@@ -1,0 +1,194 @@
+/* ========== Theme Transition ========== */
+.theme-transitioning,
+.theme-transitioning *,
+.theme-transitioning *::before,
+.theme-transitioning *::after {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
+}
+
+/* ========== Reveal Animations ========== */
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal--left {
+  transform: translateX(-40px);
+}
+.reveal--left.visible {
+  transform: translateX(0);
+}
+
+.reveal--right {
+  transform: translateX(40px);
+}
+.reveal--right.visible {
+  transform: translateX(0);
+}
+
+.reveal--scale {
+  transform: scale(0.9);
+}
+.reveal--scale.visible {
+  transform: scale(1);
+}
+
+/* Staggered children */
+.stagger > * {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.stagger.visible > * {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.stagger.visible > *:nth-child(1) { transition-delay: 0ms; }
+.stagger.visible > *:nth-child(2) { transition-delay: 100ms; }
+.stagger.visible > *:nth-child(3) { transition-delay: 200ms; }
+.stagger.visible > *:nth-child(4) { transition-delay: 300ms; }
+.stagger.visible > *:nth-child(5) { transition-delay: 400ms; }
+.stagger.visible > *:nth-child(6) { transition-delay: 500ms; }
+.stagger.visible > *:nth-child(7) { transition-delay: 600ms; }
+.stagger.visible > *:nth-child(8) { transition-delay: 700ms; }
+.stagger.visible > *:nth-child(9) { transition-delay: 800ms; }
+
+/* ========== Typewriter ========== */
+.typewriter {
+  overflow: hidden;
+  border-right: 3px solid var(--accent-cyan);
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.typewriter--blink {
+  animation: blinkCaret 0.8s step-end infinite;
+}
+
+@keyframes blinkCaret {
+  from, to { border-color: var(--accent-cyan); }
+  50% { border-color: transparent; }
+}
+
+/* ========== Glow Effects ========== */
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 20px var(--accent-cyan-dim); }
+  50% { box-shadow: 0 0 40px var(--accent-cyan-glow), 0 0 60px var(--accent-cyan-dim); }
+}
+
+.glow-pulse {
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+@keyframes borderGlow {
+  0%, 100% { border-color: var(--accent-cyan-dim); }
+  50% { border-color: var(--accent-cyan-glow); }
+}
+
+.border-glow {
+  animation: borderGlow 3s ease-in-out infinite;
+}
+
+/* ========== Float ========== */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.float--slow { animation-duration: 8s; }
+.float--fast { animation-duration: 4s; }
+
+/* ========== Gradient Background Animation ========== */
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.gradient-animate {
+  background-size: 200% 200%;
+  animation: gradientShift 8s ease infinite;
+}
+
+/* ========== Spin ========== */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin { animation: spin 20s linear infinite; }
+.spin--slow { animation-duration: 40s; }
+
+/* ========== Flow Arrow Animation (for diagrams) ========== */
+@keyframes flowDash {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+.flow-arrow {
+  stroke-dasharray: 8 4;
+  animation: flowDash 1s linear infinite;
+}
+
+/* ========== Ripple Effect ========== */
+@keyframes ripple {
+  0% { transform: scale(0); opacity: 0.5; }
+  100% { transform: scale(4); opacity: 0; }
+}
+
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple__wave {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--accent-cyan-focus);
+  pointer-events: none;
+  animation: ripple 0.6s linear forwards;
+}
+
+/* ========== Counter ========== */
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ========== Shimmer (loading placeholder) ========== */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+/* ========== Particle glow on hero ========== */
+@keyframes particleFloat {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); opacity: 0.6; }
+  25% { transform: translate(10px, -15px) rotate(90deg); opacity: 0.8; }
+  50% { transform: translate(-5px, -30px) rotate(180deg); opacity: 0.6; }
+  75% { transform: translate(-15px, -15px) rotate(270deg); opacity: 0.8; }
+}
+
+/* ========== Fade variants for GSAP compatibility ========== */
+.gsap-hidden {
+  visibility: hidden;
+}

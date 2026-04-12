@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <script>(function(){var t=localStorage.getItem('alphacarnes-theme');if(!t)t=window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark';document.documentElement.dataset.theme=t;})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AlphaCarnes — Sistema de Gestao Operacional</title>
+  <meta name="description" content="Proposta tecnica e comercial para o sistema de gestao da AlphaCarnes" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+  <!-- GSAP (global) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+
+  <!-- tsParticles -->
+  <script src="https://cdn.jsdelivr.net/npm/tsparticles-engine@2/tsparticles.engine.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/tsparticles-slim@2/tsparticles.slim.min.js" defer></script>
+
+  <!-- Vanilla Tilt -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js" defer></script>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="/css/variables.css" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/layout.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/animations.css" />
+  <link rel="stylesheet" href="/css/sections.css" />
+  <link rel="stylesheet" href="/css/diagrams.css" />
+  <link rel="stylesheet" href="/css/dashboard.css" />
+  <link rel="stylesheet" href="/css/responsive.css" />
+
+  <!-- Entry -->
+  <script type="module" src="/js/main.js"></script>
+</head>
+<body>
+  <div class="app-wrapper">
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar-nav" id="sidebar-nav">
+      <div class="nav-logo">
+        <div class="nav-logo__text">AlphaCarnes</div>
+        <div class="nav-logo__sub">Sistema de Gestao Operacional</div>
+      </div>
+      <ul class="nav-items" id="nav-items">
+        <li class="nav-item">
+          <a href="#hero" class="nav-link active" data-section="hero">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+            Inicio
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#negocio" class="nav-link" data-section="negocio">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            O Negocio
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#desafios" class="nav-link" data-section="desafios">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Os Desafios
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#solucao" class="nav-link" data-section="solucao">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            A Solucao
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#modulos" class="nav-link" data-section="modulos">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Modulos
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#fluxo" class="nav-link" data-section="fluxo">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+            Fluxo Operacional
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#inteligencia" class="nav-link" data-section="inteligencia">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0022 16z"/></svg>
+            Inteligencia
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#arquitetura" class="nav-link" data-section="arquitetura">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            Arquitetura
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#infraestrutura" class="nav-link" data-section="infraestrutura">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+            Infraestrutura
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#seguranca" class="nav-link" data-section="seguranca">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Seguranca
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#roadmap" class="nav-link" data-section="roadmap">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Roadmap
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#documentacao" class="nav-link" data-section="documentacao">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            Documentacao
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#contato" class="nav-link" data-section="contato">
+            <svg class="nav-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+            Contato
+          </a>
+        </li>
+      </ul>
+      <button class="theme-toggle" id="theme-toggle" aria-label="Alternar tema" title="Alternar tema claro/escuro">
+        <svg class="theme-toggle__icon theme-toggle__sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg class="theme-toggle__icon theme-toggle__moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      </button>
+    </nav>
+
+    <!-- Scroll Progress -->
+    <div class="scroll-progress" id="scroll-progress">
+      <div class="scroll-progress__bar" id="scroll-progress-bar"></div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="main-content" id="main-content">
+
+      <!-- 1. Hero -->
+      <section class="section section--full" id="hero">
+        <div id="hero-particles" style="position:absolute;inset:0;z-index:0;"></div>
+        <div class="bg-grid"></div>
+        <div class="container" style="position:relative;z-index:1;">
+          <div class="hero-content">
+            <div class="hero-badge section__badge">Proposta Tecnica & Comercial</div>
+            <h1 class="hero-title">
+              <span class="hero-title__line1">Alpha</span><span class="hero-title__line1 hero-title--accent">Carnes</span>
+            </h1>
+            <p class="hero-subtitle" id="hero-typewriter"></p>
+            <p class="hero-desc">Uma plataforma completa de gestao operacional projetada sob medida para a sua operacao de cross-docking de carnes.</p>
+            <div class="hero-actions">
+              <a href="#negocio" class="btn btn--primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                Conhecer a Proposta
+              </a>
+              <a href="#modulos" class="btn btn--ghost">Ver Modulos do Sistema</a>
+            </div>
+            <div class="hero-stats stagger" id="hero-stats">
+              <div class="stat-card">
+                <div class="stat-card__value" data-count="18">0</div>
+                <div class="stat-card__label">Documentos de Especificacao</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-card__value" data-count="9">0</div>
+                <div class="stat-card__label">Modulos Funcionais</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-card__value" data-count="6">0</div>
+                <div class="stat-card__label">Fases de Implantacao</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-card__value" data-count="31">0</div>
+                <div class="stat-card__label">Entidades de Dados</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. O Negocio -->
+      <section class="section section--alt" id="negocio">
+        <div class="section__bg-glow section__bg-glow--cyan" style="top:-200px;right:-200px;"></div>
+        <div class="container">
+          <div class="section__header reveal">
+            <div class="section__badge">Entendimento Profundo</div>
+            <h2 class="section__title">A Operacao AlphaCarnes</h2>
+            <p class="section__subtitle">Entendemos como a sua distribuidora funciona — do planejamento de compra ate a liberacao do caminhao.</p>
+          </div>
+          <div id="negocio-content"></div>
+        </div>
+      </section>
+
+      <!-- 3. Os Desafios -->
+      <section class="section" id="desafios">
+        <div class="section__bg-glow section__bg-glow--emerald" style="bottom:-200px;left:-200px;"></div>
+        <div class="container">
+          <div class="section__header reveal">
+            <div class="section__badge">Por que Sistematizar</div>
+            <h2 class="section__title">Os Desafios de Hoje</h2>
+            <p class="section__subtitle">Sem um sistema integrado, riscos operacionais crescem silenciosamente a cada dia.</p>
+          </div>
+          <div id="desafios-content"></div>
+        </div>
+      </section>
+
+      <!-- 4. A Solucao -->
+      <section class="section section--alt" id="solucao">
+        <div class="container">
+          <div class="section__header reveal">
+            <div class="section__badge">Visao Geral do Sistema</div>
+            <h2 class="section__title">A Solucao Proposta</h2>
+            <p class="section__subtitle">Um sistema completo, modular e construido sob medida para a operacao de cross-docking da AlphaCarnes.</p>
+          </div>
+          <div id="solucao-content"></div>
+        </div>
+      </section>
+
+      <!-- 5. Modulos -->
+      <section class="section" id="modulos">
+        <div class="section__bg-glow section__bg-glow--blue" style="top:50%;left:-200px;"></div>
+        <div class="container">
+          <div class="section__header reveal">
+            <div class="section__badge">Modulos do Sistema</div>
+            <h2 class="section__title">Cada Peca da Engrenagem</h2>
+            <p class="section__subtitle">Nove modulos funcionais que cobrem toda a cadeia operacional — da compra ao faturamento.</p>
+          </div>
+          <div id="modulos-content"></div>
+        </div>
+      </section>
+
+      <!-- 6. Fluxo Operacional -->
+      <section class="section section--alt" id="fluxo">
+        <div class="container container--wide">
+          <div class="section__header reveal">
+            <div class="section__badge">Jornada Ponta a Ponta</div>
+            <h2 class="section__title">O Fluxo Operacional Completo</h2>
+            <p class="section__subtitle">Navegue pelo fluxo macro da operacao. Clique em cada etapa para explorar regras, telas e documentacao.</p>
+          </div>
+          <div id="fluxo-content"></div>
+        </div>
+      </section>
+
+      <!-- 7. Inteligencia Operacional -->
+      <section class="section" id="inteligencia">
+        <div class="section__bg-glow section__bg-glow--cyan" style="top:30%;right:-200px;"></div>
+        <div class="container">
+          <div class="section__header reveal">
+            <div class="section__badge">Visibilidade em Tempo Real</div>
+            <h2 class="section__title">Inteligencia Operacional</h2>
+            <p class="section__subtitle">Dashboards, KPIs, alertas e monitoramento — tudo ao vivo, integrado e acionavel.</p>
+          </div>
+          <div id="inteligencia-content"></div>
+        </div>
+      </section>
+
+      <!-- 8. Arquitetura -->
+      <section class="section section--alt" id="arquitetura">
+        <div class="container container--wide">
+          <div class="section__header reveal">
+            <div class="section__badge">Como Sera Construido</div>
+            <h2 class="section__title">Arquitetura & Tecnologia</h2>
+            <p class="section__subtitle">Uma arquitetura modular, escalavel e preparada para evoluir junto com o negocio.</p>
+          </div>
+          <div id="arquitetura-content"></div>
+        </div>
+      </section>
+
+      <!-- 9. Infraestrutura -->
+      <section class="section" id="infraestrutura">
+        <div class="section__bg-glow section__bg-glow--emerald" style="top:20%;left:-300px;"></div>
+        <div class="container container--wide">
+          <div class="section__header reveal">
+            <div class="section__badge">Ambiente Fisico</div>
+            <h2 class="section__title">Infraestrutura & Equipamentos</h2>
+            <p class="section__subtitle">Tudo que precisa existir no ambiente da AlphaCarnes para o sistema funcionar.</p>
+          </div>
+          <div id="infraestrutura-content"></div>
+        </div>
+      </section>
+
+      <!-- 10. Seguranca -->
+      <section class="section section--alt" id="seguranca">
+        <div class="container">
+          <div class="section__header reveal">
+            <div class="section__badge">Controle Total</div>
+            <h2 class="section__title">Seguranca & Perfis de Acesso</h2>
+            <p class="section__subtitle">Cada usuario ve e faz apenas o que lhe compete. Cada acao critica e rastreavel.</p>
+          </div>
+          <div id="seguranca-content"></div>
+        </div>
+      </section>
+
+      <!-- 11. Roadmap -->
+      <section class="section" id="roadmap">
+        <div class="section__bg-glow section__bg-glow--blue" style="top:40%;right:-200px;"></div>
+        <div class="container">
+          <div class="section__header reveal">
+            <div class="section__badge">Plano de Implantacao</div>
+            <h2 class="section__title">Roadmap em 6 Fases</h2>
+            <p class="section__subtitle">Implantacao incremental, com valor entregue a cada fase e riscos controlados.</p>
+          </div>
+          <div id="roadmap-content"></div>
+        </div>
+      </section>
+
+      <!-- 12. Documentacao -->
+      <section class="section section--alt" id="documentacao">
+        <div class="container">
+          <div class="section__header reveal">
+            <div class="section__badge">Especificacao Completa</div>
+            <h2 class="section__title">Documentacao Tecnica</h2>
+            <p class="section__subtitle">Acesso integral aos 18 documentos de especificacao — organizados por tema, pesquisaveis e expandiveis.</p>
+          </div>
+          <div id="documentacao-content"></div>
+        </div>
+      </section>
+
+      <!-- 13. CTA / Contato -->
+      <section class="section" id="contato">
+        <div class="container container--narrow" style="text-align:center;">
+          <div class="section__header reveal">
+            <div class="section__badge">Proximos Passos</div>
+            <h2 class="section__title">Vamos Comecar?</h2>
+            <p class="section__subtitle">Esta proposta e o primeiro passo. O proximo e alinharmos detalhes, cronograma e darmos inicio a Fase 1.</p>
+          </div>
+          <div id="contato-content"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</body>
+</html>
