@@ -1,4 +1,5 @@
 import { animateCounters, ensureGsap } from '../core/animations.js';
+import { getColors, onThemeChange } from '../core/theme.js';
 
 export function initHero() {
   initParticles();
@@ -26,10 +27,8 @@ function waitForTsParticles() {
   });
 }
 
-async function initParticles() {
-  const tsParticles = await waitForTsParticles();
-
-  await tsParticles.load('hero-particles', {
+function buildParticlesConfig(pc) {
+  return {
     fullScreen: { enable: false },
     background: { color: { value: 'transparent' } },
     fpsLimit: 60,
@@ -39,7 +38,7 @@ async function initParticles() {
         density: { enable: true, area: 900 },
       },
       color: {
-        value: ['#06b6d4', '#10b981'],
+        value: pc.colors,
       },
       shape: { type: 'circle' },
       opacity: {
@@ -53,7 +52,7 @@ async function initParticles() {
       links: {
         enable: true,
         distance: 140,
-        color: '#06b6d4',
+        color: pc.linkColor,
         opacity: 0.15,
         width: 1,
       },
@@ -88,6 +87,18 @@ async function initParticles() {
         },
       },
     ],
+  };
+}
+
+async function initParticles() {
+  const tsParticles = await waitForTsParticles();
+
+  await tsParticles.load('hero-particles', buildParticlesConfig(getColors().particles));
+
+  // Reload particles with new colors on theme change
+  onThemeChange(async (_theme, colors) => {
+    const ts = await waitForTsParticles();
+    await ts.load('hero-particles', buildParticlesConfig(colors.particles));
   });
 }
 

@@ -4,6 +4,7 @@ import {
   topologyLinks,
   topologyNodeTypes,
 } from '../data/topology-nodes.js';
+import { getColors, onThemeChange } from '../core/theme.js';
 
 /**
  * Create an interactive network topology diagram using D3.js.
@@ -19,6 +20,9 @@ export function createTopologyDiagram(container, options = {}) {
   const containerRect = container.getBoundingClientRect();
   const width = containerRect.width || 1000;
   const height = containerRect.height || 700;
+
+  // ── Dynamic colors ──────────────────────────────────────────────
+  let c = getColors();
 
   // ── State ────────────────────────────────────────────────────────
   let selectedNodeId = null;
@@ -78,6 +82,17 @@ export function createTopologyDiagram(container, options = {}) {
     adjacency.get(link.source)?.add(i);
     adjacency.get(link.target)?.add(i);
   });
+
+  // ── Link stroke helper (inside closure for access to c) ─────────
+  function linkStroke(type) {
+    switch (type) {
+      case 'ethernet': return c.edgeColor;
+      case 'wireless': return '#06b6d4';
+      case 'serial':   return '#f59e0b';
+      case 'usb':      return '#8b5cf6';
+      default:         return c.edgeColor;
+    }
+  }
 
   // ── Render links ─────────────────────────────────────────────────
   const linkGroup = zoomGroup.append('g').attr('class', 'links');
@@ -141,7 +156,7 @@ export function createTopologyDiagram(container, options = {}) {
     .attr('class', 'node-label')
     .attr('text-anchor', 'middle')
     .attr('y', (d) => typeDef(d).size / 2.5 + 14)
-    .attr('fill', '#e2e8f0')
+    .attr('fill', c.textPrimary)
     .attr('font-size', '10px')
     .attr('font-weight', '600')
     .text((d) => d.label);
@@ -257,6 +272,17 @@ export function createTopologyDiagram(container, options = {}) {
   });
   container.appendChild(layerToggle);
 
+  // ── Theme change ─────────────────────────────────────────────────
+  onThemeChange((_theme, colors) => {
+    c = colors;
+    // Update node labels
+    nodeContainers.select('.node-label').attr('fill', c.textPrimary);
+    // Update ethernet/default link strokes
+    linkElements.attr('stroke', (d) => linkStroke(d.type));
+    // Reset selection to avoid stale dimmed colors
+    if (selectedNodeId) clearSelection();
+  });
+
   // ── Helpers ──────────────────────────────────────────────────────
 
   function clearSelection() {
@@ -275,16 +301,6 @@ export function createTopologyDiagram(container, options = {}) {
 
   function typeDef(node) {
     return topologyNodeTypes[node.type] || topologyNodeTypes.workstation;
-  }
-
-  function linkStroke(type) {
-    switch (type) {
-      case 'ethernet': return '#475569';
-      case 'wireless': return '#06b6d4';
-      case 'serial':   return '#f59e0b';
-      case 'usb':      return '#8b5cf6';
-      default:         return '#475569';
-    }
   }
 
   // ── Cleanup ──────────────────────────────────────────────────────

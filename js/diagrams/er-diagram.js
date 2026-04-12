@@ -1,5 +1,6 @@
 import * as d3 from 'd3';
 import { erDomains, erEntities, erRelationships } from '../data/er-entities.js';
+import { getColors, onThemeChange } from '../core/theme.js';
 
 /**
  * Create an interactive Entity-Relationship diagram using D3 force-directed layout.
@@ -15,10 +16,9 @@ export function createErDiagram(container, options = {}) {
   const NODE_RX = 8;
   const FONT_SIZE = 11;
   const LABEL_FONT_SIZE = 9;
-  const TEXT_COLOR = '#e2e8f0';
-  const TEXT_MUTED = '#94a3b8';
-  const BG_DARK = '#0f172a';
-  const BORDER_SUBTLE = 'rgba(148,163,184,0.12)';
+
+  // ── Dynamic colors from theme ───────────────────────────────────
+  let c = getColors();
 
   // ── State ────────────────────────────────────────────────────────
   const hiddenDomains = new Set();
@@ -52,7 +52,7 @@ export function createErDiagram(container, options = {}) {
   const defs = svg.append('defs');
 
   // Arrowhead marker
-  defs
+  const arrowMarker = defs
     .append('marker')
     .attr('id', 'er-arrow')
     .attr('viewBox', '0 0 10 6')
@@ -60,13 +60,14 @@ export function createErDiagram(container, options = {}) {
     .attr('refY', 3)
     .attr('markerWidth', 10)
     .attr('markerHeight', 6)
-    .attr('orient', 'auto')
+    .attr('orient', 'auto');
+  const arrowPath = arrowMarker
     .append('path')
     .attr('d', 'M0,0 L10,3 L0,6 Z')
-    .attr('fill', '#475569');
+    .attr('fill', c.edgeColor);
 
   // Highlighted arrowhead
-  defs
+  const arrowHlMarker = defs
     .append('marker')
     .attr('id', 'er-arrow-hl')
     .attr('viewBox', '0 0 10 6')
@@ -74,10 +75,11 @@ export function createErDiagram(container, options = {}) {
     .attr('refY', 3)
     .attr('markerWidth', 10)
     .attr('markerHeight', 6)
-    .attr('orient', 'auto')
+    .attr('orient', 'auto');
+  const arrowHlPath = arrowHlMarker
     .append('path')
     .attr('d', 'M0,0 L10,3 L0,6 Z')
-    .attr('fill', '#06b6d4');
+    .attr('fill', c.highlightColor);
 
   // Glow filter for hover
   const glowFilter = defs
@@ -172,7 +174,7 @@ export function createErDiagram(container, options = {}) {
           enter
             .append('line')
             .attr('class', 'er-link')
-            .attr('stroke', '#475569')
+            .attr('stroke', c.edgeColor)
             .attr('stroke-width', 1.5)
             .attr('stroke-opacity', 0.6)
             .attr('marker-end', 'url(#er-arrow)'),
@@ -193,9 +195,9 @@ export function createErDiagram(container, options = {}) {
             .attr('dominant-baseline', 'middle')
             .attr('font-size', LABEL_FONT_SIZE)
             .attr('font-family', 'Inter, system-ui, sans-serif')
-            .attr('fill', TEXT_MUTED)
+            .attr('fill', c.textMuted)
             .attr('paint-order', 'stroke')
-            .attr('stroke', BG_DARK)
+            .attr('stroke', c.bgSecondary)
             .attr('stroke-width', 3)
             .text((d) => d.cardinality),
         (update) => update.text((d) => d.cardinality),
@@ -232,12 +234,13 @@ export function createErDiagram(container, options = {}) {
 
           // Entity name label
           g.append('text')
+            .attr('class', 'er-node-label')
             .attr('text-anchor', 'middle')
             .attr('dominant-baseline', 'middle')
             .attr('font-size', FONT_SIZE)
             .attr('font-family', 'Inter, system-ui, sans-serif')
             .attr('font-weight', 600)
-            .attr('fill', TEXT_COLOR)
+            .attr('fill', c.textPrimary)
             .attr('pointer-events', 'none')
             .text((d) => truncateText(d.name, 18));
 
@@ -350,10 +353,10 @@ export function createErDiagram(container, options = {}) {
           .attr('stroke-opacity', 1)
           .attr('stroke-width', 2.5)
           .attr('fill', hexToRgba(erDomains[nd.domain]?.color || '#6b7280', 0.3));
-        el.select('text')
+        el.select('.er-node-label')
           .transition()
           .duration(200)
-          .attr('fill', TEXT_COLOR);
+          .attr('fill', c.textPrimary);
         if (nd.id === d.id) {
           el.select('rect').attr('filter', 'url(#er-glow)');
         }
@@ -364,10 +367,10 @@ export function createErDiagram(container, options = {}) {
           .attr('stroke-opacity', 0.15)
           .attr('stroke-width', 1)
           .attr('fill', hexToRgba(erDomains[nd.domain]?.color || '#6b7280', 0.05));
-        el.select('text')
+        el.select('.er-node-label')
           .transition()
           .duration(200)
-          .attr('fill', '#475569');
+          .attr('fill', c.edgeColor);
       }
     });
 
@@ -377,14 +380,14 @@ export function createErDiagram(container, options = {}) {
       if (connectedLinkIds.has(ld.id)) {
         el.transition()
           .duration(200)
-          .attr('stroke', '#06b6d4')
+          .attr('stroke', c.highlightColor)
           .attr('stroke-opacity', 0.9)
           .attr('stroke-width', 2.5)
           .attr('marker-end', 'url(#er-arrow-hl)');
       } else {
         el.transition()
           .duration(200)
-          .attr('stroke', '#1e293b')
+          .attr('stroke', c.edgeDimmed)
           .attr('stroke-opacity', 0.25)
           .attr('stroke-width', 1)
           .attr('marker-end', 'url(#er-arrow)');
@@ -395,9 +398,9 @@ export function createErDiagram(container, options = {}) {
     labelEls.each(function (ld) {
       const el = d3.select(this);
       if (connectedLinkIds.has(ld.id)) {
-        el.transition().duration(200).attr('fill', '#06b6d4').attr('opacity', 1);
+        el.transition().duration(200).attr('fill', c.highlightColor).attr('opacity', 1);
       } else {
-        el.transition().duration(200).attr('fill', '#475569').attr('opacity', 0.2);
+        el.transition().duration(200).attr('fill', c.edgeColor).attr('opacity', 0.2);
       }
     });
 
@@ -422,10 +425,10 @@ export function createErDiagram(container, options = {}) {
           .attr('stroke-opacity', 0.6)
           .attr('stroke-width', 1.5)
           .attr('fill', hexToRgba(erDomains[nd.domain]?.color || '#6b7280', 0.18));
-        el.select('text')
+        el.select('.er-node-label')
           .transition()
           .duration(200)
-          .attr('fill', TEXT_COLOR);
+          .attr('fill', c.textPrimary);
       });
     }
 
@@ -433,7 +436,7 @@ export function createErDiagram(container, options = {}) {
       linkEls
         .transition()
         .duration(200)
-        .attr('stroke', '#475569')
+        .attr('stroke', c.edgeColor)
         .attr('stroke-opacity', 0.6)
         .attr('stroke-width', 1.5)
         .attr('marker-end', 'url(#er-arrow)');
@@ -443,10 +446,32 @@ export function createErDiagram(container, options = {}) {
       labelEls
         .transition()
         .duration(200)
-        .attr('fill', TEXT_MUTED)
+        .attr('fill', c.textMuted)
         .attr('opacity', 1);
     }
   }
+
+  // ── Theme change handler ─────────────────────────────────────────
+  onThemeChange((_theme, colors) => {
+    c = colors;
+    // Update SVG marker colors
+    arrowPath.attr('fill', c.edgeColor);
+    arrowHlPath.attr('fill', c.highlightColor);
+    // Reset selection state with new colors
+    clearSelection();
+    // Update link label background stroke
+    if (labelEls) {
+      labelEls.attr('stroke', c.bgSecondary).attr('fill', c.textMuted);
+    }
+    // Update node text colors
+    if (nodeEls) {
+      nodeEls.select('.er-node-label').attr('fill', c.textPrimary);
+    }
+    // Update link colors
+    if (linkEls) {
+      linkEls.attr('stroke', c.edgeColor);
+    }
+  });
 
   // ── Drag behaviour ───────────────────────────────────────────────
   const dragBehavior = d3

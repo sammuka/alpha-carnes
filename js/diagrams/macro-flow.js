@@ -1,9 +1,138 @@
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import { flowNodes, flowEdges, flowGroups } from '../data/flow-nodes.js';
+import { getColors, onThemeChange } from '../core/theme.js';
 
 // Register dagre layout
 cytoscape.use(dagre);
+
+/**
+ * Build Cytoscape stylesheet from current theme colors.
+ */
+function buildFlowStyles(c, groupStyles) {
+  return [
+    // Base node style
+    {
+      selector: 'node',
+      style: {
+        'label': 'data(label)',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'text-wrap': 'wrap',
+        'text-max-width': '110px',
+        'font-size': '11px',
+        'font-weight': '600',
+        'font-family': 'Inter, system-ui, sans-serif',
+        'color': c.textPrimary,
+        'width': '130',
+        'height': '55',
+        'shape': 'round-rectangle',
+        'border-width': 2,
+        'border-opacity': 0.6,
+        'background-opacity': 0.85,
+        'text-outline-color': c.nodeTextOutline,
+        'text-outline-width': '1px',
+        'overlay-padding': '6px',
+        'transition-property': 'border-width, border-opacity, background-opacity, overlay-opacity',
+        'transition-duration': '200ms',
+      },
+    },
+    // Decision nodes as diamonds
+    {
+      selector: 'node[type = "decision"]',
+      style: {
+        'shape': 'diamond',
+        'width': '100',
+        'height': '80',
+        'text-max-width': '90px',
+        'font-size': '10px',
+      },
+    },
+    // Group-specific colors
+    ...groupStyles,
+    // Edge base style
+    {
+      selector: 'edge',
+      style: {
+        'width': 2,
+        'line-color': c.edgeColor,
+        'target-arrow-color': c.edgeColor,
+        'target-arrow-shape': 'triangle',
+        'curve-style': 'bezier',
+        'arrow-scale': 0.8,
+        'line-style': 'dashed',
+        'line-dash-pattern': [8, 4],
+        'line-dash-offset': 0,
+        'transition-property': 'line-color, target-arrow-color, width',
+        'transition-duration': '200ms',
+      },
+    },
+    // Edge labels
+    {
+      selector: 'edge[label]',
+      style: {
+        'label': 'data(label)',
+        'font-size': '9px',
+        'font-weight': '600',
+        'color': c.textSecondary,
+        'text-background-color': c.edgeLabelBg,
+        'text-background-opacity': 0.9,
+        'text-background-padding': '3px',
+        'text-rotation': 'autorotate',
+      },
+    },
+    // Highlighted node
+    {
+      selector: 'node.highlighted',
+      style: {
+        'border-width': 3,
+        'border-opacity': 1,
+        'background-opacity': 1,
+        'overlay-color': c.highlightColor,
+        'overlay-opacity': 0.12,
+      },
+    },
+    // Highlighted edge
+    {
+      selector: 'edge.highlighted',
+      style: {
+        'line-color': c.highlightColor,
+        'target-arrow-color': c.highlightColor,
+        'width': 3,
+      },
+    },
+    // Dimmed (non-path) nodes
+    {
+      selector: 'node.dimmed',
+      style: {
+        'background-opacity': 0.25,
+        'border-opacity': 0.2,
+        'color': c.dimmedNodeText,
+        'text-outline-opacity': 0.3,
+      },
+    },
+    // Dimmed edges
+    {
+      selector: 'edge.dimmed',
+      style: {
+        'line-color': c.edgeDimmed,
+        'target-arrow-color': c.edgeDimmed,
+        'width': 1,
+        'opacity': 0.4,
+      },
+    },
+    // Hover glow
+    {
+      selector: 'node.hover-glow',
+      style: {
+        'border-width': 3,
+        'border-opacity': 1,
+        'overlay-color': c.highlightColor,
+        'overlay-opacity': 0.08,
+      },
+    },
+  ];
+}
 
 /**
  * Create the interactive macro operational flow diagram.
@@ -40,128 +169,7 @@ export function createMacroFlow(container, options = {}) {
     boxSelectionEnabled: false,
     selectionType: 'single',
 
-    style: [
-      // Base node style
-      {
-        selector: 'node',
-        style: {
-          'label': 'data(label)',
-          'text-valign': 'center',
-          'text-halign': 'center',
-          'text-wrap': 'wrap',
-          'text-max-width': '110px',
-          'font-size': '11px',
-          'font-weight': '600',
-          'font-family': 'Inter, system-ui, sans-serif',
-          'color': '#e2e8f0',
-          'width': '130',
-          'height': '55',
-          'shape': 'round-rectangle',
-          'border-width': 2,
-          'border-opacity': 0.6,
-          'background-opacity': 0.85,
-          'text-outline-color': '#0a0f1e',
-          'text-outline-width': '1px',
-          'overlay-padding': '6px',
-          'transition-property': 'border-width, border-opacity, background-opacity, overlay-opacity',
-          'transition-duration': '200ms',
-        },
-      },
-      // Decision nodes as diamonds
-      {
-        selector: 'node[type = "decision"]',
-        style: {
-          'shape': 'diamond',
-          'width': '100',
-          'height': '80',
-          'text-max-width': '90px',
-          'font-size': '10px',
-        },
-      },
-      // Group-specific colors
-      ...groupStyles,
-      // Edge base style
-      {
-        selector: 'edge',
-        style: {
-          'width': 2,
-          'line-color': '#475569',
-          'target-arrow-color': '#475569',
-          'target-arrow-shape': 'triangle',
-          'curve-style': 'bezier',
-          'arrow-scale': 0.8,
-          'line-style': 'dashed',
-          'line-dash-pattern': [8, 4],
-          'line-dash-offset': 0,
-          'transition-property': 'line-color, target-arrow-color, width',
-          'transition-duration': '200ms',
-        },
-      },
-      // Edge labels
-      {
-        selector: 'edge[label]',
-        style: {
-          'label': 'data(label)',
-          'font-size': '9px',
-          'font-weight': '600',
-          'color': '#94a3b8',
-          'text-background-color': '#0f172a',
-          'text-background-opacity': 0.9,
-          'text-background-padding': '3px',
-          'text-rotation': 'autorotate',
-        },
-      },
-      // Highlighted node
-      {
-        selector: 'node.highlighted',
-        style: {
-          'border-width': 3,
-          'border-opacity': 1,
-          'background-opacity': 1,
-          'overlay-color': '#06b6d4',
-          'overlay-opacity': 0.12,
-        },
-      },
-      // Highlighted edge
-      {
-        selector: 'edge.highlighted',
-        style: {
-          'line-color': '#06b6d4',
-          'target-arrow-color': '#06b6d4',
-          'width': 3,
-        },
-      },
-      // Dimmed (non-path) nodes
-      {
-        selector: 'node.dimmed',
-        style: {
-          'background-opacity': 0.25,
-          'border-opacity': 0.2,
-          'color': '#64748b',
-          'text-outline-opacity': 0.3,
-        },
-      },
-      // Dimmed edges
-      {
-        selector: 'edge.dimmed',
-        style: {
-          'line-color': '#1e293b',
-          'target-arrow-color': '#1e293b',
-          'width': 1,
-          'opacity': 0.4,
-        },
-      },
-      // Hover glow
-      {
-        selector: 'node.hover-glow',
-        style: {
-          'border-width': 3,
-          'border-opacity': 1,
-          'overlay-color': '#06b6d4',
-          'overlay-opacity': 0.08,
-        },
-      },
-    ],
+    style: buildFlowStyles(getColors(), groupStyles),
 
     layout: {
       name: 'dagre',
@@ -173,6 +181,11 @@ export function createMacroFlow(container, options = {}) {
       animate: false,
       spacingFactor: 1.2,
     },
+  });
+
+  // Retheme on toggle
+  onThemeChange((_theme, colors) => {
+    cy.style().fromJson(buildFlowStyles(colors, groupStyles)).update();
   });
 
   // Edge dash animation via periodic update
@@ -205,21 +218,6 @@ export function createMacroFlow(container, options = {}) {
     const node = evt.target;
     clearHighlights(cy);
 
-    // BFS downstream
-    const downstream = cy.elements().bfs({
-      roots: node,
-      visit: () => {},
-      directed: true,
-    });
-
-    // BFS upstream (reverse edges)
-    const upstream = cy.elements().bfs({
-      roots: node,
-      visit: () => {},
-      directed: true,
-    });
-
-    // For upstream, we need to traverse predecessors manually
     const pathNodes = new Set();
     const pathEdges = new Set();
 

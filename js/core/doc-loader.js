@@ -1,4 +1,5 @@
 import { marked } from 'marked';
+import { getColors, onThemeChange } from './theme.js';
 
 // Import all 18 docs as raw strings
 import doc001 from '../../docs/001-visao-geral-operacao-e-fluxo-macro.md?raw';
@@ -67,33 +68,37 @@ export function getDocHtml(key) {
 
 /**
  * Render all mermaid blocks inside a container.
+ * Re-initializes mermaid with current theme colors on every call.
  */
-let mermaidLoaded = false;
+let mermaidModule = null;
+
+async function ensureMermaid() {
+  if (!mermaidModule) {
+    mermaidModule = (await import('mermaid')).default;
+  }
+  const mc = getColors().mermaid;
+  mermaidModule.initialize({
+    startOnLoad: false,
+    theme: mc.theme,
+    themeVariables: {
+      darkMode: mc.darkMode,
+      background: mc.bg,
+      primaryColor: mc.primary,
+      primaryTextColor: mc.text,
+      primaryBorderColor: mc.border,
+      lineColor: mc.line,
+      secondaryColor: mc.secondary,
+      tertiaryColor: mc.bg,
+    },
+  });
+  return mermaidModule;
+}
 
 export async function renderMermaidBlocks(container) {
   const blocks = container.querySelectorAll('.mermaid-block');
   if (blocks.length === 0) return;
 
-  if (!mermaidLoaded) {
-    const mermaid = await import('mermaid');
-    mermaid.default.initialize({
-      startOnLoad: false,
-      theme: 'dark',
-      themeVariables: {
-        darkMode: true,
-        background: '#0f172a',
-        primaryColor: '#06b6d4',
-        primaryTextColor: '#e2e8f0',
-        primaryBorderColor: '#1e293b',
-        lineColor: '#94a3b8',
-        secondaryColor: '#1e293b',
-        tertiaryColor: '#0f172a',
-      },
-    });
-    mermaidLoaded = true;
-  }
-
-  const mermaid = (await import('mermaid')).default;
+  const mermaid = await ensureMermaid();
 
   for (const block of blocks) {
     const code = decodeURIComponent(block.dataset.mermaid);
@@ -107,6 +112,12 @@ export async function renderMermaidBlocks(container) {
     }
   }
 }
+
+// Re-render all visible mermaid diagrams on theme change
+onThemeChange(async () => {
+  if (!mermaidModule) return;
+  await renderMermaidBlocks(document.body);
+});
 
 // ──────────────────────────────────────────────
 // Doc Modal (full-screen viewer for narrow contexts)

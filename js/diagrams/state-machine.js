@@ -1,6 +1,7 @@
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import { stateMachines } from '../data/state-definitions.js';
+import { getColors, onThemeChange } from '../core/theme.js';
 
 // Register dagre layout
 try {
@@ -11,8 +12,6 @@ try {
 
 /**
  * Convert a state machine definition into Cytoscape elements.
- * @param {string} machineKey - Key in stateMachines
- * @returns {{ nodes: object[], edges: object[] }}
  */
 function buildElements(machineKey) {
   const machine = stateMachines[machineKey];
@@ -40,6 +39,143 @@ function buildElements(machineKey) {
 }
 
 /**
+ * Build Cytoscape stylesheet from theme colors for state machines.
+ */
+function buildStateMachineStyles(c, machineColor) {
+  return [
+    {
+      selector: 'node',
+      style: {
+        'label': 'data(label)',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'text-wrap': 'wrap',
+        'text-max-width': '110px',
+        'font-size': '11px',
+        'font-weight': '600',
+        'font-family': 'Inter, system-ui, sans-serif',
+        'color': c.textPrimary,
+        'width': '120',
+        'height': '50',
+        'shape': 'round-rectangle',
+        'background-color': machineColor,
+        'background-opacity': 0.85,
+        'border-width': 2,
+        'border-color': machineColor,
+        'border-opacity': 0.6,
+        'text-outline-color': c.nodeTextOutline,
+        'text-outline-width': '1px',
+        'overlay-padding': '6px',
+        'transition-property':
+          'border-width, border-opacity, background-opacity, overlay-opacity',
+        'transition-duration': '200ms',
+      },
+    },
+    // Initial states: thicker border with brighter color
+    {
+      selector: 'node[type = "initial"]',
+      style: {
+        'border-width': 3,
+        'border-color': c.initialBorder,
+        'border-opacity': 0.9,
+      },
+    },
+    // Final states: double border effect
+    {
+      selector: 'node[type = "final"]',
+      style: {
+        'border-width': 3,
+        'border-style': 'double',
+        'border-color': c.initialBorder,
+        'border-opacity': 0.7,
+        'background-opacity': 0.6,
+      },
+    },
+    // Edge base style
+    {
+      selector: 'edge',
+      style: {
+        'width': 2,
+        'line-color': c.edgeColor,
+        'target-arrow-color': c.edgeColor,
+        'target-arrow-shape': 'triangle',
+        'curve-style': 'bezier',
+        'arrow-scale': 0.8,
+        'line-style': 'dashed',
+        'line-dash-pattern': [8, 4],
+        'line-dash-offset': 0,
+        'transition-property': 'line-color, target-arrow-color, width',
+        'transition-duration': '200ms',
+      },
+    },
+    // Edge labels
+    {
+      selector: 'edge[label]',
+      style: {
+        'label': 'data(label)',
+        'font-size': '9px',
+        'font-weight': '600',
+        'color': c.textSecondary,
+        'text-background-color': c.edgeLabelBg,
+        'text-background-opacity': 0.9,
+        'text-background-padding': '3px',
+        'text-rotation': 'autorotate',
+      },
+    },
+    // Highlighted node
+    {
+      selector: 'node.highlighted',
+      style: {
+        'border-width': 3,
+        'border-opacity': 1,
+        'background-opacity': 1,
+        'overlay-color': machineColor,
+        'overlay-opacity': 0.12,
+      },
+    },
+    // Highlighted edge
+    {
+      selector: 'edge.highlighted',
+      style: {
+        'line-color': machineColor,
+        'target-arrow-color': machineColor,
+        'width': 3,
+      },
+    },
+    // Dimmed nodes
+    {
+      selector: 'node.dimmed',
+      style: {
+        'background-opacity': 0.25,
+        'border-opacity': 0.2,
+        'color': c.dimmedNodeText,
+        'text-outline-opacity': 0.3,
+      },
+    },
+    // Dimmed edges
+    {
+      selector: 'edge.dimmed',
+      style: {
+        'line-color': c.edgeDimmed,
+        'target-arrow-color': c.edgeDimmed,
+        'width': 1,
+        'opacity': 0.4,
+      },
+    },
+    // Hover glow
+    {
+      selector: 'node.hover-glow',
+      style: {
+        'border-width': 3,
+        'border-opacity': 1,
+        'overlay-color': machineColor,
+        'overlay-opacity': 0.08,
+      },
+    },
+  ];
+}
+
+/**
  * Create an interactive Cytoscape state machine diagram.
  * @param {HTMLElement} container - The DOM element to render into
  * @param {string} machineKey - Key in stateMachines (e.g. 'compraProgramada')
@@ -63,138 +199,7 @@ export function createStateMachine(container, machineKey, options = {}) {
     boxSelectionEnabled: false,
     selectionType: 'single',
 
-    style: [
-      // Base node style
-      {
-        selector: 'node',
-        style: {
-          'label': 'data(label)',
-          'text-valign': 'center',
-          'text-halign': 'center',
-          'text-wrap': 'wrap',
-          'text-max-width': '110px',
-          'font-size': '11px',
-          'font-weight': '600',
-          'font-family': 'Inter, system-ui, sans-serif',
-          'color': '#e2e8f0',
-          'width': '120',
-          'height': '50',
-          'shape': 'round-rectangle',
-          'background-color': machineColor,
-          'background-opacity': 0.85,
-          'border-width': 2,
-          'border-color': machineColor,
-          'border-opacity': 0.6,
-          'text-outline-color': '#0a0f1e',
-          'text-outline-width': '1px',
-          'overlay-padding': '6px',
-          'transition-property':
-            'border-width, border-opacity, background-opacity, overlay-opacity',
-          'transition-duration': '200ms',
-        },
-      },
-      // Initial states: thicker border with brighter color
-      {
-        selector: 'node[type = "initial"]',
-        style: {
-          'border-width': 3,
-          'border-color': '#e2e8f0',
-          'border-opacity': 0.9,
-        },
-      },
-      // Final states: double border effect
-      {
-        selector: 'node[type = "final"]',
-        style: {
-          'border-width': 3,
-          'border-style': 'double',
-          'border-color': '#e2e8f0',
-          'border-opacity': 0.7,
-          'background-opacity': 0.6,
-        },
-      },
-      // Edge base style
-      {
-        selector: 'edge',
-        style: {
-          'width': 2,
-          'line-color': '#475569',
-          'target-arrow-color': '#475569',
-          'target-arrow-shape': 'triangle',
-          'curve-style': 'bezier',
-          'arrow-scale': 0.8,
-          'line-style': 'dashed',
-          'line-dash-pattern': [8, 4],
-          'line-dash-offset': 0,
-          'transition-property': 'line-color, target-arrow-color, width',
-          'transition-duration': '200ms',
-        },
-      },
-      // Edge labels
-      {
-        selector: 'edge[label]',
-        style: {
-          'label': 'data(label)',
-          'font-size': '9px',
-          'font-weight': '600',
-          'color': '#94a3b8',
-          'text-background-color': '#0f172a',
-          'text-background-opacity': 0.9,
-          'text-background-padding': '3px',
-          'text-rotation': 'autorotate',
-        },
-      },
-      // Highlighted node
-      {
-        selector: 'node.highlighted',
-        style: {
-          'border-width': 3,
-          'border-opacity': 1,
-          'background-opacity': 1,
-          'overlay-color': machineColor,
-          'overlay-opacity': 0.12,
-        },
-      },
-      // Highlighted edge
-      {
-        selector: 'edge.highlighted',
-        style: {
-          'line-color': machineColor,
-          'target-arrow-color': machineColor,
-          'width': 3,
-        },
-      },
-      // Dimmed nodes
-      {
-        selector: 'node.dimmed',
-        style: {
-          'background-opacity': 0.25,
-          'border-opacity': 0.2,
-          'color': '#64748b',
-          'text-outline-opacity': 0.3,
-        },
-      },
-      // Dimmed edges
-      {
-        selector: 'edge.dimmed',
-        style: {
-          'line-color': '#1e293b',
-          'target-arrow-color': '#1e293b',
-          'width': 1,
-          'opacity': 0.4,
-        },
-      },
-      // Hover glow
-      {
-        selector: 'node.hover-glow',
-        style: {
-          'border-width': 3,
-          'border-opacity': 1,
-          'overlay-color': machineColor,
-          'overlay-opacity': 0.08,
-        },
-      },
-    ],
+    style: buildStateMachineStyles(getColors(), machineColor),
 
     layout: {
       name: 'dagre',
@@ -206,6 +211,11 @@ export function createStateMachine(container, machineKey, options = {}) {
       animate: false,
       spacingFactor: 1.15,
     },
+  });
+
+  // Retheme on toggle
+  const unsubTheme = onThemeChange((_theme, colors) => {
+    cy.style().fromJson(buildStateMachineStyles(colors, machineColor)).update();
   });
 
   // Edge dash animation via periodic update
@@ -222,9 +232,10 @@ export function createStateMachine(container, machineKey, options = {}) {
   };
   animFrameId = requestAnimationFrame(animateEdges);
 
-  // Clean up animation when instance is destroyed
+  // Clean up animation and theme listener when instance is destroyed
   cy.on('destroy', () => {
     if (animFrameId) cancelAnimationFrame(animFrameId);
+    unsubTheme();
   });
 
   // Hover glow effect
@@ -310,34 +321,17 @@ export function createStateMachine(container, machineKey, options = {}) {
 
 /**
  * Create a tabbed state machine viewer with all 5 machines.
- * @param {HTMLElement} container - The DOM element to render into
- * @param {object} options - Optional callbacks
- * @param {function} options.onMachineChange - Called with (machineKey, machineData) on tab switch
- * @param {function} options.onStateClick - Forwarded to createStateMachine
- * @returns {{ destroy: function, setMachine: function }}
+ * Uses CSS classes .state-tabs / .state-tabs__btn from diagrams.css
+ * so theme switching works automatically via CSS variables.
  */
 export function createStateMachineTabs(container, options = {}) {
   const machineKeys = Object.keys(stateMachines);
   let activeMachineKey = machineKeys[0];
   let cyInstance = null;
 
-  // Create tab bar
+  // Create tab bar (CSS handles theming via variables)
   const tabBar = document.createElement('div');
-  tabBar.className = 'state-machine-tabs';
-  tabBar.style.cssText = [
-    'display: flex',
-    'flex-direction: row',
-    'gap: 4px',
-    'padding: 6px 8px',
-    'margin-bottom: 12px',
-    'border-radius: 10px',
-    'background: rgba(15, 23, 42, 0.6)',
-    'backdrop-filter: blur(12px)',
-    '-webkit-backdrop-filter: blur(12px)',
-    'border: 1px solid rgba(148, 163, 184, 0.1)',
-    'overflow-x: auto',
-    'flex-wrap: wrap',
-  ].join(';');
+  tabBar.className = 'state-tabs';
 
   // Create diagram container
   const diagramWrapper = document.createElement('div');
@@ -357,34 +351,7 @@ export function createStateMachineTabs(container, options = {}) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.textContent = machine.label;
-    btn.className = 'state-machine-tab';
-    btn.style.cssText = [
-      'padding: 8px 16px',
-      'border: none',
-      'border-bottom: 2px solid transparent',
-      'border-radius: 6px 6px 0 0',
-      'background: rgba(30, 41, 59, 0.5)',
-      'color: #94a3b8',
-      'font-size: 12px',
-      'font-weight: 600',
-      'font-family: Inter, system-ui, sans-serif',
-      'cursor: pointer',
-      'white-space: nowrap',
-      'transition: color 0.2s, border-color 0.2s, background 0.2s',
-    ].join(';');
-
-    btn.addEventListener('mouseenter', () => {
-      if (key !== activeMachineKey) {
-        btn.style.color = '#cbd5e1';
-        btn.style.background = 'rgba(30, 41, 59, 0.7)';
-      }
-    });
-    btn.addEventListener('mouseleave', () => {
-      if (key !== activeMachineKey) {
-        btn.style.color = '#94a3b8';
-        btn.style.background = 'rgba(30, 41, 59, 0.5)';
-      }
-    });
+    btn.className = 'state-tabs__btn';
 
     btn.addEventListener('click', () => {
       if (key === activeMachineKey) return;
@@ -399,18 +366,9 @@ export function createStateMachineTabs(container, options = {}) {
   function setActiveTab(key) {
     activeMachineKey = key;
 
-    // Update tab button styling
+    // Update active class on tab buttons
     machineKeys.forEach((k) => {
-      const btn = tabButtons[k];
-      if (k === key) {
-        btn.style.color = '#e2e8f0';
-        btn.style.borderBottomColor = '#06b6d4';
-        btn.style.background = 'rgba(6, 182, 212, 0.08)';
-      } else {
-        btn.style.color = '#94a3b8';
-        btn.style.borderBottomColor = 'transparent';
-        btn.style.background = 'rgba(30, 41, 59, 0.5)';
-      }
+      tabButtons[k].classList.toggle('active', k === key);
     });
 
     // Destroy existing diagram and toolbar
