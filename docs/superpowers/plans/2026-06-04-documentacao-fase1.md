@@ -6,14 +6,17 @@
 
 **Architecture:** Documentação versionada em Git dentro do próprio monorepo (`docs/`), em Markdown. Cada artefato é independente e referenciável. A premissa fundamental **nunca mudar**: quando há escolha entre mínimo e completo, sempre o completo.
 
-**Tech Stack:** Markdown, Mermaid (diagramas), PostgreSQL 17 + JSONB, Next.js 15 (App Router), Node.js/Express 5, Drizzle ORM, Zod 4, TypeScript 5, EISS NFS-e Webservice SOAP (Osasco-SP).
+**Tech Stack:** Markdown, Mermaid (diagramas), PostgreSQL 18 + JSONB, Next.js 16 (App Router), NestJS 11, Drizzle ORM, Zod 4, TypeScript 5, EISS NFS-e Webservice SOAP (Osasco-SP).
 
 ---
 
-## PREMISSA GLOBAL (ler antes de qualquer tarefa)
+## PREMISSAS GLOBAIS (ler antes de qualquer tarefa)
 
-> **Projeto E2E, não MVP.**
+> **1. Projeto E2E, não MVP.**
 > Esta premissa deve constar em todos os documentos e guiar todas as decisões. Quando existir uma escolha de escopo, a escolha correta é sempre a mais completa, robusta e rastreável. Nenhum atalho de "fase 2 resolve" é aceito no design — o design já contempla a solução completa desde o início.
+
+> **2. Arquitetura clean, sem over-engineering.**
+> Cada camada, serviço ou abstração só existe se resolver um problema real do negócio. Sem padrões por padrão, sem infraestrutura por antecipação. Se algo pode ser uma função simples, não vira um serviço. Se pode ser um módulo, não vira um microserviço. A complexidade só entra quando a simplicidade não é suficiente.
 
 ---
 
@@ -73,8 +76,9 @@ docs/
 ```markdown
 # Roadmap E2E — AlphaCarnes
 
-> **Premissa global:** Este é um projeto E2E (end-to-end), não um MVP. Cada fase entrega
-> funcionalidade completa e produtiva. Não existe "deixar para fase 2" em decisões de design.
+> **Premissas globais:**
+> 1. Este é um projeto E2E (end-to-end), não um MVP. Cada fase entrega funcionalidade completa e produtiva. Não existe "deixar para fase 2" em decisões de design.
+> 2. Arquitetura clean, sem over-engineering. Cada abstração existe para resolver um problema real.
 
 ## Fase 0 — Fundação (atual)
 **Objetivo:** Documentação completa, decisões arquiteturais, modelo de dados e spec de integrações.
@@ -88,8 +92,8 @@ docs/
 ## Fase 1 — Infraestrutura e Autenticação
 **Objetivo:** Monorepo scaffolding completo, banco inicializado, autenticação funcionando.
 **Entregáveis:**
-- `app/backend`: Express 5 + TypeScript + Drizzle ORM + PostgreSQL 17
-- `app/frontend`: Next.js 15 App Router + TypeScript + Tailwind CSS + Shadcn/ui
+- `app/backend`: NestJS 11 + TypeScript + Drizzle ORM + PostgreSQL 18
+- `app/frontend`: Next.js 16 App Router + TypeScript + Tailwind CSS + Shadcn/ui
 - Autenticação JWT (login, refresh, logout, perfis de acesso)
 - RBAC completo: 11 perfis conforme doc 013
 - Migrations iniciais com todas as entidades do modelo lógico
@@ -220,13 +224,14 @@ Quando existe escolha entre a solução mínima e a solução completa, a soluç
 - Toda operação crítica (associação, fechamento, faturamento) é transacional no banco.
 - Atualizações em tempo real são orientadas a eventos (WebSocket ou SSE).
 - Todas as ações críticas geram registro de auditoria imutável.
+- **Arquitetura clean, sem over-engineering:** cada módulo, serviço e abstração só existe se resolver um problema real. Sem camadas desnecessárias, sem padrões por imitação.
 
 ## Restrições
-- Banco de dados: PostgreSQL 17 com JSONB habilitado. Sem troca de banco.
+- Banco de dados: PostgreSQL 18 com JSONB habilitado. Sem troca de banco.
 - NFS-e: Sistema EISS da Prefeitura de Osasco-SP. Integração via SOAP Webservice.
 - Faturamento fiscal: NFS-e (nota de serviço). A AlphaCarnes é prestadora de serviços de distribuição.
 - Infraestrutura: on-premises. Sem dependência de cloud para operação crítica.
-- Stack: Next.js 15 (frontend), Node.js/Express 5 (backend), Drizzle ORM, TypeScript strict.
+- Stack: Next.js 16 (frontend), NestJS 11 (backend), Drizzle ORM, TypeScript strict.
 
 ## Restrições de Qualidade
 - TypeScript strict em todo o código (no `any` implícito).
@@ -303,53 +308,96 @@ git commit -m "docs: template ADR"
 - [ ] **Step 1: Criar o arquivo**
 
 ```markdown
-# ADR-001 — Stack Backend: Node.js + Express 5 + TypeScript
+# ADR-001 — Stack Backend: NestJS 11 + TypeScript
 
 **Data:** 2026-06-04
 **Status:** Aceita
 
 ## Contexto
-O backend precisa suportar: API REST para operações transacionais críticas, WebSocket/SSE para tempo real, integração com hardware serial (balança), integração SOAP com EISS NFS-e, e operação on-premises sem cloud. A equipe tem familiaridade com JavaScript/TypeScript.
+O backend precisa suportar: API REST para operações transacionais críticas, WebSocket/SSE para tempo real, integração com hardware serial (balança), integração SOAP com EISS NFS-e, e operação on-premises. O sistema tem domínios bem definidos (compras, pedidos, pesagem, expedição, faturamento) com regras de negócio próprias e necessidade de isolamento entre eles.
+
+A premissa de **arquitetura clean sem over-engineering** se aplica diretamente aqui: NestJS oferece estrutura modular por injeção de dependência, o que organiza o código naturalmente sem exigir padrões arquiteturais extras (sem CQRS, sem event sourcing, sem camadas desnecessárias).
 
 ## Decisão
-Usaremos **Node.js LTS (v22+)** com **Express 5** e **TypeScript 5 strict** como stack backend principal.
+Usaremos **NestJS 11** (Node.js LTS v22+) com **TypeScript 5 strict**.
 
-Bibliotecas complementares:
-- **Drizzle ORM** — ORM type-safe para PostgreSQL, suporte nativo a JSONB
-- **Zod 4** — validação de schemas em runtime (input/output de APIs)
-- **ws** — WebSocket nativo para tempo real
-- **node-serialport** — integração com balança RS-232
-- **soap** (node-soap) — cliente SOAP para EISS NFS-e
-- **bullmq** — filas para processamento assíncrono (impressão, reprocessamento fiscal)
-- **pino** — logging estruturado
-- **jose** — JWT (autenticação)
+### Por que NestJS e não Express puro
+NestJS resolve três problemas reais deste projeto sem adicionar complexidade desnecessária:
+1. **Módulos isolados por domínio** — cada domínio (compras, pedidos, pesagem...) é um `@Module()` com seus próprios controllers, services e dependências. Sem acoplamento acidental.
+2. **Injeção de dependência nativa** — services são injetáveis, testáveis isoladamente, sem precisar de fábricas manuais.
+3. **Pipes, Guards e Interceptors** — validação (Zod/class-validator), autenticação (JWT Guard) e auditoria (Interceptor) são declarativos e reutilizáveis, sem middleware espalhado.
+
+### O que NÃO vamos usar do NestJS
+Para manter a arquitetura clean e evitar over-engineering, **não vamos usar**:
+- CQRS module (`@nestjs/cqrs`) — desnecessário para este volume
+- Event Sourcing — payload JSONB no PostgreSQL é suficiente para auditoria
+- Microservices transport (`@nestjs/microservices`) — monolito modular é o suficiente
+- GraphQL — REST é simples e suficiente para todas as telas
+
+### Bibliotecas complementares
+| Biblioteca | Uso | Justificativa |
+|-----------|-----|---------------|
+| **Drizzle ORM** | PostgreSQL type-safe | SQL previsível, JSONB nativo, sem magia |
+| **Zod 4** | Validação de input/output | Type-safe em runtime, integra com DTOs |
+| **@nestjs/jwt + passport** | Autenticação JWT | Padrão NestJS, Guards declarativos |
+| **@nestjs/websockets + ws** | WebSocket tempo real | Nativo NestJS, sem Socket.io desnecessário |
+| **@nestjs/bull (BullMQ)** | Filas assíncronas | Impressão, retry NFS-e — só onde há necessidade real |
+| **node-serialport** | Balança RS-232 | Única opção para serial no Node.js |
+| **node-soap** | Cliente SOAP EISS | Necessário para NFS-e |
+| **pino + nestjs-pino** | Logging estruturado | Zero overhead, JSON nativo |
+
+### Estrutura de módulos (limpa, sem camadas extras)
+```
+app/backend/src/
+├── app.module.ts
+├── modules/
+│   ├── auth/           ← AuthModule (JWT, Guards, RBAC)
+│   ├── cadastros/      ← CadastrosModule (clientes, fornecedores, itens)
+│   ├── compras/        ← ComprasModule (compra programada, disponibilidade)
+│   ├── pedidos/        ← PedidosModule (pedidos, reservas)
+│   ├── pesagem/        ← PesagemModule (pesagem, associação sugestiva)
+│   ├── expedicao/      ← ExpedicaoModule (caminhão, conferência, fechamento)
+│   ├── faturamento/    ← FaturamentoModule (NFS-e, DANFE, liberação)
+│   └── dashboards/     ← DashboardsModule (KPIs, alertas, histórico)
+├── common/
+│   ├── guards/         ← RbacGuard, JwtAuthGuard
+│   ├── interceptors/   ← AuditoriaInterceptor
+│   └── pipes/          ← ZodValidationPipe
+├── database/
+│   ├── schema/         ← Drizzle schemas por domínio
+│   └── migrations/
+└── main.ts
+```
+
+Cada módulo tem: `controller.ts`, `service.ts`, `module.ts`. Sem repositórios separados (Drizzle já é a camada de dados).
 
 ## Consequências
 
 ### Positivas
-- TypeScript strict garante segurança de tipos ponta a ponta
-- Express 5 tem suporte nativo a async/await sem wrappers
-- Drizzle ORM gera SQL previsível e auditável, com suporte completo a JSONB
-- Ecossistema npm maduro para todas as integrações necessárias
+- Módulos NestJS mapeiam 1:1 com os domínios do negócio — fácil de navegar e manter
+- DI nativa facilita testes unitários de cada service em isolamento
+- Guards/Interceptors declarativos mantêm auth e auditoria fora da lógica de negócio
+- TypeScript strict end-to-end com inferência de tipos do Drizzle
 
 ### Negativas / Trade-offs
-- Node.js é single-threaded: operações CPU-intensas (geração de PDF, XML fiscal) precisam de worker threads ou processos separados
-- Express é minimalista: estrutura de projeto precisa ser definida explicitamente (não é opinionado)
+- NestJS tem mais boilerplate que Express para rotas simples (controller + service + module para cada domínio)
+- Curva de aprendizado inicial para quem não conhece NestJS
+- Mitigação: a estrutura modular paga o custo inicial ao crescer — Express ficaria desorganizado no mesmo ponto
 
 ### Riscos
-- **Integração serial (balança):** node-serialport requer drivers nativos; mitigação: containerizar apenas o app, manter o driver no host OS
-- **SOAP legado:** o WSDL do EISS pode mudar; mitigação: versionamento da integração + testes de contrato
+- **Integração serial (balança):** node-serialport requer drivers nativos; mitigação: processo separado (gateway) no host, não containerizado
+- **SOAP legado (EISS):** WSDL pode mudar; mitigação: encapsular em `NfseModule` com testes de contrato
 
 ## Alternativas Consideradas
 
-### NestJS
-Mais opinionado e com DI nativa. Descartado por adicionar complexidade sem benefício real para o tamanho atual do projeto. Express pode ser estruturado adequadamente sem o overhead do NestJS.
+### Express 5
+Mais simples para começar, mas exige disciplina arquitetural manual. Com 8 domínios de negócio, a falta de estrutura nativa levaria a inconsistências. NestJS resolve isso com módulos.
 
 ### Fastify
-Performance superior ao Express. Descartado porque a equipe tem mais familiaridade com Express e a performance do Express 5 é suficiente para o volume previsto (operação local, não SaaS multi-tenant).
+Performance superior, mas sem o sistema de módulos/DI do NestJS. Não justifica o ganho de performance para operação local on-premises.
 
 ## Referências
-- Context7: /expressjs/express (v5.2.0)
+- Context7: /nestjs/docs.nestjs.com (v11.1.16)
 - Context7: /drizzle-team/drizzle-orm-docs
 - Context7: /colinhacks/zod (v4.0.1)
 - docs/001-visao-geral-operacao-e-fluxo-macro.md
@@ -360,7 +408,7 @@ Performance superior ao Express. Descartado porque a equipe tem mais familiarida
 
 ```bash
 git add docs/architecture/adr/ADR-001-stack-backend.md
-git commit -m "docs: ADR-001 stack backend — Node.js + Express 5 + TypeScript"
+git commit -m "docs: ADR-001 stack backend — NestJS 11 + TypeScript, clean sem over-engineering"
 ```
 
 ---
@@ -372,7 +420,7 @@ git commit -m "docs: ADR-001 stack backend — Node.js + Express 5 + TypeScript"
 - [ ] **Step 1: Criar o arquivo**
 
 ```markdown
-# ADR-002 — Stack Frontend: Next.js 15 + TypeScript + Tailwind + Shadcn/ui
+# ADR-002 — Stack Frontend: Next.js 16 + TypeScript + Tailwind + Shadcn/ui
 
 **Data:** 2026-06-04
 **Status:** Aceita
@@ -382,10 +430,10 @@ O sistema tem dois perfis de interface distintos:
 1. **Frontend Administrativo:** desktop-first, formulários ricos, dashboards, filtros complexos.
 2. **Frontend Operacional (Terminais):** touch-friendly, alto contraste, baixo número de cliques, atualização em tempo real.
 
-Ambos precisam de TypeScript strict, autenticação por perfil e acesso ao backend Express via HTTP/WebSocket.
+Ambos precisam de TypeScript strict, autenticação por perfil e acesso ao backend NestJS via HTTP/WebSocket.
 
 ## Decisão
-Usaremos **Next.js 15 App Router** com **TypeScript 5 strict**, **Tailwind CSS 4** e **Shadcn/ui** para ambos os frontends (admin e operacional) dentro do mesmo projeto Next.js, separados por rotas e layouts.
+Usaremos **Next.js 16 App Router** com **TypeScript 5 strict**, **Tailwind CSS 4** e **Shadcn/ui** para ambos os frontends (admin e operacional) dentro do mesmo projeto Next.js, separados por rotas e layouts.
 
 Bibliotecas complementares:
 - **Shadcn/ui** — componentes acessíveis e customizáveis sobre Radix UI
@@ -419,7 +467,7 @@ Sem SSR. Descartado porque o dashboard administrativo se beneficia de Server Com
 Mais isolamento, mas duplicação de código e autenticação. Descartado: a complexidade de manter dois projetos frontend não justifica o benefício neste estágio.
 
 ## Referências
-- Context7: /vercel/next.js (v16.x)
+- Context7: /vercel/next.js (v16.2.2)
 - docs/012-arquitetura-aplicacional-modulos-servicos-e-integracoes.md (seções 3 e 4)
 - docs/016-wireframes-fluxos-por-tela.md
 ```
@@ -428,7 +476,7 @@ Mais isolamento, mas duplicação de código e autenticação. Descartado: a com
 
 ```bash
 git add docs/architecture/adr/ADR-002-stack-frontend.md
-git commit -m "docs: ADR-002 stack frontend — Next.js 15 App Router + Shadcn/ui"
+git commit -m "docs: ADR-002 stack frontend — Next.js 16 App Router + Shadcn/ui"
 ```
 
 ---
@@ -440,7 +488,7 @@ git commit -m "docs: ADR-002 stack frontend — Next.js 15 App Router + Shadcn/u
 - [ ] **Step 1: Criar o arquivo**
 
 ```markdown
-# ADR-003 — Banco de Dados: PostgreSQL 17 + JSONB
+# ADR-003 — Banco de Dados: PostgreSQL 18 + JSONB
 
 **Data:** 2026-06-04
 **Status:** Aceita
@@ -449,7 +497,7 @@ git commit -m "docs: ADR-002 stack frontend — Next.js 15 App Router + Shadcn/u
 O sistema requer: consistência transacional forte (ACID) para operações críticas (associação de peça, fechamento de expedição, faturamento), rastreabilidade de auditoria, suporte a dados semiestruturados (preferências de cliente, parâmetros de peça, payload fiscal), e operação on-premises.
 
 ## Decisão
-Usaremos **PostgreSQL 17** como banco transacional único com **JSONB habilitado**.
+Usaremos **PostgreSQL 18** como banco transacional único com **JSONB habilitado**.
 
 ### Uso de JSONB
 JSONB será usado para dados que variam por tipo ou têm estrutura flexível:
@@ -474,7 +522,7 @@ Tudo que tem cardinalidade fixa e é indexado ou filtrado é coluna tipada. JSON
 ### Positivas
 - ACID completo para operações transacionais críticas
 - JSONB com índices GIN: queries eficientes em dados semiestruturados
-- PostgreSQL 17 tem performance excelente para o volume previsto (operação local)
+- PostgreSQL 18 tem performance excelente para o volume previsto (operação local)
 - Drizzle ORM suporta JSONB nativamente com tipagem TypeScript
 
 ### Negativas / Trade-offs
@@ -494,7 +542,7 @@ Suporte a JSON inferior ao PostgreSQL. JSONB do PostgreSQL é indexável com GIN
 Sem ACID completo em transações multi-documento até versão recente. Operações de fechamento de expedição e faturamento exigem garantias transacionais fortes. Descartado.
 
 ## Referências
-- Context7: /websites/postgresql_current
+- Context7: /websites/postgresql_18
 - Context7: /drizzle-team/drizzle-orm-docs (jsonb, migrations)
 - docs/010-modelo-de-dados-conceitual-e-entidades-principais-do-sistema.md
 - docs/011-modelo-logico-inicial-banco-de-dados-tabelas-e-relacionamentos.md
@@ -504,7 +552,7 @@ Sem ACID completo em transações multi-documento até versão recente. Operaç�
 
 ```bash
 git add docs/architecture/adr/ADR-003-banco-de-dados.md
-git commit -m "docs: ADR-003 banco de dados — PostgreSQL 17 + JSONB"
+git commit -m "docs: ADR-003 banco de dados — PostgreSQL 18 + JSONB"
 ```
 
 ---
@@ -846,13 +894,13 @@ C4Container
     Person(usuario, "Usuário", "Compras, Comercial, Operadores, Faturamento, Gestor")
 
     System_Boundary(alphacarnes, "Sistema AlphaCarnes") {
-        Container(frontend, "Frontend Web", "Next.js 15, App Router, TypeScript, Tailwind, Shadcn/ui", "Interface administrativa (desktop) e terminais operacionais (touch). Servido pelo Node.js do Next.js.")
+        Container(frontend, "Frontend Web", "Next.js 16, App Router, TypeScript, Tailwind, Shadcn/ui", "Interface administrativa (desktop) e terminais operacionais (touch). Servido pelo Node.js do Next.js.")
 
-        Container(backend, "Backend API", "Node.js, Express 5, TypeScript, Drizzle ORM, Zod", "API REST + WebSocket. Centraliza todas as regras de negócio, transações e integrações.")
+        Container(backend, "Backend API", "NestJS 11, TypeScript, Drizzle ORM, Zod", "API REST + WebSocket. Módulos por domínio (compras, pedidos, pesagem, expedição, faturamento). Sem camadas desnecessárias.")
 
-        Container(db, "Banco de Dados", "PostgreSQL 17, JSONB", "Dados transacionais: pedidos, peças, expedição, faturamento, auditoria. JSONB para dados semiestruturados.")
+        Container(db, "Banco de Dados", "PostgreSQL 18, JSONB", "Dados transacionais: pedidos, peças, expedição, faturamento, auditoria. JSONB para dados semiestruturados.")
 
-        Container(queue, "Fila de Tarefas", "BullMQ + Redis", "Processamento assíncrono: impressão de etiquetas, retry NFS-e, envio de e-mails, eventos de domínio.")
+        Container(queue, "Fila de Tarefas", "BullMQ (Redis)", "Processamento assíncrono somente onde necessário: retry NFS-e, impressão de etiquetas, envio de e-mail.")
 
         Container(gateway_balanca, "Gateway de Balança", "Node.js, node-serialport", "Lê peso da balança via RS-232. Expõe WebSocket local para o backend.")
 
@@ -883,21 +931,23 @@ C4Container
 - Conexão WebSocket para atualizações em tempo real
 
 ### Backend API (`app/backend`)
-- Todas as regras de negócio
-- API REST por domínio (`/api/compras`, `/api/pedidos`, `/api/pesagem`, etc.)
-- WebSocket server para tempo real
-- Integração EISS NFS-e (encapsulada em serviço isolado)
-- Integração com gateways de balança e impressora
-- Auditoria automática via middleware
+- Módulos NestJS por domínio de negócio — sem camadas extras
+- API REST por módulo (`/compras`, `/pedidos`, `/pesagem`, `/expedicao`, `/faturamento`)
+- WebSocket Gateway NestJS para tempo real
+- `FaturamentoModule` encapsula toda comunicação SOAP com EISS
+- Guards declarativos para auth/RBAC; Interceptor para auditoria
+- Drizzle ORM direto nos services — sem repositórios intermediários desnecessários
 
-### PostgreSQL
+### PostgreSQL 18
 - Dados transacionais com ACID
 - JSONB para preferências, atributos de peça, payload fiscal
-- Auditoria via tabela de log + triggers
+- Auditoria via tabela de log + trigger `updated_at`
 
-### BullMQ + Redis
-- Filas: impressão de etiquetas, retry NFS-e, envio e-mail, propagação de eventos
-- Jobs recorrentes: limpeza de tokens expirados, relatórios diários
+### BullMQ (Redis)
+- Usado apenas onde o processamento síncrono não é viável:
+  - Retry de emissão NFS-e após falha do EISS
+  - Fila de impressão de etiquetas (um job por etiqueta)
+  - Envio de e-mail ao motorista
 
 ### Gateway de Balança
 - Processo separado no servidor on-premises
@@ -932,93 +982,107 @@ git commit -m "docs: C4 Nível 2 — diagrama de containers"
 
 ```mermaid
 C4Component
-    title AlphaCarnes — Componentes do Backend API
+    title AlphaCarnes — Componentes do Backend API (NestJS 11)
 
-    Container_Boundary(backend, "Backend API — Express 5") {
-        Component(router_compras, "Router: Compras", "Express Router", "CRUD de compra programada e desdobramento em disponibilidade virtual")
-        Component(router_pedidos, "Router: Pedidos", "Express Router", "Registro de pedidos, reserva de disponibilidade, preferências")
-        Component(router_pesagem, "Router: Pesagem", "Express Router", "Receber peso, sugerir associação, confirmar/redirecionar peça")
-        Component(router_expedicao, "Router: Expedição", "Express Router", "Posicionar peça no caminhão, transferir, fechar expedição")
-        Component(router_faturamento, "Router: Faturamento", "Express Router", "Montar payload fiscal, emitir NFS-e, liberar caminhão")
-        Component(router_cadastros, "Router: Cadastros", "Express Router", "Clientes, fornecedores, itens, usuários, parâmetros")
-        Component(router_dashboards, "Router: Dashboards", "Express Router", "KPIs, alertas, histórico operacional")
+    Container_Boundary(backend, "Backend API — NestJS 11") {
+        Component(mod_compras, "ComprasModule", "NestJS Module", "ComprasController + ComprasService: compra programada e disponibilidade virtual")
+        Component(mod_pedidos, "PedidosModule", "NestJS Module", "PedidosController + PedidosService: pedidos, reservas de disponibilidade")
+        Component(mod_pesagem, "PesagemModule", "NestJS Module", "PesagemController + PesagemService: peso, associação sugestiva, rastreabilidade")
+        Component(mod_expedicao, "ExpedicaoModule", "NestJS Module", "ExpedicaoController + ExpedicaoService: caminhão, conferência, fechamento")
+        Component(mod_faturamento, "FaturamentoModule", "NestJS Module", "FaturamentoController + FaturamentoService + NfseService: NFS-e EISS")
+        Component(mod_cadastros, "CadastrosModule", "NestJS Module", "Clientes, fornecedores, itens, usuários, parâmetros")
+        Component(mod_dashboards, "DashboardsModule", "NestJS Module", "KPIs, alertas, histórico operacional")
 
-        Component(svc_disponibilidade, "Service: Disponibilidade", "TypeScript", "Lógica de saldo virtual, reserva, overbooking, zeramento")
-        Component(svc_associacao, "Service: Associação Sugestiva", "TypeScript", "Algoritmo de sugestão: saldo + preferências + rota + planejamento")
-        Component(svc_rastreabilidade, "Service: Rastreabilidade", "TypeScript", "Registro de eventos de cada peça do recebimento à entrega")
-        Component(svc_nfse, "Service: NFS-e", "TypeScript, node-soap", "Encapsula toda comunicação SOAP com EISS Osasco-SP")
-        Component(svc_impressao, "Service: Impressão", "TypeScript", "Gera payload ZPL, enfileira, confirma impressão")
-        Component(svc_eventos, "Service: Eventos de Domínio", "TypeScript, BullMQ", "Publica e consome eventos; propaga para WebSocket")
-        Component(svc_auditoria, "Service: Auditoria", "TypeScript", "Middleware que registra todas as operações críticas")
+        Component(auth_module, "AuthModule", "NestJS Module + Passport", "JwtAuthGuard, RbacGuard — declarativos em cada controller")
+        Component(auditoria_interceptor, "AuditoriaInterceptor", "NestJS Interceptor", "Registra operações críticas automaticamente — sem código nos services")
+        Component(ws_gateway, "OperacaoGateway", "NestJS WebSocket Gateway", "Rooms por contexto: pesagem, caminhao:{id}, dashboard")
 
-        Component(ws_server, "WebSocket Server", "ws library", "Gerencia conexões, salas por contexto, broadcast de eventos")
-        Component(auth_middleware, "Auth Middleware", "JWT, jose", "Valida token, injeta usuário e perfil no request")
-        Component(rbac_middleware, "RBAC Middleware", "TypeScript", "Verifica permissão por perfil para cada endpoint")
-
-        Component(db_layer, "Drizzle ORM Layer", "Drizzle ORM, PostgreSQL", "Schemas tipados, queries, transactions, migrations")
+        Component(db_layer, "DatabaseModule", "Drizzle ORM + PostgreSQL 18", "Schemas tipados por domínio, migrations, transactions")
     }
 
-    Rel(router_compras, svc_disponibilidade, "Gera disponibilidade virtual após registrar compra")
-    Rel(router_pedidos, svc_disponibilidade, "Reserva disponibilidade ao confirmar pedido")
-    Rel(router_pesagem, svc_associacao, "Solicita sugestão de associação")
-    Rel(router_pesagem, svc_rastreabilidade, "Registra evento de pesagem")
-    Rel(router_expedicao, svc_rastreabilidade, "Registra evento de expedição")
-    Rel(router_faturamento, svc_nfse, "Emite NFS-e")
-    Rel(router_faturamento, svc_impressao, "Imprime etiqueta de saída")
-    Rel(svc_nfse, svc_eventos, "Publica evento: nfse_emitida")
-    Rel(svc_eventos, ws_server, "Propaga eventos para clientes WebSocket")
-    Rel(svc_auditoria, db_layer, "Persiste log de auditoria")
+    Rel(mod_compras, mod_pedidos, "DisponibilidadeService compartilhado via DI")
+    Rel(mod_pesagem, ws_gateway, "Emite evento após associar peça")
+    Rel(mod_expedicao, ws_gateway, "Emite evento ao fechar expedição")
+    Rel(mod_faturamento, ws_gateway, "Emite evento após NFS-e emitida")
+    Rel(auth_module, mod_compras, "JwtAuthGuard + RbacGuard aplicados")
+    Rel(auditoria_interceptor, db_layer, "Persiste log em tabela auditoria")
 ```
 
-## Estrutura de diretórios do backend
+## Estrutura de diretórios do backend (NestJS — clean)
 
 ```
 app/backend/src/
-├── routes/
-│   ├── compras.routes.ts
-│   ├── pedidos.routes.ts
-│   ├── pesagem.routes.ts
-│   ├── expedicao.routes.ts
-│   ├── faturamento.routes.ts
-│   ├── cadastros.routes.ts
-│   └── dashboards.routes.ts
+├── app.module.ts               ← importa todos os módulos de domínio
 │
-├── services/
-│   ├── disponibilidade.service.ts
-│   ├── associacao-sugestiva.service.ts
-│   ├── rastreabilidade.service.ts
-│   ├── nfse/
-│   │   ├── eiss-client.ts
-│   │   ├── nfse.service.ts
-│   │   ├── payload-builder.ts
-│   │   └── nfse-queue.ts
-│   ├── impressao.service.ts
-│   └── eventos.service.ts
+├── modules/
+│   ├── auth/
+│   │   ├── auth.module.ts
+│   │   ├── auth.service.ts     ← login, refresh, validação JWT
+│   │   ├── jwt.strategy.ts
+│   │   └── guards/
+│   │       ├── jwt-auth.guard.ts
+│   │       └── rbac.guard.ts
+│   │
+│   ├── compras/
+│   │   ├── compras.module.ts
+│   │   ├── compras.controller.ts
+│   │   └── compras.service.ts  ← inclui lógica de disponibilidade virtual
+│   │
+│   ├── pedidos/
+│   │   ├── pedidos.module.ts
+│   │   ├── pedidos.controller.ts
+│   │   └── pedidos.service.ts
+│   │
+│   ├── pesagem/
+│   │   ├── pesagem.module.ts
+│   │   ├── pesagem.controller.ts
+│   │   └── pesagem.service.ts  ← associação sugestiva + rastreabilidade
+│   │
+│   ├── expedicao/
+│   │   ├── expedicao.module.ts
+│   │   ├── expedicao.controller.ts
+│   │   └── expedicao.service.ts
+│   │
+│   ├── faturamento/
+│   │   ├── faturamento.module.ts
+│   │   ├── faturamento.controller.ts
+│   │   ├── faturamento.service.ts
+│   │   └── nfse/
+│   │       ├── nfse.service.ts       ← orquestra emissão/cancelamento
+│   │       ├── eiss-client.ts        ← cliente SOAP node-soap
+│   │       └── payload-builder.ts    ← monta NotaFiscalDTO
+│   │
+│   ├── cadastros/
+│   │   ├── cadastros.module.ts
+│   │   ├── cadastros.controller.ts
+│   │   └── cadastros.service.ts
+│   │
+│   └── dashboards/
+│       ├── dashboards.module.ts
+│       ├── dashboards.controller.ts
+│       └── dashboards.service.ts
 │
-├── middleware/
-│   ├── auth.middleware.ts
-│   ├── rbac.middleware.ts
-│   └── auditoria.middleware.ts
+├── common/
+│   ├── interceptors/
+│   │   └── auditoria.interceptor.ts
+│   ├── pipes/
+│   │   └── zod-validation.pipe.ts
+│   └── websocket/
+│       └── operacao.gateway.ts       ← @WebSocketGateway NestJS
 │
-├── db/
+├── database/
+│   ├── database.module.ts
 │   ├── schema/
 │   │   ├── cadastros.schema.ts
 │   │   ├── compras.schema.ts
 │   │   ├── pedidos.schema.ts
-│   │   ├── operacao.schema.ts
+│   │   ├── pesagem.schema.ts
 │   │   ├── expedicao.schema.ts
 │   │   ├── fiscal.schema.ts
 │   │   └── auditoria.schema.ts
-│   ├── migrations/
-│   └── index.ts
+│   └── migrations/
 │
-├── websocket/
-│   └── ws-server.ts
-│
-├── queues/
-│   └── workers/
-│
-└── app.ts
+└── main.ts
 ```
 ```
 
@@ -1435,15 +1499,22 @@ git push origin main
 ## Self-Review
 
 **Cobertura do escopo solicitado:**
-- [x] Roadmap E2E detalhado com premissa E2E formalizada (Task 1)
-- [x] Premissas e restrições formalizadas (Task 2)
-- [x] ADRs: stack backend, frontend, banco, tempo real, auth, NFS-e (Tasks 3-9)
-- [x] C4 Nível 1, 2 e 3 (Tasks 10-12)
-- [x] Modelo conceitual e lógico PostgreSQL + JSONB (Tasks 13-15)
+- [x] Roadmap E2E detalhado com premissas E2E + clean sem over-engineering (Task 1)
+- [x] Premissas e restrições formalizadas — inclui princípio anti-over-engineering (Task 2)
+- [x] ADRs: stack backend (NestJS 11), frontend (Next.js 16), banco (PostgreSQL 18), tempo real, auth, NFS-e (Tasks 3-9)
+- [x] C4 Nível 1, 2 e 3 — backend refletindo módulos NestJS, não Express (Tasks 10-12)
+- [x] Modelo conceitual e lógico PostgreSQL 18 + JSONB (Tasks 13-15)
 - [x] Documentação completa NFS-e Osasco-SP EISS (Tasks 16-24)
-- [x] Context7 usado: Next.js, Express, Drizzle ORM, Zod, PostgreSQL
+- [x] Context7 usado: NestJS 11.1.16, Next.js 16.2.2, Drizzle ORM, Zod 4, PostgreSQL 18
 - [x] Pesquisa real do WSDL, XSDs e portal da prefeitura de Osasco
 
-**Placeholders:** Nenhum TBD crítico. Tasks 13, 14, 17, 18, 20-23 têm instruções detalhadas de conteúdo mas o conteúdo real será preenchido na execução (são os mais volumosos).
+**Versões fixadas (Context7):**
+- NestJS: `v11.1.16`
+- Next.js: `v16.2.2`
+- PostgreSQL: `18`
+- Drizzle ORM: `drizzle-kit_0.31.5`
+- Zod: `v4.0.1`
 
-**Consistência de tipos:** Todos os nomes de arquivo, rotas e tipos são consistentes entre ADRs e C4.
+**Placeholders:** Nenhum TBD crítico. Tasks 13, 14, 17, 18, 20-23 têm instruções detalhadas mas o conteúdo será preenchido na execução (são os mais volumosos).
+
+**Consistência:** NestJS em todos os lugares onde antes estava Express. PostgreSQL 18 em ADR-003, C4 e convenções. Next.js 16 em ADR-002 e C4.
