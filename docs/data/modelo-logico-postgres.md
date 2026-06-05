@@ -182,6 +182,44 @@ CREATE INDEX idx_regras_desdobr_item_comercial ON regras_desdobramento_comercial
 
 ---
 
+### 1.5-b `regras_desdobramento`
+
+Fator fixo por par (item_compra × item_comercial): `quantidade_virtual = FLOOR(quantidade_comprada × fator)`.
+Exemplo: 1 boi inteiro com fator 1.0 para "dianteiro" = 1 dianteiro por boi comprado.
+
+```sql
+-- Regras de Desdobramento Comercial
+-- Fator fixo por par (item_compra × item_comercial): quantidade_virtual = FLOOR(quantidade_comprada × fator)
+-- Exemplo: 1 boi inteiro com fator 1.0 para "dianteiro" = 1 dianteiro por boi comprado
+CREATE TABLE regras_desdobramento (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_compra_id    UUID NOT NULL REFERENCES itens(id),
+  item_comercial_id UUID NOT NULL REFERENCES itens(id),
+  fator             NUMERIC(10,4) NOT NULL CHECK (fator > 0),
+  vigencia_inicio   DATE NOT NULL,
+  vigencia_fim      DATE,
+  ativo             BOOLEAN NOT NULL DEFAULT true,
+  observacoes       TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at        TIMESTAMPTZ,
+  CONSTRAINT regras_desdobramento_vigencia_check
+    CHECK (vigencia_fim IS NULL OR vigencia_fim >= vigencia_inicio)
+);
+-- Uma regra ativa por par (item_compra × item_comercial)
+CREATE UNIQUE INDEX idx_regras_desdobramento_ativo
+  ON regras_desdobramento (item_compra_id, item_comercial_id)
+  WHERE ativo = true AND deleted_at IS NULL;
+CREATE INDEX idx_regras_desdobramento_item_compra
+  ON regras_desdobramento(item_compra_id);
+-- Trigger updated_at
+CREATE TRIGGER trg_regras_desdobramento_updated_at
+  BEFORE UPDATE ON regras_desdobramento
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+```
+
+---
+
 ### 1.6 `usuarios`
 
 ```sql
@@ -283,6 +321,7 @@ CREATE INDEX idx_compras_prog_itens_item      ON compras_programadas_itens (item
 Saldo comercial virtual gerado a partir da compra. Consumido pelos pedidos sem overbooking (CHECK-01).
 
 ```sql
+-- quantidade_disponivel = quantidade_total - quantidade_reservada
 CREATE TABLE disponibilidades_virtuais (
   id                       UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   compra_id                UUID        NOT NULL REFERENCES compras_programadas (id),
