@@ -1,0 +1,16 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "id": "0000_initial_auth_rbac",
+  "prevId": "",
+  "tables": {},
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  }
+}

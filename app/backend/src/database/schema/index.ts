@@ -1,1 +1,2 @@
-// Schemas exportados aqui pela Task 5
+export * from './auth.schema';
+export * from './auditoria.schema';
