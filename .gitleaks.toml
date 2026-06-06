@@ -1,5 +1,4 @@
 [extend]
-# Usar as regras padrão do gitleaks
 useDefault = true
 
 [allowlist]
@@ -9,7 +8,6 @@ paths = [
   '''test/.*\.ts''',
   '''test/helpers/.*\.ts''',
 ]
-
-[[rules.allowlist]]
-description = "Placeholder values no .env.example"
-regexes = ['''change-me''', '''change-me-.*''']
+regexes = [
+  '''change-me''',
+]
