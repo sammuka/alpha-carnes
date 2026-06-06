@@ -1,22 +1,8 @@
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
-
-async function getUser() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('access_token')?.value;
-  if (!token) return null;
-  try {
-    const secret = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET ?? '');
-    const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch {
-    return null;
-  }
-}
+import { getMe } from '@/lib/auth';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const user = await getUser();
+  const user = await getMe();
   if (!user) redirect('/login');
 
   return (
@@ -28,6 +14,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <a href="/admin" className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">
             Dashboard
           </a>
+          {/* Gating de menu por permissão efetiva — vinda de /auth/me (backend) */}
+          {user.permissoes.includes('AUDITORIA_VISUALIZAR') && (
+            <a href="/admin/auditoria" className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">
+              Auditoria
+            </a>
+          )}
         </nav>
       </aside>
       {/* Main */}
