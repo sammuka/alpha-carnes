@@ -86,6 +86,33 @@ export class AuthRepository {
       .where(eq(schema.refreshTokens.tokenHash, tokenHash));
   }
 
+  async rotateRefreshToken(
+    oldTokenHash: string,
+    newToken: { usuarioId: string; tokenHash: string; expiresAt: Date; userAgent?: string; ip?: string },
+  ) {
+    return this.drizzle.db.transaction(async (tx) => {
+      // Dentro da transação: salvar novo e revogar antigo atomicamente
+      const [saved] = await tx
+        .insert(schema.refreshTokens)
+        .values(newToken)
+        .returning();
+
+      await tx
+        .update(schema.refreshTokens)
+        .set({ revokedAt: new Date(), replacedById: saved.id })
+        .where(eq(schema.refreshTokens.tokenHash, oldTokenHash));
+
+      return saved;
+    });
+  }
+
+  async revokeAllUserRefreshTokens(usuarioId: string) {
+    await this.db
+      .update(schema.refreshTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(schema.refreshTokens.usuarioId, usuarioId), isNull(schema.refreshTokens.revokedAt)));
+  }
+
   async updateUltimoAcesso(usuarioId: string) {
     await this.db
       .update(schema.usuarios)

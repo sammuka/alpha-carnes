@@ -61,8 +61,18 @@ export class AuthService {
     const storedToken = await this.authRepository.findRefreshToken(tokenHash);
 
     if (!storedToken) throw new UnauthorizedException('Refresh token inválido');
-    if (storedToken.revokedAt) throw new UnauthorizedException('Refresh token revogado');
     if (storedToken.expiresAt < new Date()) throw new UnauthorizedException('Refresh token expirado');
+
+    if (storedToken.revokedAt) {
+      // Reuse detection (R2): token já foi rotacionado ou revogado — possível ataque de replay.
+      // Revogar toda a família de tokens do usuário como medida de segurança.
+      this.logger.warn(
+        { usuarioId: storedToken.usuarioId },
+        'Reuse detection: refresh token já revogado; revogando todos os tokens do usuário',
+      );
+      await this.authRepository.revokeAllUserRefreshTokens(storedToken.usuarioId);
+      throw new UnauthorizedException('Refresh token revogado — sessão encerrada por segurança');
+    }
 
     const usuarioComPerfis = await this.authRepository.findUsuarioComPerfisPermissoes(storedToken.usuarioId);
     if (!usuarioComPerfis) throw new UnauthorizedException();
@@ -78,16 +88,14 @@ export class AuthService {
     const newRefreshTokenRaw = this.tokenService.generateRefreshToken();
     const newRefreshTokenHash = createHash('sha256').update(newRefreshTokenRaw).digest('hex');
 
-    const newStored = await this.authRepository.saveRefreshToken({
+    // Rotação atômica (R2): save novo + revogar antigo em uma transação
+    await this.authRepository.rotateRefreshToken(tokenHash, {
       usuarioId: storedToken.usuarioId,
       tokenHash: newRefreshTokenHash,
       expiresAt: this.tokenService.getRefreshExpiresAt(),
       userAgent: meta.userAgent,
       ip: meta.ip,
     });
-
-    // Revogar o token anterior com referência ao novo
-    await this.authRepository.revokeRefreshToken(tokenHash, newStored.id);
 
     return { accessToken: newAccessToken, refreshToken: newRefreshTokenRaw, usuario: payload };
   }

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
-import { Observable, tap } from 'rxjs';
+import { Observable, from, switchMap } from 'rxjs';
 import { Request } from 'express';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../database/database.module';
@@ -32,7 +32,6 @@ export class AuditoriaInterceptor implements NestInterceptor {
       context.getClass(),
     ]);
 
-    // Sem @Auditar → não audita
     if (!meta) return next.handle();
 
     const req = context.switchToHttp().getRequest<Request & { user?: CurrentUserPayload }>();
@@ -41,28 +40,32 @@ export class AuditoriaInterceptor implements NestInterceptor {
     const userAgent = (req.headers['user-agent'] as string) ?? null;
 
     return next.handle().pipe(
-      tap(async (responseBody) => {
-        // Somente após SUCESSO do handler (tap só é chamado quando o Observable emite sem erro)
-        try {
-          await this.drizzle.db.insert(auditoria).values({
-            tabela: meta.modulo,
-            registroId: usuarioId ?? '00000000-0000-0000-0000-000000000000',
-            operacao: 'ACAO_MANUAL',
-            modulo: meta.modulo,
-            usuarioId: usuarioId ?? undefined,
-            dadosNovos: responseBody ? { result: responseBody } : {},
-            ip,
-            userAgent,
-          });
-        } catch (err) {
-          // Falha de auditoria é observável e nunca silenciosa (RA-05/RA-06)
-          // Não re-lança — a operação de negócio já teve sucesso; o erro é observável via log
-          this.logger.error(
-            { err, acao: meta.acao, modulo: meta.modulo },
-            'Falha ao registrar auditoria',
-          );
-        }
-      }),
+      // switchMap aguarda o insert antes de emitir para o cliente (R1 fix)
+      switchMap((responseBody) =>
+        from(
+          this.drizzle.db
+            .insert(auditoria)
+            .values({
+              tabela: meta.modulo,
+              registroId: usuarioId ?? '00000000-0000-0000-0000-000000000000',
+              operacao: 'ACAO_MANUAL',
+              modulo: meta.modulo,
+              usuarioId: usuarioId ?? undefined,
+              dadosNovos: responseBody ? { result: responseBody } : {},
+              ip,
+              userAgent,
+            })
+            .then(() => responseBody)
+            .catch((err: unknown) => {
+              // Falha de auditoria é observável e nunca silenciosa (RA-05/RA-06)
+              this.logger.error(
+                { err, acao: meta.acao, modulo: meta.modulo },
+                'Falha ao registrar auditoria',
+              );
+              return responseBody; // não bloqueia a resposta
+            }),
+        ),
+      ),
     );
   }
 }
