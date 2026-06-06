@@ -1,0 +1,53 @@
+{
+  "name": "@alphacarnes/backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "start:prod": "node dist/main.js",
+    "lint": "eslint src --ext .ts",
+    "type-check": "tsc --noEmit",
+    "test": "jest --passWithNoTests",
+    "test:cov": "jest --coverage --passWithNoTests",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/database/migrate.ts",
+    "db:seed": "tsx src/database/seed.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "11.0.0",
+    "@nestjs/core": "11.0.0",
+    "@nestjs/platform-express": "11.0.0",
+    "@nestjs/jwt": "10.2.0",
+    "@nestjs/config": "3.3.0",
+    "@nestjs/throttler": "6.2.1",
+    "passport": "0.7.0",
+    "passport-jwt": "4.0.1",
+    "drizzle-orm": "0.41.0",
+    "pg": "8.13.1",
+    "zod": "3.24.2",
+    "nestjs-pino": "4.1.0",
+    "pino-http": "10.3.0",
+    "pino-pretty": "13.0.0",
+    "@node-rs/argon2": "2.0.2",
+    "cookie-parser": "1.4.7",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "10.4.9",
+    "@nestjs/testing": "11.0.0",
+    "@types/express": "5.0.0",
+    "@types/node": "22.0.0",
+    "@types/passport-jwt": "4.0.1",
+    "@types/pg": "8.11.10",
+    "@types/cookie-parser": "1.4.7",
+    "@types/supertest": "6.0.2",
+    "drizzle-kit": "0.30.4",
+    "dotenv": "16.4.7",
+    "jest": "29.7.0",
+    "ts-jest": "29.2.5",
+    "supertest": "7.0.0",
+    "tsx": "4.19.2",
+    "typescript": "5.6.3"
+  }
+}
