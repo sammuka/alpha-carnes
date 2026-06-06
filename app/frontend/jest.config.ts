@@ -7,8 +7,7 @@ const config: Config = {
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', { tsconfig: './tsconfig.json' }],
   },
-  // Executa @testing-library/jest-dom após o framework de teste estar instalado
-  setupFilesAfterFramework: ['<rootDir>/jest.setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   passWithNoTests: true,
 };
 
