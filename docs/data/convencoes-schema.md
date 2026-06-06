@@ -9,7 +9,7 @@
 - Constraints: `{tabela}_{descricao}_{tipo}` (ex: `pecas_status_valido_check`)
 
 ## Tipos de dado obrigatórios por categoria
-- PKs: `UUID DEFAULT gen_random_uuid()`
+- PKs: `UUID DEFAULT uuidv7()` (PostgreSQL 18 nativo — ordenável por tempo, conforme ADR-003 e ADR-007)
 - Datas/horas: sempre `TIMESTAMPTZ` (com timezone)
 - Valores monetários: `NUMERIC(15,2)` — nunca FLOAT
 - Pesos: `NUMERIC(10,3)` — 3 casas decimais (gramas como unidade mínima)

@@ -3,6 +3,8 @@
 **Data:** 2026-06-04
 **Status:** Aceita
 
+> **Nota (2026-06-05):** Supersedida parcialmente pela **ADR-007**. O vínculo usuário↔perfil passa a ser N:N (`usuarios_perfis`) e a autorização usa permissões nomeadas resolvidas a partir dos perfis do usuário. Os slugs canônicos dos 11 perfis estão na ADR-007. O mecanismo JWT (access/refresh, TTLs, revogação) permanece como decidido aqui.
+
 ## Contexto
 O sistema tem 11 perfis de acesso distintos (conforme doc 013): Administrador, Compras, Comercial, Operador de Pesagem, Operador de Corte, Operador de Expedição, Conferente, Faturamento, Gestor, Diretoria, Auditoria. Cada perfil tem capacidades específicas e algumas ações exigem aprovação de outro perfil (segregação de funções).
 

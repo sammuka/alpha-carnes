@@ -1,7 +1,7 @@
 # Modelo Lógico PostgreSQL — AlphaCarnes
 
 > **Convenções obrigatórias aplicadas em todas as tabelas:**
-> - PKs: `UUID DEFAULT gen_random_uuid()`
+> - PKs: `UUID DEFAULT uuidv7()`
 > - `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`
 > - `updated_at TIMESTAMPTZ NOT NULL DEFAULT now()` — atualizado por trigger
 > - `deleted_at TIMESTAMPTZ` — soft delete (nunca DELETE físico em entidades de negócio)
@@ -36,7 +36,7 @@
 
 ```sql
 CREATE TABLE clientes (
-  id               UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id               UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   codigo           TEXT        NOT NULL UNIQUE,
   razao_social     TEXT        NOT NULL,
   nome_fantasia    TEXT,
@@ -71,7 +71,7 @@ CREATE INDEX idx_clientes_preferencias_gin ON clientes USING GIN (preferencias);
 
 ```sql
 CREATE TABLE fornecedores (
-  id           UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id           UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   codigo       TEXT        NOT NULL UNIQUE,
   razao_social TEXT        NOT NULL,
   cnpj         TEXT        NOT NULL UNIQUE,
@@ -103,7 +103,7 @@ Representa o item comprado na origem (boi, lote suíno, caixa de frango etc.).
 
 ```sql
 CREATE TABLE itens_compra (
-  id            UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id            UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   codigo        TEXT        NOT NULL UNIQUE,
   descricao     TEXT        NOT NULL,
   categoria     TEXT        NOT NULL,
@@ -127,7 +127,7 @@ Representa o item vendável (dianteiro, central, traseiro, subitem específico e
 
 ```sql
 CREATE TABLE itens_comerciais (
-  id                   UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                   UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   codigo               TEXT        NOT NULL UNIQUE,
   descricao            TEXT        NOT NULL,
   categoria            TEXT        NOT NULL,
@@ -158,7 +158,7 @@ Define como 1 item de compra gera disponibilidade virtual (ex.: 1 boi → 1 dian
 
 ```sql
 CREATE TABLE regras_desdobramento_comercial (
-  id               UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id               UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   item_compra_id   UUID        NOT NULL REFERENCES itens_compra (id),
   item_comercial_id UUID       NOT NULL REFERENCES itens_comerciais (id),
   fator_quantidade NUMERIC(10,4) NOT NULL DEFAULT 1,
@@ -192,7 +192,7 @@ Exemplo: 1 boi inteiro com fator 1.0 para "dianteiro" = 1 dianteiro por boi comp
 -- Fator fixo por par (item_compra × item_comercial): quantidade_virtual = FLOOR(quantidade_comprada × fator)
 -- Exemplo: 1 boi inteiro com fator 1.0 para "dianteiro" = 1 dianteiro por boi comprado
 CREATE TABLE regras_desdobramento (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id                UUID PRIMARY KEY DEFAULT uuidv7(),
   item_compra_id    UUID NOT NULL REFERENCES itens(id),
   item_comercial_id UUID NOT NULL REFERENCES itens(id),
   fator             NUMERIC(10,4) NOT NULL CHECK (fator > 0),
@@ -220,28 +220,17 @@ CREATE TRIGGER trg_regras_desdobramento_updated_at
 
 ---
 
-### 1.6 `usuarios`
+### 1.6 `usuarios` e modelo RBAC N:N
+
+> Substituído pelo modelo N:N conforme ADR-007.
+> A coluna `usuarios.perfil` foi removida; o vínculo agora é via `usuarios_perfis`.
 
 ```sql
 CREATE TABLE usuarios (
-  id            UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id            UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   nome          TEXT        NOT NULL,
   email         TEXT        NOT NULL UNIQUE,
   senha_hash    TEXT        NOT NULL,
-  perfil        TEXT        NOT NULL
-                            CHECK (perfil IN (
-                              'admin',
-                              'gerente_comercial',
-                              'vendedor',
-                              'comprador',
-                              'supervisor_operacional',
-                              'operador_recebimento',
-                              'operador_pesagem',
-                              'operador_expedicao',
-                              'faturista',
-                              'financeiro',
-                              'visualizador'
-                            )),
   ativo         BOOLEAN     NOT NULL DEFAULT true,
   ultimo_acesso TIMESTAMPTZ,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -250,8 +239,59 @@ CREATE TABLE usuarios (
 );
 
 CREATE INDEX idx_usuarios_email  ON usuarios (email);
-CREATE INDEX idx_usuarios_perfil ON usuarios (perfil) WHERE deleted_at IS NULL;
 CREATE INDEX idx_usuarios_ativo  ON usuarios (ativo) WHERE deleted_at IS NULL;
+
+CREATE TRIGGER trg_usuarios_updated_at
+  BEFORE UPDATE ON usuarios
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Catálogo de perfis (11 slugs canônicos — ADR-007)
+CREATE TABLE perfis (
+  id          UUID  NOT NULL DEFAULT uuidv7() PRIMARY KEY,
+  slug        TEXT  NOT NULL UNIQUE CHECK (slug IN (
+                'administrador','compras','gestor','comercial',
+                'recebimento_pesagem','corte','expedicao','conferente',
+                'faturamento','logistica','diretoria'
+              )),
+  nome        TEXT  NOT NULL,
+  descricao   TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER trg_perfis_updated_at
+  BEFORE UPDATE ON perfis
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Vínculo N:N usuário ↔ perfil
+CREATE TABLE usuarios_perfis (
+  id          UUID  NOT NULL DEFAULT uuidv7() PRIMARY KEY,
+  usuario_id  UUID  NOT NULL REFERENCES usuarios (id),
+  perfil_id   UUID  NOT NULL REFERENCES perfis (id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_usuario_perfil UNIQUE (usuario_id, perfil_id)
+);
+
+CREATE INDEX idx_usuarios_perfis_usuario ON usuarios_perfis (usuario_id);
+CREATE INDEX idx_usuarios_perfis_perfil  ON usuarios_perfis (perfil_id);
+
+-- Catálogo de permissões nomeadas
+CREATE TABLE permissoes (
+  id       UUID NOT NULL DEFAULT uuidv7() PRIMARY KEY,
+  codigo   TEXT NOT NULL UNIQUE,
+  descricao TEXT
+);
+
+-- Vínculo N:N perfil ↔ permissão
+CREATE TABLE perfis_permissoes (
+  id           UUID NOT NULL DEFAULT uuidv7() PRIMARY KEY,
+  perfil_id    UUID NOT NULL REFERENCES perfis (id),
+  permissao_id UUID NOT NULL REFERENCES permissoes (id),
+  CONSTRAINT uq_perfil_permissao UNIQUE (perfil_id, permissao_id)
+);
+
+CREATE INDEX idx_perfis_permissoes_perfil    ON perfis_permissoes (perfil_id);
+CREATE INDEX idx_perfis_permissoes_permissao ON perfis_permissoes (permissao_id);
 ```
 
 ---
@@ -262,7 +302,7 @@ CREATE INDEX idx_usuarios_ativo  ON usuarios (ativo) WHERE deleted_at IS NULL;
 
 ```sql
 CREATE TABLE compras_programadas (
-  id                  UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                  UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   data_operacao       DATE        NOT NULL UNIQUE,  -- RN-07: um lote principal por dia na V1
   fornecedor_id       UUID        NOT NULL REFERENCES fornecedores (id),
   numero_interno      TEXT        UNIQUE,
@@ -299,7 +339,7 @@ CREATE INDEX idx_compras_prog_fornecedor    ON compras_programadas (fornecedor_i
 
 ```sql
 CREATE TABLE compras_programadas_itens (
-  id                     UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                     UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   compra_id              UUID        NOT NULL REFERENCES compras_programadas (id),
   item_compra_id         UUID        NOT NULL REFERENCES itens_compra (id),
   quantidade_partes      INTEGER     NOT NULL CHECK (quantidade_partes > 0),
@@ -323,7 +363,7 @@ Saldo comercial virtual gerado a partir da compra. Consumido pelos pedidos sem o
 ```sql
 -- quantidade_disponivel = quantidade_total - quantidade_reservada
 CREATE TABLE disponibilidades_virtuais (
-  id                       UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                       UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   compra_id                UUID        NOT NULL REFERENCES compras_programadas (id),
   item_comercial_id        UUID        NOT NULL REFERENCES itens_comerciais (id),
   data_validade            DATE        NOT NULL,
@@ -366,7 +406,7 @@ Tabela transacional de rastreamento de reservas — permite auditoria de cada re
 
 ```sql
 CREATE TABLE reservas_disponibilidade (
-  id                      UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                      UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   disponibilidade_id      UUID        NOT NULL REFERENCES disponibilidades_virtuais (id),
   pedido_venda_item_id    UUID        NOT NULL,  -- FK após criação de pedidos_venda_itens
   quantidade_reservada    INTEGER     NOT NULL CHECK (quantidade_reservada > 0),
@@ -391,7 +431,7 @@ CREATE INDEX idx_reservas_status          ON reservas_disponibilidade (status_re
 
 ```sql
 CREATE TABLE pedidos_venda (
-  id                 UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                 UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   compra_id          UUID        NOT NULL REFERENCES compras_programadas (id),
   cliente_id         UUID        NOT NULL REFERENCES clientes (id),
   data_pedido        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -432,7 +472,7 @@ CREATE INDEX idx_pedidos_venda_cliente_status ON pedidos_venda (cliente_id, data
 
 ```sql
 CREATE TABLE pedidos_venda_itens (
-  id                   UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                   UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   pedido_id            UUID        NOT NULL REFERENCES pedidos_venda (id),
   item_comercial_id    UUID        NOT NULL REFERENCES itens_comerciais (id),
   disponibilidade_id   UUID        REFERENCES disponibilidades_virtuais (id),
@@ -478,7 +518,7 @@ ALTER TABLE reservas_disponibilidade
 
 ```sql
 CREATE TABLE recebimentos (
-  id                     UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                     UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   compra_id              UUID        NOT NULL REFERENCES compras_programadas (id),
   fornecedor_id          UUID        NOT NULL REFERENCES fornecedores (id),
   data_hora_chegada      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -512,7 +552,7 @@ CREATE INDEX idx_recebimentos_data       ON recebimentos (data_hora_chegada);
 
 ```sql
 CREATE TABLE recebimentos_itens (
-  id                    UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                    UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   recebimento_id        UUID        NOT NULL REFERENCES recebimentos (id),
   item_comercial_id     UUID        REFERENCES itens_comerciais (id),
   classificacao_operacional TEXT,
@@ -541,7 +581,7 @@ CREATE INDEX idx_receb_itens_status      ON recebimentos_itens (status_apuracao)
 
 ```sql
 CREATE TABLE divergencias_recebimento (
-  id                     UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                     UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   recebimento_id         UUID        NOT NULL REFERENCES recebimentos (id),
   tipo                   TEXT        NOT NULL
                                      CHECK (tipo IN (
@@ -581,7 +621,7 @@ CREATE INDEX idx_diverg_receb_tipo        ON divergencias_recebimento (tipo);
 
 ```sql
 CREATE TABLE divergencias_recebimento_pedidos_afetados (
-  id              UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id              UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   divergencia_id  UUID        NOT NULL REFERENCES divergencias_recebimento (id),
   pedido_id       UUID        NOT NULL REFERENCES pedidos_venda (id),
   impacto         TEXT,
@@ -601,7 +641,7 @@ CREATE INDEX idx_div_ped_afet_pedido      ON divergencias_recebimento_pedidos_af
 
 ```sql
 CREATE TABLE ocorrencias_fornecedor (
-  id                    UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                    UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   fornecedor_id         UUID        NOT NULL REFERENCES fornecedores (id),
   compra_id             UUID        REFERENCES compras_programadas (id),
   divergencia_id        UUID        REFERENCES divergencias_recebimento (id),
@@ -634,7 +674,7 @@ CREATE INDEX idx_ocorr_forn_compra     ON ocorrencias_fornecedor (compra_id);
 
 ```sql
 CREATE TABLE ocorrencias_fornecedor_historico (
-  id              UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id              UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   ocorrencia_id   UUID        NOT NULL REFERENCES ocorrencias_fornecedor (id),
   status_anterior TEXT        NOT NULL,
   status_novo     TEXT        NOT NULL,
@@ -656,7 +696,7 @@ Entidade central da operação física — cada peça física rastreada individu
 
 ```sql
 CREATE TABLE pecas (
-  id                    UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                    UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   numero                BIGSERIAL   NOT NULL UNIQUE,  -- identificador operacional sequencial
   compra_id             UUID        NOT NULL REFERENCES compras_programadas (id),
   recebimento_id        UUID        NOT NULL REFERENCES recebimentos (id),
@@ -714,7 +754,7 @@ Log de todas as pesagens (incluindo manuais e repetições). Rastreabilidade de 
 
 ```sql
 CREATE TABLE pesagens (
-  id           UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id           UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   peca_id      UUID        NOT NULL REFERENCES pecas (id),
   peso_lido    NUMERIC(10,3) NOT NULL CHECK (peso_lido > 0),
   modo_captura TEXT        NOT NULL CHECK (modo_captura IN (
@@ -742,7 +782,7 @@ Recomendações do sistema para vincular peça a pedido. Pode ser efêmera ou pe
 
 ```sql
 CREATE TABLE sugestoes_associacao (
-  id                    UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                    UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   peca_id               UUID        NOT NULL REFERENCES pecas (id),
   pedido_id             UUID        NOT NULL REFERENCES pedidos_venda (id),
   pedido_venda_item_id  UUID        NOT NULL REFERENCES pedidos_venda_itens (id),
@@ -771,7 +811,7 @@ Toda transferência de destinação de peça deve ser registrada aqui (RI-05).
 
 ```sql
 CREATE TABLE historico_associacoes_peca (
-  id                         UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                         UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   peca_id                    UUID        NOT NULL REFERENCES pecas (id),
   pedido_origem_id           UUID        REFERENCES pedidos_venda (id),
   pedido_destino_id          UUID        REFERENCES pedidos_venda (id),
@@ -795,7 +835,7 @@ CREATE INDEX idx_hist_assoc_pedido  ON historico_associacoes_peca (pedido_destin
 
 ```sql
 CREATE TABLE transformacoes (
-  id                    UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                    UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   peca_origem_id        UUID        NOT NULL REFERENCES pecas (id),
   tipo_transformacao    TEXT        NOT NULL CHECK (tipo_transformacao IN (
                                       'corte',
@@ -834,7 +874,7 @@ Cada item derivado de um corte/transformação. Tem identidade própria (RN-07).
 
 ```sql
 CREATE TABLE subitens (
-  id                    UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                    UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   transformacao_id      UUID        NOT NULL REFERENCES transformacoes (id),
   peca_origem_id        UUID        NOT NULL REFERENCES pecas (id),
   item_comercial_id     UUID        REFERENCES itens_comerciais (id),
@@ -873,7 +913,7 @@ Histórico de todas as etiquetas emitidas. Reimpressões auditadas (RI-07).
 
 ```sql
 CREATE TABLE etiquetas (
-  id                  UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                  UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   codigo_etiqueta     TEXT        NOT NULL UNIQUE,
   tipo_etiqueta       TEXT        NOT NULL CHECK (tipo_etiqueta IN (
                                     'peca',
@@ -914,7 +954,7 @@ CREATE INDEX idx_etiquetas_status   ON etiquetas (status);
 
 ```sql
 CREATE TABLE caminhoes (
-  id                  UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                  UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   placa               TEXT        NOT NULL,
   motorista           TEXT        NOT NULL,
   rota                TEXT,
@@ -972,7 +1012,7 @@ Relaciona pedido de venda ao caminhão de entrega.
 
 ```sql
 CREATE TABLE caminhoes_pedidos (
-  id             UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id             UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   caminhao_id    UUID        NOT NULL REFERENCES caminhoes (id),
   pedido_id      UUID        NOT NULL REFERENCES pedidos_venda (id),
   ordem_na_carga INTEGER,
@@ -1002,7 +1042,7 @@ Relaciona peça ou subitem ao caminhão. CHECK-06: só um dos dois preenchido.
 
 ```sql
 CREATE TABLE carga_itens (
-  id                   UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                   UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   caminhao_id          UUID        NOT NULL REFERENCES caminhoes (id),
   tipo_origem          TEXT        NOT NULL CHECK (tipo_origem IN ('peca', 'subitem')),
   peca_id              UUID        REFERENCES pecas (id),
@@ -1040,7 +1080,7 @@ CREATE INDEX idx_carga_itens_subitem  ON carga_itens (subitem_id) WHERE subitem_
 
 ```sql
 CREATE TABLE conferencias_carga (
-  id                UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   caminhao_id       UUID        NOT NULL REFERENCES caminhoes (id),
   operador_id       UUID        REFERENCES usuarios (id),
   status            TEXT        NOT NULL DEFAULT 'iniciada'
@@ -1072,7 +1112,7 @@ CREATE INDEX idx_conf_carga_pendencias_gin ON conferencias_carga USING GIN (pend
 
 ```sql
 CREATE TABLE faturamentos (
-  id                UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   caminhao_id       UUID        NOT NULL REFERENCES caminhoes (id) UNIQUE,
   responsavel_id    UUID        REFERENCES usuarios (id),
   status            TEXT        NOT NULL DEFAULT 'iniciado'
@@ -1100,7 +1140,7 @@ CREATE INDEX idx_faturamentos_status   ON faturamentos (status);
 
 ```sql
 CREATE TABLE notas_fiscais (
-  id                    UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                    UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   faturamento_id        UUID        NOT NULL REFERENCES faturamentos (id),
   pedido_id             UUID        REFERENCES pedidos_venda (id),
   expedicao_id          UUID        REFERENCES caminhoes (id),
@@ -1146,7 +1186,7 @@ Tabela N:N — uma NF pode consolidar múltiplos pedidos.
 
 ```sql
 CREATE TABLE notas_fiscais_pedidos (
-  id           UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id           UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   nota_id      UUID        NOT NULL REFERENCES notas_fiscais (id),
   pedido_id    UUID        NOT NULL REFERENCES pedidos_venda (id),
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1164,7 +1204,7 @@ CREATE INDEX idx_nf_pedidos_pedido ON notas_fiscais_pedidos (pedido_id);
 
 ```sql
 CREATE TABLE seguros_carga (
-  id                UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   caminhao_id       UUID        NOT NULL REFERENCES caminhoes (id) UNIQUE,
   status            TEXT        NOT NULL DEFAULT 'pendente'
                                 CHECK (status IN (
@@ -1193,7 +1233,7 @@ Evidência do envio eletrônico de documentos ao motorista.
 
 ```sql
 CREATE TABLE envios_documento_motorista (
-  id             UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id             UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   caminhao_id    UUID        NOT NULL REFERENCES caminhoes (id),
   tipo_documento TEXT        NOT NULL CHECK (tipo_documento IN (
                                'danfe',
@@ -1231,7 +1271,7 @@ Sobras e entradas excepcionais de estoque. Toda entrada registra origem operacio
 
 ```sql
 CREATE TABLE estoque_movimentos (
-  id                UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id                UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   tipo_origem       TEXT        NOT NULL CHECK (tipo_origem IN ('peca', 'subitem')),
   peca_id           UUID        REFERENCES pecas (id),
   subitem_id        UUID        REFERENCES subitens (id),
@@ -1272,7 +1312,7 @@ CREATE INDEX idx_estoque_mov_motivo  ON estoque_movimentos (motivo_entrada);
 
 ```sql
 CREATE TABLE alertas (
-  id               UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id               UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   tipo             TEXT        NOT NULL CHECK (tipo IN (
                                  'saldo_critico',
                                  'divergencia_recebimento',
@@ -1312,7 +1352,7 @@ Complementa `divergencias_recebimento` para divergências de outros módulos.
 
 ```sql
 CREATE TABLE divergencias (
-  id               UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id               UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   recebimento_id   UUID        REFERENCES recebimentos (id),
   tipo             TEXT        NOT NULL,
   descricao        TEXT        NOT NULL,
@@ -1343,7 +1383,7 @@ Log imutável de todas as operações críticas. Nunca soft-delete — jamais de
 
 ```sql
 CREATE TABLE auditoria (
-  id               UUID        NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  id               UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
   tabela           TEXT        NOT NULL,
   registro_id      UUID        NOT NULL,
   operacao         TEXT        NOT NULL CHECK (operacao IN ('INSERT', 'UPDATE', 'DELETE', 'ACAO_MANUAL')),
@@ -1408,9 +1448,7 @@ CREATE TRIGGER trg_regras_desdobr_updated_at
   BEFORE UPDATE ON regras_desdobramento_comercial
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-CREATE TRIGGER trg_usuarios_updated_at
-  BEFORE UPDATE ON usuarios
-  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+-- trg_usuarios_updated_at, trg_perfis_updated_at definidos inline em §1.6 (ADR-007)
 
 -- Compra programada
 CREATE TRIGGER trg_compras_prog_updated_at
@@ -1593,7 +1631,7 @@ Consolidação de todos os `CHECK` constraints de status aplicados no DDL acima.
 | `clientes` | `ativo` | `true`, `false` |
 | `fornecedores` | `ativo` | `true`, `false` |
 | `regras_desdobramento_comercial` | `status` | `ativa`, `inativa` |
-| `usuarios` | `perfil` | `admin`, `gerente_comercial`, `vendedor`, `comprador`, `supervisor_operacional`, `operador_recebimento`, `operador_pesagem`, `operador_expedicao`, `faturista`, `financeiro`, `visualizador` |
+| `perfis` | `slug` | `administrador`, `compras`, `gestor`, `comercial`, `recebimento_pesagem`, `corte`, `expedicao`, `conferente`, `faturamento`, `logistica`, `diretoria` |
 | `compras_programadas` | `status` | `rascunho`, `em_negociacao`, `confirmada`, `operacionalizada`, `recebida`, `encerrada`, `cancelada` |
 | `disponibilidades_virtuais` | `status` | `gerada`, `parcialmente_reservada`, `esgotada`, `parcialmente_expedida`, `encerrada`, `com_sobra`, `impactada_por_divergencia` |
 | `reservas_disponibilidade` | `status_reserva` | `ativa`, `liberada`, `consumida`, `cancelada` |
