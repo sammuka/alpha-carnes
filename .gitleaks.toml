@@ -1,0 +1,24 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Ignorar exemplos, fixtures de teste e artefatos de build (não versionados)"
+paths = [
+  '''.env\.example''',
+  '''test/.*\.ts''',
+  '''test/helpers/.*\.ts''',
+  '''__tests__/.*\.ts''',
+  '''__tests__/.*\.tsx''',
+  '''.*\.spec\.ts''',
+  '''.*\.e2e-spec\.ts''',
+  # Artefatos de build/deps — efêmeros, fora do git (chaves auto-geradas pelo Next.js)
+  '''.*/\.next/.*''',
+  '''.*/node_modules/.*''',
+  '''.*/dist/.*''',
+  '''.*/coverage/.*''',
+  # Docs de design contêm Figma file keys (identificadores públicos, não credenciais)
+  '''docs/design-system/.*''',
+]
+regexes = [
+  '''change-me''',
+]

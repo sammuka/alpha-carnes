@@ -1,0 +1,54 @@
+name: alphacarnes
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: alphacarnes
+      POSTGRES_PASSWORD: alphacarnes
+      POSTGRES_DB: alphacarnes
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alphacarnes -d alphacarnes"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    build:
+      context: .
+      dockerfile: app/backend/Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://alphacarnes:alphacarnes@postgres:5432/alphacarnes
+      NODE_ENV: production
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: app/frontend/Dockerfile
+    env_file:
+      - .env
+    environment:
+      # BFF server-to-server (container-to-container)
+      BACKEND_INTERNAL_URL: http://backend:3001
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

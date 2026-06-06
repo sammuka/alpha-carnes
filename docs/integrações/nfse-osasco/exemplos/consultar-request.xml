@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:tem="http://tempuri.org/"
+                  xmlns:eis="http://schemas.datacontract.org/2004/07/Eiss.NfeWebServices.Contracts">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <tem:ConsultarNotaCompleta>
+      <tem:consulta>
+        <eis:ChaveAutenticacao>TOKEN_HOMOLOGACAO_AQUI</eis:ChaveAutenticacao>
+        <eis:Homologacao>true</eis:Homologacao>
+        <eis:NumeroNota>20250001234</eis:NumeroNota>
+      </tem:consulta>
+    </tem:ConsultarNotaCompleta>
+  </soapenv:Body>
+</soapenv:Envelope>
