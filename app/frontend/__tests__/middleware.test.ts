@@ -1,5 +1,7 @@
-// Teste do middleware Edge — verifica redirect sem token e acesso com token válido
-// Como o middleware roda no Edge, testamos a lógica internamente
+/**
+ * @jest-environment @edge-runtime/jest-environment
+ */
+// Teste do middleware Edge — usa Edge runtime (NextRequest + Response nativos)
 
 import { NextRequest } from 'next/server';
 

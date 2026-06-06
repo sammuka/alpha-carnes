@@ -1,58 +1,45 @@
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
+import { count, eq } from 'drizzle-orm';
 import * as schema from '../../src/database/schema';
-import { eq, count } from 'drizzle-orm';
+import { seed } from '../../src/database/seed';
 
-// Este teste valida que o seed é idempotente (pode rodar 2x sem duplicar)
-// Requer DATABASE_URL apontando a um banco limpo com migrations aplicadas
 describe('Seed idempotência', () => {
   let pool: Pool;
-  let db: ReturnType<typeof drizzle>;
+  let db: ReturnType<typeof drizzle<typeof schema>>;
 
   beforeAll(async () => {
     const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      console.warn('DATABASE_URL não definida — pulando teste de seed');
-      return;
-    }
+    if (!connectionString) throw new Error('DATABASE_URL não definida');
+
     pool = new Pool({ connectionString });
     db = drizzle(pool, { schema });
-  });
+
+    // Executar seed 2× para provar idempotência (DoD da F1)
+    await seed();
+    await seed();
+  }, 60_000);
 
   afterAll(async () => {
     await pool?.end();
   });
 
-  it('deve ter exatamente 11 perfis após o seed', async () => {
-    if (!db) return; // skip se DATABASE_URL não definida
-    const result = await db.select({ total: count() }).from(schema.perfis);
-    expect(result[0]?.total).toBeGreaterThanOrEqual(11);
+  it('tem exatamente 11 perfis canônicos após seed 2×', async () => {
+    const [row] = await db.select({ total: count() }).from(schema.perfis);
+    expect(row?.total).toBe(11);
   });
 
-  it('deve ter exatamente 4 permissões F1 após o seed', async () => {
-    if (!db) return;
-    const result = await db.select({ total: count() }).from(schema.permissoes);
-    expect(result[0]?.total).toBeGreaterThanOrEqual(4);
+  it('tem exatamente 4 permissões F1 após seed 2×', async () => {
+    const [row] = await db.select({ total: count() }).from(schema.permissoes);
+    expect(row?.total).toBe(4);
   });
 
-  it('deve ter ao menos 1 usuário admin após o seed', async () => {
-    if (!db) return;
+  it('tem exatamente 1 usuário admin após seed 2×', async () => {
     const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@alphacarnes.local';
-    const result = await db
+    const rows = await db
       .select()
       .from(schema.usuarios)
       .where(eq(schema.usuarios.email, adminEmail));
-    expect(result.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('segunda execução do seed não duplica registros (idempotência verificada por count)', async () => {
-    if (!db) return;
-    // Verificar que contagens são estáveis (a primeira seed já rodou no beforeAll)
-    const perfisCount = await db.select({ total: count() }).from(schema.perfis);
-    const permCount = await db.select({ total: count() }).from(schema.permissoes);
-
-    // Verificar que não há mais de 11 perfis nem mais de 4 permissões (não duplicou)
-    expect(perfisCount[0]?.total).toBeLessThanOrEqual(15); // tolerância para fixtures dos e2e
-    expect(permCount[0]?.total).toBeLessThanOrEqual(10);
+    expect(rows.length).toBe(1);
   });
 });

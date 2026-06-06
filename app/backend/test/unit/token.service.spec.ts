@@ -6,15 +6,18 @@ describe('TokenService', () => {
 
   beforeEach(() => {
     const jwtService = new JwtService({ secret: 'test-secret-min-32-chars-for-test' });
+    const cfgMap: Record<string, string> = {
+      JWT_ACCESS_SECRET: 'test-access-secret-min-32-chars-ok',
+      JWT_REFRESH_SECRET: 'test-refresh-secret-min-32-chars-ok',
+      JWT_ACCESS_TTL: '15m',
+      JWT_REFRESH_TTL: '8h',
+    };
     tokenService = new TokenService(jwtService, {
-      get: (key: string) => {
-        const map: Record<string, string> = {
-          JWT_ACCESS_SECRET: 'test-access-secret-min-32-chars-ok',
-          JWT_REFRESH_SECRET: 'test-refresh-secret-min-32-chars-ok',
-          JWT_ACCESS_TTL: '15m',
-          JWT_REFRESH_TTL: '8h',
-        };
-        return map[key];
+      get: (key: string) => cfgMap[key],
+      getOrThrow: (key: string) => {
+        const v = cfgMap[key];
+        if (!v) throw new Error(`Config key not found: ${key}`);
+        return v;
       },
     } as never);
   });

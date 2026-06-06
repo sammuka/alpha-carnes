@@ -32,7 +32,7 @@ const MAPA: Record<string, string[]> = {
   diretoria: ['AUDITORIA_VISUALIZAR'],
 };
 
-async function seed() {
+export async function seed() {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     console.error('❌ DATABASE_URL não definida');
@@ -105,4 +105,7 @@ async function seed() {
   }
 }
 
-seed();
+// Executar apenas quando chamado diretamente (não quando importado como módulo)
+if (require.main === module) {
+  seed();
+}
