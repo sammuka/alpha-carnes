@@ -6,7 +6,7 @@ export const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('8h'),
-  COOKIE_SECURE: z.string().transform((v) => v === 'true').default('false'),
+  COOKIE_SECURE: z.string().default('false').transform((v) => v === 'true'),
   THROTTLE_LOGIN_LIMIT: z.coerce.number().int().positive().default(5),
   THROTTLE_LOGIN_TTL: z.coerce.number().int().positive().default(60000),
   CORS_ORIGIN: z.string().url().default('http://localhost:3000'),

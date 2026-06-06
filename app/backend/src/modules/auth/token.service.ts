@@ -17,6 +17,8 @@ export class TokenService {
   ) {}
 
   signAccessToken(payload: CurrentUserPayload): string {
+    const secret = this.config.getOrThrow<string>('JWT_ACCESS_SECRET');
+    const expiresIn = (this.config.get<string>('JWT_ACCESS_TTL') ?? '15m') as `${number}${'s' | 'm' | 'h' | 'd'}`;
     return this.jwtService.sign(
       {
         sub: payload.sub,
@@ -24,16 +26,13 @@ export class TokenService {
         perfis: payload.perfis,
         permissoes: payload.permissoes,
       },
-      {
-        secret: this.config.get<string>('JWT_ACCESS_SECRET'),
-        expiresIn: this.config.get<string>('JWT_ACCESS_TTL') ?? '15m',
-      },
+      { secret, expiresIn },
     );
   }
 
   verifyAccessToken(token: string): AccessTokenPayload {
     return this.jwtService.verify<AccessTokenPayload>(token, {
-      secret: this.config.get<string>('JWT_ACCESS_SECRET'),
+      secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
     });
   }
 

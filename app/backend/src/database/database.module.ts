@@ -1,7 +1,7 @@
 import { Global, Module, OnModuleDestroy, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool } from 'pg';
-import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from './schema';
 
 export const DRIZZLE = Symbol('DRIZZLE');

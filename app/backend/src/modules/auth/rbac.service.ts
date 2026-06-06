@@ -56,17 +56,19 @@ export class RbacService {
         .select()
         .from(schema.perfis)
         .where(sql`${schema.perfis.slug} = ${slug}`);
-      if (perfis.length === 0) continue;
-      const perfilId = perfis[0].id;
+      const perfil = perfis[0];
+      if (!perfil) continue;
+      const perfilId = perfil.id;
       for (const codigo of codigos) {
         const perms = await this.db
           .select()
           .from(schema.permissoes)
           .where(sql`${schema.permissoes.codigo} = ${codigo}`);
-        if (perms.length === 0) continue;
+        const perm = perms[0];
+        if (!perm) continue;
         await this.db
           .insert(schema.perfisPermissoes)
-          .values({ perfilId, permissaoId: perms[0].id })
+          .values({ perfilId, permissaoId: perm.id })
           .onConflictDoNothing();
       }
     }

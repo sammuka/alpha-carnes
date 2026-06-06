@@ -64,10 +64,12 @@ export class AuthRepository {
     userAgent?: string;
     ip?: string;
   }) {
-    const [token] = await this.db
+    const rows = await this.db
       .insert(schema.refreshTokens)
       .values(data)
       .returning();
+    const token = rows[0];
+    if (!token) throw new Error('Falha ao salvar refresh token');
     return token;
   }
 
@@ -91,11 +93,12 @@ export class AuthRepository {
     newToken: { usuarioId: string; tokenHash: string; expiresAt: Date; userAgent?: string; ip?: string },
   ) {
     return this.drizzle.db.transaction(async (tx) => {
-      // Dentro da transação: salvar novo e revogar antigo atomicamente
-      const [saved] = await tx
+      const rows = await tx
         .insert(schema.refreshTokens)
         .values(newToken)
         .returning();
+      const saved = rows[0];
+      if (!saved) throw new Error('Falha ao salvar refresh token na rotação');
 
       await tx
         .update(schema.refreshTokens)

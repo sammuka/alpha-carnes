@@ -1,0 +1,15 @@
+[extend]
+# Usar as regras padrão do gitleaks
+useDefault = true
+
+[allowlist]
+description = "Ignorar arquivos de exemplo e fixtures de teste"
+paths = [
+  '''.env\.example''',
+  '''test/.*\.ts''',
+  '''test/helpers/.*\.ts''',
+]
+
+[[rules.allowlist]]
+description = "Placeholder values no .env.example"
+regexes = ['''change-me''', '''change-me-.*''']

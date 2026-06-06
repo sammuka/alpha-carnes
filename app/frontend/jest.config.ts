@@ -5,7 +5,7 @@ const config: Config = {
   testPathIgnorePatterns: ['/node_modules/', '/.next/'],
   moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' },
   transform: {
-    '^.+\\.(ts|tsx)$': ['ts-jest', { tsconfig: './tsconfig.json' }],
+    '^.+\\.(ts|tsx)$': ['ts-jest', { tsconfig: './tsconfig.test.json' }],
   },
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   passWithNoTests: true,
