@@ -7,6 +7,10 @@ paths = [
   '''.env\.example''',
   '''test/.*\.ts''',
   '''test/helpers/.*\.ts''',
+  '''__tests__/.*\.ts''',
+  '''__tests__/.*\.tsx''',
+  '''.*\.spec\.ts''',
+  '''.*\.e2e-spec\.ts''',
 ]
 regexes = [
   '''change-me''',
