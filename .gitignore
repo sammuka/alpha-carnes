@@ -13,10 +13,20 @@ build/
 # Ambiente
 .env
 .env.*
+!.env.example
 *.local
 
 # Deploy
 .vercel/
+
+# Build outputs (additional)
+out/
+
+# Coverage
+coverage/
+
+# Logs
+*.log
 
 # OS
 .DS_Store
