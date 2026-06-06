@@ -39,4 +39,36 @@ describe('TokenService', () => {
   it('verifyAccessToken lança em token inválido', () => {
     expect(() => tokenService.verifyAccessToken('token.invalido.assinado')).toThrow();
   });
+
+  it('getRefreshExpiresAt retorna ~8h à frente', () => {
+    const exp = tokenService.getRefreshExpiresAt().getTime();
+    const esperado = Date.now() + 8 * 60 * 60 * 1000;
+    // tolerância de 5s
+    expect(Math.abs(exp - esperado)).toBeLessThan(5000);
+  });
+
+  describe('defaults quando a config não define TTL', () => {
+    let svc: TokenService;
+    beforeEach(() => {
+      const jwtService = new JwtService({ secret: 'test-secret-min-32-chars-for-test' });
+      // get retorna undefined p/ os TTLs → exercita os branches `?? '15m'` e `?? '8h'`
+      const cfg = {
+        get: () => undefined,
+        getOrThrow: () => 'test-access-secret-min-32-chars-ok',
+      };
+      svc = new TokenService(jwtService, cfg as never);
+    });
+
+    it('usa 15m como TTL default do access token', () => {
+      const token = svc.signAccessToken({ sub: 'u', nome: 'n', perfis: [], permissoes: [] });
+      const decoded = svc.verifyAccessToken(token);
+      expect(decoded.exp - decoded.iat).toBe(900);
+    });
+
+    it('usa 8h como TTL default do refresh', () => {
+      const exp = svc.getRefreshExpiresAt().getTime();
+      const esperado = Date.now() + 8 * 60 * 60 * 1000;
+      expect(Math.abs(exp - esperado)).toBeLessThan(5000);
+    });
+  });
 });

@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
-import { createTestApp, cleanupDb, createTestUser } from '../helpers/test-app';
+import request from 'supertest';
+import { createTestApp, cleanupDb, createTestUser, joinSetCookie } from '../helpers/test-app';
 
 describe('RBAC e2e', () => {
   let app: INestApplication;
@@ -22,12 +22,12 @@ describe('RBAC e2e', () => {
     const loginAdmin = await request(app.getHttpServer())
       .post('/auth/login')
       .send({ email: adminEmail, password: adminPassword });
-    adminCookies = (loginAdmin.headers['set-cookie'] as string[]).join('; ');
+    adminCookies = joinSetCookie(loginAdmin);
 
     const loginComercial = await request(app.getHttpServer())
       .post('/auth/login')
       .send({ email: comercialFixture.adminEmail, password: comercialFixture.adminPassword });
-    comercialCookies = (loginComercial.headers['set-cookie'] as string[]).join('; ');
+    comercialCookies = joinSetCookie(loginComercial);
 
     novoUsuarioPayload = {
       nome: 'Novo Usuário',
@@ -82,12 +82,20 @@ describe('RBAC e2e', () => {
       const loginOutro = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: outroAdmin.adminEmail, password: outroAdmin.adminPassword });
-      const outroCookies = (loginOutro.headers['set-cookie'] as string[]).join('; ');
+      const outroCookies = joinSetCookie(loginOutro);
 
       const res = await request(app.getHttpServer())
         .post(`/usuarios/${usuarioId}/aprovar`)
         .set('Cookie', outroCookies);
-      expect([200, 409]).toContain(res.status); // 200 ok, ou 409 se já aprovado
+      expect(res.status).toBe(200); // aprovador ≠ criador → aprovação legítima
+    });
+
+    it('retorna 404 ao aprovar usuário inexistente', async () => {
+      const idInexistente = '019e9e00-0000-7000-8000-000000000999';
+      const res = await request(app.getHttpServer())
+        .post(`/usuarios/${idInexistente}/aprovar`)
+        .set('Cookie', adminCookies);
+      expect(res.status).toBe(404);
     });
 
     it('SF-01: criador não pode aprovar o próprio usuário criado → 409', async () => {

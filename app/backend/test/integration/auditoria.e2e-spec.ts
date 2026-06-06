@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
-import { createTestApp, cleanupDb, createTestUser } from '../helpers/test-app';
+import request from 'supertest';
+import { createTestApp, cleanupDb, createTestUser, joinSetCookie } from '../helpers/test-app';
 import { DRIZZLE } from '../../src/database/database.module';
 import { auditoria } from '../../src/database/schema/auditoria.schema';
 import { sql } from 'drizzle-orm';
@@ -17,7 +17,7 @@ describe('Auditoria e2e', () => {
     const loginRes = await request(app.getHttpServer())
       .post('/auth/login')
       .send({ email: fixture.adminEmail, password: fixture.adminPassword });
-    adminCookies = (loginRes.headers['set-cookie'] as string[]).join('; ');
+    adminCookies = joinSetCookie(loginRes);
   });
 
   afterAll(async () => {
@@ -42,7 +42,7 @@ describe('Auditoria e2e', () => {
         .where(sql`${auditoria.modulo} = 'auth' AND ${auditoria.createdAt} >= ${before}`);
 
       expect(registros.length).toBeGreaterThanOrEqual(1);
-      expect(registros[0].operacao).toBe('ACAO_MANUAL');
+      expect(registros[0]?.operacao).toBe('ACAO_MANUAL');
     });
   });
 

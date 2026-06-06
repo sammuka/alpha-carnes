@@ -1,8 +1,6 @@
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
-import { createTestApp, cleanupDb, createTestUser } from '../helpers/test-app';
-
-const THROTTLE_LIMIT = parseInt(process.env.THROTTLE_LOGIN_LIMIT ?? '5', 10);
+import request from 'supertest';
+import { createTestApp, cleanupDb, createTestUser, joinSetCookie } from '../helpers/test-app';
 
 describe('Auth e2e', () => {
   let app: INestApplication;
@@ -24,10 +22,14 @@ describe('Auth e2e', () => {
         .post('/auth/login')
         .send({ email: fixtures.adminEmail, password: fixtures.adminPassword });
       expect(res.status).toBe(200);
-      expect(res.headers['set-cookie']).toBeDefined();
-      const cookies = (res.headers['set-cookie'] as string[]).join(';');
-      expect(cookies).toContain('access_token');
-      expect(cookies).toContain('HttpOnly');
+      const rawCookies = res.headers['set-cookie'] as unknown as string[];
+      expect(rawCookies).toBeDefined();
+      const rawJoined = rawCookies.join(' | ');
+      expect(rawJoined).toContain('access_token');
+      expect(rawJoined).toContain('refresh_token');
+      // httpOnly sempre presente; secure ausente em dev (COOKIE_SECURE=false)
+      expect(rawJoined).toContain('HttpOnly');
+      expect(rawJoined).not.toContain('Secure');
     });
 
     it('retorna 401 em credenciais inválidas', async () => {
@@ -37,20 +39,6 @@ describe('Auth e2e', () => {
       expect(res.status).toBe(401);
       expect(res.body).not.toHaveProperty('success', true);
     });
-
-    it('retorna 429 após exceder o limite de tentativas (rate limiting)', async () => {
-      // Usar email diferente para não colidir com o throttler de outros testes
-      const bruteEmail = `brute-${Date.now()}@test.local`;
-      for (let i = 0; i < THROTTLE_LIMIT; i++) {
-        await request(app.getHttpServer())
-          .post('/auth/login')
-          .send({ email: bruteEmail, password: 'wrong' });
-      }
-      const res = await request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ email: bruteEmail, password: 'wrong' });
-      expect(res.status).toBe(429);
-    });
   });
 
   describe('POST /auth/refresh', () => {
@@ -58,7 +46,7 @@ describe('Auth e2e', () => {
       const loginRes = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: fixtures.adminEmail, password: fixtures.adminPassword });
-      const cookies = (loginRes.headers['set-cookie'] as string[]).join('; ');
+      const cookies = joinSetCookie(loginRes);
 
       // Primeiro refresh: deve funcionar
       const r1 = await request(app.getHttpServer())
@@ -72,6 +60,32 @@ describe('Auth e2e', () => {
         .set('Cookie', cookies);
       expect(r2.status).toBe(401);
     });
+
+    it('reuse detection: reusar refresh revogado invalida a família inteira', async () => {
+      const loginRes = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: fixtures.adminEmail, password: fixtures.adminPassword });
+      const cookies = joinSetCookie(loginRes);
+
+      // Rotaciona — o cookie original fica revogado e recebemos um novo refresh
+      const r1 = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', cookies);
+      expect(r1.status).toBe(200);
+      const novosCookies = joinSetCookie(r1);
+
+      // Reusar o refresh ANTIGO (revogado) → 401 + dispara reuse detection
+      const reuse = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', cookies);
+      expect(reuse.status).toBe(401);
+
+      // A família foi revogada: o refresh NOVO (legítimo) também deve falhar agora
+      const familiaRevogada = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', novosCookies);
+      expect(familiaRevogada.status).toBe(401);
+    });
   });
 
   describe('POST /auth/logout', () => {
@@ -79,7 +93,7 @@ describe('Auth e2e', () => {
       const loginRes = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: fixtures.adminEmail, password: fixtures.adminPassword });
-      const cookies = (loginRes.headers['set-cookie'] as string[]).join('; ');
+      const cookies = joinSetCookie(loginRes);
 
       await request(app.getHttpServer())
         .post('/auth/logout')
@@ -98,7 +112,7 @@ describe('Auth e2e', () => {
       const loginRes = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: fixtures.adminEmail, password: fixtures.adminPassword });
-      const cookies = (loginRes.headers['set-cookie'] as string[]).join('; ');
+      const cookies = joinSetCookie(loginRes);
 
       const res = await request(app.getHttpServer())
         .get('/auth/me')
@@ -108,5 +122,36 @@ describe('Auth e2e', () => {
       expect(res.body).toHaveProperty('permissoes');
       expect(Array.isArray(res.body.permissoes)).toBe(true);
     });
+  });
+});
+
+// Suíte isolada: o teste de rate limiting esgota o throttler (por IP), então usa
+// um app próprio com ThrottlerStorage em memória independente — não contamina os
+// demais testes de login/refresh.
+describe('Auth e2e — rate limiting', () => {
+  const RATE_LIMIT = 5;
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    // App dedicado com limite baixo e throttler em memória isolado
+    app = await createTestApp({ THROTTLE_LOGIN_LIMIT: String(RATE_LIMIT) });
+  });
+
+  afterAll(async () => {
+    await cleanupDb(app);
+    await app.close();
+  });
+
+  it('retorna 429 ao exceder o limite de tentativas de login (RA-06)', async () => {
+    const bruteEmail = `brute-${Date.now()}@test.local`;
+    let last = 200;
+    // Estoura o limite + 1 para garantir o 429
+    for (let i = 0; i <= RATE_LIMIT; i++) {
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: bruteEmail, password: 'wrong' });
+      last = res.status;
+    }
+    expect(last).toBe(429);
   });
 });

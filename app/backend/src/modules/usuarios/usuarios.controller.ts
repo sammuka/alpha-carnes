@@ -7,6 +7,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RbacGuard } from '../../common/guards/rbac.guard';
 import { RequirePermissoes } from '../../common/rbac/require-permissoes.decorator';
@@ -17,6 +18,7 @@ import { UsuariosService } from './usuarios.service';
 import { createUsuarioSchema } from './dto/create-usuario.dto';
 import type { CreateUsuarioDto } from './dto/create-usuario.dto';
 
+@SkipThrottle()
 @Controller('usuarios')
 @UseGuards(JwtAuthGuard, RbacGuard)
 export class UsuariosController {

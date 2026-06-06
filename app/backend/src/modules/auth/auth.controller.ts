@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -24,6 +24,9 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+// Por padrão, os endpoints de auth não são limitados; apenas /login (abaixo) ativa o
+// throttle, cujo limite/ttl vêm da config (THROTTLE_LOGIN_*) aplicada no ThrottlerModule.
+@SkipThrottle()
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -40,7 +43,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(200)
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @SkipThrottle({ default: false }) // ativa o throttler global (limite/ttl da config) só no login
   @Auditar('LOGIN', 'auth')
   async login(
     @Body(new ZodValidationPipe(loginSchema)) body: z.infer<typeof loginSchema>,

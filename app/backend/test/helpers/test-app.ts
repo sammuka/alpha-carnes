@@ -8,18 +8,51 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../src/database/schema';
 import { hash } from '@node-rs/argon2';
 import { RbacService } from '../../src/modules/auth/rbac.service';
-import * as cookieParser from 'cookie-parser';
+import cookieParser from 'cookie-parser';
 
-export async function createTestApp(): Promise<INestApplication> {
-  const moduleRef = await Test.createTestingModule({
-    imports: [AppModule],
-  }).compile();
+export async function createTestApp(
+  envOverrides: Record<string, string> = {},
+): Promise<INestApplication> {
+  // Por padrão, limite de throttle alto para não interferir nos testes gerais
+  // (que fazem múltiplos logins do mesmo IP serialmente). A suíte de rate limiting
+  // sobrescreve THROTTLE_LOGIN_LIMIT para um valor baixo.
+  const defaults: Record<string, string> = { THROTTLE_LOGIN_LIMIT: '1000' };
+  const overrides = { ...defaults, ...envOverrides };
+  const previous: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(overrides)) {
+    previous[k] = process.env[k];
+    process.env[k] = v;
+  }
 
-  const app = moduleRef.createNestApplication();
-  app.use(cookieParser());
-  app.useGlobalFilters(new AllExceptionsFilter());
-  await app.init();
-  return app;
+  try {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    const app = moduleRef.createNestApplication();
+    app.use(cookieParser());
+    app.useGlobalFilters(new AllExceptionsFilter());
+    await app.init();
+    return app;
+  } finally {
+    // Restaura a env para não vazar entre suítes
+    for (const [k, v] of Object.entries(previous)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
+/**
+ * Extrai apenas os pares `nome=valor` do header set-cookie para reenvio no header Cookie.
+ * Descarta atributos (Path, HttpOnly, Max-Age, SameSite) — senão o servidor interpreta
+ * "Max-Age", "Path" etc. como cookies espúrios.
+ */
+export function joinSetCookie(res: { headers: Record<string, unknown> }): string {
+  const raw = res.headers['set-cookie'];
+  if (!raw) return '';
+  const arr = Array.isArray(raw) ? raw : [String(raw)];
+  return arr.map((c) => c.split(';')[0]).join('; ');
 }
 
 export async function cleanupDb(app: INestApplication): Promise<void> {
@@ -46,6 +79,7 @@ export async function createTestUser(
     .insert(schema.usuarios)
     .values({ nome: `Test ${opts.perfil}`, email, senhaHash })
     .returning();
+  if (!usuario) throw new Error('Falha ao criar usuário de teste');
 
   // Inserir perfil se não existir
   await db
@@ -61,6 +95,7 @@ export async function createTestUser(
     .select()
     .from(schema.perfis)
     .where(sql`${schema.perfis.slug} = ${opts.perfil}`);
+  if (!perfil) throw new Error(`Perfil de teste não encontrado: ${opts.perfil}`);
 
   await db
     .insert(schema.usuariosPerfis)
