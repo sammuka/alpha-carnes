@@ -25,6 +25,7 @@ export const usuarios = pgTable(
     senhaHash:     text('senha_hash').notNull(),
     ativo:         boolean('ativo').notNull().default(true),
     ultimoAcesso:  timestamp('ultimo_acesso', { withTimezone: true }),
+    criadoPorId:   uuid('criado_por_id'),  // SF-01: quem criou este usuário (self-FK)
     createdAt:     timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt:     timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt:     timestamp('deleted_at', { withTimezone: true }),

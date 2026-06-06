@@ -4,16 +4,21 @@
 
 -- ── usuarios ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "usuarios" (
-  "id"            UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
-  "nome"          TEXT        NOT NULL,
-  "email"         TEXT        NOT NULL UNIQUE,
-  "senha_hash"    TEXT        NOT NULL,
-  "ativo"         BOOLEAN     NOT NULL DEFAULT true,
-  "ultimo_acesso" TIMESTAMPTZ,
-  "created_at"    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  "updated_at"    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  "deleted_at"    TIMESTAMPTZ
+  "id"             UUID        NOT NULL DEFAULT uuidv7() PRIMARY KEY,
+  "nome"           TEXT        NOT NULL,
+  "email"          TEXT        NOT NULL UNIQUE,
+  "senha_hash"     TEXT        NOT NULL,
+  "ativo"          BOOLEAN     NOT NULL DEFAULT true,
+  "ultimo_acesso"  TIMESTAMPTZ,
+  "criado_por_id"  UUID,
+  "created_at"     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  "updated_at"     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  "deleted_at"     TIMESTAMPTZ
 );
+
+-- FK self-referencial adicionada após criação da tabela (criado_por_id)
+ALTER TABLE "usuarios" ADD CONSTRAINT "fk_usuarios_criado_por"
+  FOREIGN KEY ("criado_por_id") REFERENCES "usuarios" ("id");
 
 CREATE INDEX IF NOT EXISTS "idx_usuarios_email" ON "usuarios" ("email");
 CREATE INDEX IF NOT EXISTS "idx_usuarios_ativo"  ON "usuarios" ("ativo") WHERE "deleted_at" IS NULL;
