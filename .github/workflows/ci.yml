@@ -43,6 +43,19 @@ jobs:
           --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       DATABASE_URL: postgres://alphacarnes:alphacarnes@localhost:5432/alphacarnes_test
+      # Segredos de teste (não-produção) exigidos pela validação Zod da env no boot
+      JWT_ACCESS_SECRET: ci-access-secret-min-32-chars-for-tests
+      JWT_REFRESH_SECRET: ci-refresh-secret-min-32-chars-for-tests
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 8h
+      COOKIE_SECURE: 'false'
+      THROTTLE_LOGIN_LIMIT: '5'
+      THROTTLE_LOGIN_TTL: '60000'
+      SEED_ADMIN_EMAIL: admin@alphacarnes.local
+      SEED_ADMIN_PASSWORD: Admin@CiTest123456
+      CORS_ORIGIN: http://localhost:3000
+      LOG_LEVEL: error
+      PORT: '3001'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
