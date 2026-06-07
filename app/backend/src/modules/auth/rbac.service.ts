@@ -53,31 +53,36 @@ export class RbacService {
    * vincula cada perfil ao seu conjunto. Não remove vínculos existentes.
    */
   async ensurePermissoes(): Promise<void> {
-    for (const [codigo, descricao] of Object.entries(DESCRICOES_PERMISSOES)) {
-      await this.db.insert(schema.permissoes).values({ codigo, descricao }).onConflictDoNothing();
+    // 1. Insere todas as permissões em lote (idempotente).
+    const permissoesValues = Object.entries(DESCRICOES_PERMISSOES).map(([codigo, descricao]) => ({
+      codigo,
+      descricao,
+    }));
+    if (permissoesValues.length > 0) {
+      await this.db.insert(schema.permissoes).values(permissoesValues).onConflictDoNothing();
     }
 
-    for (const [slug, codigos] of Object.entries(MAPA_PERFIL_PERMISSOES)) {
-      if (codigos.length === 0) continue;
-      const perfil = await this.db
-        .select()
-        .from(schema.perfis)
-        .where(eq(schema.perfis.slug, slug))
-        .then((r) => r[0] ?? null);
-      if (!perfil) continue;
+    // 2. Carrega perfis e permissões existentes em dois SELECTs (mapas por slug/código).
+    const [perfisDb, permissoesDb] = await Promise.all([
+      this.db.select({ id: schema.perfis.id, slug: schema.perfis.slug }).from(schema.perfis),
+      this.db.select({ id: schema.permissoes.id, codigo: schema.permissoes.codigo }).from(schema.permissoes),
+    ]);
+    const perfilIdPorSlug = new Map(perfisDb.map((p) => [p.slug, p.id]));
+    const permIdPorCodigo = new Map(permissoesDb.map((p) => [p.codigo, p.id]));
 
+    // 3. Monta todos os vínculos perfil→permissão e insere em um único lote.
+    const vinculos: { perfilId: string; permissaoId: string }[] = [];
+    for (const [slug, codigos] of Object.entries(MAPA_PERFIL_PERMISSOES)) {
+      const perfilId = perfilIdPorSlug.get(slug);
+      if (!perfilId) continue;
       for (const codigo of codigos) {
-        const perm = await this.db
-          .select()
-          .from(schema.permissoes)
-          .where(eq(schema.permissoes.codigo, codigo))
-          .then((r) => r[0] ?? null);
-        if (!perm) continue;
-        await this.db
-          .insert(schema.perfisPermissoes)
-          .values({ perfilId: perfil.id, permissaoId: perm.id })
-          .onConflictDoNothing();
+        const permissaoId = permIdPorCodigo.get(codigo);
+        if (!permissaoId) continue;
+        vinculos.push({ perfilId, permissaoId });
       }
+    }
+    if (vinculos.length > 0) {
+      await this.db.insert(schema.perfisPermissoes).values(vinculos).onConflictDoNothing();
     }
   }
 

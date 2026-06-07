@@ -19,6 +19,13 @@ export const PERMISSOES = {
   REGRAS_DESDOBRAMENTO_GERENCIAR: 'REGRAS_DESDOBRAMENTO_GERENCIAR',
   PARAMETROS_LER: 'PARAMETROS_LER',
   PARAMETROS_GERENCIAR: 'PARAMETROS_GERENCIAR',
+
+  // ── F3 — Planejamento Comercial ───────────────────────────────────────────
+  COMPRAS_PROGRAMADAS_LER: 'COMPRAS_PROGRAMADAS_LER',
+  COMPRAS_PROGRAMADAS_GERENCIAR: 'COMPRAS_PROGRAMADAS_GERENCIAR', // criar/editar/confirmar
+  DISPONIBILIDADE_LER: 'DISPONIBILIDADE_LER',
+  PEDIDOS_LER: 'PEDIDOS_LER',
+  PEDIDOS_GERENCIAR: 'PEDIDOS_GERENCIAR', // criar/cancelar/reduzir
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -70,6 +77,12 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'REGRAS_DESDOBRAMENTO_GERENCIAR',
     'PARAMETROS_LER',
     'PARAMETROS_GERENCIAR',
+    // F3 — administrador gerencia tudo
+    'COMPRAS_PROGRAMADAS_LER',
+    'COMPRAS_PROGRAMADAS_GERENCIAR',
+    'DISPONIBILIDADE_LER',
+    'PEDIDOS_LER',
+    'PEDIDOS_GERENCIAR',
   ],
   gestor: [
     'USUARIOS_APROVAR',
@@ -77,16 +90,43 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'CLIENTES_GERENCIAR',
     'REGRAS_DESDOBRAMENTO_GERENCIAR',
     ...LEITURA_CADASTROS,
+    // F3 (doc 013 §2.3/§4.1): gestor aprova/confirma compra e gerencia pedidos.
+    'COMPRAS_PROGRAMADAS_LER',
+    'COMPRAS_PROGRAMADAS_GERENCIAR',
+    'DISPONIBILIDADE_LER',
+    'PEDIDOS_LER',
+    'PEDIDOS_GERENCIAR',
   ],
-  compras: ['FORNECEDORES_GERENCIAR', ...LEITURA_CADASTROS],
-  comercial: [...LEITURA_CADASTROS],
-  recebimento_pesagem: [...LEITURA_CADASTROS],
-  corte: [...LEITURA_CADASTROS],
-  expedicao: [...LEITURA_CADASTROS],
-  conferente: [...LEITURA_CADASTROS],
-  faturamento: [...LEITURA_CADASTROS],
-  logistica: [...LEITURA_CADASTROS],
-  diretoria: ['AUDITORIA_VISUALIZAR', ...LEITURA_CADASTROS],
+  // F3 (doc 013 §2.2): comprador cria/confirma compra programada; consulta saldo e pedidos.
+  compras: [
+    'FORNECEDORES_GERENCIAR',
+    ...LEITURA_CADASTROS,
+    'COMPRAS_PROGRAMADAS_LER',
+    'COMPRAS_PROGRAMADAS_GERENCIAR',
+    'DISPONIBILIDADE_LER',
+    'PEDIDOS_LER',
+  ],
+  // F3 (doc 013 §2.4): operador comercial registra pedidos e consulta saldo/compras.
+  comercial: [
+    ...LEITURA_CADASTROS,
+    'COMPRAS_PROGRAMADAS_LER',
+    'DISPONIBILIDADE_LER',
+    'PEDIDOS_LER',
+    'PEDIDOS_GERENCIAR',
+  ],
+  recebimento_pesagem: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
+  corte: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
+  expedicao: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
+  conferente: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
+  faturamento: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
+  logistica: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
+  diretoria: [
+    'AUDITORIA_VISUALIZAR',
+    ...LEITURA_CADASTROS,
+    'COMPRAS_PROGRAMADAS_LER',
+    'DISPONIBILIDADE_LER',
+    'PEDIDOS_LER',
+  ],
 };
 
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
@@ -108,4 +148,9 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   REGRAS_DESDOBRAMENTO_GERENCIAR: 'Criar, editar, excluir e restaurar regras de desdobramento',
   PARAMETROS_LER: 'Consultar parâmetros do sistema',
   PARAMETROS_GERENCIAR: 'Gerenciar parâmetros do sistema',
+  COMPRAS_PROGRAMADAS_LER: 'Consultar compras programadas',
+  COMPRAS_PROGRAMADAS_GERENCIAR: 'Criar, editar e confirmar compras programadas',
+  DISPONIBILIDADE_LER: 'Consultar disponibilidade virtual do dia',
+  PEDIDOS_LER: 'Consultar pedidos de venda',
+  PEDIDOS_GERENCIAR: 'Criar, cancelar e ajustar pedidos de venda',
 };

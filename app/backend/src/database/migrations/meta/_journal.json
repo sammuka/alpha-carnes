@@ -15,6 +15,13 @@
       "when": 1780785749185,
       "tag": "0001_dry_war_machine",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780796676855,
+      "tag": "0002_clean_doorman",
+      "breakpoints": true
     }
   ]
 }
