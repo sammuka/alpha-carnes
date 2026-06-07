@@ -114,3 +114,52 @@ export interface ResultadoSugestao {
   sugestao: SugestaoScored | null;
   compativeis: SugestaoScored[];
 }
+
+// ── F4c — Corte / Transformação ───────────────────────────────────────────────
+
+export const TIPOS_TRANSFORMACAO = ['simples', 'subdivisao', 'reclassificacao', 'destinacao_mista'] as const;
+export type TipoTransformacao = (typeof TIPOS_TRANSFORMACAO)[number];
+
+export const MOTIVOS_TRANSFORMACAO = ['preferencia_cliente', 'necessidade_operacional', 'divergencia', 'decisao_humana'] as const;
+export type MotivoTransformacao = (typeof MOTIVOS_TRANSFORMACAO)[number];
+
+export type StatusTransformacao =
+  | 'aberta'
+  | 'em_execucao'
+  | 'aguardando_pesagem'
+  | 'aguardando_associacao'
+  | 'aguardando_etiquetagem'
+  | 'concluida'
+  | 'cancelada';
+
+export type StatusSubitem = 'gerado' | 'pesado' | 'associado' | 'em_sobra' | 'em_analise';
+
+export interface Transformacao {
+  id: string;
+  pecaOrigemId: string;
+  tipoTransformacao: TipoTransformacao;
+  motivo: MotivoTransformacao;
+  statusTransformacao: StatusTransformacao;
+  pesoOriginal: string;
+  pesoSubitensTotal: string | null;
+  diferencaPeso: string | null;
+  justificativaDiferenca: string | null;
+}
+
+export interface Subitem {
+  id: string;
+  transformacaoId: string;
+  pecaOrigemId: string;
+  itemComercialId: string;
+  peso: string | null;
+  quantidade: string;
+  statusSubitem: StatusSubitem;
+  etiquetaAtual: string | null;
+  pedidoVendaId: string | null;
+  pedidoVendaItemId: string | null;
+}
+
+export interface CorteDetalhe {
+  transformacao: Transformacao;
+  subitens: Subitem[];
+}
