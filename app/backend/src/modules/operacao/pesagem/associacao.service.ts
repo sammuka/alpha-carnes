@@ -1,12 +1,11 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
   associacoesPecaHistorico,
-  clientes,
   pecas,
   pedidosVenda,
   pedidosVendaItens,
@@ -15,11 +14,12 @@ import {
 } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
-import { subtrairQtd } from '../../../common/crud/decimal';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { DivergenciaRecebimentoService } from '../recebimento/divergencia/divergencia-recebimento.service';
-import { calcularScores, type CandidatoPedido, type SugestaoScored } from './associacao-score';
+import type { SugestaoScored } from './associacao-score';
 import type { ConfirmarAssociacaoDto, RedirecionarDto, SemCoberturaDto } from './dto/associacao.dto';
+import { consumirSaldo, devolverSaldo } from './saldo';
+import { calcularCompativeisItem } from './compatibilidade';
 
 type Tx = NodePgDatabase<typeof schema>;
 type Peca = typeof pecas.$inferSelect;
@@ -51,7 +51,7 @@ export class AssociacaoService {
   async sugerir(pecaId: string): Promise<ResultadoSugestao> {
     const peca = await this.buscarAtiva(this.db, pecaId);
     if (!peca) throw new NotFoundException('Peça não encontrada');
-    const compativeis = await this.calcularCompativeis(this.db, peca);
+    const compativeis = await calcularCompativeisItem(this.db, { compraProgramadaId: peca.compraProgramadaId, itemComercialId: peca.itemComercialBaseId, peso: peca.pesoOriginal });
     return { pecaId, sugestao: compativeis[0] ?? null, compativeis };
   }
 
@@ -59,7 +59,7 @@ export class AssociacaoService {
   async listarCompativeis(pecaId: string): Promise<SugestaoScored[]> {
     const peca = await this.buscarAtiva(this.db, pecaId);
     if (!peca) throw new NotFoundException('Peça não encontrada');
-    return this.calcularCompativeis(this.db, peca);
+    return calcularCompativeisItem(this.db, { compraProgramadaId: peca.compraProgramadaId, itemComercialId: peca.itemComercialBaseId, peso: peca.pesoOriginal });
   }
 
   /**
@@ -77,10 +77,10 @@ export class AssociacaoService {
       const item = await this.buscarItemCompativel(tx, peca, dto.pedidoVendaItemId);
 
       // Snapshot da sugestão no momento da decisão (a sugestão é efêmera).
-      const compativeis = await this.calcularCompativeis(tx, peca);
+      const compativeis = await calcularCompativeisItem(tx, { compraProgramadaId: peca.compraProgramadaId, itemComercialId: peca.itemComercialBaseId, peso: peca.pesoOriginal });
       const sugerido = compativeis.find((c) => c.pedidoVendaItemId === dto.pedidoVendaItemId) ?? null;
 
-      const consumido = await this.consumirSaldo(tx, dto.pedidoVendaItemId);
+      const consumido = await consumirSaldo(tx, dto.pedidoVendaItemId);
       if (!consumido) throw new ConflictException('Item do pedido já está completo');
 
       const atualizada = primeiroOuFalha(
@@ -142,14 +142,11 @@ export class AssociacaoService {
 
       const destino = await this.buscarItemCompativel(tx, peca, dto.pedidoVendaItemId);
 
-      const consumido = await this.consumirSaldo(tx, dto.pedidoVendaItemId);
+      const consumido = await consumirSaldo(tx, dto.pedidoVendaItemId);
       if (!consumido) throw new ConflictException('Item de destino já está completo');
 
       // Devolve a unidade ao item de origem (CHECK >= 0 é backstop).
-      await tx
-        .update(pedidosVendaItens)
-        .set({ quantidadeAtendida: sql`${pedidosVendaItens.quantidadeAtendida} - 1` })
-        .where(eq(pedidosVendaItens.id, peca.pedidoVendaItemId));
+      await devolverSaldo(tx, peca.pedidoVendaItemId);
 
       const pedidoOrigemId = peca.pedidoVendaId;
       const atualizada = primeiroOuFalha(
@@ -227,10 +224,7 @@ export class AssociacaoService {
 
       // Se a peça estava associada e sai do vínculo, devolve a unidade ao saldo.
       if (!manterVinculo && peca.pedidoVendaItemId) {
-        await tx
-          .update(pedidosVendaItens)
-          .set({ quantidadeAtendida: sql`${pedidosVendaItens.quantidadeAtendida} - 1` })
-          .where(eq(pedidosVendaItens.id, peca.pedidoVendaItemId));
+        await devolverSaldo(tx, peca.pedidoVendaItemId);
       }
 
       if (dto.destino === 'divergencia' && dto.divergencia) {
@@ -267,70 +261,6 @@ export class AssociacaoService {
   }
 
   // ── internos ───────────────────────────────────────────────────────────────
-
-  /** Incrementa atendida só enquanto < pedida (anti-overbooking). false = completo. */
-  private async consumirSaldo(tx: Tx, pedidoVendaItemId: string): Promise<boolean> {
-    const r = await tx
-      .update(pedidosVendaItens)
-      .set({ quantidadeAtendida: sql`${pedidosVendaItens.quantidadeAtendida} + 1` })
-      .where(
-        and(
-          eq(pedidosVendaItens.id, pedidoVendaItemId),
-          sql`${pedidosVendaItens.quantidadeAtendida} < ${pedidosVendaItens.quantidadePedida}`,
-        ),
-      )
-      .returning({ id: pedidosVendaItens.id });
-    return r.length > 0;
-  }
-
-  private async calcularCompativeis(tx: Tx, peca: Peca): Promise<SugestaoScored[]> {
-    // Candidatos: itens de pedidos da MESMA compra (RN-02), abertos, do mesmo item
-    // comercial, com saldo pendente (pedida − atendida) > 0 (RF-PS-16/17).
-    const linhas = await tx
-      .select({
-        pedidoVendaId: pedidosVenda.id,
-        pedidoVendaItemId: pedidosVendaItens.id,
-        itemComercialId: pedidosVendaItens.itemComercialId,
-        clienteId: pedidosVenda.clienteId,
-        quantidadePedida: pedidosVendaItens.quantidadePedida,
-        quantidadeAtendida: pedidosVendaItens.quantidadeAtendida,
-        prioridade: pedidosVenda.prioridade,
-        rotaPrevista: pedidosVenda.rotaPrevista,
-        preferenciasCliente: clientes.preferenciasJson,
-      })
-      .from(pedidosVendaItens)
-      .innerJoin(pedidosVenda, eq(pedidosVendaItens.pedidoVendaId, pedidosVenda.id))
-      .innerJoin(clientes, eq(pedidosVenda.clienteId, clientes.id))
-      .where(
-        and(
-          eq(pedidosVenda.compraProgramadaId, peca.compraProgramadaId),
-          eq(pedidosVendaItens.itemComercialId, peca.itemComercialBaseId),
-          isNull(pedidosVenda.deletedAt),
-          sql`${pedidosVenda.status} <> 'cancelado'`,
-          sql`${pedidosVendaItens.status} <> 'cancelado'`,
-        ),
-      );
-
-    const candidatos: CandidatoPedido[] = linhas.map((l) => {
-      const pref = (l.preferenciasCliente ?? {}) as Record<string, unknown>;
-      return {
-        pedidoVendaId: l.pedidoVendaId,
-        pedidoVendaItemId: l.pedidoVendaItemId,
-        itemComercialId: l.itemComercialId,
-        clienteId: l.clienteId,
-        saldoPendente: subtrairQtd(l.quantidadePedida, l.quantidadeAtendida),
-        prioridade: l.prioridade,
-        rotaPrevista: l.rotaPrevista,
-        preferencias: {
-          faixaPesoMin: typeof pref.faixaPesoMin === 'number' ? pref.faixaPesoMin : undefined,
-          faixaPesoMax: typeof pref.faixaPesoMax === 'number' ? pref.faixaPesoMax : undefined,
-          perfilGordura: typeof pref.perfilGordura === 'string' ? pref.perfilGordura : undefined,
-        },
-      };
-    });
-
-    return calcularScores({ itemComercialBaseId: peca.itemComercialBaseId, pesoOriginal: peca.pesoOriginal }, candidatos);
-  }
 
   /** Valida que o item existe, é compatível e pertence à compra da peça. */
   private async buscarItemCompativel(tx: Tx, peca: Peca, pedidoVendaItemId: string) {
