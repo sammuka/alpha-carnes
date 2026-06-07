@@ -10,7 +10,6 @@ import {
   pedidosVendaItens,
   reservasDisponibilidade,
   clientes,
-  itensComerciais,
 } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import {
