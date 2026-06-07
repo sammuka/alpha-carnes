@@ -53,6 +53,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               Pesagem
             </a>
           )}
+          {/* Operação (F4c) — gated por CORTE_GERENCIAR */}
+          {user.permissoes.includes('CORTE_GERENCIAR') && (
+            <a
+              href="/operacao/corte"
+              className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              Corte / Transformação
+            </a>
+          )}
           {/* Gating de menu por permissão efetiva — vinda de /auth/me (backend) */}
           {user.permissoes.includes('AUDITORIA_VISUALIZAR') && (
             <a href="/admin/auditoria" className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">
