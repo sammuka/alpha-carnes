@@ -91,18 +91,29 @@ describe('Disponibilidade virtual e2e (geração transacional + idempotência + 
     expect(payload.itens.length).toBeGreaterThan(0);
   });
 
-  it('leitura de disponibilidade por dataOperacao', async () => {
+  it('leitura de disponibilidade por dataOperacao e por compraProgramadaId', async () => {
     const compraId = await criarEConfirmar('2026-09-04', 1, 9);
     await request(app.getHttpServer())
       .post(`/comercial/compras-programadas/${compraId}/confirmar`)
       .set('Cookie', comprasCookies)
       .send();
 
-    const res = await request(app.getHttpServer())
+    const porData = await request(app.getHttpServer())
       .get('/comercial/disponibilidade?dataOperacao=2026-09-04')
       .set('Cookie', comprasCookies);
-    expect(res.status).toBe(200);
-    expect(res.body.length).toBeGreaterThanOrEqual(1);
-    expect(Number(res.body[0].quantidadeTotalGerada)).toBe(9);
+    expect(porData.status).toBe(200);
+    expect(porData.body.length).toBeGreaterThanOrEqual(1);
+    expect(Number(porData.body[0].quantidadeTotalGerada)).toBe(9);
+
+    const porCompra = await request(app.getHttpServer())
+      .get(`/comercial/disponibilidade?compraProgramadaId=${compraId}`)
+      .set('Cookie', comprasCookies);
+    expect(porCompra.status).toBe(200);
+    expect(porCompra.body.length).toBe(1);
+
+    const semFiltro = await request(app.getHttpServer())
+      .get('/comercial/disponibilidade')
+      .set('Cookie', comprasCookies);
+    expect(semFiltro.status).toBe(200);
   });
 });

@@ -94,6 +94,85 @@ describe('Compras programadas e2e (CRUD + RBAC + imutabilidade)', () => {
     expect(editar.status).toBe(409);
   });
 
+  it('atualiza cabeçalho da compra em rascunho (numeroInterno, observacoes, status)', async () => {
+    const criar = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao: '2026-07-10' }));
+    const compraId = criar.body.id;
+
+    const res = await request(app.getHttpServer())
+      .patch(`/comercial/compras-programadas/${compraId}`)
+      .set('Cookie', comprasCookies)
+      .send({ numeroInterno: 'NI-123', observacoes: 'obs', status: 'em_negociacao' });
+    expect(res.status).toBe(200);
+    expect(res.body.numeroInterno).toBe('NI-123');
+    expect(res.body.status).toBe('em_negociacao');
+  });
+
+  it('detalhar retorna a compra com itens; 404 para inexistente', async () => {
+    const criar = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao: '2026-07-11' }));
+    const detalhe = await request(app.getHttpServer())
+      .get(`/comercial/compras-programadas/${criar.body.id}`)
+      .set('Cookie', comprasCookies);
+    expect(detalhe.status).toBe(200);
+    expect(detalhe.body.itens).toHaveLength(1);
+
+    const inexistente = await request(app.getHttpServer())
+      .get('/comercial/compras-programadas/019e0000-0000-7000-8000-0000000000ff')
+      .set('Cookie', comprasCookies);
+    expect(inexistente.status).toBe(404);
+  });
+
+  it('listar com incluirRemovidos=true não quebra', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/comercial/compras-programadas?incluirRemovidos=true')
+      .set('Cookie', comprasCookies);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data)).toBe(true);
+  });
+
+  it('confirmar compra CANCELADA → 409', async () => {
+    const criar = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao: '2026-07-20' }));
+    await request(app.getHttpServer())
+      .delete(`/comercial/compras-programadas/${criar.body.id}`)
+      .set('Cookie', comprasCookies)
+      .send();
+    const confirmar = await request(app.getHttpServer())
+      .post(`/comercial/compras-programadas/${criar.body.id}/confirmar`)
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(confirmar.status).toBe(409);
+  });
+
+  it('confirmar compra inexistente → 404; cancelar confirmada → 409', async () => {
+    const inexistente = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas/019e0000-0000-7000-8000-0000000000aa/confirmar')
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(inexistente.status).toBe(404);
+
+    const criar = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao: '2026-07-12' }));
+    await request(app.getHttpServer())
+      .post(`/comercial/compras-programadas/${criar.body.id}/confirmar`)
+      .set('Cookie', comprasCookies)
+      .send();
+    const cancelar = await request(app.getHttpServer())
+      .delete(`/comercial/compras-programadas/${criar.body.id}`)
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(cancelar.status).toBe(409);
+  });
+
   it('uma compra ATIVA por dia: segunda compra no mesmo dia falha (409/500 via unique)', async () => {
     const dia = '2026-08-15';
     const primeira = await request(app.getHttpServer())

@@ -24,4 +24,21 @@ describe('decimal (aritmética NUMERIC exata, S4)', () => {
     expect(ehZero('0')).toBe(true);
     expect(ehZero('0.001')).toBe(false);
   });
+
+  it('lida com valores negativos (ramo de sinal)', () => {
+    expect(subtrairQtd('3.000', '5.000')).toBe('-2.000');
+    expect(formatarQtd('-1.5')).toBe('-1.500');
+    expect(compararQtd('-1', '1')).toBeLessThan(0);
+    expect(ehZero('-0.000')).toBe(true);
+  });
+
+  it('lida com número negativo e sem parte fracionária', () => {
+    expect(formatarQtd(-2)).toBe('-2.000');
+    expect(formatarQtd('7')).toBe('7.000');
+    expect(formatarQtd('.5')).toBe('0.500'); // sem parte inteira
+  });
+
+  it('trunca frações além de 3 casas', () => {
+    expect(formatarQtd('1.23456')).toBe('1.234');
+  });
 });

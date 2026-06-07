@@ -201,6 +201,99 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
     expect(Number(disp!.quantidadeReservada)).toBe(3);
   });
 
+  it('listar pedidos retorna paginado; detalhar inexistente → 404', async () => {
+    const lista = await request(app.getHttpServer())
+      .get('/comercial/pedidos?page=1&pageSize=10')
+      .set('Cookie', comercialCookies);
+    expect(lista.status).toBe(200);
+    expect(Array.isArray(lista.body.data)).toBe(true);
+
+    const inexistente = await request(app.getHttpServer())
+      .get('/comercial/pedidos/019e0000-0000-7000-8000-0000000000bb')
+      .set('Cookie', comercialCookies);
+    expect(inexistente.status).toBe(404);
+  });
+
+  it('reduzir item: novaQuantidade >= reservada → 409; pedido inexistente → 404', async () => {
+    const { base, compraId } = await cenarioComSaldo('2026-10-08', 1, 10);
+    const pedido = await request(app.getHttpServer())
+      .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({
+        compraProgramadaId: compraId,
+        clienteId: base.clienteId,
+        dataOperacao: '2026-10-08',
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 5 }],
+      });
+    const itemId = (
+      await request(app.getHttpServer()).get(`/comercial/pedidos/${pedido.body.id}`).set('Cookie', comercialCookies)
+    ).body.itens[0].id;
+
+    // aumentar (>= reservada) é rejeitado: só reduz
+    const aumentar = await request(app.getHttpServer())
+      .patch(`/comercial/pedidos/${pedido.body.id}/itens/${itemId}`)
+      .set('Cookie', comercialCookies)
+      .send({ novaQuantidade: 9 });
+    expect(aumentar.status).toBe(409);
+
+    const pedidoInexistente = await request(app.getHttpServer())
+      .patch(`/comercial/pedidos/019e0000-0000-7000-8000-0000000000cc/itens/${itemId}`)
+      .set('Cookie', comercialCookies)
+      .send({ novaQuantidade: 1 });
+    expect(pedidoInexistente.status).toBe(404);
+  });
+
+  it('reduzir item para 0 libera a reserva inteira e devolve todo o saldo', async () => {
+    const { base, compraId } = await cenarioComSaldo('2026-10-10', 1, 10);
+    const pedido = await request(app.getHttpServer())
+      .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({
+        compraProgramadaId: compraId,
+        clienteId: base.clienteId,
+        dataOperacao: '2026-10-10',
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }],
+      });
+    const itemId = (
+      await request(app.getHttpServer()).get(`/comercial/pedidos/${pedido.body.id}`).set('Cookie', comercialCookies)
+    ).body.itens[0].id;
+
+    const reduzir = await request(app.getHttpServer())
+      .patch(`/comercial/pedidos/${pedido.body.id}/itens/${itemId}`)
+      .set('Cookie', comercialCookies)
+      .send({ novaQuantidade: 0 });
+    expect(reduzir.status).toBe(200);
+
+    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    expect(Number(disp!.quantidadeDisponivel)).toBe(10); // saldo totalmente devolvido
+    expect(Number(disp!.quantidadeReservada)).toBe(0);
+    expect(disp!.status).toBe('gerada');
+  });
+
+  it('cancelar pedido já cancelado → 409', async () => {
+    const { base, compraId } = await cenarioComSaldo('2026-10-09', 1, 10);
+    const pedido = await request(app.getHttpServer())
+      .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({
+        compraProgramadaId: compraId,
+        clienteId: base.clienteId,
+        dataOperacao: '2026-10-09',
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+      });
+    const primeira = await request(app.getHttpServer())
+      .delete(`/comercial/pedidos/${pedido.body.id}`)
+      .set('Cookie', comercialCookies)
+      .send();
+    expect(primeira.status).toBe(200);
+    // já cancelado (soft-deleted) → 404 (não encontrado entre ativos)
+    const segunda = await request(app.getHttpServer())
+      .delete(`/comercial/pedidos/${pedido.body.id}`)
+      .set('Cookie', comercialCookies)
+      .send();
+    expect(segunda.status).toBe(404);
+  });
+
   it('RASTREABILIDADE: pedido → cliente → item → disponibilidade → preferências', async () => {
     const { base, compraId } = await cenarioComSaldo('2026-10-07', 1, 10);
     const pedido = await request(app.getHttpServer())
