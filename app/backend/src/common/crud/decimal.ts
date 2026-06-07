@@ -32,6 +32,11 @@ export function subtrairQtd(a: number | string, b: number | string): string {
   return paraString(paraEscalado(a) - paraEscalado(b));
 }
 
+/** a + b (ambos quantidades), resultado como string NUMERIC(.,3). */
+export function somarQtd(a: number | string, b: number | string): string {
+  return paraString(paraEscalado(a) + paraEscalado(b));
+}
+
 /** Normaliza um número/string de quantidade para string NUMERIC com 3 casas. */
 export function formatarQtd(valor: number | string): string {
   return paraString(paraEscalado(valor));
