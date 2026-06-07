@@ -29,6 +29,11 @@ import {
   type PecaAssociadaPayload,
   type PecaRedirecionadaPayload,
   type DispositivoStatusPayload,
+  type CorteIniciadoPayload,
+  type SubitemGeradoPayload,
+  type SubitemPesadoPayload,
+  type SubitemAssociadoPayload,
+  type CorteConcluidoPayload,
 } from './events/eventos';
 
 /** Socket autenticado: carrega o payload do usuário validado no handshake. */
@@ -203,6 +208,33 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.DISPOSITIVO_STATUS_ALTERADO)
   handleDispositivoStatus(payload: DispositivoStatusPayload): void {
     this.broadcast(EVENTOS.DISPOSITIVO_STATUS_ALTERADO, payload, payload.dataOperacao);
+  }
+
+  // ── F4c — Corte / Transformação ───────────────────────────────────────────
+
+  @OnEvent(EVENTOS.CORTE_INICIADO)
+  handleCorteIniciado(payload: CorteIniciadoPayload): void {
+    this.broadcast(EVENTOS.CORTE_INICIADO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.SUBITEM_GERADO)
+  handleSubitemGerado(payload: SubitemGeradoPayload): void {
+    this.broadcast(EVENTOS.SUBITEM_GERADO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.SUBITEM_PESADO)
+  handleSubitemPesado(payload: SubitemPesadoPayload): void {
+    this.broadcast(EVENTOS.SUBITEM_PESADO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.SUBITEM_ASSOCIADO)
+  handleSubitemAssociado(payload: SubitemAssociadoPayload): void {
+    this.broadcast(EVENTOS.SUBITEM_ASSOCIADO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.CORTE_CONCLUIDO)
+  handleCorteConcluido(payload: CorteConcluidoPayload): void {
+    this.broadcast(EVENTOS.CORTE_CONCLUIDO, payload, payload.dataOperacao);
   }
 
   private broadcast(evento: string, payload: unknown, dataOperacao: string): void {

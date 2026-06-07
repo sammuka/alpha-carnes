@@ -40,6 +40,9 @@ export const PERMISSOES = {
   ASSOCIACAO_GERENCIAR: 'ASSOCIACAO_GERENCIAR', // confirmar/redirecionar/sem-cobertura
   LEITURA_MANUAL: 'LEITURA_MANUAL', // digitar QR quando leitor indisponível (ADR-009)
   ETIQUETA_GERENCIAR: 'ETIQUETA_GERENCIAR', // emitir/reimprimir etiqueta
+
+  // ── F4c — Corte / Transformação ───────────────────────────────────────────
+  CORTE_GERENCIAR: 'CORTE_GERENCIAR', // iniciar/gerar/pesar/associar/reetiquetar/concluir corte
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -109,6 +112,7 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'ASSOCIACAO_GERENCIAR',
     'LEITURA_MANUAL',
     'ETIQUETA_GERENCIAR',
+    'CORTE_GERENCIAR', // F4c — administrador gerencia tudo
   ],
   gestor: [
     'USUARIOS_APROVAR',
@@ -134,6 +138,7 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'ASSOCIACAO_GERENCIAR',
     'LEITURA_MANUAL',
     'ETIQUETA_GERENCIAR',
+    'CORTE_GERENCIAR', // F4c — gestor operacional gerencia corte
   ],
   // F3 (doc 013 §2.2): comprador cria/confirma compra programada; consulta saldo e pedidos.
   compras: [
@@ -176,7 +181,18 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'LEITURA_MANUAL',
     'ETIQUETA_GERENCIAR',
   ],
-  corte: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
+  // F4c (doc 013): operador de corte executa o ciclo completo de transformação.
+  // Reusa os contratos de F4b: pesar subitem (manual), associar, ler QR, etiquetar.
+  corte: [
+    ...LEITURA_CADASTROS,
+    'DISPONIBILIDADE_LER',
+    'PESAGEM_LER',
+    'PESO_MANUAL',
+    'ASSOCIACAO_GERENCIAR',
+    'LEITURA_MANUAL',
+    'ETIQUETA_GERENCIAR',
+    'CORTE_GERENCIAR',
+  ],
   expedicao: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
   conferente: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
   // F4a (doc 005 §2.2): faturamento consulta o recebimento. F4b: consulta a pesagem.
@@ -225,4 +241,5 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   ASSOCIACAO_GERENCIAR: 'Confirmar, redirecionar e destinar peças a pedidos',
   LEITURA_MANUAL: 'Digitar identificador QR quando o leitor está indisponível',
   ETIQUETA_GERENCIAR: 'Emitir e reimprimir etiquetas de peça',
+  CORTE_GERENCIAR: 'Iniciar, executar e concluir cortes/transformações de peças',
 };
