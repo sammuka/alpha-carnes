@@ -167,9 +167,11 @@ export class DisponibilidadeService {
   }
 
   /**
-   * Lista pedidos em risco para um item: aqueles cujo total reservado (reservas
-   * ativas) supera o recebido até agora na disponibilidade do dia (RA-05/RA-06).
-   * Nunca silencioso — a lista alimenta o alerta de pedido em risco.
+   * Lista pedidos em risco para um item (RA-05/RA-06). O gatilho é no NÍVEL DO
+   * ITEM: quando a soma das reservas ativas de TODOS os pedidos supera o recebido
+   * do item (déficit coletivo), lista cada pedido com reserva ativa — nenhum
+   * pedido individual precisa exceder o recebido. Ex.: 2 pedidos × 6, recebido 10
+   * → Σ=12 > 10, ambos entram. Nunca silencioso.
    */
   async listarPedidosEmRisco(tx: Tx, compraProgramadaId: string, itemComercialId: string): Promise<PedidoEmRisco[]> {
     const linhas = await tx.execute<{
@@ -184,7 +186,7 @@ export class DisponibilidadeService {
         WHERE compra_programada_id = ${compraProgramadaId}
           AND item_comercial_id = ${itemComercialId}
       ),
-      reservado AS (
+      reservas_ativas AS (
         SELECT pvi.pedido_venda_id AS pedido_id,
                SUM(r.quantidade_reservada) AS quantidade_reservada
         FROM reservas_disponibilidade r
@@ -193,13 +195,19 @@ export class DisponibilidadeService {
         JOIN pedidos_venda pv ON pv.id = pvi.pedido_venda_id AND pv.deleted_at IS NULL
         WHERE r.status = 'ativa'
         GROUP BY pvi.pedido_venda_id
+      ),
+      total AS (
+        SELECT COALESCE(SUM(quantidade_reservada), 0) AS reservado_item
+        FROM reservas_ativas
       )
-      SELECT reservado.pedido_id,
+      SELECT reservas_ativas.pedido_id,
              ${itemComercialId} AS item_comercial_id,
-             reservado.quantidade_reservada,
+             reservas_ativas.quantidade_reservada,
              (SELECT quantidade_recebida FROM disp) AS quantidade_recebida
-      FROM reservado
-      WHERE reservado.quantidade_reservada > (SELECT quantidade_recebida FROM disp)
+      FROM reservas_ativas
+      -- Déficit coletivo: Σ reservas do item > recebido → todos os pedidos em risco.
+      WHERE (SELECT reservado_item FROM total) > (SELECT quantidade_recebida FROM disp)
+      ORDER BY reservas_ativas.pedido_id
     `);
     return linhas.rows.map((r) => ({
       pedidoId: r.pedido_id,

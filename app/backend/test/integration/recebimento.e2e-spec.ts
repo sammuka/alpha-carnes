@@ -1,7 +1,13 @@
 import { INestApplication } from '@nestjs/common';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase, criarCompraConfirmada, lerDisponibilidade } from '../helpers/comercial-fixtures';
+import { DRIZZLE } from '../../src/database/database.module';
+import * as schema from '../../src/database/schema';
+import { DisponibilidadeService } from '../../src/modules/comercial/disponibilidade/disponibilidade.service';
+
+type Db = NodePgDatabase<typeof schema>;
 
 describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, impacto)', () => {
   let app: INestApplication;
@@ -243,6 +249,56 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
 
     const disp = await lerDisponibilidade(app, base.itemComercialId);
     expect(Number(disp!.quantidadeRecebida)).toBe(5);
+  });
+
+  it('déficit COLETIVO: 2 pedidos × 6, recebido 10 → ambos em risco (Σ reservas > recebido)', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-17', quantidade: 12 });
+    // 2 pedidos de 6 (Σ reservado = 12). Nenhum pedido isolado excede o recebido (10).
+    for (let i = 0; i < 2; i++) {
+      const p = await request(srv())
+        .post('/comercial/pedidos')
+        .set('Cookie', comercialCookies)
+        .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-17', itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }] });
+      expect(p.status).toBe(201);
+    }
+
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const recId = ini.body.recebimento.id as string;
+    // Recebe 10 < 12 reservado → divergência. Nenhum pedido individual > 10.
+    await request(srv())
+      .post(`/operacao/recebimentos/${recId}/itens`)
+      .set('Cookie', recebimentoCookies)
+      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10, divergencia: divergenciaFalta });
+
+    // A query é a fonte de verdade do alerta: deve listar AMBOS os pedidos.
+    const { db } = app.get<{ db: Db }>(DRIZZLE);
+    const disponibilidade = app.get(DisponibilidadeService);
+    const risco = await disponibilidade.listarPedidosEmRisco(db, compraId, base.itemComercialId);
+    expect(risco).toHaveLength(2);
+    expect(risco.every((r) => Number(r.quantidadeRecebida) === 10)).toBe(true);
+  });
+
+  it('sem déficit coletivo: Σ reservas <= recebido → ninguém em risco', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-18', quantidade: 12 });
+    const p = await request(srv())
+      .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-18', itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }] });
+    expect(p.status).toBe(201);
+
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const recId = ini.body.recebimento.id as string;
+    await request(srv())
+      .post(`/operacao/recebimentos/${recId}/itens`)
+      .set('Cookie', recebimentoCookies)
+      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10, divergencia: divergenciaFalta });
+
+    const { db } = app.get<{ db: Db }>(DRIZZLE);
+    const disponibilidade = app.get(DisponibilidadeService);
+    const risco = await disponibilidade.listarPedidosEmRisco(db, compraId, base.itemComercialId);
+    expect(risco).toHaveLength(0); // reservado 6 <= recebido 10
   });
 
   // Helper: cria recebimento com uma divergência aberta; retorna ids úteis.
