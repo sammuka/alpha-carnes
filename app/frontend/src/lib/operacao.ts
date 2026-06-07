@@ -54,3 +54,63 @@ export interface IniciarRecebimentoResultado {
   recebimento: RecebimentoResumo;
   jaIniciado: boolean;
 }
+
+// ── F4b — Pesagem + Associação + Etiquetagem ──────────────────────────────────
+
+export const MODOS_CAPTURA = ['automatico', 'manual_assistido'] as const;
+export type ModoCaptura = (typeof MODOS_CAPTURA)[number];
+
+export const MOTIVOS_CAPTURA_MANUAL = [
+  'dispositivo_indisponivel',
+  'leitura_instavel',
+  'divergencia_balanca',
+  'outro',
+] as const;
+export type MotivoCapturaManual = (typeof MOTIVOS_CAPTURA_MANUAL)[number];
+
+export type StatusDispositivo = 'disponivel' | 'instavel' | 'indisponivel';
+
+export interface SaudeDispositivo {
+  status: StatusDispositivo;
+  dispositivoId: string;
+  heartbeatEm: string;
+}
+
+export interface StatusDispositivos {
+  balanca: SaudeDispositivo;
+  leitor: SaudeDispositivo;
+  impressora: SaudeDispositivo;
+}
+
+export type StatusPeca = 'pesada' | 'associada' | 'em_sobra' | 'em_analise' | 'para_corte' | 'divergente';
+
+export interface Peca {
+  id: string;
+  recebimentoId: string;
+  itemComercialBaseId: string;
+  pesoOriginal: string;
+  modoCapturaPeso: ModoCaptura;
+  statusPeca: StatusPeca;
+  etiquetaAtual: string | null;
+  pedidoVendaId: string | null;
+  pedidoVendaItemId: string | null;
+  capturaMeta: Record<string, unknown>;
+}
+
+export interface SugestaoScored {
+  pedidoVendaId: string;
+  pedidoVendaItemId: string;
+  itemComercialId: string;
+  clienteId: string;
+  saldoPendente: string;
+  prioridade: number | null;
+  rotaPrevista: string | null;
+  score: number;
+  justificativa: string;
+}
+
+export interface ResultadoSugestao {
+  pecaId: string;
+  sugestao: SugestaoScored | null;
+  compativeis: SugestaoScored[];
+}
