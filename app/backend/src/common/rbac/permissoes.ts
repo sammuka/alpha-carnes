@@ -91,8 +91,10 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'REGRAS_DESDOBRAMENTO_GERENCIAR',
     ...LEITURA_CADASTROS,
     // F3 (doc 013 §2.3/§4.1): gestor aprova/confirma compra e gerencia pedidos.
+    'COMPRAS_PROGRAMADAS_LER',
     'COMPRAS_PROGRAMADAS_GERENCIAR',
     'DISPONIBILIDADE_LER',
+    'PEDIDOS_LER',
     'PEDIDOS_GERENCIAR',
   ],
   // F3 (doc 013 §2.2): comprador cria/confirma compra programada; consulta saldo e pedidos.
@@ -108,6 +110,7 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     ...LEITURA_CADASTROS,
     'COMPRAS_PROGRAMADAS_LER',
     'DISPONIBILIDADE_LER',
+    'PEDIDOS_LER',
     'PEDIDOS_GERENCIAR',
   ],
   recebimento_pesagem: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
