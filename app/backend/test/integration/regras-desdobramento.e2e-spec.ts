@@ -1,0 +1,243 @@
+import { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
+
+describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobreposição)', () => {
+  let app: INestApplication;
+  let adminCookies: string;
+  let comercialCookies: string;
+  let itemCompraId: string;
+  let itemComercialId: string;
+
+  beforeAll(async () => {
+    app = await createTestApp();
+    const admin = await createTestUser(app, { perfil: 'administrador' });
+    const comercial = await createTestUser(app, { perfil: 'comercial' });
+    adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
+    comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
+
+    const itemCompra = await request(app.getHttpServer())
+      .post('/itens-compra')
+      .set('Cookie', adminCookies)
+      .send({ codigo: 'IC-BOI', descricao: 'Boi', unidadeCompra: 'cabeca' });
+    itemCompraId = itemCompra.body.id;
+
+    const itemComercial = await request(app.getHttpServer())
+      .post('/itens-comerciais')
+      .set('Cookie', adminCookies)
+      .send({ codigo: 'ICM-DIANT', descricao: 'Dianteiro', unidadeComercial: 'peca' });
+    itemComercialId = itemComercial.body.id;
+  });
+
+  afterAll(async () => {
+    await cleanupDb(app);
+    await app.close();
+  });
+
+  const novaRegra = (over: Record<string, unknown> = {}) => ({
+    itemCompraId,
+    itemComercialId,
+    fatorQuantidade: 1.5,
+    vigenciaInicio: '2026-01-01T00:00:00.000Z',
+    vigenciaFim: '2026-06-30T00:00:00.000Z',
+    ...over,
+  });
+
+  describe('RBAC', () => {
+    it('comercial sem GERENCIAR — gestor/admin gerencia; comercial só lê', async () => {
+      const lista = await request(app.getHttpServer())
+        .get('/regras-desdobramento')
+        .set('Cookie', comercialCookies);
+      expect(lista.status).toBe(200);
+
+      const criar = await request(app.getHttpServer())
+        .post('/regras-desdobramento')
+        .set('Cookie', comercialCookies)
+        .send(novaRegra());
+      expect(criar.status).toBe(403);
+    });
+  });
+
+  describe('Invariantes de negócio', () => {
+    it('rejeita fatorQuantidade <= 0 com 400', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/regras-desdobramento')
+        .set('Cookie', adminCookies)
+        .send(novaRegra({ fatorQuantidade: 0 }));
+      expect(res.status).toBe(400);
+    });
+
+    it('rejeita vigenciaFim anterior a vigenciaInicio com 400', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/regras-desdobramento')
+        .set('Cookie', adminCookies)
+        .send(novaRegra({ vigenciaInicio: '2026-06-01T00:00:00.000Z', vigenciaFim: '2026-01-01T00:00:00.000Z' }));
+      expect(res.status).toBe(400);
+    });
+
+    it('rejeita item de compra inexistente/inativo com 400', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/regras-desdobramento')
+        .set('Cookie', adminCookies)
+        .send(novaRegra({ itemCompraId: '019e9e00-0000-7000-8000-000000000999' }));
+      expect(res.status).toBe(400);
+    });
+
+    it('cria regra válida (201) e bloqueia segunda regra ativa com vigência sobreposta (409)', async () => {
+      const primeira = await request(app.getHttpServer())
+        .post('/regras-desdobramento')
+        .set('Cookie', adminCookies)
+        .send(novaRegra({ vigenciaInicio: '2026-01-01T00:00:00.000Z', vigenciaFim: '2026-06-30T00:00:00.000Z' }));
+      expect(primeira.status).toBe(201);
+
+      // Sobreposição real: [2026-03-01, 2026-09-30) cruza [2026-01-01, 2026-06-30).
+      const sobreposta = await request(app.getHttpServer())
+        .post('/regras-desdobramento')
+        .set('Cookie', adminCookies)
+        .send(novaRegra({ vigenciaInicio: '2026-03-01T00:00:00.000Z', vigenciaFim: '2026-09-30T00:00:00.000Z' }));
+      expect(sobreposta.status).toBe(409);
+    });
+
+    it('permite segunda regra ativa em período NÃO sobreposto', async () => {
+      // Período disjunto do anterior: [2026-07-01, 2026-12-31).
+      const res = await request(app.getHttpServer())
+        .post('/regras-desdobramento')
+        .set('Cookie', adminCookies)
+        .send(novaRegra({ vigenciaInicio: '2026-07-01T00:00:00.000Z', vigenciaFim: '2026-12-31T00:00:00.000Z' }));
+      expect(res.status).toBe(201);
+    });
+
+    it('lista incluindo removidos quando incluirRemovidos=true', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/regras-desdobramento?incluirRemovidos=true')
+        .set('Cookie', adminCookies);
+      expect(res.status).toBe(200);
+    });
+
+    it('atualiza apenas o status sem mexer em vigência/itens (ramos de fallback)', async () => {
+      const ic = await request(app.getHttpServer())
+        .post('/itens-compra')
+        .set('Cookie', adminCookies)
+        .send({ codigo: 'IC-PARTIAL', descricao: 'B', unidadeCompra: 'cabeca' });
+      const icm = await request(app.getHttpServer())
+        .post('/itens-comerciais')
+        .set('Cookie', adminCookies)
+        .send({ codigo: 'ICM-PARTIAL', descricao: 'T', unidadeComercial: 'peca' });
+      // Criação mínima: sem vigenciaFim e sem observacoes (cobre ramos de default).
+      const criar = await request(app.getHttpServer())
+        .post('/regras-desdobramento')
+        .set('Cookie', adminCookies)
+        .send({
+          itemCompraId: ic.body.id,
+          itemComercialId: icm.body.id,
+          fatorQuantidade: 1,
+          vigenciaInicio: '2026-01-01T00:00:00.000Z',
+        });
+      expect(criar.status).toBe(201);
+
+      const editar = await request(app.getHttpServer())
+        .patch(`/regras-desdobramento/${criar.body.id}`)
+        .set('Cookie', adminCookies)
+        .send({ observacoes: 'só observação' });
+      expect(editar.status).toBe(200);
+      expect(editar.body.observacoes).toBe('só observação');
+    });
+
+    it('ciclo completo: detalhar, editar, soft-delete, restore e 404', async () => {
+      // Par de itens isolado.
+      const ic = await request(app.getHttpServer())
+        .post('/itens-compra')
+        .set('Cookie', adminCookies)
+        .send({ codigo: 'IC-LIFE-R', descricao: 'Boi L', unidadeCompra: 'cabeca' });
+      const icm = await request(app.getHttpServer())
+        .post('/itens-comerciais')
+        .set('Cookie', adminCookies)
+        .send({ codigo: 'ICM-LIFE-R', descricao: 'Traseiro L', unidadeComercial: 'peca' });
+
+      const criar = await request(app.getHttpServer())
+        .post('/regras-desdobramento')
+        .set('Cookie', adminCookies)
+        .send({
+          itemCompraId: ic.body.id,
+          itemComercialId: icm.body.id,
+          fatorQuantidade: 1.2,
+          vigenciaInicio: '2026-01-01T00:00:00.000Z',
+          vigenciaFim: '2026-06-30T00:00:00.000Z',
+        });
+      expect(criar.status).toBe(201);
+      const id = criar.body.id;
+
+      const detalhar = await request(app.getHttpServer())
+        .get(`/regras-desdobramento/${id}`)
+        .set('Cookie', adminCookies);
+      expect(detalhar.status).toBe(200);
+      expect((await request(app.getHttpServer()).get('/regras-desdobramento').set('Cookie', adminCookies)).status).toBe(
+        200,
+      );
+
+      // Editar o fator e a vigência.
+      const editar = await request(app.getHttpServer())
+        .patch(`/regras-desdobramento/${id}`)
+        .set('Cookie', adminCookies)
+        .send({ fatorQuantidade: 2.5, vigenciaFim: '2026-12-31T00:00:00.000Z' });
+      expect(editar.status).toBe(200);
+      expect(Number(editar.body.fatorQuantidade)).toBe(2.5);
+
+      // Inativar via update remove a restrição de sobreposição para esse par.
+      const inativar = await request(app.getHttpServer())
+        .patch(`/regras-desdobramento/${id}`)
+        .set('Cookie', adminCookies)
+        .send({ status: 'inativo' });
+      expect(inativar.status).toBe(200);
+
+      const remover = await request(app.getHttpServer())
+        .delete(`/regras-desdobramento/${id}`)
+        .set('Cookie', adminCookies);
+      expect(remover.status).toBe(200);
+      expect(
+        (await request(app.getHttpServer()).get(`/regras-desdobramento/${id}`).set('Cookie', adminCookies)).status,
+      ).toBe(404);
+
+      const restaurar = await request(app.getHttpServer())
+        .post(`/regras-desdobramento/${id}/restaurar`)
+        .set('Cookie', adminCookies);
+      expect(restaurar.status).toBe(201);
+    });
+
+    it('vigência aberta (fim NULL) sobrepõe qualquer período posterior ao início', async () => {
+      // Cria par novo de itens para isolar este cenário.
+      const ic = await request(app.getHttpServer())
+        .post('/itens-compra')
+        .set('Cookie', adminCookies)
+        .send({ codigo: 'IC-SUINO', descricao: 'Suíno', unidadeCompra: 'lote' });
+      const icm = await request(app.getHttpServer())
+        .post('/itens-comerciais')
+        .set('Cookie', adminCookies)
+        .send({ codigo: 'ICM-PERNIL', descricao: 'Pernil', unidadeComercial: 'peca' });
+
+      const aberta = await request(app.getHttpServer())
+        .post('/regras-desdobramento')
+        .set('Cookie', adminCookies)
+        .send({
+          itemCompraId: ic.body.id,
+          itemComercialId: icm.body.id,
+          fatorQuantidade: 2,
+          vigenciaInicio: '2026-01-01T00:00:00.000Z',
+          vigenciaFim: null,
+        });
+      expect(aberta.status).toBe(201);
+
+      const conflito = await request(app.getHttpServer())
+        .post('/regras-desdobramento')
+        .set('Cookie', adminCookies)
+        .send({
+          itemCompraId: ic.body.id,
+          itemComercialId: icm.body.id,
+          fatorQuantidade: 3,
+          vigenciaInicio: '2027-05-01T00:00:00.000Z',
+          vigenciaFim: '2027-08-01T00:00:00.000Z',
+        });
+      expect(conflito.status).toBe(409);
+    });
+  });
+});

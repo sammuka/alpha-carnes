@@ -8,6 +8,13 @@
       "when": 1749081600000,
       "tag": "0000_initial_auth_rbac",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780785749185,
+      "tag": "0001_dry_war_machine",
+      "breakpoints": true
     }
   ]
 }

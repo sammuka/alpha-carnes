@@ -58,10 +58,31 @@ export function joinSetCookie(res: { headers: Record<string, unknown> }): string
 export async function cleanupDb(app: INestApplication): Promise<void> {
   const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
   await db.execute(sql`
-    TRUNCATE TABLE auditoria, refresh_tokens, usuarios_perfis, perfis_permissoes, permissoes, perfis, usuarios
+    TRUNCATE TABLE
+      auditoria,
+      regras_desdobramento_comercial, clientes, fornecedores, itens_compra, itens_comerciais, parametros,
+      refresh_tokens, usuarios_perfis, perfis_permissoes, permissoes, perfis, usuarios
     RESTART IDENTITY CASCADE
   `);
 }
+
+/** Faz login e devolve o header Cookie pronto para autenticar requisições subsequentes. */
+export async function loginCookies(
+  app: INestApplication,
+  email: string,
+  password: string,
+): Promise<string> {
+  const { default: request } = await import('supertest');
+  const res = await request(app.getHttpServer()).post('/auth/login').send({ email, password });
+  return joinSetCookie(res);
+}
+
+// Os 11 perfis canônicos (slugs do CHECK em perfis). Todos são criados nos testes para
+// que a gestão de perfis/permissões (ADR-008) e a vinculação usuário↔perfil funcionem.
+const PERFIL_SLUGS = [
+  'administrador', 'compras', 'gestor', 'comercial', 'recebimento_pesagem',
+  'corte', 'expedicao', 'conferente', 'faturamento', 'logistica', 'diretoria',
+] as const;
 
 export async function createTestUser(
   app: INestApplication,
@@ -70,7 +91,7 @@ export async function createTestUser(
   const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
   const rbacService = app.get(RbacService);
 
-  const email = `test-${opts.perfil}-${Date.now()}@test.local`;
+  const email = `test-${opts.perfil}-${Date.now()}-${Math.round(performance.now() * 1000)}@test.local`;
   const password = 'TestPass@123456';
   const senhaHash = await hash(password);
 
@@ -81,14 +102,13 @@ export async function createTestUser(
     .returning();
   if (!usuario) throw new Error('Falha ao criar usuário de teste');
 
-  // Inserir perfil se não existir
-  await db
-    .insert(schema.perfis)
-    .values({ slug: opts.perfil, nome: opts.perfil })
-    .onConflictDoNothing();
+  // Inserir TODOS os perfis canônicos (idempotente) — necessário para vínculos e gestão de perfis.
+  for (const slug of PERFIL_SLUGS) {
+    await db.insert(schema.perfis).values({ slug, nome: slug }).onConflictDoNothing();
+  }
 
-  // Inserir permissões e mapa (via RbacService ou direto)
-  await rbacService.ensurePermissoesF1();
+  // Inserir permissões e popular perfis_permissoes do banco (ADR-008 — fonte da verdade).
+  await rbacService.ensurePermissoes();
 
   // Vincular usuário ao perfil
   const [perfil] = await db
