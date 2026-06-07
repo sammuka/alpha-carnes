@@ -18,6 +18,7 @@ import { ItensComerciaisModule } from './modules/cadastros/itens-comerciais/iten
 import { RegrasDesdobramentoModule } from './modules/cadastros/regras-desdobramento/regras-desdobramento.module';
 import { ProntidaoModule } from './modules/cadastros/prontidao/prontidao.module';
 import { ParametrosModule } from './modules/parametros/parametros.module';
+import { ComercialModule } from './modules/comercial/comercial.module';
 import { AuditoriaModule } from './common/auditoria/auditoria.module';
 import { AuditoriaInterceptor } from './common/interceptors/auditoria.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -57,6 +58,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     RegrasDesdobramentoModule,
     ProntidaoModule,
     ParametrosModule,
+    ComercialModule,
   ],
   controllers: [HealthController],
   providers: [

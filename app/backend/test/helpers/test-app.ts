@@ -60,6 +60,8 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
   await db.execute(sql`
     TRUNCATE TABLE
       auditoria,
+      reservas_disponibilidade, pedidos_venda_itens, pedidos_venda,
+      disponibilidades_virtuais, compras_programadas_itens, compras_programadas,
       regras_desdobramento_comercial, clientes, fornecedores, itens_compra, itens_comerciais, parametros,
       refresh_tokens, usuarios_perfis, perfis_permissoes, permissoes, perfis, usuarios
     RESTART IDENTITY CASCADE
