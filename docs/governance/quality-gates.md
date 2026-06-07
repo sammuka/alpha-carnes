@@ -1,0 +1,165 @@
+# Quality Gates — AlphaCarnes
+
+> **Status:** Vigente
+> Critérios objetivos de qualidade. Os **gates transversais** valem para todo PR; a **DoD por fase** lista os invariantes testáveis de cada fase do [`roadmap-canonico.md`](roadmap-canonico.md). O processo que aplica estes gates está em [`framework-revisao.md`](framework-revisao.md).
+
+## Gates transversais
+
+Condição de merge para **qualquer** PR (`feature/* -> develop` e `develop -> main`). Itens marcados como **CI** são verificados automaticamente pelo pipeline ([`ci-spec.md`](ci-spec.md)); os demais são verificados na revisão.
+
+### Qualidade de código
+- **CI** Lint sem erros (backend e frontend).
+- **CI** `type-check` com TypeScript strict; zero `any` implícito; sem `@ts-ignore` não justificado.
+- **CI** Build de produção ok (backend e frontend).
+- Sem código legado comentado, marcadores artificiais ("CORRIGIDO:", "ANTES:"), ou duplicação evitável.
+- Funções/arquivos coesos; preferir simplicidade (KISS) e reuso (DRY).
+
+### Testes e cobertura
+- **CI** Testes unitários + integração passando.
+- **CI** Cobertura **backend ≥ 80%** (linha e branch nos services de domínio).
+- **CI** Frontend: smoke test de render e teste dos componentes/fluxos críticos da fase.
+- Testes provam o comportamento, não só o caminho feliz: incluem casos de borda e de falha.
+- Invariantes de negócio têm teste dedicado que **falha** quando a regra é violada (ex.: tentar furar saldo).
+
+### Segurança
+- **CI** `npm audit` sem vulnerabilidades **high** ou **critical** (backend e frontend).
+- **CI** Sem segredos commitados (secret scanning).
+- Segredos e tokens (ex.: `EISS_CHAVE_AUTENTICACAO`) só via variáveis de ambiente; nunca em código ou logs.
+- Entradas validadas/sanitizadas (Zod nas bordas); queries parametrizadas (Drizzle).
+- RBAC aplicado nos endpoints críticos; segregação de funções respeitada (doc 013).
+
+### Dados e migrations
+- **CI** Migrations geradas via `drizzle-kit` aplicam-se em banco limpo sem erro.
+- Migrations reversíveis; sem `DELETE`/`DROP`/`TRUNCATE` destrutivo não justificado.
+- Convenções de [`../data/convencoes-schema.md`](../data/convencoes-schema.md): UUID PK, `TIMESTAMPTZ`, `NUMERIC` para dinheiro/peso, status como `TEXT`+CHECK, soft delete `deleted_at`, JSONB com índice GIN quando filtrado.
+- Sem `ALTER TABLE` manual; um arquivo de schema Drizzle por domínio.
+
+### Arquitetura (RA-01..RA-06)
+- **RA-01** Sem regra de negócio no frontend.
+- **RA-02** Etapas críticas transacionais + auditadas no backend.
+- **RA-03** Hardware como gateway/serviço isolado.
+- **RA-04** Tempo real orientado a eventos (sem polling).
+- **RA-05** Nenhuma falha de integração silenciosa (erro explícito, `success=false`, log; nunca dado inventado).
+- **RA-06** Exceções operacionais/fiscais observáveis (registro, rastreio, alerta/ocorrência).
+
+### Observabilidade e auditoria
+- Operações críticas geram registro de auditoria (quem, quando, o quê; dados anteriores/novos).
+- Logs estruturados (JSON) nas operações e integrações; correlação por requisição.
+- Erros de integração externa logados com contexto suficiente para diagnóstico.
+
+### Documentação
+- ADR criada/atualizada quando há decisão arquitetural nova.
+- Documento de domínio/fase atualizado quando o comportamento muda.
+
+## DoD por fase
+
+Cada item abaixo é um **invariante testável**. O PR de fechamento da fase só é aprovado com todos demonstrados por teste (link no relatório de gate).
+
+### F1 — Infra + Auth + RBAC
+- Login, refresh e logout funcionais; access token 15 min, refresh token 8 h revogável no banco.
+- Os **11 perfis** (doc 013) existem e são aplicados por Guard nos endpoints; acesso negado para perfil incompatível tem teste.
+- Seed de usuários/perfis reproduzível.
+- Ambiente Docker local sobe `postgres + backend + frontend` em comando único.
+- Migration base por domínio (usuários, perfis, refresh tokens, auditoria) aplicada em banco limpo.
+- Auditoria base registra login e ações administrativas.
+
+### F2 — Cadastros Base
+
+**Entidades no escopo:** clientes, fornecedores, itens de compra, itens comerciais, regras de desdobramento comercial. Mais: parâmetros do sistema e gestão de usuários/perfis (administração das entidades criadas na F1).
+
+- **CRUD por entidade** (criar, listar com paginação + filtro, detalhar, editar, soft-delete, restaurar), cada rota protegida por **permissão nomeada** via Guard; perfil sem a permissão recebe **403** (teste por entidade). Mapeamento permissão→perfil conforme doc 013.
+- **Soft delete** em toda entidade de negócio: nenhuma rota faz DELETE físico; registro `deleted_at` não aparece em listagens padrão nem pode ser referenciado em novos vínculos; restauração só por perfil autorizado (teste).
+- **Validação na borda (Zod):** `documentoFiscal` aceita CNPJ **e** CPF com dígito verificador válido e é único por entidade; `codigo*` único. Entrada inválida ou duplicada retorna **400/409 explícito**, sem inventar dados (RA-05; teste cobre inválido e duplicado).
+- **Regra de desdobramento** (base que a F3 consome): liga item de compra → item comercial com `fatorQuantidade > 0` e vigência; itens referenciados devem existir e estar ativos; **não** permite duas regras ativas para o mesmo par no mesmo período (teste).
+- **JSONB conforme convenção:** preferências de cliente e atributos semiestruturados em JSONB, com índice **GIN** onde houver filtro.
+- **Auditoria (RA-02):** toda mutação de cadastro (create/update/delete/restore) gera registro com dados anteriores/novos (teste).
+- **DP-01 satisfeita:** existe checagem de prontidão de cadastros mínimos (cliente + fornecedor + item de compra + item comercial + regra de desdobramento ativos) que **falha de forma explícita** quando algo falta — bloqueia o avanço para compra/pedido (teste que falha quando a regra é violada).
+- **Frontend:** listagem + formulário (criar/editar) por entidade, com estados de loading e erro; smoke de render + teste do fluxo crítico (criar cliente; CNPJ inválido exibe erro).
+- Cobertura backend ≥ 80% (linha e branch) nos services de domínio de cadastros.
+
+### F3 — Planejamento Comercial (Negócio Fase 1)
+
+**Entidades no escopo:** compra programada + itens, disponibilidade virtual do dia, pedido de venda + itens, reservas de saldo. Eventos de domínio + gateway WebSocket.
+
+- **Geração transacional de disponibilidade:** confirmar uma compra programada gera a disponibilidade virtual por item comercial aplicando as **regras de desdobramento** da F2 (item de compra × fator × quantidade comprada), numa única transação. **Idempotente:** confirmar duas vezes não duplica saldo (guard por status). Compra confirmada é imutável (editar item após confirmação **falha**; teste).
+- **Saldo nunca negativo (invariante duro):** a reserva é um **UPDATE condicional atômico** (`... SET reservada = reservada + r, disponivel = disponivel - r WHERE id = :id AND disponivel >= r`), com `CHECK (quantidade_disponivel >= 0)` e `CHECK (quantidade_reservada >= 0)` como backstop no schema. **Sem `SELECT` e depois `UPDATE`** (race). 
+- **Teste de concorrência (obrigatório):** N reservas paralelas cujo total **excede** o saldo — o teste prova que (a) `quantidade_disponivel` nunca fica negativa, (b) a soma das reservas confirmadas == total gerado, (c) o excedente é tratado (rejeição 409 e/ou `quantidadePendente`), nunca silenciosamente perdido (RA-05).
+- **Reserva parcial + alerta:** quando o pedido excede o disponível, reserva o que há (`quantidadeReservada = min(pedida, disponivel)`), marca `quantidadePendente`, e **sinaliza alerta** de pedido sem cobertura (evento + registro observável; RA-06). Item com saldo zero → nova reserva bloqueada/100% pendente.
+- **Liberação de reserva:** cancelar pedido/item ou reduzir quantidade **devolve** o saldo à disponibilidade na mesma transação (teste prova que `disponivel` volta ao valor correto).
+- **Tempo real (RA-04):** após o **commit** da reserva/liberação, um evento de domínio é publicado e o gateway WebSocket faz broadcast do novo saldo (room `dashboard`/`operacao:{data}`). Sem polling. Teste prova que o evento é emitido **após** o commit com payload correto.
+- **Rastreabilidade:** cada reserva é rastreável (pedido → cliente → item comercial → disponibilidade de origem → preferências aplicadas).
+- Cobertura backend ≥ 80% (linha e branch) nos services de domínio.
+
+### F4a — Recebimento + Divergências
+Primeiro encontro do mundo virtual (F3) com o físico. **Sem balança e sem entidade Peça** (isso é F4b): aqui registra-se quantidade recebida (peso é campo manual opcional, informativo). Invariantes testáveis:
+
+- **Vínculo com o lote do dia:** todo recebimento referencia uma `compra_programada` **confirmada** (lote principal do dia). Iniciar recebimento sobre compra em rascunho/cancelada → **falha explícita** (409). Itens esperados derivam do desdobramento da compra (não digitados à mão).
+- **Conferência esperado × recebido:** o sistema apresenta o esperado **antes** do registro do recebido; cada item recebido é apurado contra o esperado. A diferença (falta/sobra/item trocado) é **computada pelo sistema**, não ajustada cegamente pelo operador.
+- **Divergência é sempre formal (RA-06):** qualquer diferença gera uma `divergencia_recebimento` com `tipo` (CHECK: quantidade_menor, quantidade_maior, item_divergente, qualidade_divergente, peso_incompativel, item_ausente, item_excedente, inconsistencia_nf_fisico), `descricao`, `impacto`, `acao_imediata`, `responsavel_registro` e `status`. **Não existe ajuste invisível** do esperado nem do recebido (teste prova que alterar quantidade sem ocorrência formal é rejeitado).
+- **Encerramento sem pendência silenciosa (invariante duro):** concluir um recebimento com item divergente **sem** tratativa formal registrada → **falha** (409). Teste prova: recebimento com divergência aberta e sem ação → bloqueio; com tratativa registrada → conclusão permitida.
+- **Imutabilidade pós-conclusão + idempotência:** recebimento `concluido` é imutável (novo registro/edição de item → 409); concluir duas vezes é idempotente (UPDATE condicional por status, sem efeito duplicado). Teste de concorrência na conclusão (S5-like).
+- **Impacto na disponibilidade e pedidos em risco (RA-05/RA-06):** o recebimento atualiza `quantidade_recebida` e `quantidade_com_divergencia` na `disponibilidade_virtual` do dia, na **mesma transação**. Quando `recebido < reservado` de um item, o sistema **lista os pedidos impactados** e emite alerta observável de *pedido em risco* — nunca perde a informação em silêncio. Teste prova a lista de pedidos afetados e o alerta.
+- **Ocorrência com fornecedor + histórico:** divergência pode abrir/continuar uma `ocorrencia_fornecedor` com **timeline auditável** (data/hora, usuário, ação, retorno, próximo passo, desfecho). Status com CHECK (aberta, em_analise, aguardando_fornecedor, resolvida). Encerrar ocorrência exige desfecho.
+- **Tempo real (RA-04):** após o **commit**, eventos de domínio (`recebimento_iniciado`, `recebimento_registrado`, `divergencia_recebimento_aberta`, `divergencia_recebimento_atualizada`, `ocorrencia_fornecedor_aberta`, `ocorrencia_fornecedor_atualizada`) são publicados e o gateway WS faz broadcast para `dashboard`/`operacao:{data}`. Sem polling. Teste prova emissão **após** o commit e no-emit em rollback.
+- **RBAC por permissão nomeada:** `RECEBIMENTO_LER/GERENCIAR`, `DIVERGENCIA_RECEBIMENTO_GERENCIAR`, `OCORRENCIA_FORNECEDOR_GERENCIAR`, mapeadas aos perfis (Operador/receptor, Gestor operacional, Compras, Administrativo; consulta para Faturamento/Comercial). Resolvidas do banco (ADR-008); teste de 403 por permissão ausente.
+- **Auditoria transacional antes/depois** em toda mutação (recebimento, item, divergência, ocorrência), dentro da `db.transaction` (padrão F2/F3).
+- **Rastreabilidade:** recebimento → compra/lote → fornecedor → NF → item recebido → divergência → ocorrência, consultável e sem buraco.
+- **Frontend:** tela de recebimento (esperado × recebido + painel de divergência com classificação obrigatória), painel de disponibilidade refletindo recebido/divergente via WS sem refetch, gating por permissão, estados de loading/erro.
+- Cobertura backend ≥ 80% (linha e branch) nos services de domínio.
+
+### F4b — Pesagem + Associação + Etiquetagem
+- Peso capturado via **gateway de balança isolado** (RA-03), com leitura estabilizada e fallback manual assistido sem falha silenciosa (RA-05).
+- Peça registrada com peso bruto/líquido e rastreabilidade.
+- Associação sugestiva por saldo + preferências + rota; operador confirma ou redireciona.
+- Etiqueta com QR impressa via **gateway de impressora isolado**; reimpressão auditada.
+- HW mínimo (balança + impressora) operacional como dependência satisfeita.
+
+### F4c — Corte / Transformação
+- Ordem de corte gera subitens com nova pesagem.
+- Reetiquetagem consistente; subitem mantém vínculo com a peça de origem.
+- Rastreabilidade ponta a ponta da transformação consultável (origem → subitens → destino).
+
+### F5 — Expedição (Negócio Fase 3)
+- Composição de carga por caminhão/rota com conferência por QR.
+- Status da carga acompanhado em **tempo real** (RA-04).
+- Transferência entre pedidos permitida **apenas com expedição aberta**, com auditoria.
+- **Fechamento bloqueia alterações:** mutação de peça/pedido após fechamento **falha** — teste prova o bloqueio. Reabertura só por perfil autorizado, auditada.
+- DP-05 satisfeita: faturamento só habilita após fechamento.
+
+### F6 — Faturamento + NFS-e (Negócio Fase 5)
+- Payload fiscal montado a partir da **carga real** fechada (itens, valores, alíquota).
+- Emissão NFS-e em **homologação EISS Osasco** bem-sucedida (`Erro=false`, número gerado); consulta e cancelamento de teste funcionam.
+- Falha do EISS tratada com retry/backoff e status explícito (RA-05); sem nota fantasma.
+- Payload de request/response EISS auditado em `notas_fiscais.payload_eiss` (JSONB).
+- DANFE gerada e armazenada; envio ao motorista por e-mail registrado.
+- Liberação do caminhão só com NF válida e checklist (DP-06), com rastreabilidade.
+
+### F7 — Dashboards e Observabilidade (Negócio Fase 6)
+- Dashboard operacional em tempo real (recebido vs. vendido vs. expedido) consistente com os dados.
+- KPIs (tempo médio de pesagem, taxa de divergência, aproveitamento de carga) calculados corretamente, com teste de cálculo.
+- Alertas automáticos (item zerado, divergência crítica, atraso) disparam nas condições corretas.
+- Rastreabilidade completa de cada peça (recebimento → entrega) consultável.
+- Auditoria de ações críticas consultável por perfil de auditoria.
+
+### F8 — Hardware e Integrações (hardening)
+- Monitoramento de status de balança, impressora e leitores QR em tempo real no painel.
+- Reconexão/retentativa dos gateways sem perda silenciosa de leitura.
+- Leitores QR plenos em conferência e expedição.
+
+### F9 — Estoque e Sobras (Negócio Fase 4)
+- Sobras do dia registradas com origem rastreável.
+- Congelamento registra impacto de peso/qualidade (RA-06).
+- Controle de entradas/saídas de estoque com inventário; relatório de aproveitamento e perdas.
+
+## Como o gate decide
+
+```mermaid
+flowchart TD
+    pr["PR aberto"] --> transv{"Gates transversais<br/>verdes?"}
+    transv -->|nao| block["Bloqueado: ajustar"]
+    transv -->|sim| ra{"RA-01..06<br/>respeitadas?"}
+    ra -->|nao| block
+    ra -->|sim| dod{"DoD da fase<br/>demonstrada por teste?"}
+    dod -->|nao| block
+    dod -->|sim| approve["Aprovado para merge"]
+```
