@@ -117,32 +117,42 @@ export class PedidosService {
       for (const item of dto.itens) {
         const pedida = formatarQtd(item.quantidadePedida);
 
-        // B1: UPDATE atômico único. LEAST limita a reserva ao disponível;
-        // RETURNING old/new dá o reservado efetivo sem race nem float.
+        // B1: reserva atômica em UM único statement. A CTE `FOR UPDATE` trava a
+        // linha e, sob READ COMMITTED, re-lê o saldo committed mais recente — o
+        // reservado efetivo (LEAST(pedida, disponível travado)) é calculado sobre
+        // esse valor e retornado direto, sem depender de `RETURNING old.*` (que,
+        // no PG18 sob EvalPlanQual, devolveria o snapshot obsoleto da transação).
+        // Não é SELECT-depois-UPDATE em código: é um statement atômico, row-locked.
         const atualizada = await tx.execute<{
           id: string;
-          disp_antes: string;
+          reservado_efetivo: string;
           disp_depois: string;
           reservada_depois: string;
         }>(sql`
-          UPDATE disponibilidades_virtuais
-          SET quantidade_reservada = quantidade_reservada + LEAST(${pedida}::numeric, quantidade_disponivel),
-              quantidade_disponivel = quantidade_disponivel - LEAST(${pedida}::numeric, quantidade_disponivel),
+          WITH travada AS (
+            SELECT id, quantidade_disponivel
+            FROM disponibilidades_virtuais
+            WHERE compra_programada_id = ${dto.compraProgramadaId}
+              AND item_comercial_id = ${item.itemComercialId}
+            FOR UPDATE
+          )
+          UPDATE disponibilidades_virtuais d
+          SET quantidade_reservada = d.quantidade_reservada + LEAST(${pedida}::numeric, t.quantidade_disponivel),
+              quantidade_disponivel = d.quantidade_disponivel - LEAST(${pedida}::numeric, t.quantidade_disponivel),
               status = CASE
-                WHEN quantidade_disponivel - LEAST(${pedida}::numeric, quantidade_disponivel) = 0
+                WHEN d.quantidade_disponivel - LEAST(${pedida}::numeric, t.quantidade_disponivel) = 0
                 THEN 'esgotada' ELSE 'parcialmente_reservada' END
-          WHERE compra_programada_id = ${dto.compraProgramadaId}
-            AND item_comercial_id = ${item.itemComercialId}
-            AND quantidade_disponivel > 0
-          RETURNING id,
-                    old.quantidade_disponivel AS disp_antes,
-                    quantidade_disponivel     AS disp_depois,
-                    quantidade_reservada      AS reservada_depois
+          FROM travada t
+          WHERE d.id = t.id AND t.quantidade_disponivel > 0
+          RETURNING d.id,
+                    LEAST(${pedida}::numeric, t.quantidade_disponivel) AS reservado_efetivo,
+                    d.quantidade_disponivel AS disp_depois,
+                    d.quantidade_reservada  AS reservada_depois
         `);
 
         const linha = atualizada.rows[0];
         // S3: sem disponibilidade (ou já esgotada) → reservadoEfetivo = 0.
-        const reservadoEfetivo = linha ? subtrairQtd(linha.disp_antes, linha.disp_depois) : '0.000';
+        const reservadoEfetivo = linha ? formatarQtd(linha.reservado_efetivo) : '0.000';
         const pendente = subtrairQtd(pedida, reservadoEfetivo);
 
         const statusItem = ehZero(pendente)
@@ -178,8 +188,8 @@ export class PedidosService {
           reservasAtualizadas.push({
             disponibilidadeId: linha.id,
             itemComercialId: item.itemComercialId,
-            quantidadeReservada: linha.reservada_depois,
-            quantidadeDisponivel: linha.disp_depois,
+            quantidadeReservada: formatarQtd(linha.reservada_depois),
+            quantidadeDisponivel: formatarQtd(linha.disp_depois),
           });
         }
 
