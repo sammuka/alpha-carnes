@@ -17,6 +17,19 @@ export interface DisponibilidadeGerada {
   quantidadeTotalGerada: string;
 }
 
+export interface ItemEsperado {
+  disponibilidadeId: string;
+  itemComercialId: string;
+  quantidadeTotalGerada: string;
+}
+
+export interface PedidoEmRisco {
+  pedidoId: string;
+  itemComercialId: string;
+  quantidadeReservada: string;
+  quantidadeRecebida: string;
+}
+
 @Injectable()
 export class DisponibilidadeService {
   constructor(
@@ -88,6 +101,112 @@ export class DisponibilidadeService {
     }
 
     return linhas;
+  }
+
+  /**
+   * Itens esperados do recebimento, derivados da disponibilidade do dia (F4a,
+   * Refino 1): a disponibilidade é a fonte de verdade imutável do que a compra
+   * comprometeu — não recomputamos o desdobramento (evita drift se a regra mudar).
+   */
+  async listarEsperadoDaCompra(tx: Tx, compraProgramadaId: string): Promise<ItemEsperado[]> {
+    const linhas = await tx
+      .select({
+        disponibilidadeId: disponibilidadesVirtuais.id,
+        itemComercialId: disponibilidadesVirtuais.itemComercialId,
+        quantidadeTotalGerada: disponibilidadesVirtuais.quantidadeTotalGerada,
+      })
+      .from(disponibilidadesVirtuais)
+      .where(eq(disponibilidadesVirtuais.compraProgramadaId, compraProgramadaId));
+    return linhas;
+  }
+
+  /**
+   * Aplica o impacto físico do recebimento (F4a) à disponibilidade do dia, na
+   * MESMA transação. Soma os deltas (novo − anterior) em quantidade_recebida e
+   * quantidade_com_divergencia. NÃO mexe em reservada/disponível (recebimento
+   * registra fato físico, não rebalanceia o saldo virtual). CHECK >= 0 é backstop.
+   * Retorna null se não houver disponibilidade (item excedente não tem linha).
+   */
+  async aplicarRecebimentoDelta(
+    tx: Tx,
+    params: { compraProgramadaId: string; itemComercialId: string; deltaRecebido: string; deltaComDivergencia: string },
+    usuarioId?: string | null,
+  ): Promise<{ quantidadeRecebida: string; quantidadeComDivergencia: string } | null> {
+    const atualizada = await tx.execute<{
+      id: string;
+      quantidade_recebida: string;
+      quantidade_com_divergencia: string;
+    }>(sql`
+      UPDATE disponibilidades_virtuais
+      SET quantidade_recebida = quantidade_recebida + ${params.deltaRecebido}::numeric,
+          quantidade_com_divergencia = quantidade_com_divergencia + ${params.deltaComDivergencia}::numeric
+      WHERE compra_programada_id = ${params.compraProgramadaId}
+        AND item_comercial_id = ${params.itemComercialId}
+      RETURNING id, quantidade_recebida, quantidade_com_divergencia
+    `);
+    const linha = atualizada.rows[0];
+    if (!linha) return null; // item excedente: sem disponibilidade — não falha.
+
+    await this.auditoria.registrar(tx, {
+      tabela: 'disponibilidades_virtuais',
+      registroId: linha.id,
+      operacao: 'UPDATE',
+      modulo: 'operacao',
+      usuarioId,
+      dadosAnteriores: {},
+      dadosNovos: {
+        quantidadeRecebida: linha.quantidade_recebida,
+        quantidadeComDivergencia: linha.quantidade_com_divergencia,
+      },
+    });
+
+    return {
+      quantidadeRecebida: linha.quantidade_recebida,
+      quantidadeComDivergencia: linha.quantidade_com_divergencia,
+    };
+  }
+
+  /**
+   * Lista pedidos em risco para um item: aqueles cujo total reservado (reservas
+   * ativas) supera o recebido até agora na disponibilidade do dia (RA-05/RA-06).
+   * Nunca silencioso — a lista alimenta o alerta de pedido em risco.
+   */
+  async listarPedidosEmRisco(tx: Tx, compraProgramadaId: string, itemComercialId: string): Promise<PedidoEmRisco[]> {
+    const linhas = await tx.execute<{
+      pedido_id: string;
+      item_comercial_id: string;
+      quantidade_reservada: string;
+      quantidade_recebida: string;
+    }>(sql`
+      WITH disp AS (
+        SELECT id, item_comercial_id, quantidade_recebida
+        FROM disponibilidades_virtuais
+        WHERE compra_programada_id = ${compraProgramadaId}
+          AND item_comercial_id = ${itemComercialId}
+      ),
+      reservado AS (
+        SELECT pvi.pedido_venda_id AS pedido_id,
+               SUM(r.quantidade_reservada) AS quantidade_reservada
+        FROM reservas_disponibilidade r
+        JOIN disp ON disp.id = r.disponibilidade_virtual_id
+        JOIN pedidos_venda_itens pvi ON pvi.id = r.pedido_venda_item_id
+        JOIN pedidos_venda pv ON pv.id = pvi.pedido_venda_id AND pv.deleted_at IS NULL
+        WHERE r.status = 'ativa'
+        GROUP BY pvi.pedido_venda_id
+      )
+      SELECT reservado.pedido_id,
+             ${itemComercialId} AS item_comercial_id,
+             reservado.quantidade_reservada,
+             (SELECT quantidade_recebida FROM disp) AS quantidade_recebida
+      FROM reservado
+      WHERE reservado.quantidade_reservada > (SELECT quantidade_recebida FROM disp)
+    `);
+    return linhas.rows.map((r) => ({
+      pedidoId: r.pedido_id,
+      itemComercialId: r.item_comercial_id,
+      quantidadeReservada: r.quantidade_reservada,
+      quantidadeRecebida: r.quantidade_recebida,
+    }));
   }
 
   async listar(query: ListarDisponibilidadeQuery): Promise<DisponibilidadeVirtual[]> {

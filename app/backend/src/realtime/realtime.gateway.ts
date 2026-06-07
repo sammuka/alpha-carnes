@@ -20,6 +20,11 @@ import {
   type DisponibilidadeGeradaPayload,
   type PedidoSemCoberturaPayload,
   type ReservaAtualizadaPayload,
+  type RecebimentoIniciadoPayload,
+  type RecebimentoRegistradoPayload,
+  type DivergenciaRecebimentoPayload,
+  type OcorrenciaFornecedorPayload,
+  type PedidoEmRiscoPayload,
 } from './events/eventos';
 
 /** Socket autenticado: carrega o payload do usuário validado no handshake. */
@@ -135,6 +140,43 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.PEDIDO_SEM_COBERTURA)
   handlePedidoSemCobertura(payload: PedidoSemCoberturaPayload): void {
     this.broadcast(EVENTOS.PEDIDO_SEM_COBERTURA, payload, payload.dataOperacao);
+  }
+
+  // ── F4a — Recebimento + Divergências ──────────────────────────────────────
+
+  @OnEvent(EVENTOS.RECEBIMENTO_INICIADO)
+  handleRecebimentoIniciado(payload: RecebimentoIniciadoPayload): void {
+    this.broadcast(EVENTOS.RECEBIMENTO_INICIADO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.RECEBIMENTO_REGISTRADO)
+  handleRecebimentoRegistrado(payload: RecebimentoRegistradoPayload): void {
+    this.broadcast(EVENTOS.RECEBIMENTO_REGISTRADO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.DIVERGENCIA_RECEBIMENTO_ABERTA)
+  handleDivergenciaAberta(payload: DivergenciaRecebimentoPayload): void {
+    this.broadcast(EVENTOS.DIVERGENCIA_RECEBIMENTO_ABERTA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.DIVERGENCIA_RECEBIMENTO_ATUALIZADA)
+  handleDivergenciaAtualizada(payload: DivergenciaRecebimentoPayload): void {
+    this.broadcast(EVENTOS.DIVERGENCIA_RECEBIMENTO_ATUALIZADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.OCORRENCIA_FORNECEDOR_ABERTA)
+  handleOcorrenciaAberta(payload: OcorrenciaFornecedorPayload): void {
+    this.broadcast(EVENTOS.OCORRENCIA_FORNECEDOR_ABERTA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.OCORRENCIA_FORNECEDOR_ATUALIZADA)
+  handleOcorrenciaAtualizada(payload: OcorrenciaFornecedorPayload): void {
+    this.broadcast(EVENTOS.OCORRENCIA_FORNECEDOR_ATUALIZADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PEDIDO_EM_RISCO)
+  handlePedidoEmRisco(payload: PedidoEmRiscoPayload): void {
+    this.broadcast(EVENTOS.PEDIDO_EM_RISCO, payload, payload.dataOperacao);
   }
 
   private broadcast(evento: string, payload: unknown, dataOperacao: string): void {

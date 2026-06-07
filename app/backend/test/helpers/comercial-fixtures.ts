@@ -71,6 +71,8 @@ export async function lerDisponibilidade(
   quantidadeTotalGerada: string;
   quantidadeReservada: string;
   quantidadeDisponivel: string;
+  quantidadeRecebida: string;
+  quantidadeComDivergencia: string;
   status: string;
 } | null> {
   const { db } = app.get<{ db: Db }>(DRIZZLE);
@@ -85,6 +87,35 @@ export async function lerDisponibilidade(
     quantidadeTotalGerada: row.quantidadeTotalGerada,
     quantidadeReservada: row.quantidadeReservada,
     quantidadeDisponivel: row.quantidadeDisponivel,
+    quantidadeRecebida: row.quantidadeRecebida,
+    quantidadeComDivergencia: row.quantidadeComDivergencia,
     status: row.status,
   };
+}
+
+/**
+ * Cria uma compra programada confirmada (gera a disponibilidade do dia) via API.
+ * Reusa o caminho real de F3, retornando os ids para montar pedidos/recebimentos.
+ */
+export async function criarCompraConfirmada(
+  app: INestApplication,
+  comprasCookies: string,
+  base: { fornecedorId: string; itemCompraId: string },
+  opts: { dataOperacao: string; quantidade: number },
+): Promise<string> {
+  const { default: request } = await import('supertest');
+  const criar = await request(app.getHttpServer())
+    .post('/comercial/compras-programadas')
+    .set('Cookie', comprasCookies)
+    .send({
+      dataOperacao: opts.dataOperacao,
+      fornecedorId: base.fornecedorId,
+      itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: opts.quantidade }],
+    });
+  const compraId = criar.body.id as string;
+  await request(app.getHttpServer())
+    .post(`/comercial/compras-programadas/${compraId}/confirmar`)
+    .set('Cookie', comprasCookies)
+    .send();
+  return compraId;
 }

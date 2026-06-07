@@ -9,3 +9,5 @@ export * from './parametros.schema';
 export * from './compras-programadas.schema';
 export * from './disponibilidades-virtuais.schema';
 export * from './pedidos.schema';
+export * from './recebimentos.schema';
+export * from './ocorrencias-fornecedor.schema';

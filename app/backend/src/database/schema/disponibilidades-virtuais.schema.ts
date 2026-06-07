@@ -17,6 +17,9 @@ export const disponibilidadesVirtuais = pgTable(
     quantidadeTotalGerada:  numeric('quantidade_total_gerada', { precision: 15, scale: 3 }).notNull(),
     quantidadeReservada:    numeric('quantidade_reservada', { precision: 15, scale: 3 }).notNull().default('0'),
     quantidadeDisponivel:   numeric('quantidade_disponivel', { precision: 15, scale: 3 }).notNull(),
+    // F4a: fato físico do recebimento (não rebalanceia reserva/disponível).
+    quantidadeRecebida:        numeric('quantidade_recebida', { precision: 15, scale: 3 }).notNull().default('0'),
+    quantidadeComDivergencia:  numeric('quantidade_com_divergencia', { precision: 15, scale: 3 }).notNull().default('0'),
     status:                 text('status').notNull().default('gerada'),
     createdAt:              timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt:              timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -25,6 +28,8 @@ export const disponibilidadesVirtuais = pgTable(
     // Invariantes duros (backstop do anti-overbooking).
     check('chk_disp_disponivel_nao_negativo', sql`${t.quantidadeDisponivel} >= 0`),
     check('chk_disp_reservada_nao_negativo', sql`${t.quantidadeReservada} >= 0`),
+    check('chk_disp_recebida_nao_negativo', sql`${t.quantidadeRecebida} >= 0`),
+    check('chk_disp_com_divergencia_nao_negativo', sql`${t.quantidadeComDivergencia} >= 0`),
     check('chk_disp_status', sql`${t.status} IN ('gerada','parcialmente_reservada','esgotada')`),
     uniqueIndex('uq_disp_compra_item').on(t.compraProgramadaId, t.itemComercialId),
     index('idx_disp_data_operacao').on(t.dataOperacao),

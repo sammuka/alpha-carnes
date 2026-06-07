@@ -26,6 +26,12 @@ export const PERMISSOES = {
   DISPONIBILIDADE_LER: 'DISPONIBILIDADE_LER',
   PEDIDOS_LER: 'PEDIDOS_LER',
   PEDIDOS_GERENCIAR: 'PEDIDOS_GERENCIAR', // criar/cancelar/reduzir
+
+  // ── F4a — Recebimento + Divergências ──────────────────────────────────────
+  RECEBIMENTO_LER: 'RECEBIMENTO_LER',
+  RECEBIMENTO_GERENCIAR: 'RECEBIMENTO_GERENCIAR', // iniciar/registrar item/concluir
+  DIVERGENCIA_RECEBIMENTO_GERENCIAR: 'DIVERGENCIA_RECEBIMENTO_GERENCIAR',
+  OCORRENCIA_FORNECEDOR_GERENCIAR: 'OCORRENCIA_FORNECEDOR_GERENCIAR',
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -83,6 +89,11 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'DISPONIBILIDADE_LER',
     'PEDIDOS_LER',
     'PEDIDOS_GERENCIAR',
+    // F4a — administrador gerencia tudo
+    'RECEBIMENTO_LER',
+    'RECEBIMENTO_GERENCIAR',
+    'DIVERGENCIA_RECEBIMENTO_GERENCIAR',
+    'OCORRENCIA_FORNECEDOR_GERENCIAR',
   ],
   gestor: [
     'USUARIOS_APROVAR',
@@ -96,6 +107,11 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'DISPONIBILIDADE_LER',
     'PEDIDOS_LER',
     'PEDIDOS_GERENCIAR',
+    // F4a — gestor operacional gerencia recebimento, divergências e ocorrências.
+    'RECEBIMENTO_LER',
+    'RECEBIMENTO_GERENCIAR',
+    'DIVERGENCIA_RECEBIMENTO_GERENCIAR',
+    'OCORRENCIA_FORNECEDOR_GERENCIAR',
   ],
   // F3 (doc 013 §2.2): comprador cria/confirma compra programada; consulta saldo e pedidos.
   compras: [
@@ -105,6 +121,10 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'COMPRAS_PROGRAMADAS_GERENCIAR',
     'DISPONIBILIDADE_LER',
     'PEDIDOS_LER',
+    // F4a (doc 005 §2.2): compras trata divergências e conduz ocorrências com fornecedor.
+    'RECEBIMENTO_LER',
+    'DIVERGENCIA_RECEBIMENTO_GERENCIAR',
+    'OCORRENCIA_FORNECEDOR_GERENCIAR',
   ],
   // F3 (doc 013 §2.4): operador comercial registra pedidos e consulta saldo/compras.
   comercial: [
@@ -113,12 +133,22 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'DISPONIBILIDADE_LER',
     'PEDIDOS_LER',
     'PEDIDOS_GERENCIAR',
+    // F4a (doc 005 §2.2): comercial consulta o recebimento (impacto em pedidos).
+    'RECEBIMENTO_LER',
   ],
-  recebimento_pesagem: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
+  // F4a (doc 005 §2.2): operador/receptor opera o recebimento e registra divergências.
+  recebimento_pesagem: [
+    ...LEITURA_CADASTROS,
+    'DISPONIBILIDADE_LER',
+    'RECEBIMENTO_LER',
+    'RECEBIMENTO_GERENCIAR',
+    'DIVERGENCIA_RECEBIMENTO_GERENCIAR',
+  ],
   corte: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
   expedicao: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
   conferente: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
-  faturamento: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
+  // F4a (doc 005 §2.2): faturamento consulta o recebimento.
+  faturamento: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER', 'RECEBIMENTO_LER'],
   logistica: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
   diretoria: [
     'AUDITORIA_VISUALIZAR',
@@ -153,4 +183,8 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   DISPONIBILIDADE_LER: 'Consultar disponibilidade virtual do dia',
   PEDIDOS_LER: 'Consultar pedidos de venda',
   PEDIDOS_GERENCIAR: 'Criar, cancelar e ajustar pedidos de venda',
+  RECEBIMENTO_LER: 'Consultar recebimentos e divergências',
+  RECEBIMENTO_GERENCIAR: 'Iniciar, registrar itens e concluir recebimentos',
+  DIVERGENCIA_RECEBIMENTO_GERENCIAR: 'Registrar e tratar divergências de recebimento',
+  OCORRENCIA_FORNECEDOR_GERENCIAR: 'Abrir, atualizar e encerrar ocorrências com fornecedor',
 };

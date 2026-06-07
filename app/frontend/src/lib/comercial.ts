@@ -7,6 +7,8 @@ export interface DisponibilidadeDia {
   quantidadeTotalGerada: string;
   quantidadeReservada: string;
   quantidadeDisponivel: string;
+  quantidadeRecebida: string;
+  quantidadeComDivergencia: string;
   status: string;
 }
 
