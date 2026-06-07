@@ -1,6 +1,14 @@
 import { redirect } from 'next/navigation';
 import { getMe } from '@/lib/auth';
 
+// Itens de menu dos cadastros base — cada um exige a permissão de leitura correspondente.
+const CADASTROS_MENU = [
+  { recurso: 'clientes', rotulo: 'Clientes', permissao: 'CLIENTES_LER' },
+  { recurso: 'fornecedores', rotulo: 'Fornecedores', permissao: 'FORNECEDORES_LER' },
+  { recurso: 'itens-compra', rotulo: 'Itens de Compra', permissao: 'ITENS_COMPRA_LER' },
+  { recurso: 'itens-comerciais', rotulo: 'Itens Comerciais', permissao: 'ITENS_COMERCIAIS_LER' },
+];
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getMe();
   if (!user) redirect('/login');
@@ -14,6 +22,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <a href="/admin" className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">
             Dashboard
           </a>
+          {/* Cadastros base (F2) — cada link é gated pela permissão de leitura correspondente */}
+          {CADASTROS_MENU.map(
+            (item) =>
+              user.permissoes.includes(item.permissao) && (
+                <a
+                  key={item.recurso}
+                  href={`/cadastros/${item.recurso}`}
+                  className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+                >
+                  {item.rotulo}
+                </a>
+              ),
+          )}
           {/* Gating de menu por permissão efetiva — vinda de /auth/me (backend) */}
           {user.permissoes.includes('AUDITORIA_VISUALIZAR') && (
             <a href="/admin/auditoria" className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">

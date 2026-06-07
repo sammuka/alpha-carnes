@@ -22,5 +22,6 @@ module.exports = {
   coverageThreshold: { global: { lines: 80, branches: 80 } },
   testEnvironment: 'node',
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+  setupFilesAfterEnv: ['<rootDir>/test/jest-setup.ts'],
   maxWorkers: 1,
 };

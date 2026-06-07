@@ -1,37 +1,12 @@
 import { RbacService } from '../../src/modules/auth/rbac.service';
 
-describe('RbacService', () => {
+describe('RbacService (unidade — métodos puros)', () => {
   let service: RbacService;
 
   beforeEach(() => {
-    // RbacService em modo sem banco (sem injeção de DRIZZLE nos testes unitários)
+    // resolverPermissoes/ensurePermissoes dependem do banco (ADR-008) e são cobertos por e2e.
+    // Aqui validamos apenas os métodos puros, sem injeção de DRIZZLE.
     service = new RbacService({ db: null } as never);
-  });
-
-  describe('resolverPermissoes', () => {
-    it('retorna vazio para perfil sem permissões', () => {
-      expect(service.resolverPermissoes(['comercial'])).toEqual([]);
-    });
-
-    it('retorna permissões do administrador', () => {
-      const perms = service.resolverPermissoes(['administrador']);
-      expect(perms).toContain('USUARIOS_GERENCIAR');
-      expect(perms).toContain('USUARIOS_APROVAR');
-      expect(perms).toContain('PERFIS_GERENCIAR');
-      expect(perms).toContain('AUDITORIA_VISUALIZAR');
-    });
-
-    it('faz união de permissões de múltiplos perfis', () => {
-      const perms = service.resolverPermissoes(['gestor', 'diretoria']);
-      expect(perms).toContain('USUARIOS_APROVAR');
-      expect(perms).toContain('AUDITORIA_VISUALIZAR');
-    });
-
-    it('não duplica permissões de perfis sobrepostos', () => {
-      const perms = service.resolverPermissoes(['administrador', 'gestor']);
-      const auditCount = perms.filter((p) => p === 'AUDITORIA_VISUALIZAR').length;
-      expect(auditCount).toBe(1);
-    });
   });
 
   describe('temPermissao', () => {

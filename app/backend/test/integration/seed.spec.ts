@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { count, eq } from 'drizzle-orm';
 import * as schema from '../../src/database/schema';
 import { seed } from '../../src/database/seed';
+import { DESCRICOES_PERMISSOES } from '../../src/common/rbac/permissoes';
 
 describe('Seed idempotência', () => {
   let pool: Pool;
@@ -29,9 +30,9 @@ describe('Seed idempotência', () => {
     expect(row?.total).toBe(11);
   });
 
-  it('tem exatamente 4 permissões F1 após seed 2×', async () => {
+  it('tem exatamente o catálogo de permissões após seed 2× (idempotente)', async () => {
     const [row] = await db.select({ total: count() }).from(schema.permissoes);
-    expect(row?.total).toBe(4);
+    expect(row?.total).toBe(Object.keys(DESCRICOES_PERMISSOES).length);
   });
 
   it('tem exatamente 1 usuário admin após seed 2×', async () => {
