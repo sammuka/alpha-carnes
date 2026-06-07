@@ -60,6 +60,8 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
   await db.execute(sql`
     TRUNCATE TABLE
       auditoria,
+      ocorrencias_fornecedor_historico, ocorrencias_fornecedor,
+      divergencias_recebimento, recebimentos_itens, recebimentos,
       reservas_disponibilidade, pedidos_venda_itens, pedidos_venda,
       disponibilidades_virtuais, compras_programadas_itens, compras_programadas,
       regras_desdobramento_comercial, clientes, fornecedores, itens_compra, itens_comerciais, parametros,

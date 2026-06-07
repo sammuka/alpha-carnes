@@ -55,8 +55,9 @@ export default function DisponibilidadePage() {
               : l,
           ),
         );
-      } else if (msg.type === 'disponibilidade_virtual_gerada') {
-        // Saldo novo gerado para o dia → refetch para trazer as novas linhas.
+      } else if (msg.type === 'disponibilidade_virtual_gerada' || msg.type === 'recebimento_registrado') {
+        // Saldo novo gerado ou recebimento registrado (recebido/divergente mudou)
+        // → refetch para refletir o estado atual da disponibilidade do dia.
         void refetch();
       }
     };
@@ -115,6 +116,8 @@ export default function DisponibilidadePage() {
               <th className="border border-border p-2 text-right font-medium">Total</th>
               <th className="border border-border p-2 text-right font-medium">Reservado</th>
               <th className="border border-border p-2 text-right font-medium">Disponível</th>
+              <th className="border border-border p-2 text-right font-medium">Recebido</th>
+              <th className="border border-border p-2 text-right font-medium">Divergente</th>
               <th className="border border-border p-2 text-left font-medium">Status</th>
             </tr>
           </thead>
@@ -126,6 +129,12 @@ export default function DisponibilidadePage() {
                 <td className="border border-border p-2 text-right">{l.quantidadeReservada}</td>
                 <td className="border border-border p-2 text-right font-medium" data-testid={`disp-${l.id}-disponivel`}>
                   {l.quantidadeDisponivel}
+                </td>
+                <td className="border border-border p-2 text-right" data-testid={`disp-${l.id}-recebido`}>
+                  {l.quantidadeRecebida}
+                </td>
+                <td className="border border-border p-2 text-right" data-testid={`disp-${l.id}-divergente`}>
+                  {l.quantidadeComDivergencia}
                 </td>
                 <td className="border border-border p-2">{l.status}</td>
               </tr>

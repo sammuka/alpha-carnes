@@ -30,6 +30,8 @@ const disponibilidades = [
     quantidadeTotalGerada: '40.000',
     quantidadeReservada: '0.000',
     quantidadeDisponivel: '40.000',
+    quantidadeRecebida: '0.000',
+    quantidadeComDivergencia: '0.000',
     status: 'gerada',
   },
 ];
