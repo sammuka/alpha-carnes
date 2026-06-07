@@ -109,8 +109,13 @@ Primeiro encontro do mundo virtual (F3) com o físico. **Sem balança e sem enti
 
 ### F4b — Pesagem + Associação + Etiquetagem
 - Peso capturado via **gateway de balança isolado** (RA-03), com leitura estabilizada e fallback manual assistido sem falha silenciosa (RA-05).
+- **Modo de captura explícito (ADR-009):** todo registro de peso grava `modo_captura` (`automatico` | `manual_assistido`), `operador_id`, `capturado_em`. **Automático exige `leitura_estavel = true`**; **manual exige `motivo`** (CHECK) + snapshot do `gateway_status`. Teste prova: leitura instável **não** confirma como automático; sem motivo no manual → falha.
+- **Indisponibilidade nunca silenciosa (RA-05):** gateway fora do ar vira **status visível + evento/alerta observável**; o sistema **não autopreenche nem inventa peso**. Teste (com **gateway fake**) prova: dispositivo `indisponivel` → captura automática falha explicitamente e o caminho manual fica disponível; nenhum valor default é gravado.
+- **Manual é autorizado e auditável:** entrada manual exige permissão `PESO_MANUAL` (perfis `recebimento_pesagem`/`gestor`/`administrador`); sem ela → **403**. Capturas manuais são consultáveis (KPI taxa de manual). Teste de 403 e de marcação de procedência.
+- **Gateway por interface (RA-03 + testabilidade):** backend depende de `BalancaGateway`/`LeitorGateway` (interface), nunca do driver; CI usa **fake** que simula `disponivel`/`instavel`/`indisponivel` — o fallback é coberto por teste, não só documentado.
 - Peça registrada com peso bruto/líquido e rastreabilidade.
 - Associação sugestiva por saldo + preferências + rota; operador confirma ou redireciona.
+- **Leitor/QR com mesmo contrato (ADR-009):** leitor indisponível → digitação manual autorizada (`LEITURA_MANUAL`, `modo_captura=manual_assistido`, `motivo`); o código digitado ainda precisa **resolver numa peça/subitem real** — código inválido → erro explícito, sem inventar vínculo.
 - Etiqueta com QR impressa via **gateway de impressora isolado**; reimpressão auditada.
 - HW mínimo (balança + impressora) operacional como dependência satisfeita.
 
@@ -120,7 +125,7 @@ Primeiro encontro do mundo virtual (F3) com o físico. **Sem balança e sem enti
 - Rastreabilidade ponta a ponta da transformação consultável (origem → subitens → destino).
 
 ### F5 — Expedição (Negócio Fase 3)
-- Composição de carga por caminhão/rota com conferência por QR.
+- Composição de carga por caminhão/rota com conferência por QR; **leitor indisponível → conferência manual autorizada e marcada (ADR-009)**, sem falha silenciosa e sem dispensar a validação do código contra a peça real.
 - Status da carga acompanhado em **tempo real** (RA-04).
 - Transferência entre pedidos permitida **apenas com expedição aberta**, com auditoria.
 - **Fechamento bloqueia alterações:** mutação de peça/pedido após fechamento **falha** — teste prova o bloqueio. Reabertura só por perfil autorizado, auditada.
