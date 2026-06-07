@@ -25,6 +25,10 @@ import {
   type DivergenciaRecebimentoPayload,
   type OcorrenciaFornecedorPayload,
   type PedidoEmRiscoPayload,
+  type PecaPesadaPayload,
+  type PecaAssociadaPayload,
+  type PecaRedirecionadaPayload,
+  type DispositivoStatusPayload,
 } from './events/eventos';
 
 /** Socket autenticado: carrega o payload do usuário validado no handshake. */
@@ -177,6 +181,28 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.PEDIDO_EM_RISCO)
   handlePedidoEmRisco(payload: PedidoEmRiscoPayload): void {
     this.broadcast(EVENTOS.PEDIDO_EM_RISCO, payload, payload.dataOperacao);
+  }
+
+  // ── F4b — Pesagem + Associação + Etiquetagem ──────────────────────────────
+
+  @OnEvent(EVENTOS.PECA_PESADA)
+  handlePecaPesada(payload: PecaPesadaPayload): void {
+    this.broadcast(EVENTOS.PECA_PESADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PECA_ASSOCIADA)
+  handlePecaAssociada(payload: PecaAssociadaPayload): void {
+    this.broadcast(EVENTOS.PECA_ASSOCIADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PECA_REDIRECIONADA)
+  handlePecaRedirecionada(payload: PecaRedirecionadaPayload): void {
+    this.broadcast(EVENTOS.PECA_REDIRECIONADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.DISPOSITIVO_STATUS_ALTERADO)
+  handleDispositivoStatus(payload: DispositivoStatusPayload): void {
+    this.broadcast(EVENTOS.DISPOSITIVO_STATUS_ALTERADO, payload, payload.dataOperacao);
   }
 
   private broadcast(evento: string, payload: unknown, dataOperacao: string): void {

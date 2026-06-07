@@ -46,6 +46,9 @@ export const pedidosVendaItens = pgTable(
     quantidadePedida:          numeric('quantidade_pedida', { precision: 15, scale: 3 }).notNull(),
     quantidadeReservada:       numeric('quantidade_reservada', { precision: 15, scale: 3 }).notNull().default('0'),
     quantidadePendente:        numeric('quantidade_pendente', { precision: 15, scale: 3 }).notNull().default('0'),
+    // F4b: unidades físicas (peças) já associadas a este item. saldo_pendente de
+    // associação = quantidade_pedida − quantidade_atendida (preenchimento por unidade).
+    quantidadeAtendida:        numeric('quantidade_atendida', { precision: 15, scale: 3 }).notNull().default('0'),
     preferenciasAplicadasJson: jsonb('preferencias_aplicadas_json').notNull().default(sql`'{}'::jsonb`),
     status:                    text('status').notNull(),
     observacoes:               text('observacoes'),
@@ -56,6 +59,8 @@ export const pedidosVendaItens = pgTable(
     check('chk_pedidos_itens_pedida_positiva', sql`${t.quantidadePedida} > 0`),
     check('chk_pedidos_itens_reservada_nao_negativa', sql`${t.quantidadeReservada} >= 0`),
     check('chk_pedidos_itens_pendente_nao_negativa', sql`${t.quantidadePendente} >= 0`),
+    check('chk_pedidos_itens_atendida_nao_negativa', sql`${t.quantidadeAtendida} >= 0`),
+    check('chk_pedidos_itens_atendida_ate_pedida', sql`${t.quantidadeAtendida} <= ${t.quantidadePedida}`),
     check(
       'chk_pedidos_itens_status',
       sql`${t.status} IN ('totalmente_reservado','parcialmente_reservado','sem_cobertura','cancelado')`,

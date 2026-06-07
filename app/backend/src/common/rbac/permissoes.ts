@@ -32,6 +32,14 @@ export const PERMISSOES = {
   RECEBIMENTO_GERENCIAR: 'RECEBIMENTO_GERENCIAR', // iniciar/registrar item/concluir
   DIVERGENCIA_RECEBIMENTO_GERENCIAR: 'DIVERGENCIA_RECEBIMENTO_GERENCIAR',
   OCORRENCIA_FORNECEDOR_GERENCIAR: 'OCORRENCIA_FORNECEDOR_GERENCIAR',
+
+  // ── F4b — Pesagem + Associação + Etiquetagem ──────────────────────────────
+  PESAGEM_LER: 'PESAGEM_LER',
+  PESAGEM_GERENCIAR: 'PESAGEM_GERENCIAR', // pesar peça / status dispositivos
+  PESO_MANUAL: 'PESO_MANUAL', // captura manual assistida de peso (ADR-009)
+  ASSOCIACAO_GERENCIAR: 'ASSOCIACAO_GERENCIAR', // confirmar/redirecionar/sem-cobertura
+  LEITURA_MANUAL: 'LEITURA_MANUAL', // digitar QR quando leitor indisponível (ADR-009)
+  ETIQUETA_GERENCIAR: 'ETIQUETA_GERENCIAR', // emitir/reimprimir etiqueta
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -94,6 +102,13 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'RECEBIMENTO_GERENCIAR',
     'DIVERGENCIA_RECEBIMENTO_GERENCIAR',
     'OCORRENCIA_FORNECEDOR_GERENCIAR',
+    // F4b — administrador gerencia tudo
+    'PESAGEM_LER',
+    'PESAGEM_GERENCIAR',
+    'PESO_MANUAL',
+    'ASSOCIACAO_GERENCIAR',
+    'LEITURA_MANUAL',
+    'ETIQUETA_GERENCIAR',
   ],
   gestor: [
     'USUARIOS_APROVAR',
@@ -112,6 +127,13 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'RECEBIMENTO_GERENCIAR',
     'DIVERGENCIA_RECEBIMENTO_GERENCIAR',
     'OCORRENCIA_FORNECEDOR_GERENCIAR',
+    // F4b — gestor operacional gerencia toda a pesagem/associação/etiqueta (incl. manual).
+    'PESAGEM_LER',
+    'PESAGEM_GERENCIAR',
+    'PESO_MANUAL',
+    'ASSOCIACAO_GERENCIAR',
+    'LEITURA_MANUAL',
+    'ETIQUETA_GERENCIAR',
   ],
   // F3 (doc 013 §2.2): comprador cria/confirma compra programada; consulta saldo e pedidos.
   compras: [
@@ -135,6 +157,8 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'PEDIDOS_GERENCIAR',
     // F4a (doc 005 §2.2): comercial consulta o recebimento (impacto em pedidos).
     'RECEBIMENTO_LER',
+    // F4b: comercial acompanha pesagem/associação das peças dos seus pedidos.
+    'PESAGEM_LER',
   ],
   // F4a (doc 005 §2.2): operador/receptor opera o recebimento e registra divergências.
   recebimento_pesagem: [
@@ -143,12 +167,20 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'RECEBIMENTO_LER',
     'RECEBIMENTO_GERENCIAR',
     'DIVERGENCIA_RECEBIMENTO_GERENCIAR',
+    // F4b (doc 013): operador de recebimento/pesagem opera pesagem, peso manual,
+    // associação, leitura manual de QR e etiquetagem.
+    'PESAGEM_LER',
+    'PESAGEM_GERENCIAR',
+    'PESO_MANUAL',
+    'ASSOCIACAO_GERENCIAR',
+    'LEITURA_MANUAL',
+    'ETIQUETA_GERENCIAR',
   ],
   corte: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
   expedicao: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
   conferente: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
-  // F4a (doc 005 §2.2): faturamento consulta o recebimento.
-  faturamento: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER', 'RECEBIMENTO_LER'],
+  // F4a (doc 005 §2.2): faturamento consulta o recebimento. F4b: consulta a pesagem.
+  faturamento: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER', 'RECEBIMENTO_LER', 'PESAGEM_LER'],
   logistica: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
   diretoria: [
     'AUDITORIA_VISUALIZAR',
@@ -187,4 +219,10 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   RECEBIMENTO_GERENCIAR: 'Iniciar, registrar itens e concluir recebimentos',
   DIVERGENCIA_RECEBIMENTO_GERENCIAR: 'Registrar e tratar divergências de recebimento',
   OCORRENCIA_FORNECEDOR_GERENCIAR: 'Abrir, atualizar e encerrar ocorrências com fornecedor',
+  PESAGEM_LER: 'Consultar peças pesadas e status dos dispositivos',
+  PESAGEM_GERENCIAR: 'Registrar pesagem de peças e operar a captura',
+  PESO_MANUAL: 'Registrar peso manual assistido (fallback ADR-009)',
+  ASSOCIACAO_GERENCIAR: 'Confirmar, redirecionar e destinar peças a pedidos',
+  LEITURA_MANUAL: 'Digitar identificador QR quando o leitor está indisponível',
+  ETIQUETA_GERENCIAR: 'Emitir e reimprimir etiquetas de peça',
 };

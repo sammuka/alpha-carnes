@@ -44,6 +44,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               Recebimento
             </a>
           )}
+          {/* Operação (F4b) — gated pela permissão de leitura de pesagem */}
+          {user.permissoes.includes('PESAGEM_LER') && (
+            <a
+              href="/operacao/pesagem"
+              className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              Pesagem
+            </a>
+          )}
           {/* Gating de menu por permissão efetiva — vinda de /auth/me (backend) */}
           {user.permissoes.includes('AUDITORIA_VISUALIZAR') && (
             <a href="/admin/auditoria" className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">

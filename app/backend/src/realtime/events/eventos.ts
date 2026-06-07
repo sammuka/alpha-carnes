@@ -14,6 +14,11 @@ export const EVENTOS = {
   OCORRENCIA_FORNECEDOR_ABERTA: 'ocorrencia_fornecedor_aberta',
   OCORRENCIA_FORNECEDOR_ATUALIZADA: 'ocorrencia_fornecedor_atualizada',
   PEDIDO_EM_RISCO: 'pedido_em_risco',
+  // ── F4b — Pesagem + Associação + Etiquetagem ──────────────────────────────
+  PECA_PESADA: 'peca_pesada',
+  PECA_ASSOCIADA: 'peca_associada',
+  PECA_REDIRECIONADA: 'peca_redirecionada',
+  DISPOSITIVO_STATUS_ALTERADO: 'dispositivo_status_alterado',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -96,4 +101,36 @@ export interface PedidoEmRiscoPayload {
     quantidadeReservada: string;
     quantidadeRecebida: string;
   }>;
+}
+
+// ── F4b ─────────────────────────────────────────────────────────────────────
+
+export interface PecaPesadaPayload {
+  pecaId: string;
+  recebimentoId: string;
+  dataOperacao: string;
+  modoCaptura: 'automatico' | 'manual_assistido';
+  pesoOriginal: string;
+}
+
+export interface PecaAssociadaPayload {
+  pecaId: string;
+  dataOperacao: string;
+  pedidoVendaId: string;
+  pedidoVendaItemId: string;
+}
+
+export interface PecaRedirecionadaPayload {
+  pecaId: string;
+  dataOperacao: string;
+  pedidoOrigemId: string | null;
+  pedidoDestinoId: string;
+}
+
+export interface DispositivoStatusPayload {
+  dataOperacao: string;
+  dispositivo: 'balanca' | 'leitor' | 'impressora';
+  dispositivoId: string;
+  status: 'disponivel' | 'instavel' | 'indisponivel';
+  heartbeatEm: string;
 }

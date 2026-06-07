@@ -1,3 +1,7 @@
+// Testes usam os gateways de hardware FAKE (ADR-009/ADR-010): definido antes de
+// qualquer import de módulo para que o HardwareModule resolva os fakes.
+process.env.HARDWARE_FAKE = '1';
+
 /** @type {import('jest').Config} */
 module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
