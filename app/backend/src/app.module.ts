@@ -5,6 +5,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { LoggerModule } from 'nestjs-pino';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { DatabaseModule } from './database/database.module';
+import { HardwareModule } from './hardware/hardware.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { HealthController } from './health/health.controller';
 import { appConfig } from './config/app.config';
@@ -47,6 +48,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
       ],
     }),
     DatabaseModule,
+    HardwareModule,
     AuditoriaModule,
     RealtimeModule,
     AuthModule,
