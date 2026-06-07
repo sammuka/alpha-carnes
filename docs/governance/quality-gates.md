@@ -120,9 +120,23 @@ Primeiro encontro do mundo virtual (F3) com o físico. **Sem balança e sem enti
 - HW mínimo (balança + impressora) operacional como dependência satisfeita.
 
 ### F4c — Corte / Transformação
-- Ordem de corte gera subitens com nova pesagem.
-- Reetiquetagem consistente; subitem mantém vínculo com a peça de origem.
-- Rastreabilidade ponta a ponta da transformação consultável (origem → subitens → destino).
+Transforma uma peça em subitens rastreáveis. **Reusa** o contrato de captura/etiqueta do ADR-009 e a associação por unidade da F4b. Invariantes testáveis:
+
+- **Peça original imortal (RF-CT-02/03, RT-007-02):** corte **nunca** apaga/sobrescreve a peça original; ela vira `em_transformacao` → `transformada`, com histórico e peso original preservados. Teste prova que a origem continua consultável após o corte.
+- **Elegibilidade (RF-CT-01/23):** só peça em estado elegível (`pesada`/`associada`/`para_corte`) entra em corte; peça já transformada/expedida/faturada → **falha** (409). Peça em transformação não pode ser expedida em paralelo.
+- **Contabilidade de unidade (RT-007-06 — sem inconsistência silenciosa):** ao **iniciar** o corte, a unidade que a peça original consumia no pedido é **liberada** atomicamente (`quantidade_atendida − 1` no item de origem), pois a peça deixa de ser unidade expedível. Cada **subitem associado** consome a sua própria unidade no item-alvo via o **UPDATE atômico anti-overbooking da F4b** (bloqueia item completo, 409). Teste prova o saldo antes/depois sem perda nem dupla contagem.
+- **Conservação de peso (RF-CT-09/10):** `Σ pesos dos subitens ≤ peso_original`; diferença relevante (perda) exige **justificativa obrigatória + alerta** observável. Concluir com `Σ > original` sem justificativa → **falha**. Teste cobre o caminho com e sem justificativa.
+- **Captura de peso do subitem (ADR-009):** cada subitem é pesado pelo mesmo contrato (auto exige leitura estável; manual exige `PESO_MANUAL` + motivo + snapshot; nunca inventa peso).
+- **Destino obrigatório no encerramento (RF-CT-24, RT-007-05):** não conclui o corte se algum subitem estiver sem **peso + destino (pedido/sobra/estoque/análise) + etiqueta válida**. Teste: concluir com subitem incompleto → 409.
+- **Associação de subitem (RF-CT-11..14):** subitem herda o pedido original quando compatível, ou é redirecionado (reusa a lógica F4b: compatibilidade, preferências do cliente, bloqueio de pedido completo/incompatível/faturado/caminhão fechado); sem compatível → sobra/estoque/análise (exige motivo) ou divergência (reusa F4a).
+- **Reetiquetagem (RF-CT-15..18, RF-RT-01..04):** cada subitem válido recebe **etiqueta nova com referência à peça original**; a etiqueta original é **invalidada logicamente para expedição** quando a peça deixa de existir como unidade expedível, mas **coexiste no histórico**. Reimpressão/reetiqueta auditada. Reusa o contrato de impressão best-effort do ADR-009/Refino-1 (impressora down não trava nem perde o QR).
+- **Rastreabilidade ponta a ponta (RF-CT-19/20, RT-007-01):** consultável por peça/subitem/pedido/cliente/lote — linha do tempo origem → corte → subitens → novas pesagens → reetiquetas → destino. Teste de consulta da cadeia.
+- **Tempo real (RA-04):** eventos pós-commit (`corte_iniciado`, `subitem_gerado`, `subitem_pesado`, `subitem_associado`, `corte_concluido`/`peca_transformada`) com broadcast `dashboard`/`operacao:{data}`; no-emit em rollback.
+- **RBAC** `CORTE_GERENCIAR` (perfil `corte` + `gestor`/`administrador`), reusando `PESO_MANUAL`/`LEITURA_MANUAL`/`ETIQUETA_GERENCIAR` onde aplicável; 403 por ausência. **Auditoria transacional** em toda mutação.
+- Cobertura backend ≥ 80% (linha **e** branch) nos services de domínio — **priorizar testes de ramo** (o branch global vem caindo: 80,8 → 80,38).
+
+#### Gate F4 completo (`develop → main`)
+Emitido apenas com F4a + F4b + F4c concluídas e seus DoD atendidos. É o **primeiro deploy para produção** (F1–F4): operação física fim a fim — recebimento, divergência, pesagem com fallback manual, associação sugestiva, etiqueta e corte rastreável.
 
 ### F5 — Expedição (Negócio Fase 3)
 - Composição de carga por caminhão/rota com conferência por QR; **leitor indisponível → conferência manual autorizada e marcada (ADR-009)**, sem falha silenciosa e sem dispensar a validação do código contra a peça real.
