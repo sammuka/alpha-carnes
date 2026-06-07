@@ -6,3 +6,6 @@ export * from './itens-compra.schema';
 export * from './itens-comerciais.schema';
 export * from './regras-desdobramento.schema';
 export * from './parametros.schema';
+export * from './compras-programadas.schema';
+export * from './disponibilidades-virtuais.schema';
+export * from './pedidos.schema';
