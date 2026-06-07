@@ -43,4 +43,14 @@ describe('Seed idempotência', () => {
       .where(eq(schema.usuarios.email, adminEmail));
     expect(rows.length).toBe(1);
   });
+
+  it('perfil corte tem a permissão CORTE_GERENCIAR após seed', async () => {
+    const linhas = await db
+      .select({ codigo: schema.permissoes.codigo })
+      .from(schema.perfis)
+      .innerJoin(schema.perfisPermissoes, eq(schema.perfis.id, schema.perfisPermissoes.perfilId))
+      .innerJoin(schema.permissoes, eq(schema.perfisPermissoes.permissaoId, schema.permissoes.id))
+      .where(eq(schema.perfis.slug, 'corte'));
+    expect(linhas.map((l) => l.codigo)).toContain('CORTE_GERENCIAR');
+  });
 });
