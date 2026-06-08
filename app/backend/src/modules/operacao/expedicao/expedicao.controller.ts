@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RbacGuard } from '../../../common/guards/rbac.guard';
 import { RequirePermissoes } from '../../../common/rbac/require-permissoes.decorator';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
+import { z } from 'zod';
 import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
 import { CaminhaoService } from './caminhao.service';
 import { CargaService } from './carga.service';
@@ -38,7 +39,7 @@ export class ExpedicaoController {
 
   @Get('caminhoes')
   @RequirePermissoes('EXPEDICAO_GERENCIAR')
-  listar(@Query('dataOperacao') dataOperacao: string) {
+  listar(@Query('dataOperacao', new ZodValidationPipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD'))) dataOperacao: string) {
     return this.caminhao.listar(dataOperacao);
   }
 
