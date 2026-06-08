@@ -223,4 +223,53 @@ describe('Corte/Transformação e2e (F4c)', () => {
     expect(denovo.status).toBe(201);
     expect(denovo.body.statusTransformacao).toBe('concluida');
   });
+
+  it('destinacao_mista: subitem associado + subitem em_sobra com etiqueta → concluir OK (RF-CT-14/15/24)', async () => {
+    // Prova que emitirSubitem aceita em_sobra e que o corte conclui quando todos os
+    // subitens têm peso + destino definido + etiqueta — independente do destino ser
+    // associado ou sobra. Antes da correção, o ConflictException em emitirSubitem
+    // bloqueava qualquer subitem fora de 'associado', tornando destinacao_mista
+    // impossível de concluir.
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-10-07');
+    const p = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId,
+      clienteId: c.clienteId,
+      itemComercialId: c.itemComercialId,
+      dataOperacao: c.dataOperacao,
+      quantidade: 5,
+    });
+    // Peca com 12.500 kg; dois subitens de 6.250 kg cada (Σ == original → sem justificativa)
+    fakes(app).balanca.definirPeso('12.500');
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId, { tipoTransformacao: 'destinacao_mista', motivo: 'necessidade_operacional' });
+
+    fakes(app).balanca.definirPeso('6.250');
+    // Subitem 1: associado + etiqueta (caminho normal)
+    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+
+    // Subitem 2: sobra + etiqueta (RF-CT-14 — sem pedido compatível)
+    const sub2 = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    await pesarSubitem(app, corteCookies, sub2);
+    const sobra = await request(srv())
+      .post(`/operacao/corte/subitens/${sub2}/sem-cobertura`)
+      .set('Cookie', corteCookies)
+      .send({ destino: 'sobra', motivo: 'apara sem pedido compatível' });
+    expect(sobra.status).toBe(201);
+    expect(sobra.body.statusSubitem).toBe('em_sobra');
+
+    // Emitir etiqueta do subitem em_sobra — deve permitir (RF-CT-15)
+    const etiqSobra = await request(srv())
+      .post(`/operacao/corte/subitens/${sub2}/etiqueta`)
+      .set('Cookie', corteCookies)
+      .send();
+    expect(etiqSobra.status).toBe(201);
+    expect(etiqSobra.body.etiqueta.statusImpressao).toBe('impressa');
+
+    // Concluir com Σ = peso_original (6.250 × 2 = 12.500 → sem justificativa)
+    const ok = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({});
+    expect(ok.status).toBe(201);
+    expect(ok.body.statusTransformacao).toBe('concluida');
+    expect(ok.body.diferencaPeso).toBe('0.000');
+  });
 });

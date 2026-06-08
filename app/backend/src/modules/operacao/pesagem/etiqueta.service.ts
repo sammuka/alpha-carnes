@@ -133,8 +133,9 @@ export class EtiquetaService {
   async emitirSubitem(subitemId: string, operadorId: string): Promise<{ subitem: Subitem; etiqueta: Etiqueta }> {
     const subitem = await this.buscarSubitemAtivo(subitemId);
     if (!subitem) throw new NotFoundException('Subitem não encontrado');
-    if (subitem.statusSubitem !== 'associado') {
-      throw new ConflictException('Etiqueta do subitem só pode ser emitida após a associação');
+    const DESTINOS_COM_ETIQUETA = ['associado', 'em_sobra', 'em_analise'];
+    if (!DESTINOS_COM_ETIQUETA.includes(subitem.statusSubitem)) {
+      throw new ConflictException('Etiqueta do subitem só pode ser emitida após pesagem e destinação (associado, sobra ou análise)');
     }
 
     const codigoEtiqueta = subitem.etiquetaAtual ?? `QR-SUB-${subitem.id}`;
