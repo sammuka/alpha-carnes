@@ -4,7 +4,6 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
-  NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, eq, isNull, ne } from 'drizzle-orm';
@@ -25,8 +24,6 @@ import { CaminhaoService } from './caminhao.service';
 import { EtiquetaService } from '../pesagem/etiqueta.service';
 import type { CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
 import type { RegistrarItemConferenciaDto } from './dto/expedicao.dto';
-
-type Tx = NodePgDatabase<typeof schema>;
 
 @Injectable()
 export class ConferenciaService {
