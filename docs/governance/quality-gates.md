@@ -165,6 +165,12 @@ Monta a carga física por caminhão e a congela no fechamento. **Reusa** o contr
 - A elegibilidade acima **consome** a dependência registrada no gate F4 (exclusão de peças `transformada`/`em_transformacao`).
 - DP-05: nenhum caminho de faturamento (F6) pode ser exposto antes de `fechado`.
 
+**Status:** ✅ Concluída em 2026-06-08 (PR#7 mergeada em `develop`, CI verde). Histórico de transferência (`associacoes_peca_historico`) generalizado para subitem (XOR peça/subitem), idempotência de carga por caminhão (item em outra carga ativa → 409) e prova de concorrência da transferência (saldo nunca excede) validados.
+
+**Dependências registradas para a F6 (Faturamento + NFS-e) — vinculantes:**
+- A transição `fechado → liberado_faturamento` **não tem endpoint em F5** (não há faturamento ainda). A F6 é dona dessa liberação e **deve gatear a emissão de NF em `fechado`/`liberado_faturamento`** (DP-05); nunca antes.
+- `reabrir` tem o ponto de checagem `// TODO F6` para **bloquear reabertura quando houver NF emitida** (RF-EC-08/18). A F6 obrigatoriamente implementa essa verificação antes de permitir reabertura.
+
 ### F6 — Faturamento + NFS-e (Negócio Fase 5)
 - Payload fiscal montado a partir da **carga real** fechada (itens, valores, alíquota).
 - Emissão NFS-e em **homologação EISS Osasco** bem-sucedida (`Erro=false`, número gerado); consulta e cancelamento de teste funcionam.
