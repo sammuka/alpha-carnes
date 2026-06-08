@@ -1,6 +1,6 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -53,7 +53,7 @@ export class FechamentoService {
 
       assertTransicao(status, 'fechado');
 
-      // Conferência concluída
+      // Conferência concluída (mais recente, para não usar dados de um ciclo anterior)
       const conferencia = await tx
         .select()
         .from(conferenciasCarga)
@@ -64,6 +64,7 @@ export class FechamentoService {
             isNull(conferenciasCarga.deletedAt),
           ),
         )
+        .orderBy(desc(conferenciasCarga.createdAt))
         .then((r) => r[0] ?? null);
 
       if (!conferencia) {
@@ -130,6 +131,27 @@ export class FechamentoService {
       // TODO F6: verificar se nota fiscal foi emitida e lançar ConflictException se sim
 
       assertTransicao(status, 'em_carga');
+
+      // Invalidar a conferência concluída mais recente para exigir novo ciclo completo após reabertura
+      const conferenciaExistente = await tx
+        .select()
+        .from(conferenciasCarga)
+        .where(
+          and(
+            eq(conferenciasCarga.caminhaoId, caminhaoId),
+            eq(conferenciasCarga.statusConferencia, 'concluida'),
+            isNull(conferenciasCarga.deletedAt),
+          ),
+        )
+        .orderBy(desc(conferenciasCarga.createdAt))
+        .then((r) => r[0] ?? null);
+
+      if (conferenciaExistente) {
+        await tx
+          .update(conferenciasCarga)
+          .set({ deletedAt: new Date() })
+          .where(eq(conferenciasCarga.id, conferenciaExistente.id));
+      }
 
       const atualizado = primeiroOuFalha(
         await tx

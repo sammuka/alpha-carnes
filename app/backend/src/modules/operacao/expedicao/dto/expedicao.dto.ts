@@ -79,4 +79,4 @@ export type FecharDto = z.infer<typeof fecharSchema>;
 export const reabrirSchema = z.object({
   justificativa: z.string().min(1).max(500),
 });
-export type ReobrirDto = z.infer<typeof reabrirSchema>;
+export type ReabrirDto = z.infer<typeof reabrirSchema>;
