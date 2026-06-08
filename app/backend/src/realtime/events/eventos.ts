@@ -216,10 +216,9 @@ export interface CargaItemRemovidoPayload {
   dataOperacao: string;
 }
 
-export interface ConferenciaConcludidaPayload {
+export interface ConferenciaConcluidaPayload {
   caminhaoId: string;
   conferenciaId: string;
-  pendencias: Record<string, unknown>;
   dataOperacao: string;
 }
 

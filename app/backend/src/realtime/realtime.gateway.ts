@@ -37,7 +37,7 @@ import {
   type CargaItemAdicionadoPayload,
   type CargaItemTransferidoPayload,
   type CargaItemRemovidoPayload,
-  type ConferenciaConcludidaPayload,
+  type ConferenciaConcluidaPayload,
   type ExpedicaoFechadaPayload,
   type ExpedicaoReabertaPayload,
 } from './events/eventos';
@@ -261,7 +261,7 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   }
 
   @OnEvent(EVENTOS.CONFERENCIA_CONCLUIDA)
-  handleConferenciaConcluida(payload: ConferenciaConcludidaPayload): void {
+  handleConferenciaConcluida(payload: ConferenciaConcluidaPayload): void {
     this.broadcast(EVENTOS.CONFERENCIA_CONCLUIDA, payload, payload.dataOperacao);
   }
 
