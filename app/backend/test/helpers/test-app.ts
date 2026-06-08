@@ -60,6 +60,7 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
   await db.execute(sql`
     TRUNCATE TABLE
       auditoria,
+      conferencias_carga, carga_itens, caminhoes_pedidos, caminhoes,
       etiquetas_impressoes, subitens, transformacoes, associacoes_peca_historico, pecas,
       ocorrencias_fornecedor_historico, ocorrencias_fornecedor,
       divergencias_recebimento, recebimentos_itens, recebimentos,
