@@ -32,3 +32,51 @@ export const removerItemSchema = z.object({
   motivo: z.string().min(1).max(500),
 });
 export type RemoverItemDto = z.infer<typeof removerItemSchema>;
+
+export const registrarItemConferenciaSchema = z
+  .object({
+    tipoOrigem: z.enum(['peca', 'subitem']),
+    modoCaptura: z.enum(['automatico', 'manual_assistido']),
+    codigo: z.string().optional(),
+    motivo: z.string().max(500).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.modoCaptura === 'manual_assistido') {
+      if (!v.codigo) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['codigo'],
+          message: 'código é obrigatório na conferência manual',
+        });
+      }
+      if (!v.motivo) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['motivo'],
+          message: 'motivo é obrigatório na conferência manual',
+        });
+      }
+    }
+  });
+export type RegistrarItemConferenciaDto = z.infer<typeof registrarItemConferenciaSchema>;
+
+export const fecharSchema = z
+  .object({
+    forcado: z.boolean().optional(),
+    justificativa: z.string().max(500).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.forcado && !v.justificativa) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['justificativa'],
+        message: 'justificativa obrigatória ao forçar fechamento',
+      });
+    }
+  });
+export type FecharDto = z.infer<typeof fecharSchema>;
+
+export const reabrirSchema = z.object({
+  justificativa: z.string().min(1).max(500),
+});
+export type ReobrirDto = z.infer<typeof reabrirSchema>;
