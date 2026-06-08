@@ -102,9 +102,11 @@ describe('Conferencia de carga e2e (F5)', () => {
   });
 
   // ──────────────────────────────────────────────────────────────────────────────
-  // 2. Manual sem LEITURA_MANUAL -> 403
+  // 2. Manual por usuario sem EXPEDICAO_GERENCIAR -> 403 (RBAC guard)
+  //    Nota: a validacao de LEITURA_MANUAL no service-layer esta coberta em
+  //    expedicao-branches.spec.ts (unit tests de branch coverage).
   // ──────────────────────────────────────────────────────────────────────────────
-  it('conferencia manual sem LEITURA_MANUAL retorna 403', async () => {
+  it('conferencia manual por usuario sem EXPEDICAO_GERENCIAR retorna 403 (RBAC guard; service-layer LEITURA_MANUAL coberto em expedicao-branches.spec)', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-21');
     const p = await criarPedido(app, comercialCookies, {
@@ -118,14 +120,10 @@ describe('Conferencia de carga e2e (F5)', () => {
     await adicionarPecaNaCarga(app, expedicaoCookies, caminhaoId, pecaId);
     await iniciarConferencia(app, expedicaoCookies, caminhaoId);
 
-    // Conferente nao tem EXPEDICAO_GERENCIAR, entao vamos testar com um perfil
-    // que tem EXPEDICAO_GERENCIAR mas NAO tem LEITURA_MANUAL.
-    // Na verdade, 'expedicao' TEM LEITURA_MANUAL. O perfil sem e o 'conferente'
-    // que nao tem EXPEDICAO_GERENCIAR. Vamos verificar diretamente que o service
-    // rejeita quando permissoes nao incluem LEITURA_MANUAL.
-    // A validacao e no service (user.permissoes) entao usamos o endpoint com o expedicao
-    // mas removemos LEITURA_MANUAL... Nao, na verdade o perfil expedicao ja tem.
-    // Testar: conferente nao tem EXPEDICAO_GERENCIAR, logo o guard barra antes. 403.
+    // O perfil 'conferente' nao tem EXPEDICAO_GERENCIAR, portanto o RBAC guard
+    // barra a requisicao antes de chegar ao service. O retorno esperado e 403.
+    // A validacao de LEITURA_MANUAL no service-layer e testada em unit tests
+    // (expedicao-branches.spec.ts).
     const res = await request(srv())
       .post(`/operacao/expedicao/caminhoes/${caminhaoId}/conferencia/registrar-item`)
       .set('Cookie', conferenteCookies)
