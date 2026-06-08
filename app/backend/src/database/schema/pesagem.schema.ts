@@ -144,6 +144,9 @@ export const associacoesPecaHistoricoRelations = relations(associacoesPecaHistor
     fields: [associacoesPecaHistorico.pecaId],
     references: [pecas.id],
   }),
+  // Nota: a relação `subitem` (→ subitens em transformacoes.schema.ts) não pode ser declarada aqui
+  // pois causaria ciclo de import: pesagem → transformacoes → pesagem (transformacoes importa `pecas`
+  // de pesagem.schema). Joins com subitens devem ser feitos via joins explícitos no service.
 }));
 
 export const etiquetasImpressoesRelations = relations(etiquetasImpressoes, ({ one }) => ({

@@ -85,12 +85,9 @@ export const cargaItens = pgTable(
   },
   (t) => [
     check(
-      'chk_carga_itens_tipo_origem',
-      sql`${t.tipoOrigem} IN ('peca','subitem')`,
-    ),
-    check(
-      'chk_carga_itens_xor_alvo',
-      sql`(${t.pecaId} IS NOT NULL)::int + (${t.subitemId} IS NOT NULL)::int = 1`,
+      'chk_carga_itens_tipo_origem_xor',
+      sql`(${t.tipoOrigem} = 'peca'    AND ${t.pecaId}    IS NOT NULL AND ${t.subitemId} IS NULL) OR
+          (${t.tipoOrigem} = 'subitem' AND ${t.subitemId} IS NOT NULL AND ${t.pecaId}    IS NULL)`,
     ),
     check(
       'chk_carga_itens_status',
@@ -128,6 +125,9 @@ export const conferenciasCarga = pgTable(
       'chk_conferencias_status',
       sql`${t.statusConferencia} IN ('aberta','concluida')`,
     ),
+    uniqueIndex('uq_conferencias_carga_caminhao_ativa')
+      .on(t.caminhaoId)
+      .where(sql`${t.statusConferencia} = 'aberta' AND ${t.deletedAt} IS NULL`),
     index('idx_conferencias_caminhao').on(t.caminhaoId).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
