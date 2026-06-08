@@ -34,6 +34,12 @@ import {
   type SubitemPesadoPayload,
   type SubitemAssociadoPayload,
   type CorteConcluidoPayload,
+  type CargaItemAdicionadoPayload,
+  type CargaItemTransferidoPayload,
+  type CargaItemRemovidoPayload,
+  type ConferenciaConcludidaPayload,
+  type ExpedicaoFechadaPayload,
+  type ExpedicaoReabertaPayload,
 } from './events/eventos';
 
 /** Socket autenticado: carrega o payload do usuário validado no handshake. */
@@ -235,6 +241,38 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.CORTE_CONCLUIDO)
   handleCorteConcluido(payload: CorteConcluidoPayload): void {
     this.broadcast(EVENTOS.CORTE_CONCLUIDO, payload, payload.dataOperacao);
+  }
+
+  // ── F5 — Expedição ────────────────────────────────────────────────────────
+
+  @OnEvent(EVENTOS.CARGA_ITEM_ADICIONADO)
+  handleCargaItemAdicionado(payload: CargaItemAdicionadoPayload): void {
+    this.broadcast(EVENTOS.CARGA_ITEM_ADICIONADO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.CARGA_ITEM_TRANSFERIDO)
+  handleCargaItemTransferido(payload: CargaItemTransferidoPayload): void {
+    this.broadcast(EVENTOS.CARGA_ITEM_TRANSFERIDO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.CARGA_ITEM_REMOVIDO)
+  handleCargaItemRemovido(payload: CargaItemRemovidoPayload): void {
+    this.broadcast(EVENTOS.CARGA_ITEM_REMOVIDO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.CONFERENCIA_CONCLUIDA)
+  handleConferenciaConcluida(payload: ConferenciaConcludidaPayload): void {
+    this.broadcast(EVENTOS.CONFERENCIA_CONCLUIDA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.EXPEDICAO_FECHADA)
+  handleExpedicaoFechada(payload: ExpedicaoFechadaPayload): void {
+    this.broadcast(EVENTOS.EXPEDICAO_FECHADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.EXPEDICAO_REABERTA)
+  handleExpedicaoReaberta(payload: ExpedicaoReabertaPayload): void {
+    this.broadcast(EVENTOS.EXPEDICAO_REABERTA, payload, payload.dataOperacao);
   }
 
   private broadcast(evento: string, payload: unknown, dataOperacao: string): void {
