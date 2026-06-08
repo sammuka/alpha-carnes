@@ -172,12 +172,38 @@ Monta a carga física por caminhão e a congela no fechamento. **Reusa** o contr
 - `reabrir` tem o ponto de checagem `// TODO F6` para **bloquear reabertura quando houver NF emitida** (RF-EC-08/18). A F6 obrigatoriamente implementa essa verificação antes de permitir reabertura.
 
 ### F6 — Faturamento + NFS-e (Negócio Fase 5)
-- Payload fiscal montado a partir da **carga real** fechada (itens, valores, alíquota).
-- Emissão NFS-e em **homologação EISS Osasco** bem-sucedida (`Erro=false`, número gerado); consulta e cancelamento de teste funcionam.
-- Falha do EISS tratada com retry/backoff e status explícito (RA-05); sem nota fantasma.
-- Payload de request/response EISS auditado em `notas_fiscais.payload_eiss` (JSONB).
-- DANFE gerada e armazenada; envio ao motorista por e-mail registrado.
-- Liberação do caminhão só com NF válida e checklist (DP-06), com rastreabilidade.
+
+> **Decisão do Quality Owner (subdivisão):** F6 é subdividida em **F6a (Faturamento + Emissão NFS-e)** e **F6b (Seguro + Liberação + Envio ao motorista)**, pelo mesmo critério de revisibilidade aplicado à F4 (a/b/c). Cada subfase tem PR e gate próprios; o gate **F6 completo** só é emitido com F6a + F6b mergeadas e seus DoD atendidos. Roadmap atualizado em `roadmap-canonico.md`.
+
+#### Princípio de integração externa (vinculante — RA-03/RA-05, precedente ADR-009/010)
+- A comunicação SOAP com o **EISS Osasco** é encapsulada num **gateway isolado** (porta + adapter), exatamente como ADR-006 prescreve ("serviço isolado").
+- **CI não toca o EISS real.** Toda subfase com integração externa entrega um **fake determinístico** (sucesso, `Erro=true` de negócio, timeout, HTTP 500) usado nos testes; o adapter real (`node-soap`) é cabeado só fora de teste. Mesmo padrão para o gateway de **e-mail** (envio ao motorista) e de **seguro**.
+- **Proibido nota/seguro/envio fantasma:** nenhuma operação pode gravar sucesso sem confirmação real do gateway. Falha → status explícito de erro + alerta (jamais `Erro=false` simulado).
+- O contrato do gateway de NFS-e (porta, fake, retry, consultar-antes-de-retransmitir) deve ser registrado como **ADR-011** quando a abstração for introduzida.
+
+#### F6a — Faturamento + Emissão NFS-e
+- **Pré-condição fiscal (RT-008-01, RF-FT-02, RF-NF-01/06, DP-05):** faturamento/emissão só sobre caminhão `fechado`; caminhão não fechado → **falha** (teste prova 409). NF nunca é a causa do fechamento — sempre a consequência.
+- **Base = carga real (RT-008-02, RF-NF-06):** a consolidação considera **apenas** `carga_itens` não-removidos do caminhão fechado; item fora da carga / removido não é faturável (teste prova exclusão).
+- **Bloqueios críticos impedem emissão (RF-FT-09/10, RF-NF-07):** expedição não fechada, divergência crítica não tratada, dados fiscais do cliente incompletos, peça sem rastreabilidade → emissão bloqueada com **causa + impacto + ação** observáveis (RA-05); cada bloqueio tem teste.
+- **Gateway EISS isolado + fake (acima):** `Emitir`/`Cancelar`/`ConsultarNotaCompleta` via porta; fake cobre sucesso, erro de negócio (`Erro=true`), timeout e 500.
+- **Emissão não-idempotente tratada (codigos-erro.md):** HTTP 200 com `Erro=true` é falha; em timeout, **consultar antes de retransmitir** (`ConsultarNotaCompleta`) para não duplicar; retry com backoff só para erros retriáveis (timeout/500/indisponível), máx. 3 tentativas → `erro_emissao` + alerta. Teste cobre: sucesso, erro de negócio não-retriável (falha imediata), e timeout→consulta→captura sem retransmitir.
+- **Estados e transições de NFS-e (codigos-erro.md):** `pendente → emitida | erro_emissao`; `emitida → cancelada | erro_cancelamento`; `erro_emissao → pendente` (reprocessamento autorizado). Modelados como `TEXT`+CHECK; transição inválida → falha.
+- **Persistência fiscal e auditoria (RF-NF-03, ADR-006):** registrar `numero_nfse`, `codigo_verificacao`, `status_nfse`, `tentativas_emissao`, `ultimo_erro_nfse`, `emitida_em`; payload request/response EISS em JSONB (`payload_eiss`). Vínculo rastreável NF ↔ caminhão ↔ pedido ↔ cliente ↔ peça/subitem (RF-NF-07, RF-FT-05).
+- **Trava pós-autorização (RF-NF-02) — fecha dependência da F5:** após NF `emitida`, a **reabertura da expedição é bloqueada** (substitui o `// TODO F6` em `FechamentoService.reabrir`) e a destinação de peças/subitens fica imutável. Teste prova reabertura→409 com NF emitida.
+- **Reconciliação de nomenclatura:** alinhar o modelo entre `faturamentos` (codigos-erro.md) e `notas_fiscais` (ADR-006) consultando o modelo conceitual (doc 010); decisão única, sem duplicação.
+- **RBAC por permissão nomeada:** `FATURAMENTO_LER/GERENCIAR`, `NFSE_EMITIR`, `NFSE_CANCELAR` (cancelamento e reprocessamento como ações segregadas); resolvidas do banco (ADR-008); teste de 403 por permissão ausente.
+- **Tempo real (RA-04):** eventos de mudança de status fiscal após commit; sem polling.
+- **Cobertura:** ≥80% linha **e** branch; ramos de erro do gateway exercitados.
+
+#### F6b — Seguro + Liberação do caminhão + Envio ao motorista
+- **Seguro da carga (RF-SG-01/02/03):** dados gerados a partir da **carga final** (não planejada), vinculados ao caminhão; gateway/registro isolado + fake; se o seguro for obrigatório, **bloqueia a liberação** enquanto pendente (teste prova bloqueio).
+- **Liberação do caminhão (RF-LB-01/02/03, DP-06):** só com **todos** os pré-requisitos — expedição fechada, conferência concluída, bloqueios críticos resolvidos, **NF autorizada**, seguro gerado se obrigatório, documentos enviados, checklist final. Falta de qualquer requisito crítico → saída bloqueada (teste por requisito). Liberação **auditada** (usuário, data/hora, status documental no momento).
+- **Transição de saída:** `liberado_faturamento → faturado → liberado_saida → expedido` (a cadeia diferida da F5), como `TEXT`+CHECK com transições válidas; reflete em tempo real (RF-LB-04, RA-04).
+- **Envio eletrônico ao motorista (RF-MT-01/02/03):** após emissão bem-sucedida; gateway de e-mail isolado + fake; registra **evidência de envio ou falha**; falha de envio gera **alerta operacional** (não passa silenciosa). Reenvio idempotente e auditado.
+- **Exceções auditáveis (RF-EX-01/02, RT-008-05):** liberação sob autorização superior / faturamento parcial / reprocessamento manual exigem perfil autorizado + justificativa + registro que **não apaga** o histórico original.
+- **Rastreabilidade do faturamento (§14):** o sistema responde "qual NF cobre qual pedido/peça", "quem autorizou a saída", "quais pendências havia antes da liberação", com linha do tempo (fechamento → consolidação → emissão → autorização → seguro → envio → liberação → saída).
+- **RBAC por permissão nomeada:** `SEGURO_GERENCIAR`, `LIBERACAO_GERENCIAR`, `EXPEDICAO_EXCECAO_AUTORIZAR` (segregação de funções — quem fatura não necessariamente libera); teste de 403.
+- **Cobertura:** ≥80% linha **e** branch; ramos de bloqueio e de falha de envio exercitados.
 
 ### F7 — Dashboards e Observabilidade (Negócio Fase 6)
 - Dashboard operacional em tempo real (recebido vs. vendido vs. expedido) consistente com os dados.

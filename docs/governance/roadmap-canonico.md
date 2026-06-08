@@ -46,6 +46,18 @@ A F4 do roadmap de engenharia concentra muitos módulos num único marco (recebi
 
 O gate de fechamento da **F4 completa** (PR `develop -> main`) só é emitido quando F4a, F4b e F4c estão concluídas e seus DoD atendidos.
 
+### Subdivisão de F6 (Faturamento + NFS-e)
+Pelo mesmo critério de revisibilidade da F4, a **F6 é subdividida**:
+
+- **F6a — Faturamento + Emissão NFS-e**
+  - Consolidação da carga real fechada, bloqueios fiscais, gateway EISS Osasco isolado (+ fake p/ CI), emissão/cancelamento/consulta, estados de NFS-e, retry/consultar-antes-de-retransmitir, trava pós-autorização (fecha a dependência de reabertura da F5).
+  - Dependência: F5; DP-05.
+- **F6b — Seguro + Liberação do caminhão + Envio ao motorista**
+  - Dados do seguro sobre a carga final, liberação com checklist de pré-requisitos (NF autorizada, conferência, seguro se obrigatório, docs enviados), envio eletrônico ao motorista (gateway de e-mail isolado + fake), exceções auditáveis, cadeia de status até `expedido`.
+  - Dependência: F6a; DP-06.
+
+O gate **F6 completo** só é emitido quando F6a e F6b estão concluídas e seus DoD atendidos.
+
 ## 4. Tensões entre os roadmaps e decisões de reconciliação
 
 ### Tensão A — Migrations: "todas as entidades em F1" vs. incremental por domínio
@@ -84,12 +96,13 @@ flowchart TD
     HWmin["HW minimo: balanca + impressora"] --> F4b
     F4b --> F4c["F4c Corte / Transformacao"]
     F4c --> F5["F5 Expedicao<br/>(Negocio Fase 3)"]
-    F5 --> F6["F6 Faturamento + NFS-e<br/>(Negocio Fase 5)"]
-    F6 --> F9["F9 Estoque e Sobras<br/>(Negocio Fase 4)"]
+    F5 --> F6a["F6a Faturamento + NFS-e"]
+    F6a --> F6b["F6b Seguro + Liberacao + Envio"]
+    F6b --> F9["F9 Estoque e Sobras<br/>(Negocio Fase 4)"]
     F3 --> F7["F7 Dashboards + Observabilidade<br/>(Negocio Fase 6)"]
     F4b --> F8["F8 Hardware completo (hardening)"]
     F5 --> F7
-    F6 --> F7
+    F6b --> F7
 ```
 
 F7 (dashboards/observabilidade) é incremental: começa a receber dados a partir de F3 e amadurece conforme as fases entregam eventos. F8 e F9 podem rodar em paralelo após suas dependências, mas cada uma tem gate próprio.
