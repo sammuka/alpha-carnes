@@ -5,7 +5,7 @@ import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { type Caminhao, type StatusCaminhao } from '@/lib/operacao';
 import { Button } from '@/components/ui/button';
 
-const HOJE = new Date().toISOString().slice(0, 10);
+// HOJE é calculado dentro do componente via useState para evitar bug à meia-noite
 
 const COR_STATUS: Record<StatusCaminhao, string> = {
   planejado: 'bg-muted text-muted-foreground',
@@ -33,6 +33,7 @@ function StatusBadge({ status }: { status: StatusCaminhao }) {
 export function ExpedicaoClient({ permissoes }: { permissoes: string[] }) {
   const pode = (p: string) => permissoes.includes(p);
 
+  const [hoje] = useState(() => new Date().toISOString().slice(0, 10));
   const [caminhoes, setCaminhoes] = useState<Caminhao[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,7 +43,7 @@ export function ExpedicaoClient({ permissoes }: { permissoes: string[] }) {
   const carregarCaminhoes = useCallback(async () => {
     setErro(null);
     try {
-      const res = await fetch(`/api/operacao/expedicao/caminhoes?dataOperacao=${HOJE}`, {
+      const res = await fetch(`/api/operacao/expedicao/caminhoes?dataOperacao=${encodeURIComponent(hoje)}`, {
         cache: 'no-store',
       });
       if (!res.ok) {
@@ -56,35 +57,35 @@ export function ExpedicaoClient({ permissoes }: { permissoes: string[] }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [hoje]);
 
   useEffect(() => {
     void carregarCaminhoes();
   }, [carregarCaminhoes]);
 
   useEffect(() => {
+    const EVENTOS_EXPEDICAO = new Set([
+      'carga_item_adicionado',
+      'carga_item_transferido',
+      'carga_item_removido',
+      'conferencia_concluida',
+      'expedicao_fechada',
+      'expedicao_reaberta',
+    ]);
+
     const onMessage = (msg: RealtimeMensagem) => {
-      if (
-        msg.type === 'caminhao_criado' ||
-        msg.type === 'carga_aberta' ||
-        msg.type === 'carga_item_adicionado' ||
-        msg.type === 'carga_item_removido' ||
-        msg.type === 'carga_item_transferido' ||
-        msg.type === 'carga_item_conferido' ||
-        msg.type === 'expedicao_fechada' ||
-        msg.type === 'expedicao_reaberta'
-      ) {
+      if (EVENTOS_EXPEDICAO.has(msg.type)) {
         void carregarCaminhoes();
       }
     };
     const desconectar = conectarRealtime({
-      rooms: ['dashboard', `operacao:${HOJE}`],
+      rooms: ['dashboard', `operacao:${hoje}`],
       onMessage,
       onReconnect: () => void carregarCaminhoes(),
       onStatus: setRealtimeStatus,
     });
     return desconectar;
-  }, [carregarCaminhoes]);
+  }, [carregarCaminhoes, hoje]);
 
   async function abrirCarga(caminhaoId: string) {
     setErro(null);
@@ -141,7 +142,7 @@ export function ExpedicaoClient({ permissoes }: { permissoes: string[] }) {
 
       {!loading && caminhoes !== null && caminhoes.length === 0 && (
         <p className="text-sm text-muted-foreground" data-testid="sem-caminhoes">
-          Nenhum caminhão programado para hoje ({HOJE}).
+          Nenhum caminhão programado para hoje ({hoje}).
         </p>
       )}
 

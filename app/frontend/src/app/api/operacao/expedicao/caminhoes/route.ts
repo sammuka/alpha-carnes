@@ -5,7 +5,7 @@ import type { Caminhao } from '@/lib/operacao';
 export async function GET(req: NextRequest) {
   const dataOperacao = req.nextUrl.searchParams.get('dataOperacao') ?? '';
   const { data, error, status } = await fetchBackend<Caminhao[]>(
-    `/operacao/expedicao/caminhoes?dataOperacao=${dataOperacao}`,
+    `/operacao/expedicao/caminhoes?dataOperacao=${encodeURIComponent(dataOperacao)}`,
   );
   if (error) return NextResponse.json({ message: error }, { status });
   return NextResponse.json(data);
