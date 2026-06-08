@@ -138,6 +138,12 @@ Transforma uma peça em subitens rastreáveis. **Reusa** o contrato de captura/e
 #### Gate F4 completo (`develop → main`)
 Emitido apenas com F4a + F4b + F4c concluídas e seus DoD atendidos. É o **primeiro deploy para produção** (F1–F4): operação física fim a fim — recebimento, divergência, pesagem com fallback manual, associação sugestiva, etiqueta e corte rastreável.
 
+**Status:** ✅ Emitido em 2026-06-07 (F4a PR#4, F4b PR#5, F4c PR#6 — todas mergeadas em `develop`, CI verde).
+
+**Dependências herdadas registradas para fases seguintes (vinculantes):**
+- **F5 (Expedição):** a invalidação lógica da etiqueta original no corte é representada por `pecas.status_peca = 'transformada'` (a linha em `etiquetas_impressoes` é preservada para histórico — RT-007-04). Portanto a expedição **obrigatoriamente** exclui peças `transformada` da seleção de carga; só subitens com destino válido + etiqueta são expedíveis (RT-007-05). Também: peça `em_transformacao` não pode ser expedida em paralelo (RF-CT-23).
+- **Refino futuro (não-bloqueante):** conservação de peso no corte hoje exige justificativa para qualquer diferença ≠ 0; avaliar tolerância configurável por item comercial quando houver dado operacional de aparas.
+
 ### F5 — Expedição (Negócio Fase 3)
 - Composição de carga por caminhão/rota com conferência por QR; **leitor indisponível → conferência manual autorizada e marcada (ADR-009)**, sem falha silenciosa e sem dispensar a validação do código contra a peça real.
 - Status da carga acompanhado em **tempo real** (RA-04).
