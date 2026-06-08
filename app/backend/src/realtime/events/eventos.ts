@@ -19,6 +19,12 @@ export const EVENTOS = {
   PECA_ASSOCIADA: 'peca_associada',
   PECA_REDIRECIONADA: 'peca_redirecionada',
   DISPOSITIVO_STATUS_ALTERADO: 'dispositivo_status_alterado',
+  // ── F4c — Corte / Transformação ───────────────────────────────────────────
+  CORTE_INICIADO: 'corte_iniciado',
+  SUBITEM_GERADO: 'subitem_gerado',
+  SUBITEM_PESADO: 'subitem_pesado',
+  SUBITEM_ASSOCIADO: 'subitem_associado',
+  CORTE_CONCLUIDO: 'corte_concluido',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -133,4 +139,44 @@ export interface DispositivoStatusPayload {
   dispositivoId: string;
   status: 'disponivel' | 'instavel' | 'indisponivel';
   heartbeatEm: string;
+}
+
+// ── F4c ───────────────────────────────────────────────────────────────────────
+
+export interface CorteIniciadoPayload {
+  transformacaoId: string;
+  pecaOrigemId: string;
+  dataOperacao: string;
+}
+
+export interface SubitemGeradoPayload {
+  transformacaoId: string;
+  subitemId: string;
+  dataOperacao: string;
+}
+
+export interface SubitemPesadoPayload {
+  transformacaoId: string;
+  subitemId: string;
+  dataOperacao: string;
+  modoCaptura: 'automatico' | 'manual_assistido';
+  peso: string;
+}
+
+export interface SubitemAssociadoPayload {
+  transformacaoId: string;
+  subitemId: string;
+  dataOperacao: string;
+  pedidoVendaId: string | null;
+  pedidoVendaItemId: string | null;
+  statusSubitem: string;
+}
+
+export interface CorteConcluidoPayload {
+  transformacaoId: string;
+  pecaOrigemId: string;
+  dataOperacao: string;
+  pesoOriginal: string;
+  pesoSubitensTotal: string;
+  diferencaPeso: string;
 }

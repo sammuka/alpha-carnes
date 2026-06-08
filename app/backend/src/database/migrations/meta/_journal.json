@@ -36,6 +36,13 @@
       "when": 1780841125094,
       "tag": "0004_optimal_dust",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780874196151,
+      "tag": "0005_legal_imperial_guard",
+      "breakpoints": true
     }
   ]
 }

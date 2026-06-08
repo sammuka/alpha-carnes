@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -6,10 +6,8 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import { pecas, recebimentos } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
-import { formatarQtd } from '../../../common/crud/decimal';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { EVENTOS } from '../../../realtime/events/eventos';
-import { PERMISSOES } from '../../../common/rbac/permissoes';
 import {
   BALANCA_GATEWAY,
   IMPRESSORA_GATEWAY,
@@ -21,6 +19,7 @@ import {
 } from '../../../hardware/hardware.types';
 import type { CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
 import type { RegistrarPesagemDto } from './dto/pesagem.dto';
+import { resolverCaptura } from './captura';
 
 type Peca = typeof pecas.$inferSelect;
 
@@ -90,47 +89,9 @@ export class PesagemService {
       .then((r) => r[0] ?? null);
     if (!recebimento) throw new NotFoundException('Recebimento não encontrado');
 
-    let peso: string;
-    let capturaMeta: Record<string, unknown>;
-
-    if (dto.modoCaptura === 'automatico') {
-      const saude = this.balanca.status();
-      if (saude.status !== 'disponivel') {
-        // Indisponibilidade nunca silenciosa: emite status e falha explícito.
-        this.emitirStatusDispositivo('balanca', saude, recebimento.dataOperacao);
-        throw new ConflictException(
-          'Balança indisponível ou instável: captura automática não disponível, use o modo manual assistido',
-        );
-      }
-      const leitura = await this.balanca.lerEstavel();
-      if (!leitura.estavel) {
-        this.emitirStatusDispositivo('balanca', leitura.saude, recebimento.dataOperacao);
-        throw new ConflictException('Leitura instável: confirme via modo manual assistido com motivo');
-      }
-      peso = formatarQtd(leitura.peso);
-      capturaMeta = {
-        leitura_estavel: true,
-        gateway_status: leitura.saude,
-        operador: user.sub,
-      };
-    } else {
-      // manual_assistido: exige permissão dedicada (segregação de funções, ADR-009).
-      if (!user.permissoes.includes(PERMISSOES.PESO_MANUAL)) {
-        throw new ForbiddenException('Sem permissão PESO_MANUAL para captura manual assistida');
-      }
-      if (dto.pesoManual === undefined || !dto.motivo) {
-        // Backstop ao DTO — nunca grava manual sem procedência.
-        throw new BadRequestException('Captura manual exige pesoManual e motivo');
-      }
-      peso = formatarQtd(dto.pesoManual);
-      capturaMeta = {
-        leitura_estavel: false,
-        motivo: dto.motivo,
-        motivo_detalhe: dto.motivoDetalhe ?? null,
-        gateway_status: this.balanca.status(),
-        operador: user.sub,
-      };
-    }
+    const { peso, capturaMeta } = await resolverCaptura(this.balanca, dto, user, (saude) =>
+      this.emitirStatusDispositivo('balanca', saude, recebimento.dataOperacao),
+    );
 
     const criada = await this.db.transaction(async (tx) => {
       const peca = primeiroOuFalha(

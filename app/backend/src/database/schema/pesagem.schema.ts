@@ -40,7 +40,7 @@ export const pecas = pgTable(
     check('chk_pecas_peso_positivo', sql`${t.pesoOriginal} > 0`),
     check(
       'chk_pecas_status',
-      sql`${t.statusPeca} IN ('pesada','associada','em_sobra','em_analise','para_corte','divergente')`,
+      sql`${t.statusPeca} IN ('pesada','associada','em_sobra','em_analise','para_corte','divergente','em_transformacao','transformada')`,
     ),
     index('idx_pecas_recebimento').on(t.recebimentoId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_pecas_compra').on(t.compraProgramadaId).where(sql`${t.deletedAt} IS NULL`),
@@ -88,7 +88,8 @@ export const etiquetasImpressoes = pgTable(
   'etiquetas_impressoes',
   {
     id:              uuid('id').primaryKey().default(sql`uuidv7()`),
-    pecaId:          uuid('peca_id').notNull().references(() => pecas.id),
+    pecaId:          uuid('peca_id').references(() => pecas.id),
+    subitemId:       uuid('subitem_id'),
     payload:         jsonb('payload').notNull().default(sql`'{}'::jsonb`),
     statusImpressao: text('status_impressao').notNull().default('pendente'),
     reimpressao:     boolean('reimpressao').notNull().default(false),
@@ -97,7 +98,12 @@ export const etiquetasImpressoes = pgTable(
   },
   (t) => [
     check('chk_etiq_status_impressao', sql`${t.statusImpressao} IN ('impressa','falha_impressao','pendente')`),
+    check(
+      'chk_etiq_um_alvo',
+      sql`(${t.pecaId} IS NOT NULL)::int + (${t.subitemId} IS NOT NULL)::int = 1`,
+    ),
     index('idx_etiq_peca').on(t.pecaId),
+    index('idx_etiq_subitem').on(t.subitemId),
     index('idx_etiq_payload_gin').using('gin', t.payload),
   ],
 );

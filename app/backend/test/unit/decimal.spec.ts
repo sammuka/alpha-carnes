@@ -1,4 +1,4 @@
-import { compararQtd, ehZero, formatarQtd, subtrairQtd } from '../../src/common/crud/decimal';
+import { compararQtd, ehZero, formatarQtd, somarQtd, subtrairQtd } from '../../src/common/crud/decimal';
 
 describe('decimal (aritmética NUMERIC exata, S4)', () => {
   it('formata número e string com 3 casas', () => {
@@ -40,5 +40,11 @@ describe('decimal (aritmética NUMERIC exata, S4)', () => {
 
   it('trunca frações além de 3 casas', () => {
     expect(formatarQtd('1.23456')).toBe('1.234');
+  });
+
+  it('somarQtd soma com 3 casas exatas, sem drift de float', () => {
+    expect(somarQtd('0.1', '0.2')).toBe('0.300');
+    expect(somarQtd('12.500', '1.250')).toBe('13.750');
+    expect(somarQtd(0, '0')).toBe('0.000');
   });
 });
