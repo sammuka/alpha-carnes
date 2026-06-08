@@ -145,11 +145,25 @@ Emitido apenas com F4a + F4b + F4c concluídas e seus DoD atendidos. É o **prim
 - **Refino futuro (não-bloqueante):** conservação de peso no corte hoje exige justificativa para qualquer diferença ≠ 0; avaliar tolerância configurável por item comercial quando houver dado operacional de aparas.
 
 ### F5 — Expedição (Negócio Fase 3)
-- Composição de carga por caminhão/rota com conferência por QR; **leitor indisponível → conferência manual autorizada e marcada (ADR-009)**, sem falha silenciosa e sem dispensar a validação do código contra a peça real.
-- Status da carga acompanhado em **tempo real** (RA-04).
-- Transferência entre pedidos permitida **apenas com expedição aberta**, com auditoria.
-- **Fechamento bloqueia alterações:** mutação de peça/pedido após fechamento **falha** — teste prova o bloqueio. Reabertura só por perfil autorizado, auditada.
-- DP-05 satisfeita: faturamento só habilita após fechamento.
+Monta a carga física por caminhão e a congela no fechamento. **Reusa** o contrato de captura/QR do ADR-009 (conferência) e a contabilidade de unidade da F4b. Entidades: `caminhoes` (3.21), `caminhoes_pedidos` (3.22), `carga_itens` (3.23), `conferencias_carga` (3.24). Invariantes testáveis:
+
+- **Ciclo do caminhão (RF-EC-01):** status `planejado → aguardando_carga → em_carga → em_conferencia → fechado → liberado_faturamento` (+ `faturado`/`liberado_saida`/`expedido` em F6) como `TEXT`+CHECK, com transições válidas; transição inválida → **falha** (409).
+- **Expedição aberta = mutável (RF-EC-02/15):** só caminhão `em_carga`/`em_conferencia` aceita entrada/transferência/remoção de peça. Teste prova mutação permitida aberta e bloqueada fechada.
+- **Elegibilidade de carga (dependência F4c):** só peça `associada`+etiquetada ou subitem com destino válido+etiqueta entra na carga; peça `transformada`/`em_transformacao`, `em_sobra`/`em_analise`, divergente bloqueada, ou sem etiqueta → **falha** (RT-007-05). Teste prova a exclusão de `transformada`.
+- **Entrada na carga (RF-EC-03/07):** vincular peça/subitem a `carga_itens` atualiza em tempo real o preenchido do pedido no caminhão; um item só pode estar em **uma** carga ativa (índice único parcial). Re-entrada idempotente.
+- **Transferência entre pedidos (RF-EC-06/08/09/10):** permitida só com expedição aberta, exige confirmação + motivo, é **auditada** e registra origem/destino/operador/situação (histórico 3.17). Bloqueia quando: caminhão fechado, NF emitida, pedido destino incompatível (item comercial/compra), pedido destino completo, peça bloqueada por divergência → **falha** (409). Saldo atualizado atomicamente (devolve origem / consome destino — reusa `saldo.ts` F4b; anti-overbooking).
+- **Conferência (RF-EC-12/13):** conferência por QR reusa ADR-009 (auto lê do leitor; **leitor indisponível → conferência manual autorizada (`LEITURA_MANUAL`) + motivo**, sem falha silenciosa e validando o código contra a peça/subitem real). Previsto × carregado expõe faltas/excedentes; diferença gera alerta observável.
+- **Fechamento congela (RF-EC-14/16/17):** `fechar` exige conferência sem pendência crítica (ou autorização explícita auditada); ao fechar, **toda** mutação de carga/peça/transferência subsequente **falha** — teste prova o bloqueio. `fechado` é pré-requisito de faturamento (DP-05): habilita `liberado_faturamento`. Idempotente.
+- **Reabertura (RF-EC-18):** excepcional, só por perfil autorizado, **auditada**, e proibida se houver NF emitida.
+- **Romaneio:** geração do resumo/romaneio da carga fechada (consulta consolidada previsto×real por pedido/cliente).
+- **Tempo real (RA-04):** eventos pós-commit (`carga_item_adicionado`, `carga_item_transferido`, `carga_item_removido`, `conferencia_concluida`, `expedicao_fechada`, `expedicao_reaberta`) com broadcast `dashboard`/`operacao:{data}`; no-emit em rollback.
+- **RBAC** `EXPEDICAO_GERENCIAR` (perfil `expedicao` + `gestor`/`administrador`), `EXPEDICAO_REABRIR` restrita (gestor/admin), reuso de `LEITURA_MANUAL`; 403 por ausência. **Auditoria transacional** em toda mutação.
+- **Concorrência (obrigatório):** N peças disputando o último saldo de um pedido na transferência → `atendida` nunca excede `pedida`; fechar concorrente com transferência em voo não corrompe a carga.
+- Cobertura backend ≥ 80% (linha **e** branch), priorizando ramos de erro.
+
+#### Dependências herdadas (vinculantes)
+- A elegibilidade acima **consome** a dependência registrada no gate F4 (exclusão de peças `transformada`/`em_transformacao`).
+- DP-05: nenhum caminho de faturamento (F6) pode ser exposto antes de `fechado`.
 
 ### F6 — Faturamento + NFS-e (Negócio Fase 5)
 - Payload fiscal montado a partir da **carga real** fechada (itens, valores, alíquota).
