@@ -13,3 +13,4 @@ export * from './recebimentos.schema';
 export * from './ocorrencias-fornecedor.schema';
 export * from './pesagem.schema';
 export * from './transformacoes.schema';
+export * from './expedicao.schema';

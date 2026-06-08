@@ -163,3 +163,45 @@ export interface CorteDetalhe {
   transformacao: Transformacao;
   subitens: Subitem[];
 }
+
+// ── F5 — Expedição ────────────────────────────────────────────────────────
+
+export type StatusCaminhao =
+  | 'planejado' | 'aguardando_carga' | 'em_carga' | 'em_conferencia'
+  | 'fechado' | 'liberado_faturamento' | 'faturado' | 'liberado_saida' | 'expedido';
+
+export interface Caminhao {
+  id: string;
+  placa: string;
+  motorista: string;
+  rota: string | null;
+  dataOperacao: string;
+  statusCaminhao: StatusCaminhao;
+  horaAberturaCarga: string | null;
+  horaFechamentoCarga: string | null;
+  observacoes: string | null;
+  createdAt: string;
+}
+
+export interface CaminhaoDetalhe {
+  caminhao: Caminhao;
+  pedidos: Array<{
+    pedidoVendaId: string;
+    ordemNaCarga: number | null;
+    previsto: number;
+    carregado: number;
+  }>;
+}
+
+export interface CargaItem {
+  id: string;
+  caminhaoId: string;
+  tipoOrigem: 'peca' | 'subitem';
+  pecaId: string | null;
+  subitemId: string | null;
+  pedidoVendaId: string;
+  pedidoVendaItemId: string;
+  statusCargaItem: 'em_carga' | 'conferido' | 'removido';
+  conferido: boolean;
+  dataHoraEntradaCarga: string;
+}

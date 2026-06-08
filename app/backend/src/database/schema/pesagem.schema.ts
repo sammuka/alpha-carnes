@@ -58,7 +58,8 @@ export const associacoesPecaHistorico = pgTable(
   'associacoes_peca_historico',
   {
     id:                        uuid('id').primaryKey().default(sql`uuidv7()`),
-    pecaId:                    uuid('peca_id').notNull().references(() => pecas.id),
+    pecaId:                    uuid('peca_id').references(() => pecas.id),
+    subitemId:                 uuid('subitem_id'),
     pedidoOrigemId:            uuid('pedido_origem_id').references(() => pedidosVenda.id),
     pedidoDestinoId:           uuid('pedido_destino_id').references(() => pedidosVenda.id),
     pedidoItemDestinoId:       uuid('pedido_item_destino_id').references(() => pedidosVendaItens.id),
@@ -75,8 +76,13 @@ export const associacoesPecaHistorico = pgTable(
       'chk_assoc_hist_acao',
       sql`${t.acao} IN ('confirmar','redirecionar','sobra','analise','corte','divergencia')`,
     ),
+    check(
+      'chk_assoc_hist_um_alvo',
+      sql`(${t.pecaId} IS NOT NULL)::int + (${t.subitemId} IS NOT NULL)::int = 1`,
+    ),
     index('idx_assoc_hist_peca').on(t.pecaId),
     index('idx_assoc_hist_destino').on(t.pedidoDestinoId),
+    index('idx_assoc_hist_subitem').on(t.subitemId).where(sql`${t.subitemId} IS NOT NULL`),
   ],
 );
 
@@ -138,6 +144,9 @@ export const associacoesPecaHistoricoRelations = relations(associacoesPecaHistor
     fields: [associacoesPecaHistorico.pecaId],
     references: [pecas.id],
   }),
+  // Nota: a relação `subitem` (→ subitens em transformacoes.schema.ts) não pode ser declarada aqui
+  // pois causaria ciclo de import: pesagem → transformacoes → pesagem (transformacoes importa `pecas`
+  // de pesagem.schema). Joins com subitens devem ser feitos via joins explícitos no service.
 }));
 
 export const etiquetasImpressoesRelations = relations(etiquetasImpressoes, ({ one }) => ({

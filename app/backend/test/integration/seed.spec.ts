@@ -53,4 +53,24 @@ describe('Seed idempotência', () => {
       .where(eq(schema.perfis.slug, 'corte'));
     expect(linhas.map((l) => l.codigo)).toContain('CORTE_GERENCIAR');
   });
+
+  it('perfil expedicao tem EXPEDICAO_GERENCIAR após seed', async () => {
+    const linhas = await db
+      .select({ codigo: schema.permissoes.codigo })
+      .from(schema.perfis)
+      .innerJoin(schema.perfisPermissoes, eq(schema.perfis.id, schema.perfisPermissoes.perfilId))
+      .innerJoin(schema.permissoes, eq(schema.perfisPermissoes.permissaoId, schema.permissoes.id))
+      .where(eq(schema.perfis.slug, 'expedicao'));
+    expect(linhas.map((l) => l.codigo)).toContain('EXPEDICAO_GERENCIAR');
+  });
+
+  it('perfil gestor tem EXPEDICAO_REABRIR após seed', async () => {
+    const linhas = await db
+      .select({ codigo: schema.permissoes.codigo })
+      .from(schema.perfis)
+      .innerJoin(schema.perfisPermissoes, eq(schema.perfis.id, schema.perfisPermissoes.perfilId))
+      .innerJoin(schema.permissoes, eq(schema.perfisPermissoes.permissaoId, schema.permissoes.id))
+      .where(eq(schema.perfis.slug, 'gestor'));
+    expect(linhas.map((l) => l.codigo)).toContain('EXPEDICAO_REABRIR');
+  });
 });

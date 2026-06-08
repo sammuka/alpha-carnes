@@ -25,6 +25,13 @@ export const EVENTOS = {
   SUBITEM_PESADO: 'subitem_pesado',
   SUBITEM_ASSOCIADO: 'subitem_associado',
   CORTE_CONCLUIDO: 'corte_concluido',
+  // ── F5 — Expedição ────────────────────────────────────────────────────────
+  CARGA_ITEM_ADICIONADO: 'carga_item_adicionado',
+  CARGA_ITEM_TRANSFERIDO: 'carga_item_transferido',
+  CARGA_ITEM_REMOVIDO: 'carga_item_removido',
+  CONFERENCIA_CONCLUIDA: 'conferencia_concluida',
+  EXPEDICAO_FECHADA: 'expedicao_fechada',
+  EXPEDICAO_REABERTA: 'expedicao_reaberta',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -179,4 +186,49 @@ export interface CorteConcluidoPayload {
   pesoOriginal: string;
   pesoSubitensTotal: string;
   diferencaPeso: string;
+}
+
+// ── F5 — Expedição ────────────────────────────────────────────────────────
+
+export interface CargaItemAdicionadoPayload {
+  caminhaoId: string;
+  cargaItemId: string;
+  tipoOrigem: 'peca' | 'subitem';
+  pecaId?: string;
+  subitemId?: string;
+  pedidoVendaId: string;
+  dataOperacao: string;
+}
+
+export interface CargaItemTransferidoPayload {
+  caminhaoId: string;
+  cargaItemId: string;
+  tipoOrigem: 'peca' | 'subitem';
+  pedidoOrigemId: string;
+  pedidoDestinoId: string;
+  dataOperacao: string;
+}
+
+export interface CargaItemRemovidoPayload {
+  caminhaoId: string;
+  cargaItemId: string;
+  tipoOrigem: 'peca' | 'subitem';
+  dataOperacao: string;
+}
+
+export interface ConferenciaConcluidaPayload {
+  caminhaoId: string;
+  conferenciaId: string;
+  dataOperacao: string;
+}
+
+export interface ExpedicaoFechadaPayload {
+  caminhaoId: string;
+  dataOperacao: string;
+}
+
+export interface ExpedicaoReabertaPayload {
+  caminhaoId: string;
+  operadorId: string;
+  dataOperacao: string;
 }
