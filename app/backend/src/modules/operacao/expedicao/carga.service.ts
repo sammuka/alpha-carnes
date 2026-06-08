@@ -17,7 +17,7 @@ import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { consumirSaldo, devolverSaldo } from '../pesagem/saldo';
 import { validarElegibilidadePeca, validarElegibilidadeSubitem } from './elegibilidade';
-import { expedicaoAberta } from './transicoes';
+import { expedicaoAberta, type StatusCaminhao } from './transicoes';
 import { CaminhaoService } from './caminhao.service';
 import type { AdicionarItemDto, TransferirItemDto } from './dto/expedicao.dto';
 
@@ -111,7 +111,7 @@ export class CargaService {
         dadosNovos: item,
       });
 
-      return { item, isNew: true };
+      return { item, isNew: true, dataOperacao: caminhao.dataOperacao };
     });
 
     if (resultado.isNew) {
@@ -122,8 +122,7 @@ export class CargaService {
         pecaId: resultado.item.pecaId ?? undefined,
         subitemId: resultado.item.subitemId ?? undefined,
         pedidoVendaId: resultado.item.pedidoVendaId,
-        dataOperacao:
-          resultado.item.dataHoraEntradaCarga?.toISOString().split('T')[0] ?? '',
+        dataOperacao: resultado.dataOperacao ?? '',
       });
     }
 
@@ -136,7 +135,7 @@ export class CargaService {
       const item = await this.cargaItemAtivo(tx, cargaItemId);
       const caminhao = await this.caminhaoService.caminhaoAtivo(tx, item.caminhaoId);
 
-      if (!expedicaoAberta(caminhao.statusCaminhao as any)) {
+      if (!expedicaoAberta(caminhao.statusCaminhao as StatusCaminhao)) {
         throw new ConflictException('Transferência só permitida com expedição aberta');
       }
       if (item.statusCargaItem === 'removido') {
@@ -276,7 +275,7 @@ export class CargaService {
       const item = await this.cargaItemAtivo(tx, cargaItemId);
       const caminhao = await this.caminhaoService.caminhaoAtivo(tx, item.caminhaoId);
 
-      if (!expedicaoAberta(caminhao.statusCaminhao as any)) {
+      if (!expedicaoAberta(caminhao.statusCaminhao as StatusCaminhao)) {
         throw new ConflictException('Remoção só permitida com expedição aberta');
       }
       if (item.statusCargaItem === 'removido') {

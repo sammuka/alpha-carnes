@@ -1,5 +1,5 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -144,41 +144,60 @@ export class CaminhaoService {
   /** Detalha o caminhão com pedidos e resumo previsto×carregado. */
   async detalhar(caminhaoId: string) {
     const caminhao = await this.caminhaoAtivo(this.db, caminhaoId);
-    const vinculos = await this.db
-      .select()
+    const vinculos = await this.db.select()
       .from(caminhoesPedidos)
       .where(and(eq(caminhoesPedidos.caminhaoId, caminhaoId), isNull(caminhoesPedidos.deletedAt)))
       .orderBy(asc(caminhoesPedidos.ordemNaCarga));
 
-    // Para cada pedido: previsto (itens do pedido) vs carregado (carga_itens ativos)
-    const resumo = await Promise.all(
-      vinculos.map(async (v) => {
-        const itensPedido = await this.db
-          .select({
-            id: pedidosVendaItens.id,
-            quantidadePedida: pedidosVendaItens.quantidadePedida,
-          })
-          .from(pedidosVendaItens)
-          .where(eq(pedidosVendaItens.pedidoVendaId, v.pedidoVendaId));
-        const previsto = itensPedido.reduce((acc, i) => acc + Number(i.quantidadePedida), 0);
+    if (vinculos.length === 0) return { caminhao, pedidos: [] };
 
-        const itensCarregados = await this.db
-          .select()
-          .from(cargaItens)
-          .where(
-            and(
-              eq(cargaItens.caminhaoId, caminhaoId),
-              eq(cargaItens.pedidoVendaId, v.pedidoVendaId),
-              isNull(cargaItens.deletedAt),
-            ),
-          );
-        const carregado = itensCarregados.filter((x) => x.statusCargaItem !== 'removido').length;
+    const pedidoIds = vinculos.map(v => v.pedidoVendaId);
 
-        return { ...v, previsto, carregado };
-      }),
-    );
+    // Batch 1: todos os itens dos pedidos vinculados
+    const itensPedido = await this.db.select({
+      pedidoVendaId: pedidosVendaItens.pedidoVendaId,
+      quantidadePedida: pedidosVendaItens.quantidadePedida,
+    })
+      .from(pedidosVendaItens)
+      .where(inArray(pedidosVendaItens.pedidoVendaId, pedidoIds));
 
-    return { caminhao, pedidos: resumo };
+    // Batch 2: todos os carga_itens ativos do caminhão
+    const itensCarregados = await this.db.select({
+      pedidoVendaId: cargaItens.pedidoVendaId,
+      statusCargaItem: cargaItens.statusCargaItem,
+    })
+      .from(cargaItens)
+      .where(and(
+        eq(cargaItens.caminhaoId, caminhaoId),
+        isNull(cargaItens.deletedAt),
+      ));
+
+    // Agregar em memória
+    const previstoPorPedido = new Map<string, number>();
+    for (const i of itensPedido) {
+      previstoPorPedido.set(
+        i.pedidoVendaId,
+        (previstoPorPedido.get(i.pedidoVendaId) ?? 0) + Number(i.quantidadePedida),
+      );
+    }
+
+    const carregadoPorPedido = new Map<string, number>();
+    for (const c of itensCarregados) {
+      if (c.statusCargaItem !== 'removido') {
+        carregadoPorPedido.set(
+          c.pedidoVendaId,
+          (carregadoPorPedido.get(c.pedidoVendaId) ?? 0) + 1,
+        );
+      }
+    }
+
+    const pedidos = vinculos.map(v => ({
+      ...v,
+      previsto: previstoPorPedido.get(v.pedidoVendaId) ?? 0,
+      carregado: carregadoPorPedido.get(v.pedidoVendaId) ?? 0,
+    }));
+
+    return { caminhao, pedidos };
   }
 
   /** Lista caminhões por data de operação. */
