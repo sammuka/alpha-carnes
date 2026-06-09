@@ -71,6 +71,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               Expedição
             </a>
           )}
+          {/* Operação (F6a) — gated por FATURAMENTO_LER */}
+          {user.permissoes.includes('FATURAMENTO_LER') && (
+            <a
+              href="/operacao/faturamento"
+              className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              Faturamento
+            </a>
+          )}
           {/* Gating de menu por permissão efetiva — vinda de /auth/me (backend) */}
           {user.permissoes.includes('AUDITORIA_VISUALIZAR') && (
             <a href="/admin/auditoria" className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">
