@@ -379,10 +379,8 @@ export class FaturamentoService {
   }
 
   /**
-   * Reprocessa uma NF em erro_emissao → pendente → emitir.
-   * Ação manual (baixa frequência): corrida entre dois reprocessar paralelos é protegida pelo
-   * claim atômico em emitir (uq_notas_fiscais_pedido_viva). Melhorar com SELECT FOR UPDATE
-   * antes de produção de alta concorrência.
+   * Reprocessa uma NF em erro_emissao: volta para pendente e tenta emissão novamente.
+   * Opera diretamente na NF existente (não cria nova) — correto com o índice único parcial.
    */
   async reprocessar(notaFiscalId: string, caminhaoId: string, usuarioId: string) {
     const nf = await this.db.select().from(notasFiscais)
@@ -391,7 +389,7 @@ export class FaturamentoService {
     if (!nf) throw new ConflictException('Nota fiscal não encontrada');
     assertTransicaoNfse(nf.statusNfse as StatusNfse, 'pendente');
 
-    // Voltar para pendente (apaga o erro)
+    // Fase A (tx curta): voltar para pendente — marca a NF para reprocessamento
     await this.db.transaction(async (tx) => {
       await tx.update(notasFiscais).set({
         statusNfse: 'pendente',
@@ -411,11 +409,134 @@ export class FaturamentoService {
       });
     });
 
-    // Re-emitir usando os mesmos dados
-    return this.emitir(caminhaoId, {
-      pedidoVendaId: nf.pedidoVendaId,
-      valor: String(nf.valor),
-      aliquota: String(nf.aliquota),
-    }, usuarioId);
+    // Buscar dados necessários para a emissão
+    const caminhao = await this.db.select().from(caminhoes)
+      .where(and(eq(caminhoes.id, caminhaoId), isNull(caminhoes.deletedAt)))
+      .then(r => r[0] ?? null);
+    if (!caminhao) throw new ConflictException('Caminhão não encontrado');
+
+    const pedidoRow = await this.db.select({ pedido: pedidosVenda, cliente: clientes })
+      .from(pedidosVenda)
+      .innerJoin(clientes, eq(pedidosVenda.clienteId, clientes.id))
+      .where(and(eq(pedidosVenda.id, nf.pedidoVendaId), isNull(pedidosVenda.deletedAt)))
+      .then(r => r[0] ?? null);
+    if (!pedidoRow) throw new ConflictException('Pedido não encontrado');
+
+    const paramPrestador = await this.db.select().from(parametros)
+      .where(eq(parametros.chave, 'empresa_dados_fiscais')).then(r => r[0] ?? null);
+    const prestadorJson = (paramPrestador?.valorJson ?? {}) as Record<string, string>;
+    const prestador = {
+      razaoSocial: prestadorJson['razao_social'] ?? process.env.EISS_RAZAO_SOCIAL ?? 'AlphaCarnes',
+      cnpj: prestadorJson['cnpj'] ?? process.env.EISS_CNPJ_PRESTADOR ?? '',
+      inscricaoMunicipal: prestadorJson['inscricao_municipal'] ?? process.env.EISS_INSCRICAO_MUNICIPAL ?? '',
+      email: prestadorJson['email'],
+    };
+
+    const homologacao = process.env.EISS_HOMOLOGACAO !== 'false';
+    const chaveAutenticacao = homologacao
+      ? (process.env.EISS_CHAVE_AUTENTICACAO_HML ?? '')
+      : (process.env.EISS_CHAVE_AUTENTICACAO_PRD ?? '');
+
+    const numeroRps = nf.numeroRps ?? `RPS-${Date.now()}`;
+    const serieRps = nf.serieRps ?? 'A';
+
+    const payloadBase = montarPayloadEiss(
+      {
+        pedidoId: nf.pedidoVendaId.slice(0, 8),
+        cliente: {
+          razaoSocial: pedidoRow.cliente.razaoSocial,
+          documentoFiscal: pedidoRow.cliente.documentoFiscal,
+          dadosFiscaisJson: pedidoRow.cliente.dadosFiscaisJson as Record<string, unknown>,
+          dadosContatoJson: pedidoRow.cliente.dadosContatoJson as Record<string, unknown>,
+        },
+        itensDescricao: 'reprocessamento',
+        pesoTotalKg: '0.000',
+        valor: String(nf.valor),
+        aliquota: String(nf.aliquota),
+      },
+      prestador,
+      homologacao,
+      numeroRps,
+      serieRps,
+    );
+    const reqGateway = { ...payloadBase, chaveAutenticacao };
+
+    // Fase B: gateway + retry FORA de qualquer transação (igual ao emitir)
+    let tentativas = 0;
+    let resultado: Awaited<ReturnType<NfseGateway['emitir']>> | null = null;
+    let erroFinal: Error | null = null;
+
+    while (tentativas < RETRY_MAX) {
+      try {
+        const res = await this.gateway.emitir(reqGateway);
+        if (!res.erro) { resultado = res; break; }
+        else { erroFinal = new Error(res.mensagemErro ?? 'Erro de negócio EISS'); resultado = res; break; }
+      } catch (e) {
+        if (e instanceof NfseTransporteError) {
+          tentativas++;
+          if (tentativas >= 1 && e.message.toLowerCase().includes('timeout')) {
+            try {
+              const consulta = await this.gateway.consultarNotaCompleta({
+                chaveAutenticacao, homologacao, numeroRps, serieRps,
+                prestador: { nome: prestador.razaoSocial, cnpj: prestador.cnpj.replace(/\D/g, '') },
+              });
+              if (!consulta.erro && consulta.numeroNota) { resultado = consulta; tentativas = RETRY_MAX; break; }
+            } catch { /* seguir retry */ }
+          }
+          if (tentativas < RETRY_MAX) {
+            const delay = parseInt(process.env.EISS_RETRY_DELAY_MS ?? String(RETRY_DELAYS_MS[tentativas - 1] ?? 5000));
+            await new Promise(r => setTimeout(r, delay));
+          } else { erroFinal = e; }
+        } else { erroFinal = e as Error; break; }
+      }
+    }
+
+    // Fase C: persistir resultado na NF existente (tx curta)
+    const payloadAuditoria = redigirSegredos({ request: reqGateway, response: resultado ?? erroFinal?.message });
+
+    let notaAtualizada: typeof notasFiscais.$inferSelect;
+    if (resultado && !resultado.erro) {
+      notaAtualizada = await this.db.transaction(async (tx) => {
+        const [updated] = await tx.update(notasFiscais).set({
+          statusNfse: 'emitida',
+          numeroNfse: resultado!.numeroNota,
+          codigoVerificacao: resultado!.codigoVerificacao,
+          linkNfse: resultado!.linkNota ?? null,
+          emitidaEm: new Date(),
+          tentativasEmissao: tentativas,
+          payloadEiss: payloadAuditoria as any,
+        }).where(eq(notasFiscais.id, notaFiscalId)).returning();
+        if (!updated) throw new Error('Falha ao atualizar nota fiscal');
+        await this.auditoria.registrar(tx, {
+          tabela: 'notas_fiscais', registroId: notaFiscalId, operacao: 'UPDATE',
+          modulo: 'faturamento', usuarioId, dadosAnteriores: nf, dadosNovos: updated,
+        });
+        return updated;
+      });
+      this.eventEmitter.emit(EVENTOS.NFSE_EMITIDA, {
+        caminhaoId, notaFiscalId, pedidoVendaId: nf.pedidoVendaId,
+        numeroNfse: notaAtualizada.numeroNfse, dataOperacao: caminhao.dataOperacao,
+      });
+    } else {
+      const mensagemErro = resultado?.mensagemErro ?? erroFinal?.message ?? 'Erro desconhecido';
+      notaAtualizada = await this.db.transaction(async (tx) => {
+        const [updated] = await tx.update(notasFiscais).set({
+          statusNfse: 'erro_emissao', ultimoErroNfse: mensagemErro,
+          tentativasEmissao: tentativas, payloadEiss: payloadAuditoria as any,
+        }).where(eq(notasFiscais.id, notaFiscalId)).returning();
+        if (!updated) throw new Error('Falha ao atualizar nota fiscal');
+        await this.auditoria.registrar(tx, {
+          tabela: 'notas_fiscais', registroId: notaFiscalId, operacao: 'UPDATE',
+          modulo: 'faturamento', usuarioId, dadosAnteriores: nf, dadosNovos: updated,
+        });
+        return updated;
+      });
+      this.eventEmitter.emit(EVENTOS.NFSE_ERRO_EMISSAO, {
+        caminhaoId, notaFiscalId, pedidoVendaId: nf.pedidoVendaId,
+        ultimoErro: mensagemErro, tentativas, dataOperacao: caminhao.dataOperacao,
+      });
+    }
+
+    return notaAtualizada;
   }
 }
