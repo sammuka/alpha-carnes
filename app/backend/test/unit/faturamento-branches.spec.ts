@@ -1,5 +1,8 @@
 import { assertTransicaoNfse, type StatusNfse } from '../../src/modules/operacao/faturamento/transicoes-nfse';
 import { avaliarBloqueios, type DadosParaBloqueios } from '../../src/modules/operacao/faturamento/bloqueios';
+import { ConflictException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { FaturamentoService } from '../../src/modules/operacao/faturamento/faturamento.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // transicoes-nfse
@@ -204,5 +207,124 @@ describe('bloqueios — avaliarBloqueios', () => {
   it('sem itens carregados não gera bloqueio de dados fiscais', () => {
     const bloqueios = avaliarBloqueios(baseDados({ itensCarregados: [] }));
     expect(bloqueios.some((b) => b.codigo === 'DADOS_FISCAIS_INCOMPLETOS')).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FaturamentoService — catch de erro de banco (código 23505)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('FaturamentoService — catch de erro de banco', () => {
+  function buildService(overrides: {
+    dbTransaction?: (fn: (tx: unknown) => unknown) => Promise<unknown>;
+  } = {}) {
+    // Faturamento e caminhão existentes (Fase A queries)
+    const dbFat = [{ id: 'fat-1', caminhaoId: 'cam-1', deletedAt: null }];
+    const dbCam = [{
+      id: 'cam-1',
+      statusCaminhao: 'fechado',
+      dataOperacao: '2027-01-01',
+      deletedAt: null,
+    }];
+    const dbPedido = [{
+      pedido: { id: 'pv-1', clienteId: 'cli-1', deletedAt: null },
+      cliente: {
+        id: 'cli-1',
+        razaoSocial: 'Cliente Teste',
+        documentoFiscal: '12345678000190',
+        dadosFiscaisJson: {},
+        dadosContatoJson: {},
+      },
+    }];
+
+    // Mock do db com select encadeado e transaction configurável
+    let selectCallCount = 0;
+    const selectResults = [dbFat, dbCam, dbPedido, [{ chave: null }]];
+    const thenMock = jest.fn((fn: (r: unknown[]) => unknown) => {
+      const idx = selectCallCount++;
+      return Promise.resolve(fn(selectResults[idx] ?? []));
+    });
+    const whereMock = jest.fn(() => ({ then: thenMock }));
+    const fromMock = jest.fn(() => ({ where: whereMock, innerJoin: jest.fn(() => ({ where: whereMock })) }));
+    const selectMock = jest.fn(() => ({ from: fromMock }));
+
+    const dbObj = {
+      select: selectMock,
+      transaction: overrides.dbTransaction ?? jest.fn(async (fn: (tx: unknown) => unknown) => fn({})),
+    };
+
+    const gateway = {
+      emitir: jest.fn(),
+      cancelar: jest.fn(),
+      consultarNotaCompleta: jest.fn(),
+    };
+
+    const auditoria = { registrar: jest.fn().mockResolvedValue(undefined) };
+    const emitter = new EventEmitter2();
+    jest.spyOn(emitter, 'emit').mockImplementation((() => true) as never);
+
+    const consolidacaoService = {
+      consolidar: jest.fn().mockResolvedValue({
+        bloqueios: [],
+        totalItens: 1,
+        pedidos: [{ pedidoVendaId: 'pv-1', pesoTotalKg: 10 }],
+      }),
+    };
+
+    return new FaturamentoService(
+      { db: dbObj } as never,
+      gateway as never,
+      auditoria as never,
+      emitter,
+      consolidacaoService as never,
+    );
+  }
+
+  it('db.transaction lança erro code=23505 → ConflictException (não relança o erro bruto)', async () => {
+    const dbError = Object.assign(new Error('unique violation'), { code: '23505' });
+
+    const service = buildService({
+      dbTransaction: jest.fn().mockRejectedValueOnce(dbError),
+    });
+
+    await expect(
+      service.emitir('cam-1', { pedidoVendaId: 'pv-1', valor: '100.00' }, 'user-1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('db.transaction lança erro code=23505 → mensagem inclui "NFS-e"', async () => {
+    const dbError = Object.assign(new Error('unique violation'), { code: '23505' });
+
+    const service = buildService({
+      dbTransaction: jest.fn().mockRejectedValueOnce(dbError),
+    });
+
+    await expect(
+      service.emitir('cam-1', { pedidoVendaId: 'pv-1', valor: '100.00' }, 'user-1'),
+    ).rejects.toMatchObject({ message: expect.stringContaining('NFS-e') });
+  });
+
+  it('db.transaction lança ConflictException → relança sem transformar', async () => {
+    const original = new ConflictException('conflito original');
+
+    const service = buildService({
+      dbTransaction: jest.fn().mockRejectedValueOnce(original),
+    });
+
+    await expect(
+      service.emitir('cam-1', { pedidoVendaId: 'pv-1', valor: '100.00' }, 'user-1'),
+    ).rejects.toBe(original);
+  });
+
+  it('db.transaction lança erro genérico (sem code 23505) → relança sem transformar', async () => {
+    const genericError = new Error('falha inesperada de banco');
+
+    const service = buildService({
+      dbTransaction: jest.fn().mockRejectedValueOnce(genericError),
+    });
+
+    await expect(
+      service.emitir('cam-1', { pedidoVendaId: 'pv-1', valor: '100.00' }, 'user-1'),
+    ).rejects.toBe(genericError);
   });
 });

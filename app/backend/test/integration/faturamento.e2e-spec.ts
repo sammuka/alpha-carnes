@@ -1,7 +1,18 @@
 import type { INestApplication } from '@nestjs/common';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { criarCaminhaoComCargaFechada } from '../helpers/faturamento-fixtures';
-import { fakes } from '../helpers/pesagem-fixtures';
+import { fakes, montarCenarioPesagem, pesarPeca } from '../helpers/pesagem-fixtures';
+import { seedComercialBase } from '../helpers/comercial-fixtures';
+import { iniciarCorte, subitemCompleto } from '../helpers/corte-fixtures';
+import {
+  criarCaminhao,
+  vincularPedido,
+  abrirCarga,
+  adicionarSubitemNaCarga,
+  iniciarConferencia,
+  concluirConferencia,
+  fecharCaminhao,
+} from '../helpers/expedicao-fixtures';
 import { NFSE_GATEWAY } from '../../src/integracoes/nfse/nfse.types';
 import type { FakeNfseGateway } from '../../src/integracoes/nfse/fake-nfse.gateway';
 import { DRIZZLE } from '../../src/database/database.module';
@@ -22,6 +33,7 @@ describe('Faturamento F6a — e2e', () => {
   let comercialCookies: string;
   let expedicaoCookies: string;
   let gestorCookies: string;
+  let corteCookies: string;
 
   // Alias para acesso ao servidor e banco
   const srv = () => app.getHttpServer();
@@ -37,6 +49,7 @@ describe('Faturamento F6a — e2e', () => {
     const com = await createTestUser(app, { perfil: 'comercial' });
     const exp = await createTestUser(app, { perfil: 'expedicao' });
     const gest = await createTestUser(app, { perfil: 'gestor' });
+    const corte = await createTestUser(app, { perfil: 'corte' });
 
     faturamentoCookies = await loginCookies(app, fat.adminEmail, fat.adminPassword);
     comprasCookies = await loginCookies(app, comp.adminEmail, comp.adminPassword);
@@ -44,6 +57,7 @@ describe('Faturamento F6a — e2e', () => {
     comercialCookies = await loginCookies(app, com.adminEmail, com.adminPassword);
     expedicaoCookies = await loginCookies(app, exp.adminEmail, exp.adminPassword);
     gestorCookies = await loginCookies(app, gest.adminEmail, gest.adminPassword);
+    corteCookies = await loginCookies(app, corte.adminEmail, corte.adminPassword);
   }, 90000);
 
   afterAll(async () => {
@@ -110,6 +124,105 @@ describe('Faturamento F6a — e2e', () => {
         .find(p => p.pedidoVendaId === pedidoVendaId);
       expect(pedidoNaConsolidacao).toBeDefined();
     }, 90000);
+
+    it('consolida peso de subitem (tipoOrigem=subitem) corretamente', async () => {
+      const { default: request } = await import('supertest');
+
+      const dataOperacao = '2027-03-20';
+
+      // Montar cenário base de pesagem
+      const base = await seedComercialBase(app, { fator: 1 });
+      const cenario = await montarCenarioPesagem(
+        app,
+        { compras: comprasCookies, recebimento: recebimentoCookies },
+        base,
+        { dataOperacao, quantidade: 5 },
+      );
+
+      // Criar pedido de venda com cliente válido (CNPJ)
+      const { db: dbInst } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+      const cnpj = String(Date.now()).slice(-14).padStart(14, '0');
+      const [clienteSubitem] = await dbInst
+        .insert(schema.clientes)
+        .values({
+          codigo: `CLI-SUB-${Date.now()}`,
+          razaoSocial: 'Cliente Subitem Teste',
+          documentoFiscal: cnpj,
+          dadosFiscaisJson: {
+            logradouro: 'Rua Teste', numero: '1', bairro: 'Centro',
+            cidade: 'Osasco', uf: 'SP', cep: '06000000', codigo_ibge: '3534401',
+          },
+          dadosContatoJson: { email: 'sub@teste.local' },
+        })
+        .returning();
+      if (!clienteSubitem) throw new Error('Falha ao criar cliente para subitem');
+
+      const pedidoRes = await request(srv())
+        .post('/comercial/pedidos')
+        .set('Cookie', comercialCookies)
+        .send({
+          compraProgramadaId: cenario.compraId,
+          clienteId: clienteSubitem.id,
+          dataOperacao,
+          itens: [{ itemComercialId: cenario.itemComercialId, quantidadePedida: 1 }],
+        });
+      expect(pedidoRes.status).toBe(201);
+      const pedidoSubitemId = pedidoRes.body.id as string;
+      const detalheRes = await request(srv())
+        .get(`/comercial/pedidos/${pedidoSubitemId}`)
+        .set('Cookie', comercialCookies);
+      const pedidoItemSubitemId = (detalheRes.body.itens as Array<{ id: string }>)[0]!.id;
+
+      // Pesar uma peça e transformar em subitem
+      const pecaId = await pesarPeca(app, recebimentoCookies, {
+        recebimentoId: cenario.recebimentoId,
+        itemComercialBaseId: cenario.itemComercialId,
+      });
+      // Confirmar peça (associar ao pedido) e etiquetar
+      await request(srv())
+        .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
+        .set('Cookie', recebimentoCookies)
+        .send({ pedidoVendaItemId: pedidoItemSubitemId });
+      await request(srv())
+        .post(`/operacao/pesagem/pecas/${pecaId}/etiqueta`)
+        .set('Cookie', recebimentoCookies)
+        .send();
+
+      // Iniciar corte e gerar subitem completo (pesado + associado + etiquetado)
+      const transformacaoId = await iniciarCorte(app, corteCookies, pecaId);
+      const subitemId = await subitemCompleto(
+        app, corteCookies, transformacaoId, cenario.itemComercialId, pedidoItemSubitemId,
+      );
+
+      // Criar caminhão, adicionar SUBITEM na carga e fechar
+      const caminhaoSubitemId = await criarCaminhao(app, expedicaoCookies, { dataOperacao });
+      await vincularPedido(app, expedicaoCookies, caminhaoSubitemId, pedidoSubitemId);
+      await abrirCarga(app, expedicaoCookies, caminhaoSubitemId);
+      await adicionarSubitemNaCarga(app, expedicaoCookies, caminhaoSubitemId, subitemId);
+
+      // Configurar leitor com QR do subitem para conferência
+      fakes(app).leitor.definirCodigo(`QR-SUB-${subitemId}`);
+      await iniciarConferencia(app, expedicaoCookies, caminhaoSubitemId);
+      await request(srv())
+        .post(`/operacao/expedicao/caminhoes/${caminhaoSubitemId}/conferencia/registrar-item`)
+        .set('Cookie', expedicaoCookies)
+        .send({ tipoOrigem: 'subitem', modoCaptura: 'automatico' });
+      await concluirConferencia(app, expedicaoCookies, caminhaoSubitemId);
+      await fecharCaminhao(app, expedicaoCookies, caminhaoSubitemId);
+
+      // Consolidar — deve computar peso do subitem (branch tipoOrigem==='subitem')
+      const consRes = await request(srv())
+        .get(`/operacao/faturamento/caminhoes/${caminhaoSubitemId}/consolidacao`)
+        .set('Cookie', faturamentoCookies);
+
+      expect(consRes.status).toBe(200);
+      expect(consRes.body.pedidos).toBeDefined();
+      const pedidoConsolidado = (consRes.body.pedidos as Array<{ pedidoVendaId: string; pesoTotalKg: number }>)
+        .find(p => p.pedidoVendaId === pedidoSubitemId);
+      expect(pedidoConsolidado).toBeDefined();
+      // O subitem foi pesado com balança fake (15.000 kg), peso deve ser > 0
+      expect(pedidoConsolidado!.pesoTotalKg).toBeGreaterThan(0);
+    }, 120000);
 
     it('retorna bloqueios críticos com codigo, causa, impacto, acao', async () => {
       const { default: request } = await import('supertest');
@@ -544,6 +657,42 @@ describe('Faturamento F6a — e2e', () => {
         .send({ motivo: 'Teste' });
       expect(res.status).toBe(409);
     });
+
+    it('cancelar com gateway lançando exceção → converte para erro_cancelamento', async () => {
+      const { default: request } = await import('supertest');
+      nfseGateway().definirCenario('sucesso');
+
+      const { caminhaoId, pedidoVendaId, faturamentoContexto } =
+        await criarCaminhaoComCargaFechada(app, allCookies(), { dataOperacao: '2027-03-10' });
+
+      await request(srv())
+        .get(`/operacao/faturamento/caminhoes/${caminhaoId}/consolidacao`)
+        .set('Cookie', faturamentoCookies);
+
+      const emitirRes = await request(srv())
+        .post(`/operacao/faturamento/caminhoes/${caminhaoId}/emitir`)
+        .set('Cookie', faturamentoCookies)
+        .send({ pedidoVendaId, valor: faturamentoContexto.valor });
+      expect(emitirRes.status).toBe(201);
+      expect(emitirRes.body.statusNfse).toBe('emitida');
+      const notaId = emitirRes.body.id as string;
+
+      // Configurar gateway para lançar exceção (timeout lança NfseTransporteError)
+      nfseGateway().definirCenario('timeout');
+      const cancelarRes = await request(srv())
+        .post(`/operacao/faturamento/notas/${notaId}/cancelar`)
+        .set('Cookie', faturamentoCookies)
+        .send({ motivo: 'Cancelamento com gateway lançando exceção' });
+
+      // O catch no service converte a exceção para { erro: true } → erro_cancelamento, não 500
+      expect(cancelarRes.status).toBe(201);
+      expect(cancelarRes.body.statusNfse).toBe('erro_cancelamento');
+
+      // Verificar no banco
+      const [nfBanco] = await db().select().from(schema.notasFiscais)
+        .where(eq(schema.notasFiscais.id, notaId));
+      expect(nfBanco!.statusNfse).toBe('erro_cancelamento');
+    }, 90000);
 
     it('emitir sem faturamento consolidado retorna 409', async () => {
       const { default: request } = await import('supertest');
