@@ -504,7 +504,7 @@ export class FaturamentoService {
           linkNfse: resultado!.linkNota ?? null,
           emitidaEm: new Date(),
           tentativasEmissao: tentativas,
-          payloadEiss: payloadAuditoria as any,
+          payloadEiss: payloadAuditoria as Record<string, unknown>,
         }).where(eq(notasFiscais.id, notaFiscalId)).returning();
         if (!updated) throw new Error('Falha ao atualizar nota fiscal');
         await this.auditoria.registrar(tx, {
@@ -522,7 +522,7 @@ export class FaturamentoService {
       notaAtualizada = await this.db.transaction(async (tx) => {
         const [updated] = await tx.update(notasFiscais).set({
           statusNfse: 'erro_emissao', ultimoErroNfse: mensagemErro,
-          tentativasEmissao: tentativas, payloadEiss: payloadAuditoria as any,
+          tentativasEmissao: tentativas, payloadEiss: payloadAuditoria as Record<string, unknown>,
         }).where(eq(notasFiscais.id, notaFiscalId)).returning();
         if (!updated) throw new Error('Falha ao atualizar nota fiscal');
         await this.auditoria.registrar(tx, {
