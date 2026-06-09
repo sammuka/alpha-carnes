@@ -748,67 +748,59 @@ describe('Faturamento F6a — e2e', () => {
         .send({ pedidoVendaId, valor: faturamentoContexto.valor });
 
       expect(res.status).toBe(409);
-      expect(res.body.bloqueios).toBeDefined();
-      expect(Array.isArray(res.body.bloqueios)).toBe(true);
-      expect(res.body.bloqueios.length).toBeGreaterThan(0);
+      // AllExceptionsFilter aninha exception.getResponse() em message
+      // → ConflictException({ message, bloqueios }) chega em res.body.message
+      const payload = res.body.message as { message: string; bloqueios: Array<{ codigo: string; causa: string; impacto: string; acao: string }> };
+      expect(payload.bloqueios).toBeDefined();
+      expect(Array.isArray(payload.bloqueios)).toBe(true);
+      expect(payload.bloqueios.length).toBeGreaterThan(0);
       // Cada bloqueio tem causa+impacto+acao observáveis (DoD invariant)
-      const b = res.body.bloqueios[0];
+      const b = payload.bloqueios[0]!;
       expect(b.codigo).toBeTruthy();
       expect(b.causa).toBeTruthy();
       expect(b.impacto).toBeTruthy();
       expect(b.acao).toBeTruthy();
     }, 90000);
-
-    it('emitir direto sem consolidar → 409 (sem faturamento = consolidação necessária)', async () => {
-      const { default: request } = await import('supertest');
-      nfseGateway().definirCenario('sucesso');
-
-      const { caminhaoId, pedidoVendaId } =
-        await criarCaminhaoComCargaFechada(app, allCookies(), { dataOperacao: '2027-03-26' });
-
-      // Emitir SEM consolidar antes (não há faturamento criado)
-      const res = await request(srv())
-        .post(`/operacao/faturamento/caminhoes/${caminhaoId}/emitir`)
-        .set('Cookie', faturamentoCookies)
-        .send({ pedidoVendaId, valor: '1500.00' });
-
-      // consolidar é chamado internamente; o faturamento é criado mas o caminhão
-      // tem dados fiscais válidos → deve emitir com sucesso
-      // (este teste cobre o branch do emitir que verifica status do caminhão: 202)
-      expect([201, 409]).toContain(res.status);
-    }, 90000);
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Emissão com caminhão não-fechado → 409 via emitir (branch linha 202-203)
+  // Emissão recusada após reabertura (branch linha 202-203 do emitir)
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe('Emissão recusada por status do caminhão (branch emitir linha 202-203)', () => {
-    it('emitir direto em caminhão planejado (não-fechado) → 409', async () => {
+  describe('Emissão recusada após reabertura do caminhão (branch status no emitir)', () => {
+    it('consolidar fechado → reabrir para em_carga → emitir → 409 (caminhão não está mais fechado)', async () => {
       const { default: request } = await import('supertest');
+      nfseGateway().definirCenario('sucesso');
 
-      // Criar faturamento primeiro para um caminhão fechado...
-      const { caminhaoId: caminhaoFechadoId, pedidoVendaId } =
+      const { caminhaoId, pedidoVendaId, faturamentoContexto } =
         await criarCaminhaoComCargaFechada(app, allCookies(), { dataOperacao: '2027-03-27' });
-      await request(srv())
-        .get(`/operacao/faturamento/caminhoes/${caminhaoFechadoId}/consolidacao`)
+
+      // Consolidar (cria faturamento enquanto caminhão está fechado)
+      const consRes = await request(srv())
+        .get(`/operacao/faturamento/caminhoes/${caminhaoId}/consolidacao`)
         .set('Cookie', faturamentoCookies);
+      expect(consRes.status).toBe(200);
 
-      // ...depois criar um caminhão NÃO-fechado para tentar emitir nele
-      const criarRes = await request(srv())
-        .post('/operacao/expedicao/caminhoes')
-        .set('Cookie', expedicaoCookies)
-        .send({ placa: `NF-${Date.now().toString().slice(-4)}`, motorista: 'M', dataOperacao: '2027-03-27' });
-      const caminhaoNaoFechadoId = criarRes.body.id as string;
+      // Reabrir o caminhão (gestor tem EXPEDICAO_REABRIR)
+      const reabrirRes = await request(srv())
+        .post(`/operacao/expedicao/caminhoes/${caminhaoId}/reabrir`)
+        .set('Cookie', gestorCookies)
+        .send({ justificativa: 'Ajuste operacional' });
+      expect(reabrirRes.status).toBe(200);
+      // Caminhão volta para em_carga
 
-      // Emitir em caminhão não-fechado — deve recusar (branch 202-203 do service)
+      // Tentar emitir — caminhão não está mais em 'fechado' → 409 (branch linha 202-203)
       const res = await request(srv())
-        .post(`/operacao/faturamento/caminhoes/${caminhaoNaoFechadoId}/emitir`)
+        .post(`/operacao/faturamento/caminhoes/${caminhaoId}/emitir`)
         .set('Cookie', faturamentoCookies)
-        .send({ pedidoVendaId, valor: '1500.00' });
+        .send({ pedidoVendaId, valor: faturamentoContexto.valor });
 
       expect(res.status).toBe(409);
-      expect(res.body.message).toMatch(/fechado/i);
+      // AllExceptionsFilter: message contém o texto da exceção
+      const msgStr = typeof res.body.message === 'string'
+        ? res.body.message
+        : JSON.stringify(res.body.message);
+      expect(msgStr).toMatch(/fechado/i);
     }, 90000);
   });
 

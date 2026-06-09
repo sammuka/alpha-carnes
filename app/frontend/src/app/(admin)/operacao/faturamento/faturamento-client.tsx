@@ -53,7 +53,14 @@ function FormEmissao({ caminhaoId, pedidoVendaId, onSuccess }: FormEmissaoProps)
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErroLocal((data as { message?: string }).message ?? 'Falha ao emitir NFS-e');
+        // AllExceptionsFilter: message pode ser string ou objeto {message, bloqueios}
+        const raw = (data as { message?: unknown }).message;
+        const msg = typeof raw === 'string'
+          ? raw
+          : typeof raw === 'object' && raw !== null && 'message' in raw
+            ? String((raw as { message: unknown }).message)
+            : 'Falha ao emitir NFS-e';
+        setErroLocal(msg);
         return;
       }
       setValor('');
