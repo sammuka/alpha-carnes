@@ -47,6 +47,12 @@ export const PERMISSOES = {
   // ── F5 — Expedição ───────────────────────────────────────────────────────
   EXPEDICAO_GERENCIAR: 'EXPEDICAO_GERENCIAR', // gerenciar carga, itens, transferências, conferência
   EXPEDICAO_REABRIR: 'EXPEDICAO_REABRIR',     // reabertura excepcional de expedição fechada
+
+  // ── F6a — Faturamento + NFS-e ────────────────────────────────────────────
+  FATURAMENTO_LER: 'FATURAMENTO_LER',
+  FATURAMENTO_GERENCIAR: 'FATURAMENTO_GERENCIAR',
+  NFSE_EMITIR: 'NFSE_EMITIR',
+  NFSE_CANCELAR: 'NFSE_CANCELAR',
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -119,6 +125,11 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'CORTE_GERENCIAR', // F4c — administrador gerencia tudo
     'EXPEDICAO_GERENCIAR', // F5 — administrador gerencia tudo
     'EXPEDICAO_REABRIR',
+    // F6a — administrador gerencia tudo
+    'FATURAMENTO_LER',
+    'FATURAMENTO_GERENCIAR',
+    'NFSE_EMITIR',
+    'NFSE_CANCELAR',
   ],
   gestor: [
     'USUARIOS_APROVAR',
@@ -147,6 +158,11 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'CORTE_GERENCIAR', // F4c — gestor operacional gerencia corte
     'EXPEDICAO_GERENCIAR', // F5 — gestor operacional gerencia expedição
     'EXPEDICAO_REABRIR',
+    // F6a — gestor operacional gerencia faturamento e NFS-e
+    'FATURAMENTO_LER',
+    'FATURAMENTO_GERENCIAR',
+    'NFSE_EMITIR',
+    'NFSE_CANCELAR',
   ],
   // F3 (doc 013 §2.2): comprador cria/confirma compra programada; consulta saldo e pedidos.
   compras: [
@@ -206,11 +222,22 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'DISPONIBILIDADE_LER',
     'LEITURA_MANUAL',        // conferência por QR com fallback manual (ADR-009)
     'EXPEDICAO_GERENCIAR',   // gerenciar carga, transferências, conferência
+    'FATURAMENTO_LER',       // F6a — expedicao acompanha faturamento
   ],
   conferente: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
   // F4a (doc 005 §2.2): faturamento consulta o recebimento. F4b: consulta a pesagem.
-  faturamento: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER', 'RECEBIMENTO_LER', 'PESAGEM_LER'],
-  logistica: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER'],
+  // F6a (doc 008 §4.2): faturamento gerencia faturamento e NFS-e.
+  faturamento: [
+    ...LEITURA_CADASTROS,
+    'DISPONIBILIDADE_LER',
+    'RECEBIMENTO_LER',
+    'PESAGEM_LER',
+    'FATURAMENTO_LER',
+    'FATURAMENTO_GERENCIAR',
+    'NFSE_EMITIR',
+    'NFSE_CANCELAR',
+  ],
+  logistica: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER', 'FATURAMENTO_LER'],
   diretoria: [
     'AUDITORIA_VISUALIZAR',
     ...LEITURA_CADASTROS,
@@ -257,4 +284,8 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   CORTE_GERENCIAR: 'Iniciar, executar e concluir cortes/transformações de peças',
   EXPEDICAO_GERENCIAR: 'Gerenciar expedição: carga, transferências, conferência e fechamento',
   EXPEDICAO_REABRIR: 'Reabrir expedição fechada (excepcional, auditado)',
+  FATURAMENTO_LER: 'Visualizar faturamentos e consolidação da carga',
+  FATURAMENTO_GERENCIAR: 'Gerenciar faturamentos (consolidar e reprocessar)',
+  NFSE_EMITIR: 'Emitir NFS-e para pedidos faturados',
+  NFSE_CANCELAR: 'Cancelar NFS-e emitidas',
 };
