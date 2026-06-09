@@ -9,6 +9,7 @@ import {
   caminhoesPedidos,
   cargaItens,
   conferenciasCarga,
+  notasFiscais,
   pedidosVenda,
   pedidosVendaItens,
 } from '../../../database/schema';
@@ -128,7 +129,24 @@ export class FechamentoService {
         );
       }
 
-      // TODO F6: verificar se nota fiscal foi emitida e lançar ConflictException se sim
+      // Bloquear reabertura se houver NF emitida para este caminhão (RF-NF-02)
+      const nfEmitida = await tx
+        .select({ id: notasFiscais.id })
+        .from(notasFiscais)
+        .where(
+          and(
+            eq(notasFiscais.caminhaoId, caminhaoId),
+            eq(notasFiscais.statusNfse, 'emitida'),
+            isNull(notasFiscais.deletedAt),
+          ),
+        )
+        .then((r) => r[0] ?? null);
+
+      if (nfEmitida) {
+        throw new ConflictException(
+          'Reabertura bloqueada: caminhão possui NFS-e emitida',
+        );
+      }
 
       assertTransicao(status, 'em_carga');
 

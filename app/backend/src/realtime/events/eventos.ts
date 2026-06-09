@@ -32,6 +32,10 @@ export const EVENTOS = {
   CONFERENCIA_CONCLUIDA: 'conferencia_concluida',
   EXPEDICAO_FECHADA: 'expedicao_fechada',
   EXPEDICAO_REABERTA: 'expedicao_reaberta',
+  // ── F6a — Faturamento / NFS-e ─────────────────────────────────────────────
+  NFSE_EMITIDA: 'nfse_emitida',
+  NFSE_CANCELADA: 'nfse_cancelada',
+  NFSE_ERRO_EMISSAO: 'nfse_erro_emissao',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -230,5 +234,30 @@ export interface ExpedicaoFechadaPayload {
 export interface ExpedicaoReabertaPayload {
   caminhaoId: string;
   operadorId: string;
+  dataOperacao: string;
+}
+
+// ── F6a — Faturamento / NFS-e ─────────────────────────────────────────────
+
+export interface NfseEmitidaPayload {
+  caminhaoId: string;
+  notaFiscalId: string;
+  pedidoVendaId: string;
+  numeroNfse: string | null | undefined;
+  dataOperacao: string;
+}
+
+export interface NfseCanceladaPayload {
+  caminhaoId: string;
+  notaFiscalId: string;
+  dataOperacao: string;
+}
+
+export interface NfseErroEmissaoPayload {
+  caminhaoId: string;
+  notaFiscalId: string;
+  pedidoVendaId: string;
+  ultimoErro: string;
+  tentativas: number;
   dataOperacao: string;
 }
