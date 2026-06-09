@@ -786,7 +786,7 @@ describe('Faturamento F6a — e2e', () => {
         .post(`/operacao/expedicao/caminhoes/${caminhaoId}/reabrir`)
         .set('Cookie', gestorCookies)
         .send({ justificativa: 'Ajuste operacional' });
-      expect(reabrirRes.status).toBe(200);
+      expect(reabrirRes.status).toBe(201);
       // Caminhão volta para em_carga
 
       // Tentar emitir — caminhão não está mais em 'fechado' → 409 (branch linha 202-203)

@@ -31,10 +31,18 @@ interface FormEmissaoProps {
   onSuccess: () => Promise<void>;
 }
 
+interface BloqueioEmissao {
+  codigo: string;
+  causa: string;
+  impacto: string;
+  acao: string;
+}
+
 function FormEmissao({ caminhaoId, pedidoVendaId, onSuccess }: FormEmissaoProps) {
   const [valor, setValor] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [erroLocal, setErroLocal] = useState<string | null>(null);
+  const [bloqueiosLocais, setBloqueiosLocais] = useState<BloqueioEmissao[]>([]);
 
   async function emitir(e: React.FormEvent) {
     e.preventDefault();
@@ -44,6 +52,7 @@ function FormEmissao({ caminhaoId, pedidoVendaId, onSuccess }: FormEmissaoProps)
       return;
     }
     setErroLocal(null);
+    setBloqueiosLocais([]);
     setSubmitting(true);
     try {
       const res = await fetch(`/api/operacao/faturamento/caminhoes/${caminhaoId}/emitir`, {
@@ -55,12 +64,13 @@ function FormEmissao({ caminhaoId, pedidoVendaId, onSuccess }: FormEmissaoProps)
       if (!res.ok) {
         // AllExceptionsFilter: message pode ser string ou objeto {message, bloqueios}
         const raw = (data as { message?: unknown }).message;
-        const msg = typeof raw === 'string'
-          ? raw
-          : typeof raw === 'object' && raw !== null && 'message' in raw
-            ? String((raw as { message: unknown }).message)
-            : 'Falha ao emitir NFS-e';
-        setErroLocal(msg);
+        if (typeof raw === 'object' && raw !== null && 'bloqueios' in raw) {
+          const payload = raw as { message?: string; bloqueios: BloqueioEmissao[] };
+          setErroLocal(payload.message ?? 'Emissão bloqueada por pendências críticas');
+          setBloqueiosLocais(payload.bloqueios);
+        } else {
+          setErroLocal(typeof raw === 'string' ? raw : 'Falha ao emitir NFS-e');
+        }
         return;
       }
       setValor('');
@@ -73,30 +83,44 @@ function FormEmissao({ caminhaoId, pedidoVendaId, onSuccess }: FormEmissaoProps)
   }
 
   return (
-    <form onSubmit={(e) => void emitir(e)} className="mt-2 flex flex-wrap items-end gap-2">
-      <div>
-        <label className="mb-1 block text-xs text-muted-foreground" htmlFor={`valor-${pedidoVendaId}`}>
-          Valor (R$)
-        </label>
-        <input
-          id={`valor-${pedidoVendaId}`}
-          type="number"
-          min="0.01"
-          step="0.01"
-          value={valor}
-          onChange={(e) => setValor(e.target.value)}
-          className="w-32 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          placeholder="0,00"
-          disabled={submitting}
-        />
-      </div>
-      <Button type="submit" size="sm" disabled={submitting || !valor}>
-        {submitting ? 'Emitindo…' : 'Emitir NFS-e'}
-      </Button>
-      {erroLocal && (
-        <p className="w-full text-xs text-destructive">{erroLocal}</p>
+    <div className="mt-2 space-y-2">
+      <form onSubmit={(e) => void emitir(e)} className="flex flex-wrap items-end gap-2">
+        <div>
+          <label className="mb-1 block text-xs text-muted-foreground" htmlFor={`valor-${pedidoVendaId}`}>
+            Valor (R$)
+          </label>
+          <input
+            id={`valor-${pedidoVendaId}`}
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            className="w-32 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            placeholder="0,00"
+            disabled={submitting}
+          />
+        </div>
+        <Button type="submit" size="sm" disabled={submitting || !valor}>
+          {submitting ? 'Emitindo…' : 'Emitir NFS-e'}
+        </Button>
+        {erroLocal && (
+          <p className="w-full text-xs text-destructive">{erroLocal}</p>
+        )}
+      </form>
+      {bloqueiosLocais.length > 0 && (
+        <ul className="space-y-2" data-testid="bloqueios-emissao">
+          {bloqueiosLocais.map((b) => (
+            <li key={b.codigo} className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+              <p className="font-medium">[{b.codigo}]</p>
+              <p><span className="font-medium">Causa:</span> {b.causa}</p>
+              <p><span className="font-medium">Impacto:</span> {b.impacto}</p>
+              <p><span className="font-medium">Ação:</span> {b.acao}</p>
+            </li>
+          ))}
+        </ul>
       )}
-    </form>
+    </div>
   );
 }
 
