@@ -402,8 +402,9 @@ export class FaturamentoService {
     const chaveAutenticacao = homologacao
       ? (process.env['EISS_CHAVE_AUTENTICACAO_HML'] ?? '')
       : (process.env['EISS_CHAVE_AUTENTICACAO_PRD'] ?? '');
-    const numeroRps = nf.numeroRps ?? `RPS-${Date.now()}`;
-    const serieRps = nf.serieRps ?? 'A';
+    // numeroRps/serieRps foram setados na emissão original — nunca nulos neste ponto
+    const numeroRps = nf.numeroRps!;
+    const serieRps = nf.serieRps;
 
     const payloadBase = montarPayloadEiss(
       {
