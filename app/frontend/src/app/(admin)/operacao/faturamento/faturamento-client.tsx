@@ -421,7 +421,7 @@ export function FaturamentoClient({ permissoes }: { permissoes: string[] }) {
 
                           {/* Ações por NF */}
                           <div className="flex flex-wrap gap-2">
-                            {nota.statusNfse === 'emitida' && pode('FATURAMENTO_CANCELAR') && (
+                            {nota.statusNfse === 'emitida' && pode('NFSE_CANCELAR') && (
                               <Button
                                 size="sm"
                                 variant="destructive"
@@ -433,7 +433,7 @@ export function FaturamentoClient({ permissoes }: { permissoes: string[] }) {
                               </Button>
                             )}
                             {nota.statusNfse === 'erro_emissao' &&
-                              pode('FATURAMENTO_EMITIR') && (
+                              pode('NFSE_EMITIR') && (
                                 <Button
                                   size="sm"
                                   onClick={() => void reprocessarNota(nota.id)}
@@ -448,7 +448,7 @@ export function FaturamentoClient({ permissoes }: { permissoes: string[] }) {
                       )}
 
                       {/* Emitir NF (sem nota ou nota pendente) */}
-                      {(!nota || nota.statusNfse === 'pendente') && pode('FATURAMENTO_EMITIR') && (
+                      {(!nota || nota.statusNfse === 'pendente') && pode('NFSE_EMITIR') && (
                         <FormEmissao
                           caminhaoId={consolidacao.caminhao.id}
                           pedidoVendaId={pedido.pedidoVendaId}
