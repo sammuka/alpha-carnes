@@ -54,9 +54,8 @@ export class FaturamentoController {
   @RequirePermissoes('NFSE_EMITIR')
   reprocessar(
     @Param('notaId') notaId: string,
-    @Body() body: { caminhaoId: string },
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.faturamento.reprocessar(notaId, body.caminhaoId, user.sub);
+    return this.faturamento.reprocessar(notaId, user.sub);
   }
 }

@@ -493,10 +493,9 @@ describe('Faturamento F6a — e2e', () => {
       expect(nfBanco!.statusNfse).toBe('cancelada');
     }, 90000);
 
-    it('reprocessar NF em erro_emissao → pendente → emitida via endpoint /reprocessar', async () => {
+    it('reprocessar NF em erro_emissao → endpoint /reprocessar opera na NF existente → emitida', async () => {
       const { default: request } = await import('supertest');
 
-      // Criar caminhão fechado
       const { caminhaoId, pedidoVendaId, faturamentoContexto } =
         await criarCaminhaoComCargaFechada(app, allCookies(), { dataOperacao: '2027-02-21' });
 
@@ -515,34 +514,23 @@ describe('Faturamento F6a — e2e', () => {
       expect(emitirErroRes.body.statusNfse).toBe('erro_emissao');
       const notaId = emitirErroRes.body.id as string;
 
-      // O endpoint /reprocessar define a NF como pendente e depois chama emitir(),
-      // que tenta inserir uma nova NF. Como a NF agora está em pendente (coberta pelo índice
-      // único parcial uq_notas_fiscais_pedido_viva), o INSERT retorna ON CONFLICT → 409.
-      // Isso revela uma limitação conhecida no serviço: reprocessar deve ser usado via
-      // emitir() diretamente quando a NF já está em erro_emissao (o índice parcial exclui
-      // erro_emissao, permitindo novo INSERT).
+      // Reprocessar via endpoint — body vazio (caminhaoId derivado da NF no backend)
       nfseGateway().definirCenario('sucesso');
-
-      // Estratégia de reprocessamento suportada: chamar emitir() diretamente
-      // enquanto a NF está em erro_emissao (índice parcial a exclui → INSERT aceito)
-      const reemitirRes = await request(srv())
-        .post(`/operacao/faturamento/caminhoes/${caminhaoId}/emitir`)
+      const reprocessarRes = await request(srv())
+        .post(`/operacao/faturamento/notas/${notaId}/reprocessar`)
         .set('Cookie', faturamentoCookies)
-        .send({ pedidoVendaId, valor: faturamentoContexto.valor });
+        .send();
 
-      expect(reemitirRes.status).toBe(201);
-      expect(reemitirRes.body.statusNfse).toBe('emitida');
+      expect(reprocessarRes.status).toBe(201);
+      expect(reprocessarRes.body.statusNfse).toBe('emitida');
+      // Mesma NF — não criou nova
+      expect(reprocessarRes.body.id).toBe(notaId);
 
-      // Verificar que agora existem 2 NFs para o pedido: 1 em erro_emissao + 1 emitida
+      // Exatamente 1 NF no banco para o pedido (opera na existente)
       const nfs = await db().select().from(schema.notasFiscais)
         .where(and(eq(schema.notasFiscais.pedidoVendaId, pedidoVendaId), isNull(schema.notasFiscais.deletedAt)));
-      expect(nfs).toHaveLength(2);
-      expect(nfs.some(n => n.statusNfse === 'erro_emissao')).toBe(true);
-      expect(nfs.some(n => n.statusNfse === 'emitida')).toBe(true);
-
-      // Nota: o endpoint /reprocessar expõe uma limitação de design —
-      // veja o id notaId para referência nos logs
-      void notaId;
+      expect(nfs).toHaveLength(1);
+      expect(nfs[0]!.statusNfse).toBe('emitida');
     }, 90000);
 
     it('tentar cancelar NF em erro_emissao → 409 (transição inválida)', async () => {
@@ -583,7 +571,7 @@ describe('Faturamento F6a — e2e', () => {
       const res = await request(srv())
         .post('/operacao/faturamento/notas/00000000-0000-0000-0000-000000000099/reprocessar')
         .set('Cookie', faturamentoCookies)
-        .send({ caminhaoId: '00000000-0000-0000-0000-000000000000' });
+        .send();
       expect(res.status).toBe(409);
     });
 
@@ -609,7 +597,7 @@ describe('Faturamento F6a — e2e', () => {
       const res = await request(srv())
         .post(`/operacao/faturamento/notas/${notaId}/reprocessar`)
         .set('Cookie', faturamentoCookies)
-        .send({ caminhaoId });
+        .send();
       // assertTransicaoNfse lança Error → 500
       expect(res.status).toBe(500);
     }, 90000);

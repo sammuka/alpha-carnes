@@ -224,6 +224,7 @@ export function FaturamentoClient({ permissoes }: { permissoes: string[] }) {
     setErro(null);
     setSubmittingNota(notaId);
     try {
+      // body vazio — caminhaoId derivado da NF no backend
       const res = await fetch(`/api/operacao/faturamento/notas/${notaId}/reprocessar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -431,7 +432,7 @@ export function FaturamentoClient({ permissoes }: { permissoes: string[] }) {
                                 {emOperacao ? 'Cancelando…' : 'Cancelar'}
                               </Button>
                             )}
-                            {(nota.statusNfse === 'erro_emissao' || nota.statusNfse === 'erro_cancelamento') &&
+                            {nota.statusNfse === 'erro_emissao' &&
                               pode('FATURAMENTO_EMITIR') && (
                                 <Button
                                   size="sm"

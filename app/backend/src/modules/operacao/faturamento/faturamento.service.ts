@@ -360,13 +360,15 @@ export class FaturamentoService {
   /**
    * Reprocessa uma NF em erro_emissao: volta para pendente e tenta emissão novamente.
    * Opera na NF existente (não cria nova) — correto com o índice único parcial.
+   * caminhaoId derivado da própria NF — o controller não precisa receber do cliente.
    */
-  async reprocessar(notaFiscalId: string, caminhaoId: string, usuarioId: string) {
+  async reprocessar(notaFiscalId: string, usuarioId: string) {
     const nf = await this.db.select().from(notasFiscais)
       .where(and(eq(notasFiscais.id, notaFiscalId), isNull(notasFiscais.deletedAt)))
       .then(r => r[0] ?? null);
     if (!nf) throw new ConflictException('Nota fiscal não encontrada');
     assertTransicaoNfse(nf.statusNfse as StatusNfse, 'pendente');
+    const caminhaoId = nf.caminhaoId;
 
     // Fase A (tx curta): voltar para pendente
     await this.db.transaction(async (tx) => {
