@@ -40,6 +40,9 @@ import {
   type ConferenciaConcluidaPayload,
   type ExpedicaoFechadaPayload,
   type ExpedicaoReabertaPayload,
+  type NfseEmitidaPayload,
+  type NfseCanceladaPayload,
+  type NfseErroEmissaoPayload,
 } from './events/eventos';
 
 /** Socket autenticado: carrega o payload do usuário validado no handshake. */
@@ -273,6 +276,23 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.EXPEDICAO_REABERTA)
   handleExpedicaoReaberta(payload: ExpedicaoReabertaPayload): void {
     this.broadcast(EVENTOS.EXPEDICAO_REABERTA, payload, payload.dataOperacao);
+  }
+
+  // ── F6a — Faturamento / NFS-e ─────────────────────────────────────────────
+
+  @OnEvent(EVENTOS.NFSE_EMITIDA)
+  handleNfseEmitida(payload: NfseEmitidaPayload): void {
+    this.broadcast(EVENTOS.NFSE_EMITIDA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.NFSE_CANCELADA)
+  handleNfseCancelada(payload: NfseCanceladaPayload): void {
+    this.broadcast(EVENTOS.NFSE_CANCELADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.NFSE_ERRO_EMISSAO)
+  handleNfseErroEmissao(payload: NfseErroEmissaoPayload): void {
+    this.broadcast(EVENTOS.NFSE_ERRO_EMISSAO, payload, payload.dataOperacao);
   }
 
   private broadcast(evento: string, payload: unknown, dataOperacao: string): void {

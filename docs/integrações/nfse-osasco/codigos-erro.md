@@ -1,5 +1,11 @@
 # Códigos de Erro — EISS NFS-e Osasco
 
+> **Reconciliação (ADR-011, 2026-06-08):** Os campos EISS listados neste documento
+> (numero_nfse, codigo_verificacao, status_nfse, etc.) residem na tabela `notas_fiscais`,
+> não em `faturamentos`. A tabela `faturamentos` é o cabeçalho de consolidação (1 por
+> caminhão); `notas_fiscais` é o documento fiscal (N por faturamento, 1 por pedido).
+> Ver ADR-011 para detalhes.
+
 Referência de erros retornados pelo webservice EISS da Prefeitura de Osasco-SP, estratégia de
 retry e mapeamento para os status internos do sistema AlphaCarnes.
 
