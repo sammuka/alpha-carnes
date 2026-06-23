@@ -1,25 +1,5 @@
-import dynamic from 'next/dynamic';
 import { AlphaLogo } from '@/components/ui/alpha-logo';
-
-const LoginFormClient = dynamic(
-  () => import('./login-form-client').then((m) => m.LoginFormClient),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="w-full max-w-[400px] animate-pulse space-y-6">
-        <div className="mb-10 space-y-2">
-          <div className="h-8 w-48 rounded bg-muted" />
-          <div className="h-4 w-full rounded bg-muted" />
-        </div>
-        <div className="space-y-4">
-          <div className="h-12 rounded bg-muted" />
-          <div className="h-12 rounded bg-muted" />
-        </div>
-        <div className="h-12 rounded bg-muted" />
-      </div>
-    ),
-  },
-);
+import { LoginFormShell } from './login-form-shell';
 
 export default function LoginPage() {
   return (
@@ -57,7 +37,7 @@ export default function LoginPage() {
           <h1 className="text-lg font-bold text-foreground">AlphaCarnes</h1>
         </div>
 
-        <LoginFormClient />
+        <LoginFormShell />
       </div>
     </main>
   );
