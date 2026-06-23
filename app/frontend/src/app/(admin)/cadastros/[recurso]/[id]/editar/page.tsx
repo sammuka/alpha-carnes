@@ -25,7 +25,14 @@ export default async function EditarCadastroPage(props: {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-foreground">Editar — {config.titulo}</h1>
-      <CadastroForm config={config} registro={data} />
+      <CadastroForm config={withoutSchema(config)} registro={data} />
     </div>
   );
+}
+
+function withoutSchema(config: typeof CADASTROS[string]) {
+  // schema é Zod — não serializável para Client Component
+  const { schema: _omitSchema, ...serializableConfig } = config;
+  void _omitSchema;
+  return serializableConfig;
 }

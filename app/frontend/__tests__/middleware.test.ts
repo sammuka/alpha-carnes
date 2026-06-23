@@ -63,13 +63,16 @@ describe('middleware', () => {
     expect(res.status).not.toBe(307);
   });
 
-  it('config.matcher inclui rotas /admin e exclui /api', () => {
+  it('config.matcher cobre todas as rotas e exclui /api públicos', () => {
     expect(middlewareConfig.matcher).toBeDefined();
     const matchers = Array.isArray(middlewareConfig.matcher)
       ? middlewareConfig.matcher
       : [middlewareConfig.matcher];
-    // Deve incluir algo para /admin
     const matcherStr = matchers.join(',');
-    expect(matcherStr).toMatch(/admin/);
+    // O matcher único cobre tudo (inclui /admin implicitamente) excluindo estáticos e APIs públicas
+    expect(matcherStr).toMatch(/api\/auth\/login/);
+    expect(matcherStr).toMatch(/_next/);
+    // Deve ter exatamente um matcher
+    expect(matchers).toHaveLength(1);
   });
 });

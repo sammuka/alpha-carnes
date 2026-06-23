@@ -1,5 +1,12 @@
 // Tipos compartilhados do domínio operacional (F4a — Recebimento + Divergências).
 
+export interface PaginadoRecebimento {
+  data: RecebimentoResumo[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export const TIPOS_DIVERGENCIA = [
   'quantidade_menor',
   'quantidade_maior',
@@ -67,6 +74,9 @@ export const MOTIVOS_CAPTURA_MANUAL = [
   'outro',
 ] as const;
 export type MotivoCapturaManual = (typeof MOTIVOS_CAPTURA_MANUAL)[number];
+
+export const DESTINOS_SEM_COBERTURA = ['sobra', 'analise', 'corte', 'divergencia'] as const;
+export type DestinoSemCobertura = (typeof DESTINOS_SEM_COBERTURA)[number];
 
 export type StatusDispositivo = 'disponivel' | 'instavel' | 'indisponivel';
 

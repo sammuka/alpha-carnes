@@ -1,16 +1,70 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: oklch(55% 0.2 240);
-  --color-primary-foreground: oklch(98% 0.01 240);
-  --color-background: oklch(98% 0.005 240);
-  --color-foreground: oklch(15% 0.01 240);
-  --color-card: oklch(100% 0 0);
-  --color-card-foreground: oklch(15% 0.01 240);
-  --color-border: oklch(88% 0.01 240);
-  --color-input: oklch(88% 0.01 240);
-  --color-muted: oklch(92% 0.01 240);
-  --color-muted-foreground: oklch(55% 0.01 240);
-  --color-destructive: oklch(55% 0.22 25);
-  --radius: 0.5rem;
+  /* Fonte */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* shadcn compat — mapeados para paleta AlphaCarnes */
+  --color-background:         oklch(97% 0.005 240);
+  --color-foreground:         oklch(13% 0.02 260);
+  --color-card:               oklch(100% 0 0);
+  --color-card-foreground:    oklch(13% 0.02 260);
+  --color-popover:            oklch(100% 0 0);
+  --color-popover-foreground: oklch(13% 0.02 260);
+  --color-primary:            oklch(55% 0.22 260);
+  --color-primary-foreground: oklch(99% 0.005 240);
+  --color-secondary:          oklch(94% 0.01 240);
+  --color-secondary-foreground: oklch(13% 0.02 260);
+  --color-muted:              oklch(94% 0.007 240);
+  --color-muted-foreground:   oklch(52% 0.025 250);
+  --color-accent:             oklch(94% 0.01 240);
+  --color-accent-foreground:  oklch(13% 0.02 260);
+  --color-destructive:        oklch(53% 0.22 25);
+  --color-destructive-foreground: oklch(99% 0.005 240);
+  --color-border:             oklch(90% 0.01 240);
+  --color-input:              oklch(90% 0.01 240);
+  --color-ring:               oklch(55% 0.22 260);
+  --color-chart-1:            oklch(55% 0.22 260);
+  --color-chart-2:            oklch(60% 0.15 145);
+  --color-chart-3:            oklch(68% 0.15 75);
+  --color-chart-4:            oklch(53% 0.22 25);
+  --color-chart-5:            oklch(45% 0.02 250);
+
+  /* Tokens legados AlphaCarnes */
+  --color-primary-dark:       oklch(35% 0.18 265);
+  --color-destructive-bg:     oklch(97% 0.04 25);
+  --color-success:            oklch(55% 0.17 145);
+  --color-success-bg:         oklch(96% 0.05 145);
+  --color-warning:            oklch(68% 0.15 75);
+  --color-warning-bg:         oklch(97% 0.05 75);
+  --color-info:               oklch(55% 0.22 260);
+  --color-info-bg:            oklch(96% 0.04 260);
+
+  /* Sidebar */
+  --color-sidebar-bg:         oklch(16% 0.025 255);
+  --color-sidebar-text:       oklch(70% 0.02 240);
+  --color-sidebar-text-muted: oklch(45% 0.02 240);
+  --color-sidebar-border:     oklch(22% 0.022 255);
+  --color-sidebar-item-hover: oklch(21% 0.025 255);
+  --color-sidebar-item-active:oklch(55% 0.22 260);
+  --color-sidebar-active-bg:  oklch(26% 0.06 260);
+
+  /* Raios */
+  --radius:    0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
 }

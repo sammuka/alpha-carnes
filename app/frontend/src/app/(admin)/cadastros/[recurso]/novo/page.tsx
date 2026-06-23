@@ -17,7 +17,14 @@ export default async function NovoCadastroPage(props: { params: Promise<{ recurs
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-foreground">Novo — {config.titulo}</h1>
-      <CadastroForm config={config} />
+      <CadastroForm config={withoutSchema(config)} />
     </div>
   );
+}
+
+function withoutSchema(config: typeof CADASTROS[string]) {
+  // schema é Zod — não serializável para Client Component
+  const { schema: _omitSchema, ...serializableConfig } = config;
+  void _omitSchema;
+  return serializableConfig;
 }

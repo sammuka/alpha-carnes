@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { type Caminhao, type StatusCaminhao } from '@/lib/operacao';
 import { Button } from '@/components/ui/button';
-
-// HOJE é calculado dentro do componente via useState para evitar bug à meia-noite
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 const COR_STATUS: Record<StatusCaminhao, string> = {
   planejado: 'bg-muted text-muted-foreground',
@@ -33,7 +33,7 @@ function StatusBadge({ status }: { status: StatusCaminhao }) {
 export function ExpedicaoClient({ permissoes }: { permissoes: string[] }) {
   const pode = (p: string) => permissoes.includes(p);
 
-  const [hoje] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dataOperacao, setDataOperacao] = useState(() => new Date().toISOString().slice(0, 10));
   const [caminhoes, setCaminhoes] = useState<Caminhao[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,8 +42,9 @@ export function ExpedicaoClient({ permissoes }: { permissoes: string[] }) {
 
   const carregarCaminhoes = useCallback(async () => {
     setErro(null);
+    setLoading(true);
     try {
-      const res = await fetch(`/api/operacao/expedicao/caminhoes?dataOperacao=${encodeURIComponent(hoje)}`, {
+      const res = await fetch(`/api/operacao/expedicao/caminhoes?dataOperacao=${encodeURIComponent(dataOperacao)}`, {
         cache: 'no-store',
       });
       if (!res.ok) {
@@ -57,7 +58,7 @@ export function ExpedicaoClient({ permissoes }: { permissoes: string[] }) {
     } finally {
       setLoading(false);
     }
-  }, [hoje]);
+  }, [dataOperacao]);
 
   useEffect(() => {
     void carregarCaminhoes();
@@ -79,13 +80,13 @@ export function ExpedicaoClient({ permissoes }: { permissoes: string[] }) {
       }
     };
     const desconectar = conectarRealtime({
-      rooms: ['dashboard', `operacao:${hoje}`],
+      rooms: ['dashboard', `operacao:${dataOperacao}`],
       onMessage,
       onReconnect: () => void carregarCaminhoes(),
       onStatus: setRealtimeStatus,
     });
     return desconectar;
-  }, [carregarCaminhoes, hoje]);
+  }, [carregarCaminhoes, dataOperacao]);
 
   async function abrirCarga(caminhaoId: string) {
     setErro(null);
@@ -125,6 +126,16 @@ export function ExpedicaoClient({ permissoes }: { permissoes: string[] }) {
         </span>
       </div>
 
+      <div className="flex max-w-xs flex-col gap-1">
+        <Label htmlFor="data-operacao">Data operacional</Label>
+        <Input
+          id="data-operacao"
+          type="date"
+          value={dataOperacao}
+          onChange={(e) => setDataOperacao(e.target.value)}
+        />
+      </div>
+
       {erro && (
         <div
           role="alert"
@@ -142,7 +153,7 @@ export function ExpedicaoClient({ permissoes }: { permissoes: string[] }) {
 
       {!loading && caminhoes !== null && caminhoes.length === 0 && (
         <p className="text-sm text-muted-foreground" data-testid="sem-caminhoes">
-          Nenhum caminhão programado para hoje ({hoje}).
+          Nenhum caminhão programado para {dataOperacao}.
         </p>
       )}
 

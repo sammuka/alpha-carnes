@@ -1,7 +1,6 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
 import DisponibilidadePage from '../src/app/(admin)/comercial/disponibilidade/page';
 
-// Mock do WebSocket: captura a instância para simular mensagens do servidor.
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
   onopen: (() => void) | null = null;
@@ -48,7 +47,7 @@ describe('DisponibilidadePage', () => {
 
   it('renderiza o saldo do dia (smoke + fetch inicial)', async () => {
     render(<DisponibilidadePage />);
-    expect(screen.getByText('Disponibilidade do dia')).toBeInTheDocument();
+    expect(screen.getByText('Disponibilidade virtual')).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByTestId('disp-d1-disponivel')).toHaveTextContent('40.000');
     });

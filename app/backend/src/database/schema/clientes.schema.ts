@@ -1,11 +1,13 @@
 import { sql } from 'drizzle-orm';
 import { check, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { representantes } from './representantes.schema';
 
 // ── clientes ──────────────────────────────────────────────────────────────────
 export const clientes = pgTable(
   'clientes',
   {
     id:                      uuid('id').primaryKey().default(sql`uuidv7()`),
+    representanteId:         uuid('representante_id').references(() => representantes.id),
     codigo:                  text('codigo').notNull(),
     razaoSocial:             text('razao_social').notNull(),
     nomeFantasia:            text('nome_fantasia'),

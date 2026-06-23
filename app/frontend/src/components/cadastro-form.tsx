@@ -7,10 +7,12 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { CadastroConfig } from '@/lib/cadastros-config';
+import { CADASTROS, type CadastroConfig } from '@/lib/cadastros-config';
+
+export type CadastroFormConfig = Omit<CadastroConfig, 'schema'>;
 
 interface CadastroFormProps {
-  config: CadastroConfig;
+  config: CadastroFormConfig;
   /** Quando informado, o formulário edita o registro (PATCH); senão cria (POST). */
   registro?: Record<string, unknown> & { id: string };
 }
@@ -18,13 +20,14 @@ interface CadastroFormProps {
 export function CadastroForm({ config, registro }: CadastroFormProps) {
   const router = useRouter();
   const [erro, setErro] = useState<string | null>(null);
+  const schema = CADASTROS[config.recurso]?.schema;
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FieldValues>({
-    resolver: zodResolver(config.schema),
+    resolver: schema ? zodResolver(schema) : undefined,
     defaultValues: registro ?? {},
   });
 

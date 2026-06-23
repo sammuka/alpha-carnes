@@ -71,6 +71,23 @@ export class ComprasProgramadasService {
 
   async criar(dto: CreateCompraProgramadaDto, usuarioId: string): Promise<CompraComItens> {
     return this.db.transaction(async (tx) => {
+      const compraExistenteNoDia = await tx
+        .select({ id: comprasProgramadas.id })
+        .from(comprasProgramadas)
+        .where(
+          and(
+            eq(comprasProgramadas.dataOperacao, dto.dataOperacao),
+            isNull(comprasProgramadas.deletedAt),
+            ne(comprasProgramadas.status, 'cancelada'),
+          ),
+        )
+        .limit(1)
+        .then((r) => r[0] ?? null);
+
+      if (compraExistenteNoDia) {
+        throw new ConflictException('Já existe compra programada ativa para esta data');
+      }
+
       const criada = primeiroOuFalha(
         await tx
           .insert(comprasProgramadas)

@@ -1,95 +1,40 @@
 import { redirect } from 'next/navigation';
 import { getMe } from '@/lib/auth';
-
-// Itens de menu dos cadastros base — cada um exige a permissão de leitura correspondente.
-const CADASTROS_MENU = [
-  { recurso: 'clientes', rotulo: 'Clientes', permissao: 'CLIENTES_LER' },
-  { recurso: 'fornecedores', rotulo: 'Fornecedores', permissao: 'FORNECEDORES_LER' },
-  { recurso: 'itens-compra', rotulo: 'Itens de Compra', permissao: 'ITENS_COMPRA_LER' },
-  { recurso: 'itens-comerciais', rotulo: 'Itens Comerciais', permissao: 'ITENS_COMERCIAIS_LER' },
-];
+import { filtrarMenuPorPermissoes } from '@/lib/menu-v2';
+import { AppSidebar, type SidebarUser } from '@/components/ui/app-sidebar';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getMe();
   if (!user) redirect('/login');
 
+  const sections = filtrarMenuPorPermissoes(user.permissoes);
+
+  const sidebarUser: SidebarUser = {
+    nome: user.nome,
+    perfil: user.perfis?.[0] ?? 'Usuário',
+    escopo: user.perfis.length > 1 ? `${user.perfis.length} perfis` : undefined,
+    inicial: user.nome.charAt(0).toUpperCase(),
+  };
+
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-card p-4">
-        <h2 className="mb-6 text-lg font-bold text-foreground">AlphaCarnes</h2>
-        <nav className="space-y-1">
-          <a href="/admin" className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">
-            Dashboard
-          </a>
-          {/* Cadastros base (F2) — cada link é gated pela permissão de leitura correspondente */}
-          {CADASTROS_MENU.map(
-            (item) =>
-              user.permissoes.includes(item.permissao) && (
-                <a
-                  key={item.recurso}
-                  href={`/cadastros/${item.recurso}`}
-                  className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
-                >
-                  {item.rotulo}
-                </a>
-              ),
-          )}
-          {/* Operação (F4a) — gated pela permissão de leitura de recebimento */}
-          {user.permissoes.includes('RECEBIMENTO_LER') && (
-            <a
-              href="/operacao/recebimento"
-              className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+      <AppSidebar user={sidebarUser} sections={sections} />
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-10 flex h-14 items-center justify-end border-b border-border bg-card px-6">
+          <div className="flex items-center gap-3">
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
+              aria-hidden="true"
             >
-              Recebimento
-            </a>
-          )}
-          {/* Operação (F4b) — gated pela permissão de leitura de pesagem */}
-          {user.permissoes.includes('PESAGEM_LER') && (
-            <a
-              href="/operacao/pesagem"
-              className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
-            >
-              Pesagem
-            </a>
-          )}
-          {/* Operação (F4c) — gated por CORTE_GERENCIAR */}
-          {user.permissoes.includes('CORTE_GERENCIAR') && (
-            <a
-              href="/operacao/corte"
-              className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
-            >
-              Corte / Transformação
-            </a>
-          )}
-          {/* Operação (F5) — gated por EXPEDICAO_GERENCIAR */}
-          {user.permissoes.includes('EXPEDICAO_GERENCIAR') && (
-            <a
-              href="/operacao/expedicao"
-              className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
-            >
-              Expedição
-            </a>
-          )}
-          {/* Operação (F6a) — gated por FATURAMENTO_LER */}
-          {user.permissoes.includes('FATURAMENTO_LER') && (
-            <a
-              href="/operacao/faturamento"
-              className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
-            >
-              Faturamento
-            </a>
-          )}
-          {/* Gating de menu por permissão efetiva — vinda de /auth/me (backend) */}
-          {user.permissoes.includes('AUDITORIA_VISUALIZAR') && (
-            <a href="/admin/auditoria" className="block rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">
-              Auditoria
-            </a>
-          )}
-        </nav>
-      </aside>
-      {/* Main */}
-      <main className="flex-1 p-6">{children}</main>
+              {user.nome.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-sm font-medium text-foreground">{user.nome}</span>
+          </div>
+        </header>
+
+        <main className="flex-1 p-6">{children}</main>
+      </div>
     </div>
   );
 }

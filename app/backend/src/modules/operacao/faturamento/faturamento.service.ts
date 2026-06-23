@@ -25,6 +25,7 @@ import { EVENTOS } from '../../../realtime/events/eventos';
 import { assertTransicaoNfse, type StatusNfse } from './transicoes-nfse';
 import type { EmitirNfseDto, CancelarNfseDto } from './dto/faturamento.dto';
 import { ConsolidacaoService } from './consolidacao.service';
+import { LiberacaoService } from '../expedicao/liberacao.service';
 
 const RETRY_MAX = 3;
 const RETRY_DELAYS_MS = [5_000, 10_000, 20_000];
@@ -43,6 +44,7 @@ export class FaturamentoService {
     private readonly auditoria: AuditoriaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly consolidacaoService: ConsolidacaoService,
+    private readonly liberacaoService: LiberacaoService,
   ) {}
 
   private get db() { return this.drizzle.db; }
@@ -155,6 +157,7 @@ export class FaturamentoService {
         pedidoVendaId: ctx.pedidoVendaId, numeroNfse: notaAtualizada.numeroNfse,
         dataOperacao: ctx.dataOperacao,
       });
+      await this.liberacaoService.sincronizarPosEmissao(ctx.caminhaoId, ctx.usuarioId);
     } else {
       assertTransicaoNfse('pendente', 'erro_emissao');
       const mensagemErro = resultado?.mensagemErro ?? erroFinal?.message ?? 'Erro desconhecido';
@@ -352,6 +355,7 @@ export class FaturamentoService {
         caminhaoId: nf.caminhaoId, notaFiscalId,
         dataOperacao: caminhao?.dataOperacao ?? '',
       });
+      await this.liberacaoService.sincronizarPosEmissao(nf.caminhaoId, usuarioId);
     }
 
     return nfAtualizada;

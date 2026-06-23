@@ -15,6 +15,7 @@ import {
   type CorteDetalhe,
   type StatusDispositivos,
   type StatusDispositivo,
+  type SugestaoScored,
 } from '@/lib/operacao';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +36,12 @@ function Badge({ rotulo, status }: { rotulo: string; status?: StatusDispositivo 
   );
 }
 
+interface SugestaoSubitem {
+  subitemId: string;
+  sugestao: SugestaoScored | null;
+  compativeis: SugestaoScored[];
+}
+
 export function CorteClient({ permissoes }: { permissoes: string[] }) {
   const pode = (p: string) => permissoes.includes(p);
 
@@ -47,6 +54,8 @@ export function CorteClient({ permissoes }: { permissoes: string[] }) {
   const [erro, setErro] = useState<string | null>(null);
   const [status, setStatus] = useState<'conectado' | 'desconectado'>('desconectado');
   const [submitting, setSubmitting] = useState(false);
+  const [itemComercialSubitemId, setItemComercialSubitemId] = useState('');
+  const [pedidoItemPorSubitem, setPedidoItemPorSubitem] = useState<Record<string, string>>({});
 
   // Pesar subitem — campos de captura manual
   const [manualAberto, setManualAberto] = useState<string | null>(null); // subitemId ou null
@@ -130,9 +139,12 @@ export function CorteClient({ permissoes }: { permissoes: string[] }) {
   const adicionarSubitem = async () => {
     if (!corte) return;
     const s = await chamar<Subitem>(`/api/operacao/corte/${corte.transformacao.id}/subitens`, {
-      itemComercialId: corte.transformacao.pecaOrigemId, // placeholder — operador ajusta
+      itemComercialId: itemComercialSubitemId,
     });
-    if (s) await carregarDetalhe(corte.transformacao.id);
+    if (s) {
+      setItemComercialSubitemId('');
+      await carregarDetalhe(corte.transformacao.id);
+    }
   };
 
   const pesarAuto = async (subitemId: string) => {
@@ -158,6 +170,32 @@ export function CorteClient({ permissoes }: { permissoes: string[] }) {
   const associar = async (subitemId: string, pedidoVendaItemId: string) => {
     const s = await chamar<Subitem>(`/api/operacao/corte/subitens/${subitemId}/associar`, { pedidoVendaItemId });
     if (s && corte) await carregarDetalhe(corte.transformacao.id);
+  };
+
+  const sugerirSubitem = async (subitemId: string) => {
+    setErro(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/operacao/corte/subitens/${subitemId}/sugestao`, { cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErro((data as { message?: string }).message ?? 'Falha ao sugerir pedido');
+        return;
+      }
+      const sugestao = data as SugestaoSubitem;
+      if (!sugestao.sugestao) {
+        setErro('Nenhum pedido compatível em aberto para este subitem');
+        return;
+      }
+      setPedidoItemPorSubitem((prev) => ({
+        ...prev,
+        [subitemId]: sugestao.sugestao!.pedidoVendaItemId,
+      }));
+    } catch {
+      setErro('Erro de conexão');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const reetiquetar = async (subitemId: string) => {
@@ -302,9 +340,29 @@ export function CorteClient({ permissoes }: { permissoes: string[] }) {
                   </div>
                 )}
                 {s.statusSubitem === 'pesado' && pode('CORTE_GERENCIAR') && (
-                  <Button size="sm" onClick={() => associar(s.id, s.pedidoVendaItemId ?? '')} disabled={submitting}>
-                    Associar
-                  </Button>
+                  <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                    <Input
+                      aria-label={`Item do pedido ${s.id}`}
+                      placeholder="Pedido venda item (id)"
+                      value={pedidoItemPorSubitem[s.id] ?? ''}
+                      onChange={(e) =>
+                        setPedidoItemPorSubitem((prev) => ({
+                          ...prev,
+                          [s.id]: e.target.value,
+                        }))
+                      }
+                    />
+                    <Button size="sm" variant="outline" onClick={() => sugerirSubitem(s.id)} disabled={submitting}>
+                      Sugerir pedido
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => associar(s.id, pedidoItemPorSubitem[s.id] ?? '')}
+                      disabled={submitting || !pedidoItemPorSubitem[s.id]}
+                    >
+                      Associar
+                    </Button>
+                  </div>
                 )}
                 {s.statusSubitem === 'associado' && pode('ETIQUETA_GERENCIAR') && !s.etiquetaAtual && (
                   <Button size="sm" onClick={() => reetiquetar(s.id)} disabled={submitting}>
@@ -317,8 +375,17 @@ export function CorteClient({ permissoes }: { permissoes: string[] }) {
           </div>
 
           {pode('CORTE_GERENCIAR') && corte.transformacao.statusTransformacao !== 'concluida' && corte.transformacao.statusTransformacao !== 'cancelada' && (
-            <div className="flex gap-2">
-              <Button onClick={adicionarSubitem} variant="outline" disabled={submitting}>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-72 flex-1">
+                <Label htmlFor="itemComercialSubitem">Item comercial do subitem</Label>
+                <Input
+                  id="itemComercialSubitem"
+                  placeholder="UUID do item comercial"
+                  value={itemComercialSubitemId}
+                  onChange={(e) => setItemComercialSubitemId(e.target.value)}
+                />
+              </div>
+              <Button onClick={adicionarSubitem} variant="outline" disabled={submitting || !itemComercialSubitemId}>
                 + Adicionar subitem
               </Button>
               <Button

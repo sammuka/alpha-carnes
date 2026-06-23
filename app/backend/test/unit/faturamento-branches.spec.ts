@@ -271,12 +271,17 @@ describe('FaturamentoService — catch de erro de banco', () => {
       }),
     };
 
+    const liberacaoService = {
+      sincronizarStatusPosEmissao: jest.fn().mockResolvedValue(undefined),
+    };
+
     return new FaturamentoService(
       { db: dbObj } as never,
       gateway as never,
       auditoria as never,
       emitter,
       consolidacaoService as never,
+      liberacaoService as never,
     );
   }
 

@@ -37,8 +37,6 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
 
 export const config = {
   matcher: [
-    '/admin/:path*',
-    // Excluir arquivos estáticos e APIs públicas
-    '/((?!_next/static|_next/image|favicon.ico|api/auth/login|api/auth/logout).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/auth/login|api/auth/logout|.*\\.png$|.*\\.jpg$|.*\\.svg$|.*\\.ico$).*)',
   ],
 };

@@ -32,6 +32,8 @@ export const EVENTOS = {
   CONFERENCIA_CONCLUIDA: 'conferencia_concluida',
   EXPEDICAO_FECHADA: 'expedicao_fechada',
   EXPEDICAO_REABERTA: 'expedicao_reaberta',
+  EXPEDICAO_LIBERADA_FATURAMENTO: 'expedicao_liberada_faturamento',
+  EXPEDICAO_LIBERADA_SAIDA: 'expedicao_liberada_saida',
   // ── F6a — Faturamento / NFS-e ─────────────────────────────────────────────
   NFSE_EMITIDA: 'nfse_emitida',
   NFSE_CANCELADA: 'nfse_cancelada',

@@ -18,10 +18,15 @@ import { FornecedoresModule } from './modules/cadastros/fornecedores/fornecedore
 import { ItensCompraModule } from './modules/cadastros/itens-compra/itens-compra.module';
 import { ItensComerciaisModule } from './modules/cadastros/itens-comerciais/itens-comerciais.module';
 import { RegrasDesdobramentoModule } from './modules/cadastros/regras-desdobramento/regras-desdobramento.module';
+import { ProdutosModule } from './modules/cadastros/produtos/produtos.module';
+import { RepresentantesModule } from './modules/cadastros/representantes/representantes.module';
+import { RotasModule } from './modules/cadastros/rotas/rotas.module';
 import { ProntidaoModule } from './modules/cadastros/prontidao/prontidao.module';
 import { ParametrosModule } from './modules/parametros/parametros.module';
 import { ComercialModule } from './modules/comercial/comercial.module';
 import { OperacaoModule } from './modules/operacao/operacao.module';
+import { DashboardModule } from './modules/gestao/dashboard/dashboard.module';
+import { AuditoriaConsultaModule } from './modules/auditoria/auditoria.module';
 import { AuditoriaModule } from './common/auditoria/auditoria.module';
 import { AuditoriaInterceptor } from './common/interceptors/auditoria.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -60,11 +65,16 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     FornecedoresModule,
     ItensCompraModule,
     ItensComerciaisModule,
+    ProdutosModule,
+    RepresentantesModule,
+    RotasModule,
     RegrasDesdobramentoModule,
     ProntidaoModule,
     ParametrosModule,
     ComercialModule,
     OperacaoModule,
+    DashboardModule,
+    AuditoriaConsultaModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { Button } from '@/components/ui/button';
 import type { ConsolidacaoResposta, NotaFiscal, StatusNfse } from '@/lib/faturamento';
+import type { Caminhao } from '@/lib/operacao';
 
 // ── Badges ────────────────────────────────────────────────────────────────────
 
@@ -126,7 +127,15 @@ function FormEmissao({ caminhaoId, pedidoVendaId, onSuccess }: FormEmissaoProps)
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export function FaturamentoClient({ permissoes }: { permissoes: string[] }) {
+export function FaturamentoClient({
+  permissoes,
+  titulo = 'Faturamento',
+  mostrarListaCaminhoes = false,
+}: {
+  permissoes: string[];
+  titulo?: string;
+  mostrarListaCaminhoes?: boolean;
+}) {
   const pode = (p: string) => permissoes.includes(p);
 
   const [hoje] = useState(() => new Date().toISOString().slice(0, 10));
@@ -137,7 +146,24 @@ export function FaturamentoClient({ permissoes }: { permissoes: string[] }) {
   const [realtimeStatus, setRealtimeStatus] = useState<'conectado' | 'desconectado'>('desconectado');
   const [caminhaoAtivo, setCaminhaoAtivo] = useState<string | null>(null);
 
-  const [submittingNota, setSubmittingNota] = useState<string | null>(null); // notaId em operação
+  const [submittingNota, setSubmittingNota] = useState<string | null>(null);
+  const [motivosCancelamento, setMotivosCancelamento] = useState<Record<string, string>>({});
+  const [caminhoesDia, setCaminhoesDia] = useState<Caminhao[]>([]);
+  const [liberando, setLiberando] = useState(false);
+
+  const carregarCaminhoesDia = useCallback(async () => {
+    if (!mostrarListaCaminhoes) return;
+    try {
+      const res = await fetch(`/api/operacao/expedicao/caminhoes?dataOperacao=${encodeURIComponent(hoje)}`);
+      if (res.ok) setCaminhoesDia((await res.json()) as Caminhao[]);
+    } catch {
+      /* lista auxiliar — falha silenciosa */
+    }
+  }, [hoje, mostrarListaCaminhoes]);
+
+  useEffect(() => {
+    void carregarCaminhoesDia();
+  }, [carregarCaminhoesDia]);
 
   // Carrega a consolidação do caminhão selecionado
   const carregar = useCallback(async (id?: string) => {
@@ -196,22 +222,62 @@ export function FaturamentoClient({ permissoes }: { permissoes: string[] }) {
     return desconectar;
   }, [carregar, caminhaoAtivo, hoje]);
 
+  async function liberarFaturamento() {
+    if (!caminhaoAtivo) return;
+    setErro(null);
+    setLiberando(true);
+    try {
+      const res = await fetch(`/api/operacao/expedicao/caminhoes/${caminhaoAtivo}/liberar-faturamento`, {
+        method: 'POST',
+        body: '{}',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErro((data as { message?: string }).message ?? 'Falha ao liberar faturamento');
+        return;
+      }
+      await carregarCaminhoesDia();
+      await carregar();
+    } catch {
+      setErro('Erro de conexão');
+    } finally {
+      setLiberando(false);
+    }
+  }
+
+  function selecionarCaminhao(id: string) {
+    setCaminhaoAtivo(id);
+    setCaminhaoId(id);
+    setConsolidacao(null);
+    void carregar(id);
+  }
+
   // ── Ações por nota fiscal ──────────────────────────────────────────────────
 
   async function cancelarNota(notaId: string) {
+    const motivo = motivosCancelamento[notaId]?.trim();
+    if (!motivo) {
+      setErro('Informe o motivo do cancelamento da NFS-e.');
+      return;
+    }
     setErro(null);
     setSubmittingNota(notaId);
     try {
       const res = await fetch(`/api/operacao/faturamento/notas/${notaId}/cancelar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: '{}',
+        body: JSON.stringify({ motivo }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setErro((data as { message?: string }).message ?? 'Falha ao cancelar NFS-e');
         return;
       }
+      setMotivosCancelamento((prev) => {
+        const next = { ...prev };
+        delete next[notaId];
+        return next;
+      });
       await carregar();
     } catch {
       setErro('Erro de conexão');
@@ -255,7 +321,7 @@ export function FaturamentoClient({ permissoes }: { permissoes: string[] }) {
     <div className="space-y-6">
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Faturamento</h1>
+        <h1 className="text-2xl font-bold text-foreground">{titulo}</h1>
         {caminhaoAtivo && (
           <span
             className={`rounded-full px-3 py-1 text-xs font-medium ${
@@ -270,7 +336,32 @@ export function FaturamentoClient({ permissoes }: { permissoes: string[] }) {
         )}
       </div>
 
+      {/* Lista de caminhões do dia (pré-faturamento) */}
+      {mostrarListaCaminhoes && caminhoesDia.length > 0 && (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {caminhoesDia
+            .filter((c) => ['fechado', 'liberado_faturamento', 'faturado'].includes(c.statusCaminhao))
+            .map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => selecionarCaminhao(c.id)}
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  caminhaoAtivo === c.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+                }`}
+              >
+                <p className="font-semibold text-foreground">{c.placa}</p>
+                <p className="text-xs text-muted-foreground">{c.motorista}</p>
+                <p className="mt-1 text-xs capitalize text-muted-foreground">
+                  {c.statusCaminhao.replace(/_/g, ' ')}
+                </p>
+              </button>
+            ))}
+        </div>
+      )}
+
       {/* Formulário de seleção de caminhão */}
+      {!mostrarListaCaminhoes && (
       <form onSubmit={consolidar} className="flex flex-wrap items-end gap-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="caminhao-id">
@@ -289,6 +380,14 @@ export function FaturamentoClient({ permissoes }: { permissoes: string[] }) {
           {loading ? 'Consolidando…' : 'Consolidar'}
         </Button>
       </form>
+      )}
+
+      {mostrarListaCaminhoes && caminhaoAtivo && consolidacao?.caminhao.statusCaminhao === 'fechado' &&
+        pode('FATURAMENTO_GERENCIAR') && (
+        <Button onClick={() => void liberarFaturamento()} disabled={liberando}>
+          {liberando ? 'Liberando…' : 'Liberar para Faturamento'}
+        </Button>
+      )}
 
       {/* Erro global */}
       {erro && (
@@ -422,15 +521,36 @@ export function FaturamentoClient({ permissoes }: { permissoes: string[] }) {
                           {/* Ações por NF */}
                           <div className="flex flex-wrap gap-2">
                             {nota.statusNfse === 'emitida' && pode('NFSE_CANCELAR') && (
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => void cancelarNota(nota.id)}
-                                disabled={emOperacao}
-                                data-testid="btn-cancelar"
-                              >
-                                {emOperacao ? 'Cancelando…' : 'Cancelar'}
-                              </Button>
+                              <div className="flex w-full flex-wrap items-end gap-2">
+                                <div>
+                                  <label className="mb-1 block text-xs text-muted-foreground" htmlFor={`motivo-cancelar-${nota.id}`}>
+                                    Motivo do cancelamento
+                                  </label>
+                                  <input
+                                    id={`motivo-cancelar-${nota.id}`}
+                                    type="text"
+                                    value={motivosCancelamento[nota.id] ?? ''}
+                                    onChange={(e) =>
+                                      setMotivosCancelamento((prev) => ({
+                                        ...prev,
+                                        [nota.id]: e.target.value,
+                                      }))
+                                    }
+                                    className="w-64 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    placeholder="Motivo auditável"
+                                    disabled={emOperacao}
+                                  />
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => void cancelarNota(nota.id)}
+                                  disabled={emOperacao || !motivosCancelamento[nota.id]?.trim()}
+                                  data-testid="btn-cancelar"
+                                >
+                                  {emOperacao ? 'Cancelando…' : 'Cancelar'}
+                                </Button>
+                              </div>
                             )}
                             {nota.statusNfse === 'erro_emissao' &&
                               pode('NFSE_EMITIR') && (
