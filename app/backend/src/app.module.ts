@@ -30,6 +30,7 @@ import { AuditoriaConsultaModule } from './modules/auditoria/auditoria.module';
 import { AuditoriaModule } from './common/auditoria/auditoria.module';
 import { AuditoriaInterceptor } from './common/interceptors/auditoria.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import type { IncomingMessage } from 'http';
 
 @Module({
   imports: [
@@ -39,7 +40,8 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
       pinoHttp: {
         level: process.env.LOG_LEVEL ?? 'info',
         transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
-        genReqId: (req) => (req.headers['x-request-id'] as string) ?? crypto.randomUUID(),
+        genReqId: (req: IncomingMessage) =>
+          (req.headers['x-request-id'] as string | undefined) ?? crypto.randomUUID(),
         customProps: () => ({ context: 'HTTP' }),
       },
     }),
