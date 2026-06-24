@@ -6,6 +6,7 @@ import type { CriarUsuarioDto, PerfilComPermissoes, Usuario } from '@/lib/usuari
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -183,7 +184,10 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
                         </div>
                       </td>
                       <td className="py-4 text-center">
-                        <Badge variant={u.ativo ? 'default' : 'destructive'}>{u.ativo ? 'ATIVO' : 'INATIVO'}</Badge>
+                        <StatusPill
+                          variant={u.ativo ? 'expedido' : 'bloqueado'}
+                          label={u.ativo ? 'Ativo' : 'Inativo'}
+                        />
                       </td>
                       <td className="py-4 text-right">
                         {pode('USUARIOS_GERENCIAR') && (

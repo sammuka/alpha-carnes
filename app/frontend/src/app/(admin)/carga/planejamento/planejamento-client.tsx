@@ -1,12 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Layers, MapPin, MoveRight, Plus, Search, Truck } from 'lucide-react';
+import { Layers, MapPin, MapPinned, MoveRight, Plus, Search, Truck } from 'lucide-react';
 import type { PedidoVenda } from '@/lib/comercial';
 import type { Caminhao, CaminhaoDetalhe } from '@/lib/operacao';
-import { Badge } from '@/components/ui/badge';
+import { statusCaminhaoVariant } from '@/lib/status-ui';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -83,6 +85,8 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
     }
     return [...map.entries()];
   }, [pedidosSemCaminhao]);
+
+  const totalRotas = rotasAgrupadas.length;
 
   async function vincularPedido(caminhaoId: string, pedidoVendaId: string) {
     setErro(null);
@@ -190,6 +194,19 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
       {loading ? (
         <p className="text-sm text-muted-foreground">Carregando…</p>
       ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <KpiCard label="Caminhões montados" value={caminhoes.length} variant="primary" Icon={Truck} />
+            <KpiCard
+              label="Pedidos sem caminhão"
+              value={pedidosSemCaminhao.length}
+              sub={pedidosSemCaminhao.length > 0 ? 'Aguardando vínculo' : 'Todos vinculados'}
+              variant="warning"
+              Icon={Layers}
+            />
+            <KpiCard label="Rotas pendentes" value={totalRotas} variant="violet" Icon={MapPinned} />
+          </div>
+
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
@@ -216,7 +233,7 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-bold">{pedido.id.slice(0, 8)}…</span>
-                              <Badge variant="secondary">S/ Caminhão</Badge>
+                              <StatusPill variant="pendente" label="S/ Caminhão" />
                             </div>
                             <p className="text-xs text-muted-foreground">Prioridade {pedido.prioridade ?? '—'}</p>
                           </div>
@@ -263,35 +280,36 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
                 <Truck className="h-4 w-4 text-muted-foreground" />
                 Caminhões Montados
               </h2>
-              <Badge variant="secondary">{caminhoes.length} caminhões</Badge>
+              <StatusPill variant="recebido" label={`${caminhoes.length} caminhões`} />
             </div>
-            <div className="space-y-4 overflow-auto pr-2">
+            <div className="grid grid-cols-1 gap-3 overflow-auto pr-2 sm:grid-cols-2">
               {detalhes.map(({ caminhao, pedidos: peds }) => (
                 <Card key={caminhao.id} className="bg-muted/30">
-                  <CardHeader className="border-b bg-card pb-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                          <Truck className="h-5 w-5 text-primary" />
+                  <CardHeader className="border-b bg-card px-4 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                          <Truck className="h-4 w-4 text-primary" />
                         </div>
-                        <div>
-                          <CardTitle className="text-base">{caminhao.placa}</CardTitle>
-                          <p className="text-xs text-muted-foreground">
+                        <div className="min-w-0">
+                          <CardTitle className="truncate text-sm">{caminhao.placa}</CardTitle>
+                          <p className="truncate text-xs text-muted-foreground">
                             {caminhao.motorista} · {caminhao.rota ?? '—'}
                           </p>
                         </div>
                       </div>
-                      <Badge variant="outline" className="capitalize">
-                        {caminhao.statusCaminhao.replace(/_/g, ' ')}
-                      </Badge>
+                      <StatusPill
+                        variant={statusCaminhaoVariant(caminhao.statusCaminhao)}
+                        label={caminhao.statusCaminhao.replace(/_/g, ' ')}
+                      />
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-2 p-2">
+                  <CardContent className="space-y-1.5 p-2">
                     {peds.length === 0 && (
                       <p className="p-2 text-xs text-muted-foreground">Nenhum pedido vinculado.</p>
                     )}
                     {peds.map((p, idx) => (
-                      <div key={p.pedidoVendaId} className="rounded-md border bg-card p-2 text-xs">
+                      <div key={p.pedidoVendaId} className="rounded-md border bg-card px-2 py-1.5 text-xs">
                         <span className="font-medium">{idx + 1}. </span>
                         {p.pedidoVendaId.slice(0, 8)}… · previsto {p.previsto} · carregado {p.carregado}
                       </div>
@@ -302,6 +320,7 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
             </div>
           </div>
         </div>
+        </>
       )}
     </div>
   );

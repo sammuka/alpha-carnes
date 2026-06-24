@@ -1,5 +1,5 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { ExpedicaoClient } from '../src/app/(admin)/operacao/expedicao/expedicao-client';
+import { render, screen, waitFor } from '@testing-library/react';
+import { PlanejamentoExpedicaoClient } from '../src/app/(admin)/carga/planejamento/planejamento-client';
 
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
@@ -33,68 +33,39 @@ const caminhaoBase = {
 
 function mockFetch(overrides: Record<string, unknown> = {}) {
   global.fetch = jest.fn(async (url: string) => {
-    const found = Object.entries(overrides).find(
-      ([k]) => typeof url === 'string' && url.includes(k),
-    );
+    const urlStr = String(url);
+    const found = Object.entries(overrides)
+      .sort(([a], [b]) => b.length - a.length)
+      .find(([k]) => urlStr.includes(k));
     if (found) return { ok: true, json: async () => found[1] };
-    if (typeof url === 'string' && url.includes('/caminhoes')) {
+    if (urlStr.includes('/caminhoes')) {
       return { ok: true, json: async () => [] };
+    }
+    if (urlStr.includes('/pedidos')) {
+      return { ok: true, json: async () => ({ data: [] }) };
     }
     return { ok: true, json: async () => ({}) };
   }) as unknown as typeof fetch;
 }
 
-describe('ExpedicaoClient', () => {
+describe('PlanejamentoExpedicaoClient', () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
     (global as unknown as { WebSocket: unknown }).WebSocket = MockWebSocket;
     mockFetch();
   });
 
-  it('renderiza título Expedição', async () => {
-    render(<ExpedicaoClient permissoes={[]} />);
-    expect(screen.getByText('Expedição')).toBeInTheDocument();
+  it('renderiza título Planejamento de Expedição', async () => {
+    render(<PlanejamentoExpedicaoClient permissoes={[]} />);
+    expect(screen.getByText('Planejamento de Expedição')).toBeInTheDocument();
   });
 
-  it('mostra mensagem quando não há caminhões', async () => {
-    mockFetch({ '/caminhoes': [] });
-    render(<ExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
-    await waitFor(() => expect(screen.getByTestId('sem-caminhoes')).toBeInTheDocument());
-  });
+  it('formulário de novo caminhão só aparece com EXPEDICAO_GERENCIAR', async () => {
+    const { rerender } = render(<PlanejamentoExpedicaoClient permissoes={[]} />);
+    await waitFor(() => expect(screen.queryByText('Novo Caminhão')).not.toBeInTheDocument());
 
-  it('exibe lista de caminhões quando há dados', async () => {
-    mockFetch({ '/caminhoes': [caminhaoBase] });
-    render(<ExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
-    await waitFor(() => expect(screen.getByTestId('lista-caminhoes')).toBeInTheDocument());
-    expect(screen.getByText('ABC-1234 — João Silva')).toBeInTheDocument();
-  });
-
-  it('botão Abrir carga só aparece com EXPEDICAO_GERENCIAR e status planejado', async () => {
-    mockFetch({ '/caminhoes': [caminhaoBase] });
-
-    const { rerender } = render(<ExpedicaoClient permissoes={[]} />);
-    await waitFor(() => expect(screen.getByTestId('lista-caminhoes')).toBeInTheDocument());
-    expect(screen.queryByTestId('btn-abrir-carga')).not.toBeInTheDocument();
-
-    rerender(<ExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
-    await waitFor(() => expect(screen.getByTestId('btn-abrir-carga')).toBeInTheDocument());
-  });
-
-  it('link Ver detalhe está presente para cada caminhão', async () => {
-    mockFetch({ '/caminhoes': [caminhaoBase] });
-    render(<ExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
-    await waitFor(() => expect(screen.getByTestId('link-detalhe')).toBeInTheDocument());
-    expect(screen.getByTestId('link-detalhe')).toHaveAttribute(
-      'href',
-      `/operacao/expedicao/${caminhaoBase.id}`,
-    );
-  });
-
-  it('exibe badge de status com o texto correto', async () => {
-    mockFetch({ '/caminhoes': [caminhaoBase] });
-    render(<ExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
-    await waitFor(() => expect(screen.getByTestId('status-badge')).toBeInTheDocument());
-    expect(screen.getByTestId('status-badge')).toHaveTextContent('planejado');
+    rerender(<PlanejamentoExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
+    expect(screen.getByText('Novo Caminhão')).toBeInTheDocument();
   });
 
   it('exibe erro quando API retorna falha', async () => {
@@ -102,34 +73,17 @@ describe('ExpedicaoClient', () => {
       ok: false,
       json: async () => ({ message: 'Sem autorização' }),
     })) as unknown as typeof fetch;
-    render(<ExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
+    render(<PlanejamentoExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
-    expect(screen.getByRole('alert')).toHaveTextContent('Sem autorização');
+    expect(screen.getByRole('alert')).toHaveTextContent('Falha ao carregar dados');
   });
 
-  it('chama abrir-carga ao clicar no botão', async () => {
-    mockFetch({ '/caminhoes': [caminhaoBase] });
-    const postResponse = { ...caminhaoBase, statusCaminhao: 'em_carga' };
-    global.fetch = jest.fn(async (url: string, opts?: RequestInit) => {
-      if (typeof url === 'string' && url.includes('abrir-carga') && opts?.method === 'POST') {
-        return { ok: true, json: async () => postResponse };
-      }
-      if (typeof url === 'string' && url.includes('/caminhoes')) {
-        return { ok: true, json: async () => [caminhaoBase] };
-      }
-      return { ok: true, json: async () => ({}) };
-    }) as unknown as typeof fetch;
-
-    render(<ExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
-    await waitFor(() => expect(screen.getByTestId('btn-abrir-carga')).toBeInTheDocument());
-
-    fireEvent.click(screen.getByTestId('btn-abrir-carga'));
-
-    await waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('abrir-carga'),
-        expect.objectContaining({ method: 'POST' }),
-      ),
-    );
+  it('carrega caminhões do dia quando API responde', async () => {
+    mockFetch({
+      '/caminhoes': [caminhaoBase],
+      [`/caminhoes/${caminhaoBase.id}`]: { caminhao: caminhaoBase, pedidos: [] },
+    });
+    render(<PlanejamentoExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
+    await waitFor(() => expect(screen.getByText('ABC-1234')).toBeInTheDocument());
   });
 });

@@ -1,13 +1,26 @@
 import { relations, sql } from 'drizzle-orm';
-import { check, date, index, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, date, index, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { comprasProgramadas } from './compras-programadas.schema';
 import { fornecedores } from './fornecedores.schema';
 import { itensComerciais } from './itens-comerciais.schema';
 import { usuarios } from './auth.schema';
 
+export const STATUS_RECEBIMENTO = [
+  'aguardando_conferencia',
+  'em_conferencia',
+  'finalizado',
+  'cancelado',
+] as const;
+
+export const STATUS_APURACAO_ITEM = [
+  'aguardando',
+  'em_conferencia',
+  'conferido',
+  'divergente',
+  'entrada_direta',
+] as const;
+
 // ── recebimentos ────────────────────────────────────────────────────────────
-// Cabeçalho do recebimento físico do lote do dia. Sempre vinculado a uma compra
-// programada CONFIRMADA (F4a). Imutável após conclusão.
 export const recebimentos = pgTable(
   'recebimentos',
   {
@@ -17,11 +30,19 @@ export const recebimentos = pgTable(
     dataOperacao:             date('data_operacao').notNull(),
     dataHoraChegada:          timestamp('data_hora_chegada', { withTimezone: true }).notNull().defaultNow(),
     notaFiscalFornecedor:     text('nota_fiscal_fornecedor'),
+    nfeNumero:                text('nfe_numero'),
+    nfeSerie:                 text('nfe_serie'),
+    nfeChave:                 text('nfe_chave'),
+    nfeDataEmissao:           date('nfe_data_emissao'),
+    romaneio:                 text('romaneio'),
+    nfePesoBruto:             numeric('nfe_peso_bruto', { precision: 10, scale: 3 }),
+    nfePesoLiquido:           numeric('nfe_peso_liquido', { precision: 10, scale: 3 }),
+    nfeVolumes:               numeric('nfe_volumes', { precision: 15, scale: 3 }),
     placaVeiculo:             text('placa_veiculo'),
     motorista:                text('motorista'),
     doca:                     text('doca'),
     responsavelRecebimentoId: uuid('responsavel_recebimento_id').notNull().references(() => usuarios.id),
-    status:                   text('status').notNull().default('em_andamento'),
+    status:                   text('status').notNull().default('aguardando_conferencia'),
     observacoes:              text('observacoes'),
     usuarioConclusaoId:       uuid('usuario_conclusao_id').references(() => usuarios.id),
     dataConclusao:            timestamp('data_conclusao', { withTimezone: true }),
@@ -30,8 +51,10 @@ export const recebimentos = pgTable(
     deletedAt:                timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
-    check('chk_recebimentos_status', sql`${t.status} IN ('em_andamento','com_divergencia','concluido')`),
-    // Um recebimento ativo por compra (suporta idempotência do iniciar).
+    check(
+      'chk_recebimentos_status',
+      sql`${t.status} IN ('aguardando_conferencia','em_conferencia','finalizado','cancelado')`,
+    ),
     uniqueIndex('uq_recebimentos_compra').on(t.compraProgramadaId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_recebimentos_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
     index('idx_recebimentos_data_operacao').on(t.dataOperacao).where(sql`${t.deletedAt} IS NULL`),
@@ -39,17 +62,17 @@ export const recebimentos = pgTable(
   ],
 );
 
-// ── recebimentos_itens ──────────────────────────────────────────────────────
-// Conferência por item comercial: esperado (derivado da disponibilidade do dia)
-// × recebido. Item excedente vive aqui com quantidade_esperada = 0.
 export const recebimentosItens = pgTable(
   'recebimentos_itens',
   {
     id:                  uuid('id').primaryKey().default(sql`uuidv7()`),
     recebimentoId:       uuid('recebimento_id').notNull().references(() => recebimentos.id),
     itemComercialId:     uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
+    origemDescricao:     text('origem_descricao'),
     quantidadeEsperada:  numeric('quantidade_esperada', { precision: 15, scale: 3 }).notNull(),
     quantidadeRecebida:  numeric('quantidade_recebida', { precision: 15, scale: 3 }).notNull().default('0'),
+    unidadeEsperada:     text('unidade_esperada'),
+    requerBalanca:       boolean('requer_balanca').notNull().default(true),
     pesoTotalApurado:    numeric('peso_total_apurado', { precision: 10, scale: 3 }),
     statusApuracao:      text('status_apuracao').notNull().default('aguardando'),
     observacoes:         text('observacoes'),
@@ -59,16 +82,16 @@ export const recebimentosItens = pgTable(
   (t) => [
     check('chk_receb_itens_esperada_nao_negativa', sql`${t.quantidadeEsperada} >= 0`),
     check('chk_receb_itens_recebida_nao_negativa', sql`${t.quantidadeRecebida} >= 0`),
-    check('chk_receb_itens_status_apuracao', sql`${t.statusApuracao} IN ('aguardando','conforme','divergente')`),
+    check(
+      'chk_receb_itens_status_apuracao',
+      sql`${t.statusApuracao} IN ('aguardando','em_conferencia','conferido','divergente','entrada_direta')`,
+    ),
     uniqueIndex('uq_receb_itens_recebimento_item').on(t.recebimentoId, t.itemComercialId),
     index('idx_receb_itens_recebimento').on(t.recebimentoId),
     index('idx_receb_itens_item_comercial').on(t.itemComercialId),
   ],
 );
 
-// ── divergencias_recebimento ────────────────────────────────────────────────
-// Toda diferença esperado×recebido gera uma divergência formal (RA-06). Nasce
-// 'aberta'; mover para fora de 'aberta' (tratativa auditada) libera a conclusão.
 export const divergenciasRecebimento = pgTable(
   'divergencias_recebimento',
   {

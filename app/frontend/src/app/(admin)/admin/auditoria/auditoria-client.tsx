@@ -218,13 +218,13 @@ export function AuditoriaAdminClient() {
             )}
           </div>
           {selecionado ? (
-            <div className="flex-1 overflow-auto bg-slate-900 p-5 font-mono text-xs text-slate-200">
-              <p className="mb-2 text-slate-400">// Dados Anteriores</p>
-              <pre className="mb-4 overflow-x-auto rounded border border-slate-700 bg-slate-950 p-3 text-red-300">
+            <div className="flex-1 overflow-auto border-t bg-muted/30 p-5 font-mono text-xs">
+              <p className="mb-2 font-sans text-sm font-medium text-muted-foreground">Dados Anteriores</p>
+              <pre className="mb-4 overflow-x-auto rounded-lg border border-border bg-card p-3 text-destructive">
                 {JSON.stringify(selecionado.dadosAnteriores, null, 2)}
               </pre>
-              <p className="mb-2 text-slate-400">// Dados Novos</p>
-              <pre className="overflow-x-auto rounded border border-slate-700 bg-slate-950 p-3 text-green-300">
+              <p className="mb-2 font-sans text-sm font-medium text-muted-foreground">Dados Novos</p>
+              <pre className="overflow-x-auto rounded-lg border border-border bg-card p-3 text-[var(--color-status-expedido)]">
                 {JSON.stringify(selecionado.dadosNovos, null, 2)}
               </pre>
             </div>

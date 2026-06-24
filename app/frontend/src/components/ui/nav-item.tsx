@@ -19,33 +19,14 @@ export function NavItem({ href, label, Icon }: NavItemProps) {
     <Link
       href={href}
       className={cn(
-        'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+        'flex h-[34px] items-center gap-2.5 rounded-md px-3 text-[13px] font-medium transition-colors',
         isActive
-          ? 'text-white'
-          : 'hover:text-white',
+          ? 'bg-white/16 text-white'
+          : 'text-white/90 hover:bg-white/10 hover:text-white',
       )}
-      style={
-        isActive
-          ? {
-              background: 'var(--color-sidebar-active-bg)',
-              color: 'var(--color-sidebar-item-active)',
-            }
-          : { color: 'var(--color-sidebar-text)' }
-      }
-      onMouseEnter={(e) => {
-        if (!isActive) {
-          (e.currentTarget as HTMLAnchorElement).style.background =
-            'var(--color-sidebar-item-hover)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) {
-          (e.currentTarget as HTMLAnchorElement).style.background = '';
-        }
-      }}
     >
-      <Icon size={16} strokeWidth={1.75} className="shrink-0" />
-      <span>{label}</span>
+      <Icon size={18} strokeWidth={1.75} className="shrink-0" />
+      <span className="truncate">{label}</span>
     </Link>
   );
 }

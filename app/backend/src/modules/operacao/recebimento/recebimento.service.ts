@@ -1,10 +1,21 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { comprasProgramadas, recebimentos, recebimentosItens } from '../../../database/schema';
+import {
+  clientes,
+  comprasProgramadas,
+  comprasProgramadasItens,
+  fornecedores,
+  itensComerciais,
+  itensCompra,
+  pecas,
+  pedidosVenda,
+  recebimentos,
+  recebimentosItens,
+} from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import {
   calcularRange,
@@ -17,10 +28,67 @@ import { compararQtd, ehZero, formatarQtd, subtrairQtd } from '../../../common/c
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { DisponibilidadeService, type PedidoEmRisco } from '../../comercial/disponibilidade/disponibilidade.service';
 import { DivergenciaRecebimentoService } from './divergencia/divergencia-recebimento.service';
-import type { IniciarRecebimentoDto, RegistrarItemDto } from './dto/recebimento.dto';
+import type { AtualizarMetadadosLoteDto, AtualizarNfeDto, IniciarRecebimentoDto, RegistrarItemDto } from './dto/recebimento.dto';
+import {
+  calcularProgressoBalanca,
+  contarPecasPorItem,
+  derivarTipoCarga,
+  resolverMetadadosItensPrevistos,
+} from './recebimento-metadados.helper';
 
 type Tx = NodePgDatabase<typeof schema>;
 type Recebimento = typeof recebimentos.$inferSelect;
+
+export interface RecebimentoResumoEnriquecido {
+  id: string;
+  codigoLote: string;
+  compraProgramadaId: string;
+  numeroInternoCompra: string | null;
+  fornecedorId: string;
+  fornecedorNome: string;
+  dataOperacao: string;
+  status: string;
+  nfeNumero: string | null;
+  romaneio: string | null;
+  tipoCarga: string | null;
+  progressoBalanca: number;
+}
+
+export interface PrevisaoItemOperacional {
+  itemComercialId: string;
+  produtoCodigo: string;
+  produtoDescricao: string;
+  quantidadePrevista: string;
+  unidade: string;
+  passaBalanca: boolean;
+  origemDescricao: string;
+}
+
+export interface PrevisaoRecebimento {
+  compraProgramadaId: string;
+  numeroInterno: string | null;
+  fornecedorId: string;
+  fornecedorNome: string;
+  tipoCarga: string | null;
+  observacoesCompra: string | null;
+  resumoCompra: string;
+  itensOperacionais: PrevisaoItemOperacional[];
+  jaPossuiRecebimento: boolean;
+}
+
+export interface AcaoLote {
+  id: string;
+  hora: string;
+  produtoCodigo: string | null;
+  produtoDescricao: string | null;
+  peso: string | null;
+  destino: string;
+  clientePedido: string | null;
+  etiqueta: string | null;
+  operadorNome: string | null;
+  statusPeca: string | null;
+  acao: string;
+}
 
 @Injectable()
 export class RecebimentoService {
@@ -37,36 +105,158 @@ export class RecebimentoService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<Recebimento>> {
+  async listar(query: ListarQuery): Promise<Paginado<RecebimentoResumoEnriquecido>> {
     const { limit, offset } = calcularRange(query);
     const where = query.incluirRemovidos ? undefined : isNull(recebimentos.deletedAt);
+
     const [linhas, totalRow] = await Promise.all([
-      this.db.select().from(recebimentos).where(where).orderBy(desc(recebimentos.createdAt)).limit(limit).offset(offset),
+      this.db
+        .select({
+          recebimento: recebimentos,
+          numeroInterno: comprasProgramadas.numeroInterno,
+          fornecedorNome: fornecedores.razaoSocial,
+        })
+        .from(recebimentos)
+        .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, recebimentos.compraProgramadaId))
+        .innerJoin(fornecedores, eq(fornecedores.id, recebimentos.fornecedorId))
+        .where(where)
+        .orderBy(desc(recebimentos.createdAt))
+        .limit(limit)
+        .offset(offset),
       this.db.select({ total: sql<number>`count(*)::int` }).from(recebimentos).where(where),
     ]);
-    return montarPaginado(linhas, totalRow[0]?.total ?? 0, query);
+
+    const enriquecidos: RecebimentoResumoEnriquecido[] = [];
+    for (const linha of linhas) {
+      const progresso = await this.calcularProgressoLote(linha.recebimento.id);
+      const tipoCarga = await derivarTipoCarga(this.db, linha.recebimento.compraProgramadaId);
+      enriquecidos.push({
+        id: linha.recebimento.id,
+        codigoLote: linha.recebimento.id.slice(0, 8).toUpperCase(),
+        compraProgramadaId: linha.recebimento.compraProgramadaId,
+        numeroInternoCompra: linha.numeroInterno,
+        fornecedorId: linha.recebimento.fornecedorId,
+        fornecedorNome: linha.fornecedorNome,
+        dataOperacao: linha.recebimento.dataOperacao,
+        status: linha.recebimento.status,
+        nfeNumero: linha.recebimento.nfeNumero,
+        romaneio: linha.recebimento.romaneio,
+        tipoCarga,
+        progressoBalanca: progresso,
+      });
+    }
+
+    return montarPaginado(enriquecidos, totalRow[0]?.total ?? 0, query);
   }
 
-  /** Detalhe com rastreabilidade: recebimento → itens → divergências. */
+  async previsaoDaCompra(compraProgramadaId: string): Promise<PrevisaoRecebimento> {
+    const compra = await this.db.query.comprasProgramadas.findFirst({
+      where: and(eq(comprasProgramadas.id, compraProgramadaId), isNull(comprasProgramadas.deletedAt)),
+      with: { fornecedor: true },
+    });
+    if (!compra) throw new NotFoundException('Compra programada não encontrada');
+    if (compra.status !== 'confirmada') {
+      throw new ConflictException('Somente compras confirmadas podem abrir recebimento');
+    }
+
+    const existente = await this.db
+      .select({ id: recebimentos.id })
+      .from(recebimentos)
+      .where(and(eq(recebimentos.compraProgramadaId, compraProgramadaId), isNull(recebimentos.deletedAt)))
+      .then((r) => r[0] ?? null);
+
+    const esperados = await this.disponibilidade.listarEsperadoDaCompra(this.db, compraProgramadaId);
+    const ids = esperados.map((e) => e.itemComercialId);
+    const metadados = await resolverMetadadosItensPrevistos(this.db, compraProgramadaId, compra.numeroInterno, ids);
+
+    const comerciais = ids.length
+      ? await this.db
+          .select()
+          .from(itensComerciais)
+          .where(inArray(itensComerciais.id, ids))
+      : [];
+
+    const comercialMap = new Map(comerciais.map((c) => [c.id, c]));
+
+    const itensCompraLinhas = await this.db
+      .select({
+        descricao: itensCompra.descricao,
+        quantidade: comprasProgramadasItens.quantidadeComprada,
+        unidade: itensCompra.unidadeCompra,
+      })
+      .from(comprasProgramadasItens)
+      .innerJoin(itensCompra, eq(itensCompra.id, comprasProgramadasItens.itemCompraId))
+      .where(and(eq(comprasProgramadasItens.compraProgramadaId, compraProgramadaId), isNull(comprasProgramadasItens.deletedAt)));
+
+    const resumoCompra = itensCompraLinhas
+      .map((i) => `${i.quantidade} ${i.descricao}`)
+      .join(' + ');
+
+    const tipoCarga = await derivarTipoCarga(this.db, compraProgramadaId);
+
+    return {
+      compraProgramadaId: compra.id,
+      numeroInterno: compra.numeroInterno,
+      fornecedorId: compra.fornecedorId,
+      fornecedorNome: compra.fornecedor.razaoSocial,
+      tipoCarga,
+      observacoesCompra: compra.observacoes,
+      resumoCompra,
+      itensOperacionais: esperados.map((e) => {
+        const meta = metadados.get(e.itemComercialId);
+        const ic = comercialMap.get(e.itemComercialId);
+        return {
+          itemComercialId: e.itemComercialId,
+          produtoCodigo: ic?.codigo ?? '',
+          produtoDescricao: ic?.descricao ?? '',
+          quantidadePrevista: e.quantidadeTotalGerada,
+          unidade: meta?.unidadeEsperada ?? ic?.unidadeComercial ?? 'unidade',
+          passaBalanca: meta?.requerBalanca ?? true,
+          origemDescricao: meta?.origemDescricao ?? compra.numeroInterno ?? 'Compra',
+        };
+      }),
+      jaPossuiRecebimento: Boolean(existente),
+    };
+  }
+
   async detalhar(id: string) {
     const recebimento = await this.db.query.recebimentos.findFirst({
       where: and(eq(recebimentos.id, id), isNull(recebimentos.deletedAt)),
       with: {
         fornecedor: true,
+        compra: true,
         itens: { with: { itemComercial: true } },
         divergencias: true,
       },
     });
     if (!recebimento) throw new NotFoundException('Recebimento não encontrado');
-    return recebimento;
+
+    const pecasMap = await contarPecasPorItem(this.db, id);
+    const tipoCarga = await derivarTipoCarga(this.db, recebimento.compraProgramadaId);
+    const progressoBalanca = await this.calcularProgressoLote(id);
+
+    const itensEnriquecidos = recebimento.itens.map((item) => {
+      const apurado = pecasMap.get(item.itemComercialId);
+      const qtdApurada =
+        item.requerBalanca === false
+          ? item.quantidadeRecebida
+          : String(apurado?.quantidade ?? Number(item.quantidadeRecebida));
+      return {
+        ...item,
+        quantidadeApurada: qtdApurada,
+        pesoApurado: item.requerBalanca === false ? null : (apurado?.pesoTotal ?? item.pesoTotalApurado),
+      };
+    });
+
+    return {
+      ...recebimento,
+      tipoCarga,
+      progressoBalanca,
+      codigoLote: recebimento.id.slice(0, 8).toUpperCase(),
+      itens: itensEnriquecidos,
+    };
   }
 
-  /**
-   * Inicia o recebimento sobre uma compra CONFIRMADA (lote do dia). Itens
-   * esperados derivam da disponibilidade do dia (fonte de verdade — Refino 1).
-   * Idempotente: a unique parcial em compra_programada_id garante 1 recebimento
-   * ativo; chamada repetida retorna o existente (jaIniciado). Evento pós-commit.
-   */
   async iniciar(dto: IniciarRecebimentoDto, usuarioId: string): Promise<{ recebimento: Recebimento; jaIniciado: boolean }> {
     const resultado = await this.db.transaction(async (tx) => {
       const compra = await tx
@@ -86,6 +276,13 @@ export class RecebimentoService {
         .then((r) => r[0] ?? null);
       if (existente) return { recebimento: existente, jaIniciado: true };
 
+      const esperados = await this.disponibilidade.listarEsperadoDaCompra(tx, compra.id);
+      if (esperados.length === 0) {
+        throw new ConflictException('Compra confirmada sem itens operacionais previstos');
+      }
+
+      const statusInicial = dto.iniciarConferencia ? 'em_conferencia' : 'aguardando_conferencia';
+
       const criado = primeiroOuFalha(
         await tx
           .insert(recebimentos)
@@ -94,30 +291,45 @@ export class RecebimentoService {
             fornecedorId: compra.fornecedorId,
             dataOperacao: compra.dataOperacao,
             dataHoraChegada: dto.dataHoraChegada ? new Date(dto.dataHoraChegada) : undefined,
-            notaFiscalFornecedor: dto.notaFiscalFornecedor,
+            notaFiscalFornecedor: dto.nfeNumero,
+            nfeNumero: dto.nfeNumero,
+            nfeSerie: dto.nfeSerie,
+            nfeChave: dto.nfeChave,
+            nfeDataEmissao: dto.nfeDataEmissao ?? undefined,
+            romaneio: dto.romaneio,
+            nfePesoBruto: dto.nfePesoBruto !== undefined ? formatarQtd(dto.nfePesoBruto) : undefined,
+            nfePesoLiquido: dto.nfePesoLiquido !== undefined ? formatarQtd(dto.nfePesoLiquido) : undefined,
+            nfeVolumes: dto.nfeVolumes !== undefined ? formatarQtd(dto.nfeVolumes) : undefined,
             placaVeiculo: dto.placaVeiculo,
             motorista: dto.motorista,
             doca: dto.doca,
             observacoes: dto.observacoes,
             responsavelRecebimentoId: usuarioId,
-            status: 'em_andamento',
+            status: statusInicial,
           })
           .returning(),
       );
 
-      // Itens esperados: derivados da disponibilidade do dia (não digitados).
-      const esperados = await this.disponibilidade.listarEsperadoDaCompra(tx, compra.id);
-      if (esperados.length > 0) {
-        await tx.insert(recebimentosItens).values(
-          esperados.map((e) => ({
+      const ids = esperados.map((e) => e.itemComercialId);
+      const metadados = await resolverMetadadosItensPrevistos(tx, compra.id, compra.numeroInterno, ids);
+
+      await tx.insert(recebimentosItens).values(
+        esperados.map((e) => {
+          const meta = metadados.get(e.itemComercialId);
+          const requerBalanca = meta?.requerBalanca ?? true;
+          const entradaDireta = !requerBalanca;
+          return {
             recebimentoId: criado.id,
             itemComercialId: e.itemComercialId,
+            origemDescricao: meta?.origemDescricao,
             quantidadeEsperada: e.quantidadeTotalGerada,
-            quantidadeRecebida: '0',
-            statusApuracao: 'aguardando' as const,
-          })),
-        );
-      }
+            quantidadeRecebida: entradaDireta ? e.quantidadeTotalGerada : '0',
+            unidadeEsperada: meta?.unidadeEsperada,
+            requerBalanca,
+            statusApuracao: entradaDireta ? ('entrada_direta' as const) : ('aguardando' as const),
+          };
+        }),
+      );
 
       await this.auditoria.registrar(tx, {
         tabela: 'recebimentos',
@@ -142,19 +354,91 @@ export class RecebimentoService {
     return resultado;
   }
 
-  /**
-   * Registra a conferência de um item. O sistema computa a diferença
-   * esperado×recebido; qualquer diferença (ou item excedente) EXIGE divergência
-   * formal inline — ajuste sem ocorrência é rejeitado (409, RA-06). Impacto na
-   * disponibilidade aplicado por delta na mesma transação (Refino 2). Pedido em
-   * risco avaliado apenas quando há divergência (evita falso alerta em parcial).
-   */
+  async atualizarNfe(recebimentoId: string, dto: AtualizarNfeDto, usuarioId: string): Promise<Recebimento> {
+    return this.db.transaction(async (tx) => {
+      const atual = await this.buscarAtivo(tx, recebimentoId);
+      if (!atual) throw new NotFoundException('Recebimento não encontrado');
+      if (atual.status === 'finalizado' || atual.status === 'cancelado') {
+        throw new ConflictException('Recebimento finalizado ou cancelado não pode ser alterado');
+      }
+
+      const patch: Partial<typeof recebimentos.$inferInsert> = {};
+      if (dto.nfeNumero !== undefined) {
+        patch.nfeNumero = dto.nfeNumero;
+        patch.notaFiscalFornecedor = dto.nfeNumero;
+      }
+      if (dto.nfeSerie !== undefined) patch.nfeSerie = dto.nfeSerie;
+      if (dto.nfeChave !== undefined) patch.nfeChave = dto.nfeChave;
+      if (dto.nfeDataEmissao !== undefined) patch.nfeDataEmissao = dto.nfeDataEmissao;
+      if (dto.romaneio !== undefined) patch.romaneio = dto.romaneio;
+      if (dto.nfePesoBruto !== undefined) patch.nfePesoBruto = formatarQtd(dto.nfePesoBruto);
+      if (dto.nfePesoLiquido !== undefined) patch.nfePesoLiquido = formatarQtd(dto.nfePesoLiquido);
+      if (dto.nfeVolumes !== undefined) patch.nfeVolumes = formatarQtd(dto.nfeVolumes);
+      if (dto.observacoes !== undefined) patch.observacoes = dto.observacoes;
+
+      const atualizado = primeiroOuFalha(
+        await tx.update(recebimentos).set(patch).where(eq(recebimentos.id, recebimentoId)).returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'recebimentos',
+        registroId: recebimentoId,
+        operacao: 'UPDATE',
+        modulo: 'operacao',
+        usuarioId,
+        dadosAnteriores: atual,
+        dadosNovos: atualizado,
+      });
+
+      return atualizado;
+    });
+  }
+
+  async cancelar(recebimentoId: string, usuarioId: string): Promise<Recebimento> {
+    return this.db.transaction(async (tx) => {
+      const atual = await this.buscarAtivo(tx, recebimentoId);
+      if (!atual) throw new NotFoundException('Recebimento não encontrado');
+      if (!['aguardando_conferencia', 'em_conferencia'].includes(atual.status)) {
+        throw new ConflictException('Somente lotes em aberto podem ser cancelados');
+      }
+
+      const pecasCount = await tx
+        .select({ total: sql<number>`count(*)::int` })
+        .from(pecas)
+        .where(and(eq(pecas.recebimentoId, recebimentoId), isNull(pecas.deletedAt)))
+        .then((r) => r[0]?.total ?? 0);
+      if (pecasCount > 0) {
+        throw new ConflictException('Não é permitido cancelar lote com pesagem registrada');
+      }
+
+      const cancelado = primeiroOuFalha(
+        await tx
+          .update(recebimentos)
+          .set({ status: 'cancelado' })
+          .where(eq(recebimentos.id, recebimentoId))
+          .returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'recebimentos',
+        registroId: recebimentoId,
+        operacao: 'UPDATE',
+        modulo: 'operacao',
+        usuarioId,
+        dadosAnteriores: atual,
+        dadosNovos: cancelado,
+      });
+
+      return cancelado;
+    });
+  }
+
   async registrarItem(recebimentoId: string, dto: RegistrarItemDto, usuarioId: string): Promise<{ itemId: string }> {
     const resultado = await this.db.transaction(async (tx) => {
       const recebimento = await this.buscarAtivo(tx, recebimentoId);
       if (!recebimento) throw new NotFoundException('Recebimento não encontrado');
-      if (recebimento.status === 'concluido') {
-        throw new ConflictException('Recebimento concluído é imutável');
+      if (recebimento.status === 'finalizado' || recebimento.status === 'cancelado') {
+        throw new ConflictException('Recebimento finalizado ou cancelado é imutável');
       }
 
       const recebido = formatarQtd(dto.quantidadeRecebida);
@@ -172,7 +456,6 @@ export class RecebimentoService {
 
       const ehExcedente = !item;
       if (!item) {
-        // Item não esperado: cria linha com esperada=0 (exige divergência item_excedente).
         item = primeiroOuFalha(
           await tx
             .insert(recebimentosItens)
@@ -188,19 +471,16 @@ export class RecebimentoService {
       }
 
       const recebidaAnterior = item.quantidadeRecebida;
-      // Divergente já aplicado à disponibilidade: só conta se o item já estava
-      // marcado 'divergente' (item ainda 'aguardando'/'conforme' contribuiu com 0).
       const divergenteAnterior =
         item.statusApuracao === 'divergente' ? this.calcularDivergente(item.quantidadeEsperada, recebidaAnterior) : '0';
       const diff = subtrairQtd(item.quantidadeEsperada, recebido);
       const temDiferenca = ehExcedente || !ehZero(diff);
 
-      // Qualquer diferença exige divergência formal inline.
       if (temDiferenca && !dto.divergencia) {
         throw new ConflictException('Diferença esperado×recebido exige registro formal de divergência');
       }
 
-      const statusApuracao = temDiferenca ? 'divergente' : 'conforme';
+      const statusApuracao = temDiferenca ? 'divergente' : 'conferido';
       const atualizado = primeiroOuFalha(
         await tx
           .update(recebimentosItens)
@@ -226,14 +506,12 @@ export class RecebimentoService {
           usuarioId,
         );
         divergenciaAberta = { id: divergencia.id, tipo: divergencia.tipo };
-        // Sinaliza o cabeçalho como com_divergencia (sem sobrescrever conclusão).
         await tx
           .update(recebimentos)
-          .set({ status: 'com_divergencia' })
-          .where(and(eq(recebimentos.id, recebimentoId), ne(recebimentos.status, 'concluido')));
+          .set({ status: 'em_conferencia' })
+          .where(and(eq(recebimentos.id, recebimentoId), ne(recebimentos.status, 'finalizado')));
       }
 
-      // Impacto incremental por delta na disponibilidade (excedente não tem linha).
       const divergenteNovo = this.calcularDivergente(atualizado.quantidadeEsperada, recebido);
       const deltaRecebido = subtrairQtd(recebido, recebidaAnterior);
       const deltaComDivergencia = subtrairQtd(divergenteNovo, divergenteAnterior);
@@ -250,7 +528,6 @@ export class RecebimentoService {
         );
       }
 
-      // Pedido em risco: só quando há divergência (não a cada parcial — evita ruído).
       let pedidosEmRisco: PedidoEmRisco[] = [];
       if (divergenciaAberta && !ehExcedente) {
         pedidosEmRisco = await this.disponibilidade.listarPedidosEmRisco(
@@ -279,7 +556,6 @@ export class RecebimentoService {
       };
     });
 
-    // PÓS-COMMIT (ADR-004).
     this.eventEmitter.emit(EVENTOS.RECEBIMENTO_REGISTRADO, {
       recebimentoId,
       dataOperacao: resultado.dataOperacao,
@@ -306,11 +582,6 @@ export class RecebimentoService {
     return { itemId: resultado.itemId };
   }
 
-  /**
-   * Conclui o recebimento. Bloqueia (409) se houver divergência ainda 'aberta'
-   * (sem tratativa). Idempotente: UPDATE condicional por status (concluir 2× não
-   * duplica efeito). Reconcilia pedidos em risco (recebido final vs reservado).
-   */
   async concluir(recebimentoId: string, usuarioId: string): Promise<{ recebimento: Recebimento; jaConcluido: boolean }> {
     const resultado = await this.db.transaction(async (tx) => {
       const atual = await this.buscarAtivo(tx, recebimentoId);
@@ -323,19 +594,16 @@ export class RecebimentoService {
 
       const concluido = await tx
         .update(recebimentos)
-        .set({ status: 'concluido', usuarioConclusaoId: usuarioId, dataConclusao: sql`now()` })
-        .where(and(eq(recebimentos.id, recebimentoId), ne(recebimentos.status, 'concluido')))
+        .set({ status: 'finalizado', usuarioConclusaoId: usuarioId, dataConclusao: sql`now()` })
+        .where(and(eq(recebimentos.id, recebimentoId), ne(recebimentos.status, 'finalizado')))
         .returning()
         .then((r) => r[0] ?? null);
 
       if (!concluido) {
-        // Já concluído (por esta ou outra chamada concorrente) → no-op idempotente.
-        // Re-lê para devolver o estado concluído consistente (não o 'atual' obsoleto).
         const jaConcluido = primeiroOuFalha(await this.buscarAtivo(tx, recebimentoId).then((r) => (r ? [r] : [])));
         return { recebimento: jaConcluido, jaConcluido: true, dataOperacao: jaConcluido.dataOperacao, pedidosEmRisco: [] as PedidoEmRisco[] };
       }
 
-      // Reconciliação final: pedidos em risco por item (recebido final vs reservado).
       const itens = await tx
         .select({ itemComercialId: recebimentosItens.itemComercialId })
         .from(recebimentosItens)
@@ -377,7 +645,136 @@ export class RecebimentoService {
     return { recebimento: resultado.recebimento, jaConcluido: resultado.jaConcluido };
   }
 
-  /** Quantidade com divergência de um item = |esperada − recebida| (0 se conforme). */
+  async suspender(recebimentoId: string, usuarioId: string): Promise<Recebimento> {
+    return this.db.transaction(async (tx) => {
+      const atual = await this.buscarAtivo(tx, recebimentoId);
+      if (!atual) throw new NotFoundException('Recebimento não encontrado');
+      if (atual.status !== 'em_conferencia') {
+        throw new ConflictException('Somente recebimentos em conferência podem ser suspensos');
+      }
+
+      const suspenso = primeiroOuFalha(
+        await tx
+          .update(recebimentos)
+          .set({ status: 'aguardando_conferencia' })
+          .where(eq(recebimentos.id, recebimentoId))
+          .returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'recebimentos',
+        registroId: recebimentoId,
+        operacao: 'UPDATE',
+        modulo: 'operacao',
+        usuarioId,
+        dadosAnteriores: atual,
+        dadosNovos: suspenso,
+      });
+
+      return suspenso;
+    });
+  }
+
+  async atualizarMetadados(
+    recebimentoId: string,
+    dto: AtualizarMetadadosLoteDto,
+    usuarioId: string,
+  ): Promise<Recebimento> {
+    return this.db.transaction(async (tx) => {
+      const atual = await this.buscarAtivo(tx, recebimentoId);
+      if (!atual) throw new NotFoundException('Recebimento não encontrado');
+      if (atual.status === 'finalizado' || atual.status === 'cancelado') {
+        throw new ConflictException('Recebimento finalizado ou cancelado não pode ser alterado');
+      }
+
+      const patch: Partial<typeof recebimentos.$inferInsert> = {};
+      if (dto.placaVeiculo !== undefined) patch.placaVeiculo = dto.placaVeiculo;
+      if (dto.motorista !== undefined) patch.motorista = dto.motorista;
+      if (dto.doca !== undefined) patch.doca = dto.doca;
+      if (dto.observacoes !== undefined) patch.observacoes = dto.observacoes;
+
+      const atualizado = primeiroOuFalha(
+        await tx.update(recebimentos).set(patch).where(eq(recebimentos.id, recebimentoId)).returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'recebimentos',
+        registroId: recebimentoId,
+        operacao: 'UPDATE',
+        modulo: 'operacao',
+        usuarioId,
+        dadosAnteriores: atual,
+        dadosNovos: atualizado,
+      });
+
+      return atualizado;
+    });
+  }
+
+  /** Ações/peças realizadas no lote (para tabela operacional de pesagem). */
+  async listarAcoes(recebimentoId: string): Promise<AcaoLote[]> {
+    const lote = await this.buscarAtivo(this.db, recebimentoId);
+    if (!lote) throw new NotFoundException('Recebimento não encontrado');
+
+    const linhas = await this.db
+      .select({
+        peca: pecas,
+        produtoCodigo: itensComerciais.codigo,
+        produtoDescricao: itensComerciais.descricao,
+        clienteNome: clientes.nomeFantasia,
+        clienteRazao: clientes.razaoSocial,
+      })
+      .from(pecas)
+      .innerJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
+      .leftJoin(pedidosVenda, eq(pedidosVenda.id, pecas.pedidoVendaId))
+      .leftJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
+      .where(and(eq(pecas.recebimentoId, recebimentoId), isNull(pecas.deletedAt)))
+      .orderBy(desc(pecas.dataHoraPesagem));
+
+    const destinoPorStatus: Record<string, string> = {
+      associada: 'Pedido',
+      em_sobra: 'Estoque',
+      para_corte: 'Desossa',
+      pesada: 'Aguardando destino',
+      em_analise: 'Análise',
+      divergente: 'Divergência',
+    };
+
+    return linhas.map((l) => {
+      const meta = l.peca.capturaMeta as { operador?: string } | null;
+      const cliente =
+        l.clienteNome ?? l.clienteRazao ?? (l.peca.pedidoVendaId ? l.peca.pedidoVendaId.slice(0, 8) : null);
+      return {
+        id: l.peca.id,
+        hora: l.peca.dataHoraPesagem.toISOString(),
+        produtoCodigo: l.produtoCodigo,
+        produtoDescricao: l.produtoDescricao,
+        peso: l.peca.pesoOriginal,
+        destino: destinoPorStatus[l.peca.statusPeca] ?? l.peca.statusPeca,
+        clientePedido: cliente,
+        etiqueta: l.peca.etiquetaAtual,
+        operadorNome: meta?.operador ?? null,
+        statusPeca: l.peca.statusPeca,
+        acao: l.peca.statusPeca,
+      };
+    });
+  }
+
+  private async calcularProgressoLote(recebimentoId: string): Promise<number> {
+    const itens = await this.db
+      .select()
+      .from(recebimentosItens)
+      .where(eq(recebimentosItens.recebimentoId, recebimentoId));
+    const pecasMap = await contarPecasPorItem(this.db, recebimentoId);
+    return calcularProgressoBalanca(
+      itens.map((item) => ({
+        quantidadeEsperada: item.quantidadeEsperada,
+        requerBalanca: item.requerBalanca,
+        quantidadeApurada: pecasMap.get(item.itemComercialId)?.quantidade ?? Number(item.quantidadeRecebida),
+      })),
+    );
+  }
+
   private calcularDivergente(esperada: string, recebida: string): string {
     const diff = subtrairQtd(esperada, recebida);
     return compararQtd(diff, '0') < 0 ? subtrairQtd('0', diff) : diff;

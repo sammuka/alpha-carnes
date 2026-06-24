@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, FileText, Search, Truck } from 'lucide-react';
 import type { StatusCaminhao } from '@/lib/operacao';
+import { statusCaminhaoVariant } from '@/lib/status-ui';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -93,14 +95,22 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
     }
   }
 
-  function statusBadge(c: CaminhaoLiberacao) {
+  function statusLiberacao(c: CaminhaoLiberacao): { variant: StatusPillVariant; label: string } {
     if (c.statusCaminhao === 'faturado' && c.statusFaturamento === 'concluido') {
-      return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">PRONTO</Badge>;
+      return { variant: 'expedido', label: 'Pronto' };
     }
     if (c.statusCaminhao === 'liberado_saida') {
-      return <Badge variant="outline">LIBERADO</Badge>;
+      return { variant: 'expedido', label: 'Liberado' };
     }
-    return <Badge variant="secondary">PENDENTE</Badge>;
+    return {
+      variant: statusCaminhaoVariant(c.statusCaminhao),
+      label: 'Pendente',
+    };
+  }
+
+  function statusBadge(c: CaminhaoLiberacao) {
+    const { variant, label } = statusLiberacao(c);
+    return <StatusPill variant={variant} label={label} />;
   }
 
   return (

@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Eye, Printer, QrCode, Search } from 'lucide-react';
 import type { PaginadoRecebimento, Peca, RecebimentoResumo } from '@/lib/operacao';
+import { rotuloDestinoPeca, statusPecaVariant } from '@/lib/status-ui';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -30,14 +32,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-const ROTULO_DESTINO: Record<string, string> = {
-  associada: 'Pedido',
-  em_sobra: 'Estoque',
-  para_corte: 'Desossa',
-  pesada: 'Aguardando destino',
-  em_analise: 'Análise',
-  divergente: 'Divergência',
-};
 
 export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[] }) {
   const podeLer = permissoes.includes('ETIQUETA_GERENCIAR') || permissoes.includes('PESAGEM_LER');
@@ -182,8 +176,18 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
                     </TableCell>
                     <TableCell className="font-mono text-xs">{p.id.slice(0, 10)}…</TableCell>
                     <TableCell>{p.pesoOriginal} kg</TableCell>
-                    <TableCell>{ROTULO_DESTINO[p.statusPeca] ?? p.statusPeca}</TableCell>
-                    <TableCell>{p.statusPeca}</TableCell>
+                    <TableCell>
+                      <StatusPill
+                        variant={statusPecaVariant(p.statusPeca)}
+                        label={rotuloDestinoPeca(p.statusPeca)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <StatusPill
+                        variant={statusPecaVariant(p.statusPeca)}
+                        label={p.statusPeca.replace(/_/g, ' ')}
+                      />
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="icon" onClick={() => setSelecionada(p)}>
@@ -225,7 +229,12 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
               </div>
               <div>
                 <dt className="text-muted-foreground">Destino</dt>
-                <dd>{ROTULO_DESTINO[selecionada.statusPeca] ?? selecionada.statusPeca}</dd>
+                <dd>
+                  <StatusPill
+                    variant={statusPecaVariant(selecionada.statusPeca)}
+                    label={rotuloDestinoPeca(selecionada.statusPeca)}
+                  />
+                </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Modo captura</dt>

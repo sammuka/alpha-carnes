@@ -41,7 +41,7 @@ describe('Recebimento — conclusão idempotente sob concorrência', () => {
     const ini = await request(app.getHttpServer())
       .post('/operacao/recebimentos')
       .set('Cookie', recebimentoCookies)
-      .send({ compraProgramadaId: compraId });
+      .send({ compraProgramadaId: compraId, nfeNumero: '128934' });
     const recId = ini.body.recebimento.id as string;
     await request(app.getHttpServer())
       .post(`/operacao/recebimentos/${recId}/itens`)
@@ -54,6 +54,6 @@ describe('Recebimento — conclusão idempotente sob concorrência', () => {
 
     const efetivas = resultados.filter((r) => r.jaConcluido === false);
     expect(efetivas).toHaveLength(1);
-    expect(resultados.every((r) => r.recebimento.status === 'concluido')).toBe(true);
+    expect(resultados.every((r) => r.recebimento.status === 'finalizado')).toBe(true);
   }, 60000);
 });

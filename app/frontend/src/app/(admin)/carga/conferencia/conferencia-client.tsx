@@ -3,22 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, FileText, Search, Truck } from 'lucide-react';
 import type { Caminhao, CaminhaoDetalhe, StatusCaminhao } from '@/lib/operacao';
+import { statusCaminhaoVariant } from '@/lib/status-ui';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-
-const COR_STATUS: Record<StatusCaminhao, string> = {
-  planejado: 'bg-muted text-muted-foreground',
-  aguardando_carga: 'bg-yellow-100 text-yellow-800',
-  em_carga: 'bg-blue-100 text-blue-800',
-  em_conferencia: 'bg-purple-100 text-purple-800',
-  fechado: 'bg-orange-100 text-orange-800',
-  liberado_faturamento: 'bg-teal-100 text-teal-800',
-  faturado: 'bg-cyan-100 text-cyan-800',
-  liberado_saida: 'bg-green-100 text-green-800',
-  expedido: 'bg-green-200 text-green-900',
-};
 
 const FILTROS = [
   { id: 'todos', label: 'Todas' },
@@ -26,6 +16,10 @@ const FILTROS = [
   { id: 'em_conferencia', label: 'Conferência' },
   { id: 'fechado', label: 'Fechadas' },
 ] as const;
+
+function rotuloStatusCaminhao(status: StatusCaminhao): string {
+  return status.replace(/_/g, ' ');
+}
 
 export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[] }) {
   const pode = (p: string) => permissoes.includes(p);
@@ -159,9 +153,10 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
                 >
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-sm font-semibold">{c.placa}</span>
-                    <span className={`rounded px-2 py-0.5 text-[10px] font-medium ${COR_STATUS[c.statusCaminhao]}`}>
-                      {c.statusCaminhao.replace(/_/g, ' ')}
-                    </span>
+                    <StatusPill
+                      variant={statusCaminhaoVariant(c.statusCaminhao)}
+                      label={rotuloStatusCaminhao(c.statusCaminhao)}
+                    />
                   </div>
                   <p className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Truck className="h-3 w-3" />
@@ -182,7 +177,10 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
                   <div>
                     <div className="mb-1 flex items-center gap-2">
                       <h2 className="text-xl font-bold">{cam.placa}</h2>
-                      <Badge className={COR_STATUS[cam.statusCaminhao]}>{cam.statusCaminhao.replace(/_/g, ' ')}</Badge>
+                      <StatusPill
+                        variant={statusCaminhaoVariant(cam.statusCaminhao)}
+                        label={rotuloStatusCaminhao(cam.statusCaminhao)}
+                      />
                     </div>
                     <p className="text-sm text-muted-foreground">Motorista: {cam.motorista}</p>
                   </div>

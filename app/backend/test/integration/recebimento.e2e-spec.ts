@@ -38,6 +38,10 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     acaoImediata: 'Replanejar atendimento',
   };
 
+  function iniciarBody(compraProgramadaId: string, extra: Record<string, unknown> = {}) {
+    return { compraProgramadaId, nfeNumero: '128934', ...extra };
+  }
+
   it('iniciar sobre compra em rascunho → 409', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const criar = await request(srv())
@@ -49,7 +53,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const res = await request(srv())
       .post('/operacao/recebimentos')
       .set('Cookie', recebimentoCookies)
-      .send({ compraProgramadaId: compraId });
+      .send(iniciarBody(compraId));
     expect(res.status).toBe(409);
   });
 
@@ -60,9 +64,9 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const res = await request(srv())
       .post('/operacao/recebimentos')
       .set('Cookie', recebimentoCookies)
-      .send({ compraProgramadaId: compraId });
+      .send(iniciarBody(compraId));
     expect(res.status).toBe(201);
-    expect(res.body.recebimento.status).toBe('em_andamento');
+    expect(res.body.recebimento.status).toBe('aguardando_conferencia');
     expect(res.body.jaIniciado).toBe(false);
 
     const detalhe = await request(srv())
@@ -79,8 +83,8 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-03', quantidade: 10 });
 
-    const r1 = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
-    const r2 = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const r1 = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
+    const r2 = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
     expect(r2.body.jaIniciado).toBe(true);
     expect(r2.body.recebimento.id).toBe(r1.body.recebimento.id);
   });
@@ -88,7 +92,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
   it('registrar item conforme (recebido == esperado) → conforme; impacto na disponibilidade', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-04', quantidade: 10 });
-    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
     const recId = ini.body.recebimento.id as string;
 
     const res = await request(srv())
@@ -105,7 +109,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
   it('diferença esperado×recebido SEM divergência → 409 (ajuste sem ocorrência rejeitado)', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-05', quantidade: 10 });
-    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
     const recId = ini.body.recebimento.id as string;
 
     const res = await request(srv())
@@ -118,7 +122,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
   it('diferença COM divergência formal → 201; disponibilidade reflete recebido/divergente', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-06', quantidade: 10 });
-    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
     const recId = ini.body.recebimento.id as string;
 
     const res = await request(srv())
@@ -135,7 +139,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
   it('item excedente (não esperado) exige item_excedente e não quebra (sem disponibilidade)', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-07', quantidade: 10 });
-    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
     const recId = ini.body.recebimento.id as string;
 
     // Cria um item comercial novo que NÃO faz parte do desdobramento (sem disponibilidade).
@@ -161,7 +165,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
   it('concluir com divergência aberta → 409; após tratativa (PATCH) → permitido', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-08', quantidade: 10 });
-    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
     const recId = ini.body.recebimento.id as string;
 
     await request(srv())
@@ -184,14 +188,14 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
 
     const permitido = await request(srv()).post(`/operacao/recebimentos/${recId}/concluir`).set('Cookie', recebimentoCookies).send();
     expect(permitido.status).toBe(201);
-    expect(permitido.body.recebimento.status).toBe('concluido');
+    expect(permitido.body.recebimento.status).toBe('finalizado');
     expect(permitido.body.jaConcluido).toBe(false);
   });
 
   it('imutabilidade pós-conclusão: registrar item em recebimento concluído → 409', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-09', quantidade: 10 });
-    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
     const recId = ini.body.recebimento.id as string;
 
     await request(srv())
@@ -210,7 +214,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
   it('concluir 2× é idempotente (segundo → jaConcluido=true)', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-10', quantidade: 10 });
-    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
     const recId = ini.body.recebimento.id as string;
     await request(srv()).post(`/operacao/recebimentos/${recId}/itens`).set('Cookie', recebimentoCookies).send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 });
 
@@ -230,7 +234,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-11', itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 8 }] });
     expect(pedido.status).toBe(201);
 
-    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
     const recId = ini.body.recebimento.id as string;
     // Recebe só 5 (< 8 reservado) com divergência.
     const reg = await request(srv())
@@ -263,7 +267,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       expect(p.status).toBe(201);
     }
 
-    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
     const recId = ini.body.recebimento.id as string;
     // Recebe 10 < 12 reservado → divergência. Nenhum pedido individual > 10.
     await request(srv())
@@ -288,7 +292,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-18', itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }] });
     expect(p.status).toBe(201);
 
-    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
     const recId = ini.body.recebimento.id as string;
     await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
@@ -305,7 +309,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
   async function recebimentoComDivergencia(dataOperacao: string) {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao, quantidade: 10 });
-    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send({ compraProgramadaId: compraId });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
     const recId = ini.body.recebimento.id as string;
     await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
@@ -371,7 +375,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const ini = await request(srv())
       .post('/operacao/recebimentos')
       .set('Cookie', recebimentoCookies)
-      .send({ compraProgramadaId: '019ea000-0000-7000-8000-000000000997' });
+      .send(iniciarBody('019ea000-0000-7000-8000-000000000997'));
     expect(ini.status).toBe(404);
   });
 
@@ -381,12 +385,140 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const res = await request(srv())
       .post('/operacao/recebimentos')
       .set('Cookie', comercialCookies)
-      .send({ compraProgramadaId: compraId });
+      .send(iniciarBody(compraId));
     expect(res.status).toBe(403);
   });
 
   it('RBAC: comercial tem RECEBIMENTO_LER (consulta) → 200 ao listar', async () => {
     const res = await request(srv()).get('/operacao/recebimentos').set('Cookie', comercialCookies);
     expect(res.status).toBe(200);
+  });
+
+  it('GET previsao da compra confirmada retorna itens operacionais readonly', async () => {
+    const base = await seedComercialBase(app, { fator: 4 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-21', quantidade: 10 });
+
+    const res = await request(srv())
+      .get(`/operacao/recebimentos/previsao/${compraId}`)
+      .set('Cookie', recebimentoCookies);
+    expect(res.status).toBe(200);
+    expect(res.body.itensOperacionais).toHaveLength(1);
+    expect(Number(res.body.itensOperacionais[0].quantidadePrevista)).toBe(40);
+    expect(res.body.jaPossuiRecebimento).toBe(false);
+  });
+
+  it('iniciar com iniciarConferencia=true → status em_conferencia', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-22', quantidade: 10 });
+    const res = await request(srv())
+      .post('/operacao/recebimentos')
+      .set('Cookie', recebimentoCookies)
+      .send(iniciarBody(compraId, { iniciarConferencia: true }));
+    expect(res.status).toBe(201);
+    expect(res.body.recebimento.status).toBe('em_conferencia');
+  });
+
+  it('cancelar lote sem pesagem → cancelado', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-23', quantidade: 10 });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
+    const recId = ini.body.recebimento.id as string;
+
+    const res = await request(srv()).post(`/operacao/recebimentos/${recId}/cancelar`).set('Cookie', recebimentoCookies);
+    expect(res.status).toBe(201);
+    expect(res.body.recebimento.status).toBe('cancelado');
+  });
+
+  it('iniciar sem NF → 400', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-24', quantidade: 10 });
+    const res = await request(srv())
+      .post('/operacao/recebimentos')
+      .set('Cookie', recebimentoCookies)
+      .send({ compraProgramadaId: compraId });
+    expect(res.status).toBe(400);
+  });
+
+  it('GET previsao compra rascunho → 409', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const criar = await request(srv())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send({ dataOperacao: '2026-11-25', fornecedorId: base.fornecedorId, itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 10 }] });
+    const res = await request(srv())
+      .get(`/operacao/recebimentos/previsao/${criar.body.id}`)
+      .set('Cookie', recebimentoCookies);
+    expect(res.status).toBe(409);
+  });
+
+  it('PATCH nfe em lote aberto → 200 e reflete no detalhe', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-26', quantidade: 10 });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
+    const recId = ini.body.recebimento.id as string;
+
+    const patch = await request(srv())
+      .patch(`/operacao/recebimentos/${recId}/nfe`)
+      .set('Cookie', recebimentoCookies)
+      .send({ nfeNumero: '998877', romaneio: 'ROM-PATCH', nfePesoBruto: 1500.5 });
+    expect(patch.status).toBe(200);
+    expect(patch.body.recebimento.nfeNumero).toBe('998877');
+    expect(patch.body.recebimento.romaneio).toBe('ROM-PATCH');
+
+    const detalhe = await request(srv()).get(`/operacao/recebimentos/${recId}`).set('Cookie', recebimentoCookies);
+    expect(detalhe.body.nfeNumero).toBe('998877');
+    expect(detalhe.body.notaFiscalFornecedor).toBe('998877');
+  });
+
+  it('PATCH nfe em lote finalizado → 409', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-27', quantidade: 10 });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
+    const recId = ini.body.recebimento.id as string;
+    await request(srv())
+      .post(`/operacao/recebimentos/${recId}/itens`)
+      .set('Cookie', recebimentoCookies)
+      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 });
+    await request(srv()).post(`/operacao/recebimentos/${recId}/concluir`).set('Cookie', recebimentoCookies).send();
+
+    const res = await request(srv())
+      .patch(`/operacao/recebimentos/${recId}/nfe`)
+      .set('Cookie', recebimentoCookies)
+      .send({ nfeNumero: '000111' });
+    expect(res.status).toBe(409);
+  });
+
+  it('cancelar lote finalizado → 409', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-28', quantidade: 10 });
+    const ini = await request(srv()).post('/operacao/recebimentos').set('Cookie', recebimentoCookies).send(iniciarBody(compraId));
+    const recId = ini.body.recebimento.id as string;
+    await request(srv())
+      .post(`/operacao/recebimentos/${recId}/itens`)
+      .set('Cookie', recebimentoCookies)
+      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 });
+    await request(srv()).post(`/operacao/recebimentos/${recId}/concluir`).set('Cookie', recebimentoCookies).send();
+
+    const res = await request(srv()).post(`/operacao/recebimentos/${recId}/cancelar`).set('Cookie', recebimentoCookies);
+    expect(res.status).toBe(409);
+  });
+
+  it('listar retorna resumo enriquecido com NF, romaneio e progresso', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-29', quantidade: 10 });
+    const ini = await request(srv())
+      .post('/operacao/recebimentos')
+      .set('Cookie', recebimentoCookies)
+      .send(iniciarBody(compraId, { romaneio: 'ROM-LISTA', nfeNumero: '555444' }));
+    expect(ini.status).toBe(201);
+
+    const lista = await request(srv()).get('/operacao/recebimentos?pageSize=50').set('Cookie', recebimentoCookies);
+    expect(lista.status).toBe(200);
+    const row = lista.body.data.find((r: { id: string }) => r.id === ini.body.recebimento.id);
+    expect(row).toBeDefined();
+    expect(row.nfeNumero).toBe('555444');
+    expect(row.romaneio).toBe('ROM-LISTA');
+    expect(row.codigoLote).toBe(ini.body.recebimento.id.slice(0, 8).toUpperCase());
+    expect(typeof row.progressoBalanca).toBe('number');
   });
 });

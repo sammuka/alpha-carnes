@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Calendar, CheckCircle, Plus, Save, Trash2, Truck } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -39,12 +39,27 @@ function hojeISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  rascunho: 'bg-amber-50 text-amber-700 border-amber-200',
-  em_negociacao: 'bg-blue-50 text-blue-700 border-blue-200',
-  confirmada: 'bg-green-50 text-green-700 border-green-200',
-  cancelada: 'bg-muted text-muted-foreground',
+const ROTULO_COMPRA: Record<string, string> = {
+  rascunho: 'Rascunho',
+  em_negociacao: 'Em negociação',
+  confirmada: 'Confirmada',
+  cancelada: 'Cancelada',
 };
+
+function statusCompraVariant(status: string): StatusPillVariant {
+  switch (status) {
+    case 'rascunho':
+      return 'pendente';
+    case 'em_negociacao':
+      return 'recebido';
+    case 'confirmada':
+      return 'expedido';
+    case 'cancelada':
+      return 'bloqueado';
+    default:
+      return 'pendente';
+  }
+}
 
 export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const podeLer = permissoes.includes('COMPRAS_PROGRAMADAS_LER');
@@ -275,9 +290,10 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
               <div>
                 <Label>Status</Label>
                 <div className="mt-2">
-                  <Badge variant="outline" className={STATUS_BADGE[compra?.status ?? 'rascunho']}>
-                    {(compra?.status ?? 'rascunho').toUpperCase()}
-                  </Badge>
+                  <StatusPill
+                    variant={statusCompraVariant(compra?.status ?? 'rascunho')}
+                    label={ROTULO_COMPRA[compra?.status ?? 'rascunho'] ?? compra?.status ?? 'Rascunho'}
+                  />
                 </div>
               </div>
               <div className="sm:col-span-3">

@@ -9,6 +9,7 @@ import {
   PowerOff,
   Search,
 } from 'lucide-react';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -109,12 +110,7 @@ function formParaPayload(form: FormProduto): CriarProdutoDto {
 function StatusBadge({ status }: { status: string }) {
   const ativo = status === 'ativo';
   return (
-    <Badge
-      variant="outline"
-      className={ativo ? 'border-green-200 bg-green-50 text-green-700' : 'border-muted bg-muted/50 text-muted-foreground'}
-    >
-      {ativo ? 'Ativo' : 'Inativo'}
-    </Badge>
+    <StatusPill variant={ativo ? 'expedido' : 'bloqueado'} label={ativo ? 'Ativo' : 'Inativo'} />
   );
 }
 
@@ -495,6 +491,14 @@ export function ProdutosClient({ permissoes }: { permissoes: string[] }) {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="precoPorKg">Preço por kg (R$)</Label>
+              <Input id="precoPorKg" value="" placeholder="—" disabled readOnly />
+              <p className="text-xs text-muted-foreground">
+                Lacuna backend — tabela de preços por kg ainda não exposta pela API.
+              </p>
             </div>
 
             <div className="space-y-3 rounded-lg border p-3">

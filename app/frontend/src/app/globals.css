@@ -1,60 +1,81 @@
 @import "tailwindcss";
 
 @theme {
-  /* Fonte */
+  /* Fonte — Inter only (sem JetBrains Mono) */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
-  /* shadcn compat — mapeados para paleta AlphaCarnes */
-  --color-background:         oklch(97% 0.005 240);
-  --color-foreground:         oklch(13% 0.02 260);
-  --color-card:               oklch(100% 0 0);
-  --color-card-foreground:    oklch(13% 0.02 260);
-  --color-popover:            oklch(100% 0 0);
-  --color-popover-foreground: oklch(13% 0.02 260);
-  --color-primary:            oklch(55% 0.22 260);
-  --color-primary-foreground: oklch(99% 0.005 240);
-  --color-secondary:          oklch(94% 0.01 240);
-  --color-secondary-foreground: oklch(13% 0.02 260);
-  --color-muted:              oklch(94% 0.007 240);
-  --color-muted-foreground:   oklch(52% 0.025 250);
-  --color-accent:             oklch(94% 0.01 240);
-  --color-accent-foreground:  oklch(13% 0.02 260);
-  --color-destructive:        oklch(53% 0.22 25);
-  --color-destructive-foreground: oklch(99% 0.005 240);
-  --color-border:             oklch(90% 0.01 240);
-  --color-input:              oklch(90% 0.01 240);
-  --color-ring:               oklch(55% 0.22 260);
-  --color-chart-1:            oklch(55% 0.22 260);
-  --color-chart-2:            oklch(60% 0.15 145);
-  --color-chart-3:            oklch(68% 0.15 75);
-  --color-chart-4:            oklch(53% 0.22 25);
-  --color-chart-5:            oklch(45% 0.02 250);
+  /* Protótipo v2 — cores base */
+  --color-background: #F5F7FA;
+  --color-foreground: #1A2332;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #1A2332;
+  --color-popover: #FFFFFF;
+  --color-popover-foreground: #1A2332;
+  --color-primary: #3B7FD4;
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: #F1F5F9;
+  --color-secondary-foreground: #1A2332;
+  --color-muted: #F1F5F9;
+  --color-muted-foreground: #64748B;
+  --color-accent: #E8EEF5;
+  --color-accent-foreground: #1A2332;
+  --color-destructive: #FC5241;
+  --color-destructive-foreground: #FFFFFF;
+  --color-border: #E2E8F0;
+  --color-input: #E2E8F0;
+  --color-ring: #3B7FD4;
+  --color-chart-1: #3B7FD4;
+  --color-chart-2: #18A84A;
+  --color-chart-3: #F5B019;
+  --color-chart-4: #FC5241;
+  --color-chart-5: #64748B;
 
-  /* Tokens legados AlphaCarnes */
-  --color-primary-dark:       oklch(35% 0.18 265);
-  --color-destructive-bg:     oklch(97% 0.04 25);
-  --color-success:            oklch(55% 0.17 145);
-  --color-success-bg:         oklch(96% 0.05 145);
-  --color-warning:            oklch(68% 0.15 75);
-  --color-warning-bg:         oklch(97% 0.05 75);
-  --color-info:               oklch(55% 0.22 260);
-  --color-info-bg:            oklch(96% 0.04 260);
+  /* Texto auxiliar */
+  --color-text-secondary: #64748B;
+  --color-text-muted: #94A3B8;
 
-  /* Sidebar */
-  --color-sidebar-bg:         oklch(16% 0.025 255);
-  --color-sidebar-text:       oklch(70% 0.02 240);
-  --color-sidebar-text-muted: oklch(45% 0.02 240);
-  --color-sidebar-border:     oklch(22% 0.022 255);
-  --color-sidebar-item-hover: oklch(21% 0.025 255);
-  --color-sidebar-item-active:oklch(55% 0.22 260);
-  --color-sidebar-active-bg:  oklch(26% 0.06 260);
+  /* Primário hover */
+  --color-primary-hover: #265389;
+
+  /* Estados operacionais — StatusPill */
+  --color-status-recebido: #3B7FD4;
+  --color-status-recebido-bg: #E8EEF5;
+  --color-status-pesado: #7C3AED;
+  --color-status-pesado-bg: #F3E8FF;
+  --color-status-expedido: #18A84A;
+  --color-status-expedido-bg: #DCFCE7;
+  --color-status-divergencia: #F5B019;
+  --color-status-divergencia-bg: #FEF3C7;
+  --color-status-bloqueado: #FC5241;
+  --color-status-bloqueado-bg: #FEE2E2;
+  --color-status-pendente: #64748B;
+  --color-status-pendente-bg: #F1F5F9;
+
+  /* Sidebar gradiente */
+  --color-sidebar-gradient-start: #1E3A5F;
+  --color-sidebar-gradient-end: #1B4E9B;
+  --color-sidebar-text: rgba(255, 255, 255, 0.92);
+  --color-sidebar-text-muted: rgba(255, 255, 255, 0.55);
+  --color-sidebar-item-hover: rgba(255, 255, 255, 0.1);
+  --color-sidebar-item-active: rgba(255, 255, 255, 0.16);
+  --color-sidebar-border: rgba(255, 255, 255, 0.1);
+
+  /* Compat legado */
+  --color-primary-dark: #265389;
+  --color-destructive-bg: #FEE2E2;
+  --color-success: #18A84A;
+  --color-success-bg: #DCFCE7;
+  --color-warning: #F5B019;
+  --color-warning-bg: #FEF3C7;
+  --color-info: #3B7FD4;
+  --color-info-bg: #E8EEF5;
 
   /* Raios */
-  --radius:    0.5rem;
+  --radius: 0.75rem;
   --radius-lg: 0.75rem;
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-xl: 1rem;
 }
 
 @layer base {

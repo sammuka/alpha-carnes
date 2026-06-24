@@ -1,12 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Filter, PackageSearch } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Filter, PackageCheck, PackageSearch, Scale, TrendingUp } from 'lucide-react';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import type { DisponibilidadeDia } from '@/lib/comercial';
-import { Badge } from '@/components/ui/badge';
+import { AlertItem } from '@/components/ui/alert-item';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
@@ -101,11 +103,11 @@ export default function DisponibilidadePage() {
   };
 
   const cards = [
-    { label: 'Total gerado', value: resumo.total.toFixed(0), desc: 'Previsto do dia', border: 'border-l-primary' },
-    { label: 'Reservado', value: resumo.reservado.toFixed(0), desc: 'Pedidos confirmados', border: 'border-l-violet-500' },
-    { label: 'Disponível (livre)', value: resumo.disponivel.toFixed(0), desc: 'Pronto para venda', border: 'border-l-green-500' },
-    { label: 'Recebido', value: resumo.recebido.toFixed(0), desc: 'Em planta', border: 'border-l-amber-500' },
-    { label: 'Esgotados', value: `${esgotados.length} itens`, desc: 'Sem cobertura', border: 'border-l-red-500' },
+    { label: 'Total gerado', value: resumo.total.toFixed(0), sub: 'Previsto do dia', variant: 'primary' as const, Icon: PackageCheck },
+    { label: 'Reservado', value: resumo.reservado.toFixed(0), sub: 'Pedidos confirmados', variant: 'violet' as const, Icon: Scale },
+    { label: 'Disponível (livre)', value: resumo.disponivel.toFixed(0), sub: 'Pronto para venda', variant: 'success' as const, Icon: TrendingUp },
+    { label: 'Recebido', value: resumo.recebido.toFixed(0), sub: 'Em planta', variant: 'warning' as const, Icon: PackageSearch },
+    { label: 'Esgotados', value: `${esgotados.length} itens`, sub: 'Sem cobertura', variant: 'warning' as const, Icon: AlertTriangle },
   ];
 
   return (
@@ -116,9 +118,10 @@ export default function DisponibilidadePage() {
           <p className="text-sm text-muted-foreground">Saldo comercial por item para a data operacional</p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className={status === 'conectado' ? 'border-green-200 bg-green-50 text-green-700' : ''}>
-            {status === 'conectado' ? '● tempo real' : '○ reconectando'}
-          </Badge>
+          <StatusPill
+            variant={status === 'conectado' ? 'expedido' : 'pendente'}
+            label={status === 'conectado' ? 'tempo real' : 'reconectando'}
+          />
           <Button variant="outline" size="sm" onClick={() => setBusca('')}>
             <Filter className="mr-1 h-4 w-4" />
             Limpar filtros
@@ -139,13 +142,14 @@ export default function DisponibilidadePage() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         {cards.map((c) => (
-          <Card key={c.label} className={`border-l-4 ${c.border}`}>
-            <CardContent className="p-4">
-              <p className="text-xs font-medium text-muted-foreground">{c.label}</p>
-              <p className="mt-1 text-2xl font-bold">{carregando ? '…' : c.value}</p>
-              <p className="text-xs text-muted-foreground">{c.desc}</p>
-            </CardContent>
-          </Card>
+          <KpiCard
+            key={c.label}
+            label={c.label}
+            value={carregando ? '…' : c.value}
+            sub={c.sub}
+            variant={c.variant}
+            Icon={c.Icon}
+          />
         ))}
       </div>
 
@@ -205,11 +209,7 @@ export default function DisponibilidadePage() {
                           <div className="space-y-1">
                             <div className="flex justify-between text-xs text-muted-foreground">
                               <span>{pct}% reservado</span>
-                              {disp <= 0 && (
-                                <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 text-[10px]">
-                                  ESGOTADO
-                                </Badge>
-                              )}
+                              {disp <= 0 && <StatusPill variant="divergencia" label="ESGOTADO" />}
                             </div>
                             <Progress value={pct} className="h-2" />
                           </div>
@@ -234,13 +234,14 @@ export default function DisponibilidadePage() {
               <p className="text-sm text-muted-foreground">Nenhum item esgotado no momento.</p>
             ) : (
               esgotados.map((l) => (
-                <div key={l.id} className="rounded-md border border-red-200 bg-red-50 p-3 text-sm">
-                  <p className="font-semibold text-red-700">Item esgotado</p>
-                  <p className="mt-1 font-mono text-xs text-muted-foreground">{l.itemComercialId}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Reservado: {l.quantidadeReservada} / Gerado: {l.quantidadeTotalGerada}
-                  </p>
-                </div>
+                <AlertItem
+                  key={l.id}
+                  title="Item esgotado"
+                  description={`Reservado: ${l.quantidadeReservada} / Gerado: ${l.quantidadeTotalGerada} · ${l.itemComercialId.slice(0, 12)}…`}
+                  time=""
+                  variant="divergencia"
+                  Icon={AlertTriangle}
+                />
               ))
             )}
             {linhas.some((l) => Number(l.quantidadeComDivergencia) > 0) && (

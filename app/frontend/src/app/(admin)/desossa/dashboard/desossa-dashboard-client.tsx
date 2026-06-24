@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { RefreshCw, Scissors } from 'lucide-react';
+import { AlertTriangle, Package, RefreshCw, Scissors, Warehouse } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { KpiCard } from '@/components/ui/kpi-card';
 import {
   Table,
   TableBody,
@@ -24,6 +25,7 @@ export function DesossaDashboardClient() {
   const [faltas, setFaltas] = useState<FaltaDesossa[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null);
 
   const carregar = useCallback(async () => {
     setErro(null);
@@ -36,6 +38,7 @@ export function DesossaDashboardClient() {
         return;
       }
       setFaltas((await res.json()) as FaltaDesossa[]);
+      setUltimaAtualizacao(new Date());
     } catch {
       setErro('Erro de conexão');
     } finally {
@@ -58,8 +61,20 @@ export function DesossaDashboardClient() {
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Desossa</p>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Painel de Necessidade</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            O que falta produzir para completar os pedidos do dia. Atualização automática a cada minuto.
+            O que falta produzir para completar os pedidos do dia.
           </p>
+          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <span
+              className={`h-2 w-2 shrink-0 rounded-full ${carregando ? 'animate-pulse bg-primary' : 'bg-[var(--color-status-expedido)]'}`}
+              aria-hidden="true"
+            />
+            <span>Atualização automática a cada minuto</span>
+            {ultimaAtualizacao && (
+              <span className="text-muted-foreground/80">
+                · Última: {ultimaAtualizacao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void carregar()} disabled={carregando}>
@@ -76,20 +91,25 @@ export function DesossaDashboardClient() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="border-l-4 border-l-amber-500 p-4">
-          <p className="text-sm text-muted-foreground">Produtos com demanda</p>
-          <p className="text-3xl font-bold tabular-nums">{faltas.length}</p>
-        </Card>
-        <Card className="border-l-4 border-l-red-500 p-4">
-          <p className="text-sm text-muted-foreground">Total faltante</p>
-          <p className="text-3xl font-bold tabular-nums text-red-700">{formatarQuantidade(totalFaltante)}</p>
-        </Card>
-        <Card className="border-l-4 border-l-emerald-500 p-4">
-          <p className="text-sm text-muted-foreground">Prontos em estoque (demanda)</p>
-          <p className="text-3xl font-bold tabular-nums text-emerald-700">
-            {formatarQuantidade(faltas.reduce((acc, item) => acc + item.quantidadeEstoque, 0))}
-          </p>
-        </Card>
+        <KpiCard
+          label="Produtos com demanda"
+          value={faltas.length}
+          variant="warning"
+          Icon={Package}
+        />
+        <KpiCard
+          label="Total faltante"
+          value={formatarQuantidade(totalFaltante)}
+          sub={totalFaltante > 0 ? 'Requer produção' : 'Demanda atendida'}
+          variant="warning"
+          Icon={AlertTriangle}
+        />
+        <KpiCard
+          label="Prontos em estoque (demanda)"
+          value={formatarQuantidade(faltas.reduce((acc, item) => acc + item.quantidadeEstoque, 0))}
+          variant="success"
+          Icon={Warehouse}
+        />
       </div>
 
       {erro && (
@@ -134,15 +154,20 @@ export function DesossaDashboardClient() {
                     <div className="text-xs text-muted-foreground">{item.produto.codigo}</div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Badge
-                      variant={item.quantidadeFaltante > 0 ? 'destructive' : 'secondary'}
-                      className="min-w-12 justify-center tabular-nums"
+                    <span
+                      className={`inline-block min-w-[3rem] text-3xl font-bold tabular-nums tracking-tight ${
+                        item.quantidadeFaltante > 0
+                          ? 'text-[var(--color-status-divergencia)]'
+                          : 'text-muted-foreground'
+                      }`}
                     >
                       {formatarQuantidade(item.quantidadeFaltante)}
-                    </Badge>
+                    </span>
                   </TableCell>
-                  <TableCell className="text-right tabular-nums font-medium text-emerald-700">
-                    {formatarQuantidade(item.quantidadeEstoque)}
+                  <TableCell className="text-right">
+                    <span className="text-xl font-semibold tabular-nums text-[var(--color-status-expedido)]">
+                      {formatarQuantidade(item.quantidadeEstoque)}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline">{item.origem}</Badge>

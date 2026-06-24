@@ -39,3 +39,7 @@ Thumbs.db
 
 # Worktrees
 .worktrees/
+
+# Playwright (artefatos locais)
+app/frontend/e2e/screenshots/
+app/frontend/e2e/test-results/

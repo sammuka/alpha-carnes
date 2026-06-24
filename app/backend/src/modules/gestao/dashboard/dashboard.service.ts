@@ -1,16 +1,38 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lt, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
   caminhoes,
+  clientes,
   comprasProgramadas,
   disponibilidadesVirtuais,
   divergenciasRecebimento,
+  itensComerciais,
   pedidosVenda,
+  pedidosVendaItens,
+  pecas,
   recebimentos,
+  auditoria,
+  usuarios,
 } from '../../../database/schema';
+
+export interface PedidoEmAndamento {
+  pedidoId: string;
+  clienteNome: string;
+  produtoResumo: string;
+  pesoTotalKg: string | null;
+  status: string;
+  dataOperacao: string;
+}
+
+export interface AtividadeRecente {
+  id: string;
+  usuarioNome: string;
+  descricao: string;
+  createdAt: string;
+}
 
 export interface DashboardDia {
   dataOperacao: string;
@@ -23,6 +45,8 @@ export interface DashboardDia {
     total: number;
     porStatus: Record<string, number>;
   };
+  pedidosEmAndamento: PedidoEmAndamento[];
+  atividadesRecentes: AtividadeRecente[];
   divergenciasAbertas: number;
   caminhoesDoDia: number;
   disponibilidade: {
@@ -107,6 +131,11 @@ export class DashboardService {
       if (disp <= 0) itensEsgotados += 1;
     }
 
+    const [pedidosEmAndamento, atividadesRecentes] = await Promise.all([
+      this.listarPedidosEmAndamento(dataOperacao),
+      this.listarAtividadesRecentes(dataOperacao),
+    ]);
+
     return {
       dataOperacao,
       comprasProgramadas: {
@@ -118,6 +147,8 @@ export class DashboardService {
         total: pedidosTotal,
         porStatus: pedidosPorStatus,
       },
+      pedidosEmAndamento,
+      atividadesRecentes,
       divergenciasAbertas: divergenciasRow[0]?.total ?? 0,
       caminhoesDoDia: caminhoesRow[0]?.total ?? 0,
       disponibilidade: {
@@ -126,5 +157,102 @@ export class DashboardService {
         quantidadeDisponivelTotal: quantidadeDisponivelTotal.toFixed(3),
       },
     };
+  }
+
+  private async listarPedidosEmAndamento(dataOperacao: string): Promise<PedidoEmAndamento[]> {
+    const pedidos = await this.db
+      .select({
+        pedidoId: pedidosVenda.id,
+        status: pedidosVenda.status,
+        dataOperacao: pedidosVenda.dataOperacao,
+        clienteNome: clientes.nomeFantasia,
+        clienteRazao: clientes.razaoSocial,
+      })
+      .from(pedidosVenda)
+      .innerJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
+      .where(
+        and(
+          eq(pedidosVenda.dataOperacao, dataOperacao),
+          isNull(pedidosVenda.deletedAt),
+          ne(pedidosVenda.status, 'cancelado'),
+        ),
+      )
+      .orderBy(desc(pedidosVenda.createdAt))
+      .limit(20);
+
+    const resultado: PedidoEmAndamento[] = [];
+    for (const p of pedidos) {
+      const itens = await this.db
+        .select({
+          codigo: itensComerciais.codigo,
+          descricao: itensComerciais.descricao,
+          quantidade: pedidosVendaItens.quantidadePedida,
+        })
+        .from(pedidosVendaItens)
+        .innerJoin(itensComerciais, eq(itensComerciais.id, pedidosVendaItens.itemComercialId))
+        .where(eq(pedidosVendaItens.pedidoVendaId, p.pedidoId));
+
+      const produtoResumo =
+        itens.length === 0
+          ? '—'
+          : itens.length === 1
+            ? `${itens[0]!.codigo} (${itens[0]!.quantidade})`
+            : `${itens[0]!.codigo} +${itens.length - 1}`;
+
+      const pesoRow = await this.db
+        .select({ total: sql<string>`coalesce(sum(${pecas.pesoOriginal}), 0)::text` })
+        .from(pecas)
+        .where(and(eq(pecas.pedidoVendaId, p.pedidoId), isNull(pecas.deletedAt)));
+
+      resultado.push({
+        pedidoId: p.pedidoId,
+        clienteNome: p.clienteNome ?? p.clienteRazao ?? '—',
+        produtoResumo,
+        pesoTotalKg: pesoRow[0]?.total && Number(pesoRow[0].total) > 0 ? pesoRow[0].total : null,
+        status: p.status,
+        dataOperacao: p.dataOperacao,
+      });
+    }
+    return resultado;
+  }
+
+  private async listarAtividadesRecentes(dataOperacao: string): Promise<AtividadeRecente[]> {
+    const inicio = new Date(`${dataOperacao}T00:00:00.000Z`);
+    const fim = new Date(inicio);
+    fim.setUTCDate(fim.getUTCDate() + 1);
+
+    const linhas = await this.db
+      .select({
+        id: auditoria.id,
+        tabela: auditoria.tabela,
+        operacao: auditoria.operacao,
+        modulo: auditoria.modulo,
+        usuarioNome: usuarios.nome,
+        createdAt: auditoria.createdAt,
+      })
+      .from(auditoria)
+      .leftJoin(usuarios, eq(usuarios.id, auditoria.usuarioId))
+      .where(
+        and(
+          gte(auditoria.createdAt, inicio),
+          lt(auditoria.createdAt, fim),
+          sql`${auditoria.modulo} IN ('operacao', 'comercial', 'pesagem', 'gestao')`,
+        ),
+      )
+      .orderBy(desc(auditoria.createdAt))
+      .limit(15);
+
+    return linhas.map((l) => ({
+      id: l.id,
+      usuarioNome: l.usuarioNome ?? 'Sistema',
+      descricao: this.humanizarAuditoria(l.tabela, l.operacao, l.modulo),
+      createdAt: l.createdAt.toISOString(),
+    }));
+  }
+
+  private humanizarAuditoria(tabela: string, operacao: string, modulo: string | null): string {
+    const acao =
+      operacao === 'INSERT' ? 'criou' : operacao === 'UPDATE' ? 'alterou' : operacao === 'DELETE' ? 'removeu' : operacao.toLowerCase();
+    return `${acao} registro em ${tabela}${modulo ? ` (${modulo})` : ''}`;
   }
 }

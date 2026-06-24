@@ -1,13 +1,17 @@
 import { z } from 'zod';
 import type { FieldValues } from 'react-hook-form';
 
+export type AbaCadastro = 'gerais' | 'fiscais' | 'contatos' | 'preferencias' | 'parametros';
+
 export interface CampoConfig {
   nome: string;
   rotulo: string;
-  tipo: 'text' | 'select' | 'checkbox' | 'date' | 'number';
+  tipo: 'text' | 'select' | 'checkbox' | 'date' | 'number' | 'textarea';
   obrigatorio?: boolean;
   opcoes?: Array<{ valor: string; rotulo: string }>;
   placeholder?: string;
+  aba?: AbaCadastro;
+  jsonCampo?: string;
 }
 
 export interface ColunaConfig {
@@ -35,6 +39,50 @@ const statusOpcoes = [
 const documentoRegex = /^\d{11}$|^\d{14}$/;
 const documentoMsg = 'Informe um CNPJ (14 dígitos) ou CPF (11 dígitos), apenas números';
 
+const dadosFiscaisFormSchema = z
+  .object({
+    logradouro: z.string().optional(),
+    numero: z.string().optional(),
+    bairro: z.string().optional(),
+    cidade: z.string().optional(),
+    uf: z.string().optional(),
+    cep: z.string().optional(),
+    inscricaoEstadual: z.string().optional(),
+  })
+  .optional();
+
+const dadosContatoFormSchema = z
+  .object({
+    nome: z.string().optional(),
+    telefone: z.string().optional(),
+    email: z.string().optional(),
+    cargo: z.string().optional(),
+  })
+  .optional();
+
+const preferenciasFormSchema = z
+  .object({
+    prefereMaisPesada: z.boolean().optional(),
+    prefereMaisGorda: z.boolean().optional(),
+    observacaoBalanca: z.string().optional(),
+  })
+  .optional();
+
+const contatosFornecedorFormSchema = z
+  .object({
+    nome: z.string().optional(),
+    telefone: z.string().optional(),
+    email: z.string().optional(),
+    cargo: z.string().optional(),
+  })
+  .optional();
+
+const parametrosFornecedorFormSchema = z
+  .object({
+    romaneioAntecipado: z.boolean().optional(),
+  })
+  .optional();
+
 export const clientesConfig: CadastroConfig = {
   recurso: 'clientes',
   titulo: 'Clientes',
@@ -47,17 +95,119 @@ export const clientesConfig: CadastroConfig = {
     { campo: 'status', rotulo: 'Status' },
   ],
   campos: [
-    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true },
-    { nome: 'razaoSocial', rotulo: 'Razão Social', tipo: 'text', obrigatorio: true },
-    { nome: 'nomeFantasia', rotulo: 'Nome Fantasia', tipo: 'text' },
+    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true, aba: 'gerais' },
+    { nome: 'razaoSocial', rotulo: 'Razão Social', tipo: 'text', obrigatorio: true, aba: 'gerais' },
+    { nome: 'nomeFantasia', rotulo: 'Nome Fantasia', tipo: 'text', aba: 'gerais' },
     {
       nome: 'documentoFiscal',
       rotulo: 'CNPJ/CPF',
       tipo: 'text',
       obrigatorio: true,
       placeholder: 'Somente números',
+      aba: 'gerais',
     },
-    { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes },
+    { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes, aba: 'gerais' },
+    { nome: 'rotaPadrao', rotulo: 'Rota padrão', tipo: 'text', aba: 'gerais' },
+    {
+      nome: 'representanteId',
+      rotulo: 'Representante (UUID)',
+      tipo: 'text',
+      placeholder: 'ID do representante',
+      aba: 'gerais',
+    },
+    { nome: 'prioridade', rotulo: 'Prioridade', tipo: 'text', aba: 'gerais' },
+    {
+      nome: 'observacoesOperacionais',
+      rotulo: 'Observações operacionais',
+      tipo: 'textarea',
+      aba: 'gerais',
+    },
+    {
+      nome: 'logradouro',
+      rotulo: 'Logradouro',
+      tipo: 'text',
+      aba: 'fiscais',
+      jsonCampo: 'dadosFiscaisJson',
+    },
+    {
+      nome: 'numero',
+      rotulo: 'Número',
+      tipo: 'text',
+      aba: 'fiscais',
+      jsonCampo: 'dadosFiscaisJson',
+    },
+    {
+      nome: 'bairro',
+      rotulo: 'Bairro',
+      tipo: 'text',
+      aba: 'fiscais',
+      jsonCampo: 'dadosFiscaisJson',
+    },
+    {
+      nome: 'cidade',
+      rotulo: 'Cidade',
+      tipo: 'text',
+      aba: 'fiscais',
+      jsonCampo: 'dadosFiscaisJson',
+    },
+    { nome: 'uf', rotulo: 'UF', tipo: 'text', aba: 'fiscais', jsonCampo: 'dadosFiscaisJson' },
+    { nome: 'cep', rotulo: 'CEP', tipo: 'text', aba: 'fiscais', jsonCampo: 'dadosFiscaisJson' },
+    {
+      nome: 'inscricaoEstadual',
+      rotulo: 'Inscrição estadual',
+      tipo: 'text',
+      aba: 'fiscais',
+      jsonCampo: 'dadosFiscaisJson',
+    },
+    {
+      nome: 'nome',
+      rotulo: 'Nome do contato',
+      tipo: 'text',
+      aba: 'contatos',
+      jsonCampo: 'dadosContatoJson',
+    },
+    {
+      nome: 'telefone',
+      rotulo: 'Telefone',
+      tipo: 'text',
+      aba: 'contatos',
+      jsonCampo: 'dadosContatoJson',
+    },
+    {
+      nome: 'email',
+      rotulo: 'E-mail',
+      tipo: 'text',
+      aba: 'contatos',
+      jsonCampo: 'dadosContatoJson',
+    },
+    {
+      nome: 'cargo',
+      rotulo: 'Cargo',
+      tipo: 'text',
+      aba: 'contatos',
+      jsonCampo: 'dadosContatoJson',
+    },
+    {
+      nome: 'prefereMaisPesada',
+      rotulo: 'Prefere peça mais pesada',
+      tipo: 'checkbox',
+      aba: 'preferencias',
+      jsonCampo: 'preferenciasJson',
+    },
+    {
+      nome: 'prefereMaisGorda',
+      rotulo: 'Prefere peça mais gorda',
+      tipo: 'checkbox',
+      aba: 'preferencias',
+      jsonCampo: 'preferenciasJson',
+    },
+    {
+      nome: 'observacaoBalanca',
+      rotulo: 'Observação para balança',
+      tipo: 'textarea',
+      aba: 'preferencias',
+      jsonCampo: 'preferenciasJson',
+    },
   ],
   schema: z.object({
     codigo: z.string().min(1, 'Código obrigatório'),
@@ -65,6 +215,13 @@ export const clientesConfig: CadastroConfig = {
     nomeFantasia: z.string().optional(),
     documentoFiscal: z.string().regex(documentoRegex, documentoMsg),
     status: z.enum(['ativo', 'inativo']).optional(),
+    rotaPadrao: z.string().optional(),
+    representanteId: z.string().uuid().optional().or(z.literal('')),
+    prioridade: z.string().optional(),
+    observacoesOperacionais: z.string().optional(),
+    dadosFiscaisJson: dadosFiscaisFormSchema,
+    dadosContatoJson: dadosContatoFormSchema,
+    preferenciasJson: preferenciasFormSchema,
   }),
 };
 
@@ -80,16 +237,62 @@ export const fornecedoresConfig: CadastroConfig = {
     { campo: 'status', rotulo: 'Status' },
   ],
   campos: [
-    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true },
-    { nome: 'razaoSocial', rotulo: 'Razão Social', tipo: 'text', obrigatorio: true },
-    { nome: 'documentoFiscal', rotulo: 'CNPJ/CPF', tipo: 'text', obrigatorio: true, placeholder: 'Somente números' },
-    { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes },
+    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true, aba: 'gerais' },
+    { nome: 'razaoSocial', rotulo: 'Razão Social', tipo: 'text', obrigatorio: true, aba: 'gerais' },
+    {
+      nome: 'documentoFiscal',
+      rotulo: 'CNPJ/CPF',
+      tipo: 'text',
+      obrigatorio: true,
+      placeholder: 'Somente números',
+      aba: 'gerais',
+    },
+    { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes, aba: 'gerais' },
+    { nome: 'observacoes', rotulo: 'Observações', tipo: 'textarea', aba: 'gerais' },
+    {
+      nome: 'nome',
+      rotulo: 'Nome do contato',
+      tipo: 'text',
+      aba: 'contatos',
+      jsonCampo: 'contatosJson',
+    },
+    {
+      nome: 'telefone',
+      rotulo: 'Telefone',
+      tipo: 'text',
+      aba: 'contatos',
+      jsonCampo: 'contatosJson',
+    },
+    {
+      nome: 'email',
+      rotulo: 'E-mail',
+      tipo: 'text',
+      aba: 'contatos',
+      jsonCampo: 'contatosJson',
+    },
+    {
+      nome: 'cargo',
+      rotulo: 'Cargo',
+      tipo: 'text',
+      aba: 'contatos',
+      jsonCampo: 'contatosJson',
+    },
+    {
+      nome: 'romaneioAntecipado',
+      rotulo: 'Romaneio antecipado',
+      tipo: 'checkbox',
+      aba: 'parametros',
+      jsonCampo: 'parametrosOperacionaisJson',
+    },
   ],
   schema: z.object({
     codigo: z.string().min(1, 'Código obrigatório'),
     razaoSocial: z.string().min(1, 'Razão social obrigatória'),
     documentoFiscal: z.string().regex(documentoRegex, documentoMsg),
     status: z.enum(['ativo', 'inativo']).optional(),
+    observacoes: z.string().optional(),
+    contatosJson: contatosFornecedorFormSchema,
+    parametrosOperacionaisJson: parametrosFornecedorFormSchema,
   }),
 };
 
@@ -155,3 +358,13 @@ export const CADASTROS: Record<string, CadastroConfig> = {
   'itens-compra': itensCompraConfig,
   'itens-comerciais': itensComerciaisConfig,
 };
+
+export const ABA_LABELS: Record<AbaCadastro, string> = {
+  gerais: 'Gerais',
+  fiscais: 'Fiscais',
+  contatos: 'Contatos',
+  preferencias: 'Preferências',
+  parametros: 'Parâmetros',
+};
+
+export const ABA_ORDEM: AbaCadastro[] = ['gerais', 'fiscais', 'contatos', 'preferencias', 'parametros'];

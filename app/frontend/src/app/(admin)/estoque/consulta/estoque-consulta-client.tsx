@@ -1,10 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Package, RefreshCw, Search } from 'lucide-react';
+import { Layers, Package, RefreshCw, Scissors, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { StatusPill } from '@/components/ui/status-pill';
+import { statusPecaVariant } from '@/lib/status-ui';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -81,18 +84,9 @@ export function EstoqueConsultaClient() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground">Itens em estoque</p>
-          <p className="text-3xl font-bold tabular-nums">{itens.length}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground">Peças inteiras</p>
-          <p className="text-3xl font-bold tabular-nums">{totalPecas}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground">Subitens (desossa)</p>
-          <p className="text-3xl font-bold tabular-nums">{totalSubitens}</p>
-        </Card>
+        <KpiCard label="Itens em estoque" value={itens.length} variant="primary" Icon={Package} />
+        <KpiCard label="Peças inteiras" value={totalPecas} variant="success" Icon={Layers} />
+        <KpiCard label="Subitens (desossa)" value={totalSubitens} variant="violet" Icon={Scissors} />
       </div>
 
       <div className="relative max-w-md">
@@ -151,7 +145,7 @@ export function EstoqueConsultaClient() {
                   <TableCell className="text-right tabular-nums">{formatarPeso(item.peso)}</TableCell>
                   <TableCell className="font-mono text-xs">{item.etiqueta ?? '—'}</TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{item.status}</Badge>
+                    <StatusPill variant={statusPecaVariant(item.status)} label={item.status.replace(/_/g, ' ')} />
                   </TableCell>
                 </TableRow>
               ))

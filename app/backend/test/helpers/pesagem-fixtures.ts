@@ -10,6 +10,7 @@ import {
 import type { FakeBalancaGateway } from '../../src/hardware/fakes/fake-balanca.gateway';
 import type { FakeLeitorGateway } from '../../src/hardware/fakes/fake-leitor.gateway';
 import type { FakeImpressoraGateway } from '../../src/hardware/fakes/fake-impressora.gateway';
+import { criarCompraConfirmada } from './comercial-fixtures';
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -36,7 +37,7 @@ export interface CenarioPesagem {
 
 /**
  * Monta o cenário base de F4b reusando os caminhos reais de F3/F4a:
- * compra confirmada → recebimento iniciado e concluído (sem divergência) →
+ * compra confirmada → recebimento aberto (conferência na balança) →
  * pronto para pesar peças. Pedidos são criados à parte (criarPedido).
  */
 export async function montarCenarioPesagem(
@@ -48,35 +49,16 @@ export async function montarCenarioPesagem(
   const { default: request } = await import('supertest');
   const srv = app.getHttpServer();
 
-  // Compra confirmada (gera disponibilidade do dia).
-  const criar = await request(srv)
-    .post('/comercial/compras-programadas')
-    .set('Cookie', cookies.compras)
-    .send({
-      dataOperacao: opts.dataOperacao,
-      fornecedorId: base.fornecedorId,
-      itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: opts.quantidade }],
-    });
-  const compraId = criar.body.id as string;
-  await request(srv).post(`/comercial/compras-programadas/${compraId}/confirmar`).set('Cookie', cookies.compras).send();
+  const compraId = await criarCompraConfirmada(app, cookies.compras, base, opts);
 
-  // Recebimento iniciado.
   const receb = await request(srv)
     .post('/operacao/recebimentos')
     .set('Cookie', cookies.recebimento)
-    .send({ compraProgramadaId: compraId });
-  const recebimentoId = receb.body.recebimento.id as string;
-
-  // Conferência conforme (recebido == esperado) e conclusão (sem divergência).
-  const detalhe = await request(srv).get(`/operacao/recebimentos/${recebimentoId}`).set('Cookie', cookies.recebimento);
-  const itens = detalhe.body.itens as Array<{ itemComercialId: string; quantidadeEsperada: string }>;
-  for (const it of itens) {
-    await request(srv)
-      .post(`/operacao/recebimentos/${recebimentoId}/itens`)
-      .set('Cookie', cookies.recebimento)
-      .send({ itemComercialId: it.itemComercialId, quantidadeRecebida: Number(it.quantidadeEsperada) });
+    .send({ compraProgramadaId: compraId, nfeNumero: '128934' });
+  if (receb.status !== 201 || !receb.body?.recebimento?.id) {
+    throw new Error(`Falha ao iniciar recebimento: ${receb.status} ${JSON.stringify(receb.body)}`);
   }
-  await request(srv).post(`/operacao/recebimentos/${recebimentoId}/concluir`).set('Cookie', cookies.recebimento).send();
+  const recebimentoId = receb.body.recebimento.id as string;
 
   const { db } = app.get<{ db: Db }>(DRIZZLE);
   const [cliente] = await db.select().from(schema.clientes).limit(1);
@@ -107,22 +89,35 @@ export async function criarPedido(
       prioridade: params.prioridade,
       itens: [{ itemComercialId: params.itemComercialId, quantidadePedida: params.quantidade }],
     });
+  if (res.status !== 201) {
+    throw new Error(`Falha ao criar pedido: ${res.status} ${JSON.stringify(res.body)}`);
+  }
   const pedidoId = res.body.id as string;
-  const detalhe = await request(app.getHttpServer()).get(`/comercial/pedidos/${pedidoId}`).set('Cookie', comercialCookies);
-  const pedidoItemId = (detalhe.body.itens as Array<{ id: string }>)[0]!.id;
+  const det = await request(app.getHttpServer()).get(`/comercial/pedidos/${pedidoId}`).set('Cookie', comercialCookies);
+  const pedidoItemId = (det.body.itens as Array<{ id: string }>)[0]?.id;
+  if (!pedidoItemId) throw new Error('Pedido criado sem itens');
   return { pedidoId, pedidoItemId };
 }
 
-/** Pesa uma peça via API (modo automático por padrão). Retorna o id da peça. */
 export async function pesarPeca(
   app: INestApplication,
-  cookies: string,
-  params: { recebimentoId: string; itemComercialBaseId: string },
+  recebimentoCookies: string,
+  params: { recebimentoId: string; itemComercialBaseId: string; peso?: string },
 ): Promise<string> {
+  fakes(app).balanca.definirStatus('disponivel');
+  fakes(app).balanca.definirPeso(params.peso ?? '12.500');
+
   const { default: request } = await import('supertest');
   const res = await request(app.getHttpServer())
     .post('/operacao/pesagem/pecas')
-    .set('Cookie', cookies)
-    .send({ recebimentoId: params.recebimentoId, itemComercialBaseId: params.itemComercialBaseId, modoCaptura: 'automatico' });
+    .set('Cookie', recebimentoCookies)
+    .send({
+      recebimentoId: params.recebimentoId,
+      itemComercialBaseId: params.itemComercialBaseId,
+      modoCaptura: 'automatico',
+    });
+  if (res.status !== 201) {
+    throw new Error(`Falha ao pesar peça: ${res.status} ${JSON.stringify(res.body)}`);
+  }
   return res.body.id as string;
 }

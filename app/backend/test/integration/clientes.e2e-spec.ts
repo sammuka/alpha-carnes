@@ -188,15 +188,15 @@ describe('Clientes e2e (CRUD + RBAC + validação + soft delete + auditoria)', (
           status: 'inativo',
           rotaPadrao: 'ROTA-1',
           prioridade: 'alta',
-          preferenciasJson: { entrega: 'manha' },
-          dadosFiscaisJson: { regime: 'simples' },
+          preferenciasJson: { prefereMaisPesada: true },
+          dadosFiscaisJson: { cidade: 'Osasco' },
           dadosContatoJson: { email: 'c@c.com' },
           observacoesOperacionais: 'obs',
         });
       expect(editar.status).toBe(200);
       expect(editar.body.codigo).toBe('CLI-FULL-2');
       expect(editar.body.status).toBe('inativo');
-      expect(editar.body.preferenciasJson).toEqual({ entrega: 'manha' });
+      expect(editar.body.preferenciasJson).toEqual({ prefereMaisPesada: true });
     });
 
     it('cria cliente com todos os campos JSONB preenchidos (cobre ramos de default)', async () => {
@@ -211,14 +211,14 @@ describe('Clientes e2e (CRUD + RBAC + validação + soft delete + auditoria)', (
             status: 'ativo',
             rotaPadrao: 'R2',
             prioridade: 'baixa',
-            preferenciasJson: { x: 1 },
-            dadosFiscaisJson: { y: 2 },
-            dadosContatoJson: { z: 3 },
+            preferenciasJson: { aceitaSubstituicao: false },
+            dadosFiscaisJson: { uf: 'SP' },
+            dadosContatoJson: { nome: 'Contato' },
             observacoesOperacionais: 'obs2',
           }),
         );
       expect(res.status).toBe(201);
-      expect(res.body.preferenciasJson).toEqual({ x: 1 });
+      expect(res.body.preferenciasJson).toEqual({ aceitaSubstituicao: false });
     });
 
     it('detalhar inexistente → 404; editar inexistente → 404', async () => {

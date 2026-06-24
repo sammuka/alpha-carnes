@@ -1,17 +1,23 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertCircle,
   Calendar,
+  ClipboardList,
   Info,
+  Package,
   Plus,
   Search,
   Trash2,
+  TrendingUp,
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { AlertItem } from '@/components/ui/alert-item';
 import { Button } from '@/components/ui/button';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { StatusPill } from '@/components/ui/status-pill';
+import { statusPedidoVariant } from '@/lib/status-ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -60,6 +66,10 @@ function saldoMap(disponibilidade: DisponibilidadeDia[]): Record<string, number>
   const m: Record<string, number> = {};
   for (const d of disponibilidade) m[d.itemComercialId] = Number(d.quantidadeDisponivel);
   return m;
+}
+
+function rotuloStatusPedido(status: string): string {
+  return status.replace(/_/g, ' ');
 }
 
 export function PedidoVendaClient({ permissoes, modo }: { permissoes: string[]; modo: 'lista' | 'novo' }) {
@@ -174,13 +184,81 @@ export function PedidoVendaClient({ permissoes, modo }: { permissoes: string[]; 
     setSalvando(false);
   };
 
+  const kpisLista = useMemo(() => {
+    const total = pedidos.length;
+    const reservados = pedidos.filter((p) => p.status === 'reservado').length;
+    const parciais = pedidos.filter((p) => p.status === 'parcialmente_reservado').length;
+    const cancelados = pedidos.filter((p) => p.status === 'cancelado').length;
+    return { total, reservados, parciais, cancelados };
+  }, [pedidos]);
+
+  const alertasLista = useMemo(() => {
+    const items: Array<{
+      key: string;
+      title: string;
+      description: string;
+      time: string;
+      variant: 'divergencia' | 'bloqueado' | 'pendente';
+    }> = [];
+    if (kpisLista.parciais > 0) {
+      items.push({
+        key: 'parciais',
+        title: 'Reservas parciais',
+        description: `${kpisLista.parciais} pedido(s) com reserva parcial — saldo virtual insuficiente no momento da reserva.`,
+        time: 'Hoje',
+        variant: 'divergencia',
+      });
+    }
+    if (kpisLista.cancelados > 0) {
+      items.push({
+        key: 'cancelados',
+        title: 'Pedidos cancelados',
+        description: `${kpisLista.cancelados} pedido(s) cancelado(s) na listagem.`,
+        time: 'Hoje',
+        variant: 'bloqueado',
+      });
+    }
+    return items;
+  }, [kpisLista]);
+
+  const alertasNovo = useMemo(() => {
+    const items: Array<{
+      key: string;
+      title: string;
+      description: string;
+      time: string;
+      variant: 'divergencia' | 'bloqueado' | 'pendente';
+    }> = [];
+    if (erro) {
+      items.push({
+        key: 'erro',
+        title: 'Validação',
+        description: erro,
+        time: 'Agora',
+        variant: 'bloqueado',
+      });
+    }
+    if (disponibilidade.some((d) => Number(d.quantidadeDisponivel) <= 0)) {
+      items.push({
+        key: 'esgotados',
+        title: 'Itens esgotados',
+        description: 'Há itens esgotados — pedidos podem ficar parcialmente reservados.',
+        time: dataOperacao,
+        variant: 'divergencia',
+      });
+    }
+    return items;
+  }, [disponibilidade, dataOperacao, erro]);
+
   if (!podeLer) {
     return <p className="text-sm text-destructive">Você não tem permissão para visualizar pedidos.</p>;
   }
 
   if (modo === 'lista') {
+    const temAlertas = alertasLista.length > 0;
+
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Pedidos de venda</h1>
@@ -192,47 +270,92 @@ export function PedidoVendaClient({ permissoes, modo }: { permissoes: string[]; 
             </Button>
           )}
         </div>
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Rota</TableHead>
-                <TableHead>Prioridade</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pedidos.length === 0 ? (
+
+        {pedidos.length > 0 && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <KpiCard label="Total de pedidos" value={kpisLista.total} variant="primary" Icon={ClipboardList} />
+            <KpiCard label="Reservados" value={kpisLista.reservados} variant="success" Icon={Package} />
+            <KpiCard
+              label="Reserva parcial"
+              value={kpisLista.parciais}
+              sub={kpisLista.parciais > 0 ? 'Requer atenção' : undefined}
+              variant="warning"
+              Icon={TrendingUp}
+            />
+            <KpiCard label="Cancelados" value={kpisLista.cancelados} variant="muted" Icon={AlertCircle} />
+          </div>
+        )}
+
+        <div className={`grid grid-cols-1 gap-6 ${temAlertas ? 'xl:grid-cols-12' : ''}`}>
+          <Card className={temAlertas ? 'xl:col-span-8' : ''}>
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    Nenhum pedido registrado.
-                  </TableCell>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Rota</TableHead>
+                  <TableHead>Prioridade</TableHead>
                 </TableRow>
-              ) : (
-                pedidos.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="font-mono text-xs">{p.id.slice(0, 8)}…</TableCell>
-                    <TableCell>{p.dataOperacao}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{p.status}</Badge>
+              </TableHeader>
+              <TableBody>
+                {pedidos.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      Nenhum pedido registrado.
                     </TableCell>
-                    <TableCell>{p.rotaPrevista ?? '—'}</TableCell>
-                    <TableCell>{p.prioridade ?? '—'}</TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </Card>
+                ) : (
+                  pedidos.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-mono text-xs">{p.id.slice(0, 8)}…</TableCell>
+                      <TableCell>{p.dataOperacao}</TableCell>
+                      <TableCell>
+                        <StatusPill variant={statusPedidoVariant(p.status)} label={rotuloStatusPedido(p.status)} />
+                      </TableCell>
+                      <TableCell>{p.rotaPrevista ?? '—'}</TableCell>
+                      <TableCell>{p.prioridade ?? '—'}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+
+          {temAlertas && (
+            <div className="xl:col-span-4">
+              <Card>
+                <CardHeader className="border-b bg-muted/40">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <AlertCircle className="h-4 w-4 text-primary" />
+                    Alertas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="divide-y px-4">
+                  {alertasLista.map((a) => (
+                    <AlertItem
+                      key={a.key}
+                      title={a.title}
+                      description={a.description}
+                      time={a.time}
+                      variant={a.variant}
+                      Icon={AlertCircle}
+                    />
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
+  const temAlertasNovo = alertasNovo.length > 0;
+
   return (
-    <div className="flex flex-col gap-6 lg:flex-row">
-      <div className="min-w-0 flex-1 space-y-6">
+    <div className={`grid grid-cols-1 gap-6 ${temAlertasNovo ? 'xl:grid-cols-12' : 'lg:flex lg:flex-row'}`}>
+      <div className={`min-w-0 space-y-6 ${temAlertasNovo ? 'xl:col-span-8' : 'flex-1'}`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">Novo pedido de venda</h1>
@@ -383,9 +506,9 @@ export function PedidoVendaClient({ permissoes, modo }: { permissoes: string[]; 
                         {qtd <= 0 ? (
                           '—'
                         ) : parcial ? (
-                          <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50">Parcial</Badge>
+                          <StatusPill variant="divergencia" label="Parcial" />
                         ) : (
-                          <Badge className="bg-green-50 text-green-700 hover:bg-green-50">Total</Badge>
+                          <StatusPill variant="expedido" label="Total" />
                         )}
                       </TableCell>
                       <TableCell>
@@ -410,7 +533,29 @@ export function PedidoVendaClient({ permissoes, modo }: { permissoes: string[]; 
         </Card>
       </div>
 
-      <div className="w-full shrink-0 lg:w-80">
+      <div className={`w-full shrink-0 ${temAlertasNovo ? 'xl:col-span-4' : 'lg:w-80'}`}>
+        {temAlertasNovo && (
+          <Card className="mb-4">
+            <CardHeader className="border-b bg-muted/40">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <AlertCircle className="h-4 w-4 text-primary" />
+                Validações
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="divide-y px-4 pt-0">
+              {alertasNovo.map((a) => (
+                <AlertItem
+                  key={a.key}
+                  title={a.title}
+                  description={a.description}
+                  time={a.time}
+                  variant={a.variant}
+                  Icon={AlertCircle}
+                />
+              ))}
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardHeader className="border-b bg-muted/40">
             <CardTitle className="flex items-center gap-2 text-sm">
@@ -444,12 +589,6 @@ export function PedidoVendaClient({ permissoes, modo }: { permissoes: string[]; 
                 </div>
               )}
             </div>
-            {disponibilidade.some((d) => Number(d.quantidadeDisponivel) <= 0) && (
-              <div className="flex items-start gap-2 rounded-md bg-red-50 p-3 text-xs text-red-700">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                Há itens esgotados — pedidos podem ficar parcialmente reservados.
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getMe } from '@/lib/auth';
-import { FaturamentoClient } from '../../operacao/faturamento/faturamento-client';
+import { FaturamentoClient } from './pre-faturamento-client';
 
 export default async function PreFaturamentoPage() {
   const user = await getMe();
