@@ -27,8 +27,8 @@
 **Escopo do protótipo v1.1**: 39 telas de conteúdo (+ login + redirect = 41 entradas de rota), todas completas (zero placeholders), 9 grupos de menu, 9 perfis simulados, mapa de disponibilidade "teatro", Operações como entidade, overbooking com confirmação, conferência tripla Pedido×NF×Pesagem, Troca de Peça, SIF, seguro manual, modelos de etiqueta configuráveis.
 
 **Gap consolidado** ([matriz completa](2026-07-22-matriz-rastreabilidade-v1.1.md), 41/41 entradas classificadas):
-- **3 conformes** (login; conferência — backend; auditoria);
-- **27 divergentes** — implementadas sob premissa antiga ou com UI placeholder/backend parcial;
+- **2 conformes** (login; auditoria);
+- **28 divergentes** — implementadas sob premissa antiga ou com UI placeholder/backend parcial; inclui conferência, cujo backend está conforme, mas a UI ainda diverge;
 - **11 ausentes** — sem nada no projeto real (tabela de preços, espelho, operações, pendências de overbooking, relatórios SIF, entrada de itens, ajustes, seguro, caminhões, motoristas, modelos de etiqueta).
 
 **Divergências estruturais** (corrigidas na Onda 1, antes de qualquer feature):
@@ -286,4 +286,4 @@ Não-funcionais herdados (vigentes): reserva/mutações críticas transacionais 
 
 Percorrido `src/app/routes.tsx` do protótipo (`feature/completude-v1.1`) linha a linha, na ordem do arquivo: `/login`, `/` (index redirect) e as **39 rotas de conteúdo** (9 grupos: 5+6+3+3+3+3+4+8+4) — **41/41 entradas de rota cobertas (100%)** na [matriz de rastreabilidade](2026-07-22-matriz-rastreabilidade-v1.1.md), cada uma com módulo, entidades, endpoints, perfis, classificação e referência documental. As 6 mecânicas transversais obrigatórias do checklist mestre (Operação-pivô, Troca de Peça atômica, badge Provisório, terminologia, prioridade físico→virtual→overbooking, auditoria §12) têm entradas dedicadas. Nenhuma rota usa PlaceholderPage no protótipo; nenhuma ficou sem classificação.
 
-**Contagem final:** 3 conformes · 27 divergentes · 11 ausentes (entradas de rota); com as transversais: 30 itens divergentes/parciais sob regra antiga a corrigir e 13 blocos ausentes a construir.
+**Contagem final:** 2 conformes · 28 divergentes · 11 ausentes (entradas de rota); com as transversais: 31 itens divergentes/parciais sob regra antiga a corrigir e 13 blocos ausentes a construir.
