@@ -126,7 +126,7 @@ Documento dedicado: [`2026-07-22-matriz-rastreabilidade-v1.1.md`](2026-07-22-mat
 ### `comercial/pedidos` (mudanças v1.1)
 - `POST /comercial/pedidos` e `POST /comercial/pedidos/:id/itens` — criação/inclusão sem confirmação. Se houver déficit, retornam `409 OVERBOOKING_CONFIRMACAO_NECESSARIA` com o payload do modal do protótipo (produto, disponível, solicitado, overbooking gerado) e **zero mutação persistida**, conforme AD-05.
 - `POST /comercial/pedidos/confirmar-overbooking` (criação, `201`) e `POST /comercial/pedidos/:id/itens/confirmar-overbooking` (inclusão/aumento, `200`) — reavaliam o saldo dentro da transação e persistem explicitamente a parcela real + reserva `tipo_consumo=overbooking` + `pendencias_overbooking`. Depois de confirmada, a falta não bloqueia `finalizar`.
-- `POST /comercial/pedidos/:id/adendos` · `POST /comercial/pedidos/:id/finalizar` (reserva → compromisso, sem dupla baixa) · `GET /comercial/pedidos/aberto?clienteId=&produtoId=[&operacaoId=]` (verificação de unicidade → sugestão de adendo).
+- `POST /comercial/pedidos/:id/adendos` · `POST /comercial/pedidos/:id/finalizar` (reserva → compromisso, sem dupla baixa) · `GET /comercial/pedidos/aberto?clienteId=&produtoId=&operacaoId=` (verificação de unicidade por cliente + produto + operação → sugestão de adendo; os três parâmetros são obrigatórios).
 - Eventos: `RESERVA_ATUALIZADA` (existe), `OVERBOOKING_CONFIRMADO`, `ADENDO_REGISTRADO`, `PEDIDO_FINALIZADO`, `PENDENCIA_OVERBOOKING_ABERTA`.
 
 ### `comercial/overbooking`

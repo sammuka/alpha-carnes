@@ -20,7 +20,7 @@ Para revisar fase a fase com gates objetivos, é preciso uma única régua. **A 
 | **F0 — Fundação (documentação)** | — (pré-fase) | — | Documentação E2E, ADRs, C4, modelo de dados, spec NFS-e (concluída) |
 | **F1 — Infra + Auth + RBAC** | — (habilitador técnico) | F0 | Autenticação funcional, 11 perfis aplicados, ambiente local reproduzível |
 | **F2 — Cadastros Base** | habilitador da Fase 1 | F1; DP-01 | Cadastros mínimos existem antes de compra/pedido |
-| **F3 — Planejamento Comercial** | **Fase 1** | F2; DP-02, DP-03 | Saldo virtual confiável; venda bloqueada quando item zera; pedidos rastreáveis |
+| **F3 — Planejamento Comercial** | **Fase 1** | F2; DP-02, DP-03 | Saldos físico e virtual nunca negativos; déficit exige confirmação explícita de overbooking, sem bloquear o pedido confirmado; pedidos e pendências rastreáveis |
 | **F4 — Operação Física** | **Fase 2** (+ corte da Fase 4) | F3; DP-04; HW mínimo | Peso capturado; peça registrada; divergência formalizada |
 | **F5 — Expedição** | **Fase 3** | F4; DP-05 | Carga acompanhada em tempo real; fechamento bloqueia alterações |
 | **F6 — Faturamento + NFS-e** | **Fase 5** | F5; DP-06 | NF emitida a partir da carga real; caminhão liberado com rastreabilidade |

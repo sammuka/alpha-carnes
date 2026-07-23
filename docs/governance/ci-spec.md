@@ -1,6 +1,6 @@
 # Especificação de CI/CD — AlphaCarnes
 
-> **Status:** Especificação. **Não implementar agora.** Os arquivos `.github/**` descritos aqui devem ser criados **quando a Fase 1 (scaffolding) iniciar**, junto com o primeiro código de `app/`. Enquanto `app/backend` e `app/frontend` forem placeholders, não há o que o pipeline rodar.
+> **Status:** Implementado e ativo em `.github/workflows/ci.yml`; reconciliado com `develop` em 2026-07-23.
 > Esta spec materializa os [`quality-gates.md`](quality-gates.md#gates-transversais) como verificação automática e o fluxo do [`framework-revisao.md`](framework-revisao.md).
 
 ## 1. Visão geral
@@ -21,9 +21,9 @@ Jobs (cada um é um status check obrigatório):
 - **`test-frontend`** — testes de componente/smoke do Next.js.
 - **`build`** — build de produção de backend e frontend.
 - **`audit`** — `npm audit --audit-level=high` em backend e frontend; falha com vuln high/critical.
-- **`secret-scan`** — varredura de segredos com o binário **gitleaks** em modo diretório (`gitleaks dir`), determinístico e sem dependência da API de PR do GitHub.
+- **`secret-scan`** — histórico Git completo com `gitleaks git . --log-opts=--all`; o binário v8.24.3 só é executado após validação fail-closed do SHA-256 oficial.
 
-Esqueleto de referência (a ajustar quando o `app/` existir):
+Referência do pipeline vigente:
 
 ```yaml
 name: CI
@@ -128,13 +128,18 @@ jobs:
       - name: gitleaks
         run: |
           GLV=8.24.3
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v${GLV}/gitleaks_${GLV}_linux_x64.tar.gz | tar -xz -C /tmp gitleaks
-          /tmp/gitleaks dir . --no-banner --redact -v --exit-code 1 --config .gitleaks.toml
+          GL_SHA256=9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c
+          curl --fail --silent --show-error --location \
+            --output /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GLV}/gitleaks_${GLV}_linux_x64.tar.gz"
+          echo "${GL_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks git . --log-opts=--all --no-banner --redact --verbose --exit-code 1 --config .gitleaks.toml
 ```
 
 Notas:
-- O comando exato (`npm run lint`, `test:cov`, `db:migrate`) será fixado no scaffolding da Fase 1; o esqueleto assume scripts npm por workspace.
-- `check-coverage.mjs` é um pequeno checker do `coverage-summary.json` (linhas e branches ≥ 80%). Alternativa: limiar no próprio Jest (`coverageThreshold`).
+- Os comandos são os scripts versionados no `package.json` raiz e nos workspaces; `db:migrate` e `test:cov` rodam em `app/backend`.
+- `scripts/check-coverage.mjs` valida o `coverage-summary.json` (linhas e branches ≥ 80%).
 - Node 22 LTS conforme ADR-001.
 
 ## 3. `.github/pull_request_template.md`
@@ -184,26 +189,25 @@ O revisor é owner do código, da documentação e dos workflows, garantindo rev
 /.github/         @sammuka
 ```
 
-> Ajustar o handle do revisor conforme o time. Com branch protection exigindo review de CODEOWNERS, todo PR depende da aprovação do revisor.
+> `CODEOWNERS` mantém a responsabilidade explícita. Enquanto o repositório tiver um único colaborador elegível, a independência é comprovada pelos papéis Codex Monitor/Executor/Worker e pelos dois pareceres de Portão 2, sem fingir uma aprovação humana impossível do próprio autor.
 
 ## 5. Branch protection (configurar no GitHub)
 
 Para `main` e `develop`:
 - Exigir Pull Request antes do merge (sem push direto).
-- Exigir **1 approval**; exigir review de **CODEOWNERS**.
+- Proteger também administradores; exigir resolução de conversas e histórico linear.
 - Exigir **status checks obrigatórios**: `lint`, `type-check`, `test-backend`, `coverage`, `test-frontend`, `build`, `audit`, `secret-scan`.
 - Exigir branch atualizada com a base antes do merge.
-- Descartar approvals obsoletos ao novo push.
 - Bloquear force-push e deleção das branches protegidas.
 
-`main` é mais restrita: recebe apenas PR vindo de `develop` (release de fase), com relatório de gate anexado.
+`develop` já tem essas regras ativas. `main` recebe apenas release proveniente de `develop`; a proteção equivalente deve ser verificada/reconciliada antes do primeiro release.
 
 ## 6. Dependabot (opcional, recomendado)
 
 `.github/dependabot.yml` para atualizações de segurança de `npm` em `app/backend`, `app/frontend` e `landing`, e de `github-actions`. Reduz o risco de vuln high/critical acumulada e mantém o gate `audit` verde.
 
-## 7. Quando implementar
+## 7. Estado da implementação
 
-- **Pré-requisito:** início da Fase 1 (scaffolding de `app/backend` e `app/frontend`).
-- **Primeiro PR da Fase 1** deve incluir: `ci.yml`, `pull_request_template.md`, `CODEOWNERS` e a ativação da branch protection — para que o restante da Fase 1 já passe pelos gates.
-- Até lá, esta spec é a referência; nenhum arquivo `.github/**` é criado.
+- `.github/workflows/ci.yml`, `.github/pull_request_template.md`, `.github/CODEOWNERS` e Dependabot estão versionados.
+- Os oito checks são obrigatórios em `develop` e foram provados verdes no PR-base.
+- Antes do release em `main`, o Executor deve consultar a configuração remota e aplicar a mesma política fail-closed; divergência de proteção bloqueia o gate.

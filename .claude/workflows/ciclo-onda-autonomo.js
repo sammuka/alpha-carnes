@@ -39,6 +39,7 @@ if (!onda) {
     `args.onda é obrigatório, ex.: { onda: "onda2" }. Recebido: ${JSON.stringify(args)}`
   )
 }
+const LOCK_OWNER_TOKEN = `${onda}-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
 
 // RE-ADOÇÃO DE ÓRFÃ (opt-in, propagado pelo orquestrador multionda). Por padrão
 // a pré-condição barra uma onda presa em "implementando"/"aguardando_portao2"
@@ -79,14 +80,14 @@ const LOCKDIR_COMPARTILHADO = `${REPO}/.claude/workflows/.locks/docs-execucao.lo
 function LOCK_ADQUIRIR_DOCS_COMPARTILHADOS(descricaoTrabalho) {
   return `ANTES de ${descricaoTrabalho}, adquira o lock compartilhado que serializa escrita em docs/execucao/ e a janela crítica de merge contra outras ondas em paralelo. Rode EXATAMENTE este comando (NÃO reescreva a lógica):
 \`\`\`bash
-bash "${CAMINHO_LOCK_SH}" acquire "${LOCKDIR_COMPARTILHADO}"
+bash "${CAMINHO_LOCK_SH}" acquire "${LOCKDIR_COMPARTILHADO}" "${LOCK_OWNER_TOKEN}"
 \`\`\`
 Só prossiga com ${descricaoTrabalho} se a saída for exatamente "LOCK_ACQUIRED". Se for "LOCK_TIMEOUT", NÃO prossiga — marque requerDecisaoHumana=true, explique em motivoDecisaoHumana, e pare.
 
 `
 }
 
-const LOCK_LIBERAR_DOCS_COMPARTILHADOS = `Libere o lock agora (SEMPRE, mesmo se você parar por requerDecisaoHumana ou erro — nunca retorne sem isto): \`bash "${CAMINHO_LOCK_SH}" release "${LOCKDIR_COMPARTILHADO}"\`.
+const LOCK_LIBERAR_DOCS_COMPARTILHADOS = `Libere o lock agora (SEMPRE, mesmo se você parar por requerDecisaoHumana ou erro — nunca retorne sem isto): \`bash "${CAMINHO_LOCK_SH}" release "${LOCKDIR_COMPARTILHADO}" "${LOCK_OWNER_TOKEN}"\`. O token impede que uma execução que recebeu LOCK_TIMEOUT remova o lock de outra.
 
 `
 
@@ -934,10 +935,10 @@ Passos (ordem exata):
    1b. git -C ${REPO} fetch origin && git -C ${REPO} merge-base --is-ancestor origin/develop origin/${branch} && echo OK || echo DESATUALIZADA. DESATUALIZADA → passo 1c. OK → passo 2.
    1c. AUTO-RECUPERAÇÃO, TODA no worktree ../AlphaCarnes-${onda} (NUNCA no repo principal, SEM lock):
        git -C ../AlphaCarnes-${onda} fetch origin && git -C ../AlphaCarnes-${onda} rebase origin/develop
-       - Rebase limpo: rode os testes do plano no worktree; passando: git -C ../AlphaCarnes-${onda} push --force-with-lease. RE-ESPERE o CI (gh pr checks ${prNumero} --watch). CI verde: re-confira mergeable/headRefOid e siga ao passo 2 com o NOVO headRefOid (registre em autoRecuperacaoBranch=true).
+       - Rebase limpo: rode os testes do plano no worktree; passando: git -C ../AlphaCarnes-${onda} push --force-with-lease. RE-ESPERE o CI (gh pr checks ${prNumero} --watch). Mesmo com CI verde, o HEAD mudou e as aprovações anteriores NÃO valem: PARE com requerDecisaoHumana=true e motivo "HEAD alterado para <novo SHA>; reiniciar Portão 2 + verificação adversarial". NUNCA siga ao passo 2 nesta execução.
        - Conflito, teste falho ou CI vermelho: git rebase --abort (se em rebase) e PARE — requerDecisaoHumana=true com o estado exato.
 2. ADQUIRA O LOCK AGORA: ${LOCK_ADQUIRIR_DOCS_COMPARTILHADOS('mergear (squash) e tocar docs/execucao/ no repo principal')}
-   2a. Re-checagem DENTRO do lock: gh pr view ${prNumero} --json mergeable,mergeStateStatus. Não MERGEABLE/CLEAN → LIBERE O LOCK, requerDecisaoHumana=true ("branch desatualizou aguardando o lock — novo rebase necessário").
+   2a. Re-checagem DENTRO do lock: gh pr view ${prNumero} --json mergeable,mergeStateStatus,headRefOid. Exige MERGEABLE + CLEAN + headRefOid EXATAMENTE IGUAL a ${shaAuditado}. Qualquer diferença → LIBERE O LOCK e pare com requerDecisaoHumana=true ("estado ou SHA mudou aguardando o lock — nova auditoria necessária").
    2b. gh pr merge ${prNumero} --squash --delete-branch. Anote o SHA em commitSquash.
    2c. Detecte arquivos de coordenação compartilhada tocados: git -C ${REPO} diff origin/develop~1..origin/develop --name-only | grep -E "schema/index.ts$|app.module.ts$|eventos.ts$|permissoes.ts$|globals.css$" (DEPOIS do squash). Preencha arquivosCompartilhadosTocados (vazio se nenhum).
 3. Remova o worktree: git -C ${REPO} worktree remove ../AlphaCarnes-${onda} --force (se existir). Falhou → reporte e SIGA.
