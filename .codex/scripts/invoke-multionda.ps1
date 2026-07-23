@@ -36,7 +36,7 @@ function Read-StatusTable {
             throw "Linha de status malformada: $line"
         }
         $number = [int]$cells[0]
-        if ($number -lt 1 -or $number -gt 10) {
+        if ($number -gt 10) {
             continue
         }
         $wave = "onda$number"

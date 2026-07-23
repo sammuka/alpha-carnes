@@ -494,7 +494,8 @@ exit 34
         $lines = @(
             '| Onda | Escopo | Depende de | Status | Plano |',
             '|---|---|---|---|---|',
-            '| 1 | A | — | aguardando_portao1 | plano1 |',
+            '| 0 | Base | — | mergeada | plano0 |',
+            '| 1 | A | 0 | aguardando_portao1 | plano1 |',
             '| 2 | B | 1 | aguardando_inicio | plano2 |',
             '| 3 | C | 2 | aguardando_inicio | plano3 |',
             '| 4 | D | 3 | aguardando_inicio | plano4 |',
