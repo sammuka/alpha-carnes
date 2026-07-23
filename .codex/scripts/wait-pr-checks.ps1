@@ -65,10 +65,11 @@ function Get-ChangedFiles {
         foreach ($file in $page) {
             if (-not $file -or
                 -not $file.PSObject.Properties['filename'] -or
-                [string]::IsNullOrWhiteSpace([string]$file.filename)) {
+                $file.filename -isnot [string] -or
+                [string]::IsNullOrWhiteSpace($file.filename)) {
                 throw "gh api retornou item sem filename no PR #$Number."
             }
-            $filename = [string]$file.filename
+            $filename = $file.filename
             if (-not $seen.Add($filename)) {
                 throw "gh api retornou filename duplicado no PR #$Number`: $filename"
             }
@@ -99,7 +100,9 @@ function Get-Snapshot {
     )
     $pr = ($prRaw -join "`n") | ConvertFrom-Json
     if (-not $pr.PSObject.Properties['changedFiles'] -or
-        $null -eq $pr.changedFiles -or [int]$pr.changedFiles -lt 0) {
+        $pr.changedFiles -isnot [long] -or
+        $pr.changedFiles -lt 0 -or
+        $pr.changedFiles -gt [int]::MaxValue) {
         throw "gh pr view não informou changedFiles para o PR #$PrNumber."
     }
     $changedFiles = @(Get-ChangedFiles -Number $PrNumber -ExpectedCount ([int]$pr.changedFiles))

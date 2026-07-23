@@ -457,11 +457,20 @@ if ($Remaining.Count -ge 2 -and $Remaining[0] -eq 'pr' -and $Remaining[1] -eq 'c
     exit 0
 }
 if ($Remaining.Count -ge 2 -and $Remaining[0] -eq 'pr' -and $Remaining[1] -eq 'view') {
+    $changedFiles = if ($env:CODEX_PR_FILES_MODE -eq 'bad-count-string') {
+        '1'
+    } elseif ($env:CODEX_PR_FILES_MODE -eq 'bad-count-bool') {
+        $true
+    } elseif ($env:CODEX_PR_FILES_MODE -match '^bad-filename-') {
+        1
+    } else {
+        301
+    }
     [ordered]@{
         headRefOid = 'large-pr-sha'
         headRefName = 'feature/large-pr'
         baseRefName = 'develop'
-        changedFiles = 301
+        changedFiles = $changedFiles
     } | ConvertTo-Json -Compress
     exit 0
 }
@@ -469,6 +478,17 @@ if ($Remaining.Count -ge 1 -and $Remaining[0] -eq 'api') {
     if ($env:CODEX_PR_FILES_MODE -eq 'error') {
         Write-Output 'HTTP 503 fixture'
         exit 86
+    }
+    if ($env:CODEX_PR_FILES_MODE -match '^bad-filename-') {
+        $badFilename = if ($env:CODEX_PR_FILES_MODE -eq 'bad-filename-number') {
+            123
+        } else {
+            [ordered]@{ nested = 'a' }
+        }
+        $badPages = [Collections.Generic.List[object]]::new()
+        $badPages.Add(@([ordered]@{ filename = $badFilename }))
+        ConvertTo-Json -InputObject @($badPages) -Depth 6 -Compress
+        exit 0
     }
     $count = if ($env:CODEX_PR_FILES_MODE -eq 'incomplete') { 300 } else { 301 }
     $allFiles = @(
@@ -557,6 +577,34 @@ exit 87
             Assert-True (
                 $message -match 'Enumeração incompleta.*retornou 300.*declarou 301'
             ) 'Resposta truncada da API não falhou fechada.'
+        } finally {
+            $env:CODEX_PR_FILES_MODE = $savedMode
+            $env:CODEX_PR_FILES_LOG = $savedLog
+        }
+    }
+
+    Test-Case 'PR files rejects coerced filename and changedFiles types' {
+        $savedMode = $env:CODEX_PR_FILES_MODE
+        $savedLog = $env:CODEX_PR_FILES_LOG
+        try {
+            $env:CODEX_PR_FILES_LOG = $prFilesLog
+            foreach ($case in @(
+                [ordered]@{ mode = 'bad-filename-number'; pattern = 'item sem filename' },
+                [ordered]@{ mode = 'bad-filename-object'; pattern = 'item sem filename' },
+                [ordered]@{ mode = 'bad-count-string'; pattern = 'não informou changedFiles' },
+                [ordered]@{ mode = 'bad-count-bool'; pattern = 'não informou changedFiles' }
+            )) {
+                $env:CODEX_PR_FILES_MODE = $case.mode
+                $message = ''
+                try {
+                    $null = & $waitChecksScript -PrNumber 9 -GhCommandPath $prFilesMock
+                } catch {
+                    $message = $_.Exception.Message
+                }
+                Assert-True (
+                    $message -match $case.pattern
+                ) "Tipo inválido foi aceito em $($case.mode): $message"
+            }
         } finally {
             $env:CODEX_PR_FILES_MODE = $savedMode
             $env:CODEX_PR_FILES_LOG = $savedLog
