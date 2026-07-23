@@ -1,0 +1,17 @@
+# Decisões Registradas — AlphaCarnes
+
+> Decisões do Quality Owner que fecham pendências (v1.1 §16 e achados). Precedência máxima abaixo da [constituição](../governance/constituicao.md). Append-only: decisão revogada ganha nova linha, nunca é apagada.
+> Formato: `AD-xx · data · decisão · o que fecha · efeito no código/plano`.
+
+| # | Data | Decisão | Fecha | Efeito |
+|---|---|---|---|---|
+| AD-01 | 2026-07-23 | **Composição do boi casado: 1 boi = 6 partes → 2 TZ + 2 DT + 2 PA.** Confirmada pelo cliente. | v1.1 §16.1 | Regra de desdobramento seedada com esses valores; permanece parametrizável (Princípio X / v1.1 §6.1.5), mas o badge "Provisório" da composição **sai** das telas (Compras, Regras de Transformação, Parâmetros). |
+| AD-02 | 2026-07-23 | **Sistema fiscal externo: EISS Osasco (SOAP)**, já levantado e documentado em `docs/integrações/nfse-osasco/` (webservice, estrutura XML, ambiente de homologação, códigos de erro). | v1.1 §16.11 | A modelagem existente (`payloadEiss`, `serieRps`, ADR-006/ADR-011, porta `NfseGateway` + fake) está **correta e é mantida**. Gap restante = adapter node-soap real + credenciais de homologação (pendência externa) + feature flag RTC (`modelo_fiscal: padrao | rtc`). Badge "Provisório" da emissão fiscal sai; entra nota "aguardando homologação". |
+| AD-03 | 2026-07-23 | **A operação participa da unicidade do pedido aberto.** A chave funcional é `(cliente, produto, operação)`. | P4 / v1.1 §16.5 | A regra deixa de ser parâmetro provisório. A Onda 4 implementa a validação e o adendo nessa chave; pedidos do mesmo cliente/produto em operações diferentes podem coexistir. |
+| AD-04 | 2026-07-23 | **Permanecem os 11 perfis canônicos.** “Estoque” é recorte de permissões `ESTOQUE_*` atribuído a `expedicao` e `recebimento_pesagem`, sem 12º perfil. | P13 | A Onda 3 mantém os 11 perfis do doc 013 e configura a matriz de permissões; o badge/aviso provisório dessa reconciliação sai. |
+| AD-05 | 2026-07-23 | **Overbooking é permitido sem limite, mas sempre exige confirmação explícita.** A tentativa acima do saldo retorna `409 OVERBOOKING_CONFIRMACAO_NECESSARIA` com payload do modal e **não persiste nenhuma mutação**; o endpoint de confirmação persiste a inclusão/aumento e retorna `201` na criação ou `200` na atualização. Depois de confirmado, o overbooking não bloqueia a finalização. | P14 + v1.1 §6.4 | Substitui definitivamente “bloquear pedido sem disponibilidade” por “exigir confirmação de overbooking”. O challenge 409 é read-only; a confirmação é a única mutação deficitária e cria reserva tipada + pendência atomicamente. |
+| AD-06 | 2026-07-23 | **Pedidos em rascunho não têm expiração automática de reserva.** A liberação ocorre somente por remoção/cancelamento pelo vendedor ou pela ação administrativa auditada “Liberar reserva”. | P2 / v1.1 §16.3 | Não criar TTL/job de expiração. A Onda 4 expõe o estado “Rascunho com reserva ativa” e a ação administrativa com permissão, justificativa, auditoria e evento pós-commit. |
+
+## Pendentes aguardando decisão (P1–P15)
+
+Lista mantida no [plano mestre §7](../superpowers/plans/2026-07-22-implementacao-completa-prototipo-v1.1.md). P2, P4, P13 e P14 foram fechadas por AD-03..AD-06. Permanecem abertas P1, P3, P5–P12 e P15.

@@ -42,7 +42,7 @@ Esse encadeamento respeita o fluxo real do negócio e reduz retrabalho arquitetu
 - regras de desdobramento
 - disponibilidade virtual
 - pedidos de venda
-- bloqueio de overbooking
+- confirmação explícita e pendência rastreável de overbooking
 - painel comercial básico
 
 ### Resultado esperado
@@ -187,7 +187,7 @@ A implantação pode conviver por um período com processos paralelos controlado
 
 ## Fase 1
 - saldo virtual confiável
-- venda bloqueada quando item zera
+- déficit exige confirmação explícita de overbooking e segue como pendência rastreável, sem tornar saldos negativos nem bloquear o pedido confirmado
 - pedidos rastreáveis
 
 ## Fase 2

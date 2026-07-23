@@ -7,10 +7,14 @@
 
 Condição de merge para **qualquer** PR (`feature/* -> develop` e `develop -> main`). Itens marcados como **CI** são verificados automaticamente pelo pipeline ([`ci-spec.md`](ci-spec.md)); os demais são verificados na revisão.
 
+O deploy Vercel pertence exclusivamente à landing page de apresentação. Seu status é
+obrigatório somente quando o diff toca `landing/**`; para os demais PRs, não integra o gate da
+aplicação. A aplicação operacional é validada no Docker Desktop local.
+
 ### Qualidade de código
 - **CI** Lint sem erros (backend e frontend).
 - **CI** `type-check` com TypeScript strict; zero `any` implícito; sem `@ts-ignore` não justificado.
-- **CI** Build de produção ok (backend e frontend).
+- **CI** Build de produção ok (backend, frontend e landing; Vercel permanece exclusivo da landing).
 - Sem código legado comentado, marcadores artificiais ("CORRIGIDO:", "ANTES:"), ou duplicação evitável.
 - Funções/arquivos coesos; preferir simplicidade (KISS) e reuso (DRY).
 
@@ -22,7 +26,7 @@ Condição de merge para **qualquer** PR (`feature/* -> develop` e `develop -> m
 - Invariantes de negócio têm teste dedicado que **falha** quando a regra é violada (ex.: tentar furar saldo).
 
 ### Segurança
-- **CI** `npm audit` sem vulnerabilidades **high** ou **critical** (backend e frontend).
+- **CI** `npm audit` sem vulnerabilidades **high** ou **critical** (monorepo backend/frontend e pacote independente da landing).
 - **CI** Sem segredos commitados (secret scanning).
 - Segredos e tokens (ex.: `EISS_CHAVE_AUTENTICACAO`) só via variáveis de ambiente; nunca em código ou logs.
 - Entradas validadas/sanitizadas (Zod nas bordas); queries parametrizadas (Drizzle).
@@ -59,7 +63,9 @@ Cada item abaixo é um **invariante testável**. O PR de fechamento da fase só 
 - Login, refresh e logout funcionais; access token 15 min, refresh token 8 h revogável no banco.
 - Os **11 perfis** (doc 013) existem e são aplicados por Guard nos endpoints; acesso negado para perfil incompatível tem teste.
 - Seed de usuários/perfis reproduzível.
-- Ambiente Docker local sobe `postgres + backend + frontend` em comando único.
+- Ambiente Docker Desktop local sobe `postgres + backend + frontend` em comando único, com
+  portas publicadas no host `4000` (frontend), `4001` (backend) e `15433` (PostgreSQL);
+  internamente permanecem `3000`, `3001` e `5432`.
 - Migration base por domínio (usuários, perfis, refresh tokens, auditoria) aplicada em banco limpo.
 - Auditoria base registra login e ações administrativas.
 
@@ -82,10 +88,10 @@ Cada item abaixo é um **invariante testável**. O PR de fechamento da fase só 
 **Entidades no escopo:** compra programada + itens, disponibilidade virtual do dia, pedido de venda + itens, reservas de saldo. Eventos de domínio + gateway WebSocket.
 
 - **Geração transacional de disponibilidade:** confirmar uma compra programada gera a disponibilidade virtual por item comercial aplicando as **regras de desdobramento** da F2 (item de compra × fator × quantidade comprada), numa única transação. **Idempotente:** confirmar duas vezes não duplica saldo (guard por status). Compra confirmada é imutável (editar item após confirmação **falha**; teste).
-- **Saldo nunca negativo (invariante duro):** a reserva é um **UPDATE condicional atômico** (`... SET reservada = reservada + r, disponivel = disponivel - r WHERE id = :id AND disponivel >= r`), com `CHECK (quantidade_disponivel >= 0)` e `CHECK (quantidade_reservada >= 0)` como backstop no schema. **Sem `SELECT` e depois `UPDATE`** (race). 
-- **Teste de concorrência (obrigatório):** N reservas paralelas cujo total **excede** o saldo — o teste prova que (a) `quantidade_disponivel` nunca fica negativa, (b) a soma das reservas confirmadas == total gerado, (c) o excedente é tratado (rejeição 409 e/ou `quantidadePendente`), nunca silenciosamente perdido (RA-05).
-- **Reserva parcial + alerta:** quando o pedido excede o disponível, reserva o que há (`quantidadeReservada = min(pedida, disponivel)`), marca `quantidadePendente`, e **sinaliza alerta** de pedido sem cobertura (evento + registro observável; RA-06). Item com saldo zero → nova reserva bloqueada/100% pendente.
-- **Liberação de reserva:** cancelar pedido/item ou reduzir quantidade **devolve** o saldo à disponibilidade na mesma transação (teste prova que `disponivel` volta ao valor correto).
+- **Saldo nunca negativo (invariante duro):** os saldos físico e virtual usam baixa condicional atômica, com `CHECK` não negativo como backstop. A parcela sem cobertura é modelada separadamente como `pendencia_overbooking`; nunca se mascara déficit deixando saldo negativo.
+- **Confirmação explícita e não bloqueante (AD-05):** a primeira tentativa com déficit retorna `409` com challenge de confirmação e **zero mutação** — nenhum pedido, item, reserva, pendência ou evento é persistido. A repetição no endpoint de confirmação, com challenge válido, reavalia tudo transacionalmente, reserva apenas a parcela real, persiste a parcela excedente tipada e permite confeccionar/finalizar o pedido.
+- **Teste de concorrência (obrigatório):** N solicitações paralelas que excedem o saldo provam que (a) nenhum saldo fica negativo, (b) nenhuma parcela coberta é perdida ou vendida duas vezes, (c) challenges não confirmados são idempotentes e não mutam estado e (d) cada confirmação aceita cria pendência distinta, auditável e rastreável ao pedido.
+- **Liberação e resolução:** cancelar pedido/item ou reduzir quantidade devolve reservas reais na mesma transação e resolve/recalcula a pendência tipada correspondente, sem apagar o histórico.
 - **Tempo real (RA-04):** após o **commit** da reserva/liberação, um evento de domínio é publicado e o gateway WebSocket faz broadcast do novo saldo (room `dashboard`/`operacao:{data}`). Sem polling. Teste prova que o evento é emitido **após** o commit com payload correto.
 - **Rastreabilidade:** cada reserva é rastreável (pedido → cliente → item comercial → disponibilidade de origem → preferências aplicadas).
 - Cobertura backend ≥ 80% (linha e branch) nos services de domínio.
@@ -221,6 +227,45 @@ Monta a carga física por caminhão e a congela no fechamento. **Reusa** o contr
 - Sobras do dia registradas com origem rastreável.
 - Congelamento registra impacto de peso/qualidade (RA-06).
 - Controle de entradas/saídas de estoque com inventário; relatório de aproveitamento e perdas.
+
+## DoD do Ciclo v1.1 (ondas — vigente)
+
+> Ondas definidas em [`roadmap-canonico.md`](roadmap-canonico.md#8-ciclo-v11--implementação-completa-do-protótipo-vigente); rito de gates em [`pipeline-execucao.md`](pipeline-execucao.md); princípios em [`constituicao.md`](constituicao.md).
+
+### Gate transversal adicional do Ciclo v1.1 — Fidelidade ao protótipo (Princípio I, NÃO-NEGOCIÁVEL)
+
+Vale para **todo PR com UI**, somado aos gates transversais acima:
+- Cada tela do PR referencia no plano tático o arquivo `.tsx` de origem no protótipo (`feature/completude-v1.1`) e é **estruturalmente idêntica** a ele: seções, abas, modais, botões, rótulos, estados visuais, fluxo de navegação.
+- Zero cores hex fora dos tokens do DS/paleta do protótipo; fonte única Inter; menu com os 9 grupos, ordem e rótulos do protótipo.
+- Terminologia: "Nome Fantasia" / "Buscar cliente"; **zero ocorrências de "Marca"** em UI (teste/grep no gate).
+- Pendências abertas (P1–P15 do plano mestre §7) aparecem como parâmetro + badge "Provisório" — nunca regra fixa; badge só sai com AD-xx registrada em [`../execucao/DECISOES.md`](../execucao/DECISOES.md).
+- Evidência no PR: screenshot Playwright por tela, comparável lado a lado com a rota equivalente do protótipo. Divergência não autorizada pelo plano = **reprovação**, mesmo que "melhore" a tela.
+
+### Onda 1 — Correção estrutural
+- **Operação (D2):** tabela `operacoes` criada; toda tabela de fato referencia `operacao_id` (backfill de `dataOperacao` provado por migration aplicada em banco com dados); todos os writers (`compras_programadas`, `disponibilidades_virtuais`, `pedidos_venda`, `recebimentos`, `caminhoes`, `faturamentos`) gravam a FK; `data_operacao` sai no contract `0014`; geração por cadência **parametrizada** (default seg/qua/sex marcado provisório — P1) idempotente por janela; operação extraordinária criável; teste prova unicidade por data.
+- **Overbooking (D1/AD-05):** tentativa de criação/inclusão acima do saldo retorna `409 OVERBOOKING_CONFIRMACAO_NECESSARIA` com payload do modal e **nenhum `INSERT`/`UPDATE`/`DELETE`**, sem mutação em operação, pedido, item, reserva, saldo ou pendência; confirmação explícita retorna `201` na criação ou `200` na inclusão e cria reserva `tipo_consumo='overbooking'` **e** `pendencias_overbooking` na mesma transação (teste prova atomicidade); uma linha ativa por `(pedido, item comercial)` é garantida no banco; o CHECK ≥0 do saldo real **permanece** e overbooking nunca o viola (teste de concorrência: N confirmações paralelas não corrompem o saldo físico/virtual); reduzir/remover/cancelar trata separadamente as parcelas real e overbooking, atualiza/cancela a pendência e nunca credita overbooking no saldo; venda jamais é bloqueada após confirmação.
+- **Pedido ao Fornecedor (D3):** recebimento só nasce de `pedido_fornecedor` (iniciar sem ele → 409); NF do fornecedor registrada como entidade com itens; migration preserva pedidos/itens/NFs históricos; acumuladores por produto vêm das peças para itens pesáveis e de `recebimentos_itens.quantidade_recebida` para caixarias/entrada direta (nunca digitados como total de conferência); `Concluir pesagem` transiciona para revisão obrigatória (concluir sem revisão → 409); `conclusoes_conferencia` imutável pós-gravação (update → 409) e `conclusoes_conferencia_nfs` preserva todas as NFs consideradas; divergência usa tipos v1.1 e gera ocorrência vinculada à conclusão e, quando atribuível a uma única nota, à NF, tudo na mesma transação; estados v1.1 §6.10.5 com CHECK.
+- **Terminologia (D5):** zero "marca" em UI/rotulagem (grep no CI ou teste dedicado).
+- **CLAUDE.md (D9):** corrigido — sem "Fase 0 sem código"; registra docs_v2 v1.1 como fonte funcional e a governança vigente.
+- Cobertura backend ≥ 80% (linha e branch) nos services tocados.
+
+### Onda 2 — Shell + DS
+- Tokens completos da paleta do protótipo centralizados (globals.css/@theme) — **zero hex avulso** nas telas (grep).
+- Layout com sidebar em gradiente, menu 9 grupos (ordem/rótulos do protótipo), breadcrumb, colapso por grupo; `visibleGroups` dirigido por RBAC real (não simulador).
+- Componentes compartilhados portados: PipelineBar, badge "Provisório" (com `title` citando a pendência), base do modal TrocaPeca, StatusPill/KpiCard/AlertItem alinhados.
+- Login fiel ao protótipo (painel de marca + formulário) mantendo o fluxo JWT real.
+- Smoke tests de render por componente; screenshot de shell comparado ao protótipo.
+
+### Ondas 3–10 — regra geral
+Cada onda tem plano tático próprio (padrão F4c) aprovado no **Portão 1**, cujo "Mapa DoD → teste" é a DoD específica da onda — derivada das linhas correspondentes da [matriz de rastreabilidade](../superpowers/plans/2026-07-22-matriz-rastreabilidade-v1.1.md) e dos invariantes do plano mestre §3–§4. Invariantes mínimos por onda (não exaustivo):
+- **O3:** CRUDs completos com RBAC (403 testado por permissão), 11 perfis canônicos com recorte `ESTOQUE_*` conforme AD-04, simuladores de regras funcionais, seed AD-01 sem badge + regras TZ A/B com badge (P12/§16.15), preview de modelo de etiqueta.
+- **O4:** adendo com histórico e unicidade de pedido aberto por cliente+produto+operação (AD-03); rascunho sem expiração automática e ação administrativa auditada “Liberar reserva” (AD-06); mapa teatro com estados F/V/R/C/D/O/E/! agregados + drill-down; catálogo MVP correto (nunca o legado da aba Grade); tabela de preços com publicação auditada.
+- **O5:** painel de impacto na edição de compra confirmada; fila de pendências de overbooking com decisão em 3 caminhos; comparativo Pedido×NF×Pesagem imutável; SIF com versionamento/retificação (P8).
+- **O6:** Troca de Peça atômica preservando pesos e invalidando etiqueta (teste dos 9 passos numa transação); estorno conforme regras doc 04 §3.2; acumuladores em tempo real.
+- **O7:** exclusividade de regra por unidade de TZ (teste: alternativa A escolhida bloqueia saídas da B); checklist esperado×registrado; divergência de transformação formal; painel Modo TV via eventos (RA-04).
+- **O8:** ajuste com segregação criador≠aprovador e limiar parametrizado; FIFO como sugestão parametrizável (P3).
+- **O9:** UI fiel sobre o backend F5 existente; bipagem reusa contrato ADR-009.
+- **O10:** adapter EISS real atrás da mesma porta (fake segue no CI — Princípio V); flag RTC; checklist de liberação calculado bloqueando por requisito faltante (teste por requisito); trava de cancelamento pós-liberação.
 
 ## Como o gate decide
 

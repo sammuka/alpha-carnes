@@ -8,6 +8,7 @@
   },
   "scripts": {
     "lint": "npm run lint --workspaces --if-present",
+    "test:ci-scripts": "node --test scripts/*.test.mjs",
     "type-check": "npm run type-check --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "build": "npm run build --workspaces --if-present"

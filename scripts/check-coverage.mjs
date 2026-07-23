@@ -1,7 +1,14 @@
 #!/usr/bin/env node
-// Lê coverage/coverage-summary.json e falha se lines ou branches < --min
+// Lê coverage/coverage-summary.json e falha se o total OU qualquer service
+// tocado pelo PR ficar abaixo de --min em lines/branches.
 import { readFileSync } from 'fs';
 import { argv } from 'process';
+import { resolve } from 'path';
+
+import {
+  listChangedServices,
+  resolveCoverageBase,
+} from './check-coverage-lib.mjs';
 
 const minIdx = argv.indexOf('--min');
 const min = minIdx !== -1 ? parseInt(argv[minIdx + 1], 10) : 80;
@@ -16,15 +23,42 @@ try {
 }
 
 const total = summary.total;
-const lines = total.lines.pct;
-const branches = total.branches.pct;
+const avaliar = (rotulo, cobertura) => {
+  const lines = cobertura.lines.pct;
+  const branches = cobertura.branches.pct;
+  console.log(`Coverage ${rotulo}: lines=${lines}%, branches=${branches}% (min=${min}%)`);
+  if (lines < min || branches < min) {
+    console.error(`FALHA: ${rotulo} abaixo do mínimo de ${min}%`);
+    return false;
+  }
+  return true;
+};
 
-console.log(`Coverage: lines=${lines}%, branches=${branches}% (min=${min}%)`);
+let ok = avaliar('total', total);
 
-if (lines < min || branches < min) {
-  console.error(`FALHA: cobertura abaixo do mínimo de ${min}%`);
+const baseRef = resolveCoverageBase();
+let changedServices = [];
+try {
+  changedServices = listChangedServices(baseRef);
+} catch (error) {
+  console.error(`FALHA: não foi possível calcular services tocados contra ${baseRef}: ${error.message}`);
   process.exit(1);
 }
 
-console.log('OK: cobertura dentro do limiar');
-process.exit(0);
+const entries = Object.entries(summary).filter(([key]) => key !== 'total');
+for (const service of changedServices) {
+  const expectedSuffix = service.replace(/^app\/backend\//, '').replaceAll('/', '\\');
+  const match = entries.find(([key]) => {
+    const normalized = resolve(key).replaceAll('/', '\\');
+    return normalized.endsWith(expectedSuffix);
+  });
+  if (!match) {
+    console.error(`FALHA: service tocado sem entrada de cobertura: ${service}`);
+    ok = false;
+    continue;
+  }
+  ok = avaliar(service, match[1]) && ok;
+}
+
+if (!ok) process.exit(1);
+console.log(`OK: cobertura total e ${changedServices.length} service(s) tocado(s) dentro do limiar`);
