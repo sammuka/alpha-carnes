@@ -16,7 +16,7 @@ import { middleware, config as middlewareConfig } from '../src/middleware';
 const mockJwtVerify = jwtVerify as jest.Mock;
 
 function createRequest(path: string, cookies: Record<string, string> = {}) {
-  const url = `http://localhost:3000${path}`;
+  const url = `http://localhost:4000${path}`;
   const cookieHeader = Object.entries(cookies)
     .map(([k, v]) => `${k}=${v}`)
     .join('; ');
@@ -37,6 +37,14 @@ describe('middleware', () => {
     const res = await middleware(req);
     // Rota pública — deve seguir (next()) ou redirect para admin se já logado
     expect(res).toBeDefined();
+  });
+
+  it('rota pública /api/auth/refresh segue sem access token', async () => {
+    const req = createRequest('/api/auth/refresh', { refresh_token: 'refresh-token' });
+    const res = await middleware(req);
+    expect(res.status).not.toBe(307);
+    expect(res.headers.get('x-middleware-next')).toBe('1');
+    expect(mockJwtVerify).not.toHaveBeenCalled();
   });
 
   it('rota protegida sem cookie redireciona para /login', async () => {
@@ -71,6 +79,7 @@ describe('middleware', () => {
     const matcherStr = matchers.join(',');
     // O matcher único cobre tudo (inclui /admin implicitamente) excluindo estáticos e APIs públicas
     expect(matcherStr).toMatch(/api\/auth\/login/);
+    expect(matcherStr).toMatch(/api\/auth\/refresh/);
     expect(matcherStr).toMatch(/_next/);
     // Deve ter exatamente um matcher
     expect(matchers).toHaveLength(1);
