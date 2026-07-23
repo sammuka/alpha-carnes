@@ -1,5 +1,9 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { PesagemClient } from '../src/app/(admin)/operacao/pesagem/pesagem-client';
+import { PesagemDestinacaoClient } from '../src/app/(admin)/recebimento/pesagem-destinacao/pesagem-destinacao-client';
+
+jest.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
@@ -24,18 +28,103 @@ const statusDispositivos = {
   impressora: { status: 'disponivel', dispositivoId: 'p1', heartbeatEm: 'now' },
 };
 
+const recebimentoId = 'a1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+const itemComercialId = 'i1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+
+const recebimentoLista = {
+  id: recebimentoId,
+  codigoLote: '001',
+  compraProgramadaId: 'c1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+  numeroInternoCompra: 'PC-001',
+  fornecedorId: 'f1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+  fornecedorNome: 'Frigorífico Teste',
+  dataOperacao: '2026-06-08',
+  status: 'em_conferencia',
+  nfeNumero: '12345',
+  romaneio: 'ROM-1',
+  tipoCarga: 'Boi',
+  progressoBalanca: 0,
+};
+
+const recebimentoDetalhe = {
+  id: recebimentoId,
+  codigoLote: '001',
+  compraProgramadaId: recebimentoLista.compraProgramadaId,
+  fornecedorId: recebimentoLista.fornecedorId,
+  dataOperacao: '2026-06-08',
+  status: 'em_conferencia',
+  tipoCarga: 'Boi',
+  progressoBalanca: 0,
+  nfeNumero: '12345',
+  nfeSerie: null,
+  nfeChave: null,
+  nfeDataEmissao: null,
+  romaneio: 'ROM-1',
+  nfePesoBruto: null,
+  nfePesoLiquido: null,
+  nfeVolumes: null,
+  notaFiscalFornecedor: '12345',
+  placaVeiculo: 'ABC1D23',
+  motorista: 'João',
+  doca: '1',
+  observacoes: null,
+  fornecedor: { id: recebimentoLista.fornecedorId, razaoSocial: 'Frigorífico Teste' },
+  itens: [
+    {
+      id: 'ri1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      itemComercialId,
+      origemDescricao: 'Traseiro',
+      quantidadeEsperada: '10',
+      quantidadeRecebida: '0',
+      unidadeEsperada: 'Peça',
+      requerBalanca: true,
+      pesoTotalApurado: null,
+      statusApuracao: 'aguardando',
+      observacoes: null,
+      itemComercial: { id: itemComercialId, codigo: 'TZ', descricao: 'Traseiro' },
+    },
+  ],
+  divergencias: [],
+};
+
 function mockFetch(overrides: Record<string, unknown> = {}) {
-  global.fetch = jest.fn(async (url: string) => {
-    if (typeof url === 'string' && url.includes('/dispositivos/status')) {
+  global.fetch = jest.fn(async (url: string, init?: RequestInit) => {
+    const u = typeof url === 'string' ? url : '';
+    const method = init?.method ?? 'GET';
+
+    if (method === 'POST' && u.includes('/pesagem/pecas') && !u.includes('/confirmar')) {
+      const found = overrides['/api/operacao/pesagem/pecas'];
+      return { ok: true, json: async () => found ?? {} };
+    }
+
+    if (u.includes('/dispositivos/status')) {
       return { ok: true, json: async () => statusDispositivos };
     }
-    const found = Object.entries(overrides).find(([k]) => typeof url === 'string' && url.includes(k));
+    if (u.includes('/recebimentos?pageSize')) {
+      return { ok: true, json: async () => ({ data: [recebimentoLista] }) };
+    }
+    if (u.includes(`/recebimentos/${recebimentoId}`) && !u.includes('/acoes')) {
+      return { ok: true, json: async () => recebimentoDetalhe };
+    }
+    if (u.includes('/acoes')) {
+      return { ok: true, json: async () => [] };
+    }
+    if (u.includes('/desossa/faltas')) {
+      return { ok: true, json: async () => [] };
+    }
+    if (u.includes('/sugestao')) {
+      return {
+        ok: true,
+        json: async () => ({ pecaId: 'pc1aaaaaa', sugestao: null, compativeis: [] }),
+      };
+    }
+    const found = Object.entries(overrides).find(([k]) => u.includes(k));
     if (found) return { ok: true, json: async () => found[1] };
     return { ok: true, json: async () => ({}) };
   }) as unknown as typeof fetch;
 }
 
-describe('PesagemClient', () => {
+describe('PesagemDestinacaoClient', () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
     (global as unknown as { WebSocket: unknown }).WebSocket = MockWebSocket;
@@ -43,38 +132,45 @@ describe('PesagemClient', () => {
   });
 
   it('mostra o status dos dispositivos sempre visível (RA-05)', async () => {
-    render(<PesagemClient permissoes={['PESAGEM_LER', 'PESAGEM_GERENCIAR']} />);
-    await waitFor(() => expect(screen.getByLabelText(/Balança indisponivel/i)).toBeInTheDocument());
+    render(<PesagemDestinacaoClient permissoes={['PESAGEM_LER', 'PESAGEM_GERENCIAR']} />);
+    await waitFor(() => expect(screen.getByText(/Balança: indisponivel/i)).toBeInTheDocument());
   });
 
-  it('mostra botão de peso manual apenas com permissão PESO_MANUAL', async () => {
-    const { rerender } = render(<PesagemClient permissoes={['PESAGEM_GERENCIAR']} />);
+  it('mostra botão Digitar apenas com permissão PESO_MANUAL', async () => {
+    const { rerender } = render(<PesagemDestinacaoClient permissoes={['PESAGEM_GERENCIAR']} />);
     await waitFor(() => expect(screen.getByTestId('status-dispositivos')).toBeInTheDocument());
-    expect(screen.queryByText('Peso manual assistido')).not.toBeInTheDocument();
+    expect(screen.queryByText('Digitar')).not.toBeInTheDocument();
 
-    rerender(<PesagemClient permissoes={['PESAGEM_GERENCIAR', 'PESO_MANUAL']} />);
-    expect(screen.getByText('Peso manual assistido')).toBeInTheDocument();
+    rerender(<PesagemDestinacaoClient permissoes={['PESAGEM_GERENCIAR', 'PESO_MANUAL']} />);
+    await waitFor(() => expect(screen.getByText('Digitar')).toBeInTheDocument());
   });
 
-  it('captura automática cria peça e permite sugerir', async () => {
+  it('captura automática cria peça após carregar lote e produto', async () => {
     mockFetch({
-      '/api/operacao/pesagem/pecas': { id: 'pc1aaaaaa', recebimentoId: 'r1', pesoOriginal: '12.500', modoCapturaPeso: 'automatico', statusPeca: 'pesada', etiquetaAtual: null, pedidoVendaId: null, pedidoVendaItemId: null },
+      '/api/operacao/pesagem/pecas': {
+        id: 'pc1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        recebimentoId,
+        pesoOriginal: '12.500',
+        modoCapturaPeso: 'automatico',
+        statusPeca: 'pesada',
+        etiquetaAtual: null,
+        pedidoVendaId: null,
+        pedidoVendaItemId: null,
+      },
     });
-    render(<PesagemClient permissoes={['PESAGEM_GERENCIAR', 'ASSOCIACAO_GERENCIAR']} />);
-    await waitFor(() => expect(screen.getByTestId('status-dispositivos')).toBeInTheDocument());
+    render(<PesagemDestinacaoClient permissoes={['PESAGEM_GERENCIAR', 'ASSOCIACAO_GERENCIAR']} />);
 
-    fireEvent.change(screen.getByLabelText('Recebimento (id)'), { target: { value: 'r1' } });
-    fireEvent.change(screen.getByLabelText('Item comercial (id)'), { target: { value: 'i1' } });
-    fireEvent.click(screen.getByText('Capturar peso automático'));
+    const btn = await screen.findByRole('button', { name: 'Capturar Peso' });
+    await waitFor(() => expect(btn).not.toBeDisabled());
+    fireEvent.click(btn);
 
     await waitFor(() => expect(screen.getByTestId('peca-atual')).toBeInTheDocument());
     expect(screen.getByTestId('peca-status')).toHaveTextContent('pesada');
-    expect(screen.getByText('Sugerir pedido')).toBeInTheDocument();
   });
 
   it('exibe alerta quando a balança está indisponível', async () => {
-    render(<PesagemClient permissoes={['PESAGEM_GERENCIAR', 'PESO_MANUAL']} />);
+    render(<PesagemDestinacaoClient permissoes={['PESAGEM_GERENCIAR', 'PESO_MANUAL']} />);
     await waitFor(() => expect(screen.getByTestId('status-dispositivos')).toBeInTheDocument());
-    expect(screen.getByText(/use o peso manual assistido/i)).toBeInTheDocument();
+    expect(screen.getByText(/use peso manual assistido/i)).toBeInTheDocument();
   });
 });

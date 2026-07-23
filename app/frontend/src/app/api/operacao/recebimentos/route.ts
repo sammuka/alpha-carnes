@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchBackend } from '@/lib/api';
 import type { IniciarRecebimentoResultado } from '@/lib/operacao';
-
-// BFF: lista recebimentos (RA-01 — cliente nunca chama o backend direto).
 export async function GET(req: NextRequest) {
   const qs = req.nextUrl.search;
   const { data, error, status } = await fetchBackend<unknown>(`/operacao/recebimentos${qs}`);

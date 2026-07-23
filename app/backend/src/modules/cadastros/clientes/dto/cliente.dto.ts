@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  dadosContatoJsonSchema,
+  dadosFiscaisJsonSchema,
+  preferenciasJsonSchema,
+} from '../../../../common/dto/json-cadastros.dto';
 import { normalizarDocumento, validarDocumentoFiscal } from '../../../../common/validators/documento-fiscal';
 
 // documentoFiscal: aceita CNPJ E CPF; validado por dígito verificador; normalizado (só dígitos).
@@ -17,10 +22,11 @@ export const createClienteSchema = z.object({
   documentoFiscal: documentoFiscalSchema,
   status: statusSchema.optional().default('ativo'),
   rotaPadrao: z.string().trim().max(100).optional(),
+  representanteId: z.string().uuid().optional(),
   prioridade: z.string().trim().max(50).optional(),
-  preferenciasJson: z.record(z.string(), z.unknown()).optional(),
-  dadosFiscaisJson: z.record(z.string(), z.unknown()).optional(),
-  dadosContatoJson: z.record(z.string(), z.unknown()).optional(),
+  preferenciasJson: preferenciasJsonSchema,
+  dadosFiscaisJson: dadosFiscaisJsonSchema,
+  dadosContatoJson: dadosContatoJsonSchema,
   observacoesOperacionais: z.string().trim().optional(),
 });
 

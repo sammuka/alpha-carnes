@@ -1,7 +1,10 @@
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
-import RecebimentoPage from '../src/app/(admin)/operacao/recebimento/page';
+import { RecebimentoCargaClient } from '../src/app/(admin)/recebimento/recebimento-carga/recebimento-carga-client';
 
-// Mock do WebSocket: captura a instância para simular mensagens do servidor.
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn() }),
+}));
+
 class MockWebSocket {
   static instances: MockWebSocket[] = [];
   onopen: (() => void) | null = null;
@@ -22,91 +25,132 @@ class MockWebSocket {
   }
 }
 
-const recebimentoComDivergencia = {
+const PERMISSOES = ['RECEBIMENTO_LER', 'RECEBIMENTO_GERENCIAR'];
+
+const recebimentoLista = {
   id: 'r1',
+  codigoLote: 'R1ABCDEF',
+  compraProgramadaId: 'c1',
+  numeroInternoCompra: 'PC-2091',
+  fornecedorId: 'f1',
+  fornecedorNome: 'Frigorífico Boi Forte',
+  dataOperacao: '2026-06-07',
+  status: 'em_conferencia',
+  nfeNumero: '128934',
+  romaneio: 'ROM-7781',
+  tipoCarga: 'Boi',
+  progressoBalanca: 58,
+};
+
+const recebimentoDetalhe = {
+  id: 'r1',
+  codigoLote: 'R1ABCDEF',
   compraProgramadaId: 'c1',
   fornecedorId: 'f1',
   dataOperacao: '2026-06-07',
-  status: 'com_divergencia',
-  notaFiscalFornecedor: null,
+  status: 'em_conferencia',
+  tipoCarga: 'Boi',
+  progressoBalanca: 58,
+  nfeNumero: '128934',
+  nfeSerie: null,
+  nfeChave: null,
+  nfeDataEmissao: null,
+  romaneio: 'ROM-7781',
+  nfePesoBruto: null,
+  nfePesoLiquido: null,
+  nfeVolumes: null,
+  notaFiscalFornecedor: '128934',
+  observacoes: null,
+  fornecedor: { id: 'f1', razaoSocial: 'Frigorífico Boi Forte' },
+  compra: { id: 'c1', numeroInterno: 'PC-2091' },
   itens: [
     {
       id: 'it1',
       itemComercialId: 'item-1',
-      quantidadeEsperada: '40.000',
-      quantidadeRecebida: '36.000',
-      pesoTotalApurado: null,
-      statusApuracao: 'divergente',
+      origemDescricao: 'PC-2091 / Regra Boi → DT/PA/TZ',
+      quantidadeEsperada: '20.000',
+      quantidadeRecebida: '12.000',
+      quantidadeApurada: '12',
+      unidadeEsperada: 'peças',
+      requerBalanca: true,
+      pesoTotalApurado: '586.400',
+      pesoApurado: '586.400',
+      statusApuracao: 'em_conferencia',
       observacoes: null,
+      itemComercial: { id: 'item-1', codigo: 'TZ', descricao: 'Traseiro' },
     },
   ],
-  divergencias: [
-    { id: 'dv1', recebimentoItemId: 'it1', tipo: 'quantidade_menor', descricao: 'faltou', acaoImediata: 'replanejar', status: 'aberta' },
-  ],
+  divergencias: [],
 };
 
-function mockIniciar() {
-  global.fetch = jest.fn(async (url: string, opts?: { method?: string }) => {
-    if (typeof url === 'string' && url.endsWith('/api/operacao/recebimentos') && opts?.method === 'POST') {
-      return { ok: true, json: async () => ({ recebimento: { id: 'r1' }, jaIniciado: false }) };
+function mockFetchRecebimento() {
+  global.fetch = jest.fn(async (url: string) => {
+    if (typeof url === 'string' && url.includes('/api/operacao/recebimentos?pageSize')) {
+      return { ok: true, json: async () => ({ data: [recebimentoLista], page: 1, pageSize: 50, total: 1 }) };
     }
     if (typeof url === 'string' && url.includes('/api/operacao/recebimentos/r1')) {
-      return { ok: true, json: async () => recebimentoComDivergencia };
+      return { ok: true, json: async () => recebimentoDetalhe };
     }
-    return { ok: true, json: async () => ({}) };
+    if (typeof url === 'string' && url.includes('/api/comercial/compras-programadas')) {
+      return { ok: true, json: async () => ({ data: [] }) };
+    }
+    if (typeof url === 'string' && url.includes('/api/cadastros/fornecedores')) {
+      return { ok: true, json: async () => ({ data: [] }) };
+    }
+    return { ok: true, json: async () => ({ data: [] }) };
   }) as unknown as typeof fetch;
 }
 
-describe('RecebimentoPage', () => {
+describe('RecebimentoCargaClient', () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
     (global as unknown as { WebSocket: unknown }).WebSocket = MockWebSocket;
-    mockIniciar();
+    mockFetchRecebimento();
   });
 
-  it('renderiza o título (smoke)', () => {
-    render(<RecebimentoPage />);
-    expect(screen.getByText('Recebimento')).toBeInTheDocument();
+  it('renderiza o título e lista enriquecida (smoke)', async () => {
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    expect(screen.getByText('Recebimento de carga')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('PC-2091')).toBeInTheDocument());
+    expect(screen.getByText('Frigorífico Boi Forte')).toBeInTheDocument();
+    expect(screen.getByText('128934')).toBeInTheDocument();
   });
 
-  it('inicia recebimento e mostra grid esperado×recebido', async () => {
-    render(<RecebimentoPage />);
-    fireEvent.change(screen.getByLabelText('Compra programada (confirmada)'), { target: { value: 'c1' } });
-    fireEvent.click(screen.getByText('Iniciar recebimento'));
+  it('abre detalhe readonly ao clicar Abrir', async () => {
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    await waitFor(() => expect(screen.getByText('Abrir')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Abrir'));
 
-    await waitFor(() => expect(screen.getByTestId('item-item-1')).toBeInTheDocument());
-    expect(screen.getByTestId('receb-status')).toHaveTextContent('com_divergencia');
+    await waitFor(() => expect(screen.getByTestId('receb-status')).toHaveTextContent('Em conferência'));
+    expect(screen.getByTestId('item-item-1')).toBeInTheDocument();
+    expect(screen.getByTestId('btn-concluir')).toBeInTheDocument();
+    expect(screen.getByText('Itens previstos importados')).toBeInTheDocument();
   });
 
-  it('bloqueia conclusão quando há divergência aberta', async () => {
-    render(<RecebimentoPage />);
-    fireEvent.change(screen.getByLabelText('Compra programada (confirmada)'), { target: { value: 'c1' } });
-    fireEvent.click(screen.getByText('Iniciar recebimento'));
+  it('exibe status Aguardando conferência na lista', async () => {
+    global.fetch = jest.fn(async (url: string) => {
+      if (typeof url === 'string' && url.includes('/api/operacao/recebimentos?pageSize')) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: [{ ...recebimentoLista, status: 'aguardando_conferencia' }],
+            page: 1,
+            pageSize: 50,
+            total: 1,
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ data: [] }) };
+    }) as unknown as typeof fetch;
 
-    await waitFor(() => expect(screen.getByTestId('btn-concluir')).toBeInTheDocument());
-    expect(screen.getByTestId('btn-concluir')).toBeDisabled();
-    expect(screen.getByText(/trate antes de concluir/i)).toBeInTheDocument();
-  });
-
-  it('exige classificação (descrição + ação) antes de registrar divergência', async () => {
-    render(<RecebimentoPage />);
-    fireEvent.change(screen.getByLabelText('Compra programada (confirmada)'), { target: { value: 'c1' } });
-    fireEvent.click(screen.getByText('Iniciar recebimento'));
-    await waitFor(() => expect(screen.getByTestId('item-item-1')).toBeInTheDocument());
-
-    // Marca "Registrar divergência": sem descrição/ação o botão Registrar fica desabilitado.
-    fireEvent.click(screen.getByLabelText('Registrar divergência'));
-    expect(screen.getByText('Registrar')).toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText('Descrição da divergência item-1'), { target: { value: 'faltou' } });
-    fireEvent.change(screen.getByLabelText('Ação imediata item-1'), { target: { value: 'replanejar' } });
-    expect(screen.getByText('Registrar')).toBeEnabled();
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    await waitFor(() => expect(screen.getByText('Aguardando conferência')).toBeInTheDocument());
   });
 
   it('recarrega ao receber evento recebimento_registrado via WS', async () => {
-    render(<RecebimentoPage />);
-    fireEvent.change(screen.getByLabelText('Compra programada (confirmada)'), { target: { value: 'c1' } });
-    fireEvent.click(screen.getByText('Iniciar recebimento'));
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    await waitFor(() => expect(screen.getByText('Abrir')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Abrir'));
     await waitFor(() => expect(screen.getByTestId('item-item-1')).toBeInTheDocument());
 
     const fetchSpy = global.fetch as jest.Mock;

@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
+import { extrairMensagemErro } from './error-message';
 
-const BACKEND_URL = process.env.BACKEND_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const BACKEND_URL = process.env.BACKEND_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4001';
 
 export async function fetchBackend<T>(
   path: string,
@@ -34,7 +35,7 @@ export async function fetchBackend<T>(
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({ message: 'Erro desconhecido' }));
-      return { data: null, error: (body as { message?: string }).message ?? 'Erro', status: res.status };
+      return { data: null, error: extrairMensagemErro(body, 'Erro'), status: res.status };
     }
 
     const data = await res.json();

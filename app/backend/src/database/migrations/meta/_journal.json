@@ -64,6 +64,27 @@
       "when": 1780962926947,
       "tag": "0008_superb_union_jack",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781049600000,
+      "tag": "0009_f7_produtos_representantes_rotas",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781136000000,
+      "tag": "0010_f4_regras_transformacao",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781222400000,
+      "tag": "0011_recebimento_simplificado",
+      "breakpoints": true
     }
   ]
 }

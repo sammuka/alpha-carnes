@@ -1,40 +1,59 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import NovoPedidoPage from '../src/app/(admin)/comercial/pedidos/novo/page';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { PedidoVendaClient } from '../src/app/(admin)/comercial/pedidos/pedido-venda-client';
 
-const UUID = '019e0000-0000-7000-8000-000000000001';
+const PERMISSOES = ['PEDIDOS_LER', 'PEDIDOS_GERENCIAR'];
 
-describe('NovoPedidoPage', () => {
+function mockFetchVazio() {
+  global.fetch = jest.fn(async (url: string, opts?: { method?: string }) => {
+    if (typeof url === 'string' && url.includes('/api/comercial/pedidos') && opts?.method === 'POST') {
+      return {
+        ok: true,
+        json: async () => ({ id: 'pedido-1', status: 'reservado' }),
+      };
+    }
+    if (typeof url === 'string' && url.includes('/api/comercial/compras-programadas')) {
+      return {
+        ok: true,
+        json: async () => ({
+          data: [{ id: 'c1', dataOperacao: '2026-06-07', status: 'confirmada' }],
+        }),
+      };
+    }
+    if (typeof url === 'string' && url.includes('/api/cadastros/clientes')) {
+      return { ok: true, json: async () => ({ data: [{ id: 'cl1', razaoSocial: 'Cliente Teste' }] }) };
+    }
+    if (typeof url === 'string' && url.includes('/api/cadastros/itens-comerciais')) {
+      return { ok: true, json: async () => ({ data: [{ id: 'ic1', codigo: 'DIANT' }] }) };
+    }
+    if (typeof url === 'string' && url.includes('/api/comercial/disponibilidade')) {
+      return { ok: true, json: async () => [] };
+    }
+    return { ok: true, json: async () => ({ data: [] }) };
+  }) as unknown as typeof fetch;
+}
+
+describe('PedidoVendaClient (modo novo)', () => {
   beforeEach(() => {
-    global.fetch = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({ id: 'pedido-1', status: 'reservado' }),
-    })) as unknown as typeof fetch;
+    mockFetchVazio();
   });
 
-  it('renderiza o formulário de pedido (smoke)', () => {
-    render(<NovoPedidoPage />);
-    expect(screen.getByText('Novo pedido')).toBeInTheDocument();
-    expect(screen.getByLabelText('Compra programada')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /criar pedido/i })).toBeInTheDocument();
+  it('renderiza o formulário de pedido (smoke)', async () => {
+    render(<PedidoVendaClient permissoes={PERMISSOES} modo="novo" />);
+    await waitFor(() => {
+      expect(screen.getByText('Novo pedido de venda')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /salvar e reservar/i })).toBeInTheDocument();
+    expect(screen.getByText('Cliente')).toBeInTheDocument();
   });
 
-  it('submete o pedido via BFF e exibe o resultado', async () => {
-    render(<NovoPedidoPage />);
+  it('exige campos obrigatórios antes de submeter', async () => {
+    render(<PedidoVendaClient permissoes={PERMISSOES} modo="novo" />);
+    await waitFor(() => expect(screen.getByText('Novo pedido de venda')).toBeInTheDocument());
 
-    fireEvent.input(screen.getByLabelText('Compra programada'), { target: { value: UUID } });
-    fireEvent.input(screen.getByLabelText('Cliente'), { target: { value: UUID } });
-    fireEvent.input(screen.getByLabelText('Data operacional'), { target: { value: '2026-06-07' } });
-    fireEvent.input(screen.getByLabelText('Item comercial'), { target: { value: UUID } });
-    fireEvent.input(screen.getByLabelText('Quantidade'), { target: { value: '4' } });
-
-    fireEvent.click(screen.getByRole('button', { name: /criar pedido/i }));
+    fireEvent.click(screen.getByRole('button', { name: /salvar e reservar/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent('pedido-1');
+      expect(screen.getByRole('alert')).toHaveTextContent(/preencha compra, cliente e ao menos um item/i);
     });
-    expect(global.fetch).toHaveBeenCalledWith(
-      '/api/comercial/pedidos',
-      expect.objectContaining({ method: 'POST' }),
-    );
   });
 });

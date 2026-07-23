@@ -67,4 +67,15 @@ describe('RealtimeHub', () => {
   it('broadcast em room inexistente é no-op', () => {
     expect(() => hub.broadcast('inexistente', 'e', {})).not.toThrow();
   });
+
+  it('remove room vazia após limpar sockets fechados', () => {
+    const fechado = fakeSocket();
+    fechado.readyState = 3;
+    hub.join(fechado, 'solo');
+
+    hub.broadcast('solo', 'e', { ok: true });
+
+    expect(fechado.send).not.toHaveBeenCalled();
+    expect(() => hub.broadcast('solo', 'e2', {})).not.toThrow();
+  });
 });

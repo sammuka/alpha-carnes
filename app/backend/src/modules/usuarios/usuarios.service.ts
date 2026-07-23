@@ -92,7 +92,31 @@ export class UsuariosService {
   }
 
   async listar() {
-    return this.db.select(PROJECAO_USUARIO).from(schema.usuarios).where(isNull(schema.usuarios.deletedAt));
+    const usuarios = await this.db
+      .select(PROJECAO_USUARIO)
+      .from(schema.usuarios)
+      .where(isNull(schema.usuarios.deletedAt));
+
+    if (usuarios.length === 0) return [];
+
+    const ids = usuarios.map((u) => u.id);
+    const perfisRows = await this.db
+      .select({ usuarioId: schema.usuariosPerfis.usuarioId, slug: schema.perfis.slug })
+      .from(schema.usuariosPerfis)
+      .innerJoin(schema.perfis, eq(schema.usuariosPerfis.perfilId, schema.perfis.id))
+      .where(inArray(schema.usuariosPerfis.usuarioId, ids));
+
+    const perfisPorUsuario = new Map<string, string[]>();
+    for (const row of perfisRows) {
+      const atual = perfisPorUsuario.get(row.usuarioId) ?? [];
+      atual.push(row.slug);
+      perfisPorUsuario.set(row.usuarioId, atual);
+    }
+
+    return usuarios.map((u) => ({
+      ...u,
+      perfis: perfisPorUsuario.get(u.id) ?? [],
+    }));
   }
 
   async detalhar(id: string) {

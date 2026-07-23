@@ -15,6 +15,12 @@ export const PERMISSOES = {
   ITENS_COMPRA_GERENCIAR: 'ITENS_COMPRA_GERENCIAR',
   ITENS_COMERCIAIS_LER: 'ITENS_COMERCIAIS_LER',
   ITENS_COMERCIAIS_GERENCIAR: 'ITENS_COMERCIAIS_GERENCIAR',
+  PRODUTOS_LER: 'PRODUTOS_LER',
+  PRODUTOS_GERENCIAR: 'PRODUTOS_GERENCIAR',
+  REPRESENTANTES_LER: 'REPRESENTANTES_LER',
+  REPRESENTANTES_GERENCIAR: 'REPRESENTANTES_GERENCIAR',
+  ROTAS_LER: 'ROTAS_LER',
+  ROTAS_GERENCIAR: 'ROTAS_GERENCIAR',
   REGRAS_DESDOBRAMENTO_LER: 'REGRAS_DESDOBRAMENTO_LER',
   REGRAS_DESDOBRAMENTO_GERENCIAR: 'REGRAS_DESDOBRAMENTO_GERENCIAR',
   PARAMETROS_LER: 'PARAMETROS_LER',
@@ -44,6 +50,14 @@ export const PERMISSOES = {
   // ── F4c — Corte / Transformação ───────────────────────────────────────────
   CORTE_GERENCIAR: 'CORTE_GERENCIAR', // iniciar/gerar/pesar/associar/reetiquetar/concluir corte
 
+  // ── F4d — Desossa ─────────────────────────────────────────────────────────
+  DESOSSA_LER: 'DESOSSA_LER',
+  DESOSSA_GERENCIAR: 'DESOSSA_GERENCIAR',
+
+  // ── F4e — Estoque ─────────────────────────────────────────────────────────
+  ESTOQUE_LER: 'ESTOQUE_LER',
+  ESTOQUE_GERENCIAR: 'ESTOQUE_GERENCIAR',
+
   // ── F5 — Expedição ───────────────────────────────────────────────────────
   EXPEDICAO_GERENCIAR: 'EXPEDICAO_GERENCIAR', // gerenciar carga, itens, transferências, conferência
   EXPEDICAO_REABRIR: 'EXPEDICAO_REABRIR',     // reabertura excepcional de expedição fechada
@@ -66,6 +80,9 @@ const LEITURA_CADASTROS: Permissao[] = [
   'FORNECEDORES_LER',
   'ITENS_COMPRA_LER',
   'ITENS_COMERCIAIS_LER',
+  'PRODUTOS_LER',
+  'REPRESENTANTES_LER',
+  'ROTAS_LER',
   'REGRAS_DESDOBRAMENTO_LER',
   'PARAMETROS_LER',
 ];
@@ -100,6 +117,12 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'ITENS_COMPRA_GERENCIAR',
     'ITENS_COMERCIAIS_LER',
     'ITENS_COMERCIAIS_GERENCIAR',
+    'PRODUTOS_LER',
+    'PRODUTOS_GERENCIAR',
+    'REPRESENTANTES_LER',
+    'REPRESENTANTES_GERENCIAR',
+    'ROTAS_LER',
+    'ROTAS_GERENCIAR',
     'REGRAS_DESDOBRAMENTO_LER',
     'REGRAS_DESDOBRAMENTO_GERENCIAR',
     'PARAMETROS_LER',
@@ -123,6 +146,10 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'LEITURA_MANUAL',
     'ETIQUETA_GERENCIAR',
     'CORTE_GERENCIAR', // F4c — administrador gerencia tudo
+    'DESOSSA_LER',
+    'DESOSSA_GERENCIAR',
+    'ESTOQUE_LER',
+    'ESTOQUE_GERENCIAR',
     'EXPEDICAO_GERENCIAR', // F5 — administrador gerencia tudo
     'EXPEDICAO_REABRIR',
     // F6a — administrador gerencia tudo
@@ -136,6 +163,9 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'AUDITORIA_VISUALIZAR',
     'CLIENTES_GERENCIAR',
     'REGRAS_DESDOBRAMENTO_GERENCIAR',
+    'PRODUTOS_GERENCIAR',
+    'REPRESENTANTES_GERENCIAR',
+    'ROTAS_GERENCIAR',
     ...LEITURA_CADASTROS,
     // F3 (doc 013 §2.3/§4.1): gestor aprova/confirma compra e gerencia pedidos.
     'COMPRAS_PROGRAMADAS_LER',
@@ -156,6 +186,10 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'LEITURA_MANUAL',
     'ETIQUETA_GERENCIAR',
     'CORTE_GERENCIAR', // F4c — gestor operacional gerencia corte
+    'DESOSSA_LER',
+    'DESOSSA_GERENCIAR',
+    'ESTOQUE_LER',
+    'ESTOQUE_GERENCIAR',
     'EXPEDICAO_GERENCIAR', // F5 — gestor operacional gerencia expedição
     'EXPEDICAO_REABRIR',
     // F6a — gestor operacional gerencia faturamento e NFS-e
@@ -216,6 +250,8 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'LEITURA_MANUAL',
     'ETIQUETA_GERENCIAR',
     'CORTE_GERENCIAR',
+    'DESOSSA_LER',
+    'DESOSSA_GERENCIAR',
   ],
   expedicao: [
     ...LEITURA_CADASTROS,
@@ -262,6 +298,12 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   ITENS_COMPRA_GERENCIAR: 'Criar, editar, excluir e restaurar itens de compra',
   ITENS_COMERCIAIS_LER: 'Consultar itens comerciais',
   ITENS_COMERCIAIS_GERENCIAR: 'Criar, editar, excluir e restaurar itens comerciais',
+  PRODUTOS_LER: 'Consultar produtos',
+  PRODUTOS_GERENCIAR: 'Criar, editar, excluir e restaurar produtos',
+  REPRESENTANTES_LER: 'Consultar representantes',
+  REPRESENTANTES_GERENCIAR: 'Criar, editar, excluir e restaurar representantes',
+  ROTAS_LER: 'Consultar rotas',
+  ROTAS_GERENCIAR: 'Criar, editar, excluir e restaurar rotas',
   REGRAS_DESDOBRAMENTO_LER: 'Consultar regras de desdobramento comercial',
   REGRAS_DESDOBRAMENTO_GERENCIAR: 'Criar, editar, excluir e restaurar regras de desdobramento',
   PARAMETROS_LER: 'Consultar parâmetros do sistema',
@@ -282,6 +324,10 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   LEITURA_MANUAL: 'Digitar identificador QR quando o leitor está indisponível',
   ETIQUETA_GERENCIAR: 'Emitir e reimprimir etiquetas de peça',
   CORTE_GERENCIAR: 'Iniciar, executar e concluir cortes/transformações de peças',
+  DESOSSA_LER: 'Consultar dashboard de faltas e regras de transformação da desossa',
+  DESOSSA_GERENCIAR: 'Gerenciar regras de transformação da desossa',
+  ESTOQUE_LER: 'Consultar peças e subitens em estoque',
+  ESTOQUE_GERENCIAR: 'Gerenciar movimentações e ajustes de estoque',
   EXPEDICAO_GERENCIAR: 'Gerenciar expedição: carga, transferências, conferência e fechamento',
   EXPEDICAO_REABRIR: 'Reabrir expedição fechada (excepcional, auditado)',
   FATURAMENTO_LER: 'Visualizar faturamentos e consolidação da carga',

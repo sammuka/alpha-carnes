@@ -6,13 +6,14 @@ import { CaminhaoService } from './caminhao.service';
 import { CargaService } from './carga.service';
 import { ConferenciaService } from './conferencia.service';
 import { FechamentoService } from './fechamento.service';
+import { LiberacaoService } from './liberacao.service';
 
 // F5 — Expedição. Reusa EtiquetaService (de PesagemModule) para conferência por QR (ADR-009).
 // Gateways de hardware (leitor QR) vêm do HardwareModule (global).
 @Module({
   imports: [AuthModule, PesagemModule],
   controllers: [ExpedicaoController],
-  providers: [CaminhaoService, CargaService, ConferenciaService, FechamentoService],
-  exports: [CaminhaoService, CargaService, ConferenciaService, FechamentoService],
+  providers: [CaminhaoService, CargaService, ConferenciaService, FechamentoService, LiberacaoService],
+  exports: [CaminhaoService, CargaService, ConferenciaService, FechamentoService, LiberacaoService],
 })
 export class ExpedicaoModule {}

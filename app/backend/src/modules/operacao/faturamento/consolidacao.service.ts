@@ -40,8 +40,7 @@ export class ConsolidacaoService {
     if (
       caminhao.statusCaminhao !== 'fechado' &&
       caminhao.statusCaminhao !== 'liberado_faturamento' &&
-      caminhao.statusCaminhao !== 'faturado' &&
-      caminhao.statusCaminhao !== 'parcialmente_emitido'
+      caminhao.statusCaminhao !== 'faturado'
     ) {
       throw new ConflictException(
         `Faturamento só permitido para caminhão 'fechado'. Status atual: ${caminhao.statusCaminhao}`

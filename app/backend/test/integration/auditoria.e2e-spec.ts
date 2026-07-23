@@ -95,4 +95,21 @@ describe('Auditoria e2e', () => {
       expect(sucessos.length).toBe(0);
     });
   });
+
+  describe('Consulta paginada', () => {
+    it('GET /auditoria lista registros com filtros', async () => {
+      await request(app.getHttpServer())
+        .post('/usuarios')
+        .set('Cookie', adminCookies)
+        .send({ nome: 'Filtro Audit', email: `filtro-${Date.now()}@test.local`, password: 'Senha@12345678' })
+        .expect(201);
+
+      const lista = await request(app.getHttpServer())
+        .get('/auditoria?page=1&pageSize=10&modulo=usuarios')
+        .set('Cookie', adminCookies);
+      expect(lista.status).toBe(200);
+      expect(lista.body.data.length).toBeGreaterThanOrEqual(1);
+      expect(lista.body.total).toBeGreaterThanOrEqual(1);
+    });
+  });
 });

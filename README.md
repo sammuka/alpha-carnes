@@ -57,7 +57,13 @@ Isso irá:
 2. Buildar e subir o backend (aplica migrations + seed automaticamente)
 3. Buildar e subir o frontend
 
-Acesse: [http://localhost:3000](http://localhost:3000)
+Acesse o frontend em [http://localhost:4000](http://localhost:4000).
+
+As portas publicadas no host são:
+
+- frontend: `4000` → container `3000`
+- backend: `4001` → container `3001`
+- PostgreSQL: `15433` → container `5432`
 
 ### Credenciais do seed (desenvolvimento)
 

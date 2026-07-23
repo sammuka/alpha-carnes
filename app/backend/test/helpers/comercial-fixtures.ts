@@ -112,10 +112,16 @@ export async function criarCompraConfirmada(
       fornecedorId: base.fornecedorId,
       itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: opts.quantidade }],
     });
+  if (criar.status !== 201 || !criar.body?.id) {
+    throw new Error(`Falha ao criar compra: ${criar.status} ${JSON.stringify(criar.body)}`);
+  }
   const compraId = criar.body.id as string;
-  await request(app.getHttpServer())
+  const confirmar = await request(app.getHttpServer())
     .post(`/comercial/compras-programadas/${compraId}/confirmar`)
     .set('Cookie', comprasCookies)
     .send();
+  if (confirmar.status !== 201 && confirmar.status !== 200) {
+    throw new Error(`Falha ao confirmar compra: ${confirmar.status} ${JSON.stringify(confirmar.body)}`);
+  }
   return compraId;
 }

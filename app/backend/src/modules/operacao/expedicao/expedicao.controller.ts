@@ -3,6 +3,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RbacGuard } from '../../../common/guards/rbac.guard';
 import { RequirePermissoes } from '../../../common/rbac/require-permissoes.decorator';
+import { RequireQualquerPermissao } from '../../../common/rbac/require-qualquer-permissao.decorator';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { z } from 'zod';
 import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
@@ -10,6 +11,7 @@ import { CaminhaoService } from './caminhao.service';
 import { CargaService } from './carga.service';
 import { ConferenciaService } from './conferencia.service';
 import { FechamentoService } from './fechamento.service';
+import { LiberacaoService } from './liberacao.service';
 import {
   criarCaminhaoSchema, vincularPedidoSchema, adicionarItemSchema,
   transferirItemSchema, removerItemSchema, registrarItemConferenciaSchema,
@@ -28,6 +30,7 @@ export class ExpedicaoController {
     private readonly carga: CargaService,
     private readonly conferencia: ConferenciaService,
     private readonly fechamento: FechamentoService,
+    private readonly liberacao: LiberacaoService,
   ) {}
 
   // ── Caminhão ───────────────────────────────────────────────────────────────
@@ -116,5 +119,26 @@ export class ExpedicaoController {
   @RequirePermissoes('EXPEDICAO_GERENCIAR')
   romaneio(@Param('id') id: string) {
     return this.fechamento.romaneio(id);
+  }
+
+  // ── Liberação (F6) ────────────────────────────────────────────────────────
+  @Get('liberacao')
+  @RequireQualquerPermissao('FATURAMENTO_LER', 'EXPEDICAO_GERENCIAR')
+  listarLiberacao(
+    @Query('dataOperacao', new ZodValidationPipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD'))) dataOperacao: string,
+  ) {
+    return this.liberacao.listarParaLiberacao(dataOperacao);
+  }
+
+  @Post('caminhoes/:id/liberar-faturamento')
+  @RequirePermissoes('FATURAMENTO_GERENCIAR')
+  liberarFaturamento(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.liberacao.liberarFaturamento(id, user.sub);
+  }
+
+  @Post('caminhoes/:id/liberar-saida')
+  @RequireQualquerPermissao('FATURAMENTO_GERENCIAR', 'EXPEDICAO_GERENCIAR')
+  liberarSaida(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.liberacao.liberarSaida(id, user.sub);
   }
 }

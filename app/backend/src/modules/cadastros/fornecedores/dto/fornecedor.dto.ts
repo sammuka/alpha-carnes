@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  contatosFornecedorJsonSchema,
+  parametrosOperacionaisJsonSchema,
+} from '../../../../common/dto/json-cadastros.dto';
 import { normalizarDocumento, validarDocumentoFiscal } from '../../../../common/validators/documento-fiscal';
 
 const documentoFiscalSchema = z
@@ -12,8 +16,8 @@ export const createFornecedorSchema = z.object({
   razaoSocial: z.string().trim().min(1).max(200),
   documentoFiscal: documentoFiscalSchema,
   status: z.enum(['ativo', 'inativo']).optional().default('ativo'),
-  contatosJson: z.record(z.string(), z.unknown()).optional(),
-  parametrosOperacionaisJson: z.record(z.string(), z.unknown()).optional(),
+  contatosJson: contatosFornecedorJsonSchema,
+  parametrosOperacionaisJson: parametrosOperacionaisJsonSchema,
   observacoes: z.string().trim().optional(),
 });
 

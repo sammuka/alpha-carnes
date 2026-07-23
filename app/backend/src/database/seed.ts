@@ -83,17 +83,26 @@ export async function seed() {
 
     const [admin] = await db.insert(schema.usuarios)
       .values({ nome: 'Administrador', email: adminEmail, senhaHash })
-      .onConflictDoNothing()
+      .onConflictDoUpdate({
+        target: schema.usuarios.email,
+        set: {
+          nome: 'Administrador',
+          senhaHash,
+          ativo: true,
+          deletedAt: null,
+          updatedAt: new Date(),
+        },
+      })
       .returning();
 
-    if (admin) {
-      await db.insert(schema.usuariosPerfis)
-        .values({ usuarioId: admin.id, perfilId: adminPerfil.id })
-        .onConflictDoNothing();
-      console.log(`✅ Usuário admin criado: ${adminEmail}`);
-    } else {
-      console.log(`ℹ️ Usuário admin já existe: ${adminEmail}`);
+    if (!admin) {
+      throw new Error(`Falha ao verificar usuário admin: ${adminEmail}`);
     }
+
+    await db.insert(schema.usuariosPerfis)
+      .values({ usuarioId: admin.id, perfilId: adminPerfil.id })
+      .onConflictDoNothing();
+    console.log(`✅ Usuário admin verificado: ${adminEmail}`);
 
     console.log('🎉 Seed concluído com sucesso!');
   } catch (err) {

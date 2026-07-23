@@ -1,29 +1,74 @@
 import { z } from 'zod';
 import { divergenciaInputSchema } from '../divergencia/dto/divergencia-recebimento.dto';
 
-/** Início do recebimento: vínculo com a compra programada confirmada do dia. */
+const pesoNfSchema = z.number().nonnegative().max(9_999_999.999);
+const volumesNfSchema = z.number().nonnegative().max(9_999_999_999.999);
+
+/** Abertura do lote de recebimento a partir de compra programada confirmada. */
 export const iniciarRecebimentoSchema = z.object({
   compraProgramadaId: z.string().uuid(),
+  nfeNumero: z.string().trim().min(1, 'Número da NF-e é obrigatório').max(100),
+  nfeSerie: z.string().trim().max(20).optional(),
+  nfeChave: z
+    .string()
+    .trim()
+    .regex(/^\d{44}$/, 'Chave da NF-e deve ter 44 dígitos')
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (v === '' ? undefined : v)),
+  nfeDataEmissao: z.string().date().optional(),
+  romaneio: z.string().trim().max(100).optional(),
+  nfePesoBruto: pesoNfSchema.optional(),
+  nfePesoLiquido: pesoNfSchema.optional(),
+  nfeVolumes: volumesNfSchema.optional(),
   dataHoraChegada: z.string().datetime().optional(),
-  notaFiscalFornecedor: z.string().trim().max(100).optional(),
+  placaVeiculo: z.string().trim().max(20).optional(),
+  motorista: z.string().trim().max(200).optional(),
+  doca: z.string().trim().max(50).optional(),
+  observacoes: z.string().trim().max(1000).optional(),
+  iniciarConferencia: z.boolean().optional().default(false),
+});
+
+export type IniciarRecebimentoDto = z.infer<typeof iniciarRecebimentoSchema>;
+
+export const atualizarNfeSchema = z.object({
+  nfeNumero: z.string().trim().min(1).max(100).optional(),
+  nfeSerie: z.string().trim().max(20).optional(),
+  nfeChave: z
+    .string()
+    .trim()
+    .regex(/^\d{44}$/)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (v === '' ? undefined : v)),
+  nfeDataEmissao: z.string().date().optional(),
+  romaneio: z.string().trim().max(100).optional(),
+  nfePesoBruto: pesoNfSchema.optional(),
+  nfePesoLiquido: pesoNfSchema.optional(),
+  nfeVolumes: volumesNfSchema.optional(),
   placaVeiculo: z.string().trim().max(20).optional(),
   motorista: z.string().trim().max(200).optional(),
   doca: z.string().trim().max(50).optional(),
   observacoes: z.string().trim().max(1000).optional(),
 });
 
-export type IniciarRecebimentoDto = z.infer<typeof iniciarRecebimentoSchema>;
+export type AtualizarNfeDto = z.infer<typeof atualizarNfeSchema>;
+
+/** Metadados operacionais do lote (placa, motorista, doca). */
+export const atualizarMetadadosLoteSchema = z.object({
+  placaVeiculo: z.string().trim().max(20).optional(),
+  motorista: z.string().trim().max(200).optional(),
+  doca: z.string().trim().max(50).optional(),
+  observacoes: z.string().trim().max(1000).optional(),
+});
+
+export type AtualizarMetadadosLoteDto = z.infer<typeof atualizarMetadadosLoteSchema>;
 
 const quantidadeSchema = z
   .number()
   .nonnegative('quantidadeRecebida não pode ser negativa')
   .max(9_999_999_999.999, 'quantidade fora do intervalo');
 
-/**
- * Registro de item recebido. Qualquer diferença esperado×recebido (ou item
- * excedente) EXIGE a classificação de divergência inline (ajuste sem ocorrência
- * formal é rejeitado pelo service — RA-06).
- */
 export const registrarItemSchema = z.object({
   itemComercialId: z.string().uuid(),
   quantidadeRecebida: quantidadeSchema,

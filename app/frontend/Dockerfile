@@ -14,6 +14,8 @@ WORKDIR /app
 COPY app/frontend ./app/frontend
 COPY tsconfig.base.json ./
 
+ARG NEXT_PUBLIC_API_URL=http://localhost:4001
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w app/frontend
 
@@ -28,7 +30,7 @@ WORKDIR /app
 # Next standalone inclui apenas o que precisa
 COPY --from=build /app/app/frontend/.next/standalone ./
 COPY --from=build /app/app/frontend/.next/static ./app/frontend/.next/static
-COPY --from=build /app/app/frontend/public ./app/frontend/public 2>/dev/null || true
+COPY --from=build /app/app/frontend/public ./app/frontend/public
 
 EXPOSE 3000
 ENV PORT=3000

@@ -38,7 +38,7 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
       jaIniciado: false,
     }));
 
-    await service.iniciar({ compraProgramadaId: 'c1' } as never, 'user-1');
+    await service.iniciar({ compraProgramadaId: 'c1', nfeNumero: '128934' } as never, 'user-1');
 
     expect(emitSpy).toHaveBeenCalledWith(
       EVENTOS.RECEBIMENTO_INICIADO,
@@ -53,7 +53,7 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
       jaIniciado: true,
     }));
 
-    await service.iniciar({ compraProgramadaId: 'c1' } as never, 'user-1');
+    await service.iniciar({ compraProgramadaId: 'c1', nfeNumero: '128934' } as never, 'user-1');
     expect(emitSpy).not.toHaveBeenCalled();
   });
 

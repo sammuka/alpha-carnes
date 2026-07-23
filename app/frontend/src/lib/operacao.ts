@@ -1,5 +1,31 @@
 // Tipos compartilhados do domínio operacional (F4a — Recebimento + Divergências).
 
+export const STATUS_RECEBIMENTO = [
+  'aguardando_conferencia',
+  'em_conferencia',
+  'finalizado',
+  'cancelado',
+] as const;
+
+export type StatusRecebimento = (typeof STATUS_RECEBIMENTO)[number];
+
+export const STATUS_APURACAO_ITEM = [
+  'aguardando',
+  'em_conferencia',
+  'conferido',
+  'divergente',
+  'entrada_direta',
+] as const;
+
+export type StatusApuracaoItem = (typeof STATUS_APURACAO_ITEM)[number];
+
+export interface PaginadoRecebimento {
+  data: RecebimentoResumoEnriquecido[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export const TIPOS_DIVERGENCIA = [
   'quantidade_menor',
   'quantidade_maior',
@@ -16,11 +42,17 @@ export type TipoDivergencia = (typeof TIPOS_DIVERGENCIA)[number];
 export interface RecebimentoItem {
   id: string;
   itemComercialId: string;
+  origemDescricao: string | null;
   quantidadeEsperada: string;
   quantidadeRecebida: string;
+  quantidadeApurada?: string;
+  unidadeEsperada: string | null;
+  requerBalanca: boolean;
   pesoTotalApurado: string | null;
-  statusApuracao: 'aguardando' | 'conforme' | 'divergente';
+  pesoApurado?: string | null;
+  statusApuracao: StatusApuracaoItem;
   observacoes: string | null;
+  itemComercial?: { id: string; codigo: string; descricao: string };
 }
 
 export interface DivergenciaRecebimento {
@@ -34,13 +66,46 @@ export interface DivergenciaRecebimento {
 
 export interface RecebimentoDetalhe {
   id: string;
+  codigoLote: string;
   compraProgramadaId: string;
   fornecedorId: string;
   dataOperacao: string;
-  status: 'em_andamento' | 'com_divergencia' | 'concluido';
+  status: StatusRecebimento;
+  tipoCarga: string | null;
+  progressoBalanca: number;
+  nfeNumero: string | null;
+  nfeSerie: string | null;
+  nfeChave: string | null;
+  nfeDataEmissao: string | null;
+  romaneio: string | null;
+  nfePesoBruto: string | null;
+  nfePesoLiquido: string | null;
+  nfeVolumes: string | null;
   notaFiscalFornecedor: string | null;
+  placaVeiculo: string | null;
+  motorista: string | null;
+  doca: string | null;
+  dataHoraChegada: string | null;
+  observacoes: string | null;
+  fornecedor?: { id: string; razaoSocial: string };
+  compra?: { id: string; numeroInterno: string | null };
   itens: RecebimentoItem[];
   divergencias: DivergenciaRecebimento[];
+}
+
+export interface RecebimentoResumoEnriquecido {
+  id: string;
+  codigoLote: string;
+  compraProgramadaId: string;
+  numeroInternoCompra: string | null;
+  fornecedorId: string;
+  fornecedorNome: string;
+  dataOperacao: string;
+  status: StatusRecebimento;
+  nfeNumero: string | null;
+  romaneio: string | null;
+  tipoCarga: string | null;
+  progressoBalanca: number;
 }
 
 export interface RecebimentoResumo {
@@ -48,6 +113,47 @@ export interface RecebimentoResumo {
   compraProgramadaId: string;
   dataOperacao: string;
   status: string;
+  codigoLote?: string;
+  progressoBalanca?: number;
+}
+
+export interface PrevisaoItemOperacional {
+  itemComercialId: string;
+  produtoCodigo: string;
+  produtoDescricao: string;
+  quantidadePrevista: string;
+  unidade: string;
+  passaBalanca: boolean;
+  origemDescricao: string;
+}
+
+export interface PrevisaoRecebimento {
+  compraProgramadaId: string;
+  numeroInterno: string | null;
+  fornecedorId: string;
+  fornecedorNome: string;
+  tipoCarga: string | null;
+  observacoesCompra: string | null;
+  resumoCompra: string;
+  itensOperacionais: PrevisaoItemOperacional[];
+  jaPossuiRecebimento: boolean;
+}
+
+export interface IniciarRecebimentoPayload {
+  compraProgramadaId: string;
+  nfeNumero: string;
+  nfeSerie?: string;
+  nfeChave?: string;
+  nfeDataEmissao?: string;
+  romaneio?: string;
+  nfePesoBruto?: number;
+  nfePesoLiquido?: number;
+  nfeVolumes?: number;
+  observacoes?: string;
+  placaVeiculo?: string;
+  motorista?: string;
+  doca?: string;
+  iniciarConferencia?: boolean;
 }
 
 export interface IniciarRecebimentoResultado {
@@ -67,6 +173,9 @@ export const MOTIVOS_CAPTURA_MANUAL = [
   'outro',
 ] as const;
 export type MotivoCapturaManual = (typeof MOTIVOS_CAPTURA_MANUAL)[number];
+
+export const DESTINOS_SEM_COBERTURA = ['sobra', 'analise', 'corte', 'divergencia'] as const;
+export type DestinoSemCobertura = (typeof DESTINOS_SEM_COBERTURA)[number];
 
 export type StatusDispositivo = 'disponivel' | 'instavel' | 'indisponivel';
 
@@ -113,6 +222,27 @@ export interface ResultadoSugestao {
   pecaId: string;
   sugestao: SugestaoScored | null;
   compativeis: SugestaoScored[];
+}
+
+export interface AcaoLote {
+  id: string;
+  hora: string;
+  produtoCodigo: string | null;
+  produtoDescricao: string | null;
+  peso: string | null;
+  destino: string;
+  clientePedido: string | null;
+  etiqueta: string | null;
+  operadorNome: string | null;
+  statusPeca: string | null;
+  acao: string;
+}
+
+export interface FaltaDesossa {
+  produto: { id: string; codigo: string; nome: string };
+  quantidadeFaltante: number;
+  quantidadeEstoque: number;
+  origem: string;
 }
 
 // ── F4c — Corte / Transformação ───────────────────────────────────────────────

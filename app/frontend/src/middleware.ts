@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/logout', '/_next', '/favicon.ico'];
+const PUBLIC_PATHS = [
+  '/login',
+  '/api/auth/login',
+  '/api/auth/logout',
+  '/api/auth/refresh',
+  '/_next',
+  '/favicon.ico',
+];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname.startsWith(p));
@@ -37,8 +44,6 @@ export async function middleware(req: NextRequest): Promise<NextResponse> {
 
 export const config = {
   matcher: [
-    '/admin/:path*',
-    // Excluir arquivos estáticos e APIs públicas
-    '/((?!_next/static|_next/image|favicon.ico|api/auth/login|api/auth/logout).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/auth/login|api/auth/logout|api/auth/refresh|.*\\.png$|.*\\.jpg$|.*\\.svg$|.*\\.ico$).*)',
   ],
 };
