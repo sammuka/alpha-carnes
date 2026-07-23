@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: alphacarnes
       POSTGRES_DB: alphacarnes
     ports:
-      - "5432:5432"
+      - "15433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
@@ -26,9 +26,10 @@ services:
       - .env
     environment:
       DATABASE_URL: postgres://alphacarnes:alphacarnes@postgres:5432/alphacarnes
+      CORS_ORIGIN: http://localhost:4000
       NODE_ENV: production
     ports:
-      - "3001:3001"
+      - "4001:3001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,6 +39,8 @@ services:
     build:
       context: .
       dockerfile: app/frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4001
     env_file:
       - .env
     environment:
@@ -45,7 +48,7 @@ services:
       BACKEND_INTERNAL_URL: http://backend:3001
       NODE_ENV: production
     ports:
-      - "3000:3000"
+      - "4000:3000"
     depends_on:
       - backend
     restart: unless-stopped

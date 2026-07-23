@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { extrairMensagemErro } from '@/lib/error-message';
 
 const loginSchema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -36,7 +37,7 @@ export function LoginFormClient() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError((body as { message?: string }).message ?? 'Credenciais inválidas');
+        setError(extrairMensagemErro(body, 'Credenciais inválidas'));
         return;
       }
       router.push('/gestao/dashboard');

@@ -39,7 +39,7 @@ jobs:
           POSTGRES_DB: alphacarnes_test
         ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U alphacarnes"
+          --health-cmd "pg_isready -U alphacarnes -d alphacarnes_test"
           --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       DATABASE_URL: postgres://alphacarnes:alphacarnes@localhost:5432/alphacarnes_test
@@ -131,4 +131,4 @@ jobs:
         run: |
           GLV=8.24.3
           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v${GLV}/gitleaks_${GLV}_linux_x64.tar.gz | tar -xz -C /tmp gitleaks
-          /tmp/gitleaks dir . --no-banner --redact --verbose --exit-code 1 --config .gitleaks.toml
+          /tmp/gitleaks git . --no-banner --redact --verbose --exit-code 1 --config .gitleaks.toml

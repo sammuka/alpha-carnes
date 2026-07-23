@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 export async function POST(_req: NextRequest) {
   const cookieStore = await cookies();
   const refreshToken = cookieStore.get('refresh_token')?.value;
-  const backendUrl = process.env.BACKEND_INTERNAL_URL ?? 'http://localhost:3001';
+  const backendUrl = process.env.BACKEND_INTERNAL_URL ?? 'http://localhost:4001';
 
   if (!refreshToken) {
     return NextResponse.json({ message: 'Sem refresh token' }, { status: 401 });

@@ -50,7 +50,7 @@ function uniqueStrings(values: Array<string | undefined>): string[] {
 }
 
 const BASE_URL = process.env.E2E_FRONTEND_URL ?? 'http://localhost:3100';
-const BACKEND_URL = process.env.E2E_BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const BACKEND_URL = process.env.E2E_BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4001';
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? BACKEND_ENV.SEED_ADMIN_EMAIL ?? ROOT_ENV.SEED_ADMIN_EMAIL ?? 'admin@alphacarnes.local';
 const ADMIN_PASSWORDS = uniqueStrings([
   process.env.SEED_ADMIN_PASSWORD,

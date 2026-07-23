@@ -19,7 +19,7 @@ export interface ConectarOpts {
 
 const WS_URL =
   process.env.NEXT_PUBLIC_WS_URL ??
-  (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace(/^http/, 'ws');
+  (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4001').replace(/^http/, 'ws');
 
 export function conectarRealtime(opts: ConectarOpts): () => void {
   let ws: WebSocket | null = null;

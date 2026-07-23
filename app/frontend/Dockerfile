@@ -14,6 +14,8 @@ WORKDIR /app
 COPY app/frontend ./app/frontend
 COPY tsconfig.base.json ./
 
+ARG NEXT_PUBLIC_API_URL=http://localhost:4001
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w app/frontend
 
