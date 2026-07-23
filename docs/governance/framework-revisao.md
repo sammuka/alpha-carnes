@@ -12,7 +12,7 @@
 - Emite o **relatório de gate** ao fechar cada fase (PR `develop -> main`).
 - Não implementa as features das fases; atua na revisão, nos gates e na integração.
 
-### Implementador (Claude)
+### Implementador (Worker Codex)
 - Implementa cada fase/sub-gate em branch `feature/*`.
 - Abre PR para `develop` com o checklist de PR preenchido e evidências de teste.
 - Trata os comentários de revisão até o PR ficar verde.
@@ -34,7 +34,7 @@ Nunca há push direto em `develop` ou `main`. Toda mudança passa por PR.
 
 ```mermaid
 flowchart LR
-    feat["feature/*<br/>(Claude implementa)"] --> prDev["PR para develop"]
+    feat["feature/*<br/>(Worker implementa)"] --> prDev["PR para develop"]
     prDev --> ci["CI: gates transversais"]
     ci -->|verde| review["Revisor: checklist + RA-01..06"]
     ci -->|vermelho| fix1["Ajustes no feature/*"]
