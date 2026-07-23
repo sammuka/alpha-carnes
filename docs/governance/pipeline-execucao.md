@@ -110,6 +110,12 @@ O rito acima roda de duas formas:
   nunca aceito da resposta do modelo. O Portão 2 aprovado é seguido por outro processo Monitor
   adversarial; refutação sustentada reabre o ciclo.
 
+Limite da CLI pinada: o Codex `0.145.0` não expõe subcomando programático de `spawn`; pedir
+delegação a uma única sessão e confiar na resposta final não comprova que um subagente nasceu.
+Por isso `invoke-role.ps1` lê os perfis `.codex/agents/*.toml`, cria processos `codex exec`
+separados e rejeita stream sem evidência, thread repetida ou `collab_tool_call` interno. Mudança
+de versão/configuração que deixe de aceitar esses overrides falha fechada antes de um gate.
+
 ## 9. Relação com o framework de revisão existente
 
 [`framework-revisao.md`](framework-revisao.md) permanece vigente para o mecânico de branches/PR/proteções/relatório de gate de fase. Este documento adiciona por cima: o Portão 1 (que não existia), os papéis separados Executor/Monitor/Worker (antes: revisor humano único) e o estado vivo auditável. O "Revisor/Quality Owner" do framework mapeia para Quality Owner (autoridade) + Monitor (execução da auditoria).
