@@ -96,12 +96,13 @@ const SOMENTE_ONDAS = Array.isArray(parsedArgs?.somenteOndas) && parsedArgs.some
 const CAMINHO_LOCK_SH = `${REPO}/.claude/workflows/lib/lock.sh`
 const LOCKDIR_RUN = `${REPO}/.claude/workflows/.locks/multionda-run.lock`
 const LOCK_RUN_TIMEOUT_S = 21600 // 6h — acima de qualquer run legítimo; mais velho = órfão.
+const LOCK_RUN_OWNER_TOKEN = `multionda-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
 
 async function adquirirLockRun() {
   const r = await agent(
     `${SEM_INTERACAO_SINCRONA}Adquira o lock de INSTÂNCIA ÚNICA do orquestrador multionda. Rode EXATAMENTE:
 \`\`\`bash
-bash "${CAMINHO_LOCK_SH}" acquire "${LOCKDIR_RUN}" ${LOCK_RUN_TIMEOUT_S} 0
+bash "${CAMINHO_LOCK_SH}" acquire "${LOCKDIR_RUN}" "${LOCK_RUN_OWNER_TOKEN}" ${LOCK_RUN_TIMEOUT_S} 0
 \`\`\`
 Reporte estruturado: adquirido=true SE a saída foi exatamente "LOCK_ACQUIRED"; false se "LOCK_TIMEOUT". Em "saida", a linha literal.`,
     {
@@ -109,28 +110,33 @@ Reporte estruturado: adquirido=true SE a saída foi exatamente "LOCK_ACQUIRED"; 
       schema: {
         type: 'object',
         properties: { adquirido: { type: 'boolean' }, saida: { type: 'string' } },
-        required: ['adquirido'],
+        required: ['adquirido', 'saida'],
       },
     }
   )
-  return r && r.adquirido === true
+  if (r?.saida === 'LOCK_ACQUIRED') return true
+  if (r?.saida === 'LOCK_TIMEOUT') return false
+  throw new Error(`Saída inválida ao adquirir lock multionda: ${JSON.stringify(r)}`)
 }
 
 let lockRunLiberado = false
 async function liberarLockRun() {
   if (lockRunLiberado) return
-  lockRunLiberado = true
-  await agent(
-    `${SEM_INTERACAO_SINCRONA}Libere o lock de instância única. Rode EXATAMENTE: \`bash "${CAMINHO_LOCK_SH}" release "${LOCKDIR_RUN}"\`. Reporte liberado=true e a saída em "saida".`,
+  const r = await agent(
+    `${SEM_INTERACAO_SINCRONA}Libere o lock de instância única. Rode EXATAMENTE: \`bash "${CAMINHO_LOCK_SH}" release "${LOCKDIR_RUN}" "${LOCK_RUN_OWNER_TOKEN}"\`. Reporte liberado=true somente se a saída for "LOCK_RELEASED" ou "LOCK_ALREADY_RELEASED"; inclua a saída literal em "saida".`,
     {
       label: 'multionda:lock-run-liberar',
       schema: {
         type: 'object',
         properties: { liberado: { type: 'boolean' }, saida: { type: 'string' } },
-        required: ['liberado'],
+        required: ['liberado', 'saida'],
       },
     }
   )
+  if (!r || r.liberado !== true || !['LOCK_RELEASED', 'LOCK_ALREADY_RELEASED'].includes(r.saida)) {
+    throw new Error(`Falha ao liberar lock multionda: ${JSON.stringify(r)}`)
+  }
+  lockRunLiberado = true
 }
 
 async function lerStatusAtual() {

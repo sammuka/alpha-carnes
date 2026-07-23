@@ -42,7 +42,7 @@ Esse encadeamento respeita o fluxo real do negócio e reduz retrabalho arquitetu
 - regras de desdobramento
 - disponibilidade virtual
 - pedidos de venda
-- bloqueio de overbooking
+- confirmação explícita e pendência rastreável de overbooking
 - painel comercial básico
 
 ### Resultado esperado

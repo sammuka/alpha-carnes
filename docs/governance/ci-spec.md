@@ -7,7 +7,7 @@
 
 - **Plataforma:** GitHub Actions (repo `sammuka/alpha-carnes`).
 - **Gatilhos:** `pull_request` para `develop` e `main`; `push` em `develop` e `main`.
-- **Monorepo:** jobs separados por workspace (`app/backend`, `app/frontend`), acionados por mudança de path quando possível.
+- **Monorepo:** comandos raiz orquestram os workspaces (`app/backend`, `app/frontend`); todos os oito jobs rodam em cada evento, sem filtro de path.
 - **Bloqueio de merge:** os checks abaixo são **status checks obrigatórios** na branch protection (seção 5).
 
 ## 2. Pipeline `.github/workflows/ci.yml`
@@ -65,10 +65,22 @@ jobs:
           POSTGRES_DB: alphacarnes_test
         ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U alphacarnes"
+          --health-cmd "pg_isready -U alphacarnes -d alphacarnes_test"
           --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       DATABASE_URL: postgres://alphacarnes:alphacarnes@localhost:5432/alphacarnes_test
+      JWT_ACCESS_SECRET: ci-access-secret-min-32-chars-for-tests
+      JWT_REFRESH_SECRET: ci-refresh-secret-min-32-chars-for-tests
+      JWT_ACCESS_TTL: 8h
+      JWT_REFRESH_TTL: 8h
+      COOKIE_SECURE: 'false'
+      THROTTLE_LOGIN_LIMIT: '5'
+      THROTTLE_LOGIN_TTL: '60000'
+      SEED_ADMIN_EMAIL: admin@alphacarnes.local
+      SEED_ADMIN_PASSWORD: Admin@CiTest123456
+      CORS_ORIGIN: http://localhost:3000
+      LOG_LEVEL: error
+      PORT: '3001'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -87,10 +99,13 @@ jobs:
     needs: test-backend
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
       - uses: actions/download-artifact@v4
         with: { name: backend-coverage, path: coverage }
-      # Falha se cobertura (linha/branch) < 80%.
-      # Implementar com checker do relatório lcov/json-summary.
       - run: node scripts/check-coverage.mjs --min 80
 
   test-frontend:
@@ -118,6 +133,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
+      - run: npm ci
       - run: npm audit --audit-level=high
 
   secret-scan:
