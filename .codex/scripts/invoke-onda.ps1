@@ -47,21 +47,6 @@ function New-FailureResult {
     }
 }
 
-function Get-ThreadId {
-    param([string[]]$Lines)
-    foreach ($line in $Lines) {
-        try {
-            $event = $line | ConvertFrom-Json
-            if ([string]$event.type -eq 'thread.started' -and $event.thread_id) {
-                return [string]$event.thread_id
-            }
-        } catch {
-            continue
-        }
-    }
-    ''
-}
-
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 if ([string]::IsNullOrWhiteSpace($RuntimeRoot)) {
     $RuntimeRoot = Join-Path $repoRoot '.codex\runtime'
@@ -78,12 +63,12 @@ $runId = '{0}-{1}-{2}' -f (
     [DateTimeOffset]::UtcNow.ToString('yyyyMMddTHHmmssZ')
 ), $Wave, ([Guid]::NewGuid().ToString('N').Substring(0, 8))
 $schemaPath = Join-Path $repoRoot '.codex\schemas\ciclo-onda-result.schema.json'
+$roleSchemaPath = Join-Path $repoRoot '.codex\schemas\role-result.schema.json'
 $lockScript = Join-Path $PSScriptRoot 'lock.ps1'
 $checkpointScript = Join-Path $PSScriptRoot 'checkpoint.ps1'
+$invokeRoleScript = Join-Path $PSScriptRoot 'invoke-role.ps1'
 $runRoot = Join-Path $runtimeFull "runs\$runId"
 $resultPath = Join-Path $runRoot 'result.json'
-$eventsPath = Join-Path $runRoot 'events.jsonl'
-$stderrPath = Join-Path $runRoot 'stderr.log'
 $lockName = "orchestration-onda-$($Wave.Replace('onda', ''))"
 
 if ($DryRun) {
@@ -96,10 +81,24 @@ if ($DryRun) {
         repoRoot = $repoRoot
         runtimeRoot = $runtimeFull
         schemaPath = $schemaPath
+        roleSchemaPath = $roleSchemaPath
         lockName = $lockName
         functionalContextPath = 'docs_v2/alphacarnes_contexto_funcional_e_recomendacoes_prototipo_v1.1.md'
-        command = 'codex --ask-for-approval never exec --strict-config --json --sandbox workspace-write'
-        resumeCommand = "codex --ask-for-approval never --sandbox workspace-write -C `"$repoRoot`" exec resume --strict-config --json <thread-id> <prompt>"
+        mechanism = 'PowerShell launches one independent codex exec process per role/stage'
+        roleSequence = @(
+            'monitor:gate1',
+            'planner:plan-fix (conditional)',
+            'monitor:gate1-recheck (fresh process)',
+            'executor:prepare',
+            'worker:implementation',
+            'monitor:gate2',
+            'worker:implementation-fix (conditional)',
+            'monitor:gate2-recheck (fresh process)',
+            'monitor:gate-a (fresh process)',
+            'executor:finalize'
+        )
+        evidence = 'unique runtime thread.started plus turn.completed per role; no self-declared roleTrace'
+        internalDelegation = 'disabled with features.multi_agent=false'
     })
     return
 }
@@ -116,6 +115,8 @@ $requiredPaths = @(
     '.codex/agents/monitor.toml',
     '.codex/agents/executor.toml',
     '.codex/agents/worker.toml',
+    '.codex/schemas/role-result.schema.json',
+    '.codex/scripts/invoke-role.ps1',
     '.agents/skills/gate-plano/SKILL.md',
     '.agents/skills/gate-pr/SKILL.md',
     '.agents/skills/disparar-onda/SKILL.md',
@@ -174,109 +175,181 @@ try {
         throw "Checkpoint init inválido: $($checkpointResult.status)."
     }
 
-    $promptTemplate = @'
-Você é somente o coordenador raiz do ciclo autônomo do AlphaCarnes. Leia AGENTS.md e não
-escreva arquivos por conta própria. Processe a onda {0}, run ID {1}.
+    $roleTrace = [Collections.Generic.List[object]]::new()
+    $threadIds = [Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::OrdinalIgnoreCase
+    )
 
-Delegue cada papel ao custom agent nominal:
-1. nova instância monitor para Portão 1 usando $gate-plano;
-2. se ajustar, nova instância planner corrige somente o plano e outro monitor reaudita;
-3. executor prepara worktree/estado e worker implementa usando $disparar-onda;
-4. nova instância monitor executa $gate-pr;
-5. ajustes técnicos voltam ao worker e cada nova auditoria usa outro monitor;
-6. um monitor adversarial independente forma a conclusão sem ler o veredito anterior e registra
-   Portão A para o mesmo SHA;
-7. executor faz merge somente se AutoMerge={2}; caso contrário retorna ready-for-merge.
-
-AdoptOrphan={3}. Use os helpers .codex/scripts/lock.ps1, checkpoint.ps1 e visibility-ci.ps1.
-Não use perguntas síncronas. Decisão humana ausente retorna requires-human. Falhe fechado.
-Retorne somente o objeto final compatível com o schema fornecido, incluindo roleTrace real.
-'@
-    $prompt = $promptTemplate -f $Wave, $runId, ([bool]$AutoMerge).ToString().ToLowerInvariant(),
-        ([bool]$AdoptOrphan).ToString().ToLowerInvariant()
-
-    $threadId = ''
-    $validResult = $null
-    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        $checkpointResult = & $checkpointScript record -RunId $runId -Wave $Wave -Stage orchestration `
-            -StepId "attempt-$attempt" -Status started -Role coordinator `
-            -Message "Tentativa Codex $attempt." -RuntimeRoot $runtimeFull | ConvertFrom-Json
-        if ($checkpointResult.status -notin @('recorded', 'duplicate')) {
-            throw "Checkpoint da tentativa inválido: $($checkpointResult.status)."
-        }
-
-        if ($attempt -eq 1) {
-            $arguments = @(
-                '--ask-for-approval', 'never',
-                'exec',
-                '--strict-config',
-                '--ignore-user-config',
-                '--json',
-                '--sandbox', 'workspace-write',
-                '-c', 'sandbox_workspace_write.network_access=true',
-                '--output-schema', $schemaPath,
-                '--output-last-message', $resultPath,
-                '-C', $repoRoot,
-                '-m', 'gpt-5.6-sol',
-                '-'
-            )
-            $eventLines = @($prompt | & codex @arguments 2>> $stderrPath)
-        } else {
-            if ([string]::IsNullOrWhiteSpace($threadId)) {
-                break
-            }
-            $resumePrompt = "Retome o run $runId da $Wave pelo checkpoint; não repita passos concluídos."
-            $arguments = @(
-                '--ask-for-approval', 'never',
-                '--sandbox', 'workspace-write',
-                '-C', $repoRoot,
-                'exec', 'resume',
-                '--strict-config',
-                '--ignore-user-config',
-                '--json',
-                '-c', 'sandbox_workspace_write.network_access=true',
-                '--output-schema', $schemaPath,
-                '--output-last-message', $resultPath,
-                '-m', 'gpt-5.6-sol',
-                $threadId,
-                $resumePrompt
-            )
-            $eventLines = @(& codex @arguments 2>> $stderrPath)
-        }
-        Add-Content -LiteralPath $eventsPath -Encoding utf8 -Value $eventLines
-        if ([string]::IsNullOrWhiteSpace($threadId)) {
-            $threadId = Get-ThreadId -Lines $eventLines
-        }
-
-        if (Test-Path -LiteralPath $resultPath -PathType Leaf) {
-            try {
-                $validResult = Get-Content -Raw -Encoding utf8 -LiteralPath $resultPath |
-                    ConvertFrom-Json
-            } catch {
-                $validResult = $null
-            }
-        }
-        if ($validResult) {
-            break
-        }
-        $checkpointResult = & $checkpointScript record -RunId $runId -Wave $Wave -Stage orchestration `
-            -StepId "attempt-$attempt" -Status failed -Role coordinator `
-            -Message "Codex não produziu resultado estruturado; thread=$threadId." `
+    function Invoke-RoleStage {
+        param(
+            [Parameter(Mandatory)][string]$Role,
+            [Parameter(Mandatory)][string]$Stage,
+            [Parameter(Mandatory)][string]$Prompt
+        )
+        $checkpointResult = & $checkpointScript record -RunId $runId -Wave $Wave `
+            -Stage orchestration -StepId "$Role-$Stage" -Status started -Role coordinator `
+            -Message "Processo independente iniciado: $Role/$Stage." `
             -RuntimeRoot $runtimeFull | ConvertFrom-Json
         if ($checkpointResult.status -notin @('recorded', 'duplicate')) {
-            throw "Checkpoint de falha inválido: $($checkpointResult.status)."
+            throw "Checkpoint inicial inválido para $Role/$Stage."
+        }
+        $envelope = & $invokeRoleScript -Role $Role -Stage $Stage -Wave $Wave `
+            -RunId $runId -Prompt $Prompt -RuntimeRoot $runtimeFull | ConvertFrom-Json
+        if ([string]$envelope.status -cne 'completed' -or
+            [string]$envelope.mechanism -cne 'independent-codex-exec-process') {
+            throw "Envelope inválido para $Role/$Stage."
+        }
+        if (-not $threadIds.Add([string]$envelope.threadId)) {
+            throw "Thread reutilizada entre papéis: $($envelope.threadId)."
+        }
+        $roleTrace.Add([ordered]@{
+            role = $Role
+            stage = $Stage
+            threadId = [string]$envelope.threadId
+            invocationId = [string]$envelope.invocationId
+            result = [string]$envelope.result.result
+            summary = [string]$envelope.result.message
+        })
+        $checkpointResult = & $checkpointScript record -RunId $runId -Wave $Wave `
+            -Stage orchestration -StepId "$Role-$Stage" -Status completed -Role coordinator `
+            -Message "Processo $Role/$Stage terminou em $($envelope.result.result)." `
+            -RuntimeRoot $runtimeFull | ConvertFrom-Json
+        if ($checkpointResult.status -notin @('recorded', 'duplicate')) {
+            throw "Checkpoint final inválido para $Role/$Stage."
+        }
+        $envelope.result
+    }
+
+    function New-ResultFromRole {
+        param($RoleResult, [string]$ResultOverride = '', [string]$StageOverride = '')
+        [ordered]@{
+            schemaVersion = 1
+            runId = $runId
+            wave = $Wave
+            result = if ($ResultOverride) { $ResultOverride } else { [string]$RoleResult.result }
+            stage = if ($StageOverride) { $StageOverride } else { [string]$RoleResult.stage }
+            planPath = [string]$RoleResult.planPath
+            planSha256 = [string]$RoleResult.planSha256
+            branch = [string]$RoleResult.branch
+            prNumber = $RoleResult.prNumber
+            auditedHeadSha = [string]$RoleResult.auditedHeadSha
+            squashSha = [string]$RoleResult.squashSha
+            message = [string]$RoleResult.message
+            roleTrace = @($roleTrace)
         }
     }
 
-    if (-not $validResult) {
-        $validResult = New-FailureResult -Stage 'codex-exec' `
-            -Message "Nenhum resultado estruturado após $MaxAttempts tentativa(s); thread=$threadId."
-        [IO.File]::WriteAllText(
-            $resultPath,
-            ($validResult | ConvertTo-Json -Depth 20),
-            [Text.UTF8Encoding]::new($false)
+    $validResult = $null
+    :cycle do {
+        $gate1 = Invoke-RoleStage -Role monitor -Stage gate1 -Prompt (
+            'Execute $gate-plano para a onda indicada, com verificação própria. ' +
+            'Registre o veredito sob lock e retorne approved, adjust, requires-human, blocked ou failed.'
         )
+        $correction = 0
+        while ([string]$gate1.result -ceq 'adjust' -and $correction -lt $MaxAttempts) {
+            $correction++
+            $planner = Invoke-RoleStage -Role planner -Stage "plan-fix-$correction" -Prompt (
+                "Corrija somente os bloqueadores do último Portão 1 da $Wave. " +
+                'Não implemente. Retorne completed ou um estado terminal.'
+            )
+            if ([string]$planner.result -ne 'completed') {
+                $validResult = New-ResultFromRole -RoleResult $planner
+                break cycle
+            }
+            $gate1 = Invoke-RoleStage -Role monitor -Stage "gate1-recheck-$correction" -Prompt (
+                'Use uma auditoria nova com $gate-plano; não confie no relato do Planner. ' +
+                'Registre e retorne o veredito atual.'
+            )
+        }
+        if ([string]$gate1.result -ne 'approved') {
+            $mapped = if ([string]$gate1.result -eq 'adjust') { 'not-ready' } else {
+                [string]$gate1.result
+            }
+            $validResult = New-ResultFromRole -RoleResult $gate1 -ResultOverride $mapped
+            break cycle
+        }
+
+        $prepare = Invoke-RoleStage -Role executor -Stage prepare -Prompt (
+            "Prepare estado, branch e worktree da $Wave conforme `$disparar-onda. " +
+            "AdoptOrphan=$([bool]$AdoptOrphan). Não implemente. Retorne ready ou estado terminal."
+        )
+        if ([string]$prepare.result -ne 'ready') {
+            $validResult = New-ResultFromRole -RoleResult $prepare
+            break cycle
+        }
+
+        $worker = Invoke-RoleStage -Role worker -Stage implementation -Prompt (
+            'Implemente literalmente o plano aprovado no worktree preparado, com TDD, gate local e PR. ' +
+            'Não edite estado nem faça merge. Retorne implemented ou estado terminal.'
+        )
+        if ([string]$worker.result -ne 'implemented') {
+            $validResult = New-ResultFromRole -RoleResult $worker
+            break cycle
+        }
+
+        $gate2 = Invoke-RoleStage -Role monitor -Stage gate2 -Prompt (
+            'Execute $gate-pr no PR e SHA exatos produzidos pelo Worker, incluindo CI e fidelidade. ' +
+            'Registre e retorne approved, adjust ou estado terminal.'
+        )
+        $fix = 0
+        while ([string]$gate2.result -ceq 'adjust' -and $fix -lt $MaxAttempts) {
+            $fix++
+            $worker = Invoke-RoleStage -Role worker -Stage "implementation-fix-$fix" -Prompt (
+                "Corrija somente os bloqueadores técnicos do último Portão 2 da $Wave. " +
+                'Rode novamente o gate local e atualize o mesmo PR; retorne implemented.'
+            )
+            if ([string]$worker.result -ne 'implemented') {
+                $validResult = New-ResultFromRole -RoleResult $worker
+                break cycle
+            }
+            $gate2 = Invoke-RoleStage -Role monitor -Stage "gate2-recheck-$fix" -Prompt (
+                'Faça nova auditoria $gate-pr do novo SHA; não aprove por herança. Registre o veredito.'
+            )
+        }
+        if ([string]$gate2.result -ne 'approved') {
+            $mapped = if ([string]$gate2.result -eq 'adjust') { 'not-ready' } else {
+                [string]$gate2.result
+            }
+            $validResult = New-ResultFromRole -RoleResult $gate2 -ResultOverride $mapped
+            break cycle
+        }
+
+        $gateA = Invoke-RoleStage -Role monitor -Stage gate-a -Prompt (
+            'Faça revisão adversarial independente do mesmo SHA sem ler a conclusão do Portão 2 ' +
+            'que está tentando refutar. Registre Portão A e retorne approved ou estado terminal.'
+        )
+        if ([string]$gateA.result -ne 'approved') {
+            $validResult = New-ResultFromRole -RoleResult $gateA
+            break cycle
+        }
+
+        $finalize = Invoke-RoleStage -Role executor -Stage finalize -Prompt (
+            "Confirme Portão 2 e Portão A para o mesmo SHA. AutoMerge=$([bool]$AutoMerge). " +
+            'Faça merge somente se autorizado; caso contrário retorne ready-for-merge.'
+        )
+        $expectedFinal = if ($AutoMerge) { 'merged' } else { 'ready-for-merge' }
+        if ([string]$finalize.result -ne $expectedFinal -and
+            [string]$finalize.result -notin @('requires-human', 'blocked', 'failed')) {
+            $validResult = New-ResultFromRole -RoleResult $finalize -ResultOverride failed `
+                -StageOverride orchestration
+            $validResult.message = (
+                "Executor retornou '$($finalize.result)'; esperado '$expectedFinal'."
+            )
+            break cycle
+        }
+        $validResult = New-ResultFromRole -RoleResult $finalize
+    } while ($false)
+
+    if (-not $validResult) {
+        $validResult = New-FailureResult -Stage orchestration `
+            -Message 'Orquestração terminou sem resultado.'
+        $validResult.roleTrace = @($roleTrace)
     }
+    [IO.File]::WriteAllText(
+        $resultPath,
+        ($validResult | ConvertTo-Json -Depth 20),
+        [Text.UTF8Encoding]::new($false)
+    )
 
     $checkpointResult = & $checkpointScript complete -RunId $runId -Wave $Wave `
         -Stage orchestration -Role coordinator -Message "Resultado final: $($validResult.result)." `

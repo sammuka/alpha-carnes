@@ -26,6 +26,9 @@ param(
     [ValidateRange(25, 10000)]
     [int]$PollMilliseconds = 1000,
 
+    [ValidateRange(1, 600)]
+    [int]$StealGuardStaleSeconds = 30,
+
     [string]$RuntimeRoot
 )
 
@@ -86,6 +89,45 @@ function Get-OwnerStamp {
     [DateTimeOffset](Get-Item -LiteralPath $Path).LastWriteTimeUtc
 }
 
+function Get-GuardStamp {
+    param($Guard, [string]$Path)
+    if ($Guard -and $Guard.acquiredAtUtc) {
+        try {
+            return [DateTimeOffset]::Parse(
+                [string]$Guard.acquiredAtUtc,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::RoundtripKind
+            )
+        } catch {
+            # Metadata incompleto usa o timestamp do diretório e nunca é roubado imediatamente.
+        }
+    }
+    [DateTimeOffset](Get-Item -LiteralPath $Path).LastWriteTimeUtc
+}
+
+function Read-Guard {
+    param([Parameter(Mandatory)][string]$Path)
+    $guardPath = Join-Path $Path 'guard.json'
+    if (-not (Test-Path -LiteralPath $guardPath -PathType Leaf)) {
+        return $null
+    }
+    try {
+        Get-Content -Raw -Encoding utf8 -LiteralPath $guardPath | ConvertFrom-Json
+    } catch {
+        $null
+    }
+}
+
+function Test-SameOwner {
+    param($Before, $After)
+    if (-not $Before -or -not $After) {
+        return (-not $Before -and -not $After)
+    }
+    ([string]$Before.token -ceq [string]$After.token) -and
+        ([string]$Before.acquiredAtUtc -ceq [string]$After.acquiredAtUtc) -and
+        ([string]$Before.runId -ceq [string]$After.runId)
+}
+
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 if ([string]::IsNullOrWhiteSpace($RuntimeRoot)) {
     $RuntimeRoot = Join-Path $repoRoot '.codex\runtime'
@@ -100,6 +142,26 @@ switch ($Command) {
     'acquire' {
         $deadline = [DateTimeOffset]::UtcNow.AddSeconds($MaxWaitSeconds)
         while ($true) {
+            if (Test-Path -LiteralPath $stealPath -PathType Container) {
+                $guard = Read-Guard -Path $stealPath
+                $guardStamp = Get-GuardStamp -Guard $guard -Path $stealPath
+                if (([DateTimeOffset]::UtcNow - $guardStamp).TotalSeconds -gt
+                    $StealGuardStaleSeconds) {
+                    $recoveryPath = Assert-ChildPath -Parent $locksRoot -Child (
+                        Join-Path $locksRoot (
+                            "$Name.lock.steal.recovery.$([Guid]::NewGuid().ToString('N'))"
+                        )
+                    )
+                    try {
+                        [IO.Directory]::Move($stealPath, $recoveryPath)
+                        [IO.Directory]::Delete($recoveryPath, $true)
+                    } catch {
+                        # Outro competidor recuperou ou renovou o guard primeiro.
+                    }
+                    continue
+                }
+            }
+
             if (-not (Test-Path -LiteralPath $stealPath)) {
                 try {
                     New-Item -ItemType Directory -Path $lockPath -ErrorAction Stop | Out-Null
@@ -135,12 +197,33 @@ switch ($Command) {
             }
 
             $owner = Read-Owner -Path $lockPath
-            $stamp = Get-OwnerStamp -Owner $owner -Path $lockPath
-            $age = ([DateTimeOffset]::UtcNow - $stamp).TotalSeconds
+            $lockExists = Test-Path -LiteralPath $lockPath -PathType Container
+            $age = if ($lockExists) {
+                $stamp = Get-OwnerStamp -Owner $owner -Path $lockPath
+                ([DateTimeOffset]::UtcNow - $stamp).TotalSeconds
+            } else {
+                0
+            }
 
-            if ($age -gt $StaleAfterSeconds) {
+            if ($lockExists -and $age -gt $StaleAfterSeconds) {
+                $guardToken = [Guid]::NewGuid().ToString('N')
                 try {
                     New-Item -ItemType Directory -Path $stealPath -ErrorAction Stop | Out-Null
+                    $guardOwner = [ordered]@{
+                        schemaVersion = 1
+                        name = $Name
+                        token = $guardToken
+                        runId = $RunId
+                        role = $Role
+                        pid = $PID
+                        host = [Environment]::MachineName
+                        acquiredAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+                    }
+                    [IO.File]::WriteAllText(
+                        (Join-Path $stealPath 'guard.json'),
+                        ($guardOwner | ConvertTo-Json -Depth 4),
+                        [Text.UTF8Encoding]::new($false)
+                    )
                     try {
                         $ownerAfterGuard = Read-Owner -Path $lockPath
                         $stampAfterGuard = if (Test-Path -LiteralPath $lockPath) {
@@ -150,7 +233,7 @@ switch ($Command) {
                         }
                         $stillStale = (Test-Path -LiteralPath $lockPath) -and
                             (([DateTimeOffset]::UtcNow - $stampAfterGuard).TotalSeconds -gt $StaleAfterSeconds)
-                        if ($stillStale) {
+                        if ($stillStale -and (Test-SameOwner -Before $owner -After $ownerAfterGuard)) {
                             $orphanPath = Assert-ChildPath -Parent $locksRoot -Child (
                                 Join-Path $locksRoot "$Name.lock.orphan.$([Guid]::NewGuid().ToString('N'))"
                             )
@@ -159,12 +242,15 @@ switch ($Command) {
                         }
                     } finally {
                         if (Test-Path -LiteralPath $stealPath) {
-                            [IO.Directory]::Delete($stealPath, $false)
+                            $ownedGuard = Read-Guard -Path $stealPath
+                            if ($ownedGuard -and [string]$ownedGuard.token -ceq $guardToken) {
+                                [IO.Directory]::Delete($stealPath, $true)
+                            }
                         }
                     }
                     continue
                 } catch {
-                    if (-not (Test-Path -LiteralPath $stealPath)) {
+                    if (-not (Test-Path -LiteralPath $stealPath -PathType Container)) {
                         throw
                     }
                 }

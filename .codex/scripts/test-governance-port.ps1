@@ -56,6 +56,7 @@ $checkpointScript = Join-Path $PSScriptRoot 'checkpoint.ps1'
 $visibilityScript = Join-Path $PSScriptRoot 'visibility-ci.ps1'
 $waitChecksScript = Join-Path $PSScriptRoot 'wait-pr-checks.ps1'
 $invokeWaveScript = Join-Path $PSScriptRoot 'invoke-onda.ps1'
+$invokeRoleScript = Join-Path $PSScriptRoot 'invoke-role.ps1'
 $invokeMultiScript = Join-Path $PSScriptRoot 'invoke-multionda.ps1'
 
 try {
@@ -74,11 +75,13 @@ try {
     }
 
     Test-Case 'JSON schema parses' {
-        $schema = Get-Content -Raw -Encoding utf8 -LiteralPath (
-            Join-Path $repoRoot '.codex\schemas\ciclo-onda-result.schema.json'
-        ) | ConvertFrom-Json
-        Assert-True ($schema.type -eq 'object') 'Schema não é objeto.'
-        Assert-True ($schema.required.Count -ge 10) 'Schema final incompleto.'
+        foreach ($name in @('ciclo-onda-result.schema.json', 'role-result.schema.json')) {
+            $schema = Get-Content -Raw -Encoding utf8 -LiteralPath (
+                Join-Path $repoRoot ".codex\schemas\$name"
+            ) | ConvertFrom-Json
+            Assert-True ($schema.type -eq 'object') "Schema $name não é objeto."
+            Assert-True ($schema.required.Count -ge 10) "Schema $name incompleto."
+        }
     }
 
     Test-Case 'Agents and skills are discoverable artifacts' {
@@ -130,6 +133,84 @@ try {
         $released = & pwsh -NoProfile -File $lockScript release test-lock -Role test `
             -RunId test-lock -Token $first.token -RuntimeRoot $testRootFull | ConvertFrom-Json
         Assert-True ($released.status -eq 'released') 'Liberação correta falhou.'
+    }
+
+    Test-Case 'Lock recovers crashed steal guard only after guard becomes stale' {
+        $locksRoot = Join-Path $testRootFull 'locks'
+        New-Item -ItemType Directory -Force -Path $locksRoot | Out-Null
+        $guardPath = Join-Path $locksRoot 'guard-crash.lock.steal'
+        New-Item -ItemType Directory -Path $guardPath | Out-Null
+        Write-Utf8Json -Path (Join-Path $guardPath 'guard.json') -Value ([ordered]@{
+            schemaVersion = 1
+            name = 'guard-crash'
+            token = 'crashed-guard-token'
+            runId = 'dead-run'
+            role = 'test'
+            pid = 999999
+            host = [Environment]::MachineName
+            acquiredAtUtc = [DateTimeOffset]::UtcNow.AddMinutes(-5).ToString('o')
+        })
+        $acquired = & $lockScript acquire guard-crash -Role test -RunId recovery `
+            -MaxWaitSeconds 2 -PollMilliseconds 25 -StealGuardStaleSeconds 1 `
+            -RuntimeRoot $testRootFull | ConvertFrom-Json
+        Assert-True ($acquired.status -eq 'acquired') 'Guard órfão não foi recuperado.'
+        Assert-True (-not (Test-Path -LiteralPath $guardPath)) 'Guard órfão permaneceu.'
+        $released = & $lockScript release guard-crash -Role test -RunId recovery `
+            -Token $acquired.token -RuntimeRoot $testRootFull | ConvertFrom-Json
+        Assert-True ($released.status -eq 'released') 'Lock recuperado não foi liberado.'
+    }
+
+    Test-Case 'Lock quarantines only the stale owner observed before guarded steal' {
+        $locksRoot = Join-Path $testRootFull 'locks'
+        New-Item -ItemType Directory -Force -Path $locksRoot | Out-Null
+        $lockPath = Join-Path $locksRoot 'stale-owner.lock'
+        New-Item -ItemType Directory -Path $lockPath | Out-Null
+        Write-Utf8Json -Path (Join-Path $lockPath 'owner.json') -Value ([ordered]@{
+            schemaVersion = 1
+            name = 'stale-owner'
+            token = 'old-owner-token'
+            runId = 'old-run'
+            role = 'test'
+            pid = 999999
+            host = [Environment]::MachineName
+            acquiredAtUtc = [DateTimeOffset]::UtcNow.AddMinutes(-5).ToString('o')
+        })
+        $acquired = & $lockScript acquire stale-owner -Role test -RunId new-run `
+            -StaleAfterSeconds 1 -StealGuardStaleSeconds 30 -MaxWaitSeconds 2 `
+            -PollMilliseconds 25 -RuntimeRoot $testRootFull | ConvertFrom-Json
+        Assert-True ($acquired.status -eq 'acquired') 'Owner stale não foi substituído.'
+        Assert-True ($acquired.owner.runId -eq 'new-run') 'Novo owner não ficou registrado.'
+        Assert-True (
+            -not (Test-Path -LiteralPath (Join-Path $locksRoot 'stale-owner.lock.steal'))
+        ) 'Guard de steal ficou órfão após sucesso.'
+        $released = & $lockScript release stale-owner -Role test -RunId new-run `
+            -Token $acquired.token -RuntimeRoot $testRootFull | ConvertFrom-Json
+        Assert-True ($released.status -eq 'released') 'Novo owner não liberou o lock.'
+    }
+
+    Test-Case 'Live steal guard blocks acquisition without lock directory' {
+        $locksRoot = Join-Path $testRootFull 'locks'
+        New-Item -ItemType Directory -Force -Path $locksRoot | Out-Null
+        $guardPath = Join-Path $locksRoot 'guard-live.lock.steal'
+        New-Item -ItemType Directory -Path $guardPath | Out-Null
+        Write-Utf8Json -Path (Join-Path $guardPath 'guard.json') -Value ([ordered]@{
+            schemaVersion = 1
+            name = 'guard-live'
+            token = 'live-guard-token'
+            runId = 'live-run'
+            role = 'test'
+            pid = $PID
+            host = [Environment]::MachineName
+            acquiredAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+        })
+        $blocked = & $lockScript acquire guard-live -Role test -RunId competitor `
+            -MaxWaitSeconds 0 -StealGuardStaleSeconds 60 -RuntimeRoot $testRootFull |
+            ConvertFrom-Json
+        Assert-True ($blocked.status -eq 'timeout') 'Guard vivo deveria bloquear aquisição.'
+        $guard = Get-Content -Raw -Encoding utf8 -LiteralPath (
+            Join-Path $guardPath 'guard.json'
+        ) | ConvertFrom-Json
+        Assert-True ($guard.token -eq 'live-guard-token') 'Competidor alterou ownership do guard.'
     }
 
     Test-Case 'Checkpoint append-only and idempotent' {
@@ -208,6 +289,117 @@ try {
         Assert-True (
             @($read.entries.stepId | Sort-Object -Unique).Count -eq 9
         ) 'Checkpoint concorrente contém perda ou duplicação.'
+    }
+
+    Test-Case 'Independent role wrapper accepts runtime evidence and binds identity' {
+        $events = Join-Path $testRootFull 'role-events-ok.jsonl'
+        $resultPath = Join-Path $testRootFull 'role-result-ok.json'
+        [IO.File]::WriteAllLines(
+            $events,
+            @(
+                '{"type":"thread.started","thread_id":"thread-monitor-1"}',
+                '{"type":"turn.started"}',
+                '{"type":"item.completed","item":{"type":"agent_message","text":"done"}}',
+                '{"type":"turn.completed","usage":{}}'
+            ),
+            [Text.UTF8Encoding]::new($false)
+        )
+        Write-Utf8Json -Path $resultPath -Value ([ordered]@{
+            schemaVersion = 1
+            runId = 'role-test'
+            wave = 'onda1'
+            role = 'monitor'
+            stage = 'gate1'
+            result = 'approved'
+            planPath = 'docs/plan.md'
+            planSha256 = 'abc'
+            branch = ''
+            prNumber = $null
+            auditedHeadSha = ''
+            squashSha = ''
+            message = 'Aprovado por fixture.'
+        })
+        $envelope = & $invokeRoleScript -Role monitor -Stage gate1 -Wave onda1 `
+            -RunId role-test -Prompt fixture -RuntimeRoot $testRootFull `
+            -FixtureEventsPath $events -FixtureResultPath $resultPath | ConvertFrom-Json
+        Assert-True (
+            $envelope.mechanism -eq 'independent-codex-exec-process'
+        ) 'Mecanismo independente não foi atestado.'
+        Assert-True ($envelope.threadId -eq 'thread-monitor-1') 'Thread do runtime não foi ligada.'
+        Assert-True ($envelope.result.role -eq 'monitor') 'Identidade do papel não foi validada.'
+    }
+
+    Test-Case 'Independent role wrapper rejects self-declared output without thread evidence' {
+        $events = Join-Path $testRootFull 'role-events-no-thread.jsonl'
+        $resultPath = Join-Path $testRootFull 'role-result-no-thread.json'
+        [IO.File]::WriteAllLines(
+            $events,
+            @('{"type":"turn.started"}', '{"type":"turn.completed","usage":{}}'),
+            [Text.UTF8Encoding]::new($false)
+        )
+        Write-Utf8Json -Path $resultPath -Value ([ordered]@{
+            schemaVersion = 1
+            runId = 'role-no-thread'
+            wave = 'onda1'
+            role = 'monitor'
+            stage = 'gate1'
+            result = 'approved'
+            planPath = ''
+            planSha256 = ''
+            branch = ''
+            prNumber = $null
+            auditedHeadSha = ''
+            squashSha = ''
+            message = 'Alegação sem evidência.'
+        })
+        $failed = $false
+        try {
+            $null = & $invokeRoleScript -Role monitor -Stage gate1 -Wave onda1 `
+                -RunId role-no-thread -Prompt fixture -RuntimeRoot $testRootFull `
+                -FixtureEventsPath $events -FixtureResultPath $resultPath
+        } catch {
+            $failed = $_.Exception.Message -match 'thread.started'
+        }
+        Assert-True $failed 'Saída auto-declarada sem thread deveria falhar fechada.'
+    }
+
+    Test-Case 'Independent role wrapper rejects hidden internal delegation' {
+        $events = Join-Path $testRootFull 'role-events-collab.jsonl'
+        $resultPath = Join-Path $testRootFull 'role-result-collab.json'
+        [IO.File]::WriteAllLines(
+            $events,
+            @(
+                '{"type":"thread.started","thread_id":"thread-monitor-collab"}',
+                '{"type":"turn.started"}',
+                '{"type":"item.completed","item":{"type":"collab_tool_call","tool":"spawn_agent"}}',
+                '{"type":"turn.completed","usage":{}}'
+            ),
+            [Text.UTF8Encoding]::new($false)
+        )
+        Write-Utf8Json -Path $resultPath -Value ([ordered]@{
+            schemaVersion = 1
+            runId = 'role-collab'
+            wave = 'onda1'
+            role = 'monitor'
+            stage = 'gate1'
+            result = 'approved'
+            planPath = ''
+            planSha256 = ''
+            branch = ''
+            prNumber = $null
+            auditedHeadSha = ''
+            squashSha = ''
+            message = 'Delegou indevidamente.'
+        })
+        $failed = $false
+        try {
+            $null = & $invokeRoleScript -Role monitor -Stage gate1 -Wave onda1 `
+                -RunId role-collab -Prompt fixture -RuntimeRoot $testRootFull `
+                -FixtureEventsPath $events -FixtureResultPath $resultPath
+        } catch {
+            $failed = $_.Exception.Message -match 'tentou delegar'
+        }
+        Assert-True $failed 'Delegação interna deveria falhar fechada.'
     }
 
     $canonicalChecks = @(
@@ -319,6 +511,25 @@ if ($Remaining.Count -ge 2 -and $Remaining[0] -eq 'repo' -and $Remaining[1] -eq 
         Add-Content -LiteralPath $logPath -Value 'PRIVATE-FAILED'
         exit 33
     }
+    if ($visibility -eq 'PRIVATE' -and
+        -not [string]::IsNullOrWhiteSpace($env:CODEX_GH_MOCK_FAIL_PRIVATE_COUNT)) {
+        $counterPath = $env:CODEX_GH_MOCK_PRIVATE_COUNTER
+        $count = if (Test-Path -LiteralPath $counterPath) {
+            [int](Get-Content -Raw -LiteralPath $counterPath)
+        } else {
+            0
+        }
+        $count++
+        [IO.File]::WriteAllText(
+            $counterPath,
+            [string]$count,
+            [Text.UTF8Encoding]::new($false)
+        )
+        if ($count -le [int]$env:CODEX_GH_MOCK_FAIL_PRIVATE_COUNT) {
+            Add-Content -LiteralPath $logPath -Value "PRIVATE-FAILED-$count"
+            exit 33
+        }
+    }
     [IO.File]::WriteAllText($statePath, $visibility, [Text.UTF8Encoding]::new($false))
     Add-Content -LiteralPath $logPath -Value $visibility
     exit 0
@@ -421,44 +632,58 @@ exit 34
         }
     }
 
-    Test-Case 'Visibility restore failure takes precedence over primary error' {
+    Test-Case 'Visibility watchdog persists beyond five failures and restores PRIVATE' {
         $statePath = Join-Path $ghMockRoot 'state-restore-failure.txt'
         $logPath = Join-Path $ghMockRoot 'calls-restore-failure.log'
+        $counterPath = Join-Path $ghMockRoot 'private-counter.txt'
         [IO.File]::WriteAllText($statePath, 'PRIVATE', [Text.UTF8Encoding]::new($false))
         [IO.File]::WriteAllText($logPath, '', [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($counterPath, '0', [Text.UTF8Encoding]::new($false))
         $savedPath = $env:PATH
         $savedState = $env:CODEX_GH_MOCK_STATE
         $savedLog = $env:CODEX_GH_MOCK_LOG
         $savedRuntime = $env:CODEX_GH_MOCK_RUNTIME
         $savedFailPrivate = $env:CODEX_GH_MOCK_FAIL_PRIVATE
+        $savedFailCount = $env:CODEX_GH_MOCK_FAIL_PRIVATE_COUNT
+        $savedCounter = $env:CODEX_GH_MOCK_PRIVATE_COUNTER
         try {
             $env:PATH = "$ghMockRoot;$savedPath"
             $env:CODEX_GH_MOCK_STATE = $statePath
             $env:CODEX_GH_MOCK_LOG = $logPath
             $env:CODEX_GH_MOCK_RUNTIME = $testRootFull
-            $env:CODEX_GH_MOCK_FAIL_PRIVATE = '1'
+            $env:CODEX_GH_MOCK_FAIL_PRIVATE = '0'
+            $env:CODEX_GH_MOCK_FAIL_PRIVATE_COUNT = '6'
+            $env:CODEX_GH_MOCK_PRIVATE_COUNTER = $counterPath
             $message = ''
             try {
                 $null = & $visibilityScript -Repository 'owner/repo' -EnableVisibilityLease `
                     -ActionScript { throw 'PRIMARY-MOCK' } -RuntimeRoot $testRootFull `
-                    -TimeoutSeconds 1 -VisibilityRetryDelayMilliseconds 1
+                    -TimeoutSeconds 60 -VisibilityRetryDelayMilliseconds 1 `
+                    -RecoveryWaitSeconds 10
             } catch {
                 $message = $_.Exception.Message
             }
             Assert-True (
-                $message -match '^FALHA CRÍTICA: não foi possível restaurar'
-            ) 'Falha de restauração deve substituir o erro principal.'
+                $message -match 'PRIMARY-MOCK'
+            ) 'Erro principal deve reaparecer após a recuperação durável.'
             Assert-True (
-                $message -match 'Erro principal anterior: PRIMARY-MOCK'
-            ) 'Diagnóstico deve preservar o erro principal como contexto.'
-            Start-Sleep -Seconds 2
+                [int](Get-Content -Raw -LiteralPath $counterPath) -ge 7
+            ) 'Watchdog não continuou além das cinco tentativas síncronas.'
+            Assert-True (
+                (Get-Content -Raw -LiteralPath $statePath).Trim() -eq 'PRIVATE'
+            ) 'Recuperação durável não confirmou PRIVATE.'
+            $calls = @(Get-Content -LiteralPath $logPath | Where-Object { $_ })
+            Assert-True (
+                @($calls | Where-Object { $_ -match '^PRIVATE-FAILED-' }).Count -eq 6
+            ) 'Número adversarial de falhas transitórias inesperado.'
         } finally {
-            [IO.File]::WriteAllText($statePath, 'PRIVATE', [Text.UTF8Encoding]::new($false))
             $env:PATH = $savedPath
             $env:CODEX_GH_MOCK_STATE = $savedState
             $env:CODEX_GH_MOCK_LOG = $savedLog
             $env:CODEX_GH_MOCK_RUNTIME = $savedRuntime
             $env:CODEX_GH_MOCK_FAIL_PRIVATE = $savedFailPrivate
+            $env:CODEX_GH_MOCK_FAIL_PRIVATE_COUNT = $savedFailCount
+            $env:CODEX_GH_MOCK_PRIVATE_COUNTER = $savedCounter
         }
     }
 
@@ -474,19 +699,23 @@ exit 34
             $result.functionalContextPath -match '^docs_v2/'
         ) 'Contexto funcional docs_v2 deve estar no preflight.'
         Assert-True (
-            $result.resumeCommand -match '--sandbox workspace-write -C '
-        ) 'Resume deve declarar sandbox e cwd antes de exec.'
+            $result.mechanism -match 'independent codex exec process'
+        ) 'Dry-run deve declarar processos Codex independentes.'
+        Assert-True (
+            $result.internalDelegation -match 'disabled'
+        ) 'Delegação interna precisa estar desabilitada.'
+        Assert-True (
+            @($result.roleSequence | Where-Object { $_ -match '^monitor:' }).Count -ge 4
+        ) 'Sequência deve incluir Monitores novos para gates e revisão adversarial.'
     }
 
-    Test-Case 'Codex resume argument placement probe' {
-        $probe = @(
-            & codex --ask-for-approval never --sandbox workspace-write -C $repoRoot `
-                exec resume --strict-config --ignore-user-config --help
-        )
-        Assert-True ($LASTEXITCODE -eq 0) 'CLI rejeitou a posição dos argumentos de resume.'
+    Test-Case 'Codex 0.145 accepts role isolation config' {
+        $probe = @(& codex debug prompt-input -c 'features.multi_agent=false' `
+            -c 'developer_instructions="role-probe"' 'probe')
+        Assert-True ($LASTEXITCODE -eq 0) 'CLI rejeitou config de isolamento de papel.'
         Assert-True (
-            ($probe -join "`n") -match 'Usage:\s+codex exec resume'
-        ) 'Probe não alcançou o parser de codex exec resume.'
+            ($probe -join "`n") -match 'role-probe'
+        ) 'Developer instructions do papel não entraram no prompt efetivo.'
     }
 
     Test-Case 'Multiwave reads dependency graph from status table' {

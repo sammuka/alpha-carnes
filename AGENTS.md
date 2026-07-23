@@ -78,7 +78,8 @@ Os oito jobs do GitHub Actions são sempre obrigatórios. Vercel só é gate qua
 toca `landing/**`; PR restrito à aplicação não é reprovado por status Vercel.
 Quando CI exigir visibilidade pública temporária, use exclusivamente
 `.codex/scripts/visibility-ci.ps1 -EnableVisibilityLease`: preflight privado, watchdog de
-25 minutos e restauração privada verificada são obrigatórios.
+25 minutos e restauração privada verificada são obrigatórios. Se a restauração síncrona falhar,
+o watchdog persiste sem teto fixo de tentativas e mantém o lease/lock até confirmar `PRIVATE`.
 
 ## Conclusão
 

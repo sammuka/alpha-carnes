@@ -14,6 +14,7 @@ param(
     [string]$RuntimeRoot,
     [ValidateRange(1, 30)][int]$WatchdogReadyTimeoutSeconds = 10,
     [ValidateRange(1, 10000)][int]$VisibilityRetryDelayMilliseconds = 2000,
+    [ValidateRange(1, 300)][int]$RecoveryWaitSeconds = 30,
 
     # Parâmetros internos exclusivos do processo watchdog.
     [switch]$Watchdog,
@@ -119,6 +120,7 @@ if ($Watchdog) {
         throw "LeaseRoot do watchdog fora do runtime: $leaseRootFull"
     }
     $completeMarker = Join-Path $leaseRootFull 'complete.json'
+    $restoreRequiredMarker = Join-Path $leaseRootFull 'restore-required.json'
     $readyMarker = Join-Path $leaseRootFull 'watchdog-ready.json'
     $watchdogLog = Join-Path $leaseRootFull 'watchdog-result.json'
     [IO.File]::WriteAllText(
@@ -130,18 +132,52 @@ if ($Watchdog) {
         } | ConvertTo-Json -Depth 4),
         [Text.UTF8Encoding]::new($false)
     )
-    Start-Sleep -Seconds $TimeoutSeconds
-    if (-not (Test-Path -LiteralPath $completeMarker -PathType Leaf)) {
-        $restore = Set-RepositoryVisibility -Repo $Repository -Visibility private -Attempts 5 `
+    $restoreDeadline = [DateTimeOffset]::UtcNow.AddSeconds($TimeoutSeconds)
+    while (-not (Test-Path -LiteralPath $completeMarker -PathType Leaf) -and
+        -not (Test-Path -LiteralPath $restoreRequiredMarker -PathType Leaf) -and
+        [DateTimeOffset]::UtcNow -lt $restoreDeadline) {
+        Start-Sleep -Milliseconds 250
+    }
+
+    $attempt = 0
+    while (-not (Test-Path -LiteralPath $completeMarker -PathType Leaf)) {
+        $attempt++
+        $restore = Set-RepositoryVisibility -Repo $Repository -Visibility private -Attempts 1 `
             -RetryDelayMilliseconds $VisibilityRetryDelayMilliseconds
+        $restoreErrors = if ($restore.Contains('errors')) { @($restore['errors']) } else { @() }
+        $recoveryState = [ordered]@{
+            schemaVersion = 1
+            leaseId = $LeaseId
+            repository = $Repository
+            watchdogPid = $PID
+            attempt = $attempt
+            attemptedAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+            restored = [bool]$restore.ok
+            errors = $restoreErrors
+        }
         [IO.File]::WriteAllText(
             $watchdogLog,
-            ($restore | ConvertTo-Json -Depth 8),
+            ($recoveryState | ConvertTo-Json -Depth 8),
             [Text.UTF8Encoding]::new($false)
         )
-        if (-not $restore.ok) {
-            throw "WATCHDOG não conseguiu restaurar $Repository para PRIVATE."
+        if ($restore.ok) {
+            [IO.File]::WriteAllText(
+                $completeMarker,
+                ([ordered]@{
+                    leaseId = $LeaseId
+                    repository = $Repository
+                    restoredAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+                    visibility = 'PRIVATE'
+                    restoredBy = 'durable-watchdog'
+                    recoveryAttempts = $attempt
+                } | ConvertTo-Json -Depth 5),
+                [Text.UTF8Encoding]::new($false)
+            )
+            break
         }
+        Start-Sleep -Milliseconds (
+            [Math]::Min($VisibilityRetryDelayMilliseconds * [Math]::Min($attempt, 10), 30000)
+        )
     }
     if (-not [string]::IsNullOrWhiteSpace($LockToken)) {
         try {
@@ -161,6 +197,7 @@ if ($DryRun) {
         repository = $Repository
         timeoutSeconds = $TimeoutSeconds
         visibilitySequence = @('PRIVATE preflight', 'PUBLIC lease', 'action/checks', 'PRIVATE finally')
+        recovery = 'watchdog retries until PRIVATE is verified; no fixed retry ceiling'
         realMutation = $false
     })
     return
@@ -234,6 +271,7 @@ $actionResult = $null
 $primaryError = $null
 $cleanupErrors = [Collections.Generic.List[string]]::new()
 $watchdogReady = $false
+$durableRecoveryUsed = $false
 
 try {
     $pwshPath = (Get-Command pwsh -ErrorAction Stop).Source
@@ -249,6 +287,7 @@ try {
         '-LockToken', $LockToken,
         '-TimeoutSeconds', [string]$TimeoutSeconds,
         '-VisibilityRetryDelayMilliseconds', [string]$VisibilityRetryDelayMilliseconds,
+        '-RecoveryWaitSeconds', [string]$RecoveryWaitSeconds,
         '-RuntimeRoot', "`"$runtimeFull`""
     )
     $watchdogProcess = Start-Process -FilePath $pwshPath -ArgumentList $watchdogArguments `
@@ -303,7 +342,48 @@ try {
             errors = @($_.Exception.Message)
         }
     }
-    if ($privateRestore.ok) {
+    if (-not $privateRestore.ok) {
+        $durableRecoveryUsed = $true
+        try {
+            [IO.File]::WriteAllText(
+                (Join-Path $LeaseRoot 'restore-required.json'),
+                ([ordered]@{
+                    leaseId = $LeaseId
+                    repository = $Repository
+                    requestedAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+                    initialErrors = @($privateRestore.errors)
+                } | ConvertTo-Json -Depth 6),
+                [Text.UTF8Encoding]::new($false)
+            )
+        } catch {
+            $cleanupErrors.Add("restore-required marker: $($_.Exception.Message)")
+        }
+        $recoveryDeadline = [DateTimeOffset]::UtcNow.AddSeconds($RecoveryWaitSeconds)
+        $completePath = Join-Path $LeaseRoot 'complete.json'
+        while (-not (Test-Path -LiteralPath $completePath -PathType Leaf) -and
+            $watchdogProcess -and -not $watchdogProcess.HasExited -and
+            [DateTimeOffset]::UtcNow -lt $recoveryDeadline) {
+            Start-Sleep -Milliseconds 100
+        }
+        if (Test-Path -LiteralPath $completePath -PathType Leaf) {
+            try {
+                $recovered = Get-Content -Raw -Encoding utf8 -LiteralPath $completePath |
+                    ConvertFrom-Json
+                if ([string]$recovered.visibility -ceq 'PRIVATE' -and
+                    [string]$recovered.leaseId -ceq $LeaseId) {
+                    $privateRestore = [ordered]@{
+                        ok = $true
+                        visibility = 'PRIVATE'
+                        attempt = 5 + [int]$recovered.recoveryAttempts
+                        restoredBy = 'durable-watchdog'
+                    }
+                }
+            } catch {
+                $cleanupErrors.Add("read durable recovery: $($_.Exception.Message)")
+            }
+        }
+    }
+    if ($privateRestore.ok -and -not $durableRecoveryUsed) {
         $complete = [ordered]@{
             leaseId = $LeaseId
             repository = $Repository
@@ -342,7 +422,13 @@ if (-not $privateRestore -or -not $privateRestore.ok) {
     } else {
         ''
     }
-    throw "FALHA CRÍTICA: não foi possível restaurar $Repository para PRIVATE. $restoreDetails$primaryDetails"
+    $recoveryState = Join-Path $LeaseRoot 'watchdog-result.json'
+    $recoveryPid = if ($watchdogProcess) { $watchdogProcess.Id } else { 'not-started' }
+    throw (
+        "FALHA CRÍTICA: PRIVATE ainda não foi verificado; recuperação durável segue ativa " +
+        "no watchdog PID $recoveryPid, lease $LeaseRoot, estado $recoveryState. " +
+        "$restoreDetails$primaryDetails"
+    )
 }
 if ($primaryError) {
     throw $primaryError
@@ -359,5 +445,6 @@ Write-Json ([ordered]@{
     privateRestored = [bool]$privateRestore.ok
     watchdogReady = $watchdogReady
     watchdogPid = if ($watchdogProcess) { $watchdogProcess.Id } else { $null }
+    durableRecoveryUsed = $durableRecoveryUsed
     actionResult = $actionResult
 })

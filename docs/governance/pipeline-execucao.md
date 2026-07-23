@@ -104,8 +104,11 @@ O rito acima roda de duas formas:
 - **Autônoma (PowerShell 7):** [`.codex/scripts/invoke-onda.ps1`](../../.codex/scripts/invoke-onda.ps1)
   executa uma onda; [`.codex/scripts/invoke-multionda.ps1`](../../.codex/scripts/invoke-multionda.ps1)
   agenda o grafo; `lock.ps1`, `checkpoint.ps1`, `wait-pr-checks.ps1` e `visibility-ci.ps1`
-  fornecem exclusão mútua, retomada, espera de CI e lease de visibilidade. O Portão 2 aprovado
-  é seguido por Monitor adversarial independente; refutação sustentada reabre o ciclo.
+  fornecem exclusão mútua, retomada, espera de CI e lease de visibilidade. O orquestrador
+  inicia um processo `codex exec` novo para cada papel/estágio, desabilita delegação interna e
+  exige `thread.started` único mais `turn.completed`; `roleTrace` é montado dessas evidências,
+  nunca aceito da resposta do modelo. O Portão 2 aprovado é seguido por outro processo Monitor
+  adversarial; refutação sustentada reabre o ciclo.
 
 ## 9. Relação com o framework de revisão existente
 

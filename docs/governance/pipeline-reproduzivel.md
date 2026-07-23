@@ -80,15 +80,17 @@ Não remova estas garantias ao adaptar:
 - **Pin de SHA auditado**: o merge só vale para o commit que os gates auditaram; head diferente → re-auditoria.
 - **Espera de CI explícita** antes de cada rodada de auditoria (PR recém-aberto está sempre pending — sem a espera, as rodadas de correção são queimadas por latência, não por defeito).
 - **Retomada explícita**: `checkpoint.ps1` rejeita cauda JSONL interrompida e serializa escritores
-  concorrentes; `invoke-onda.ps1` só retoma a sessão Codex registrada para a mesma etapa.
+  concorrentes; `invoke-onda.ps1` nunca reutiliza thread entre papéis e retoma pelo checkpoint
+  com um novo processo independente para a etapa pendente.
 - **Lease de visibilidade fail-closed**: `visibility-ci.ps1` limita a janela pública a 25 minutos,
-  espera o watchdog ficar pronto e confirma a restauração privada mesmo quando a ação falha.
+  espera o watchdog ficar pronto e, após as tentativas síncronas, mantém recuperação durável
+  sem teto de tentativas até confirmar `PRIVATE`.
 - **Normalização de status antes de comparar** (células reais trazem sufixo: "mergeada (PR #12, …)").
 - **Lista positiva de status elegíveis** no agendador — status desconhecido = não disparar, nunca disparar por omissão.
 - **Resultado adiável ≠ bloqueante**: dependência não satisfeita por timing volta à fila; veredito negativo de gate para o run.
 - **Saída estruturada**: toda onda deve produzir JSON válido contra
   `.codex/schemas/ciclo-onda-result.schema.json`; decisão humana necessária vira
-  `requerDecisaoHumana`, nunca resposta inventada.
+  `requires-human`, nunca resposta inventada.
 
 ## 6. O que é específico de cada projeto (adaptar, não copiar)
 

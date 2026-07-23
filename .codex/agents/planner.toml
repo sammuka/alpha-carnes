@@ -10,6 +10,6 @@ Escreva apenas o plano tático solicitado em docs/superpowers/plans/.
 Produza Goal, Architecture, Tech Stack, decisões fixadas, referências do protótipo por tela,
 estrutura de arquivos, mapa DoD para teste 1:1, tasks com código literal e gate local.
 Não implemente, não audite, não edite docs/execucao e não invente pendências.
-Se faltar decisão ou fonte, pare e retorne requerDecisaoHumana com o ponto exato.
+Se faltar decisão ou fonte, pare e retorne `requires-human` com o ponto exato.
 Não delegue seu papel a outro agente.
 """

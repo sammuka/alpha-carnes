@@ -6,56 +6,47 @@
     "schemaVersion": { "type": "integer", "const": 1 },
     "runId": { "type": "string", "minLength": 1 },
     "wave": { "type": "string", "pattern": "^onda(?:[1-9]|10)$" },
+    "role": {
+      "type": "string",
+      "enum": ["planner", "monitor", "executor", "worker"]
+    },
+    "stage": { "type": "string", "minLength": 1 },
     "result": {
       "type": "string",
       "enum": [
+        "approved",
+        "completed",
+        "ready",
+        "implemented",
         "merged",
         "ready-for-merge",
-        "not-ready",
         "adjust",
         "blocked",
         "requires-human",
         "failed"
       ]
     },
-    "stage": { "type": "string", "minLength": 1 },
     "planPath": { "type": "string" },
     "planSha256": { "type": "string" },
     "branch": { "type": "string" },
     "prNumber": { "type": ["integer", "null"] },
     "auditedHeadSha": { "type": "string" },
     "squashSha": { "type": "string" },
-    "message": { "type": "string" },
-    "roleTrace": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "role": { "type": "string", "enum": ["planner", "monitor", "executor", "worker"] },
-          "stage": { "type": "string" },
-          "threadId": { "type": "string", "minLength": 1 },
-          "invocationId": { "type": "string", "minLength": 1 },
-          "result": { "type": "string", "minLength": 1 },
-          "summary": { "type": "string" }
-        },
-        "required": ["role", "stage", "threadId", "invocationId", "result", "summary"]
-      }
-    }
+    "message": { "type": "string", "minLength": 1 }
   },
   "required": [
     "schemaVersion",
     "runId",
     "wave",
-    "result",
+    "role",
     "stage",
+    "result",
     "planPath",
     "planSha256",
     "branch",
     "prNumber",
     "auditedHeadSha",
     "squashSha",
-    "message",
-    "roleTrace"
+    "message"
   ]
 }
