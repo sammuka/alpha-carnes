@@ -121,6 +121,9 @@ app/frontend/__tests__/{api,terminologia}.test.ts
 | Operação única por data e cadência idempotente | `operacoes.e2e-spec.ts` — `unique ativa; gerar duas vezes cria zero na segunda execução` |
 | `0012→0013→0014` em banco limpo e legado | `onda1-migrations.e2e-spec.ts` — `journal aplica os três arquivos em ordem` |
 | `0012` amplia CHECKs de status ao superset antes do backfill (aceita legado e novo) | `onda1-migrations.e2e-spec.ts` — `0012 amplia CHECKs de status para o superset` |
+| `0012` amplia `chk_diverg_receb_tipo` ao superset (8 legados ∪ 5 v1.1) | `onda1-migrations.e2e-spec.ts` — `0012 amplia CHECKs de status para o superset` (asserts de `divergencias_recebimento.tipo`) |
+| `0013` remapeia 100% dos 8 tipos legados de divergência para os 5 v1.1 e preserva a origem | `onda1-migrations.e2e-spec.ts` — `0013 remapeia os 8 tipos legados de divergência para os 5 v1.1` |
+| `0014` aperta `chk_diverg_receb_tipo` ao conjunto final de 5 (rejeita legado) | `onda1-migrations.e2e-spec.ts` — `0014 aperta chk_diverg_receb_tipo ao conjunto final` |
 | Microcopy do challenge idêntica ao protótipo (`PedidoVenda.tsx:229`) | `pedidos-v11.e2e-spec.ts` — payload 409 contém `"A venda poderá ser concluída, mas a gestão deverá tratar a falta."` |
 | Seis writers gravam `operacao_id` | `operacoes-writers.e2e-spec.ts` — seis casos nomeados por tabela |
 | `data_operacao` e cache `nfe_*` não existem após contract | `onda1-migrations.e2e-spec.ts` — consulta `information_schema.columns` |
@@ -394,6 +397,16 @@ ALTER TABLE "recebimentos" ADD CONSTRAINT "chk_recebimentos_status" CHECK ("rece
   'conferido_sem_divergencia','conferido_com_divergencia',
   'ocorrencia_administrativa_aberta','tratativa_administrativa_concluida','cancelado'
 ));--> statement-breakpoint
+-- chk_diverg_receb_tipo também é apertado no fim da migração (Task 5 grava os 5 tipos
+-- v1.1 em conferências novas ANTES do backfill 0013). Superset = 8 tipos legados
+-- (recebimentos.schema.ts) ∪ 5 tipos v1.1 (`classificarTipoV11`); o aperto ao conjunto
+-- final de 5 é feito no 0014 depois que o 0013 remapeia 100% das linhas legadas.
+ALTER TABLE "divergencias_recebimento" DROP CONSTRAINT IF EXISTS "chk_diverg_receb_tipo";--> statement-breakpoint
+ALTER TABLE "divergencias_recebimento" ADD CONSTRAINT "chk_diverg_receb_tipo" CHECK ("divergencias_recebimento"."tipo" IN (
+  'quantidade_menor','quantidade_maior','item_divergente','qualidade_divergente',
+  'peso_incompativel','item_ausente','item_excedente','inconsistencia_nf_fisico',
+  'falta','excesso','produto_nao_previsto','peso_divergente','outro'
+));--> statement-breakpoint
 ```
 
 - [ ] Ampliar o teste do 0012 para provar que o superset aceita os status novos e que os legados seguem válidos (o aperto é verificado na Task 7):
@@ -405,9 +418,13 @@ it('0012 amplia CHECKs de status para o superset (aceita legado e novo)', async 
   await expectCheckAceita('pedidos_venda', 'status', 'aguardando_confirmacao_overbooking');
   await expectCheckAceita('pedidos_venda_itens', 'status', 'aguardando_confirmacao_overbooking');
   await expectCheckAceita('recebimentos', 'status', 'pesagem_em_andamento');
+  // tipos v1.1 que a Task 5 grava em conferências novas passam a ser aceitos:
+  await expectCheckAceita('divergencias_recebimento', 'tipo', 'falta');
+  await expectCheckAceita('divergencias_recebimento', 'tipo', 'produto_nao_previsto');
   // valores legados continuam aceitos durante a janela expand:
   await expectCheckAceita('pedidos_venda', 'status', 'reservado');
   await expectCheckAceita('recebimentos', 'status', 'finalizado');
+  await expectCheckAceita('divergencias_recebimento', 'tipo', 'inconsistencia_nf_fisico');
 });
 ```
 
@@ -1658,7 +1675,7 @@ await tx.insert(recebimentos).values({
   operacaoId: pedidoFornecedor.operacaoId,
   fornecedorId: pedidoFornecedor.fornecedorId,
   status: 'pesagem_em_andamento',
-  usuarioCriacaoId: usuarioId,
+  responsavelRecebimentoId: usuarioId, // NOT NULL real de `recebimentos` (recebimentos.schema.ts); não existe `usuario_criacao_id` nesta tabela.
 });
 ```
 
@@ -1797,25 +1814,54 @@ await tx.insert(conclusoesConferenciaNfs).values(nfs.map((nf) => ({
   nfFornecedorId: nf.id,
 })));
 
-for (const item of quadro.filter((q) => q.situacao === 'divergente')) {
-  await tx.insert(divergenciasRecebimento).values({
-    recebimentoId,
-    recebimentoItemId: item.recebimentoItemId,
-    itemComercialId: item.itemComercialId,
-    conclusaoConferenciaId: conclusao.id,
-    nfFornecedorId: nfs.length === 1 ? nfs[0].id : null,
-    tipo: classificarTipoV11(item),
-    descricao: descreverDiferenca(item),
-    acaoImediata: 'Tratar divergência da conferência com o fornecedor',
-    responsavelRegistroId: usuarioId,
-  });
-}
-await this.ocorrencias.abrirDaConclusao(
-  tx,
-  conclusao.id,
-  nfs.map((nf) => nf.id),
-  usuarioId,
+// fornecedorId da ocorrência vem do recebimento (recebimentos.fornecedorId NOT NULL).
+const recebimento = primeiroOuFalha(
+  await tx.select({ fornecedorId: recebimentos.fornecedorId })
+    .from(recebimentos)
+    .where(eq(recebimentos.id, recebimentoId)),
 );
+const ocorrenciasAbertas: Ocorrencia[] = [];
+for (const item of quadro.filter((q) => q.situacao === 'divergente')) {
+  const divergencia = primeiroOuFalha(
+    await tx.insert(divergenciasRecebimento).values({
+      recebimentoId,
+      recebimentoItemId: item.recebimentoItemId,
+      itemComercialId: item.itemComercialId,
+      conclusaoConferenciaId: conclusao.id,
+      nfFornecedorId: nfs.length === 1 ? nfs[0].id : null,
+      tipo: classificarTipoV11(item),
+      descricao: descreverDiferenca(item),
+      acaoImediata: 'Tratar divergência da conferência com o fornecedor',
+      responsavelRegistroId: usuarioId,
+    }).returning(),
+  );
+  // API real do serviço: abrirNaTx(tx, AbrirOcorrenciaDto, usuarioId) — uma
+  // ocorrência administrativa auditável por divergência, vinculada por divergenciaId
+  // (mesmo método que a tratativa reusa; a auditoria é registrada dentro de abrirNaTx).
+  const ocorrencia = await this.ocorrencias.abrirNaTx(
+    tx,
+    {
+      fornecedorId: recebimento.fornecedorId,
+      divergenciaId: divergencia.id,
+      descricao: `Divergência ${divergencia.tipo}: ${divergencia.descricao}`,
+    },
+    usuarioId,
+  );
+  ocorrenciasAbertas.push(ocorrencia);
+}
+// `Ocorrencia` = typeof ocorrenciasFornecedor.$inferSelect (retorno de abrirNaTx).
+```
+
+- [ ] PÓS-COMMIT, emitir a abertura de cada ocorrência criada pela conclusão. `abrirNaTx`
+  não emite — a emissão é sempre do chamador (como em `ocorrencia.abrir` e
+  `divergencia.atualizar`). Reusar `emitirAbertura(ocorrencia, dataOperacao)`, que já
+  publica `EVENTOS.OCORRENCIA_FORNECEDOR_ABERTA` na room do dia; `dataOperacao` deriva de
+  `operacoes.data` (contract 0014):
+
+```typescript
+for (const ocorrencia of resultado.ocorrenciasAbertas) {
+  this.ocorrencias.emitirAbertura(ocorrencia, dataOperacao);
+}
 ```
 
 - [ ] `classificarTipoV11` é literal:
@@ -1864,7 +1910,7 @@ function descreverDiferenca(item: QuadroItem): string {
 }
 ```
 
-- [ ] Testar TZ pesável e Caixa de Rabo `requerBalanca=false`, segunda conclusão 409, resultado falso 409, rollback sem conclusão órfã, vínculo conclusão+NF.
+- [ ] Testar TZ pesável e Caixa de Rabo `requerBalanca=false`, segunda conclusão 409, resultado falso 409, rollback sem conclusão órfã, vínculo conclusão+NF, e que cada divergência da conclusão abre uma `ocorrencias_fornecedor` vinculada por `divergencia_id` (com o `fornecedor_id` do recebimento) — sem ocorrência órfã em caso de rollback.
 - [ ] Run: `npm run test -- conferencia-tripla` → PASS.
 - [ ] Commit previsto: `feat(onda1): conferencia tripla imutavel com caixarias por unidade`
 
@@ -2008,7 +2054,59 @@ SET status = CASE
 END
 WHERE status IN ('aguardando_conferencia','em_conferencia','finalizado');
 ```
+
+- [ ] Remapear 100% dos 8 tipos legados de `divergencias_recebimento` para os 5 tipos v1.1
+  ANTES do aperto de `chk_diverg_receb_tipo` no 0014. O mapa é total e determinístico (cobre
+  os 8 valores do CHECK legado sem inferência ambígua) e preserva a origem na coluna
+  `descricao` (NOT NULL já existente — não se inventa coluna nova): anexa `[origem_legado=<tipo>]`
+  ao texto. Como a Task 5 já grava os 5 tipos finais em conferências novas, este UPDATE só
+  toca linhas cujo `tipo` ainda pertence ao conjunto legado:
+
+```sql
+UPDATE divergencias_recebimento
+SET descricao = descricao || ' [origem_legado=' || tipo || ']',
+    tipo = CASE tipo
+      WHEN 'quantidade_menor'        THEN 'falta'
+      WHEN 'item_ausente'            THEN 'falta'
+      WHEN 'quantidade_maior'        THEN 'excesso'
+      WHEN 'item_excedente'          THEN 'excesso'
+      WHEN 'peso_incompativel'       THEN 'peso_divergente'
+      WHEN 'item_divergente'         THEN 'produto_nao_previsto'
+      WHEN 'qualidade_divergente'    THEN 'outro'
+      WHEN 'inconsistencia_nf_fisico' THEN 'outro'
+    END
+WHERE tipo IN (
+  'quantidade_menor','quantidade_maior','item_divergente','qualidade_divergente',
+  'peso_incompativel','item_ausente','item_excedente','inconsistencia_nf_fisico'
+);
+```
 - [ ] Testar fixture 0011 com seis tabelas, recebimento, caixaria e NF header; afirmar FKs preenchidas e zero item de NF inventado.
+- [ ] Testar o remapeamento total dos 8 tipos legados (mapa 1:1, sem inferência ambígua):
+
+```typescript
+it('0013 remapeia os 8 tipos legados de divergência para os 5 v1.1', async () => {
+  await migrarAte('0012_onda1_expand');
+  // Semeia uma divergência para cada um dos 8 tipos legados (fixture com FKs válidas).
+  const semeados = await semearDivergenciasLegadas([
+    'quantidade_menor', 'quantidade_maior', 'item_divergente', 'qualidade_divergente',
+    'peso_incompativel', 'item_ausente', 'item_excedente', 'inconsistencia_nf_fisico',
+  ]);
+  await migrarAte('0013_onda1_backfill');
+  const mapaEsperado: Record<string, string> = {
+    quantidade_menor: 'falta', item_ausente: 'falta',
+    quantidade_maior: 'excesso', item_excedente: 'excesso',
+    peso_incompativel: 'peso_divergente', item_divergente: 'produto_nao_previsto',
+    qualidade_divergente: 'outro', inconsistencia_nf_fisico: 'outro',
+  };
+  for (const { id, tipoLegado } of semeados) {
+    const linha = await buscarDivergencia(id);
+    expect(linha.tipo).toBe(mapaEsperado[tipoLegado]);
+    expect(linha.descricao).toContain(`[origem_legado=${tipoLegado}]`);
+  }
+  // Nenhuma linha permanece com um tipo legado após o backfill.
+  expect(await contarDivergenciasComTipoLegado()).toBe(0);
+});
+```
 - [ ] Run: `npm run test -- onda1-migrations` → FAIL apenas na expectativa do contract ainda ausente.
 - [ ] Commit previsto: `feat(onda1): migration custom 0013 com backfill preservador`
 
@@ -2055,9 +2153,14 @@ check('chk_recebimentos_status', sql`${t.status} IN (
   'conferido_sem_divergencia','conferido_com_divergencia',
   'ocorrencia_administrativa_aberta','tratativa_administrativa_concluida','cancelado'
 )`);
+// divergencias_recebimento (recebimentos.schema.ts): apertar do superset transitório do
+// 0012 para os 5 tipos v1.1 finais. Seguro: o 0013 remapeou 100% dos 8 tipos legados.
+check('chk_diverg_receb_tipo', sql`${t.tipo} IN (
+  'falta','excesso','produto_nao_previsto','peso_divergente','outro'
+)`);
 ```
 
-- [ ] Após `db:generate`, inspecionar `0014_onda1_contract.sql`: ele **precisa** conter o aperto dos três CHECKs de status (do superset transitório do `0012` para o conjunto final acima) além das duas novas constraints de `reservas_disponibilidade`. Se o generate não emitir a troca de algum CHECK preexistente (drizzle-kit nem sempre diffa alteração de expressão de CHECK), anexar à mão ao SQL gerado o mesmo idioma nomeado de `0011` (`DROP CONSTRAINT IF EXISTS "<nome>"` → `ADD CONSTRAINT "<nome>" CHECK (...)`) para `chk_pedidos_venda_status`, `chk_pedidos_itens_status` e `chk_recebimentos_status`. O aperto é seguro porque o `0013` já migrou 100% das linhas legadas: nenhum registro carrega `reservado`, `parcialmente_reservado`, `sem_cobertura`, `aguardando_conferencia`, `em_conferencia` ou `finalizado` ao chegar no contract.
+- [ ] Após `db:generate`, inspecionar `0014_onda1_contract.sql`: ele **precisa** conter o aperto dos quatro CHECKs (os três de status mais `chk_diverg_receb_tipo`, do superset transitório do `0012` para o conjunto final acima) além das duas novas constraints de `reservas_disponibilidade`. Se o generate não emitir a troca de algum CHECK preexistente (drizzle-kit nem sempre diffa alteração de expressão de CHECK), anexar à mão ao SQL gerado o mesmo idioma nomeado de `0011` (`DROP CONSTRAINT IF EXISTS "<nome>"` → `ADD CONSTRAINT "<nome>" CHECK (...)`) para `chk_pedidos_venda_status`, `chk_pedidos_itens_status`, `chk_recebimentos_status` e `chk_diverg_receb_tipo`. O aperto é seguro porque o `0013` já migrou 100% das linhas legadas: nenhum registro carrega `reservado`, `parcialmente_reservado`, `sem_cobertura`, `aguardando_conferencia`, `em_conferencia`, `finalizado` nem qualquer um dos 8 tipos legados de divergência ao chegar no contract.
 
 - [ ] Atualizar consultas para derivar data:
 
@@ -2109,6 +2212,19 @@ npm run db:generate -- --name onda1_contract
 Expected: `0014_onda1_contract.sql`, `meta/0014_snapshot.json`, journal `idx: 14`; apenas `SET NOT NULL`, troca de CHECK/FK/índice e DROP das colunas duplicadas já backfilladas.
 
 - [ ] Atualizar `ROLLBACK.md` com rollback em ordem `0014 → 0013 → 0012`; restauração de `data_operacao` deriva `operacoes.data`, e cache de NF deriva a entidade antes de remover as tabelas novas.
+- [ ] Testar o contract final de `chk_diverg_receb_tipo` (aperto ao conjunto de 5):
+
+```typescript
+it('0014 aperta chk_diverg_receb_tipo ao conjunto final', async () => {
+  await migrarAte('0014_onda1_contract');
+  // Os 5 tipos v1.1 permanecem aceitos:
+  await expectCheckAceita('divergencias_recebimento', 'tipo', 'falta');
+  await expectCheckAceita('divergencias_recebimento', 'tipo', 'outro');
+  // Qualquer tipo legado é rejeitado após o contract (0013 já os remapeou):
+  await expectCheckRejeita('divergencias_recebimento', 'tipo', 'inconsistencia_nf_fisico');
+  await expectCheckRejeita('divergencias_recebimento', 'tipo', 'quantidade_menor');
+});
+```
 - [ ] Run: `npm run test -- "onda1-migrations|operacoes-writers"` → PASS.
 - [ ] Commit previsto: `feat(onda1): contract 0014 remove duplicacoes e fecha FKs`
 
