@@ -5,7 +5,7 @@
 
 | Onda | Escopo resumido | Depende de | Status | Plano tático | PR | SHA merge | Observações |
 |---|---|---|---|---|---|---|---|
-| 0 | Pipeline de governança (constituição, gates, skills, workflows, estado vivo) | — | aguardando_portao2 | (plano mestre §6) | — | — | Entregáveis versionados; PR e SHA serão registrados pelo Executor quando existirem |
+| 0 | Pipeline de governança (constituição, gates, skills, workflows, estado vivo) | — | mergeada | (plano mestre §6) | [#10](https://github.com/sammuka/alpha-carnes/pull/10) | `0f8491ff2141473b5b7e3cf784b9c878fce35549` | CI completo no head `72e2ac961b59e47ae1737b2d287f2134df53a7e4`; dois Monitores independentes aprovaram o mesmo objeto |
 | 1 | Correção estrutural: Operação (D2), overbooking v1.1 (D1), Pedido ao Fornecedor + conferência tripla (D3), terminologia (D5), CLAUDE.md (D9) | 0 | aguardando_portao1 | [`2026-07-22-onda1-correcao-estrutural.md`](../superpowers/plans/2026-07-22-onda1-correcao-estrutural.md) | — | — | Plano tático entregue junto do mestre |
 | 2 | Shell + DS fiel ao protótipo (layout, menu 9 grupos, tokens, componentes compartilhados) | 1 | aguardando_inicio | just-in-time | — | — | — |
 | 3 | Cadastros & Regras completos + Admin | 2 | aguardando_inicio | just-in-time | — | — | P13 fechada por AD-04: 11 perfis com recorte `ESTOQUE_*` |

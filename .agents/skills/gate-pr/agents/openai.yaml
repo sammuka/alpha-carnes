@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gate de PR"
+  short_description: "Audita um PR antes do merge em develop"
+  default_prompt: "Use $gate-pr para auditar a onda1 no PR informado."

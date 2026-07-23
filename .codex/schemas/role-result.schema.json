@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "wave": { "type": "string", "pattern": "^onda(?:[1-9]|10)$" },
+    "role": {
+      "type": "string",
+      "enum": ["planner", "monitor", "executor", "worker"]
+    },
+    "stage": { "type": "string", "minLength": 1 },
+    "result": {
+      "type": "string",
+      "enum": [
+        "approved",
+        "completed",
+        "ready",
+        "implemented",
+        "merged",
+        "ready-for-merge",
+        "adjust",
+        "blocked",
+        "requires-human",
+        "failed"
+      ]
+    },
+    "planPath": { "type": "string" },
+    "planSha256": { "type": "string" },
+    "branch": { "type": "string" },
+    "prNumber": { "type": ["integer", "null"] },
+    "auditedHeadSha": { "type": "string" },
+    "squashSha": { "type": "string" },
+    "message": { "type": "string", "minLength": 1 }
+  },
+  "required": [
+    "schemaVersion",
+    "runId",
+    "wave",
+    "role",
+    "stage",
+    "result",
+    "planPath",
+    "planSha256",
+    "branch",
+    "prNumber",
+    "auditedHeadSha",
+    "squashSha",
+    "message"
+  ]
+}

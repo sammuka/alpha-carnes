@@ -131,7 +131,7 @@ O processo de revisão e merge que aplica esses gates está em [`framework-revis
 | Onda | Escopo | Depende de | DoD |
 |---|---|---|---|
 | 0 | Pipeline de governança (constituição, gates, skills, workflows, estado vivo) | — | artefatos criados e rito validável |
-| 1 | Correção estrutural: `operacoes` (D2), overbooking v1.1 (D1), Pedido ao Fornecedor + conferência tripla (D3), terminologia (D5), CLAUDE.md (D9) | 0 | [quality-gates §Ondas](quality-gates.md) |
+| 1 | Correção estrutural: `operacoes` (D2), overbooking v1.1 (D1), Pedido ao Fornecedor + conferência tripla (D3), terminologia (D5), instruções canônicas em AGENTS.md (D9) | 0 | [quality-gates §Ondas](quality-gates.md) |
 | 2 | Shell + DS **fiéis ao protótipo**: Layout/menu 9 grupos, breadcrumb, tokens completos da paleta, componentes compartilhados (PipelineBar, badge Provisório, TrocaPeca base), login fiel | 1 | idem |
 | 3 | Cadastros & Regras completos + Admin (Caminhões, Motoristas, Modelos de Etiqueta, Produtos/Fornecedores/Rotas/Representantes fiéis, Regras de Transformação c/ simuladores, Usuários/Perfis 11/Parâmetros/Auditoria) | 2 | idem |
 | 4 | Comercial (Clientes, Pedidos c/ adendo+overbooking, Tabela de Preços, Disponibilidade-mapa teatro, Espelho) | 3 | idem |

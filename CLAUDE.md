@@ -1,6 +1,8 @@
-# CLAUDE.md
+# CLAUDE.md — compatibilidade
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Este arquivo preserva contexto de domínio para clientes legados. A instrução canônica para
+agentes é [`AGENTS.md`](AGENTS.md); as skills ficam em `.agents/skills`, os papéis em
+`.codex/agents` e a automação portátil em `.codex/scripts` (PowerShell 7).
 
 ## Estado atual do projeto (importante)
 
@@ -32,13 +34,15 @@ O projeto está em **implementação ativa** (fases F1–F6a concluídas; Ciclo 
 
 ### Aplicação (`app/` — monorepo npm workspaces)
 
-```bash
+```powershell
 npm ci                                  # na raiz (workspaces: app/backend, app/frontend)
 npm run build                           # build de tudo
-cd app/backend && npm run db:migrate    # migrations (drizzle-kit; exige Postgres 18)
-cd app/backend && npm run db:seed       # seed RBAC (11 perfis + permissões)
-cd app/backend && npm run test:cov      # testes + cobertura (gate ≥80% linha e branch)
-cd app/frontend && npm run test         # Jest; e2e Playwright em app/frontend/e2e/
+Set-Location app/backend
+npm run db:migrate                      # migrations (drizzle-kit; exige Postgres 18)
+npm run db:seed                         # seed RBAC (11 perfis + permissões)
+npm run test:cov                        # testes + cobertura (gate ≥80% linha e branch)
+Set-Location ../frontend
+npm run test                            # Jest; e2e Playwright em app/frontend/e2e/
 ```
 
 CI (`.github/workflows/ci.yml`): lint, type-check, test-backend (Postgres 18 service),
@@ -62,8 +66,10 @@ executados no host usam `http://localhost:4001` e `localhost:15433`. O aceite lo
 
 ### Landing page (`landing/`)
 
-```bash
-cd landing && npm install && npm run dev   # build: npm run build -> landing/dist/
+```powershell
+Set-Location landing
+npm install
+npm run dev                              # build: npm run build -> landing/dist/
 ```
 
 A Vercel publica **somente** `landing/` para apresentação ao cliente. O status Vercel é gate
