@@ -5,6 +5,8 @@
 
 **Goal:** Corrigir integralmente D2 (Operação como pivô), D1 (overbooking v1.1 conforme AD-05), D3 (Pedido ao Fornecedor, NF própria e conferência Pedido×NF×Pesagem), D5 (terminologia) e absorver as decisões AD-03..AD-06 sem alterar visualmente as telas.
 
+> **Escopo — D9 fora desta onda (concluído):** a divergência **D9 (instruções canônicas em `AGENTS.md` + `CLAUDE.md` de compatibilidade)** já foi **entregue antes da Onda 1** pelo **PR [#11](https://github.com/sammuka/alpha-carnes/pull/11)** (squash `8b2958ef992e1243015cd7f0507310dbac9706e0`). Não há Task de implementação de D9 neste plano e nenhuma será criada; a linha da Onda 1 em `EXECUCAO-STATUS.md` e no roadmap §8 é reescopada para refletir D9 como concluída por PR #11. As Tasks abaixo cobrem apenas D1, D2, D3 e D5.
+
 **Architecture:** Monólito modular NestJS. `operacoes` passa a ser a única referência persistida do dia operacional. A migração é exatamente `0012 expand → 0013 custom backfill → 0014 contract`; o contract remove `data_operacao` das seis tabelas de fato, remove o cache `nfe_*` de `recebimentos` e torna as novas FKs obrigatórias. APIs que ainda expõem `dataOperacao` derivam `operacoes.data`. Challenge de overbooking é consulta transacional com lock e resposta 409 sem escrita; confirmação é comando explícito e atômico. Eventos são emitidos somente após commit.
 
 **Tech Stack:** Node 22, NestJS 11, TypeScript strict, Drizzle ORM 0.45 + drizzle-kit 0.31, PostgreSQL 18, Zod 4, Jest com PostgreSQL real e `maxWorkers: 1`, Next.js 16 BFF.
@@ -35,7 +37,7 @@
 8. `finalizar` aceita item `overbooking_confirmado`; só rejeita challenge legado ainda não confirmado.
 9. Pedido ao Fornecedor materializa uma compra confirmada e usa os itens comerciais gerados pelo desdobramento. O modelo aceita várias NFs e vários recebimentos por pedido, sem decidir P7.
 10. NF legada sem itens não ganha valores inferidos. `0013` migra o cabeçalho e marca `payload_json.migracao='legado_sem_itens_nf'`; uma conferência ainda aberta exige carga explícita dos itens da NF.
-11. Caixaria/entrada direta usa `recebimentos_itens.quantidade_recebida`; item com `requer_balanca=true` usa `COUNT(pecas)` e `SUM(peso_liquido)`.
+11. Caixaria/entrada direta usa `recebimentos_itens.quantidade_recebida`; item com `requer_balanca=true` usa `COUNT(pecas)` e `SUM(pecas.peso_original)`, agrupando por `pecas.item_comercial_base_id` e filtrando `pecas.deleted_at IS NULL` (nomes reais em `pesagem.schema.ts`; não existem `pecas.item_comercial_id` nem `pecas.peso_liquido`).
 12. Divergências novas usam `falta | excesso | peso_divergente | produto_nao_previsto | outro`, sempre referenciam a conclusão e referenciam uma NF quando a diferença é atribuível a uma única nota; `conclusoes_conferencia_nfs` preserva o conjunto completo.
 13. `conclusoes_conferencia` é append-only: não possui rota de edição, e segunda conclusão retorna 409.
 14. As migrations são criadas apenas pelos três comandos definidos neste plano. É proibido renomear SQL ou editar `meta/_journal.json` à mão.
@@ -117,6 +119,8 @@ app/frontend/__tests__/{api,terminologia}.test.ts
 |---|---|
 | Operação única por data e cadência idempotente | `operacoes.e2e-spec.ts` — `unique ativa; gerar duas vezes cria zero na segunda execução` |
 | `0012→0013→0014` em banco limpo e legado | `onda1-migrations.e2e-spec.ts` — `journal aplica os três arquivos em ordem` |
+| `0012` amplia CHECKs de status ao superset antes do backfill (aceita legado e novo) | `onda1-migrations.e2e-spec.ts` — `0012 amplia CHECKs de status para o superset` |
+| Microcopy do challenge idêntica ao protótipo (`PedidoVenda.tsx:229`) | `pedidos-v11.e2e-spec.ts` — payload 409 contém `"A venda poderá ser concluída, mas a gestão deverá tratar a falta."` |
 | Seis writers gravam `operacao_id` | `operacoes-writers.e2e-spec.ts` — seis casos nomeados por tabela |
 | `data_operacao` e cache `nfe_*` não existem após contract | `onda1-migrations.e2e-spec.ts` — consulta `information_schema.columns` |
 | Challenge 409 não executa escrita nem muta seis agregados | `pedidos-v11.e2e-spec.ts` — spy de SQL sem `INSERT/UPDATE/DELETE` + snapshot antes/depois de operação, pedido, item, reserva, saldo, pendência |
@@ -208,7 +212,7 @@ tipoConsumo: text('tipo_consumo').notNull().default('virtual'),
 // CHECK: tipo_consumo='overbooking' OR disponibilidade_virtual_id IS NOT NULL
 ```
 
-Em `0012`, manter os CHECKs legados de status de pedido/item/recebimento. A troca dos CHECKs ocorre somente em `0014`, após o backfill de valores da Task 6.
+**Sequência de CHECKs (expand → backfill → contract), decisiva para a executabilidade.** O backfill `0013` grava status que os CHECKs legados rejeitam (`em_elaboracao_reserva_ativa`, `aguardando_confirmacao_overbooking` em `pedidos_venda`; `aguardando_confirmacao_overbooking` em `pedidos_venda_itens`; `pesagem_em_andamento`, `conferido_sem_divergencia`, `tratativa_administrativa_concluida` em `recebimentos`). Por isso, em `0012` os três CHECKs de status são **ampliados para um superset (valores legados ∪ valores finais)** antes de qualquer backfill; o contract `0014` os aperta ao conjunto final. As definições de CHECK nos arquivos de schema permanecem **legadas** durante as Tasks 1–6 (o snapshot do `0012` reflete o estado legado); a ampliação transitória do `0012` é **anexada à mão ao SQL gerado**, exatamente pelo idioma nomeado já provado em `0011_recebimento_simplificado.sql` (`DROP CONSTRAINT IF EXISTS "<nome>"` → `ADD CONSTRAINT "<nome>" CHECK (...)`), o que dispensa depender do diff de CHECK do drizzle-kit e é robusto a nome (os nomes reais são `chk_pedidos_venda_status`, `chk_pedidos_itens_status`, `chk_recebimentos_status`). O SQL literal está no bloco da Task 1. Somente em `0014`, os CHECKs do schema são trocados pelos finais e o `db:generate` emite o aperto; se o generate não o emitir, o mesmo idioma nomeado é anexado à mão (Task 7). Nenhum CHECK novo sobre `reservas_disponibilidade.tipo_consumo` é exigido no backfill: a coluna nasce com `DEFAULT 'virtual'` e seu CHECK entra apenas no contract.
 
 ```typescript
 export const pendenciasOverbooking = pgTable('pendencias_overbooking', {
@@ -359,6 +363,46 @@ npm run db:generate -- --name onda1_expand
 ```
 
 Expected: `0012_onda1_expand.sql`, `meta/0012_snapshot.json` e entrada `idx: 12` no journal; nenhuma coluna removida e nenhum `SET NOT NULL`.
+
+- [ ] Anexar à mão, ao final do `0012_onda1_expand.sql` gerado, a **ampliação transitória dos três CHECKs de status** para o superset (legado ∪ final), pelo idioma nomeado de `0011` (não editar `meta/_journal.json` nem renomear o arquivo — apenas completar o corpo SQL, exatamente como o `0013` é completado):
+
+```sql
+-- 0012 (append): ampliar CHECKs de status para o superset antes do backfill 0013.
+-- Superset = valores legados ∪ valores finais; o aperto ao conjunto final é feito no 0014.
+ALTER TABLE "pedidos_venda" DROP CONSTRAINT IF EXISTS "chk_pedidos_venda_status";--> statement-breakpoint
+ALTER TABLE "pedidos_venda" ADD CONSTRAINT "chk_pedidos_venda_status" CHECK ("pedidos_venda"."status" IN (
+  'reservado','parcialmente_reservado',
+  'rascunho','em_elaboracao_reserva_ativa','aguardando_confirmacao_overbooking',
+  'finalizado','parcialmente_atendido','atendido','faturado','cancelado'
+));--> statement-breakpoint
+ALTER TABLE "pedidos_venda_itens" DROP CONSTRAINT IF EXISTS "chk_pedidos_itens_status";--> statement-breakpoint
+ALTER TABLE "pedidos_venda_itens" ADD CONSTRAINT "chk_pedidos_itens_status" CHECK ("pedidos_venda_itens"."status" IN (
+  'totalmente_reservado','parcialmente_reservado','sem_cobertura',
+  'aguardando_confirmacao_overbooking','overbooking_confirmado','cancelado'
+));--> statement-breakpoint
+ALTER TABLE "recebimentos" DROP CONSTRAINT IF EXISTS "chk_recebimentos_status";--> statement-breakpoint
+ALTER TABLE "recebimentos" ADD CONSTRAINT "chk_recebimentos_status" CHECK ("recebimentos"."status" IN (
+  'aguardando_conferencia','em_conferencia','finalizado',
+  'pesagem_em_andamento','aguardando_conclusao_pesagem','aguardando_conferencia_final',
+  'conferido_sem_divergencia','conferido_com_divergencia',
+  'ocorrencia_administrativa_aberta','tratativa_administrativa_concluida','cancelado'
+));--> statement-breakpoint
+```
+
+- [ ] Ampliar o teste do 0012 para provar que o superset aceita os status novos e que os legados seguem válidos (o aperto é verificado na Task 7):
+
+```typescript
+it('0012 amplia CHECKs de status para o superset (aceita legado e novo)', async () => {
+  await migrarAte('0012_onda1_expand');
+  // valores novos que o backfill 0013 gravará passam a ser aceitos:
+  await expectCheckAceita('pedidos_venda', 'status', 'aguardando_confirmacao_overbooking');
+  await expectCheckAceita('pedidos_venda_itens', 'status', 'aguardando_confirmacao_overbooking');
+  await expectCheckAceita('recebimentos', 'status', 'pesagem_em_andamento');
+  // valores legados continuam aceitos durante a janela expand:
+  await expectCheckAceita('pedidos_venda', 'status', 'reservado');
+  await expectCheckAceita('recebimentos', 'status', 'finalizado');
+});
+```
 
 - [ ] Run: `npm run test -- onda1-migrations` → FAIL apenas porque 0013/0014 ainda não existem.
 - [ ] Commit previsto: `feat(onda1): expand estrutural completo e migration 0012`
@@ -780,6 +824,8 @@ it('409 challenge não executa escrita e não persiste mutação', async () => {
     disponivelAntes: '2.000',
     quantidadeSolicitada: '5.000',
     overbookingGerado: '3.000',
+    // Microcopy idêntica ao protótipo PedidoVenda.tsx:229 (Princípio I).
+    mensagem: 'A venda poderá ser concluída, mas a gestão deverá tratar a falta.',
   });
   removerSpy();
   expect(escritas).toEqual([]);
@@ -812,7 +858,7 @@ const resultado = await this.db.transaction(async (tx) => {
       disponivelAntes: p.disponivelAntes,
       quantidadeSolicitada: p.quantidadeSolicitada,
       overbookingGerado: p.deficit,
-      mensagem: 'A venda poderá ser concluída, mas o gestor deverá tratar a falta.',
+      mensagem: 'A venda poderá ser concluída, mas a gestão deverá tratar a falta.',
     })));
   }
 
@@ -863,7 +909,7 @@ if (desafios.length && !confirmado) {
     disponivelAntes: p.disponivelAntes,
     quantidadeSolicitada: p.quantidadeSolicitada,
     overbookingGerado: p.deficit,
-    mensagem: 'A venda poderá ser concluída, mas o gestor deverá tratar a falta.',
+    mensagem: 'A venda poderá ser concluída, mas a gestão deverá tratar a falta.',
   })));
 }
 // Nenhum INSERT/UPDATE pode existir antes deste ponto.
@@ -1539,12 +1585,15 @@ WITH nf_itens AS (
   WHERE nf.recebimento_id=${recebimentoId} AND nf.deleted_at IS NULL
   GROUP BY nf.recebimento_id, nfi.item_comercial_id
 ), pecas_apuradas AS (
-  SELECT recebimento_id, item_comercial_id,
+  -- Schema real de `pecas` (pesagem.schema.ts): a FK do item é
+  -- `item_comercial_base_id` e o peso capturado é `peso_original`.
+  -- Aliasamos para `item_comercial_id` para manter os JOINs a jusante.
+  SELECT recebimento_id, item_comercial_base_id AS item_comercial_id,
          COUNT(id)::numeric AS qtd_pecas,
-         COALESCE(SUM(peso_liquido), 0) AS peso_apurado
+         COALESCE(SUM(peso_original), 0) AS peso_apurado
   FROM pecas
-  WHERE recebimento_id=${recebimentoId}
-  GROUP BY recebimento_id, item_comercial_id
+  WHERE recebimento_id=${recebimentoId} AND deleted_at IS NULL
+  GROUP BY recebimento_id, item_comercial_base_id
 ), item_ids AS (
   SELECT pfi.item_comercial_id
   FROM recebimentos r
@@ -1908,6 +1957,8 @@ check('chk_recebimentos_status', sql`${t.status} IN (
   'ocorrencia_administrativa_aberta','tratativa_administrativa_concluida','cancelado'
 )`);
 ```
+
+- [ ] Após `db:generate`, inspecionar `0014_onda1_contract.sql`: ele **precisa** conter o aperto dos três CHECKs de status (do superset transitório do `0012` para o conjunto final acima) além das duas novas constraints de `reservas_disponibilidade`. Se o generate não emitir a troca de algum CHECK preexistente (drizzle-kit nem sempre diffa alteração de expressão de CHECK), anexar à mão ao SQL gerado o mesmo idioma nomeado de `0011` (`DROP CONSTRAINT IF EXISTS "<nome>"` → `ADD CONSTRAINT "<nome>" CHECK (...)`) para `chk_pedidos_venda_status`, `chk_pedidos_itens_status` e `chk_recebimentos_status`. O aperto é seguro porque o `0013` já migrou 100% das linhas legadas: nenhum registro carrega `reservado`, `parcialmente_reservado`, `sem_cobertura`, `aguardando_conferencia`, `em_conferencia` ou `finalizado` ao chegar no contract.
 
 - [ ] Atualizar consultas para derivar data:
 
