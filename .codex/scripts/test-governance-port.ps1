@@ -441,6 +441,10 @@ try {
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Remaining)
 Add-Content -LiteralPath $env:CODEX_PR_FILES_LOG -Value ($Remaining -join ' ')
 if ($Remaining.Count -ge 2 -and $Remaining[0] -eq 'pr' -and $Remaining[1] -eq 'checks') {
+    if ($env:CODEX_PR_FILES_MODE -eq 'no-checks') {
+        Write-Output 'no checks reported on the ''feature/transient'' branch'
+        exit 1
+    }
     $checks = @(
         'lint', 'type-check', 'test-backend', 'coverage',
         'test-frontend', 'build', 'audit', 'secret-scan', 'Vercel'
@@ -462,6 +466,8 @@ if ($Remaining.Count -ge 2 -and $Remaining[0] -eq 'pr' -and $Remaining[1] -eq 'v
     } elseif ($env:CODEX_PR_FILES_MODE -eq 'bad-count-bool') {
         $true
     } elseif ($env:CODEX_PR_FILES_MODE -match '^bad-filename-') {
+        1
+    } elseif ($env:CODEX_PR_FILES_MODE -eq 'no-checks') {
         1
     } else {
         301
@@ -490,7 +496,13 @@ if ($Remaining.Count -ge 1 -and $Remaining[0] -eq 'api') {
         ConvertTo-Json -InputObject @($badPages) -Depth 6 -Compress
         exit 0
     }
-    $count = if ($env:CODEX_PR_FILES_MODE -eq 'incomplete') { 300 } else { 301 }
+    $count = if ($env:CODEX_PR_FILES_MODE -eq 'incomplete') {
+        300
+    } elseif ($env:CODEX_PR_FILES_MODE -eq 'no-checks') {
+        1
+    } else {
+        301
+    }
     $allFiles = @(
         foreach ($index in 1..$count) {
             [ordered]@{
@@ -507,7 +519,7 @@ if ($Remaining.Count -ge 1 -and $Remaining[0] -eq 'api') {
         $last = [Math]::Min($offset + 99, $allFiles.Count - 1)
         $pages.Add(@($allFiles[$offset..$last]))
     }
-    @($pages) | ConvertTo-Json -Depth 6 -Compress
+    ConvertTo-Json -InputObject @($pages) -Depth 6 -Compress
     exit 0
 }
 exit 87
@@ -535,6 +547,29 @@ exit 87
                 $calls -match 'api --paginate --slurp repos/\{owner\}/\{repo\}/pulls/9/files\?per_page=100'
             ) 'Chamada REST não usou paginação e slurp.'
             Assert-True ($calls -notmatch 'pr diff') 'Caminho sujeito a HTTP 406 ainda foi usado.'
+        } finally {
+            $env:CODEX_PR_FILES_MODE = $savedMode
+            $env:CODEX_PR_FILES_LOG = $savedLog
+        }
+    }
+
+    Test-Case 'Transient PR without reported checks remains pending' {
+        $savedMode = $env:CODEX_PR_FILES_MODE
+        $savedLog = $env:CODEX_PR_FILES_LOG
+        try {
+            $env:CODEX_PR_FILES_MODE = 'no-checks'
+            $env:CODEX_PR_FILES_LOG = $prFilesLog
+            $result = & $waitChecksScript -PrNumber 9 -GhCommandPath $prFilesMock |
+                ConvertFrom-Json
+            Assert-True ($result.status -eq 'pending') (
+                'Janela sem checks deveria permanecer pending.'
+            )
+            Assert-True ($result.requiredMissing.Count -eq 8) (
+                'Os oito checks obrigatórios deveriam constar como ausentes.'
+            )
+            Assert-True (-not $result.landingChanged) (
+                'Fixture transitória não deveria envolver landing.'
+            )
         } finally {
             $env:CODEX_PR_FILES_MODE = $savedMode
             $env:CODEX_PR_FILES_LOG = $savedLog

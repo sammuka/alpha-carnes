@@ -93,7 +93,19 @@ function Get-Snapshot {
         'pr', 'checks', [string]$PrNumber,
         '--json', 'name,state,bucket,workflow,link'
     ) -AcceptedExitCodes @(0, 1, 8)
-    $checks = @(($checksRaw -join "`n") | ConvertFrom-Json)
+    $checksText = ($checksRaw -join "`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($checksText) -or
+        $checksText -match '^no checks reported') {
+        # Janela transitória logo após push: tratar como conjunto vazio mantém
+        # o estado pending/fail-closed até os checks obrigatórios aparecerem.
+        $checks = @()
+    } else {
+        try {
+            $checks = @($checksText | ConvertFrom-Json)
+        } catch {
+            throw "gh pr checks retornou saída não-JSON inesperada: $checksText"
+        }
+    }
     $prRaw = Invoke-Gh -Arguments @(
         'pr', 'view', [string]$PrNumber,
         '--json', 'headRefOid,headRefName,baseRefName,changedFiles'
