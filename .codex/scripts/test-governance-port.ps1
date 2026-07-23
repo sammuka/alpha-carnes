@@ -435,6 +435,134 @@ try {
         [ordered]@{ name = $_; state = 'SUCCESS'; bucket = 'pass'; workflow = 'CI'; link = '' }
     }
 
+    $prFilesMock = Join-Path $testRootFull 'gh-pr-files-mock.ps1'
+    $prFilesLog = Join-Path $testRootFull 'gh-pr-files-calls.log'
+    $prFilesMockSource = @'
+param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Remaining)
+Add-Content -LiteralPath $env:CODEX_PR_FILES_LOG -Value ($Remaining -join ' ')
+if ($Remaining.Count -ge 2 -and $Remaining[0] -eq 'pr' -and $Remaining[1] -eq 'checks') {
+    $checks = @(
+        'lint', 'type-check', 'test-backend', 'coverage',
+        'test-frontend', 'build', 'audit', 'secret-scan', 'Vercel'
+    ) | ForEach-Object {
+        [ordered]@{
+            name = $_
+            state = 'SUCCESS'
+            bucket = 'pass'
+            workflow = if ($_ -eq 'Vercel') { '' } else { 'CI' }
+            link = ''
+        }
+    }
+    $checks | ConvertTo-Json -Depth 5 -Compress
+    exit 0
+}
+if ($Remaining.Count -ge 2 -and $Remaining[0] -eq 'pr' -and $Remaining[1] -eq 'view') {
+    [ordered]@{
+        headRefOid = 'large-pr-sha'
+        headRefName = 'feature/large-pr'
+        baseRefName = 'develop'
+        changedFiles = 301
+    } | ConvertTo-Json -Compress
+    exit 0
+}
+if ($Remaining.Count -ge 1 -and $Remaining[0] -eq 'api') {
+    if ($env:CODEX_PR_FILES_MODE -eq 'error') {
+        Write-Output 'HTTP 503 fixture'
+        exit 86
+    }
+    $count = if ($env:CODEX_PR_FILES_MODE -eq 'incomplete') { 300 } else { 301 }
+    $allFiles = @(
+        foreach ($index in 1..$count) {
+            [ordered]@{
+                filename = if ($index -eq 301) {
+                    'landing/src/cliente.tsx'
+                } else {
+                    "app/backend/src/generated/file-$index.ts"
+                }
+            }
+        }
+    )
+    $pages = [Collections.Generic.List[object]]::new()
+    for ($offset = 0; $offset -lt $allFiles.Count; $offset += 100) {
+        $last = [Math]::Min($offset + 99, $allFiles.Count - 1)
+        $pages.Add(@($allFiles[$offset..$last]))
+    }
+    @($pages) | ConvertTo-Json -Depth 6 -Compress
+    exit 0
+}
+exit 87
+'@
+    [IO.File]::WriteAllText(
+        $prFilesMock,
+        $prFilesMockSource,
+        [Text.UTF8Encoding]::new($false)
+    )
+
+    Test-Case 'PR files API paginates beyond 300 and still detects landing' {
+        [IO.File]::WriteAllText($prFilesLog, '', [Text.UTF8Encoding]::new($false))
+        $savedMode = $env:CODEX_PR_FILES_MODE
+        $savedLog = $env:CODEX_PR_FILES_LOG
+        try {
+            $env:CODEX_PR_FILES_MODE = 'full'
+            $env:CODEX_PR_FILES_LOG = $prFilesLog
+            $result = & $waitChecksScript -PrNumber 9 -GhCommandPath $prFilesMock |
+                ConvertFrom-Json
+            Assert-True ($result.status -eq 'green') 'PR grande com checks verdes deveria passar.'
+            Assert-True ($result.changedFiles.Count -eq 301) 'Paginação perdeu arquivos após 300.'
+            Assert-True $result.landingChanged 'Arquivo landing na quarta página não foi detectado.'
+            $calls = Get-Content -Raw -LiteralPath $prFilesLog
+            Assert-True (
+                $calls -match 'api --paginate --slurp repos/\{owner\}/\{repo\}/pulls/9/files\?per_page=100'
+            ) 'Chamada REST não usou paginação e slurp.'
+            Assert-True ($calls -notmatch 'pr diff') 'Caminho sujeito a HTTP 406 ainda foi usado.'
+        } finally {
+            $env:CODEX_PR_FILES_MODE = $savedMode
+            $env:CODEX_PR_FILES_LOG = $savedLog
+        }
+    }
+
+    Test-Case 'PR files API error fails closed' {
+        $savedMode = $env:CODEX_PR_FILES_MODE
+        $savedLog = $env:CODEX_PR_FILES_LOG
+        try {
+            $env:CODEX_PR_FILES_MODE = 'error'
+            $env:CODEX_PR_FILES_LOG = $prFilesLog
+            $message = ''
+            try {
+                $null = & $waitChecksScript -PrNumber 9 -GhCommandPath $prFilesMock
+            } catch {
+                $message = $_.Exception.Message
+            }
+            Assert-True (
+                $message -match 'gh api .*exit code 86'
+            ) 'Erro REST não interrompeu o gate com diagnóstico.'
+        } finally {
+            $env:CODEX_PR_FILES_MODE = $savedMode
+            $env:CODEX_PR_FILES_LOG = $savedLog
+        }
+    }
+
+    Test-Case 'PR files count mismatch fails closed' {
+        $savedMode = $env:CODEX_PR_FILES_MODE
+        $savedLog = $env:CODEX_PR_FILES_LOG
+        try {
+            $env:CODEX_PR_FILES_MODE = 'incomplete'
+            $env:CODEX_PR_FILES_LOG = $prFilesLog
+            $message = ''
+            try {
+                $null = & $waitChecksScript -PrNumber 9 -GhCommandPath $prFilesMock
+            } catch {
+                $message = $_.Exception.Message
+            }
+            Assert-True (
+                $message -match 'Enumeração incompleta.*retornou 300.*declarou 301'
+            ) 'Resposta truncada da API não falhou fechada.'
+        } finally {
+            $env:CODEX_PR_FILES_MODE = $savedMode
+            $env:CODEX_PR_FILES_LOG = $savedLog
+        }
+    }
+
     Test-Case 'Application PR ignores Vercel' {
         $fixture = Join-Path $testRootFull 'ci-app.json'
         Write-Utf8Json -Path $fixture -Value ([ordered]@{

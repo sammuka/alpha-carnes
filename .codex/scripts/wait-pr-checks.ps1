@@ -19,28 +19,90 @@ param(
     [switch]$Watch,
     [ValidateRange(1, 7200)][int]$TimeoutSeconds = 1500,
     [ValidateRange(1, 300)][int]$PollSeconds = 15,
-    [string]$FixturePath
+    [string]$FixturePath,
+
+    # Injeção exclusiva para testes locais; omitida em uso real.
+    [string]$GhCommandPath = 'gh'
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Invoke-Gh {
+    param(
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [int[]]$AcceptedExitCodes = @(0)
+    )
+    $output = @(& $GhCommandPath @Arguments 2>&1)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -notin $AcceptedExitCodes) {
+        throw "gh $($Arguments -join ' ') falhou com exit code $exitCode`: $($output -join ' ')"
+    }
+    $output
+}
+
+function Get-ChangedFiles {
+    param(
+        [Parameter(Mandatory)][int]$Number,
+        [Parameter(Mandatory)][int]$ExpectedCount
+    )
+    $endpoint = "repos/{owner}/{repo}/pulls/$Number/files?per_page=100"
+    $raw = Invoke-Gh -Arguments @('api', '--paginate', '--slurp', $endpoint)
+    try {
+        $pages = ($raw -join "`n") | ConvertFrom-Json -NoEnumerate
+    } catch {
+        throw "gh api retornou JSON inválido para arquivos do PR #$Number`: $($_.Exception.Message)"
+    }
+    if ($pages -isnot [Array]) {
+        throw "gh api não retornou uma coleção paginada para arquivos do PR #$Number."
+    }
+    $files = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($page in $pages) {
+        if ($page -isnot [Array]) {
+            throw "gh api retornou página malformada para arquivos do PR #$Number."
+        }
+        foreach ($file in $page) {
+            if (-not $file -or
+                -not $file.PSObject.Properties['filename'] -or
+                [string]::IsNullOrWhiteSpace([string]$file.filename)) {
+                throw "gh api retornou item sem filename no PR #$Number."
+            }
+            $filename = [string]$file.filename
+            if (-not $seen.Add($filename)) {
+                throw "gh api retornou filename duplicado no PR #$Number`: $filename"
+            }
+            $files.Add($filename)
+        }
+    }
+    if ($files.Count -ne $ExpectedCount) {
+        throw (
+            "Enumeração incompleta dos arquivos do PR #$Number`: API retornou $($files.Count), " +
+            "gh pr view declarou $ExpectedCount."
+        )
+    }
+    @($files)
+}
+
 function Get-Snapshot {
     if (-not [string]::IsNullOrWhiteSpace($FixturePath)) {
         return Get-Content -Raw -Encoding utf8 -LiteralPath $FixturePath | ConvertFrom-Json
     }
-    $checks = @(gh pr checks $PrNumber --json name,state,bucket,workflow,link | ConvertFrom-Json)
-    if ($LASTEXITCODE -notin @(0, 1, 8)) {
-        throw "gh pr checks falhou com exit code $LASTEXITCODE."
+    $checksRaw = Invoke-Gh -Arguments @(
+        'pr', 'checks', [string]$PrNumber,
+        '--json', 'name,state,bucket,workflow,link'
+    ) -AcceptedExitCodes @(0, 1, 8)
+    $checks = @(($checksRaw -join "`n") | ConvertFrom-Json)
+    $prRaw = Invoke-Gh -Arguments @(
+        'pr', 'view', [string]$PrNumber,
+        '--json', 'headRefOid,headRefName,baseRefName,changedFiles'
+    )
+    $pr = ($prRaw -join "`n") | ConvertFrom-Json
+    if (-not $pr.PSObject.Properties['changedFiles'] -or
+        $null -eq $pr.changedFiles -or [int]$pr.changedFiles -lt 0) {
+        throw "gh pr view não informou changedFiles para o PR #$PrNumber."
     }
-    $pr = gh pr view $PrNumber --json headRefOid,headRefName,baseRefName | ConvertFrom-Json
-    if ($LASTEXITCODE -ne 0) {
-        throw "gh pr view falhou com exit code $LASTEXITCODE."
-    }
-    $changedFiles = @(gh pr diff $PrNumber --name-only)
-    if ($LASTEXITCODE -ne 0) {
-        throw "gh pr diff falhou com exit code $LASTEXITCODE."
-    }
+    $changedFiles = @(Get-ChangedFiles -Number $PrNumber -ExpectedCount ([int]$pr.changedFiles))
     [pscustomobject]@{
         headRefOid = $pr.headRefOid
         headRefName = $pr.headRefName
