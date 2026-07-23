@@ -40,7 +40,7 @@ Invocável via skill [`/gate-plano <onda>`](../../.claude/skills/gate-plano/SKIL
 4. **Autossuficiência para o worker:** padrão do plano F4c — Goal/Architecture/Tech Stack, decisões fixadas, estrutura de arquivos, mapa DoD→teste 1:1, tasks com código literal, comandos com saída esperada, zero "TBD"/"implementar depois". Um worker de modelo inferior consegue executar sem decidir nada.
 5. **Consistência cruzada:** nomes de entidades/endpoints/eventos batem com o plano mestre e com planos de ondas vizinhas.
 
-Veredito: `aprovado | ajustar | bloqueado` + feedback objetivo, registrado em `GATE-VEREDITOS.md`.
+Veredito: `aprovado | ajustar | bloqueado` + feedback objetivo, registrado em `GATE-VEREDITOS.md`. O Monitor fixa o SHA e o blob do plano antes de ler, revalida ambos dentro do lock compartilhado e registra os OIDs; plano móvel nunca recebe aprovação.
 
 ## 4. Portão 2 — Gate de PR
 
@@ -50,13 +50,13 @@ Invocável via skill [`/gate-pr <onda> <nº do PR>`](../../.claude/skills/gate-p
    (lint, type-check, testes, cobertura ≥80% linha+branch, build, audit, secret-scan). Vercel é
    exigido somente quando o diff toca `landing/**`; nos demais PRs seu status não faz parte do
    gate da aplicação.
-2. **Diff vs. plano:** todo item do plano tático implementado; nada fora do escopo; critérios de aceite (§ do plano) verificados um a um (grep/execução).
+2. **Diff vs. plano:** o Monitor fixa `baseOid` e `headRefOid`, usa apenas `git diff <base>...<head>`/`git show <head>:<plano>`; todo item implementado, nada fora do escopo e critérios de aceite verificados um a um.
 3. **RA-01..06 em runtime** — checklist de [`framework-revisao.md`](framework-revisao.md) §6.
 4. **Fidelidade ao protótipo (Princípio I):** para cada tela do PR, comparar com a rota equivalente do protótipo (rodar ambos ou comparar screenshots Playwright vs. protótipo); divergência não autorizada → `ajustar`.
 5. **DoD da onda** ([`quality-gates.md`](quality-gates.md)) demonstrada por teste com link.
 6. **Segurança:** sem segredo commitado, RBAC nos endpoints novos (teste de 403), migrations reversíveis.
 
-Veredito registrado; merge só com `aprovado`. Reprovação volta ao Worker com lista objetiva.
+Veredito registrado sob lock, incluindo os dois OIDs; merge só com `aprovado`. O Executor revalida base e head dentro do mesmo lock e usa `gh pr merge --match-head-commit <head>`; mudança em qualquer objeto exige novo Portão 2. Como `develop` não aceita push direto, a formalização de `EXECUCAO-STATUS`/`GATE-VEREDITOS` entra por um PR de coordenação próprio, também com CI e compare-and-swap, ainda sob o lock. Reprovação volta ao Worker com lista objetiva.
 
 ## 5. Estado vivo (`docs/execucao/`)
 
@@ -65,6 +65,8 @@ Veredito registrado; merge só com `aprovado`. Reprovação volta ao Worker com 
 | `EXECUCAO-STATUS.md` | Executor | tabela por onda: status (`aguardando_inicio → planejando → aguardando_portao1 → plano_aprovado → implementando → aguardando_portao2 → mergeada` \| `bloqueada`), PR, SHA do merge, observações |
 | `GATE-VEREDITOS.md` | Monitor | **append-only**; linha por veredito: `data · onda · portão · veredito · evidência · feedback` |
 | `DECISOES.md` | Quality Owner (registrado pelo Executor) | decisões numeradas `AD-xx` que fecham pendências (fonte de precedência máxima abaixo da constituição) |
+
+Toda escrita nesses arquivos usa `.claude/workflows/lib/lock.sh` com token aleatório por seção, persistido apenas como hash, e valida saída literal de acquire/release. Uma execução mantém também `onda<N>-run.lock` durante o ciclo inteiro; isso impede dois disparos da mesma onda, inclusive entre modo assistido e autônomo. Lock órfão nunca é roubado por idade: recuperação exige prova externa de que o dono não está vivo.
 
 ## 6. Formato obrigatório do plano tático de onda
 
@@ -98,7 +100,7 @@ Padrão consolidado no plano F4c (`docs/superpowers/plans/2026-06-07-f4c-corte-t
 
 O rito acima roda de duas formas:
 
-- **Assistida (skills):** humano/Executor invoca `/gate-plano`, `/disparar-onda`, `/gate-pr` manualmente.
+- **Assistida (skills):** humano/Executor invoca `/gate-plano`, `/disparar-onda`, `/gate-pr` manualmente; as skills usam os mesmos locks, pins de objetos e compare-and-swap do merge do modo autônomo.
 - **Autônoma (workflows):** [`.claude/workflows/ciclo-onda-autonomo.js`](../../.claude/workflows/ciclo-onda-autonomo.js) executa o ciclo completo de UMA onda (pré-condições → Portão 1 → implementação → Portão 2 → **verificação adversarial** → merge) sem intervenção; [`.claude/workflows/ciclo-multionda-autonomo.js`](../../.claude/workflows/ciclo-multionda-autonomo.js) agenda múltiplas ondas respeitando o grafo de dependências do roadmap, com lock em disco para exclusão mútua. A **verificação adversarial** é uma etapa extra exclusiva do modo autônomo: após o Portão 2 aprovar, um segundo revisor independente tenta **refutar** a aprovação; refutação sustentada reabre o ciclo. Política de modelo preservada: workers em modelo inferior, gates em modelo superior.
 
 ## 9. Relação com o framework de revisão existente

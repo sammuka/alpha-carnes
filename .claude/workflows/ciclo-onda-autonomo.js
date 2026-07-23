@@ -75,6 +75,8 @@ Este agente já roda com contexto grande. Cada arquivo despejado inteiro aumenta
 // script versionado — o agente só INVOCA verbatim.
 const CAMINHO_LOCK_SH = `${REPO}/.claude/workflows/lib/lock.sh`
 const LOCKDIR_COMPARTILHADO = `${REPO}/.claude/workflows/.locks/docs-execucao.lock`
+const LOCKDIR_ONDA = `${REPO}/.claude/workflows/.locks/${onda}-run.lock`
+const LOCK_ONDA_OWNER_TOKEN = `${onda}-run-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
 let lockSequence = 0
 let lockTokenPendente = null
 
@@ -87,6 +89,7 @@ function LOCK_ADQUIRIR_DOCS_COMPARTILHADOS(descricaoTrabalho) {
 bash "${CAMINHO_LOCK_SH}" acquire "${LOCKDIR_COMPARTILHADO}" "${lockTokenPendente}"
 \`\`\`
 Só prossiga com ${descricaoTrabalho} se a saída for exatamente "LOCK_ACQUIRED". Se for "LOCK_TIMEOUT", NÃO execute a ação protegida: retorne falha no schema desta tarefa e inclua a linha literal "LOCK_TIMEOUT" no campo de detalhe disponível.
+Na resposta estruturada, inclua obrigatoriamente \`lockAcquireOutput="LOCK_ACQUIRED"\`.
 
 `
 }
@@ -95,9 +98,55 @@ function LOCK_LIBERAR_DOCS_COMPARTILHADOS() {
   if (!lockTokenPendente) throw new Error('Nenhuma guarda de lock aberta ao construir a liberação.')
   const token = lockTokenPendente
   lockTokenPendente = null
-  return `Libere o lock agora (SEMPRE após LOCK_ACQUIRED, mesmo se a ação protegida falhar — nunca retorne sem isto): \`bash "${CAMINHO_LOCK_SH}" release "${LOCKDIR_COMPARTILHADO}" "${token}"\`. Exija "LOCK_RELEASED"; outro resultado torna a tarefa falha. Cada seção crítica recebe token exclusivo, portanto retry atrasado não pode liberar aquisição posterior.
+  return `Libere o lock agora (SEMPRE após LOCK_ACQUIRED, mesmo se a ação protegida falhar — nunca retorne sem isto): \`bash "${CAMINHO_LOCK_SH}" release "${LOCKDIR_COMPARTILHADO}" "${token}"\`. Exija "LOCK_RELEASED"; outro resultado torna a tarefa falha. Cada seção crítica recebe token exclusivo, portanto retry atrasado não pode liberar aquisição posterior. Na resposta estruturada, inclua obrigatoriamente \`lockReleaseOutput="LOCK_RELEASED"\`.
 
 `
+}
+
+function lockEstruturadoValido(resultado) {
+  return resultado?.lockAcquireOutput === 'LOCK_ACQUIRED'
+    && resultado?.lockReleaseOutput === 'LOCK_RELEASED'
+}
+
+async function adquirirLockOnda() {
+  const resultado = await agent(
+    `${SEM_INTERACAO_SINCRONA}Adquira a exclusão mútua de TODA a execução de "${onda}". Rode EXATAMENTE:
+\`\`\`bash
+bash "${CAMINHO_LOCK_SH}" acquire "${LOCKDIR_ONDA}" "${LOCK_ONDA_OWNER_TOKEN}" 0
+\`\`\`
+Não leia nem reutilize credencial persistida. Responda adquirido=true somente para a saída literal "LOCK_ACQUIRED"; para "LOCK_TIMEOUT", adquirido=false. Inclua a saída literal em "saida".`,
+    {
+      label: `lock-run:${onda}:adquirir`,
+      schema: {
+        type: 'object',
+        properties: { adquirido: { type: 'boolean' }, saida: { type: 'string' } },
+        required: ['adquirido', 'saida'],
+      },
+    }
+  )
+  if (resultado?.adquirido === true && resultado?.saida === 'LOCK_ACQUIRED') return true
+  if (resultado?.adquirido === false && resultado?.saida === 'LOCK_TIMEOUT') return false
+  throw new Error(`Saída contraditória ao adquirir lock da onda: ${JSON.stringify(resultado)}`)
+}
+
+let lockOndaLiberado = false
+async function liberarLockOnda() {
+  if (lockOndaLiberado) return
+  const resultado = await agent(
+    `${SEM_INTERACAO_SINCRONA}Libere a exclusão mútua de "${onda}". Rode EXATAMENTE: \`bash "${CAMINHO_LOCK_SH}" release "${LOCKDIR_ONDA}" "${LOCK_ONDA_OWNER_TOKEN}"\`. Responda liberado=true somente para "LOCK_RELEASED" e inclua a saída literal em "saida".`,
+    {
+      label: `lock-run:${onda}:liberar`,
+      schema: {
+        type: 'object',
+        properties: { liberado: { type: 'boolean' }, saida: { type: 'string' } },
+        required: ['liberado', 'saida'],
+      },
+    }
+  )
+  if (resultado?.liberado !== true || resultado?.saida !== 'LOCK_RELEASED') {
+    throw new Error(`Falha ao liberar lock da onda: ${JSON.stringify(resultado)}`)
+  }
+  lockOndaLiberado = true
 }
 
 // MEMÓRIA DE PROGRESSO RETOMÁVEL (anti-loop de heartbeat): checkpoint em disco
@@ -169,6 +218,13 @@ async function agentComRetry(prompt, opts, contextoLog) {
 // ---------------------------------------------------------------------------
 // Fase 1 — Pré-condição
 // ---------------------------------------------------------------------------
+const lockOndaOk = await adquirirLockOnda()
+if (!lockOndaOk) {
+  log(`Já existe uma execução ativa ou um lock órfão não recuperado para ${onda}. Abortando sem ler/alterar estado.`)
+  return resultadoFinal({ resultado: 'run-concorrente-ativo', etapa: 'lock-onda' })
+}
+
+try {
 phase('Pré-condição')
 log(`Verificando pré-condições para a ${onda}...`)
 
@@ -344,13 +400,18 @@ NÃO edite mais nada. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS()}Respond
         effort: 'low',
         schema: {
           type: 'object',
-          properties: { ok: { type: 'boolean' }, linha: { type: 'string' } },
-          required: ['ok', 'linha'],
+          properties: {
+            ok: { type: 'boolean' },
+            linha: { type: 'string' },
+            lockAcquireOutput: { type: 'string' },
+            lockReleaseOutput: { type: 'string' },
+          },
+          required: ['ok', 'linha', 'lockAcquireOutput', 'lockReleaseOutput'],
         },
       }
     )
     registrar('portao1-escrita', { rodada: rodadaPlano, saida: escrita })
-    if (!escrita || escrita.ok !== true) {
+    if (!escrita || escrita.ok !== true || !lockEstruturadoValido(escrita)) {
       log(`Registro do Portão 1 falhou fechado: ${escrita ? escrita.linha : 'agente sem resposta'}.`)
       return null
     }
@@ -446,13 +507,18 @@ const statusImplementando = await agent(
     effort: 'low',
     schema: {
       type: 'object',
-      properties: { ok: { type: 'boolean' }, detalhe: { type: 'string' } },
-      required: ['ok', 'detalhe'],
+      properties: {
+        ok: { type: 'boolean' },
+        detalhe: { type: 'string' },
+        lockAcquireOutput: { type: 'string' },
+        lockReleaseOutput: { type: 'string' },
+      },
+      required: ['ok', 'detalhe', 'lockAcquireOutput', 'lockReleaseOutput'],
     },
   }
 )
 registrar('marcar-status', { status: 'implementando', saida: statusImplementando })
-if (statusImplementando && statusImplementando.ok) {
+if (statusImplementando?.ok === true && lockEstruturadoValido(statusImplementando)) {
   docsSujos = true
 } else {
   log(`Não marquei "implementando" (${statusImplementando ? statusImplementando.detalhe : 'agente falhou'}). Abortando fechado.`)
@@ -573,13 +639,18 @@ const statusAguardando = await agent(
     effort: 'low',
     schema: {
       type: 'object',
-      properties: { ok: { type: 'boolean' }, detalhe: { type: 'string' } },
-      required: ['ok', 'detalhe'],
+      properties: {
+        ok: { type: 'boolean' },
+        detalhe: { type: 'string' },
+        lockAcquireOutput: { type: 'string' },
+        lockReleaseOutput: { type: 'string' },
+      },
+      required: ['ok', 'detalhe', 'lockAcquireOutput', 'lockReleaseOutput'],
     },
   }
 )
 registrar('marcar-status', { status: 'aguardando_portao2', saida: statusAguardando })
-if (statusAguardando && statusAguardando.ok) {
+if (statusAguardando?.ok === true && lockEstruturadoValido(statusAguardando)) {
   docsSujos = true
 } else {
   log(`Não marquei "aguardando_portao2" (${statusAguardando ? statusAguardando.detalhe : 'agente falhou'}). Abortando fechado.`)
@@ -753,13 +824,18 @@ NÃO edite mais nada. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS()}Respond
       effort: 'low',
       schema: {
         type: 'object',
-        properties: { ok: { type: 'boolean' }, linha: { type: 'string' } },
-        required: ['ok', 'linha'],
+        properties: {
+          ok: { type: 'boolean' },
+          linha: { type: 'string' },
+          lockAcquireOutput: { type: 'string' },
+          lockReleaseOutput: { type: 'string' },
+        },
+        required: ['ok', 'linha', 'lockAcquireOutput', 'lockReleaseOutput'],
       },
     }
   )
   registrar('portao2-escrita', { ciclo: cicloAuditoria, rodada: rodadaCorrecao, saida: escrita })
-  if (!escrita || escrita.ok !== true) {
+  if (!escrita || escrita.ok !== true || !lockEstruturadoValido(escrita)) {
     log(`Registro do Portão 2 falhou fechado: ${escrita ? escrita.linha : 'agente sem resposta'}.`)
     return null
   }
@@ -961,21 +1037,25 @@ Passos (ordem exata):
 
 1. Verificações de segurança (SEM lock — leitura ou worktree isolado da própria onda):
    1a. gh pr view ${prNumero} --json mergeable,mergeStateStatus,headRefOid — exige MERGEABLE + CLEAN + headRefOid IGUAL a ${shaAuditado}. SHA diferente → commits pós-auditoria: PARE (requerDecisaoHumana=true; re-auditoria necessária).
-   1b. git -C ${REPO} fetch origin && git -C ${REPO} merge-base --is-ancestor origin/develop origin/${branch} && echo OK || echo DESATUALIZADA. DESATUALIZADA → passo 1c. OK → passo 2.
+   1b. git -C ${REPO} fetch origin; capture \`baseAtual=$(git -C ${REPO} rev-parse origin/develop)\` e exija igualdade EXATA com a base auditada ${veredito2.baseRefOid}. Depois exija \`git -C ${REPO} merge-base --is-ancestor "$baseAtual" "${shaAuditado}"\`. Base diferente → PARE e exija novo Portão 2; branch desatualizada → passo 1c.
    1c. AUTO-RECUPERAÇÃO, TODA no worktree ../AlphaCarnes-${onda} (NUNCA no repo principal, SEM lock):
        git -C ../AlphaCarnes-${onda} fetch origin && git -C ../AlphaCarnes-${onda} rebase origin/develop
        - Rebase limpo: rode os testes do plano no worktree; passando: git -C ../AlphaCarnes-${onda} push --force-with-lease. RE-ESPERE o CI (gh pr checks ${prNumero} --watch). Mesmo com CI verde, o HEAD mudou e as aprovações anteriores NÃO valem: PARE com requerDecisaoHumana=true e motivo "HEAD alterado para <novo SHA>; reiniciar Portão 2 + verificação adversarial". NUNCA siga ao passo 2 nesta execução.
        - Conflito, teste falho ou CI vermelho: git rebase --abort (se em rebase) e PARE — requerDecisaoHumana=true com o estado exato.
 2. ADQUIRA O LOCK AGORA: ${LOCK_ADQUIRIR_DOCS_COMPARTILHADOS('mergear (squash) e tocar docs/execucao/ no repo principal')}
-   2a. Re-checagem DENTRO do lock: gh pr view ${prNumero} --json mergeable,mergeStateStatus,headRefOid. Exige MERGEABLE + CLEAN + headRefOid EXATAMENTE IGUAL a ${shaAuditado}. Qualquer diferença → LIBERE O LOCK e pare com requerDecisaoHumana=true ("estado ou SHA mudou aguardando o lock — nova auditoria necessária").
-   2b. gh pr merge ${prNumero} --squash --delete-branch. Anote o SHA em commitSquash.
+   2a. Re-checagem DENTRO do lock: rode \`git -C ${REPO} fetch origin\`, exija \`git -C ${REPO} rev-parse origin/develop\` EXATAMENTE igual a ${veredito2.baseRefOid}; depois \`gh pr view ${prNumero} --json mergeable,mergeStateStatus,headRefOid\` exige MERGEABLE + CLEAN + headRefOid EXATAMENTE IGUAL a ${shaAuditado}. Qualquer diferença → LIBERE O LOCK e pare com requerDecisaoHumana=true ("base, estado ou SHA mudou aguardando o lock — nova auditoria necessária").
+   2b. Execute compare-and-swap: \`gh pr merge ${prNumero} --squash --delete-branch --match-head-commit ${shaAuditado}\`. Qualquer recusa impede o merge. Anote o SHA em commitSquash.
    2c. Detecte arquivos de coordenação compartilhada tocados: git -C ${REPO} diff origin/develop~1..origin/develop --name-only | grep -E "schema/index.ts$|app.module.ts$|eventos.ts$|permissoes.ts$|globals.css$" (DEPOIS do squash). Preencha arquivosCompartilhadosTocados (vazio se nenhum).
-3. Remova o worktree: git -C ${REPO} worktree remove ../AlphaCarnes-${onda} --force (se existir). Falhou → reporte e SIGA.
-4. git -C ${REPO} checkout develop 2>/dev/null; git -C ${REPO} pull — atualize develop local ANTES de editar docs. Se reclamar de mudanças locais em docs/execucao/: stash push -- docs/execucao && pull && stash pop. Conflito no pop → LIBERE O LOCK, requerDecisaoHumana=true.
-5. Atualize docs/execucao/EXECUCAO-STATUS.md: onda "${onda}" → "mergeada" (PR #${prNumero} + SHA squash) e observação resumindo o ciclo (rodadas de correção, auto-recuperação se houve).
-6. Commit + push dos docs: git -C ${REPO} add docs/execucao/EXECUCAO-STATUS.md docs/execucao/GATE-VEREDITOS.md${planoCorrigido ? ` "${planoPath}"` : ''} && commit (docs(execucao): ciclo autônomo ${onda} mergeada) && push. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS()}
+3. Remova o worktree de implementação: git -C ${REPO} worktree remove ../AlphaCarnes-${onda} --force (se existir). Falhou → reporte e SIGA.
+4. A branch protection proíbe push direto em develop. Ainda DENTRO do lock, faça a atualização formal por PR de coordenação:
+   4a. git -C ${REPO} fetch origin develop; crie worktree limpo ../AlphaCarnes-${onda}-estado, branch \`docs/execucao-${onda}-<shortCommitSquash>\`, a partir do novo origin/develop.
+   4b. Copie a versão corrente de \`${REPO}/docs/execucao/GATE-VEREDITOS.md\` para o worktree de estado (ela contém os vereditos acumulados sob lock). No worktree de estado, atualize EXECUCAO-STATUS.md: "${onda}" → "mergeada" com PR #${prNumero} + SHA squash. Se \`planoCorrigido\`, copie também o plano corrigido.
+   4c. Commit, push e abra PR de coordenação para develop. Espere os oito checks obrigatórios. Fixe base/head antes e depois do CI; exija base ainda igual ao origin/develop capturado após o squash e head intacto.
+   4d. Mergeie o PR de coordenação com \`gh pr merge <prEstado> --squash --delete-branch --match-head-commit <headEstado>\`. Mudança de base/head, CI não verde ou recusa → libere o lock e pare com decisão humana; nunca faça push direto.
+   4e. Remova o worktree de estado; atualize o develop local sem descartar arquivos fora de docs/execucao. Confirme que origin/develop contém a linha mergeada e os vereditos.
+5. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS()}
 
-Responda estruturado. Em "verificacoes", cada comando do passo 1 (e 1c se rodou) com output literal resumido.`,
+Responda estruturado. Em "verificacoes", cada comando do passo 1 (e 1c se rodou) com output literal resumido. Sempre inclua lockAcquireOutput e lockReleaseOutput: ambos "NOT_ACQUIRED" se parou antes do passo 2; se adquiriu o lock, os valores literais devem ser "LOCK_ACQUIRED" e "LOCK_RELEASED".`,
   {
     label: `merge:${onda}`,
     schema: {
@@ -983,19 +1063,39 @@ Responda estruturado. Em "verificacoes", cada comando do passo 1 (e 1c se rodou)
       properties: {
         mergeado: { type: 'boolean' },
         commitSquash: { type: 'string' },
+        prCoordenacao: { type: 'number' },
+        commitEstado: { type: 'string' },
         autoRecuperacaoBranch: { type: 'boolean' },
         arquivosCompartilhadosTocados: { type: 'array', items: { type: 'string' } },
         verificacoes: { type: 'array', items: { type: 'string' } },
         detalhe: { type: 'string' },
         requerDecisaoHumana: { type: 'boolean' },
         motivoDecisaoHumana: { type: 'string' },
+        lockAcquireOutput: { type: 'string' },
+        lockReleaseOutput: { type: 'string' },
       },
-      required: ['mergeado', 'detalhe', 'verificacoes', 'requerDecisaoHumana'],
+      required: [
+        'mergeado', 'detalhe', 'verificacoes', 'requerDecisaoHumana',
+        'lockAcquireOutput', 'lockReleaseOutput',
+      ],
     },
   }
 )
 
 registrar('merge', { shaAuditado, planoCorrigido, saida: merge })
+
+const mergeParouAntesDoLock = merge?.mergeado === false
+  && merge?.lockAcquireOutput === 'NOT_ACQUIRED'
+  && merge?.lockReleaseOutput === 'NOT_ACQUIRED'
+if (!merge || (!lockEstruturadoValido(merge) && !mergeParouAntesDoLock)) {
+  return resultadoFinal({
+    resultado: 'merge-falhou',
+    etapa: 'evidencia-lock-merge',
+    prNumero,
+    shaAuditado,
+    merge,
+  })
+}
 
 if (merge && merge.requerDecisaoHumana) {
   log(`Merge do PR #${prNumero} parou por decisão humana: ${merge.motivoDecisaoHumana}`)
@@ -1019,3 +1119,6 @@ return resultadoFinal({
   adversarial,
   merge,
 })
+} finally {
+  await liberarLockOnda()
+}

@@ -118,7 +118,7 @@ app/frontend/__tests__/{api,terminologia}.test.ts
 | `0012→0013→0014` em banco limpo e legado | `onda1-migrations.e2e-spec.ts` — `journal aplica os três arquivos em ordem` |
 | Seis writers gravam `operacao_id` | `operacoes-writers.e2e-spec.ts` — seis casos nomeados por tabela |
 | `data_operacao` e cache `nfe_*` não existem após contract | `onda1-migrations.e2e-spec.ts` — consulta `information_schema.columns` |
-| Challenge 409 não muta cinco agregados | `pedidos-v11.e2e-spec.ts` — snapshot antes/depois de pedido, item, reserva, saldo, pendência |
+| Challenge 409 não executa escrita nem muta seis agregados | `pedidos-v11.e2e-spec.ts` — spy de SQL sem `INSERT/UPDATE/DELETE` + snapshot antes/depois de operação, pedido, item, reserva, saldo, pendência |
 | Confirmação 201/200 cria reserva+pendência atomicamente | `overbooking.e2e-spec.ts` — criação e inclusão, com falha injetada |
 | Concorrência nunca negativiza/reutiliza saldo; payload duplicado é rejeitado | `overbooking-concorrencia.e2e-spec.ts` + `pedidos-v11.e2e-spec.ts` |
 | Reduzir/remover/cancelar não credita overbooking ao saldo | `overbooking-lifecycle.e2e-spec.ts` |
@@ -191,6 +191,10 @@ pedidoFornecedorId: uuid('pedido_fornecedor_id').references(() => pedidosFornece
 ```typescript
 // pedidos_venda_itens
 quantidadeOverbooking: numeric('quantidade_overbooking', { precision: 15, scale: 3 }).notNull().default('0'),
+// No callback de índices de pedidos_venda_itens:
+uniqueIndex('uq_pedido_venda_item_comercial_ativo')
+  .on(t.pedidoVendaId, t.itemComercialId)
+  .where(sql`${t.deletedAt} IS NULL`),
 
 // reservas_disponibilidade
 disponibilidadeVirtualId: uuid('disponibilidade_virtual_id').references(() => disponibilidadesVirtuais.id),
@@ -387,6 +391,13 @@ async garantirOperacao(tx: Tx, data: string, usuarioId?: string) {
     .from(operacoes).where(and(eq(operacoes.data, data), isNull(operacoes.deletedAt))));
   return { operacao: concorrente, criada: false };
 }
+
+async encontrarAtivaPorData(tx: Tx, data: string) {
+  return tx.select({ id: operacoes.id, data: operacoes.data })
+    .from(operacoes)
+    .where(and(eq(operacoes.data, data), isNull(operacoes.deletedAt)))
+    .then((rows) => rows[0] ?? null);
+}
 ```
 
 - [ ] DTOs e controller de Operações:
@@ -539,7 +550,7 @@ await tx.insert(faturamentos).values({
 });
 ```
 
-- [ ] Pedidos e recebimentos chamam `garantirOperacao(tx, dto.dataOperacao, usuarioId)` e gravam `operacaoId: operacao.id` nos blocos literais das Tasks 3 e 4.
+- [ ] Recebimentos chamam `garantirOperacao` no início do writer. Pedidos fazem primeiro `encontrarAtivaPorData` + planejamento read-only e só chamam `garantirOperacao` depois de superar/confirmar o challenge; ambos gravam `operacaoId: operacao.id` nos blocos literais das Tasks 3 e 4.
 - [ ] Registrar `OperacoesModule` e importá-lo em `ComprasProgramadasModule`, `PedidosModule`, `RecebimentoModule`, `ExpedicaoModule` e `FaturamentoModule`.
 - [ ] Seed literal:
 
@@ -616,9 +627,9 @@ const itensCriacaoPedidoSchema = z.array(itemPedidoSchema)
   });
 // createPedidoSchema usa `itens: itensCriacaoPedidoSchema`.
 export const confirmarCriacaoOverbookingSchema = createPedidoSchema;
-export const confirmarInclusaoOverbookingSchema = incluirItemSchema.extend({
-  itemId: z.string().uuid().optional(), // presente para aumento/legado; ausente para nova linha
-});
+// Inclusão sempre cria uma nova linha. Aumento/redução de linha existente usa
+// os endpoints explícitos de alteração de item; não há itemId ambíguo aqui.
+export const confirmarInclusaoOverbookingSchema = incluirItemSchema;
 ```
 
 ```typescript
@@ -675,8 +686,12 @@ export class OverbookingChallengeException extends ConflictException {
 - [ ] O primeiro teste de integração prova zero mutação:
 
 ```typescript
-it('409 challenge não persiste mutação', async () => {
+it('409 challenge não executa escrita e não persiste mutação', async () => {
   const antes = await snapshotOverbooking(db, { disponibilidadeId });
+  const escritas: string[] = [];
+  const removerSpy = observarSql(db, (sql) => {
+    if (/^\s*(insert|update|delete)\b/i.test(sql)) escritas.push(sql);
+  });
   const response = await api.post('/comercial/pedidos')
     .send(pedidoComQuantidadeAcimaDoSaldo)
     .expect(409);
@@ -686,6 +701,8 @@ it('409 challenge não persiste mutação', async () => {
     quantidadeSolicitada: '5.000',
     overbookingGerado: '3.000',
   });
+  removerSpy();
+  expect(escritas).toEqual([]);
   const depois = await snapshotOverbooking(db, { disponibilidadeId });
   expect(depois).toEqual(antes);
 });
@@ -695,13 +712,19 @@ it('409 challenge não persiste mutação', async () => {
 
 ```typescript
 const resultado = await this.db.transaction(async (tx) => {
-  const { operacao } = await this.operacoes.garantirOperacao(tx, dto.dataOperacao, usuarioId);
   const solicitados: ItemSolicitado[] = dto.itens.map((item) => ({
     itemComercialId: item.itemComercialId,
     quantidade: item.quantidadePedida,
     observacoes: item.observacoes,
   }));
-  const plano = await this.planejarSobLock(tx, operacao.id, solicitados);
+  // O challenge é estritamente read-only: não chame garantirOperacao antes
+  // de decidir se a confirmação é necessária.
+  const operacaoExistente = await this.operacoes.encontrarAtivaPorData(
+    tx, dto.dataOperacao,
+  );
+  const plano = await this.planejarSobLock(
+    tx, operacaoExistente?.id ?? null, solicitados,
+  );
   const desafios = plano.filter((p) => compararQtd(p.deficit, '0') > 0);
   if (desafios.length && !confirmado) {
     throw new OverbookingChallengeException(desafios.map((p) => ({
@@ -713,6 +736,10 @@ const resultado = await this.db.transaction(async (tx) => {
     })));
   }
 
+  const operacao = operacaoExistente
+    ?? (await this.operacoes.garantirOperacao(
+      tx, dto.dataOperacao, usuarioId,
+    )).operacao;
   const pedido = primeiroOuFalha(await tx.insert(pedidosVenda).values({
     compraProgramadaId: dto.compraProgramadaId,
     clienteId: dto.clienteId,
@@ -733,7 +760,22 @@ return resultado.pedido;
 O mesmo núcleo é chamado por `incluirItem`; nesse caso o pedido existente já fornece `operacaoId` e `clienteId`:
 
 ```typescript
-const plano = await this.planejarSobLock(tx, pedido.operacaoId, [dto]);
+const itemExistente = await tx.select({ id: pedidosVendaItens.id })
+  .from(pedidosVendaItens)
+  .where(and(
+    eq(pedidosVendaItens.pedidoVendaId, pedido.id),
+    eq(pedidosVendaItens.itemComercialId, dto.itemComercialId),
+    isNull(pedidosVendaItens.deletedAt),
+  )).limit(1);
+if (itemExistente.length) {
+  throw new ConflictException('Item comercial já existe neste pedido');
+}
+const solicitado = {
+  itemComercialId: dto.itemComercialId,
+  quantidade: dto.quantidade,
+  observacoes: dto.observacoes,
+};
+const plano = await this.planejarSobLock(tx, pedido.operacaoId, [solicitado]);
 const desafios = plano.filter((p) => compararQtd(p.deficit, '0') > 0);
 if (desafios.length && !confirmado) {
   throw new OverbookingChallengeException(desafios.map((p) => ({
@@ -750,12 +792,14 @@ if (desafios.length && !confirmado) {
 - [ ] `planejarSobLock` distribui o saldo de todas as linhas da Operação sem escrever:
 
 ```typescript
-async planejarSobLock(tx: Tx, operacaoId: string, itens: ItemSolicitado[]): Promise<PlanoItem[]> {
+async planejarSobLock(tx: Tx, operacaoId: string | null, itens: ItemSolicitado[]): Promise<PlanoItem[]> {
   const ids = itens.map((item) => item.itemComercialId);
   if (new Set(ids).size !== ids.length) {
     throw new BadRequestException('item comercial duplicado no mesmo pedido');
   }
-  const resultado = await tx.execute<{
+  const resultado = operacaoId === null
+    ? { rows: [] }
+    : await tx.execute<{
     id: string;
     item_comercial_id: string;
     quantidade_disponivel: string;
@@ -794,6 +838,11 @@ async planejarSobLock(tx: Tx, operacaoId: string, itens: ItemSolicitado[]): Prom
 - [ ] Na confirmação, persistir parcelas e pendência na mesma transação:
 
 ```typescript
+type EventoDominio = {
+  nome: (typeof EVENTOS)[keyof typeof EVENTOS];
+  payload: Record<string, unknown>;
+};
+
 async persistirItensPlanejados(
   tx: Tx,
   pedido: PedidoVenda,
@@ -858,7 +907,7 @@ async persistirItensPlanejados(
         pendenciaId: pendencia.id, acao: 'confirmada_pelo_vendedor', autorId: usuarioId,
       });
       eventos.push({
-        nome: EVENTOS.PENDENCIA_OVERBOOKING_CRIADA,
+        nome: EVENTOS.PENDENCIA_OVERBOOKING_ABERTA,
         payload: { pendenciaId: pendencia.id, pedidoVendaId: pedido.id },
       });
     }
@@ -869,6 +918,30 @@ async persistirItensPlanejados(
   }
   return { pedido, eventos };
 }
+```
+
+- [ ] A migration `0012` cria a unicidade ativa entre chamadas e falha com
+  diagnóstico se o legado já estiver inconsistente; nunca escolhe silenciosamente
+  qual linha preservar:
+
+```sql
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pedidos_venda_itens
+    WHERE deleted_at IS NULL
+    GROUP BY pedido_venda_id, item_comercial_id
+    HAVING count(*) > 1
+  ) THEN
+    RAISE EXCEPTION
+      'duplicidade ativa em pedidos_venda_itens; saneamento explícito obrigatório';
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX uq_pedido_venda_item_comercial_ativo
+  ON pedidos_venda_itens (pedido_venda_id, item_comercial_id)
+  WHERE deleted_at IS NULL;
 ```
 
 - [ ] Implementar redução, remoção e cancelamento:
@@ -1068,6 +1141,40 @@ async cancelarPedido(pedidoId: string, motivo: string, usuarioId: string): Promi
 - [ ] Implementar a fila com transições fechadas:
 
 ```typescript
+const statusPendenciaSchema = z.enum([
+  'aberta', 'em_analise', 'compra_complementar_programada',
+  'redistribuicao_decidida', 'novo_pedido_criado', 'resolvida', 'cancelada',
+]);
+type StatusPendencia = z.infer<typeof statusPendenciaSchema>;
+export const listarPendenciasSchema = z.object({
+  operacaoId: z.string().uuid(),
+  status: statusPendenciaSchema.optional(),
+  pagina: z.coerce.number().int().positive().default(1),
+  limite: z.coerce.number().int().min(1).max(100).default(20),
+});
+export const decidirPendenciaSchema = z.object({
+  caminho: z.enum(['compra_complementar', 'redistribuicao', 'novo_pedido']),
+  detalhe: z.record(z.string(), z.unknown()).default({}),
+});
+export const alterarPendenciaSchema = z.object({
+  status: statusPendenciaSchema,
+  detalhe: z.record(z.string(), z.unknown()).default({}),
+});
+export type ListarPendenciasDto = z.infer<typeof listarPendenciasSchema>;
+export type DecidirPendenciaDto = z.infer<typeof decidirPendenciaSchema>;
+export type AlterarPendenciaDto = z.infer<typeof alterarPendenciaSchema>;
+
+const STATUS_POR_CAMINHO = {
+  compra_complementar: 'compra_complementar_programada',
+  redistribuicao: 'redistribuicao_decidida',
+  novo_pedido: 'novo_pedido_criado',
+} as const;
+function statusDoCaminho(
+  caminho: DecidirPendenciaDto['caminho'],
+): StatusPendencia {
+  return STATUS_POR_CAMINHO[caminho];
+}
+
 const TRANSICOES_PENDENCIA: Record<StatusPendencia, readonly StatusPendencia[]> = {
   aberta: ['em_analise', 'cancelada'],
   em_analise: [
@@ -1153,7 +1260,7 @@ if (pendenteLegado.length) throw new ConflictException('OVERBOOKING_CONFIRMACAO_
 // overbooking_confirmado é aceito; não tocar no saldo.
 ```
 
-- [ ] Testes obrigatórios: challenge compara contagens e saldos antes/depois; confirmação 201 e 200; item comercial duplicado no mesmo payload retorna 400/zero mutação; UPDATE condicional retornando zero aborta toda a transação; falha injetada; concorrência; redução somente déficit; redução além do déficit; remoção; cancelamento; finalização.
+- [ ] Testes obrigatórios: challenge prova zero comando de escrita e compara operação + cinco agregados antes/depois; confirmação 201 e 200; item comercial duplicado no mesmo payload retorna 400/zero mutação; duas inclusões sequenciais e duas concorrentes do mesmo `itemComercialId` no mesmo pedido retornam conflito e deixam uma linha; UPDATE condicional retornando zero aborta toda a transação; falha injetada; concorrência; redução somente déficit; redução além do déficit; remoção; cancelamento; finalização.
 - [ ] Run: `npm run test -- "pedidos-v11|overbooking"` → PASS.
 - [ ] Commit previsto: `feat(onda1): challenge e lifecycle completo de overbooking`
 
@@ -1675,6 +1782,7 @@ PENDENCIA_OVERBOOKING_ABERTA: 'pendencia_overbooking_aberta',
 PENDENCIA_OVERBOOKING_ATUALIZADA: 'pendencia_overbooking_atualizada',
 PENDENCIA_OVERBOOKING_RESOLVIDA: 'pendencia_overbooking_resolvida',
 PEDIDO_FINALIZADO: 'pedido_finalizado',
+PEDIDO_VENDA_ITEM_CRIADO: 'pedido_venda_item_criado',
 PEDIDO_FORNECEDOR_CRIADO: 'pedido_fornecedor_criado',
 NF_FORNECEDOR_REGISTRADA: 'nf_fornecedor_registrada',
 CONFERENCIA_TRIPLA_CONCLUIDA: 'conferencia_tripla_concluida',

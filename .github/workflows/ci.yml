@@ -17,10 +17,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - name: governance lock harness
-        run: |
-          if [ -f .claude/workflows/lib/test-lock.sh ]; then
-            bash .claude/workflows/lib/test-lock.sh
-          fi
+        run: bash .claude/workflows/lib/test-lock.sh
 
   type-check:
     runs-on: ubuntu-latest
@@ -82,6 +79,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22

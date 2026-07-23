@@ -17,7 +17,7 @@ Jobs (cada um é um status check obrigatório):
 - **`lint`** — ESLint em backend e frontend. Falha em qualquer erro de lint.
 - **`type-check`** — `tsc --noEmit` com TS strict em backend e frontend. Falha com qualquer `any` implícito ou erro de tipo.
 - **`test-backend`** — testes unitários + integração do NestJS, com **PostgreSQL 18 como service container**. Sobe banco efêmero, aplica migrations Drizzle, roda testes, coleta cobertura.
-- **`coverage`** — valida cobertura backend ≥ 80% (linha + branch). Falha abaixo do limiar.
+- **`coverage`** — valida cobertura backend global e de cada `*.service.ts` tocado pelo PR ≥ 80% (linha + branch). Service tocado ausente do relatório também falha.
 - **`test-frontend`** — testes de componente/smoke do Next.js.
 - **`build`** — build de produção de backend, frontend e landing; isso não muda o limite de deploy: Vercel continua exclusivo da landing.
 - **`audit`** — `npm audit --audit-level=high` no monorepo da aplicação e separadamente em `landing`; falha com vuln high/critical.
@@ -45,10 +45,7 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - name: governance lock harness
-        run: |
-          if [ -f .claude/workflows/lib/test-lock.sh ]; then
-            bash .claude/workflows/lib/test-lock.sh
-          fi
+        run: bash .claude/workflows/lib/test-lock.sh
 
   type-check:
     runs-on: ubuntu-latest
@@ -105,6 +102,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -168,7 +167,7 @@ jobs:
 
 Notas:
 - Os comandos da aplicação são os scripts versionados no `package.json` raiz e nos workspaces; `db:migrate` e `test:cov` rodam em `app/backend`. A landing tem lockfile independente, portanto `npm ci`, build e audit rodam com `working-directory: landing`.
-- `scripts/check-coverage.mjs` valida o `coverage-summary.json` (linhas e branches ≥ 80%).
+- `scripts/check-coverage.mjs` valida o total do `coverage-summary.json` e cada service tocado no diff contra a base fixa do PR (linhas e branches ≥ 80%); histórico completo no checkout é obrigatório para o cálculo fail-closed.
 - Node 22 LTS conforme ADR-001.
 
 ## 3. `.github/pull_request_template.md`

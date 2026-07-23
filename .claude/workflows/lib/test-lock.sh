@@ -18,7 +18,17 @@ code=$?
 set -e
 test "$code" -eq 2
 test "$output" = "LOCK_TIMEOUT"
-test "$(cat "$lock/owner_token")" = "owner-a"
+test ! -e "$lock/owner_token"
+stored_hash="$(cat "$lock/owner_token_hash")"
+test "$stored_hash" != "owner-a"
+
+# Ler tudo que o lock persiste não fornece um token reutilizável.
+set +e
+output="$("$lock_script" release "$lock" "$stored_hash")"
+code=$?
+set -e
+test "$code" -eq 4
+test "$output" = "LOCK_NOT_OWNER"
 
 set +e
 output="$("$lock_script" release "$lock" owner-b)"
@@ -26,7 +36,7 @@ code=$?
 set -e
 test "$code" -eq 4
 test "$output" = "LOCK_NOT_OWNER"
-test "$(cat "$lock/owner_token")" = "owner-a"
+test "$(cat "$lock/owner_token_hash")" = "$stored_hash"
 test "$("$lock_script" release "$lock" owner-a)" = "LOCK_RELEASED"
 
 stress_lock="$test_root/stress.lock"

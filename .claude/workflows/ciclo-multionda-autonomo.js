@@ -113,9 +113,9 @@ Reporte estruturado: adquirido=true SE a saída foi exatamente "LOCK_ACQUIRED"; 
       },
     }
   )
-  if (r?.saida === 'LOCK_ACQUIRED') return true
-  if (r?.saida === 'LOCK_TIMEOUT') return false
-  throw new Error(`Saída inválida ao adquirir lock multionda: ${JSON.stringify(r)}`)
+  if (r?.adquirido === true && r?.saida === 'LOCK_ACQUIRED') return true
+  if (r?.adquirido === false && r?.saida === 'LOCK_TIMEOUT') return false
+  throw new Error(`Saída contraditória ao adquirir lock multionda: ${JSON.stringify(r)}`)
 }
 
 let lockRunLiberado = false
@@ -202,6 +202,7 @@ if (!lockRunOk) {
   return { resultado: 'run-concorrente-ativo', concluidas: [] }
 }
 
+try {
 log('Lendo o estado atual das ondas...')
 
 const statusMap = await lerStatusAtual()
@@ -306,8 +307,6 @@ const naoAlcancadas = Object.keys(GRAFO).filter(
 
 log(`Ciclo multionda concluído. ${concluidas.filter((c) => c.resultado?.resultado === 'mergeado').length} onda(s) mergeada(s) nesta execução. Parou por falha: ${parar}.`)
 
-await liberarLockRun()
-
 return {
   resultado: parar ? 'parou-por-falha' : (naoAlcancadas.length ? 'concluido-com-pendencias' : 'concluido-tudo-elegivel'),
   concluidas,
@@ -319,4 +318,7 @@ return {
   naoAlcancadas,
   adiadas: [...adiadas],
   statusFinalConhecido: statusMap,
+}
+} finally {
+  await liberarLockRun()
 }

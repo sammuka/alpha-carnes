@@ -18,6 +18,17 @@
 #       Libera somente o lock pertencente ao token informado. Se outro processo
 #       for o dono, retorna LOCK_NOT_OWNER sem remover nada.
 set -u
+umask 077
+
+hash_token() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$1" | sha256sum | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$1" | shasum -a 256 | awk '{print $1}'
+  else
+    printf '%s' "$1" | openssl dgst -sha256 | awk '{print $NF}'
+  fi
+}
 
 cmd="${1:-}"
 lockdir="${2:-}"
@@ -35,7 +46,10 @@ case "$cmd" in
     waited=0
     while true; do
       if mkdir "$lockdir" 2>/dev/null; then
-        printf '%s\n' "$owner_token" > "$lockdir/owner_token"
+        # Nunca persista o bearer token. Processos concorrentes podem ler o
+        # diretório compartilhado; somente o hash é suficiente para validar
+        # release sem entregar a credencial do dono.
+        hash_token "$owner_token" > "$lockdir/owner_token_hash"
         date +%s > "$lockdir/acquired_at" 2>/dev/null
         echo "LOCK_ACQUIRED"
         exit 0
@@ -53,8 +67,9 @@ case "$cmd" in
       echo "LOCK_ALREADY_RELEASED"
       exit 0
     fi
-    actual_owner=$(cat "$lockdir/owner_token" 2>/dev/null || echo "")
-    if [ "$actual_owner" != "$owner_token" ]; then
+    actual_owner_hash=$(cat "$lockdir/owner_token_hash" 2>/dev/null || echo "")
+    requested_owner_hash=$(hash_token "$owner_token")
+    if [ "$actual_owner_hash" != "$requested_owner_hash" ]; then
       echo "LOCK_NOT_OWNER"
       exit 4
     fi
@@ -63,8 +78,8 @@ case "$cmd" in
       echo "LOCK_RELEASE_RACE"
       exit 5
     fi
-    moved_owner=$(cat "$quarantine/owner_token" 2>/dev/null || echo "")
-    if [ "$moved_owner" != "$owner_token" ]; then
+    moved_owner_hash=$(cat "$quarantine/owner_token_hash" 2>/dev/null || echo "")
+    if [ "$moved_owner_hash" != "$requested_owner_hash" ]; then
       if [ ! -e "$lockdir" ]; then mv "$quarantine" "$lockdir" 2>/dev/null; fi
       echo "LOCK_NOT_OWNER"
       exit 4
