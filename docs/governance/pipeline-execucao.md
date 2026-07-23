@@ -112,6 +112,8 @@ O rito acima roda de duas formas:
   exige `thread.started` único mais `turn.completed`; `roleTrace` é montado dessas evidências,
   nunca aceito da resposta do modelo. O Portão 2 aprovado é seguido por outro processo Monitor
   adversarial; refutação sustentada reabre o ciclo.
+  O protótipo usa por padrão `F:\Projetos\alpha-carnes-prototipo`; ambientes
+  diferentes devem informar `-PrototypePath` ou `ALPHACARNES_PROTOTYPE_PATH`.
 
 Limite da CLI pinada: o Codex `0.145.0` não expõe subcomando programático de `spawn`; pedir
 delegação a uma única sessão e confiar na resposta final não comprova que um subagente nasceu.

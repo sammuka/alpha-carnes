@@ -34,8 +34,14 @@ function Write-Json {
 
 function Invoke-Gh {
     param([Parameter(Mandatory)][string[]]$Arguments)
-    $output = @(& $GhCommandPath @Arguments 2>&1)
-    if ($LASTEXITCODE -ne 0) {
+    Push-Location $repoRoot
+    try {
+        $output = @(& $GhCommandPath @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    if ($exitCode -ne 0) {
         throw "gh $($Arguments -join ' ') falhou: $($output -join ' ')"
     }
     $output
@@ -334,7 +340,8 @@ try {
         $actionResult = & $ActionScript
     } else {
         $actionResult = & $waitScript -PrNumber $PrNumber -Watch `
-            -TimeoutSeconds $TimeoutSeconds -PollSeconds $PollSeconds | ConvertFrom-Json
+            -TimeoutSeconds $TimeoutSeconds -PollSeconds $PollSeconds `
+            -Repository $Repository -GhCommandPath $GhCommandPath | ConvertFrom-Json
         if ([string]$actionResult.status -cne 'green') {
             throw "Checks obrigatórios terminaram em '$($actionResult.status)'."
         }

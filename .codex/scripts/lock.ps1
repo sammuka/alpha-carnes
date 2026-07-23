@@ -217,7 +217,14 @@ switch ($Command) {
                         })
                         return
                     } catch {
-                        if (-not (Test-Path -LiteralPath $lockPath -PathType Container)) {
+                        # Outra instância pode criar e liberar o diretório entre
+                        # o New-Item e este catch. ResourceExists é contenção
+                        # normal mesmo quando o lock já desapareceu; deixe o
+                        # fluxo abaixo respeitar timeout/poll antes de tentar
+                        # novamente, sem converter a colisão em erro terminal.
+                        if ($_.CategoryInfo.Category -ne
+                            [Management.Automation.ErrorCategory]::ResourceExists -and
+                            -not (Test-Path -LiteralPath $lockPath -PathType Container)) {
                             throw
                         }
                     }
@@ -314,8 +321,52 @@ switch ($Command) {
         $releasePath = Assert-ChildPath -Parent $locksRoot -Child (
             Join-Path $locksRoot "$Name.lock.release.$Token"
         )
-        [IO.Directory]::Move($lockPath, $releasePath)
-        [IO.Directory]::Delete($releasePath, $true)
+        $releaseDeadline = [DateTimeOffset]::UtcNow.AddSeconds(5)
+        while ($true) {
+            try {
+                [IO.Directory]::Move($lockPath, $releasePath)
+                break
+            } catch {
+                $releaseError = $_.Exception.GetBaseException()
+                if ($releaseError -isnot [IO.IOException] -and
+                    $releaseError -isnot [UnauthorizedAccessException]) {
+                    throw
+                }
+                if ((Test-Path -LiteralPath $releasePath -PathType Container) -and
+                    -not (Test-Path -LiteralPath $lockPath -PathType Container)) {
+                    break
+                }
+                if ([DateTimeOffset]::UtcNow -ge $releaseDeadline) {
+                    throw
+                }
+                $ownerDuringRetry = Read-Owner -Path $lockPath
+                if ($ownerDuringRetry -and
+                    [string]$ownerDuringRetry.token -cne $Token) {
+                    throw "Ownership do lock '$Name' mudou durante a liberação."
+                }
+                Start-Sleep -Milliseconds 25
+            }
+        }
+        $cleanupDeadline = [DateTimeOffset]::UtcNow.AddSeconds(5)
+        while ($true) {
+            try {
+                [IO.Directory]::Delete($releasePath, $true)
+                break
+            } catch {
+                $cleanupError = $_.Exception.GetBaseException()
+                if ($cleanupError -isnot [IO.IOException] -and
+                    $cleanupError -isnot [UnauthorizedAccessException]) {
+                    throw
+                }
+                if (-not (Test-Path -LiteralPath $releasePath)) {
+                    break
+                }
+                if ([DateTimeOffset]::UtcNow -ge $cleanupDeadline) {
+                    throw
+                }
+                Start-Sleep -Milliseconds 25
+            }
+        }
         Write-Json ([ordered]@{ status = 'released'; name = $Name; token = $Token; path = $lockPath })
     }
 

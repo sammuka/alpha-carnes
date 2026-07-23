@@ -10,7 +10,8 @@ param(
     [switch]$DryRun,
     [switch]$AllowNonDevelopCoordinator,
     [ValidateRange(1, 5)][int]$MaxAttempts = 3,
-    [string]$RuntimeRoot
+    [string]$RuntimeRoot,
+    [string]$PrototypePath
 )
 
 Set-StrictMode -Version Latest
@@ -48,6 +49,16 @@ function New-FailureResult {
 }
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+if ([string]::IsNullOrWhiteSpace($PrototypePath)) {
+    $PrototypePath = if (
+        -not [string]::IsNullOrWhiteSpace($env:ALPHACARNES_PROTOTYPE_PATH)
+    ) {
+        $env:ALPHACARNES_PROTOTYPE_PATH
+    } else {
+        'F:\Projetos\alpha-carnes-prototipo'
+    }
+}
+$prototypeFull = [IO.Path]::GetFullPath($PrototypePath)
 if ([string]::IsNullOrWhiteSpace($RuntimeRoot)) {
     $RuntimeRoot = Join-Path $repoRoot '.codex\runtime'
 }
@@ -80,6 +91,7 @@ if ($DryRun) {
         adoptOrphan = [bool]$AdoptOrphan
         repoRoot = $repoRoot
         runtimeRoot = $runtimeFull
+        prototypePath = $prototypeFull
         schemaPath = $schemaPath
         roleSchemaPath = $roleSchemaPath
         lockName = $lockName
@@ -133,8 +145,8 @@ $missing = @($requiredPaths | Where-Object {
 if ($missing.Count -gt 0) {
     throw "Pré-condição ausente: $($missing -join ', ')"
 }
-if (-not (Test-Path -LiteralPath 'F:\Projetos\alpha-carnes-prototipo')) {
-    throw 'Protótipo obrigatório não encontrado em F:\Projetos\alpha-carnes-prototipo.'
+if (-not (Test-Path -LiteralPath $prototypeFull -PathType Container)) {
+    throw "Protótipo obrigatório não encontrado em $prototypeFull."
 }
 
 $codexVersionText = codex --version
@@ -193,8 +205,11 @@ try {
         if ($checkpointResult.status -notin @('recorded', 'duplicate')) {
             throw "Checkpoint inicial inválido para $Role/$Stage."
         }
+        $contextualPrompt = (
+            "$Prompt`nUse como protótipo efetivo e fonte de fidelidade: $prototypeFull"
+        )
         $envelope = & $invokeRoleScript -Role $Role -Stage $Stage -Wave $Wave `
-            -RunId $runId -Prompt $Prompt -RuntimeRoot $runtimeFull | ConvertFrom-Json
+            -RunId $runId -Prompt $contextualPrompt -RuntimeRoot $runtimeFull | ConvertFrom-Json
         if ([string]$envelope.status -cne 'completed' -or
             [string]$envelope.mechanism -cne 'independent-codex-exec-process') {
             throw "Envelope inválido para $Role/$Stage."

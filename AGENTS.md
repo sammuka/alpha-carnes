@@ -7,7 +7,9 @@ Leia somente o necessário e aplique esta precedência:
 1. `docs/governance/constituicao.md`.
 2. `docs/execucao/DECISOES.md`.
 3. `docs_v2/alphacarnes_contexto_funcional_e_recomendacoes_prototipo_v1.1.md`.
-4. Protótipo `F:\Projetos\alpha-carnes-prototipo`, branch `feature/completude-v1.1`.
+4. Protótipo na branch `feature/completude-v1.1`; caminho padrão
+   `F:\Projetos\alpha-carnes-prototipo`, substituível por
+   `-PrototypePath` ou `ALPHACARNES_PROTOTYPE_PATH`.
 5. `docs/governance/roadmap-canonico.md`, plano mestre e matriz de rastreabilidade.
 6. Demais documentos e ADRs.
 

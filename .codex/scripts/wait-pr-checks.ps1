@@ -20,6 +20,7 @@ param(
     [ValidateRange(1, 7200)][int]$TimeoutSeconds = 1500,
     [ValidateRange(1, 300)][int]$PollSeconds = 15,
     [string]$FixturePath,
+    [string]$Repository,
 
     # Injeção exclusiva para testes locais; omitida em uso real.
     [string]$GhCommandPath = 'gh'
@@ -33,8 +34,20 @@ function Invoke-Gh {
         [Parameter(Mandatory)][string[]]$Arguments,
         [int[]]$AcceptedExitCodes = @(0)
     )
-    $output = @(& $GhCommandPath @Arguments 2>&1)
-    $exitCode = $LASTEXITCODE
+    $savedGhRepo = $env:GH_REPO
+    try {
+        if (-not [string]::IsNullOrWhiteSpace($Repository)) {
+            $env:GH_REPO = $Repository
+        }
+        $output = @(& $GhCommandPath @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    } finally {
+        if ($null -eq $savedGhRepo) {
+            Remove-Item Env:GH_REPO -ErrorAction SilentlyContinue
+        } else {
+            $env:GH_REPO = $savedGhRepo
+        }
+    }
     if ($exitCode -notin $AcceptedExitCodes) {
         throw "gh $($Arguments -join ' ') falhou com exit code $exitCode`: $($output -join ' ')"
     }

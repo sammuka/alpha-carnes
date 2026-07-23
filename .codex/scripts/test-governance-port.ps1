@@ -307,46 +307,54 @@ try {
     Test-Case 'Checkpoint serializes concurrent writers and coherent read' {
         $null = & $checkpointScript init -RunId test-concurrent -Wave onda2 `
             -Stage implementation -Role test -RuntimeRoot $testRootFull
-        $jobs = @(
-            foreach ($number in 1..8) {
-                Start-ThreadJob -ArgumentList @(
-                    $checkpointScript,
-                    $testRootFull,
-                    $number
-                ) -ScriptBlock {
-                    param($Script, $RuntimeRoot, $Number)
-                    & $Script record -RunId test-concurrent -Wave onda2 -Stage implementation `
-                        -StepId "writer-$Number" -Status completed -Role test `
-                        -RuntimeRoot $RuntimeRoot
+        foreach ($batch in 1..5) {
+            $jobs = @(
+                foreach ($number in 1..8) {
+                    Start-ThreadJob -ArgumentList @(
+                        $checkpointScript,
+                        $testRootFull,
+                        $batch,
+                        $number
+                    ) -ScriptBlock {
+                        param($Script, $RuntimeRoot, $Batch, $Number)
+                        & $Script record -RunId test-concurrent -Wave onda2 `
+                            -Stage implementation -StepId "writer-$Batch-$Number" `
+                            -Status completed -Role test -RuntimeRoot $RuntimeRoot
+                    }
                 }
-            }
-        )
-        try {
-            # ThreadJob mantém concorrência real no arquivo/lock sem depender
-            # do limite de processos do runner hospedado.
-            $null = Wait-Job -Job $jobs -Timeout 90
-            $unfinished = @($jobs | Where-Object { $_.State -ne 'Completed' })
-            $jobDiagnostics = @(
-                $unfinished | ForEach-Object {
-                    "$($_.State):$($_.JobStateInfo.Reason?.Message)"
+            )
+            try {
+                # ThreadJob mantém concorrência real no arquivo/lock sem depender
+                # do limite de processos do runner hospedado. Cinco lotes
+                # pressionam aquisição e liberação no Windows e no Linux.
+                $null = Wait-Job -Job $jobs -Timeout 90
+                $unfinished = @($jobs | Where-Object { $_.State -ne 'Completed' })
+                $jobDiagnostics = @(
+                    $unfinished | ForEach-Object {
+                        "$($_.State):$($_.JobStateInfo.Reason?.Message)"
+                    }
+                ) -join '; '
+                Assert-True (
+                    $unfinished.Count -eq 0
+                ) "Writers concorrentes não terminaram no lote $batch`: $jobDiagnostics."
+                foreach ($raw in @(Receive-Job -Job $jobs)) {
+                    $result = [string]$raw | ConvertFrom-Json
+                    Assert-True (
+                        $result.status -eq 'recorded'
+                    ) "Writer concorrente não registrou no lote $batch."
                 }
-            ) -join '; '
-            Assert-True (
-                $unfinished.Count -eq 0
-            ) "Writers concorrentes não terminaram: $jobDiagnostics."
-            foreach ($raw in @(Receive-Job -Job $jobs)) {
-                $result = [string]$raw | ConvertFrom-Json
-                Assert-True ($result.status -eq 'recorded') 'Writer concorrente não registrou.'
+            } finally {
+                Remove-Job -Job $jobs -Force -ErrorAction SilentlyContinue
             }
-        } finally {
-            Remove-Job -Job $jobs -Force -ErrorAction SilentlyContinue
         }
         $read = & $checkpointScript read -RunId test-concurrent -Wave onda2 `
             -Stage implementation -Role test -RuntimeRoot $testRootFull | ConvertFrom-Json
         Assert-True ($read.status -eq 'read') 'Leitura coerente deveria retornar read.'
-        Assert-True ($read.entries.Count -eq 9) 'Init mais oito writers deveriam estar presentes.'
         Assert-True (
-            @($read.entries.stepId | Sort-Object -Unique).Count -eq 9
+            $read.entries.Count -eq 41
+        ) 'Init mais quarenta writers deveriam estar presentes.'
+        Assert-True (
+            @($read.entries.stepId | Sort-Object -Unique).Count -eq 41
         ) 'Checkpoint concorrente contém perda ou duplicação.'
     }
 
@@ -470,9 +478,14 @@ try {
 
     $prFilesMock = Join-Path $testRootFull 'gh-pr-files-mock.ps1'
     $prFilesLog = Join-Path $testRootFull 'gh-pr-files-calls.log'
-    $prFilesMockSource = @'
+$prFilesMockSource = @'
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Remaining)
 Add-Content -LiteralPath $env:CODEX_PR_FILES_LOG -Value ($Remaining -join ' ')
+if (-not [string]::IsNullOrWhiteSpace($env:CODEX_PR_FILES_EXPECT_REPOSITORY) -and
+    $env:GH_REPO -ne $env:CODEX_PR_FILES_EXPECT_REPOSITORY) {
+    Write-Output "GH_REPO inesperado: '$env:GH_REPO'"
+    exit 88
+}
 if ($Remaining.Count -ge 2 -and $Remaining[0] -eq 'pr' -and $Remaining[1] -eq 'checks') {
     if ($env:CODEX_PR_FILES_MODE -eq 'no-checks') {
         Write-Output 'no checks reported on the ''feature/transient'' branch'
@@ -567,11 +580,15 @@ exit 87
         [IO.File]::WriteAllText($prFilesLog, '', [Text.UTF8Encoding]::new($false))
         $savedMode = $env:CODEX_PR_FILES_MODE
         $savedLog = $env:CODEX_PR_FILES_LOG
+        $savedExpectedRepository = $env:CODEX_PR_FILES_EXPECT_REPOSITORY
+        $savedGhRepo = $env:GH_REPO
         try {
             $env:CODEX_PR_FILES_MODE = 'full'
             $env:CODEX_PR_FILES_LOG = $prFilesLog
-            $result = & $waitChecksScript -PrNumber 9 -GhCommandPath $prFilesMock |
-                ConvertFrom-Json
+            $env:CODEX_PR_FILES_EXPECT_REPOSITORY = 'owner/repo'
+            $env:GH_REPO = 'caller/must-be-restored'
+            $result = & $waitChecksScript -PrNumber 9 -Repository 'owner/repo' `
+                -GhCommandPath $prFilesMock | ConvertFrom-Json
             Assert-True ($result.status -eq 'green') 'PR grande com checks verdes deveria passar.'
             Assert-True ($result.changedFiles.Count -eq 301) 'Paginação perdeu arquivos após 300.'
             Assert-True $result.landingChanged 'Arquivo landing na quarta página não foi detectado.'
@@ -580,9 +597,14 @@ exit 87
                 $calls -match 'api --paginate --slurp repos/\{owner\}/\{repo\}/pulls/9/files\?per_page=100'
             ) 'Chamada REST não usou paginação e slurp.'
             Assert-True ($calls -notmatch 'pr diff') 'Caminho sujeito a HTTP 406 ainda foi usado.'
+            Assert-True (
+                $env:GH_REPO -eq 'caller/must-be-restored'
+            ) 'Contexto GH_REPO do chamador não foi restaurado.'
         } finally {
             $env:CODEX_PR_FILES_MODE = $savedMode
             $env:CODEX_PR_FILES_LOG = $savedLog
+            $env:CODEX_PR_FILES_EXPECT_REPOSITORY = $savedExpectedRepository
+            $env:GH_REPO = $savedGhRepo
         }
     }
 
@@ -750,10 +772,16 @@ exit 87
     New-Item -ItemType Directory -Force -Path $ghMockRoot | Out-Null
     $ghMockScript = Join-Path $ghMockRoot 'gh-mock.ps1'
     $ghMockCmd = Join-Path $ghMockRoot 'gh.cmd'
-    $ghMockSource = @'
+$ghMockSource = @'
 param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Remaining)
 $statePath = $env:CODEX_GH_MOCK_STATE
 $logPath = $env:CODEX_GH_MOCK_LOG
+if (-not [string]::IsNullOrWhiteSpace($env:CODEX_GH_MOCK_EXPECT_CWD) -and
+    [IO.Path]::GetFullPath((Get-Location).Path) -ne
+        [IO.Path]::GetFullPath($env:CODEX_GH_MOCK_EXPECT_CWD)) {
+    Add-Content -LiteralPath $logPath -Value "BAD-CWD:$((Get-Location).Path)"
+    exit 35
+}
 if ($Remaining.Count -ge 2 -and $Remaining[0] -eq 'auth' -and $Remaining[1] -eq 'status') {
     exit 0
 }
@@ -831,21 +859,30 @@ exit 34
         $savedLog = $env:CODEX_GH_MOCK_LOG
         $savedRuntime = $env:CODEX_GH_MOCK_RUNTIME
         $savedFailPrivate = $env:CODEX_GH_MOCK_FAIL_PRIVATE
+        $savedExpectedCwd = $env:CODEX_GH_MOCK_EXPECT_CWD
         try {
             $env:CODEX_GH_MOCK_STATE = $statePath
             $env:CODEX_GH_MOCK_LOG = $logPath
             $env:CODEX_GH_MOCK_RUNTIME = $testRootFull
             $env:CODEX_GH_MOCK_FAIL_PRIVATE = '0'
-            $result = & $visibilityScript -Repository 'owner/repo' -EnableVisibilityLease `
-                -ActionScript {
-                    $visibility = (Get-Content -Raw -LiteralPath $env:CODEX_GH_MOCK_STATE).Trim()
-                    if ($visibility -ne 'PUBLIC') {
-                        throw "Ação observou $visibility em vez de PUBLIC."
-                    }
-                    [ordered]@{ status = 'green'; source = 'mock' }
-                } -RuntimeRoot $testRootFull -TimeoutSeconds 60 `
-                -VisibilityRetryDelayMilliseconds 1 `
-                -GhCommandPath $ghMockCommand | ConvertFrom-Json
+            $env:CODEX_GH_MOCK_EXPECT_CWD = $repoRoot
+            Push-Location $testRootFull
+            try {
+                $result = & $visibilityScript -Repository 'owner/repo' -EnableVisibilityLease `
+                    -ActionScript {
+                        $visibility = (
+                            Get-Content -Raw -LiteralPath $env:CODEX_GH_MOCK_STATE
+                        ).Trim()
+                        if ($visibility -ne 'PUBLIC') {
+                            throw "Ação observou $visibility em vez de PUBLIC."
+                        }
+                        [ordered]@{ status = 'green'; source = 'mock' }
+                    } -RuntimeRoot $testRootFull -TimeoutSeconds 60 `
+                    -VisibilityRetryDelayMilliseconds 1 `
+                    -GhCommandPath $ghMockCommand | ConvertFrom-Json
+            } finally {
+                Pop-Location
+            }
             Assert-True ($result.watchdogReady -eq $true) 'Readiness do watchdog não foi confirmada.'
             Assert-True ($result.publicVerified -eq $true) 'PUBLIC não foi verificado no mock.'
             Assert-True ($result.privateRestored -eq $true) 'PRIVATE não foi restaurado no mock.'
@@ -861,6 +898,7 @@ exit 34
             $env:CODEX_GH_MOCK_LOG = $savedLog
             $env:CODEX_GH_MOCK_RUNTIME = $savedRuntime
             $env:CODEX_GH_MOCK_FAIL_PRIVATE = $savedFailPrivate
+            $env:CODEX_GH_MOCK_EXPECT_CWD = $savedExpectedCwd
         }
     }
 
@@ -952,8 +990,8 @@ exit 34
     }
 
     Test-Case 'Wave invocation dry-run' {
-        $result = & $invokeWaveScript -Wave onda1 -DryRun -RuntimeRoot $testRootFull |
-            ConvertFrom-Json
+        $result = & $invokeWaveScript -Wave onda1 -DryRun -RuntimeRoot $testRootFull `
+            -PrototypePath $testRootFull | ConvertFrom-Json
         Assert-True ($result.status -eq 'dry-run') 'Dry-run de onda falhou.'
         Assert-True ($result.autoMerge -eq $false) 'AutoMerge deve ser opt-in.'
         Assert-True (
@@ -962,6 +1000,9 @@ exit 34
         Assert-True (
             $result.functionalContextPath -match '^docs_v2/'
         ) 'Contexto funcional docs_v2 deve estar no preflight.'
+        Assert-True (
+            [IO.Path]::GetFullPath([string]$result.prototypePath) -eq $testRootFull
+        ) 'Caminho configurável do protótipo não foi propagado.'
         Assert-True (
             $result.mechanism -match 'independent codex exec process'
         ) 'Dry-run deve declarar processos Codex independentes.'
