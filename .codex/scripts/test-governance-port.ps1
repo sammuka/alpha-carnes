@@ -309,7 +309,7 @@ try {
             -Stage implementation -Role test -RuntimeRoot $testRootFull
         $jobs = @(
             foreach ($number in 1..8) {
-                Start-Job -ArgumentList @(
+                Start-ThreadJob -ArgumentList @(
                     $checkpointScript,
                     $testRootFull,
                     $number
@@ -322,14 +322,18 @@ try {
             }
         )
         try {
-            # Start-Job cria processos pwsh completos; runners Linux frios podem
-            # levar mais de 30 s apenas para inicializar oito workers.
+            # ThreadJob mantém concorrência real no arquivo/lock sem depender
+            # do limite de processos do runner hospedado.
             $null = Wait-Job -Job $jobs -Timeout 90
+            $unfinished = @($jobs | Where-Object { $_.State -ne 'Completed' })
+            $jobDiagnostics = @(
+                $unfinished | ForEach-Object {
+                    "$($_.State):$($_.JobStateInfo.Reason?.Message)"
+                }
+            ) -join '; '
             Assert-True (
-                @($jobs | Where-Object { $_.State -ne 'Completed' }).Count -eq 0
-            ) "Writers concorrentes não terminaram: $(
-                @($jobs | ForEach-Object { $_.State }) -join ','
-            )."
+                $unfinished.Count -eq 0
+            ) "Writers concorrentes não terminaram: $jobDiagnostics."
             foreach ($raw in @(Receive-Job -Job $jobs)) {
                 $result = [string]$raw | ConvertFrom-Json
                 Assert-True ($result.status -eq 'recorded') 'Writer concorrente não registrou.'
