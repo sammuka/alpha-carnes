@@ -111,6 +111,31 @@ try {
         Assert-True ($LASTEXITCODE -ne 0) '.agents/skills foi ignorado indevidamente.'
     }
 
+    Test-Case 'Codex PowerShell port is canonical' {
+        foreach ($legacy in @(
+            '.claude/skills/gate-plano/SKILL.md',
+            '.claude/skills/gate-pr/SKILL.md',
+            '.claude/skills/disparar-onda/SKILL.md',
+            '.claude/workflows/ciclo-onda-autonomo.js',
+            '.claude/workflows/ciclo-multionda-autonomo.js',
+            '.claude/workflows/lib/lock.sh',
+            '.claude/workflows/lib/test-lock.sh'
+        )) {
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $repoRoot $legacy))) (
+                "Artefato legado ainda presente: $legacy"
+            )
+        }
+        $ci = Get-Content -Raw -Encoding utf8 -LiteralPath (
+            Join-Path $repoRoot '.github/workflows/ci.yml'
+        )
+        Assert-True ($ci.Contains('governance PowerShell harness')) (
+            'CI não executa o harness PowerShell.'
+        )
+        Assert-True (-not $ci.Contains('bash .claude/workflows')) (
+            'CI ainda invoca o harness Bash legado.'
+        )
+    }
+
     Test-Case 'Lock ownership and exclusion' {
         $firstRaw = & pwsh -NoProfile -File $lockScript acquire test-lock -Role test `
             -RunId test-lock -MaxWaitSeconds 0 -RuntimeRoot $testRootFull
