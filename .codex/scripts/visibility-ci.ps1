@@ -6,12 +6,14 @@ param(
 
     [string]$Repository,
     [switch]$EnableVisibilityLease,
-    [ValidateRange(60, 1500)][int]$TimeoutSeconds = 1500,
+    [ValidateRange(1, 1500)][int]$TimeoutSeconds = 1500,
     [ValidateRange(1, 300)][int]$PollSeconds = 15,
     [scriptblock]$ActionScript,
     [string]$FixturePath,
     [switch]$DryRun,
     [string]$RuntimeRoot,
+    [ValidateRange(1, 30)][int]$WatchdogReadyTimeoutSeconds = 10,
+    [ValidateRange(1, 10000)][int]$VisibilityRetryDelayMilliseconds = 2000,
 
     # Parâmetros internos exclusivos do processo watchdog.
     [switch]$Watchdog,
@@ -52,7 +54,8 @@ function Set-RepositoryVisibility {
     param(
         [Parameter(Mandatory)][string]$Repo,
         [Parameter(Mandatory)][ValidateSet('public', 'private')][string]$Visibility,
-        [ValidateRange(1, 8)][int]$Attempts = 5
+        [ValidateRange(1, 8)][int]$Attempts = 5,
+        [ValidateRange(1, 10000)][int]$RetryDelayMilliseconds = 2000
     )
     $errors = @()
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
@@ -75,7 +78,9 @@ function Set-RepositoryVisibility {
             $errors += "tentativa $attempt`: $($_.Exception.Message)"
         }
         if ($attempt -lt $Attempts) {
-            Start-Sleep -Seconds ([Math]::Min(2 * $attempt, 10))
+            Start-Sleep -Milliseconds (
+                [Math]::Min($RetryDelayMilliseconds * $attempt, 10000)
+            )
         }
     }
     [ordered]@{
@@ -114,10 +119,21 @@ if ($Watchdog) {
         throw "LeaseRoot do watchdog fora do runtime: $leaseRootFull"
     }
     $completeMarker = Join-Path $leaseRootFull 'complete.json'
+    $readyMarker = Join-Path $leaseRootFull 'watchdog-ready.json'
     $watchdogLog = Join-Path $leaseRootFull 'watchdog-result.json'
+    [IO.File]::WriteAllText(
+        $readyMarker,
+        ([ordered]@{
+            leaseId = $LeaseId
+            pid = $PID
+            readyAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+        } | ConvertTo-Json -Depth 4),
+        [Text.UTF8Encoding]::new($false)
+    )
     Start-Sleep -Seconds $TimeoutSeconds
     if (-not (Test-Path -LiteralPath $completeMarker -PathType Leaf)) {
-        $restore = Set-RepositoryVisibility -Repo $Repository -Visibility private -Attempts 5
+        $restore = Set-RepositoryVisibility -Repo $Repository -Visibility private -Attempts 5 `
+            -RetryDelayMilliseconds $VisibilityRetryDelayMilliseconds
         [IO.File]::WriteAllText(
             $watchdogLog,
             ($restore | ConvertTo-Json -Depth 8),
@@ -215,6 +231,9 @@ $watchdogProcess = $null
 $publicVerified = $false
 $privateRestore = $null
 $actionResult = $null
+$primaryError = $null
+$cleanupErrors = [Collections.Generic.List[string]]::new()
+$watchdogReady = $false
 
 try {
     $pwshPath = (Get-Command pwsh -ErrorAction Stop).Source
@@ -229,6 +248,7 @@ try {
         '-LeaseRoot', "`"$LeaseRoot`"",
         '-LockToken', $LockToken,
         '-TimeoutSeconds', [string]$TimeoutSeconds,
+        '-VisibilityRetryDelayMilliseconds', [string]$VisibilityRetryDelayMilliseconds,
         '-RuntimeRoot', "`"$runtimeFull`""
     )
     $watchdogProcess = Start-Process -FilePath $pwshPath -ArgumentList $watchdogArguments `
@@ -237,8 +257,25 @@ try {
     if (-not $watchdogProcess -or $watchdogProcess.HasExited) {
         throw 'Watchdog de visibilidade não iniciou.'
     }
+    $readyMarker = Join-Path $LeaseRoot 'watchdog-ready.json'
+    $readyDeadline = [DateTimeOffset]::UtcNow.AddSeconds($WatchdogReadyTimeoutSeconds)
+    while (-not (Test-Path -LiteralPath $readyMarker -PathType Leaf)) {
+        if ($watchdogProcess.HasExited) {
+            throw 'Watchdog encerrou antes de confirmar readiness.'
+        }
+        if ([DateTimeOffset]::UtcNow -ge $readyDeadline) {
+            throw "Watchdog não confirmou readiness em $WatchdogReadyTimeoutSeconds segundo(s)."
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    $ready = Get-Content -Raw -Encoding utf8 -LiteralPath $readyMarker | ConvertFrom-Json
+    if ([string]$ready.leaseId -cne $LeaseId -or [int]$ready.pid -ne $watchdogProcess.Id) {
+        throw 'Readiness do watchdog não corresponde ao processo/lease ativo.'
+    }
+    $watchdogReady = $true
 
-    $public = Set-RepositoryVisibility -Repo $Repository -Visibility public -Attempts 3
+    $public = Set-RepositoryVisibility -Repo $Repository -Visibility public -Attempts 3 `
+        -RetryDelayMilliseconds $VisibilityRetryDelayMilliseconds
     if (-not $public.ok) {
         throw "Não foi possível verificar PUBLIC: $($public.errors -join '; ')"
     }
@@ -253,8 +290,19 @@ try {
             throw "Checks obrigatórios terminaram em '$($actionResult.status)'."
         }
     }
+} catch {
+    $primaryError = $_
 } finally {
-    $privateRestore = Set-RepositoryVisibility -Repo $Repository -Visibility private -Attempts 5
+    try {
+        $privateRestore = Set-RepositoryVisibility -Repo $Repository -Visibility private `
+            -Attempts 5 -RetryDelayMilliseconds $VisibilityRetryDelayMilliseconds
+    } catch {
+        $privateRestore = [ordered]@{
+            ok = $false
+            visibility = 'UNKNOWN'
+            errors = @($_.Exception.Message)
+        }
+    }
     if ($privateRestore.ok) {
         $complete = [ordered]@{
             leaseId = $LeaseId
@@ -262,25 +310,45 @@ try {
             restoredAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
             visibility = 'PRIVATE'
         }
-        [IO.File]::WriteAllText(
-            (Join-Path $LeaseRoot 'complete.json'),
-            ($complete | ConvertTo-Json -Depth 5),
-            [Text.UTF8Encoding]::new($false)
-        )
+        try {
+            [IO.File]::WriteAllText(
+                (Join-Path $LeaseRoot 'complete.json'),
+                ($complete | ConvertTo-Json -Depth 5),
+                [Text.UTF8Encoding]::new($false)
+            )
+        } catch {
+            $cleanupErrors.Add("complete marker: $($_.Exception.Message)")
+        }
         if ($watchdogProcess -and -not $watchdogProcess.HasExited) {
-            Stop-Process -Id $watchdogProcess.Id -Force -ErrorAction SilentlyContinue
+            try {
+                Stop-Process -Id $watchdogProcess.Id -Force -ErrorAction Stop
+            } catch {
+                $cleanupErrors.Add("stop watchdog: $($_.Exception.Message)")
+            }
         }
         try {
             $null = & $lockScript release visibility-ci -Token $LockToken -Role executor `
                 -RunId $LeaseId -RuntimeRoot $runtimeFull
         } catch {
-            # O watchdog pode ter liberado primeiro.
+            $cleanupErrors.Add("release lock: $($_.Exception.Message)")
         }
     }
 }
 
 if (-not $privateRestore -or -not $privateRestore.ok) {
-    throw "FALHA CRÍTICA: não foi possível restaurar $Repository para PRIVATE."
+    $restoreDetails = @($privateRestore.errors) -join '; '
+    $primaryDetails = if ($primaryError) {
+        " Erro principal anterior: $($primaryError.Exception.Message)"
+    } else {
+        ''
+    }
+    throw "FALHA CRÍTICA: não foi possível restaurar $Repository para PRIVATE. $restoreDetails$primaryDetails"
+}
+if ($primaryError) {
+    throw $primaryError
+}
+if ($cleanupErrors.Count -gt 0) {
+    throw "Lease restaurado para PRIVATE, mas a limpeza falhou: $($cleanupErrors -join '; ')"
 }
 
 Write-Json ([ordered]@{
@@ -289,6 +357,7 @@ Write-Json ([ordered]@{
     repository = $Repository
     publicVerified = $publicVerified
     privateRestored = [bool]$privateRestore.ok
+    watchdogReady = $watchdogReady
     watchdogPid = if ($watchdogProcess) { $watchdogProcess.Id } else { $null }
     actionResult = $actionResult
 })

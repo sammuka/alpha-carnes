@@ -84,7 +84,7 @@ $runRoot = Join-Path $runtimeFull "runs\$runId"
 $resultPath = Join-Path $runRoot 'result.json'
 $eventsPath = Join-Path $runRoot 'events.jsonl'
 $stderrPath = Join-Path $runRoot 'stderr.log'
-$lockName = "onda-$($Wave.Replace('onda', ''))"
+$lockName = "orchestration-onda-$($Wave.Replace('onda', ''))"
 
 if ($DryRun) {
     Write-Json ([ordered]@{
@@ -96,7 +96,10 @@ if ($DryRun) {
         repoRoot = $repoRoot
         runtimeRoot = $runtimeFull
         schemaPath = $schemaPath
+        lockName = $lockName
+        functionalContextPath = 'docs_v2/alphacarnes_contexto_funcional_e_recomendacoes_prototipo_v1.1.md'
         command = 'codex --ask-for-approval never exec --strict-config --json --sandbox workspace-write'
+        resumeCommand = "codex --ask-for-approval never --sandbox workspace-write -C `"$repoRoot`" exec resume --strict-config --json <thread-id> <prompt>"
     })
     return
 }
@@ -120,7 +123,8 @@ $requiredPaths = @(
     'docs/governance/pipeline-execucao.md',
     'docs/execucao/EXECUCAO-STATUS.md',
     'docs/execucao/GATE-VEREDITOS.md',
-    'docs/execucao/DECISOES.md'
+    'docs/execucao/DECISOES.md',
+    'docs_v2/alphacarnes_contexto_funcional_e_recomendacoes_prototipo_v1.1.md'
 )
 $missing = @($requiredPaths | Where-Object {
     -not (Test-Path -LiteralPath (Join-Path $repoRoot $_))
@@ -163,8 +167,12 @@ if (-not $lockResult -or $lockResult.status -ne 'acquired') {
 $lockToken = [string]$lockResult.token
 
 try {
-    $null = & $checkpointScript init -RunId $runId -Wave $Wave -Stage orchestration `
-        -Role coordinator -Message 'Ciclo iniciado.' -RuntimeRoot $runtimeFull
+    $checkpointResult = & $checkpointScript init -RunId $runId -Wave $Wave `
+        -Stage orchestration -Role coordinator -Message 'Ciclo iniciado.' `
+        -RuntimeRoot $runtimeFull | ConvertFrom-Json
+    if ($checkpointResult.status -notin @('recorded', 'duplicate')) {
+        throw "Checkpoint init inválido: $($checkpointResult.status)."
+    }
 
     $promptTemplate = @'
 Você é somente o coordenador raiz do ciclo autônomo do AlphaCarnes. Leia AGENTS.md e não
@@ -190,9 +198,12 @@ Retorne somente o objeto final compatível com o schema fornecido, incluindo rol
     $threadId = ''
     $validResult = $null
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        $null = & $checkpointScript record -RunId $runId -Wave $Wave -Stage orchestration `
+        $checkpointResult = & $checkpointScript record -RunId $runId -Wave $Wave -Stage orchestration `
             -StepId "attempt-$attempt" -Status started -Role coordinator `
-            -Message "Tentativa Codex $attempt." -RuntimeRoot $runtimeFull
+            -Message "Tentativa Codex $attempt." -RuntimeRoot $runtimeFull | ConvertFrom-Json
+        if ($checkpointResult.status -notin @('recorded', 'duplicate')) {
+            throw "Checkpoint da tentativa inválido: $($checkpointResult.status)."
+        }
 
         if ($attempt -eq 1) {
             $arguments = @(
@@ -217,6 +228,8 @@ Retorne somente o objeto final compatível com o schema fornecido, incluindo rol
             $resumePrompt = "Retome o run $runId da $Wave pelo checkpoint; não repita passos concluídos."
             $arguments = @(
                 '--ask-for-approval', 'never',
+                '--sandbox', 'workspace-write',
+                '-C', $repoRoot,
                 'exec', 'resume',
                 '--strict-config',
                 '--ignore-user-config',
@@ -246,10 +259,13 @@ Retorne somente o objeto final compatível com o schema fornecido, incluindo rol
         if ($validResult) {
             break
         }
-        $null = & $checkpointScript record -RunId $runId -Wave $Wave -Stage orchestration `
+        $checkpointResult = & $checkpointScript record -RunId $runId -Wave $Wave -Stage orchestration `
             -StepId "attempt-$attempt" -Status failed -Role coordinator `
             -Message "Codex não produziu resultado estruturado; thread=$threadId." `
-            -RuntimeRoot $runtimeFull
+            -RuntimeRoot $runtimeFull | ConvertFrom-Json
+        if ($checkpointResult.status -notin @('recorded', 'duplicate')) {
+            throw "Checkpoint de falha inválido: $($checkpointResult.status)."
+        }
     }
 
     if (-not $validResult) {
@@ -262,8 +278,12 @@ Retorne somente o objeto final compatível com o schema fornecido, incluindo rol
         )
     }
 
-    $null = & $checkpointScript complete -RunId $runId -Wave $Wave -Stage orchestration `
-        -Role coordinator -Message "Resultado final: $($validResult.result)." -RuntimeRoot $runtimeFull
+    $checkpointResult = & $checkpointScript complete -RunId $runId -Wave $Wave `
+        -Stage orchestration -Role coordinator -Message "Resultado final: $($validResult.result)." `
+        -RuntimeRoot $runtimeFull | ConvertFrom-Json
+    if ($checkpointResult.status -notin @('recorded', 'duplicate')) {
+        throw "Checkpoint final inválido: $($checkpointResult.status)."
+    }
     Write-Json $validResult
 } finally {
     if ($lockToken) {

@@ -149,6 +149,67 @@ try {
         Assert-True ($read.entries.Count -eq 2) 'Checkpoint deveria conter duas entradas.'
     }
 
+    Test-Case 'Checkpoint detects interrupted JSONL tail' {
+        $init = & $checkpointScript init -RunId test-interrupted -Wave onda1 `
+            -Stage implementation -Role test -RuntimeRoot $testRootFull | ConvertFrom-Json
+        [IO.File]::AppendAllText(
+            [string]$init.path,
+            '{"schemaVersion":',
+            [Text.UTF8Encoding]::new($false)
+        )
+        $beforeLength = (Get-Item -LiteralPath $init.path).Length
+        $read = & $checkpointScript read -RunId test-interrupted -Wave onda1 `
+            -Stage implementation -Role test -RuntimeRoot $testRootFull | ConvertFrom-Json
+        Assert-True ($read.status -eq 'corrupt') 'Cauda parcial deveria retornar corrupt.'
+        Assert-True ($read.tailPartial -eq $true) 'Cauda interrompida deveria ser marcada partial.'
+        Assert-True ($read.entries.Count -eq 1) 'Entradas válidas anteriores devem ser preservadas.'
+        $write = & $checkpointScript record -RunId test-interrupted -Wave onda1 `
+            -Stage implementation -StepId after-corruption -Status completed -Role test `
+            -RuntimeRoot $testRootFull | ConvertFrom-Json
+        Assert-True ($write.status -eq 'corrupt') 'Escrita sobre cauda parcial deve falhar fechada.'
+        Assert-True (
+            (Get-Item -LiteralPath $init.path).Length -eq $beforeLength
+        ) 'Checkpoint corrupto não pode receber append.'
+    }
+
+    Test-Case 'Checkpoint serializes concurrent writers and coherent read' {
+        $null = & $checkpointScript init -RunId test-concurrent -Wave onda2 `
+            -Stage implementation -Role test -RuntimeRoot $testRootFull
+        $jobs = @(
+            foreach ($number in 1..8) {
+                Start-Job -ArgumentList @(
+                    $checkpointScript,
+                    $testRootFull,
+                    $number
+                ) -ScriptBlock {
+                    param($Script, $RuntimeRoot, $Number)
+                    & $Script record -RunId test-concurrent -Wave onda2 -Stage implementation `
+                        -StepId "writer-$Number" -Status completed -Role test `
+                        -RuntimeRoot $RuntimeRoot
+                }
+            }
+        )
+        try {
+            $null = Wait-Job -Job $jobs -Timeout 30
+            Assert-True (
+                @($jobs | Where-Object { $_.State -ne 'Completed' }).Count -eq 0
+            ) 'Writers concorrentes não terminaram.'
+            foreach ($raw in @(Receive-Job -Job $jobs)) {
+                $result = [string]$raw | ConvertFrom-Json
+                Assert-True ($result.status -eq 'recorded') 'Writer concorrente não registrou.'
+            }
+        } finally {
+            Remove-Job -Job $jobs -Force -ErrorAction SilentlyContinue
+        }
+        $read = & $checkpointScript read -RunId test-concurrent -Wave onda2 `
+            -Stage implementation -Role test -RuntimeRoot $testRootFull | ConvertFrom-Json
+        Assert-True ($read.status -eq 'read') 'Leitura coerente deveria retornar read.'
+        Assert-True ($read.entries.Count -eq 9) 'Init mais oito writers deveriam estar presentes.'
+        Assert-True (
+            @($read.entries.stepId | Sort-Object -Unique).Count -eq 9
+        ) 'Checkpoint concorrente contém perda ou duplicação.'
+    }
+
     $canonicalChecks = @(
         'lint', 'type-check', 'test-backend', 'coverage',
         'test-frontend', 'build', 'audit', 'secret-scan'
@@ -223,11 +284,209 @@ try {
         Assert-True $failed 'Lease maior que 25 minutos deveria ser rejeitado.'
     }
 
+    $ghMockRoot = Join-Path $testRootFull 'gh-mock'
+    New-Item -ItemType Directory -Force -Path $ghMockRoot | Out-Null
+    $ghMockScript = Join-Path $ghMockRoot 'gh-mock.ps1'
+    $ghMockCmd = Join-Path $ghMockRoot 'gh.cmd'
+    $ghMockSource = @'
+param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Remaining)
+$statePath = $env:CODEX_GH_MOCK_STATE
+$logPath = $env:CODEX_GH_MOCK_LOG
+if ($Remaining.Count -ge 2 -and $Remaining[0] -eq 'auth' -and $Remaining[1] -eq 'status') {
+    exit 0
+}
+if ($Remaining.Count -ge 2 -and $Remaining[0] -eq 'repo' -and $Remaining[1] -eq 'view') {
+    $visibility = (Get-Content -Raw -LiteralPath $statePath).Trim()
+    [ordered]@{ visibility = $visibility; nameWithOwner = 'owner/repo' } |
+        ConvertTo-Json -Compress
+    exit 0
+}
+if ($Remaining.Count -ge 2 -and $Remaining[0] -eq 'repo' -and $Remaining[1] -eq 'edit') {
+    $visibilityIndex = [Array]::IndexOf($Remaining, '--visibility')
+    if ($visibilityIndex -lt 0 -or $visibilityIndex + 1 -ge $Remaining.Count) {
+        exit 31
+    }
+    $visibility = $Remaining[$visibilityIndex + 1].ToUpperInvariant()
+    if ($visibility -eq 'PUBLIC') {
+        $ready = @(Get-ChildItem -LiteralPath $env:CODEX_GH_MOCK_RUNTIME -Recurse `
+            -Filter 'watchdog-ready.json' -ErrorAction SilentlyContinue)
+        if ($ready.Count -eq 0) {
+            Add-Content -LiteralPath $logPath -Value 'PUBLIC-BEFORE-WATCHDOG'
+            exit 32
+        }
+    }
+    if ($visibility -eq 'PRIVATE' -and $env:CODEX_GH_MOCK_FAIL_PRIVATE -eq '1') {
+        Add-Content -LiteralPath $logPath -Value 'PRIVATE-FAILED'
+        exit 33
+    }
+    [IO.File]::WriteAllText($statePath, $visibility, [Text.UTF8Encoding]::new($false))
+    Add-Content -LiteralPath $logPath -Value $visibility
+    exit 0
+}
+exit 34
+'@
+    [IO.File]::WriteAllText(
+        $ghMockScript,
+        $ghMockSource,
+        [Text.UTF8Encoding]::new($false)
+    )
+    [IO.File]::WriteAllLines(
+        $ghMockCmd,
+        @(
+            '@echo off',
+            'pwsh -NoProfile -File "%~dp0gh-mock.ps1" %*',
+            'exit /b %ERRORLEVEL%'
+        ),
+        [Text.ASCIIEncoding]::new()
+    )
+
+    Test-Case 'Visibility lease uses GH mock and waits for watchdog readiness' {
+        $statePath = Join-Path $ghMockRoot 'state.txt'
+        $logPath = Join-Path $ghMockRoot 'calls.log'
+        [IO.File]::WriteAllText($statePath, 'PRIVATE', [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($logPath, '', [Text.UTF8Encoding]::new($false))
+        $savedPath = $env:PATH
+        $savedState = $env:CODEX_GH_MOCK_STATE
+        $savedLog = $env:CODEX_GH_MOCK_LOG
+        $savedRuntime = $env:CODEX_GH_MOCK_RUNTIME
+        $savedFailPrivate = $env:CODEX_GH_MOCK_FAIL_PRIVATE
+        try {
+            $env:PATH = "$ghMockRoot;$savedPath"
+            $env:CODEX_GH_MOCK_STATE = $statePath
+            $env:CODEX_GH_MOCK_LOG = $logPath
+            $env:CODEX_GH_MOCK_RUNTIME = $testRootFull
+            $env:CODEX_GH_MOCK_FAIL_PRIVATE = '0'
+            $result = & $visibilityScript -Repository 'owner/repo' -EnableVisibilityLease `
+                -ActionScript {
+                    $visibility = (Get-Content -Raw -LiteralPath $env:CODEX_GH_MOCK_STATE).Trim()
+                    if ($visibility -ne 'PUBLIC') {
+                        throw "Ação observou $visibility em vez de PUBLIC."
+                    }
+                    [ordered]@{ status = 'green'; source = 'mock' }
+                } -RuntimeRoot $testRootFull -TimeoutSeconds 60 `
+                -VisibilityRetryDelayMilliseconds 1 | ConvertFrom-Json
+            Assert-True ($result.watchdogReady -eq $true) 'Readiness do watchdog não foi confirmada.'
+            Assert-True ($result.publicVerified -eq $true) 'PUBLIC não foi verificado no mock.'
+            Assert-True ($result.privateRestored -eq $true) 'PRIVATE não foi restaurado no mock.'
+            Assert-True (
+                (Get-Content -Raw -LiteralPath $statePath).Trim() -eq 'PRIVATE'
+            ) 'Estado final do mock deve ser PRIVATE.'
+            $calls = @(Get-Content -LiteralPath $logPath | Where-Object { $_ })
+            Assert-True (
+                ($calls -join ',') -eq 'PUBLIC,PRIVATE'
+            ) "Sequência de visibilidade inesperada: $($calls -join ',')."
+        } finally {
+            $env:PATH = $savedPath
+            $env:CODEX_GH_MOCK_STATE = $savedState
+            $env:CODEX_GH_MOCK_LOG = $savedLog
+            $env:CODEX_GH_MOCK_RUNTIME = $savedRuntime
+            $env:CODEX_GH_MOCK_FAIL_PRIVATE = $savedFailPrivate
+        }
+    }
+
+    Test-Case 'Visibility lease restores PRIVATE after primary action error' {
+        $statePath = Join-Path $ghMockRoot 'state-primary.txt'
+        $logPath = Join-Path $ghMockRoot 'calls-primary.log'
+        [IO.File]::WriteAllText($statePath, 'PRIVATE', [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($logPath, '', [Text.UTF8Encoding]::new($false))
+        $savedPath = $env:PATH
+        $savedState = $env:CODEX_GH_MOCK_STATE
+        $savedLog = $env:CODEX_GH_MOCK_LOG
+        $savedRuntime = $env:CODEX_GH_MOCK_RUNTIME
+        $savedFailPrivate = $env:CODEX_GH_MOCK_FAIL_PRIVATE
+        try {
+            $env:PATH = "$ghMockRoot;$savedPath"
+            $env:CODEX_GH_MOCK_STATE = $statePath
+            $env:CODEX_GH_MOCK_LOG = $logPath
+            $env:CODEX_GH_MOCK_RUNTIME = $testRootFull
+            $env:CODEX_GH_MOCK_FAIL_PRIVATE = '0'
+            $message = ''
+            try {
+                $null = & $visibilityScript -Repository 'owner/repo' -EnableVisibilityLease `
+                    -ActionScript { throw 'PRIMARY-MOCK' } -RuntimeRoot $testRootFull `
+                    -TimeoutSeconds 60 -VisibilityRetryDelayMilliseconds 1
+            } catch {
+                $message = $_.Exception.Message
+            }
+            Assert-True ($message -match 'PRIMARY-MOCK') 'Erro principal deveria ser preservado.'
+            Assert-True (
+                (Get-Content -Raw -LiteralPath $statePath).Trim() -eq 'PRIVATE'
+            ) 'PRIVATE deve ser restaurado mesmo após erro principal.'
+        } finally {
+            $env:PATH = $savedPath
+            $env:CODEX_GH_MOCK_STATE = $savedState
+            $env:CODEX_GH_MOCK_LOG = $savedLog
+            $env:CODEX_GH_MOCK_RUNTIME = $savedRuntime
+            $env:CODEX_GH_MOCK_FAIL_PRIVATE = $savedFailPrivate
+        }
+    }
+
+    Test-Case 'Visibility restore failure takes precedence over primary error' {
+        $statePath = Join-Path $ghMockRoot 'state-restore-failure.txt'
+        $logPath = Join-Path $ghMockRoot 'calls-restore-failure.log'
+        [IO.File]::WriteAllText($statePath, 'PRIVATE', [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($logPath, '', [Text.UTF8Encoding]::new($false))
+        $savedPath = $env:PATH
+        $savedState = $env:CODEX_GH_MOCK_STATE
+        $savedLog = $env:CODEX_GH_MOCK_LOG
+        $savedRuntime = $env:CODEX_GH_MOCK_RUNTIME
+        $savedFailPrivate = $env:CODEX_GH_MOCK_FAIL_PRIVATE
+        try {
+            $env:PATH = "$ghMockRoot;$savedPath"
+            $env:CODEX_GH_MOCK_STATE = $statePath
+            $env:CODEX_GH_MOCK_LOG = $logPath
+            $env:CODEX_GH_MOCK_RUNTIME = $testRootFull
+            $env:CODEX_GH_MOCK_FAIL_PRIVATE = '1'
+            $message = ''
+            try {
+                $null = & $visibilityScript -Repository 'owner/repo' -EnableVisibilityLease `
+                    -ActionScript { throw 'PRIMARY-MOCK' } -RuntimeRoot $testRootFull `
+                    -TimeoutSeconds 1 -VisibilityRetryDelayMilliseconds 1
+            } catch {
+                $message = $_.Exception.Message
+            }
+            Assert-True (
+                $message -match '^FALHA CRÍTICA: não foi possível restaurar'
+            ) 'Falha de restauração deve substituir o erro principal.'
+            Assert-True (
+                $message -match 'Erro principal anterior: PRIMARY-MOCK'
+            ) 'Diagnóstico deve preservar o erro principal como contexto.'
+            Start-Sleep -Seconds 2
+        } finally {
+            [IO.File]::WriteAllText($statePath, 'PRIVATE', [Text.UTF8Encoding]::new($false))
+            $env:PATH = $savedPath
+            $env:CODEX_GH_MOCK_STATE = $savedState
+            $env:CODEX_GH_MOCK_LOG = $savedLog
+            $env:CODEX_GH_MOCK_RUNTIME = $savedRuntime
+            $env:CODEX_GH_MOCK_FAIL_PRIVATE = $savedFailPrivate
+        }
+    }
+
     Test-Case 'Wave invocation dry-run' {
         $result = & $invokeWaveScript -Wave onda1 -DryRun -RuntimeRoot $testRootFull |
             ConvertFrom-Json
         Assert-True ($result.status -eq 'dry-run') 'Dry-run de onda falhou.'
         Assert-True ($result.autoMerge -eq $false) 'AutoMerge deve ser opt-in.'
+        Assert-True (
+            $result.lockName -eq 'orchestration-onda-1'
+        ) 'Lock externo deve ser orchestration-onda-N.'
+        Assert-True (
+            $result.functionalContextPath -match '^docs_v2/'
+        ) 'Contexto funcional docs_v2 deve estar no preflight.'
+        Assert-True (
+            $result.resumeCommand -match '--sandbox workspace-write -C '
+        ) 'Resume deve declarar sandbox e cwd antes de exec.'
+    }
+
+    Test-Case 'Codex resume argument placement probe' {
+        $probe = @(
+            & codex --ask-for-approval never --sandbox workspace-write -C $repoRoot `
+                exec resume --strict-config --ignore-user-config --help
+        )
+        Assert-True ($LASTEXITCODE -eq 0) 'CLI rejeitou a posição dos argumentos de resume.'
+        Assert-True (
+            ($probe -join "`n") -match 'Usage:\s+codex exec resume'
+        ) 'Probe não alcançou o parser de codex exec resume.'
     }
 
     Test-Case 'Multiwave reads dependency graph from status table' {

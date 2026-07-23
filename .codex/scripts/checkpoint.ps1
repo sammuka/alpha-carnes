@@ -57,16 +57,58 @@ function Assert-SafeChild {
     $childFull
 }
 
-function Read-Entries {
+function Read-CheckpointState {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-        return @()
+        return [pscustomobject]@{
+            status = 'ok'
+            entries = @()
+            corruptLine = $null
+            tailPartial = $false
+            error = ''
+        }
     }
-    @(
-        Get-Content -Encoding utf8 -LiteralPath $Path |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-            ForEach-Object { $_ | ConvertFrom-Json }
-    )
+    $text = [IO.File]::ReadAllText($Path, [Text.Encoding]::UTF8)
+    if ([string]::IsNullOrWhiteSpace($text)) {
+        return [pscustomobject]@{
+            status = 'ok'
+            entries = @()
+            corruptLine = $null
+            tailPartial = $false
+            error = ''
+        }
+    }
+
+    $endsWithNewline = $text.EndsWith("`n") -or $text.EndsWith("`r")
+    $lines = [regex]::Split($text, "`r`n|`n|`r")
+    $lastContentIndex = $lines.Count - 1
+    while ($lastContentIndex -ge 0 -and [string]::IsNullOrWhiteSpace($lines[$lastContentIndex])) {
+        $lastContentIndex--
+    }
+    $entries = [Collections.Generic.List[object]]::new()
+    for ($index = 0; $index -le $lastContentIndex; $index++) {
+        if ([string]::IsNullOrWhiteSpace($lines[$index])) {
+            continue
+        }
+        try {
+            $entries.Add(($lines[$index] | ConvertFrom-Json))
+        } catch {
+            return [pscustomobject]@{
+                status = 'corrupt'
+                entries = @($entries)
+                corruptLine = $index + 1
+                tailPartial = ($index -eq $lastContentIndex -and -not $endsWithNewline)
+                error = $_.Exception.Message
+            }
+        }
+    }
+    [pscustomobject]@{
+        status = 'ok'
+        entries = @($entries)
+        corruptLine = $null
+        tailPartial = $false
+        error = ''
+    }
 }
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -81,18 +123,6 @@ $checkpointPath = Assert-SafeChild -Parent $waveRoot -Child (Join-Path $waveRoot
 $lockName = "checkpoint-$($Wave.Replace('onda', 'o'))-$Stage"
 $lockScript = Join-Path $PSScriptRoot 'lock.ps1'
 
-if ($Command -eq 'read') {
-    Write-Json ([ordered]@{
-        status = 'read'
-        runId = $RunId
-        wave = $Wave
-        stage = $Stage
-        path = $checkpointPath
-        entries = @(Read-Entries -Path $checkpointPath)
-    })
-    return
-}
-
 $lockResult = & $lockScript acquire $lockName -Role $Role -RunId $RunId `
     -MaxWaitSeconds 10 -RuntimeRoot $runtimeFull | ConvertFrom-Json
 if (-not $lockResult -or $lockResult.status -ne 'acquired') {
@@ -102,7 +132,22 @@ $lockToken = [string]$lockResult.token
 
 try {
     New-Item -ItemType Directory -Force -Path $waveRoot | Out-Null
-    $entries = @(Read-Entries -Path $checkpointPath)
+    $checkpointState = Read-CheckpointState -Path $checkpointPath
+    if ($Command -eq 'read' -or $checkpointState.status -eq 'corrupt') {
+        Write-Json ([ordered]@{
+            status = if ($checkpointState.status -eq 'corrupt') { 'corrupt' } else { 'read' }
+            runId = $RunId
+            wave = $Wave
+            stage = $Stage
+            path = $checkpointPath
+            corruptLine = $checkpointState.corruptLine
+            tailPartial = $checkpointState.tailPartial
+            error = $checkpointState.error
+            entries = @($checkpointState.entries)
+        })
+        return
+    }
+    $entries = @($checkpointState.entries)
 
     if ($Command -eq 'init') {
         $StepId = 'init'
