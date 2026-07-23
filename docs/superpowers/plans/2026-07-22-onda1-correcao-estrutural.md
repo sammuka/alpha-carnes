@@ -98,7 +98,8 @@ app/backend/src/
   realtime/realtime.gateway.ts
 app/backend/test/
   integration/{operacoes,operacoes-writers,onda1-migrations,pedidos-v11,overbooking,overbooking-lifecycle,overbooking-concorrencia,pedido-fornecedor,conferencia-tripla}.e2e-spec.ts
-  unit/{operacoes.service,pedidos-eventos-onda1,conferencia.calc,decimal-onda1}.spec.ts
+  unit/{operacoes.service,pedidos-eventos-onda1,conferencia.calc,decimal-onda1,permissoes-onda1}.spec.ts
+  integration/seed.spec.ts   # já existe: recebe casos das permissões da Onda 1
 app/frontend/src/
   app/api/comercial/pedidos/route.ts
   app/api/comercial/pedidos/confirmar-overbooking/route.ts
@@ -133,6 +134,12 @@ app/frontend/__tests__/{api,terminologia}.test.ts
 | Caixaria usa quantidade; pesável usa peças/peso | `conferencia-tripla.e2e-spec.ts` |
 | Conclusão imutável e divergência transacional | `conferencia-tripla.e2e-spec.ts` |
 | RBAC das permissões novas | um caso 403 em cada suíte de endpoint |
+| Seis chaves novas existem no catálogo `PERMISSOES` (a união `Permissao` as inclui) | `permissoes-onda1.spec.ts` — `PERMISSOES contém as 6 chaves da Onda 1` |
+| `DESCRICOES_PERMISSOES` permanece exaustivo em `Record<Permissao, string>` (uma descrição por chave, zero órfã) | `permissoes-onda1.spec.ts` — `toda chave de PERMISSOES tem descrição e vice-versa` |
+| Seed insere as 6 permissões e o total do catálogo (idempotente) | `seed.spec.ts` — `catálogo = Object.keys(DESCRICOES_PERMISSOES).length` (reuso) |
+| Concessão: cada uma das 6 chaves é seedada ao(s) perfil(is) mapeado(s) | `seed.spec.ts` — `gestor tem as 6; compras tem OPERACOES_GERENCIAR e PEDIDO_FORNECEDOR_GERENCIAR; comercial tem PEDIDO_OVERBOOKING_CONFIRMAR e PEDIDO_FINALIZAR; recebimento_pesagem tem CONFERENCIA_CONCLUIR; administrador tem as 6` |
+| Negação: perfil sem a chave não a recebe (segregação) | `seed.spec.ts` — `conferente/diretoria/logistica NÃO têm OVERBOOKING_RESOLVER` |
+| Continua com 11 perfis; nenhuma chave nova cria 12º perfil | `seed.spec.ts` — `total de perfis = 11` (reuso) |
 | Eventos somente pós-commit | `pedidos-eventos-onda1.spec.ts` e suítes de integração com rollback |
 | Zero rótulo banido | `app/frontend/__tests__/terminologia.test.ts` via AST |
 
@@ -654,18 +661,36 @@ const PARAMETROS_ONDA1 = [
 
 AD-03, AD-05 e AD-06 são regras confirmadas, não toggles administrativos: não criar parâmetros capazes de desativá-las.
 
-- [ ] Catálogo e mapa de permissões:
+- [ ] **Catálogo e mapa de permissões — este é o PRIMEIRO passo de código da Task 2**, executado antes de qualquer decorator/controller/seed/`.push` que cite as chaves novas. Motivo (bloqueador do Portão 1, objeto `e0f602d5…`): `Permissao` é a união derivada de `PERMISSOES` (`common/rbac/permissoes.ts` L72: `(typeof PERMISSOES)[keyof typeof PERMISSOES]`); `MAPA_PERFIL_PERMISSOES.<perfil>` é `Permissao[]`. Sem declarar as chaves no objeto canônico, o `.push` de literais fora da união falha em TS-strict (TS2345) e o seed nunca concede a permissão em runtime (403 permanente). Portanto, estender **primeiro** o objeto `PERMISSOES` com as seis chaves literais (a chave e o valor são idênticos, como no restante do objeto — cada `Permissao` é seu próprio literal):
 
 ```typescript
-Object.assign(DESCRICOES_PERMISSOES, {
-  OPERACOES_GERENCIAR: 'Criar, iniciar e fechar operações',
-  PEDIDO_OVERBOOKING_CONFIRMAR: 'Confirmar inclusão com overbooking',
-  OVERBOOKING_RESOLVER: 'Tratar pendências de overbooking',
-  PEDIDO_FORNECEDOR_GERENCIAR: 'Gerenciar pedidos ao fornecedor',
-  CONFERENCIA_CONCLUIR: 'Concluir conferência Pedido×NF×Pesagem',
-  PEDIDO_FINALIZAR: 'Finalizar pedido de venda',
-});
+// common/rbac/permissoes.ts — dentro do objeto `PERMISSOES as const`,
+// após o bloco F6a (antes do fechamento `} as const;`).
+// Onda 1 — Operação-pivô, overbooking v1.1, Pedido ao Fornecedor e conferência tripla.
+OPERACOES_GERENCIAR: 'OPERACOES_GERENCIAR',
+PEDIDO_OVERBOOKING_CONFIRMAR: 'PEDIDO_OVERBOOKING_CONFIRMAR',
+OVERBOOKING_RESOLVER: 'OVERBOOKING_RESOLVER',
+PEDIDO_FORNECEDOR_GERENCIAR: 'PEDIDO_FORNECEDOR_GERENCIAR',
+CONFERENCIA_CONCLUIR: 'CONFERENCIA_CONCLUIR',
+PEDIDO_FINALIZAR: 'PEDIDO_FINALIZAR',
+```
 
+- [ ] No **mesmo** commit e antes de qualquer uso, estender `DESCRICOES_PERMISSOES` **literalmente dentro do objeto** (não usar `Object.assign`: `DESCRICOES_PERMISSOES` é `Record<Permissao, string>`; ao ampliar a união `Permissao`, o literal deixaria de ser exaustivo e o TS-strict acusaria propriedades faltantes — TS2741. As descrições precisam existir como chaves do próprio literal para o `Record` continuar exaustivo e o seed sincronizar o catálogo completo):
+
+```typescript
+// common/rbac/permissoes.ts — dentro do objeto literal `DESCRICOES_PERMISSOES`,
+// após a última entrada (NFSE_CANCELAR), antes do fechamento `};`.
+OPERACOES_GERENCIAR: 'Criar, iniciar e fechar operações',
+PEDIDO_OVERBOOKING_CONFIRMAR: 'Confirmar inclusão com overbooking',
+OVERBOOKING_RESOLVER: 'Tratar pendências de overbooking',
+PEDIDO_FORNECEDOR_GERENCIAR: 'Gerenciar pedidos ao fornecedor',
+CONFERENCIA_CONCLUIR: 'Concluir conferência Pedido×NF×Pesagem',
+PEDIDO_FINALIZAR: 'Finalizar pedido de venda',
+```
+
+- [ ] Só então mapear perfil → permissões (`.push` já com literais válidos da união; nenhum perfil novo é criado — permanecem os 11 de `PERFIS_FIXOS`, ver AD-04):
+
+```typescript
 MAPA_PERFIL_PERMISSOES.gestor.push(
   'OPERACOES_GERENCIAR', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'OVERBOOKING_RESOLVER',
   'PEDIDO_FORNECEDOR_GERENCIAR', 'CONFERENCIA_CONCLUIR', 'PEDIDO_FINALIZAR',
@@ -679,6 +704,80 @@ MAPA_PERFIL_PERMISSOES.administrador.push(
 );
 ```
 
+- [ ] Escrever `unit/permissoes-onda1.spec.ts` provando catálogo e exaustividade das descrições sem tocar no banco (prova a declaração canônica; a compilação em TS-strict já é o primeiro sinal de que o `.push` acima é válido):
+
+```typescript
+import {
+  PERMISSOES,
+  DESCRICOES_PERMISSOES,
+} from '../../src/common/rbac/permissoes';
+
+const CHAVES_ONDA1 = [
+  'OPERACOES_GERENCIAR',
+  'PEDIDO_OVERBOOKING_CONFIRMAR',
+  'OVERBOOKING_RESOLVER',
+  'PEDIDO_FORNECEDOR_GERENCIAR',
+  'CONFERENCIA_CONCLUIR',
+  'PEDIDO_FINALIZAR',
+] as const;
+
+it('PERMISSOES contém as 6 chaves da Onda 1 com valor idêntico à chave', () => {
+  for (const chave of CHAVES_ONDA1) {
+    expect(PERMISSOES[chave]).toBe(chave);
+  }
+});
+
+it('toda chave de PERMISSOES tem descrição e vice-versa (Record exaustivo)', () => {
+  const chavesPermissoes = Object.values(PERMISSOES).sort();
+  const chavesDescricoes = Object.keys(DESCRICOES_PERMISSOES).sort();
+  expect(chavesDescricoes).toEqual(chavesPermissoes);
+  for (const chave of CHAVES_ONDA1) {
+    expect(DESCRICOES_PERMISSOES[chave]).toMatch(/\S/);
+  }
+});
+```
+
+- [ ] Acrescentar a `test/integration/seed.spec.ts` (suíte já existente; não criar nova) os casos de concessão e negação após o seed 2×. Os testes existentes de total de perfis (`= 11`) e de total de catálogo (`= Object.keys(DESCRICOES_PERMISSOES).length`) passam a cobrir automaticamente as 6 chaves e provam que nenhum 12º perfil surge; adicionar somente a concessão/negação 1:1, reusando o padrão de JOIN das suítes vizinhas:
+
+```typescript
+async function permissoesDoPerfil(slug: string): Promise<string[]> {
+  const linhas = await db
+    .select({ codigo: schema.permissoes.codigo })
+    .from(schema.perfis)
+    .innerJoin(schema.perfisPermissoes, eq(schema.perfis.id, schema.perfisPermissoes.perfilId))
+    .innerJoin(schema.permissoes, eq(schema.perfisPermissoes.permissaoId, schema.permissoes.id))
+    .where(eq(schema.perfis.slug, slug));
+  return linhas.map((l) => l.codigo);
+}
+
+it('concede as permissões da Onda 1 exatamente aos perfis mapeados', async () => {
+  expect(await permissoesDoPerfil('gestor')).toEqual(expect.arrayContaining([
+    'OPERACOES_GERENCIAR', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'OVERBOOKING_RESOLVER',
+    'PEDIDO_FORNECEDOR_GERENCIAR', 'CONFERENCIA_CONCLUIR', 'PEDIDO_FINALIZAR',
+  ]));
+  expect(await permissoesDoPerfil('administrador')).toEqual(expect.arrayContaining([
+    'OPERACOES_GERENCIAR', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'OVERBOOKING_RESOLVER',
+    'PEDIDO_FORNECEDOR_GERENCIAR', 'CONFERENCIA_CONCLUIR', 'PEDIDO_FINALIZAR',
+  ]));
+  expect(await permissoesDoPerfil('compras')).toEqual(expect.arrayContaining([
+    'OPERACOES_GERENCIAR', 'PEDIDO_FORNECEDOR_GERENCIAR',
+  ]));
+  expect(await permissoesDoPerfil('comercial')).toEqual(expect.arrayContaining([
+    'PEDIDO_OVERBOOKING_CONFIRMAR', 'PEDIDO_FINALIZAR',
+  ]));
+  expect(await permissoesDoPerfil('recebimento_pesagem')).toEqual(
+    expect.arrayContaining(['CONFERENCIA_CONCLUIR']),
+  );
+});
+
+it('nega OVERBOOKING_RESOLVER a perfis sem a permissão (segregação)', async () => {
+  for (const slug of ['conferente', 'diretoria', 'logistica', 'comercial', 'compras']) {
+    expect(await permissoesDoPerfil(slug)).not.toContain('OVERBOOKING_RESOLVER');
+  }
+});
+```
+
+- [ ] Run: `npm run test -- "permissoes-onda1|seed"` → PASS (catálogo, descrição exaustiva, concessão e negação; 11 perfis mantidos).
 - [ ] Eventos de operação são acumulados durante a transação e emitidos após a resolução da Promise:
 
 ```typescript
