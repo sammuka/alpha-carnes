@@ -117,7 +117,7 @@ O processo de revisão e merge que aplica esses gates está em [`framework-revis
 
 ## 8. Ciclo v1.1 — Implementação completa do protótipo (vigente)
 
-**Status das fases anteriores:** F1, F2, F3, F4a/b/c, F5 e F6a **concluídas** (PRs #1–#8 + absorção do protótipo v2 em `540abea`). F6b, F8 e F9 são absorvidas pelas ondas abaixo (F6b → Onda 10; hardening/estoque → Ondas 8 e seguintes). O escopo, o modelo de dados e os contratos do ciclo estão no [plano mestre](../superpowers/plans/2026-07-22-implementacao-completa-prototipo-v1.1.md); a cobertura tela a tela (39/39 rotas) está na [matriz de rastreabilidade](../superpowers/plans/2026-07-22-matriz-rastreabilidade-v1.1.md).
+**Status das fases anteriores:** F1, F2, F3, F4a/b/c, F5 e F6a **concluídas** (PRs #1–#8 + absorção do protótipo v2 em `540abea`). F6b, F8 e F9 são absorvidas pelas ondas abaixo (F6b → Onda 10; hardening/estoque → Ondas 8 e seguintes). O escopo, o modelo de dados e os contratos do ciclo estão no [plano mestre](../superpowers/plans/2026-07-22-implementacao-completa-prototipo-v1.1.md); a cobertura completa (39 telas de conteúdo + login + redirect = 41/41 entradas) está na [matriz de rastreabilidade](../superpowers/plans/2026-07-22-matriz-rastreabilidade-v1.1.md).
 
 ### Princípios de ordenação (vinculantes)
 

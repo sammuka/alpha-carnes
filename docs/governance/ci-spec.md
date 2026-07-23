@@ -44,6 +44,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm run test:ci-scripts
       - name: governance lock harness
         run: bash .claude/workflows/lib/test-lock.sh
 
@@ -111,6 +112,8 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: backend-coverage, path: coverage }
       - run: node scripts/check-coverage.mjs --min 80
+        env:
+          COVERAGE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
 
   test-frontend:
     runs-on: ubuntu-latest
@@ -167,7 +170,7 @@ jobs:
 
 Notas:
 - Os comandos da aplicação são os scripts versionados no `package.json` raiz e nos workspaces; `db:migrate` e `test:cov` rodam em `app/backend`. A landing tem lockfile independente, portanto `npm ci`, build e audit rodam com `working-directory: landing`.
-- `scripts/check-coverage.mjs` valida o total do `coverage-summary.json` e cada service tocado no diff contra a base fixa do PR (linhas e branches ≥ 80%); histórico completo no checkout é obrigatório para o cálculo fail-closed.
+- `scripts/check-coverage.mjs` valida o total do `coverage-summary.json` e cada service adicionado, copiado, modificado ou renomeado no diff contra o SHA exato da base (linhas e branches ≥ 80%); services removidos não exigem entrada de cobertura. O workflow injeta `COVERAGE_BASE_SHA` e o histórico completo no checkout é obrigatório para o cálculo fail-closed.
 - Node 22 LTS conforme ADR-001.
 
 ## 3. `.github/pull_request_template.md`

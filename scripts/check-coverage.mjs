@@ -2,9 +2,13 @@
 // Lê coverage/coverage-summary.json e falha se o total OU qualquer service
 // tocado pelo PR ficar abaixo de --min em lines/branches.
 import { readFileSync } from 'fs';
-import { execFileSync } from 'child_process';
-import { argv, env } from 'process';
+import { argv } from 'process';
 import { resolve } from 'path';
+
+import {
+  listChangedServices,
+  resolveCoverageBase,
+} from './check-coverage-lib.mjs';
 
 const minIdx = argv.indexOf('--min');
 const min = minIdx !== -1 ? parseInt(argv[minIdx + 1], 10) : 80;
@@ -32,14 +36,10 @@ const avaliar = (rotulo, cobertura) => {
 
 let ok = avaliar('total', total);
 
-const baseRef = env.GITHUB_BASE_REF ? `origin/${env.GITHUB_BASE_REF}` : 'HEAD^';
+const baseRef = resolveCoverageBase();
 let changedServices = [];
 try {
-  changedServices = execFileSync(
-    'git',
-    ['diff', '--name-only', `${baseRef}...HEAD`, '--', 'app/backend/src/**/*.service.ts'],
-    { encoding: 'utf8' },
-  ).trim().split(/\r?\n/).filter(Boolean);
+  changedServices = listChangedServices(baseRef);
 } catch (error) {
   console.error(`FALHA: não foi possível calcular services tocados contra ${baseRef}: ${error.message}`);
   process.exit(1);
