@@ -1,0 +1,4 @@
+interface:
+  display_name: "Disparar Onda"
+  short_description: "Executa uma onda com plano já aprovado"
+  default_prompt: "Use $disparar-onda para implementar a onda1 após o Portão 1."

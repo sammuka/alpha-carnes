@@ -40,6 +40,9 @@ Thumbs.db
 # Worktrees
 .worktrees/
 
+# Estado efêmero dos fluxos Codex
+.codex/runtime/
+
 # Playwright (artefatos locais)
 app/frontend/e2e/screenshots/
 app/frontend/e2e/test-results/

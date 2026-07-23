@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gate de Plano"
+  short_description: "Audita o plano tático antes da implementação"
+  default_prompt: "Use $gate-plano para auditar o plano tático da onda1."
