@@ -116,8 +116,9 @@ O rito acima roda de duas formas:
 Limite da CLI pinada: o Codex `0.145.0` não expõe subcomando programático de `spawn`; pedir
 delegação a uma única sessão e confiar na resposta final não comprova que um subagente nasceu.
 Por isso `invoke-role.ps1` lê os perfis `.codex/agents/*.toml`, cria processos `codex exec`
-separados e rejeita stream sem evidência, thread repetida ou `collab_tool_call` interno. Mudança
-de versão/configuração que deixe de aceitar esses overrides falha fechada antes de um gate.
+separados e rejeita stream sem evidência ou com `collab_tool_call` interno; `invoke-onda.ps1`
+rejeita thread repetida entre etapas. Mudança de versão/configuração que deixe de aceitar esses
+overrides falha fechada antes de um gate.
 
 ## 9. Relação com o framework de revisão existente
 
