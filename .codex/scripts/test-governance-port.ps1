@@ -91,7 +91,7 @@ try {
         foreach ($skill in @('gate-plano', 'gate-pr', 'disparar-onda')) {
             $path = Join-Path $repoRoot ".agents\skills\$skill\SKILL.md"
             $content = Get-Content -Raw -Encoding utf8 -LiteralPath $path
-            Assert-True ($content -match "(?m)^name:\s+$skill$") "Skill $skill sem nome."
+            Assert-True ($content -match "(?m)^name:\s+$skill\r?$") "Skill $skill sem nome."
             Assert-True ($content -match '(?m)^description:\s+\S') "Skill $skill sem descrição."
             Assert-True (
                 Test-Path -LiteralPath (Join-Path $repoRoot ".agents\skills\$skill\agents\openai.yaml")
