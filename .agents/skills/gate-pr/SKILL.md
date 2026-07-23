@@ -45,8 +45,9 @@ Falha de qualquer pré-condição retorna `bloqueado`.
 6. **Pin**
    - Releia `headRefOid` ao terminar. SHA diferente invalida toda a rodada.
 
-Em dúvida, use `ajustar`. Segurança, violação não negociável ou decisão de produto ausente
-usa `bloqueado`.
+Em dúvida, use `ajustar`. Segurança, violação não negociável ou decisão de produto ausente usa
+`bloqueado` no veredito. Na saída estruturada do ciclo, decisão de produto ausente mapeia
+obrigatoriamente para `requires-human`; os demais bloqueios mapeiam para `blocked`.
 
 ## Registro
 

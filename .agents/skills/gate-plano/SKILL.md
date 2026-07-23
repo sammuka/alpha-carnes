@@ -45,8 +45,10 @@ Leia o plano inteiro e verifique:
 5. **Consistência**
    - Tabelas, endpoints, eventos e tipos batem com o plano mestre e ondas aprovadas.
 
-Em dúvida, use `ajustar`. Use `bloqueado` para decisão de produto ausente, dependência não
-satisfeita ou violação não negociável.
+Em dúvida, use `ajustar`. Registre `bloqueado` no veredito para decisão de produto ausente,
+dependência não satisfeita ou violação não negociável. Na saída estruturada do ciclo, decisão de
+produto ausente mapeia obrigatoriamente para `requires-human`; os demais bloqueios mapeiam para
+`blocked`.
 
 ## Registro
 

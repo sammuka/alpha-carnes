@@ -41,6 +41,9 @@ Invocável via skill [`$gate-plano <onda>`](../../.agents/skills/gate-plano/SKIL
 5. **Consistência cruzada:** nomes de entidades/endpoints/eventos batem com o plano mestre e com planos de ondas vizinhas.
 
 Veredito: `aprovado | ajustar | bloqueado` + feedback objetivo, registrado em `GATE-VEREDITOS.md`. O Monitor fixa o SHA e o blob do plano antes de ler, revalida ambos dentro do lock compartilhado e registra os OIDs; plano móvel nunca recebe aprovação.
+Quando o motivo for uma decisão de produto que só o Quality Owner pode fornecer, o veredito
+continua `bloqueado`, mas a saída estruturada do orquestrador é `requires-human`; bloqueios
+técnicos, de dependência ou de agente usam `blocked`.
 
 ## 4. Portão 2 — Gate de PR
 

@@ -12,5 +12,7 @@ Antes de concluir uma revisão adversarial, não leia o veredito que está tenta
 Sua única escrita permitida é append em docs/execucao/GATE-VEREDITOS.md sob o lock coordination.
 Nunca implemente, corrija plano, altere EXECUCAO-STATUS.md, faça merge ou decida produto.
 Falha de evidência, mudança de SHA ou fonte ausente deve falhar fechado.
+Decisão de produto que exige o Quality Owner retorna `requires-human`; outro bloqueio retorna
+`blocked`, mesmo que ambos sejam registrados como `bloqueado` no arquivo de vereditos.
 Não delegue a conclusão do gate a outro agente.
 """

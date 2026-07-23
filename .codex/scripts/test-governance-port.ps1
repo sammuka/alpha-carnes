@@ -213,6 +213,32 @@ try {
         Assert-True ($guard.token -eq 'live-guard-token') 'Competidor alterou ownership do guard.'
     }
 
+    Test-Case 'Exclusive steal mutex closes recovery and guard replacement race' {
+        $locksRoot = Join-Path $testRootFull 'locks'
+        New-Item -ItemType Directory -Force -Path $locksRoot | Out-Null
+        $mutexPath = Join-Path $locksRoot 'mutex-race.lock.steal.mutex'
+        $held = [IO.File]::Open(
+            $mutexPath,
+            [IO.FileMode]::OpenOrCreate,
+            [IO.FileAccess]::ReadWrite,
+            [IO.FileShare]::None
+        )
+        try {
+            $blocked = & $lockScript acquire mutex-race -Role test -RunId competitor `
+                -MaxWaitSeconds 0 -RuntimeRoot $testRootFull | ConvertFrom-Json
+            Assert-True (
+                $blocked.status -eq 'timeout'
+            ) 'Competidor entrou na seção de recuperação com mutex exclusivo ativo.'
+        } finally {
+            $held.Dispose()
+        }
+        $acquired = & $lockScript acquire mutex-race -Role test -RunId owner `
+            -MaxWaitSeconds 1 -RuntimeRoot $testRootFull | ConvertFrom-Json
+        Assert-True ($acquired.status -eq 'acquired') 'Mutex liberado não permitiu aquisição.'
+        $null = & $lockScript release mutex-race -Role test -RunId owner `
+            -Token $acquired.token -RuntimeRoot $testRootFull
+    }
+
     Test-Case 'Checkpoint append-only and idempotent' {
         $init = & $checkpointScript init -RunId test-checkpoint -Wave onda1 -Stage implementation `
             -Role test -RuntimeRoot $testRootFull | ConvertFrom-Json

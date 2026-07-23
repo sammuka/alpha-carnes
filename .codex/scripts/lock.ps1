@@ -136,78 +136,104 @@ $runtimeFull = Assert-ChildPath -Parent $repoRoot -Child $RuntimeRoot
 $locksRoot = Assert-ChildPath -Parent $runtimeFull -Child (Join-Path $runtimeFull 'locks')
 $lockPath = Assert-ChildPath -Parent $locksRoot -Child (Join-Path $locksRoot "$Name.lock")
 $stealPath = Assert-ChildPath -Parent $locksRoot -Child (Join-Path $locksRoot "$Name.lock.steal")
+$stealMutexPath = Assert-ChildPath -Parent $locksRoot -Child (
+    Join-Path $locksRoot "$Name.lock.steal.mutex"
+)
 New-Item -ItemType Directory -Force -Path $locksRoot | Out-Null
 
 switch ($Command) {
     'acquire' {
         $deadline = [DateTimeOffset]::UtcNow.AddSeconds($MaxWaitSeconds)
         while ($true) {
-            if (Test-Path -LiteralPath $stealPath -PathType Container) {
-                $guard = Read-Guard -Path $stealPath
-                $guardStamp = Get-GuardStamp -Guard $guard -Path $stealPath
-                if (([DateTimeOffset]::UtcNow - $guardStamp).TotalSeconds -gt
-                    $StealGuardStaleSeconds) {
-                    $recoveryPath = Assert-ChildPath -Parent $locksRoot -Child (
-                        Join-Path $locksRoot (
-                            "$Name.lock.steal.recovery.$([Guid]::NewGuid().ToString('N'))"
-                        )
-                    )
-                    try {
-                        [IO.Directory]::Move($stealPath, $recoveryPath)
-                        [IO.Directory]::Delete($recoveryPath, $true)
-                    } catch {
-                        # Outro competidor recuperou ou renovou o guard primeiro.
-                    }
-                    continue
-                }
-            }
-
-            if (-not (Test-Path -LiteralPath $stealPath)) {
-                try {
-                    New-Item -ItemType Directory -Path $lockPath -ErrorAction Stop | Out-Null
-                    $newToken = [Guid]::NewGuid().ToString('N')
-                    $owner = [ordered]@{
-                        schemaVersion = 1
-                        name = $Name
-                        token = $newToken
-                        runId = $RunId
-                        role = $Role
-                        pid = $PID
-                        host = [Environment]::MachineName
-                        acquiredAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
-                    }
-                    [IO.File]::WriteAllText(
-                        (Join-Path $lockPath 'owner.json'),
-                        ($owner | ConvertTo-Json -Depth 4),
-                        [Text.UTF8Encoding]::new($false)
-                    )
+            $stealMutex = $null
+            try {
+                $stealMutex = [IO.File]::Open(
+                    $stealMutexPath,
+                    [IO.FileMode]::OpenOrCreate,
+                    [IO.FileAccess]::ReadWrite,
+                    [IO.FileShare]::None
+                )
+            } catch {
+                if ([DateTimeOffset]::UtcNow -ge $deadline) {
                     Write-Json ([ordered]@{
-                        status = 'acquired'
+                        status = 'timeout'
                         name = $Name
-                        token = $newToken
                         path = $lockPath
-                        owner = $owner
+                        owner = Read-Owner -Path $lockPath
                     })
                     return
-                } catch {
-                    if (-not (Test-Path -LiteralPath $lockPath -PathType Container)) {
-                        throw
+                }
+                Start-Sleep -Milliseconds $PollMilliseconds
+                continue
+            }
+
+            try {
+                if (Test-Path -LiteralPath $stealPath -PathType Container) {
+                    $guard = Read-Guard -Path $stealPath
+                    $guardStamp = Get-GuardStamp -Guard $guard -Path $stealPath
+                    if (([DateTimeOffset]::UtcNow - $guardStamp).TotalSeconds -gt
+                        $StealGuardStaleSeconds) {
+                        $recoveryPath = Assert-ChildPath -Parent $locksRoot -Child (
+                            Join-Path $locksRoot (
+                                "$Name.lock.steal.recovery.$([Guid]::NewGuid().ToString('N'))"
+                            )
+                        )
+                        [IO.Directory]::Move($stealPath, $recoveryPath)
+                        $guardAfterMove = Read-Guard -Path $recoveryPath
+                        if (-not (Test-SameOwner -Before $guard -After $guardAfterMove)) {
+                            [IO.Directory]::Move($recoveryPath, $stealPath)
+                            throw "Ownership do guard '$Name' mudou durante a recuperação."
+                        }
+                        [IO.Directory]::Delete($recoveryPath, $true)
+                        continue
                     }
                 }
-            }
 
-            $owner = Read-Owner -Path $lockPath
-            $lockExists = Test-Path -LiteralPath $lockPath -PathType Container
-            $age = if ($lockExists) {
-                $stamp = Get-OwnerStamp -Owner $owner -Path $lockPath
-                ([DateTimeOffset]::UtcNow - $stamp).TotalSeconds
-            } else {
-                0
-            }
+                if (-not (Test-Path -LiteralPath $stealPath)) {
+                    try {
+                        New-Item -ItemType Directory -Path $lockPath -ErrorAction Stop | Out-Null
+                        $newToken = [Guid]::NewGuid().ToString('N')
+                        $owner = [ordered]@{
+                            schemaVersion = 1
+                            name = $Name
+                            token = $newToken
+                            runId = $RunId
+                            role = $Role
+                            pid = $PID
+                            host = [Environment]::MachineName
+                            acquiredAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+                        }
+                        [IO.File]::WriteAllText(
+                            (Join-Path $lockPath 'owner.json'),
+                            ($owner | ConvertTo-Json -Depth 4),
+                            [Text.UTF8Encoding]::new($false)
+                        )
+                        Write-Json ([ordered]@{
+                            status = 'acquired'
+                            name = $Name
+                            token = $newToken
+                            path = $lockPath
+                            owner = $owner
+                        })
+                        return
+                    } catch {
+                        if (-not (Test-Path -LiteralPath $lockPath -PathType Container)) {
+                            throw
+                        }
+                    }
+                }
 
-            if ($lockExists -and $age -gt $StaleAfterSeconds) {
-                $guardToken = [Guid]::NewGuid().ToString('N')
-                try {
+                $owner = Read-Owner -Path $lockPath
+                $lockExists = Test-Path -LiteralPath $lockPath -PathType Container
+                $age = if ($lockExists) {
+                    $stamp = Get-OwnerStamp -Owner $owner -Path $lockPath
+                    ([DateTimeOffset]::UtcNow - $stamp).TotalSeconds
+                } else {
+                    0
+                }
+
+                if ($lockExists -and $age -gt $StaleAfterSeconds) {
+                    $guardToken = [Guid]::NewGuid().ToString('N')
                     New-Item -ItemType Directory -Path $stealPath -ErrorAction Stop | Out-Null
                     $guardOwner = [ordered]@{
                         schemaVersion = 1
@@ -249,21 +275,19 @@ switch ($Command) {
                         }
                     }
                     continue
-                } catch {
-                    if (-not (Test-Path -LiteralPath $stealPath -PathType Container)) {
-                        throw
-                    }
                 }
-            }
 
-            if ([DateTimeOffset]::UtcNow -ge $deadline) {
-                Write-Json ([ordered]@{
-                    status = 'timeout'
-                    name = $Name
-                    path = $lockPath
-                    owner = $owner
-                })
-                return
+                if ([DateTimeOffset]::UtcNow -ge $deadline) {
+                    Write-Json ([ordered]@{
+                        status = 'timeout'
+                        name = $Name
+                        path = $lockPath
+                        owner = $owner
+                    })
+                    return
+                }
+            } finally {
+                $stealMutex.Dispose()
             }
             Start-Sleep -Milliseconds $PollMilliseconds
         }
