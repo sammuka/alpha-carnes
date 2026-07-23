@@ -1,0 +1,2 @@
+# Scripts executados em Bash/Linux precisam permanecer LF mesmo com core.autocrlf=true.
+*.sh text eol=lf

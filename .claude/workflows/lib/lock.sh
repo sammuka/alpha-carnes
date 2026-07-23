@@ -9,10 +9,11 @@
 # bash colado no prompt).
 #
 # Uso:
-#   bash lock.sh acquire <lockdir> <owner_token> [timeout_s=1800] [max_wait_s=900]
-#       Adquire o lock. Rouba (de forma ATÔMICA) locks órfãos mais velhos que
-#       timeout_s. Desiste após max_wait_s de espera ativa. Sai 0 e imprime
-#       LOCK_ACQUIRED ao adquirir; sai 2 e imprime LOCK_TIMEOUT ao desistir.
+#   bash lock.sh acquire <lockdir> <owner_token> [max_wait_s=900]
+#       Adquire o lock sem jamais roubar um dono apenas por idade. Desiste após
+#       max_wait_s de espera ativa. Lock órfão exige recuperação explícita fora
+#       deste script, depois de provar que não existe execução ativa. Sai 0 e
+#       imprime LOCK_ACQUIRED; sai 2 e imprime LOCK_TIMEOUT.
 #   bash lock.sh release <lockdir> <owner_token>
 #       Libera somente o lock pertencente ao token informado. Se outro processo
 #       for o dono, retorna LOCK_NOT_OWNER sem remover nada.
@@ -23,57 +24,21 @@ lockdir="${2:-}"
 owner_token="${3:-}"
 
 if [ -z "$cmd" ] || [ -z "$lockdir" ] || [ -z "$owner_token" ]; then
-  echo "USO: lock.sh <acquire|release> <lockdir> <owner_token> [timeout_s] [max_wait_s]" >&2
+  echo "USO: lock.sh <acquire|release> <lockdir> <owner_token> [max_wait_s]" >&2
   exit 3
 fi
 
 case "$cmd" in
   acquire)
-    timeout_s="${4:-1800}"
-    max_wait_s="${5:-900}"
+    max_wait_s="${4:-900}"
     mkdir -p "$(dirname "$lockdir")" 2>/dev/null
     waited=0
     while true; do
-      steal_guard="${lockdir}.steal"
-      if [ -d "$steal_guard" ]; then
-        guard_ts=$(stat -c %Y "$steal_guard" 2>/dev/null || echo "")
-        guard_age=0
-        if [ -n "$guard_ts" ]; then guard_age=$(( $(date +%s) - guard_ts )); fi
-        if [ "$guard_age" -gt 30 ]; then
-          guard_quarantine="${steal_guard}.orphan.$$.$(date +%s)"
-          if mv "$steal_guard" "$guard_quarantine" 2>/dev/null; then
-            rm -rf "$guard_quarantine"
-          fi
-        fi
-      fi
-      if [ ! -d "$steal_guard" ] && mkdir "$lockdir" 2>/dev/null; then
+      if mkdir "$lockdir" 2>/dev/null; then
         printf '%s\n' "$owner_token" > "$lockdir/owner_token"
         date +%s > "$lockdir/acquired_at" 2>/dev/null
         echo "LOCK_ACQUIRED"
         exit 0
-      fi
-      # Lock ocupado — checa idade para eventual roubo de órfão.
-      ts=$(cat "$lockdir/acquired_at" 2>/dev/null || stat -c %Y "$lockdir" 2>/dev/null || echo "")
-      age=0
-      if [ -n "$ts" ]; then age=$(( $(date +%s) - ts )); fi
-      if [ "$age" -gt "$timeout_s" ]; then
-        # Roubo ATÔMICO anti-TOCTOU: só quem cria o steal-marker remove o lock
-        # órfão. Se dois processos veem idade>timeout ao mesmo tempo, só um
-        # ganha o mkdir do steal-marker e faz o rm; o outro volta ao loop e
-        # disputa o lock recriado normalmente.
-        if mkdir "$steal_guard" 2>/dev/null; then
-          current_ts=$(cat "$lockdir/acquired_at" 2>/dev/null || stat -c %Y "$lockdir" 2>/dev/null || echo "")
-          current_age=0
-          if [ -n "$current_ts" ]; then current_age=$(( $(date +%s) - current_ts )); fi
-          if [ -d "$lockdir" ] && [ "$current_age" -gt "$timeout_s" ]; then
-            quarantine="${lockdir}.stale.$$.$(date +%s)"
-            if mv "$lockdir" "$quarantine" 2>/dev/null; then
-              rm -rf "$quarantine"
-            fi
-          fi
-          rmdir "$steal_guard" 2>/dev/null
-          continue
-        fi
       fi
       if [ "$waited" -ge "$max_wait_s" ]; then
         echo "LOCK_TIMEOUT"

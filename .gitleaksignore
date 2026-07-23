@@ -1,0 +1,7 @@
+# Exceções pontuais revisadas; nunca excluir caminhos inteiros.
+# Figma file key é identificador público, não credencial.
+92cae1a09b6030dccbe59d8345ed261fdb3a99a3:docs/design-system/prompt_claude_reconstrucao_figma_alphacarnes.md:generic-api-key:96
+# Segredos sintéticos de testes, sem uso fora do processo efêmero.
+e62efaead549ee5f89d3b24d6b0b2114e2c94bf0:app/backend/test/unit/token.service.spec.ts:generic-api-key:8
+e62efaead549ee5f89d3b24d6b0b2114e2c94bf0:app/backend/test/unit/token.service.spec.ts:generic-api-key:53
+e62efaead549ee5f89d3b24d6b0b2114e2c94bf0:app/frontend/__tests__/middleware.test.ts:generic-api-key:31

@@ -16,6 +16,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - name: governance lock harness
+        run: |
+          if [ -f .claude/workflows/lib/test-lock.sh ]; then
+            bash .claude/workflows/lib/test-lock.sh
+          fi
 
   type-check:
     runs-on: ubuntu-latest
@@ -109,6 +114,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - run: npm ci
+        working-directory: landing
+      - run: npm run build
+        working-directory: landing
 
   audit:
     runs-on: ubuntu-latest
@@ -120,6 +129,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm audit --audit-level=high
+      - run: npm ci
+        working-directory: landing
+      - run: npm audit --audit-level=high
+        working-directory: landing
 
   secret-scan:
     runs-on: ubuntu-latest

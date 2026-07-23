@@ -2,24 +2,24 @@ import { marked } from 'marked';
 import { getColors, onThemeChange } from './theme.js';
 
 // Import all 18 docs as raw strings
-import doc001 from '../../docs/001-visao-geral-operacao-e-fluxo-macro.md?raw';
-import doc002 from '../../docs/002-compra-programada-disponibilidade-virtual-e-vendas.md?raw';
-import doc003 from '../../docs/003-regras-funcionais-por-tela-bloco-estrutural.md?raw';
-import doc004 from '../../docs/004-campos-e-acoes-detalhados-tela-compra-programada-e-pedido-venda.md?raw';
-import doc005 from '../../docs/005-campos-e-acoes-detalhados-tela-disponibilidade-virtual-e-recebimento-com-divergencias.md?raw';
-import doc006 from '../../docs/006-campos-e-acoes-detalhados-tela-pesagem-associacao-sugestiva-e-expedicao-caminhao.md?raw';
-import doc007 from '../../docs/007-corte-transformacao-reetiquetagem-e-rastreabilidade-da-peca.md?raw';
-import doc008 from '../../docs/008-faturamento-emissao-nf-seguro-bloqueios-fiscais-e-liberacao-do-caminhao.md?raw';
-import doc009 from '../../docs/009-dashboards-operacionais-kpis-alertas-e-monitoramento-em-tempo-real.md?raw';
-import doc010 from '../../docs/010-modelo-de-dados-conceitual-e-entidades-principais-do-sistema.md?raw';
-import doc011 from '../../docs/011-modelo-logico-inicial-banco-de-dados-tabelas-e-relacionamentos.md?raw';
-import doc012 from '../../docs/012-arquitetura-aplicacional-modulos-servicos-e-integracoes.md?raw';
-import doc013 from '../../docs/013-perfis-acesso-papeis-aprovacoes-e-segregacao-de-funcoes.md?raw';
-import doc014 from '../../docs/014-eventos-de-dominio-workflows-assincronos-e-atualizacao-em-tempo-real.md?raw';
-import doc015 from '../../docs/015-roadmap-de-implantacao-fases-riscos-premissas-e-dependencias.md?raw';
-import doc016 from '../../docs/016-wireframes-fluxos-por-tela.md?raw';
-import doc017 from '../../docs/017-infraestrutura-e-equipamentos-recomendados-para-operacao.md?raw';
-import doc018 from '../../docs/018-arquitetura-onpremises-e-topologia-de-equipamentos-minimos.md?raw';
+import doc001 from '../../../docs/001-visao-geral-operacao-e-fluxo-macro.md?raw';
+import doc002 from '../../../docs/002-compra-programada-disponibilidade-virtual-e-vendas.md?raw';
+import doc003 from '../../../docs/003-regras-funcionais-por-tela-bloco-estrutural.md?raw';
+import doc004 from '../../../docs/004-campos-e-acoes-detalhados-tela-compra-programada-e-pedido-venda.md?raw';
+import doc005 from '../../../docs/005-campos-e-acoes-detalhados-tela-disponibilidade-virtual-e-recebimento-com-divergencias.md?raw';
+import doc006 from '../../../docs/006-campos-e-acoes-detalhados-tela-pesagem-associacao-sugestiva-e-expedicao-caminhao.md?raw';
+import doc007 from '../../../docs/007-corte-transformacao-reetiquetagem-e-rastreabilidade-da-peca.md?raw';
+import doc008 from '../../../docs/008-faturamento-emissao-nf-seguro-bloqueios-fiscais-e-liberacao-do-caminhao.md?raw';
+import doc009 from '../../../docs/009-dashboards-operacionais-kpis-alertas-e-monitoramento-em-tempo-real.md?raw';
+import doc010 from '../../../docs/010-modelo-de-dados-conceitual-e-entidades-principais-do-sistema.md?raw';
+import doc011 from '../../../docs/011-modelo-logico-inicial-banco-de-dados-tabelas-e-relacionamentos.md?raw';
+import doc012 from '../../../docs/012-arquitetura-aplicacional-modulos-servicos-e-integracoes.md?raw';
+import doc013 from '../../../docs/013-perfis-acesso-papeis-aprovacoes-e-segregacao-de-funcoes.md?raw';
+import doc014 from '../../../docs/014-eventos-de-dominio-workflows-assincronos-e-atualizacao-em-tempo-real.md?raw';
+import doc015 from '../../../docs/015-roadmap-de-implantacao-fases-riscos-premissas-e-dependencias.md?raw';
+import doc016 from '../../../docs/016-wireframes-fluxos-por-tela.md?raw';
+import doc017 from '../../../docs/017-infraestrutura-e-equipamentos-recomendados-para-operacao.md?raw';
+import doc018 from '../../../docs/018-arquitetura-onpremises-e-topologia-de-equipamentos-minimos.md?raw';
 
 const rawDocs = {
   '001': doc001, '002': doc002, '003': doc003, '004': doc004,

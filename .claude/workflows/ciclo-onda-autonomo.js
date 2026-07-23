@@ -39,7 +39,6 @@ if (!onda) {
     `args.onda é obrigatório, ex.: { onda: "onda2" }. Recebido: ${JSON.stringify(args)}`
   )
 }
-const LOCK_OWNER_TOKEN = `${onda}-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
 
 // RE-ADOÇÃO DE ÓRFÃ (opt-in, propagado pelo orquestrador multionda). Por padrão
 // a pré-condição barra uma onda presa em "implementando"/"aguardando_portao2"
@@ -76,20 +75,30 @@ Este agente já roda com contexto grande. Cada arquivo despejado inteiro aumenta
 // script versionado — o agente só INVOCA verbatim.
 const CAMINHO_LOCK_SH = `${REPO}/.claude/workflows/lib/lock.sh`
 const LOCKDIR_COMPARTILHADO = `${REPO}/.claude/workflows/.locks/docs-execucao.lock`
+let lockSequence = 0
+let lockTokenPendente = null
 
 function LOCK_ADQUIRIR_DOCS_COMPARTILHADOS(descricaoTrabalho) {
+  if (lockTokenPendente) throw new Error('Guarda de lock anterior não foi fechada ao construir o prompt.')
+  lockSequence += 1
+  lockTokenPendente = `${onda}-${Date.now()}-${lockSequence}-${Math.random().toString(36).slice(2, 12)}`
   return `ANTES de ${descricaoTrabalho}, adquira o lock compartilhado que serializa escrita em docs/execucao/ e a janela crítica de merge contra outras ondas em paralelo. Rode EXATAMENTE este comando (NÃO reescreva a lógica):
 \`\`\`bash
-bash "${CAMINHO_LOCK_SH}" acquire "${LOCKDIR_COMPARTILHADO}" "${LOCK_OWNER_TOKEN}"
+bash "${CAMINHO_LOCK_SH}" acquire "${LOCKDIR_COMPARTILHADO}" "${lockTokenPendente}"
 \`\`\`
-Só prossiga com ${descricaoTrabalho} se a saída for exatamente "LOCK_ACQUIRED". Se for "LOCK_TIMEOUT", NÃO prossiga — marque requerDecisaoHumana=true, explique em motivoDecisaoHumana, e pare.
+Só prossiga com ${descricaoTrabalho} se a saída for exatamente "LOCK_ACQUIRED". Se for "LOCK_TIMEOUT", NÃO execute a ação protegida: retorne falha no schema desta tarefa e inclua a linha literal "LOCK_TIMEOUT" no campo de detalhe disponível.
 
 `
 }
 
-const LOCK_LIBERAR_DOCS_COMPARTILHADOS = `Libere o lock agora (SEMPRE, mesmo se você parar por requerDecisaoHumana ou erro — nunca retorne sem isto): \`bash "${CAMINHO_LOCK_SH}" release "${LOCKDIR_COMPARTILHADO}" "${LOCK_OWNER_TOKEN}"\`. O token impede que uma execução que recebeu LOCK_TIMEOUT remova o lock de outra.
+function LOCK_LIBERAR_DOCS_COMPARTILHADOS() {
+  if (!lockTokenPendente) throw new Error('Nenhuma guarda de lock aberta ao construir a liberação.')
+  const token = lockTokenPendente
+  lockTokenPendente = null
+  return `Libere o lock agora (SEMPRE após LOCK_ACQUIRED, mesmo se a ação protegida falhar — nunca retorne sem isto): \`bash "${CAMINHO_LOCK_SH}" release "${LOCKDIR_COMPARTILHADO}" "${token}"\`. Exija "LOCK_RELEASED"; outro resultado torna a tarefa falha. Cada seção crítica recebe token exclusivo, portanto retry atrasado não pode liberar aquisição posterior.
 
 `
+}
 
 // MEMÓRIA DE PROGRESSO RETOMÁVEL (anti-loop de heartbeat): checkpoint em disco
 // que o agente LÊ no início (retoma do primeiro passo pendente) e APENDA a cada
@@ -322,12 +331,13 @@ NÃO edite nada e NÃO escreva em GATE-VEREDITOS.md — a escrita é de outro ag
     const evidenciaChecada = blocos.map((b) => `[${b.titulo}] (${b.status}) ${b.evidencia}`).join('\n\n')
     const resumo = `Portão 1 decomposto: ${blocos.map((b) => `${b.id}=${b.status}`).join('; ')}.`
 
-    // Escrita serializada, contexto mínimo, sem retry (rastro, não gate).
+    // Escrita serializada, contexto mínimo, sem retry. O rastro é parte do
+    // gate: falha de lock/escrita aborta fechado logo abaixo.
     const escrita = await agent(
       `${SEM_INTERACAO_SINCRONA}${LOCK_ADQUIRIR_DOCS_COMPARTILHADOS('anexar o veredito')}Anexe UMA linha na tabela de docs/execucao/GATE-VEREDITOS.md (repo ${REPO}), no formato da tabela existente (leia só o cabeçalho para copiar o formato). Timestamp via \`date -u +%Y-%m-%dT%H:%M:%SZ\`. A linha:
 | <timestamp> | ${onda} | 1 | ${veredito} | ${evidenciaChecada.replace(/\n+/g, ' ').replace(/\|/g, '/').slice(0, 700)} | ${(feedback || '—').replace(/\n+/g, ' ').replace(/\|/g, '/').slice(0, 500)} |
 
-NÃO edite mais nada. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS}Responda estruturado com ok=true/false e a linha anexada em "linha".`,
+NÃO edite mais nada. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS()}Responda estruturado com ok=true/false e a linha anexada em "linha".`,
       {
         label: `portao1:${onda}:r${rodadaPlano}:escrever-veredito`,
         phase: 'Portão 1',
@@ -340,6 +350,10 @@ NÃO edite mais nada. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS}Responda 
       }
     )
     registrar('portao1-escrita', { rodada: rodadaPlano, saida: escrita })
+    if (!escrita || escrita.ok !== true) {
+      log(`Registro do Portão 1 falhou fechado: ${escrita ? escrita.linha : 'agente sem resposta'}.`)
+      return null
+    }
 
     return { veredito, resumo, feedback, evidenciaChecada }
   }
@@ -422,9 +436,10 @@ log(`Portão 1 aprovado para ${onda}. Marcando status "implementando"...`)
 // ---------------------------------------------------------------------------
 phase('Implementação')
 
-// Trava anti-duplo-disparo + rastro de retomada. Falha aqui não aborta.
+// Trava anti-duplo-disparo + rastro de retomada. Falha aqui aborta fechado:
+// executar sem transição de estado permitiria um segundo disparo concorrente.
 const statusImplementando = await agent(
-  `${SEM_INTERACAO_SINCRONA}${LOCK_ADQUIRIR_DOCS_COMPARTILHADOS('editar o status')}Edite docs/execucao/EXECUCAO-STATUS.md (repo ${REPO}): na tabela de ondas, mude o status da onda "${onda}" para \`implementando\` e acrescente na coluna Observações "(ciclo autônomo, worktree ../AlphaCarnes-${onda})". Não mude NADA além. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS}Responda estruturado: ok=true/false, linha editada em "detalhe".`,
+  `${SEM_INTERACAO_SINCRONA}${LOCK_ADQUIRIR_DOCS_COMPARTILHADOS('editar o status')}Edite docs/execucao/EXECUCAO-STATUS.md (repo ${REPO}): na tabela de ondas, mude o status da onda "${onda}" para \`implementando\` e acrescente na coluna Observações "(ciclo autônomo, worktree ../AlphaCarnes-${onda})". Não mude NADA além. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS()}Responda estruturado: ok=true/false, linha editada em "detalhe".`,
   {
     label: 'marcar-status:implementando',
     phase: 'Implementação',
@@ -440,7 +455,8 @@ registrar('marcar-status', { status: 'implementando', saida: statusImplementando
 if (statusImplementando && statusImplementando.ok) {
   docsSujos = true
 } else {
-  log(`AVISO: não marquei "implementando" (${statusImplementando ? statusImplementando.detalhe : 'agente falhou'}). Seguindo — é rastro, não gate.`)
+  log(`Não marquei "implementando" (${statusImplementando ? statusImplementando.detalhe : 'agente falhou'}). Abortando fechado.`)
+  return resultadoFinal({ resultado: 'estado-vivo-falhou', etapa: 'marcar-implementando', statusImplementando })
 }
 
 // Eco do plano: força o agente a articular o entendimento antes de tocar em
@@ -550,7 +566,7 @@ const prNumero = implementacao.prNumero
 log(`PR #${prNumero} aberto para ${onda} (branch ${branch}). Marcando "aguardando_portao2"...`)
 
 const statusAguardando = await agent(
-  `${SEM_INTERACAO_SINCRONA}${LOCK_ADQUIRIR_DOCS_COMPARTILHADOS('editar o status')}Edite docs/execucao/EXECUCAO-STATUS.md (repo ${REPO}): mude o status da onda "${onda}" para \`aguardando_portao2\` e registre "PR #${prNumero}" na coluna PR. Nada além. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS}Responda estruturado: ok, detalhe.`,
+  `${SEM_INTERACAO_SINCRONA}${LOCK_ADQUIRIR_DOCS_COMPARTILHADOS('editar o status')}Edite docs/execucao/EXECUCAO-STATUS.md (repo ${REPO}): mude o status da onda "${onda}" para \`aguardando_portao2\` e registre "PR #${prNumero}" na coluna PR. Nada além. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS()}Responda estruturado: ok, detalhe.`,
   {
     label: 'marcar-status:aguardando-portao2',
     phase: 'Implementação',
@@ -563,7 +579,12 @@ const statusAguardando = await agent(
   }
 )
 registrar('marcar-status', { status: 'aguardando_portao2', saida: statusAguardando })
-if (statusAguardando && statusAguardando.ok) docsSujos = true
+if (statusAguardando && statusAguardando.ok) {
+  docsSujos = true
+} else {
+  log(`Não marquei "aguardando_portao2" (${statusAguardando ? statusAguardando.detalhe : 'agente falhou'}). Abortando fechado.`)
+  return resultadoFinal({ resultado: 'estado-vivo-falhou', etapa: 'marcar-aguardando-portao2', prNumero, statusAguardando })
+}
 
 // ---------------------------------------------------------------------------
 // Fases 4 e 5 — Portão 2 + Verificação Adversarial
@@ -627,11 +648,13 @@ async function auditarPortao2(cicloAuditoria, rodadaCorrecao) {
   const ciSync = await agentComRetry(
     `${SEM_INTERACAO_SINCRONA}${ECONOMIA_CONTEXTO}Você audita SOMENTE CI + sincronia de branch do PR #${prNumero} (onda "${onda}", branch ${branch}) do AlphaCarnes (repo ${REPO}). Verifique por comando — não confie em relato. NÃO edite nada, NÃO escreva em GATE-VEREDITOS.md.
 
-1. CI: gh pr checks ${prNumero} → os 8 jobs canônicos (lint, type-check, test-backend, coverage, test-frontend, build, audit, secret-scan) verdes. Consulte o diff: Vercel é obrigatório somente se houver arquivo em landing/**; fora desse escopo, ignore o status Vercel. Falha SOMENTE check obrigatório CONCLUÍDO vermelho; pending obrigatório → aguarde com --watch antes de decidir. Vermelho obrigatório concluído → "ajustar".
-2. Sincronia: git -C ${REPO} fetch origin && git -C ${REPO} merge-base --is-ancestor origin/develop origin/${branch} && echo OK || echo DESATUALIZADA. DESATUALIZADA → "bloqueado" (pedir rebase).
-3. SHA: gh pr view ${prNumero} --json headRefOid — retorne o SHA COMPLETO em headRefOid.
+1. PIN ANTES DO CI: capture \`headAntes=$(gh pr view ${prNumero} --json headRefOid --jq .headRefOid)\`.
+2. CI: gh pr checks ${prNumero} → os 8 jobs canônicos (lint, type-check, test-backend, coverage, test-frontend, build, audit, secret-scan) verdes. Consulte os arquivos do PR: Vercel é obrigatório somente se houver arquivo em landing/**; fora desse escopo, ignore o status Vercel. Pending obrigatório → aguarde com --watch.
+3. PIN DEPOIS DO CI: capture novamente headRefOid e exija igualdade EXATA com \`headAntes\`. Mudou durante a espera → "bloqueado"; não associe checks antigos ao SHA novo.
+4. Sincronia dos objetos fixos: git -C ${REPO} fetch origin; capture \`baseOid=$(git -C ${REPO} rev-parse origin/develop)\`; exija \`git -C ${REPO} rev-parse origin/${branch}\` igual a \`headAntes\` e \`git -C ${REPO} merge-base --is-ancestor "$baseOid" "$headAntes"\`. Qualquer falha → "bloqueado".
+5. Retorne \`headAntes\` como headRefOid e \`baseOid\` como baseRefOid, ambos completos. Evidência deve mostrar os dois pins do head iguais, o pin da base e os checks.
 
-Retorne estruturado: status, feedback, evidencia (comandos+outputs), headRefOid.`,
+Retorne estruturado: status, feedback, evidencia (comandos+outputs), headRefOid, baseRefOid.`,
     {
       label: `portao2:${onda}:${tag}:ci-sync`,
       phase: 'Portão 2',
@@ -642,8 +665,9 @@ Retorne estruturado: status, feedback, evidencia (comandos+outputs), headRefOid.
           feedback: { type: 'string' },
           evidencia: { type: 'string' },
           headRefOid: { type: 'string' },
+          baseRefOid: { type: 'string' },
         },
-        required: ['status', 'feedback', 'evidencia', 'headRefOid'],
+        required: ['status', 'feedback', 'evidencia', 'headRefOid', 'baseRefOid'],
       },
     },
     `Portão 2 ${tag} bloco "ci-sync" (${onda}, PR #${prNumero})`
@@ -655,8 +679,8 @@ Retorne estruturado: status, feedback, evidencia (comandos+outputs), headRefOid.
       agentComRetry(
         `${SEM_INTERACAO_SINCRONA}${ECONOMIA_CONTEXTO}Você audita SOMENTE "diff vs plano" do PR #${prNumero} (onda "${onda}", branch ${branch}) do AlphaCarnes (repo ${REPO}). NÃO edite nada, NÃO escreva em GATE-VEREDITOS.md.
 
-Leia o plano ${planoPath} de forma DIRIGIDA (Estrutura de arquivos + tasks, por faixa de linhas) e rode:
-- git -C ${REPO} diff origin/develop...origin/${branch} --stat, depois arquivos-chave por faixa. Verifique: (a) toda task do plano presente; (b) NADA fora do escopo (arquivo inesperado → questionar); (c) migrations batem com o plano (geradas por drizzle-kit, reversíveis, sem DELETE/DROP não justificado); (d) schemas/DTOs com os nomes exatos do plano.
+Leia o plano fixo com \`git -C ${REPO} show ${ciSync.headRefOid}:${planoPath}\` (Estrutura de arquivos + tasks, por faixa) e rode:
+- git -C ${REPO} diff ${ciSync.baseRefOid}...${ciSync.headRefOid} --stat, depois arquivos-chave dos mesmos objetos (nunca refs simbólicos). Verifique: (a) toda task do plano presente; (b) NADA fora do escopo; (c) migrations batem com o plano; (d) schemas/DTOs com os nomes exatos.
 
 Em dúvida → ajustar. Retorne estruturado: status, feedback, evidencia.`,
         { label: `portao2:${onda}:${tag}:diff-escopo`, phase: 'Portão 2', schema: SCHEMA_BLOCO_P2 },
@@ -666,14 +690,14 @@ Em dúvida → ajustar. Retorne estruturado: status, feedback, evidencia.`,
       agentComRetry(
         `${SEM_INTERACAO_SINCRONA}${ECONOMIA_CONTEXTO}Você audita SOMENTE "Mapa DoD→teste + RA-01..06 + segurança" do PR #${prNumero} (onda "${onda}", branch ${branch}) do AlphaCarnes (repo ${REPO}). NÃO edite nada, NÃO escreva em GATE-VEREDITOS.md.
 
-Leia só o "Mapa DoD → teste" do plano ${planoPath} (por faixa de linhas) e rode você mesmo:
+Leia só o "Mapa DoD → teste" do plano fixo via \`git -C ${REPO} show ${ciSync.headRefOid}:${planoPath}\` e rode você mesmo sobre o objeto ${ciSync.headRefOid}:
 - Cada invariante do mapa: localize o teste no diff (grep pelo nome) e LEIA a asserção — ela falharia se a regra fosse violada? Teste superficial → ajustar.
 - RA-01: grep no diff do frontend por lógica de decisão (saldo, bloqueio, cálculo crítico) — deve estar no backend.
 - RA-02: mutações críticas dentro de db.transaction + auditoria no mesmo escopo.
 - RA-04: eventos pós-commit; nenhum setInterval/polling novo.
 - RA-05/06: nenhum success mascarando erro; falha externa com log + status explícito.
 - RBAC: endpoints novos com @RequirePermissoes + teste de 403.
-- Segredos: git -C ${REPO} diff origin/develop...origin/${branch} | grep -iE "senha|password|secret|api[_-]?key" → nada em texto claro.
+- Segredos: git -C ${REPO} diff ${ciSync.baseRefOid}...${ciSync.headRefOid} | grep -iE "senha|password|secret|api[_-]?key" → nada em texto claro.
 
 Segredo em claro ou RA violada estruturalmente → bloqueado. Em dúvida → ajustar. Retorne estruturado: status, feedback, evidencia.`,
         { label: `portao2:${onda}:${tag}:dod-ra`, phase: 'Portão 2', schema: SCHEMA_BLOCO_P2 },
@@ -683,7 +707,7 @@ Segredo em claro ou RA violada estruturalmente → bloqueado. Em dúvida → aju
       agentComRetry(
         `${SEM_INTERACAO_SINCRONA}${ECONOMIA_CONTEXTO}Você audita SOMENTE "fidelidade ao protótipo (Princípio I da constituição — NÃO-NEGOCIÁVEL)" do PR #${prNumero} (onda "${onda}", branch ${branch}) do AlphaCarnes (repo ${REPO}). NÃO edite nada, NÃO escreva em GATE-VEREDITOS.md. Se a onda não tem telas (só backend), retorne "aprovado" com evidencia "onda sem UI".
 
-Leia a seção "Referências do protótipo" do plano ${planoPath} e, para CADA tela do PR:
+Leia a seção "Referências do protótipo" do plano fixo via \`git -C ${REPO} show ${ciSync.headRefOid}:${planoPath}\` e, para CADA tela do objeto ${ciSync.headRefOid}:
 - Abra o .tsx correspondente do protótipo (${PROTOTIPO}, branch feature/completude-v1.1) e o arquivo da tela no diff. Compare ESTRUTURA: seções, abas, modais, botões, rótulos, estados visuais, fluxo. Divergência não autorizada pelo plano → ajustar ("ficou melhor" NÃO aprova; fiel é o critério).
 - Grep no diff por cores hex fora dos tokens do DS/paleta do protótipo (#265389 #1E4070 #3B7FD4 #E8EEF5 #F5F7FA #1A2332 #64748B #94A3B8 #18A84A #F5B019 #FC5241 #7C3AED #1E3A5F #1B4E9B #2563EB #1844B8 #FEF3C7 #92400E e tokens var(--...)) → hex avulso estranho à paleta → ajustar.
 - Grep por "[Mm]arca" em rótulo/copy de UI → ajustar (Princípio IX).
@@ -716,12 +740,13 @@ Retorne estruturado: status, feedback (tela a tela), evidencia.`,
   const evidenciaChecada = blocos.map((b) => `[${b.titulo}] (${b.status}) ${b.evidencia}`).join('\n\n')
   const resumo = `Portão 2 decomposto: ${blocos.map((b) => `${b.titulo}=${b.status}`).join('; ')}.`
   const headRefOid = ciSync.headRefOid
+  const baseRefOid = ciSync.baseRefOid
 
   const escrita = await agent(
     `${SEM_INTERACAO_SINCRONA}${LOCK_ADQUIRIR_DOCS_COMPARTILHADOS('anexar o veredito')}Anexe UMA linha na tabela de docs/execucao/GATE-VEREDITOS.md (repo ${REPO}), formato da tabela existente. Timestamp via \`date -u +%Y-%m-%dT%H:%M:%SZ\`. A linha:
-| <timestamp> | ${onda} | 2 | ${veredito} | PR #${prNumero}, SHA ${headRefOid}: ${evidenciaChecada.replace(/\n+/g, ' ').replace(/\|/g, '/').slice(0, 600)} | ${(feedback || '—').replace(/\n+/g, ' ').replace(/\|/g, '/').slice(0, 500)} |
+| <timestamp> | ${onda} | 2 | ${veredito} | PR #${prNumero}, base ${baseRefOid}, head ${headRefOid}: ${evidenciaChecada.replace(/\n+/g, ' ').replace(/\|/g, '/').slice(0, 560)} | ${(feedback || '—').replace(/\n+/g, ' ').replace(/\|/g, '/').slice(0, 500)} |
 
-NÃO edite mais nada. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS}Responda estruturado: ok, linha.`,
+NÃO edite mais nada. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS()}Responda estruturado: ok, linha.`,
     {
       label: `portao2:${onda}:${tag}:escrever-veredito`,
       phase: 'Portão 2',
@@ -734,8 +759,12 @@ NÃO edite mais nada. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS}Responda 
     }
   )
   registrar('portao2-escrita', { ciclo: cicloAuditoria, rodada: rodadaCorrecao, saida: escrita })
+  if (!escrita || escrita.ok !== true) {
+    log(`Registro do Portão 2 falhou fechado: ${escrita ? escrita.linha : 'agente sem resposta'}.`)
+    return null
+  }
 
-  return { veredito, resumo, feedback, headRefOid, evidenciaChecada }
+  return { veredito, resumo, feedback, headRefOid, baseRefOid, evidenciaChecada }
 }
 
 auditoria: while (true) {
@@ -827,9 +856,9 @@ INDEPENDÊNCIA ESTRITA: NÃO leia docs/execucao/GATE-VEREDITOS.md antes de forma
 
 PIN DE AUDITORIA: o "aprovado" auditou o commit ${shaAuditado}. Primeiro passo: gh pr view ${prNumero} --json headRefOid — se o head atual for DIFERENTE, alguém empurrou commits pós-auditoria: refutado=true, achados="head mudou após o Portão 2 (esperado ${shaAuditado})", corrigivel=false.
 
-Leia o plano ${planoPath} (Mapa DoD→teste + Referências do protótipo, por faixa) e rode você mesmo:
-- gh pr checks ${prNumero} — todos os 8 jobs realmente verdes agora.
-- git -C ${REPO} diff origin/develop...origin/${branch} --stat + arquivos-chave — algo fora do escopo, guardrail enfraquecido, teste superficial que não prova o que afirma.
+Leia o plano pelo objeto auditado (\`git -C ${REPO} show ${shaAuditado}:${planoPath}\`, Mapa DoD→teste + Referências do protótipo) e rode você mesmo:
+- gh pr checks ${prNumero} — todos os 8 jobs realmente verdes agora; depois repita \`gh pr view --json headRefOid\` e exija ainda ${shaAuditado}.
+- git -C ${REPO} diff ${veredito2.baseRefOid}...${shaAuditado} --stat + arquivos-chave dos objetos fixos — algo fora do escopo, guardrail enfraquecido, teste superficial que não prova o que afirma.
 - Rode pessoalmente ao menos 2 verificações do Mapa DoD→teste do plano.
 - Se a onda tem UI: abra 1-2 telas do diff LADO A LADO com o .tsx do protótipo (${PROTOTIPO}) — divergência estrutural de layout/fluxo/rótulo é violação do Princípio I (NÃO-NEGOCIÁVEL) e refuta.
 - Procure: segredos em claro, regra de negócio no frontend (RA-01), mutação crítica sem transação/auditoria (RA-02), polling (RA-04), erro engolido (RA-05), migration destrutiva, "[Mm]arca" em UI.
@@ -944,7 +973,7 @@ Passos (ordem exata):
 3. Remova o worktree: git -C ${REPO} worktree remove ../AlphaCarnes-${onda} --force (se existir). Falhou → reporte e SIGA.
 4. git -C ${REPO} checkout develop 2>/dev/null; git -C ${REPO} pull — atualize develop local ANTES de editar docs. Se reclamar de mudanças locais em docs/execucao/: stash push -- docs/execucao && pull && stash pop. Conflito no pop → LIBERE O LOCK, requerDecisaoHumana=true.
 5. Atualize docs/execucao/EXECUCAO-STATUS.md: onda "${onda}" → "mergeada" (PR #${prNumero} + SHA squash) e observação resumindo o ciclo (rodadas de correção, auto-recuperação se houve).
-6. Commit + push dos docs: git -C ${REPO} add docs/execucao/EXECUCAO-STATUS.md docs/execucao/GATE-VEREDITOS.md${planoCorrigido ? ` "${planoPath}"` : ''} && commit (docs(execucao): ciclo autônomo ${onda} mergeada) && push. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS}
+6. Commit + push dos docs: git -C ${REPO} add docs/execucao/EXECUCAO-STATUS.md docs/execucao/GATE-VEREDITOS.md${planoCorrigido ? ` "${planoPath}"` : ''} && commit (docs(execucao): ciclo autônomo ${onda} mergeada) && push. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS()}
 
 Responda estruturado. Em "verificacoes", cada comando do passo 1 (e 1c se rodou) com output literal resumido.`,
   {

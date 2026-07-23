@@ -95,14 +95,13 @@ const SOMENTE_ONDAS = Array.isArray(parsedArgs?.somenteOndas) && parsedArgs.some
 // workers node (jest/tsc/build) e saturam a RAM. Se já houver um vivo, aborta.
 const CAMINHO_LOCK_SH = `${REPO}/.claude/workflows/lib/lock.sh`
 const LOCKDIR_RUN = `${REPO}/.claude/workflows/.locks/multionda-run.lock`
-const LOCK_RUN_TIMEOUT_S = 21600 // 6h — acima de qualquer run legítimo; mais velho = órfão.
 const LOCK_RUN_OWNER_TOKEN = `multionda-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
 
 async function adquirirLockRun() {
   const r = await agent(
     `${SEM_INTERACAO_SINCRONA}Adquira o lock de INSTÂNCIA ÚNICA do orquestrador multionda. Rode EXATAMENTE:
 \`\`\`bash
-bash "${CAMINHO_LOCK_SH}" acquire "${LOCKDIR_RUN}" "${LOCK_RUN_OWNER_TOKEN}" ${LOCK_RUN_TIMEOUT_S} 0
+bash "${CAMINHO_LOCK_SH}" acquire "${LOCKDIR_RUN}" "${LOCK_RUN_OWNER_TOKEN}" 0
 \`\`\`
 Reporte estruturado: adquirido=true SE a saída foi exatamente "LOCK_ACQUIRED"; false se "LOCK_TIMEOUT". Em "saida", a linha literal.`,
     {

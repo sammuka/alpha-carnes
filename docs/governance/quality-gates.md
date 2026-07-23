@@ -14,7 +14,7 @@ aplicação. A aplicação operacional é validada no Docker Desktop local.
 ### Qualidade de código
 - **CI** Lint sem erros (backend e frontend).
 - **CI** `type-check` com TypeScript strict; zero `any` implícito; sem `@ts-ignore` não justificado.
-- **CI** Build de produção ok (backend e frontend).
+- **CI** Build de produção ok (backend, frontend e landing; Vercel permanece exclusivo da landing).
 - Sem código legado comentado, marcadores artificiais ("CORRIGIDO:", "ANTES:"), ou duplicação evitável.
 - Funções/arquivos coesos; preferir simplicidade (KISS) e reuso (DRY).
 
@@ -26,7 +26,7 @@ aplicação. A aplicação operacional é validada no Docker Desktop local.
 - Invariantes de negócio têm teste dedicado que **falha** quando a regra é violada (ex.: tentar furar saldo).
 
 ### Segurança
-- **CI** `npm audit` sem vulnerabilidades **high** ou **critical** (backend e frontend).
+- **CI** `npm audit` sem vulnerabilidades **high** ou **critical** (monorepo backend/frontend e pacote independente da landing).
 - **CI** Sem segredos commitados (secret scanning).
 - Segredos e tokens (ex.: `EISS_CHAVE_AUTENTICACAO`) só via variáveis de ambiente; nunca em código ou logs.
 - Entradas validadas/sanitizadas (Zod nas bordas); queries parametrizadas (Drizzle).

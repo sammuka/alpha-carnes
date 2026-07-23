@@ -69,7 +69,7 @@ Perfis RBAC usam os slugs canônicos do doc 013 / seed F1: `administrador`, `com
 | Padrão de sinalização **"Provisório"** (badge âmbar + title com referência ao doc) | frontend (DS) | — | **Ausente** (DS v2 não tem o badge) | protótipo (13+ usos); v1.1 §18.21 | Componente compartilhado na Onda 2; remoção do badge exige decisão registrada (ex.: AD-01 remove o badge da composição do boi) |
 | **Terminologia**: "Nome Fantasia"/"Razão Social" no cadastro; "Buscar cliente" na busca; nunca "Marca" | todos | — | **Divergente (D5)** | v1.1 §1.3/§6.8 | Varredura completa na Onda 1 + regra de gate (constituição) |
 | Consumo automático físico → virtual → overbooking | `comercial/pedidos` | `reservas_disponibilidade` | **Divergente (D1)** | v1.1 §6.2 | Prioridade automática, sem escolha manual do vendedor |
-| Auditoria de eventos obrigatórios v1.1 §12 | `common/auditoria` | auditoria (existe) | **Conforme** (mecanismo) / **Divergente** (cobertura dos novos eventos) | v1.1 §12 | Cada onda adiciona seus eventos auditáveis |
+| Auditoria de eventos obrigatórios v1.1 §12 | `common/auditoria` | auditoria (existe) | **Divergente** (cobertura; mecanismo existente conforme) | v1.1 §12 | Cada onda adiciona seus eventos auditáveis |
 
 ## Checagem de fechamento
 
@@ -83,8 +83,8 @@ Percorridas **todas** as entradas de `src/app/routes.tsx` do protótipo (`featur
 
 | Classificação | Entradas de rota | Transversais |
 |---|---|---|
-| Conforme | 2 (login; auditoria) | 1 parcial (auditoria-mecanismo) |
-| Divergente | 28 (27 telas + o redirect da linha 2) | 3 |
-| Ausente | 11 (tabela-precos, espelho, operacoes, overbooking, relatorios-sif, entrada-itens, ajustes, seguro-manual, caminhoes, motoristas, modelos-etiqueta) | 2 |
+| Conforme | 2 (login; auditoria) | 0 |
+| Divergente | 28 (27 telas + o redirect da linha 2) | 3 (terminologia, consumo automático, cobertura da auditoria) |
+| Ausente | 11 (tabela-precos, espelho, operacoes, overbooking, relatorios-sif, entrada-itens, ajustes, seguro-manual, caminhoes, motoristas, modelos-etiqueta) | 3 (Operação, Troca de Peça, badge Provisório) |
 
 > Nota: a granularidade backend/frontend está na coluna Observação — várias linhas são "Divergente" por terem backend conforme e UI placeholder, ou vice-versa.

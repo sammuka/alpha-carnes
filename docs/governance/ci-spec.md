@@ -19,9 +19,9 @@ Jobs (cada um é um status check obrigatório):
 - **`test-backend`** — testes unitários + integração do NestJS, com **PostgreSQL 18 como service container**. Sobe banco efêmero, aplica migrations Drizzle, roda testes, coleta cobertura.
 - **`coverage`** — valida cobertura backend ≥ 80% (linha + branch). Falha abaixo do limiar.
 - **`test-frontend`** — testes de componente/smoke do Next.js.
-- **`build`** — build de produção de backend e frontend.
-- **`audit`** — `npm audit --audit-level=high` em backend e frontend; falha com vuln high/critical.
-- **`secret-scan`** — histórico Git completo com `gitleaks git . --log-opts=--all`; o binário v8.24.3 só é executado após validação fail-closed do SHA-256 oficial.
+- **`build`** — build de produção de backend, frontend e landing; isso não muda o limite de deploy: Vercel continua exclusivo da landing.
+- **`audit`** — `npm audit --audit-level=high` no monorepo da aplicação e separadamente em `landing`; falha com vuln high/critical.
+- **`secret-scan`** — histórico Git completo com `gitleaks git . --log-opts=--all`; o binário v8.24.3 só é executado após validação fail-closed do SHA-256 oficial. Nenhum caminho versionado é excluído: falsos positivos revisados entram por fingerprint exato em `.gitleaksignore`.
 
 Referência do pipeline vigente:
 
@@ -44,6 +44,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - name: governance lock harness
+        run: |
+          if [ -f .claude/workflows/lib/test-lock.sh ]; then
+            bash .claude/workflows/lib/test-lock.sh
+          fi
 
   type-check:
     runs-on: ubuntu-latest
@@ -126,6 +131,10 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm run build
+      - run: npm ci
+        working-directory: landing
+      - run: npm run build
+        working-directory: landing
 
   audit:
     runs-on: ubuntu-latest
@@ -135,6 +144,10 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm audit --audit-level=high
+      - run: npm ci
+        working-directory: landing
+      - run: npm audit --audit-level=high
+        working-directory: landing
 
   secret-scan:
     runs-on: ubuntu-latest
@@ -154,7 +167,7 @@ jobs:
 ```
 
 Notas:
-- Os comandos são os scripts versionados no `package.json` raiz e nos workspaces; `db:migrate` e `test:cov` rodam em `app/backend`.
+- Os comandos da aplicação são os scripts versionados no `package.json` raiz e nos workspaces; `db:migrate` e `test:cov` rodam em `app/backend`. A landing tem lockfile independente, portanto `npm ci`, build e audit rodam com `working-directory: landing`.
 - `scripts/check-coverage.mjs` valida o `coverage-summary.json` (linhas e branches ≥ 80%).
 - Node 22 LTS conforme ADR-001.
 

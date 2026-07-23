@@ -71,7 +71,7 @@ Estas defesas custaram diagnósticos reais lá — não as remova ao adaptar:
 
 - **Watchdog de silêncio (~3 min sem token)** mata turnos de raciocínio longos, não tarefas longas → auditorias decompostas em blocos paralelos de contexto pequeno + diretiva de cadência no retry (`agentComRetry`). Nunca "ler menos"; sempre "passos mais curtos".
 - **Memória de progresso em disco** (`.locks/progresso-*.md`): implementações longas retomam do checkpoint em vez de recomeçar do zero a cada reinício do harness.
-- **Lock em disco via `mkdir` atômico** (`lib/lock.sh`, versionado — o agente invoca verbatim, nunca reimplementa): serializa escrita no estado vivo e a janela crítica de merge entre execuções concorrentes; rouba locks órfãos com marker atômico anti-TOCTOU.
+- **Lock em disco via `mkdir` atômico** (`lib/lock.sh`, versionado — o agente invoca verbatim, nunca reimplementa): serializa escrita no estado vivo e a janela crítica de merge entre execuções concorrentes; nunca rouba um dono apenas por idade. Lock órfão bloqueia fechado e só pode ser recuperado após prova externa de que não há execução ativa. O harness versionado `lib/test-lock.sh` prova ownership, timeout fail-closed e concorrência real em Bash/Linux.
 - **Lock de instância única do orquestrador**: dois runs multionda sobrepostos saturam a RAM (N workers × jest/tsc cada).
 - **Pin de SHA auditado**: o merge só vale para o commit que os gates auditaram; head diferente → re-auditoria.
 - **Espera de CI explícita** antes de cada rodada de auditoria (PR recém-aberto está sempre pending — sem a espera, as rodadas de correção são queimadas por latência, não por defeito).

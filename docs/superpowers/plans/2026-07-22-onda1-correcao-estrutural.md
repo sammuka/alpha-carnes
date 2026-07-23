@@ -120,7 +120,7 @@ app/frontend/__tests__/{api,terminologia}.test.ts
 | `data_operacao` e cache `nfe_*` não existem após contract | `onda1-migrations.e2e-spec.ts` — consulta `information_schema.columns` |
 | Challenge 409 não muta cinco agregados | `pedidos-v11.e2e-spec.ts` — snapshot antes/depois de pedido, item, reserva, saldo, pendência |
 | Confirmação 201/200 cria reserva+pendência atomicamente | `overbooking.e2e-spec.ts` — criação e inclusão, com falha injetada |
-| Concorrência nunca negativiza saldo | `overbooking-concorrencia.e2e-spec.ts` |
+| Concorrência nunca negativiza/reutiliza saldo; payload duplicado é rejeitado | `overbooking-concorrencia.e2e-spec.ts` + `pedidos-v11.e2e-spec.ts` |
 | Reduzir/remover/cancelar não credita overbooking ao saldo | `overbooking-lifecycle.e2e-spec.ts` |
 | Pedido confirmado com falta finaliza | `pedidos-v11.e2e-spec.ts` — `finalizar overbooking_confirmado retorna 200` |
 | Recebimento exige Pedido ao Fornecedor | `pedido-fornecedor.e2e-spec.ts` |
@@ -599,6 +599,22 @@ export const incluirItemSchema = z.object({
   quantidade: z.coerce.number().positive(),
   observacoes: z.string().max(1000).optional(),
 });
+const itensCriacaoPedidoSchema = z.array(itemPedidoSchema)
+  .min(1, 'pedido precisa de ao menos um item')
+  .superRefine((itens, ctx) => {
+    const vistos = new Set<string>();
+    itens.forEach((item, index) => {
+      if (vistos.has(item.itemComercialId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index, 'itemComercialId'],
+          message: 'item comercial duplicado no mesmo pedido',
+        });
+      }
+      vistos.add(item.itemComercialId);
+    });
+  });
+// createPedidoSchema usa `itens: itensCriacaoPedidoSchema`.
 export const confirmarCriacaoOverbookingSchema = createPedidoSchema;
 export const confirmarInclusaoOverbookingSchema = incluirItemSchema.extend({
   itemId: z.string().uuid().optional(), // presente para aumento/legado; ausente para nova linha
@@ -680,7 +696,12 @@ it('409 challenge não persiste mutação', async () => {
 ```typescript
 const resultado = await this.db.transaction(async (tx) => {
   const { operacao } = await this.operacoes.garantirOperacao(tx, dto.dataOperacao, usuarioId);
-  const plano = await this.planejarSobLock(tx, operacao.id, dto.itens);
+  const solicitados: ItemSolicitado[] = dto.itens.map((item) => ({
+    itemComercialId: item.itemComercialId,
+    quantidade: item.quantidadePedida,
+    observacoes: item.observacoes,
+  }));
+  const plano = await this.planejarSobLock(tx, operacao.id, solicitados);
   const desafios = plano.filter((p) => compararQtd(p.deficit, '0') > 0);
   if (desafios.length && !confirmado) {
     throw new OverbookingChallengeException(desafios.map((p) => ({
@@ -703,7 +724,7 @@ const resultado = await this.db.transaction(async (tx) => {
     observacoesGerais: dto.observacoesGerais,
     usuarioCriacaoId: usuarioId,
   }).returning());
-  return this.persistirItensPlanejados(tx, pedido, dto.itens, plano, usuarioId);
+  return this.persistirItensPlanejados(tx, pedido, solicitados, plano, usuarioId);
 });
 this.emitirEventosPosCommit(resultado.eventos);
 return resultado.pedido;
@@ -731,6 +752,9 @@ if (desafios.length && !confirmado) {
 ```typescript
 async planejarSobLock(tx: Tx, operacaoId: string, itens: ItemSolicitado[]): Promise<PlanoItem[]> {
   const ids = itens.map((item) => item.itemComercialId);
+  if (new Set(ids).size !== ids.length) {
+    throw new BadRequestException('item comercial duplicado no mesmo pedido');
+  }
   const resultado = await tx.execute<{
     id: string;
     item_comercial_id: string;
@@ -793,7 +817,7 @@ async persistirItensPlanejados(
     }).returning();
 
     for (const cobertura of alocacao.coberturas) {
-      await tx.execute(sql`
+      const atualizada = await tx.execute<{ id: string }>(sql`
         UPDATE disponibilidades_virtuais
         SET quantidade_reservada=quantidade_reservada+${cobertura.quantidade}::numeric,
             quantidade_disponivel=quantidade_disponivel-${cobertura.quantidade}::numeric,
@@ -802,7 +826,12 @@ async persistirItensPlanejados(
               ELSE 'parcialmente_reservada'
             END
         WHERE id=${cobertura.disponibilidadeId}
+          AND quantidade_disponivel >= ${cobertura.quantidade}::numeric
+        RETURNING id
       `);
+      if (atualizada.rows.length !== 1) {
+        throw new ConflictException('Saldo mudou durante a confirmação; refaça a operação');
+      }
       await tx.insert(reservasDisponibilidade).values({
         disponibilidadeVirtualId: cobertura.disponibilidadeId,
         pedidoVendaItemId: item.id,
@@ -1124,7 +1153,7 @@ if (pendenteLegado.length) throw new ConflictException('OVERBOOKING_CONFIRMACAO_
 // overbooking_confirmado é aceito; não tocar no saldo.
 ```
 
-- [ ] Testes obrigatórios: challenge compara contagens e saldos antes/depois; confirmação 201 e 200; falha injetada; concorrência; redução somente déficit; redução além do déficit; remoção; cancelamento; finalização.
+- [ ] Testes obrigatórios: challenge compara contagens e saldos antes/depois; confirmação 201 e 200; item comercial duplicado no mesmo payload retorna 400/zero mutação; UPDATE condicional retornando zero aborta toda a transação; falha injetada; concorrência; redução somente déficit; redução além do déficit; remoção; cancelamento; finalização.
 - [ ] Run: `npm run test -- "pedidos-v11|overbooking"` → PASS.
 - [ ] Commit previsto: `feat(onda1): challenge e lifecycle completo de overbooking`
 
@@ -1157,7 +1186,7 @@ export const criarPedidoFornecedorSchema = z.object({
 });
 export const listarPedidosFornecedorSchema = z.object({
   status: z.enum(['rascunho', 'enviado', 'aguardando_recebimento', 'recebido', 'encerrado', 'cancelado']).optional(),
-  operacaoId: z.string().uuid().optional(),
+  operacaoId: z.string().uuid(), // obrigatório: nenhuma consulta operacional cruza Operações implicitamente
 });
 ```
 
