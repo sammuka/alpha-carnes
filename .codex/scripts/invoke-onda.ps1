@@ -240,7 +240,8 @@ try {
     }
 
     $validResult = $null
-    :cycle do {
+    try {
+        :cycle do {
         $gate1 = Invoke-RoleStage -Role monitor -Stage gate1 -Prompt (
             'Execute $gate-plano para a onda indicada, com verificação própria. ' +
             'Registre o veredito sob lock e retorne approved, adjust, requires-human, blocked ou failed.'
@@ -338,7 +339,13 @@ try {
             break cycle
         }
         $validResult = New-ResultFromRole -RoleResult $finalize
-    } while ($false)
+        } while ($false)
+    } catch {
+        $validResult = New-FailureResult -Stage orchestration -Message (
+            "Falha fechada na orquestração: $($_.Exception.Message)"
+        )
+        $validResult.roleTrace = @($roleTrace)
+    }
 
     if (-not $validResult) {
         $validResult = New-FailureResult -Stage orchestration `
