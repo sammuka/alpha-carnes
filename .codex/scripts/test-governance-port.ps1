@@ -297,10 +297,14 @@ try {
             }
         )
         try {
-            $null = Wait-Job -Job $jobs -Timeout 30
+            # Start-Job cria processos pwsh completos; runners Linux frios podem
+            # levar mais de 30 s apenas para inicializar oito workers.
+            $null = Wait-Job -Job $jobs -Timeout 90
             Assert-True (
                 @($jobs | Where-Object { $_.State -ne 'Completed' }).Count -eq 0
-            ) 'Writers concorrentes não terminaram.'
+            ) "Writers concorrentes não terminaram: $(
+                @($jobs | ForEach-Object { $_.State }) -join ','
+            )."
             foreach ($raw in @(Receive-Job -Job $jobs)) {
                 $result = [string]$raw | ConvertFrom-Json
                 Assert-True ($result.status -eq 'recorded') 'Writer concorrente não registrou.'
@@ -787,19 +791,18 @@ exit 34
         ),
         [Text.ASCIIEncoding]::new()
     )
+    $ghMockCommand = if ($IsWindows) { $ghMockCmd } else { $ghMockScript }
 
     Test-Case 'Visibility lease uses GH mock and waits for watchdog readiness' {
         $statePath = Join-Path $ghMockRoot 'state.txt'
         $logPath = Join-Path $ghMockRoot 'calls.log'
         [IO.File]::WriteAllText($statePath, 'PRIVATE', [Text.UTF8Encoding]::new($false))
         [IO.File]::WriteAllText($logPath, '', [Text.UTF8Encoding]::new($false))
-        $savedPath = $env:PATH
         $savedState = $env:CODEX_GH_MOCK_STATE
         $savedLog = $env:CODEX_GH_MOCK_LOG
         $savedRuntime = $env:CODEX_GH_MOCK_RUNTIME
         $savedFailPrivate = $env:CODEX_GH_MOCK_FAIL_PRIVATE
         try {
-            $env:PATH = "$ghMockRoot;$savedPath"
             $env:CODEX_GH_MOCK_STATE = $statePath
             $env:CODEX_GH_MOCK_LOG = $logPath
             $env:CODEX_GH_MOCK_RUNTIME = $testRootFull
@@ -812,7 +815,8 @@ exit 34
                     }
                     [ordered]@{ status = 'green'; source = 'mock' }
                 } -RuntimeRoot $testRootFull -TimeoutSeconds 60 `
-                -VisibilityRetryDelayMilliseconds 1 | ConvertFrom-Json
+                -VisibilityRetryDelayMilliseconds 1 `
+                -GhCommandPath $ghMockCommand | ConvertFrom-Json
             Assert-True ($result.watchdogReady -eq $true) 'Readiness do watchdog não foi confirmada.'
             Assert-True ($result.publicVerified -eq $true) 'PUBLIC não foi verificado no mock.'
             Assert-True ($result.privateRestored -eq $true) 'PRIVATE não foi restaurado no mock.'
@@ -824,7 +828,6 @@ exit 34
                 ($calls -join ',') -eq 'PUBLIC,PRIVATE'
             ) "Sequência de visibilidade inesperada: $($calls -join ',')."
         } finally {
-            $env:PATH = $savedPath
             $env:CODEX_GH_MOCK_STATE = $savedState
             $env:CODEX_GH_MOCK_LOG = $savedLog
             $env:CODEX_GH_MOCK_RUNTIME = $savedRuntime
@@ -837,13 +840,11 @@ exit 34
         $logPath = Join-Path $ghMockRoot 'calls-primary.log'
         [IO.File]::WriteAllText($statePath, 'PRIVATE', [Text.UTF8Encoding]::new($false))
         [IO.File]::WriteAllText($logPath, '', [Text.UTF8Encoding]::new($false))
-        $savedPath = $env:PATH
         $savedState = $env:CODEX_GH_MOCK_STATE
         $savedLog = $env:CODEX_GH_MOCK_LOG
         $savedRuntime = $env:CODEX_GH_MOCK_RUNTIME
         $savedFailPrivate = $env:CODEX_GH_MOCK_FAIL_PRIVATE
         try {
-            $env:PATH = "$ghMockRoot;$savedPath"
             $env:CODEX_GH_MOCK_STATE = $statePath
             $env:CODEX_GH_MOCK_LOG = $logPath
             $env:CODEX_GH_MOCK_RUNTIME = $testRootFull
@@ -852,7 +853,8 @@ exit 34
             try {
                 $null = & $visibilityScript -Repository 'owner/repo' -EnableVisibilityLease `
                     -ActionScript { throw 'PRIMARY-MOCK' } -RuntimeRoot $testRootFull `
-                    -TimeoutSeconds 60 -VisibilityRetryDelayMilliseconds 1
+                    -TimeoutSeconds 60 -VisibilityRetryDelayMilliseconds 1 `
+                    -GhCommandPath $ghMockCommand
             } catch {
                 $message = $_.Exception.Message
             }
@@ -861,7 +863,6 @@ exit 34
                 (Get-Content -Raw -LiteralPath $statePath).Trim() -eq 'PRIVATE'
             ) 'PRIVATE deve ser restaurado mesmo após erro principal.'
         } finally {
-            $env:PATH = $savedPath
             $env:CODEX_GH_MOCK_STATE = $savedState
             $env:CODEX_GH_MOCK_LOG = $savedLog
             $env:CODEX_GH_MOCK_RUNTIME = $savedRuntime
@@ -876,7 +877,6 @@ exit 34
         [IO.File]::WriteAllText($statePath, 'PRIVATE', [Text.UTF8Encoding]::new($false))
         [IO.File]::WriteAllText($logPath, '', [Text.UTF8Encoding]::new($false))
         [IO.File]::WriteAllText($counterPath, '0', [Text.UTF8Encoding]::new($false))
-        $savedPath = $env:PATH
         $savedState = $env:CODEX_GH_MOCK_STATE
         $savedLog = $env:CODEX_GH_MOCK_LOG
         $savedRuntime = $env:CODEX_GH_MOCK_RUNTIME
@@ -884,7 +884,6 @@ exit 34
         $savedFailCount = $env:CODEX_GH_MOCK_FAIL_PRIVATE_COUNT
         $savedCounter = $env:CODEX_GH_MOCK_PRIVATE_COUNTER
         try {
-            $env:PATH = "$ghMockRoot;$savedPath"
             $env:CODEX_GH_MOCK_STATE = $statePath
             $env:CODEX_GH_MOCK_LOG = $logPath
             $env:CODEX_GH_MOCK_RUNTIME = $testRootFull
@@ -896,7 +895,7 @@ exit 34
                 $null = & $visibilityScript -Repository 'owner/repo' -EnableVisibilityLease `
                     -ActionScript { throw 'PRIMARY-MOCK' } -RuntimeRoot $testRootFull `
                     -TimeoutSeconds 60 -VisibilityRetryDelayMilliseconds 1 `
-                    -RecoveryWaitSeconds 10
+                    -RecoveryWaitSeconds 10 -GhCommandPath $ghMockCommand
             } catch {
                 $message = $_.Exception.Message
             }
@@ -914,7 +913,6 @@ exit 34
                 @($calls | Where-Object { $_ -match '^PRIVATE-FAILED-' }).Count -eq 6
             ) 'Número adversarial de falhas transitórias inesperado.'
         } finally {
-            $env:PATH = $savedPath
             $env:CODEX_GH_MOCK_STATE = $savedState
             $env:CODEX_GH_MOCK_LOG = $savedLog
             $env:CODEX_GH_MOCK_RUNTIME = $savedRuntime

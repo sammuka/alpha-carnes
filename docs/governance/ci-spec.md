@@ -45,8 +45,10 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run test:ci-scripts
-      - name: governance lock harness
-        run: bash .claude/workflows/lib/test-lock.sh
+      - run: npm install --global @openai/codex@0.145.0
+      - name: governance PowerShell harness
+        shell: pwsh
+        run: ./.codex/scripts/test-governance-port.ps1
 
   type-check:
     runs-on: ubuntu-latest

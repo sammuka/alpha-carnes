@@ -69,7 +69,7 @@ Veredito registrado sob lock, incluindo os dois OIDs; merge só com `aprovado`. 
 | `GATE-VEREDITOS.md` | Monitor | **append-only**; linha por veredito: `data · onda · portão · veredito · evidência · feedback` |
 | `DECISOES.md` | Quality Owner (registrado pelo Executor) | decisões numeradas `AD-xx` que fecham pendências (fonte de precedência máxima abaixo da constituição) |
 
-Toda escrita nesses arquivos usa `.claude/workflows/lib/lock.sh` com token aleatório por seção, persistido apenas como hash, e valida saída literal de acquire/release. Uma execução mantém também `onda<N>-run.lock` durante o ciclo inteiro; isso impede dois disparos da mesma onda, inclusive entre modo assistido e autônomo. Lock órfão nunca é roubado por idade: recuperação exige prova externa de que o dono não está vivo.
+Toda escrita nesses arquivos usa [`.codex/scripts/lock.ps1`](../../.codex/scripts/lock.ps1) com token aleatório por seção, persistido apenas como hash, e valida a saída estruturada de acquire/release. Uma execução mantém também `onda<N>-run.lock` durante o ciclo inteiro; isso impede dois disparos da mesma onda, inclusive entre modo assistido e autônomo. Lock órfão nunca é recuperado apenas por idade: a quarentena exige prova externa de que o dono não está vivo e compare-and-swap do owner observado.
 
 ## 6. Formato obrigatório do plano tático de onda
 

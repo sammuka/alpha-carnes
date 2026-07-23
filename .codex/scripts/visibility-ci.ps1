@@ -15,6 +15,7 @@ param(
     [ValidateRange(1, 30)][int]$WatchdogReadyTimeoutSeconds = 10,
     [ValidateRange(1, 10000)][int]$VisibilityRetryDelayMilliseconds = 2000,
     [ValidateRange(1, 300)][int]$RecoveryWaitSeconds = 30,
+    [string]$GhCommandPath = 'gh',
 
     # Parâmetros internos exclusivos do processo watchdog.
     [switch]$Watchdog,
@@ -33,7 +34,7 @@ function Write-Json {
 
 function Invoke-Gh {
     param([Parameter(Mandatory)][string[]]$Arguments)
-    $output = @(& gh @Arguments 2>&1)
+    $output = @(& $GhCommandPath @Arguments 2>&1)
     if ($LASTEXITCODE -ne 0) {
         throw "gh $($Arguments -join ' ') falhou: $($output -join ' ')"
     }
@@ -223,10 +224,10 @@ if (-not $EnableVisibilityLease) {
 if ($PrNumber -le 0 -and -not $ActionScript) {
     throw 'PrNumber é obrigatório quando ActionScript não é informado.'
 }
-if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+if (-not (Get-Command $GhCommandPath -ErrorAction SilentlyContinue)) {
     throw 'GitHub CLI não encontrado.'
 }
-gh auth status 1>$null 2>$null
+$null = Invoke-Gh -Arguments @('auth', 'status')
 if ($LASTEXITCODE -ne 0) {
     throw 'GitHub CLI não está autenticado.'
 }
@@ -288,11 +289,20 @@ try {
         '-TimeoutSeconds', [string]$TimeoutSeconds,
         '-VisibilityRetryDelayMilliseconds', [string]$VisibilityRetryDelayMilliseconds,
         '-RecoveryWaitSeconds', [string]$RecoveryWaitSeconds,
-        '-RuntimeRoot', "`"$runtimeFull`""
+        '-RuntimeRoot', "`"$runtimeFull`"",
+        '-GhCommandPath', "`"$GhCommandPath`""
     )
-    $watchdogProcess = Start-Process -FilePath $pwshPath -ArgumentList $watchdogArguments `
-        -WindowStyle Hidden -RedirectStandardOutput $watchdogStdout `
-        -RedirectStandardError $watchdogStderr -PassThru
+    $startParameters = @{
+        FilePath = $pwshPath
+        ArgumentList = $watchdogArguments
+        RedirectStandardOutput = $watchdogStdout
+        RedirectStandardError = $watchdogStderr
+        PassThru = $true
+    }
+    if ($IsWindows) {
+        $startParameters.WindowStyle = 'Hidden'
+    }
+    $watchdogProcess = Start-Process @startParameters
     if (-not $watchdogProcess -or $watchdogProcess.HasExited) {
         throw 'Watchdog de visibilidade não iniciou.'
     }

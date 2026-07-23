@@ -1,2 +1,3 @@
-# Scripts executados em Bash/Linux precisam permanecer LF mesmo com core.autocrlf=true.
+# Scripts executados em Linux precisam permanecer LF mesmo com core.autocrlf=true.
 *.sh text eol=lf
+*.ps1 text eol=lf
