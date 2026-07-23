@@ -135,6 +135,7 @@ app/frontend/__tests__/{api,terminologia}.test.ts
 | Recebimento exige Pedido ao Fornecedor | `pedido-fornecedor.e2e-spec.ts` |
 | Migração não inventa itens de NF legada | `onda1-migrations.e2e-spec.ts` |
 | Caixaria usa quantidade; pesável usa peças/peso | `conferencia-tripla.e2e-spec.ts` |
+| `calcularQuadro` mapeia SQL→`QuadroItem` (snake→camel, incl. `recebimentoItemId` de `ri.id`) e a `situacao` (`conforme`/`divergente`) sai só de `classificarSituacao` — comparação decimal exata (`compararQtd`), sem tolerância; peso nulo de caixaria não gera falso positivo; item só pesado é `produto_nao_previsto` com `recebimentoItemId=null` | `conferencia-tripla.e2e-spec.ts` — `calcularQuadro classifica conforme/divergente por qtd e peso exatos, mapeia recebimentoItemId e trata item nao previsto` |
 | Conclusão imutável e divergência transacional | `conferencia-tripla.e2e-spec.ts` |
 | RBAC das permissões novas | um caso 403 em cada suíte de endpoint |
 | Seis chaves novas existem no catálogo `PERMISSOES` (a união `Permissao` as inclui) | `permissoes-onda1.spec.ts` — `PERMISSOES contém as 6 chaves da Onda 1` |
@@ -1687,68 +1688,108 @@ await tx.insert(recebimentos).values({
 
 **Files:** `conferencia.service.ts`, schema de conclusão/divergência/ocorrência, controller/DTO, testes.
 
-- [ ] Calcular o quadro por modalidade:
+- [ ] `calcularQuadro` monta o quadro por modalidade e é a **única fonte** da `situacao`.
+  Assinatura idêntica ao uso no controller (`this.conferencia.calcularQuadro(this.db, id)`):
+  `db` é `NodePgDatabase<typeof schema>` (mesmo tipo injetado nos demais services), a query
+  crua roda por `db.execute(sql\`…\`)` e lê `.rows` (idioma real — cf.
+  `disponibilidade.service.ts`). O SELECT projeta `ri.id AS recebimento_item_id`; o mapa
+  snake→camel converte campo a campo e a `situacao` é computada por `classificarSituacao`
+  (RA-01 — a regra que dispara a ocorrência administrativa ao fornecedor vive aqui, no
+  backend; o consumidor `concluirConferencia` só filtra `q.situacao === 'divergente'`):
 
-```sql
-WITH nf_itens AS (
-  SELECT nf.recebimento_id, nfi.item_comercial_id,
-         SUM(nfi.quantidade_declarada) AS qtd_nf,
-         SUM(nfi.peso_declarado)
-           FILTER (WHERE nfi.peso_declarado IS NOT NULL) AS peso_nf
-  FROM notas_fiscais_fornecedor nf
-  JOIN notas_fiscais_fornecedor_itens nfi
-    ON nfi.nf_id=nf.id AND nfi.deleted_at IS NULL
-  WHERE nf.recebimento_id=${recebimentoId} AND nf.deleted_at IS NULL
-  GROUP BY nf.recebimento_id, nfi.item_comercial_id
-), pecas_apuradas AS (
-  -- Schema real de `pecas` (pesagem.schema.ts): a FK do item é
-  -- `item_comercial_base_id` e o peso capturado é `peso_original`.
-  -- Aliasamos para `item_comercial_id` para manter os JOINs a jusante.
-  SELECT recebimento_id, item_comercial_base_id AS item_comercial_id,
-         COUNT(id)::numeric AS qtd_pecas,
-         COALESCE(SUM(peso_original), 0) AS peso_apurado
-  FROM pecas
-  WHERE recebimento_id=${recebimentoId} AND deleted_at IS NULL
-  GROUP BY recebimento_id, item_comercial_base_id
-), item_ids AS (
-  SELECT pfi.item_comercial_id
-  FROM recebimentos r
-  JOIN pedidos_fornecedor_itens pfi
-    ON pfi.pedido_fornecedor_id=r.pedido_fornecedor_id AND pfi.deleted_at IS NULL
-  WHERE r.id=${recebimentoId}
-  UNION
-  SELECT item_comercial_id FROM nf_itens
-  UNION
-  SELECT item_comercial_id
-  FROM recebimentos_itens
-  WHERE recebimento_id=${recebimentoId}
-)
-SELECT ids.item_comercial_id,
-       pfi.quantidade_prevista AS qtd_pedido,
-       COALESCE(nfi.qtd_nf, 0) AS qtd_nf,
-       CASE WHEN COALESCE(ri.requer_balanca, false)
-            THEN COALESCE(pa.qtd_pecas, 0)
-            ELSE COALESCE(ri.quantidade_recebida, 0)
-       END AS qtd_apurada,
-       nfi.peso_nf,
-       CASE WHEN COALESCE(ri.requer_balanca, false)
-            THEN COALESCE(pa.peso_apurado, 0)
-            ELSE NULL
-       END AS peso_apurado,
-       (pfi.id IS NOT NULL) AS previsto_no_pedido
-FROM recebimentos r
-JOIN item_ids ids ON true
-LEFT JOIN pedidos_fornecedor_itens pfi
-  ON pfi.pedido_fornecedor_id=r.pedido_fornecedor_id
- AND pfi.item_comercial_id=ids.item_comercial_id
- AND pfi.deleted_at IS NULL
-LEFT JOIN recebimentos_itens ri
-  ON ri.recebimento_id=r.id AND ri.item_comercial_id=ids.item_comercial_id
-LEFT JOIN nf_itens nfi
-  ON nfi.recebimento_id=r.id AND nfi.item_comercial_id=ids.item_comercial_id
-LEFT JOIN pecas_apuradas pa
-  ON pa.recebimento_id=r.id AND pa.item_comercial_id=ids.item_comercial_id
-WHERE r.id=${recebimentoId};
+```typescript
+async calcularQuadro(
+  db: NodePgDatabase<typeof schema>,
+  recebimentoId: string,
+): Promise<QuadroItem[]> {
+  const resultado = await db.execute(sql`
+    WITH nf_itens AS (
+      SELECT nf.recebimento_id, nfi.item_comercial_id,
+             SUM(nfi.quantidade_declarada) AS qtd_nf,
+             SUM(nfi.peso_declarado)
+               FILTER (WHERE nfi.peso_declarado IS NOT NULL) AS peso_nf
+      FROM notas_fiscais_fornecedor nf
+      JOIN notas_fiscais_fornecedor_itens nfi
+        ON nfi.nf_id=nf.id AND nfi.deleted_at IS NULL
+      WHERE nf.recebimento_id=${recebimentoId} AND nf.deleted_at IS NULL
+      GROUP BY nf.recebimento_id, nfi.item_comercial_id
+    ), pecas_apuradas AS (
+      -- Schema real de `pecas` (pesagem.schema.ts): a FK do item é
+      -- `item_comercial_base_id` e o peso capturado é `peso_original`.
+      -- Aliasamos para `item_comercial_id` para manter os JOINs a jusante.
+      SELECT recebimento_id, item_comercial_base_id AS item_comercial_id,
+             COUNT(id)::numeric AS qtd_pecas,
+             COALESCE(SUM(peso_original), 0) AS peso_apurado
+      FROM pecas
+      WHERE recebimento_id=${recebimentoId} AND deleted_at IS NULL
+      GROUP BY recebimento_id, item_comercial_base_id
+    ), item_ids AS (
+      SELECT pfi.item_comercial_id
+      FROM recebimentos r
+      JOIN pedidos_fornecedor_itens pfi
+        ON pfi.pedido_fornecedor_id=r.pedido_fornecedor_id AND pfi.deleted_at IS NULL
+      WHERE r.id=${recebimentoId}
+      UNION
+      SELECT item_comercial_id FROM nf_itens
+      UNION
+      SELECT item_comercial_id
+      FROM recebimentos_itens
+      WHERE recebimento_id=${recebimentoId}
+      UNION
+      -- Item pesado que só existe na pesagem (sem pedido/NF/entrada direta) NÃO pode
+      -- sumir do quadro (RA-05/06, nenhuma falha silenciosa): entra e cai em não
+      -- previsto → divergente. `pecas_apuradas` já expõe `item_comercial_id`.
+      SELECT item_comercial_id FROM pecas_apuradas
+    )
+    SELECT ids.item_comercial_id,
+           ri.id AS recebimento_item_id,
+           pfi.quantidade_prevista AS qtd_pedido,
+           COALESCE(nfi.qtd_nf, 0) AS qtd_nf,
+           CASE WHEN COALESCE(ri.requer_balanca, false)
+                THEN COALESCE(pa.qtd_pecas, 0)
+                ELSE COALESCE(ri.quantidade_recebida, 0)
+           END AS qtd_apurada,
+           nfi.peso_nf,
+           CASE WHEN COALESCE(ri.requer_balanca, false)
+                THEN COALESCE(pa.peso_apurado, 0)
+                ELSE NULL
+           END AS peso_apurado,
+           (pfi.id IS NOT NULL) AS previsto_no_pedido
+    FROM recebimentos r
+    JOIN item_ids ids ON true
+    LEFT JOIN pedidos_fornecedor_itens pfi
+      ON pfi.pedido_fornecedor_id=r.pedido_fornecedor_id
+     AND pfi.item_comercial_id=ids.item_comercial_id
+     AND pfi.deleted_at IS NULL
+    LEFT JOIN recebimentos_itens ri
+      ON ri.recebimento_id=r.id AND ri.item_comercial_id=ids.item_comercial_id
+    LEFT JOIN nf_itens nfi
+      ON nfi.recebimento_id=r.id AND nfi.item_comercial_id=ids.item_comercial_id
+    LEFT JOIN pecas_apuradas pa
+      ON pa.recebimento_id=r.id AND pa.item_comercial_id=ids.item_comercial_id
+    WHERE r.id=${recebimentoId};
+  `);
+
+  // Mapeamento snake_case (node-pg) → camelCase `QuadroItem`, campo a campo.
+  // node-pg devolve NUMERIC e COUNT()::numeric como string; uuid/boolean nativos.
+  // `recebimento_item_id` é NULL quando o item não tem linha em `recebimentos_itens`
+  // (ex.: item só pesado ou só na NF); por isso `QuadroItem.recebimentoItemId` e a FK
+  // `divergencias_recebimento.recebimento_item_id` são nullable (Task 1 expand / Task 7).
+  return resultado.rows.map((raw) => {
+    const r = raw as unknown as QuadroRow;
+    const base = {
+      recebimentoItemId: r.recebimento_item_id,
+      itemComercialId:   r.item_comercial_id,
+      previstoNoPedido:  r.previsto_no_pedido,
+      qtdPedido:         r.qtd_pedido,
+      qtdNf:             r.qtd_nf,
+      qtdApurada:        r.qtd_apurada,
+      pesoNf:            r.peso_nf,
+      pesoApurado:       r.peso_apurado,
+    } satisfies Omit<QuadroItem, 'situacao'>;
+    return { ...base, situacao: classificarSituacao(base) };
+  });
+}
 ```
 
 - [ ] Bloquear NF legada sem itens:
@@ -1864,7 +1905,14 @@ for (const ocorrencia of resultado.ocorrenciasAbertas) {
 }
 ```
 
-- [ ] `classificarTipoV11` é literal:
+- [ ] Tipos e classificadores literais. **Regra operacional (sem nova decisão):** a
+  conferência tripla **não tem tolerância de peso nem de quantidade** — a comparação é
+  decimal exata (`compararQtd(...) === 0`). Isso não é invenção: o protótipo
+  (`RecebimentoCarga.tsx:374` → `difQtd !== 0` marca divergente) e a spec v1.1 §6.10.4 (o
+  exemplo só rotula "Conferido" quando a diferença de qtd. **e** de peso é exatamente zero)
+  são a fonte; não há `AD-xx` autorizando faixa de tolerância em `DECISOES.md`. Fixar
+  qualquer folga aqui violaria Princípio VIII (não inventar o pendente) e RA-01. Se um dia
+  surgir tolerância, ela nasce como `AD-xx` + parâmetro, nunca hardcoded neste plano.
 
 ```typescript
 type TipoDivergenciaV11 =
@@ -1874,15 +1922,49 @@ type TipoDivergenciaV11 =
   | 'peso_divergente'
   | 'outro';
 
+// Linha crua do `db.execute` (node-pg): NUMERIC e COUNT()::numeric chegam como string.
+interface QuadroRow {
+  recebimento_item_id: string | null;
+  item_comercial_id: string;
+  previsto_no_pedido: boolean;
+  qtd_pedido: string | null;
+  qtd_nf: string;
+  qtd_apurada: string;
+  peso_nf: string | null;
+  peso_apurado: string | null;
+}
+
 interface QuadroItem {
   recebimentoItemId: string | null;
   itemComercialId: string;
   previstoNoPedido: boolean;
+  qtdPedido: string | null;
   qtdNf: string;
   qtdApurada: string;
   pesoNf: string | null;
   pesoApurado: string | null;
   situacao: 'conforme' | 'divergente';
+}
+
+// Único critério de negócio da conferência. Recebe o item SEM `situacao` (o mapa de
+// `calcularQuadro` a injeta com o retorno desta função) para evitar dependência circular.
+// Divergente se: (a) não previsto no pedido; ou (b) qtd_apurada ≠ qtd_nf; ou
+// (c) ambos os pesos presentes e peso_nf ≠ peso_apurado (só itens pesáveis têm
+// `pesoApurado`; caixaria tem `pesoApurado = null` → comparação de peso é ignorada,
+// nunca gera falso positivo). Comparação decimal exata (compararQtd) — sem tolerância.
+function classificarSituacao(
+  item: Omit<QuadroItem, 'situacao'>,
+): 'conforme' | 'divergente' {
+  if (!item.previstoNoPedido) return 'divergente';
+  if (compararQtd(item.qtdApurada, item.qtdNf) !== 0) return 'divergente';
+  if (
+    item.pesoNf !== null
+    && item.pesoApurado !== null
+    && compararQtd(item.pesoNf, item.pesoApurado) !== 0
+  ) {
+    return 'divergente';
+  }
+  return 'conforme';
 }
 
 function classificarTipoV11(item: QuadroItem): TipoDivergenciaV11 {
@@ -1910,7 +1992,17 @@ function descreverDiferenca(item: QuadroItem): string {
 }
 ```
 
-- [ ] Testar TZ pesável e Caixa de Rabo `requerBalanca=false`, segunda conclusão 409, resultado falso 409, rollback sem conclusão órfã, vínculo conclusão+NF, e que cada divergência da conclusão abre uma `ocorrencias_fornecedor` vinculada por `divergencia_id` (com o `fornecedor_id` do recebimento) — sem ocorrência órfã em caso de rollback.
+- [ ] `calcularQuadro` (`conferencia-tripla.e2e-spec.ts`, banco real): montar um recebimento
+  com (i) TZ pesável (`requerBalanca=true`) previsto, com `pecas` cujo `COUNT`/`SUM(peso_original)`
+  batem com a NF → `situacao='conforme'`; (ii) mesmo TZ com uma peça a mais (qtd_apurada≠qtd_nf)
+  → `divergente` e `classificarTipoV11='excesso'`; (iii) TZ com qtd. igual mas `SUM(peso_original)`≠`peso_nf`
+  → `divergente`/`peso_divergente`; (iv) Caixa de Rabo `requerBalanca=false` com
+  `quantidade_recebida=qtd_nf` e `peso_apurado=NULL` → `conforme` (afirmar que peso nulo **não**
+  gera falso positivo); (v) item presente só na pesagem, sem pedido → `previstoNoPedido=false`,
+  `situacao='divergente'`, `classificarTipoV11='produto_nao_previsto'` e `recebimentoItemId=null`.
+  Afirmar o mapa snake→camel campo a campo (incl. `recebimentoItemId` vindo de `ri.id`, string
+  para item com entrada direta e `null` para o item não previsto).
+- [ ] Testar segunda conclusão 409, resultado falso 409, rollback sem conclusão órfã, vínculo conclusão+NF, e que cada divergência da conclusão abre uma `ocorrencias_fornecedor` vinculada por `divergencia_id` (com o `fornecedor_id` do recebimento) — sem ocorrência órfã em caso de rollback. Afirmar que a divergência do item não previsto grava `recebimento_item_id=NULL` (FK nullable) sem violar a constraint.
 - [ ] Run: `npm run test -- conferencia-tripla` → PASS.
 - [ ] Commit previsto: `feat(onda1): conferencia tripla imutavel com caixarias por unidade`
 
