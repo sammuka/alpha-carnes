@@ -814,10 +814,12 @@ Retorne estruturado: status, feedback (tela a tela), evidencia.`,
   const baseRefOid = ciSync.baseRefOid
 
   const escrita = await agent(
-    `${SEM_INTERACAO_SINCRONA}${LOCK_ADQUIRIR_DOCS_COMPARTILHADOS('anexar o veredito')}Anexe UMA linha na tabela de docs/execucao/GATE-VEREDITOS.md (repo ${REPO}), formato da tabela existente. Timestamp via \`date -u +%Y-%m-%dT%H:%M:%SZ\`. A linha:
+    `${SEM_INTERACAO_SINCRONA}${LOCK_ADQUIRIR_DOCS_COMPARTILHADOS('anexar o veredito')}ANTES de escrever e já DENTRO do lock: rode \`git -C ${REPO} fetch origin develop ${branch}\`; exija \`git -C ${REPO} rev-parse origin/develop\` EXATAMENTE igual a ${baseRefOid}, \`git -C ${REPO} rev-parse origin/${branch}\` EXATAMENTE igual a ${headRefOid} e \`gh pr view ${prNumero} --json headRefOid --jq .headRefOid\` EXATAMENTE igual a ${headRefOid}. Se qualquer pin mudou, NÃO anexe, libere o lock e retorne ok=false com os valores observados.
+
+Somente com os três pins intactos, anexe UMA linha na tabela de docs/execucao/GATE-VEREDITOS.md (repo ${REPO}), formato da tabela existente. Timestamp via \`date -u +%Y-%m-%dT%H:%M:%SZ\`. A linha:
 | <timestamp> | ${onda} | 2 | ${veredito} | PR #${prNumero}, base ${baseRefOid}, head ${headRefOid}: ${evidenciaChecada.replace(/\n+/g, ' ').replace(/\|/g, '/').slice(0, 560)} | ${(feedback || '—').replace(/\n+/g, ' ').replace(/\|/g, '/').slice(0, 500)} |
 
-NÃO edite mais nada. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS()}Responda estruturado: ok, linha.`,
+NÃO edite mais nada. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS()}Responda estruturado: ok, linha, headRevalidado e baseRevalidada com os OIDs completos observados dentro do lock.`,
     {
       label: `portao2:${onda}:${tag}:escrever-veredito`,
       phase: 'Portão 2',
@@ -829,13 +831,24 @@ NÃO edite mais nada. NÃO commite. ${LOCK_LIBERAR_DOCS_COMPARTILHADOS()}Respond
           linha: { type: 'string' },
           lockAcquireOutput: { type: 'string' },
           lockReleaseOutput: { type: 'string' },
+          headRevalidado: { type: 'string' },
+          baseRevalidada: { type: 'string' },
         },
-        required: ['ok', 'linha', 'lockAcquireOutput', 'lockReleaseOutput'],
+        required: [
+          'ok', 'linha', 'lockAcquireOutput', 'lockReleaseOutput',
+          'headRevalidado', 'baseRevalidada',
+        ],
       },
     }
   )
   registrar('portao2-escrita', { ciclo: cicloAuditoria, rodada: rodadaCorrecao, saida: escrita })
-  if (!escrita || escrita.ok !== true || !lockEstruturadoValido(escrita)) {
+  if (
+    !escrita
+    || escrita.ok !== true
+    || !lockEstruturadoValido(escrita)
+    || escrita.headRevalidado !== headRefOid
+    || escrita.baseRevalidada !== baseRefOid
+  ) {
     log(`Registro do Portão 2 falhou fechado: ${escrita ? escrita.linha : 'agente sem resposta'}.`)
     return null
   }

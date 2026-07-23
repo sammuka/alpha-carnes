@@ -90,12 +90,13 @@ app/backend/src/
   modules/operacao/expedicao/{caminhao.service.ts,carga.service.ts,conferencia.service.ts,fechamento.service.ts,liberacao.service.ts}
   modules/operacao/faturamento/{consolidacao.service.ts,faturamento.service.ts}
   common/rbac/permissoes.ts
+  common/crud/decimal.ts
   database/seed.ts
   realtime/events/eventos.ts
   realtime/realtime.gateway.ts
 app/backend/test/
   integration/{operacoes,operacoes-writers,onda1-migrations,pedidos-v11,overbooking,overbooking-lifecycle,overbooking-concorrencia,pedido-fornecedor,conferencia-tripla}.e2e-spec.ts
-  unit/{operacoes.service,pedidos-eventos-onda1,conferencia.calc}.spec.ts
+  unit/{operacoes.service,pedidos-eventos-onda1,conferencia.calc,decimal-onda1}.spec.ts
 app/frontend/src/
   app/api/comercial/pedidos/route.ts
   app/api/comercial/pedidos/confirmar-overbooking/route.ts
@@ -191,10 +192,14 @@ pedidoFornecedorId: uuid('pedido_fornecedor_id').references(() => pedidosFornece
 ```typescript
 // pedidos_venda_itens
 quantidadeOverbooking: numeric('quantidade_overbooking', { precision: 15, scale: 3 }).notNull().default('0'),
+deletedAt: timestamp('deleted_at', { withTimezone: true }),
 // No callback de índices de pedidos_venda_itens:
 uniqueIndex('uq_pedido_venda_item_comercial_ativo')
   .on(t.pedidoVendaId, t.itemComercialId)
   .where(sql`${t.deletedAt} IS NULL`),
+
+// pedidos_venda
+motivoCancelamento: text('motivo_cancelamento'),
 
 // reservas_disponibilidade
 disponibilidadeVirtualId: uuid('disponibilidade_virtual_id').references(() => disponibilidadesVirtuais.id),
@@ -329,6 +334,10 @@ export const conclusoesConferenciaNfs = pgTable('conclusoes_conferencia_nfs', {
 // divergencias_recebimento e ocorrencias_fornecedor ganham, nullable no expand:
 conclusaoConferenciaId: uuid('conclusao_conferencia_id').references(() => conclusoesConferencia.id),
 nfFornecedorId: uuid('nf_fornecedor_id').references(() => notasFiscaisFornecedor.id),
+// divergencias_recebimento também ganha item_comercial_id nullable no expand;
+// recebimento_item_id passa a nullable para representar produto não previsto.
+itemComercialId: uuid('item_comercial_id').references(() => itensComerciais.id),
+recebimentoItemId: uuid('recebimento_item_id').references(() => recebimentosItens.id),
 ```
 
 ```typescript
@@ -403,6 +412,16 @@ async encontrarAtivaPorData(tx: Tx, data: string) {
 - [ ] DTOs e controller de Operações:
 
 ```typescript
+const statusOperacaoSchema = z.enum(['aberta', 'em_andamento', 'fechada']);
+export const listarOperacoesSchema = z.object({
+  de: z.string().date().optional(),
+  ate: z.string().date().optional(),
+  status: statusOperacaoSchema.optional(),
+  pagina: z.coerce.number().int().positive().default(1),
+  limite: z.coerce.number().int().min(1).max(100).default(20),
+}).refine(({ de, ate }) => !de || !ate || de <= ate, {
+  message: 'de deve ser anterior ou igual a ate',
+});
 export const criarExtraordinariaSchema = z.object({
   data: z.string().date(),
   rotulo: z.string().trim().min(1).max(120),
@@ -412,8 +431,31 @@ export const gerarCadenciaSchema = z.object({
   ate: z.string().date(),
 }).refine(({ de, ate }) => de <= ate, { message: 'de deve ser anterior ou igual a ate' });
 export const alterarStatusOperacaoSchema = z.object({
-  status: z.enum(['aberta', 'em_andamento', 'fechada']),
+  status: statusOperacaoSchema,
 });
+export type StatusOperacao = z.infer<typeof statusOperacaoSchema>;
+export type ListarOperacoesDto = z.infer<typeof listarOperacoesSchema>;
+export type CriarExtraordinariaDto = z.infer<typeof criarExtraordinariaSchema>;
+export type GerarCadenciaDto = z.infer<typeof gerarCadenciaSchema>;
+export type AlterarStatusOperacaoDto =
+  z.infer<typeof alterarStatusOperacaoSchema>;
+
+const DIAS_SEMANA_PT = [
+  'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira',
+  'quinta-feira', 'sexta-feira', 'sábado',
+] as const;
+
+function datasInclusivas(de: string, ate: string): string[] {
+  const datas: string[] = [];
+  for (
+    let atual = new Date(`${de}T12:00:00Z`);
+    atual <= new Date(`${ate}T12:00:00Z`);
+    atual = new Date(atual.getTime() + 86_400_000)
+  ) {
+    datas.push(atual.toISOString().slice(0, 10));
+  }
+  return datas;
+}
 ```
 
 ```typescript
@@ -491,7 +533,10 @@ async gerarCadencia(dto: GerarCadenciaDto, usuarioId: string) {
     return criadas;
   });
   for (const operacao of resultado) {
-    this.eventEmitter.emit(EVENTOS.OPERACAO_CRIADA, operacao);
+    this.eventEmitter.emit(EVENTOS.OPERACAO_CRIADA, {
+      operacaoId: operacao.id,
+      data: operacao.data,
+    });
   }
   return { criadas: resultado.length, operacoes: resultado };
 }
@@ -510,7 +555,10 @@ async criarExtraordinaria(dto: CriarExtraordinariaDto, usuarioId: string) {
     });
     return criada;
   });
-  this.eventEmitter.emit(EVENTOS.OPERACAO_CRIADA, operacao);
+  this.eventEmitter.emit(EVENTOS.OPERACAO_CRIADA, {
+    operacaoId: operacao.id,
+    data: operacao.data,
+  });
   return operacao;
 }
 ```
@@ -630,10 +678,38 @@ export const confirmarCriacaoOverbookingSchema = createPedidoSchema;
 // Inclusão sempre cria uma nova linha. Aumento/redução de linha existente usa
 // os endpoints explícitos de alteração de item; não há itemId ambíguo aqui.
 export const confirmarInclusaoOverbookingSchema = incluirItemSchema;
+export type IncluirItemDto = z.infer<typeof incluirItemSchema>;
+export type ConfirmarInclusaoOverbookingDto =
+  z.infer<typeof confirmarInclusaoOverbookingSchema>;
+
+interface ItemSolicitado {
+  itemComercialId: string;
+  quantidade: number;
+  observacoes?: string;
+}
+interface CoberturaPlanejada {
+  disponibilidadeId: string;
+  quantidade: string;
+}
+interface PlanoItem {
+  itemComercialId: string;
+  quantidadeSolicitada: string;
+  disponivelAntes: string;
+  coberturas: CoberturaPlanejada[];
+  deficit: string;
+}
+export interface OverbookingChallengeItem {
+  itemComercialId: string;
+  disponivelAntes: string;
+  quantidadeSolicitada: string;
+  overbookingGerado: string;
+  mensagem: string;
+}
 ```
 
 ```typescript
 @Post()
+@RequirePermissoes('PEDIDOS_GERENCIAR')
 async criar(
   @Body(new ZodValidationPipe(createPedidoSchema)) dto: CreatePedidoDto,
   @CurrentUser() user: CurrentUserPayload,
@@ -641,6 +717,7 @@ async criar(
 
 @Post('confirmar-overbooking')
 @HttpCode(HttpStatus.CREATED)
+@RequirePermissoes('PEDIDO_OVERBOOKING_CONFIRMAR')
 async confirmarCriacao(
   @Body(new ZodValidationPipe(confirmarCriacaoOverbookingSchema)) dto: CreatePedidoDto,
   @CurrentUser() user: CurrentUserPayload,
@@ -648,6 +725,7 @@ async confirmarCriacao(
 
 @Post(':id/itens')
 @HttpCode(HttpStatus.OK)
+@RequirePermissoes('PEDIDOS_GERENCIAR')
 async incluir(
   @Param('id') id: string,
   @Body(new ZodValidationPipe(incluirItemSchema)) dto: IncluirItemDto,
@@ -656,6 +734,7 @@ async incluir(
 
 @Post(':id/itens/confirmar-overbooking')
 @HttpCode(HttpStatus.OK)
+@RequirePermissoes('PEDIDO_OVERBOOKING_CONFIRMAR')
 async confirmarInclusao(
   @Param('id') id: string,
   @Body(new ZodValidationPipe(confirmarInclusaoOverbookingSchema)) dto: ConfirmarInclusaoOverbookingDto,
@@ -664,6 +743,7 @@ async confirmarInclusao(
 
 @Post(':id/finalizar')
 @HttpCode(HttpStatus.OK)
+@RequirePermissoes('PEDIDO_FINALIZAR')
 async finalizar(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
   return this.service.finalizar(id, user.sub);
 }
@@ -789,9 +869,47 @@ if (desafios.length && !confirmado) {
 // Nenhum INSERT/UPDATE pode existir antes deste ponto.
 ```
 
+A unicidade do banco também é traduzida para `409` no race entre requisições:
+
+```typescript
+function ehDuplicidadeDeItemNoPedido(error: unknown): boolean {
+  const pg = error as { code?: string; constraint?: string };
+  return pg.code === '23505'
+    && pg.constraint === 'uq_pedido_venda_item_comercial_ativo';
+}
+
+let resultadoInclusao: { pedido: PedidoVenda; eventos: EventoDominio[] };
+try {
+  resultadoInclusao = await this.db.transaction((tx) =>
+    this.incluirItemTransacional(tx, pedidoId, dto, usuarioId, confirmado),
+  );
+} catch (error) {
+  if (ehDuplicidadeDeItemNoPedido(error)) {
+    throw new ConflictException('Item comercial já existe neste pedido');
+  }
+  throw error;
+}
+this.emitirEventosPosCommit(resultadoInclusao.eventos);
+return resultadoInclusao.pedido;
+```
+
 - [ ] `planejarSobLock` distribui o saldo de todas as linhas da Operação sem escrever:
 
 ```typescript
+// common/crud/decimal.ts — reutiliza a aritmética BigInt já existente.
+export function minimoQtd(
+  a: number | string,
+  b: number | string,
+): string {
+  return compararQtd(a, b) <= 0 ? formatarQtd(a) : formatarQtd(b);
+}
+
+export function somarListaQtd(
+  valores: readonly (number | string)[],
+): string {
+  return valores.reduce((total, valor) => somarQtd(total, valor), '0.000');
+}
+
 async planejarSobLock(tx: Tx, operacaoId: string | null, itens: ItemSolicitado[]): Promise<PlanoItem[]> {
   const ids = itens.map((item) => item.itemComercialId);
   if (new Set(ids).size !== ids.length) {
@@ -816,7 +934,7 @@ async planejarSobLock(tx: Tx, operacaoId: string | null, itens: ItemSolicitado[]
   return itens.map((item) => {
     let restante = formatarQtd(item.quantidade);
     const linhas = resultado.rows.filter((row) => row.item_comercial_id === item.itemComercialId);
-    const disponivelAntes = somarQtd(linhas.map((row) => row.quantidade_disponivel));
+    const disponivelAntes = somarListaQtd(linhas.map((row) => row.quantidade_disponivel));
     const coberturas: CoberturaPlanejada[] = [];
     for (const row of linhas) {
       if (ehZero(restante)) break;
@@ -838,10 +956,9 @@ async planejarSobLock(tx: Tx, operacaoId: string | null, itens: ItemSolicitado[]
 - [ ] Na confirmação, persistir parcelas e pendência na mesma transação:
 
 ```typescript
-type EventoDominio = {
-  nome: (typeof EVENTOS)[keyof typeof EVENTOS];
-  payload: Record<string, unknown>;
-};
+type EventoDominio<N extends keyof PayloadPorEvento = keyof PayloadPorEvento> = {
+  [K in N]: { nome: K; payload: PayloadPorEvento[K] };
+}[N];
 
 async persistirItensPlanejados(
   tx: Tx,
@@ -853,7 +970,7 @@ async persistirItensPlanejados(
   const eventos: EventoDominio[] = [];
   for (const [indice, alocacao] of plano.entries()) {
     const solicitado = solicitados[indice];
-    const quantidadeReal = somarQtd(alocacao.coberturas.map((c) => c.quantidade));
+    const quantidadeReal = somarListaQtd(alocacao.coberturas.map((c) => c.quantidade));
     const [item] = await tx.insert(pedidosVendaItens).values({
       pedidoVendaId: pedido.id,
       itemComercialId: solicitado.itemComercialId,
@@ -909,6 +1026,14 @@ async persistirItensPlanejados(
       eventos.push({
         nome: EVENTOS.PENDENCIA_OVERBOOKING_ABERTA,
         payload: { pendenciaId: pendencia.id, pedidoVendaId: pedido.id },
+      });
+      eventos.push({
+        nome: EVENTOS.OVERBOOKING_CONFIRMADO,
+        payload: {
+          pedidoVendaId: pedido.id,
+          itemId: item.id,
+          quantidadeOverbooking: alocacao.deficit,
+        },
       });
     }
     eventos.push({
@@ -1176,7 +1301,13 @@ function statusDoCaminho(
 }
 
 const TRANSICOES_PENDENCIA: Record<StatusPendencia, readonly StatusPendencia[]> = {
-  aberta: ['em_analise', 'cancelada'],
+  aberta: [
+    'em_analise',
+    'compra_complementar_programada',
+    'redistribuicao_decidida',
+    'novo_pedido_criado',
+    'cancelada',
+  ],
   em_analise: [
     'compra_complementar_programada',
     'redistribuicao_decidida',
@@ -1260,7 +1391,7 @@ if (pendenteLegado.length) throw new ConflictException('OVERBOOKING_CONFIRMACAO_
 // overbooking_confirmado é aceito; não tocar no saldo.
 ```
 
-- [ ] Testes obrigatórios: challenge prova zero comando de escrita e compara operação + cinco agregados antes/depois; confirmação 201 e 200; item comercial duplicado no mesmo payload retorna 400/zero mutação; duas inclusões sequenciais e duas concorrentes do mesmo `itemComercialId` no mesmo pedido retornam conflito e deixam uma linha; UPDATE condicional retornando zero aborta toda a transação; falha injetada; concorrência; redução somente déficit; redução além do déficit; remoção; cancelamento; finalização.
+- [ ] Testes obrigatórios: `decimal-onda1.spec.ts` cobre mínimo e soma de lista sem drift; challenge prova zero comando de escrita e compara operação + cinco agregados antes/depois; confirmação 201 e 200; item comercial duplicado no mesmo payload retorna 400/zero mutação; duas inclusões sequenciais e duas concorrentes do mesmo `itemComercialId` no mesmo pedido retornam conflito e deixam uma linha; UPDATE condicional retornando zero aborta toda a transação; falha injetada; concorrência; redução somente déficit; redução além do déficit; remoção; cancelamento; finalização.
 - [ ] Run: `npm run test -- "pedidos-v11|overbooking"` → PASS.
 - [ ] Commit previsto: `feat(onda1): challenge e lifecycle completo de overbooking`
 
@@ -1295,6 +1426,24 @@ export const listarPedidosFornecedorSchema = z.object({
   status: z.enum(['rascunho', 'enviado', 'aguardando_recebimento', 'recebido', 'encerrado', 'cancelado']).optional(),
   operacaoId: z.string().uuid(), // obrigatório: nenhuma consulta operacional cruza Operações implicitamente
 });
+export const registrarNfSchema = z.object({
+  numero: z.string().trim().min(1).max(60),
+  serie: z.string().trim().max(30).optional(),
+  chave: z.string().trim().max(60).optional(),
+  dataEmissao: z.string().date().optional(),
+  pesoTotalDeclarado: z.coerce.number().positive().optional(),
+  payload: z.record(z.string(), z.unknown()).optional(),
+  itens: z.array(z.object({
+    itemComercialId: z.string().uuid(),
+    quantidadeDeclarada: z.coerce.number().positive(),
+    pesoDeclarado: z.coerce.number().positive().optional(),
+  })).min(1),
+});
+export type CriarPedidoFornecedorDto =
+  z.infer<typeof criarPedidoFornecedorSchema>;
+export type ListarPedidosFornecedorDto =
+  z.infer<typeof listarPedidosFornecedorSchema>;
+export type RegistrarNfDto = z.infer<typeof registrarNfSchema>;
 ```
 
 ```typescript
@@ -1335,13 +1484,13 @@ async registrarNf(
 ```
 
 ```typescript
-await tx.insert(notasFiscaisFornecedor).values({
+const nf = primeiroOuFalha(await tx.insert(notasFiscaisFornecedor).values({
   pedidoFornecedorId: recebimento.pedidoFornecedorId,
   recebimentoId, numero: dto.numero, serie: dto.serie,
   chave: dto.chave, dataEmissao: dto.dataEmissao,
   pesoTotalDeclarado: dto.pesoTotalDeclarado,
   payloadJson: dto.payload ?? {},
-});
+}).returning());
 await tx.insert(notasFiscaisFornecedorItens).values(dto.itens.map((item) => ({
   nfId: nf.id, itemComercialId: item.itemComercialId,
   quantidadeDeclarada: formatarQtd(item.quantidadeDeclarada),
@@ -1455,6 +1604,7 @@ export const concluirConferenciaSchema = z.object({
   resultado: z.enum(['sem_divergencia', 'com_divergencia']),
   observacao: z.string().trim().max(2000).optional(),
 });
+export type ConcluirConferenciaDto = z.infer<typeof concluirConferenciaSchema>;
 ```
 
 ```typescript
@@ -1501,11 +1651,14 @@ await tx.insert(conclusoesConferenciaNfs).values(nfs.map((nf) => ({
 
 for (const item of quadro.filter((q) => q.situacao === 'divergente')) {
   await tx.insert(divergenciasRecebimento).values({
+    recebimentoId,
     recebimentoItemId: item.recebimentoItemId,
+    itemComercialId: item.itemComercialId,
     conclusaoConferenciaId: conclusao.id,
     nfFornecedorId: nfs.length === 1 ? nfs[0].id : null,
     tipo: classificarTipoV11(item),
     descricao: descreverDiferenca(item),
+    acaoImediata: 'Tratar divergência da conferência com o fornecedor',
     responsavelRegistroId: usuarioId,
   });
 }
@@ -1520,6 +1673,24 @@ await this.ocorrencias.abrirDaConclusao(
 - [ ] `classificarTipoV11` é literal:
 
 ```typescript
+type TipoDivergenciaV11 =
+  | 'falta'
+  | 'excesso'
+  | 'produto_nao_previsto'
+  | 'peso_divergente'
+  | 'outro';
+
+interface QuadroItem {
+  recebimentoItemId: string | null;
+  itemComercialId: string;
+  previstoNoPedido: boolean;
+  qtdNf: string;
+  qtdApurada: string;
+  pesoNf: string | null;
+  pesoApurado: string | null;
+  situacao: 'conforme' | 'divergente';
+}
+
 function classificarTipoV11(item: QuadroItem): TipoDivergenciaV11 {
   if (!item.previstoNoPedido) return 'produto_nao_previsto';
   if (compararQtd(item.qtdApurada, item.qtdNf) < 0) return 'falta';
@@ -1532,6 +1703,16 @@ function classificarTipoV11(item: QuadroItem): TipoDivergenciaV11 {
     return 'peso_divergente';
   }
   return 'outro';
+}
+
+function descreverDiferenca(item: QuadroItem): string {
+  return [
+    `item=${item.itemComercialId}`,
+    `qtd_nf=${item.qtdNf}`,
+    `qtd_apurada=${item.qtdApurada}`,
+    `peso_nf=${item.pesoNf ?? 'n/a'}`,
+    `peso_apurado=${item.pesoApurado ?? 'n/a'}`,
+  ].join('; ');
 }
 ```
 
@@ -1584,6 +1765,23 @@ UPDATE caminhoes t SET operacao_id=o.id FROM operacoes o
  WHERE t.operacao_id IS NULL AND o.data=t.data_operacao AND o.deleted_at IS NULL;
 UPDATE faturamentos t SET operacao_id=o.id FROM operacoes o
  WHERE t.operacao_id IS NULL AND o.data=t.data_operacao AND o.deleted_at IS NULL;
+
+UPDATE divergencias_recebimento d
+SET item_comercial_id=ri.item_comercial_id
+FROM recebimentos_itens ri
+WHERE d.item_comercial_id IS NULL
+  AND d.recebimento_item_id=ri.id;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM divergencias_recebimento
+    WHERE item_comercial_id IS NULL
+  ) THEN
+    RAISE EXCEPTION
+      'divergencia legada sem item comercial; saneamento explícito obrigatório';
+  END IF;
+END $$;
 ```
 
 ```sql
@@ -1682,6 +1880,11 @@ pedidoFornecedorId: uuid('pedido_fornecedor_id').notNull().references(() => pedi
 // Remover uq_recebimentos_compra; criar índices não-únicos:
 index('idx_recebimentos_pedido_fornecedor').on(t.pedidoFornecedorId);
 index('idx_recebimentos_operacao').on(t.operacaoId);
+
+// divergencias_recebimento: produto não previsto pode não ter linha física,
+// mas toda divergência fica ancorada no item comercial.
+itemComercialId: uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
+recebimentoItemId: uuid('recebimento_item_id').references(() => recebimentosItens.id),
 ```
 
 - [ ] Substituir os CHECKs legados pelos finais somente nesta Task:
@@ -1774,9 +1977,10 @@ const payload = await response.json();
 return NextResponse.json(payload, { status: response.status }); // mantém 409/201
 ```
 
-- [ ] Eventos:
+- [ ] Adicionar estas propriedades dentro do objeto `EVENTOS` existente:
 
 ```typescript
+OPERACAO_CRIADA: 'operacao_criada',
 OVERBOOKING_CONFIRMADO: 'overbooking_confirmado',
 PENDENCIA_OVERBOOKING_ABERTA: 'pendencia_overbooking_aberta',
 PENDENCIA_OVERBOOKING_ATUALIZADA: 'pendencia_overbooking_atualizada',
@@ -1787,6 +1991,52 @@ PEDIDO_FORNECEDOR_CRIADO: 'pedido_fornecedor_criado',
 NF_FORNECEDOR_REGISTRADA: 'nf_fornecedor_registrada',
 CONFERENCIA_TRIPLA_CONCLUIDA: 'conferencia_tripla_concluida',
 RECEBIMENTO_ESTADO_ALTERADO: 'recebimento_estado_alterado',
+```
+
+- [ ] No mesmo `eventos.ts`, adicionar os contratos de payload completos:
+
+```typescript
+export interface PayloadPorEvento {
+  operacao_criada: { operacaoId: string; data: string };
+  overbooking_confirmado: {
+    pedidoVendaId: string;
+    itemId: string;
+    quantidadeOverbooking: string;
+  };
+  pendencia_overbooking_aberta: {
+    pendenciaId: string;
+    pedidoVendaId: string;
+  };
+  pendencia_overbooking_atualizada: {
+    pendenciaId: string;
+    status: string;
+  };
+  pendencia_overbooking_resolvida: {
+    pendenciaId: string;
+    status: 'resolvida';
+  };
+  pedido_finalizado: { pedidoVendaId: string };
+  pedido_venda_item_criado: { pedidoVendaId: string; itemId: string };
+  pedido_fornecedor_criado: {
+    pedidoFornecedorId: string;
+    operacaoId: string;
+  };
+  nf_fornecedor_registrada: {
+    nfId: string;
+    pedidoFornecedorId: string;
+    recebimentoId: string;
+  };
+  conferencia_tripla_concluida: {
+    conclusaoId: string;
+    recebimentoId: string;
+    resultado: 'sem_divergencia' | 'com_divergencia';
+  };
+  recebimento_estado_alterado: {
+    recebimentoId: string;
+    statusAnterior: string;
+    statusAtual: string;
+  };
+}
 ```
 
 - [ ] Corrigir exatamente a string validada pelo protótipo:
