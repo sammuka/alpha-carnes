@@ -4,10 +4,10 @@ import { divergenciaInputSchema } from '../divergencia/dto/divergencia-recebimen
 const pesoNfSchema = z.number().nonnegative().max(9_999_999.999);
 const volumesNfSchema = z.number().nonnegative().max(9_999_999_999.999);
 
-/** Abertura do lote de recebimento a partir de compra programada confirmada. */
+/** Abertura do lote de recebimento exclusivamente a partir do Pedido ao Fornecedor. */
 export const iniciarRecebimentoSchema = z.object({
-  compraProgramadaId: z.string().uuid(),
-  nfeNumero: z.string().trim().min(1, 'Número da NF-e é obrigatório').max(100),
+  pedidoFornecedorId: z.string().uuid(),
+  nfeNumero: z.string().trim().min(1).max(100).optional(),
   nfeSerie: z.string().trim().max(20).optional(),
   nfeChave: z
     .string()
@@ -26,7 +26,6 @@ export const iniciarRecebimentoSchema = z.object({
   motorista: z.string().trim().max(200).optional(),
   doca: z.string().trim().max(50).optional(),
   observacoes: z.string().trim().max(1000).optional(),
-  iniciarConferencia: z.boolean().optional().default(false),
 });
 
 export type IniciarRecebimentoDto = z.infer<typeof iniciarRecebimentoSchema>;

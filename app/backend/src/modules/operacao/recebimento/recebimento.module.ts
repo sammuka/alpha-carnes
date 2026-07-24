@@ -4,6 +4,8 @@ import { DisponibilidadeModule } from '../../comercial/disponibilidade/disponibi
 import { OperacoesModule } from '../../operacoes/operacoes.module';
 import { RecebimentoController } from './recebimento.controller';
 import { RecebimentoService } from './recebimento.service';
+import { PedidoFornecedorController } from './pedido-fornecedor.controller';
+import { PedidoFornecedorService } from './pedido-fornecedor.service';
 import { DivergenciaRecebimentoController } from './divergencia/divergencia-recebimento.controller';
 import { DivergenciaRecebimentoService } from './divergencia/divergencia-recebimento.service';
 import { OcorrenciaFornecedorController } from './ocorrencia/ocorrencia-fornecedor.controller';
@@ -11,8 +13,23 @@ import { OcorrenciaFornecedorService } from './ocorrencia/ocorrencia-fornecedor.
 
 @Module({
   imports: [AuthModule, DisponibilidadeModule, OperacoesModule],
-  controllers: [RecebimentoController, DivergenciaRecebimentoController, OcorrenciaFornecedorController],
-  providers: [RecebimentoService, DivergenciaRecebimentoService, OcorrenciaFornecedorService],
-  exports: [RecebimentoService, DivergenciaRecebimentoService, OcorrenciaFornecedorService],
+  controllers: [
+    RecebimentoController,
+    PedidoFornecedorController,
+    DivergenciaRecebimentoController,
+    OcorrenciaFornecedorController,
+  ],
+  providers: [
+    RecebimentoService,
+    PedidoFornecedorService,
+    DivergenciaRecebimentoService,
+    OcorrenciaFornecedorService,
+  ],
+  exports: [
+    RecebimentoService,
+    PedidoFornecedorService,
+    DivergenciaRecebimentoService,
+    OcorrenciaFornecedorService,
+  ],
 })
 export class RecebimentoModule {}

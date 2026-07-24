@@ -62,7 +62,9 @@ export const recebimentos = pgTable(
       'chk_recebimentos_status',
       sql`${t.status} IN ('aguardando_conferencia','em_conferencia','finalizado','cancelado')`,
     ),
-    uniqueIndex('uq_recebimentos_compra').on(t.compraProgramadaId).where(sql`${t.deletedAt} IS NULL`),
+    // uq_recebimentos_compra removido no contract 0014 (Task 7); durante expand
+    // o índice legado ainda pode existir no banco até o DROP IF EXISTS do 0014.
+    index('idx_recebimentos_pedido_fornecedor').on(t.pedidoFornecedorId),
     index('idx_recebimentos_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
     index('idx_recebimentos_data_operacao').on(t.dataOperacao).where(sql`${t.deletedAt} IS NULL`),
     index('idx_recebimentos_fornecedor').on(t.fornecedorId).where(sql`${t.deletedAt} IS NULL`),

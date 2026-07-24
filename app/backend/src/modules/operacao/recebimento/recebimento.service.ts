@@ -12,6 +12,7 @@ import {
   itensComerciais,
   itensCompra,
   pecas,
+  pedidosFornecedor,
   pedidosVenda,
   recebimentos,
   recebimentosItens,
@@ -261,40 +262,41 @@ export class RecebimentoService {
 
   async iniciar(dto: IniciarRecebimentoDto, usuarioId: string): Promise<{ recebimento: Recebimento; jaIniciado: boolean }> {
     const resultado = await this.db.transaction(async (tx) => {
+      const pedido = await tx.select().from(pedidosFornecedor)
+        .where(and(
+          eq(pedidosFornecedor.id, dto.pedidoFornecedorId),
+          isNull(pedidosFornecedor.deletedAt),
+        ))
+        .then((r) => r[0] ?? null);
+      if (!pedido) throw new NotFoundException('Pedido ao fornecedor não encontrado');
+      if (!['enviado', 'aguardando_recebimento'].includes(pedido.status)) {
+        throw new ConflictException('Pedido ao fornecedor não está aguardando recebimento');
+      }
+
       const compra = await tx
         .select()
         .from(comprasProgramadas)
-        .where(and(eq(comprasProgramadas.id, dto.compraProgramadaId), isNull(comprasProgramadas.deletedAt)))
+        .where(and(
+          eq(comprasProgramadas.id, pedido.compraProgramadaId),
+          isNull(comprasProgramadas.deletedAt),
+        ))
         .then((r) => r[0] ?? null);
       if (!compra) throw new NotFoundException('Compra programada não encontrada');
-      if (compra.status !== 'confirmada') {
-        throw new ConflictException('Recebimento só pode ser iniciado sobre compra confirmada');
-      }
-
-      const existente = await tx
-        .select()
-        .from(recebimentos)
-        .where(and(eq(recebimentos.compraProgramadaId, dto.compraProgramadaId), isNull(recebimentos.deletedAt)))
-        .then((r) => r[0] ?? null);
-      if (existente) return { recebimento: existente, jaIniciado: true };
 
       const esperados = await this.disponibilidade.listarEsperadoDaCompra(tx, compra.id);
       if (esperados.length === 0) {
         throw new ConflictException('Compra confirmada sem itens operacionais previstos');
       }
 
-      const statusInicial = dto.iniciarConferencia ? 'em_conferencia' : 'aguardando_conferencia';
-
-      const { operacao } = await this.operacoes.garantirOperacao(tx, compra.dataOperacao, usuarioId);
-
       const criado = primeiroOuFalha(
         await tx
           .insert(recebimentos)
           .values({
             compraProgramadaId: compra.id,
-            fornecedorId: compra.fornecedorId,
+            pedidoFornecedorId: pedido.id,
+            fornecedorId: pedido.fornecedorId,
             dataOperacao: compra.dataOperacao,
-            operacaoId: operacao.id,
+            operacaoId: pedido.operacaoId,
             dataHoraChegada: dto.dataHoraChegada ? new Date(dto.dataHoraChegada) : undefined,
             notaFiscalFornecedor: dto.nfeNumero,
             nfeNumero: dto.nfeNumero,
@@ -310,7 +312,7 @@ export class RecebimentoService {
             doca: dto.doca,
             observacoes: dto.observacoes,
             responsavelRecebimentoId: usuarioId,
-            status: statusInicial,
+            status: 'pesagem_em_andamento',
           })
           .returning(),
       );
@@ -349,13 +351,16 @@ export class RecebimentoService {
       return { recebimento: criado, jaIniciado: false };
     });
 
-    if (!resultado.jaIniciado) {
-      this.eventEmitter.emit(EVENTOS.RECEBIMENTO_INICIADO, {
-        recebimentoId: resultado.recebimento.id,
-        compraProgramadaId: resultado.recebimento.compraProgramadaId,
-        dataOperacao: resultado.recebimento.dataOperacao,
-      });
-    }
+    this.eventEmitter.emit(EVENTOS.RECEBIMENTO_INICIADO, {
+      recebimentoId: resultado.recebimento.id,
+      compraProgramadaId: resultado.recebimento.compraProgramadaId,
+      dataOperacao: resultado.recebimento.dataOperacao,
+    });
+    this.eventEmitter.emit(EVENTOS.RECEBIMENTO_ESTADO_ALTERADO, {
+      recebimentoId: resultado.recebimento.id,
+      statusAnterior: 'novo',
+      statusAtual: resultado.recebimento.status,
+    });
     return resultado;
   }
 
