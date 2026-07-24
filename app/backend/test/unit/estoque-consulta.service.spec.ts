@@ -90,6 +90,69 @@ describe('EstoqueConsultaService', () => {
     expect(itens[1]?.produto).toEqual({ id: null, codigo: 'MISC', nome: 'Sem produto' });
   });
 
+  it('usa fallback textual quando item comercial não está no mapa', async () => {
+    let selectCall = 0;
+    const createdAt = new Date('2026-06-23T12:00:00Z');
+    const db = {
+      select: jest.fn(() => {
+        const idx = selectCall++;
+        if (idx === 0) {
+          return {
+            from: jest.fn(() => ({
+              where: jest.fn(() => ({
+                orderBy: jest.fn(() =>
+                  Promise.resolve([
+                    {
+                      id: 'peca-x',
+                      status: 'em_sobra',
+                      peso: '1.000',
+                      quantidade: '1',
+                      etiqueta: null,
+                      itemComercialId: 'ic-missing',
+                      createdAt,
+                    },
+                  ]),
+                ),
+              })),
+            })),
+          };
+        }
+        if (idx === 1) {
+          return {
+            from: jest.fn(() => ({
+              where: jest.fn(() => ({
+                orderBy: jest.fn(() =>
+                  Promise.resolve([
+                    {
+                      id: 'sub-x',
+                      status: 'em_sobra',
+                      peso: '0.500',
+                      quantidade: '1.000',
+                      etiqueta: null,
+                      itemComercialId: 'ic-missing-2',
+                      createdAt: new Date('2026-06-22T12:00:00Z'),
+                    },
+                  ]),
+                ),
+              })),
+            })),
+          };
+        }
+        // carregarItensComerciais / produtos: vazios → fallback '—' / 'Item comercial'
+        return {
+          from: jest.fn(() => ({
+            where: jest.fn(() => Promise.resolve([])),
+          })),
+        };
+      }),
+    };
+
+    const service = new EstoqueConsultaService({ db } as never);
+    const itens = await service.consultar();
+    expect(itens).toHaveLength(2);
+    expect(itens.every((i) => i.produto.codigo === '—' && i.produto.nome === 'Item comercial')).toBe(true);
+  });
+
   it('retorna lista vazia sem consultar itens comerciais', async () => {
     let selectCall = 0;
     const db = {

@@ -4,7 +4,7 @@ import { LiberacaoService } from '../../src/modules/operacao/expedicao/liberacao
 import { EVENTOS } from '../../src/realtime/events/eventos';
 
 function caminhao(status: string, id = 'cam-1') {
-  return { id, statusCaminhao: status, dataOperacao: '2026-06-23' };
+  return { id, statusCaminhao: status, dataOperacao: '2026-06-23', operacaoId: 'op-1' };
 }
 
 describe('LiberacaoService — branches', () => {
@@ -19,6 +19,7 @@ describe('LiberacaoService — branches', () => {
   it('liberarFaturamento idempotente quando já liberado', async () => {
     const caminhaoService = {
       caminhaoAtivo: jest.fn().mockResolvedValue(caminhao('liberado_faturamento')),
+      dataOperacaoDoCaminhao: jest.fn().mockResolvedValue('2026-06-23'),
     };
     const db = {
       transaction: jest.fn(async (cb: (tx: object) => Promise<unknown>) => cb({})),
@@ -38,6 +39,7 @@ describe('LiberacaoService — branches', () => {
   it('liberarFaturamento emite evento ao transicionar de fechado', async () => {
     const caminhaoService = {
       caminhaoAtivo: jest.fn().mockResolvedValue(caminhao('fechado')),
+      dataOperacaoDoCaminhao: jest.fn().mockResolvedValue('2026-06-23'),
     };
     const tx = {
       update: jest.fn(() => ({
@@ -68,6 +70,7 @@ describe('LiberacaoService — branches', () => {
   it('liberarSaida exige faturamento concluído', async () => {
     const caminhaoService = {
       caminhaoAtivo: jest.fn().mockResolvedValue(caminhao('faturado')),
+      dataOperacaoDoCaminhao: jest.fn().mockResolvedValue('2026-06-23'),
     };
     const tx = {
       select: jest.fn(() => ({
@@ -92,6 +95,7 @@ describe('LiberacaoService — branches', () => {
   it('liberarSaida idempotente quando já liberado_saida', async () => {
     const caminhaoService = {
       caminhaoAtivo: jest.fn().mockResolvedValue(caminhao('liberado_saida')),
+      dataOperacaoDoCaminhao: jest.fn().mockResolvedValue('2026-06-23'),
     };
     const db = {
       transaction: jest.fn(async (cb: (tx: object) => Promise<unknown>) => cb({})),
@@ -120,7 +124,7 @@ describe('LiberacaoService — branches', () => {
       { db } as never,
       auditoria as never,
       emitter,
-      { caminhaoAtivo: jest.fn() } as never,
+      { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn().mockResolvedValue('2026-06-23') } as never,
     );
 
     await expect(service.sincronizarPosEmissao('cam-1', 'op-1')).resolves.toBeNull();

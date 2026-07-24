@@ -60,4 +60,58 @@ describe('operacoes e2e', () => {
       .send({ data: '2026-08-10', rotulo: 'Extra' });
     expect(res.status).toBe(403);
   });
+
+  it('listar/detalhar/extraordinaria/status cobrem ciclo de vida', async () => {
+    const data = '2026-08-14'; // sexta fora do intervalo do teste de cadência
+    const criar = await request(app.getHttpServer())
+      .post('/operacoes/extraordinaria')
+      .set('Cookie', gestorCookies)
+      .send({ data, rotulo: 'Operação extraordinária de teste' });
+    expect(criar.status).toBe(201);
+    expect(criar.body.extraordinaria).toBe(true);
+
+    const duplicada = await request(app.getHttpServer())
+      .post('/operacoes/extraordinaria')
+      .set('Cookie', gestorCookies)
+      .send({ data, rotulo: 'Duplicada' });
+    expect(duplicada.status).toBe(409);
+
+    const lista = await request(app.getHttpServer())
+      .get('/operacoes')
+      .query({ de: data, ate: data, status: 'aberta', pagina: 1, limite: 10 })
+      .set('Cookie', gestorCookies);
+    expect(lista.status).toBe(200);
+    expect(lista.body.data.some((o: { id: string }) => o.id === criar.body.id)).toBe(true);
+
+    const detalhe = await request(app.getHttpServer())
+      .get(`/operacoes/${criar.body.id}`)
+      .set('Cookie', gestorCookies);
+    expect(detalhe.status).toBe(200);
+    expect(detalhe.body.id).toBe(criar.body.id);
+
+    const inexistente = await request(app.getHttpServer())
+      .get('/operacoes/019ea000-0000-7000-8000-0000000000aa')
+      .set('Cookie', gestorCookies);
+    expect(inexistente.status).toBe(404);
+
+    const andamento = await request(app.getHttpServer())
+      .patch(`/operacoes/${criar.body.id}/status`)
+      .set('Cookie', gestorCookies)
+      .send({ status: 'em_andamento' });
+    expect(andamento.status).toBe(200);
+    expect(andamento.body.status).toBe('em_andamento');
+
+    const fechada = await request(app.getHttpServer())
+      .patch(`/operacoes/${criar.body.id}/status`)
+      .set('Cookie', gestorCookies)
+      .send({ status: 'fechada' });
+    expect(fechada.status).toBe(200);
+    expect(fechada.body.status).toBe('fechada');
+
+    const invalida = await request(app.getHttpServer())
+      .patch(`/operacoes/${criar.body.id}/status`)
+      .set('Cookie', gestorCookies)
+      .send({ status: 'aberta' });
+    expect(invalida.status).toBe(409);
+  });
 });

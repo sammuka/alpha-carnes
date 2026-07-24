@@ -29,32 +29,102 @@ function sqlStatements(fileContent: string): string[] {
 }
 
 let pool: Pool | null = null;
+let poolReady: Promise<Pool> | null = null;
 
+/**
+ * Banco dedicado para DROP SCHEMA das migrations. Evita derrubar o schema
+ * usado pelas suites e2e no mesmo DATABASE_URL (mesmo com maxWorkers=1,
+ * afterAll/antes do próximo arquivo ainda compartilhavam o catálogo).
+ */
+function connectionStringMigrations(): string {
+  if (process.env.DATABASE_URL_MIGRATIONS) {
+    return process.env.DATABASE_URL_MIGRATIONS;
+  }
+  const base = process.env.DATABASE_URL;
+  if (!base) throw new Error('DATABASE_URL não definida');
+  // Deriva .../alphacarnes_migrations a partir do DB padrão de testes.
+  return base.replace(/\/([^/?]+)(\?.*)?$/, '/$1_migrations$2');
+}
+
+async function ensureMigrationsDatabase(connectionString: string): Promise<void> {
+  const match = connectionString.match(/^(postgres(?:ql)?:\/\/[^/]+)\/([^/?]+)(.*)$/i);
+  if (!match) throw new Error(`DATABASE_URL_MIGRATIONS inválida: ${connectionString}`);
+  const [, origin, dbName, suffix] = match;
+  const adminUrl = `${origin}/postgres${suffix ?? ''}`;
+  const admin = new Pool({ connectionString: adminUrl, max: 1 });
+  try {
+    const { rows } = await admin.query<{ exists: boolean }>(
+      `SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1) AS exists`,
+      [dbName],
+    );
+    if (!rows[0]?.exists) {
+      // Identificador validado: só [a-zA-Z0-9_]
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(dbName!)) {
+        throw new Error(`Nome de database de migrations inválido: ${dbName}`);
+      }
+      await admin.query(`CREATE DATABASE ${dbName}`);
+    }
+  } finally {
+    await admin.end();
+  }
+}
+
+/** @deprecated Prefira ensurePool(); mantido para leituras após migrarAte. */
 export function getPool(): Pool {
   if (!pool) {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      throw new Error('DATABASE_URL não definida');
-    }
-    pool = new Pool({ connectionString });
+    throw new Error('Pool de migrations ainda não inicializado — chame ensurePool()');
   }
   return pool;
+}
+
+/** Garante DB dedicado + pool (lazy, idempotente). */
+export async function ensurePool(): Promise<Pool> {
+  if (pool) return pool;
+  if (!poolReady) {
+    poolReady = (async () => {
+      const connectionString = connectionStringMigrations();
+      await ensureMigrationsDatabase(connectionString);
+      pool = new Pool({ connectionString, max: 1 });
+      return pool;
+    })();
+  }
+  return poolReady;
 }
 
 export async function closePool(): Promise<void> {
   if (pool) {
     await pool.end();
     pool = null;
+    poolReady = null;
   }
+}
+
+async function dropSchemasComRetry(client: PoolClient): Promise<void> {
+  // Não usar pg_terminate_backend: com maxWorkers=1 o DROP serializa com as
+  // suites e2e; terminate matava pools Nest vizinhos e gerava 401/TRUNCATE falho.
+  let ultimoErro: unknown;
+  for (let tentativa = 1; tentativa <= 8; tentativa++) {
+    try {
+      await client.query('DROP SCHEMA IF EXISTS public CASCADE');
+      await client.query('DROP SCHEMA IF EXISTS drizzle CASCADE');
+      return;
+    } catch (err) {
+      ultimoErro = err;
+      const code = (err as { code?: string }).code;
+      // 40P01 deadlock; 55006 object_in_use; 57P01 admin_shutdown
+      if (code !== '40P01' && code !== '55006' && code !== '57P01') throw err;
+      await new Promise((r) => setTimeout(r, 150 * tentativa));
+    }
+  }
+  throw ultimoErro;
 }
 
 /** Recria o schema public e aplica migrations do journal até o tag informado (inclusive). */
 export async function migrarAte(tag: string): Promise<void> {
-  const p = getPool();
+  const p = await ensurePool();
   const client = await p.connect();
   try {
-    await client.query('DROP SCHEMA IF EXISTS public CASCADE');
-    await client.query('DROP SCHEMA IF EXISTS drizzle CASCADE');
+    await dropSchemasComRetry(client);
     await client.query('CREATE SCHEMA public');
     await client.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
 
@@ -87,7 +157,7 @@ export async function aplicarMigration(tag: string): Promise<void> {
     throw new Error(`Arquivo de migration ausente: ${filePath}`);
   }
   const content = fs.readFileSync(filePath, 'utf8');
-  const client = await getPool().connect();
+  const client = await (await ensurePool()).connect();
   try {
     for (const stmt of sqlStatements(content)) {
       await client.query(stmt);
@@ -98,7 +168,7 @@ export async function aplicarMigration(tag: string): Promise<void> {
 }
 
 export async function expectTabela(nome: string): Promise<void> {
-  const { rows } = await getPool().query<{ exists: boolean }>(
+  const { rows } = await (await ensurePool()).query<{ exists: boolean }>(
     `SELECT EXISTS (
        SELECT 1 FROM information_schema.tables
        WHERE table_schema = 'public' AND table_name = $1
@@ -113,7 +183,7 @@ export async function expectColuna(
   coluna: string,
   opts: { nullable: boolean },
 ): Promise<void> {
-  const { rows } = await getPool().query<{ is_nullable: string }>(
+  const { rows } = await (await ensurePool()).query<{ is_nullable: string }>(
     `SELECT is_nullable
        FROM information_schema.columns
       WHERE table_schema = 'public'
@@ -126,7 +196,7 @@ export async function expectColuna(
 }
 
 async function withClient<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
-  const client = await getPool().connect();
+  const client = await (await ensurePool()).connect();
   try {
     return await fn(client);
   } finally {
@@ -261,7 +331,7 @@ export async function semearDivergenciasLegadas(
 }
 
 export async function buscarDivergencia(id: string): Promise<{ tipo: string; descricao: string }> {
-  const { rows } = await getPool().query<{ tipo: string; descricao: string }>(
+  const { rows } = await (await ensurePool()).query<{ tipo: string; descricao: string }>(
     `SELECT tipo, descricao FROM divergencias_recebimento WHERE id = $1`,
     [id],
   );
@@ -270,7 +340,7 @@ export async function buscarDivergencia(id: string): Promise<{ tipo: string; des
 }
 
 export async function contarDivergenciasComTipoLegado(): Promise<number> {
-  const { rows } = await getPool().query<{ total: string }>(
+  const { rows } = await (await ensurePool()).query<{ total: string }>(
     `SELECT count(*)::text AS total FROM divergencias_recebimento
       WHERE tipo IN (
         'quantidade_menor','quantidade_maior','item_divergente','qualidade_divergente',

@@ -121,7 +121,9 @@ export async function seed() {
     console.log('🎉 Seed concluído com sucesso!');
   } catch (err) {
     console.error('❌ Falha no seed:', err);
-    process.exit(1);
+    // process.exit aborta o Jest quando seed() é importado por seed.spec.ts
+    if (require.main === module) process.exit(1);
+    throw err;
   } finally {
     await pool.end();
   }

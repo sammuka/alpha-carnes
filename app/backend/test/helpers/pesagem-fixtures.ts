@@ -73,16 +73,29 @@ export async function criarPedido(
   params: { compraId: string; clienteId: string; itemComercialId: string; dataOperacao: string; quantidade: number; prioridade?: number },
 ): Promise<{ pedidoId: string; pedidoItemId: string }> {
   const { default: request } = await import('supertest');
-  const res = await request(app.getHttpServer())
+  const body = {
+    compraProgramadaId: params.compraId,
+    clienteId: params.clienteId,
+    dataOperacao: params.dataOperacao,
+    prioridade: params.prioridade,
+    itens: [{ itemComercialId: params.itemComercialId, quantidadePedida: params.quantidade }],
+  };
+  let res = await request(app.getHttpServer())
     .post('/comercial/pedidos')
     .set('Cookie', comercialCookies)
-    .send({
-      compraProgramadaId: params.compraId,
-      clienteId: params.clienteId,
-      dataOperacao: params.dataOperacao,
-      prioridade: params.prioridade,
-      itens: [{ itemComercialId: params.itemComercialId, quantidadePedida: params.quantidade }],
-    });
+    .send(body);
+  // Fixture de cenário: AD-05 exige confirmação explícita quando não há saldo.
+  const challenge = res.body?.message;
+  if (
+    res.status === 409
+    && typeof challenge === 'object'
+    && challenge?.code === 'OVERBOOKING_CONFIRMACAO_NECESSARIA'
+  ) {
+    res = await request(app.getHttpServer())
+      .post('/comercial/pedidos/confirmar-overbooking')
+      .set('Cookie', comercialCookies)
+      .send(body);
+  }
   if (res.status !== 201) {
     throw new Error(`Falha ao criar pedido: ${res.status} ${JSON.stringify(res.body)}`);
   }

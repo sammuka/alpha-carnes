@@ -73,11 +73,19 @@ export class OperacoesService {
     if (atual) return { operacao: atual, criada: false };
 
     const diaSemana = new Date(`${data}T12:00:00Z`).getUTCDay();
-    const [criada] = await tx.insert(operacoes).values({
-      data, diaSemana, rotulo: `Operação de ${DIAS_SEMANA_PT[diaSemana]}`,
-      criadaPorId: usuarioId ?? null,
-    }).onConflictDoNothing().returning({ id: operacoes.id, data: operacoes.data });
-    if (criada) return { operacao: criada, criada: true };
+    // Índice único parcial (deleted_at IS NULL): ON CONFLICT sem target falha no PG.
+    // Em corrida, reconsulta a linha ativa após unique_violation (23505).
+    try {
+      const [criada] = await tx.insert(operacoes).values({
+        data, diaSemana, rotulo: `Operação de ${DIAS_SEMANA_PT[diaSemana]}`,
+        criadaPorId: usuarioId ?? null,
+      }).returning({ id: operacoes.id, data: operacoes.data });
+      if (criada) return { operacao: criada, criada: true };
+    } catch (err) {
+      const code = (err as { code?: string }).code
+        ?? (err as { cause?: { code?: string } }).cause?.code;
+      if (code !== '23505') throw err;
+    }
 
     const concorrente = primeiroOuFalha(await tx.select({ id: operacoes.id, data: operacoes.data })
       .from(operacoes).where(and(eq(operacoes.data, data), isNull(operacoes.deletedAt))));

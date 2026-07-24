@@ -3,19 +3,21 @@ import {
   buscarDivergencia,
   closePool,
   contarDivergenciasComTipoLegado,
+  ensurePool,
   expectCheckAceita,
   expectCheckRejeita,
   expectColuna,
   expectTabela,
-  getPool,
   migrarAte,
   semearDivergenciasLegadas,
 } from '../helpers/onda1-migrations';
 
 describe('onda1-migrations', () => {
   afterAll(async () => {
+    // DROP ocorre só no DB dedicado (*_migrations); e2e usam DATABASE_URL.
+    await migrarAte('0014_onda1_contract');
     await closePool();
-  });
+  }, 120_000);
 
   it('0012 cria estruturas sem remover colunas legadas', async () => {
     await migrarAte('0012_onda1_expand');
@@ -62,7 +64,8 @@ describe('onda1-migrations', () => {
     expect(await contarDivergenciasComTipoLegado()).toBe(0);
 
     // Backfill preenche FKs e NF legada sem inventar itens
-    const { rows: recs } = await getPool().query<{
+    const mig = await ensurePool();
+    const { rows: recs } = await mig.query<{
       pedido_fornecedor_id: string | null;
       operacao_id: string | null;
       status: string;
@@ -72,12 +75,12 @@ describe('onda1-migrations', () => {
     expect(recs[0]!.operacao_id).toBeTruthy();
     expect(recs[0]!.status).toBe('pesagem_em_andamento');
 
-    const { rows: nfs } = await getPool().query<{ payload_json: { migracao?: string } }>(
+    const { rows: nfs } = await mig.query<{ payload_json: { migracao?: string } }>(
       `SELECT payload_json FROM notas_fiscais_fornecedor`,
     );
     expect(nfs.length).toBe(1);
     expect(nfs[0]!.payload_json.migracao).toBe('legado_sem_itens_nf');
-    const { rows: nfItens } = await getPool().query(
+    const { rows: nfItens } = await mig.query(
       `SELECT id FROM notas_fiscais_fornecedor_itens`,
     );
     expect(nfItens.length).toBe(0);

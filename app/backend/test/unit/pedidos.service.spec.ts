@@ -83,3 +83,54 @@ describe('PedidosService — emissão de evento pós-commit', () => {
     );
   });
 });
+
+describe('PedidosService — branches de conflito', () => {
+  const auditoria = { registrar: jest.fn() };
+  const emitter = new EventEmitter2();
+
+  function service(db: object) {
+    return new PedidosService({ db } as never, auditoria as never, emitter, {} as never);
+  }
+
+  it('incluirItem mapeia unique violation para 409 de item duplicado', async () => {
+    const db = {
+      transaction: jest.fn(async () => {
+        throw Object.assign(new Error('dup'), {
+          code: '23505',
+          constraint: 'uq_pedido_venda_item_comercial_ativo',
+        });
+      }),
+    };
+    await expect(service(db).incluirItem('p1', {
+      itemComercialId: 'i1', quantidade: 1,
+    } as never, 'user-1')).rejects.toThrow('Item comercial já existe neste pedido');
+  });
+
+  it('incluirItem propaga erro que não é duplicidade', async () => {
+    const db = {
+      transaction: jest.fn(async () => {
+        throw new Error('falha genérica');
+      }),
+    };
+    await expect(service(db).incluirItem('p1', {
+      itemComercialId: 'i1', quantidade: 1,
+    } as never, 'user-1')).rejects.toThrow('falha genérica');
+  });
+
+  it('planejarSobLock rejeita item comercial duplicado no payload', async () => {
+    const tx = { execute: jest.fn() };
+    await expect(service({}).planejarSobLock(tx as never, 'op-1', [
+      { itemComercialId: 'i1', quantidade: '1' },
+      { itemComercialId: 'i1', quantidade: '2' },
+    ] as never)).rejects.toThrow('item comercial duplicado');
+  });
+
+  it('planejarSobLock sem operacaoId retorna déficit total', async () => {
+    const plano = await service({}).planejarSobLock({} as never, null, [
+      { itemComercialId: 'i1', quantidade: '3.000' },
+    ] as never);
+    expect(plano).toHaveLength(1);
+    expect(plano[0]?.deficit).toBe('3.000');
+    expect(plano[0]?.coberturas).toEqual([]);
+  });
+});
