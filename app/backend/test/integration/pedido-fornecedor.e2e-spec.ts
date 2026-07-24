@@ -113,7 +113,7 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
       .expect(409);
   });
 
-  it('recebimento exige pedido enviado; permite N recebimentos e N NFs', async () => {
+  it('recebimento exige pedido enviado; permite N recebimentos e N NFs no mesmo recebimento', async () => {
     const { base, pedidoId, operacaoId } = await pedidoPronto('2026-08-03');
 
     // sem enviar (novo rascunho)
@@ -144,12 +144,14 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
       .expect(201);
     expect(r2.body.recebimento.id).not.toBe(r1.body.recebimento.id);
 
+    const recId = r1.body.recebimento.id as string;
+
     const nf1 = await request(app.getHttpServer())
       .post(`/operacao/pedidos-fornecedor/${pedidoId}/nf`)
       .set('Cookie', recebimentoCookies)
       .send({
         numero: '1001',
-        recebimentoId: r1.body.recebimento.id,
+        recebimentoId: recId,
         itens: [{ itemComercialId: base.itemComercialId, quantidadeDeclarada: 5 }],
       })
       .expect(201);
@@ -159,7 +161,7 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
       .set('Cookie', recebimentoCookies)
       .send({
         numero: '1002',
-        recebimentoId: r2.body.recebimento.id,
+        recebimentoId: recId,
         itens: [{ itemComercialId: base.itemComercialId, quantidadeDeclarada: 3 }],
       })
       .expect(201);
@@ -168,8 +170,9 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
 
     const { db } = app.get(DRIZZLE);
     const nfs = await db.select().from(schema.notasFiscaisFornecedor)
-      .where(eq(schema.notasFiscaisFornecedor.pedidoFornecedorId, pedidoId));
+      .where(eq(schema.notasFiscaisFornecedor.recebimentoId, recId));
     expect(nfs.length).toBe(2);
+    expect(nfs.every((nf: { deletedAt: Date | null }) => nf.deletedAt === null)).toBe(true);
 
     const lista = await request(app.getHttpServer())
       .get('/operacao/pedidos-fornecedor')

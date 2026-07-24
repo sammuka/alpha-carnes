@@ -9,7 +9,6 @@ import {
   notasFiscaisFornecedor,
   notasFiscaisFornecedorItens,
   pedidosFornecedor,
-  pedidosFornecedorItens,
   recebimentos,
 } from '../../../database/schema';
 import type { AtualizarNfeDto, IniciarRecebimentoDto } from './dto/recebimento.dto';
@@ -39,6 +38,16 @@ export function temCamposNfEstruturados(dto: Partial<NfCamposUi>): boolean {
   );
 }
 
+function extrairPayloadNfUi(
+  dto: Partial<NfCamposUi>,
+  extras?: Record<string, unknown>,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = { ...extras };
+  if (dto.nfeVolumes !== undefined) payload.volumes = dto.nfeVolumes;
+  if (dto.nfePesoLiquido !== undefined) payload.pesoLiquido = dto.nfePesoLiquido;
+  return payload;
+}
+
 export function mapearCamposNfParaRegistrar(
   dto: Partial<NfCamposUi>,
   recebimentoId: string,
@@ -47,67 +56,79 @@ export function mapearCamposNfParaRegistrar(
   if (!dto.nfeNumero?.trim()) {
     throw new BadRequestException('nfeNumero é obrigatório para persistir NF estruturada');
   }
-  const payload: Record<string, unknown> = {};
-  if (dto.nfeVolumes !== undefined) payload.volumes = dto.nfeVolumes;
-  // Preferência: peso bruto; se só líquido vier, usa líquido como total declarado.
-  const pesoTotalDeclarado = dto.nfePesoBruto ?? dto.nfePesoLiquido;
+  const payload = extrairPayloadNfUi(dto);
   return {
     numero: dto.nfeNumero.trim(),
     serie: dto.nfeSerie,
     chave: dto.nfeChave,
     dataEmissao: dto.nfeDataEmissao,
-    pesoTotalDeclarado,
+    pesoTotalDeclarado: dto.nfePesoBruto,
     payload: Object.keys(payload).length > 0 ? payload : undefined,
     itens,
     recebimentoId,
   };
 }
 
-export async function derivarItensNfDoPedido(
+async function validarPedidoRecebimento(
   tx: Tx,
   pedidoFornecedorId: string,
-): Promise<RegistrarNfDto['itens']> {
-  const itens = await tx
-    .select({
-      itemComercialId: pedidosFornecedorItens.itemComercialId,
-      quantidadePrevista: pedidosFornecedorItens.quantidadePrevista,
-    })
-    .from(pedidosFornecedorItens)
+  recebimentoId: string,
+) {
+  const pedido = await tx
+    .select()
+    .from(pedidosFornecedor)
     .where(and(
-      eq(pedidosFornecedorItens.pedidoFornecedorId, pedidoFornecedorId),
-      isNull(pedidosFornecedorItens.deletedAt),
-    ));
-  if (!itens.length) {
-    throw new ConflictException('Pedido ao fornecedor sem itens para derivar NF');
+      eq(pedidosFornecedor.id, pedidoFornecedorId),
+      isNull(pedidosFornecedor.deletedAt),
+    ))
+    .then((r) => r[0] ?? null);
+  if (!pedido) throw new NotFoundException('Pedido ao fornecedor não encontrado');
+
+  const rec = await tx
+    .select()
+    .from(recebimentos)
+    .where(and(
+      eq(recebimentos.id, recebimentoId),
+      eq(recebimentos.pedidoFornecedorId, pedidoFornecedorId),
+      isNull(recebimentos.deletedAt),
+    ))
+    .then((r) => r[0] ?? null);
+  if (!rec) {
+    throw new NotFoundException('Recebimento não encontrado para este pedido ao fornecedor');
   }
-  return itens.map((item) => ({
-    itemComercialId: item.itemComercialId,
-    quantidadeDeclarada: Number(item.quantidadePrevista),
-  }));
+  return { pedido, rec };
 }
 
-async function softDeleteNfAtiva(tx: Tx, recebimentoId: string): Promise<void> {
-  const existentes = await tx
-    .select({ id: notasFiscaisFornecedor.id })
+async function contarItensNfAtivos(tx: Tx, nfId: string): Promise<number> {
+  const itens = await tx
+    .select({ id: notasFiscaisFornecedorItens.id })
+    .from(notasFiscaisFornecedorItens)
+    .where(and(
+      eq(notasFiscaisFornecedorItens.nfId, nfId),
+      isNull(notasFiscaisFornecedorItens.deletedAt),
+    ));
+  return itens.length;
+}
+
+async function buscarNfCabecalhoAtivaPorNumero(
+  tx: Tx,
+  recebimentoId: string,
+  numero: string,
+) {
+  const candidatas = await tx
+    .select()
     .from(notasFiscaisFornecedor)
     .where(and(
       eq(notasFiscaisFornecedor.recebimentoId, recebimentoId),
+      eq(notasFiscaisFornecedor.numero, numero),
       isNull(notasFiscaisFornecedor.deletedAt),
-    ));
-  const agora = new Date();
-  for (const nf of existentes) {
-    await tx
-      .update(notasFiscaisFornecedorItens)
-      .set({ deletedAt: agora })
-      .where(and(
-        eq(notasFiscaisFornecedorItens.nfId, nf.id),
-        isNull(notasFiscaisFornecedorItens.deletedAt),
-      ));
-    await tx
-      .update(notasFiscaisFornecedor)
-      .set({ deletedAt: agora })
-      .where(eq(notasFiscaisFornecedor.id, nf.id));
+    ))
+    .orderBy(desc(notasFiscaisFornecedor.createdAt));
+
+  for (const nf of candidatas) {
+    if (await contarItensNfAtivos(tx, nf.id) === 0) return nf;
   }
+  return null;
 }
 
 export async function buscarNfAtivaDoRecebimento(tx: Tx, recebimentoId: string) {
@@ -135,30 +156,11 @@ export async function persistirNfEstruturadaNaTx(
 ): Promise<typeof notasFiscaisFornecedor.$inferSelect> {
   const { pedidoFornecedorId, recebimentoId, dto, usuarioId } = params;
 
-  const pedido = await tx
-    .select()
-    .from(pedidosFornecedor)
-    .where(and(
-      eq(pedidosFornecedor.id, pedidoFornecedorId),
-      isNull(pedidosFornecedor.deletedAt),
-    ))
-    .then((r) => r[0] ?? null);
-  if (!pedido) throw new NotFoundException('Pedido ao fornecedor não encontrado');
-
-  const rec = await tx
-    .select()
-    .from(recebimentos)
-    .where(and(
-      eq(recebimentos.id, recebimentoId),
-      eq(recebimentos.pedidoFornecedorId, pedidoFornecedorId),
-      isNull(recebimentos.deletedAt),
-    ))
-    .then((r) => r[0] ?? null);
-  if (!rec) {
-    throw new NotFoundException('Recebimento não encontrado para este pedido ao fornecedor');
+  if (!dto.itens.length) {
+    throw new BadRequestException('NF estruturada exige ao menos um item');
   }
 
-  await softDeleteNfAtiva(tx, recebimentoId);
+  const { pedido } = await validarPedidoRecebimento(tx, pedidoFornecedorId, recebimentoId);
 
   const nf = primeiroOuFalha(await tx.insert(notasFiscaisFornecedor).values({
     pedidoFornecedorId: pedido.id,
@@ -193,6 +195,80 @@ export async function persistirNfEstruturadaNaTx(
   return nf;
 }
 
+async function persistirNfCabecalhoUiNaTx(
+  tx: Tx,
+  auditoria: AuditoriaService,
+  params: {
+    pedidoFornecedorId: string;
+    recebimentoId: string;
+    campos: Partial<NfCamposUi>;
+    usuarioId: string;
+  },
+): Promise<typeof notasFiscaisFornecedor.$inferSelect> {
+  const { pedidoFornecedorId, recebimentoId, campos, usuarioId } = params;
+
+  if (!campos.nfeNumero?.trim()) {
+    throw new BadRequestException('nfeNumero é obrigatório para persistir NF estruturada');
+  }
+
+  const numero = campos.nfeNumero.trim();
+  const { pedido } = await validarPedidoRecebimento(tx, pedidoFornecedorId, recebimentoId);
+
+  const payloadJson = extrairPayloadNfUi(campos, {
+    cabecalho_sem_itens: true,
+    migracao: 'legado_sem_itens_nf',
+  });
+
+  const valores = {
+    serie: campos.nfeSerie,
+    chave: campos.nfeChave,
+    dataEmissao: campos.nfeDataEmissao,
+    pesoTotalDeclarado: campos.nfePesoBruto === undefined
+      ? null
+      : formatarQtd(campos.nfePesoBruto),
+    payloadJson,
+  };
+
+  const existente = await buscarNfCabecalhoAtivaPorNumero(tx, recebimentoId, numero);
+  if (existente) {
+    const atualizada = primeiroOuFalha(await tx.update(notasFiscaisFornecedor)
+      .set(valores)
+      .where(eq(notasFiscaisFornecedor.id, existente.id))
+      .returning());
+
+    await auditoria.registrar(tx, {
+      tabela: 'notas_fiscais_fornecedor',
+      registroId: existente.id,
+      operacao: 'UPDATE',
+      modulo: 'operacao',
+      usuarioId,
+      dadosAnteriores: existente,
+      dadosNovos: atualizada,
+    });
+
+    return atualizada;
+  }
+
+  const nf = primeiroOuFalha(await tx.insert(notasFiscaisFornecedor).values({
+    pedidoFornecedorId: pedido.id,
+    recebimentoId,
+    numero,
+    ...valores,
+  }).returning());
+
+  await auditoria.registrar(tx, {
+    tabela: 'notas_fiscais_fornecedor',
+    registroId: nf.id,
+    operacao: 'INSERT',
+    modulo: 'operacao',
+    usuarioId,
+    dadosAnteriores: {},
+    dadosNovos: nf,
+  });
+
+  return nf;
+}
+
 export async function persistirNfDeCamposUiNaTx(
   tx: Tx,
   auditoria: AuditoriaService,
@@ -204,12 +280,20 @@ export async function persistirNfDeCamposUiNaTx(
     itens?: RegistrarNfDto['itens'];
   },
 ): Promise<typeof notasFiscaisFornecedor.$inferSelect> {
-  const itens = params.itens ?? await derivarItensNfDoPedido(tx, params.pedidoFornecedorId);
-  const dto = mapearCamposNfParaRegistrar(params.campos, params.recebimentoId, itens);
-  return persistirNfEstruturadaNaTx(tx, auditoria, {
+  if (params.itens?.length) {
+    const dto = mapearCamposNfParaRegistrar(params.campos, params.recebimentoId, params.itens);
+    return persistirNfEstruturadaNaTx(tx, auditoria, {
+      pedidoFornecedorId: params.pedidoFornecedorId,
+      recebimentoId: params.recebimentoId,
+      dto,
+      usuarioId: params.usuarioId,
+    });
+  }
+
+  return persistirNfCabecalhoUiNaTx(tx, auditoria, {
     pedidoFornecedorId: params.pedidoFornecedorId,
     recebimentoId: params.recebimentoId,
-    dto,
+    campos: params.campos,
     usuarioId: params.usuarioId,
   });
 }

@@ -322,13 +322,7 @@ describe('PedidoFornecedorService — branches', () => {
           .mockReturnValueOnce(chainSelect([{ id: 'pf-1', status: 'aguardando_recebimento' }]))
           .mockReturnValueOnce(chainSelect([{ id: 'rec-1' }]))
           .mockReturnValueOnce(chainSelect([{ id: 'pf-1', status: 'aguardando_recebimento' }]))
-          .mockReturnValueOnce(chainSelect([{ id: 'rec-1', pedidoFornecedorId: 'pf-1' }]))
-          .mockReturnValueOnce(chainSelect([])),
-        update: jest.fn(() => ({
-          set: () => ({
-            where: () => Promise.resolve(undefined),
-          }),
-        })),
+          .mockReturnValueOnce(chainSelect([{ id: 'rec-1', pedidoFornecedorId: 'pf-1' }])),
         insert: jest.fn()
           .mockReturnValueOnce({
             values: () => ({

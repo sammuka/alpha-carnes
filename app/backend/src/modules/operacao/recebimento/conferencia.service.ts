@@ -245,8 +245,7 @@ export class ConferenciaService {
             eq(notasFiscaisFornecedorItens.nfId, nf.id),
             isNull(notasFiscaisFornecedorItens.deletedAt),
           ));
-        const payload = nf.payloadJson as { migracao?: string } | null;
-        if (payload?.migracao === 'legado_sem_itens_nf' && nfItens.length === 0) {
+        if (nfItens.length === 0) {
           throw new ConflictException({
             code: 'NF_ITENS_OBRIGATORIOS',
             message: 'Carregue os itens da NF antes de concluir a conferência',
