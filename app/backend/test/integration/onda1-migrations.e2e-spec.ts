@@ -7,6 +7,7 @@ import {
   expectCheckAceita,
   expectCheckRejeita,
   expectColuna,
+  expectColunaAusente,
   expectTabela,
   migrarAte,
   semearDivergenciasLegadas,
@@ -94,5 +95,34 @@ describe('onda1-migrations', () => {
     // Qualquer tipo legado é rejeitado após o contract (0013 já os remapeou):
     await expectCheckRejeita('divergencias_recebimento', 'tipo', 'inconsistencia_nf_fisico');
     await expectCheckRejeita('divergencias_recebimento', 'tipo', 'quantidade_menor');
+  });
+
+  it('0014 pós-contract: information_schema confirma ausência de data_operacao e nfe_*', async () => {
+    await migrarAte('0014_onda1_contract');
+
+    const tabelasSemDataOperacao = [
+      'compras_programadas',
+      'disponibilidades_virtuais',
+      'pedidos_venda',
+      'recebimentos',
+      'caminhoes',
+      'faturamentos',
+    ] as const;
+    for (const tabela of tabelasSemDataOperacao) {
+      await expectColunaAusente(tabela, 'data_operacao');
+    }
+
+    const colunasNfeCache = [
+      'nfe_numero',
+      'nfe_serie',
+      'nfe_chave',
+      'nfe_data_emissao',
+      'nfe_peso_bruto',
+      'nfe_peso_liquido',
+      'nfe_volumes',
+    ] as const;
+    for (const coluna of colunasNfeCache) {
+      await expectColunaAusente('recebimentos', coluna);
+    }
   });
 });

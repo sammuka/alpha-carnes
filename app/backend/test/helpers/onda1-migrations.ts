@@ -195,6 +195,19 @@ export async function expectColuna(
   expect(rows[0]!.is_nullable).toBe(opts.nullable ? 'YES' : 'NO');
 }
 
+export async function expectColunaAusente(tabela: string, coluna: string): Promise<void> {
+  const { rows } = await (await ensurePool()).query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = $1
+         AND column_name = $2
+     ) AS exists`,
+    [tabela, coluna],
+  );
+  expect(rows[0]?.exists).toBe(false);
+}
+
 async function withClient<T>(fn: (c: PoolClient) => Promise<T>): Promise<T> {
   const client = await (await ensurePool()).connect();
   try {
