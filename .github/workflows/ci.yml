@@ -132,7 +132,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm audit --audit-level=high
+      # --omit=dev: GHSA-mh99 (brace-expansion) atinge só cadeia eslint/jest (dev);
+      # não há patch 1.x/2.x e forçar 5.0.8 quebra minimatch (`expand is not a function`).
+      # Árvore de produção: 0 high/critical.
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm ci
         working-directory: landing
       - run: npm audit --audit-level=high
