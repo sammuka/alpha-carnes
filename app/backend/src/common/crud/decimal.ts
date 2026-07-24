@@ -52,3 +52,18 @@ export function compararQtd(a: number | string, b: number | string): number {
 export function ehZero(valor: number | string): boolean {
   return paraEscalado(valor) === 0n;
 }
+
+/** Mínimo entre duas quantidades, como string NUMERIC(.,3). */
+export function minimoQtd(
+  a: number | string,
+  b: number | string,
+): string {
+  return compararQtd(a, b) <= 0 ? formatarQtd(a) : formatarQtd(b);
+}
+
+/** Soma uma lista de quantidades sem drift de float. */
+export function somarListaQtd(
+  valores: readonly (number | string)[],
+): string {
+  return valores.reduce<string>((total, valor) => somarQtd(total, valor), '0.000');
+}

@@ -11,6 +11,22 @@ const itemPedidoSchema = z.object({
   observacoes: z.string().trim().max(500).optional(),
 });
 
+const itensCriacaoPedidoSchema = z.array(itemPedidoSchema)
+  .min(1, 'pedido precisa de ao menos um item')
+  .superRefine((itens, ctx) => {
+    const vistos = new Set<string>();
+    itens.forEach((item, index) => {
+      if (vistos.has(item.itemComercialId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index, 'itemComercialId'],
+          message: 'item comercial duplicado no mesmo pedido',
+        });
+      }
+      vistos.add(item.itemComercialId);
+    });
+  });
+
 export const createPedidoSchema = z.object({
   compraProgramadaId: z.string().uuid(),
   clienteId: z.string().uuid(),
@@ -19,14 +35,40 @@ export const createPedidoSchema = z.object({
   rotaPrevista: z.string().trim().max(100).optional(),
   prioridade: z.number().int().min(0).max(100).optional(),
   observacoesGerais: z.string().trim().max(1000).optional(),
-  itens: z.array(itemPedidoSchema).min(1, 'pedido precisa de ao menos um item'),
+  itens: itensCriacaoPedidoSchema,
 });
 
 export type CreatePedidoDto = z.infer<typeof createPedidoSchema>;
 
-// Reduzir (ou zerar) a quantidade reservada de um item — devolve saldo.
+export const incluirItemSchema = z.object({
+  itemComercialId: z.string().uuid(),
+  quantidade: z.coerce.number().positive(),
+  observacoes: z.string().max(1000).optional(),
+});
+
+export const confirmarCriacaoOverbookingSchema = createPedidoSchema;
+// Inclusão sempre cria uma nova linha. Aumento/redução de linha existente usa
+// os endpoints explícitos de alteração de item; não há itemId ambíguo aqui.
+export const confirmarInclusaoOverbookingSchema = incluirItemSchema;
+export type IncluirItemDto = z.infer<typeof incluirItemSchema>;
+export type ConfirmarInclusaoOverbookingDto =
+  z.infer<typeof confirmarInclusaoOverbookingSchema>;
+
 export const reduzirItemSchema = z.object({
-  novaQuantidade: z.number().min(0).max(9_999_999_999.999),
+  novaQuantidade: z.coerce.number().positive().max(9_999_999_999.999),
+  motivo: z.string().trim().min(1).max(1000),
 });
 
 export type ReduzirItemDto = z.infer<typeof reduzirItemSchema>;
+
+export const cancelarPedidoSchema = z.object({
+  motivo: z.string().trim().min(1).max(1000),
+});
+
+export type CancelarPedidoDto = z.infer<typeof cancelarPedidoSchema>;
+
+export const removerItemSchema = z.object({
+  motivo: z.string().trim().min(1).max(1000),
+});
+
+export type RemoverItemDto = z.infer<typeof removerItemSchema>;
