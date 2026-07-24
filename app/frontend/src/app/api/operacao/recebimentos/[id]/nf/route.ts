@@ -3,7 +3,11 @@ import { fetchBackend } from '@/lib/api';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// BFF: rota exposta como /nf (plano onda1); backend persiste em /nfe.
+/**
+ * Rota do plano onda1 (/nf). Persistência estruturada via PATCH backend /nfe
+ * (atualizarNfe → notas_fiscais_fornecedor). Não é alias pass-through cego:
+ * o backend deriva itens do pedido ao fornecedor quando necessário.
+ */
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
   const body = await req.json();
