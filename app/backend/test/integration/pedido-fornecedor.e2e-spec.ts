@@ -67,6 +67,15 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
     return { base, compraId, pedidoId: pedido.body.id as string, operacaoId: pedido.body.operacaoId as string };
   }
 
+  it('recebimento sem PEDIDO_FORNECEDOR_GERENCIAR recebe 403', async () => {
+    const { compraId } = await compraConfirmada('2026-08-05');
+    const res = await request(app.getHttpServer())
+      .post('/operacao/pedidos-fornecedor')
+      .set('Cookie', recebimentoCookies)
+      .send({ compraProgramadaId: compraId });
+    expect(res.status).toBe(403);
+  });
+
   it('cria pedido espelhando disponibilidade da compra confirmada', async () => {
     const { base, compraId } = await compraConfirmada('2026-08-01');
 

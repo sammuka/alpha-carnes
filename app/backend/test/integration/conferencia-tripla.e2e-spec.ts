@@ -106,6 +106,15 @@ describe('conferencia-tripla', () => {
     };
   }
 
+  it('compras sem CONFERENCIA_CONCLUIR recebe 403', async () => {
+    const { recebimentoId } = await montarRecebimento('2026-08-22');
+    const res = await request(app.getHttpServer())
+      .post(`/operacao/recebimentos/${recebimentoId}/conferencia/concluir`)
+      .set('Cookie', comprasCookies)
+      .send({ resultado: 'com_divergencia', observacao: 'sem permissão' });
+    expect(res.status).toBe(403);
+  });
+
   it('quadro: conforme / excesso / peso / caixaria / não previsto', async () => {
     const { base, caixaId, compraId, pedidoId, recebimentoId } = await montarRecebimento('2026-08-20');
     const { db } = app.get(DRIZZLE);

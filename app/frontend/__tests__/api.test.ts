@@ -89,3 +89,58 @@ describe('BFF POST /api/comercial/pedidos', () => {
     await expect(res.json()).resolves.toEqual(criado);
   });
 });
+
+describe('BFF POST /api/comercial/pedidos/confirmar-overbooking', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.resetModules();
+  });
+
+  it('preserva status 201 no sucesso', async () => {
+    const criado = { id: 'p2', status: 'em_elaboracao_reserva_ativa' };
+    global.fetch = jest.fn(async () =>
+      new Response(JSON.stringify(criado), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ) as unknown as typeof fetch;
+
+    const { POST } = await import('../src/app/api/comercial/pedidos/confirmar-overbooking/route');
+    const req = { json: async () => ({ clienteId: 'c1', dataOperacao: '2026-07-24', itens: [] }) };
+    const res = await POST(req as never);
+    expect(res.status).toBe(201);
+    await expect(res.json()).resolves.toEqual(criado);
+  });
+});
+
+describe('BFF GET /api/comercial/overbooking', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.resetModules();
+  });
+
+  it('retorna lista paginada com sucesso', async () => {
+    const lista = {
+      data: [{ id: 'pend1', status: 'aberta', quantidadeDeficit: '2.000' }],
+      page: 1,
+      pageSize: 20,
+      total: 1,
+    };
+    global.fetch = jest.fn(async () =>
+      new Response(JSON.stringify(lista), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ) as unknown as typeof fetch;
+
+    const { GET } = await import('../src/app/api/comercial/overbooking/route');
+    const req = { nextUrl: { searchParams: new URLSearchParams('operacaoId=op1') } };
+    const res = await GET(req as never);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(lista);
+  });
+});

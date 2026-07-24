@@ -32,6 +32,44 @@ describe('overbooking-lifecycle', () => {
     await app.close();
   });
 
+  it('comercial sem OVERBOOKING_RESOLVER recebe 403', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const criar = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send({
+        dataOperacao: '2026-12-11',
+        fornecedorId: base.fornecedorId,
+        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 1 }],
+      });
+    await request(app.getHttpServer())
+      .post(`/comercial/compras-programadas/${criar.body.id}/confirmar`)
+      .set('Cookie', comprasCookies)
+      .send();
+
+    const pedido = await request(app.getHttpServer())
+      .post('/comercial/pedidos/confirmar-overbooking')
+      .set('Cookie', comercialCookies)
+      .send({
+        compraProgramadaId: criar.body.id,
+        clienteId: base.clienteId,
+        dataOperacao: '2026-12-11',
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 5 }],
+      })
+      .expect(201);
+
+    const { db } = app.get(DRIZZLE);
+    const [pend] = await db.select().from(schema.pendenciasOverbooking)
+      .where(eq(schema.pendenciasOverbooking.pedidoVendaId, pedido.body.id));
+    if (!pend) throw new Error('pendência ausente');
+
+    const res = await request(app.getHttpServer())
+      .post(`/comercial/overbooking/${pend.id}/decisao`)
+      .set('Cookie', comercialCookies)
+      .send({ caminho: 'compra_complementar', detalhe: { obs: 'negado' } });
+    expect(res.status).toBe(403);
+  });
+
   it('detalhar pendência inclui histórico', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const criar = await request(app.getHttpServer())

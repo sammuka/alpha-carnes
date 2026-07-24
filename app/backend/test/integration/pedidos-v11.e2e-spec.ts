@@ -59,6 +59,40 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
     return { base, compraId, disponibilidadeId: disp.id };
   }
 
+  it('compras sem PEDIDO_OVERBOOKING_CONFIRMAR recebe 403', async () => {
+    const { base, compraId } = await cenarioComSaldo('2026-11-10', 2);
+    const res = await request(app.getHttpServer())
+      .post('/comercial/pedidos/confirmar-overbooking')
+      .set('Cookie', comprasCookies)
+      .send({
+        compraProgramadaId: compraId,
+        clienteId: base.clienteId,
+        dataOperacao: '2026-11-10',
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 5 }],
+      });
+    expect(res.status).toBe(403);
+  });
+
+  it('compras sem PEDIDO_FINALIZAR recebe 403', async () => {
+    const { base, compraId } = await cenarioComSaldo('2026-11-11', 2);
+    const criado = await request(app.getHttpServer())
+      .post('/comercial/pedidos/confirmar-overbooking')
+      .set('Cookie', comercialCookies)
+      .send({
+        compraProgramadaId: compraId,
+        clienteId: base.clienteId,
+        dataOperacao: '2026-11-11',
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 4 }],
+      })
+      .expect(201);
+
+    const res = await request(app.getHttpServer())
+      .post(`/comercial/pedidos/${criado.body.id}/finalizar`)
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(res.status).toBe(403);
+  });
+
   it('409 challenge não executa escrita e não persiste mutação', async () => {
     const { base, compraId, disponibilidadeId } = await cenarioComSaldo('2026-11-01', 2);
     const drizzle = app.get(DRIZZLE);
