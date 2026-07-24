@@ -103,11 +103,22 @@ describe('operacoes-writers e2e', () => {
     }
 
     if (tabela === 'recebimentos') {
+      // Desde Task 4 o recebimento nasce do Pedido ao Fornecedor (não mais compra+NF).
       const compraId = await criarCompraConfirmada(data);
+      const pedido = await request(app.getHttpServer())
+        .post('/operacao/pedidos-fornecedor')
+        .set('Cookie', comprasCookies)
+        .send({ compraProgramadaId: compraId });
+      expect(pedido.status).toBe(201);
+      const enviado = await request(app.getHttpServer())
+        .post(`/operacao/pedidos-fornecedor/${pedido.body.id}/enviar`)
+        .set('Cookie', comprasCookies)
+        .send();
+      expect(enviado.status).toBe(200);
       const rec = await request(app.getHttpServer())
         .post('/operacao/recebimentos')
         .set('Cookie', recebimentoCookies)
-        .send({ compraProgramadaId: compraId, nfeNumero: `NF${diaSeq}` });
+        .send({ pedidoFornecedorId: pedido.body.id });
       expect([200, 201]).toContain(rec.status);
       return;
     }

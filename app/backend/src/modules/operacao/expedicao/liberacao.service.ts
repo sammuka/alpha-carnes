@@ -4,12 +4,12 @@ import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import {
+import { operacoes,
   caminhoes,
   cargaItens,
   faturamentos,
   notasFiscais,
-} from '../../../database/schema';
+ } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { EVENTOS } from '../../../realtime/events/eventos';
@@ -67,9 +67,10 @@ export class LiberacaoService {
     });
 
     if (!resultado.jaLiberado) {
+      const dataOperacao = await this.caminhaoService.dataOperacaoDoCaminhao(this.db, resultado.caminhao);
       this.eventEmitter.emit(EVENTOS.EXPEDICAO_LIBERADA_FATURAMENTO, {
         caminhaoId,
-        dataOperacao: resultado.caminhao.dataOperacao,
+        dataOperacao,
       });
     }
 
@@ -125,7 +126,7 @@ export class LiberacaoService {
     if (!resultado.jaLiberado) {
       this.eventEmitter.emit(EVENTOS.EXPEDICAO_LIBERADA_SAIDA, {
         caminhaoId,
-        dataOperacao: resultado.caminhao.dataOperacao,
+        dataOperacao: await this.caminhaoService.dataOperacaoDoCaminhao(this.db, resultado.caminhao),
       });
     }
 
@@ -258,17 +259,18 @@ export class LiberacaoService {
         motorista: caminhoes.motorista,
         rota: caminhoes.rota,
         statusCaminhao: caminhoes.statusCaminhao,
-        dataOperacao: caminhoes.dataOperacao,
+        dataOperacao: operacoes.data,
         statusFaturamento: faturamentos.statusFaturamento,
       })
       .from(caminhoes)
+      .innerJoin(operacoes, eq(operacoes.id, caminhoes.operacaoId))
       .leftJoin(
         faturamentos,
         and(eq(faturamentos.caminhaoId, caminhoes.id), isNull(faturamentos.deletedAt)),
       )
       .where(
         and(
-          eq(caminhoes.dataOperacao, dataOperacao),
+          eq(operacoes.data, dataOperacao),
           isNull(caminhoes.deletedAt),
           sql`${caminhoes.statusCaminhao} IN ('faturado', 'liberado_saida', 'liberado_faturamento', 'fechado')`,
         ),

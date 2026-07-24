@@ -16,12 +16,11 @@ export const pedidosVenda = pgTable(
     id:                  uuid('id').primaryKey().default(sql`uuidv7()`),
     compraProgramadaId:  uuid('compra_programada_id').notNull().references(() => comprasProgramadas.id),
     clienteId:           uuid('cliente_id').notNull().references(() => clientes.id),
-    dataOperacao:        date('data_operacao').notNull(),
-    operacaoId:          uuid('operacao_id').references(() => operacoes.id),
+    operacaoId:          uuid('operacao_id').notNull().references(() => operacoes.id),
     dataEntrega:         date('data_entrega'),
     rotaPrevista:        text('rota_prevista'),
     prioridade:          integer('prioridade'),
-    status:              text('status').notNull().default('reservado'),
+    status:              text('status').notNull().default('em_elaboracao_reserva_ativa'),
     observacoesGerais:   text('observacoes_gerais'),
     motivoCancelamento:  text('motivo_cancelamento'),
     usuarioCriacaoId:    uuid('usuario_criacao_id').notNull().references(() => usuarios.id),
@@ -31,12 +30,14 @@ export const pedidosVenda = pgTable(
     deletedAt:           timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
-    // CHECK legado durante expand (Tasks 1–6); superset transitório no SQL 0012; finais no 0014.
-    check('chk_pedidos_venda_status', sql`${t.status} IN ('reservado','parcialmente_reservado','cancelado')`),
+    check('chk_pedidos_venda_status', sql`${t.status} IN (
+      'rascunho','em_elaboracao_reserva_ativa','aguardando_confirmacao_overbooking',
+      'finalizado','parcialmente_atendido','atendido','faturado','cancelado'
+    )`),
     index('idx_pedidos_venda_compra').on(t.compraProgramadaId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_pedidos_venda_cliente').on(t.clienteId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_pedidos_venda_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
-    index('idx_pedidos_venda_data_operacao').on(t.dataOperacao).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_pedidos_venda_operacao').on(t.operacaoId).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 
@@ -50,8 +51,6 @@ export const pedidosVendaItens = pgTable(
     quantidadePedida:          numeric('quantidade_pedida', { precision: 15, scale: 3 }).notNull(),
     quantidadeReservada:       numeric('quantidade_reservada', { precision: 15, scale: 3 }).notNull().default('0'),
     quantidadePendente:        numeric('quantidade_pendente', { precision: 15, scale: 3 }).notNull().default('0'),
-    // F4b: unidades físicas (peças) já associadas a este item. saldo_pendente de
-    // associação = quantidade_pedida − quantidade_atendida (preenchimento por unidade).
     quantidadeAtendida:        numeric('quantidade_atendida', { precision: 15, scale: 3 }).notNull().default('0'),
     quantidadeOverbooking:     numeric('quantidade_overbooking', { precision: 15, scale: 3 }).notNull().default('0'),
     preferenciasAplicadasJson: jsonb('preferencias_aplicadas_json').notNull().default(sql`'{}'::jsonb`),
@@ -67,11 +66,10 @@ export const pedidosVendaItens = pgTable(
     check('chk_pedidos_itens_pendente_nao_negativa', sql`${t.quantidadePendente} >= 0`),
     check('chk_pedidos_itens_atendida_nao_negativa', sql`${t.quantidadeAtendida} >= 0`),
     check('chk_pedidos_itens_atendida_ate_pedida', sql`${t.quantidadeAtendida} <= ${t.quantidadePedida}`),
-    // CHECK legado durante expand; superset no SQL 0012; finais no 0014.
-    check(
-      'chk_pedidos_itens_status',
-      sql`${t.status} IN ('totalmente_reservado','parcialmente_reservado','sem_cobertura','cancelado')`,
-    ),
+    check('chk_pedidos_itens_status', sql`${t.status} IN (
+      'totalmente_reservado','aguardando_confirmacao_overbooking',
+      'overbooking_confirmado','cancelado'
+    )`),
     uniqueIndex('uq_pedido_venda_item_comercial_ativo')
       .on(t.pedidoVendaId, t.itemComercialId)
       .where(sql`${t.deletedAt} IS NULL`),
@@ -82,8 +80,6 @@ export const pedidosVendaItens = pgTable(
 );
 
 // ── reservas_disponibilidade ────────────────────────────────────────────────
-// Liga um item de pedido ao saldo virtual consumido. A quantidade aqui é o
-// reservado EFETIVO (base para liberação/devolução de saldo).
 export const reservasDisponibilidade = pgTable(
   'reservas_disponibilidade',
   {
@@ -99,7 +95,10 @@ export const reservasDisponibilidade = pgTable(
   (t) => [
     check('chk_reservas_qtd_positiva', sql`${t.quantidadeReservada} > 0`),
     check('chk_reservas_status', sql`${t.status} IN ('ativa','liberada')`),
-    // CHECKs de tipo_consumo entram apenas no contract 0014.
+    check('chk_reservas_tipo_consumo', sql`${t.tipoConsumo} IN ('fisico','virtual','overbooking')`),
+    check('chk_reservas_origem', sql`
+      ${t.tipoConsumo} = 'overbooking' OR ${t.disponibilidadeVirtualId} IS NOT NULL
+    `),
     index('idx_reservas_disponibilidade').on(t.disponibilidadeVirtualId),
     index('idx_reservas_pedido_item').on(t.pedidoVendaItemId),
   ],
@@ -113,6 +112,10 @@ export const pedidosVendaRelations = relations(pedidosVenda, ({ one, many }) => 
   cliente: one(clientes, {
     fields: [pedidosVenda.clienteId],
     references: [clientes.id],
+  }),
+  operacao: one(operacoes, {
+    fields: [pedidosVenda.operacaoId],
+    references: [operacoes.id],
   }),
   itens: many(pedidosVendaItens),
 }));

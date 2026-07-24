@@ -4,7 +4,7 @@ import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { comprasProgramadas, comprasProgramadasItens } from '../../../database/schema';
+import { comprasProgramadas, comprasProgramadasItens, operacoes } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import {
   calcularRange,
@@ -73,12 +73,14 @@ export class ComprasProgramadasService {
 
   async criar(dto: CreateCompraProgramadaDto, usuarioId: string): Promise<CompraComItens> {
     return this.db.transaction(async (tx) => {
+      const { operacao } = await this.operacoes.garantirOperacao(tx, dto.dataOperacao, usuarioId);
+
       const compraExistenteNoDia = await tx
         .select({ id: comprasProgramadas.id })
         .from(comprasProgramadas)
         .where(
           and(
-            eq(comprasProgramadas.dataOperacao, dto.dataOperacao),
+            eq(comprasProgramadas.operacaoId, operacao.id),
             isNull(comprasProgramadas.deletedAt),
             ne(comprasProgramadas.status, 'cancelada'),
           ),
@@ -90,13 +92,10 @@ export class ComprasProgramadasService {
         throw new ConflictException('Já existe compra programada ativa para esta data');
       }
 
-      const { operacao } = await this.operacoes.garantirOperacao(tx, dto.dataOperacao, usuarioId);
-
       const criada = primeiroOuFalha(
         await tx
           .insert(comprasProgramadas)
           .values({
-            dataOperacao: dto.dataOperacao,
             operacaoId: operacao.id,
             fornecedorId: dto.fornecedorId,
             numeroInterno: dto.numeroInterno,
@@ -263,13 +262,18 @@ export class ComprasProgramadasService {
 
     // PÓS-COMMIT: eventos de tempo real (não emite em no-op idempotente).
     if (!resultado.jaConfirmada) {
+      const dataOperacao = await this.db
+        .select({ data: operacoes.data })
+        .from(operacoes)
+        .where(eq(operacoes.id, resultado.compra.operacaoId))
+        .then((r) => r[0]?.data ?? '');
       this.eventEmitter.emit(EVENTOS.COMPRA_CONFIRMADA, {
         compraId: resultado.compra.id,
-        dataOperacao: resultado.compra.dataOperacao,
+        dataOperacao,
       });
       this.eventEmitter.emit(EVENTOS.DISPONIBILIDADE_GERADA, {
         compraId: resultado.compra.id,
-        dataOperacao: resultado.compra.dataOperacao,
+        dataOperacao,
         itens: resultado.disponibilidades.map((d) => ({
           disponibilidadeId: d.id,
           itemComercialId: d.itemComercialId,

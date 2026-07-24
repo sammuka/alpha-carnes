@@ -109,7 +109,7 @@ export class FechamentoService {
     if (!resultado.jaFechado) {
       this.eventEmitter.emit(EVENTOS.EXPEDICAO_FECHADA, {
         caminhaoId,
-        dataOperacao: resultado.caminhao.dataOperacao,
+        dataOperacao: await this.caminhaoService.dataOperacaoDoCaminhao(this.db, resultado.caminhao),
       });
     }
 
@@ -195,7 +195,7 @@ export class FechamentoService {
     this.eventEmitter.emit(EVENTOS.EXPEDICAO_REABERTA, {
       caminhaoId,
       operadorId,
-      dataOperacao: resultado.caminhao.dataOperacao,
+      dataOperacao: await this.caminhaoService.dataOperacaoDoCaminhao(this.db, resultado.caminhao),
     });
 
     return resultado.caminhao;

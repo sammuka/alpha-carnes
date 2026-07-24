@@ -12,7 +12,7 @@ import { compararQtd } from '../../../common/crud/decimal';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import {
+import { pedidosFornecedor,
   conclusoesConferencia,
   conclusoesConferenciaNfs,
   divergenciasRecebimento,
@@ -20,7 +20,7 @@ import {
   notasFiscaisFornecedorItens,
   operacoes,
   recebimentos,
-} from '../../../database/schema';
+ } from '../../../database/schema';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import type { ConcluirConferenciaDto } from './dto/conferencia.dto';
 import { OcorrenciaFornecedorService } from './ocorrencia/ocorrencia-fornecedor.service';
@@ -282,9 +282,10 @@ export class ConferenciaService {
         await tx.select({
           fornecedorId: recebimentos.fornecedorId,
           operacaoId: recebimentos.operacaoId,
-          compraProgramadaId: recebimentos.compraProgramadaId,
+          compraProgramadaId: pedidosFornecedor.compraProgramadaId,
         })
           .from(recebimentos)
+          .innerJoin(pedidosFornecedor, eq(pedidosFornecedor.id, recebimentos.pedidoFornecedorId))
           .where(eq(recebimentos.id, recebimentoId)),
       );
 
@@ -338,14 +339,11 @@ export class ConferenciaService {
         dadosNovos: conclusao,
       });
 
-      let dataOperacao = atual.dataOperacao;
-      if (recebimento.operacaoId) {
-        const op = await tx.select({ data: operacoes.data })
-          .from(operacoes)
-          .where(eq(operacoes.id, recebimento.operacaoId))
-          .then((r) => r[0] ?? null);
-        if (op) dataOperacao = op.data;
-      }
+      const op = await tx.select({ data: operacoes.data })
+        .from(operacoes)
+        .where(eq(operacoes.id, recebimento.operacaoId))
+        .then((r) => r[0] ?? null);
+      const dataOperacao = op?.data ?? '';
 
       return {
         conclusao,

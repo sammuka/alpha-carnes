@@ -154,8 +154,6 @@ export class PedidosService {
       const pedido = primeiroOuFalha(await tx.insert(pedidosVenda).values({
         compraProgramadaId: dto.compraProgramadaId,
         clienteId: dto.clienteId,
-        // dataOperacao permanece NOT NULL até o contract 0014 (Task 7).
-        dataOperacao: dto.dataOperacao,
         operacaoId: operacao.id,
         dataEntrega: dto.dataEntrega,
         rotaPrevista: dto.rotaPrevista,

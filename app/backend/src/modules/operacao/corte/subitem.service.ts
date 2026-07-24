@@ -4,7 +4,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { pecas, recebimentos, recebimentosItens, subitens, transformacoes } from '../../../database/schema';
+import { operacoes, pecas, recebimentos, recebimentosItens, subitens, transformacoes  } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { EVENTOS } from '../../../realtime/events/eventos';
@@ -375,7 +375,7 @@ export class SubitemService {
 
   private async dataOperacao(tx: Tx, pecaId: string): Promise<string> {
     const r = await tx
-      .select({ dataOperacao: recebimentos.dataOperacao })
+      .select({ dataOperacao: operacoes.data })
       .from(pecas)
       .innerJoin(recebimentos, eq(pecas.recebimentoId, recebimentos.id))
       .where(eq(pecas.id, pecaId))

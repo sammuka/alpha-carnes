@@ -4,14 +4,14 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import {
+import { operacoes,
   notasFiscais,
   faturamentos,
   caminhoes,
   pedidosVenda,
   clientes,
   parametros,
-} from '../../../database/schema';
+ } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import {
   NFSE_GATEWAY,
@@ -293,7 +293,7 @@ export class FaturamentoService {
     return this.persistirResultadoEmissao(
       notaFiscal.id, notaFiscal, gwResult,
       payloadBase as Record<string, unknown>,
-      { caminhaoId, pedidoVendaId: dto.pedidoVendaId, dataOperacao: caminhao.dataOperacao, usuarioId },
+      { caminhaoId, pedidoVendaId: dto.pedidoVendaId, dataOperacao: await this.dataOperacaoDoCaminhao(caminhao.operacaoId), usuarioId },
     );
   }
 
@@ -305,8 +305,10 @@ export class FaturamentoService {
     if (!nf) throw new ConflictException('Nota fiscal não encontrada');
     assertTransicaoNfse(nf.statusNfse as StatusNfse, 'cancelada');
 
-    const caminhao = await this.db.select({ dataOperacao: caminhoes.dataOperacao })
-      .from(caminhoes).where(eq(caminhoes.id, nf.caminhaoId)).then(r => r[0]);
+    const caminhao = await this.db.select({ dataOperacao: operacoes.data })
+      .from(caminhoes)
+      .innerJoin(operacoes, eq(operacoes.id, caminhoes.operacaoId))
+      .where(eq(caminhoes.id, nf.caminhaoId)).then(r => r[0]);
 
     const homologacao = process.env['EISS_HOMOLOGACAO'] !== 'false';
     const chaveAutenticacao = homologacao
@@ -439,7 +441,16 @@ export class FaturamentoService {
     return this.persistirResultadoEmissao(
       notaFiscalId, nfPendente, gwResult,
       payloadBase as Record<string, unknown>,
-      { caminhaoId, pedidoVendaId: nf.pedidoVendaId, dataOperacao: caminhao.dataOperacao, usuarioId },
+      { caminhaoId, pedidoVendaId: nf.pedidoVendaId, dataOperacao: await this.dataOperacaoDoCaminhao(caminhao.operacaoId), usuarioId },
     );
+  }
+
+  private async dataOperacaoDoCaminhao(operacaoId: string): Promise<string> {
+    const linha = await this.db
+      .select({ data: operacoes.data })
+      .from(operacoes)
+      .where(eq(operacoes.id, operacaoId))
+      .then((r) => r[0] ?? null);
+    return linha?.data ?? '';
   }
 }

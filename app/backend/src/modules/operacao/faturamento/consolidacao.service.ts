@@ -131,7 +131,6 @@ export class ConsolidacaoService {
         const [fat] = await tx.insert(faturamentos).values({
           caminhaoId,
           statusFaturamento: 'em_consolidacao',
-          dataOperacao: caminhao.dataOperacao,
           operacaoId: caminhao.operacaoId,
           responsavelId: usuarioId,
         }).returning();

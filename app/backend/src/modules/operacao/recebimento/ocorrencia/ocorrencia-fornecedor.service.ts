@@ -221,8 +221,9 @@ export class OcorrenciaFornecedorService {
   async resolverDataOperacao(compraProgramadaId?: string | null): Promise<string> {
     if (!compraProgramadaId) return '';
     const compra = await this.db
-      .select({ dataOperacao: schema.comprasProgramadas.dataOperacao })
+      .select({ dataOperacao: schema.operacoes.data })
       .from(schema.comprasProgramadas)
+      .innerJoin(schema.operacoes, eq(schema.operacoes.id, schema.comprasProgramadas.operacaoId))
       .where(and(eq(schema.comprasProgramadas.id, compraProgramadaId), isNull(schema.comprasProgramadas.deletedAt)))
       .then((r) => r[0] ?? null);
     return compra?.dataOperacao ?? '';

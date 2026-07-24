@@ -27,8 +27,7 @@ export const faturamentos = pgTable(
     id:                   uuid('id').primaryKey().default(sql`uuidv7()`),
     caminhaoId:           uuid('caminhao_id').notNull().references(() => caminhoes.id),
     statusFaturamento:    text('status_faturamento').notNull().default('em_consolidacao'),
-    dataOperacao:         date('data_operacao').notNull(),
-    operacaoId:           uuid('operacao_id').references(() => operacoes.id),
+    operacaoId:           uuid('operacao_id').notNull().references(() => operacoes.id),
     responsavelId:        uuid('responsavel_id').notNull().references(() => usuarios.id),
     observacoes:          text('observacoes'),
     createdAt:            timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -45,7 +44,7 @@ export const faturamentos = pgTable(
       .on(t.caminhaoId)
       .where(sql`${t.deletedAt} IS NULL`),
     index('idx_faturamentos_status').on(t.statusFaturamento).where(sql`${t.deletedAt} IS NULL`),
-    index('idx_faturamentos_data').on(t.dataOperacao).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_faturamentos_operacao').on(t.operacaoId).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 

@@ -1,14 +1,11 @@
 import { z } from 'zod';
 
 export const TIPOS_DIVERGENCIA = [
-  'quantidade_menor',
-  'quantidade_maior',
-  'item_divergente',
-  'qualidade_divergente',
-  'peso_incompativel',
-  'item_ausente',
-  'item_excedente',
-  'inconsistencia_nf_fisico',
+  'falta',
+  'excesso',
+  'produto_nao_previsto',
+  'peso_divergente',
+  'outro',
 ] as const;
 
 export const STATUS_DIVERGENCIA = ['aberta', 'em_analise', 'aguardando_fornecedor', 'resolvida'] as const;

@@ -4,6 +4,7 @@ import {
   closePool,
   contarDivergenciasComTipoLegado,
   expectCheckAceita,
+  expectCheckRejeita,
   expectColuna,
   expectTabela,
   getPool,
@@ -80,5 +81,15 @@ describe('onda1-migrations', () => {
       `SELECT id FROM notas_fiscais_fornecedor_itens`,
     );
     expect(nfItens.length).toBe(0);
+  });
+
+  it('0014 aperta chk_diverg_receb_tipo ao conjunto final', async () => {
+    await migrarAte('0014_onda1_contract');
+    // Os 5 tipos v1.1 permanecem aceitos:
+    await expectCheckAceita('divergencias_recebimento', 'tipo', 'falta');
+    await expectCheckAceita('divergencias_recebimento', 'tipo', 'outro');
+    // Qualquer tipo legado é rejeitado após o contract (0013 já os remapeou):
+    await expectCheckRejeita('divergencias_recebimento', 'tipo', 'inconsistencia_nf_fisico');
+    await expectCheckRejeita('divergencias_recebimento', 'tipo', 'quantidade_menor');
   });
 });

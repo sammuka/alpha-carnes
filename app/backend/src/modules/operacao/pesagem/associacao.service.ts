@@ -4,14 +4,14 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import {
+import { operacoes,
   associacoesPecaHistorico,
   pecas,
   pedidosVenda,
   pedidosVendaItens,
   recebimentos,
   recebimentosItens,
-} from '../../../database/schema';
+ } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { EVENTOS } from '../../../realtime/events/eventos';
@@ -336,7 +336,7 @@ export class AssociacaoService {
 
   private async dataOperacaoDaPeca(tx: Tx, peca: Peca): Promise<string> {
     const r = await tx
-      .select({ dataOperacao: recebimentos.dataOperacao })
+      .select({ dataOperacao: operacoes.data })
       .from(recebimentos)
       .where(eq(recebimentos.id, peca.recebimentoId))
       .then((rows) => rows[0] ?? null);
