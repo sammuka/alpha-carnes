@@ -481,7 +481,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     expect(detalhe.body.notaFiscalFornecedor).toBe('998877');
   });
 
-  it('PATCH nfe com serie/chave persiste notas_fiscais_fornecedor e detalhar expõe nfeSerie', async () => {
+  it('PATCH nfe com serie/chave persiste cabeçalho sem itens inferidos', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-30', quantidade: 10 });
     const ini = await iniciarViaCompra(compraId);
@@ -513,12 +513,77 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       .where(eq(schema.notasFiscaisFornecedor.recebimentoId, recId));
     expect(nfs).toHaveLength(1);
     expect(nfs[0]?.serie).toBe('3');
+    expect(nfs[0]?.payloadJson).toMatchObject({
+      cabecalho_sem_itens: true,
+      migracao: 'legado_sem_itens_nf',
+    });
 
     const itensNf = await db
       .select()
       .from(schema.notasFiscaisFornecedorItens)
       .where(eq(schema.notasFiscaisFornecedorItens.nfId, nfs[0]!.id));
-    expect(itensNf.length).toBeGreaterThan(0);
+    expect(itensNf).toHaveLength(0);
+  });
+
+  it('PATCH nfe expõe nfePesoLiquido via payload sem mintar como bruto', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-12-01', quantidade: 10 });
+    const ini = await iniciarViaCompra(compraId);
+    const recId = ini.body.recebimento.id as string;
+
+    const patch = await request(srv())
+      .patch(`/operacao/recebimentos/${recId}/nfe`)
+      .set('Cookie', recebimentoCookies)
+      .send({
+        nfeNumero: '777888',
+        nfePesoLiquido: 1800.5,
+      });
+    expect(patch.status).toBe(200);
+
+    const detalhe = await request(srv()).get(`/operacao/recebimentos/${recId}`).set('Cookie', recebimentoCookies);
+    expect(detalhe.status).toBe(200);
+    expect(Number(detalhe.body.nfePesoLiquido)).toBe(1800.5);
+    expect(detalhe.body.nfePesoBruto).toBeNull();
+
+    const { db } = app.get(DRIZZLE);
+    const nfs = await db
+      .select()
+      .from(schema.notasFiscaisFornecedor)
+      .where(eq(schema.notasFiscaisFornecedor.recebimentoId, recId));
+    expect(nfs[0]?.pesoTotalDeclarado).toBeNull();
+    expect(nfs[0]?.payloadJson).toMatchObject({ pesoLiquido: 1800.5 });
+  });
+
+  it('conferência com NF só-cabeçalho → 409 NF_ITENS_OBRIGATORIOS', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-12-02', quantidade: 10 });
+    const ini = await iniciarViaCompra(compraId);
+    const recId = ini.body.recebimento.id as string;
+
+    await request(srv())
+      .patch(`/operacao/recebimentos/${recId}/nfe`)
+      .set('Cookie', recebimentoCookies)
+      .send({ nfeNumero: '555666', nfeSerie: '1' })
+      .expect(200);
+
+    await request(srv())
+      .post(`/operacao/recebimentos/${recId}/itens`)
+      .set('Cookie', recebimentoCookies)
+      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 })
+      .expect(201);
+
+    await request(srv())
+      .post(`/operacao/recebimentos/${recId}/concluir`)
+      .set('Cookie', recebimentoCookies)
+      .send()
+      .expect(201);
+
+    const res = await request(srv())
+      .post(`/operacao/recebimentos/${recId}/conferencia/concluir`)
+      .set('Cookie', recebimentoCookies)
+      .send({ resultado: 'sem_divergencia' });
+    expect(res.status).toBe(409);
+    expect(res.body.message?.code ?? res.body.code).toBe('NF_ITENS_OBRIGATORIOS');
   });
 
   it('PATCH nfe em lote após conclusão de pesagem → 409', async () => {

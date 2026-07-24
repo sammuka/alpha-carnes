@@ -260,7 +260,7 @@ export class RecebimentoService {
     const tipoCarga = await derivarTipoCarga(this.db, recebimento.pedidoFornecedor.compraProgramadaId);
     const progressoBalanca = await this.calcularProgressoLote(id);
     const nfAtiva = await buscarNfAtivaDoRecebimento(this.db, id);
-    const payloadNf = nfAtiva?.payloadJson as { volumes?: number } | null;
+    const payloadNf = nfAtiva?.payloadJson as { volumes?: number; pesoLiquido?: number } | null;
 
     const itensEnriquecidos = recebimento.itens.map((item) => {
       const apurado = pecasMap.get(item.itemComercialId);
@@ -285,6 +285,9 @@ export class RecebimentoService {
       nfeChave: nfAtiva?.chave ?? null,
       nfeDataEmissao: nfAtiva?.dataEmissao ?? null,
       nfePesoBruto: nfAtiva?.pesoTotalDeclarado ?? null,
+      ...(payloadNf?.pesoLiquido !== undefined
+        ? { nfePesoLiquido: formatarQtd(payloadNf.pesoLiquido) }
+        : {}),
       ...(payloadNf?.volumes !== undefined ? { nfeVolumes: payloadNf.volumes } : {}),
       itens: itensEnriquecidos,
     };
