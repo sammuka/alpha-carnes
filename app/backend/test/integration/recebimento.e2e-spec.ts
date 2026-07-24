@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
@@ -515,8 +515,8 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     expect(nfs[0]?.serie).toBe('3');
     expect(nfs[0]?.payloadJson).toMatchObject({
       cabecalho_sem_itens: true,
-      migracao: 'legado_sem_itens_nf',
     });
+    expect(nfs[0]?.payloadJson).not.toHaveProperty('migracao');
 
     const itensNf = await db
       .select()
@@ -552,6 +552,146 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       .where(eq(schema.notasFiscaisFornecedor.recebimentoId, recId));
     expect(nfs[0]?.pesoTotalDeclarado).toBeNull();
     expect(nfs[0]?.payloadJson).toMatchObject({ pesoLiquido: 1800.5 });
+  });
+
+  it('cabecalho via PATCH + registrarNf com itens completa NF e permite conferência', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-12-03', quantidade: 10 });
+    const pfId = await criarPedidoFornecedorEnviado(app, comprasCookies, compraId);
+    const ini = await request(srv())
+      .post('/operacao/recebimentos')
+      .set('Cookie', recebimentoCookies)
+      .send({ pedidoFornecedorId: pfId });
+    expect(ini.status).toBe(201);
+    const recId = ini.body.recebimento.id as string;
+
+    await request(srv())
+      .patch(`/operacao/recebimentos/${recId}/nfe`)
+      .set('Cookie', recebimentoCookies)
+      .send({ nfeNumero: '900100', nfeSerie: '1' })
+      .expect(200);
+
+    await request(srv())
+      .post(`/operacao/pedidos-fornecedor/${pfId}/nf`)
+      .set('Cookie', recebimentoCookies)
+      .send({
+        numero: '900100',
+        recebimentoId: recId,
+        itens: [{ itemComercialId: base.itemComercialId, quantidadeDeclarada: 10 }],
+      })
+      .expect(201);
+
+    const { db } = app.get(DRIZZLE);
+    const nfs = await db
+      .select()
+      .from(schema.notasFiscaisFornecedor)
+      .where(eq(schema.notasFiscaisFornecedor.recebimentoId, recId));
+    expect(nfs.filter((nf: { deletedAt: Date | null }) => nf.deletedAt === null)).toHaveLength(1);
+    const itensNf = await db
+      .select()
+      .from(schema.notasFiscaisFornecedorItens)
+      .where(eq(schema.notasFiscaisFornecedorItens.nfId, nfs[0]!.id));
+    expect(itensNf).toHaveLength(1);
+    expect(nfs[0]?.payloadJson).not.toHaveProperty('cabecalho_sem_itens');
+
+    await request(srv())
+      .post(`/operacao/recebimentos/${recId}/itens`)
+      .set('Cookie', recebimentoCookies)
+      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 })
+      .expect(201);
+
+    await db.update(schema.recebimentosItens)
+      .set({ requerBalanca: false, statusApuracao: 'entrada_direta' })
+      .where(and(
+        eq(schema.recebimentosItens.recebimentoId, recId),
+        eq(schema.recebimentosItens.itemComercialId, base.itemComercialId),
+      ));
+
+    await request(srv())
+      .post(`/operacao/recebimentos/${recId}/concluir`)
+      .set('Cookie', recebimentoCookies)
+      .send()
+      .expect(201);
+
+    const conf = await request(srv())
+      .post(`/operacao/recebimentos/${recId}/conferencia/concluir`)
+      .set('Cookie', recebimentoCookies)
+      .send({ resultado: 'sem_divergencia' });
+    expect(conf.status).toBe(201);
+  });
+
+  it('PATCH nfe corrige numero sem criar NF fantasma', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-12-04', quantidade: 10 });
+    const ini = await iniciarViaCompra(compraId);
+    const recId = ini.body.recebimento.id as string;
+
+    await request(srv())
+      .patch(`/operacao/recebimentos/${recId}/nfe`)
+      .set('Cookie', recebimentoCookies)
+      .send({ nfeNumero: '900201', nfeSerie: '1' })
+      .expect(200);
+
+    await request(srv())
+      .patch(`/operacao/recebimentos/${recId}/nfe`)
+      .set('Cookie', recebimentoCookies)
+      .send({ nfeNumero: '900202', nfeSerie: '2' })
+      .expect(200);
+
+    const { db } = app.get(DRIZZLE);
+    const nfs = await db
+      .select()
+      .from(schema.notasFiscaisFornecedor)
+      .where(eq(schema.notasFiscaisFornecedor.recebimentoId, recId));
+    const ativas = nfs.filter((nf: { deletedAt: Date | null }) => nf.deletedAt === null);
+    expect(ativas).toHaveLength(1);
+    expect(ativas[0]?.numero).toBe('900202');
+    expect(ativas[0]?.serie).toBe('2');
+
+    const detalhe = await request(srv()).get(`/operacao/recebimentos/${recId}`).set('Cookie', recebimentoCookies);
+    expect(detalhe.body.nfeNumero).toBe('900202');
+    expect(detalhe.body.nfeSerie).toBe('2');
+  });
+
+  it('PATCH nfe parcial preserva pesos e volumes já informados', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-12-05', quantidade: 10 });
+    const ini = await iniciarViaCompra(compraId);
+    const recId = ini.body.recebimento.id as string;
+
+    await request(srv())
+      .patch(`/operacao/recebimentos/${recId}/nfe`)
+      .set('Cookie', recebimentoCookies)
+      .send({
+        nfeNumero: '800100',
+        nfeSerie: '1',
+        nfePesoBruto: 3200,
+        nfePesoLiquido: 3000,
+        nfeVolumes: 45,
+      })
+      .expect(200);
+
+    await request(srv())
+      .patch(`/operacao/recebimentos/${recId}/nfe`)
+      .set('Cookie', recebimentoCookies)
+      .send({ nfeNumero: '800101', nfeSerie: '2' })
+      .expect(200);
+
+    const detalhe = await request(srv()).get(`/operacao/recebimentos/${recId}`).set('Cookie', recebimentoCookies);
+    expect(detalhe.body.nfeNumero).toBe('800101');
+    expect(detalhe.body.nfeSerie).toBe('2');
+    expect(Number(detalhe.body.nfePesoBruto)).toBe(3200);
+    expect(Number(detalhe.body.nfePesoLiquido)).toBe(3000);
+    expect(Number(detalhe.body.nfeVolumes)).toBe(45);
+
+    const { db } = app.get(DRIZZLE);
+    const nfs = await db
+      .select()
+      .from(schema.notasFiscaisFornecedor)
+      .where(eq(schema.notasFiscaisFornecedor.recebimentoId, recId));
+    expect(nfs).toHaveLength(1);
+    expect(Number(nfs[0]?.pesoTotalDeclarado)).toBe(3200);
+    expect(nfs[0]?.payloadJson).toMatchObject({ pesoLiquido: 3000, volumes: 45 });
   });
 
   it('conferência com NF só-cabeçalho → 409 NF_ITENS_OBRIGATORIOS', async () => {

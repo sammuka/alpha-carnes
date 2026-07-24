@@ -1,5 +1,7 @@
 import {
   mapearCamposNfParaRegistrar,
+  mesclarPayloadNfCabecalho,
+  mesclarPayloadNfCompleta,
   temCamposNfEstruturados,
 } from '../../src/modules/operacao/recebimento/nota-fiscal-fornecedor.persistence';
 
@@ -35,5 +37,42 @@ describe('nota-fiscal-fornecedor.persistence', () => {
     );
     expect(dto.pesoTotalDeclarado).toBe(1000);
     expect(dto.payload).toEqual({ pesoLiquido: 900 });
+  });
+
+  it('mesclarPayloadNfCabecalho preserva campos existentes e não carimba migracao', () => {
+    const merged = mesclarPayloadNfCabecalho(
+      { pesoLiquido: 3000, volumes: 45, migracao: 'legado_sem_itens_nf' },
+      { nfeSerie: '2' },
+      true,
+    );
+    expect(merged).toEqual({
+      pesoLiquido: 3000,
+      volumes: 45,
+      cabecalho_sem_itens: true,
+    });
+    expect(merged).not.toHaveProperty('migracao');
+  });
+
+  it('mesclarPayloadNfCabecalho atualiza só chaves enviadas no patch parcial', () => {
+    const merged = mesclarPayloadNfCabecalho(
+      { pesoLiquido: 3000, volumes: 45 },
+      { nfeVolumes: 50 },
+      true,
+    );
+    expect(merged).toEqual({
+      pesoLiquido: 3000,
+      volumes: 50,
+      cabecalho_sem_itens: true,
+    });
+  });
+
+  it('mesclarPayloadNfCompleta remove marcadores de cabeçalho ao completar com itens', () => {
+    const merged = mesclarPayloadNfCompleta(
+      { cabecalho_sem_itens: true, migracao: 'legado_sem_itens_nf', pesoLiquido: 900 },
+      { volumes: 12 },
+    );
+    expect(merged).toEqual({ pesoLiquido: 900, volumes: 12 });
+    expect(merged).not.toHaveProperty('cabecalho_sem_itens');
+    expect(merged).not.toHaveProperty('migracao');
   });
 });
