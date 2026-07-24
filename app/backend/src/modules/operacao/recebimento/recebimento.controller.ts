@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RbacGuard } from '../../../common/guards/rbac.guard';
@@ -6,7 +6,15 @@ import { RequirePermissoes } from '../../../common/rbac/require-permissoes.decor
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
 import { listarQuerySchema, type ListarQuery } from '../../../common/crud/paginacao';
+import { DRIZZLE } from '../../../database/database.module';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import * as schema from '../../../database/schema';
 import { RecebimentoService } from './recebimento.service';
+import { ConferenciaService } from './conferencia.service';
+import {
+  concluirConferenciaSchema,
+  type ConcluirConferenciaDto,
+} from './dto/conferencia.dto';
 import {
   atualizarMetadadosLoteSchema,
   atualizarNfeSchema,
@@ -22,7 +30,15 @@ import {
 @Controller('operacao/recebimentos')
 @UseGuards(JwtAuthGuard, RbacGuard)
 export class RecebimentoController {
-  constructor(private readonly service: RecebimentoService) {}
+  constructor(
+    private readonly service: RecebimentoService,
+    private readonly conferencia: ConferenciaService,
+    @Inject(DRIZZLE) private readonly drizzle: { db: NodePgDatabase<typeof schema> },
+  ) {}
+
+  private get db() {
+    return this.drizzle.db;
+  }
 
   @Get()
   @RequirePermissoes('RECEBIMENTO_LER')
@@ -107,5 +123,27 @@ export class RecebimentoController {
   async suspender(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
     const recebimento = await this.service.suspender(id, user.sub);
     return { recebimento };
+  }
+
+  @Get(':id/conferencia')
+  @RequirePermissoes('RECEBIMENTO_LER')
+  quadro(@Param('id') id: string) {
+    return this.conferencia.calcularQuadro(this.db, id);
+  }
+
+  @Post(':id/concluir-pesagem')
+  @RequirePermissoes('CONFERENCIA_CONCLUIR')
+  concluirPesagem(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.conferencia.concluirPesagem(id, user.sub);
+  }
+
+  @Post(':id/conferencia/concluir')
+  @RequirePermissoes('CONFERENCIA_CONCLUIR')
+  concluirConferencia(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(concluirConferenciaSchema)) dto: ConcluirConferenciaDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.conferencia.concluirConferencia(id, dto, user.sub);
   }
 }

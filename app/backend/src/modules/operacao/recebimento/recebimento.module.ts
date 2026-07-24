@@ -6,6 +6,7 @@ import { RecebimentoController } from './recebimento.controller';
 import { RecebimentoService } from './recebimento.service';
 import { PedidoFornecedorController } from './pedido-fornecedor.controller';
 import { PedidoFornecedorService } from './pedido-fornecedor.service';
+import { ConferenciaService } from './conferencia.service';
 import { DivergenciaRecebimentoController } from './divergencia/divergencia-recebimento.controller';
 import { DivergenciaRecebimentoService } from './divergencia/divergencia-recebimento.service';
 import { OcorrenciaFornecedorController } from './ocorrencia/ocorrencia-fornecedor.controller';
@@ -22,12 +23,14 @@ import { OcorrenciaFornecedorService } from './ocorrencia/ocorrencia-fornecedor.
   providers: [
     RecebimentoService,
     PedidoFornecedorService,
+    ConferenciaService,
     DivergenciaRecebimentoService,
     OcorrenciaFornecedorService,
   ],
   exports: [
     RecebimentoService,
     PedidoFornecedorService,
+    ConferenciaService,
     DivergenciaRecebimentoService,
     OcorrenciaFornecedorService,
   ],
