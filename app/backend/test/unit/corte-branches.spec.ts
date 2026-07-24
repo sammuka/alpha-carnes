@@ -292,6 +292,134 @@ describe('CorteService — branches unitários', () => {
     await expect(make().rastrear({ pecaId: 'pc-inexistente' })).rejects.toThrow(NotFoundException);
     await expect(make().rastrear({ pecaId: 'pc-inexistente' })).rejects.toThrow('Peça não encontrada');
   });
+
+  // ─── rastrear: sem subitens não consulta etiquetas de subitens ──────────────
+  it('rastrear → subIds vazio não consulta etiquetas de subitens', async () => {
+    const peca = { id: 'pc1', deletedAt: null };
+    const { db } = makeDb([], [[peca], [], [], [], []]);
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const result = await service.rastrear({ pecaId: 'pc1' });
+    expect(result.etiquetasSubitens).toEqual([]);
+  });
+
+  // ─── iniciar: peça não encontrada ────────────────────────────────────────────
+  it('iniciar → lança 404 se peça não encontrada', async () => {
+    const { db } = makeDb([[]]);
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    await expect(
+      service.iniciar('pc-x', { tipoTransformacao: 'desossa' } as never, 'u1'),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  // ─── iniciar: sucesso sem data de operação resolvida (recebimento sem operação vinculada) ──
+  it('iniciar → sucesso mesmo quando data de operação não é resolvida', async () => {
+    const pecaElegivel = {
+      id: 'pc1',
+      statusPeca: 'pesada',
+      pedidoVendaItemId: null,
+      pesoOriginal: '10.000',
+      recebimentoId: 'rec1',
+      deletedAt: null,
+    };
+    const emitter = makeEmitter();
+    const emitSpy = jest.spyOn(emitter, 'emit');
+    // txSelect: 1ª = pecaAtiva, 2ª = dataOperacaoPorRecebimento (vazio)
+    const { db } = makeDb([[pecaElegivel], []]);
+    const service = new CorteService({ db } as never, makeAuditoria() as never, emitter);
+    await service.iniciar('pc1', { tipoTransformacao: 'desossa' } as never, 'u1');
+    expect(emitSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ dataOperacao: '' }));
+  });
+
+  // ─── concluir: transformação não encontrada ──────────────────────────────────
+  it('concluir → lança 404 se transformação não encontrada', async () => {
+    const { db } = makeDb([[]]);
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    await expect(service.concluir('t-x', {} as never, 'u1')).rejects.toThrow(NotFoundException);
+  });
+
+  // ─── concluir: sem subitens ───────────────────────────────────────────────────
+  it('concluir → lança 409 se não há subitens', async () => {
+    const transf = { id: 't1', statusTransformacao: 'aberta', pecaOrigemId: 'pc1', pesoOriginal: '10.000', deletedAt: null };
+    const { db } = makeDb([[transf], []]);
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    await expect(service.concluir('t1', {} as never, 'u1')).rejects.toThrow('Não há subitens');
+  });
+
+  // ─── concluir: subitem sem peso ──────────────────────────────────────────────
+  it('concluir → lança 409 se subitem está sem peso', async () => {
+    const transf = { id: 't1', statusTransformacao: 'aberta', pecaOrigemId: 'pc1', pesoOriginal: '10.000', deletedAt: null };
+    const subitemSemPeso = { id: 's1', peso: null, statusSubitem: 'associado', etiquetaAtual: 'QR1' };
+    const { db } = makeDb([[transf], [subitemSemPeso]]);
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    await expect(service.concluir('t1', {} as never, 'u1')).rejects.toThrow('sem peso');
+  });
+
+  // ─── concluir: sucesso com peça de origem não recuperável e totais nulos ─────
+  it('concluir → conclui mesmo quando peça de origem some e totais retornam nulos', async () => {
+    const transf = { id: 't1', statusTransformacao: 'aberta', pecaOrigemId: 'pc1', pesoOriginal: '10.000', deletedAt: null };
+    const subitem = { id: 's1', peso: '10.000', statusSubitem: 'associado', etiquetaAtual: 'QR1' };
+    const atualizada = {
+      id: 't1',
+      statusTransformacao: 'concluida',
+      pecaOrigemId: 'pc1',
+      pesoOriginal: '10.000',
+      pesoSubitensTotal: null,
+      diferencaPeso: null,
+    };
+    const emitter = makeEmitter();
+    const emitSpy = jest.spyOn(emitter, 'emit');
+    // txSelect: 1ª = transformacaoAtiva, 2ª = lista de subitens, 3ª = pecaAtiva final (vazia)
+    const { db } = makeDb([[transf], [subitem], []], [], atualizada);
+    const service = new CorteService({ db } as never, makeAuditoria() as never, emitter);
+    const result = await service.concluir('t1', {} as never, 'u1');
+    expect(result).toEqual(atualizada);
+    expect(emitSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dataOperacao: '', pesoSubitensTotal: '0.000', diferencaPeso: '0.000' }),
+    );
+  });
+
+  // ─── cancelar: devolve saldo do subitem e reconhece redirecionamento sem destino disponível ──
+  it('cancelar → devolve saldo do subitem com pedido e reconhece histórico de redirecionamento', async () => {
+    const transf = { id: 't1', statusTransformacao: 'aberta', pecaOrigemId: 'pc1', deletedAt: null };
+    const subitemComPedido = { id: 's1', transformacaoId: 't1', pedidoVendaItemId: 'pvi1', deletedAt: null };
+    const historicoRedirecionar = [{
+      pecaId: 'pc1',
+      acao: 'redirecionar',
+      pedidoItemDestinoId: null,
+      pedidoDestinoId: null,
+      createdAt: new Date('2026-01-01'),
+    }];
+    const atualizada = { id: 't1', statusTransformacao: 'cancelada' };
+
+    let selectCall = 0;
+    let updateCall = 0;
+    const customTx = {
+      select: jest.fn(() => {
+        selectCall++;
+        if (selectCall === 1) return makeSelectChain([transf]);
+        if (selectCall === 2) return makeSelectChain([subitemComPedido]);
+        return makeSelectChain(historicoRedirecionar);
+      }),
+      update: jest.fn(() => {
+        updateCall++;
+        return {
+          set: () => ({
+            where: () => ({
+              returning: jest.fn(async () => (updateCall >= 4 ? [atualizada] : [{ id: 'u' }])),
+            }),
+          }),
+        };
+      }),
+      insert: jest.fn(),
+    };
+    const db = { transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(customTx)) };
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const result = await service.cancelar('t1', 'u1');
+    expect(result).toEqual(atualizada);
+    // devolverSaldo + soft-delete subitem + pecas(pesada) + transformacoes(cancelada) = 4 updates
+    expect(customTx.update).toHaveBeenCalledTimes(4);
+  });
 });
 
 // ── SubitemService — branches ─────────────────────────────────────────────────

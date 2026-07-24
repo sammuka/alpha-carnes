@@ -129,4 +129,130 @@ describe('LiberacaoService — branches', () => {
 
     await expect(service.sincronizarPosEmissao('cam-1', 'op-1')).resolves.toBeNull();
   });
+
+  function makeExec(selectResponses: unknown[][], updateReturns: unknown[][] = []) {
+    let sIdx = 0;
+    const select = jest.fn(() => ({
+      from: () => ({
+        where: () => {
+          const rows = selectResponses[sIdx++] ?? [];
+          return Promise.resolve(rows);
+        },
+      }),
+    }));
+    let uIdx = 0;
+    const update = jest.fn(() => ({
+      set: () => ({
+        where: () => ({
+          returning: jest.fn(async () => updateReturns[uIdx++] ?? [{ id: 'x' }]),
+        }),
+      }),
+    }));
+    return { select, update };
+  }
+
+  it('sincronizarPosEmissao retorna null quando não há itens de carga (pedidoIds vazio)', async () => {
+    const faturamento = { id: 'f1', statusFaturamento: 'em_consolidacao', caminhaoId: 'cam-1', deletedAt: null };
+    const exec = makeExec([[faturamento], []]);
+    const caminhaoService = { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn() };
+    const service = new LiberacaoService(
+      { db: exec } as never,
+      auditoria as never,
+      emitter,
+      caminhaoService as never,
+    );
+
+    await expect(service.sincronizarPosEmissao('cam-1', 'u1')).resolves.toBeNull();
+    expect(caminhaoService.caminhaoAtivo).not.toHaveBeenCalled();
+  });
+
+  it('sincronizarPosEmissao → sem NF emitida mantém em_consolicao→pronto_para_emitir sem alterar caminhão', async () => {
+    const faturamento = { id: 'f1', statusFaturamento: 'em_consolidacao', caminhaoId: 'cam-1', deletedAt: null };
+    const exec = makeExec(
+      [[faturamento], [{ pedidoVendaId: 'p1' }], []],
+      [[{ id: 'f1', statusFaturamento: 'pronto_para_emitir' }]],
+    );
+    const caminhaoService = {
+      caminhaoAtivo: jest.fn().mockResolvedValue({ id: 'cam-1', statusCaminhao: 'em_carga' }),
+      dataOperacaoDoCaminhao: jest.fn(),
+    };
+    const db = { ...exec, transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(exec)) };
+    const service = new LiberacaoService(
+      { db } as never,
+      auditoria as never,
+      emitter,
+      caminhaoService as never,
+    );
+
+    const resultado = await service.sincronizarPosEmissao('cam-1', 'u1');
+    expect(resultado).toEqual({ statusFaturamento: 'pronto_para_emitir', statusCaminhao: 'em_carga' });
+    expect(exec.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('sincronizarPosEmissao → emissão parcial não atualiza caminhão (fatAtualizado ausente)', async () => {
+    const faturamento = { id: 'f1', statusFaturamento: 'pronto_para_emitir', caminhaoId: 'cam-1', deletedAt: null };
+    const exec = makeExec(
+      [[faturamento], [{ pedidoVendaId: 'p1' }, { pedidoVendaId: 'p2' }], [{ statusNfse: 'emitida' }]],
+      [[]],
+    );
+    const caminhaoService = {
+      caminhaoAtivo: jest.fn().mockResolvedValue({ id: 'cam-1', statusCaminhao: 'faturado' }),
+      dataOperacaoDoCaminhao: jest.fn(),
+    };
+    const service = new LiberacaoService(
+      { db: exec } as never,
+      auditoria as never,
+      emitter,
+      caminhaoService as never,
+    );
+
+    const resultado = await service.sincronizarPosEmissao('cam-1', 'u1', exec as never);
+    expect(resultado).toEqual({ statusFaturamento: 'parcialmente_emitido', statusCaminhao: 'faturado' });
+    expect(auditoria.registrar).not.toHaveBeenCalled();
+  });
+
+  it('sincronizarPosEmissao → conclusão a partir de fechado promove caminhão a faturado', async () => {
+    const faturamento = { id: 'f1', statusFaturamento: 'pronto_para_emitir', caminhaoId: 'cam-1', deletedAt: null };
+    const exec = makeExec(
+      [[faturamento], [{ pedidoVendaId: 'p1' }], [{ statusNfse: 'emitida' }]],
+      [[{ id: 'f1', statusFaturamento: 'concluido' }], [{ id: 'cam-1', statusCaminhao: 'faturado' }]],
+    );
+    const caminhaoService = {
+      caminhaoAtivo: jest.fn().mockResolvedValue({ id: 'cam-1', statusCaminhao: 'fechado' }),
+      dataOperacaoDoCaminhao: jest.fn(),
+    };
+    const db = { ...exec, transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(exec)) };
+    const service = new LiberacaoService(
+      { db } as never,
+      auditoria as never,
+      emitter,
+      caminhaoService as never,
+    );
+
+    const resultado = await service.sincronizarPosEmissao('cam-1', 'u1');
+    expect(resultado).toEqual({ statusFaturamento: 'concluido', statusCaminhao: 'faturado' });
+    expect(exec.update).toHaveBeenCalledTimes(2);
+    expect(auditoria.registrar).toHaveBeenCalledTimes(2);
+  });
+
+  it('sincronizarPosEmissao → conclusão a partir de liberado_faturamento promove caminhão a faturado', async () => {
+    const faturamento = { id: 'f1', statusFaturamento: 'pronto_para_emitir', caminhaoId: 'cam-1', deletedAt: null };
+    const exec = makeExec(
+      [[faturamento], [{ pedidoVendaId: 'p1' }], [{ statusNfse: 'emitida' }]],
+      [[{ id: 'f1', statusFaturamento: 'concluido' }], [{ id: 'cam-1', statusCaminhao: 'faturado' }]],
+    );
+    const caminhaoService = {
+      caminhaoAtivo: jest.fn().mockResolvedValue({ id: 'cam-1', statusCaminhao: 'liberado_faturamento' }),
+      dataOperacaoDoCaminhao: jest.fn(),
+    };
+    const service = new LiberacaoService(
+      { db: exec } as never,
+      auditoria as never,
+      emitter,
+      caminhaoService as never,
+    );
+
+    const resultado = await service.sincronizarPosEmissao('cam-1', 'u1', exec as never);
+    expect(resultado).toEqual({ statusFaturamento: 'concluido', statusCaminhao: 'faturado' });
+  });
 });
