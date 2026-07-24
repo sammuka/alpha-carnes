@@ -141,19 +141,33 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
     await expect(service.atualizarNfe('rec-1', { romaneio: 'R' } as never, 'u1')).rejects.toThrow(ConflictException);
   });
 
-  it('atualizarNfe → persiste campos NF e audita', async () => {
-    const atual = { id: 'rec-1', status: 'pesagem_em_andamento', notaFiscalFornecedor: '111' };
-    const atualizado = { ...atual, notaFiscalFornecedor: '222', romaneio: 'ROM' };
+  it('atualizarNfe → persiste metadados operacionais e audita (sem NF estruturada)', async () => {
+    const atual = { id: 'rec-1', status: 'pesagem_em_andamento', pedidoFornecedorId: 'pf-1' };
+    const atualizado = { ...atual, romaneio: 'ROM', observacoes: 'ok' };
     const { db } = makeDb([[atual]], [], atualizado);
     const { service, auditoria } = makeService(db);
 
     const res = await service.atualizarNfe(
       'rec-1',
-      { nfeNumero: '222', romaneio: 'ROM', nfePesoBruto: 100, nfeSerie: '1', observacoes: 'ok' } as never,
+      { romaneio: 'ROM', observacoes: 'ok' } as never,
       'u1',
     );
-    expect(res.notaFiscalFornecedor).toBe('222');
+    expect(res.romaneio).toBe('ROM');
     expect(auditoria.registrar).toHaveBeenCalled();
+  });
+
+  it('atualizarNfe → 409 se campos NF estruturados sem pedidoFornecedorId', async () => {
+    const atual = { id: 'rec-1', status: 'pesagem_em_andamento', pedidoFornecedorId: null };
+    const { db } = makeDb([[atual]]);
+    const { service } = makeService(db);
+
+    await expect(
+      service.atualizarNfe(
+        'rec-1',
+        { nfeNumero: '222', nfeSerie: '1', nfePesoBruto: 100 } as never,
+        'u1',
+      ),
+    ).rejects.toThrow(/pedido ao fornecedor/i);
   });
 
   it('cancelar → 404 se recebimento não existe', async () => {
