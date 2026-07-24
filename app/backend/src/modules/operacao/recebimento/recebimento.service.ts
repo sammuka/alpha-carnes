@@ -37,6 +37,11 @@ import {
   derivarTipoCarga,
   resolverMetadadosItensPrevistos,
 } from './recebimento-metadados.helper';
+import {
+  buscarNfAtivaDoRecebimento,
+  persistirNfDeCamposUiNaTx,
+  temCamposNfEstruturados,
+} from './nota-fiscal-fornecedor.persistence';
 
 type Tx = NodePgDatabase<typeof schema>;
 type Recebimento = typeof recebimentos.$inferSelect;
@@ -254,6 +259,8 @@ export class RecebimentoService {
     const pecasMap = await contarPecasPorItem(this.db, id);
     const tipoCarga = await derivarTipoCarga(this.db, recebimento.pedidoFornecedor.compraProgramadaId);
     const progressoBalanca = await this.calcularProgressoLote(id);
+    const nfAtiva = await buscarNfAtivaDoRecebimento(this.db, id);
+    const payloadNf = nfAtiva?.payloadJson as { volumes?: number } | null;
 
     const itensEnriquecidos = recebimento.itens.map((item) => {
       const apurado = pecasMap.get(item.itemComercialId);
@@ -273,6 +280,12 @@ export class RecebimentoService {
       tipoCarga,
       progressoBalanca,
       codigoLote: recebimento.id.slice(0, 8).toUpperCase(),
+      nfeNumero: nfAtiva?.numero ?? recebimento.notaFiscalFornecedor,
+      nfeSerie: nfAtiva?.serie ?? null,
+      nfeChave: nfAtiva?.chave ?? null,
+      nfeDataEmissao: nfAtiva?.dataEmissao ?? null,
+      nfePesoBruto: nfAtiva?.pesoTotalDeclarado ?? null,
+      ...(payloadNf?.volumes !== undefined ? { nfeVolumes: payloadNf.volumes } : {}),
       itens: itensEnriquecidos,
     };
   }
@@ -356,7 +369,18 @@ export class RecebimentoService {
         dadosNovos: criado,
       });
 
-      return { recebimento: criado, jaIniciado: false };
+      let nfId: string | null = null;
+      if (temCamposNfEstruturados(dto)) {
+        const nf = await persistirNfDeCamposUiNaTx(tx, this.auditoria, {
+          pedidoFornecedorId: pedido.id,
+          recebimentoId: criado.id,
+          campos: dto,
+          usuarioId,
+        });
+        nfId = nf.id;
+      }
+
+      return { recebimento: criado, jaIniciado: false, nfId };
     });
 
     const dataOperacao = await this.db
@@ -379,11 +403,18 @@ export class RecebimentoService {
       statusAnterior: 'novo',
       statusAtual: resultado.recebimento.status,
     });
+    if (resultado.nfId) {
+      this.eventEmitter.emit(EVENTOS.NF_FORNECEDOR_REGISTRADA, {
+        nfId: resultado.nfId,
+        pedidoFornecedorId: resultado.recebimento.pedidoFornecedorId,
+        recebimentoId: resultado.recebimento.id,
+      });
+    }
     return resultado;
   }
 
   async atualizarNfe(recebimentoId: string, dto: AtualizarNfeDto, usuarioId: string): Promise<Recebimento> {
-    return this.db.transaction(async (tx) => {
+    const { recebimento: atualizado, nfMeta } = await this.db.transaction(async (tx) => {
       const atual = await this.buscarAtivo(tx, recebimentoId);
       if (!atual) throw new NotFoundException('Recebimento não encontrado');
       if ([
@@ -405,9 +436,23 @@ export class RecebimentoService {
       if (dto.doca !== undefined) patch.doca = dto.doca;
       if (dto.observacoes !== undefined) patch.observacoes = dto.observacoes;
 
-      const atualizado = primeiroOuFalha(
+      const atualizadoRow = primeiroOuFalha(
         await tx.update(recebimentos).set(patch).where(eq(recebimentos.id, recebimentoId)).returning(),
       );
+
+      let nfMeta: { id: string; pedidoFornecedorId: string } | null = null;
+      if (temCamposNfEstruturados(dto)) {
+        if (!atual.pedidoFornecedorId) {
+          throw new ConflictException('Recebimento sem pedido ao fornecedor não pode registrar NF estruturada');
+        }
+        const nf = await persistirNfDeCamposUiNaTx(tx, this.auditoria, {
+          pedidoFornecedorId: atual.pedidoFornecedorId,
+          recebimentoId,
+          campos: dto,
+          usuarioId,
+        });
+        nfMeta = { id: nf.id, pedidoFornecedorId: atual.pedidoFornecedorId };
+      }
 
       await this.auditoria.registrar(tx, {
         tabela: 'recebimentos',
@@ -416,11 +461,20 @@ export class RecebimentoService {
         modulo: 'operacao',
         usuarioId,
         dadosAnteriores: atual,
-        dadosNovos: atualizado,
+        dadosNovos: atualizadoRow,
       });
 
-      return atualizado;
+      return { recebimento: atualizadoRow, nfMeta };
     });
+
+    if (nfMeta) {
+      this.eventEmitter.emit(EVENTOS.NF_FORNECEDOR_REGISTRADA, {
+        nfId: nfMeta.id,
+        pedidoFornecedorId: nfMeta.pedidoFornecedorId,
+        recebimentoId,
+      });
+    }
+    return atualizado;
   }
 
   async cancelar(recebimentoId: string, usuarioId: string): Promise<Recebimento> {

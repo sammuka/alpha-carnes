@@ -305,23 +305,30 @@ describe('PedidoFornecedorService — branches', () => {
 
   it('registrarNf resolve recebimento implícito e persiste NF', async () => {
     const nf = { id: 'nf-1', numero: '1' };
+    const chainSelect = (rows: unknown[]) => ({
+      from: () => ({
+        where: () => ({
+          orderBy: () => ({
+            limit: () => Promise.resolve(rows),
+            then: (cb: (r: unknown[]) => unknown) => cb(rows),
+          }),
+          then: (cb: (r: unknown[]) => unknown) => cb(rows),
+        }),
+      }),
+    });
     const db = {
       transaction: jest.fn(async (cb: (tx: object) => Promise<unknown>) => cb({
         select: jest.fn()
-          .mockReturnValueOnce({
-            from: () => ({
-              where: () => Promise.resolve([{ id: 'pf-1', status: 'aguardando_recebimento' }]),
-            }),
-          })
-          .mockReturnValueOnce({
-            from: () => ({
-              where: () => ({
-                orderBy: () => ({
-                  limit: () => Promise.resolve([{ id: 'rec-1' }]),
-                }),
-              }),
-            }),
+          .mockReturnValueOnce(chainSelect([{ id: 'pf-1', status: 'aguardando_recebimento' }]))
+          .mockReturnValueOnce(chainSelect([{ id: 'rec-1' }]))
+          .mockReturnValueOnce(chainSelect([{ id: 'pf-1', status: 'aguardando_recebimento' }]))
+          .mockReturnValueOnce(chainSelect([{ id: 'rec-1', pedidoFornecedorId: 'pf-1' }]))
+          .mockReturnValueOnce(chainSelect([])),
+        update: jest.fn(() => ({
+          set: () => ({
+            where: () => Promise.resolve(undefined),
           }),
+        })),
         insert: jest.fn()
           .mockReturnValueOnce({
             values: () => ({

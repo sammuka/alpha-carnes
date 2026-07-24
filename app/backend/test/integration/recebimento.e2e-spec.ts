@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
@@ -476,7 +477,48 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     expect(patch.body.recebimento.romaneio).toBe('ROM-PATCH');
 
     const detalhe = await request(srv()).get(`/operacao/recebimentos/${recId}`).set('Cookie', recebimentoCookies);
+    expect(detalhe.body.nfeNumero).toBe('998877');
     expect(detalhe.body.notaFiscalFornecedor).toBe('998877');
+  });
+
+  it('PATCH nfe com serie/chave persiste notas_fiscais_fornecedor e detalhar expõe nfeSerie', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-30', quantidade: 10 });
+    const ini = await iniciarViaCompra(compraId);
+    const recId = ini.body.recebimento.id as string;
+    const chaveNfe = '35250612345678901234567890123456789012345678';
+
+    const patch = await request(srv())
+      .patch(`/operacao/recebimentos/${recId}/nfe`)
+      .set('Cookie', recebimentoCookies)
+      .send({
+        nfeNumero: '123456',
+        nfeSerie: '3',
+        nfeChave: chaveNfe,
+        nfeDataEmissao: '2026-07-01',
+        nfePesoBruto: 2500,
+      });
+    expect(patch.status).toBe(200);
+
+    const detalhe = await request(srv()).get(`/operacao/recebimentos/${recId}`).set('Cookie', recebimentoCookies);
+    expect(detalhe.status).toBe(200);
+    expect(detalhe.body.nfeSerie).toBe('3');
+    expect(detalhe.body.nfeChave).toBe(chaveNfe);
+    expect(Number(detalhe.body.nfePesoBruto)).toBe(2500);
+
+    const { db } = app.get(DRIZZLE);
+    const nfs = await db
+      .select()
+      .from(schema.notasFiscaisFornecedor)
+      .where(eq(schema.notasFiscaisFornecedor.recebimentoId, recId));
+    expect(nfs).toHaveLength(1);
+    expect(nfs[0]?.serie).toBe('3');
+
+    const itensNf = await db
+      .select()
+      .from(schema.notasFiscaisFornecedorItens)
+      .where(eq(schema.notasFiscaisFornecedorItens.nfId, nfs[0]!.id));
+    expect(itensNf.length).toBeGreaterThan(0);
   });
 
   it('PATCH nfe em lote após conclusão de pesagem → 409', async () => {

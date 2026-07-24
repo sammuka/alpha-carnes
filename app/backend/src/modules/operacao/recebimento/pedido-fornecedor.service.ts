@@ -8,19 +8,17 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
-import { formatarQtd } from '../../../common/crud/decimal';
 import { montarPaginado, primeiroOuFalha, type Paginado } from '../../../common/crud/paginacao';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
   comprasProgramadas,
   disponibilidadesVirtuais,
-  notasFiscaisFornecedor,
-  notasFiscaisFornecedorItens,
   pedidosFornecedor,
   pedidosFornecedorItens,
   recebimentos,
 } from '../../../database/schema';
+import { persistirNfEstruturadaNaTx } from './nota-fiscal-fornecedor.persistence';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import type {
   CriarPedidoFornecedorDto,
@@ -195,34 +193,11 @@ export class PedidoFornecedorService {
         recebimentoId = rec.id;
       }
 
-      const nf = primeiroOuFalha(await tx.insert(notasFiscaisFornecedor).values({
+      const nf = await persistirNfEstruturadaNaTx(tx, this.auditoria, {
         pedidoFornecedorId: pedido.id,
         recebimentoId,
-        numero: dto.numero,
-        serie: dto.serie,
-        chave: dto.chave,
-        dataEmissao: dto.dataEmissao,
-        pesoTotalDeclarado: dto.pesoTotalDeclarado === undefined
-          ? null
-          : formatarQtd(dto.pesoTotalDeclarado),
-        payloadJson: dto.payload ?? {},
-      }).returning());
-
-      await tx.insert(notasFiscaisFornecedorItens).values(dto.itens.map((item) => ({
-        nfId: nf.id,
-        itemComercialId: item.itemComercialId,
-        quantidadeDeclarada: formatarQtd(item.quantidadeDeclarada),
-        pesoDeclarado: item.pesoDeclarado === undefined ? null : formatarQtd(item.pesoDeclarado),
-      })));
-
-      await this.auditoria.registrar(tx, {
-        tabela: 'notas_fiscais_fornecedor',
-        registroId: nf.id,
-        operacao: 'INSERT',
-        modulo: 'operacao',
+        dto,
         usuarioId,
-        dadosAnteriores: {},
-        dadosNovos: nf,
       });
 
       return { nf, recebimentoId };
