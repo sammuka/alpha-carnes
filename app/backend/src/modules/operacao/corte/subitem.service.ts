@@ -378,6 +378,7 @@ export class SubitemService {
       .select({ dataOperacao: operacoes.data })
       .from(pecas)
       .innerJoin(recebimentos, eq(pecas.recebimentoId, recebimentos.id))
+      .innerJoin(operacoes, eq(operacoes.id, recebimentos.operacaoId))
       .where(eq(pecas.id, pecaId))
       .then((rows) => rows[0] ?? null);
     return r?.dataOperacao ?? '';

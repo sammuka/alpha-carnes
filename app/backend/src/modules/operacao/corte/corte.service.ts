@@ -368,6 +368,7 @@ export class CorteService {
     const r = await tx
       .select({ dataOperacao: operacoes.data })
       .from(recebimentos)
+      .innerJoin(operacoes, eq(operacoes.id, recebimentos.operacaoId))
       .where(eq(recebimentos.id, recebimentoId))
       .then((rows) => rows[0] ?? null);
     return r?.dataOperacao ?? '';

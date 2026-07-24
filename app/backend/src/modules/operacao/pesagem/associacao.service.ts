@@ -338,6 +338,7 @@ export class AssociacaoService {
     const r = await tx
       .select({ dataOperacao: operacoes.data })
       .from(recebimentos)
+      .innerJoin(operacoes, eq(operacoes.id, recebimentos.operacaoId))
       .where(eq(recebimentos.id, peca.recebimentoId))
       .then((rows) => rows[0] ?? null);
     return r?.dataOperacao ?? '';

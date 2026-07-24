@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import request from 'supertest';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase, lerDisponibilidade } from '../helpers/comercial-fixtures';
+import { challengePayload } from '../helpers/overbooking-fixtures';
 import { EVENTOS } from '../../src/realtime/events/eventos';
 
 describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)', () => {
@@ -26,7 +27,6 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
     await app.close();
   });
 
-  // Cria compra confirmada com saldo conhecido; retorna ids para montar pedidos.
   async function cenarioComSaldo(dataOperacao: string, fator: number, quantidade: number) {
     const base = await seedComercialBase(app, { fator });
     const criar = await request(app.getHttpServer())
@@ -46,7 +46,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
   }
 
   it('reserva total: pedida <= disponível decrementa o saldo', async () => {
-    const { base, compraId } = await cenarioComSaldo('2026-10-01', 1, 10); // saldo 10
+    const { base, compraId } = await cenarioComSaldo('2026-10-01', 1, 10);
     const res = await request(app.getHttpServer())
       .post('/comercial/pedidos')
       .set('Cookie', comercialCookies)
@@ -57,7 +57,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 4 }],
       });
     expect(res.status).toBe(201);
-    expect(res.body.status).toBe('reservado');
+    expect(res.body.status).toBe('em_elaboracao_reserva_ativa');
 
     const disp = await lerDisponibilidade(app, base.itemComercialId);
     expect(Number(disp!.quantidadeDisponivel)).toBe(6);
@@ -79,12 +79,9 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
     expect(res.status).toBe(403);
   });
 
-  it('reserva PARCIAL: pedida > disponível → reserva o que há, resto pendente + evento sem cobertura', async () => {
-    const { base, compraId } = await cenarioComSaldo('2026-10-03', 1, 5); // saldo 5
-    const emitter = app.get(EventEmitter2);
-    const semCobertura = new Promise<{ pedidoId: string }>((resolve) => {
-      emitter.once(EVENTOS.PEDIDO_SEM_COBERTURA, (p) => resolve(p));
-    });
+  it('AD-05: pedida > disponível sem confirmação → 409 challenge sem mutação', async () => {
+    const { base, compraId } = await cenarioComSaldo('2026-10-03', 1, 5);
+    const antes = await lerDisponibilidade(app, base.itemComercialId);
 
     const res = await request(app.getHttpServer())
       .post('/comercial/pedidos')
@@ -93,30 +90,53 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-10-03',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 8 }], // pede 8, há 5
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 8 }],
+      });
+    expect(res.status).toBe(409);
+    const payload = challengePayload(res.body);
+    expect(payload.code).toBe('OVERBOOKING_CONFIRMACAO_NECESSARIA');
+
+    const depois = await lerDisponibilidade(app, base.itemComercialId);
+    expect(depois).toEqual(antes);
+  });
+
+  it('AD-05: confirmar-overbooking com saldo parcial → 201 + pendência overbooking', async () => {
+    const { base, compraId } = await cenarioComSaldo('2026-10-13', 1, 5);
+    const emitter = app.get(EventEmitter2);
+    const overbookingEvt = new Promise<{ pedidoVendaId: string }>((resolve) => {
+      emitter.once(EVENTOS.OVERBOOKING_CONFIRMADO, (p) => resolve(p));
+    });
+
+    const res = await request(app.getHttpServer())
+      .post('/comercial/pedidos/confirmar-overbooking')
+      .set('Cookie', comercialCookies)
+      .send({
+        compraProgramadaId: compraId,
+        clienteId: base.clienteId,
+        dataOperacao: '2026-10-13',
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 8 }],
       });
     expect(res.status).toBe(201);
-    expect(res.body.status).toBe('parcialmente_reservado');
+    expect(res.body.status).toBe('em_elaboracao_reserva_ativa');
 
     const detalhe = await request(app.getHttpServer())
       .get(`/comercial/pedidos/${res.body.id}`)
       .set('Cookie', comercialCookies);
     const item = detalhe.body.itens[0];
     expect(Number(item.quantidadeReservada)).toBe(5);
-    expect(Number(item.quantidadePendente)).toBe(3);
-    expect(item.status).toBe('parcialmente_reservado');
+    expect(Number(item.quantidadeOverbooking)).toBe(3);
+    expect(item.status).toBe('overbooking_confirmado');
 
     const disp = await lerDisponibilidade(app, base.itemComercialId);
     expect(Number(disp!.quantidadeDisponivel)).toBe(0);
     expect(disp!.status).toBe('esgotada');
 
-    const evt = await semCobertura;
-    expect(evt.pedidoId).toBe(res.body.id);
+    const evt = await overbookingEvt;
+    expect(evt.pedidoVendaId).toBe(res.body.id);
   });
 
-  it('saldo ZERO (S3): item 100% pendente, status sem_cobertura', async () => {
-    const { base, compraId } = await cenarioComSaldo('2026-10-04', 1, 3); // saldo 3
-    // consome tudo
+  it('AD-05: saldo ZERO sem confirmação → 409; com confirmação → overbooking 100%', async () => {
+    const { base, compraId } = await cenarioComSaldo('2026-10-04', 1, 3);
     await request(app.getHttpServer())
       .post('/comercial/pedidos')
       .set('Cookie', comercialCookies)
@@ -125,10 +145,23 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         clienteId: base.clienteId,
         dataOperacao: '2026-10-04',
         itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 3 }],
-      });
-    // segundo pedido não tem saldo
-    const res = await request(app.getHttpServer())
+      })
+      .expect(201);
+
+    const challenge = await request(app.getHttpServer())
       .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({
+        compraProgramadaId: compraId,
+        clienteId: base.clienteId,
+        dataOperacao: '2026-10-04',
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+      });
+    expect(challenge.status).toBe(409);
+    expect(challengePayload(challenge.body).code).toBe('OVERBOOKING_CONFIRMACAO_NECESSARIA');
+
+    const res = await request(app.getHttpServer())
+      .post('/comercial/pedidos/confirmar-overbooking')
       .set('Cookie', comercialCookies)
       .send({
         compraProgramadaId: compraId,
@@ -142,11 +175,11 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
       .set('Cookie', comercialCookies);
     const item = detalhe.body.itens[0];
     expect(Number(item.quantidadeReservada)).toBe(0);
-    expect(Number(item.quantidadePendente)).toBe(2);
-    expect(item.status).toBe('sem_cobertura');
+    expect(Number(item.quantidadeOverbooking)).toBe(2);
+    expect(item.status).toBe('overbooking_confirmado');
 
     const disp = await lerDisponibilidade(app, base.itemComercialId);
-    expect(Number(disp!.quantidadeDisponivel)).toBe(0); // nunca negativo
+    expect(Number(disp!.quantidadeDisponivel)).toBe(0);
   });
 
   it('LIBERAÇÃO: cancelar pedido devolve o saldo à disponibilidade', async () => {
@@ -166,13 +199,13 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
     const cancelar = await request(app.getHttpServer())
       .delete(`/comercial/pedidos/${pedido.body.id}`)
       .set('Cookie', comercialCookies)
-      .send();
+      .send({ motivo: 'Cliente desistiu' });
     expect(cancelar.status).toBe(200);
 
     disp = await lerDisponibilidade(app, base.itemComercialId);
-    expect(Number(disp!.quantidadeDisponivel)).toBe(10); // saldo devolvido
+    expect(Number(disp!.quantidadeDisponivel)).toBe(10);
     expect(Number(disp!.quantidadeReservada)).toBe(0);
-    expect(disp!.status).toBe('gerada'); // S1: não fica esgotada com disponível > 0
+    expect(disp!.status).toBe('gerada');
   });
 
   it('REDUZIR item devolve a diferença ao saldo', async () => {
@@ -193,11 +226,11 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
     const reduzir = await request(app.getHttpServer())
       .patch(`/comercial/pedidos/${pedido.body.id}/itens/${itemId}`)
       .set('Cookie', comercialCookies)
-      .send({ novaQuantidade: 3 });
+      .send({ novaQuantidade: 3, motivo: 'Ajuste comercial' });
     expect(reduzir.status).toBe(200);
 
     const disp = await lerDisponibilidade(app, base.itemComercialId);
-    expect(Number(disp!.quantidadeDisponivel)).toBe(7); // 10 - 3
+    expect(Number(disp!.quantidadeDisponivel)).toBe(7);
     expect(Number(disp!.quantidadeReservada)).toBe(3);
   });
 
@@ -229,21 +262,20 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
       await request(app.getHttpServer()).get(`/comercial/pedidos/${pedido.body.id}`).set('Cookie', comercialCookies)
     ).body.itens[0].id;
 
-    // aumentar (>= reservada) é rejeitado: só reduz
     const aumentar = await request(app.getHttpServer())
       .patch(`/comercial/pedidos/${pedido.body.id}/itens/${itemId}`)
       .set('Cookie', comercialCookies)
-      .send({ novaQuantidade: 9 });
+      .send({ novaQuantidade: 9, motivo: 'Tentativa de aumento' });
     expect(aumentar.status).toBe(409);
 
     const pedidoInexistente = await request(app.getHttpServer())
       .patch(`/comercial/pedidos/019e0000-0000-7000-8000-0000000000cc/itens/${itemId}`)
       .set('Cookie', comercialCookies)
-      .send({ novaQuantidade: 1 });
+      .send({ novaQuantidade: 1, motivo: 'Ajuste' });
     expect(pedidoInexistente.status).toBe(404);
   });
 
-  it('reduzir item para 0 libera a reserva inteira e devolve todo o saldo', async () => {
+  it('remover item libera a reserva inteira e devolve todo o saldo', async () => {
     const { base, compraId } = await cenarioComSaldo('2026-10-10', 1, 10);
     const pedido = await request(app.getHttpServer())
       .post('/comercial/pedidos')
@@ -258,14 +290,14 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
       await request(app.getHttpServer()).get(`/comercial/pedidos/${pedido.body.id}`).set('Cookie', comercialCookies)
     ).body.itens[0].id;
 
-    const reduzir = await request(app.getHttpServer())
-      .patch(`/comercial/pedidos/${pedido.body.id}/itens/${itemId}`)
+    const remover = await request(app.getHttpServer())
+      .delete(`/comercial/pedidos/${pedido.body.id}/itens/${itemId}`)
       .set('Cookie', comercialCookies)
-      .send({ novaQuantidade: 0 });
-    expect(reduzir.status).toBe(200);
+      .send({ motivo: 'Item cancelado' });
+    expect(remover.status).toBe(200);
 
     const disp = await lerDisponibilidade(app, base.itemComercialId);
-    expect(Number(disp!.quantidadeDisponivel)).toBe(10); // saldo totalmente devolvido
+    expect(Number(disp!.quantidadeDisponivel)).toBe(10);
     expect(Number(disp!.quantidadeReservada)).toBe(0);
     expect(disp!.status).toBe('gerada');
   });
@@ -284,14 +316,13 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
     const primeira = await request(app.getHttpServer())
       .delete(`/comercial/pedidos/${pedido.body.id}`)
       .set('Cookie', comercialCookies)
-      .send();
+      .send({ motivo: 'Primeiro cancelamento' });
     expect(primeira.status).toBe(200);
-    // já cancelado (soft-deleted) → 404 (não encontrado entre ativos)
     const segunda = await request(app.getHttpServer())
       .delete(`/comercial/pedidos/${pedido.body.id}`)
       .set('Cookie', comercialCookies)
-      .send();
-    expect(segunda.status).toBe(404);
+      .send({ motivo: 'Segundo cancelamento' });
+    expect(segunda.status).toBe(409);
   });
 
   it('RASTREABILIDADE: pedido → cliente → item → disponibilidade → preferências', async () => {

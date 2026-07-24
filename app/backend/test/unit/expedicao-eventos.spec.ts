@@ -31,7 +31,9 @@ describe('CargaService — emissao pos-commit', () => {
         id: 'cam-1',
         statusCaminhao: 'em_carga',
         dataOperacao: '2026-12-01',
+        operacaoId: 'op-1',
       })),
+      dataOperacaoDoCaminhao: jest.fn(async () => '2026-12-01'),
     };
     const service = new CargaService(
       { db } as never,
@@ -134,7 +136,7 @@ describe('CargaService — removerItem emissao pos-commit', () => {
       { db } as never,
       { registrar: jest.fn() } as never,
       emitter,
-      { caminhaoAtivo: jest.fn() } as never,
+      { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn(async () => '2026-12-01') } as never,
     );
     return { service, emitSpy, ordem };
   }
@@ -182,7 +184,7 @@ describe('CargaService — transferir emissao pos-commit', () => {
       { db } as never,
       { registrar: jest.fn() } as never,
       emitter,
-      { caminhaoAtivo: jest.fn() } as never,
+      { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn(async () => '2026-12-01') } as never,
     );
     return { service, emitSpy, ordem };
   }
@@ -235,7 +237,7 @@ describe('FechamentoService — emissao pos-commit', () => {
       { db } as never,
       { registrar: jest.fn() } as never,
       emitter,
-      { caminhaoAtivo: jest.fn() } as never,
+      { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn(async () => '2026-12-01') } as never,
     );
     return { service, emitSpy, ordem };
   }
@@ -297,7 +299,7 @@ describe('FechamentoService — emissao pos-commit', () => {
       { db } as never,
       { registrar: jest.fn() } as never,
       emitter,
-      { caminhaoAtivo: jest.fn() } as never,
+      { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn(async () => '2026-12-01') } as never,
     );
 
     await expect(service.reabrir('cam-1', 'j', 'user-1')).rejects.toThrow();
@@ -313,7 +315,7 @@ describe('ConferenciaService — validacao manualidade (branches 96/99)', () => 
       { db } as never,
       { registrar: jest.fn() } as never,
       emitter,
-      { caminhaoAtivo: jest.fn() } as never,
+      { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn(async () => '2026-12-01') } as never,
       { resolverQr: jest.fn(), resolverQrSubitem: jest.fn() } as never,
     );
 
@@ -334,7 +336,7 @@ describe('ConferenciaService — validacao manualidade (branches 96/99)', () => 
       { db } as never,
       { registrar: jest.fn() } as never,
       emitter,
-      { caminhaoAtivo: jest.fn() } as never,
+      { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn(async () => '2026-12-01') } as never,
       { resolverQr: jest.fn(), resolverQrSubitem: jest.fn() } as never,
     );
 
@@ -370,7 +372,7 @@ describe('ConferenciaService — emissao pos-commit', () => {
       { db } as never,
       { registrar: jest.fn() } as never,
       emitter,
-      { caminhaoAtivo: jest.fn() } as never,
+      { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn(async () => '2026-12-01') } as never,
       { resolverQr: jest.fn(), resolverQrSubitem: jest.fn() } as never,
     );
 

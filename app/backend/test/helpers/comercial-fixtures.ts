@@ -125,3 +125,45 @@ export async function criarCompraConfirmada(
   }
   return compraId;
 }
+
+
+/** Cria Pedido ao Fornecedor a partir de compra confirmada e envia (status aguardando_recebimento). */
+export async function criarPedidoFornecedorEnviado(
+  app: INestApplication,
+  comprasCookies: string,
+  compraProgramadaId: string,
+): Promise<string> {
+  const { default: request } = await import('supertest');
+  const pedido = await request(app.getHttpServer())
+    .post('/operacao/pedidos-fornecedor')
+    .set('Cookie', comprasCookies)
+    .send({ compraProgramadaId });
+  if (pedido.status !== 201 || !pedido.body?.id) {
+    throw new Error(`Falha ao criar PF: ${pedido.status} ${JSON.stringify(pedido.body)}`);
+  }
+  const enviado = await request(app.getHttpServer())
+    .post(`/operacao/pedidos-fornecedor/${pedido.body.id}/enviar`)
+    .set('Cookie', comprasCookies)
+    .send();
+  if (enviado.status !== 200 && enviado.status !== 201) {
+    throw new Error(`Falha ao enviar PF: ${enviado.status} ${JSON.stringify(enviado.body)}`);
+  }
+  return pedido.body.id as string;
+}
+
+/** Inicia recebimento a partir do Pedido ao Fornecedor enviado. */
+export async function iniciarRecebimentoViaPf(
+  app: INestApplication,
+  recebimentoCookies: string,
+  pedidoFornecedorId: string,
+): Promise<{ recebimentoId: string; body: unknown }> {
+  const { default: request } = await import('supertest');
+  const receb = await request(app.getHttpServer())
+    .post('/operacao/recebimentos')
+    .set('Cookie', recebimentoCookies)
+    .send({ pedidoFornecedorId });
+  if (receb.status !== 201 || !receb.body?.recebimento?.id) {
+    throw new Error(`Falha ao iniciar recebimento: ${receb.status} ${JSON.stringify(receb.body)}`);
+  }
+  return { recebimentoId: receb.body.recebimento.id as string, body: receb.body };
+}

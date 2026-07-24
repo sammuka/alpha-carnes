@@ -27,7 +27,7 @@ function makeSelectChain(rows: unknown[]) {
 function makeDb(
   txSelectResponses: unknown[][],
   directSelectResponses: unknown[][] = [],
-  updateReturning: unknown = { id: 'rec-1', status: 'aguardando_conferencia' },
+  updateReturning: unknown = { id: 'rec-1', status: 'pesagem_em_andamento' },
 ) {
   let txIdx = 0;
   const txSelect = jest.fn(() => makeSelectChain(txSelectResponses[txIdx++] ?? []));
@@ -76,6 +76,7 @@ function makeService(db: ReturnType<typeof makeDb>['db']) {
     emitter,
     disponibilidade as never,
     divergencias as never,
+    {} as never,
   );
   return { service, disponibilidade, auditoria };
 }
@@ -134,15 +135,15 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
   });
 
   it('atualizarNfe → 409 se finalizado', async () => {
-    const { db } = makeDb([[{ id: 'rec-1', status: 'finalizado' }]]);
+    const { db } = makeDb([[{ id: 'rec-1', status: 'conferido_sem_divergencia' }]]);
     const { service } = makeService(db);
 
     await expect(service.atualizarNfe('rec-1', { romaneio: 'R' } as never, 'u1')).rejects.toThrow(ConflictException);
   });
 
   it('atualizarNfe → persiste campos NF e audita', async () => {
-    const atual = { id: 'rec-1', status: 'aguardando_conferencia', nfeNumero: '111' };
-    const atualizado = { ...atual, nfeNumero: '222', romaneio: 'ROM', nfePesoBruto: '100.000' };
+    const atual = { id: 'rec-1', status: 'pesagem_em_andamento', notaFiscalFornecedor: '111' };
+    const atualizado = { ...atual, notaFiscalFornecedor: '222', romaneio: 'ROM' };
     const { db } = makeDb([[atual]], [], atualizado);
     const { service, auditoria } = makeService(db);
 
@@ -151,7 +152,7 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
       { nfeNumero: '222', romaneio: 'ROM', nfePesoBruto: 100, nfeSerie: '1', observacoes: 'ok' } as never,
       'u1',
     );
-    expect(res.nfeNumero).toBe('222');
+    expect(res.notaFiscalFornecedor).toBe('222');
     expect(auditoria.registrar).toHaveBeenCalled();
   });
 
@@ -163,21 +164,21 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
   });
 
   it('cancelar → 409 se status não permite cancelamento', async () => {
-    const { db } = makeDb([[{ id: 'rec-1', status: 'finalizado' }]]);
+    const { db } = makeDb([[{ id: 'rec-1', status: 'conferido_sem_divergencia' }]]);
     const { service } = makeService(db);
 
     await expect(service.cancelar('rec-1', 'u1')).rejects.toThrow(ConflictException);
   });
 
   it('cancelar → 409 se já há peças pesadas no lote', async () => {
-    const { db } = makeDb([[{ id: 'rec-1', status: 'aguardando_conferencia' }], [{ total: 2 }]]);
+    const { db } = makeDb([[{ id: 'rec-1', status: 'pesagem_em_andamento' }], [{ total: 2 }]]);
     const { service } = makeService(db);
 
     await expect(service.cancelar('rec-1', 'u1')).rejects.toThrow(/pesagem registrada/i);
   });
 
   it('cancelar → status cancelado quando lote aberto sem peças', async () => {
-    const atual = { id: 'rec-1', status: 'em_conferencia' };
+    const atual = { id: 'rec-1', status: 'pesagem_em_andamento' };
     const cancelado = { ...atual, status: 'cancelado' };
     const { db } = makeDb([[atual], [{ total: 0 }]], [], cancelado);
     const { service, auditoria } = makeService(db);
@@ -188,13 +189,14 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
   });
 
   it('iniciar → 409 quando compra confirmada não tem itens operacionais', async () => {
-    const compra = { id: 'c1', status: 'confirmada', fornecedorId: 'f1', dataOperacao: '2026-06-01', numeroInterno: 'PC' };
-    const { db } = makeDb([[compra], []]);
+    const pedido = { id: 'pf1', status: 'aguardando_recebimento', compraProgramadaId: 'c1', fornecedorId: 'f1', operacaoId: 'op1' };
+    const compra = { id: 'c1', status: 'confirmada', fornecedorId: 'f1', numeroInterno: 'PC' };
+    const { db } = makeDb([[pedido], [compra]]);
     const { service, disponibilidade } = makeService(db);
     disponibilidade.listarEsperadoDaCompra.mockResolvedValue([]);
 
     await expect(
-      service.iniciar({ compraProgramadaId: 'c1', nfeNumero: '999' } as never, 'u1'),
+      service.iniciar({ pedidoFornecedorId: '019ea000-0000-7000-8000-000000000001' } as never, 'u1'),
     ).rejects.toThrow(/sem itens operacionais/i);
   });
 
@@ -204,20 +206,20 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
     await expect(service.suspender('rec-x', 'u1')).rejects.toThrow(NotFoundException);
   });
 
-  it('suspender → 409 se status não é em_conferencia', async () => {
-    const { db } = makeDb([[{ id: 'rec-1', status: 'aguardando_conferencia' }]]);
+  it('suspender → 409 se status não é aguardando_conferencia_final', async () => {
+    const { db } = makeDb([[{ id: 'rec-1', status: 'pesagem_em_andamento' }]]);
     const { service } = makeService(db);
     await expect(service.suspender('rec-1', 'u1')).rejects.toThrow(ConflictException);
   });
 
-  it('suspender → retorna recebimento suspenso', async () => {
-    const atual = { id: 'rec-1', status: 'em_conferencia' };
-    const suspenso = { ...atual, status: 'aguardando_conferencia' };
+  it('suspender → retorna recebimento em pesagem_em_andamento', async () => {
+    const atual = { id: 'rec-1', status: 'aguardando_conferencia_final' };
+    const suspenso = { ...atual, status: 'pesagem_em_andamento' };
     const { db } = makeDb([[atual]], [], suspenso);
     const { service, auditoria } = makeService(db);
 
     const res = await service.suspender('rec-1', 'u1');
-    expect(res.status).toBe('aguardando_conferencia');
+    expect(res.status).toBe('pesagem_em_andamento');
     expect(auditoria.registrar).toHaveBeenCalled();
   });
 
@@ -238,7 +240,7 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
   });
 
   it('atualizarMetadados → persiste campos informados', async () => {
-    const atual = { id: 'rec-1', status: 'em_conferencia' };
+    const atual = { id: 'rec-1', status: 'pesagem_em_andamento' };
     const atualizado = { ...atual, placaVeiculo: 'XYZ9Z99', doca: 'D2' };
     const { db } = makeDb([[atual]], [], atualizado);
     const { service } = makeService(db);
@@ -254,7 +256,7 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
   });
 
   it('listarAcoes → mapeia destino, cliente e operador', async () => {
-    const lote = { id: 'rec-1', status: 'em_conferencia' };
+    const lote = { id: 'rec-1', status: 'pesagem_em_andamento' };
     const pecaRow = {
       peca: {
         id: 'pec-1',
@@ -310,7 +312,7 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
   });
 
   it('listarAcoes → fallback de cliente pelo pedido e destino desconhecido', async () => {
-    const lote = { id: 'rec-1', status: 'em_conferencia' };
+    const lote = { id: 'rec-1', status: 'pesagem_em_andamento' };
     const pecaRow = {
       peca: {
         id: 'pec-2',

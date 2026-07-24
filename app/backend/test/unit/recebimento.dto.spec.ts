@@ -5,17 +5,20 @@ import {
 
 describe('iniciarRecebimentoSchema', () => {
   const base = {
-    compraProgramadaId: '019ea000-0000-7000-8000-000000000001',
-    nfeNumero: '123456',
+    pedidoFornecedorId: '019ea000-0000-7000-8000-000000000001',
   };
 
-  it('aceita payload mínimo com NF', () => {
+  it('aceita payload mínimo com pedidoFornecedorId', () => {
     const parsed = iniciarRecebimentoSchema.parse(base);
-    expect(parsed.nfeNumero).toBe('123456');
-    expect(parsed.iniciarConferencia).toBe(false);
+    expect(parsed.pedidoFornecedorId).toBe(base.pedidoFornecedorId);
   });
 
-  it('rejeita NF vazia', () => {
+  it('aceita NF opcional', () => {
+    const parsed = iniciarRecebimentoSchema.parse({ ...base, nfeNumero: '123456' });
+    expect(parsed.nfeNumero).toBe('123456');
+  });
+
+  it('rejeita NF vazia quando informada', () => {
     expect(() =>
       iniciarRecebimentoSchema.parse({ ...base, nfeNumero: '   ' }),
     ).toThrow();
@@ -36,6 +39,10 @@ describe('iniciarRecebimentoSchema', () => {
     expect(() =>
       iniciarRecebimentoSchema.parse({ ...base, nfeChave: '123' }),
     ).toThrow();
+  });
+
+  it('rejeita ausência de pedidoFornecedorId', () => {
+    expect(() => iniciarRecebimentoSchema.parse({ nfeNumero: '1' })).toThrow();
   });
 });
 
