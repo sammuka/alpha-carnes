@@ -1,7 +1,6 @@
 import { relations, sql } from 'drizzle-orm';
 import {
   check,
-  date,
   index,
   integer,
   jsonb,

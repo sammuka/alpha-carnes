@@ -1,5 +1,5 @@
 import { relations, sql } from 'drizzle-orm';
-import { boolean, check, date, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, integer } from 'drizzle-orm/pg-core';
+import { boolean, check, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, integer } from 'drizzle-orm/pg-core';
 import { pecas } from './pesagem.schema';
 import { subitens } from './transformacoes.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';

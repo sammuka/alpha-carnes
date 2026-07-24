@@ -19,7 +19,6 @@ import * as schema from '../../database/schema';
 import { operacoes, parametros } from '../../database/schema';
 import { EVENTOS } from '../../realtime/events/eventos';
 import type {
-  AlterarStatusOperacaoDto,
   CriarExtraordinariaDto,
   GerarCadenciaDto,
   ListarOperacoesDto,
