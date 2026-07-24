@@ -80,6 +80,23 @@ export async function migrarAte(tag: string): Promise<void> {
   }
 }
 
+/** Aplica um único arquivo de migration sobre o schema já existente (sem DROP). */
+export async function aplicarMigration(tag: string): Promise<void> {
+  const filePath = path.join(MIGRATIONS_DIR, `${tag}.sql`);
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Arquivo de migration ausente: ${filePath}`);
+  }
+  const content = fs.readFileSync(filePath, 'utf8');
+  const client = await getPool().connect();
+  try {
+    for (const stmt of sqlStatements(content)) {
+      await client.query(stmt);
+    }
+  } finally {
+    client.release();
+  }
+}
+
 export async function expectTabela(nome: string): Promise<void> {
   const { rows } = await getPool().query<{ exists: boolean }>(
     `SELECT EXISTS (
@@ -177,4 +194,88 @@ export async function expectCheckRejeita(
     rejeitou = true;
   }
   expect(rejeitou).toBe(true);
+}
+
+/** Semeia divergências legadas (após 0012) com FKs mínimas válidas. */
+export async function semearDivergenciasLegadas(
+  tipos: string[],
+): Promise<Array<{ id: string; tipoLegado: string }>> {
+  return withClient(async (client) => {
+    const u = await client.query<{ id: string }>(
+      `INSERT INTO usuarios (nome, email, senha_hash)
+       VALUES ('Mig', 'mig-${Date.now()}@t.local', 'x') RETURNING id`,
+    );
+    const usuarioId = u.rows[0]!.id;
+    const f = await client.query<{ id: string }>(
+      `INSERT INTO fornecedores (codigo, razao_social, documento_fiscal)
+       VALUES ('F-MIG', 'Forn Mig', 'DOC-MIG-${Date.now()}') RETURNING id`,
+    );
+    const fornecedorId = f.rows[0]!.id;
+    const ic = await client.query<{ id: string }>(
+      `INSERT INTO itens_comerciais (codigo, descricao, unidade_comercial)
+       VALUES ('IC-MIG', 'Item Mig', 'parte') RETURNING id`,
+    );
+    const itemComercialId = ic.rows[0]!.id;
+    const op = await client.query<{ id: string }>(
+      `INSERT INTO operacoes (data, dia_semana, rotulo)
+       VALUES ('2099-01-01', 4, 'Op Mig') RETURNING id`,
+    );
+    const operacaoId = op.rows[0]!.id;
+    const cp = await client.query<{ id: string }>(
+      `INSERT INTO compras_programadas
+         (data_operacao, operacao_id, fornecedor_id, status, usuario_criacao_id)
+       VALUES ('2099-01-01', $1, $2, 'confirmada', $3) RETURNING id`,
+      [operacaoId, fornecedorId, usuarioId],
+    );
+    const compraId = cp.rows[0]!.id;
+    const r = await client.query<{ id: string }>(
+      `INSERT INTO recebimentos
+         (compra_programada_id, fornecedor_id, data_operacao, operacao_id,
+          responsavel_recebimento_id, status, nfe_numero)
+       VALUES ($1, $2, '2099-01-01', $3, $4, 'aguardando_conferencia', 'NF-MIG')
+       RETURNING id`,
+      [compraId, fornecedorId, operacaoId, usuarioId],
+    );
+    const recebimentoId = r.rows[0]!.id;
+    const ri = await client.query<{ id: string }>(
+      `INSERT INTO recebimentos_itens
+         (recebimento_id, item_comercial_id, quantidade_esperada)
+       VALUES ($1, $2, 1) RETURNING id`,
+      [recebimentoId, itemComercialId],
+    );
+    const recebimentoItemId = ri.rows[0]!.id;
+
+    const out: Array<{ id: string; tipoLegado: string }> = [];
+    for (const tipo of tipos) {
+      const d = await client.query<{ id: string }>(
+        `INSERT INTO divergencias_recebimento
+           (recebimento_id, recebimento_item_id, item_comercial_id, tipo, descricao,
+            acao_imediata, responsavel_registro_id)
+         VALUES ($1, $2, $3, $4, 'legado', 'tratar', $5) RETURNING id`,
+        [recebimentoId, recebimentoItemId, itemComercialId, tipo, usuarioId],
+      );
+      out.push({ id: d.rows[0]!.id, tipoLegado: tipo });
+    }
+    return out;
+  });
+}
+
+export async function buscarDivergencia(id: string): Promise<{ tipo: string; descricao: string }> {
+  const { rows } = await getPool().query<{ tipo: string; descricao: string }>(
+    `SELECT tipo, descricao FROM divergencias_recebimento WHERE id = $1`,
+    [id],
+  );
+  if (!rows[0]) throw new Error(`divergência ${id} não encontrada`);
+  return rows[0];
+}
+
+export async function contarDivergenciasComTipoLegado(): Promise<number> {
+  const { rows } = await getPool().query<{ total: string }>(
+    `SELECT count(*)::text AS total FROM divergencias_recebimento
+      WHERE tipo IN (
+        'quantidade_menor','quantidade_maior','item_divergente','qualidade_divergente',
+        'peso_incompativel','item_ausente','item_excedente','inconsistencia_nf_fisico'
+      )`,
+  );
+  return Number(rows[0]?.total ?? 0);
 }
