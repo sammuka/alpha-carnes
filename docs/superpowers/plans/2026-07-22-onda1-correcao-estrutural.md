@@ -5,6 +5,8 @@
 
 **Goal:** Corrigir integralmente D2 (Operação como pivô), D1 (overbooking v1.1 conforme AD-05), D3 (Pedido ao Fornecedor, NF própria e conferência Pedido×NF×Pesagem), D5 (terminologia) e absorver as decisões AD-03..AD-06 sem alterar visualmente as telas.
 
+> **Escopo — D9 fora desta onda (concluído):** a divergência **D9 (instruções canônicas em `AGENTS.md` + `CLAUDE.md` de compatibilidade)** já foi **entregue antes da Onda 1** pelo **PR [#11](https://github.com/sammuka/alpha-carnes/pull/11)** (squash `8b2958ef992e1243015cd7f0507310dbac9706e0`). Não há Task de implementação de D9 neste plano e nenhuma será criada; a linha da Onda 1 em `EXECUCAO-STATUS.md` e no roadmap §8 é reescopada para refletir D9 como concluída por PR #11. As Tasks abaixo cobrem apenas D1, D2, D3 e D5.
+
 **Architecture:** Monólito modular NestJS. `operacoes` passa a ser a única referência persistida do dia operacional. A migração é exatamente `0012 expand → 0013 custom backfill → 0014 contract`; o contract remove `data_operacao` das seis tabelas de fato, remove o cache `nfe_*` de `recebimentos` e torna as novas FKs obrigatórias. APIs que ainda expõem `dataOperacao` derivam `operacoes.data`. Challenge de overbooking é consulta transacional com lock e resposta 409 sem escrita; confirmação é comando explícito e atômico. Eventos são emitidos somente após commit.
 
 **Tech Stack:** Node 22, NestJS 11, TypeScript strict, Drizzle ORM 0.45 + drizzle-kit 0.31, PostgreSQL 18, Zod 4, Jest com PostgreSQL real e `maxWorkers: 1`, Next.js 16 BFF.
@@ -35,7 +37,7 @@
 8. `finalizar` aceita item `overbooking_confirmado`; só rejeita challenge legado ainda não confirmado.
 9. Pedido ao Fornecedor materializa uma compra confirmada e usa os itens comerciais gerados pelo desdobramento. O modelo aceita várias NFs e vários recebimentos por pedido, sem decidir P7.
 10. NF legada sem itens não ganha valores inferidos. `0013` migra o cabeçalho e marca `payload_json.migracao='legado_sem_itens_nf'`; uma conferência ainda aberta exige carga explícita dos itens da NF.
-11. Caixaria/entrada direta usa `recebimentos_itens.quantidade_recebida`; item com `requer_balanca=true` usa `COUNT(pecas)` e `SUM(peso_liquido)`.
+11. Caixaria/entrada direta usa `recebimentos_itens.quantidade_recebida`; item com `requer_balanca=true` usa `COUNT(pecas)` e `SUM(pecas.peso_original)`, agrupando por `pecas.item_comercial_base_id` e filtrando `pecas.deleted_at IS NULL` (nomes reais em `pesagem.schema.ts`; não existem `pecas.item_comercial_id` nem `pecas.peso_liquido`).
 12. Divergências novas usam `falta | excesso | peso_divergente | produto_nao_previsto | outro`, sempre referenciam a conclusão e referenciam uma NF quando a diferença é atribuível a uma única nota; `conclusoes_conferencia_nfs` preserva o conjunto completo.
 13. `conclusoes_conferencia` é append-only: não possui rota de edição, e segunda conclusão retorna 409.
 14. As migrations são criadas apenas pelos três comandos definidos neste plano. É proibido renomear SQL ou editar `meta/_journal.json` à mão.
@@ -96,7 +98,8 @@ app/backend/src/
   realtime/realtime.gateway.ts
 app/backend/test/
   integration/{operacoes,operacoes-writers,onda1-migrations,pedidos-v11,overbooking,overbooking-lifecycle,overbooking-concorrencia,pedido-fornecedor,conferencia-tripla}.e2e-spec.ts
-  unit/{operacoes.service,pedidos-eventos-onda1,conferencia.calc,decimal-onda1}.spec.ts
+  unit/{operacoes.service,pedidos-eventos-onda1,conferencia.calc,decimal-onda1,permissoes-onda1}.spec.ts
+  integration/seed.spec.ts   # já existe: recebe casos das permissões da Onda 1
 app/frontend/src/
   app/api/comercial/pedidos/route.ts
   app/api/comercial/pedidos/confirmar-overbooking/route.ts
@@ -117,6 +120,11 @@ app/frontend/__tests__/{api,terminologia}.test.ts
 |---|---|
 | Operação única por data e cadência idempotente | `operacoes.e2e-spec.ts` — `unique ativa; gerar duas vezes cria zero na segunda execução` |
 | `0012→0013→0014` em banco limpo e legado | `onda1-migrations.e2e-spec.ts` — `journal aplica os três arquivos em ordem` |
+| `0012` amplia CHECKs de status ao superset antes do backfill (aceita legado e novo) | `onda1-migrations.e2e-spec.ts` — `0012 amplia CHECKs de status para o superset` |
+| `0012` amplia `chk_diverg_receb_tipo` ao superset (8 legados ∪ 5 v1.1) | `onda1-migrations.e2e-spec.ts` — `0012 amplia CHECKs de status para o superset` (asserts de `divergencias_recebimento.tipo`) |
+| `0013` remapeia 100% dos 8 tipos legados de divergência para os 5 v1.1 e preserva a origem | `onda1-migrations.e2e-spec.ts` — `0013 remapeia os 8 tipos legados de divergência para os 5 v1.1` |
+| `0014` aperta `chk_diverg_receb_tipo` ao conjunto final de 5 (rejeita legado) | `onda1-migrations.e2e-spec.ts` — `0014 aperta chk_diverg_receb_tipo ao conjunto final` |
+| Microcopy do challenge idêntica ao protótipo (`PedidoVenda.tsx:229`) | `pedidos-v11.e2e-spec.ts` — payload 409 contém `"A venda poderá ser concluída, mas a gestão deverá tratar a falta."` |
 | Seis writers gravam `operacao_id` | `operacoes-writers.e2e-spec.ts` — seis casos nomeados por tabela |
 | `data_operacao` e cache `nfe_*` não existem após contract | `onda1-migrations.e2e-spec.ts` — consulta `information_schema.columns` |
 | Challenge 409 não executa escrita nem muta seis agregados | `pedidos-v11.e2e-spec.ts` — spy de SQL sem `INSERT/UPDATE/DELETE` + snapshot antes/depois de operação, pedido, item, reserva, saldo, pendência |
@@ -127,8 +135,15 @@ app/frontend/__tests__/{api,terminologia}.test.ts
 | Recebimento exige Pedido ao Fornecedor | `pedido-fornecedor.e2e-spec.ts` |
 | Migração não inventa itens de NF legada | `onda1-migrations.e2e-spec.ts` |
 | Caixaria usa quantidade; pesável usa peças/peso | `conferencia-tripla.e2e-spec.ts` |
+| `calcularQuadro` mapeia SQL→`QuadroItem` (snake→camel, incl. `recebimentoItemId` de `ri.id`) e a `situacao` (`conforme`/`divergente`) sai só de `classificarSituacao` — comparação decimal exata (`compararQtd`), sem tolerância; peso nulo de caixaria não gera falso positivo; item só pesado é `produto_nao_previsto` com `recebimentoItemId=null` | `conferencia-tripla.e2e-spec.ts` — `calcularQuadro classifica conforme/divergente por qtd e peso exatos, mapeia recebimentoItemId e trata item nao previsto` |
 | Conclusão imutável e divergência transacional | `conferencia-tripla.e2e-spec.ts` |
 | RBAC das permissões novas | um caso 403 em cada suíte de endpoint |
+| Seis chaves novas existem no catálogo `PERMISSOES` (a união `Permissao` as inclui) | `permissoes-onda1.spec.ts` — `PERMISSOES contém as 6 chaves da Onda 1` |
+| `DESCRICOES_PERMISSOES` permanece exaustivo em `Record<Permissao, string>` (uma descrição por chave, zero órfã) | `permissoes-onda1.spec.ts` — `toda chave de PERMISSOES tem descrição e vice-versa` |
+| Seed insere as 6 permissões e o total do catálogo (idempotente) | `seed.spec.ts` — `catálogo = Object.keys(DESCRICOES_PERMISSOES).length` (reuso) |
+| Concessão: cada uma das 6 chaves é seedada ao(s) perfil(is) mapeado(s) | `seed.spec.ts` — `gestor tem as 6; compras tem OPERACOES_GERENCIAR e PEDIDO_FORNECEDOR_GERENCIAR; comercial tem PEDIDO_OVERBOOKING_CONFIRMAR e PEDIDO_FINALIZAR; recebimento_pesagem tem CONFERENCIA_CONCLUIR; administrador tem as 6` |
+| Negação: perfil sem a chave não a recebe (segregação) | `seed.spec.ts` — `conferente/diretoria/logistica NÃO têm OVERBOOKING_RESOLVER` |
+| Continua com 11 perfis; nenhuma chave nova cria 12º perfil | `seed.spec.ts` — `total de perfis = 11` (reuso) |
 | Eventos somente pós-commit | `pedidos-eventos-onda1.spec.ts` e suítes de integração com rollback |
 | Zero rótulo banido | `app/frontend/__tests__/terminologia.test.ts` via AST |
 
@@ -208,7 +223,7 @@ tipoConsumo: text('tipo_consumo').notNull().default('virtual'),
 // CHECK: tipo_consumo='overbooking' OR disponibilidade_virtual_id IS NOT NULL
 ```
 
-Em `0012`, manter os CHECKs legados de status de pedido/item/recebimento. A troca dos CHECKs ocorre somente em `0014`, após o backfill de valores da Task 6.
+**Sequência de CHECKs (expand → backfill → contract), decisiva para a executabilidade.** O backfill `0013` grava status que os CHECKs legados rejeitam (`em_elaboracao_reserva_ativa`, `aguardando_confirmacao_overbooking` em `pedidos_venda`; `aguardando_confirmacao_overbooking` em `pedidos_venda_itens`; `pesagem_em_andamento`, `conferido_sem_divergencia`, `tratativa_administrativa_concluida` em `recebimentos`). Por isso, em `0012` os três CHECKs de status são **ampliados para um superset (valores legados ∪ valores finais)** antes de qualquer backfill; o contract `0014` os aperta ao conjunto final. As definições de CHECK nos arquivos de schema permanecem **legadas** durante as Tasks 1–6 (o snapshot do `0012` reflete o estado legado); a ampliação transitória do `0012` é **anexada à mão ao SQL gerado**, exatamente pelo idioma nomeado já provado em `0011_recebimento_simplificado.sql` (`DROP CONSTRAINT IF EXISTS "<nome>"` → `ADD CONSTRAINT "<nome>" CHECK (...)`), o que dispensa depender do diff de CHECK do drizzle-kit e é robusto a nome (os nomes reais são `chk_pedidos_venda_status`, `chk_pedidos_itens_status`, `chk_recebimentos_status`). O SQL literal está no bloco da Task 1. Somente em `0014`, os CHECKs do schema são trocados pelos finais e o `db:generate` emite o aperto; se o generate não o emitir, o mesmo idioma nomeado é anexado à mão (Task 7). Nenhum CHECK novo sobre `reservas_disponibilidade.tipo_consumo` é exigido no backfill: a coluna nasce com `DEFAULT 'virtual'` e seu CHECK entra apenas no contract.
 
 ```typescript
 export const pendenciasOverbooking = pgTable('pendencias_overbooking', {
@@ -359,6 +374,60 @@ npm run db:generate -- --name onda1_expand
 ```
 
 Expected: `0012_onda1_expand.sql`, `meta/0012_snapshot.json` e entrada `idx: 12` no journal; nenhuma coluna removida e nenhum `SET NOT NULL`.
+
+- [ ] Anexar à mão, ao final do `0012_onda1_expand.sql` gerado, a **ampliação transitória dos três CHECKs de status** para o superset (legado ∪ final), pelo idioma nomeado de `0011` (não editar `meta/_journal.json` nem renomear o arquivo — apenas completar o corpo SQL, exatamente como o `0013` é completado):
+
+```sql
+-- 0012 (append): ampliar CHECKs de status para o superset antes do backfill 0013.
+-- Superset = valores legados ∪ valores finais; o aperto ao conjunto final é feito no 0014.
+ALTER TABLE "pedidos_venda" DROP CONSTRAINT IF EXISTS "chk_pedidos_venda_status";--> statement-breakpoint
+ALTER TABLE "pedidos_venda" ADD CONSTRAINT "chk_pedidos_venda_status" CHECK ("pedidos_venda"."status" IN (
+  'reservado','parcialmente_reservado',
+  'rascunho','em_elaboracao_reserva_ativa','aguardando_confirmacao_overbooking',
+  'finalizado','parcialmente_atendido','atendido','faturado','cancelado'
+));--> statement-breakpoint
+ALTER TABLE "pedidos_venda_itens" DROP CONSTRAINT IF EXISTS "chk_pedidos_itens_status";--> statement-breakpoint
+ALTER TABLE "pedidos_venda_itens" ADD CONSTRAINT "chk_pedidos_itens_status" CHECK ("pedidos_venda_itens"."status" IN (
+  'totalmente_reservado','parcialmente_reservado','sem_cobertura',
+  'aguardando_confirmacao_overbooking','overbooking_confirmado','cancelado'
+));--> statement-breakpoint
+ALTER TABLE "recebimentos" DROP CONSTRAINT IF EXISTS "chk_recebimentos_status";--> statement-breakpoint
+ALTER TABLE "recebimentos" ADD CONSTRAINT "chk_recebimentos_status" CHECK ("recebimentos"."status" IN (
+  'aguardando_conferencia','em_conferencia','finalizado',
+  'pesagem_em_andamento','aguardando_conclusao_pesagem','aguardando_conferencia_final',
+  'conferido_sem_divergencia','conferido_com_divergencia',
+  'ocorrencia_administrativa_aberta','tratativa_administrativa_concluida','cancelado'
+));--> statement-breakpoint
+-- chk_diverg_receb_tipo também é apertado no fim da migração (Task 5 grava os 5 tipos
+-- v1.1 em conferências novas ANTES do backfill 0013). Superset = 8 tipos legados
+-- (recebimentos.schema.ts) ∪ 5 tipos v1.1 (`classificarTipoV11`); o aperto ao conjunto
+-- final de 5 é feito no 0014 depois que o 0013 remapeia 100% das linhas legadas.
+ALTER TABLE "divergencias_recebimento" DROP CONSTRAINT IF EXISTS "chk_diverg_receb_tipo";--> statement-breakpoint
+ALTER TABLE "divergencias_recebimento" ADD CONSTRAINT "chk_diverg_receb_tipo" CHECK ("divergencias_recebimento"."tipo" IN (
+  'quantidade_menor','quantidade_maior','item_divergente','qualidade_divergente',
+  'peso_incompativel','item_ausente','item_excedente','inconsistencia_nf_fisico',
+  'falta','excesso','produto_nao_previsto','peso_divergente','outro'
+));--> statement-breakpoint
+```
+
+- [ ] Ampliar o teste do 0012 para provar que o superset aceita os status novos e que os legados seguem válidos (o aperto é verificado na Task 7):
+
+```typescript
+it('0012 amplia CHECKs de status para o superset (aceita legado e novo)', async () => {
+  await migrarAte('0012_onda1_expand');
+  // valores novos que o backfill 0013 gravará passam a ser aceitos:
+  await expectCheckAceita('pedidos_venda', 'status', 'aguardando_confirmacao_overbooking');
+  await expectCheckAceita('pedidos_venda_itens', 'status', 'aguardando_confirmacao_overbooking');
+  await expectCheckAceita('recebimentos', 'status', 'pesagem_em_andamento');
+  // tipos v1.1 que a Task 5 grava em conferências novas passam a ser aceitos:
+  await expectCheckAceita('divergencias_recebimento', 'tipo', 'falta');
+  await expectCheckAceita('divergencias_recebimento', 'tipo', 'produto_nao_previsto');
+  // valores legados continuam aceitos durante a janela expand:
+  await expectCheckAceita('pedidos_venda', 'status', 'reservado');
+  await expectCheckAceita('recebimentos', 'status', 'finalizado');
+  await expectCheckAceita('divergencias_recebimento', 'tipo', 'inconsistencia_nf_fisico');
+});
+```
 
 - [ ] Run: `npm run test -- onda1-migrations` → FAIL apenas porque 0013/0014 ainda não existem.
 - [ ] Commit previsto: `feat(onda1): expand estrutural completo e migration 0012`
@@ -610,18 +679,36 @@ const PARAMETROS_ONDA1 = [
 
 AD-03, AD-05 e AD-06 são regras confirmadas, não toggles administrativos: não criar parâmetros capazes de desativá-las.
 
-- [ ] Catálogo e mapa de permissões:
+- [ ] **Catálogo e mapa de permissões — este é o PRIMEIRO passo de código da Task 2**, executado antes de qualquer decorator/controller/seed/`.push` que cite as chaves novas. Motivo (bloqueador do Portão 1, objeto `e0f602d5…`): `Permissao` é a união derivada de `PERMISSOES` (`common/rbac/permissoes.ts` L72: `(typeof PERMISSOES)[keyof typeof PERMISSOES]`); `MAPA_PERFIL_PERMISSOES.<perfil>` é `Permissao[]`. Sem declarar as chaves no objeto canônico, o `.push` de literais fora da união falha em TS-strict (TS2345) e o seed nunca concede a permissão em runtime (403 permanente). Portanto, estender **primeiro** o objeto `PERMISSOES` com as seis chaves literais (a chave e o valor são idênticos, como no restante do objeto — cada `Permissao` é seu próprio literal):
 
 ```typescript
-Object.assign(DESCRICOES_PERMISSOES, {
-  OPERACOES_GERENCIAR: 'Criar, iniciar e fechar operações',
-  PEDIDO_OVERBOOKING_CONFIRMAR: 'Confirmar inclusão com overbooking',
-  OVERBOOKING_RESOLVER: 'Tratar pendências de overbooking',
-  PEDIDO_FORNECEDOR_GERENCIAR: 'Gerenciar pedidos ao fornecedor',
-  CONFERENCIA_CONCLUIR: 'Concluir conferência Pedido×NF×Pesagem',
-  PEDIDO_FINALIZAR: 'Finalizar pedido de venda',
-});
+// common/rbac/permissoes.ts — dentro do objeto `PERMISSOES as const`,
+// após o bloco F6a (antes do fechamento `} as const;`).
+// Onda 1 — Operação-pivô, overbooking v1.1, Pedido ao Fornecedor e conferência tripla.
+OPERACOES_GERENCIAR: 'OPERACOES_GERENCIAR',
+PEDIDO_OVERBOOKING_CONFIRMAR: 'PEDIDO_OVERBOOKING_CONFIRMAR',
+OVERBOOKING_RESOLVER: 'OVERBOOKING_RESOLVER',
+PEDIDO_FORNECEDOR_GERENCIAR: 'PEDIDO_FORNECEDOR_GERENCIAR',
+CONFERENCIA_CONCLUIR: 'CONFERENCIA_CONCLUIR',
+PEDIDO_FINALIZAR: 'PEDIDO_FINALIZAR',
+```
 
+- [ ] No **mesmo** commit e antes de qualquer uso, estender `DESCRICOES_PERMISSOES` **literalmente dentro do objeto** (não usar `Object.assign`: `DESCRICOES_PERMISSOES` é `Record<Permissao, string>`; ao ampliar a união `Permissao`, o literal deixaria de ser exaustivo e o TS-strict acusaria propriedades faltantes — TS2741. As descrições precisam existir como chaves do próprio literal para o `Record` continuar exaustivo e o seed sincronizar o catálogo completo):
+
+```typescript
+// common/rbac/permissoes.ts — dentro do objeto literal `DESCRICOES_PERMISSOES`,
+// após a última entrada (NFSE_CANCELAR), antes do fechamento `};`.
+OPERACOES_GERENCIAR: 'Criar, iniciar e fechar operações',
+PEDIDO_OVERBOOKING_CONFIRMAR: 'Confirmar inclusão com overbooking',
+OVERBOOKING_RESOLVER: 'Tratar pendências de overbooking',
+PEDIDO_FORNECEDOR_GERENCIAR: 'Gerenciar pedidos ao fornecedor',
+CONFERENCIA_CONCLUIR: 'Concluir conferência Pedido×NF×Pesagem',
+PEDIDO_FINALIZAR: 'Finalizar pedido de venda',
+```
+
+- [ ] Só então mapear perfil → permissões (`.push` já com literais válidos da união; nenhum perfil novo é criado — permanecem os 11 de `PERFIS_FIXOS`, ver AD-04):
+
+```typescript
 MAPA_PERFIL_PERMISSOES.gestor.push(
   'OPERACOES_GERENCIAR', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'OVERBOOKING_RESOLVER',
   'PEDIDO_FORNECEDOR_GERENCIAR', 'CONFERENCIA_CONCLUIR', 'PEDIDO_FINALIZAR',
@@ -635,6 +722,80 @@ MAPA_PERFIL_PERMISSOES.administrador.push(
 );
 ```
 
+- [ ] Escrever `unit/permissoes-onda1.spec.ts` provando catálogo e exaustividade das descrições sem tocar no banco (prova a declaração canônica; a compilação em TS-strict já é o primeiro sinal de que o `.push` acima é válido):
+
+```typescript
+import {
+  PERMISSOES,
+  DESCRICOES_PERMISSOES,
+} from '../../src/common/rbac/permissoes';
+
+const CHAVES_ONDA1 = [
+  'OPERACOES_GERENCIAR',
+  'PEDIDO_OVERBOOKING_CONFIRMAR',
+  'OVERBOOKING_RESOLVER',
+  'PEDIDO_FORNECEDOR_GERENCIAR',
+  'CONFERENCIA_CONCLUIR',
+  'PEDIDO_FINALIZAR',
+] as const;
+
+it('PERMISSOES contém as 6 chaves da Onda 1 com valor idêntico à chave', () => {
+  for (const chave of CHAVES_ONDA1) {
+    expect(PERMISSOES[chave]).toBe(chave);
+  }
+});
+
+it('toda chave de PERMISSOES tem descrição e vice-versa (Record exaustivo)', () => {
+  const chavesPermissoes = Object.values(PERMISSOES).sort();
+  const chavesDescricoes = Object.keys(DESCRICOES_PERMISSOES).sort();
+  expect(chavesDescricoes).toEqual(chavesPermissoes);
+  for (const chave of CHAVES_ONDA1) {
+    expect(DESCRICOES_PERMISSOES[chave]).toMatch(/\S/);
+  }
+});
+```
+
+- [ ] Acrescentar a `test/integration/seed.spec.ts` (suíte já existente; não criar nova) os casos de concessão e negação após o seed 2×. Os testes existentes de total de perfis (`= 11`) e de total de catálogo (`= Object.keys(DESCRICOES_PERMISSOES).length`) passam a cobrir automaticamente as 6 chaves e provam que nenhum 12º perfil surge; adicionar somente a concessão/negação 1:1, reusando o padrão de JOIN das suítes vizinhas:
+
+```typescript
+async function permissoesDoPerfil(slug: string): Promise<string[]> {
+  const linhas = await db
+    .select({ codigo: schema.permissoes.codigo })
+    .from(schema.perfis)
+    .innerJoin(schema.perfisPermissoes, eq(schema.perfis.id, schema.perfisPermissoes.perfilId))
+    .innerJoin(schema.permissoes, eq(schema.perfisPermissoes.permissaoId, schema.permissoes.id))
+    .where(eq(schema.perfis.slug, slug));
+  return linhas.map((l) => l.codigo);
+}
+
+it('concede as permissões da Onda 1 exatamente aos perfis mapeados', async () => {
+  expect(await permissoesDoPerfil('gestor')).toEqual(expect.arrayContaining([
+    'OPERACOES_GERENCIAR', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'OVERBOOKING_RESOLVER',
+    'PEDIDO_FORNECEDOR_GERENCIAR', 'CONFERENCIA_CONCLUIR', 'PEDIDO_FINALIZAR',
+  ]));
+  expect(await permissoesDoPerfil('administrador')).toEqual(expect.arrayContaining([
+    'OPERACOES_GERENCIAR', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'OVERBOOKING_RESOLVER',
+    'PEDIDO_FORNECEDOR_GERENCIAR', 'CONFERENCIA_CONCLUIR', 'PEDIDO_FINALIZAR',
+  ]));
+  expect(await permissoesDoPerfil('compras')).toEqual(expect.arrayContaining([
+    'OPERACOES_GERENCIAR', 'PEDIDO_FORNECEDOR_GERENCIAR',
+  ]));
+  expect(await permissoesDoPerfil('comercial')).toEqual(expect.arrayContaining([
+    'PEDIDO_OVERBOOKING_CONFIRMAR', 'PEDIDO_FINALIZAR',
+  ]));
+  expect(await permissoesDoPerfil('recebimento_pesagem')).toEqual(
+    expect.arrayContaining(['CONFERENCIA_CONCLUIR']),
+  );
+});
+
+it('nega OVERBOOKING_RESOLVER a perfis sem a permissão (segregação)', async () => {
+  for (const slug of ['conferente', 'diretoria', 'logistica', 'comercial', 'compras']) {
+    expect(await permissoesDoPerfil(slug)).not.toContain('OVERBOOKING_RESOLVER');
+  }
+});
+```
+
+- [ ] Run: `npm run test -- "permissoes-onda1|seed"` → PASS (catálogo, descrição exaustiva, concessão e negação; 11 perfis mantidos).
 - [ ] Eventos de operação são acumulados durante a transação e emitidos após a resolução da Promise:
 
 ```typescript
@@ -780,6 +941,8 @@ it('409 challenge não executa escrita e não persiste mutação', async () => {
     disponivelAntes: '2.000',
     quantidadeSolicitada: '5.000',
     overbookingGerado: '3.000',
+    // Microcopy idêntica ao protótipo PedidoVenda.tsx:229 (Princípio I).
+    mensagem: 'A venda poderá ser concluída, mas a gestão deverá tratar a falta.',
   });
   removerSpy();
   expect(escritas).toEqual([]);
@@ -812,7 +975,7 @@ const resultado = await this.db.transaction(async (tx) => {
       disponivelAntes: p.disponivelAntes,
       quantidadeSolicitada: p.quantidadeSolicitada,
       overbookingGerado: p.deficit,
-      mensagem: 'A venda poderá ser concluída, mas o gestor deverá tratar a falta.',
+      mensagem: 'A venda poderá ser concluída, mas a gestão deverá tratar a falta.',
     })));
   }
 
@@ -863,7 +1026,7 @@ if (desafios.length && !confirmado) {
     disponivelAntes: p.disponivelAntes,
     quantidadeSolicitada: p.quantidadeSolicitada,
     overbookingGerado: p.deficit,
-    mensagem: 'A venda poderá ser concluída, mas o gestor deverá tratar a falta.',
+    mensagem: 'A venda poderá ser concluída, mas a gestão deverá tratar a falta.',
   })));
 }
 // Nenhum INSERT/UPDATE pode existir antes deste ponto.
@@ -1513,7 +1676,7 @@ await tx.insert(recebimentos).values({
   operacaoId: pedidoFornecedor.operacaoId,
   fornecedorId: pedidoFornecedor.fornecedorId,
   status: 'pesagem_em_andamento',
-  usuarioCriacaoId: usuarioId,
+  responsavelRecebimentoId: usuarioId, // NOT NULL real de `recebimentos` (recebimentos.schema.ts); não existe `usuario_criacao_id` nesta tabela.
 });
 ```
 
@@ -1525,65 +1688,108 @@ await tx.insert(recebimentos).values({
 
 **Files:** `conferencia.service.ts`, schema de conclusão/divergência/ocorrência, controller/DTO, testes.
 
-- [ ] Calcular o quadro por modalidade:
+- [ ] `calcularQuadro` monta o quadro por modalidade e é a **única fonte** da `situacao`.
+  Assinatura idêntica ao uso no controller (`this.conferencia.calcularQuadro(this.db, id)`):
+  `db` é `NodePgDatabase<typeof schema>` (mesmo tipo injetado nos demais services), a query
+  crua roda por `db.execute(sql\`…\`)` e lê `.rows` (idioma real — cf.
+  `disponibilidade.service.ts`). O SELECT projeta `ri.id AS recebimento_item_id`; o mapa
+  snake→camel converte campo a campo e a `situacao` é computada por `classificarSituacao`
+  (RA-01 — a regra que dispara a ocorrência administrativa ao fornecedor vive aqui, no
+  backend; o consumidor `concluirConferencia` só filtra `q.situacao === 'divergente'`):
 
-```sql
-WITH nf_itens AS (
-  SELECT nf.recebimento_id, nfi.item_comercial_id,
-         SUM(nfi.quantidade_declarada) AS qtd_nf,
-         SUM(nfi.peso_declarado)
-           FILTER (WHERE nfi.peso_declarado IS NOT NULL) AS peso_nf
-  FROM notas_fiscais_fornecedor nf
-  JOIN notas_fiscais_fornecedor_itens nfi
-    ON nfi.nf_id=nf.id AND nfi.deleted_at IS NULL
-  WHERE nf.recebimento_id=${recebimentoId} AND nf.deleted_at IS NULL
-  GROUP BY nf.recebimento_id, nfi.item_comercial_id
-), pecas_apuradas AS (
-  SELECT recebimento_id, item_comercial_id,
-         COUNT(id)::numeric AS qtd_pecas,
-         COALESCE(SUM(peso_liquido), 0) AS peso_apurado
-  FROM pecas
-  WHERE recebimento_id=${recebimentoId}
-  GROUP BY recebimento_id, item_comercial_id
-), item_ids AS (
-  SELECT pfi.item_comercial_id
-  FROM recebimentos r
-  JOIN pedidos_fornecedor_itens pfi
-    ON pfi.pedido_fornecedor_id=r.pedido_fornecedor_id AND pfi.deleted_at IS NULL
-  WHERE r.id=${recebimentoId}
-  UNION
-  SELECT item_comercial_id FROM nf_itens
-  UNION
-  SELECT item_comercial_id
-  FROM recebimentos_itens
-  WHERE recebimento_id=${recebimentoId}
-)
-SELECT ids.item_comercial_id,
-       pfi.quantidade_prevista AS qtd_pedido,
-       COALESCE(nfi.qtd_nf, 0) AS qtd_nf,
-       CASE WHEN COALESCE(ri.requer_balanca, false)
-            THEN COALESCE(pa.qtd_pecas, 0)
-            ELSE COALESCE(ri.quantidade_recebida, 0)
-       END AS qtd_apurada,
-       nfi.peso_nf,
-       CASE WHEN COALESCE(ri.requer_balanca, false)
-            THEN COALESCE(pa.peso_apurado, 0)
-            ELSE NULL
-       END AS peso_apurado,
-       (pfi.id IS NOT NULL) AS previsto_no_pedido
-FROM recebimentos r
-JOIN item_ids ids ON true
-LEFT JOIN pedidos_fornecedor_itens pfi
-  ON pfi.pedido_fornecedor_id=r.pedido_fornecedor_id
- AND pfi.item_comercial_id=ids.item_comercial_id
- AND pfi.deleted_at IS NULL
-LEFT JOIN recebimentos_itens ri
-  ON ri.recebimento_id=r.id AND ri.item_comercial_id=ids.item_comercial_id
-LEFT JOIN nf_itens nfi
-  ON nfi.recebimento_id=r.id AND nfi.item_comercial_id=ids.item_comercial_id
-LEFT JOIN pecas_apuradas pa
-  ON pa.recebimento_id=r.id AND pa.item_comercial_id=ids.item_comercial_id
-WHERE r.id=${recebimentoId};
+```typescript
+async calcularQuadro(
+  db: NodePgDatabase<typeof schema>,
+  recebimentoId: string,
+): Promise<QuadroItem[]> {
+  const resultado = await db.execute(sql`
+    WITH nf_itens AS (
+      SELECT nf.recebimento_id, nfi.item_comercial_id,
+             SUM(nfi.quantidade_declarada) AS qtd_nf,
+             SUM(nfi.peso_declarado)
+               FILTER (WHERE nfi.peso_declarado IS NOT NULL) AS peso_nf
+      FROM notas_fiscais_fornecedor nf
+      JOIN notas_fiscais_fornecedor_itens nfi
+        ON nfi.nf_id=nf.id AND nfi.deleted_at IS NULL
+      WHERE nf.recebimento_id=${recebimentoId} AND nf.deleted_at IS NULL
+      GROUP BY nf.recebimento_id, nfi.item_comercial_id
+    ), pecas_apuradas AS (
+      -- Schema real de `pecas` (pesagem.schema.ts): a FK do item é
+      -- `item_comercial_base_id` e o peso capturado é `peso_original`.
+      -- Aliasamos para `item_comercial_id` para manter os JOINs a jusante.
+      SELECT recebimento_id, item_comercial_base_id AS item_comercial_id,
+             COUNT(id)::numeric AS qtd_pecas,
+             COALESCE(SUM(peso_original), 0) AS peso_apurado
+      FROM pecas
+      WHERE recebimento_id=${recebimentoId} AND deleted_at IS NULL
+      GROUP BY recebimento_id, item_comercial_base_id
+    ), item_ids AS (
+      SELECT pfi.item_comercial_id
+      FROM recebimentos r
+      JOIN pedidos_fornecedor_itens pfi
+        ON pfi.pedido_fornecedor_id=r.pedido_fornecedor_id AND pfi.deleted_at IS NULL
+      WHERE r.id=${recebimentoId}
+      UNION
+      SELECT item_comercial_id FROM nf_itens
+      UNION
+      SELECT item_comercial_id
+      FROM recebimentos_itens
+      WHERE recebimento_id=${recebimentoId}
+      UNION
+      -- Item pesado que só existe na pesagem (sem pedido/NF/entrada direta) NÃO pode
+      -- sumir do quadro (RA-05/06, nenhuma falha silenciosa): entra e cai em não
+      -- previsto → divergente. `pecas_apuradas` já expõe `item_comercial_id`.
+      SELECT item_comercial_id FROM pecas_apuradas
+    )
+    SELECT ids.item_comercial_id,
+           ri.id AS recebimento_item_id,
+           pfi.quantidade_prevista AS qtd_pedido,
+           COALESCE(nfi.qtd_nf, 0) AS qtd_nf,
+           CASE WHEN COALESCE(ri.requer_balanca, false)
+                THEN COALESCE(pa.qtd_pecas, 0)
+                ELSE COALESCE(ri.quantidade_recebida, 0)
+           END AS qtd_apurada,
+           nfi.peso_nf,
+           CASE WHEN COALESCE(ri.requer_balanca, false)
+                THEN COALESCE(pa.peso_apurado, 0)
+                ELSE NULL
+           END AS peso_apurado,
+           (pfi.id IS NOT NULL) AS previsto_no_pedido
+    FROM recebimentos r
+    JOIN item_ids ids ON true
+    LEFT JOIN pedidos_fornecedor_itens pfi
+      ON pfi.pedido_fornecedor_id=r.pedido_fornecedor_id
+     AND pfi.item_comercial_id=ids.item_comercial_id
+     AND pfi.deleted_at IS NULL
+    LEFT JOIN recebimentos_itens ri
+      ON ri.recebimento_id=r.id AND ri.item_comercial_id=ids.item_comercial_id
+    LEFT JOIN nf_itens nfi
+      ON nfi.recebimento_id=r.id AND nfi.item_comercial_id=ids.item_comercial_id
+    LEFT JOIN pecas_apuradas pa
+      ON pa.recebimento_id=r.id AND pa.item_comercial_id=ids.item_comercial_id
+    WHERE r.id=${recebimentoId};
+  `);
+
+  // Mapeamento snake_case (node-pg) → camelCase `QuadroItem`, campo a campo.
+  // node-pg devolve NUMERIC e COUNT()::numeric como string; uuid/boolean nativos.
+  // `recebimento_item_id` é NULL quando o item não tem linha em `recebimentos_itens`
+  // (ex.: item só pesado ou só na NF); por isso `QuadroItem.recebimentoItemId` e a FK
+  // `divergencias_recebimento.recebimento_item_id` são nullable (Task 1 expand / Task 7).
+  return resultado.rows.map((raw) => {
+    const r = raw as unknown as QuadroRow;
+    const base = {
+      recebimentoItemId: r.recebimento_item_id,
+      itemComercialId:   r.item_comercial_id,
+      previstoNoPedido:  r.previsto_no_pedido,
+      qtdPedido:         r.qtd_pedido,
+      qtdNf:             r.qtd_nf,
+      qtdApurada:        r.qtd_apurada,
+      pesoNf:            r.peso_nf,
+      pesoApurado:       r.peso_apurado,
+    } satisfies Omit<QuadroItem, 'situacao'>;
+    return { ...base, situacao: classificarSituacao(base) };
+  });
+}
 ```
 
 - [ ] Bloquear NF legada sem itens:
@@ -1649,28 +1855,64 @@ await tx.insert(conclusoesConferenciaNfs).values(nfs.map((nf) => ({
   nfFornecedorId: nf.id,
 })));
 
-for (const item of quadro.filter((q) => q.situacao === 'divergente')) {
-  await tx.insert(divergenciasRecebimento).values({
-    recebimentoId,
-    recebimentoItemId: item.recebimentoItemId,
-    itemComercialId: item.itemComercialId,
-    conclusaoConferenciaId: conclusao.id,
-    nfFornecedorId: nfs.length === 1 ? nfs[0].id : null,
-    tipo: classificarTipoV11(item),
-    descricao: descreverDiferenca(item),
-    acaoImediata: 'Tratar divergência da conferência com o fornecedor',
-    responsavelRegistroId: usuarioId,
-  });
-}
-await this.ocorrencias.abrirDaConclusao(
-  tx,
-  conclusao.id,
-  nfs.map((nf) => nf.id),
-  usuarioId,
+// fornecedorId da ocorrência vem do recebimento (recebimentos.fornecedorId NOT NULL).
+const recebimento = primeiroOuFalha(
+  await tx.select({ fornecedorId: recebimentos.fornecedorId })
+    .from(recebimentos)
+    .where(eq(recebimentos.id, recebimentoId)),
 );
+const ocorrenciasAbertas: Ocorrencia[] = [];
+for (const item of quadro.filter((q) => q.situacao === 'divergente')) {
+  const divergencia = primeiroOuFalha(
+    await tx.insert(divergenciasRecebimento).values({
+      recebimentoId,
+      recebimentoItemId: item.recebimentoItemId,
+      itemComercialId: item.itemComercialId,
+      conclusaoConferenciaId: conclusao.id,
+      nfFornecedorId: nfs.length === 1 ? nfs[0].id : null,
+      tipo: classificarTipoV11(item),
+      descricao: descreverDiferenca(item),
+      acaoImediata: 'Tratar divergência da conferência com o fornecedor',
+      responsavelRegistroId: usuarioId,
+    }).returning(),
+  );
+  // API real do serviço: abrirNaTx(tx, AbrirOcorrenciaDto, usuarioId) — uma
+  // ocorrência administrativa auditável por divergência, vinculada por divergenciaId
+  // (mesmo método que a tratativa reusa; a auditoria é registrada dentro de abrirNaTx).
+  const ocorrencia = await this.ocorrencias.abrirNaTx(
+    tx,
+    {
+      fornecedorId: recebimento.fornecedorId,
+      divergenciaId: divergencia.id,
+      descricao: `Divergência ${divergencia.tipo}: ${divergencia.descricao}`,
+    },
+    usuarioId,
+  );
+  ocorrenciasAbertas.push(ocorrencia);
+}
+// `Ocorrencia` = typeof ocorrenciasFornecedor.$inferSelect (retorno de abrirNaTx).
 ```
 
-- [ ] `classificarTipoV11` é literal:
+- [ ] PÓS-COMMIT, emitir a abertura de cada ocorrência criada pela conclusão. `abrirNaTx`
+  não emite — a emissão é sempre do chamador (como em `ocorrencia.abrir` e
+  `divergencia.atualizar`). Reusar `emitirAbertura(ocorrencia, dataOperacao)`, que já
+  publica `EVENTOS.OCORRENCIA_FORNECEDOR_ABERTA` na room do dia; `dataOperacao` deriva de
+  `operacoes.data` (contract 0014):
+
+```typescript
+for (const ocorrencia of resultado.ocorrenciasAbertas) {
+  this.ocorrencias.emitirAbertura(ocorrencia, dataOperacao);
+}
+```
+
+- [ ] Tipos e classificadores literais. **Regra operacional (sem nova decisão):** a
+  conferência tripla **não tem tolerância de peso nem de quantidade** — a comparação é
+  decimal exata (`compararQtd(...) === 0`). Isso não é invenção: o protótipo
+  (`RecebimentoCarga.tsx:374` → `difQtd !== 0` marca divergente) e a spec v1.1 §6.10.4 (o
+  exemplo só rotula "Conferido" quando a diferença de qtd. **e** de peso é exatamente zero)
+  são a fonte; não há `AD-xx` autorizando faixa de tolerância em `DECISOES.md`. Fixar
+  qualquer folga aqui violaria Princípio VIII (não inventar o pendente) e RA-01. Se um dia
+  surgir tolerância, ela nasce como `AD-xx` + parâmetro, nunca hardcoded neste plano.
 
 ```typescript
 type TipoDivergenciaV11 =
@@ -1680,15 +1922,49 @@ type TipoDivergenciaV11 =
   | 'peso_divergente'
   | 'outro';
 
+// Linha crua do `db.execute` (node-pg): NUMERIC e COUNT()::numeric chegam como string.
+interface QuadroRow {
+  recebimento_item_id: string | null;
+  item_comercial_id: string;
+  previsto_no_pedido: boolean;
+  qtd_pedido: string | null;
+  qtd_nf: string;
+  qtd_apurada: string;
+  peso_nf: string | null;
+  peso_apurado: string | null;
+}
+
 interface QuadroItem {
   recebimentoItemId: string | null;
   itemComercialId: string;
   previstoNoPedido: boolean;
+  qtdPedido: string | null;
   qtdNf: string;
   qtdApurada: string;
   pesoNf: string | null;
   pesoApurado: string | null;
   situacao: 'conforme' | 'divergente';
+}
+
+// Único critério de negócio da conferência. Recebe o item SEM `situacao` (o mapa de
+// `calcularQuadro` a injeta com o retorno desta função) para evitar dependência circular.
+// Divergente se: (a) não previsto no pedido; ou (b) qtd_apurada ≠ qtd_nf; ou
+// (c) ambos os pesos presentes e peso_nf ≠ peso_apurado (só itens pesáveis têm
+// `pesoApurado`; caixaria tem `pesoApurado = null` → comparação de peso é ignorada,
+// nunca gera falso positivo). Comparação decimal exata (compararQtd) — sem tolerância.
+function classificarSituacao(
+  item: Omit<QuadroItem, 'situacao'>,
+): 'conforme' | 'divergente' {
+  if (!item.previstoNoPedido) return 'divergente';
+  if (compararQtd(item.qtdApurada, item.qtdNf) !== 0) return 'divergente';
+  if (
+    item.pesoNf !== null
+    && item.pesoApurado !== null
+    && compararQtd(item.pesoNf, item.pesoApurado) !== 0
+  ) {
+    return 'divergente';
+  }
+  return 'conforme';
 }
 
 function classificarTipoV11(item: QuadroItem): TipoDivergenciaV11 {
@@ -1716,7 +1992,17 @@ function descreverDiferenca(item: QuadroItem): string {
 }
 ```
 
-- [ ] Testar TZ pesável e Caixa de Rabo `requerBalanca=false`, segunda conclusão 409, resultado falso 409, rollback sem conclusão órfã, vínculo conclusão+NF.
+- [ ] `calcularQuadro` (`conferencia-tripla.e2e-spec.ts`, banco real): montar um recebimento
+  com (i) TZ pesável (`requerBalanca=true`) previsto, com `pecas` cujo `COUNT`/`SUM(peso_original)`
+  batem com a NF → `situacao='conforme'`; (ii) mesmo TZ com uma peça a mais (qtd_apurada≠qtd_nf)
+  → `divergente` e `classificarTipoV11='excesso'`; (iii) TZ com qtd. igual mas `SUM(peso_original)`≠`peso_nf`
+  → `divergente`/`peso_divergente`; (iv) Caixa de Rabo `requerBalanca=false` com
+  `quantidade_recebida=qtd_nf` e `peso_apurado=NULL` → `conforme` (afirmar que peso nulo **não**
+  gera falso positivo); (v) item presente só na pesagem, sem pedido → `previstoNoPedido=false`,
+  `situacao='divergente'`, `classificarTipoV11='produto_nao_previsto'` e `recebimentoItemId=null`.
+  Afirmar o mapa snake→camel campo a campo (incl. `recebimentoItemId` vindo de `ri.id`, string
+  para item com entrada direta e `null` para o item não previsto).
+- [ ] Testar segunda conclusão 409, resultado falso 409, rollback sem conclusão órfã, vínculo conclusão+NF, e que cada divergência da conclusão abre uma `ocorrencias_fornecedor` vinculada por `divergencia_id` (com o `fornecedor_id` do recebimento) — sem ocorrência órfã em caso de rollback. Afirmar que a divergência do item não previsto grava `recebimento_item_id=NULL` (FK nullable) sem violar a constraint.
 - [ ] Run: `npm run test -- conferencia-tripla` → PASS.
 - [ ] Commit previsto: `feat(onda1): conferencia tripla imutavel com caixarias por unidade`
 
@@ -1860,7 +2146,59 @@ SET status = CASE
 END
 WHERE status IN ('aguardando_conferencia','em_conferencia','finalizado');
 ```
+
+- [ ] Remapear 100% dos 8 tipos legados de `divergencias_recebimento` para os 5 tipos v1.1
+  ANTES do aperto de `chk_diverg_receb_tipo` no 0014. O mapa é total e determinístico (cobre
+  os 8 valores do CHECK legado sem inferência ambígua) e preserva a origem na coluna
+  `descricao` (NOT NULL já existente — não se inventa coluna nova): anexa `[origem_legado=<tipo>]`
+  ao texto. Como a Task 5 já grava os 5 tipos finais em conferências novas, este UPDATE só
+  toca linhas cujo `tipo` ainda pertence ao conjunto legado:
+
+```sql
+UPDATE divergencias_recebimento
+SET descricao = descricao || ' [origem_legado=' || tipo || ']',
+    tipo = CASE tipo
+      WHEN 'quantidade_menor'        THEN 'falta'
+      WHEN 'item_ausente'            THEN 'falta'
+      WHEN 'quantidade_maior'        THEN 'excesso'
+      WHEN 'item_excedente'          THEN 'excesso'
+      WHEN 'peso_incompativel'       THEN 'peso_divergente'
+      WHEN 'item_divergente'         THEN 'produto_nao_previsto'
+      WHEN 'qualidade_divergente'    THEN 'outro'
+      WHEN 'inconsistencia_nf_fisico' THEN 'outro'
+    END
+WHERE tipo IN (
+  'quantidade_menor','quantidade_maior','item_divergente','qualidade_divergente',
+  'peso_incompativel','item_ausente','item_excedente','inconsistencia_nf_fisico'
+);
+```
 - [ ] Testar fixture 0011 com seis tabelas, recebimento, caixaria e NF header; afirmar FKs preenchidas e zero item de NF inventado.
+- [ ] Testar o remapeamento total dos 8 tipos legados (mapa 1:1, sem inferência ambígua):
+
+```typescript
+it('0013 remapeia os 8 tipos legados de divergência para os 5 v1.1', async () => {
+  await migrarAte('0012_onda1_expand');
+  // Semeia uma divergência para cada um dos 8 tipos legados (fixture com FKs válidas).
+  const semeados = await semearDivergenciasLegadas([
+    'quantidade_menor', 'quantidade_maior', 'item_divergente', 'qualidade_divergente',
+    'peso_incompativel', 'item_ausente', 'item_excedente', 'inconsistencia_nf_fisico',
+  ]);
+  await migrarAte('0013_onda1_backfill');
+  const mapaEsperado: Record<string, string> = {
+    quantidade_menor: 'falta', item_ausente: 'falta',
+    quantidade_maior: 'excesso', item_excedente: 'excesso',
+    peso_incompativel: 'peso_divergente', item_divergente: 'produto_nao_previsto',
+    qualidade_divergente: 'outro', inconsistencia_nf_fisico: 'outro',
+  };
+  for (const { id, tipoLegado } of semeados) {
+    const linha = await buscarDivergencia(id);
+    expect(linha.tipo).toBe(mapaEsperado[tipoLegado]);
+    expect(linha.descricao).toContain(`[origem_legado=${tipoLegado}]`);
+  }
+  // Nenhuma linha permanece com um tipo legado após o backfill.
+  expect(await contarDivergenciasComTipoLegado()).toBe(0);
+});
+```
 - [ ] Run: `npm run test -- onda1-migrations` → FAIL apenas na expectativa do contract ainda ausente.
 - [ ] Commit previsto: `feat(onda1): migration custom 0013 com backfill preservador`
 
@@ -1907,7 +2245,14 @@ check('chk_recebimentos_status', sql`${t.status} IN (
   'conferido_sem_divergencia','conferido_com_divergencia',
   'ocorrencia_administrativa_aberta','tratativa_administrativa_concluida','cancelado'
 )`);
+// divergencias_recebimento (recebimentos.schema.ts): apertar do superset transitório do
+// 0012 para os 5 tipos v1.1 finais. Seguro: o 0013 remapeou 100% dos 8 tipos legados.
+check('chk_diverg_receb_tipo', sql`${t.tipo} IN (
+  'falta','excesso','produto_nao_previsto','peso_divergente','outro'
+)`);
 ```
+
+- [ ] Após `db:generate`, inspecionar `0014_onda1_contract.sql`: ele **precisa** conter o aperto dos quatro CHECKs (os três de status mais `chk_diverg_receb_tipo`, do superset transitório do `0012` para o conjunto final acima) além das duas novas constraints de `reservas_disponibilidade`. Se o generate não emitir a troca de algum CHECK preexistente (drizzle-kit nem sempre diffa alteração de expressão de CHECK), anexar à mão ao SQL gerado o mesmo idioma nomeado de `0011` (`DROP CONSTRAINT IF EXISTS "<nome>"` → `ADD CONSTRAINT "<nome>" CHECK (...)`) para `chk_pedidos_venda_status`, `chk_pedidos_itens_status`, `chk_recebimentos_status` e `chk_diverg_receb_tipo`. O aperto é seguro porque o `0013` já migrou 100% das linhas legadas: nenhum registro carrega `reservado`, `parcialmente_reservado`, `sem_cobertura`, `aguardando_conferencia`, `em_conferencia`, `finalizado` nem qualquer um dos 8 tipos legados de divergência ao chegar no contract.
 
 - [ ] Atualizar consultas para derivar data:
 
@@ -1959,6 +2304,19 @@ npm run db:generate -- --name onda1_contract
 Expected: `0014_onda1_contract.sql`, `meta/0014_snapshot.json`, journal `idx: 14`; apenas `SET NOT NULL`, troca de CHECK/FK/índice e DROP das colunas duplicadas já backfilladas.
 
 - [ ] Atualizar `ROLLBACK.md` com rollback em ordem `0014 → 0013 → 0012`; restauração de `data_operacao` deriva `operacoes.data`, e cache de NF deriva a entidade antes de remover as tabelas novas.
+- [ ] Testar o contract final de `chk_diverg_receb_tipo` (aperto ao conjunto de 5):
+
+```typescript
+it('0014 aperta chk_diverg_receb_tipo ao conjunto final', async () => {
+  await migrarAte('0014_onda1_contract');
+  // Os 5 tipos v1.1 permanecem aceitos:
+  await expectCheckAceita('divergencias_recebimento', 'tipo', 'falta');
+  await expectCheckAceita('divergencias_recebimento', 'tipo', 'outro');
+  // Qualquer tipo legado é rejeitado após o contract (0013 já os remapeou):
+  await expectCheckRejeita('divergencias_recebimento', 'tipo', 'inconsistencia_nf_fisico');
+  await expectCheckRejeita('divergencias_recebimento', 'tipo', 'quantidade_menor');
+});
+```
 - [ ] Run: `npm run test -- "onda1-migrations|operacoes-writers"` → PASS.
 - [ ] Commit previsto: `feat(onda1): contract 0014 remove duplicacoes e fecha FKs`
 
