@@ -3,6 +3,7 @@ import { boolean, check, date, index, jsonb, pgTable, text, timestamp, uniqueInd
 import { pecas } from './pesagem.schema';
 import { subitens } from './transformacoes.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
+import { operacoes } from './operacoes.schema';
 import { usuarios } from './auth.schema';
 
 // ── caminhoes ─────────────────────────────────────────────────────────────────
@@ -16,6 +17,7 @@ export const caminhoes = pgTable(
     rota:                 text('rota'),
     itinerario:           text('itinerario'),
     dataOperacao:         date('data_operacao').notNull(),
+    operacaoId:           uuid('operacao_id').references(() => operacoes.id),
     statusCaminhao:       text('status_caminhao').notNull().default('planejado'),
     horaAberturaCarga:    timestamp('hora_abertura_carga', { withTimezone: true }),
     horaFechamentoCarga:  timestamp('hora_fechamento_carga', { withTimezone: true }),

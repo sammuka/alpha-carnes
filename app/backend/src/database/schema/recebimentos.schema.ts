@@ -3,7 +3,11 @@ import { boolean, check, date, index, jsonb, numeric, pgTable, text, timestamp, 
 import { comprasProgramadas } from './compras-programadas.schema';
 import { fornecedores } from './fornecedores.schema';
 import { itensComerciais } from './itens-comerciais.schema';
+import { operacoes } from './operacoes.schema';
+import { pedidosFornecedor } from './pedidos-fornecedor.schema';
 import { usuarios } from './auth.schema';
+import { conclusoesConferencia } from './conclusoes-conferencia.schema';
+import { notasFiscaisFornecedor } from './notas-fiscais-fornecedor.schema';
 
 export const STATUS_RECEBIMENTO = [
   'aguardando_conferencia',
@@ -28,6 +32,8 @@ export const recebimentos = pgTable(
     compraProgramadaId:       uuid('compra_programada_id').notNull().references(() => comprasProgramadas.id),
     fornecedorId:             uuid('fornecedor_id').notNull().references(() => fornecedores.id),
     dataOperacao:             date('data_operacao').notNull(),
+    operacaoId:               uuid('operacao_id').references(() => operacoes.id),
+    pedidoFornecedorId:       uuid('pedido_fornecedor_id').references(() => pedidosFornecedor.id),
     dataHoraChegada:          timestamp('data_hora_chegada', { withTimezone: true }).notNull().defaultNow(),
     notaFiscalFornecedor:     text('nota_fiscal_fornecedor'),
     nfeNumero:                text('nfe_numero'),
@@ -51,6 +57,7 @@ export const recebimentos = pgTable(
     deletedAt:                timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
+    // CHECK legado durante expand; superset no SQL 0012; finais no 0014.
     check(
       'chk_recebimentos_status',
       sql`${t.status} IN ('aguardando_conferencia','em_conferencia','finalizado','cancelado')`,
@@ -97,7 +104,12 @@ export const divergenciasRecebimento = pgTable(
   {
     id:                     uuid('id').primaryKey().default(sql`uuidv7()`),
     recebimentoId:          uuid('recebimento_id').notNull().references(() => recebimentos.id),
-    recebimentoItemId:      uuid('recebimento_item_id').notNull().references(() => recebimentosItens.id),
+    // Nullable no expand para produto não previsto; contract ancora item_comercial_id.
+    recebimentoItemId:      uuid('recebimento_item_id').references(() => recebimentosItens.id),
+    itemComercialId:        uuid('item_comercial_id').references(() => itensComerciais.id),
+    // Arrow lazy: ciclo de módulo com conclusoes/notas é resolvido na introspecção.
+    conclusaoConferenciaId: uuid('conclusao_conferencia_id').references(() => conclusoesConferencia.id),
+    nfFornecedorId:         uuid('nf_fornecedor_id').references(() => notasFiscaisFornecedor.id),
     tipo:                   text('tipo').notNull(),
     descricao:              text('descricao').notNull(),
     impactoOperacional:     text('impacto_operacional'),
@@ -111,6 +123,7 @@ export const divergenciasRecebimento = pgTable(
     updatedAt:              timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    // CHECK legado durante expand; superset no SQL 0012; finais no 0014.
     check(
       'chk_diverg_receb_tipo',
       sql`${t.tipo} IN ('quantidade_menor','quantidade_maior','item_divergente','qualidade_divergente','peso_incompativel','item_ausente','item_excedente','inconsistencia_nf_fisico')`,

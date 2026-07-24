@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import { check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { fornecedores } from './fornecedores.schema';
 import { itensCompra } from './itens-compra.schema';
+import { operacoes } from './operacoes.schema';
 import { usuarios } from './auth.schema';
 
 // ── compras_programadas ─────────────────────────────────────────────────────
@@ -12,6 +13,7 @@ export const comprasProgramadas = pgTable(
   {
     id:                   uuid('id').primaryKey().default(sql`uuidv7()`),
     dataOperacao:         date('data_operacao').notNull(),
+    operacaoId:           uuid('operacao_id').references(() => operacoes.id),
     fornecedorId:         uuid('fornecedor_id').notNull().references(() => fornecedores.id),
     numeroInterno:        text('numero_interno'),
     referenciaExterna:    text('referencia_externa'),

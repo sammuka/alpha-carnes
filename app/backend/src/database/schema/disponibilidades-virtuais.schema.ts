@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import { check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { comprasProgramadas } from './compras-programadas.schema';
 import { itensComerciais } from './itens-comerciais.schema';
+import { operacoes } from './operacoes.schema';
 
 // ── disponibilidades_virtuais ───────────────────────────────────────────────
 // Saldo virtual do dia por item comercial, gerado ao confirmar a compra.
@@ -13,6 +14,7 @@ export const disponibilidadesVirtuais = pgTable(
     id:                     uuid('id').primaryKey().default(sql`uuidv7()`),
     compraProgramadaId:     uuid('compra_programada_id').notNull().references(() => comprasProgramadas.id),
     dataOperacao:           date('data_operacao').notNull(),
+    operacaoId:             uuid('operacao_id').references(() => operacoes.id),
     itemComercialId:        uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
     quantidadeTotalGerada:  numeric('quantidade_total_gerada', { precision: 15, scale: 3 }).notNull(),
     quantidadeReservada:    numeric('quantidade_reservada', { precision: 15, scale: 3 }).notNull().default('0'),
