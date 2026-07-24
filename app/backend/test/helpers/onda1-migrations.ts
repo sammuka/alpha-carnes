@@ -54,6 +54,7 @@ export async function migrarAte(tag: string): Promise<void> {
   const client = await p.connect();
   try {
     await client.query('DROP SCHEMA IF EXISTS public CASCADE');
+    await client.query('DROP SCHEMA IF EXISTS drizzle CASCADE');
     await client.query('CREATE SCHEMA public');
     await client.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
 

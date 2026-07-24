@@ -27,6 +27,7 @@ import {
 import { compararQtd, ehZero, formatarQtd, subtrairQtd } from '../../../common/crud/decimal';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { DisponibilidadeService, type PedidoEmRisco } from '../../comercial/disponibilidade/disponibilidade.service';
+import { OperacoesService } from '../../operacoes/operacoes.service';
 import { DivergenciaRecebimentoService } from './divergencia/divergencia-recebimento.service';
 import type { AtualizarMetadadosLoteDto, AtualizarNfeDto, IniciarRecebimentoDto, RegistrarItemDto } from './dto/recebimento.dto';
 import {
@@ -99,6 +100,7 @@ export class RecebimentoService {
     private readonly eventEmitter: EventEmitter2,
     private readonly disponibilidade: DisponibilidadeService,
     private readonly divergencias: DivergenciaRecebimentoService,
+    private readonly operacoes: OperacoesService,
   ) {}
 
   private get db() {
@@ -283,6 +285,8 @@ export class RecebimentoService {
 
       const statusInicial = dto.iniciarConferencia ? 'em_conferencia' : 'aguardando_conferencia';
 
+      const { operacao } = await this.operacoes.garantirOperacao(tx, compra.dataOperacao, usuarioId);
+
       const criado = primeiroOuFalha(
         await tx
           .insert(recebimentos)
@@ -290,6 +294,7 @@ export class RecebimentoService {
             compraProgramadaId: compra.id,
             fornecedorId: compra.fornecedorId,
             dataOperacao: compra.dataOperacao,
+            operacaoId: operacao.id,
             dataHoraChegada: dto.dataHoraChegada ? new Date(dto.dataHoraChegada) : undefined,
             notaFiscalFornecedor: dto.nfeNumero,
             nfeNumero: dto.nfeNumero,

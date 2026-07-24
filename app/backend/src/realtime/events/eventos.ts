@@ -6,6 +6,8 @@ export const EVENTOS = {
   DISPONIBILIDADE_GERADA: 'disponibilidade_virtual_gerada',
   RESERVA_ATUALIZADA: 'reserva_disponibilidade_atualizada',
   PEDIDO_SEM_COBERTURA: 'pedido_sem_cobertura',
+  // Onda 1 — Operação pivô
+  OPERACAO_CRIADA: 'operacao_criada',
   // ── F4a — Recebimento + Divergências ──────────────────────────────────────
   RECEBIMENTO_INICIADO: 'recebimento_iniciado',
   RECEBIMENTO_REGISTRADO: 'recebimento_registrado',

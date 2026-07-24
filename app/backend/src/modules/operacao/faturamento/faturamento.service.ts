@@ -408,9 +408,9 @@ export class FaturamentoService {
     const chaveAutenticacao = homologacao
       ? (process.env['EISS_CHAVE_AUTENTICACAO_HML'] ?? '')
       : (process.env['EISS_CHAVE_AUTENTICACAO_PRD'] ?? '');
-    // numeroRps/serieRps foram setados na emissão original — nunca nulos neste ponto
+    // numeroRps/serieRps foram setados na emissão original — serieRps tem DEFAULT 'A' no banco.
     const numeroRps = nf.numeroRps!;
-    const serieRps = nf.serieRps;
+    const serieRps = nf.serieRps ?? 'A';
 
     const payloadBase = montarPayloadEiss(
       {

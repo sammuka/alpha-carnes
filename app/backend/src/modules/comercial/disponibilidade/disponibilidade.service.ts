@@ -58,10 +58,11 @@ export class DisponibilidadeService {
       quantidade_total_gerada: string;
     }>(sql`
       INSERT INTO disponibilidades_virtuais
-        (compra_programada_id, data_operacao, item_comercial_id,
+        (compra_programada_id, operacao_id, data_operacao, item_comercial_id,
          quantidade_total_gerada, quantidade_reservada, quantidade_disponivel, status)
       SELECT
         ${compra.id},
+        ${compra.operacaoId},
         ${compra.dataOperacao}::date,
         r.item_comercial_id,
         SUM(r.fator_quantidade * cpi.quantidade_comprada),

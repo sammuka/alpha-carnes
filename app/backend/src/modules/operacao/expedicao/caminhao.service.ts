@@ -12,6 +12,7 @@ import {
 } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
+import { OperacoesService } from '../../operacoes/operacoes.service';
 import { assertTransicao, type StatusCaminhao } from './transicoes';
 import type { CriarCaminhaoDto, VincularPedidoDto } from './dto/expedicao.dto';
 
@@ -23,6 +24,7 @@ export class CaminhaoService {
   constructor(
     @Inject(DRIZZLE) private readonly drizzle: { db: NodePgDatabase<typeof schema> },
     private readonly auditoria: AuditoriaService,
+    private readonly operacoes: OperacoesService,
   ) {}
 
   private get db() {
@@ -32,6 +34,7 @@ export class CaminhaoService {
   /** Cria caminhão no status 'planejado'. */
   async criar(dto: CriarCaminhaoDto, operadorId: string): Promise<Caminhao> {
     return this.db.transaction(async (tx) => {
+      const { operacao } = await this.operacoes.garantirOperacao(tx, dto.dataOperacao, operadorId);
       const caminhao = primeiroOuFalha(
         await tx
           .insert(caminhoes)
@@ -41,6 +44,7 @@ export class CaminhaoService {
             rota: dto.rota,
             itinerario: dto.itinerario,
             dataOperacao: dto.dataOperacao,
+            operacaoId: operacao.id,
             observacoes: dto.observacoes,
           })
           .returning(),

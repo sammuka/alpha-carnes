@@ -14,6 +14,7 @@ import {
   type Paginado,
 } from '../../../common/crud/paginacao';
 import { EVENTOS } from '../../../realtime/events/eventos';
+import { OperacoesService } from '../../operacoes/operacoes.service';
 import { DisponibilidadeService, type DisponibilidadeGerada } from '../disponibilidade/disponibilidade.service';
 import type {
   CreateCompraProgramadaDto,
@@ -35,6 +36,7 @@ export class ComprasProgramadasService {
     private readonly auditoria: AuditoriaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly disponibilidadeService: DisponibilidadeService,
+    private readonly operacoes: OperacoesService,
   ) {}
 
   private get db() {
@@ -88,11 +90,14 @@ export class ComprasProgramadasService {
         throw new ConflictException('Já existe compra programada ativa para esta data');
       }
 
+      const { operacao } = await this.operacoes.garantirOperacao(tx, dto.dataOperacao, usuarioId);
+
       const criada = primeiroOuFalha(
         await tx
           .insert(comprasProgramadas)
           .values({
             dataOperacao: dto.dataOperacao,
+            operacaoId: operacao.id,
             fornecedorId: dto.fornecedorId,
             numeroInterno: dto.numeroInterno,
             referenciaExterna: dto.referenciaExterna,

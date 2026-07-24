@@ -1,3 +1,9 @@
+import { config as loadEnv } from 'dotenv';
+import * as path from 'path';
+
+loadEnv({ path: path.resolve(__dirname, '../../../.env') });
+loadEnv();
+
 // Hooks e2e criam fixtures via argon2 (deliberadamente lento) + init do Nest +
 // sincronização do catálogo RBAC (ensurePermissoes). Com a suíte F3 a carga
 // acumulada de setup por suíte cresceu; 30s ficava no limite e estourava sob

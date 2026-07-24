@@ -21,6 +21,7 @@ import {
 } from '../../../common/crud/paginacao';
 import { compararQtd, ehZero, formatarQtd, subtrairQtd } from '../../../common/crud/decimal';
 import { EVENTOS } from '../../../realtime/events/eventos';
+import { OperacoesService } from '../../operacoes/operacoes.service';
 import type { CreatePedidoDto, ReduzirItemDto } from './dto/pedido.dto';
 
 type PedidoVenda = typeof pedidosVenda.$inferSelect;
@@ -46,6 +47,7 @@ export class PedidosService {
     private readonly drizzle: { db: NodePgDatabase<typeof schema> },
     private readonly auditoria: AuditoriaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly operacoes: OperacoesService,
   ) {}
 
   private get db() {
@@ -84,6 +86,7 @@ export class PedidosService {
    */
   async criar(dto: CreatePedidoDto, usuarioId: string) {
     const { pedido, reservasAtualizadas, semCobertura } = await this.db.transaction(async (tx) => {
+      const { operacao } = await this.operacoes.garantirOperacao(tx, dto.dataOperacao, usuarioId);
       const pedidoCriado = primeiroOuFalha(
         await tx
           .insert(pedidosVenda)
@@ -91,6 +94,7 @@ export class PedidosService {
             compraProgramadaId: dto.compraProgramadaId,
             clienteId: dto.clienteId,
             dataOperacao: dto.dataOperacao,
+            operacaoId: operacao.id,
             dataEntrega: dto.dataEntrega,
             rotaPrevista: dto.rotaPrevista,
             prioridade: dto.prioridade,
@@ -325,6 +329,9 @@ export class PedidosService {
         )
         .then((r) => r[0] ?? null);
       if (!reserva) throw new ConflictException('Item sem reserva ativa');
+      if (!reserva.disponibilidadeVirtualId) {
+        throw new ConflictException('Reserva sem disponibilidade virtual associada');
+      }
 
       // Devolve saldo e recomputa status (S1: nunca esgotada com disponível > 0).
       const dispAtualizada = await this.devolverSaldo(tx, reserva.disponibilidadeVirtualId, devolver);
@@ -396,6 +403,10 @@ export class PedidosService {
 
     const atualizadas: ReservaAtualizada[] = [];
     for (const r of reservas) {
+      if (!r.disponibilidadeId) {
+        await tx.update(reservasDisponibilidade).set({ status: 'liberada' }).where(eq(reservasDisponibilidade.id, r.reservaId));
+        continue;
+      }
       const disp = await this.devolverSaldo(tx, r.disponibilidadeId, r.quantidade);
       await tx.update(reservasDisponibilidade).set({ status: 'liberada' }).where(eq(reservasDisponibilidade.id, r.reservaId));
       atualizadas.push({

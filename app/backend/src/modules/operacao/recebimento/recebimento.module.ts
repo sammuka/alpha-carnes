@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../../auth/auth.module';
 import { DisponibilidadeModule } from '../../comercial/disponibilidade/disponibilidade.module';
+import { OperacoesModule } from '../../operacoes/operacoes.module';
 import { RecebimentoController } from './recebimento.controller';
 import { RecebimentoService } from './recebimento.service';
 import { DivergenciaRecebimentoController } from './divergencia/divergencia-recebimento.controller';
@@ -9,7 +10,7 @@ import { OcorrenciaFornecedorController } from './ocorrencia/ocorrencia-forneced
 import { OcorrenciaFornecedorService } from './ocorrencia/ocorrencia-fornecedor.service';
 
 @Module({
-  imports: [AuthModule, DisponibilidadeModule],
+  imports: [AuthModule, DisponibilidadeModule, OperacoesModule],
   controllers: [RecebimentoController, DivergenciaRecebimentoController, OcorrenciaFornecedorController],
   providers: [RecebimentoService, DivergenciaRecebimentoService, OcorrenciaFornecedorService],
   exports: [RecebimentoService, DivergenciaRecebimentoService, OcorrenciaFornecedorService],
