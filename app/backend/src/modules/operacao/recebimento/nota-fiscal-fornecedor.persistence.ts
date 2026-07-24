@@ -177,6 +177,28 @@ async function buscarNfCabecalhoAtivaPorRecebimento(
   return null;
 }
 
+/** PATCH de cabeçalho UI: prefere NF com itens; senão órfã; nunca INSERT se já houver NF ativa. */
+async function buscarNfParaAtualizarCabecalhoUi(
+  tx: Tx,
+  recebimentoId: string,
+) {
+  const candidatas = await tx
+    .select()
+    .from(notasFiscaisFornecedor)
+    .where(and(
+      eq(notasFiscaisFornecedor.recebimentoId, recebimentoId),
+      isNull(notasFiscaisFornecedor.deletedAt),
+    ))
+    .orderBy(desc(notasFiscaisFornecedor.createdAt));
+
+  let orfao: typeof notasFiscaisFornecedor.$inferSelect | null = null;
+  for (const nf of candidatas) {
+    if (await contarItensNfAtivos(tx, nf.id) > 0) return nf;
+    if (!orfao) orfao = nf;
+  }
+  return orfao;
+}
+
 async function buscarCabecalhoParaCompletar(
   tx: Tx,
   recebimentoId: string,
@@ -347,7 +369,7 @@ async function persistirNfCabecalhoUiNaTx(
   const numero = campos.nfeNumero.trim();
   const { pedido } = await validarPedidoRecebimento(tx, pedidoFornecedorId, recebimentoId);
 
-  const existente = await buscarNfCabecalhoAtivaPorRecebimento(tx, recebimentoId);
+  const existente = await buscarNfParaAtualizarCabecalhoUi(tx, recebimentoId);
   if (existente) {
     const patch = montarPatchCabecalhoUi(campos, existente);
     patch.numero = numero;

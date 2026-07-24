@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
@@ -651,6 +651,77 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const detalhe = await request(srv()).get(`/operacao/recebimentos/${recId}`).set('Cookie', recebimentoCookies);
     expect(detalhe.body.nfeNumero).toBe('900202');
     expect(detalhe.body.nfeSerie).toBe('2');
+  });
+
+  it('PATCH nfe corrige numero depois dos itens sem NF fantasma', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-12-06', quantidade: 10 });
+    const pfId = await criarPedidoFornecedorEnviado(app, comprasCookies, compraId);
+    const ini = await request(srv())
+      .post('/operacao/recebimentos')
+      .set('Cookie', recebimentoCookies)
+      .send({ pedidoFornecedorId: pfId });
+    expect(ini.status).toBe(201);
+    const recId = ini.body.recebimento.id as string;
+
+    await request(srv())
+      .post(`/operacao/pedidos-fornecedor/${pfId}/nf`)
+      .set('Cookie', recebimentoCookies)
+      .send({
+        numero: '910100',
+        recebimentoId: recId,
+        itens: [{ itemComercialId: base.itemComercialId, quantidadeDeclarada: 10 }],
+      })
+      .expect(201);
+
+    await request(srv())
+      .patch(`/operacao/recebimentos/${recId}/nfe`)
+      .set('Cookie', recebimentoCookies)
+      .send({ nfeNumero: '910101' })
+      .expect(200);
+
+    const { db } = app.get(DRIZZLE);
+    const nfs = await db
+      .select()
+      .from(schema.notasFiscaisFornecedor)
+      .where(eq(schema.notasFiscaisFornecedor.recebimentoId, recId));
+    const ativas = nfs.filter((nf: { deletedAt: Date | null }) => nf.deletedAt === null);
+    expect(ativas).toHaveLength(1);
+    expect(ativas[0]?.numero).toBe('910101');
+
+    const itensNf = await db
+      .select()
+      .from(schema.notasFiscaisFornecedorItens)
+      .where(and(
+        eq(schema.notasFiscaisFornecedorItens.nfId, ativas[0]!.id),
+        isNull(schema.notasFiscaisFornecedorItens.deletedAt),
+      ));
+    expect(itensNf).toHaveLength(1);
+
+    await request(srv())
+      .post(`/operacao/recebimentos/${recId}/itens`)
+      .set('Cookie', recebimentoCookies)
+      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 })
+      .expect(201);
+
+    await db.update(schema.recebimentosItens)
+      .set({ requerBalanca: false, statusApuracao: 'entrada_direta' })
+      .where(and(
+        eq(schema.recebimentosItens.recebimentoId, recId),
+        eq(schema.recebimentosItens.itemComercialId, base.itemComercialId),
+      ));
+
+    await request(srv())
+      .post(`/operacao/recebimentos/${recId}/concluir`)
+      .set('Cookie', recebimentoCookies)
+      .send()
+      .expect(201);
+
+    const conf = await request(srv())
+      .post(`/operacao/recebimentos/${recId}/conferencia/concluir`)
+      .set('Cookie', recebimentoCookies)
+      .send({ resultado: 'sem_divergencia' });
+    expect(conf.status).toBe(201);
   });
 
   it('PATCH nfe parcial preserva pesos e volumes já informados', async () => {
