@@ -111,7 +111,7 @@ export class CargaService {
         dadosNovos: item,
       });
 
-      return { item, isNew: true, dataOperacao: caminhao.dataOperacao };
+      return { item, isNew: true, dataOperacao: await this.caminhaoService.dataOperacaoDoCaminhao(tx, caminhao) };
     });
 
     if (resultado.isNew) {
@@ -254,7 +254,7 @@ export class CargaService {
         dadosNovos: atualizado,
       });
 
-      return { item: atualizado, pedidoOrigemId, dataOperacao: caminhao.dataOperacao };
+      return { item: atualizado, pedidoOrigemId, dataOperacao: await this.caminhaoService.dataOperacaoDoCaminhao(tx, caminhao) };
     });
 
     this.eventEmitter.emit(EVENTOS.CARGA_ITEM_TRANSFERIDO, {
@@ -279,7 +279,7 @@ export class CargaService {
         throw new ConflictException('Remoção só permitida com expedição aberta');
       }
       if (item.statusCargaItem === 'removido') {
-        return { item, dataOperacao: caminhao.dataOperacao };
+        return { item, dataOperacao: await this.caminhaoService.dataOperacaoDoCaminhao(tx, caminhao) };
       }
 
       await devolverSaldo(tx, item.pedidoVendaItemId);
@@ -302,7 +302,7 @@ export class CargaService {
         dadosNovos: atualizado,
       });
 
-      return { item: atualizado, dataOperacao: caminhao.dataOperacao };
+      return { item: atualizado, dataOperacao: await this.caminhaoService.dataOperacaoDoCaminhao(tx, caminhao) };
     });
 
     this.eventEmitter.emit(EVENTOS.CARGA_ITEM_REMOVIDO, {

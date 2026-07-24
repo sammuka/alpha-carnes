@@ -67,6 +67,14 @@ export const PERMISSOES = {
   FATURAMENTO_GERENCIAR: 'FATURAMENTO_GERENCIAR',
   NFSE_EMITIR: 'NFSE_EMITIR',
   NFSE_CANCELAR: 'NFSE_CANCELAR',
+
+  // Onda 1 — Operação-pivô, overbooking v1.1, Pedido ao Fornecedor e conferência tripla.
+  OPERACOES_GERENCIAR: 'OPERACOES_GERENCIAR',
+  PEDIDO_OVERBOOKING_CONFIRMAR: 'PEDIDO_OVERBOOKING_CONFIRMAR',
+  OVERBOOKING_RESOLVER: 'OVERBOOKING_RESOLVER',
+  PEDIDO_FORNECEDOR_GERENCIAR: 'PEDIDO_FORNECEDOR_GERENCIAR',
+  CONFERENCIA_CONCLUIR: 'CONFERENCIA_CONCLUIR',
+  PEDIDO_FINALIZAR: 'PEDIDO_FINALIZAR',
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -274,6 +282,7 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'NFSE_CANCELAR',
   ],
   logistica: [...LEITURA_CADASTROS, 'DISPONIBILIDADE_LER', 'FATURAMENTO_LER'],
+  // diretoria e demais: definidos abaixo; pushes Onda 1 após o objeto.
   diretoria: [
     'AUDITORIA_VISUALIZAR',
     ...LEITURA_CADASTROS,
@@ -282,6 +291,26 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'PEDIDOS_LER',
   ],
 };
+
+function pushPermissoes(perfil: string, ...chaves: Permissao[]): void {
+  const lista = MAPA_PERFIL_PERMISSOES[perfil];
+  if (!lista) throw new Error(`Perfil ausente no mapa: ${perfil}`);
+  lista.push(...chaves);
+}
+
+pushPermissoes(
+  'gestor',
+  'OPERACOES_GERENCIAR', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'OVERBOOKING_RESOLVER',
+  'PEDIDO_FORNECEDOR_GERENCIAR', 'CONFERENCIA_CONCLUIR', 'PEDIDO_FINALIZAR',
+);
+pushPermissoes('compras', 'OPERACOES_GERENCIAR', 'PEDIDO_FORNECEDOR_GERENCIAR');
+pushPermissoes('comercial', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'PEDIDO_FINALIZAR');
+pushPermissoes('recebimento_pesagem', 'CONFERENCIA_CONCLUIR');
+pushPermissoes(
+  'administrador',
+  'OPERACOES_GERENCIAR', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'OVERBOOKING_RESOLVER',
+  'PEDIDO_FORNECEDOR_GERENCIAR', 'CONFERENCIA_CONCLUIR', 'PEDIDO_FINALIZAR',
+);
 
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
@@ -334,4 +363,10 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   FATURAMENTO_GERENCIAR: 'Gerenciar faturamentos (consolidar e reprocessar)',
   NFSE_EMITIR: 'Emitir NFS-e para pedidos faturados',
   NFSE_CANCELAR: 'Cancelar NFS-e emitidas',
+  OPERACOES_GERENCIAR: 'Criar, iniciar e fechar operações',
+  PEDIDO_OVERBOOKING_CONFIRMAR: 'Confirmar inclusão com overbooking',
+  OVERBOOKING_RESOLVER: 'Tratar pendências de overbooking',
+  PEDIDO_FORNECEDOR_GERENCIAR: 'Gerenciar pedidos ao fornecedor',
+  CONFERENCIA_CONCLUIR: 'Concluir conferência Pedido×NF×Pesagem',
+  PEDIDO_FINALIZAR: 'Finalizar pedido de venda',
 };

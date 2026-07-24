@@ -711,9 +711,9 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 className="pl-9"
-                placeholder="Buscar cliente / marca…"
+                placeholder="Buscar cliente"
                 value={buscaPedido}
-                onChange={(e) => setBuscaPedido(e.target.value)}
+                onChange={(event) => setBuscaPedido(event.target.value)}
                 disabled={!peca || !sugestao}
               />
             </div>

@@ -1,7 +1,6 @@
 import { relations, sql } from 'drizzle-orm';
 import {
   check,
-  date,
   index,
   integer,
   jsonb,
@@ -15,6 +14,7 @@ import {
 import { caminhoes } from './expedicao.schema';
 import { pedidosVenda } from './pedidos.schema';
 import { clientes } from './clientes.schema';
+import { operacoes } from './operacoes.schema';
 import { usuarios } from './auth.schema';
 
 // ── faturamentos ──────────────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ export const faturamentos = pgTable(
     id:                   uuid('id').primaryKey().default(sql`uuidv7()`),
     caminhaoId:           uuid('caminhao_id').notNull().references(() => caminhoes.id),
     statusFaturamento:    text('status_faturamento').notNull().default('em_consolidacao'),
-    dataOperacao:         date('data_operacao').notNull(),
+    operacaoId:           uuid('operacao_id').notNull().references(() => operacoes.id),
     responsavelId:        uuid('responsavel_id').notNull().references(() => usuarios.id),
     observacoes:          text('observacoes'),
     createdAt:            timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -43,7 +43,7 @@ export const faturamentos = pgTable(
       .on(t.caminhaoId)
       .where(sql`${t.deletedAt} IS NULL`),
     index('idx_faturamentos_status').on(t.statusFaturamento).where(sql`${t.deletedAt} IS NULL`),
-    index('idx_faturamentos_data').on(t.dataOperacao).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_faturamentos_operacao').on(t.operacaoId).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 
@@ -74,7 +74,8 @@ export const notasFiscais = pgTable(
     motivoCancelamento:   text('motivo_cancelamento'),
     // Necessário para ConsultarNotaCompleta em caso de timeout na emissão
     numeroRps:            text('numero_rps'),
-    serieRps:             text('serie_rps').notNull().default('A'),
+    // Nullable no banco desde 0008 (DEFAULT 'A'); não forçar NOT NULL no expand da Onda 1.
+    serieRps:             text('serie_rps').default('A'),
     // request + response EISS; token REDACTADO antes de persistir
     payloadEiss:          jsonb('payload_eiss').notNull().default(sql`'{}'::jsonb`),
     createdAt:            timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

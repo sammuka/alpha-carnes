@@ -122,6 +122,30 @@ separados e rejeita stream sem evidência ou com `collab_tool_call` interno; `in
 rejeita thread repetida entre etapas. Mudança de versão/configuração que deixe de aceitar esses
 overrides falha fechada antes de um gate.
 
-## 9. Relação com o framework de revisão existente
+## 9. Paralelismo de Workers (sem perder o plano literal)
+
+Dois níveis — e só esses — são permitidos:
+
+### 9.1 Ondas paralelas (já no grafo)
+
+Quando [`roadmap-canonico.md`](roadmap-canonico.md) §8 mostra ramos independentes (ex.: Ondas 4∥5; 8∥9) **e** todas as dependências estão `mergeada`, o Executor pode disparar um Worker por onda em worktrees/branches isolados. Um único Writer por artefato de estado (`EXECUCAO-STATUS`, `GATE-VEREDITOS`). Integração e Portão 2 continuam **por onda**, serialmente.
+
+### 9.2 Fatias paralelas dentro de uma Task de regressão
+
+Quando o plano tático tem uma task do tipo “atualizar fixtures / regressão por domínio” **sem patches literais arquivo a arquivo**, o Executor pode fatiar a task em Workers paralelos sob estas regras:
+
+1. **Pré-condição:** tasks estruturais anteriores da onda (migrations, services canônicos) já commitadas; helpers compartilhados estáveis no HEAD da branch da onda.
+2. **Ownership exclusivo de arquivos** por Worker (lista explícita no prompt). Proibido dois Workers tocarem o mesmo path. Helpers compartilhados (`test/helpers/*`) só mudam num Worker “helpers” serial **antes** das fatias, ou ficam congelados.
+3. **Worktree/branch por fatia** (ex.: `feature/onda<N>-t<M>-<dominio>`), base pinada no mesmo SHA. Merge de volta na branch da onda é **serial** (Executor), depois um único gate do plano (`npm run test -- "<regex domínio>"` + `test:cov` quando exigido).
+4. **Modelo por complexidade** (política, não princípio constitucional):
+   - mecânico (arity, remaps de string, mocks): modelo workhorse / rápido;
+   - domínio médio (status AD-05, recebimento/PF): modelo thinking intermediário;
+   - cadeia longa (expedição→faturamento, corte/rastreabilidade): modelo superior thinking.
+5. **STOP idêntico ao Worker único:** plano omisso de regra de negócio → parar e reportar; não improvisar. Paralelismo acelera fixtures alinhadas ao contrato já aprovado — não autoriza atalho de Portão nem decisão de produto.
+6. **Checkpoint:** cada fatia atualiza `.codex/runtime/PROGRESSO-SESSAO.md` da sua worktree; o Executor consolida na worktree da onda.
+
+Proibido: dois Workers na mesma branch/worktree; paralelizar expand→backfill→contract; reutilizar veredito de Portão de outro SHA.
+
+## 10. Relação com o framework de revisão existente
 
 [`framework-revisao.md`](framework-revisao.md) permanece vigente para o mecânico de branches/PR/proteções/relatório de gate de fase. Este documento adiciona por cima: o Portão 1 (que não existia), os papéis separados Executor/Monitor/Worker (antes: revisor humano único) e o estado vivo auditável. O "Revisor/Quality Owner" do framework mapeia para Quality Owner (autoridade) + Monitor (execução da auditoria).

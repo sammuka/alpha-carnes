@@ -180,11 +180,12 @@ describe('Subitens e2e (F4c — pesar/associar/redirecionar/sem-cobertura)', () 
     await pesarSubitem(app, corteCookies, sub2);
     const div = await request(srv()).post(`/operacao/corte/subitens/${sub2}/sem-cobertura`).set('Cookie', corteCookies).send({
       destino: 'divergencia',
-      divergencia: { tipo: 'qualidade_divergente', descricao: 'osso exposto', acaoImediata: 'separar para análise' },
+      // Tipologia canônica pós-0013 (legado qualidade_divergente → outro).
+      divergencia: { tipo: 'outro', descricao: 'osso exposto', acaoImediata: 'separar para análise' },
     });
     expect(div.status).toBe(201);
 
     const divs = await db().select().from(schema.divergenciasRecebimento).where(eq(schema.divergenciasRecebimento.recebimentoId, c.recebimentoId));
-    expect(divs.some((d) => d.tipo === 'qualidade_divergente')).toBe(true);
+    expect(divs.some((d) => d.tipo === 'outro')).toBe(true);
   });
 });

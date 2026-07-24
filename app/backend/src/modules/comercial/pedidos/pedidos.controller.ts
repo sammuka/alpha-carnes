@@ -1,4 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RbacGuard } from '../../../common/guards/rbac.guard';
@@ -8,10 +20,19 @@ import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators
 import { listarQuerySchema, type ListarQuery } from '../../../common/crud/paginacao';
 import { PedidosService } from './pedidos.service';
 import {
+  cancelarPedidoSchema,
+  confirmarCriacaoOverbookingSchema,
+  confirmarInclusaoOverbookingSchema,
   createPedidoSchema,
+  incluirItemSchema,
   reduzirItemSchema,
+  removerItemSchema,
+  type CancelarPedidoDto,
+  type ConfirmarInclusaoOverbookingDto,
   type CreatePedidoDto,
+  type IncluirItemDto,
   type ReduzirItemDto,
+  type RemoverItemDto,
 } from './dto/pedido.dto';
 
 @SkipThrottle()
@@ -38,7 +59,46 @@ export class PedidosController {
     @Body(new ZodValidationPipe(createPedidoSchema)) dto: CreatePedidoDto,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.service.criar(dto, user.sub);
+    return this.service.criar(dto, user.sub, false);
+  }
+
+  @Post('confirmar-overbooking')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissoes('PEDIDO_OVERBOOKING_CONFIRMAR')
+  async confirmarCriacao(
+    @Body(new ZodValidationPipe(confirmarCriacaoOverbookingSchema)) dto: CreatePedidoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.criar(dto, user.sub, true);
+  }
+
+  @Post(':id/itens/confirmar-overbooking')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissoes('PEDIDO_OVERBOOKING_CONFIRMAR')
+  async confirmarInclusao(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(confirmarInclusaoOverbookingSchema)) dto: ConfirmarInclusaoOverbookingDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.incluirItem(id, dto, user.sub, true);
+  }
+
+  @Post(':id/itens')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissoes('PEDIDOS_GERENCIAR')
+  async incluir(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(incluirItemSchema)) dto: IncluirItemDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.incluirItem(id, dto, user.sub, false);
+  }
+
+  @Post(':id/finalizar')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissoes('PEDIDO_FINALIZAR')
+  async finalizar(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.service.finalizar(id, user.sub);
   }
 
   @Patch(':id/itens/:itemId')
@@ -52,9 +112,24 @@ export class PedidosController {
     return this.service.reduzirItem(id, itemId, dto, user.sub);
   }
 
+  @Delete(':id/itens/:itemId')
+  @RequirePermissoes('PEDIDOS_GERENCIAR')
+  async removerItem(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body(new ZodValidationPipe(removerItemSchema)) dto: RemoverItemDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.removerItem(id, itemId, dto, user.sub);
+  }
+
   @Delete(':id')
   @RequirePermissoes('PEDIDOS_GERENCIAR')
-  async cancelar(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
-    return this.service.cancelar(id, user.sub);
+  async cancelar(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(cancelarPedidoSchema)) dto: CancelarPedidoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.cancelarPedido(id, dto.motivo, user.sub);
   }
 }

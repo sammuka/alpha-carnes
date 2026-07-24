@@ -1,14 +1,21 @@
 import { relations, sql } from 'drizzle-orm';
-import { boolean, check, date, index, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { comprasProgramadas } from './compras-programadas.schema';
+import { boolean, check, index, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { fornecedores } from './fornecedores.schema';
 import { itensComerciais } from './itens-comerciais.schema';
+import { operacoes } from './operacoes.schema';
+import { pedidosFornecedor } from './pedidos-fornecedor.schema';
 import { usuarios } from './auth.schema';
+import { conclusoesConferencia } from './conclusoes-conferencia.schema';
+import { notasFiscaisFornecedor } from './notas-fiscais-fornecedor.schema';
 
 export const STATUS_RECEBIMENTO = [
-  'aguardando_conferencia',
-  'em_conferencia',
-  'finalizado',
+  'pesagem_em_andamento',
+  'aguardando_conclusao_pesagem',
+  'aguardando_conferencia_final',
+  'conferido_sem_divergencia',
+  'conferido_com_divergencia',
+  'ocorrencia_administrativa_aberta',
+  'tratativa_administrativa_concluida',
   'cancelado',
 ] as const;
 
@@ -25,24 +32,17 @@ export const recebimentos = pgTable(
   'recebimentos',
   {
     id:                       uuid('id').primaryKey().default(sql`uuidv7()`),
-    compraProgramadaId:       uuid('compra_programada_id').notNull().references(() => comprasProgramadas.id),
     fornecedorId:             uuid('fornecedor_id').notNull().references(() => fornecedores.id),
-    dataOperacao:             date('data_operacao').notNull(),
+    operacaoId:               uuid('operacao_id').notNull().references(() => operacoes.id),
+    pedidoFornecedorId:       uuid('pedido_fornecedor_id').notNull().references(() => pedidosFornecedor.id),
     dataHoraChegada:          timestamp('data_hora_chegada', { withTimezone: true }).notNull().defaultNow(),
     notaFiscalFornecedor:     text('nota_fiscal_fornecedor'),
-    nfeNumero:                text('nfe_numero'),
-    nfeSerie:                 text('nfe_serie'),
-    nfeChave:                 text('nfe_chave'),
-    nfeDataEmissao:           date('nfe_data_emissao'),
     romaneio:                 text('romaneio'),
-    nfePesoBruto:             numeric('nfe_peso_bruto', { precision: 10, scale: 3 }),
-    nfePesoLiquido:           numeric('nfe_peso_liquido', { precision: 10, scale: 3 }),
-    nfeVolumes:               numeric('nfe_volumes', { precision: 15, scale: 3 }),
     placaVeiculo:             text('placa_veiculo'),
     motorista:                text('motorista'),
     doca:                     text('doca'),
     responsavelRecebimentoId: uuid('responsavel_recebimento_id').notNull().references(() => usuarios.id),
-    status:                   text('status').notNull().default('aguardando_conferencia'),
+    status:                   text('status').notNull().default('pesagem_em_andamento'),
     observacoes:              text('observacoes'),
     usuarioConclusaoId:       uuid('usuario_conclusao_id').references(() => usuarios.id),
     dataConclusao:            timestamp('data_conclusao', { withTimezone: true }),
@@ -51,13 +51,14 @@ export const recebimentos = pgTable(
     deletedAt:                timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
-    check(
-      'chk_recebimentos_status',
-      sql`${t.status} IN ('aguardando_conferencia','em_conferencia','finalizado','cancelado')`,
-    ),
-    uniqueIndex('uq_recebimentos_compra').on(t.compraProgramadaId).where(sql`${t.deletedAt} IS NULL`),
+    check('chk_recebimentos_status', sql`${t.status} IN (
+      'pesagem_em_andamento','aguardando_conclusao_pesagem','aguardando_conferencia_final',
+      'conferido_sem_divergencia','conferido_com_divergencia',
+      'ocorrencia_administrativa_aberta','tratativa_administrativa_concluida','cancelado'
+    )`),
+    index('idx_recebimentos_pedido_fornecedor').on(t.pedidoFornecedorId),
+    index('idx_recebimentos_operacao').on(t.operacaoId),
     index('idx_recebimentos_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
-    index('idx_recebimentos_data_operacao').on(t.dataOperacao).where(sql`${t.deletedAt} IS NULL`),
     index('idx_recebimentos_fornecedor').on(t.fornecedorId).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
@@ -97,7 +98,10 @@ export const divergenciasRecebimento = pgTable(
   {
     id:                     uuid('id').primaryKey().default(sql`uuidv7()`),
     recebimentoId:          uuid('recebimento_id').notNull().references(() => recebimentos.id),
-    recebimentoItemId:      uuid('recebimento_item_id').notNull().references(() => recebimentosItens.id),
+    recebimentoItemId:      uuid('recebimento_item_id').references(() => recebimentosItens.id),
+    itemComercialId:        uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
+    conclusaoConferenciaId: uuid('conclusao_conferencia_id').references(() => conclusoesConferencia.id),
+    nfFornecedorId:         uuid('nf_fornecedor_id').references(() => notasFiscaisFornecedor.id),
     tipo:                   text('tipo').notNull(),
     descricao:              text('descricao').notNull(),
     impactoOperacional:     text('impacto_operacional'),
@@ -111,10 +115,9 @@ export const divergenciasRecebimento = pgTable(
     updatedAt:              timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    check(
-      'chk_diverg_receb_tipo',
-      sql`${t.tipo} IN ('quantidade_menor','quantidade_maior','item_divergente','qualidade_divergente','peso_incompativel','item_ausente','item_excedente','inconsistencia_nf_fisico')`,
-    ),
+    check('chk_diverg_receb_tipo', sql`${t.tipo} IN (
+      'falta','excesso','produto_nao_previsto','peso_divergente','outro'
+    )`),
     check(
       'chk_diverg_receb_status',
       sql`${t.status} IN ('aberta','em_analise','aguardando_fornecedor','resolvida')`,
@@ -127,13 +130,17 @@ export const divergenciasRecebimento = pgTable(
 );
 
 export const recebimentosRelations = relations(recebimentos, ({ one, many }) => ({
-  compra: one(comprasProgramadas, {
-    fields: [recebimentos.compraProgramadaId],
-    references: [comprasProgramadas.id],
+  pedidoFornecedor: one(pedidosFornecedor, {
+    fields: [recebimentos.pedidoFornecedorId],
+    references: [pedidosFornecedor.id],
   }),
   fornecedor: one(fornecedores, {
     fields: [recebimentos.fornecedorId],
     references: [fornecedores.id],
+  }),
+  operacao: one(operacoes, {
+    fields: [recebimentos.operacaoId],
+    references: [operacoes.id],
   }),
   itens: many(recebimentosItens),
   divergencias: many(divergenciasRecebimento),

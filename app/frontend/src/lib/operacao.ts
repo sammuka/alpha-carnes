@@ -335,3 +335,59 @@ export interface CargaItem {
   conferido: boolean;
   dataHoraEntradaCarga: string;
 }
+
+// ── Pedido ao Fornecedor (onda1) ──────────────────────────────────────────────
+
+export type StatusPedidoFornecedor =
+  | 'rascunho'
+  | 'enviado'
+  | 'aguardando_recebimento'
+  | 'recebido'
+  | 'encerrado'
+  | 'cancelado';
+
+export interface PedidoFornecedor {
+  id: string;
+  numero: string;
+  fornecedorId: string;
+  operacaoId: string;
+  compraProgramadaId: string;
+  status: StatusPedidoFornecedor;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PedidoFornecedorItem {
+  id: string;
+  pedidoFornecedorId: string;
+  itemComercialId: string;
+  quantidadePrevista: string;
+  pesoPrevisto: string | null;
+}
+
+export interface PedidoFornecedorDetalhe extends PedidoFornecedor {
+  itens: PedidoFornecedorItem[];
+}
+
+export interface CriarPedidoFornecedorDto {
+  compraProgramadaId: string;
+}
+
+// ── Conferência tripla recebimento (onda1) ────────────────────────────────────
+
+export interface QuadroConferenciaItem {
+  recebimentoItemId: string | null;
+  itemComercialId: string;
+  previstoNoPedido: boolean;
+  qtdPedido: string | null;
+  qtdNf: string;
+  qtdApurada: string;
+  pesoNf: string | null;
+  pesoApurado: string | null;
+  situacao: 'conforme' | 'divergente';
+}
+
+export interface ConcluirConferenciaDto {
+  resultado: 'sem_divergencia' | 'com_divergencia';
+  observacao?: string;
+}

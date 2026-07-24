@@ -4,14 +4,14 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import {
+import { operacoes,
   associacoesPecaHistorico,
   etiquetasImpressoes,
   pecas,
   recebimentos,
   subitens,
   transformacoes,
-} from '../../../database/schema';
+ } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { somarQtd, subtrairQtd, ehZero } from '../../../common/crud/decimal';
@@ -366,8 +366,9 @@ export class CorteService {
 
   private async dataOperacaoPorRecebimento(tx: Tx, recebimentoId: string): Promise<string> {
     const r = await tx
-      .select({ dataOperacao: recebimentos.dataOperacao })
+      .select({ dataOperacao: operacoes.data })
       .from(recebimentos)
+      .innerJoin(operacoes, eq(operacoes.id, recebimentos.operacaoId))
       .where(eq(recebimentos.id, recebimentoId))
       .then((rows) => rows[0] ?? null);
     return r?.dataOperacao ?? '';

@@ -1,8 +1,9 @@
 import { relations, sql } from 'drizzle-orm';
-import { boolean, check, date, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, integer } from 'drizzle-orm/pg-core';
+import { boolean, check, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, integer } from 'drizzle-orm/pg-core';
 import { pecas } from './pesagem.schema';
 import { subitens } from './transformacoes.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
+import { operacoes } from './operacoes.schema';
 import { usuarios } from './auth.schema';
 
 // ── caminhoes ─────────────────────────────────────────────────────────────────
@@ -15,7 +16,7 @@ export const caminhoes = pgTable(
     motorista:            text('motorista').notNull(),
     rota:                 text('rota'),
     itinerario:           text('itinerario'),
-    dataOperacao:         date('data_operacao').notNull(),
+    operacaoId:           uuid('operacao_id').notNull().references(() => operacoes.id),
     statusCaminhao:       text('status_caminhao').notNull().default('planejado'),
     horaAberturaCarga:    timestamp('hora_abertura_carga', { withTimezone: true }),
     horaFechamentoCarga:  timestamp('hora_fechamento_carga', { withTimezone: true }),
@@ -30,7 +31,7 @@ export const caminhoes = pgTable(
       'chk_caminhoes_status',
       sql`${t.statusCaminhao} IN ('planejado','aguardando_carga','em_carga','em_conferencia','fechado','liberado_faturamento','faturado','liberado_saida','expedido')`,
     ),
-    index('idx_caminhoes_data_operacao').on(t.dataOperacao).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_caminhoes_operacao').on(t.operacaoId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_caminhoes_status').on(t.statusCaminhao).where(sql`${t.deletedAt} IS NULL`),
   ],
 );

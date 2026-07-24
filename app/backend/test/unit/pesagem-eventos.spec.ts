@@ -20,8 +20,13 @@ describe('PesagemService — emissão pós-commit', () => {
       return true;
     }) as never);
 
+    const terminal = {
+      then: (cb: (r: unknown[]) => unknown) => cb([opts.recebimento]),
+      where: function where() { return terminal; },
+      innerJoin: function innerJoin() { return terminal; },
+    };
     const db = {
-      select: () => ({ from: () => ({ where: () => ({ then: (cb: (r: unknown[]) => unknown) => cb([opts.recebimento]) }) }) }),
+      select: () => ({ from: () => terminal }),
       transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
         const r = await opts.transactionImpl();
         ordem.push('commit');

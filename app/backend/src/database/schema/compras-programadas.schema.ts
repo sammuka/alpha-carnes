@@ -1,7 +1,8 @@
 import { relations, sql } from 'drizzle-orm';
-import { check, date, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { fornecedores } from './fornecedores.schema';
 import { itensCompra } from './itens-compra.schema';
+import { operacoes } from './operacoes.schema';
 import { usuarios } from './auth.schema';
 
 // ── compras_programadas ─────────────────────────────────────────────────────
@@ -11,7 +12,7 @@ export const comprasProgramadas = pgTable(
   'compras_programadas',
   {
     id:                   uuid('id').primaryKey().default(sql`uuidv7()`),
-    dataOperacao:         date('data_operacao').notNull(),
+    operacaoId:           uuid('operacao_id').notNull().references(() => operacoes.id),
     fornecedorId:         uuid('fornecedor_id').notNull().references(() => fornecedores.id),
     numeroInterno:        text('numero_interno'),
     referenciaExterna:    text('referencia_externa'),
@@ -27,13 +28,13 @@ export const comprasProgramadas = pgTable(
   },
   (t) => [
     check('chk_compras_prog_status', sql`${t.status} IN ('rascunho','em_negociacao','confirmada','cancelada')`),
-    // S2: uma compra ATIVA (não cancelada) por dia. Cancelar libera o dia para nova compra
-    // sem setar deleted_at (mantém histórico/auditoria visível).
-    uniqueIndex('uq_compras_prog_data_operacao')
-      .on(t.dataOperacao)
+    // S2: uma compra ATIVA (não cancelada) por Operação.
+    uniqueIndex('uq_compras_prog_operacao')
+      .on(t.operacaoId)
       .where(sql`${t.deletedAt} IS NULL AND ${t.status} <> 'cancelada'`),
     index('idx_compras_prog_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
     index('idx_compras_prog_fornecedor').on(t.fornecedorId).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_compras_prog_operacao').on(t.operacaoId).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 
@@ -61,6 +62,10 @@ export const comprasProgramadasRelations = relations(comprasProgramadas, ({ one,
   fornecedor: one(fornecedores, {
     fields: [comprasProgramadas.fornecedorId],
     references: [fornecedores.id],
+  }),
+  operacao: one(operacoes, {
+    fields: [comprasProgramadas.operacaoId],
+    references: [operacoes.id],
   }),
   itens: many(comprasProgramadasItens),
 }));

@@ -104,10 +104,26 @@ export async function seed() {
       .onConflictDoNothing();
     console.log(`✅ Usuário admin verificado: ${adminEmail}`);
 
+    const PARAMETROS_ONDA1 = [
+      {
+        chave: 'operacao.cadencia_dias_semana',
+        valorJson: { dias: [1, 3, 5], provisorio: true, ref: 'P1/v1.1 §16.2' },
+        descricao: 'Cadência semanal de operações (provisório P1)',
+      },
+    ];
+    for (const parametro of PARAMETROS_ONDA1) {
+      await db.insert(schema.parametros)
+        .values(parametro)
+        .onConflictDoNothing({ target: schema.parametros.chave });
+    }
+    console.log(`✅ ${PARAMETROS_ONDA1.length} parâmetros da Onda 1 inseridos/verificados`);
+
     console.log('🎉 Seed concluído com sucesso!');
   } catch (err) {
     console.error('❌ Falha no seed:', err);
-    process.exit(1);
+    // process.exit aborta o Jest quando seed() é importado por seed.spec.ts
+    if (require.main === module) process.exit(1);
+    throw err;
   } finally {
     await pool.end();
   }

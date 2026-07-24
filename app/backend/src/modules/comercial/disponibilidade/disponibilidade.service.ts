@@ -3,7 +3,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { disponibilidadesVirtuais } from '../../../database/schema';
+import { disponibilidadesVirtuais, operacoes } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import type { ListarDisponibilidadeQuery } from './dto/disponibilidade.dto';
 
@@ -58,11 +58,11 @@ export class DisponibilidadeService {
       quantidade_total_gerada: string;
     }>(sql`
       INSERT INTO disponibilidades_virtuais
-        (compra_programada_id, data_operacao, item_comercial_id,
+        (compra_programada_id, operacao_id, item_comercial_id,
          quantidade_total_gerada, quantidade_reservada, quantidade_disponivel, status)
       SELECT
         ${compra.id},
-        ${compra.dataOperacao}::date,
+        ${compra.operacaoId},
         r.item_comercial_id,
         SUM(r.fator_quantidade * cpi.quantidade_comprada),
         0,
@@ -218,13 +218,35 @@ export class DisponibilidadeService {
   }
 
   async listar(query: ListarDisponibilidadeQuery): Promise<DisponibilidadeVirtual[]> {
-    const filtros = [];
-    if (query.dataOperacao) filtros.push(eq(disponibilidadesVirtuais.dataOperacao, query.dataOperacao));
-    if (query.compraProgramadaId) {
-      filtros.push(eq(disponibilidadesVirtuais.compraProgramadaId, query.compraProgramadaId));
+    if (query.dataOperacao) {
+      const filtros = [eq(operacoes.data, query.dataOperacao)];
+      if (query.compraProgramadaId) {
+        filtros.push(eq(disponibilidadesVirtuais.compraProgramadaId, query.compraProgramadaId));
+      }
+      return this.db
+        .select({
+          id: disponibilidadesVirtuais.id,
+          compraProgramadaId: disponibilidadesVirtuais.compraProgramadaId,
+          operacaoId: disponibilidadesVirtuais.operacaoId,
+          itemComercialId: disponibilidadesVirtuais.itemComercialId,
+          quantidadeTotalGerada: disponibilidadesVirtuais.quantidadeTotalGerada,
+          quantidadeReservada: disponibilidadesVirtuais.quantidadeReservada,
+          quantidadeDisponivel: disponibilidadesVirtuais.quantidadeDisponivel,
+          quantidadeRecebida: disponibilidadesVirtuais.quantidadeRecebida,
+          quantidadeComDivergencia: disponibilidadesVirtuais.quantidadeComDivergencia,
+          status: disponibilidadesVirtuais.status,
+          createdAt: disponibilidadesVirtuais.createdAt,
+          updatedAt: disponibilidadesVirtuais.updatedAt,
+        })
+        .from(disponibilidadesVirtuais)
+        .innerJoin(operacoes, eq(operacoes.id, disponibilidadesVirtuais.operacaoId))
+        .where(and(...filtros))
+        .orderBy(disponibilidadesVirtuais.itemComercialId);
     }
-    const where = filtros.length ? and(...filtros) : undefined;
 
+    const where = query.compraProgramadaId
+      ? eq(disponibilidadesVirtuais.compraProgramadaId, query.compraProgramadaId)
+      : undefined;
     return this.db.select().from(disponibilidadesVirtuais).where(where).orderBy(disponibilidadesVirtuais.itemComercialId);
   }
 }

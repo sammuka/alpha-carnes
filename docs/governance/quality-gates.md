@@ -26,7 +26,7 @@ aplicação. A aplicação operacional é validada no Docker Desktop local.
 - Invariantes de negócio têm teste dedicado que **falha** quando a regra é violada (ex.: tentar furar saldo).
 
 ### Segurança
-- **CI** `npm audit` sem vulnerabilidades **high** ou **critical** (monorepo backend/frontend e pacote independente da landing).
+- **CI** `npm audit` sem vulnerabilidades **high** ou **critical**: monorepo (`app/backend` + `app/frontend`) na árvore de produção (`npm audit --omit=dev --audit-level=high`, [AD-08](../execucao/DECISOES.md#decisões-registradas--alphacarnes)); landing permanece com audit completo (sem `--omit`).
 - **CI** Sem segredos commitados (secret scanning).
 - Segredos e tokens (ex.: `EISS_CHAVE_AUTENTICACAO`) só via variáveis de ambiente; nunca em código ou logs.
 - Entradas validadas/sanitizadas (Zod nas bordas); queries parametrizadas (Drizzle).

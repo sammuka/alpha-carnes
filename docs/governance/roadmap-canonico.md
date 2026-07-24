@@ -159,3 +159,8 @@ flowchart TD
 ```
 
 Estado corrente por onda: [`../execucao/EXECUCAO-STATUS.md`](../execucao/EXECUCAO-STATUS.md). Decisões que fecham pendências: [`../execucao/DECISOES.md`](../execucao/DECISOES.md) (AD-01: boi casado = 2 TZ + 2 DT + 2 PA; AD-02: fiscal = EISS Osasco).
+
+### Paralelismo de execução
+
+- **Entre ondas:** apenas onde o grafo acima ramifica (4∥5 após Onda 3; 8∥9 após Onda 7), cada uma em worktree isolado — ver [`pipeline-execucao.md`](pipeline-execucao.md) §9.1.
+- **Dentro de uma onda:** tasks estruturais (migrations expand→backfill→contract, writers canônicos) são **seriais**. Fatias paralelas só na task de regressão/fixtures, com ownership de arquivos e gate serial na branch da onda — §9.2 do pipeline. A constituição (princípios I–X) **não muda**: paralelismo é rito operacional, não afrouxamento de fidelidade nem de completude E2E.

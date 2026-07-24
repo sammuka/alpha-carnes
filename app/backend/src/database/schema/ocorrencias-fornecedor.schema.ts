@@ -3,6 +3,8 @@ import { check, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-cor
 import { comprasProgramadas } from './compras-programadas.schema';
 import { fornecedores } from './fornecedores.schema';
 import { divergenciasRecebimento } from './recebimentos.schema';
+import { conclusoesConferencia } from './conclusoes-conferencia.schema';
+import { notasFiscaisFornecedor } from './notas-fiscais-fornecedor.schema';
 import { usuarios } from './auth.schema';
 
 // ── ocorrencias_fornecedor ──────────────────────────────────────────────────
@@ -14,6 +16,8 @@ export const ocorrenciasFornecedor = pgTable(
     fornecedorId:         uuid('fornecedor_id').notNull().references(() => fornecedores.id),
     compraProgramadaId:   uuid('compra_programada_id').references(() => comprasProgramadas.id),
     divergenciaId:        uuid('divergencia_id').references(() => divergenciasRecebimento.id),
+    conclusaoConferenciaId: uuid('conclusao_conferencia_id').references(() => conclusoesConferencia.id),
+    nfFornecedorId:       uuid('nf_fornecedor_id').references(() => notasFiscaisFornecedor.id),
     status:               text('status').notNull().default('aberta'),
     descricao:            text('descricao').notNull(),
     impacto:              text('impacto'),

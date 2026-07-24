@@ -12,7 +12,7 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
       ordem.push(`emit:${String(event)}`);
       return true;
     }) as never);
-    const db = {
+    const db: { transaction: jest.Mock; select?: jest.Mock } = {
       transaction: jest.fn(async () => {
         const r = await transactionImpl();
         ordem.push('commit');
@@ -22,23 +22,32 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
     const auditoria = { registrar: jest.fn() };
     const disponibilidade = { aplicarRecebimentoDelta: jest.fn(), listarPedidosEmRisco: jest.fn() };
     const divergencias = { abrirNaTx: jest.fn(), contarAbertasSemTratativa: jest.fn() };
+    const operacoes = {} as never;
     const service = new RecebimentoService(
       { db } as never,
       auditoria as never,
       emitter,
       disponibilidade as never,
       divergencias as never,
+      operacoes,
     );
-    return { service, emitSpy, ordem };
+    return { service, emitSpy, ordem, db };
   }
 
   it('emite recebimento_iniciado APÓS o commit', async () => {
-    const { service, emitSpy, ordem } = montar(async () => ({
-      recebimento: { id: 'r1', compraProgramadaId: 'c1', dataOperacao: '2026-06-06' },
+    const { service, emitSpy, ordem, db } = montar(async () => ({
+      recebimento: { id: 'r1', operacaoId: 'op1', pedidoFornecedorId: 'pf1' },
       jaIniciado: false,
     }));
+    db.select = jest.fn()
+      .mockReturnValueOnce({
+        from: () => ({ where: () => ({ then: (cb: (r: unknown[]) => unknown) => cb([{ data: '2026-06-06' }]) }) }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({ where: () => ({ then: (cb: (r: unknown[]) => unknown) => cb([{ id: 'c1' }]) }) }),
+      });
 
-    await service.iniciar({ compraProgramadaId: 'c1', nfeNumero: '128934' } as never, 'user-1');
+    await service.iniciar({ pedidoFornecedorId: '019ea000-0000-7000-8000-000000000001' } as never, 'user-1');
 
     expect(emitSpy).toHaveBeenCalledWith(
       EVENTOS.RECEBIMENTO_INICIADO,
@@ -47,14 +56,24 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
     expect(ordem.indexOf('commit')).toBeLessThan(ordem.indexOf(`emit:${EVENTOS.RECEBIMENTO_INICIADO}`));
   });
 
-  it('NÃO emite recebimento_iniciado quando idempotente (jaIniciado)', async () => {
-    const { service, emitSpy } = montar(async () => ({
-      recebimento: { id: 'r1', compraProgramadaId: 'c1', dataOperacao: '2026-06-06' },
-      jaIniciado: true,
+  it('emite recebimento_iniciado também em reabertura (N lotes por PF)', async () => {
+    const { service, emitSpy, db } = montar(async () => ({
+      recebimento: { id: 'r2', operacaoId: 'op1', pedidoFornecedorId: 'pf1', status: 'pesagem_em_andamento' },
+      jaIniciado: false,
     }));
+    db.select = jest.fn()
+      .mockReturnValueOnce({
+        from: () => ({ where: () => ({ then: (cb: (r: unknown[]) => unknown) => cb([{ data: '2026-06-06' }]) }) }),
+      })
+      .mockReturnValueOnce({
+        from: () => ({ where: () => ({ then: (cb: (r: unknown[]) => unknown) => cb([{ id: 'c1' }]) }) }),
+      });
 
-    await service.iniciar({ compraProgramadaId: 'c1', nfeNumero: '128934' } as never, 'user-1');
-    expect(emitSpy).not.toHaveBeenCalled();
+    await service.iniciar({ pedidoFornecedorId: '019ea000-0000-7000-8000-000000000001' } as never, 'user-1');
+    expect(emitSpy).toHaveBeenCalledWith(
+      EVENTOS.RECEBIMENTO_INICIADO,
+      expect.objectContaining({ recebimentoId: 'r2' }),
+    );
   });
 
   it('NÃO emite quando a transação de iniciar rejeita (rollback)', async () => {
@@ -62,7 +81,9 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
       throw new Error('falha simulada na tx');
     });
 
-    await expect(service.iniciar({ compraProgramadaId: 'c1' } as never, 'user-1')).rejects.toThrow('falha simulada');
+    await expect(
+      service.iniciar({ pedidoFornecedorId: '019ea000-0000-7000-8000-000000000001' } as never, 'user-1'),
+    ).rejects.toThrow('falha simulada');
     expect(emitSpy).not.toHaveBeenCalled();
   });
 
@@ -160,7 +181,14 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
 // Cálculo determinístico da quantidade com divergência (Refino 2): |esperada − recebida|.
 describe('RecebimentoService — cálculo de divergente (decimal exato)', () => {
   function svc(): RecebimentoService {
-    return new RecebimentoService({} as never, {} as never, new EventEmitter2(), {} as never, {} as never);
+    return new RecebimentoService(
+      {} as never,
+      {} as never,
+      new EventEmitter2(),
+      {} as never,
+      {} as never,
+      {} as never,
+    );
   }
   // calcularDivergente é privado: acessamos via cast para validar o invariante de cálculo.
   const calc = (esperada: string, recebida: string): string =>

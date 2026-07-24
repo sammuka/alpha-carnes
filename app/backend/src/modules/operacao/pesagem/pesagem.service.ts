@@ -4,7 +4,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { pecas, recebimentos } from '../../../database/schema';
+import { pedidosFornecedor, operacoes, pecas, recebimentos   } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { EVENTOS } from '../../../realtime/events/eventos';
@@ -83,8 +83,14 @@ export class PesagemService {
    */
   async registrarPesagem(dto: RegistrarPesagemDto, user: CurrentUserPayload): Promise<Peca> {
     const recebimento = await this.db
-      .select()
+      .select({
+        id: recebimentos.id,
+        compraProgramadaId: pedidosFornecedor.compraProgramadaId,
+        dataOperacao: operacoes.data,
+      })
       .from(recebimentos)
+      .innerJoin(pedidosFornecedor, eq(pedidosFornecedor.id, recebimentos.pedidoFornecedorId))
+      .innerJoin(operacoes, eq(operacoes.id, recebimentos.operacaoId))
       .where(and(eq(recebimentos.id, dto.recebimentoId), isNull(recebimentos.deletedAt)))
       .then((r) => r[0] ?? null);
     if (!recebimento) throw new NotFoundException('Recebimento não encontrado');

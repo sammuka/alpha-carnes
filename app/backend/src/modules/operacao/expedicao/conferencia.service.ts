@@ -254,7 +254,7 @@ export class ConferenciaService {
         dadosNovos: atualizada,
       });
 
-      return { conferencia: atualizada, dataOperacao: caminhao.dataOperacao };
+      return { conferencia: atualizada, dataOperacao: await this.caminhaoService.dataOperacaoDoCaminhao(tx, caminhao) };
     });
 
     this.eventEmitter.emit(EVENTOS.CONFERENCIA_CONCLUIDA, {

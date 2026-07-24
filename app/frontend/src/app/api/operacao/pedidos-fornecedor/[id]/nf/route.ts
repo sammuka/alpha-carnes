@@ -1,0 +1,15 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { apiFetch } from '@/lib/api';
+
+type Ctx = { params: Promise<{ id: string }> };
+
+export async function POST(req: NextRequest, ctx: Ctx) {
+  const { id } = await ctx.params;
+  const body = await req.json();
+  const res = await apiFetch(`/operacao/pedidos-fornecedor/${id}/nf`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  const payload = await res.json().catch(() => ({ message: 'Erro desconhecido' }));
+  return NextResponse.json(payload, { status: res.status });
+}

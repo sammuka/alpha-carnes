@@ -73,4 +73,40 @@ describe('Seed idempotência', () => {
       .where(eq(schema.perfis.slug, 'gestor'));
     expect(linhas.map((l) => l.codigo)).toContain('EXPEDICAO_REABRIR');
   });
+
+  async function permissoesDoPerfil(slug: string): Promise<string[]> {
+    const linhas = await db
+      .select({ codigo: schema.permissoes.codigo })
+      .from(schema.perfis)
+      .innerJoin(schema.perfisPermissoes, eq(schema.perfis.id, schema.perfisPermissoes.perfilId))
+      .innerJoin(schema.permissoes, eq(schema.perfisPermissoes.permissaoId, schema.permissoes.id))
+      .where(eq(schema.perfis.slug, slug));
+    return linhas.map((l) => l.codigo);
+  }
+
+  it('concede as permissões da Onda 1 exatamente aos perfis mapeados', async () => {
+    expect(await permissoesDoPerfil('gestor')).toEqual(expect.arrayContaining([
+      'OPERACOES_GERENCIAR', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'OVERBOOKING_RESOLVER',
+      'PEDIDO_FORNECEDOR_GERENCIAR', 'CONFERENCIA_CONCLUIR', 'PEDIDO_FINALIZAR',
+    ]));
+    expect(await permissoesDoPerfil('administrador')).toEqual(expect.arrayContaining([
+      'OPERACOES_GERENCIAR', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'OVERBOOKING_RESOLVER',
+      'PEDIDO_FORNECEDOR_GERENCIAR', 'CONFERENCIA_CONCLUIR', 'PEDIDO_FINALIZAR',
+    ]));
+    expect(await permissoesDoPerfil('compras')).toEqual(expect.arrayContaining([
+      'OPERACOES_GERENCIAR', 'PEDIDO_FORNECEDOR_GERENCIAR',
+    ]));
+    expect(await permissoesDoPerfil('comercial')).toEqual(expect.arrayContaining([
+      'PEDIDO_OVERBOOKING_CONFIRMAR', 'PEDIDO_FINALIZAR',
+    ]));
+    expect(await permissoesDoPerfil('recebimento_pesagem')).toEqual(
+      expect.arrayContaining(['CONFERENCIA_CONCLUIR']),
+    );
+  });
+
+  it('nega OVERBOOKING_RESOLVER a perfis sem a permissão (segregação)', async () => {
+    for (const slug of ['conferente', 'diretoria', 'logistica', 'comercial', 'compras']) {
+      expect(await permissoesDoPerfil(slug)).not.toContain('OVERBOOKING_RESOLVER');
+    }
+  });
 });

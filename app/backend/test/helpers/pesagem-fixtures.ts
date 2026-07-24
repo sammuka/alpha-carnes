@@ -10,7 +10,11 @@ import {
 import type { FakeBalancaGateway } from '../../src/hardware/fakes/fake-balanca.gateway';
 import type { FakeLeitorGateway } from '../../src/hardware/fakes/fake-leitor.gateway';
 import type { FakeImpressoraGateway } from '../../src/hardware/fakes/fake-impressora.gateway';
-import { criarCompraConfirmada } from './comercial-fixtures';
+import {
+  criarCompraConfirmada,
+  criarPedidoFornecedorEnviado,
+  iniciarRecebimentoViaPf,
+} from './comercial-fixtures';
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -46,19 +50,9 @@ export async function montarCenarioPesagem(
   base: { fornecedorId: string; itemCompraId: string; itemComercialId: string },
   opts: { dataOperacao: string; quantidade: number },
 ): Promise<CenarioPesagem> {
-  const { default: request } = await import('supertest');
-  const srv = app.getHttpServer();
-
   const compraId = await criarCompraConfirmada(app, cookies.compras, base, opts);
-
-  const receb = await request(srv)
-    .post('/operacao/recebimentos')
-    .set('Cookie', cookies.recebimento)
-    .send({ compraProgramadaId: compraId, nfeNumero: '128934' });
-  if (receb.status !== 201 || !receb.body?.recebimento?.id) {
-    throw new Error(`Falha ao iniciar recebimento: ${receb.status} ${JSON.stringify(receb.body)}`);
-  }
-  const recebimentoId = receb.body.recebimento.id as string;
+  const pedidoFornecedorId = await criarPedidoFornecedorEnviado(app, cookies.compras, compraId);
+  const { recebimentoId } = await iniciarRecebimentoViaPf(app, cookies.recebimento, pedidoFornecedorId);
 
   const { db } = app.get<{ db: Db }>(DRIZZLE);
   const [cliente] = await db.select().from(schema.clientes).limit(1);
@@ -79,16 +73,29 @@ export async function criarPedido(
   params: { compraId: string; clienteId: string; itemComercialId: string; dataOperacao: string; quantidade: number; prioridade?: number },
 ): Promise<{ pedidoId: string; pedidoItemId: string }> {
   const { default: request } = await import('supertest');
-  const res = await request(app.getHttpServer())
+  const body = {
+    compraProgramadaId: params.compraId,
+    clienteId: params.clienteId,
+    dataOperacao: params.dataOperacao,
+    prioridade: params.prioridade,
+    itens: [{ itemComercialId: params.itemComercialId, quantidadePedida: params.quantidade }],
+  };
+  let res = await request(app.getHttpServer())
     .post('/comercial/pedidos')
     .set('Cookie', comercialCookies)
-    .send({
-      compraProgramadaId: params.compraId,
-      clienteId: params.clienteId,
-      dataOperacao: params.dataOperacao,
-      prioridade: params.prioridade,
-      itens: [{ itemComercialId: params.itemComercialId, quantidadePedida: params.quantidade }],
-    });
+    .send(body);
+  // Fixture de cenário: AD-05 exige confirmação explícita quando não há saldo.
+  const challenge = res.body?.message;
+  if (
+    res.status === 409
+    && typeof challenge === 'object'
+    && challenge?.code === 'OVERBOOKING_CONFIRMACAO_NECESSARIA'
+  ) {
+    res = await request(app.getHttpServer())
+      .post('/comercial/pedidos/confirmar-overbooking')
+      .set('Cookie', comercialCookies)
+      .send(body);
+  }
   if (res.status !== 201) {
     throw new Error(`Falha ao criar pedido: ${res.status} ${JSON.stringify(res.body)}`);
   }
@@ -120,4 +127,46 @@ export async function pesarPeca(
     throw new Error(`Falha ao pesar peça: ${res.status} ${JSON.stringify(res.body)}`);
   }
   return res.body.id as string;
+}
+
+/** Associa peça pesada ao item do pedido (status → associada). */
+export async function associarPeca(
+  app: INestApplication,
+  recebimentoCookies: string,
+  pecaId: string,
+  pedidoVendaItemId: string,
+): Promise<void> {
+  const { default: request } = await import('supertest');
+  const res = await request(app.getHttpServer())
+    .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
+    .set('Cookie', recebimentoCookies)
+    .send({ pedidoVendaItemId });
+  if (res.status !== 201 && res.status !== 200) {
+    throw new Error(`Falha ao associar peça: ${res.status} ${JSON.stringify(res.body)}`);
+  }
+}
+
+/** Pesa, associa e emite etiqueta — peça elegível para carga. */
+export async function pecaAssociadaComEtiqueta(
+  app: INestApplication,
+  recebimentoCookies: string,
+  params: {
+    recebimentoId: string;
+    itemComercialBaseId: string;
+    pedidoVendaItemId: string;
+    peso?: string;
+  },
+): Promise<string> {
+  const pecaId = await pesarPeca(app, recebimentoCookies, params);
+  await associarPeca(app, recebimentoCookies, pecaId, params.pedidoVendaItemId);
+  fakes(app).impressora.definirStatus('disponivel');
+  const { default: request } = await import('supertest');
+  const etiqueta = await request(app.getHttpServer())
+    .post(`/operacao/pesagem/pecas/${pecaId}/etiqueta`)
+    .set('Cookie', recebimentoCookies)
+    .send();
+  if (etiqueta.status !== 201 && etiqueta.status !== 200) {
+    throw new Error(`Falha ao emitir etiqueta: ${etiqueta.status} ${JSON.stringify(etiqueta.body)}`);
+  }
+  return pecaId;
 }

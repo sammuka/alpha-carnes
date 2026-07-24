@@ -10,6 +10,7 @@ import {
   disponibilidadesVirtuais,
   divergenciasRecebimento,
   itensComerciais,
+  operacoes,
   pedidosVenda,
   pedidosVendaItens,
   pecas,
@@ -78,19 +79,22 @@ export class DashboardService {
       this.db
         .select({ status: comprasProgramadas.status, id: comprasProgramadas.id })
         .from(comprasProgramadas)
-        .where(and(eq(comprasProgramadas.dataOperacao, dataOperacao), isNull(comprasProgramadas.deletedAt))),
+        .innerJoin(operacoes, eq(operacoes.id, comprasProgramadas.operacaoId))
+        .where(and(eq(operacoes.data, dataOperacao), isNull(comprasProgramadas.deletedAt))),
       this.db
         .select({ status: pedidosVenda.status, total: sql<number>`count(*)::int` })
         .from(pedidosVenda)
-        .where(and(eq(pedidosVenda.dataOperacao, dataOperacao), isNull(pedidosVenda.deletedAt)))
+        .innerJoin(operacoes, eq(operacoes.id, pedidosVenda.operacaoId))
+        .where(and(eq(operacoes.data, dataOperacao), isNull(pedidosVenda.deletedAt)))
         .groupBy(pedidosVenda.status),
       this.db
         .select({ total: sql<number>`count(*)::int` })
         .from(divergenciasRecebimento)
         .innerJoin(recebimentos, eq(divergenciasRecebimento.recebimentoId, recebimentos.id))
+        .innerJoin(operacoes, eq(operacoes.id, recebimentos.operacaoId))
         .where(
           and(
-            eq(recebimentos.dataOperacao, dataOperacao),
+            eq(operacoes.data, dataOperacao),
             isNull(recebimentos.deletedAt),
             ne(divergenciasRecebimento.status, 'resolvida'),
           ),
@@ -98,14 +102,16 @@ export class DashboardService {
       this.db
         .select({ total: sql<number>`count(*)::int` })
         .from(caminhoes)
-        .where(and(eq(caminhoes.dataOperacao, dataOperacao), isNull(caminhoes.deletedAt))),
+        .innerJoin(operacoes, eq(operacoes.id, caminhoes.operacaoId))
+        .where(and(eq(operacoes.data, dataOperacao), isNull(caminhoes.deletedAt))),
       this.db
         .select({
           id: disponibilidadesVirtuais.id,
           quantidadeDisponivel: disponibilidadesVirtuais.quantidadeDisponivel,
         })
         .from(disponibilidadesVirtuais)
-        .where(eq(disponibilidadesVirtuais.dataOperacao, dataOperacao)),
+        .innerJoin(operacoes, eq(operacoes.id, disponibilidadesVirtuais.operacaoId))
+        .where(eq(operacoes.data, dataOperacao)),
     ]);
 
     const comprasPorStatus: Record<string, number> = {};
@@ -164,15 +170,16 @@ export class DashboardService {
       .select({
         pedidoId: pedidosVenda.id,
         status: pedidosVenda.status,
-        dataOperacao: pedidosVenda.dataOperacao,
+        dataOperacao: operacoes.data,
         clienteNome: clientes.nomeFantasia,
         clienteRazao: clientes.razaoSocial,
       })
       .from(pedidosVenda)
       .innerJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
+      .innerJoin(operacoes, eq(operacoes.id, pedidosVenda.operacaoId))
       .where(
         and(
-          eq(pedidosVenda.dataOperacao, dataOperacao),
+          eq(operacoes.data, dataOperacao),
           isNull(pedidosVenda.deletedAt),
           ne(pedidosVenda.status, 'cancelado'),
         ),

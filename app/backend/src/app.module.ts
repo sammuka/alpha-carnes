@@ -25,6 +25,7 @@ import { ProntidaoModule } from './modules/cadastros/prontidao/prontidao.module'
 import { ParametrosModule } from './modules/parametros/parametros.module';
 import { ComercialModule } from './modules/comercial/comercial.module';
 import { OperacaoModule } from './modules/operacao/operacao.module';
+import { OperacoesModule } from './modules/operacoes/operacoes.module';
 import { DashboardModule } from './modules/gestao/dashboard/dashboard.module';
 import { AuditoriaConsultaModule } from './modules/auditoria/auditoria.module';
 import { AuditoriaModule } from './common/auditoria/auditoria.module';
@@ -73,6 +74,7 @@ import type { IncomingMessage } from 'http';
     RegrasDesdobramentoModule,
     ProntidaoModule,
     ParametrosModule,
+    OperacoesModule,
     ComercialModule,
     OperacaoModule,
     DashboardModule,

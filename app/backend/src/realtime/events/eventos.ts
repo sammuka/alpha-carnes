@@ -6,6 +6,18 @@ export const EVENTOS = {
   DISPONIBILIDADE_GERADA: 'disponibilidade_virtual_gerada',
   RESERVA_ATUALIZADA: 'reserva_disponibilidade_atualizada',
   PEDIDO_SEM_COBERTURA: 'pedido_sem_cobertura',
+  // Onda 1 — Operação pivô / overbooking / fornecedor
+  OPERACAO_CRIADA: 'operacao_criada',
+  OVERBOOKING_CONFIRMADO: 'overbooking_confirmado',
+  PENDENCIA_OVERBOOKING_ABERTA: 'pendencia_overbooking_aberta',
+  PENDENCIA_OVERBOOKING_ATUALIZADA: 'pendencia_overbooking_atualizada',
+  PENDENCIA_OVERBOOKING_RESOLVIDA: 'pendencia_overbooking_resolvida',
+  PEDIDO_FINALIZADO: 'pedido_finalizado',
+  PEDIDO_VENDA_ITEM_CRIADO: 'pedido_venda_item_criado',
+  PEDIDO_FORNECEDOR_CRIADO: 'pedido_fornecedor_criado',
+  NF_FORNECEDOR_REGISTRADA: 'nf_fornecedor_registrada',
+  CONFERENCIA_TRIPLA_CONCLUIDA: 'conferencia_tripla_concluida',
+  RECEBIMENTO_ESTADO_ALTERADO: 'recebimento_estado_alterado',
   // ── F4a — Recebimento + Divergências ──────────────────────────────────────
   RECEBIMENTO_INICIADO: 'recebimento_iniciado',
   RECEBIMENTO_REGISTRADO: 'recebimento_registrado',
@@ -262,4 +274,47 @@ export interface NfseErroEmissaoPayload {
   ultimoErro: string;
   tentativas: number;
   dataOperacao: string;
+}
+
+/** Contratos tipados dos eventos Onda 1 (PayloadPorEvento). */
+export interface PayloadPorEvento {
+  operacao_criada: { operacaoId: string; data: string };
+  overbooking_confirmado: {
+    pedidoVendaId: string;
+    itemId: string;
+    quantidadeOverbooking: string;
+  };
+  pendencia_overbooking_aberta: {
+    pendenciaId: string;
+    pedidoVendaId: string;
+  };
+  pendencia_overbooking_atualizada: {
+    pendenciaId: string;
+    status: string;
+  };
+  pendencia_overbooking_resolvida: {
+    pendenciaId: string;
+    status: 'resolvida';
+  };
+  pedido_finalizado: { pedidoVendaId: string };
+  pedido_venda_item_criado: { pedidoVendaId: string; itemId: string };
+  pedido_fornecedor_criado: {
+    pedidoFornecedorId: string;
+    operacaoId: string;
+  };
+  nf_fornecedor_registrada: {
+    nfId: string;
+    pedidoFornecedorId: string;
+    recebimentoId: string;
+  };
+  conferencia_tripla_concluida: {
+    conclusaoId: string;
+    recebimentoId: string;
+    resultado: 'sem_divergencia' | 'com_divergencia';
+  };
+  recebimento_estado_alterado: {
+    recebimentoId: string;
+    statusAnterior: string;
+    statusAtual: string;
+  };
 }

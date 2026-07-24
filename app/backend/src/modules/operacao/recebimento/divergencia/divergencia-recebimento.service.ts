@@ -4,7 +4,13 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../../database/database.module';
 import * as schema from '../../../../database/schema';
-import { divergenciasRecebimento, recebimentos } from '../../../../database/schema';
+import {
+  pedidosFornecedor,
+  operacoes,
+  divergenciasRecebimento,
+  recebimentos,
+  recebimentosItens,
+} from '../../../../database/schema';
 import { AuditoriaService } from '../../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../../common/crud/paginacao';
 import { EVENTOS } from '../../../../realtime/events/eventos';
@@ -35,12 +41,20 @@ export class DivergenciaRecebimentoService {
 
   /** Abre a divergência DENTRO da transação do registrar item (status 'aberta'). */
   async abrirNaTx(tx: Tx, params: AbrirNaTxParams, usuarioId: string): Promise<Divergencia> {
+    const item = await tx
+      .select({ itemComercialId: recebimentosItens.itemComercialId })
+      .from(recebimentosItens)
+      .where(eq(recebimentosItens.id, params.recebimentoItemId))
+      .then((r) => r[0] ?? null);
+    if (!item) throw new NotFoundException('Item de recebimento não encontrado');
+
     const criada = primeiroOuFalha(
       await tx
         .insert(divergenciasRecebimento)
         .values({
           recebimentoId: params.recebimentoId,
           recebimentoItemId: params.recebimentoItemId,
+          itemComercialId: item.itemComercialId,
           tipo: params.tipo,
           descricao: params.descricao,
           acaoImediata: params.acaoImediata,
@@ -116,8 +130,12 @@ export class DivergenciaRecebimentoService {
           .then((r) => r[0] ?? null);
         if (!jaTem) {
           const recebimento = await tx
-            .select({ fornecedorId: recebimentos.fornecedorId, compraId: recebimentos.compraProgramadaId })
+            .select({
+              fornecedorId: recebimentos.fornecedorId,
+              compraId: pedidosFornecedor.compraProgramadaId,
+            })
             .from(recebimentos)
+            .innerJoin(pedidosFornecedor, eq(pedidosFornecedor.id, recebimentos.pedidoFornecedorId))
             .where(eq(recebimentos.id, atualizada.recebimentoId))
             .then((r) => r[0] ?? null);
           if (recebimento) {
@@ -172,8 +190,9 @@ export class DivergenciaRecebimentoService {
 
   private async resolverDataOperacao(tx: Tx, recebimentoId: string): Promise<string> {
     const linha = await tx
-      .select({ dataOperacao: recebimentos.dataOperacao })
+      .select({ dataOperacao: operacoes.data })
       .from(recebimentos)
+      .innerJoin(operacoes, eq(operacoes.id, recebimentos.operacaoId))
       .where(eq(recebimentos.id, recebimentoId))
       .then((r) => r[0] ?? null);
     return linha?.dataOperacao ?? '';

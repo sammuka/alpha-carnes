@@ -3,15 +3,16 @@ import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import {
+import { operacoes,
   caminhoes,
   caminhoesPedidos,
   cargaItens,
   pedidosVenda,
   pedidosVendaItens,
-} from '../../../database/schema';
+ } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
+import { OperacoesService } from '../../operacoes/operacoes.service';
 import { assertTransicao, type StatusCaminhao } from './transicoes';
 import type { CriarCaminhaoDto, VincularPedidoDto } from './dto/expedicao.dto';
 
@@ -23,6 +24,7 @@ export class CaminhaoService {
   constructor(
     @Inject(DRIZZLE) private readonly drizzle: { db: NodePgDatabase<typeof schema> },
     private readonly auditoria: AuditoriaService,
+    private readonly operacoes: OperacoesService,
   ) {}
 
   private get db() {
@@ -32,6 +34,7 @@ export class CaminhaoService {
   /** Cria caminhão no status 'planejado'. */
   async criar(dto: CriarCaminhaoDto, operadorId: string): Promise<Caminhao> {
     return this.db.transaction(async (tx) => {
+      const { operacao } = await this.operacoes.garantirOperacao(tx, dto.dataOperacao, operadorId);
       const caminhao = primeiroOuFalha(
         await tx
           .insert(caminhoes)
@@ -40,7 +43,7 @@ export class CaminhaoService {
             motorista: dto.motorista,
             rota: dto.rota,
             itinerario: dto.itinerario,
-            dataOperacao: dto.dataOperacao,
+            operacaoId: operacao.id,
             observacoes: dto.observacoes,
           })
           .returning(),
@@ -203,10 +206,36 @@ export class CaminhaoService {
   /** Lista caminhões por data de operação. */
   async listar(dataOperacao: string) {
     return this.db
-      .select()
+      .select({
+        id: caminhoes.id,
+        placa: caminhoes.placa,
+        motorista: caminhoes.motorista,
+        rota: caminhoes.rota,
+        itinerario: caminhoes.itinerario,
+        operacaoId: caminhoes.operacaoId,
+        statusCaminhao: caminhoes.statusCaminhao,
+        horaAberturaCarga: caminhoes.horaAberturaCarga,
+        horaFechamentoCarga: caminhoes.horaFechamentoCarga,
+        horaLiberacao: caminhoes.horaLiberacao,
+        observacoes: caminhoes.observacoes,
+        createdAt: caminhoes.createdAt,
+        updatedAt: caminhoes.updatedAt,
+        deletedAt: caminhoes.deletedAt,
+        dataOperacao: operacoes.data,
+      })
       .from(caminhoes)
-      .where(and(eq(caminhoes.dataOperacao, dataOperacao), isNull(caminhoes.deletedAt)))
+      .innerJoin(operacoes, eq(operacoes.id, caminhoes.operacaoId))
+      .where(and(eq(operacoes.data, dataOperacao), isNull(caminhoes.deletedAt)))
       .orderBy(asc(caminhoes.createdAt));
+  }
+
+  async dataOperacaoDoCaminhao(tx: Tx, caminhao: Pick<Caminhao, 'operacaoId'>): Promise<string> {
+    const linha = await tx
+      .select({ data: operacoes.data })
+      .from(operacoes)
+      .where(eq(operacoes.id, caminhao.operacaoId))
+      .then((r) => r[0] ?? null);
+    return linha?.data ?? '';
   }
 
   // ── internos ───────────────────────────────────────────────────────────────

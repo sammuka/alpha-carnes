@@ -124,11 +124,14 @@ export class ConsolidacaoService {
       .then(r => r[0] ?? null);
 
     if (!faturamento) {
+      if (!caminhao.operacaoId) {
+        throw new ConflictException('Caminhão sem operação associada');
+      }
       faturamento = await this.db.transaction(async (tx) => {
         const [fat] = await tx.insert(faturamentos).values({
           caminhaoId,
           statusFaturamento: 'em_consolidacao',
-          dataOperacao: caminhao.dataOperacao,
+          operacaoId: caminhao.operacaoId,
           responsavelId: usuarioId,
         }).returning();
         if (!fat) throw new Error('Falha ao criar faturamento');

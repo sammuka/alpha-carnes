@@ -85,6 +85,27 @@
       "when": 1781222400000,
       "tag": "0011_recebimento_simplificado",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784905801591,
+      "tag": "0012_onda1_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784907502229,
+      "tag": "0013_onda1_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784907731357,
+      "tag": "0014_onda1_contract",
+      "breakpoints": true
     }
   ]
 }

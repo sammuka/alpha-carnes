@@ -6,14 +6,14 @@ import { seedComercialBase, lerDisponibilidade } from '../helpers/comercial-fixt
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { PedidosService } from '../../src/modules/comercial/pedidos/pedidos.service';
+import { OverbookingChallengeException } from '../../src/modules/comercial/pedidos/overbooking-challenge.exception';
 import request from 'supertest';
 
-// TESTE MAIS IMPORTANTE DA FASE (anti-overbooking sob concorrência).
-// Dispara N reservas em paralelo (Promise.all) cujo total excede o saldo e prova:
-// (a) quantidade_disponivel nunca fica negativa, (b) Σ reservas == total gerado,
-// (c) o excedente vira quantidadePendente (nunca perdido), (d) consistência
-// Σ reservas_disponibilidade.quantidade == disponibilidades_virtuais.reservada.
-describe('Pedidos — concorrência anti-overbooking', () => {
+/**
+ * AD-05: challenge 409 sem mutação. Sob concorrência, pedidos que cabem no saldo
+ * são criados; o excedente recebe OVERBOOKING_CONFIRMACAO_NECESSARIA sem escrita.
+ */
+describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
   let app: INestApplication;
   let comprasCookies: string;
   let usuarioId: string;
@@ -62,92 +62,98 @@ describe('Pedidos — concorrência anti-overbooking', () => {
     return Number(rows[0]?.total ?? 0);
   }
 
-  async function somaPendentePorItem(itemComercialId: string): Promise<number> {
-    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
-    const rows = await db
-      .select({ total: sql<string>`coalesce(sum(${schema.pedidosVendaItens.quantidadePendente}), 0)` })
-      .from(schema.pedidosVendaItens)
-      .where(eq(schema.pedidosVendaItens.itemComercialId, itemComercialId));
-    return Number(rows[0]?.total ?? 0);
+  async function criarSafe(
+    dto: {
+      compraProgramadaId: string;
+      clienteId: string;
+      dataOperacao: string;
+      itens: Array<{ itemComercialId: string; quantidadePedida: number }>;
+    },
+  ): Promise<'ok' | 'challenge' | 'error'> {
+    try {
+      await service.criar(dto as never, usuarioId, false);
+      return 'ok';
+    } catch (e) {
+      if (e instanceof OverbookingChallengeException) return 'challenge';
+      return 'error';
+    }
   }
 
-  it('caminho feliz: T=10, N=20 reservas de 1 em paralelo — sem overbooking', async () => {
+  it('caminho feliz: T=10, N=20 reservas de 1 — 10 ok + 10 challenge; sem mutação no challenge', async () => {
     const T = 10;
     const N = 20;
     const { base, compraId } = await cenarioComSaldo('2026-11-01', T);
 
-    const chamadas = Array.from({ length: N }, () =>
-      service.criar(
-        {
+    const resultados = await Promise.all(
+      Array.from({ length: N }, () =>
+        criarSafe({
           compraProgramadaId: compraId,
           clienteId: base.clienteId,
           dataOperacao: '2026-11-01',
           itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 1 }],
-        } as never,
-        usuarioId,
+        }),
       ),
     );
-    await Promise.all(chamadas);
+
+    expect(resultados.filter((r) => r === 'ok')).toHaveLength(T);
+    expect(resultados.filter((r) => r === 'challenge')).toHaveLength(N - T);
+    expect(resultados.filter((r) => r === 'error')).toHaveLength(0);
 
     const disp = await lerDisponibilidade(app, base.itemComercialId);
-    expect(Number(disp!.quantidadeDisponivel)).toBe(0); // nunca negativo
-    expect(Number(disp!.quantidadeReservada)).toBe(T); // == total gerado
-    expect(await somaReservasAtivas(disp!.id)).toBe(T); // consistência
-    expect(await somaPendentePorItem(base.itemComercialId)).toBe(N - T); // excedente: 20-10
+    expect(Number(disp!.quantidadeDisponivel)).toBe(0);
+    expect(Number(disp!.quantidadeReservada)).toBe(T);
+    expect(await somaReservasAtivas(disp!.id)).toBe(T);
     expect(disp!.status).toBe('esgotada');
   }, 60000);
 
-  it('B2 — caminho PARCIAL sob concorrência: T=10, N=20 reservas de 3', async () => {
+  it('B2 — T=10, N=20 de 3: só cabem reservas totais sem challenge; restante 409', async () => {
     const T = 10;
     const N = 20;
     const r = 3;
     const { base, compraId } = await cenarioComSaldo('2026-11-02', T);
 
-    const chamadas = Array.from({ length: N }, () =>
-      service.criar(
-        {
+    const resultados = await Promise.all(
+      Array.from({ length: N }, () =>
+        criarSafe({
           compraProgramadaId: compraId,
           clienteId: base.clienteId,
           dataOperacao: '2026-11-02',
           itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: r }],
-        } as never,
-        usuarioId,
+        }),
       ),
     );
-    await Promise.all(chamadas);
+
+    const ok = resultados.filter((x) => x === 'ok').length;
+    const challenge = resultados.filter((x) => x === 'challenge').length;
+    expect(ok + challenge).toBe(N);
+    expect(resultados.filter((x) => x === 'error')).toHaveLength(0);
+    // Cada sucesso consome 3; cabem floor(10/3)=3 sucessos se todos pedem 3.
+    expect(ok).toBeLessThanOrEqual(Math.floor(T / r));
 
     const disp = await lerDisponibilidade(app, base.itemComercialId);
-    // (a) nunca negativo
-    expect(Number(disp!.quantidadeDisponivel)).toBe(0);
-    // (b) Σ reservadoEfetivo == total gerado
-    expect(Number(disp!.quantidadeReservada)).toBe(T);
-    // (c) excedente vira pendente, nunca perdido: 20×3 − 10 = 50
-    expect(await somaPendentePorItem(base.itemComercialId)).toBe(N * r - T);
-    // (d) consistência: Σ reservas == reservada da disponibilidade
-    expect(await somaReservasAtivas(disp!.id)).toBe(T);
+    expect(Number(disp!.quantidadeDisponivel)).toBeGreaterThanOrEqual(0);
+    expect(Number(disp!.quantidadeReservada)).toBe(ok * r);
+    expect(await somaReservasAtivas(disp!.id)).toBe(ok * r);
   }, 60000);
 
-  it('fronteira: T=10, 3 chamadas de 4 → reservados 4+4+2, último pendente 2', async () => {
+  it('fronteira: T=10, 3 chamadas de 4 → 2 ok (8) + 1 challenge; saldo restante 2', async () => {
     const { base, compraId } = await cenarioComSaldo('2026-11-03', 10);
 
     const resultados = await Promise.all(
       [4, 4, 4].map(() =>
-        service.criar(
-          {
-            compraProgramadaId: compraId,
-            clienteId: base.clienteId,
-            dataOperacao: '2026-11-03',
-            itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 4 }],
-          } as never,
-          usuarioId,
-        ),
+        criarSafe({
+          compraProgramadaId: compraId,
+          clienteId: base.clienteId,
+          dataOperacao: '2026-11-03',
+          itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 4 }],
+        }),
       ),
     );
-    expect(resultados).toHaveLength(3);
+    expect(resultados.filter((r) => r === 'ok')).toHaveLength(2);
+    expect(resultados.filter((r) => r === 'challenge')).toHaveLength(1);
 
     const disp = await lerDisponibilidade(app, base.itemComercialId);
-    expect(Number(disp!.quantidadeDisponivel)).toBe(0);
-    expect(Number(disp!.quantidadeReservada)).toBe(10); // 4+4+2
-    expect(await somaPendentePorItem(base.itemComercialId)).toBe(2); // 12 pedidas − 10 saldo
+    expect(Number(disp!.quantidadeDisponivel)).toBe(2);
+    expect(Number(disp!.quantidadeReservada)).toBe(8);
   }, 60000);
 });
