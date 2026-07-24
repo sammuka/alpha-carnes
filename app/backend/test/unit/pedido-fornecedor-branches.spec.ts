@@ -322,7 +322,10 @@ describe('PedidoFornecedorService — branches', () => {
           .mockReturnValueOnce(chainSelect([{ id: 'pf-1', status: 'aguardando_recebimento' }]))
           .mockReturnValueOnce(chainSelect([{ id: 'rec-1' }]))
           .mockReturnValueOnce(chainSelect([{ id: 'pf-1', status: 'aguardando_recebimento' }]))
-          .mockReturnValueOnce(chainSelect([{ id: 'rec-1', pedidoFornecedorId: 'pf-1' }])),
+          .mockReturnValueOnce(chainSelect([{ id: 'rec-1', pedidoFornecedorId: 'pf-1' }]))
+          // buscarCabecalhoParaCompletar: por número + por recebimento (sem órfão)
+          .mockReturnValueOnce(chainSelect([]))
+          .mockReturnValueOnce(chainSelect([])),
         insert: jest.fn()
           .mockReturnValueOnce({
             values: () => ({
