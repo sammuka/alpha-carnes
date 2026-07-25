@@ -679,7 +679,9 @@ const itens = [
  * `overflow-hidden`. `toBeVisible()` do jest-dom não olha `max-height` e o Tailwind não
  * compila no jsdom: um link dentro do painel fechado passaria em `toBeVisible()`. Por isso
  * o teste afere o mecanismo real — `aria-expanded`, `data-state` e a `max-height` inline —,
- * que fica vermelho se o colapso desaparecer.
+ * que fica vermelho se o colapso desaparecer. O componente emite unidade (`'0px'` /
+ * `` `${alturaItens}px` ``): React serializa `maxHeight: 0` (número) como `"0"` no jsdom,
+ * e `.toBe('0px')` / `toHaveStyle({ maxHeight: '0px' })` falhariam.
  */
 function painelDe(cabecalho: HTMLElement): HTMLElement {
   const id = cabecalho.getAttribute('aria-controls');
@@ -1054,7 +1056,7 @@ export function NavGroup({ title, items, defaultOpen = false }: NavGroupProps) {
         id={idPainel}
         data-state={open ? 'aberto' : 'fechado'}
         className="overflow-hidden transition-[max-height] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
-        style={{ maxHeight: open ? alturaItens : 0 }}
+        style={{ maxHeight: open ? `${alturaItens}px` : '0px' }}
       >
         <div className="flex w-full flex-col gap-0.5 pb-1">
           {items.map((item) => (
