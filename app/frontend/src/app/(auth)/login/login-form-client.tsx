@@ -40,7 +40,7 @@ export function LoginFormClient() {
         setError(extrairMensagemErro(body, 'Credenciais inválidas'));
         return;
       }
-      router.push('/gestao/dashboard');
+      router.push('/');
     } catch {
       setError('Erro de conexão');
     }
@@ -61,7 +61,7 @@ export function LoginFormClient() {
               id="email"
               type="email"
               autoComplete="email"
-              placeholder="admin@alphacarnes.local"
+              placeholder="nome@alphacarnes.com.br"
               className="h-12"
               {...register('email')}
             />
@@ -94,8 +94,8 @@ export function LoginFormClient() {
           </div>
         )}
 
-        <Button type="submit" className="h-12 w-full" loading={isSubmitting}>
-          Entrar
+        <Button type="submit" variant="acao" className="h-12 w-full" loading={isSubmitting}>
+          Acessar Sistema
         </Button>
       </form>
     </div>

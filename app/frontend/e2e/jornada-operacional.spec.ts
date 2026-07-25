@@ -438,7 +438,7 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
 
     await page.getByLabel('E-mail').fill(ADMIN_EMAIL);
     await page.getByLabel('Senha').fill(auth.password);
-    await page.getByRole('button', { name: 'Entrar' }).click();
+    await page.getByRole('button', { name: 'Acessar Sistema' }).click();
     await expect(page.getByRole('heading', { name: 'Painel Geral da Operação' })).toBeVisible({ timeout: 15_000 });
     await capture(
       page,
