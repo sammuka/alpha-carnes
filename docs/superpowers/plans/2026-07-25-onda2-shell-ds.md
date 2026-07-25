@@ -30,7 +30,7 @@
 2. A paleta canônica é a do Figma do protótipo (`src/imports/──PaletaDeCores──/index.tsx`, 14 entradas: `brand/navy #265389`, `brand/navy-hover #1E4070`, `brand/blue-mid #3B7FD4`, `brand/navy-10 #E8EEF5`, `bg/app #F5F7FA`, `text/primary #1A2332`, `text/secondary #64748B`, `text/muted #94A3B8`, `status/aceite #18A84A`, `status/pendente #F5B019`, `status/bloqueado #FC5241`, `status/recebido #3B7FD4`, `status/pesado #7C3AED`, `border/subtle #E2E8F0`). `src/styles/theme.css` do protótipo é o tema default do Figma Make (oklch genérico) e **não** é fonte de verdade de cor — está registrado aqui para evitar que alguém o porte por engano.
 3. Os hexadecimais que o protótipo usa nas telas além das 14 entradas (família de ação `#2563EB`/`#1D4ED8`/`#1844B8`, superfícies `#F8FAFC`/`#F0EFF5`/`#E5E3ED`, login `#1F2633`/`#70748C`/`#B0B4BD`/`#1F1D2D`/`#6B7081`, pipeline `#10B981`/`#A1A5B3`, badge `#FEF3C7`/`#92400E`/`#FDE68A`, sinalizações `#15803D`/`#F0FDF4`/`#DC2626`/`#FFF1F2`/`#1E293B`/`#475569`/`#374151`/`#EFF6FF`/`#BFDBFE`/`#1E3A8A`, violeta `#8B5CF6`/`#F5F3FF`, popover da sidebar `#0F2645`) **entram como tokens nomeados**. Nenhuma cor é inventada: cada token tem origem rastreada no protótipo (tabela da Task 1).
 4. O gate de hex é **global** em `app/frontend/src`, sem exceção por path e sem lista de tolerância por arquivo. Hoje **6** arquivos casam o padrão de hex: 5 deles usam hex como **cor aplicada** e todos são tocados nesta onda (`app-sidebar.tsx`, `activity-item.tsx`, `(admin)/layout.tsx`, `(auth)/login/page.tsx`, `cadastros/regras-transformacao/regras-transformacao-client.tsx`); o sexto (`components/ui/chart.tsx:58`) usa hex **dentro de seletor de atributo CSS** e é tratado pelo critério sintático da decisão 23 — não por exceção de caminho.
-5. O menu canônico tem **9 grupos e 39 itens**, com os rótulos e as rotas de `ALL_NAV_GROUPS` (`src/app/components/Layout.tsx` do protótipo). Correções obrigatórias em `menu-v2.ts`: `Dashboard Operacional` → **`Painel Geral da Operação`**, `Aprovações` → **`Aprovações & Ocorrências`**, `Relatórios de Gestão` → **`Relatórios & SIF`**, e inclusão de **`Operações` (`/gestao/operacoes`)** e **`Pendências de Overbooking` (`/gestao/overbooking`)** na posição do protótipo.
+5. O menu canônico tem **9 grupos e 39 itens**, com os rótulos e as rotas de `ALL_NAV_GROUPS` (`src/app/components/Layout.tsx` do protótipo). Correções obrigatórias em `menu-v2.ts`: `Dashboard Operacional` → **`Painel Geral da Operação`**, `Aprovações` → **`Aprovações & Ocorrências`**, `Relatórios de Gestão` → **`Relatórios & SIF`**, e inclusão de **`Operações` (`/gestao/operacoes`)** e **`Pendências de Overbooking` (`/gestao/overbooking`)** na posição do protótipo. Pela mesma razão, o `<h1>` de `/gestao/dashboard` (`dashboard-client.tsx:193`) sai de `Dashboard Operacional` para **`Painel Geral da Operação`**, igual ao protótipo (`src/app/pages/Dashboard.tsx:56`), ao item de menu e ao breadcrumb — é troca de string de microcopy, não implementação da tela (a tela de Gestão é da Onda 5). Os specs Playwright existentes que afirmam o título antigo (`e2e/telas-reais.spec.ts:102`, `e2e/telas-migradas.spec.ts:130`, `e2e/jornada-operacional.spec.ts:442` e `:447`) são atualizados na mesma Task, senão a suíte fica vermelha.
 6. Item de menu **nunca** aponta para rota inexistente (RA-05). As duas rotas novas recebem `page.tsx` usando o `PlaceholderPage` já existente (mesmo padrão das outras 11 telas ausentes). As telas reais são das Ondas 5 (`/gestao/operacoes`, `/gestao/overbooking`).
 7. O breadcrumb continua derivado do menu (`BREADCRUMB_MAP` gerado de `MENU_V2` em `breadcrumb-v2.ts`): corrigir rótulo/rota no menu corrige o breadcrumb por construção. Nenhum segundo mapa é criado.
 8. **O simulador de perfil do protótipo (`PROFILES`, `PROFILE_ORDER`, "SIMULAR PERFIL") não é portado** — é andaime de protótipo e o DoD manda RBAC real. Um teste garante que a string `SIMULAR PERFIL` não existe no código.
@@ -45,11 +45,12 @@
     - `FATURAMENTO`: `FATURAMENTO_GERENCIAR`, `NFSE_EMITIR`
     - `CADASTROS & REGRAS`: `CLIENTES_GERENCIAR`, `PRODUTOS_GERENCIAR`, `FORNECEDORES_GERENCIAR`, `REPRESENTANTES_GERENCIAR`, `ROTAS_GERENCIAR`, `REGRAS_DESDOBRAMENTO_GERENCIAR`
     - `ADMINISTRAÇÃO`: `USUARIOS_GERENCIAR`, `PERFIS_GERENCIAR`, `PARAMETROS_GERENCIAR`, `AUDITORIA_VISUALIZAR`
-11. **Equivalência com as personas do protótipo é provada por teste**, não afirmada: `comercial → [COMERCIAL]`, `recebimento_pesagem → [RECEBIMENTO & BALANÇA]`, `corte → [DESOSSA]`, `expedicao → [CARGA]`, `faturamento → [FATURAMENTO]`, `administrador → 9 grupos`. Divergências **autorizadas** e justificadas:
+11. **Equivalência com as personas do protótipo é provada por teste**, não afirmada: `comercial → [COMERCIAL]`, `recebimento_pesagem → [RECEBIMENTO & BALANÇA]`, `corte → [DESOSSA]`, `expedicao → [CARGA]`, `administrador → 9 grupos`. Divergências **autorizadas** e justificadas:
     - `gestor` também vê `ADMINISTRAÇÃO`, com **apenas** o item `Auditoria` visível, porque `gestor` tem `AUDITORIA_VISUALIZAR` no catálogo e a matriz de rastreabilidade (linha 41) lista `administrador`, `diretoria` e `gestor` como leitores da auditoria. A persona "Gestão" do protótipo escondia o grupo inteiro; aqui o RBAC canônico (doc 013) prevalece sobre o simulador, que o próprio DoD manda remover.
     - `diretoria` vê `[COMERCIAL, ADMINISTRAÇÃO]`; `compras` vê `[COMERCIAL, GESTÃO, CADASTROS & REGRAS]`. O protótipo não tem persona para esses perfis, logo não há divergência visual a conciliar.
     - `conferente` e `logistica` não têm, no catálogo pós-Onda 1, nenhuma permissão de grupo (só `LEITURA_CADASTROS` + `DISPONIBILIDADE_LER` (+ `FATURAMENTO_LER` para `logistica`)) e portanto ficam com **zero** grupos. A Onda 3 (matriz AD-04, incluindo o recorte `ESTOQUE_*`) é quem lhes atribui permissões. A Onda 2 não inventa acesso.
-    - Os itens que `expedicao` e `diretoria` **perdem** por efeito do gate de grupo estão declarados um a um na decisão 25.
+    - `faturamento → [GESTÃO, FATURAMENTO]`, com `GESTÃO` restrita ao item `Relatórios & SIF`: a matriz (linha 13) lista `faturamento` como perfil **primário** desse relatório e a decisão 30 restaura o item; a persona "Faturamento" do protótipo mostrava só o grupo `FATURAMENTO`. Vale aqui o mesmo critério do `gestor`: o RBAC canônico + matriz prevalecem sobre o simulador, que o próprio DoD manda remover.
+    - Os itens que **cada um dos 11 perfis** perde por efeito do gate de grupo estão declarados um a um na decisão 25; as correções aplicadas para restaurar fidelidade à matriz estão na decisão 30; os itens visíveis que a matriz não nomeia estão na decisão 31.
 12. **Zero grupo visível não pode virar sidebar vazia silenciosa** (RA-05): `AppSidebar` renderiza estado vazio explícito — "Nenhum módulo liberado para o seu perfil. Solicite acesso ao administrador." — coberto por teste.
 13. **`ESTOQUE_*` é a permissão canônica do grupo `ESTOQUE`** (AD-04). Os itens do grupo passam a exigir `ESTOQUE_LER`/`ESTOQUE_GERENCIAR` (hoje `Consulta` aceita `PESAGEM_LER`/`CORTE_GERENCIAR` e `Ajustes` aceita só `PARAMETROS_GERENCIAR`). Consequência aceita e documentada: até a Onda 3 distribuir `ESTOQUE_*`, somente `administrador` e `gestor` veem o grupo `ESTOQUE`.
 14. **`/admin/parametros` passa a exigir `PARAMETROS_GERENCIAR`** (e não `PARAMETROS_LER`), pois `PARAMETROS_LER` é transversal via `LEITURA_CADASTROS` e exporia parâmetros do sistema a todos os perfis. `/cadastros/representantes` passa a exigir `REPRESENTANTES_LER`/`REPRESENTANTES_GERENCIAR` (hoje exige `CLIENTES_GERENCIAR`, o que é incoerente com o recurso).
@@ -70,20 +71,50 @@
 24. **Correções de RBAC de UI complementares à decisão 14** (nenhuma permissão nova; apenas alinhamento recurso × permissão, auditável no Portão 2):
     - `/cadastros/rotas` passa a exigir `ROTAS_LER`/`ROTAS_GERENCIAR` (hoje exige `EXPEDICAO_GERENCIAR`/`CLIENTES_LER`): rota/itinerário é o recurso `ROTAS_*` do catálogo; exigir `CLIENTES_LER` abriria o item para os 11 perfis via `LEITURA_CADASTROS`.
     - `/desossa/dashboard` deixa de aceitar `DISPONIBILIDADE_LER` e passa a exigir `DESOSSA_LER`/`CORTE_GERENCIAR`: `DISPONIBILIDADE_LER` é transversal (10 dos 11 perfis) e não expressa acesso à desossa. Consequência: dentro do grupo `DESOSSA` (visível só para `administrador`, `gestor` e `corte`), os três mantêm o item — nenhum perfil perde acesso real.
-25. **Efeitos do gate de grupo declarados item a item** (Princípio II + RA-05). Além do que a decisão 11 já fixa, a introdução de `permissoesGrupo` retira estes itens do menu:
-    - `expedicao` perde `Caminhões` (`/cadastros/caminhoes`) e `Motoristas` (`/cadastros/motoristas`) — matriz linhas 33/34 listam `expedicao` como leitor. Motivo: o grupo `CADASTROS & REGRAS` exige um `*_GERENCIAR` de cadastro e `expedicao` só tem `LEITURA_CADASTROS` + `EXPEDICAO_GERENCIAR`. Os dois itens continuam existindo e acessíveis por URL/RBAC de backend; o que muda é a navegação.
-    - `diretoria` perde `Painel Geral da Operação` (`/gestao/dashboard`) e `Relatórios & SIF` (`/gestao/relatorios`) — matriz linhas 8/13 listam `diretoria`. Motivo: o grupo `GESTÃO` exige `COMPRAS_PROGRAMADAS_GERENCIAR`/`OPERACOES_GERENCIAR`/`OVERBOOKING_RESOLVER`/`EXPEDICAO_REABRIR` e `diretoria` é perfil de leitura (`COMPRAS_PROGRAMADAS_LER`, `DISPONIBILIDADE_LER`, `PEDIDOS_LER`, `AUDITORIA_VISUALIZAR`).
-    - `conferente` e `logistica` ficam sem nenhum grupo (decisão 11) e caem no estado vazio explícito da decisão 12 + na página de entrada explícita da decisão 26.
-    Esses quatro casos são **aceitos nesta onda e endereçados na Onda 3**: a matriz completa de permissões por perfil (AD-04, incluindo `ESTOQUE_*`) é entrega da Onda 3, e é lá que `expedicao`/`diretoria`/`conferente`/`logistica` recebem as permissões de leitura que a matriz de rastreabilidade lhes atribui. A Onda 2 não inventa permissão para reconciliar (Princípio VIII); ela deixa o efeito explícito, testado e rastreável.
+25. **Efeitos do gate de grupo declarados item a item — conjunto completo, calculado sobre 39 itens × 11 perfis** (Princípio II + RA-05). O cálculo compara, para cada par (perfil, rota), o que a coluna "Perfis RBAC" da matriz de rastreabilidade v1.1 atribui ao perfil (incluindo os papéis secundários "consulta"/"registro") com o que o menu desta onda mostra, já considerando as correções da decisão 30. Sobram **26 perdas**, e **todas** têm a mesma causa: o grupo inteiro não é visível para o perfil (em 15 delas o perfil também não teria a permissão do item). Nenhuma perda vem do filtro de item — isso é invariante testado.
+
+    | Perfil | Rota que a matriz atribui e o menu não mostra | Papel na matriz | Grupo que ficou invisível | Por que não é corrigida nesta onda | Destino |
+    |---|---|---|---|---|---|
+    | `compras` | `/recebimento/recebimento-carga` (linha 14) | consulta | `RECEBIMENTO & BALANÇA` | o único gancho é `RECEBIMENTO_LER`, que 6 dos 11 perfis têm: no gate, abriria o módulo inteiro para `comercial` (3 itens não atribuídos) e traria 2 itens não atribuídos a `faturamento` | Onda 3 |
+    | `comercial` | `/gestao/compras` (10), `/gestao/overbooking` (11) | consulta | `GESTÃO` | abrir `GESTÃO` para `comercial` quebraria a persona `comercial → [COMERCIAL]` do protótipo (Princípio I) e traria `Painel Geral`/`Relatórios & SIF` não atribuídos | Onda 3 |
+    | `comercial` | `/desossa/dashboard` (17) | consulta | `DESOSSA` | mesma razão; além disso a decisão 24 tirou `DISPONIBILIDADE_LER` do item por ser transversal a 10 dos 11 perfis | Onda 3 |
+    | `recebimento_pesagem` | `/gestao/aprovacoes` (12) | registro | `GESTÃO` | o único gancho seria `CONFERENCIA_CONCLUIR` no gate de `GESTÃO`, o que traria junto `Relatórios & SIF`, não atribuído ao perfil — troca uma divergência por outra | Onda 3 |
+    | `recebimento_pesagem` | `/estoque/consulta`, `/estoque/entrada-itens`, `/estoque/ajustes` (20–22) | primário **condicionado** a `ESTOQUE_*` (AD-04) | `ESTOQUE` | a própria matriz condiciona o acesso ao recorte `ESTOQUE_*`, que o catálogo pós-Onda 1 só dá a `administrador`/`gestor` (decisão 13) | Onda 3 |
+    | `expedicao` | `/comercial/pedidos` (4), `/comercial/espelho` (7) | consulta | `COMERCIAL` | `expedicao` não tem `PEDIDOS_LER` no catálogo; concedê-la é a entrega da matriz AD-04 | Onda 3 |
+    | `expedicao` | `/estoque/consulta`, `/estoque/entrada-itens`, `/estoque/ajustes` (20–22) | primário **condicionado** a `ESTOQUE_*` (AD-04) | `ESTOQUE` | idem `recebimento_pesagem` (decisão 13) | Onda 3 |
+    | `expedicao` | `/cadastros/caminhoes` (33), `/cadastros/motoristas` (34) | secundário (leitor) | `CADASTROS & REGRAS` | o gate exige um `*_GERENCIAR` de cadastro; `expedicao` só tem `LEITURA_CADASTROS` + `EXPEDICAO_GERENCIAR`. Abrir o gate para `EXPEDICAO_GERENCIAR` traria 6 itens de cadastro não atribuídos | Onda 3 |
+    | `conferente` | `/carga/conferencia` (24) | **primário** | `CARGA` | restaurar exigiria conceder `EXPEDICAO_GERENCIAR` a `conferente` — permissão de gestão de carga, que fere a segregação do doc 013 e inventaria acesso (Princípio VIII); o catálogo (`permissoes.ts`) é imutável nesta onda | Onda 3 |
+    | `faturamento` | `/comercial/clientes` (3), `/comercial/pedidos` (4) | consulta | `COMERCIAL` | `faturamento` não tem `PEDIDOS_LER`; abrir `COMERCIAL` por `CLIENTES_LER` (transversal) reabriria o problema que a decisão 9 fechou | Onda 3 |
+    | `faturamento` | `/recebimento/recebimento-carga` (14) | consulta | `RECEBIMENTO & BALANÇA` | mesma razão do caso `compras` acima | Onda 3 |
+    | `logistica` | `/faturamento/notas-xml` (27) | consulta | `FATURAMENTO` | `logistica` só tem `FATURAMENTO_LER`; pôr `FATURAMENTO_LER` no gate daria o grupo inteiro a `expedicao` também (3 itens não atribuídos) e ainda assim não restauraria os dois itens abaixo | Onda 3 |
+    | `logistica` | `/faturamento/seguro-manual` (28) | secundário | `FATURAMENTO` | itens exigem `FATURAMENTO_GERENCIAR`, que `logistica` não tem no catálogo | Onda 3 |
+    | `logistica` | `/faturamento/liberacao` (29) | **primário** | `FATURAMENTO` | idem — restaurar exigiria conceder `FATURAMENTO_GERENCIAR` a `logistica`, permissão de gestão fiscal; é decisão da matriz AD-04 | Onda 3 |
+    | `diretoria` | `/gestao/dashboard` (8) | primário (leitura) | `GESTÃO` | o gate de `GESTÃO` exige um `*_GERENCIAR`/`*_RESOLVER` e `diretoria` é perfil somente-leitura (`COMPRAS_PROGRAMADAS_LER`, `DISPONIBILIDADE_LER`, `PEDIDOS_LER`, `AUDITORIA_VISUALIZAR`) | Onda 3 |
+    | `diretoria` | `/gestao/aprovacoes` (12), `/gestao/relatorios` (13) | consulta | `GESTÃO` | idem | Onda 3 |
+    | `diretoria` | `/faturamento/notas-xml` (27) | consulta | `FATURAMENTO` | idem `logistica`: só teria acesso abrindo o gate para uma permissão de leitura ampla | Onda 3 |
+
+    `conferente` e `logistica` ficam com **zero** grupos (decisão 11) e caem no estado vazio explícito da decisão 12 + na página de entrada explícita da decisão 26 — nenhuma tela morta e nenhum 404.
+
+    Regra de decisão usada em toda a tabela, para não virar arbítrio: **corrigir** quando o perfil é primário na matriz **e** existe permissão no catálogo que restaure o item sem expor item algum não atribuído (foi o caso dos dois itens da decisão 30); **declarar e diferir** quando restaurar exigiria conceder permissão nova (vedado — Princípio VIII, catálogo congelado nesta onda) ou produziria nova divergência do outro lado. Todas as 26 rotas continuam existindo e acessíveis por URL, com o RBAC do backend intacto: o que muda é apenas a navegação. A matriz completa de permissões por perfil (AD-04, incluindo `ESTOQUE_*`) é entrega da **Onda 3**, cujo plano tático deve tratar estas 26 linhas no seu mapa DoD→teste.
 26. **Rota de entrada `/` e destino pós-login resolvidos pelo menu real, nunca em rota morta** (matriz linha 2 + RA-05). Hoje `/` não tem `page.tsx` (404) e `login-form-client.tsx` empurra todos para `/gestao/dashboard`, que após esta onda fica fora do menu de 7 dos 11 perfis. Fica fixado:
     - nasce `src/app/(admin)/page.tsx` (rota `/`, dentro do shell): resolve `GET /auth/me`, calcula os grupos visíveis e redireciona para `rotaDeEntrada(permissoes)`;
-    - `rotaDeEntrada` devolve `/gestao/dashboard` **quando essa rota está visível** para o usuário (preserva o destino do protótipo e da matriz linha 2 para `administrador`, `gestor` e `compras`); senão, a **primeira rota visível do menu** na ordem canônica; senão `null`;
+    - `rotaDeEntrada` devolve `/gestao/dashboard` **quando essa rota está visível** para o usuário (preserva o destino do protótipo e da matriz linha 2 para `administrador`, `gestor` e `compras`); senão, a primeira rota visível do **grupo de trabalho** — o grupo com **mais itens visíveis**, empate resolvido pela ordem canônica do menu; senão `null`. O critério é "grupo de trabalho" e não "primeira rota visível" porque um perfil pode enxergar, antes do seu módulo operacional, um grupo com um único item de consulta: `faturamento` vê `GESTÃO` só com `Relatórios & SIF` (decisão 30) e precisa entrar em `Pré-Faturamento`, não no relatório;
     - com `null` (nenhum grupo liberado), `/` **não** redireciona: renderiza aviso explícito ("Nenhum módulo liberado…"), dentro do shell com a sidebar em estado vazio (decisão 12). Nada de 403 genérico, nada de tela branca;
     - o login passa a navegar para `/` — a decisão de destino fica **num único lugar no servidor**, não duplicada no cliente.
     Tabela fixada (calculada sobre `MAPA_PERFIL_PERMISSOES` e provada por teste, 11 casos): `administrador`, `gestor`, `compras` → `/gestao/dashboard`; `comercial`, `diretoria` → `/comercial/clientes`; `recebimento_pesagem` → `/recebimento/recebimento-carga`; `corte` → `/desossa/dashboard`; `expedicao` → `/carga/planejamento`; `faturamento` → `/faturamento/pre-faturamento`; `conferente`, `logistica` → `null` (aviso explícito).
 27. **`/admin/auditoria` (matriz linha 41): a Onda 2 entrega o DS que a tela consome; o alinhamento de filtros/visual ao protótipo é executado na Onda 3.** A matriz diz "alinhar filtros/visual ao protótipo na Onda 2", mas o roadmap §8 aloca todo o módulo Admin (Usuários, Perfis de Acesso, Parâmetros, Auditoria) à Onda 3, e Princípio II proíbe entregar metade de uma tela: os filtros de auditoria dependem do catálogo de entidades/permissões que a própria Onda 3 fecha. Reconciliação registrada: **a linha 41 é diferida para a Onda 3**, cujo plano deve incluí-la no mapa DoD→teste. O que a Onda 2 garante e testa: a rota existe, permanece no menu do grupo `ADMINISTRAÇÃO` exigindo `AUDITORIA_VISUALIZAR` e continua visível exatamente para os três perfis da matriz linha 41 (`administrador`, `gestor`, `diretoria`) — caso `menu-rbac.test.ts`. Nenhuma alteração de `/admin/auditoria` é feita nesta onda além dos tokens que o shell/DS já impõe.
 28. **As sete dívidas herdadas do Portão 2 da Onda 1 são formalmente redirecionadas para a Onda 6** — ver a tabela da seção "Dívidas herdadas da Onda 1". Nenhuma delas é executada aqui e nenhuma fica órfã.
 29. **O CTA do login usa a cor de ação do protótipo.** `Login.tsx` do protótipo pinta "Acessar Sistema" com `#2563EB` e hover `#1844B8`; a variante `default` de `button.tsx` é `bg-primary` (`#3B7FD4`, hover `#265389`) — usá-la perderia a cor do protótipo (Princípio I). Em vez de sobrescrever por `className` (o resultado dependeria da precedência do `tailwind-merge`), `button.tsx` **ganha** a variante `acao`: `bg-action-blue text-white hover:bg-action-blue-strong`. É adição pura ao `cva` (nenhuma variante existente muda), autorizada nominalmente pela decisão 22, e o login passa a usar `variant="acao"`. O teste afere as classes do botão, não a cor computada.
+30. **Duas perdas do gate de grupo são corrigidas no próprio menu, para preservar fidelidade à matriz** (nenhuma permissão nova; só recomposição de `permissoesGrupo`/`permissoes` de item):
+    - **`faturamento` recupera `Relatórios & SIF` (`/gestao/relatorios`)** — a matriz linha 13 lista `faturamento` como perfil **primário** desse relatório. `FATURAMENTO_GERENCIAR` entra no `permissoesGrupo` de `GESTÃO`; como a permissão só existe para `administrador`, `gestor` e `faturamento`, o gate continua fechado para os demais. Para que a abertura não traga item não atribuído, `/gestao/dashboard` deixa de aceitar `DISPONIBILIDADE_LER` (transversal a 10 dos 11 perfis) e passa a exigir `COMPRAS_PROGRAMADAS_LER`/`PEDIDOS_LER`: `administrador`, `gestor` e `compras` mantêm o item (todos têm `COMPRAS_PROGRAMADAS_LER`) e `faturamento` não o ganha, exatamente como a matriz linha 8 quer. Resultado: o grupo `GESTÃO` de `faturamento` contém **um** item, `Relatórios & SIF`.
+    - **`compras` recupera `Pendências de Overbooking` (`/gestao/overbooking`)** — matriz linha 11 lista `compras` em consulta. `COMPRAS_PROGRAMADAS_GERENCIAR` entra nas `permissoes` do item, coerente com o recurso: uma das decisões da pendência é "compra complementar programada" (v1.1 §6.4). Detentores: `administrador`, `gestor`, `compras` — os três atribuídos pela matriz, sem efeito colateral. Aqui a perda era de **item**, não de grupo (`compras` já vê `GESTÃO`).
+
+    Trade-offs registrados: (i) `faturamento` deixa de ser idêntico à persona do protótipo (`visibleGroups: ["FATURAMENTO"]`) e passa a `[GESTÃO, FATURAMENTO]` — divergência autorizada na decisão 11, pelo mesmo critério já aceito para o `gestor` (RBAC canônico + matriz prevalecem sobre o simulador, que o DoD manda remover), e limitada a um único item de leitura; (ii) a rota de entrada de `faturamento` continuaria correta apenas porque a decisão 26 passou a usar o "grupo de trabalho" — sem esse refinamento, `faturamento` entraria em `Relatórios & SIF`; (iii) o estreitamento de `/gestao/dashboard` não tira o item de ninguém que o tenha hoje pelo gate de grupo. Efeito líquido: as divergências contra a matriz caem de 28 para 26, e nenhuma nova é criada.
+31. **Itens que o menu mostra sem que a matriz nomeie o perfil também são declarados** (a auditoria do Portão 1 recalcula os dois lados, não só as perdas). Ocorrem em dois perfis, ambos **sem persona no protótipo** — logo sem divergência visual a conciliar:
+    - `compras` (11): `/comercial/clientes`, `/comercial/pedidos`, `/comercial/disponibilidade`, `/comercial/espelho`, `/gestao/dashboard`, `/gestao/aprovacoes`, `/gestao/relatorios`, `/cadastros/representantes`, `/cadastros/produtos`, `/cadastros/rotas`, `/cadastros/regras-transformacao`.
+    - `diretoria` (3): `/comercial/clientes`, `/comercial/pedidos`, `/comercial/espelho`.
+
+    Todos decorrem de permissões que o **catálogo real** (doc 013) concede ao perfil — `PEDIDOS_LER`, `COMPRAS_PROGRAMADAS_LER`, `DIVERGENCIA_RECEBIMENTO_GERENCIAR`, `LEITURA_CADASTROS` —, e a coluna "Perfis RBAC" da matriz nomeia os donos do fluxo de cada tela, não uma lista negativa exaustiva. Nenhum deles abre escrita: o RBAC do backend continua sendo o guarda do dado. Retirá-los exigiria remover permissão do catálogo, o que esta onda não pode fazer. A Onda 3 concilia catálogo × matriz de uma vez. O conjunto é **pinado por teste**: qualquer item extra novo falha o `menu-rbac.test.ts`.
 
 ## Dívidas herdadas da Onda 1 — fora do escopo desta onda, com destino nomeado
 
@@ -127,6 +158,7 @@ app/frontend/src/
   app/(admin)/page.tsx                              # NOVO — rota `/`: entra pela rota visível do perfil (decisão 26)
   app/(admin)/gestao/operacoes/page.tsx             # NOVO placeholder (rota do menu; tela real = Onda 5)
   app/(admin)/gestao/overbooking/page.tsx           # NOVO placeholder (rota do menu; tela real = Onda 5)
+  app/(admin)/gestao/dashboard/dashboard-client.tsx # só o texto do h1 → "Painel Geral da Operação" (decisão 5)
   app/(admin)/cadastros/regras-transformacao/regras-transformacao-client.tsx  # hex → token
   app/(auth)/login/page.tsx                         # painel institucional fiel, tokens, chip de ambiente
   app/(auth)/login/login-form-client.tsx            # microcopy/rótulos do protótipo, JWT real intacto
@@ -159,6 +191,8 @@ app/frontend/__tests__/
   perfis.test.ts                                     # NOVO — rótulos dos 11 perfis, chave desconhecida preservada
 app/frontend/e2e/
   shell-ds.spec.ts                                   # NOVO — asserções do shell + screenshots de evidência
+  telas-reais.spec.ts, telas-migradas.spec.ts        # só o título do dashboard nas asserções (decisão 5)
+  jornada-operacional.spec.ts                        # título do dashboard + CTA "Acessar Sistema" (decisões 5 e 20)
 app/backend/
   scripts/gerar-snapshot-perfis.ts                   # NOVO — gera o snapshot do catálogo RBAC
   src/common/rbac/perfil-permissoes.snapshot.json    # NOVO — fixture versionada (gerada, nunca editada à mão)
@@ -186,7 +220,7 @@ DoD da Onda 2 conforme `docs/governance/quality-gates.md` § "Onda 2 — Shell +
 | 7 | Rótulos e rotas idênticos ao protótipo (39 itens) | `menu-v2.test.ts` — `MENU_V2 tem os 39 itens com rotulo e rota do prototipo` |
 | 8 | Toda rota do menu existe (nenhum item aponta para 404) | `menu-v2.test.ts` — `toda rota do menu tem page.tsx correspondente` |
 | 9 | Breadcrumb "Grupo / Item" | `admin-header.test.tsx` — `exibe o breadcrumb Grupo / Item da rota ativa`; `e2e/shell-ds.spec.ts` — `breadcrumb do dashboard e Gestão / Painel Geral da Operação` |
-| 10 | Colapso por grupo | `nav-group.test.tsx` — `colapsa e expande o grupo ao clicar no cabecalho` e `abre o grupo automaticamente quando um item esta ativo` |
+| 10 | Colapso por grupo | `nav-group.test.tsx` — `colapsa e expande o grupo ao clicar no cabecalho`, `o painel de itens declara o mecanismo de colapso do prototipo` e `abre o grupo automaticamente quando um item esta ativo`; `e2e/shell-ds.spec.ts` — `colapso por grupo funciona no shell renderizado` |
 | 11 | `visibleGroups` dirigido por RBAC real | `menu-rbac.test.ts` — `visibilidade de grupo por perfil canonico bate com a tabela fixada` (11 casos `it.each`) |
 | 12 | RBAC real, **não simulador** | `app-sidebar.test.tsx` — `nao renderiza simulador de perfil`; `tokens-ds.test.ts` — `nenhum residuo do simulador de perfil do prototipo em src` |
 | 13 | Fixture de RBAC é o catálogo real do backend | `perfil-permissoes-snapshot.spec.ts` — `snapshot reflete exatamente MAPA_PERFIL_PERMISSOES` e `cobre os 11 perfis canonicos` |
@@ -202,14 +236,17 @@ DoD da Onda 2 conforme `docs/governance/quality-gates.md` § "Onda 2 — Shell +
 | 23 | `AlertItem` alinhado | `alert-item.test.tsx` — `renderiza titulo, descricao, hora e a pilha de status` |
 | 24 | Login fiel ao protótipo (painel institucional + formulário) | `login.test.tsx` — `usa a microcopy e o botao Acessar Sistema do prototipo`; `e2e/shell-ds.spec.ts` — `login exibe painel institucional e formulario fieis` |
 | 25 | Login mantém o fluxo JWT real | `login.test.tsx` — `envia credenciais para /api/auth/login e navega apos 200` e `exibe erro explicito quando o backend recusa` |
-| 26 | Smoke test de render por componente | suíte `npm run test` no frontend cobrindo os 12 arquivos novos de `__tests__` (cada componente novo/reescrito tem ao menos um caso de render) |
+| 26 | Smoke test de render por componente | suíte `npm run test` no frontend cobrindo os **14** arquivos novos de `__tests__` (`tokens-ds`, `menu-v2`, `menu-rbac`, `app-sidebar`, `nav-group`, `admin-header`, `entrada`, `badge-provisorio`, `pipeline-bar`, `troca-peca-modal`, `status-pill`, `kpi-card`, `alert-item`, `perfis`) mais `login.test.tsx` reescrito — cada componente novo/reescrito tem ao menos um caso de render |
 | 27 | Screenshot de shell comparado ao protótipo | `e2e/shell-ds.spec.ts` — `captura evidencias do shell e do login` + `docs/evidencias/onda2-shell/README.md` com o par app × protótipo |
 | 28 | Terminologia banida continua ausente | `terminologia.test.ts` (existente) — `strings de UI não contêm o rótulo banido` |
 | 29 | Rota de entrada `/` e destino pós-login nunca caem fora do menu do perfil (decisão 26) | `menu-rbac.test.ts` — `rota de entrada por perfil canonico bate com a tabela fixada` (11 casos `it.each`); `entrada.test.tsx` — `redireciona para a rota de entrada do perfil`; `login.test.tsx` — `envia credenciais para /api/auth/login e navega para a rota de entrada` |
 | 30 | Perfil sem módulo liberado recebe aviso explícito, não 404 nem redirect para rota morta | `entrada.test.tsx` — `sem modulo liberado exibe aviso explicito sem redirecionar` |
 | 31 | Auditoria segue visível exatamente para os perfis da matriz linha 41 (decisão 27) | `menu-rbac.test.ts` — `auditoria fica visivel para administrador, gestor e diretoria (matriz linha 41)` |
-| 32 | Efeitos declarados do gate de grupo conferem com o catálogo (decisão 25) | `menu-rbac.test.ts` — `efeitos declarados do gate de grupo conferem com o catalogo` |
+| 32 | Efeitos do gate de grupo conferem com o catálogo, **item a item, nos 11 perfis** (decisão 25) | `menu-rbac.test.ts` — `perdas declaradas conferem com o catalogo e a matriz` (11 casos `it.each`, cobrindo as 26 rotas da tabela) e `toda perda declarada e efeito do gate de grupo, nunca do filtro de item` |
 | 33 | CTA do login usa a cor de ação do protótipo (decisão 29) | `login.test.tsx` — `botao Acessar Sistema usa a variante de acao do DS` |
+| 34 | Correções da decisão 30 restauram os itens que a matriz atribui ao perfil primário | `menu-rbac.test.ts` — `faturamento ve Relatorios & SIF e nada mais em GESTÃO (matriz linha 13)` e `compras ve Pendencias de Overbooking (matriz linha 11)` |
+| 35 | Itens visíveis sem atribuição na matriz ficam pinados (decisão 31) | `menu-rbac.test.ts` — `itens visiveis sem atribuicao na matriz conferem com a lista declarada` (11 casos `it.each`) |
+| 36 | Microcopy do Painel Geral alinhada ao protótipo (decisão 5) | `e2e/shell-ds.spec.ts` — `captura evidencias do shell e do login` (heading `Painel Geral da Operação`) |
 
 ## Task 1 — Tokens da paleta e erradicação do hex avulso
 
@@ -637,21 +674,51 @@ const itens = [
   { href: '/gestao/compras', label: 'Compras', Icon: LayoutDashboard },
 ];
 
+/**
+ * O colapso do protótipo mantém os itens montados e anima `max-height` (220ms) com
+ * `overflow-hidden`. `toBeVisible()` do jest-dom não olha `max-height` e o Tailwind não
+ * compila no jsdom: um link dentro do painel fechado passaria em `toBeVisible()`. Por isso
+ * o teste afere o mecanismo real — `aria-expanded`, `data-state` e a `max-height` inline —,
+ * que fica vermelho se o colapso desaparecer.
+ */
+function painelDe(cabecalho: HTMLElement): HTMLElement {
+  const id = cabecalho.getAttribute('aria-controls');
+  const painel = id ? document.getElementById(id) : null;
+  if (!painel) throw new Error('cabeçalho do grupo não aponta para o painel de itens via aria-controls');
+  return painel;
+}
+
 describe('NavGroup', () => {
   it('colapsa e expande o grupo ao clicar no cabecalho', async () => {
     mockPathname.mockReturnValue('/comercial/clientes');
     render(<NavGroup title="GESTÃO" items={itens} defaultOpen />);
 
     const cabecalho = screen.getByRole('button', { name: /GESTÃO/ });
+    const painel = painelDe(cabecalho);
     expect(cabecalho).toHaveAttribute('aria-expanded', 'true');
+    expect(painel).toHaveAttribute('data-state', 'aberto');
+    // 2 itens × 36px + 4px, conforme alturaItens do componente
+    expect(painel.style.maxHeight).toBe('76px');
 
     await userEvent.click(cabecalho);
     expect(cabecalho).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByRole('link', { name: 'Compras' })).not.toBeVisible();
+    expect(painel).toHaveAttribute('data-state', 'fechado');
+    expect(painel.style.maxHeight).toBe('0px');
 
     await userEvent.click(cabecalho);
     expect(cabecalho).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('link', { name: 'Compras' })).toBeVisible();
+    expect(painel).toHaveAttribute('data-state', 'aberto');
+    expect(painel.style.maxHeight).toBe('76px');
+  });
+
+  it('o painel de itens declara o mecanismo de colapso do prototipo', () => {
+    mockPathname.mockReturnValue('/comercial/clientes');
+    render(<NavGroup title="GESTÃO" items={itens} defaultOpen />);
+
+    const painel = painelDe(screen.getByRole('button', { name: /GESTÃO/ }));
+    expect(painel.className).toContain('overflow-hidden');
+    expect(painel.className).toContain('transition-[max-height]');
+    expect(painel.className).toContain('duration-200');
   });
 
   it('abre o grupo automaticamente quando um item esta ativo', () => {
@@ -748,17 +815,19 @@ export const MENU_V2: MenuGroupDef[] = [
   },
   {
     title: 'GESTÃO',
+    // FATURAMENTO_GERENCIAR abre o grupo para `faturamento`, primário em Relatórios & SIF (decisão 30)
     permissoesGrupo: [
       'COMPRAS_PROGRAMADAS_GERENCIAR',
       'OPERACOES_GERENCIAR',
       'OVERBOOKING_RESOLVER',
       'EXPEDICAO_REABRIR',
+      'FATURAMENTO_GERENCIAR',
     ],
     items: [
-      { href: '/gestao/dashboard', label: 'Painel Geral da Operação', iconKey: 'LayoutDashboard', permissoes: ['COMPRAS_PROGRAMADAS_LER', 'DISPONIBILIDADE_LER', 'PEDIDOS_LER'] },
+      { href: '/gestao/dashboard', label: 'Painel Geral da Operação', iconKey: 'LayoutDashboard', permissoes: ['COMPRAS_PROGRAMADAS_LER', 'PEDIDOS_LER'] },
       { href: '/gestao/operacoes', label: 'Operações', iconKey: 'CalendarRange', permissoes: ['OPERACOES_GERENCIAR'] },
       { href: '/gestao/compras', label: 'Compras', iconKey: 'ShoppingCart', permissoes: ['COMPRAS_PROGRAMADAS_LER', 'COMPRAS_PROGRAMADAS_GERENCIAR'] },
-      { href: '/gestao/overbooking', label: 'Pendências de Overbooking', iconKey: 'AlertTriangle', permissoes: ['OVERBOOKING_RESOLVER', 'PEDIDO_OVERBOOKING_CONFIRMAR'] },
+      { href: '/gestao/overbooking', label: 'Pendências de Overbooking', iconKey: 'AlertTriangle', permissoes: ['OVERBOOKING_RESOLVER', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'COMPRAS_PROGRAMADAS_GERENCIAR'] },
       { href: '/gestao/aprovacoes', label: 'Aprovações & Ocorrências', iconKey: 'CheckCircle', permissoes: ['DIVERGENCIA_RECEBIMENTO_GERENCIAR', 'EXPEDICAO_REABRIR'] },
       { href: '/gestao/relatorios', label: 'Relatórios & SIF', iconKey: 'PieChart', permissoes: ['DISPONIBILIDADE_LER'] },
     ],
@@ -863,16 +932,24 @@ export function filtrarMenuPorPermissoes(permissoes: string[]): MenuGrupoVisivel
 export const ROTA_PREFERENCIAL_ENTRADA = '/gestao/dashboard';
 
 /**
- * Rota de entrada do usuário: a preferencial quando visível, senão a primeira rota
- * visível na ordem canônica do menu, senão `null` (nenhum módulo liberado).
+ * Rota de entrada do usuário: a preferencial quando visível, senão a primeira rota do
+ * grupo de trabalho — o grupo com mais itens visíveis, empate pela ordem canônica —,
+ * senão `null` (nenhum módulo liberado). O grupo de trabalho evita entrar por um grupo
+ * que o perfil só enxerga para consulta de um item (decisões 26 e 30).
  * Nunca devolve rota fora do menu do próprio usuário (RA-05).
  */
 export function rotaDeEntrada(permissoes: string[]): string | null {
-  const visiveis = filtrarMenuPorPermissoes(permissoes).flatMap((grupo) =>
-    grupo.items.map((item) => item.href),
+  const grupos = filtrarMenuPorPermissoes(permissoes);
+  const temPreferencial = grupos.some((grupo) =>
+    grupo.items.some((item) => item.href === ROTA_PREFERENCIAL_ENTRADA),
   );
-  if (visiveis.includes(ROTA_PREFERENCIAL_ENTRADA)) return ROTA_PREFERENCIAL_ENTRADA;
-  return visiveis[0] ?? null;
+  if (temPreferencial) return ROTA_PREFERENCIAL_ENTRADA;
+
+  const grupoDeTrabalho = grupos.reduce<MenuGrupoVisivel | null>(
+    (maior, grupo) => (maior && maior.items.length >= grupo.items.length ? maior : grupo),
+    null,
+  );
+  return grupoDeTrabalho?.items[0]?.href ?? null;
 }
 ```
 
@@ -896,12 +973,34 @@ export default function Page() {
 }
 ```
 
-- [ ] Reescrever `src/components/ui/nav-group.tsx` com a animação de colapso do protótipo (max-height 220ms, chevron `-rotate-90` quando fechado, `aria-expanded`, itens de 34px com gap de 2px):
+- [ ] Alinhar a microcopy do Painel Geral (decisão 5) — em `src/app/(admin)/gestao/dashboard/dashboard-client.tsx:193`, trocar **só** o texto do `<h1>` (nada mais da tela é tocado; a tela de Gestão é da Onda 5):
+
+```tsx
+          <h1 className="text-[22px] font-bold text-foreground">Painel Geral da Operação</h1>
+```
+
+- [ ] Atualizar as asserções Playwright existentes que afirmam o título antigo, senão a suíte fica vermelha — `e2e/telas-reais.spec.ts:102` e `e2e/telas-migradas.spec.ts:130`:
+
+```typescript
+  await expect(page.getByRole('heading', { name: /Painel Geral da Operação/i })).toBeVisible({
+```
+
+e `e2e/jornada-operacional.spec.ts:442` e `:447`:
+
+```typescript
+    await expect(page.getByRole('heading', { name: 'Painel Geral da Operação' })).toBeVisible({ timeout: 15_000 });
+```
+
+```typescript
+      'Painel Geral da Operação',
+```
+
+- [ ] Reescrever `src/components/ui/nav-group.tsx` com a animação de colapso do protótipo (max-height 220ms, chevron `-rotate-90` quando fechado, `aria-expanded`/`aria-controls`, itens de 34px com gap de 2px). O painel expõe `data-state` porque `max-height` inline é invisível para `toBeVisible()` no jsdom: sem um estado declarado, o colapso não teria como ser aferido:
 
 ```tsx
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import type { LucideIcon } from 'lucide-react';
@@ -921,6 +1020,7 @@ interface NavGroupProps {
 }
 
 export function NavGroup({ title, items, defaultOpen = false }: NavGroupProps) {
+  const idPainel = useId();
   const pathname = usePathname();
   const hasActive = items.some(
     (item) => pathname === item.href || (item.href !== '/' && pathname.startsWith(`${item.href}/`)),
@@ -941,6 +1041,7 @@ export function NavGroup({ title, items, defaultOpen = false }: NavGroupProps) {
         onClick={() => setOpen((v) => !v)}
         className="group/hdr mb-1.5 flex w-full items-center justify-between px-1 text-[10px] font-bold uppercase tracking-widest text-sidebar-text-muted transition-colors hover:text-white"
         aria-expanded={open}
+        aria-controls={idPainel}
       >
         <span>{title}</span>
         <ChevronDown
@@ -950,6 +1051,8 @@ export function NavGroup({ title, items, defaultOpen = false }: NavGroupProps) {
         />
       </button>
       <div
+        id={idPainel}
+        data-state={open ? 'aberto' : 'fechado'}
         className="overflow-hidden transition-[max-height] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
         style={{ maxHeight: open ? alturaItens : 0 }}
       >
@@ -1099,7 +1202,7 @@ Expected: JSON gerado com 11 chaves e ambos os casos PASS. O JSON **nunca** é e
 ```typescript
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { filtrarMenuPorPermissoes, rotaDeEntrada } from '../src/lib/menu-v2';
+import { MENU_V2, filtrarMenuPorPermissoes, rotaDeEntrada } from '../src/lib/menu-v2';
 
 const SNAPSHOT = join(
   __dirname, '..', '..', 'backend', 'src', 'common', 'rbac', 'perfil-permissoes.snapshot.json',
@@ -1112,9 +1215,10 @@ const TODOS = [
 ];
 
 /**
- * Tabela fixada no plano da Onda 2 (decisões 10–13 e 25).
+ * Tabela fixada no plano da Onda 2 (decisões 10–13, 25 e 30).
  * Personas do protótipo cobertas: administrador, gestor, comercial,
- * recebimento_pesagem, corte (Desossa), expedicao (Carga), faturamento.
+ * recebimento_pesagem, corte (Desossa), expedicao (Carga).
+ * `faturamento` também vê GESTÃO, restrita a Relatórios & SIF (decisões 11 e 30).
  * conferente/logistica ficam sem grupo até a matriz AD-04 da Onda 3.
  */
 const GRUPOS_ESPERADOS: Record<string, string[]> = {
@@ -1125,10 +1229,117 @@ const GRUPOS_ESPERADOS: Record<string, string[]> = {
   recebimento_pesagem: ['RECEBIMENTO & BALANÇA'],
   corte: ['DESOSSA'],
   expedicao: ['CARGA'],
-  faturamento: ['FATURAMENTO'],
+  faturamento: ['GESTÃO', 'FATURAMENTO'],
   diretoria: ['COMERCIAL', 'ADMINISTRAÇÃO'],
   conferente: [],
   logistica: [],
+};
+
+/**
+ * Coluna "Perfis RBAC" da matriz de rastreabilidade v1.1 (linhas 3–41), transcrita rota a
+ * rota — inclui os papéis secundários ("consulta", "registro"). É a referência contra a qual
+ * as decisões 25, 30 e 31 são aferidas.
+ */
+const MATRIZ_RASTREABILIDADE: Record<string, string[]> = {
+  '/comercial/clientes': ['comercial', 'gestor', 'administrador', 'faturamento'],
+  '/comercial/pedidos': ['comercial', 'gestor', 'administrador', 'faturamento', 'expedicao'],
+  '/comercial/tabela-precos': ['gestor', 'administrador', 'comercial'],
+  '/comercial/disponibilidade': ['comercial', 'gestor', 'diretoria', 'administrador'],
+  '/comercial/espelho': ['comercial', 'gestor', 'expedicao', 'administrador'],
+  '/gestao/dashboard': ['gestor', 'diretoria', 'administrador'],
+  '/gestao/operacoes': ['gestor', 'compras', 'administrador'],
+  '/gestao/compras': ['compras', 'gestor', 'administrador', 'comercial'],
+  '/gestao/overbooking': ['gestor', 'administrador', 'comercial', 'compras'],
+  '/gestao/aprovacoes': ['gestor', 'administrador', 'recebimento_pesagem', 'diretoria'],
+  '/gestao/relatorios': ['gestor', 'faturamento', 'administrador', 'diretoria'],
+  '/recebimento/recebimento-carga': ['recebimento_pesagem', 'gestor', 'administrador', 'compras', 'faturamento'],
+  '/recebimento/pesagem-destinacao': ['recebimento_pesagem', 'gestor', 'administrador'],
+  '/recebimento/etiquetas': ['recebimento_pesagem', 'gestor', 'administrador'],
+  '/desossa/dashboard': ['corte', 'gestor', 'administrador', 'comercial'],
+  '/desossa/pesagem-destinacao': ['corte', 'gestor', 'administrador'],
+  '/desossa/etiquetas': ['corte', 'gestor', 'administrador'],
+  '/estoque/consulta': ['expedicao', 'recebimento_pesagem', 'gestor', 'administrador'],
+  '/estoque/entrada-itens': ['expedicao', 'recebimento_pesagem', 'gestor', 'administrador'],
+  '/estoque/ajustes': ['expedicao', 'recebimento_pesagem', 'gestor', 'administrador'],
+  '/carga/planejamento': ['expedicao', 'gestor', 'administrador'],
+  '/carga/conferencia': ['conferente', 'expedicao', 'gestor', 'administrador'],
+  '/carga/enviar-faturamento': ['expedicao', 'gestor', 'administrador'],
+  '/faturamento/pre-faturamento': ['faturamento', 'gestor', 'administrador'],
+  '/faturamento/notas-xml': ['faturamento', 'gestor', 'administrador', 'logistica', 'diretoria'],
+  '/faturamento/seguro-manual': ['faturamento', 'logistica', 'gestor', 'administrador'],
+  '/faturamento/liberacao': ['logistica', 'faturamento', 'gestor', 'administrador'],
+  '/cadastros/representantes': ['administrador', 'gestor'],
+  '/cadastros/produtos': ['administrador', 'gestor'],
+  '/cadastros/fornecedores': ['administrador', 'gestor', 'compras'],
+  '/cadastros/caminhoes': ['administrador', 'gestor', 'expedicao'],
+  '/cadastros/motoristas': ['administrador', 'gestor', 'expedicao'],
+  '/cadastros/rotas': ['administrador', 'gestor'],
+  '/cadastros/regras-transformacao': ['administrador', 'gestor'],
+  '/cadastros/modelos-etiqueta': ['administrador', 'gestor'],
+  '/admin/usuarios': ['administrador'],
+  '/admin/perfis': ['administrador'],
+  '/admin/parametros': ['administrador'],
+  '/admin/auditoria': ['administrador', 'diretoria', 'gestor'],
+};
+
+/** Decisão 25 — as 26 rotas que a matriz atribui e o gate de grupo retira do menu. */
+const PERDAS_DECLARADAS: Record<string, string[]> = {
+  administrador: [],
+  gestor: [],
+  compras: ['/recebimento/recebimento-carga'],
+  comercial: ['/gestao/compras', '/gestao/overbooking', '/desossa/dashboard'],
+  recebimento_pesagem: [
+    '/gestao/aprovacoes',
+    '/estoque/consulta',
+    '/estoque/entrada-itens',
+    '/estoque/ajustes',
+  ],
+  corte: [],
+  expedicao: [
+    '/comercial/pedidos',
+    '/comercial/espelho',
+    '/estoque/consulta',
+    '/estoque/entrada-itens',
+    '/estoque/ajustes',
+    '/cadastros/caminhoes',
+    '/cadastros/motoristas',
+  ],
+  conferente: ['/carga/conferencia'],
+  faturamento: ['/comercial/clientes', '/comercial/pedidos', '/recebimento/recebimento-carga'],
+  logistica: ['/faturamento/notas-xml', '/faturamento/seguro-manual', '/faturamento/liberacao'],
+  diretoria: [
+    '/gestao/dashboard',
+    '/gestao/aprovacoes',
+    '/gestao/relatorios',
+    '/faturamento/notas-xml',
+  ],
+};
+
+/** Decisão 31 — itens visíveis cujo perfil a matriz não nomeia (perfis sem persona no protótipo). */
+const EXTRAS_DECLARADOS: Record<string, string[]> = {
+  administrador: [],
+  gestor: [],
+  compras: [
+    '/comercial/clientes',
+    '/comercial/pedidos',
+    '/comercial/disponibilidade',
+    '/comercial/espelho',
+    '/gestao/dashboard',
+    '/gestao/aprovacoes',
+    '/gestao/relatorios',
+    '/cadastros/representantes',
+    '/cadastros/produtos',
+    '/cadastros/rotas',
+    '/cadastros/regras-transformacao',
+  ],
+  comercial: [],
+  recebimento_pesagem: [],
+  corte: [],
+  expedicao: [],
+  conferente: [],
+  faturamento: [],
+  logistica: [],
+  diretoria: ['/comercial/clientes', '/comercial/pedidos', '/comercial/espelho'],
 };
 
 /** Tabela fixada da decisão 26 — rota de entrada por perfil. */
@@ -1172,12 +1383,47 @@ function rotasVisiveis(perfil: string): string[] {
   );
 }
 
+function listaDeclarada(tabela: Record<string, string[]>, perfil: string): string[] {
+  const lista = tabela[perfil];
+  if (!lista) throw new Error(`perfil fora da tabela fixada do plano: ${perfil}`);
+  return [...lista].sort();
+}
+
+/** Rotas que a matriz atribui ao perfil e o menu não mostra. */
+function perdasCalculadas(perfil: string): string[] {
+  const visiveis = new Set(rotasVisiveis(perfil));
+  return Object.entries(MATRIZ_RASTREABILIDADE)
+    .filter(([href, perfis]) => perfis.includes(perfil) && !visiveis.has(href))
+    .map(([href]) => href)
+    .sort();
+}
+
+/** Rotas que o menu mostra e a matriz não atribui ao perfil. */
+function extrasCalculados(perfil: string): string[] {
+  return rotasVisiveis(perfil)
+    .filter((href) => !(MATRIZ_RASTREABILIDADE[href] ?? []).includes(perfil))
+    .sort();
+}
+
+function grupoDaRota(href: string) {
+  const grupo = MENU_V2.find((g) => g.items.some((item) => item.href === href));
+  if (!grupo) throw new Error(`rota fora do MENU_V2: ${href}`);
+  return grupo;
+}
+
 describe('visibilidade do menu por RBAC real', () => {
   it('a tabela fixada cobre os 11 perfis do catalogo', () => {
-    expect(Object.keys(GRUPOS_ESPERADOS).sort()).toEqual(Object.keys(PERMISSOES_POR_PERFIL).sort());
-    expect(Object.keys(ROTAS_ENTRADA_ESPERADAS).sort()).toEqual(
-      Object.keys(PERMISSOES_POR_PERFIL).sort(),
-    );
+    const perfis = Object.keys(PERMISSOES_POR_PERFIL).sort();
+    expect(Object.keys(GRUPOS_ESPERADOS).sort()).toEqual(perfis);
+    expect(Object.keys(ROTAS_ENTRADA_ESPERADAS).sort()).toEqual(perfis);
+    expect(Object.keys(PERDAS_DECLARADAS).sort()).toEqual(perfis);
+    expect(Object.keys(EXTRAS_DECLARADOS).sort()).toEqual(perfis);
+  });
+
+  it('a matriz transcrita cobre exatamente as 39 rotas do menu', () => {
+    const rotasMenu = MENU_V2.flatMap((grupo) => grupo.items.map((item) => item.href)).sort();
+    expect(Object.keys(MATRIZ_RASTREABILIDADE).sort()).toEqual(rotasMenu);
+    expect(rotasMenu).toHaveLength(39);
   });
 
   it.each(Object.keys(GRUPOS_ESPERADOS))(
@@ -1225,11 +1471,47 @@ describe('visibilidade do menu por RBAC real', () => {
     }
   });
 
-  it('efeitos declarados do gate de grupo conferem com o catalogo', () => {
-    expect(rotasVisiveis('expedicao')).not.toContain('/cadastros/caminhoes');
-    expect(rotasVisiveis('expedicao')).not.toContain('/cadastros/motoristas');
-    expect(rotasVisiveis('diretoria')).not.toContain('/gestao/dashboard');
-    expect(rotasVisiveis('diretoria')).not.toContain('/gestao/relatorios');
+  it.each(Object.keys(PERDAS_DECLARADAS))(
+    'perdas declaradas conferem com o catalogo e a matriz: %s',
+    (perfil) => {
+      expect(perdasCalculadas(perfil)).toEqual(listaDeclarada(PERDAS_DECLARADAS, perfil));
+    },
+  );
+
+  it('a decisao 25 declara exatamente 26 perdas', () => {
+    const total = Object.keys(PERDAS_DECLARADAS).reduce(
+      (soma, perfil) => soma + perdasCalculadas(perfil).length,
+      0,
+    );
+    expect(total).toBe(26);
+  });
+
+  it('toda perda declarada e efeito do gate de grupo, nunca do filtro de item', () => {
+    for (const perfil of Object.keys(PERDAS_DECLARADAS)) {
+      const concedidas = new Set(permissoesDe(perfil));
+      for (const href of listaDeclarada(PERDAS_DECLARADAS, perfil)) {
+        const grupo = grupoDaRota(href);
+        expect(grupo.permissoesGrupo.some((p) => concedidas.has(p))).toBe(false);
+      }
+    }
+  });
+
+  it.each(Object.keys(EXTRAS_DECLARADOS))(
+    'itens visiveis sem atribuicao na matriz conferem com a lista declarada: %s',
+    (perfil) => {
+      expect(extrasCalculados(perfil)).toEqual(listaDeclarada(EXTRAS_DECLARADOS, perfil));
+    },
+  );
+
+  it('faturamento ve Relatorios & SIF e nada mais em GESTÃO (matriz linha 13)', () => {
+    const gestao = filtrarMenuPorPermissoes(permissoesDe('faturamento')).find(
+      (grupo) => grupo.title === 'GESTÃO',
+    );
+    expect(gestao?.items.map((item) => item.href)).toEqual(['/gestao/relatorios']);
+  });
+
+  it('compras ve Pendencias de Overbooking (matriz linha 11)', () => {
+    expect(rotasVisiveis('compras')).toContain('/gestao/overbooking');
   });
 
   it('comercial nao ve tabela de precos sem PEDIDOS_GERENCIAR', () => {
@@ -1352,11 +1634,19 @@ describe('rota de entrada /', () => {
     await expect(EntradaPage()).rejects.toThrow('REDIRECT:/gestao/dashboard');
   });
 
-  it('redireciona para a primeira rota visivel quando o dashboard nao esta no menu', async () => {
+  it('redireciona para a rota do grupo de trabalho quando o dashboard nao esta no menu', async () => {
     mockGetMe.mockResolvedValue({
-      sub: 'u2', nome: 'Carla', perfis: ['expedicao'], permissoes: permissoesDe('expedicao'),
+      sub: 'u2', nome: 'Ludmila', perfis: ['expedicao'], permissoes: permissoesDe('expedicao'),
     });
     await expect(EntradaPage()).rejects.toThrow('REDIRECT:/carga/planejamento');
+  });
+
+  // `faturamento` vê GESTÃO só com Relatórios & SIF (decisão 30); o grupo de trabalho é FATURAMENTO
+  it('ignora grupo de consulta com item unico ao escolher a entrada', async () => {
+    mockGetMe.mockResolvedValue({
+      sub: 'u4', nome: 'Carla', perfis: ['faturamento'], permissoes: permissoesDe('faturamento'),
+    });
+    await expect(EntradaPage()).rejects.toThrow('REDIRECT:/faturamento/pre-faturamento');
   });
 
   it('sem modulo liberado exibe aviso explicito sem redirecionar', async () => {
@@ -2321,6 +2611,12 @@ export default function LoginPage() {
 }
 ```
 
+- [ ] Atualizar o único spec Playwright que faz login pela UI e ainda clica no rótulo antigo — `e2e/jornada-operacional.spec.ts:441`:
+
+```typescript
+    await page.getByRole('button', { name: 'Acessar Sistema' }).click();
+```
+
 - [ ] Acrescentar a variável em `.env.example`, na seção do frontend (logo após `NEXT_PUBLIC_API_URL`):
 
 ```dotenv
@@ -2453,23 +2749,31 @@ test.describe('Shell + DS da Onda 2', () => {
     await expect(breadcrumb).toContainText('Painel Geral da Operação');
   });
 
+  // O colapso é max-height + overflow-hidden com os itens montados: um link clipado ainda tem
+  // bounding box e continuaria "visível" para o Playwright. A asserção é do mecanismo real.
   test('colapso por grupo funciona no shell renderizado', async ({ page, request, baseURL }) => {
     await loginAdmin(page, request, baseURL!);
     await page.goto('/gestao/dashboard');
     const cabecalho = page.getByRole('button', { name: /COMERCIAL/ });
-    const item = page.getByRole('link', { name: 'Clientes' });
-    if (await item.isVisible()) {
-      await cabecalho.click();
-      await expect(item).toBeHidden();
-    }
+    const idPainel = await cabecalho.getAttribute('aria-controls');
+    expect(idPainel).toBeTruthy();
+    const painel = page.locator(`[id="${idPainel}"]`);
+
+    if ((await painel.getAttribute('data-state')) === 'fechado') await cabecalho.click();
+    await expect(cabecalho).toHaveAttribute('aria-expanded', 'true');
+    await expect(painel).toHaveAttribute('data-state', 'aberto');
+    await expect(page.getByRole('link', { name: 'Clientes' })).toBeVisible();
+
     await cabecalho.click();
-    await expect(item).toBeVisible();
+    await expect(cabecalho).toHaveAttribute('aria-expanded', 'false');
+    await expect(painel).toHaveAttribute('data-state', 'fechado');
+    await expect(painel).toHaveCSS('max-height', '0px');
   });
 
   test('captura evidencias do shell e do login', async ({ page, request, baseURL }) => {
     await loginAdmin(page, request, baseURL!);
     await page.goto('/gestao/dashboard');
-    await expect(page.getByRole('heading', { name: /Dashboard Operacional/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /Painel Geral da Operação/i })).toBeVisible({ timeout: 15_000 });
     await page.screenshot({ path: path.join(EVIDENCIAS, '02-shell-dashboard.png'), fullPage: true });
     await page
       .getByRole('complementary', { name: 'Navegação principal' })
@@ -2504,7 +2808,7 @@ npx playwright screenshot --viewport-size=1280,800 --full-page \
   "F:/Projetos/AlphaCarnes/docs/evidencias/onda2-shell/referencia-prototipo/02-shell-prototipo.png"
 ```
 
-- [ ] Criar `docs/evidencias/onda2-shell/README.md` com: origem de cada PNG (app × protótipo), comando que gerou cada um, viewport `1280×800`, e a lista das divergências autorizadas pelas decisões 11, 16, 20, 25 e 26 deste plano (ADMINISTRAÇÃO para `gestor`; ausência do chip "Escopo"; login sem foto de CDN, sem credencial pré-preenchida, sem "Esqueci a senha"/"Lembrar minhas credenciais" e sem rodapé de protótipo; itens que `expedicao`/`diretoria` perdem no menu; rota de entrada resolvida pelo menu do perfil). Critério explícito: **comparação estrutural lado a lado, não pixel-perfect** (decisão 21).
+- [ ] Criar `docs/evidencias/onda2-shell/README.md` com: origem de cada PNG (app × protótipo), comando que gerou cada um, viewport `1280×800`, e a lista das divergências autorizadas pelas decisões 11, 16, 20, 25, 26, 30 e 31 deste plano (ADMINISTRAÇÃO para `gestor` e GESTÃO restrita a `Relatórios & SIF` para `faturamento`; ausência do chip "Escopo"; login sem foto de CDN, sem credencial pré-preenchida, sem "Esqueci a senha"/"Lembrar minhas credenciais" e sem rodapé de protótipo; as 26 perdas de item declaradas na decisão 25 e os itens visíveis sem atribuição na matriz da decisão 31; rota de entrada resolvida pelo grupo de trabalho do perfil). Critério explícito: **comparação estrutural lado a lado, não pixel-perfect** (decisão 21).
 
 - [ ] Run (com Postgres, backend e seed ativos). O workspace `app/backend` **não tem script de dev** (só `build`/`start:prod`/`lint`/`type-check`/`test`/`test:cov`/`db:*`); o backend real desta etapa sobe pelo serviço `backend` do `docker-compose.yml`, que expõe `http://localhost:4001`:
 
@@ -2525,7 +2829,7 @@ Notas de execução (nada aqui é opcional): `db:migrate`/`db:seed` rodam **do h
 
 Expected: 7 testes PASS; os três PNGs de `docs/evidencias/onda2-shell/` criados.
 
-- [ ] Run: `cd app/frontend && npm run test` → toda a suíte Jest PASS (inclui os 12 arquivos novos + `terminologia`, `api`, `middleware` e as suítes de tela pré-existentes).
+- [ ] Run: `cd app/frontend && npm run test` → toda a suíte Jest PASS (inclui os 14 arquivos novos + `login` reescrito + `terminologia`, `api`, `middleware` e as suítes de tela pré-existentes).
 - [ ] Commit previsto: `test(onda2): smoke do DS e evidencia do shell contra o prototipo`
 
 ## Task 9 — Gate local e PR
@@ -2595,12 +2899,15 @@ Plano tático: `docs/superpowers/plans/2026-07-25-onda2-shell-ds.md` (sha256 reg
 - Decisão 21 — comparação de shell é estrutural, não pixel-perfect.
 - Decisão 23 — hex remanescente apenas em seletor de atributo CSS (`chart.tsx`), com inventário pinado por teste.
 - Decisão 24 — `/cadastros/rotas` passa a exigir `ROTAS_*`; `/desossa/dashboard` deixa de aceitar `DISPONIBILIDADE_LER`.
-- Decisão 25 — `expedicao` perde Caminhões/Motoristas e `diretoria` perde Painel Geral/Relatórios no menu (reconciliação na Onda 3).
-- Decisão 26 — rota de entrada `/` e destino pós-login resolvidos pelo menu do perfil (matriz linha 2 refinada para não cair em rota fora do menu).
+- Decisão 25 — as **26** rotas que a matriz atribui e o gate de grupo tira do menu, declaradas item a item por perfil e aferidas em `menu-rbac.test.ts` (reconciliação na Onda 3).
+- Decisão 26 — rota de entrada `/` e destino pós-login resolvidos pelo grupo de trabalho do perfil (matriz linha 2 refinada para não cair em rota fora do menu).
 - Decisão 29 — `button.tsx` ganha a variante `acao` para o CTA do login usar `--color-action-blue`.
+- Decisão 30 — `faturamento` recupera `Relatórios & SIF` (matriz linha 13) e passa a ver `GESTÃO` com esse único item; `compras` recupera `Pendências de Overbooking` (linha 11); `/gestao/dashboard` deixa de aceitar `DISPONIBILIDADE_LER`.
+- Decisão 31 — itens visíveis que a matriz não atribui (11 em `compras`, 3 em `diretoria`), pinados por teste.
+- Decisão 5 — `<h1>` de `/gestao/dashboard` alinhado a `Painel Geral da Operação`; specs Playwright existentes atualizados junto.
 
 ### Fora de escopo
-Telas de domínio das Ondas 3–10; regra de Troca de Peça (Onda 6); matriz completa de permissões por perfil (Onda 3); alinhamento de filtros/visual de `/admin/auditoria` (Onda 3 — decisão 27); as sete dívidas herdadas da Onda 1 (Onda 6 — decisão 28 e seção "Dívidas herdadas da Onda 1").
+Telas de domínio das Ondas 3–10; regra de Troca de Peça (Onda 6); matriz completa de permissões por perfil (Onda 3 — inclui as 26 perdas da decisão 25 e a conciliação catálogo × matriz da decisão 31); alinhamento de filtros/visual de `/admin/auditoria` (Onda 3 — decisão 27); as sete dívidas herdadas da Onda 1 (Onda 6 — decisão 28 e seção "Dívidas herdadas da Onda 1").
 ```
 
 - [ ] Solicitar `/gate-pr onda2 <PR>`.
