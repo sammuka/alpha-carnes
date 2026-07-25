@@ -13,10 +13,21 @@ export function formatMenuGroupTitle(title: string): string {
     .join(' & ');
 }
 
+/** Única divergência menu×breadcrumb — protótipo Layout.tsx getBreadcrumb. */
+const BREADCRUMB_ITEM_OVERRIDES: Record<string, string> = {
+  '/cadastros/fornecedores': 'Fornecedores',
+};
+
 /** Mapa href → breadcrumb "Grupo / Item" conforme menu canônico v2. */
 export const BREADCRUMB_MAP: Record<string, BreadcrumbV2> = Object.fromEntries(
   MENU_V2.flatMap((group) =>
-    group.items.map((item) => [item.href, { group: group.title, item: item.label }]),
+    group.items.map((item) => [
+      item.href,
+      {
+        group: group.title,
+        item: BREADCRUMB_ITEM_OVERRIDES[item.href] ?? item.label,
+      },
+    ]),
   ),
 );
 
