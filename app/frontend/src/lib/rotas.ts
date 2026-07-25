@@ -1,5 +1,20 @@
 export type StatusCadastro = 'ativo' | 'inativo';
 
+export interface ParadaRota {
+  ordem: number;
+  descricao: string;
+}
+
+export const DIAS_SEMANA = [
+  { valor: 'seg', rotulo: 'Seg' },
+  { valor: 'ter', rotulo: 'Ter' },
+  { valor: 'qua', rotulo: 'Qua' },
+  { valor: 'qui', rotulo: 'Qui' },
+  { valor: 'sex', rotulo: 'Sex' },
+  { valor: 'sab', rotulo: 'Sáb' },
+  { valor: 'dom', rotulo: 'Dom' },
+] as const;
+
 export interface Rota {
   id: string;
   codigo: string;
@@ -10,6 +25,8 @@ export interface Rota {
   motoristaPadrao: string | null;
   observacoes: string | null;
   status: StatusCadastro;
+  paradas: ParadaRota[];
+  diasAtendimento: string[];
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -24,6 +41,8 @@ export interface CriarRotaDto {
   motoristaPadrao?: string;
   observacoes?: string;
   status?: StatusCadastro;
+  paradas: ParadaRota[];
+  diasAtendimento: string[];
 }
 
 export type AtualizarRotaDto = Partial<CriarRotaDto>;

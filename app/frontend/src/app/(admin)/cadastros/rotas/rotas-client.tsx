@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Map, MapPin, Plus, Search } from 'lucide-react';
+import { ArrowDown, ArrowUp, Map, MapPin, MoveVertical, Plus, Search, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import type { CriarRotaDto, Paginado, Rota } from '@/lib/rotas';
+import type { CriarRotaDto, Paginado, ParadaRota, Rota } from '@/lib/rotas';
+import { DIAS_SEMANA } from '@/lib/rotas';
 
 type FormRota = CriarRotaDto & { id?: string };
 
@@ -22,6 +23,8 @@ const FORM_VAZIO: FormRota = {
   motoristaPadrao: '',
   observacoes: '',
   status: 'ativo',
+  paradas: [],
+  diasAtendimento: [],
 };
 
 function rotaParaForm(r: Rota): FormRota {
@@ -35,6 +38,8 @@ function rotaParaForm(r: Rota): FormRota {
     motoristaPadrao: r.motoristaPadrao ?? '',
     observacoes: r.observacoes ?? '',
     status: r.status,
+    paradas: r.paradas ?? [],
+    diasAtendimento: r.diasAtendimento ?? [],
   };
 }
 
@@ -48,11 +53,13 @@ function formParaPayload(form: FormRota): CriarRotaDto {
     motoristaPadrao: form.motoristaPadrao?.trim() || undefined,
     observacoes: form.observacoes?.trim() || undefined,
     status: form.status,
+    paradas: form.paradas,
+    diasAtendimento: form.diasAtendimento,
   };
 }
 
 export function RotasClient({ permissoes }: { permissoes: string[] }) {
-  const podeGerenciar = permissoes.includes('EXPEDICAO_GERENCIAR');
+  const podeGerenciar = permissoes.includes('ROTAS_GERENCIAR');
 
   const [busca, setBusca] = useState('');
   const [rotas, setRotas] = useState<Rota[]>([]);
@@ -109,10 +116,52 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
     }
   };
 
+  const setCampo = <K extends keyof FormRota>(key: K, val: FormRota[K]) =>
+    setForm((f) => ({ ...f, [key]: val }));
+
+  const renumerar = (lista: ParadaRota[]) =>
+    lista.map((parada, indice) => ({ ordem: indice + 1, descricao: parada.descricao }));
+
+  const adicionarParada = () =>
+    setCampo('paradas', renumerar([...form.paradas, { ordem: form.paradas.length + 1, descricao: '' }]));
+
+  const atualizarParada = (indice: number, descricao: string) =>
+    setCampo(
+      'paradas',
+      form.paradas.map((parada, i) => (i === indice ? { ...parada, descricao } : parada)),
+    );
+
+  const removerParada = (indice: number) =>
+    setCampo('paradas', renumerar(form.paradas.filter((_, i) => i !== indice)));
+
+  const moverParada = (indice: number, delta: number) => {
+    const destino = indice + delta;
+    if (destino < 0 || destino >= form.paradas.length) return;
+    const lista = [...form.paradas];
+    const atual = lista[indice];
+    const outro = lista[destino];
+    if (!atual || !outro) return;
+    lista[indice] = outro;
+    lista[destino] = atual;
+    setCampo('paradas', renumerar(lista));
+  };
+
+  const alternarDia = (dia: string) =>
+    setCampo(
+      'diasAtendimento',
+      form.diasAtendimento.includes(dia)
+        ? form.diasAtendimento.filter((d) => d !== dia)
+        : [...form.diasAtendimento, dia],
+    );
+
   const salvar = async () => {
     if (!podeGerenciar) return;
     if (!form.codigo.trim() || !form.nome.trim()) {
       setErro('Preencha código e nome da rota.');
+      return;
+    }
+    if (form.paradas.some((parada) => parada.descricao.trim() === '')) {
+      setErro('Informe a descrição de todas as paradas.');
       return;
     }
     setSalvando(true);
@@ -166,9 +215,6 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
       setErro('Erro de conexão');
     }
   };
-
-  const setCampo = <K extends keyof FormRota>(key: K, val: FormRota[K]) =>
-    setForm((f) => ({ ...f, [key]: val }));
 
   const painelAtivo = modoNovo || !!selecionada;
 
@@ -371,6 +417,102 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
                     onChange={(e) => setCampo('observacoes', e.target.value)}
                     rows={4}
                   />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between border-b border-border pb-2">
+                    <h3 className="text-sm font-bold tracking-wider text-foreground uppercase">
+                      Sequência de Paradas / Bairros
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      {form.paradas.length} {form.paradas.length === 1 ? 'parada' : 'paradas'}
+                    </span>
+                  </div>
+
+                  {form.paradas.length === 0 && (
+                    <p className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
+                      Nenhuma parada cadastrada nesta rota.
+                    </p>
+                  )}
+
+                  {form.paradas.map((parada, indice) => (
+                    <div key={parada.ordem} className="flex items-center gap-3 rounded-md border border-border bg-muted/30 p-3">
+                      <MoveVertical className="size-4 cursor-grab text-muted-foreground" />
+                      <span className="flex size-6 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                        {indice + 1}
+                      </span>
+                      <Input
+                        aria-label={`Parada ${indice + 1}`}
+                        className="flex-1 bg-card"
+                        value={parada.descricao}
+                        disabled={!podeGerenciar}
+                        onChange={(e) => atualizarParada(indice, e.target.value)}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Subir parada"
+                        disabled={!podeGerenciar || indice === 0}
+                        onClick={() => moverParada(indice, -1)}
+                      >
+                        <ArrowUp className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Descer parada"
+                        disabled={!podeGerenciar || indice === form.paradas.length - 1}
+                        onClick={() => moverParada(indice, 1)}
+                      >
+                        <ArrowDown className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Remover parada"
+                        disabled={!podeGerenciar}
+                        onClick={() => removerParada(indice)}
+                      >
+                        <Trash2 className="size-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+
+                  {podeGerenciar && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-2 w-full border-dashed text-muted-foreground"
+                      onClick={adicionarParada}
+                    >
+                      <Plus className="mr-2 size-4" />
+                      Adicionar Parada
+                    </Button>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="border-b border-border pb-2 text-sm font-bold tracking-wider text-foreground uppercase">
+                    Dias de Atendimento
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {DIAS_SEMANA.map((dia) => {
+                      const marcado = form.diasAtendimento.includes(dia.valor);
+                      return (
+                        <Button
+                          key={dia.valor}
+                          type="button"
+                          variant={marcado ? 'default' : 'outline'}
+                          size="sm"
+                          aria-pressed={marcado}
+                          disabled={!podeGerenciar}
+                          onClick={() => alternarDia(dia.valor)}
+                        >
+                          {dia.rotulo}
+                        </Button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </>

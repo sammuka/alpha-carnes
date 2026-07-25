@@ -27,7 +27,18 @@ export const createProdutoSchema = z.object({
   ativoCompra: z.boolean().optional().default(false),
   status: z.enum(['ativo', 'inativo']).optional().default('ativo'),
   observacoesOperacionais: z.string().trim().optional(),
-  atributosJson: z.record(z.string(), z.unknown()).optional(),
+  atributosJson: z
+    .object({
+      fiscal: z
+        .object({
+          ncm: z.string().trim().max(10).optional(),
+          cfop: z.string().trim().max(6).optional(),
+          origemFiscal: z.string().trim().max(60).optional(),
+          cestOpcional: z.string().trim().max(10).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
 export type CreateProdutoDto = z.infer<typeof createProdutoSchema>;

@@ -1,8 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Eye, FileJson, Filter } from 'lucide-react';
-import type { FiltrosAuditoria, OperacaoAuditoria, PaginadoAuditoria, RegistroAuditoria } from '@/lib/auditoria';
+import { Download, Eye, FileJson, Filter } from 'lucide-react';
+import { toast } from 'sonner';
+import type {
+  FacetasAuditoria,
+  FiltrosAuditoria,
+  OperacaoAuditoria,
+  PaginadoAuditoria,
+  RegistroAuditoria,
+} from '@/lib/auditoria';
+import { mensagemDeErro } from '@/lib/error-message';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,12 +31,17 @@ const COR_OPERACAO: Record<OperacaoAuditoria, string> = {
   ACAO_MANUAL: 'bg-violet-100 text-violet-800',
 };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function AuditoriaAdminClient() {
   const [filtros, setFiltros] = useState<FiltrosAuditoria>({ page: 1, pageSize: 20 });
   const [resultado, setResultado] = useState<PaginadoAuditoria | null>(null);
   const [selecionado, setSelecionado] = useState<RegistroAuditoria | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [facetas, setFacetas] = useState<FacetasAuditoria | null>(null);
+  const [registro, setRegistro] = useState('');
+  const [exportando, setExportando] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -40,8 +53,7 @@ export function AuditoriaAdminClient() {
       });
       const res = await fetch(`/api/admin/auditoria?${params.toString()}`);
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setErro((data as { message?: string }).message ?? 'Falha ao carregar auditoria');
+        setErro(await mensagemDeErro(res));
         return;
       }
       const data = (await res.json()) as PaginadoAuditoria;
@@ -58,6 +70,56 @@ export function AuditoriaAdminClient() {
     void carregar();
   }, [carregar]);
 
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch('/api/admin/auditoria/facetas', { cache: 'no-store' });
+      if (!res.ok) {
+        setErro(await mensagemDeErro(res));
+        return;
+      }
+      setFacetas((await res.json()) as FacetasAuditoria);
+    })();
+  }, []);
+
+  const aplicarFiltros = () => {
+    const valor = registro.trim();
+    setFiltros((s) => ({
+      ...s,
+      registroId: UUID.test(valor) ? valor : undefined,
+      registroBusca: valor && !UUID.test(valor) ? valor : undefined,
+      page: 1,
+    }));
+  };
+
+  const exportarCsv = async () => {
+    setExportando(true);
+    try {
+      const params = new URLSearchParams();
+      Object.entries(filtros).forEach(([k, v]) => {
+        if (v !== undefined && v !== '' && k !== 'page' && k !== 'pageSize') params.set(k, String(v));
+      });
+      const res = await fetch(`/api/admin/auditoria/export?${params.toString()}`);
+      if (!res.ok) {
+        toast.error(await mensagemDeErro(res));
+        return;
+      }
+      if (res.headers.get('X-Auditoria-Truncado') === '1') {
+        toast.warning('Exportação truncada em 5000 registros. Refine o período.');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `auditoria-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Erro de conexão com o servidor.');
+    } finally {
+      setExportando(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -67,22 +129,82 @@ export function AuditoriaAdminClient() {
             Rastreabilidade completa de alterações no sistema e segregação de funções
           </p>
         </div>
-        <Button onClick={() => void carregar()}>
-          <Filter className="mr-2 h-4 w-4" />
-          Aplicar Filtros
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={aplicarFiltros}>
+            <Filter className="mr-2 h-4 w-4" />
+            Aplicar Filtros
+          </Button>
+          <Button variant="outline" onClick={() => void exportarCsv()} disabled={exportando}>
+            <Download className="mr-2 size-4" />
+            {exportando ? 'Exportando…' : 'Exportar CSV'}
+          </Button>
+        </div>
       </div>
 
       <Card>
         <CardContent className="grid gap-4 p-5 md:grid-cols-6">
           <div className="md:col-span-2">
-            <Label>Módulo</Label>
-            <Input
-              value={filtros.modulo ?? ''}
-              onChange={(e) => setFiltros((s) => ({ ...s, modulo: e.target.value || undefined, page: 1 }))}
-              placeholder="ex.: faturamento"
-            />
+            <Label htmlFor="periodo-inicio">Período</Label>
+            <div className="flex gap-2">
+              <Input
+                id="periodo-inicio"
+                type="datetime-local"
+                value={filtros.dataInicio ?? ''}
+                onChange={(e) => setFiltros((s) => ({ ...s, dataInicio: e.target.value || undefined, page: 1 }))}
+              />
+              <Input
+                aria-label="Período — fim"
+                type="datetime-local"
+                value={filtros.dataFim ?? ''}
+                onChange={(e) => setFiltros((s) => ({ ...s, dataFim: e.target.value || undefined, page: 1 }))}
+              />
+            </div>
           </div>
+
+          <div>
+            <Label>Usuário</Label>
+            <Select
+              value={filtros.usuarioId ?? 'todos'}
+              onValueChange={(v) =>
+                setFiltros((s) => ({ ...s, usuarioId: v === 'todos' ? undefined : v, page: 1 }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Todos os usuários" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os usuários</SelectItem>
+                {(facetas?.usuarios ?? []).map((usuario) => (
+                  <SelectItem key={usuario.id} value={usuario.id}>
+                    {usuario.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label>Módulo</Label>
+            <Select
+              value={filtros.modulo ?? 'todos'}
+              onValueChange={(v) =>
+                setFiltros((s) => ({ ...s, modulo: v === 'todos' ? undefined : v, page: 1 }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                {(facetas?.modulos ?? []).map((modulo) => (
+                  <SelectItem key={modulo} value={modulo}>
+                    {modulo}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div>
             <Label>Operação</Label>
             <Select
@@ -107,25 +229,14 @@ export function AuditoriaAdminClient() {
               </SelectContent>
             </Select>
           </div>
+
           <div>
-            <Label>Tabela</Label>
+            <Label htmlFor="registro">Registro (ID)</Label>
             <Input
-              value={filtros.tabela ?? ''}
-              onChange={(e) => setFiltros((s) => ({ ...s, tabela: e.target.value || undefined, page: 1 }))}
-            />
-          </div>
-          <div>
-            <Label>Registro (UUID)</Label>
-            <Input
-              value={filtros.registroId ?? ''}
-              onChange={(e) => setFiltros((s) => ({ ...s, registroId: e.target.value || undefined, page: 1 }))}
-            />
-          </div>
-          <div>
-            <Label>Usuário (UUID)</Label>
-            <Input
-              value={filtros.usuarioId ?? ''}
-              onChange={(e) => setFiltros((s) => ({ ...s, usuarioId: e.target.value || undefined, page: 1 }))}
+              id="registro"
+              placeholder="UUID completo ou parte dele"
+              value={registro}
+              onChange={(e) => setRegistro(e.target.value)}
             />
           </div>
         </CardContent>
@@ -218,15 +329,19 @@ export function AuditoriaAdminClient() {
             )}
           </div>
           {selecionado ? (
-            <div className="flex-1 overflow-auto border-t bg-muted/30 p-5 font-mono text-xs">
-              <p className="mb-2 font-sans text-sm font-medium text-muted-foreground">Dados Anteriores</p>
-              <pre className="mb-4 overflow-x-auto rounded-lg border border-border bg-card p-3 text-destructive">
-                {JSON.stringify(selecionado.dadosAnteriores, null, 2)}
-              </pre>
-              <p className="mb-2 font-sans text-sm font-medium text-muted-foreground">Dados Novos</p>
-              <pre className="overflow-x-auto rounded-lg border border-border bg-card p-3 text-[var(--color-status-expedido)]">
-                {JSON.stringify(selecionado.dadosNovos, null, 2)}
-              </pre>
+            <div className="flex-1 overflow-auto bg-text-strong p-5 font-mono text-[12px] leading-relaxed text-border">
+              <div className="mb-4">
+                <p className="mb-1 text-text-muted">// Dados Anteriores</p>
+                <pre className="overflow-x-auto rounded-[6px] border border-text-ink bg-code-surface p-3 text-destructive">
+                  {JSON.stringify(selecionado.dadosAnteriores, null, 2)}
+                </pre>
+              </div>
+              <div>
+                <p className="mb-1 text-text-muted">// Dados Novos</p>
+                <pre className="overflow-x-auto rounded-[6px] border border-text-ink bg-code-surface p-3 text-success">
+                  {JSON.stringify(selecionado.dadosNovos, null, 2)}
+                </pre>
+              </div>
             </div>
           ) : (
             <p className="p-5 text-sm text-muted-foreground">Selecione um evento.</p>

@@ -27,7 +27,14 @@ export interface FiltrosAuditoria {
   operacao?: OperacaoAuditoria;
   usuarioId?: string;
   registroId?: string;
+  registroBusca?: string;
   tabela?: string;
   dataInicio?: string;
   dataFim?: string;
+}
+
+export interface FacetasAuditoria {
+  modulos: string[];
+  tabelas: string[];
+  usuarios: Array<{ id: string; nome: string }>;
 }

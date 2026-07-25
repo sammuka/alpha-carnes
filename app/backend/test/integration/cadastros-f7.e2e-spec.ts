@@ -135,6 +135,23 @@ describe('Cadastros F7 e2e (produtos, rotas, representantes)', () => {
     });
   });
 
+  describe('Produtos', () => {
+    it('produto persiste bloco fiscal em atributos_json', async () => {
+      const criar = await request(srv()).post('/produtos').set('Cookie', adminCookies).send({
+        codigo: 'PRD-FISCAL',
+        nome: 'Coxão mole',
+        tipoOperacional: 'peca_inteira_pesavel',
+        unidadePedido: 'Peça',
+        unidadePreco: 'kg',
+        atributosJson: { fiscal: { ncm: '0201.30.00', cfop: '5102' } },
+      });
+      expect(criar.status).toBe(201);
+
+      const detalhe = await request(srv()).get(`/produtos/${criar.body.id}`).set('Cookie', adminCookies);
+      expect(detalhe.body.atributosJson.fiscal).toEqual({ ncm: '0201.30.00', cfop: '5102' });
+    });
+  });
+
   describe('Representantes', () => {
     it('ciclo CRUD completo', async () => {
       const criar = await request(srv())

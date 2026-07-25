@@ -1,6 +1,29 @@
 import { defineConfig, devices } from '@playwright/test';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+/** Carrega chaves do .env da raiz do worktree (JWT do middleware, seed, BFF). */
+function loadRootEnv(): void {
+  const envPath = path.join(__dirname, '..', '..', '.env');
+  if (!fs.existsSync(envPath)) return;
+  for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const separator = trimmed.indexOf('=');
+    if (separator === -1) continue;
+    const key = trimmed.slice(0, separator).trim();
+    const value = trimmed
+      .slice(separator + 1)
+      .trim()
+      .replace(/^["']|["']$/g, '');
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+loadRootEnv();
 
 const frontendUrl = process.env.E2E_FRONTEND_URL ?? 'http://localhost:3100';
+const backendUrl = process.env.BACKEND_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4001';
 
 export default defineConfig({
   testDir: './e2e',
@@ -25,7 +48,14 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev -- --port 3100',
     url: frontendUrl,
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI,
     timeout: 60_000,
+    env: {
+      ...process.env,
+      BACKEND_INTERNAL_URL: backendUrl,
+      NEXT_PUBLIC_API_URL: backendUrl,
+      JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET ?? '',
+      JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET ?? '',
+    },
   },
 });

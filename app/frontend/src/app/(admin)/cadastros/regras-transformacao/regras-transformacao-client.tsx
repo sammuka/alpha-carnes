@@ -1,12 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Calculator, GitBranch, Plus, Trash2 } from 'lucide-react';
+import { GitBranch, Plus, Trash2 } from 'lucide-react';
+import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusPill } from '@/components/ui/status-pill';
-import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Paginado } from '@/lib/cadastros';
+import { SimuladorDesdobramento } from './simulador-desdobramento';
+import { SimuladorDesossa } from './simulador-desossa';
 
 interface RegraDesdobramento {
   id: string;
@@ -52,7 +55,6 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
   const [regras, setRegras] = useState<RegraDesdobramento[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
-  const [simQuantidade, setSimQuantidade] = useState('10');
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -83,8 +85,7 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
     [regras],
   );
 
-  const qtdSim = parseFloat(simQuantidade.replace(',', '.'));
-  const simValido = !Number.isNaN(qtdSim) && qtdSim > 0;
+  const itemCompraSelecionadoId = regras[0]?.itemCompraId ?? null;
 
   return (
     <div className="flex max-w-[1664px] flex-col gap-6">
@@ -108,8 +109,13 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-        <div className="space-y-6 xl:col-span-8">
+      <Tabs defaultValue="desdobramento" className="gap-4">
+        <TabsList>
+          <TabsTrigger value="desdobramento">Desdobramento de Compra</TabsTrigger>
+          <TabsTrigger value="desossa">Transformação de Desossa (TZ)</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="desdobramento" className="space-y-6">
           <Card className="rounded-xl border-border shadow-sm">
             <CardContent className="p-5">
               <p className="text-xs font-medium text-muted-foreground">
@@ -200,55 +206,20 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
               </table>
             </div>
           </Card>
-        </div>
 
-        <div className="xl:col-span-4">
-          <Card className="h-full rounded-xl border-border border-t-4 border-t-violet-accent shadow-sm">
-            <CardContent className="flex flex-col gap-4 p-5">
-              <div className="flex items-center gap-2">
-                <Calculator className="h-5 w-5 text-violet-accent" />
-                <h2 className="text-base font-bold text-foreground">Simulador</h2>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Estime o resultado com base nas regras carregadas (sem inventar dados).
-              </p>
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-foreground">Quantidade base de compra</label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={simQuantidade}
-                  onChange={(e) => setSimQuantidade(e.target.value)}
-                  className="max-w-[140px] font-bold"
-                />
-              </div>
-              <div className="mt-2 border-t border-border pt-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-violet-accent">Resultado estimado</p>
-                <div className="mt-3 space-y-3 rounded-lg border border-border bg-background p-4">
-                  {!simValido || regras.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Informe uma quantidade válida e cadastre regras para simular.
-                    </p>
-                  ) : (
-                    regras.map((regra) => {
-                      const fator = parseFloat(regra.fatorQuantidade);
-                      const resultado = (qtdSim * fator).toFixed(2);
-                      return (
-                        <div key={regra.id} className="flex items-center justify-between text-sm">
-                          <span className="truncate text-xs text-foreground">
-                            {rotuloItemComercial(regra)}
-                          </span>
-                          <span className="font-bold text-violet-accent">{resultado}</span>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+          <SimuladorDesdobramento itemCompraId={itemCompraSelecionadoId} />
+        </TabsContent>
+
+        <TabsContent value="desossa" className="space-y-6">
+          <div className="flex items-start gap-3 rounded-lg border border-provisorio-border bg-warning-surface p-4">
+            <BadgeProvisorio pendencia="P12" />
+            <p className="text-sm text-provisorio-text">
+              Cada unidade de TZ atende exatamente uma das alternativas abaixo.
+            </p>
+          </div>
+          <SimuladorDesossa />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

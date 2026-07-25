@@ -1,15 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Edit2, Key, Plus, Shield, Trash2, UserCircle } from 'lucide-react';
+import { Edit2, Plus, Trash2, UserCircle } from 'lucide-react';
 import type { CriarUsuarioDto, PerfilComPermissoes, Usuario } from '@/lib/usuarios';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Switch } from '@/components/ui/switch';
+import { extrairMensagemErro } from '@/lib/error-message';
+import { ResumoPerfis } from './resumo-perfis';
 
 export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
   const pode = (p: string) => permissoes.includes(p);
@@ -21,6 +25,8 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
   const [editando, setEditando] = useState<Usuario | null>(null);
   const [form, setForm] = useState<CriarUsuarioDto>({ nome: '', email: '', password: '', perfis: [] });
   const [submitting, setSubmitting] = useState(false);
+  const [ativo, setAtivo] = useState(true);
+  const [aprovando, setAprovando] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -52,12 +58,14 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
   function abrirNovo() {
     setEditando(null);
     setForm({ nome: '', email: '', password: '', perfis: [] });
+    setAtivo(true);
     setSheetAberto(true);
   }
 
   function abrirEditar(u: Usuario) {
     setEditando(u);
     setForm({ nome: u.nome, email: u.email, password: '', perfis: u.perfis });
+    setAtivo(u.ativo);
     setSheetAberto(true);
   }
 
@@ -70,11 +78,11 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
         const res = await fetch(`/api/admin/usuarios/${editando.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nome: form.nome, email: form.email }),
+          body: JSON.stringify({ nome: form.nome, email: form.email, ativo }),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          setErro((data as { message?: string }).message ?? 'Falha ao atualizar');
+          setErro(extrairMensagemErro(data, 'Falha ao atualizar'));
           return;
         }
         if (pode('PERFIS_GERENCIAR') && form.perfis) {
@@ -92,7 +100,7 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          setErro((data as { message?: string }).message ?? 'Falha ao criar usuário');
+          setErro(extrairMensagemErro(data, 'Falha ao criar usuário'));
           return;
         }
       }
@@ -105,6 +113,24 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
     }
   }
 
+  async function aprovar(id: string) {
+    setErro(null);
+    setAprovando(true);
+    try {
+      const res = await fetch(`/api/admin/usuarios/${id}/aprovar`, { method: 'POST' });
+      if (!res.ok) {
+        setErro(extrairMensagemErro(await res.json().catch(() => ({})), 'Falha ao aprovar usuário'));
+        return;
+      }
+      setSheetAberto(false);
+      await carregar();
+    } catch {
+      setErro('Erro de conexão');
+    } finally {
+      setAprovando(false);
+    }
+  }
+
   async function remover(id: string) {
     if (!confirm('Remover este usuário?')) return;
     setSubmitting(true);
@@ -112,7 +138,7 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
       const res = await fetch(`/api/admin/usuarios/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setErro((data as { message?: string }).message ?? 'Falha ao remover');
+        setErro(extrairMensagemErro(data, 'Falha ao remover'));
         return;
       }
       await carregar();
@@ -120,11 +146,6 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
       setSubmitting(false);
     }
   }
-
-  const resumoPerfis = perfis.map((p) => ({
-    ...p,
-    total: usuarios.filter((u) => u.perfis.includes(p.slug)).length,
-  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -147,7 +168,7 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid gap-6 lg:grid-cols-12">
         <Card className="lg:col-span-8">
           <div className="flex items-center gap-2 border-b p-5">
             <UserCircle className="h-5 w-5 text-primary" />
@@ -177,7 +198,6 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
                         <div className="flex flex-wrap gap-1">
                           {u.perfis.map((p) => (
                             <Badge key={p} variant="outline">
-                              <Shield className="mr-1 h-3 w-3" />
                               {p}
                             </Badge>
                           ))}
@@ -209,66 +229,94 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
           </div>
         </Card>
 
-        <Card className="lg:col-span-4">
-          <CardContent className="space-y-4 p-5">
-            <div className="flex items-center gap-2">
-              <Key className="h-5 w-5 text-violet-600" />
-              <h2 className="font-bold">Resumo de Perfis</h2>
-            </div>
-            {resumoPerfis.map((p) => (
-              <div key={p.slug} className="flex items-center justify-between rounded-lg border p-3">
-                <span className="text-sm font-semibold">{p.nome}</span>
-                <Badge>{p.total} usuários</Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <div className="lg:col-span-4">
+          <ResumoPerfis />
+        </div>
       </div>
 
       <Sheet open={sheetAberto} onOpenChange={setSheetAberto}>
-        <SheetContent>
+        <SheetContent className="w-[520px] sm:max-w-[520px]">
           <SheetHeader>
             <SheetTitle>{editando ? 'Editar Usuário' : 'Novo Usuário'}</SheetTitle>
           </SheetHeader>
+
           <form onSubmit={(e) => void salvar(e)} className="mt-6 space-y-4">
-            <div>
+            <div className="space-y-1.5">
               <Label htmlFor="nome">Nome</Label>
-              <Input id="nome" value={form.nome} onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))} required />
+              <Input
+                id="nome"
+                value={form.nome}
+                onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))}
+                required
+              />
             </div>
-            <div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="email">E-mail</Label>
-              <Input id="email" type="email" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} required />
+              <Input
+                id="email"
+                type="email"
+                value={form.email}
+                disabled={editando !== null}
+                onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
+                required
+              />
             </div>
+
             {!editando && (
-              <div>
+              <div className="space-y-1.5">
                 <Label htmlFor="senha">Senha</Label>
-                <Input id="senha" type="password" value={form.password} onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} required minLength={8} />
+                <Input
+                  id="senha"
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))}
+                  required
+                  minLength={8}
+                />
               </div>
             )}
+
+            <div className="flex items-center justify-between rounded-md border border-border p-3">
+              <Label htmlFor="ativo">Ativo</Label>
+              <Switch id="ativo" checked={ativo} onCheckedChange={setAtivo} />
+            </div>
+
             {pode('PERFIS_GERENCIAR') && (
               <div className="space-y-2">
                 <Label>Perfis</Label>
                 {perfis.map((p) => (
-                  <label key={p.slug} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
+                  <div key={p.slug} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`perfil-${p.slug}`}
                       checked={form.perfis?.includes(p.slug) ?? false}
-                      onChange={(e) => {
-                        const perfisAtuais = form.perfis ?? [];
+                      onCheckedChange={(marcado) => {
+                        const atuais = form.perfis ?? [];
                         setForm((s) => ({
                           ...s,
-                          perfis: e.target.checked
-                            ? [...perfisAtuais, p.slug]
-                            : perfisAtuais.filter((x) => x !== p.slug),
+                          perfis: marcado === true ? [...atuais, p.slug] : atuais.filter((x) => x !== p.slug),
                         }));
                       }}
                     />
-                    {p.nome}
-                  </label>
+                    <Label htmlFor={`perfil-${p.slug}`} className="text-sm font-normal">
+                      {p.nome}
+                    </Label>
+                  </div>
                 ))}
               </div>
             )}
-            <SheetFooter>
+
+            <SheetFooter className="flex-row justify-between gap-2">
+              {editando && pode('USUARIOS_APROVAR') && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={aprovando}
+                  onClick={() => void aprovar(editando.id)}
+                >
+                  {aprovando ? 'Aprovando…' : 'Aprovar usuário'}
+                </Button>
+              )}
               <Button type="submit" disabled={submitting}>
                 {submitting ? 'Salvando…' : 'Salvar'}
               </Button>
