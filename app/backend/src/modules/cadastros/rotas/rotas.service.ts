@@ -22,6 +22,17 @@ export class RotasService {
     return this.drizzle.db;
   }
 
+  private normalizarParadas(paradas: { ordem: number; descricao: string }[]) {
+    return [...paradas]
+      .sort((a, b) => a.ordem - b.ordem)
+      .map((p, i) => ({ ordem: i + 1, descricao: p.descricao }));
+  }
+
+  private normalizarDias(dias: string[]): string[] {
+    const ordem = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'];
+    return [...new Set(dias)].sort((a, b) => ordem.indexOf(a) - ordem.indexOf(b));
+  }
+
   async listar(query: ListarQuery): Promise<Paginado<Rota>> {
     const { limit, offset } = calcularRange(query);
     const filtros = [query.incluirRemovidos ? undefined : isNull(rotas.deletedAt)];
@@ -60,6 +71,8 @@ export class RotasService {
             caminhaoPadrao: dto.caminhaoPadrao,
             motoristaPadrao: dto.motoristaPadrao,
             observacoes: dto.observacoes,
+            paradas: this.normalizarParadas(dto.paradas),
+            diasAtendimento: this.normalizarDias(dto.diasAtendimento),
             status: dto.status,
           })
           .returning(),
@@ -96,6 +109,10 @@ export class RotasService {
             caminhaoPadrao: dto.caminhaoPadrao ?? anterior.caminhaoPadrao,
             motoristaPadrao: dto.motoristaPadrao ?? anterior.motoristaPadrao,
             observacoes: dto.observacoes ?? anterior.observacoes,
+            paradas: dto.paradas ? this.normalizarParadas(dto.paradas) : anterior.paradas,
+            diasAtendimento: dto.diasAtendimento
+              ? this.normalizarDias(dto.diasAtendimento)
+              : anterior.diasAtendimento,
             status: dto.status ?? anterior.status,
           })
           .where(eq(rotas.id, id))
