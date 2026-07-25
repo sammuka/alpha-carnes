@@ -80,6 +80,14 @@ const contatosFornecedorFormSchema = z
 const parametrosFornecedorFormSchema = z
   .object({
     romaneioAntecipado: z.boolean().optional(),
+    horarioLimiteRecebimento: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM')
+      .optional()
+      .or(z.literal('')),
+    capacidadeMaximaKg: z.coerce.number().int().min(0).optional(),
+    toleranciaDivergenciaPercentual: z.coerce.number().min(0).max(100).optional(),
+    notaQualidade: z.enum(['A', 'B', 'C']).optional(),
   })
   .optional();
 
@@ -281,6 +289,40 @@ export const fornecedoresConfig: CadastroConfig = {
       nome: 'romaneioAntecipado',
       rotulo: 'Romaneio antecipado',
       tipo: 'checkbox',
+      aba: 'parametros',
+      jsonCampo: 'parametrosOperacionaisJson',
+    },
+    {
+      nome: 'horarioLimiteRecebimento',
+      rotulo: 'Horário Limite Recebimento',
+      tipo: 'text',
+      placeholder: 'HH:MM',
+      aba: 'parametros',
+      jsonCampo: 'parametrosOperacionaisJson',
+    },
+    {
+      nome: 'capacidadeMaximaKg',
+      rotulo: 'Capacidade Max. Caminhão (kg)',
+      tipo: 'number',
+      aba: 'parametros',
+      jsonCampo: 'parametrosOperacionaisJson',
+    },
+    {
+      nome: 'toleranciaDivergenciaPercentual',
+      rotulo: 'Tolerância de Divergência (%)',
+      tipo: 'number',
+      aba: 'parametros',
+      jsonCampo: 'parametrosOperacionaisJson',
+    },
+    {
+      nome: 'notaQualidade',
+      rotulo: 'Nota de Qualidade',
+      tipo: 'select',
+      opcoes: [
+        { valor: 'A', rotulo: 'A (Excelente)' },
+        { valor: 'B', rotulo: 'B (Bom)' },
+        { valor: 'C', rotulo: 'C (Regular)' },
+      ],
       aba: 'parametros',
       jsonCampo: 'parametrosOperacionaisJson',
     },

@@ -95,6 +95,47 @@ describe('Cadastros diversos e2e (fornecedores, itens, parâmetros)', () => {
       const ops = auditRows.rows.map((r) => r.operacao);
       expect(ops).toEqual(expect.arrayContaining(['INSERT', 'DELETE', 'UPDATE']));
     });
+
+    it('contagens de fornecedores batem com o banco', async () => {
+      await request(app.getHttpServer()).post('/fornecedores').set('Cookie', adminCookies)
+        .send({ codigo: 'FOR-C1', razaoSocial: 'Ativo 1', documentoFiscal: '12345678000195' });
+      const inativo = await request(app.getHttpServer()).post('/fornecedores').set('Cookie', adminCookies)
+        .send({ codigo: 'FOR-C2', razaoSocial: 'Inativo 1', documentoFiscal: '98765432000198', status: 'inativo' });
+      expect(inativo.status).toBe(201);
+
+      const contagens = await request(app.getHttpServer()).get('/fornecedores/contagens').set('Cookie', adminCookies);
+      expect(contagens.status).toBe(200);
+      expect(contagens.body.total).toBe(contagens.body.ativos + contagens.body.inativos);
+      expect(contagens.body.inativos).toBeGreaterThanOrEqual(1);
+    });
+
+    it('historico do fornecedor vem de ocorrencias reais', async () => {
+      const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+
+      const criar = await request(app.getHttpServer()).post('/fornecedores').set('Cookie', adminCookies)
+        .send({ codigo: 'FOR-H1', razaoSocial: 'Com histórico', documentoFiscal: '55667788000186' });
+      const semOcorrencia = await request(app.getHttpServer())
+        .get(`/fornecedores/${criar.body.id}/historico`).set('Cookie', adminCookies);
+      expect(semOcorrencia.status).toBe(200);
+      expect(semOcorrencia.body).toEqual({ ocorrenciasAno: 0, ultimaDivergencia: null });
+
+      const [usuario] = await db.select({ id: schema.usuarios.id }).from(schema.usuarios).limit(1);
+      expect(usuario).toBeDefined();
+      const descricaoFallback = 'Atraso na entrega acordada';
+      await db.insert(schema.ocorrenciasFornecedor).values({
+        fornecedorId: criar.body.id,
+        divergenciaId: null,
+        descricao: descricaoFallback,
+        status: 'aberta',
+        usuarioAberturaId: usuario!.id,
+      });
+
+      const comOcorrencia = await request(app.getHttpServer())
+        .get(`/fornecedores/${criar.body.id}/historico`).set('Cookie', adminCookies);
+      expect(comOcorrencia.status).toBe(200);
+      expect(comOcorrencia.body.ocorrenciasAno).toBe(1);
+      expect(comOcorrencia.body.ultimaDivergencia).toMatchObject({ tipo: descricaoFallback });
+    });
   });
 
   describe('Itens de compra e comerciais (administrador gerencia)', () => {
