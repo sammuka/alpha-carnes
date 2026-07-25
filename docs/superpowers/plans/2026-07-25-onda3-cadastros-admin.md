@@ -361,8 +361,24 @@ tolerância só é *exibida*; nenhuma validação de recebimento passa a consumi
 
 **Decisão 18 — "Nota de Qualidade", "Total de Ocorrências (Ano)" e "Última Divergência" do fornecedor
 vêm do backend real.** Ocorrências e última divergência são calculadas de `ocorrencias_fornecedor`
-(tabela já existente) no endpoint `GET /fornecedores/:id/historico`. A **nota de qualidade** não tem
-origem no domínio e não é inventada: é campo editável do cadastro
+(tabela já existente) no endpoint `GET /fornecedores/:id/historico`. O campo `ultimaDivergencia.tipo`
+**não** existe em `ocorrencias_fornecedor` (que tem `status`, `descricao`, `impacto`, …): vem de
+`divergencias_recebimento.tipo` via `LEFT JOIN` em `ocorrencias_fornecedor.divergencia_id` (FK opcional).
+Quando a ocorrência não tem divergência ligada (`divergencia_id` null), o fallback de `tipo` é
+`ocorrencias_fornecedor.descricao` (texto real da ocorrência — nunca rótulo inventado). O objeto
+`ultimaDivergencia` inteiro continua `null` quando não há nenhuma ocorrência — a tela mostra "—".
+O backend **sempre** devolve o **slug** CHECK em `tipo` quando há join (`falta`, `excesso`,
+`produto_nao_previsto`, `peso_divergente`, `outro`) ou o texto bruto de `descricao` no fallback —
+**nunca** traduz para rótulo humano na API. O rótulo exibido na tela vem do mapa frontend pinado
+`ROTULOS_TIPO_DIVERGENCIA` (Task 16.2.5): `peso_divergente` → **"Falta de Peso"**, alinhado ao
+protótipo (`Fornecedores.tsx:33`). Na renderização: se `tipo` está no mapa, mostrar o rótulo; senão
+(fallback `descricao`) mostrar o texto com `truncate max-w-[220px]` + `title` com o texto completo
+(Task 16.3). Zero uso de coluna inexistente `ocorrencias_fornecedor.tipo`.
+No protótipo (`Fornecedores.tsx`), o rótulo entre parênteses em "Última Divergência" (ex.: "Falta de Peso")
+corresponde ao `tipo` da divergência, não ao `status` da ocorrência (`aberta`/`em_analise`/…). A data no
+protótipo usa formato relativo ("Há 14 dias"); a implementação desta onda usa
+`toLocaleDateString('pt-BR')` — divergência autorizada **D16.b** (sem *relative-time* nesta onda).
+A **nota de qualidade** não tem origem no domínio e não é inventada: é campo editável do cadastro
 (`parametros_operacionais_json.notaQualidade`, valores `A`, `B`, `C`), exibido com o mesmo *badge* do
 protótipo e sem cálculo automático. Quando ausente, o bloco mostra "—".
 
@@ -766,7 +782,7 @@ app/backend/src/modules/operacao/desossa/desossa.controller.ts             POST 
 app/backend/src/modules/operacao/desossa/regras-transformacao.service.ts   simular
 app/backend/src/modules/cadastros/regras-desdobramento/regras-desdobramento.controller.ts  POST /simular
 app/backend/src/modules/cadastros/regras-desdobramento/regras-desdobramento.service.ts     simular
-app/backend/test/integration/cadastros-diversos.e2e-spec.ts  +2 casos (Task 7.3)
+app/backend/test/integration/cadastros-diversos.e2e-spec.ts  +2 casos (Task 7.3; DoD-24 inclui coalesce descricao)
 app/backend/test/integration/cadastros-f7.e2e-spec.ts        +3 casos (Tasks 13.0 e 19.2)
 app/backend/test/integration/rbac.e2e-spec.ts                +1 caso (Task 9.8)
 ```
@@ -776,6 +792,7 @@ app/backend/test/integration/rbac.e2e-spec.ts                +1 caso (Task 9.8)
 ```
 app/frontend/src/lib/frota.ts
 app/frontend/src/lib/modelos-etiqueta.ts
+app/frontend/src/lib/rotulos-tipo-divergencia.ts
 app/frontend/src/components/cadastros/cadastro-tabela-drawer.tsx
 app/frontend/src/app/(admin)/cadastros/representantes/representantes-client.tsx
 app/frontend/src/app/(admin)/cadastros/representantes/clientes-vinculados.tsx
@@ -809,6 +826,7 @@ app/frontend/src/app/api/admin/auditoria/export/route.ts
 app/frontend/__tests__/cadastro-tabela-drawer.test.tsx
 app/frontend/__tests__/representantes-client.test.tsx
 app/frontend/__tests__/fornecedores-contagens.test.tsx
+app/frontend/__tests__/rotulos-tipo-divergencia.test.ts
 app/frontend/__tests__/rotas-paradas.test.tsx
 app/frontend/__tests__/modelos-etiqueta.test.tsx
 app/frontend/__tests__/produtos-client.test.tsx
@@ -894,7 +912,7 @@ essa string no `it(...)`.
 | DoD-21 | Rota persiste paradas com ordem normalizada e aceita só os 7 dias canônicos | `rota persiste paradas ordenadas e dias validos` | `app/backend/test/integration/rotas-paradas.e2e-spec.ts` |
 | DoD-22 | Reordenar paradas persiste a nova ordem sem perder descrição | `reordenacao de paradas preserva descricoes` | `app/backend/test/integration/rotas-paradas.e2e-spec.ts` |
 | DoD-23 | `GET /fornecedores/contagens` devolve total, ativos e inativos coerentes com o banco | `contagens de fornecedores batem com o banco` | `app/backend/test/integration/cadastros-diversos.e2e-spec.ts` |
-| DoD-24 | `GET /fornecedores/:id/historico` vem de `ocorrencias_fornecedor` e devolve `null` quando não há ocorrência | `historico do fornecedor vem de ocorrencias reais` | `app/backend/test/integration/cadastros-diversos.e2e-spec.ts` |
+| DoD-24 | `GET /fornecedores/:id/historico` vem de `ocorrencias_fornecedor`; `null` sem ocorrência; com ocorrência sem divergência ligada, `ultimaDivergencia.tipo` = `descricao` (coalesce) | `historico do fornecedor vem de ocorrencias reais` | `app/backend/test/integration/cadastros-diversos.e2e-spec.ts` |
 | DoD-25 | O bloco fiscal do produto persiste em `atributos_json.fiscal` e volta no detalhe | `produto persiste bloco fiscal em atributos_json` | `app/backend/test/integration/cadastros-f7.e2e-spec.ts` |
 | DoD-26 | Simulador de desdobramento: quantidade × fator por item comercial e total de partes, no backend | `simulador de desdobramento multiplica fatores e soma partes` | `app/backend/test/unit/simulador-desdobramento.spec.ts` |
 | DoD-27 | Simulador da desossa respeita a exclusividade por unidade de TZ e marca o produto bloqueado | `simulador de desossa respeita exclusividade por unidade de TZ` | `app/backend/test/unit/simulador-desossa.spec.ts` |
@@ -2896,7 +2914,12 @@ Saída esperada: `Tests: 2 passed, 2 total`.
 
 ### Task 7 — Backend: contagens e histórico do fornecedor
 
-**7.1** Em `fornecedores.service.ts`, acrescentar:
+**7.1** Em `fornecedores.service.ts`, estender os imports existentes e acrescentar os métodos:
+
+```ts
+import { and, desc, eq, gte, ilike, isNull, or, sql } from 'drizzle-orm';
+import { divergenciasRecebimento, fornecedores, ocorrenciasFornecedor } from '../../../database/schema';
+```
 
 ```ts
   async contagens(): Promise<{ total: number; ativos: number; inativos: number }> {
@@ -2914,6 +2937,9 @@ Saída esperada: `Tests: 2 passed, 2 total`.
 
   /**
    * Histórico real de ocorrências do fornecedor (decisão 18 da Onda 3).
+   * `ultimaDivergencia.tipo` devolve o slug CHECK (`divergencias_recebimento.tipo`, LEFT JOIN)
+   * ou, sem divergência ligada, `ocorrencias_fornecedor.descricao` — nunca rótulo humano.
+   * A tradução para "Falta de Peso" etc. é só no frontend (`ROTULOS_TIPO_DIVERGENCIA`, Task 16.2.5).
    * `ultimaDivergencia` é null quando não há ocorrência — a tela mostra "—".
    */
   async historico(id: string): Promise<{
@@ -2932,8 +2958,15 @@ Saída esperada: `Tests: 2 passed, 2 total`.
           gte(ocorrenciasFornecedor.createdAt, inicioDoAno),
         )),
       this.db
-        .select({ data: ocorrenciasFornecedor.createdAt, tipo: ocorrenciasFornecedor.tipo })
+        .select({
+          data: ocorrenciasFornecedor.createdAt,
+          tipo: sql<string>`coalesce(${divergenciasRecebimento.tipo}, ${ocorrenciasFornecedor.descricao})`,
+        })
         .from(ocorrenciasFornecedor)
+        .leftJoin(
+          divergenciasRecebimento,
+          eq(ocorrenciasFornecedor.divergenciaId, divergenciasRecebimento.id),
+        )
         .where(eq(ocorrenciasFornecedor.fornecedorId, fornecedor.id))
         .orderBy(desc(ocorrenciasFornecedor.createdAt))
         .limit(1),
@@ -2968,25 +3001,44 @@ DoD-23 e DoD-24:
 
 ```ts
   it('contagens de fornecedores batem com o banco', async () => {
-    await request(srv()).post('/fornecedores').set('Cookie', adminCookies)
+    await request(app.getHttpServer()).post('/fornecedores').set('Cookie', adminCookies)
       .send({ codigo: 'FOR-C1', razaoSocial: 'Ativo 1', documentoFiscal: '12345678000190' });
-    const inativo = await request(srv()).post('/fornecedores').set('Cookie', adminCookies)
+    const inativo = await request(app.getHttpServer()).post('/fornecedores').set('Cookie', adminCookies)
       .send({ codigo: 'FOR-C2', razaoSocial: 'Inativo 1', documentoFiscal: '98765432000110', status: 'inativo' });
     expect(inativo.status).toBe(201);
 
-    const contagens = await request(srv()).get('/fornecedores/contagens').set('Cookie', adminCookies);
+    const contagens = await request(app.getHttpServer()).get('/fornecedores/contagens').set('Cookie', adminCookies);
     expect(contagens.status).toBe(200);
     expect(contagens.body.total).toBe(contagens.body.ativos + contagens.body.inativos);
     expect(contagens.body.inativos).toBeGreaterThanOrEqual(1);
   });
 
   it('historico do fornecedor vem de ocorrencias reais', async () => {
-    const criar = await request(srv()).post('/fornecedores').set('Cookie', adminCookies)
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+
+    const criar = await request(app.getHttpServer()).post('/fornecedores').set('Cookie', adminCookies)
       .send({ codigo: 'FOR-H1', razaoSocial: 'Com histórico', documentoFiscal: '11222333000144' });
-    const semOcorrencia = await request(srv())
+    const semOcorrencia = await request(app.getHttpServer())
       .get(`/fornecedores/${criar.body.id}/historico`).set('Cookie', adminCookies);
     expect(semOcorrencia.status).toBe(200);
     expect(semOcorrencia.body).toEqual({ ocorrenciasAno: 0, ultimaDivergencia: null });
+
+    const [usuario] = await db.select({ id: schema.usuarios.id }).from(schema.usuarios).limit(1);
+    expect(usuario).toBeDefined();
+    const descricaoFallback = 'Atraso na entrega acordada';
+    await db.insert(schema.ocorrenciasFornecedor).values({
+      fornecedorId: criar.body.id,
+      divergenciaId: null,
+      descricao: descricaoFallback,
+      status: 'aberta',
+      usuarioAberturaId: usuario!.id,
+    });
+
+    const comOcorrencia = await request(app.getHttpServer())
+      .get(`/fornecedores/${criar.body.id}/historico`).set('Cookie', adminCookies);
+    expect(comOcorrencia.status).toBe(200);
+    expect(comOcorrencia.body.ocorrenciasAno).toBe(1);
+    expect(comOcorrencia.body.ultimaDivergencia).toMatchObject({ tipo: descricaoFallback });
   });
 ```
 
@@ -3482,6 +3534,9 @@ com `atualizarValorSchema = z.object({ valorJson: z.record(z.string(), z.unknown
 
 ```ts
 // parametros-onda3.e2e-spec.ts
+import { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { DRIZZLE } from '../../src/database/database.module';
 
 const CHAVES = [
@@ -3490,107 +3545,147 @@ const CHAVES = [
   'fiscal.seguro_integrado', 'fiscal.emissao_fiscal', 'fiscal.expiracao_reserva_rascunho',
 ];
 
-it('seed cria as 9 chaves de parametro da v1.1 com AD-01, AD-02 e AD-06 honradas', async () => {
-  const { seedParametros } = await import('../../src/database/seed');
-  await seedParametros(app.get(DRIZZLE).db);
+describe('Parametros Onda 3 e2e', () => {
+  let app: INestApplication;
+  let adminCookies: string;
 
-  const lista = await request(srv()).get('/parametros?pageSize=100').set('Cookie', adminCookies);
-  const chaves = lista.body.data.map((p: { chave: string }) => p.chave);
-  for (const chave of CHAVES) expect(chaves).toContain(chave);
+  beforeAll(async () => {
+    app = await createTestApp();
+    const admin = await createTestUser(app, { perfil: 'administrador' });
+    adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
+  });
 
-  const porChave = (chave: string) =>
-    lista.body.data.find((p: { chave: string }) => p.chave === chave).valorJson as {
-      texto: string; provisorio: boolean; pendencia: string | null; tipo: string;
-    };
+  afterAll(async () => {
+    await cleanupDb(app);
+    await app.close();
+  });
 
-  // AD-01: composição confirmada — sem badge Provisório.
-  const boi = porChave('operacao.composicao_boi_casado');
-  expect(boi.texto).toContain('2 TZ + 2 DT + 2 PA');
-  expect(boi.provisorio).toBe(false);
-  expect(boi.pendencia).toBeNull();
+  const srv = () => app.getHttpServer();
 
-  // AD-02: emissão fiscal decidida — nota de homologação no lugar do badge.
-  const fiscal = porChave('fiscal.emissao_fiscal');
-  expect(fiscal.provisorio).toBe(false);
-  expect(fiscal.texto).toContain('aguardando homologação');
+  it('seed cria as 9 chaves de parametro da v1.1 com AD-01, AD-02 e AD-06 honradas', async () => {
+    const { seedParametros } = await import('../../src/database/seed');
+    await seedParametros(app.get(DRIZZLE).db);
 
-  // AD-06: sem TTL de reserva — cartão informativo, não parâmetro pendente.
-  const reserva = porChave('fiscal.expiracao_reserva_rascunho');
-  expect(reserva.provisorio).toBe(false);
-  expect(reserva.tipo).toBe('info');
-  expect(reserva.texto).toContain('Sem expiração automática');
+    const lista = await request(srv()).get('/parametros?pageSize=100').set('Cookie', adminCookies);
+    const chaves = lista.body.data.map((p: { chave: string }) => p.chave);
+    for (const chave of CHAVES) expect(chaves).toContain(chave);
 
-  const provisorios = lista.body.data
-    .filter(
-      (p: { chave: string; valorJson: { provisorio?: boolean } }) =>
-        CHAVES.includes(p.chave) && p.valorJson.provisorio === true,
-    )
-    .map((p: { chave: string; valorJson: { pendencia: string } }) => [p.chave, p.valorJson.pendencia])
-    .sort();
-  expect(provisorios).toEqual([
-    ['operacao.cadencia_dias_semana', 'P1'],
-    ['operacao.regras_transformacao_tz', 'P12'],
-  ]);
-});
+    const porChave = (chave: string) =>
+      lista.body.data.find((p: { chave: string }) => p.chave === chave).valorJson as {
+        texto: string; provisorio: boolean; pendencia: string | null; tipo: string;
+      };
 
-it('atualiza parametro por chave, audita e 404 em chave desconhecida', async () => {
-  const patch = await request(srv())
-    .patch('/parametros/chave/fiscal.seguro_integrado').set('Cookie', adminCookies)
-    .send({ valorJson: { grupo: 'Fiscal', tipo: 'toggle', titulo: 'Seguro integrado', texto: 'x', valor: true, provisorio: false, pendencia: null } });
-  expect(patch.status).toBe(200);
-  expect(patch.body.valorJson.valor).toBe(true);
+    // AD-01: composição confirmada — sem badge Provisório.
+    const boi = porChave('operacao.composicao_boi_casado');
+    expect(boi.texto).toContain('2 TZ + 2 DT + 2 PA');
+    expect(boi.provisorio).toBe(false);
+    expect(boi.pendencia).toBeNull();
 
-  const log = await request(srv())
-    .get('/auditoria?tabela=parametros&operacao=UPDATE').set('Cookie', adminCookies);
-  expect(log.body.total).toBeGreaterThanOrEqual(1);
+    // AD-02: emissão fiscal decidida — nota de homologação no lugar do badge.
+    const fiscal = porChave('fiscal.emissao_fiscal');
+    expect(fiscal.provisorio).toBe(false);
+    expect(fiscal.texto).toContain('aguardando homologação');
 
-  const inexistente = await request(srv())
-    .patch('/parametros/chave/nao.existe').set('Cookie', adminCookies).send({ valorJson: {} });
-  expect(inexistente.status).toBe(404);
+    // AD-06: sem TTL de reserva — cartão informativo, não parâmetro pendente.
+    const reserva = porChave('fiscal.expiracao_reserva_rascunho');
+    expect(reserva.provisorio).toBe(false);
+    expect(reserva.tipo).toBe('info');
+    expect(reserva.texto).toContain('Sem expiração automática');
+
+    const provisorios = lista.body.data
+      .filter(
+        (p: { chave: string; valorJson: { provisorio?: boolean } }) =>
+          CHAVES.includes(p.chave) && p.valorJson.provisorio === true,
+      )
+      .map((p: { chave: string; valorJson: { pendencia: string } }) => [p.chave, p.valorJson.pendencia])
+      .sort();
+    expect(provisorios).toEqual([
+      ['operacao.cadencia_dias_semana', 'P1'],
+      ['operacao.regras_transformacao_tz', 'P12'],
+    ]);
+  });
+
+  it('atualiza parametro por chave, audita e 404 em chave desconhecida', async () => {
+    const patch = await request(srv())
+      .patch('/parametros/chave/fiscal.seguro_integrado').set('Cookie', adminCookies)
+      .send({ valorJson: { grupo: 'Fiscal', tipo: 'toggle', titulo: 'Seguro integrado', texto: 'x', valor: true, provisorio: false, pendencia: null } });
+    expect(patch.status).toBe(200);
+    expect(patch.body.valorJson.valor).toBe(true);
+
+    const log = await request(srv())
+      .get('/auditoria?tabela=parametros&operacao=UPDATE').set('Cookie', adminCookies);
+    expect(log.body.total).toBeGreaterThanOrEqual(1);
+
+    const inexistente = await request(srv())
+      .patch('/parametros/chave/nao.existe').set('Cookie', adminCookies).send({ valorJson: {} });
+    expect(inexistente.status).toBe(404);
+  });
 });
 ```
 
 ```ts
 // auditoria-facetas.e2e-spec.ts
-it('auditoria filtra por periodo, usuario, modulo, operacao e registro', async () => {
-  const criar = await request(srv()).post('/frota/caminhoes').set('Cookie', adminCookies)
-    .send({ placa: 'AUD-1A11' });
-  const registroId = criar.body.id as string;
-  const inicio = new Date(Date.now() - 60_000).toISOString();
-  const fim = new Date(Date.now() + 60_000).toISOString();
+import { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 
-  const filtrado = await request(srv())
-    .get(`/auditoria?modulo=cadastros&operacao=INSERT&tabela=frota_caminhoes&registroId=${registroId}&dataInicio=${inicio}&dataFim=${fim}`)
-    .set('Cookie', adminCookies);
-  expect(filtrado.status).toBe(200);
-  expect(filtrado.body.total).toBe(1);
+describe('Auditoria facetas e2e', () => {
+  let app: INestApplication;
+  let adminCookies: string;
 
-  const foraDaJanela = await request(srv())
-    .get(`/auditoria?dataInicio=${new Date(Date.now() + 3_600_000).toISOString()}`)
-    .set('Cookie', adminCookies);
-  expect(foraDaJanela.body.total).toBe(0);
-});
+  beforeAll(async () => {
+    app = await createTestApp();
+    const admin = await createTestUser(app, { perfil: 'administrador' });
+    adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
+  });
 
-it('facetas de auditoria listam valores distintos reais', async () => {
-  const res = await request(srv()).get('/auditoria/facetas').set('Cookie', adminCookies);
-  expect(res.status).toBe(200);
-  expect(res.body.modulos).toContain('cadastros');
-  expect(res.body.tabelas).toContain('frota_caminhoes');
-  expect(res.body.usuarios.length).toBeGreaterThanOrEqual(1);
-});
+  afterAll(async () => {
+    await cleanupDb(app);
+    await app.close();
+  });
 
-it('filtro de registro aceita trecho e valida uuid', async () => {
-  const criar = await request(srv()).post('/frota/caminhoes').set('Cookie', adminCookies)
-    .send({ placa: 'AUD-2B22' });
-  const trecho = (criar.body.id as string).slice(0, 8);
+  const srv = () => app.getHttpServer();
 
-  const porTrecho = await request(srv())
-    .get(`/auditoria?registroBusca=${trecho}`).set('Cookie', adminCookies);
-  expect(porTrecho.body.total).toBeGreaterThanOrEqual(1);
+  it('auditoria filtra por periodo, usuario, modulo, operacao e registro', async () => {
+    const criar = await request(srv()).post('/frota/caminhoes').set('Cookie', adminCookies)
+      .send({ placa: 'AUD-1A11' });
+    const registroId = criar.body.id as string;
+    const inicio = new Date(Date.now() - 60_000).toISOString();
+    const fim = new Date(Date.now() + 60_000).toISOString();
 
-  const uuidInvalido = await request(srv())
-    .get('/auditoria?registroId=PED-123').set('Cookie', adminCookies);
-  expect(uuidInvalido.status).toBe(400);
+    const filtrado = await request(srv())
+      .get(`/auditoria?modulo=cadastros&operacao=INSERT&tabela=frota_caminhoes&registroId=${registroId}&dataInicio=${inicio}&dataFim=${fim}`)
+      .set('Cookie', adminCookies);
+    expect(filtrado.status).toBe(200);
+    expect(filtrado.body.total).toBe(1);
+
+    const foraDaJanela = await request(srv())
+      .get(`/auditoria?dataInicio=${new Date(Date.now() + 3_600_000).toISOString()}`)
+      .set('Cookie', adminCookies);
+    expect(foraDaJanela.body.total).toBe(0);
+  });
+
+  it('facetas de auditoria listam valores distintos reais', async () => {
+    const res = await request(srv()).get('/auditoria/facetas').set('Cookie', adminCookies);
+    expect(res.status).toBe(200);
+    expect(res.body.modulos).toContain('cadastros');
+    expect(res.body.tabelas).toContain('frota_caminhoes');
+    expect(res.body.usuarios.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('filtro de registro aceita trecho e valida uuid', async () => {
+    const criar = await request(srv()).post('/frota/caminhoes').set('Cookie', adminCookies)
+      .send({ placa: 'AUD-2B22' });
+    const trecho = (criar.body.id as string).slice(0, 8);
+
+    const porTrecho = await request(srv())
+      .get(`/auditoria?registroBusca=${trecho}`).set('Cookie', adminCookies);
+    expect(porTrecho.body.total).toBeGreaterThanOrEqual(1);
+
+    const uuidInvalido = await request(srv())
+      .get('/auditoria?registroId=PED-123').set('Cookie', adminCookies);
+    expect(uuidInvalido.status).toBe(400);
+  });
 });
 ```
 
@@ -3606,7 +3701,7 @@ Saída esperada: `Tests: 5 passed, 5 total`.
 
 ```ts
   it('resumo de perfis conta usuarios reais e inclui perfil vazio', async () => {
-    const res = await request(srv()).get('/usuarios/resumo-perfis').set('Cookie', adminCookies);
+    const res = await request(app.getHttpServer()).get('/usuarios/resumo-perfis').set('Cookie', adminCookies);
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(11);
     expect(res.body[0].slug).toBe('administrador');
@@ -3761,6 +3856,25 @@ de `db` que devolve as regras fixas do exemplo do protótipo:
 
 ```ts
 // simulador-desdobramento.spec.ts — DoD-26
+import { RegrasDesdobramentoService } from '../../src/modules/cadastros/regras-desdobramento/regras-desdobramento.service';
+
+function criarServiceCom(
+  regras: Array<{ itemComercialId: string; descricao: string; fator: string }>,
+) {
+  const db = {
+    select: jest.fn(() => ({
+      from: jest.fn(() => ({
+        innerJoin: jest.fn(() => ({
+          where: jest.fn(() => ({
+            orderBy: jest.fn(() => Promise.resolve(regras)),
+          })),
+        })),
+      })),
+    })),
+  };
+  return new RegrasDesdobramentoService({ db } as never, {} as never);
+}
+
 it('simulador de desdobramento multiplica fatores e soma partes', async () => {
   const service = criarServiceCom([
     { itemComercialId: 'c1', descricao: 'Traseiro', fator: '2' },
@@ -3776,6 +3890,25 @@ it('simulador de desdobramento multiplica fatores e soma partes', async () => {
 
 ```ts
 // simulador-desossa.spec.ts — DoD-27 e DoD-28
+import { RegrasTransformacaoService } from '../../src/modules/operacao/desossa/regras-transformacao.service';
+
+type RegraAtivaComSaidas = {
+  id: string;
+  nome: string;
+  saidas: Array<{ produtoId: string; produtoNome: string; quantidadeFixa: string }>;
+};
+
+function criarServiceCom(regras: RegraAtivaComSaidas[]) {
+  const service = new RegrasTransformacaoService({ db: {} as never } as never, {} as never);
+  jest
+    .spyOn(
+      service as RegrasTransformacaoService & { listarAtivasComSaidas: () => Promise<RegraAtivaComSaidas[]> },
+      'listarAtivasComSaidas',
+    )
+    .mockResolvedValue(regras);
+  return service;
+}
+
 it('simulador de desossa respeita exclusividade por unidade de TZ', async () => {
   const service = criarServiceCom([
     { id: 'a', nome: 'Alternativa A', saidas: [
@@ -5916,6 +6049,64 @@ cadastro (nome do contato, telefone, e-mail, cargo). "Endereço Completo", "Cida
 decisão 17 não os cria; renderizar campo sem origem seria dado inventado (RA-06). O título da seção e o
 ícone continuam os do protótipo. Registrada no README de evidências (Task 27.1).
 
+**Divergência autorizada D16.b** — o protótipo exibe a última divergência como texto relativo
+("Há 14 dias (Falta de Peso)", `Fornecedores.tsx:33`); a implementação desta onda formata a data com
+`toLocaleDateString('pt-BR')` seguida do rótulo traduzido (decisão 18 + `ROTULOS_TIPO_DIVERGENCIA`).
+*Relative-time* ("Há N dias") **não** entra nesta onda — escopo futuro se necessário. Registrada no
+README de evidências (Task 27.1).
+
+**16.2.5** Criar `app/frontend/src/lib/rotulos-tipo-divergencia.ts` — mapa literal pinado (decisão 18;
+slug vem do backend, rótulo humano só aqui):
+
+```ts
+export const ROTULOS_TIPO_DIVERGENCIA: Record<string, string> = {
+  falta: 'Falta',
+  excesso: 'Excesso',
+  produto_nao_previsto: 'Produto não previsto',
+  peso_divergente: 'Falta de Peso',
+  outro: 'Outro',
+};
+
+/** Slug conhecido → rótulo do protótipo; fallback (descricao livre) → texto bruto. */
+export function rotuloTipoDivergencia(tipo: string): string {
+  return ROTULOS_TIPO_DIVERGENCIA[tipo] ?? tipo;
+}
+
+export function tipoDivergenciaEhSlugConhecido(tipo: string): boolean {
+  return tipo in ROTULOS_TIPO_DIVERGENCIA;
+}
+```
+
+**16.2.6** Criar `app/frontend/__tests__/rotulos-tipo-divergencia.test.ts`:
+
+```ts
+import {
+  ROTULOS_TIPO_DIVERGENCIA,
+  rotuloTipoDivergencia,
+  tipoDivergenciaEhSlugConhecido,
+} from '../src/lib/rotulos-tipo-divergencia';
+
+it('mapa traduz peso_divergente para Falta de Peso do prototipo', () => {
+  expect(ROTULOS_TIPO_DIVERGENCIA.peso_divergente).toBe('Falta de Peso');
+  expect(rotuloTipoDivergencia('peso_divergente')).toBe('Falta de Peso');
+  expect(tipoDivergenciaEhSlugConhecido('peso_divergente')).toBe(true);
+});
+
+it('fallback devolve descricao livre sem inventar rotulo', () => {
+  const descricao = 'Atraso na entrega acordada';
+  expect(rotuloTipoDivergencia(descricao)).toBe(descricao);
+  expect(tipoDivergenciaEhSlugConhecido(descricao)).toBe(false);
+});
+```
+
+**Verificação:**
+
+```bash
+cd app/frontend && npx jest __tests__/rotulos-tipo-divergencia.test.ts
+```
+
+Saída esperada: `Tests: 2 passed, 2 total`.
+
 **16.1** Em `app/frontend/src/lib/cadastros-config.ts`, acrescentar o conceito de **seção** (usado só
 por fornecedores nesta onda; cadastros sem `secoes` continuam com `Tabs`, sem mudança):
 
@@ -6009,7 +6200,10 @@ Renderizar `filtrosExtras` logo abaixo do campo de busca da coluna mestre. No co
 `blocoDetalheExtra` é o último bloco da coluna 2 — a quarta seção do protótipo
 ("Histórico & Ocorrências"). Props ausentes não mudam nada nas outras telas que usam o componente.
 
-**16.3** Substituir `app/frontend/src/app/(admin)/cadastros/fornecedores/fornecedores-client.tsx`:
+**16.3** Substituir `app/frontend/src/app/(admin)/cadastros/fornecedores/fornecedores-client.tsx`.
+O shape `{ data, tipo }` de `ultimaDivergencia` permanece; `tipo` vem do backend como slug CHECK (join)
+ou `descricao` (fallback) — decisão 18. A tela traduz slug via `ROTULOS_TIPO_DIVERGENCIA` (Task 16.2.5);
+fallback longo usa `truncate max-w-[220px]` + `title`.
 
 ```tsx
 'use client';
@@ -6020,6 +6214,10 @@ import { CadastroMasterDetail } from '@/components/cadastro-master-detail';
 import { Badge } from '@/components/ui/badge';
 import { fornecedoresConfig } from '@/lib/cadastros-config';
 import { mensagemDeErro } from '@/lib/error-message';
+import {
+  rotuloTipoDivergencia,
+  tipoDivergenciaEhSlugConhecido,
+} from '@/lib/rotulos-tipo-divergencia';
 
 interface Contagens {
   total: number;
@@ -6029,7 +6227,30 @@ interface Contagens {
 
 interface Historico {
   ocorrenciasAno: number;
+  /** `tipo`: slug da divergencia (join) ou descricao da ocorrencia (fallback — decisao 18) */
   ultimaDivergencia: { data: string; tipo: string } | null;
+}
+
+function UltimaDivergenciaLinha({ item }: { item: { data: string; tipo: string } }) {
+  const dataFmt = new Date(item.data).toLocaleDateString('pt-BR');
+  const textoTipo = rotuloTipoDivergencia(item.tipo);
+
+  if (tipoDivergenciaEhSlugConhecido(item.tipo)) {
+    return (
+      <span className="font-medium text-foreground">
+        {dataFmt} · {textoTipo}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 font-medium text-foreground">
+      <span>{dataFmt} ·</span>
+      <span className="truncate max-w-[220px]" title={item.tipo}>
+        {textoTipo}
+      </span>
+    </span>
+  );
 }
 
 function Chips() {
@@ -6120,11 +6341,11 @@ function BlocoHistorico({ fornecedorId }: { fornecedorId: string }) {
           </div>
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Última Divergência</span>
-            <span className="font-medium text-foreground">
-              {historico.ultimaDivergencia
-                ? `${new Date(historico.ultimaDivergencia.data).toLocaleDateString('pt-BR')} · ${historico.ultimaDivergencia.tipo}`
-                : '—'}
-            </span>
+            {historico.ultimaDivergencia ? (
+              <UltimaDivergenciaLinha item={historico.ultimaDivergencia} />
+            ) : (
+              <span className="font-medium text-foreground">—</span>
+            )}
           </div>
         </div>
       )}
@@ -8866,14 +9087,15 @@ Saída esperada: `Tests: 3 passed, 3 total` no frontend, `13 passed` no Playwrig
   `visível` para todas as 26, e a saída do teste `as 26 perdas herdadas da Onda 2 estao visiveis`;
 - a tabela dos **14 extras** da decisão 31 com "situação" = `removido`, e a saída do teste
   `os 14 extras herdados da Onda 2 sumiram do menu`;
-- as **quatorze** divergências autorizadas, cada uma com a justificativa e a linha do protótipo (ou, em
+- as **quinze** divergências autorizadas, cada uma com a justificativa e a linha do protótipo (ou, em
   D18.c, a linha do plano mestre):
   `/admin/perfis` (11 perfis canônicos e permissões reais em vez dos 8 perfis e 9 rótulos do mock —
   decisão 29), o `placeholder` do campo "Registro (ID)" da auditoria (decisão 31),
   `MODELOS_ETIQUETA_LER` concedida a `recebimento_pesagem` e `corte` além da linha 37 da matriz
   (decisão 27), **D13.a** (tipo/canal como texto), **D13.b** ("Usuários vinculados" diferido para a
   Onda 4), **D13.c** (campo "Código" no drawer de representantes), **D16.a** ("Endereço e Contato" só
-  com os campos que existem no schema), **D17.a** (botões de subir/descer parada e `Trash2` no lugar do
+  com os campos que existem no schema), **D16.b** (data absoluta `toLocaleDateString` em vez de
+  "Há N dias" do protótipo), **D17.a** (botões de subir/descer parada e `Trash2` no lugar do
   `MapPin` riscado), **D18.a** (preview de etiqueta sem valores de exemplo), **D18.b** (botão "Salvar
   Modelo"), **D18.c** (`GET /modelos-etiqueta/:id/preview` do plano mestre §4 diferido para a Onda 6),
   **D22.a** (chips de menu clicáveis com os 39 do catálogo), **D23.a** (botão "Salvar" por
@@ -9001,9 +9223,9 @@ O Worker executa na ordem numérica: as dependências acima estão satisfeitas p
       escopo. O único item diferido é o escopo comercial "representantes permitidos" (linha 38 da
       matriz), com decisão numerada (43), onda de destino (4) e dívida registrada — o campo não aparece
       inerte em tela nesta onda.
-- [x] As quatorze divergências autorizadas estão numeradas e registradas no README de evidências:
+- [x] As quinze divergências autorizadas estão numeradas e registradas no README de evidências:
       decisão 29 (`/admin/perfis`), decisão 31 (placeholder do campo Registro), decisão 27
-      (`MODELOS_ETIQUETA_LER` além da linha 37 da matriz), D13.a, D13.b, D13.c, D16.a, D17.a, D18.a,
+      (`MODELOS_ETIQUETA_LER` além da linha 37 da matriz), D13.a, D13.b, D13.c, D16.a, D16.b, D17.a, D18.a,
       D18.b, D18.c, D22.a, D23.a e D41.a.
 - [x] Todo nome que difere do plano mestre §3–§4 está reconciliado e numerado (R1 `frota_*`, R2
       `slug`/`campos`, R3 `GET /modelos-etiqueta/:id/preview`), com onda de destino quando o item é
