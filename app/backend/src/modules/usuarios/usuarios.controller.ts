@@ -38,6 +38,12 @@ export class UsuariosController {
     return this.usuariosService.listar();
   }
 
+  @Get('resumo-perfis')
+  @RequirePermissoes('USUARIOS_LER')
+  resumoPerfis() {
+    return this.usuariosService.resumoPerfis();
+  }
+
   @Get(':id')
   @RequirePermissoes('USUARIOS_LER')
   async detalhar(@Param('id') id: string) {

@@ -45,6 +45,25 @@ export class ParametrosService {
     return param;
   }
 
+  async detalharPorChave(chave: string): Promise<Parametro> {
+    const param = await this.db
+      .select()
+      .from(parametros)
+      .where(and(eq(parametros.chave, chave), isNull(parametros.deletedAt)))
+      .then((r) => r[0] ?? null);
+    if (!param) throw new NotFoundException('Parâmetro não encontrado');
+    return param;
+  }
+
+  async atualizarPorChave(
+    chave: string,
+    valorJson: Record<string, unknown>,
+    usuarioId: string,
+  ): Promise<Parametro> {
+    const atual = await this.detalharPorChave(chave);
+    return this.atualizar(atual.id, { valorJson }, usuarioId);
+  }
+
   async criar(dto: CreateParametroDto, usuarioId: string): Promise<Parametro> {
     return this.db.transaction(async (tx) => {
       const existente = await tx
