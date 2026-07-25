@@ -9081,8 +9081,24 @@ Saída esperada: `Tests: 3 passed, 3 total` no frontend, `13 passed` no Playwrig
 
 **27.1** Criar `docs/execucao/evidencias/onda3-cadastros-admin/README.md` com:
 
-- as 12 capturas lado a lado (protótipo × implementação), nomeadas
-  `<rota-com-hifens>-prototipo.png` e `<rota-com-hifens>-app.png`;
+- as 12 capturas lado a lado (protótipo × implementação), **commitadas** em
+  `docs/execucao/evidencias/onda3-cadastros-admin/` (não basta listar nomes no README), nomeadas
+  `<rota-com-hifens>-prototipo.png` e `<rota-com-hifens>-app.png` — uma por rota de `ROTAS` (Task 26.1),
+  com hífens no lugar de barras (ex.: `cadastros-representantes-app.png`);
+- **procedimento de captura pinado** (viewport `1280×800`, `fullPage: true`, login de administrador ativo):
+  as PNGs `-app.png` são geradas com o frontend e o backend da implementação no ar (mesmo pré-requisito da
+  Task 26), rodando para cada rota:
+
+  ```bash
+  cd app/frontend
+  npx playwright screenshot --viewport-size=1280,800 --full-page \
+    "http://localhost:3100<caminho-da-rota>" \
+    "../../docs/execucao/evidencias/onda3-cadastros-admin/<rota-com-hifens>-app.png"
+  ```
+
+  (a porta segue o `webServer` do `playwright.config.ts`; se diferir de `3100`, usar a porta real). As PNGs
+  `-prototipo.png` vêm do protótipo validado (`feature/completude-v1.1`), no mesmo viewport, com o mesmo
+  comando apontando para a porta do protótipo. O README registra origem, comando e viewport de cada par;
 - a tabela das **26 perdas** da decisão 25 da Onda 2 com a coluna "situação após a Onda 3" preenchida com
   `visível` para todas as 26, e a saída do teste `as 26 perdas herdadas da Onda 2 estao visiveis`;
 - a tabela dos **14 extras** da decisão 31 com "situação" = `removido`, e a saída do teste
@@ -9108,8 +9124,8 @@ Saída esperada: `Tests: 3 passed, 3 total` no frontend, `13 passed` no Playwrig
   composição do boi casado, emissão fiscal e expiração de reserva.
 
 **27.2** Atualizar `docs/execucao/EXECUCAO-STATUS.md`: linha da Onda 3 para `aguardando_portao2`, com o sha
-do commit da implementação, e as **8 dívidas** da seção "Dívidas deixadas por esta onda", cada uma com a
-onda de destino: 1 e 7 na Onda 9 e na Onda 6, 6 na Onda 4, 8 na Onda 5, e 2 a 5 sem onda fixa porque
+do commit da implementação, e as **9 dívidas** da seção "Dívidas deixadas por esta onda", cada uma com a
+onda de destino: 1 e 7 na Onda 9 e na Onda 6, 6 e 9 na Onda 4, 8 na Onda 5, e 2 a 5 sem onda fixa porque
 dependem de decisão do cliente (AD-xx).
 
 **27.3** Gate local completo, na ordem:
@@ -9125,14 +9141,17 @@ cd app/frontend && npm run lint
 cd app/frontend && npx tsc --noEmit
 cd app/frontend && npm run test
 cd app/frontend && npm run build
-cd app/frontend && npx playwright test
+cd app/frontend && npx playwright test e2e/onda3-cadastros-admin.spec.ts e2e/shell-ds.spec.ts
 ```
 
 Saída esperada, em ordem: lint sem avisos; `tsc` silencioso; migrations aplicando `0015` uma única vez
 (`applied 0015_onda3_cadastros_admin`); seed idempotente (rodar duas vezes não muda contagens);
 `git diff --exit-code` sem diferença no snapshot (prova que o snapshot commitado está atualizado —
 decisão 28); cobertura **≥ 80%** de linha e de branch no backend; Jest do frontend verde; `next build`
-sem erro; Playwright com todos os `spec` verdes.
+sem erro; Playwright com **`e2e/onda3-cadastros-admin.spec.ts` (13 passed — DoD-72/73) e
+`e2e/shell-ds.spec.ts` (regressão do shell da Onda 2) verdes**. Não exige `jornada-operacional`,
+`telas-migradas` nem `telas-reais` neste gate — esses `spec` são legado de jornada comercial (Onda 4;
+dívida 9).
 
 **27.4** Conferência final de aritmética da reconciliação (roda em segundos e é o resumo que vai no PR):
 
@@ -9199,6 +9218,11 @@ O Worker executa na ordem numérica: as dependências acima estão satisfeitas p
 8. **Geração de Operações por cadência (P1).** O parâmetro `operacao.cadencia_dias_semana` é semeado e
    editável nesta onda, mas nenhum serviço o consome: quem gera Operação a partir da cadência é a
    **Onda 5 (Gestão)**, dona de `/gestao/operacoes`.
+9. **E2E legado de jornada comercial (`jornada-operacional.spec.ts` e afins).** Esses `spec` assumem
+   seletores e fluxo de pedidos do protótipo/mock antigo (ex.: `#compraProgramadaId`), incompatíveis com a
+   UI real de `/comercial/pedidos/novo` (`pedido-venda-client.tsx` usa `<Select>` sem esse `id`). Não são
+   escopo desta onda reescrever o fluxo de pedido. Realinhar à UI atual na **Onda 4 (Comercial)**, junto
+   das telas de Clientes, Pedidos, Preços e Disponibilidade.
 
 ---
 
@@ -9231,8 +9255,8 @@ O Worker executa na ordem numérica: as dependências acima estão satisfeitas p
       `slug`/`campos`, R3 `GET /modelos-etiqueta/:id/preview`), com onda de destino quando o item é
       diferido.
 - [x] Toda dívida deixada aponta a onda de destino do roadmap canônico §8: frota × expedição na **Onda 9
-      (Carga)**, cadência das Operações na **Onda 5 (Gestão)**, "representantes permitidos" na **Onda 4
-      (Comercial)** e o preview do mestre na **Onda 6 (etiquetas)**.
+      (Carga)**, cadência das Operações na **Onda 5 (Gestão)**, "representantes permitidos" e E2E legado de
+      jornada comercial na **Onda 4 (Comercial)** e o preview do mestre na **Onda 6 (etiquetas)**.
 - [x] Rótulo, ícone e valor inicial de cada tela são os literais do `.tsx` do protótipo — inclusive
       "Transformação de Desossa (TZ)", "Simulador de Disponibilidade", "Reservar produto",
       "Quantidade a reservar", "Sequência de Paradas / Bairros", `MoveVertical`, "Todos os usuários",
@@ -9247,5 +9271,5 @@ O Worker executa na ordem numérica: as dependências acima estão satisfeitas p
       foi inventada.
 - [x] Migração é expand puro, com rollback documentado e snapshot gerado por `drizzle-kit`.
 - [x] Todo comando tem saída esperada; o gate local cobre lint, tipos, migração, seed, snapshot RBAC,
-      cobertura, build e E2E.
+      cobertura, build e E2E (`onda3-cadastros-admin` + `shell-ds`; não a suíte completa de jornada comercial).
 - [x] Nenhuma regra de negócio no frontend: simuladores, contagens e histórico vêm do backend.
