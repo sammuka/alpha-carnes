@@ -11,8 +11,8 @@ Viewport: **1280×800** (Playwright default do projeto).
 | `01-login.png` | Playwright `e2e/shell-ds.spec.ts` — teste "login exibe painel institucional…" | `npm run e2e:shell` |
 | `02-shell-dashboard.png` | Playwright — teste "captura evidencias do shell…" | `npm run e2e:shell` |
 | `03-shell-sidebar-9-grupos.png` | Playwright — screenshot da sidebar no dashboard | `npm run e2e:shell` |
-| `referencia-prototipo/01-login-prototipo.png` | `alpha-carnes-prototipo/src/imports/01-login.png` | cópia versionada |
-| `referencia-prototipo/02-shell-prototipo.png` | `alpha-carnes-prototipo/src/imports/02-dashboard.png` | cópia versionada |
+| `referencia-prototipo/01-login-prototipo.png` | Protótipo Vite em execução — `/login` | ver seção abaixo |
+| `referencia-prototipo/02-shell-prototipo.png` | Protótipo Vite — `/gestao/dashboard` (sidebar 9 grupos) | ver seção abaixo |
 
 ## Divergências autorizadas (plano Onda 2)
 
@@ -24,7 +24,25 @@ Viewport: **1280×800** (Playwright default do projeto).
 - **Decisão 30** — `faturamento` vê `GESTÃO` só com `Relatórios & SIF`; `compras` recupera `Pendências de Overbooking`.
 - **Decisão 31** — itens visíveis sem atribuição na matriz (`compras`: 11; `diretoria`: 3).
 
-## Como regenerar
+## Referência do protótipo (captura real)
+
+Origem: repositório `F:/Projetos/alpha-carnes-prototipo`, branch **`feature/completude-v1.1`**.
+
+1. Subir o dev server: `npm run dev -- --host 127.0.0.1 --port 5173`
+2. Viewport **1280×800** (Playwright Chromium)
+3. Capturas:
+   - `http://127.0.0.1:5173/login` → `referencia-prototipo/01-login-prototipo.png`
+   - Login via botão **Acessar Sistema** → `http://127.0.0.1:5173/gestao/dashboard` → `referencia-prototipo/02-shell-prototipo.png`
+
+Script auxiliar (com o protótipo rodando):
+
+```bash
+cd app/frontend && node scripts/capture-prototipo-ref.mjs
+```
+
+Última captura: **2026-07-25**. Não usar `src/imports/*.png` — são screenshots antigos da jornada E2E da app, não do protótipo atual.
+
+## Como regenerar (app Next.js)
 
 ```bash
 docker compose up -d postgres
