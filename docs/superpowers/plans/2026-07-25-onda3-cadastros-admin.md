@@ -139,7 +139,7 @@ Todos os caminhos são relativos a `src/app/pages/`.
 | `/cadastros/caminhoes` | `Caminhoes.tsx` | 247 | header + "Novo Caminhão"; busca + `select` de status (`:185-188`) + contador "N caminhões" (`:189`); tabela de 6 colunas (`:198`) com placa em *chip* monoespaçado e ícone `Truck`, linhas zebradas e clique na linha (`:205-206`); ações `Pencil` + `Power`/`PowerOff` (`:218-227`), **sem exclusão**; drawer `w-[460px]` (`:57`) |
 | `/cadastros/motoristas` | `Motoristas.tsx` | 250 | mesma estrutura de `Caminhoes.tsx` (busca + `select` de status `:186-189`, contador `:190`, zebra e clique `:206-207`, `Pencil`+`Power`/`PowerOff` `:221-230`, drawer `w-[460px]` `:57`) com campos nome, documento, telefone, caminhão padrão |
 | `/cadastros/rotas` | `Itinerarios.tsx` | 129 | master `w-1/3` com cartões (nome, badge ativo, paradas, dias) + detail com nome/código, sequência de paradas reordenável e 7 chips de dias |
-| `/cadastros/regras-transformacao` | `RegraDesdobramento.tsx` | 548 | 2 abas ("Desdobramento de Compra" e "Transformação na Desossa"); tabela de itens comerciais com soma de fatores; **Simulador** (aba 1) e **Simulador de Disponibilidade** (aba 2) |
+| `/cadastros/regras-transformacao` | `RegraDesdobramento.tsx` | 548 | 2 abas — "Desdobramento de Compra" (`:538`) e "Transformação de Desossa (TZ)" (`:541`); tabela de itens comerciais com soma de fatores; **Simulador** (aba 1, `:203`) e **Simulador de Disponibilidade** (aba 2, `:424`), com os rótulos "Quantidade de TZ livre" (`:429`), "Reservar produto" (`:440`) e "Quantidade a reservar" (`:453`) |
 | `/cadastros/modelos-etiqueta` | `ModelosEtiqueta.tsx` | 221 | banner âmbar de pendência (`:158`); 3 colunas em `flex`: lista `w-[260px]` (`:165`), painel de campos `flex-1` com 12 `<input type="checkbox">` em `grid-cols-2` (`:194-205`), preview `w-[380px]` (`:210`) com etiqueta renderizada ao vivo |
 | `/admin/usuarios` | `Usuarios.tsx` | 121 | grid 12 colunas: lista de usuários (`col-span-8`) + "Resumo de Perfis" (`col-span-4`) com contagem por perfil e botão "Gerenciar Permissões (RBAC)" |
 | `/admin/perfis` | `PerfisAcesso.tsx` | 212 | matriz perfil × permissão com primeira coluna *sticky* e toggles; painel "Menus visíveis — {perfil}" com contador e chips em `grid-cols-3` |
@@ -410,17 +410,24 @@ perfil→permissão — nenhuma tela desta onda depende dela.
 **Decisão 29 — `/admin/perfis` mostra os 11 perfis canônicos e o catálogo real de permissões,
 agrupado por módulo**, e não os 8 perfis com 9 rótulos do mock de `PerfisAcesso.tsx`. Justificativa:
 **AD-04** e doc 013 fixam 11 perfis; os 9 rótulos do protótipo (`criarPedido`, `alterarPreco`, …) não
-existem no catálogo. A **estrutura visual é idêntica** ao protótipo: cartão "Matriz de permissões" com
-`ShieldCheck`, cabeçalho `bg-[#F8FAFC]`, primeira coluna *sticky*, linhas zebradas, linha selecionada em
-`bg-[#EFF6FF]`, toggles `h-5 w-9`; e cartão "Menus visíveis — {perfil}" com contador e chips
+existem no catálogo. A **estrutura visual é idêntica** ao protótipo: cabeçalho com trilha
+"Administração / Perfis de Acesso" em `text-[11px]`, `h1` em `text-[20px]` e subtítulo em `text-[12px]`
+(`PerfisAcesso.tsx:140-142`); cartão "Matriz de permissões" com `ShieldCheck`, cabeçalho `bg-[#F8FAFC]`,
+**uma linha por perfil e uma coluna por permissão** (a orientação do protótipo, não a transposta),
+primeira coluna *sticky*, linhas zebradas, linha selecionada em `bg-[#EFF6FF]` por clique na própria
+linha, toggles `h-5 w-9`; e cartão "Menus visíveis — {perfil}" com o contador "N menus" e chips
 `grid-cols-3`. Divergência autorizada e registrada no README de evidências.
 
 **Decisão 30 — `/admin/auditoria` (fecha a decisão 27 da Onda 2).** Os 5 filtros passam a ser exatamente
-os do protótipo: **Período** (`col-span-2`, dois campos `datetime-local` — início e fim), **Usuário**
-(`select` populado por `GET /auditoria/facetas`), **Módulo** (`select`, mesma fonte), **Operação**
+os do protótipo, **com os rótulos literais de cada opção neutra**: **Período** (`col-span-2`, dois campos
+`datetime-local` — início e fim), **Usuário** (`select` populado por `GET /auditoria/facetas`, opção
+neutra "Todos os usuários", `Auditoria.tsx:44`), **Módulo** (`select`, mesma fonte, opção neutra
+"Todos", `:51`), **Operação**
 (`select` com `INSERT`, `UPDATE`, `DELETE`, `ACAO_MANUAL`) e **Registro (ID)** (`input` texto). O layout
 passa a ser `grid grid-cols-12` com tabela em `col-span-8` e painel de diff em `col-span-4`, com fundo
-`bg-[#1E293B]`, "Dados Anteriores" em `text-[#FC5241]` e "Dados Novos" em `text-[#18A84A]`. O botão
+`bg-[#1E293B]`, rótulos literais `// Dados Anteriores` em `text-[#FC5241]` e `// Dados Novos` em
+`text-[#18A84A]` (`Auditoria.tsx:127-135`) — na tela, sempre pelos tokens `text-strong`, `destructive`,
+`success`, `code-surface`, `text-ink`, `text-muted` e `border` (decisão 46). O botão
 "Aplicar Filtros" dispara a consulta; o botão "Exportar CSV" baixa o resultado do filtro corrente.
 
 **Decisão 31 — "Registro (ID)" aceita UUID e prefixo.** O protótipo sugere `PED-123`. Como `registro_id`
@@ -438,7 +445,8 @@ Registro;Justificativa;IP`.
 **Decisão 33 — o "Resumo de Perfis" de `/admin/usuarios` usa contagem real** por perfil
 (`GET /usuarios/resumo-perfis` → `[{ slug, nome, total }]`), lista os 11 perfis em ordem canônica e
 mostra `0 usuários` quando vazio. As três cores fixas do protótipo (`#8B5CF6`, `#3B7FD4`, `#18A84A`)
-são aplicadas ciclicamente na ordem canônica dos perfis. O botão "Gerenciar Permissões (RBAC)" navega
+são aplicadas ciclicamente na ordem canônica dos perfis, **pelos tokens** `--color-violet-accent`,
+`--color-brand-blue-mid` e `--color-success` (hex literal em `src` reprova em `tokens-ds.test.ts`). O botão "Gerenciar Permissões (RBAC)" navega
 para `/admin/perfis`.
 
 **Decisão 34 — o drawer de usuário** (o protótipo tem o botão "Novo Usuário" sem drawer) reutiliza o
@@ -479,11 +487,12 @@ no drawer: Gerais, Comercial, Operacional, Estoque, Fiscal. Os campos fiscais (`
 `origemFiscal`, `cestOpcional`) entram em `atributos_json.fiscal`, sem coluna nova: são dados
 semiestruturados de baixa cardinalidade de uso e o `atributos_json` já existe (convenções §JSONB).
 
-**Decisão 37 — `/cadastros/regras-transformacao` ganha as 2 abas do protótipo.** Aba 1
-("Desdobramento de Compra") edita `regras_desdobramento_comercial` e traz o **Simulador**: campo
-"Se eu comprar (Boi Casado)" e resultado = quantidade × fator por item comercial, com "Total de partes
-geradas". Aba 2 ("Transformação na Desossa") edita `regras_transformacao`/`regras_transformacao_saidas`
-e traz o **Simulador de Disponibilidade**: quantidade de TZ livre, produto a reservar e quantidade,
+**Decisão 37 — `/cadastros/regras-transformacao` ganha as 2 abas do protótipo, com os rótulos
+literais.** Aba 1 ("Desdobramento de Compra") edita `regras_desdobramento_comercial` e traz o
+**Simulador**: campo "Se eu comprar (Boi Casado):" e resultado = quantidade × fator por item comercial,
+com "Total de partes geradas". Aba 2 (**"Transformação de Desossa (TZ)"**) edita
+`regras_transformacao`/`regras_transformacao_saidas` e traz o **Simulador de Disponibilidade**:
+"Quantidade de TZ livre", "Reservar produto" e "Quantidade a reservar",
 devolvendo por produto o disponível e o bloqueio, mais "Alternativas ainda possíveis". Os dois
 simuladores são **calculados no backend** (`POST /regras-desdobramento/simular` e
 `POST /desossa/regras-transformacao/simular`) — RA-01.
@@ -510,9 +519,14 @@ são a única adição ao protótipo e só são renderizados quando `total > pag
 protótipo (4 registros) a tela é idêntica à referência. Registrada como divergência **D41.a** no README
 de evidências: sem ela, a paginação do backend seria inalcançável pela tela (RA-05).
 
-**Decisão 42 — as mensagens de erro são as do backend.** O helper `mensagemDeErro` de
-`src/lib/error-message.ts` já traduz o envelope de erro; a tela mostra `toast` de `sonner` com essa
-mensagem e mantém o formulário aberto com os dados digitados.
+**Decisão 42 — as mensagens de erro são as do backend.** `src/lib/error-message.ts` hoje só tem
+`extrairMensagemErro(body, fallback)`; a Task 12.1 acrescenta o adaptador `mensagemDeErro(res)`, que lê
+o corpo da `Response` e delega a ele — é essa a função usada pelas telas da onda. A mensagem aparece em
+`toast` de `sonner`, e a mesma 12.1 monta o `<Toaster />` no layout `(admin)`, que ainda não existe na
+árvore: sem esse mount o erro sumiria em silêncio (RA-05). O formulário permanece aberto com os dados
+digitados. Nas telas que já usam banner de erro local (`usuarios-client.tsx`, `fornecedores-client.tsx`),
+o padrão do arquivo é mantido — `setErro`, não `toast` — para não haver dois canais de erro na mesma
+tela.
 
 **Decisão 43 — "representantes permitidos" do usuário (linha 38 da matriz) é diferido para a Onda 4
 (Comercial), com escopo declarado aqui.** A matriz pede o campo em `/admin/usuarios`, mas o valor dele é
@@ -571,8 +585,10 @@ Contato, Clientes vinculados, Status, Ações); a 7ª volta na Onda 4, junto do 
 (Onda 2, decisão 23) reprova qualquer literal hexadecimal em `src` fora de `globals.css`, e o gate é
 executado no CI. O inventário completo de cores dos cinco `.tsx` desta onda
 (`rg -o '#[0-9A-Fa-f]{6}' Representantes.tsx Caminhoes.tsx Motoristas.tsx ModelosEtiqueta.tsx
-PerfisAcesso.tsx`) tem 32 valores distintos: 14 já têm token da Onda 2 e **18 não têm**. Os 18 entram
-em `globals.css` com a origem pinada, e o inventário de `tokens-ds.test.ts` passa a citá-los:
+PerfisAcesso.tsx`) tem 32 valores distintos: 14 já têm token da Onda 2 e **18 não têm**. A esses 18
+soma-se `--color-code-surface`, exigido pelo painel de diff de `Auditoria.tsx` (decisão 30) — **19
+tokens novos** ao todo. Os 19 entram em `globals.css` com a origem pinada, e o inventário de
+`tokens-ds.test.ts` passa a citá-los:
 
 | Token | Valor | Origem |
 |---|---|---|
@@ -591,9 +607,10 @@ em `globals.css` com a origem pinada, e o inventário de `tokens-ds.test.ts` pas
 | `--color-brand-navy-deep` | `#1E3A5F` | `Representantes.tsx:252` (botão primário da tela) |
 | `--color-text-ink` | `#334155` | `Representantes.tsx:176`, `PerfisAcesso.tsx:202` |
 | `--color-violet-surface` | `#F5F3FF` | `Representantes.tsx:71` (*chip* do canal Representante) |
-| `--color-warning-surface` | `#FFFBEB` | `ModelosEtiqueta.tsx:158` (fundo do banner P11) |
+| `--color-warning-surface` | `#FFFBEB` | `ModelosEtiqueta.tsx:158` (fundo do aviso da pendência **P9** — modelo físico/campos finais da etiqueta) |
 | `--color-warning-ink` | `#D97706` | `ModelosEtiqueta.tsx:159` (ícone `AlertTriangle`) |
 | `--color-action-blue-ring` | `#93C5FD` | `ModelosEtiqueta.tsx:178` (borda do modelo selecionado) |
+| `--color-code-surface` | `#0F172A` | `Auditoria.tsx:128` (fundo dos `pre` do painel de diff) |
 
 As 14 cores restantes já têm token da Onda 2 e são reusadas pelo valor exato:
 `#F8FAFC` = `surface-subtle`, `#1E293B` = `text-strong`, `#475569` = `text-slate`,
@@ -712,6 +729,7 @@ app/frontend/src/app/api/admin/perfis/[slug]/menus/route.ts
 app/frontend/src/app/api/admin/parametros/route.ts
 app/frontend/src/app/api/admin/parametros/chave/[chave]/route.ts
 app/frontend/src/app/api/admin/usuarios/resumo-perfis/route.ts
+app/frontend/src/app/api/admin/usuarios/[id]/aprovar/route.ts
 app/frontend/src/app/api/admin/auditoria/facetas/route.ts
 app/frontend/src/app/api/admin/auditoria/export/route.ts
 app/frontend/__tests__/cadastro-tabela-drawer.test.tsx
@@ -734,16 +752,20 @@ docs/execucao/evidencias/onda3-cadastros-admin/README.md
 ### Frontend — arquivos alterados
 
 ```
-app/frontend/src/app/globals.css                     18 tokens novos da decisão 46 (Task 12.1)
+app/frontend/src/app/globals.css                     19 tokens novos da decisão 46 (Task 12.1)
+app/frontend/src/lib/error-message.ts                adaptador mensagemDeErro(res) (Task 12.1, decisão 42)
 app/frontend/src/lib/menu-v2.ts                      decisões 4, 5 e 9
 app/frontend/src/lib/auth.ts                         menusVisiveis no payload de getMe
 app/frontend/src/lib/representantes.ts               clientesVinculados (decisão 45)
-app/frontend/src/lib/cadastros-config.ts             fornecedor: 3 campos da decisão 17 + nota de qualidade
-app/frontend/src/app/(admin)/layout.tsx              consome filtrarMenuPorMenusVisiveis (Task 11.4)
+app/frontend/src/lib/rotas.ts                        ParadaRota, DIAS_SEMANA e os 2 campos novos (Task 17.1)
+app/frontend/src/lib/auditoria.ts                    dataInicio/dataFim/registroBusca e FacetasAuditoria (Task 24.1)
+app/frontend/src/lib/cadastros-config.ts             SecaoCadastro + seções do fornecedor (16.1) e os 4 campos da decisão 17 (7.4)
+app/frontend/src/components/cadastro-master-detail.tsx  props filtrosExtras/blocoDetalheExtra e render por seção (16.2)
+app/frontend/src/app/(admin)/layout.tsx              filtrarMenuPorMenusVisiveis (11.4) + mount do <Toaster /> (12.1)
 app/frontend/src/app/(admin)/page.tsx                rotaDeEntrada(user.menusVisiveis, user.perfis) (Task 11.5)
 app/frontend/__tests__/menu-rbac.test.ts             reescrito (Task 11.7)
 app/frontend/__tests__/menu-v2.test.ts               ajustado à nova assinatura (Task 11.6)
-app/frontend/__tests__/tokens-ds.test.ts             +18 tokens no inventário pinado (Task 12.1)
+app/frontend/__tests__/tokens-ds.test.ts             +19 tokens no inventário pinado (Task 12.1)
 app/frontend/src/app/(admin)/cadastros/representantes/page.tsx
 app/frontend/src/app/(admin)/cadastros/caminhoes/page.tsx
 app/frontend/src/app/(admin)/cadastros/motoristas/page.tsx
@@ -839,9 +861,9 @@ essa string no `it(...)`.
 | DoD-52 | Erro do backend no simulador vira mensagem e nenhum número é exibido | `erro do simulador nao exibe numero` | `app/frontend/__tests__/simuladores-transformacao.test.tsx` |
 | DoD-53 | O "Resumo de Perfis" usa contagem real do backend, inclusive perfil com zero usuários | `resumo de perfis usa contagem real do backend` | `app/frontend/__tests__/usuarios-client.test.tsx` |
 | DoD-54 | Sem `USUARIOS_APROVAR` não existe botão de aprovar (segregação de funções, doc 013) | `sem USUARIOS_APROVAR nao ha botao de aprovar` | `app/frontend/__tests__/usuarios-client.test.tsx` |
-| DoD-55 | `/admin/perfis` renderiza uma coluna por perfil e uma linha por permissão do catálogo, agrupadas por módulo | `matriz renderiza 11 perfis e o catalogo agrupado por modulo` | `app/frontend/__tests__/perfis-client.test.tsx` |
+| DoD-55 | `/admin/perfis` renderiza uma **linha** por perfil e uma **coluna** por permissão do catálogo, com cabeçalho de módulo em `colSpan` (orientação do protótipo) | `matriz renderiza 11 perfis e o catalogo agrupado por modulo` | `app/frontend/__tests__/perfis-client.test.tsx` |
 | DoD-56 | Alternar um chip de menu chama `PUT /perfis/:slug/menus` com a lista completa atualizada | `alterar menu visivel envia lista completa ao backend` | `app/frontend/__tests__/perfis-client.test.tsx` |
-| DoD-57 | O painel mostra o contador "N de 39 menus" do perfil selecionado | `painel de menus mostra contador de 39` | `app/frontend/__tests__/perfis-client.test.tsx` |
+| DoD-57 | O painel mostra o contador do protótipo ("N menus", singular/plural) do perfil selecionado na linha da matriz | `painel de menus mostra o contador do prototipo` | `app/frontend/__tests__/perfis-client.test.tsx` |
 | DoD-58 | A nota sobre menu valer na próxima navegação e permissão no próximo login está na tela (decisão 11) | `tela explica diferenca entre menu e permissao` | `app/frontend/__tests__/perfis-client.test.tsx` |
 | DoD-59 | Erro do backend não altera a matriz exibida e aparece como mensagem | `erro ao salvar perfil nao altera a matriz` | `app/frontend/__tests__/perfis-client.test.tsx` |
 | DoD-60 | `/admin/parametros` mostra os 3 grupos e os 9 cartões na ordem Comercial → Operação → Fiscal | `parametros mostra 3 grupos e 9 cartoes na ordem do prototipo` | `app/frontend/__tests__/parametros-client.test.tsx` |
@@ -854,7 +876,7 @@ essa string no `it(...)`.
 | DoD-67 | **(decisão 31)** UUID completo vira `registroId`; texto parcial vira `registroBusca` | `campo registro escolhe entre registroId e registroBusca` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
 | DoD-68 | **(decisão 32)** "Exportar CSV" chama a rota de exportação com os filtros correntes | `exportar csv usa os filtros correntes` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
 | DoD-69 | **(decisão 32)** Exportação truncada em 5 000 registros avisa o usuário | `exportacao truncada avisa o usuario` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
-| DoD-70 | As 18 rotas BFF da onda existem nos caminhos previstos | `todas as rotas BFF da Onda 3 existem` | `app/frontend/__tests__/bff-onda3.test.ts` |
+| DoD-70 | As 19 rotas BFF da onda existem nos caminhos previstos | `todas as rotas BFF da Onda 3 existem` | `app/frontend/__tests__/bff-onda3.test.ts` |
 | DoD-71 | O BFF repassa status e mensagem do backend em caso de erro, sem mascarar (RA-05) | `erro do backend vira status e message no BFF` | `app/frontend/__tests__/bff-onda3.test.ts` |
 | DoD-72 | Cada uma das 12 rotas abre com o título do protótipo, sem placeholder e sem erro de console | `rota <rota> abre com titulo e sem placeholder` | `app/frontend/e2e/onda3-cadastros-admin.spec.ts` |
 | DoD-73 | O menu do administrador leva às 12 rotas da onda | `menu do administrador leva as 12 rotas da onda` | `app/frontend/e2e/onda3-cadastros-admin.spec.ts` |
@@ -3592,7 +3614,7 @@ no domínio da desossa (decisão 39): cada unidade de TZ atende **uma** alternat
 
 ```ts
   /**
-   * Simulador da aba "Transformação na Desossa".
+   * Simulador da aba "Transformação de Desossa (TZ)".
    * Dado o total de TZ livre e uma reserva pretendida, devolve o disponível por produto
    * e as alternativas ainda possíveis depois da reserva.
    */
@@ -4279,7 +4301,7 @@ Três regras estruturais do componente, para as três telas ficarem idênticas p
 3. todo `select` é elemento nativo, como no protótipo (`Caminhoes.tsx:185`, `Representantes.tsx:275`),
    estilizado por token; o `Select` do Radix não entra nesta barra nem neste drawer.
 
-**12.1** Acrescentar ao bloco `:root` de `app/frontend/src/app/globals.css` os 18 tokens da decisão 46,
+**12.1** Acrescentar ao bloco `:root` de `app/frontend/src/app/globals.css` os 19 tokens da decisão 46,
 com o comentário de origem, e citá-los no inventário de `app/frontend/__tests__/tokens-ds.test.ts`
 (no `it('globals.css declara os tokens de acao, superficie, login, pipeline e provisorio')`):
 
@@ -4303,10 +4325,37 @@ com o comentário de origem, e citá-los no inventário de `app/frontend/__tests
   --color-warning-surface: #FFFBEB;
   --color-warning-ink: #D97706;
   --color-action-blue-ring: #93C5FD;
+  --color-code-surface: #0F172A;
 ```
 
 Sem esse passo, o gate `nenhum literal hexadecimal de cor em src fora de globals.css` reprova a onda
 inteira: nenhum arquivo da Task 12 em diante escreve `#`.
+
+Ainda na 12.1, dois pré-requisitos do padrão de erro da decisão 42, hoje inexistentes no repositório —
+sem eles as telas desta onda não compilam e o `toast` não apareceria (falha silenciosa, RA-05):
+
+*a)* acrescentar a `app/frontend/src/lib/error-message.ts` o adaptador de `Response` usado por todas as
+telas da onda (o `extrairMensagemErro` já existente continua intacto e é reusado):
+
+```ts
+/** Lê o corpo de uma resposta de erro e devolve o texto exibível ao usuário. */
+export async function mensagemDeErro(res: Response, fallback = 'Falha na operação'): Promise<string> {
+  const body: unknown = await res.json().catch(() => null);
+  return extrairMensagemErro(body, fallback);
+}
+```
+
+*b)* montar o `<Toaster />` de `@/components/ui/sonner` em `app/frontend/src/app/(admin)/layout.tsx`,
+como último filho do `div` externo (`layout.tsx:21-28`), com o `import { Toaster } from
+'@/components/ui/sonner';`:
+
+```tsx
+      <div className="flex min-w-0 flex-1 flex-col">
+        <AdminHeader user={sidebarUser} />
+        <main className="flex-1 bg-background p-4">{children}</main>
+      </div>
+      <Toaster />
+```
 
 **12.2** Criar `app/frontend/src/components/cadastros/cadastro-tabela-drawer.tsx`:
 
@@ -5763,12 +5812,56 @@ Saída esperada: sem erros.
 
 ### Task 16 — Tela `/cadastros/fornecedores`
 
-Protótipo: `Fornecedores.tsx` — mestre-detalhe com chips de contagem no topo da lista e abas
-"Dados Cadastrais", "Parâmetros Operacionais" e "Histórico" no detalhe. A tela já usa
+Protótipo: `Fornecedores.tsx` — mestre-detalhe com chips de contagem no topo da lista e, no detalhe,
+**quatro seções com ícone distribuídas em duas colunas** (`:130`, `grid grid-cols-2 gap-8`) —
+**não há `Tabs` neste arquivo**. As seções, com o `h3` `text-sm font-bold ... flex items-center gap-2
+border-b pb-2` e o ícone `w-4 h-4`, são: "Dados Principais" (`Building2`, `:135-136`) e "Endereço e
+Contato" (`MapPin`, `:155-156`) na coluna esquerda; "Parâmetros Operacionais" (`Truck`, `:182-183`) e
+"Histórico & Ocorrências" (`AlertTriangle`, `:202-203`) na coluna direita. A tela já usa
 `CadastroMasterDetail`; esta task acrescenta os chips reais (decisão 19) e o bloco de histórico real
 (decisão 18). Os campos novos do cadastro entraram na Task 7.4.
 
-**16.1** Em `app/frontend/src/components/cadastro-master-detail.tsx`, acrescentar duas props opcionais à
+**Divergência autorizada D16.a** — a seção "Endereço e Contato" traz apenas os campos que existem no
+cadastro (nome do contato, telefone, e-mail, cargo). "Endereço Completo", "Cidade / UF", "CEP" e
+"Inscrição Estadual" (`Fornecedores.tsx:141-174`) **não** existem em `fornecedores.schema.ts` e a
+decisão 17 não os cria; renderizar campo sem origem seria dado inventado (RA-06). O título da seção e o
+ícone continuam os do protótipo. Registrada no README de evidências (Task 27.1).
+
+**16.1** Em `app/frontend/src/lib/cadastros-config.ts`, acrescentar o conceito de **seção** (usado só
+por fornecedores nesta onda; cadastros sem `secoes` continuam com `Tabs`, sem mudança):
+
+```ts
+import type { LucideIcon } from 'lucide-react';
+
+export interface SecaoCadastro {
+  chave: string;
+  titulo: string;
+  icone: LucideIcon;
+  coluna: 1 | 2;
+}
+```
+
+`CampoConfig` ganha `secao?: string` e `CadastroConfig` ganha `secoes?: SecaoCadastro[]`.
+
+Em `fornecedoresConfig`, declarar as seções do protótipo e trocar `aba` por `secao` em **todos** os
+campos (inclusive os quatro da Task 7.4, que passam de `aba: 'parametros'` para
+`secao: 'parametros-operacionais'`):
+
+```ts
+  secoes: [
+    { chave: 'dados-principais', titulo: 'Dados Principais', icone: Building2, coluna: 1 },
+    { chave: 'endereco-contato', titulo: 'Endereço e Contato', icone: MapPin, coluna: 1 },
+    { chave: 'parametros-operacionais', titulo: 'Parâmetros Operacionais', icone: Truck, coluna: 2 },
+  ],
+```
+
+| campo | seção |
+|---|---|
+| `codigo`, `razaoSocial`, `documentoFiscal`, `status`, `observacoes` | `dados-principais` |
+| `nome`, `telefone`, `email`, `cargo` (todos `jsonCampo: 'contatosJson'`) | `endereco-contato` |
+| `romaneioAntecipado`, `horarioLimiteRecebimento`, `capacidadeMaximaKg`, `toleranciaDivergenciaPercentual`, `notaQualidade` | `parametros-operacionais` |
+
+**16.2** Em `app/frontend/src/components/cadastro-master-detail.tsx`, acrescentar duas props opcionais à
 interface (linha 19) e ao destructuring (linha 162):
 
 ```tsx
@@ -5793,17 +5886,47 @@ export function CadastroMasterDetail({
 }: CadastroMasterDetailProps) {
 ```
 
-Renderizar `filtrosExtras` logo abaixo do campo de busca da coluna mestre e
-`{selecionadoId && blocoDetalheExtra?.(selecionadoId)}` como último bloco do painel de detalhe (depois do
-`Tabs`/`renderCampos`). Props ausentes não mudam nada nas outras telas que usam o componente.
+Renderizar `filtrosExtras` logo abaixo do campo de busca da coluna mestre. No corpo do `<form>`
+(linhas 453–472), acrescentar um terceiro caminho **antes** do teste `usaAbas`: quando
+`config.secoes` existe, o detalhe é o grid de duas colunas do protótipo (`Fornecedores.tsx:130-225`) e
+`Tabs` não é renderizado:
 
-**16.2** Substituir `app/frontend/src/app/(admin)/cadastros/fornecedores/fornecedores-client.tsx`:
+```tsx
+                {config.secoes ? (
+                  <div className="grid grid-cols-2 gap-8">
+                    {([1, 2] as const).map((coluna) => (
+                      <div key={coluna} className="space-y-8">
+                        {config.secoes
+                          ?.filter((secao) => secao.coluna === coluna)
+                          .map((secao) => {
+                            const Icone = secao.icone;
+                            return (
+                              <section key={secao.chave} className="space-y-4">
+                                <h3 className="flex items-center gap-2 border-b border-border pb-2 text-sm font-bold text-foreground">
+                                  <Icone className="size-4 text-muted-foreground" />
+                                  {secao.titulo}
+                                </h3>
+                                {renderCampos(config.campos.filter((campo) => campo.secao === secao.chave))}
+                              </section>
+                            );
+                          })}
+                        {coluna === 2 && selecionadoId && blocoDetalheExtra?.(selecionadoId)}
+                      </div>
+                    ))}
+                  </div>
+                ) : usaAbas ? (
+```
+
+`blocoDetalheExtra` é o último bloco da coluna 2 — a quarta seção do protótipo
+("Histórico & Ocorrências"). Props ausentes não mudam nada nas outras telas que usam o componente.
+
+**16.3** Substituir `app/frontend/src/app/(admin)/cadastros/fornecedores/fornecedores-client.tsx`:
 
 ```tsx
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Award } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { CadastroMasterDetail } from '@/components/cadastro-master-detail';
 import { Badge } from '@/components/ui/badge';
 import { fornecedoresConfig } from '@/lib/cadastros-config';
@@ -5882,35 +6005,38 @@ function BlocoHistorico({ fornecedorId }: { fornecedorId: string }) {
     })();
   }, [fornecedorId]);
 
-  if (erro) {
-    return (
-      <p role="alert" className="mt-6 text-sm text-destructive">
-        {erro}
-      </p>
-    );
-  }
-  if (!historico) return <p className="mt-6 text-sm text-muted-foreground">Carregando histórico…</p>;
-
   return (
-    <section className="mt-6 grid gap-4 md:grid-cols-2">
-      <div className="rounded-lg border border-border bg-card p-4">
-        <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase">
-          <AlertTriangle className="size-4" />
-          Total de Ocorrências (Ano)
+    /* Quarta seção do detalhe — Fornecedores.tsx:201-221 */
+    <section className="space-y-4">
+      <h3 className="flex items-center gap-2 border-b border-border pb-2 text-sm font-bold text-foreground">
+        <AlertTriangle className="size-4 text-muted-foreground" />
+        Histórico &amp; Ocorrências
+      </h3>
+
+      {erro ? (
+        <p role="alert" className="text-sm text-destructive">
+          {erro}
         </p>
-        <p className="mt-2 text-2xl font-bold">{historico.ocorrenciasAno}</p>
-      </div>
-      <div className="rounded-lg border border-border bg-card p-4">
-        <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase">
-          <Award className="size-4" />
-          Última Divergência
-        </p>
-        <p className="mt-2 text-sm font-medium">
-          {historico.ultimaDivergencia
-            ? `${new Date(historico.ultimaDivergencia.data).toLocaleDateString('pt-BR')} · ${historico.ultimaDivergencia.tipo}`
-            : '—'}
-        </p>
-      </div>
+      ) : !historico ? (
+        <p className="text-sm text-muted-foreground">Carregando histórico…</p>
+      ) : (
+        <div className="space-y-3 rounded-lg border border-border p-4">
+          <div className="flex items-center justify-between border-b border-border pb-2 text-sm">
+            <span className="text-muted-foreground">Total de Ocorrências (Ano)</span>
+            <span className="font-bold text-destructive">
+              {historico.ocorrenciasAno} {historico.ocorrenciasAno === 1 ? 'registro' : 'registros'}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Última Divergência</span>
+            <span className="font-medium text-foreground">
+              {historico.ultimaDivergencia
+                ? `${new Date(historico.ultimaDivergencia.data).toLocaleDateString('pt-BR')} · ${historico.ultimaDivergencia.tipo}`
+                : '—'}
+            </span>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -5932,7 +6058,7 @@ export function FornecedoresClient({ podeGerenciar }: { podeGerenciar: boolean }
 }
 ```
 
-**16.3** Criar `app/frontend/__tests__/fornecedores-contagens.test.tsx` (DoD-40 e DoD-41):
+**16.4** Criar `app/frontend/__tests__/fornecedores-contagens.test.tsx` (DoD-40 e DoD-41):
 
 ```tsx
 import { render, screen } from '@testing-library/react';
@@ -5978,9 +6104,20 @@ Saída esperada: `Tests: 2 passed, 2 total` e nenhum erro de tipo.
 
 ### Task 17 — Tela `/cadastros/rotas`: paradas e dias de atendimento
 
-Protótipo: `Itinerarios.tsx` — o painel de detalhe tem, abaixo dos campos, a lista "Paradas / Bairros"
-com `GripVertical`, botões de subir/descer, `Trash2` por linha e o campo "Adicionar parada"; e a faixa
-"Dias de Atendimento" com sete botões alternáveis.
+Protótipo: `Itinerarios.tsx` — o painel de detalhe tem, abaixo dos campos, a seção
+**"Sequência de Paradas / Bairros"** (`:91`, `h3` `text-sm font-bold uppercase tracking-wider` com
+`border-b`), em que cada parada é uma linha com o ícone **`MoveVertical`** (`:6`, `:95`), o número da
+ordem num círculo (`:96`), o `Input` da descrição (`:97`) e um botão de remoção à direita (`:98`);
+abaixo, o botão de largura total "Adicionar Parada" (`:101-103`). A segunda seção é
+**"Dias de Atendimento"** (`:109`) com os sete chips `Seg…Dom` (`:111-115`).
+
+**Divergência autorizada D17.a** — os botões "Subir parada"/"Descer parada" não existem no protótipo:
+o `MoveVertical` de `:95` é só um punho visual (`cursor-grab`) sem *drag* implementado, e a ordem do
+protótipo nunca muda. Como `paradas.ordem` é persistida (Task 6) e DoD-22 exige reordenação real, a
+tela ganha os dois botões, com o mesmo ícone `MoveVertical` mantido à esquerda da linha. O botão de
+remoção usa `Trash2` no lugar do `MapPin className="line-through"` de `:98` — o ícone do protótipo é um
+`MapPin` riscado por CSS, que não comunica exclusão fora daquele contexto. Mesma justificativa de D18.b
+(sem isso a edição seria inalcançável, RA-06); registrada no README de evidências (Task 27.1).
 
 **17.1** Em `app/frontend/src/lib/rotas.ts`, acrescentar:
 
@@ -6009,9 +6146,13 @@ os dois blocos novos:
 
 ```tsx
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label>Paradas / Bairros</Label>
-                    <span className="text-xs text-muted-foreground">{form.paradas.length} paradas</span>
+                  <div className="flex items-center justify-between border-b border-border pb-2">
+                    <h3 className="text-sm font-bold tracking-wider text-foreground uppercase">
+                      Sequência de Paradas / Bairros
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      {form.paradas.length} {form.paradas.length === 1 ? 'parada' : 'paradas'}
+                    </span>
                   </div>
 
                   {form.paradas.length === 0 && (
@@ -6021,10 +6162,18 @@ os dois blocos novos:
                   )}
 
                   {form.paradas.map((parada, indice) => (
-                    <div key={`${parada.ordem}-${parada.descricao}`} className="flex items-center gap-2 rounded-md border p-2">
-                      <GripVertical className="size-4 text-muted-foreground" />
-                      <span className="w-6 text-center text-xs font-medium text-muted-foreground">{indice + 1}</span>
-                      <span className="flex-1 text-sm">{parada.descricao}</span>
+                    <div key={parada.ordem} className="flex items-center gap-3 rounded-md border border-border bg-muted/30 p-3">
+                      <MoveVertical className="size-4 cursor-grab text-muted-foreground" />
+                      <span className="flex size-6 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                        {indice + 1}
+                      </span>
+                      <Input
+                        aria-label={`Parada ${indice + 1}`}
+                        className="flex-1 bg-card"
+                        value={parada.descricao}
+                        disabled={!podeGerenciar}
+                        onChange={(e) => atualizarParada(indice, e.target.value)}
+                      />
                       <Button
                         variant="ghost"
                         size="icon"
@@ -6056,28 +6205,22 @@ os dois blocos novos:
                   ))}
 
                   {podeGerenciar && (
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Adicionar parada (bairro, referência)"
-                        value={novaParada}
-                        onChange={(e) => setNovaParada(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            adicionarParada();
-                          }
-                        }}
-                      />
-                      <Button variant="outline" onClick={adicionarParada}>
-                        <Plus className="mr-1 size-4" />
-                        Adicionar
-                      </Button>
-                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-2 w-full border-dashed text-muted-foreground"
+                      onClick={adicionarParada}
+                    >
+                      <Plus className="mr-2 size-4" />
+                      Adicionar Parada
+                    </Button>
                   )}
                 </div>
 
                 <div className="space-y-3">
-                  <Label>Dias de Atendimento</Label>
+                  <h3 className="border-b border-border pb-2 text-sm font-bold tracking-wider text-foreground uppercase">
+                    Dias de Atendimento
+                  </h3>
                   <div className="flex flex-wrap gap-2">
                     {DIAS_SEMANA.map((dia) => {
                       const marcado = form.diasAtendimento.includes(dia.valor);
@@ -6100,21 +6243,21 @@ os dois blocos novos:
 ```
 
 com o import
-`import { ArrowDown, ArrowUp, GripVertical, Map, MapPin, Plus, Search, Trash2 } from 'lucide-react';`
+`import { ArrowDown, ArrowUp, Map, MapPin, MoveVertical, Plus, Search, Trash2 } from 'lucide-react';`
 e os manipuladores acima do `return`:
 
 ```tsx
-  const [novaParada, setNovaParada] = useState('');
-
   const renumerar = (lista: ParadaRota[]) =>
     lista.map((parada, indice) => ({ ordem: indice + 1, descricao: parada.descricao }));
 
-  const adicionarParada = () => {
-    const descricao = novaParada.trim();
-    if (!descricao) return;
-    setCampo('paradas', renumerar([...form.paradas, { ordem: form.paradas.length + 1, descricao }]));
-    setNovaParada('');
-  };
+  const adicionarParada = () =>
+    setCampo('paradas', renumerar([...form.paradas, { ordem: form.paradas.length + 1, descricao: '' }]));
+
+  const atualizarParada = (indice: number, descricao: string) =>
+    setCampo(
+      'paradas',
+      form.paradas.map((parada, i) => (i === indice ? { ...parada, descricao } : parada)),
+    );
 
   const removerParada = (indice: number) =>
     setCampo('paradas', renumerar(form.paradas.filter((_, i) => i !== indice)));
@@ -6138,6 +6281,16 @@ e os manipuladores acima do `return`:
         ? form.diasAtendimento.filter((d) => d !== dia)
         : [...form.diasAtendimento, dia],
     );
+```
+
+No início do `salvar` já existente, antes do `fetch`, entra a guarda que impede parada sem descrição
+(nada é enviado pela metade nem descartado em silêncio — RA-05):
+
+```tsx
+    if (form.paradas.some((parada) => parada.descricao.trim() === '')) {
+      setErro('Informe a descrição de todas as paradas.');
+      return;
+    }
 ```
 
 **17.3** Criar `app/frontend/__tests__/rotas-paradas.test.tsx` (DoD-42 e DoD-43):
@@ -6169,8 +6322,10 @@ it('reordena parada para cima preservando descricoes', async () => {
 
   fireEvent.click(screen.getAllByRole('button', { name: 'Subir parada' })[1]!);
 
-  expect(screen.getAllByText(/Centro|Bela Vista/).map((el) => el.textContent))
-    .toEqual(['Bela Vista', 'Centro']);
+  expect([
+    (screen.getByLabelText('Parada 1') as HTMLInputElement).value,
+    (screen.getByLabelText('Parada 2') as HTMLInputElement).value,
+  ]).toEqual(['Bela Vista', 'Centro']);
 });
 
 it('alterna dia de atendimento', async () => {
@@ -6214,7 +6369,9 @@ O controle de cada campo é `<input type="checkbox">` (`:197-202`) dentro de um 
 (`EXEMPLO`, linhas 73–84: "ETQ-88391", "Restaurante Grill / #PV-1029", "Frigorífico Boi Forte"). Esses
 valores são dado de demonstração e não vão para a tela (decisão 2 e RA-06). O preview desta onda mantém a
 coluna, o título e a moldura da etiqueta e lista **os rótulos dos campos ligados**, atualizando a cada
-marcação. Registrada no README de evidências (Task 27.1).
+marcação. O cabeçalho da etiqueta continua literal do protótipo: **"ALFA CARNES"**
+(`ModelosEtiqueta.tsx:91`) — a grafia literal do protótipo, que o Worker não "corrige". Registrada no
+README de evidências (Task 27.1).
 
 **Divergência autorizada D18.b** — o painel "Campos configuráveis" ganha o botão "Salvar Modelo" no
 cabeçalho, que o protótipo não tem porque marca campo em `useState` local (`:141-146`). Sem ele a
@@ -6435,7 +6592,7 @@ export function ModelosEtiquetaClient({ podeGerenciar }: { podeGerenciar: boolea
           <div className="flex flex-1 items-start justify-center overflow-y-auto p-4">
             <div className="w-full rounded-xl border-2 border-action-blue bg-surface-subtle p-4 font-mono text-[12px] text-text-ink">
               <p className="mb-3 text-[9px] font-black tracking-[0.2em] text-text-muted uppercase">
-                ALPHA CARNES
+                ALFA CARNES
               </p>
               {marcados.length === 0 ? (
                 <p className="text-text-muted">Nenhum campo selecionado.</p>
@@ -6590,10 +6747,14 @@ e garantir que `produtos.service.ts` grava `atributosJson` no `values` de `criar
 As outras quatro `TabsContent` recebem, sem alterar o markup interno, os blocos de campos já existentes na
 ordem da tabela acima.
 
-**19.3** Criar `app/frontend/__tests__/produtos-client.test.tsx` (DoD-48 e DoD-49), com o cabeçalho
-padrão dos testes de tela do repositório (`import { render, screen, fireEvent, waitFor } from
-'@testing-library/react'` e `import ProdutosClient from
-'@/app/(admin)/cadastros/produtos/produtos-client'`):
+**19.3** Criar `app/frontend/__tests__/produtos-client.test.tsx` (DoD-48 e DoD-49) com este cabeçalho —
+o componente é **export nomeado** (`produtos-client.tsx:131`, `export function ProdutosClient`), então o
+`import` é entre chaves e o Worker não troca por `default`:
+
+```tsx
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { ProdutosClient } from '../src/app/(admin)/cadastros/produtos/produtos-client';
+```
 
 ```tsx
 it('drawer de produto tem as 5 abas do prototipo', async () => {
@@ -6642,17 +6803,29 @@ Saída esperada: `Tests: 2 passed, 2 total`.
 
 ### Task 20 — Tela `/cadastros/regras-transformacao`: 2 abas e simuladores
 
-Protótipo: `RegraDesdobramento.tsx` — aba 1 "Desdobramento de Compra" (regras + simulador
-"Se eu comprar (Boi Casado)") e aba 2 "Transformação na Desossa" (alternativas + simulador de
-disponibilidade), com o aviso de exclusividade por unidade de TZ.
+Protótipo: `RegraDesdobramento.tsx` — aba 1 **"Desdobramento de Compra"** (`:538`; regras + cartão
+**"Simulador"**, `:203`, com o rótulo "Se eu comprar (Boi Casado):", `:208`) e aba 2
+**"Transformação de Desossa (TZ)"** (`:541`; alternativas + cartão **"Simulador de Disponibilidade"**,
+`:424`), com o aviso de exclusividade por unidade de TZ. Os rótulos dos três campos do simulador da
+aba 2 são literais: "Quantidade de TZ livre" (`:429`), "Reservar produto" (`:440`) e
+"Quantidade a reservar" (`:453`).
 
-**20.1** Em `regras-transformacao-client.tsx`, envolver o conteúdo em `Tabs`:
+**20.1** Em `regras-transformacao-client.tsx`, acrescentar os imports
+
+```tsx
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
+import { SimuladorDesdobramento } from './simulador-desdobramento';
+import { SimuladorDesossa } from './simulador-desossa';
+```
+
+e envolver o conteúdo em `Tabs` (o aviso usa os tokens da paleta, nunca classes `amber-*` cruas):
 
 ```tsx
       <Tabs defaultValue="desdobramento" className="gap-4">
         <TabsList>
           <TabsTrigger value="desdobramento">Desdobramento de Compra</TabsTrigger>
-          <TabsTrigger value="desossa">Transformação na Desossa</TabsTrigger>
+          <TabsTrigger value="desossa">Transformação de Desossa (TZ)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="desdobramento" className="space-y-6">
@@ -6661,9 +6834,9 @@ disponibilidade), com o aviso de exclusividade por unidade de TZ.
         </TabsContent>
 
         <TabsContent value="desossa" className="space-y-6">
-          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3 rounded-lg border border-provisorio-border bg-warning-surface p-4">
             <BadgeProvisorio pendencia="P12" />
-            <p className="text-sm text-amber-900">
+            <p className="text-sm text-provisorio-text">
               Cada unidade de TZ atende exatamente uma das alternativas abaixo.
             </p>
           </div>
@@ -6694,7 +6867,8 @@ interface Resultado {
 }
 
 export function SimuladorDesdobramento({ itemCompraId }: { itemCompraId: string | null }) {
-  const [quantidade, setQuantidade] = useState('100');
+  /** Valor inicial do protótipo — RegraDesdobramento.tsx:65 (`useState(10)`). */
+  const [quantidade, setQuantidade] = useState('10');
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [calculando, setCalculando] = useState(false);
@@ -6736,7 +6910,7 @@ export function SimuladorDesdobramento({ itemCompraId }: { itemCompraId: string 
 
       <div className="flex items-end gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="qtd-simulacao">Se eu comprar (Boi Casado)</Label>
+          <Label htmlFor="qtd-simulacao">Se eu comprar (Boi Casado):</Label>
           <Input
             id="qtd-simulacao"
             type="number"
@@ -6799,9 +6973,10 @@ interface Resultado {
 
 export function SimuladorDesossa() {
   const [produtos, setProdutos] = useState<Array<{ id: string; nome: string }>>([]);
-  const [tzLivre, setTzLivre] = useState('100');
+  /** Valores iniciais do protótipo — RegraDesdobramento.tsx:323 (`10`) e :325 (`3`). */
+  const [tzLivre, setTzLivre] = useState('10');
   const [produtoId, setProdutoId] = useState('');
-  const [quantidade, setQuantidade] = useState('');
+  const [quantidade, setQuantidade] = useState('3');
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [calculando, setCalculando] = useState(false);
@@ -6849,8 +7024,12 @@ export function SimuladorDesossa() {
     <Card className="space-y-4 p-6">
       <div className="flex items-center gap-2">
         <Calculator className="size-5 text-primary" />
-        <h3 className="font-bold">Simulador</h3>
+        <h3 className="font-bold">Simulador de Disponibilidade</h3>
       </div>
+
+      <p className="text-sm text-muted-foreground">
+        Informe o TZ livre e reserve um produto derivado para ver o impacto nas duas alternativas.
+      </p>
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1.5">
@@ -6865,7 +7044,7 @@ export function SimuladorDesossa() {
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="produto-reserva">Produto a reservar</Label>
+          <Label htmlFor="produto-reserva">Reservar produto</Label>
           <select
             id="produto-reserva"
             className="h-9 w-56 rounded-md border border-input bg-background px-3 text-sm"
@@ -6881,7 +7060,7 @@ export function SimuladorDesossa() {
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="qtd-reserva">Quantidade</Label>
+          <Label htmlFor="qtd-reserva">Quantidade a reservar</Label>
           <Input
             id="qtd-reserva"
             type="number"
@@ -6935,9 +7114,18 @@ export function SimuladorDesossa() {
 ```
 
 **20.4** Criar `app/frontend/__tests__/simuladores-transformacao.test.tsx` (DoD-50 a DoD-52) cobrindo:
-(a) o simulador de desdobramento mostra `100 × 2 = 200` por item e o total devolvido pela API;
+
+(a) o simulador de desdobramento exibe, por item, exatamente a linha `quantidade × fator = total` **do
+corpo devolvido pela API** e o "Total de partes geradas" também da API — o caso monta a resposta com
+`{ quantidade: 10, itens: [{ …, fator: '2', total: 20 }], totalPartes: 60 }` e afere `10 × 2 = 20`,
+partindo do valor inicial `10` do protótipo. Nenhum número da expectativa é escrito à mão fora do
+`mock`: o teste compara com os campos do próprio corpo, de modo que trocar o valor inicial da tela não
+transforma a expectativa em ficção (RA-06);
+
 (b) o simulador de desossa marca "Bloqueado pela reserva" no produto que a API marcou e lista as
-alternativas possíveis; (c) erro do backend vira `role="alert"` e nenhum número é exibido.
+alternativas possíveis;
+
+(c) erro do backend vira `role="alert"` e nenhum número é exibido.
 
 **Verificação:**
 
@@ -6972,7 +7160,9 @@ interface LinhaResumo {
   total: number;
 }
 
-const CORES = ['#8B5CF6', '#3B7FD4', '#18A84A'];
+/** As três cores do protótipo pelos tokens da Onda 2 — hex literal em `src` reprova em
+ *  `tokens-ds.test.ts` (decisão 46). */
+const CORES = ['var(--color-violet-accent)', 'var(--color-brand-blue-mid)', 'var(--color-success)'];
 
 export function ResumoPerfis() {
   const [linhas, setLinhas] = useState<LinhaResumo[] | null>(null);
@@ -7042,25 +7232,153 @@ export function ResumoPerfis() {
 `<div className="grid gap-6 lg:grid-cols-12">`, com a tabela em `lg:col-span-8` e
 `<ResumoPerfis />` em `lg:col-span-4`.
 
-**21.3** No mesmo arquivo, acrescentar o drawer de usuário (decisão 34) usando `Sheet` do DS, aberto pelo
-botão "Novo Usuário" e pelo `Pencil` de cada linha, com os campos:
+**21.3** No mesmo arquivo, **substituir** o bloco `<Sheet>` atual (linhas 228–278) pelo drawer da
+decisão 34: largura `w-[520px]` do drawer do protótipo (`Representantes.tsx:92`), `Switch` de status,
+`Checkbox` do DS no lugar do `<input type="checkbox">` cru e o botão de aprovação. Estado e
+manipuladores novos, acima do `return`:
 
-| campo | tipo | regra |
-|---|---|---|
-| Nome | `Input` texto | obrigatório |
-| E-mail | `Input` e-mail | obrigatório; desabilitado na edição |
-| Senha | `Input` password | só na criação, obrigatório, mínimo 8 caracteres |
-| Ativo | `Switch` | padrão ligado |
-| Perfis | lista de `Checkbox` com os 11 perfis de `GET /api/admin/perfis` | ao menos um |
+```tsx
+  const [ativo, setAtivo] = useState(true);
+  const [aprovando, setAprovando] = useState(false);
+```
 
-`POST /api/admin/usuarios` na criação, `PATCH /api/admin/usuarios/:id` na edição e
-`PUT /api/admin/usuarios/:id/perfis` para os perfis (rota BFF já existente). Botão "Aprovar usuário"
-aparece somente com `USUARIOS_APROVAR` e chama `POST /api/admin/usuarios/:id/aprovar`; o erro de
-segregação criador ≠ aprovador vindo do backend aparece como `toast.error` com a mensagem do backend.
+`abrirNovo` passa a fazer `setAtivo(true)` e `abrirEditar(u)` passa a fazer `setAtivo(u.ativo)`; o
+`PATCH` de edição passa a enviar `{ nome: form.nome, email: form.email, ativo }` (`AtualizarUsuarioDto`
+já tem `ativo`, `src/lib/usuarios.ts:25-29`). O drawer completo:
 
-**21.4** Criar `app/frontend/__tests__/usuarios-client.test.tsx` (DoD-53 e DoD-54), com o cabeçalho
-padrão dos testes de tela (`@testing-library/react` + `import UsuariosClient from
-'@/app/(admin)/admin/usuarios/usuarios-client'`):
+```tsx
+      <Sheet open={sheetAberto} onOpenChange={setSheetAberto}>
+        <SheetContent className="w-[520px] sm:max-w-[520px]">
+          <SheetHeader>
+            <SheetTitle>{editando ? 'Editar Usuário' : 'Novo Usuário'}</SheetTitle>
+          </SheetHeader>
+
+          <form onSubmit={(e) => void salvar(e)} className="mt-6 space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="nome">Nome</Label>
+              <Input
+                id="nome"
+                value={form.nome}
+                onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))}
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="email">E-mail</Label>
+              <Input
+                id="email"
+                type="email"
+                value={form.email}
+                disabled={editando !== null}
+                onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
+                required
+              />
+            </div>
+
+            {!editando && (
+              <div className="space-y-1.5">
+                <Label htmlFor="senha">Senha</Label>
+                <Input
+                  id="senha"
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))}
+                  required
+                  minLength={8}
+                />
+              </div>
+            )}
+
+            <div className="flex items-center justify-between rounded-md border border-border p-3">
+              <Label htmlFor="ativo">Ativo</Label>
+              <Switch id="ativo" checked={ativo} onCheckedChange={setAtivo} />
+            </div>
+
+            {pode('PERFIS_GERENCIAR') && (
+              <div className="space-y-2">
+                <Label>Perfis</Label>
+                {perfis.map((p) => (
+                  <div key={p.slug} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`perfil-${p.slug}`}
+                      checked={form.perfis?.includes(p.slug) ?? false}
+                      onCheckedChange={(marcado) => {
+                        const atuais = form.perfis ?? [];
+                        setForm((s) => ({
+                          ...s,
+                          perfis: marcado === true ? [...atuais, p.slug] : atuais.filter((x) => x !== p.slug),
+                        }));
+                      }}
+                    />
+                    <Label htmlFor={`perfil-${p.slug}`} className="text-sm font-normal">
+                      {p.nome}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <SheetFooter className="flex-row justify-between gap-2">
+              {editando && pode('USUARIOS_APROVAR') && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={aprovando}
+                  onClick={() => void aprovar(editando.id)}
+                >
+                  {aprovando ? 'Aprovando…' : 'Aprovar usuário'}
+                </Button>
+              )}
+              <Button type="submit" disabled={submitting}>
+                {submitting ? 'Salvando…' : 'Salvar'}
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+```
+
+com o manipulador da aprovação — no mesmo padrão de erro do arquivo (`setErro`, nunca `toast`), com a
+mensagem do 409 de segregação SF-01 vinda do backend (decisão 42), sem máscara:
+
+```tsx
+  async function aprovar(id: string) {
+    setErro(null);
+    setAprovando(true);
+    try {
+      const res = await fetch(`/api/admin/usuarios/${id}/aprovar`, { method: 'POST' });
+      if (!res.ok) {
+        setErro(extrairMensagemErro(await res.json().catch(() => ({})), 'Falha ao aprovar usuário'));
+        return;
+      }
+      setSheetAberto(false);
+      await carregar();
+    } catch {
+      setErro('Erro de conexão');
+    } finally {
+      setAprovando(false);
+    }
+  }
+```
+
+Imports acrescentados ao arquivo: `Checkbox` (`@/components/ui/checkbox`), `Switch`
+(`@/components/ui/switch`) e `extrairMensagemErro` (`@/lib/error-message`, assinatura real
+`(body: unknown, fallback?: string) => string`).
+
+A criação continua em `POST /api/admin/usuarios`, a edição em `PATCH /api/admin/usuarios/:id`, os perfis
+em `PUT /api/admin/usuarios/:id/perfis` (rota BFF já existente) e a aprovação em
+`POST /api/admin/usuarios/:id/aprovar` (rota BFF **nova**, Task 25.5 — o backend já expõe
+`POST /usuarios/:id/aprovar` com `USUARIOS_APROVAR`, `usuarios.controller.ts:88-94`).
+
+**21.4** Criar `app/frontend/__tests__/usuarios-client.test.tsx` (DoD-53 e DoD-54) com este cabeçalho —
+o componente real chama-se **`UsuariosAdminClient`** e é **export nomeado**
+(`usuarios-client.tsx:14`), então nem o nome nem a forma do `import` são escolha do Worker:
+
+```tsx
+import { render, screen, waitFor } from '@testing-library/react';
+import { UsuariosAdminClient } from '../src/app/(admin)/admin/usuarios/usuarios-client';
+```
 
 ```tsx
 it('resumo de perfis usa contagem real do backend', async () => {
@@ -7077,13 +7395,13 @@ it('resumo de perfis usa contagem real do backend', async () => {
     return Promise.resolve({ ok: true, json: async () => ({ data: [], total: 0, page: 1, pageSize: 20 }) });
   }) as unknown as typeof fetch;
 
-  render(<UsuariosClient permissoes={['USUARIOS_LER']} />);
+  render(<UsuariosAdminClient permissoes={['USUARIOS_LER']} />);
   expect(await screen.findByText('2 usuários')).toBeInTheDocument();
   expect(screen.getByText('0 usuários')).toBeInTheDocument();
 });
 
 it('sem USUARIOS_APROVAR nao ha botao de aprovar', async () => {
-  render(<UsuariosClient permissoes={['USUARIOS_LER', 'USUARIOS_GERENCIAR']} />);
+  render(<UsuariosAdminClient permissoes={['USUARIOS_LER', 'USUARIOS_GERENCIAR']} />);
   await waitFor(() => expect(screen.queryByRole('button', { name: /Aprovar/i })).not.toBeInTheDocument());
 });
 ```
@@ -7100,10 +7418,21 @@ Saída esperada: `Tests: 2 passed, 2 total`.
 
 ### Task 22 — Tela `/admin/perfis`
 
-Protótipo: `PerfisAcesso.tsx` — cartão "Matriz de permissões" com `ShieldCheck`, cabeçalho
-`bg-[#F8FAFC]`, primeira coluna fixa, linha selecionada em `bg-[#EFF6FF]` e toggles `h-5 w-9`; e cartão
-"Menus visíveis — {perfil}" com contador e chips em `grid-cols-3`. O conteúdo são os 11 perfis canônicos
-e o catálogo real de permissões (decisão 29).
+Protótipo: `PerfisAcesso.tsx` — cabeçalho com trilha "Administração / Perfis de Acesso" (`:140-142`);
+cartão "Matriz de permissões" com `ShieldCheck` (`:147-149`), cabeçalho `bg-[#F8FAFC]`, **uma linha por
+perfil e uma coluna por permissão** (`:155-181`), primeira coluna *sticky*, zebra na linha ímpar,
+linha selecionada em `bg-[#EFF6FF]` com o nome do perfil em `text-[#1D4ED8]` (`:168-174`), clique na
+linha seleciona o perfil (`:167`) e a célula do toggle faz `stopPropagation` (`:176`), toggles
+`h-5 w-9` (`:81`); e cartão "Menus visíveis — {perfil}" (`:191-209`) com contador
+`{n} menu(s)` (`:194`) e chips em `grid-cols-3` (`:200`). O conteúdo são os 11 perfis canônicos e o
+catálogo real de permissões (decisão 29). A orientação da matriz é a do protótipo: o Worker **não**
+transpõe linhas e colunas.
+
+**Divergência autorizada D22.a** — os chips de menu do protótipo são estáticos (`:202`, listam só os
+menus do perfil). Aqui os 39 menus do catálogo aparecem sempre, e o chip é um `button` com
+`aria-pressed` que liga/desliga o menu por `PUT /perfis/:slug/menus`. Sem isso o painel seria um
+controle inerte e a reconciliação da decisão 4 não teria tela (RA-06). Registrada no README de
+evidências (Task 27.1).
 
 **22.1** `app/frontend/src/app/(admin)/admin/perfis/page.tsx`:
 
@@ -7135,7 +7464,6 @@ export default async function Page() {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Info, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { mensagemDeErro } from '@/lib/error-message';
@@ -7198,6 +7526,11 @@ export function PerfisClient() {
     [perfis, slugSelecionado],
   );
 
+  const colunas = useMemo(
+    () => (catalogo?.grupos ?? []).flatMap((grupo) => grupo.permissoes),
+    [catalogo],
+  );
+
   const alternarPermissao = async (perfil: Perfil, codigo: string) => {
     const permissoes = perfil.permissoes.includes(codigo)
       ? perfil.permissoes.filter((c) => c !== codigo)
@@ -7234,11 +7567,13 @@ export function PerfisClient() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex h-full flex-col gap-5">
+      {/* Cabeçalho — PerfisAcesso.tsx:139-143, literal */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Perfis de Acesso</h1>
-        <p className="text-sm text-muted-foreground">
-          Permissões de API e menus visíveis dos 11 perfis com segregação de funções
+        <p className="mb-0.5 text-[11px] font-medium text-text-muted">Administração / Perfis de Acesso</p>
+        <h1 className="text-[20px] font-bold text-text-strong">Perfis de Acesso</h1>
+        <p className="mt-0.5 text-[12px] text-text-secondary">
+          Matriz de permissões por perfil e menus visíveis para cada perfil.
         </p>
       </div>
 
@@ -7248,44 +7583,74 @@ export function PerfisClient() {
         </p>
       )}
 
-      <Card className="overflow-hidden py-0">
-        <div className="flex items-center gap-2 border-b p-5">
-          <ShieldCheck className="size-5 text-primary" />
-          <h2 className="font-bold">Matriz de permissões</h2>
+      {/* Matriz de permissões — PerfisAcesso.tsx:146-188: uma LINHA por perfil, uma COLUNA por permissão */}
+      <Card className="overflow-hidden rounded-xl py-0">
+        <div className="flex items-center gap-2 border-b border-muted px-4 py-3">
+          <ShieldCheck className="size-4 text-action-blue" />
+          <p className="text-[12px] font-bold text-text-strong">Matriz de permissões</p>
         </div>
 
-        <div className="max-h-[520px] overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-[#F8FAFC] text-left text-xs font-semibold text-muted-foreground uppercase">
-              <tr>
-                <th className="sticky left-0 z-10 bg-[#F8FAFC] px-4 py-3">Permissão</th>
-                {perfis.map((perfil) => (
-                  <th key={perfil.slug} className="px-3 py-3 text-center whitespace-nowrap">
-                    {perfil.nome}
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-muted bg-surface-subtle">
+                <th
+                  rowSpan={2}
+                  className="sticky left-0 bg-surface-subtle px-4 py-2.5 text-left text-[10px] font-bold tracking-wider text-text-secondary uppercase whitespace-nowrap"
+                >
+                  Perfil
+                </th>
+                {(catalogo?.grupos ?? []).map((grupo) => (
+                  <th
+                    key={grupo.modulo}
+                    colSpan={grupo.permissoes.length}
+                    className="border-l border-muted px-3 py-2 text-center text-[10px] font-bold tracking-wider text-text-secondary uppercase whitespace-nowrap"
+                  >
+                    {grupo.modulo}
+                  </th>
+                ))}
+              </tr>
+              <tr className="border-b border-muted bg-surface-subtle">
+                {colunas.map((permissao) => (
+                  <th
+                    key={permissao.codigo}
+                    title={permissao.descricao}
+                    className="px-3 py-2.5 text-center text-[10px] font-bold tracking-wider text-text-secondary uppercase whitespace-nowrap"
+                  >
+                    {permissao.codigo}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {catalogo?.grupos.map((grupo) => (
-                <>
-                  <tr key={grupo.modulo} className="bg-muted/40">
-                    <td className="sticky left-0 bg-muted/40 px-4 py-2 text-xs font-bold uppercase" colSpan={1}>
-                      {grupo.modulo}
-                    </td>
-                    <td colSpan={perfis.length} />
-                  </tr>
-                  {grupo.permissoes.map((permissao, indice) => (
-                    <tr
-                      key={permissao.codigo}
-                      className={indice % 2 === 1 ? 'bg-[#FAFAFA]' : undefined}
+              {perfis.map((perfil, indice) => {
+                const ativo = perfil.slug === slugSelecionado;
+                return (
+                  <tr
+                    key={perfil.slug}
+                    onClick={() => setSlugSelecionado(perfil.slug)}
+                    className={`cursor-pointer border-b border-surface-subtle transition-colors ${
+                      ativo
+                        ? 'bg-action-blue-bg'
+                        : indice % 2 !== 0
+                          ? 'bg-table-zebra hover:bg-surface-subtle'
+                          : 'hover:bg-surface-subtle'
+                    }`}
+                  >
+                    <td
+                      className={`sticky left-0 px-4 py-2.5 font-semibold whitespace-nowrap ${
+                        ativo ? 'bg-action-blue-bg text-action-blue-hover' : 'bg-card text-text-strong'
+                      }`}
                     >
-                      <td className="sticky left-0 z-10 bg-card px-4 py-2">
-                        <p className="font-mono text-xs">{permissao.codigo}</p>
-                        <p className="text-xs text-muted-foreground">{permissao.descricao}</p>
-                      </td>
-                      {perfis.map((perfil) => (
-                        <td key={perfil.slug} className="px-3 py-2 text-center">
+                      {perfil.nome}
+                    </td>
+                    {colunas.map((permissao) => (
+                      <td
+                        key={permissao.codigo}
+                        className="px-3 py-2.5 text-center"
+                        onClick={(ev) => ev.stopPropagation()}
+                      >
+                        <div className="flex justify-center">
                           <Switch
                             className="h-5 w-9"
                             aria-label={`${permissao.codigo} para ${perfil.nome}`}
@@ -7293,66 +7658,60 @@ export function PerfisClient() {
                             disabled={salvando}
                             onCheckedChange={() => void alternarPermissao(perfil, permissao.codigo)}
                           />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </>
-              ))}
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </Card>
 
-      <Card className="space-y-4 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-bold">
+      {/* Menus visíveis do perfil selecionado — PerfisAcesso.tsx:190-209, com D22.a */}
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl py-0">
+        <div className="flex items-center justify-between border-b border-muted px-4 py-3">
+          <p className="text-[12px] font-bold text-text-strong">
             Menus visíveis — {selecionado?.nome ?? 'selecione um perfil'}
-          </h2>
-          <span className="text-xs text-muted-foreground">
-            {selecionado ? `${selecionado.menusVisiveis.length} de 39 menus` : '—'}
+          </p>
+          <span className="text-[11px] text-text-muted">
+            {selecionado
+              ? `${selecionado.menusVisiveis.length} menu${selecionado.menusVisiveis.length !== 1 ? 's' : ''}`
+              : '—'}
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {perfis.map((perfil) => (
-            <Button
-              key={perfil.slug}
-              variant={perfil.slug === slugSelecionado ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setSlugSelecionado(perfil.slug)}
-            >
-              {perfil.nome}
-            </Button>
-          ))}
+        <div className="flex-1 overflow-y-auto p-4">
+          {!selecionado ? (
+            <p className="text-[13px] text-text-muted">Selecione um perfil na matriz.</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {(catalogo?.menus ?? []).map((href) => {
+                const marcado = selecionado.menusVisiveis.includes(href);
+                return (
+                  <button
+                    key={href}
+                    type="button"
+                    aria-pressed={marcado}
+                    disabled={salvando}
+                    onClick={() => void alternarMenu(selecionado, href)}
+                    className={`rounded-md border px-3 py-2 text-left text-[12px] transition-colors ${
+                      marcado
+                        ? 'border-action-blue bg-action-blue-bg text-action-blue-hover'
+                        : 'border-muted bg-surface-subtle text-text-ink hover:border-action-blue'
+                    }`}
+                  >
+                    {ROTULO_MENU.get(href) ?? href}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {selecionado && (
-          <div className="grid gap-2 md:grid-cols-3">
-            {(catalogo?.menus ?? []).map((href) => {
-              const marcado = selecionado.menusVisiveis.includes(href);
-              return (
-                <button
-                  key={href}
-                  type="button"
-                  aria-pressed={marcado}
-                  disabled={salvando}
-                  onClick={() => void alternarMenu(selecionado, href)}
-                  className={`rounded-md border px-3 py-2 text-left text-xs transition-colors ${
-                    marcado
-                      ? 'border-primary bg-[#EFF6FF] text-foreground'
-                      : 'border-border bg-card text-muted-foreground hover:border-primary/40'
-                  }`}
-                >
-                  {ROTULO_MENU.get(href) ?? href}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <p className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-          <Info className="mt-0.5 size-4" />
+        <p className="flex items-start gap-2 border-t border-muted px-4 py-3 text-[11px] text-text-secondary">
+          <Info className="mt-0.5 size-3.5 flex-shrink-0" />
           Alterar menus visíveis vale na próxima navegação do usuário. Alterar permissões de API vale no
           próximo login ou renovação de sessão.
         </p>
@@ -7363,10 +7722,11 @@ export function PerfisClient() {
 ```
 
 **22.3** Criar `app/frontend/__tests__/perfis-client.test.tsx` (DoD-55 a DoD-59) cobrindo:
-a matriz renderiza uma coluna por perfil devolvido e uma linha por permissão do catálogo, agrupadas por
-módulo; clicar num chip de menu dispara `PUT /api/admin/perfis/:slug/menus` com a lista atualizada;
-o contador mostra "N de 39 menus"; o texto da nota sobre menu × permissão está presente; erro do backend
-vira `toast`/`role="alert"` sem alterar a matriz na tela.
+a matriz renderiza uma **linha** por perfil devolvido e uma **coluna** por permissão do catálogo, com o
+cabeçalho de módulo em `colSpan`; clicar num chip de menu dispara `PUT /api/admin/perfis/:slug/menus`
+com a lista atualizada; o contador mostra "N menus" (singular/plural) do perfil selecionado na matriz;
+o texto da nota sobre menu × permissão está presente; erro do backend vira `toast`/`role="alert"` sem
+alterar a matriz na tela.
 
 **Verificação:**
 
@@ -7380,9 +7740,18 @@ Saída esperada: `Tests: 5 passed, 5 total`.
 
 ### Task 23 — Tela `/admin/parametros`
 
-Protótipo: `Parametros.tsx` — cartões agrupados por seção (Comercial, Operação, Fiscal), cada um com
-título, descrição e controle (`Switch` para toggle, `Input` para texto, texto estático para info),
-`BadgeProvisorio` quando provisório e botão "Salvar" por cartão.
+Protótipo: `Parametros.tsx` — cabeçalho com trilha "Administração / Parâmetros" (`:152-154`); três
+grupos, cada um com ícone (`Briefcase` para Comercial, `Settings` para Operação, `Receipt` para Fiscal,
+`:68-72`) e título `text-[13px] font-bold uppercase tracking-wide` (`:163`); cartões em
+`grid grid-cols-2 gap-4` (`:165`). Cada cartão (`:109-134`) tem título `text-[13px] font-bold`,
+`ProvisorioBadge` à direita quando provisório, descrição `text-[12px]` e, conforme o tipo: `toggle` com
+a linha "Ativado/Desativado" + interruptor `h-5 w-9` acima de um separador (`:117-120`), `texto` com
+`input` de `placeholder="Observação / valor definido..."` (`:125-131`) e `info` sem controle nenhum.
+
+**Divergência autorizada D23.a** — cada cartão editável ganha o botão "Salvar", que o protótipo não tem
+porque guarda o valor em `useState` local (`:141-146`). Sem ele o valor não chegaria ao banco e a tela
+seria um controle inerte (RA-06). O botão só aparece com `PARAMETROS_GERENCIAR` (decisão 40) e nunca no
+cartão `info`. Registrada no README de evidências (Task 27.1).
 
 **23.1** `page.tsx` no molde da Task 22.1 com `PARAMETROS_LER` para leitura e
 `PARAMETROS_GERENCIAR` passado como `podeGerenciar`.
@@ -7393,10 +7762,10 @@ título, descrição e controle (`Switch` para toggle, `Input` para texto, texto
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { Briefcase, Receipt, Settings, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { mensagemDeErro } from '@/lib/error-message';
@@ -7417,7 +7786,12 @@ interface Parametro {
   valorJson: ValorParametro;
 }
 
-const GRUPOS = ['Comercial', 'Operação', 'Fiscal'];
+/** Ícone por grupo — Parametros.tsx:68-72, sem substituição. */
+const GRUPOS: Array<{ chave: string; icone: LucideIcon }> = [
+  { chave: 'Comercial', icone: Briefcase },
+  { chave: 'Operação', icone: Settings },
+  { chave: 'Fiscal', icone: Receipt },
+];
 
 export function ParametrosClient({ podeGerenciar }: { podeGerenciar: boolean }) {
   const [parametros, setParametros] = useState<Parametro[]>([]);
@@ -7474,12 +7848,28 @@ export function ParametrosClient({ podeGerenciar }: { podeGerenciar: boolean }) 
     }
   };
 
+  /** D23.a — o protótipo não persiste; sem este botão o cartão seria inerte. */
+  const botaoSalvar = (parametro: Parametro) =>
+    podeGerenciar ? (
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 text-[12px]"
+        disabled={salvandoChave === parametro.chave}
+        onClick={() => void salvar(parametro)}
+      >
+        {salvandoChave === parametro.chave ? 'Salvando…' : 'Salvar'}
+      </Button>
+    ) : null;
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex h-full flex-col gap-5 overflow-y-auto">
+      {/* Cabeçalho — Parametros.tsx:151-155, literal */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Parâmetros do Sistema</h1>
-        <p className="text-sm text-muted-foreground">
-          Regras configuráveis da operação; itens provisórios aguardam definição do cliente
+        <p className="mb-0.5 text-[11px] font-medium text-text-muted">Administração / Parâmetros</p>
+        <h1 className="text-[20px] font-bold text-text-strong">Parâmetros do Sistema</h1>
+        <p className="mt-0.5 text-[12px] text-text-secondary">
+          Regras gerais de negócio, agrupadas por Comercial, Operação e Fiscal.
         </p>
       </div>
 
@@ -7489,59 +7879,71 @@ export function ParametrosClient({ podeGerenciar }: { podeGerenciar: boolean }) 
         </p>
       )}
 
-      {GRUPOS.map((grupo) => {
+      {GRUPOS.map(({ chave: grupo, icone: Icone }) => {
         const doGrupo = parametros.filter((p) => p.valorJson.grupo === grupo);
         if (doGrupo.length === 0) return null;
 
         return (
-          <section key={grupo} className="space-y-3">
-            <h2 className="text-xs font-bold text-muted-foreground uppercase">{grupo}</h2>
+          <section key={grupo} className="flex flex-col gap-3">
+            {/* Cabeçalho do grupo — Parametros.tsx:161-164 */}
+            <div className="flex items-center gap-2">
+              <Icone className="size-4 text-action-blue" />
+              <p className="text-[13px] font-bold tracking-wide text-text-strong uppercase">{grupo}</p>
+            </div>
 
-            {doGrupo.map((parametro) => (
-              <Card key={parametro.id} className="flex flex-wrap items-start justify-between gap-4 p-5">
-                <div className="min-w-[240px] flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold">{parametro.valorJson.titulo}</h3>
+            {/* Cartões — Parametros.tsx:165, grid de 2 colunas */}
+            <div className="grid grid-cols-2 gap-4">
+              {doGrupo.map((parametro) => (
+                <div
+                  key={parametro.id}
+                  className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-[13px] leading-tight font-bold text-text-strong">
+                      {parametro.valorJson.titulo}
+                    </p>
                     {parametro.valorJson.provisorio && parametro.valorJson.pendencia && (
                       <BadgeProvisorio pendencia={parametro.valorJson.pendencia} />
                     )}
                   </div>
-                  <p className="mt-1 text-sm text-muted-foreground">{parametro.valorJson.texto}</p>
-                </div>
+                  <p className="text-[12px] leading-relaxed text-text-secondary">
+                    {parametro.valorJson.texto}
+                  </p>
 
-                <div className="flex items-center gap-3">
                   {parametro.valorJson.tipo === 'toggle' && (
-                    <Switch
-                      aria-label={parametro.valorJson.titulo}
-                      checked={rascunho[parametro.chave] === true}
-                      disabled={!podeGerenciar}
-                      onCheckedChange={(v) => setRascunho((r) => ({ ...r, [parametro.chave]: v }))}
-                    />
+                    <div className="mt-1 flex items-center justify-between gap-3 border-t border-muted pt-2">
+                      <span className="text-[12px] font-medium text-text-ink">
+                        {rascunho[parametro.chave] === true ? 'Ativado' : 'Desativado'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {botaoSalvar(parametro)}
+                        <Switch
+                          className="h-5 w-9"
+                          aria-label={parametro.valorJson.titulo}
+                          checked={rascunho[parametro.chave] === true}
+                          disabled={!podeGerenciar}
+                          onCheckedChange={(v) => setRascunho((r) => ({ ...r, [parametro.chave]: v }))}
+                        />
+                      </div>
+                    </div>
                   )}
 
                   {parametro.valorJson.tipo === 'texto' && (
-                    <Input
-                      aria-label={parametro.valorJson.titulo}
-                      className="w-56"
-                      value={String(rascunho[parametro.chave] ?? '')}
-                      disabled={!podeGerenciar}
-                      onChange={(e) => setRascunho((r) => ({ ...r, [parametro.chave]: e.target.value }))}
-                    />
-                  )}
-
-                  {parametro.valorJson.tipo !== 'info' && podeGerenciar && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={salvandoChave === parametro.chave}
-                      onClick={() => void salvar(parametro)}
-                    >
-                      {salvandoChave === parametro.chave ? 'Salvando…' : 'Salvar'}
-                    </Button>
+                    <div className="mt-1 flex items-center gap-2 border-t border-muted pt-2">
+                      <Input
+                        aria-label={parametro.valorJson.titulo}
+                        className="h-8 flex-1 text-[13px]"
+                        placeholder="Observação / valor definido..."
+                        value={String(rascunho[parametro.chave] ?? '')}
+                        disabled={!podeGerenciar}
+                        onChange={(e) => setRascunho((r) => ({ ...r, [parametro.chave]: e.target.value }))}
+                      />
+                      {botaoSalvar(parametro)}
+                    </div>
                   )}
                 </div>
-              </Card>
-            ))}
+              ))}
+            </div>
           </section>
         );
       })}
@@ -7616,10 +8018,10 @@ export interface FacetasAuditoria {
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="Todos" />
+                <SelectValue placeholder="Todos os usuários" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="todos">Todos os usuários</SelectItem>
                 {(facetas?.usuarios ?? []).map((usuario) => (
                   <SelectItem key={usuario.id} value={usuario.id}>
                     {usuario.nome}
@@ -7731,9 +8133,30 @@ O botão do cabeçalho passa a chamar `aplicarFiltros`, e ao lado dele entra:
         </Button>
 ```
 
-**24.3** Ajustar o painel de diff para as cores do protótipo (decisão 30): o container recebe
-`bg-[#1E293B]`, os rótulos `text-slate-300`, o `pre` de "Dados Anteriores" `text-[#FC5241]` e o de
-"Dados Novos" `text-[#18A84A]`.
+**24.3** Ajustar o painel de diff às cores do protótipo (`Auditoria.tsx:125-135`, decisão 30) **pelos
+tokens** — hex literal em `src` reprova em `tokens-ds.test.ts` (decisão 46). Equivalência usada:
+`#1E293B` = `text-strong`, `#E2E8F0` = `border`, `#94A3B8` = `text-muted`, `#0F172A` = `code-surface`,
+`#334155` = `text-ink`, `#FC5241` = `destructive`, `#18A84A` = `success`:
+
+O bloco substitui as linhas 221–230 de `auditoria-client.tsx` (o `selecionado ? … : …` em volta
+permanece):
+
+```tsx
+            <div className="flex-1 overflow-auto bg-text-strong p-5 font-mono text-[12px] leading-relaxed text-border">
+              <div className="mb-4">
+                <p className="mb-1 text-text-muted">// Dados Anteriores</p>
+                <pre className="overflow-x-auto rounded-[6px] border border-text-ink bg-code-surface p-3 text-destructive">
+                  {JSON.stringify(selecionado.dadosAnteriores, null, 2)}
+                </pre>
+              </div>
+              <div>
+                <p className="mb-1 text-text-muted">// Dados Novos</p>
+                <pre className="overflow-x-auto rounded-[6px] border border-text-ink bg-code-surface p-3 text-success">
+                  {JSON.stringify(selecionado.dadosNovos, null, 2)}
+                </pre>
+              </div>
+            </div>
+```
 
 **24.4** Criar a rota de exportação `app/frontend/src/app/api/admin/auditoria/export/route.ts`
 (decisão 32):
@@ -7923,14 +8346,119 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
 }
 ```
 
-**25.3** Repetir 25.1 e 25.2, trocando apenas o caminho do backend, para:
+**25.3** `app/frontend/src/app/api/cadastros/frota-motoristas/route.ts`:
 
-| rota BFF | rota do backend |
-|---|---|
-| `/api/cadastros/frota-motoristas` | `/frota/motoristas` |
-| `/api/cadastros/modelos-etiqueta` | `/modelos-etiqueta` |
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/api';
 
-**25.4** Rotas de leitura simples (só `GET`, mesmo corpo da 25.1 com o caminho trocado):
+export async function GET(req: NextRequest) {
+  const qs = req.nextUrl.searchParams.toString();
+  const { data, error, status } = await fetchBackend(`/frota/motoristas${qs ? `?${qs}` : ''}`);
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 200 });
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const { data, error, status } = await fetchBackend('/frota/motoristas', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 201 });
+}
+```
+
+`app/frontend/src/app/api/cadastros/frota-motoristas/[id]/route.ts`:
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/api';
+
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const body = await req.json();
+  const { data, error, status } = await fetchBackend(`/frota/motoristas/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 200 });
+}
+
+export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const { error, status } = await fetchBackend(`/frota/motoristas/${id}`, { method: 'DELETE' });
+  if (error) return NextResponse.json({ message: error }, { status });
+  return new NextResponse(null, { status: 204 });
+}
+```
+
+`app/frontend/src/app/api/cadastros/modelos-etiqueta/route.ts`:
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/api';
+
+export async function GET(req: NextRequest) {
+  const qs = req.nextUrl.searchParams.toString();
+  const { data, error, status } = await fetchBackend(`/modelos-etiqueta${qs ? `?${qs}` : ''}`);
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 200 });
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const { data, error, status } = await fetchBackend('/modelos-etiqueta', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 201 });
+}
+```
+
+`app/frontend/src/app/api/cadastros/modelos-etiqueta/[id]/route.ts`:
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/api';
+
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const body = await req.json();
+  const { data, error, status } = await fetchBackend(`/modelos-etiqueta/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 200 });
+}
+
+export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const { error, status } = await fetchBackend(`/modelos-etiqueta/${id}`, { method: 'DELETE' });
+  if (error) return NextResponse.json({ message: error }, { status });
+  return new NextResponse(null, { status: 204 });
+}
+```
+
+**25.4** Rotas de leitura simples — cada arquivo `route.ts` recebe **exatamente** este corpo, trocando
+só o caminho do backend pelo da tabela (nas duas com `[id]`, ler `ctx.params` como na 25.2 e interpolar
+o `id` no caminho):
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/api';
+
+export async function GET(req: NextRequest) {
+  const qs = req.nextUrl.searchParams.toString();
+  const { data, error, status } = await fetchBackend(`/parametros${qs ? `?${qs}` : ''}`);
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 200 });
+}
+```
 
 | rota BFF | rota do backend |
 |---|---|
@@ -7951,10 +8479,11 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
 |---|---|---|
 | `/api/admin/perfis/[slug]/menus` | `PUT` | `/perfis/{slug}/menus` |
 | `/api/admin/parametros/chave/[chave]` | `GET`, `PATCH` | `/parametros/chave/{chave}` |
+| `/api/admin/usuarios/[id]/aprovar` | `POST` | `/usuarios/{id}/aprovar` |
 | `/api/cadastros/regras-desdobramento/simular` | `POST` | `/regras-desdobramento/simular` |
 | `/api/desossa/regras-transformacao/simular` | `POST` | `/desossa/regras-transformacao/simular` |
 
-Exemplo literal do `PUT` (os outros seguem o mesmo formato, devolvendo `200`):
+`app/frontend/src/app/api/admin/perfis/[slug]/menus/route.ts`:
 
 ```ts
 import { NextRequest, NextResponse } from 'next/server';
@@ -7972,14 +8501,92 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ slug: strin
 }
 ```
 
-**25.6** Criar `app/frontend/__tests__/bff-onda3.test.ts` (DoD-70 e DoD-71) verificando, para cada uma das 17
-rotas novas, que o arquivo existe e que o handler devolve o status do backend em caso de erro:
+`app/frontend/src/app/api/admin/usuarios/[id]/aprovar/route.ts` (a aprovação não tem corpo; o backend
+responde `200` e devolve `409` na violação de SF-01, que o BFF repassa sem mascarar):
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/api';
+
+export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const { data, error, status } = await fetchBackend(`/usuarios/${id}/aprovar`, { method: 'POST' });
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 200 });
+}
+```
+
+`app/frontend/src/app/api/admin/parametros/chave/[chave]/route.ts`:
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/api';
+
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ chave: string }> }) {
+  const { chave } = await ctx.params;
+  const { data, error, status } = await fetchBackend(`/parametros/chave/${chave}`);
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 200 });
+}
+
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ chave: string }> }) {
+  const { chave } = await ctx.params;
+  const body = await req.json();
+  const { data, error, status } = await fetchBackend(`/parametros/chave/${chave}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 200 });
+}
+```
+
+`app/frontend/src/app/api/cadastros/regras-desdobramento/simular/route.ts`:
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/api';
+
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const { data, error, status } = await fetchBackend('/regras-desdobramento/simular', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 200 });
+}
+```
+
+`app/frontend/src/app/api/desossa/regras-transformacao/simular/route.ts`:
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/api';
+
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const { data, error, status } = await fetchBackend('/desossa/regras-transformacao/simular', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 200 });
+}
+```
+
+**25.6** Criar `app/frontend/__tests__/bff-onda3.test.ts` (DoD-70 e DoD-71) verificando, para cada uma
+das 19 rotas novas — as 17 desta task (25.1 a 25.5) mais `cadastros/representantes/canais` (Task 13.3) e
+`admin/auditoria/export` (Task 24.4) —, que o arquivo existe e que o handler devolve o status do backend
+em caso de erro:
 
 ```ts
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { NextRequest } from 'next/server';
 
 const ROTAS = [
+  'cadastros/representantes/canais/route.ts',
   'cadastros/frota-caminhoes/route.ts',
   'cadastros/frota-caminhoes/[id]/route.ts',
   'cadastros/frota-motoristas/route.ts',
@@ -7993,6 +8600,7 @@ const ROTAS = [
   'admin/perfis/catalogo/route.ts',
   'admin/perfis/[slug]/menus/route.ts',
   'admin/usuarios/resumo-perfis/route.ts',
+  'admin/usuarios/[id]/aprovar/route.ts',
   'admin/auditoria/facetas/route.ts',
   'admin/auditoria/export/route.ts',
   'admin/parametros/route.ts',
@@ -8009,7 +8617,8 @@ it('erro do backend vira status e message no BFF', async () => {
     fetchBackend: async () => ({ data: null, error: 'Sem permissão', status: 403 }),
   }));
   const { GET } = await import('../src/app/api/admin/perfis/catalogo/route');
-  const res = await GET(new Request('http://localhost/api/admin/perfis/catalogo') as never);
+  // `NextRequest` (e não `Request`) porque o handler lê `req.nextUrl.searchParams`.
+  const res = await GET(new NextRequest('http://localhost/api/admin/perfis/catalogo'));
   expect(res.status).toBe(403);
   await expect(res.json()).resolves.toEqual({ message: 'Sem permissão' });
 });
@@ -8147,14 +8756,16 @@ Saída esperada: `Tests: 3 passed, 3 total` no frontend, `13 passed` no Playwrig
   `visível` para todas as 26, e a saída do teste `as 26 perdas herdadas da Onda 2 estao visiveis`;
 - a tabela dos **14 extras** da decisão 31 com "situação" = `removido`, e a saída do teste
   `os 14 extras herdados da Onda 2 sumiram do menu`;
-- as **nove** divergências autorizadas, cada uma com a justificativa e a linha do protótipo:
+- as **treze** divergências autorizadas, cada uma com a justificativa e a linha do protótipo:
   `/admin/perfis` (11 perfis canônicos e permissões reais em vez dos 8 perfis e 9 rótulos do mock —
   decisão 29), o `placeholder` do campo "Registro (ID)" da auditoria (decisão 31),
   `MODELOS_ETIQUETA_LER` concedida a `recebimento_pesagem` e `corte` além da linha 37 da matriz
   (decisão 27), **D13.a** (tipo/canal como texto), **D13.b** ("Usuários vinculados" diferido para a
-  Onda 4), **D13.c** (campo "Código" no drawer de representantes), **D18.a** (preview de etiqueta sem
-  valores de exemplo), **D18.b** (botão "Salvar Modelo") e **D41.a** (botões Anterior/Próxima quando
-  `total > pageSize`);
+  Onda 4), **D13.c** (campo "Código" no drawer de representantes), **D16.a** ("Endereço e Contato" só
+  com os campos que existem no schema), **D17.a** (botões de subir/descer parada e `Trash2` no lugar do
+  `MapPin` riscado), **D18.a** (preview de etiqueta sem valores de exemplo), **D18.b** (botão "Salvar
+  Modelo"), **D22.a** (chips de menu clicáveis com os 39 do catálogo), **D23.a** (botão "Salvar" por
+  cartão de parâmetro) e **D41.a** (botões Anterior/Próxima quando `total > pageSize`);
 - a lista dos 3 badges Provisório da onda e onde aparecem: P1 em `/admin/parametros`
   (`operacao.cadencia_dias_semana`), P12 em `/admin/parametros` (`operacao.regras_transformacao_tz`) e
   P9 em `/cadastros/modelos-etiqueta`; e a nota de que AD-01, AD-02 e AD-06 retiraram os badges de
@@ -8267,9 +8878,14 @@ O Worker executa na ordem numérica: as dependências acima estão satisfeitas p
       escopo. O único item diferido é o escopo comercial "representantes permitidos" (linha 38 da
       matriz), com decisão numerada (43), onda de destino (4) e dívida registrada — o campo não aparece
       inerte em tela nesta onda.
-- [x] As nove divergências autorizadas estão numeradas e registradas no README de evidências:
+- [x] As treze divergências autorizadas estão numeradas e registradas no README de evidências:
       decisão 29 (`/admin/perfis`), decisão 31 (placeholder do campo Registro), decisão 27
-      (`MODELOS_ETIQUETA_LER` além da linha 37 da matriz), D13.a, D13.b, D13.c, D18.a, D18.b e D41.a.
+      (`MODELOS_ETIQUETA_LER` além da linha 37 da matriz), D13.a, D13.b, D13.c, D16.a, D17.a, D18.a,
+      D18.b, D22.a, D23.a e D41.a.
+- [x] Rótulo, ícone e valor inicial de cada tela são os literais do `.tsx` do protótipo — inclusive
+      "Transformação de Desossa (TZ)", "Simulador de Disponibilidade", "Reservar produto",
+      "Quantidade a reservar", "Sequência de Paradas / Bairros", `MoveVertical`, "Todos os usuários",
+      "ALFA CARNES" e os `useState` iniciais `10`/`10`/`3` dos dois simuladores.
 - [x] O rótulo banido pela v1.1 §6.8 não aparece no plano nem nos códigos propostos.
 - [x] As três dívidas herdadas da Onda 2 (decisões 25, 27 e 31 **da Onda 2**) estão no mapa DoD → teste,
       com invariante próprio e teste nomeado; nesta onda elas são fechadas pelas decisões 4/5 (menu),
