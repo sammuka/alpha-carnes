@@ -15,8 +15,8 @@
 
 - Constituição I–X, com ênfase em **I (fidelidade absoluta ao protótipo)**, **II (completude E2E)**, **VI**, **VIII (não inventar o que está pendente)** e **RA-05/RA-06 (nenhuma falha silenciosa, nenhum dado inventado)**.
 - Onda 2 é **transversal**: é proibido implementar tela de domínio das Ondas 3–10, criar endpoint de domínio, migration, permissão nova ou perfil novo.
-- Alteração permitida no backend: **apenas** `scripts/gerar-snapshot-perfis.ts`, o JSON gerado, o script npm `rbac:snapshot` e o teste que guarda o snapshot. `src/common/rbac/permissoes.ts` **não** é editado.
-- Zero literal hexadecimal em `app/frontend/src/**/*.{ts,tsx}`; `globals.css` é a única exceção. Zero `rgba(` fora de `globals.css`.
+- Alteração permitida no backend: **apenas** `scripts/gerar-snapshot-perfis.ts`, o JSON gerado, o script npm `rbac:snapshot` e o teste que guarda o snapshot. `src/common/rbac/permissoes.ts` **não** é editado. As sete dívidas herdadas do Portão 2 da Onda 1 têm destino nomeado na seção "Dívidas herdadas da Onda 1" (decisão 28) e **não** são executadas aqui — tocar nelas é desvio de plano.
+- Zero literal hexadecimal **de cor aplicada** em `app/frontend/src/**/*.{ts,tsx}`; `globals.css` é a única fonte de cor. A única forma remanescente tolerada é hex **dentro de seletor de atributo CSS** (`[stroke='#ccc']`), que casa marcação de terceiro e não pinta nada — critério e inventário pinado na decisão 23. Zero `rgba(` fora de `globals.css`.
 - Fonte única Inter (já configurada em `--font-sans`); nenhuma fonte nova.
 - Terminologia: "Nome Fantasia"/"Buscar cliente"; **zero** ocorrência do rótulo banido — `__tests__/terminologia.test.ts` continua verde sem alteração.
 - Pendências abertas (P1, P3, P5–P12, P15) só aparecem via badge `Provisório` com `title` citando a pendência e sua referência. Pendências fechadas (P2, P4, P13, P14 → AD-03..AD-06) **não podem** receber badge: o catálogo do componente não as contém.
@@ -29,7 +29,7 @@
 1. **`globals.css` é a única fonte de cor.** Os tokens existentes (`--color-status-*`, `--color-sidebar-*`, `--color-primary`, …) **mantêm os nomes atuais**; a Onda 2 apenas **adiciona** os tokens que faltam. Nenhum rename, para não invalidar `StatusPill`, `KpiCard`, `AlertItem` e `PlaceholderPage`, que já consomem `var(--color-*)`.
 2. A paleta canônica é a do Figma do protótipo (`src/imports/──PaletaDeCores──/index.tsx`, 14 entradas: `brand/navy #265389`, `brand/navy-hover #1E4070`, `brand/blue-mid #3B7FD4`, `brand/navy-10 #E8EEF5`, `bg/app #F5F7FA`, `text/primary #1A2332`, `text/secondary #64748B`, `text/muted #94A3B8`, `status/aceite #18A84A`, `status/pendente #F5B019`, `status/bloqueado #FC5241`, `status/recebido #3B7FD4`, `status/pesado #7C3AED`, `border/subtle #E2E8F0`). `src/styles/theme.css` do protótipo é o tema default do Figma Make (oklch genérico) e **não** é fonte de verdade de cor — está registrado aqui para evitar que alguém o porte por engano.
 3. Os hexadecimais que o protótipo usa nas telas além das 14 entradas (família de ação `#2563EB`/`#1D4ED8`/`#1844B8`, superfícies `#F8FAFC`/`#F0EFF5`/`#E5E3ED`, login `#1F2633`/`#70748C`/`#B0B4BD`/`#1F1D2D`/`#6B7081`, pipeline `#10B981`/`#A1A5B3`, badge `#FEF3C7`/`#92400E`/`#FDE68A`, sinalizações `#15803D`/`#F0FDF4`/`#DC2626`/`#FFF1F2`/`#1E293B`/`#475569`/`#374151`/`#EFF6FF`/`#BFDBFE`/`#1E3A8A`, violeta `#8B5CF6`/`#F5F3FF`, popover da sidebar `#0F2645`) **entram como tokens nomeados**. Nenhuma cor é inventada: cada token tem origem rastreada no protótipo (tabela da Task 1).
-4. O gate de hex é **global** em `app/frontend/src` (5 arquivos hoje têm hex e todos são tocados nesta onda: `app-sidebar.tsx`, `activity-item.tsx`, `(admin)/layout.tsx`, `(auth)/login/page.tsx`, `cadastros/regras-transformacao/regras-transformacao-client.tsx`). Não há exceção por path, nem lista de tolerância.
+4. O gate de hex é **global** em `app/frontend/src`, sem exceção por path e sem lista de tolerância por arquivo. Hoje **6** arquivos casam o padrão de hex: 5 deles usam hex como **cor aplicada** e todos são tocados nesta onda (`app-sidebar.tsx`, `activity-item.tsx`, `(admin)/layout.tsx`, `(auth)/login/page.tsx`, `cadastros/regras-transformacao/regras-transformacao-client.tsx`); o sexto (`components/ui/chart.tsx:58`) usa hex **dentro de seletor de atributo CSS** e é tratado pelo critério sintático da decisão 23 — não por exceção de caminho.
 5. O menu canônico tem **9 grupos e 39 itens**, com os rótulos e as rotas de `ALL_NAV_GROUPS` (`src/app/components/Layout.tsx` do protótipo). Correções obrigatórias em `menu-v2.ts`: `Dashboard Operacional` → **`Painel Geral da Operação`**, `Aprovações` → **`Aprovações & Ocorrências`**, `Relatórios de Gestão` → **`Relatórios & SIF`**, e inclusão de **`Operações` (`/gestao/operacoes`)** e **`Pendências de Overbooking` (`/gestao/overbooking`)** na posição do protótipo.
 6. Item de menu **nunca** aponta para rota inexistente (RA-05). As duas rotas novas recebem `page.tsx` usando o `PlaceholderPage` já existente (mesmo padrão das outras 11 telas ausentes). As telas reais são das Ondas 5 (`/gestao/operacoes`, `/gestao/overbooking`).
 7. O breadcrumb continua derivado do menu (`BREADCRUMB_MAP` gerado de `MENU_V2` em `breadcrumb-v2.ts`): corrigir rótulo/rota no menu corrige o breadcrumb por construção. Nenhum segundo mapa é criado.
@@ -49,6 +49,7 @@
     - `gestor` também vê `ADMINISTRAÇÃO`, com **apenas** o item `Auditoria` visível, porque `gestor` tem `AUDITORIA_VISUALIZAR` no catálogo e a matriz de rastreabilidade (linha 41) lista `administrador`, `diretoria` e `gestor` como leitores da auditoria. A persona "Gestão" do protótipo escondia o grupo inteiro; aqui o RBAC canônico (doc 013) prevalece sobre o simulador, que o próprio DoD manda remover.
     - `diretoria` vê `[COMERCIAL, ADMINISTRAÇÃO]`; `compras` vê `[COMERCIAL, GESTÃO, CADASTROS & REGRAS]`. O protótipo não tem persona para esses perfis, logo não há divergência visual a conciliar.
     - `conferente` e `logistica` não têm, no catálogo pós-Onda 1, nenhuma permissão de grupo (só `LEITURA_CADASTROS` + `DISPONIBILIDADE_LER` (+ `FATURAMENTO_LER` para `logistica`)) e portanto ficam com **zero** grupos. A Onda 3 (matriz AD-04, incluindo o recorte `ESTOQUE_*`) é quem lhes atribui permissões. A Onda 2 não inventa acesso.
+    - Os itens que `expedicao` e `diretoria` **perdem** por efeito do gate de grupo estão declarados um a um na decisão 25.
 12. **Zero grupo visível não pode virar sidebar vazia silenciosa** (RA-05): `AppSidebar` renderiza estado vazio explícito — "Nenhum módulo liberado para o seu perfil. Solicite acesso ao administrador." — coberto por teste.
 13. **`ESTOQUE_*` é a permissão canônica do grupo `ESTOQUE`** (AD-04). Os itens do grupo passam a exigir `ESTOQUE_LER`/`ESTOQUE_GERENCIAR` (hoje `Consulta` aceita `PESAGEM_LER`/`CORTE_GERENCIAR` e `Ajustes` aceita só `PARAMETROS_GERENCIAR`). Consequência aceita e documentada: até a Onda 3 distribuir `ESTOQUE_*`, somente `administrador` e `gestor` veem o grupo `ESTOQUE`.
 14. **`/admin/parametros` passa a exigir `PARAMETROS_GERENCIAR`** (e não `PARAMETROS_LER`), pois `PARAMETROS_LER` é transversal via `LEITURA_CADASTROS` e exporia parâmetros do sistema a todos os perfis. `/cadastros/representantes` passa a exigir `REPRESENTANTES_LER`/`REPRESENTANTES_GERENCIAR` (hoje exige `CLIENTES_GERENCIAR`, o que é incoerente com o recurso).
@@ -64,7 +65,41 @@
     - **Sem o rodapé "Protótipo de alta fidelidade — Design System Aplicado"**: texto sobre o protótipo, não sobre o produto.
     - **Chip de ambiente vem de `NEXT_PUBLIC_AMBIENTE`**; ausente a variável, o chip não é renderizado (nada de "Produção" fixo, que seria dado inventado).
 21. **Evidência de shell** é um par screenshot app × referência do protótipo em `docs/evidencias/onda2-shell/`, mais asserções estruturais em Playwright (9 grupos na ordem canônica, gradiente da sidebar resolvido a partir dos tokens, breadcrumb do dashboard). Não há comparação por pixel: o protótipo é Vite/React Router com dados mockados e a comparação pixel-perfect entre stacks geraria falso negativo permanente. A referência é fixture versionada (procedimento de captura na Task 8).
-22. Nenhum componente Shadcn de `src/components/ui` fora do escopo desta onda é editado, exceto `activity-item.tsx` e `regras-transformacao-client.tsx` — e neles **apenas** a substituição de hex por token.
+22. Nenhum componente Shadcn de `src/components/ui` fora do escopo desta onda é editado, exceto: `activity-item.tsx` e `regras-transformacao-client.tsx` (**apenas** substituição de hex por token) e `button.tsx` (**apenas** a adição da variante `acao`, decisão 29 — nenhuma variante existente é alterada). `chart.tsx` **não** é editado (decisão 23).
+23. **O invariante de cor é "zero hex de cor aplicada", e o teste implementa esse critério de forma sintática.** `components/ui/chart.tsx:58` traz `#ccc` (3×) e `#fff` (2×) — as **únicas 5 ocorrências de hex do arquivo**, todas **dentro de seletores de atributo CSS** (`[&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50`, `[&_.recharts-dot[stroke='#fff']]:stroke-transparent`, …). Esses hex não pintam nada: são o valor que o **recharts** escreve no atributo `stroke` do SVG e que o seletor precisa casar literalmente. Trocá-los por token quebraria o casamento e o estilo deixaria de ser aplicado — falha silenciosa (RA-05) e regressão visual, além de divergir do protótipo, que carrega o mesmo arquivo (`src/app/components/ui/chart.tsx`, recharts 2.15.2). Portanto: `chart.tsx` fica **intacto** e o teste de hex remove de todo arquivo, antes de varrer, o padrão `[<atributo>='#hex']` — regra **sintática e global**, não exceção de caminho (decisão 4). Para que a tolerância não vire porta aberta, um segundo caso pina o **inventário** desses seletores em `src`: hoje exatamente 5 ocorrências, todas em `src/components/ui/chart.tsx`; qualquer nova ocorrência falha o teste e exige decisão numerada. `chart.tsx` não tem consumidor hoje (verificado por `rg`); ele permanece como componente do DS absorvido para as telas com gráfico das Ondas 5/9.
+24. **Correções de RBAC de UI complementares à decisão 14** (nenhuma permissão nova; apenas alinhamento recurso × permissão, auditável no Portão 2):
+    - `/cadastros/rotas` passa a exigir `ROTAS_LER`/`ROTAS_GERENCIAR` (hoje exige `EXPEDICAO_GERENCIAR`/`CLIENTES_LER`): rota/itinerário é o recurso `ROTAS_*` do catálogo; exigir `CLIENTES_LER` abriria o item para os 11 perfis via `LEITURA_CADASTROS`.
+    - `/desossa/dashboard` deixa de aceitar `DISPONIBILIDADE_LER` e passa a exigir `DESOSSA_LER`/`CORTE_GERENCIAR`: `DISPONIBILIDADE_LER` é transversal (10 dos 11 perfis) e não expressa acesso à desossa. Consequência: dentro do grupo `DESOSSA` (visível só para `administrador`, `gestor` e `corte`), os três mantêm o item — nenhum perfil perde acesso real.
+25. **Efeitos do gate de grupo declarados item a item** (Princípio II + RA-05). Além do que a decisão 11 já fixa, a introdução de `permissoesGrupo` retira estes itens do menu:
+    - `expedicao` perde `Caminhões` (`/cadastros/caminhoes`) e `Motoristas` (`/cadastros/motoristas`) — matriz linhas 33/34 listam `expedicao` como leitor. Motivo: o grupo `CADASTROS & REGRAS` exige um `*_GERENCIAR` de cadastro e `expedicao` só tem `LEITURA_CADASTROS` + `EXPEDICAO_GERENCIAR`. Os dois itens continuam existindo e acessíveis por URL/RBAC de backend; o que muda é a navegação.
+    - `diretoria` perde `Painel Geral da Operação` (`/gestao/dashboard`) e `Relatórios & SIF` (`/gestao/relatorios`) — matriz linhas 8/13 listam `diretoria`. Motivo: o grupo `GESTÃO` exige `COMPRAS_PROGRAMADAS_GERENCIAR`/`OPERACOES_GERENCIAR`/`OVERBOOKING_RESOLVER`/`EXPEDICAO_REABRIR` e `diretoria` é perfil de leitura (`COMPRAS_PROGRAMADAS_LER`, `DISPONIBILIDADE_LER`, `PEDIDOS_LER`, `AUDITORIA_VISUALIZAR`).
+    - `conferente` e `logistica` ficam sem nenhum grupo (decisão 11) e caem no estado vazio explícito da decisão 12 + na página de entrada explícita da decisão 26.
+    Esses quatro casos são **aceitos nesta onda e endereçados na Onda 3**: a matriz completa de permissões por perfil (AD-04, incluindo `ESTOQUE_*`) é entrega da Onda 3, e é lá que `expedicao`/`diretoria`/`conferente`/`logistica` recebem as permissões de leitura que a matriz de rastreabilidade lhes atribui. A Onda 2 não inventa permissão para reconciliar (Princípio VIII); ela deixa o efeito explícito, testado e rastreável.
+26. **Rota de entrada `/` e destino pós-login resolvidos pelo menu real, nunca em rota morta** (matriz linha 2 + RA-05). Hoje `/` não tem `page.tsx` (404) e `login-form-client.tsx` empurra todos para `/gestao/dashboard`, que após esta onda fica fora do menu de 7 dos 11 perfis. Fica fixado:
+    - nasce `src/app/(admin)/page.tsx` (rota `/`, dentro do shell): resolve `GET /auth/me`, calcula os grupos visíveis e redireciona para `rotaDeEntrada(permissoes)`;
+    - `rotaDeEntrada` devolve `/gestao/dashboard` **quando essa rota está visível** para o usuário (preserva o destino do protótipo e da matriz linha 2 para `administrador`, `gestor` e `compras`); senão, a **primeira rota visível do menu** na ordem canônica; senão `null`;
+    - com `null` (nenhum grupo liberado), `/` **não** redireciona: renderiza aviso explícito ("Nenhum módulo liberado…"), dentro do shell com a sidebar em estado vazio (decisão 12). Nada de 403 genérico, nada de tela branca;
+    - o login passa a navegar para `/` — a decisão de destino fica **num único lugar no servidor**, não duplicada no cliente.
+    Tabela fixada (calculada sobre `MAPA_PERFIL_PERMISSOES` e provada por teste, 11 casos): `administrador`, `gestor`, `compras` → `/gestao/dashboard`; `comercial`, `diretoria` → `/comercial/clientes`; `recebimento_pesagem` → `/recebimento/recebimento-carga`; `corte` → `/desossa/dashboard`; `expedicao` → `/carga/planejamento`; `faturamento` → `/faturamento/pre-faturamento`; `conferente`, `logistica` → `null` (aviso explícito).
+27. **`/admin/auditoria` (matriz linha 41): a Onda 2 entrega o DS que a tela consome; o alinhamento de filtros/visual ao protótipo é executado na Onda 3.** A matriz diz "alinhar filtros/visual ao protótipo na Onda 2", mas o roadmap §8 aloca todo o módulo Admin (Usuários, Perfis de Acesso, Parâmetros, Auditoria) à Onda 3, e Princípio II proíbe entregar metade de uma tela: os filtros de auditoria dependem do catálogo de entidades/permissões que a própria Onda 3 fecha. Reconciliação registrada: **a linha 41 é diferida para a Onda 3**, cujo plano deve incluí-la no mapa DoD→teste. O que a Onda 2 garante e testa: a rota existe, permanece no menu do grupo `ADMINISTRAÇÃO` exigindo `AUDITORIA_VISUALIZAR` e continua visível exatamente para os três perfis da matriz linha 41 (`administrador`, `gestor`, `diretoria`) — caso `menu-rbac.test.ts`. Nenhuma alteração de `/admin/auditoria` é feita nesta onda além dos tokens que o shell/DS já impõe.
+28. **As sete dívidas herdadas do Portão 2 da Onda 1 são formalmente redirecionadas para a Onda 6** — ver a tabela da seção "Dívidas herdadas da Onda 1". Nenhuma delas é executada aqui e nenhuma fica órfã.
+29. **O CTA do login usa a cor de ação do protótipo.** `Login.tsx` do protótipo pinta "Acessar Sistema" com `#2563EB` e hover `#1844B8`; a variante `default` de `button.tsx` é `bg-primary` (`#3B7FD4`, hover `#265389`) — usá-la perderia a cor do protótipo (Princípio I). Em vez de sobrescrever por `className` (o resultado dependeria da precedência do `tailwind-merge`), `button.tsx` **ganha** a variante `acao`: `bg-action-blue text-white hover:bg-action-blue-strong`. É adição pura ao `cva` (nenhuma variante existente muda), autorizada nominalmente pela decisão 22, e o login passa a usar `variant="acao"`. O teste afere as classes do botão, não a cor computada.
+
+## Dívidas herdadas da Onda 1 — fora do escopo desta onda, com destino nomeado
+
+O Portão 2 da Onda 1 (veredito `22d3f51`, `docs/execucao/GATE-VEREDITOS.md`) aceitou sete ressalvas com a anotação "resolver na Onda 2". Todas pertencem ao **módulo NF/Recebimento** — domínio da **Onda 6 (Recebimento & Balança)** —, enquanto a Onda 2 é transversal (shell + DS) e não altera backend nem BFF de domínio. Redirecionamento formalizado aqui (decisão 28) e a ser homologado no Portão 1 desta onda:
+
+| # | Dívida | Natureza | Destino | Por que não nesta onda |
+|---|---|---|---|---|
+| (h) | `mesclarPayloadNfCabecalho(..., true)` incondicional carimba `cabecalho_sem_itens: true` em NF **que tem** itens; correto é `marcarCabecalhoSemItens = (itensAtivos === 0)` | Backend — `nota-fiscal-fornecedor.persistence.ts` | **Onda 6**, no mapa DoD→teste da onda | Atributo de documento fiscal auditável: exige teste de NF com/sem itens e a tela que o consome (Onda 6). Sem leitor hoje (verificado no veredito), logo sem urgência funcional |
+| (a) | Gate ACMR de cobertura por arquivo cobre só `app/backend/src/**/*.service.ts` (`scripts/check-coverage-lib.mjs:20`), deixando 458 L de regra de NF fora | CI/gate transversal | **Onda 6**, junto de (h), como o veredito determinou | Estender o glob torna `nota-fiscal-fornecedor.persistence.ts` sujeito a ≥80%; fechar isso é escrever teste de regra de NF — trabalho de domínio, não de shell/DS |
+| (b) | Nenhuma tela consome `POST /pedidos-fornecedor/[id]/nf` nem `/conferencia/concluir`: captura dos itens da NF em tela | Frontend de domínio | **Onda 6** | É a tela de Recebimento de Carga da Onda 6; construí-la aqui violaria a proibição de implementar tela de domínio das Ondas 3–10 |
+| (c) | `buscarCabecalhoParaCompletar` renumera o cabeçalho órfão silenciosamente (audita o UPDATE, mas não sinaliza a troca) | Backend | **Onda 6** | Decidir entre bloquear, exigir confirmação ou registrar ocorrência é regra de negócio de recebimento (RA-01) |
+| (d) | `completarCabecalhoComItensNaTx` sem `SELECT … FOR UPDATE`: dois `registrarNf` concorrentes podem completar o mesmo órfão | Backend (concorrência) | **Onda 6** | Exige teste de concorrência com Postgres e o contexto transacional da conferência (RA-02) |
+| (e) | `app/api/operacao/recebimentos/[id]/nf/route.ts` duplica `[id]/nfe/route.ts` sem consumidor | Frontend (BFF de domínio) | **Onda 6** | Remover a rota junto do reaproveitamento do contrato na tela que a substitui evita mexer duas vezes no mesmo módulo |
+| (f) | `lib/operacao.ts:83` declara `nfeVolumes: string \| null`, backend devolve `number` | Frontend (contrato de domínio) | **Onda 6** | O acerto de tipo vem com a tela que lê o campo; alterar o contrato sem consumidor é mudança não verificável nesta onda |
+
+Obrigação processual: o Executor registra este redirecionamento nas observações de `EXECUCAO-STATUS.md` e o **plano tático da Onda 6 precisa conter as sete linhas acima no seu mapa DoD→teste** — o Portão 1 da Onda 6 verifica isso. Nenhum Worker desta onda toca nesses arquivos.
 
 ## Referências do protótipo
 
@@ -89,6 +124,7 @@ Protótipo: `F:\Projetos\alpha-carnes-prototipo`, branch `feature/completude-v1.
 app/frontend/src/
   app/globals.css                                   # + tokens da paleta completa (única fonte de cor)
   app/(admin)/layout.tsx                            # header/sidebar por tokens; identidade sem dado inventado
+  app/(admin)/page.tsx                              # NOVO — rota `/`: entra pela rota visível do perfil (decisão 26)
   app/(admin)/gestao/operacoes/page.tsx             # NOVO placeholder (rota do menu; tela real = Onda 5)
   app/(admin)/gestao/overbooking/page.tsx           # NOVO placeholder (rota do menu; tela real = Onda 5)
   app/(admin)/cadastros/regras-transformacao/regras-transformacao-client.tsx  # hex → token
@@ -99,10 +135,11 @@ app/frontend/src/
   components/ui/nav-item.tsx                        # item 34px/13px por tokens
   components/ui/admin-header.tsx                     # breadcrumb + identidade real (sem "Escopo" inventado)
   components/ui/activity-item.tsx                    # hex/rgba → tokens
+  components/ui/button.tsx                           # + variante `acao` (token de ação do protótipo, decisão 29)
   components/ui/badge-provisorio.tsx                 # NOVO — badge + catálogo das pendências abertas
   components/ui/pipeline-bar.tsx                     # NOVO — porte do PipelineBar
   components/ui/troca-peca-modal.tsx                 # NOVO — base visual do wizard (sem regra de negócio)
-  lib/menu-v2.ts                                     # 9 grupos × 39 itens + permissoesGrupo
+  lib/menu-v2.ts                                     # 9 grupos × 39 itens + permissoesGrupo + rotaDeEntrada
   lib/perfis.ts                                      # NOVO — rótulos canônicos dos 11 perfis
 app/frontend/__tests__/
   tokens-ds.test.ts                                  # NOVO — zero hex fora de globals.css + paleta completa
@@ -111,6 +148,7 @@ app/frontend/__tests__/
   app-sidebar.test.tsx                               # NOVO — gradiente, identidade, estado vazio, sem simulador
   nav-group.test.tsx                                 # NOVO — colapso/expansão e abertura por item ativo
   admin-header.test.tsx                              # NOVO — breadcrumb Grupo / Item
+  entrada.test.tsx                                   # NOVO — rota `/`: redirect por perfil e aviso explícito
   badge-provisorio.test.tsx                          # NOVO — title cita pendência; catálogo sem pendência fechada
   pipeline-bar.test.tsx                              # NOVO — estados passado/atual/futuro e contadores
   troca-peca-modal.test.tsx                          # NOVO — chrome do wizard e painel de sucesso
@@ -141,6 +179,7 @@ DoD da Onda 2 conforme `docs/governance/quality-gates.md` § "Onda 2 — Shell +
 | 1 | Tokens completos da paleta do protótipo centralizados em `globals.css`/`@theme` | `tokens-ds.test.ts` — `globals.css declara as 14 cores canônicas da paleta do prototipo` |
 | 2 | Tokens cobrem também as cores de tela do protótipo usadas pelo shell/DS | `tokens-ds.test.ts` — `globals.css declara os tokens de acao, superficie, login, pipeline e provisorio` |
 | 3 | **Zero hex avulso** nas telas (grep) | `tokens-ds.test.ts` — `nenhum literal hexadecimal de cor em src fora de globals.css` |
+| 3b | Hex remanescente só em seletor de atributo CSS, com inventário pinado (decisão 23) | `tokens-ds.test.ts` — `hex em seletor de atributo CSS esta restrito ao inventario pinado` |
 | 4 | Zero cor opaca fora de token (`rgba` avulso) | `tokens-ds.test.ts` — `nenhum literal rgba em src fora de globals.css` |
 | 5 | Sidebar em gradiente | `app-sidebar.test.tsx` — `aplica o gradiente da sidebar pelos tokens do DS`; `e2e/shell-ds.spec.ts` — `sidebar resolve o gradiente 1E3A5F→1B4E9B` |
 | 6 | Menu com 9 grupos na ordem do protótipo | `menu-v2.test.ts` — `MENU_V2 tem os 9 grupos na ordem do prototipo` |
@@ -166,6 +205,11 @@ DoD da Onda 2 conforme `docs/governance/quality-gates.md` § "Onda 2 — Shell +
 | 26 | Smoke test de render por componente | suíte `npm run test` no frontend cobrindo os 12 arquivos novos de `__tests__` (cada componente novo/reescrito tem ao menos um caso de render) |
 | 27 | Screenshot de shell comparado ao protótipo | `e2e/shell-ds.spec.ts` — `captura evidencias do shell e do login` + `docs/evidencias/onda2-shell/README.md` com o par app × protótipo |
 | 28 | Terminologia banida continua ausente | `terminologia.test.ts` (existente) — `strings de UI não contêm o rótulo banido` |
+| 29 | Rota de entrada `/` e destino pós-login nunca caem fora do menu do perfil (decisão 26) | `menu-rbac.test.ts` — `rota de entrada por perfil canonico bate com a tabela fixada` (11 casos `it.each`); `entrada.test.tsx` — `redireciona para a rota de entrada do perfil`; `login.test.tsx` — `envia credenciais para /api/auth/login e navega para a rota de entrada` |
+| 30 | Perfil sem módulo liberado recebe aviso explícito, não 404 nem redirect para rota morta | `entrada.test.tsx` — `sem modulo liberado exibe aviso explicito sem redirecionar` |
+| 31 | Auditoria segue visível exatamente para os perfis da matriz linha 41 (decisão 27) | `menu-rbac.test.ts` — `auditoria fica visivel para administrador, gestor e diretoria (matriz linha 41)` |
+| 32 | Efeitos declarados do gate de grupo conferem com o catálogo (decisão 25) | `menu-rbac.test.ts` — `efeitos declarados do gate de grupo conferem com o catalogo` |
+| 33 | CTA do login usa a cor de ação do protótipo (decisão 29) | `login.test.tsx` — `botao Acessar Sistema usa a variante de acao do DS` |
 
 ## Task 1 — Tokens da paleta e erradicação do hex avulso
 
@@ -220,6 +264,21 @@ import { join } from 'node:path';
 const GLOBALS = join('src', 'app', 'globals.css');
 const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/;
 
+/**
+ * Hex dentro de seletor de atributo CSS (ex.: `[stroke='#ccc']`) não é cor aplicada:
+ * é o valor que a biblioteca de terceiro escreve no atributo e que o seletor precisa
+ * casar literalmente. Critério global e sintático — decisão 23, sem exceção por path.
+ */
+const SELETOR_ATRIBUTO = /\[[a-zA-Z-]+=['"]#[0-9a-fA-F]{3,8}['"]\]/g;
+
+function semSeletoresDeAtributo(texto: string): string {
+  return texto.replace(SELETOR_ATRIBUTO, '');
+}
+
+function caminhoPosix(file: string): string {
+  return file.split('\\').join('/');
+}
+
 function fontes(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
@@ -251,8 +310,8 @@ function literaisDeCor(file: string, padrao: RegExp): string[] {
       ts.isJsxText(node) ||
       ts.isTemplateExpression(node) ||
       ts.isNoSubstitutionTemplateLiteral(node);
-    if (ehTexto && padrao.test(node.getText(sf))) {
-      hits.push(`${file}:${sf.getLineAndCharacterOfPosition(node.pos).line + 1}`);
+    if (ehTexto && padrao.test(semSeletoresDeAtributo(node.getText(sf)))) {
+      hits.push(`${caminhoPosix(file)}:${sf.getLineAndCharacterOfPosition(node.pos).line + 1}`);
     }
     ts.forEachChild(node, visit);
   };
@@ -314,6 +373,23 @@ describe('tokens do DS', () => {
     expect(hits).toEqual([]);
   });
 
+  it('hex em seletor de atributo CSS esta restrito ao inventario pinado', () => {
+    const inventario: Record<string, string[]> = {};
+    for (const file of fontes('src')) {
+      const seletores = readFileSync(file, 'utf8').match(SELETOR_ATRIBUTO);
+      if (seletores) inventario[caminhoPosix(file)] = seletores;
+    }
+    expect(inventario).toEqual({
+      'src/components/ui/chart.tsx': [
+        "[stroke='#ccc']",
+        "[stroke='#ccc']",
+        "[stroke='#ccc']",
+        "[stroke='#fff']",
+        "[stroke='#fff']",
+      ],
+    });
+  });
+
   it('globals.css e a unica folha de estilo do frontend', () => {
     expect(folhas('src')).toEqual([]);
   });
@@ -328,7 +404,7 @@ describe('tokens do DS', () => {
 ```
 
 - [ ] Run: `cd app/frontend && npm run test -- tokens-ds`.
-Expected: FAIL nos casos de token ausente e nos dois casos de hex/rgba (5 arquivos hoje têm literal de cor).
+Expected: FAIL nos casos de token ausente e nos dois casos de hex/rgba (5 arquivos hoje têm literal de **cor aplicada**). O caso `hex em seletor de atributo CSS esta restrito ao inventario pinado` já passa desde o início — `chart.tsx` não é editado nesta onda (decisão 23); se ele falhar, alguém acrescentou seletor com hex e o Worker deve parar e reportar.
 
 - [ ] Adicionar os tokens em `src/app/globals.css`, dentro do bloco `@theme` existente, imediatamente antes do comentário `/* Raios */`:
 
@@ -595,27 +671,34 @@ describe('NavGroup', () => {
 - [ ] Teste primeiro — `app/frontend/__tests__/admin-header.test.tsx`:
 
 ```tsx
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { AdminHeader } from '../src/components/ui/admin-header';
 
 jest.mock('next/navigation', () => ({
   usePathname: () => '/gestao/dashboard',
 }));
 
-describe('AdminHeader', () => {
-  const user = { nome: 'Fabrício', perfil: 'Gestão', inicial: 'F' };
+/**
+ * O perfil da fixture é `Administrador` de propósito: com `Gestão` o texto do
+ * breadcrumb (`formatMenuGroupTitle('GESTÃO')`) e o valor da meta "Perfil"
+ * ficariam idênticos e as consultas por texto casariam dois nós.
+ */
+const user = { nome: 'Fabrício', perfil: 'Administrador', inicial: 'F' };
 
+describe('AdminHeader', () => {
   it('exibe o breadcrumb Grupo / Item da rota ativa', () => {
     render(<AdminHeader user={user} />);
-    const breadcrumb = screen.getByLabelText('Breadcrumb');
-    expect(breadcrumb).toHaveTextContent('Gestão');
-    expect(breadcrumb).toHaveTextContent('Painel Geral da Operação');
+    const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(breadcrumb).getByText('Gestão')).toBeInTheDocument();
+    expect(within(breadcrumb).getByText('Painel Geral da Operação')).toBeInTheDocument();
   });
 
-  it('exibe usuario e perfil reais', () => {
+  it('exibe usuario e perfil reais fora do breadcrumb', () => {
     render(<AdminHeader user={user} />);
+    const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
     expect(screen.getByText('Fabrício')).toBeInTheDocument();
-    expect(screen.getByText('Gestão')).toBeInTheDocument();
+    expect(screen.getByText('Administrador')).toBeInTheDocument();
+    expect(within(breadcrumb).queryByText('Administrador')).not.toBeInTheDocument();
   });
 
   it('nao renderiza chip de escopo', () => {
@@ -775,6 +858,22 @@ export function filtrarMenuPorPermissoes(permissoes: string[]): MenuGrupoVisivel
     }))
     .filter((group) => group.items.length > 0);
 }
+
+/** Destino do protótipo/matriz linha 2 — usado quando visível para o usuário (decisão 26). */
+export const ROTA_PREFERENCIAL_ENTRADA = '/gestao/dashboard';
+
+/**
+ * Rota de entrada do usuário: a preferencial quando visível, senão a primeira rota
+ * visível na ordem canônica do menu, senão `null` (nenhum módulo liberado).
+ * Nunca devolve rota fora do menu do próprio usuário (RA-05).
+ */
+export function rotaDeEntrada(permissoes: string[]): string | null {
+  const visiveis = filtrarMenuPorPermissoes(permissoes).flatMap((grupo) =>
+    grupo.items.map((item) => item.href),
+  );
+  if (visiveis.includes(ROTA_PREFERENCIAL_ENTRADA)) return ROTA_PREFERENCIAL_ENTRADA;
+  return visiveis[0] ?? null;
+}
 ```
 
 - [ ] Criar `src/app/(admin)/gestao/operacoes/page.tsx`:
@@ -903,7 +1002,7 @@ export function NavItem({ href, label, Icon }: NavItemProps) {
 }
 ```
 
-- [ ] Em `src/components/ui/app-sidebar.tsx`, acrescentar os dois ícones novos ao import de `lucide-react` e ao `ICON_MAP` (ordem alfabética dentro do bloco existente):
+- [ ] Em `src/components/ui/app-sidebar.tsx`, acrescentar os dois ícones novos ao import de `lucide-react` e ao `ICON_MAP` — o mesmo par de nomes nos dois blocos, porque `ICON_MAP` usa propriedade abreviada. As listas atuais seguem a ordem do menu, não alfabética: **inserir no fim de cada bloco, sem reordenar o que já existe**:
 
 ```tsx
   AlertTriangle,
@@ -941,7 +1040,7 @@ export interface AdminHeaderUser {
 
 ## Task 3 — `visibleGroups` pelo RBAC real (snapshot do catálogo, sem simulador)
 
-**Files:** `app/backend/scripts/gerar-snapshot-perfis.ts`, `app/backend/src/common/rbac/perfil-permissoes.snapshot.json`, `app/backend/package.json`, `app/backend/test/unit/perfil-permissoes-snapshot.spec.ts`, `app/frontend/src/lib/perfis.ts`, `app/frontend/src/components/ui/app-sidebar.tsx`, `app/frontend/src/app/(admin)/layout.tsx`, `app/frontend/__tests__/{menu-rbac,app-sidebar,perfis}.test.*`.
+**Files:** `app/backend/scripts/gerar-snapshot-perfis.ts`, `app/backend/src/common/rbac/perfil-permissoes.snapshot.json`, `app/backend/package.json`, `app/backend/test/unit/perfil-permissoes-snapshot.spec.ts`, `app/frontend/src/lib/perfis.ts`, `app/frontend/src/components/ui/app-sidebar.tsx`, `app/frontend/src/app/(admin)/layout.tsx`, `app/frontend/src/app/(admin)/page.tsx`, `app/frontend/__tests__/{menu-rbac,app-sidebar,perfis,entrada}.test.*`.
 
 - [ ] Teste primeiro (backend) — `app/backend/test/unit/perfil-permissoes-snapshot.spec.ts`:
 
@@ -1000,7 +1099,7 @@ Expected: JSON gerado com 11 chaves e ambos os casos PASS. O JSON **nunca** é e
 ```typescript
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { filtrarMenuPorPermissoes } from '../src/lib/menu-v2';
+import { filtrarMenuPorPermissoes, rotaDeEntrada } from '../src/lib/menu-v2';
 
 const SNAPSHOT = join(
   __dirname, '..', '..', 'backend', 'src', 'common', 'rbac', 'perfil-permissoes.snapshot.json',
@@ -1013,7 +1112,7 @@ const TODOS = [
 ];
 
 /**
- * Tabela fixada no plano da Onda 2 (decisões 10–13).
+ * Tabela fixada no plano da Onda 2 (decisões 10–13 e 25).
  * Personas do protótipo cobertas: administrador, gestor, comercial,
  * recebimento_pesagem, corte (Desossa), expedicao (Carga), faturamento.
  * conferente/logistica ficam sem grupo até a matriz AD-04 da Onda 3.
@@ -1032,33 +1131,109 @@ const GRUPOS_ESPERADOS: Record<string, string[]> = {
   logistica: [],
 };
 
+/** Tabela fixada da decisão 26 — rota de entrada por perfil. */
+const ROTAS_ENTRADA_ESPERADAS: Record<string, string | null> = {
+  administrador: '/gestao/dashboard',
+  gestor: '/gestao/dashboard',
+  compras: '/gestao/dashboard',
+  comercial: '/comercial/clientes',
+  diretoria: '/comercial/clientes',
+  recebimento_pesagem: '/recebimento/recebimento-carga',
+  corte: '/desossa/dashboard',
+  expedicao: '/carga/planejamento',
+  faturamento: '/faturamento/pre-faturamento',
+  conferente: null,
+  logistica: null,
+};
+
+/** Acessos explícitos: sob `noUncheckedIndexedAccess`, indexar Record devolve `| undefined`. */
+function permissoesDe(perfil: string): string[] {
+  const permissoes = PERMISSOES_POR_PERFIL[perfil];
+  if (!permissoes) throw new Error(`perfil ausente no snapshot RBAC do backend: ${perfil}`);
+  return permissoes;
+}
+
+function gruposEsperadosDe(perfil: string): string[] {
+  const grupos = GRUPOS_ESPERADOS[perfil];
+  if (!grupos) throw new Error(`perfil fora da tabela fixada do plano: ${perfil}`);
+  return grupos;
+}
+
+function rotaEsperadaDe(perfil: string): string | null {
+  if (!(perfil in ROTAS_ENTRADA_ESPERADAS)) {
+    throw new Error(`perfil fora da tabela de rota de entrada do plano: ${perfil}`);
+  }
+  return ROTAS_ENTRADA_ESPERADAS[perfil] ?? null;
+}
+
+function rotasVisiveis(perfil: string): string[] {
+  return filtrarMenuPorPermissoes(permissoesDe(perfil)).flatMap((grupo) =>
+    grupo.items.map((item) => item.href),
+  );
+}
+
 describe('visibilidade do menu por RBAC real', () => {
   it('a tabela fixada cobre os 11 perfis do catalogo', () => {
     expect(Object.keys(GRUPOS_ESPERADOS).sort()).toEqual(Object.keys(PERMISSOES_POR_PERFIL).sort());
+    expect(Object.keys(ROTAS_ENTRADA_ESPERADAS).sort()).toEqual(
+      Object.keys(PERMISSOES_POR_PERFIL).sort(),
+    );
   });
 
   it.each(Object.keys(GRUPOS_ESPERADOS))(
     'visibilidade de grupo por perfil canonico bate com a tabela fixada: %s',
     (perfil) => {
-      const grupos = filtrarMenuPorPermissoes(PERMISSOES_POR_PERFIL[perfil]).map((g) => g.title);
-      expect(grupos).toEqual(GRUPOS_ESPERADOS[perfil]);
+      const grupos = filtrarMenuPorPermissoes(permissoesDe(perfil)).map((g) => g.title);
+      expect(grupos).toEqual(gruposEsperadosDe(perfil));
     },
   );
 
+  it.each(Object.keys(ROTAS_ENTRADA_ESPERADAS))(
+    'rota de entrada por perfil canonico bate com a tabela fixada: %s',
+    (perfil) => {
+      expect(rotaDeEntrada(permissoesDe(perfil))).toBe(rotaEsperadaDe(perfil));
+    },
+  );
+
+  it('rota de entrada esta sempre dentro do menu visivel do proprio perfil', () => {
+    for (const perfil of Object.keys(ROTAS_ENTRADA_ESPERADAS)) {
+      const rota = rotaDeEntrada(permissoesDe(perfil));
+      if (rota) expect(rotasVisiveis(perfil)).toContain(rota);
+      else expect(rotasVisiveis(perfil)).toEqual([]);
+    }
+  });
+
   it('perfil sem permissao de grupo resulta em zero grupos', () => {
     expect(filtrarMenuPorPermissoes([])).toEqual([]);
-    expect(filtrarMenuPorPermissoes(PERMISSOES_POR_PERFIL.conferente)).toEqual([]);
+    expect(rotaDeEntrada([])).toBeNull();
+    expect(filtrarMenuPorPermissoes(permissoesDe('conferente'))).toEqual([]);
   });
 
   it('gestor ve ADMINISTRAÇÃO apenas com Auditoria (matriz linha 41)', () => {
-    const admin = filtrarMenuPorPermissoes(PERMISSOES_POR_PERFIL.gestor).find(
+    const admin = filtrarMenuPorPermissoes(permissoesDe('gestor')).find(
       (g) => g.title === 'ADMINISTRAÇÃO',
     );
     expect(admin?.items.map((i) => i.href)).toEqual(['/admin/auditoria']);
   });
 
+  it('auditoria fica visivel para administrador, gestor e diretoria (matriz linha 41)', () => {
+    for (const perfil of ['administrador', 'gestor', 'diretoria']) {
+      expect(rotasVisiveis(perfil)).toContain('/admin/auditoria');
+    }
+    for (const perfil of ['compras', 'comercial', 'recebimento_pesagem', 'corte', 'expedicao', 'faturamento', 'conferente', 'logistica']) {
+      expect(rotasVisiveis(perfil)).not.toContain('/admin/auditoria');
+    }
+  });
+
+  it('efeitos declarados do gate de grupo conferem com o catalogo', () => {
+    expect(rotasVisiveis('expedicao')).not.toContain('/cadastros/caminhoes');
+    expect(rotasVisiveis('expedicao')).not.toContain('/cadastros/motoristas');
+    expect(rotasVisiveis('diretoria')).not.toContain('/gestao/dashboard');
+    expect(rotasVisiveis('diretoria')).not.toContain('/gestao/relatorios');
+  });
+
   it('comercial nao ve tabela de precos sem PEDIDOS_GERENCIAR', () => {
-    const permissoes = PERMISSOES_POR_PERFIL.comercial.filter((p) => p !== 'PEDIDOS_GERENCIAR');
+    const permissoes = permissoesDe('comercial').filter((p) => p !== 'PEDIDOS_GERENCIAR');
     const comercial = filtrarMenuPorPermissoes(permissoes).find((g) => g.title === 'COMERCIAL');
     expect(comercial?.items.map((i) => i.href)).not.toContain('/comercial/tabela-precos');
   });
@@ -1135,7 +1310,74 @@ describe('AppSidebar', () => {
 });
 ```
 
-- [ ] Run: `cd app/frontend && npm run test -- "menu-rbac|perfis|app-sidebar"` → FAIL (arquivos e comportamentos inexistentes).
+- [ ] Teste primeiro — `app/frontend/__tests__/entrada.test.tsx` (rota `/`, decisão 26):
+
+```tsx
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { render, screen } from '@testing-library/react';
+import EntradaPage from '../src/app/(admin)/page';
+import { getMe } from '../src/lib/auth';
+
+jest.mock('../src/lib/auth', () => ({ getMe: jest.fn() }));
+
+jest.mock('next/navigation', () => ({
+  redirect: (rota: string) => {
+    throw new Error(`REDIRECT:${rota}`);
+  },
+}));
+
+const SNAPSHOT = join(
+  __dirname, '..', '..', 'backend', 'src', 'common', 'rbac', 'perfil-permissoes.snapshot.json',
+);
+const PERMISSOES_POR_PERFIL = JSON.parse(readFileSync(SNAPSHOT, 'utf8')) as Record<string, string[]>;
+
+function permissoesDe(perfil: string): string[] {
+  const permissoes = PERMISSOES_POR_PERFIL[perfil];
+  if (!permissoes) throw new Error(`perfil ausente no snapshot RBAC do backend: ${perfil}`);
+  return permissoes;
+}
+
+const mockGetMe = getMe as jest.MockedFunction<typeof getMe>;
+
+describe('rota de entrada /', () => {
+  beforeEach(() => {
+    mockGetMe.mockReset();
+  });
+
+  it('redireciona para a rota de entrada do perfil', async () => {
+    mockGetMe.mockResolvedValue({
+      sub: 'u1', nome: 'Admin', perfis: ['administrador'], permissoes: permissoesDe('administrador'),
+    });
+    await expect(EntradaPage()).rejects.toThrow('REDIRECT:/gestao/dashboard');
+  });
+
+  it('redireciona para a primeira rota visivel quando o dashboard nao esta no menu', async () => {
+    mockGetMe.mockResolvedValue({
+      sub: 'u2', nome: 'Carla', perfis: ['expedicao'], permissoes: permissoesDe('expedicao'),
+    });
+    await expect(EntradaPage()).rejects.toThrow('REDIRECT:/carga/planejamento');
+  });
+
+  it('sem modulo liberado exibe aviso explicito sem redirecionar', async () => {
+    mockGetMe.mockResolvedValue({
+      sub: 'u3', nome: 'Conferente', perfis: ['conferente'], permissoes: permissoesDe('conferente'),
+    });
+    render(await EntradaPage());
+    expect(screen.getByRole('heading', { name: 'Nenhum módulo liberado' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Seu perfil ainda não tem módulos liberados. Solicite acesso ao administrador.'),
+    ).toBeInTheDocument();
+  });
+
+  it('sem sessao valida volta para o login', async () => {
+    mockGetMe.mockResolvedValue(null);
+    await expect(EntradaPage()).rejects.toThrow('REDIRECT:/login');
+  });
+});
+```
+
+- [ ] Run: `cd app/frontend && npm run test -- "menu-rbac|perfis|app-sidebar|entrada"` → FAIL (arquivos e comportamentos inexistentes).
 
 - [ ] Criar `app/frontend/src/lib/perfis.ts`:
 
@@ -1270,10 +1512,35 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 }
 ```
 
-- [ ] Run: `cd app/frontend && npm run test -- "menu-rbac|perfis|app-sidebar|admin-header"` → PASS.
+- [ ] Criar `src/app/(admin)/page.tsx` — rota `/` dentro do shell, destino resolvido pelo menu real (decisão 26):
+
+```tsx
+import { redirect } from 'next/navigation';
+import { getMe } from '@/lib/auth';
+import { rotaDeEntrada } from '@/lib/menu-v2';
+
+export default async function EntradaPage() {
+  const user = await getMe();
+  if (!user) redirect('/login');
+
+  const rota = rotaDeEntrada(user.permissoes);
+  if (rota) redirect(rota);
+
+  return (
+    <section className="mx-auto max-w-lg rounded-xl border border-border bg-card p-6 text-center">
+      <h1 className="text-base font-semibold text-foreground">Nenhum módulo liberado</h1>
+      <p className="mt-2 text-sm text-text-secondary">
+        Seu perfil ainda não tem módulos liberados. Solicite acesso ao administrador.
+      </p>
+    </section>
+  );
+}
+```
+
+- [ ] Run: `cd app/frontend && npm run test -- "menu-rbac|perfis|app-sidebar|admin-header|entrada"` → PASS.
 - [ ] Run: `cd app/frontend && npm run type-check && npm run lint` → exit 0.
 - [ ] Run: `cd app/backend && npm run test -- perfil-permissoes-snapshot` → PASS.
-- [ ] Commit previsto: `feat(onda2): visibilidade do menu por RBAC real com snapshot do catalogo`
+- [ ] Commit previsto: `feat(onda2): visibilidade do menu e rota de entrada por RBAC real`
 
 ## Task 4 — Badge "Provisório" e alinhamento de StatusPill/KpiCard/AlertItem
 
@@ -1551,7 +1818,9 @@ export function PipelineBar({ etapaAtual, contadores, className }: PipelineBarPr
     >
       {ETAPAS_PIPELINE.map((etapa, index) => {
         const estado = index < indiceAtual ? 'concluida' : index === indiceAtual ? 'atual' : 'futura';
-        const contador = contadores?.[CHAVES_CONTADOR[index]];
+        // `noUncheckedIndexedAccess`: o índice devolve `| undefined`, então a chave é estreitada antes de indexar.
+        const chave = CHAVES_CONTADOR[index];
+        const contador = chave ? contadores?.[chave] : undefined;
 
         return (
           <li
@@ -1597,6 +1866,7 @@ export function PipelineBar({ etapaAtual, contadores, className }: PipelineBarPr
 ```
 
 - [ ] Run: `cd app/frontend && npm run test -- pipeline-bar` → PASS.
+- [ ] Run: `cd app/frontend && npm run type-check` → exit 0 (o trecho do contador é o que quebrava sob `noUncheckedIndexedAccess`).
 - [ ] Commit previsto: `feat(onda2): PipelineBar compartilhada portada do prototipo`
 
 ## Task 6 — Base visual do modal Troca de Peça
@@ -1880,7 +2150,7 @@ Expected: se o `Dialog` do DS exigir `aria-describedby`/`DialogDescription`, adi
 
 ## Task 7 — Login fiel ao protótipo com JWT real
 
-**Files:** `src/app/(auth)/login/page.tsx`, `src/app/(auth)/login/login-form-client.tsx`, `.env.example`, `__tests__/login.test.tsx`.
+**Files:** `src/app/(auth)/login/page.tsx`, `src/app/(auth)/login/login-form-client.tsx`, `src/components/ui/button.tsx`, `.env.example`, `__tests__/login.test.tsx`.
 
 - [ ] Teste primeiro — substituir `app/frontend/__tests__/login.test.tsx` por:
 
@@ -1910,6 +2180,14 @@ describe('LoginFormClient', () => {
     expect(screen.getByRole('button', { name: 'Acessar Sistema' })).toBeInTheDocument();
   });
 
+  it('botao Acessar Sistema usa a variante de acao do DS', () => {
+    render(<LoginFormClient />);
+    const botao = screen.getByRole('button', { name: 'Acessar Sistema' });
+    expect(botao.className).toContain('bg-action-blue');
+    expect(botao.className).toContain('hover:bg-action-blue-strong');
+    expect(botao.className).not.toContain('bg-primary');
+  });
+
   it('nao pre-preenche credenciais', () => {
     render(<LoginFormClient />);
     expect(screen.getByLabelText('E-mail')).toHaveValue('');
@@ -1922,7 +2200,7 @@ describe('LoginFormClient', () => {
     expect(screen.queryByLabelText(/Lembrar/i)).not.toBeInTheDocument();
   });
 
-  it('envia credenciais para /api/auth/login e navega apos 200', async () => {
+  it('envia credenciais para /api/auth/login e navega para a rota de entrada', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => ({}) });
     render(<LoginFormClient />);
 
@@ -1935,7 +2213,8 @@ describe('LoginFormClient', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: 'admin@alphacarnes.local', password: 'segredo-123' }),
     }));
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/gestao/dashboard'));
+    // decisão 26: o destino é resolvido no servidor, em `/`; o cliente não escolhe rota.
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/'));
   });
 
   it('exibe erro explicito quando o backend recusa', async () => {
@@ -1955,9 +2234,15 @@ describe('LoginFormClient', () => {
 });
 ```
 
-- [ ] Run: `cd app/frontend && npm run test -- login` → FAIL (placeholder e rótulo do botão divergem).
+- [ ] Run: `cd app/frontend && npm run test -- login` → FAIL (placeholder, rótulo, cor do botão e destino da navegação divergem).
 
-- [ ] Ajustar `src/app/(auth)/login/login-form-client.tsx`: manter todo o fluxo JWT atual (`/api/auth/login`, `extrairMensagemErro`, `router.push('/gestao/dashboard')`) e trocar apenas o placeholder e o rótulo do botão:
+- [ ] Acrescentar a variante `acao` ao `cva` de `src/components/ui/button.tsx`, logo após `default` (adição pura — nenhuma variante existente muda; decisões 22 e 29):
+
+```tsx
+        acao: "bg-action-blue text-white hover:bg-action-blue-strong",
+```
+
+- [ ] Ajustar `src/app/(auth)/login/login-form-client.tsx`: manter todo o fluxo JWT atual (`/api/auth/login`, `extrairMensagemErro`) e trocar o placeholder, o rótulo/variante do botão e o destino da navegação:
 
 ```tsx
             <Input
@@ -1971,7 +2256,11 @@ describe('LoginFormClient', () => {
 ```
 
 ```tsx
-        <Button type="submit" className="h-12 w-full" loading={isSubmitting}>
+      router.push('/');
+```
+
+```tsx
+        <Button type="submit" variant="acao" className="h-12 w-full" loading={isSubmitting}>
           Acessar Sistema
         </Button>
 ```
@@ -2150,6 +2439,12 @@ test.describe('Shell + DS da Onda 2', () => {
     expect(titulos.map((t) => t.trim())).toEqual(GRUPOS);
   });
 
+  test('pos-login o administrador entra por /gestao/dashboard', async ({ page, request, baseURL }) => {
+    await loginAdmin(page, request, baseURL!);
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/gestao\/dashboard$/);
+  });
+
   test('breadcrumb do dashboard e Gestão / Painel Geral da Operação', async ({ page, request, baseURL }) => {
     await loginAdmin(page, request, baseURL!);
     await page.goto('/gestao/dashboard');
@@ -2209,17 +2504,26 @@ npx playwright screenshot --viewport-size=1280,800 --full-page \
   "F:/Projetos/AlphaCarnes/docs/evidencias/onda2-shell/referencia-prototipo/02-shell-prototipo.png"
 ```
 
-- [ ] Criar `docs/evidencias/onda2-shell/README.md` com: origem de cada PNG (app × protótipo), comando que gerou cada um, viewport `1280×800`, e a lista das divergências autorizadas pelas decisões 11, 16 e 20 deste plano (ADMINISTRAÇÃO para `gestor`; ausência do chip "Escopo"; login sem foto de CDN, sem credencial pré-preenchida, sem "Esqueci a senha"/"Lembrar minhas credenciais" e sem rodapé de protótipo). Critério explícito: **comparação estrutural lado a lado, não pixel-perfect** (decisão 21).
+- [ ] Criar `docs/evidencias/onda2-shell/README.md` com: origem de cada PNG (app × protótipo), comando que gerou cada um, viewport `1280×800`, e a lista das divergências autorizadas pelas decisões 11, 16, 20, 25 e 26 deste plano (ADMINISTRAÇÃO para `gestor`; ausência do chip "Escopo"; login sem foto de CDN, sem credencial pré-preenchida, sem "Esqueci a senha"/"Lembrar minhas credenciais" e sem rodapé de protótipo; itens que `expedicao`/`diretoria` perdem no menu; rota de entrada resolvida pelo menu do perfil). Critério explícito: **comparação estrutural lado a lado, não pixel-perfect** (decisão 21).
 
-- [ ] Run (com Postgres, backend e seed ativos):
+- [ ] Run (com Postgres, backend e seed ativos). O workspace `app/backend` **não tem script de dev** (só `build`/`start:prod`/`lint`/`type-check`/`test`/`test:cov`/`db:*`); o backend real desta etapa sobe pelo serviço `backend` do `docker-compose.yml`, que expõe `http://localhost:4001`:
 
 ```bash
 docker compose up -d postgres
-cd app/backend && npm run db:migrate && npm run db:seed && npm run start:dev &
-cd app/frontend && npm run e2e:shell
+cd app/backend && npm run db:migrate && npm run db:seed && cd ../..
+docker compose up -d --build backend
+curl -fsS http://localhost:4001/health           # {"status":"ok"}
+
+cd app/frontend
+JWT_ACCESS_SECRET="$(grep '^JWT_ACCESS_SECRET=' ../../.env | cut -d= -f2-)" \
+BACKEND_INTERNAL_URL=http://localhost:4001 \
+NEXT_PUBLIC_AMBIENTE=Desenvolvimento \
+npm run e2e:shell
 ```
 
-Expected: 6 testes PASS; os três PNGs de `docs/evidencias/onda2-shell/` criados.
+Notas de execução (nada aqui é opcional): `db:migrate`/`db:seed` rodam **do host** com o `DATABASE_URL` da raiz (`localhost:15433`); o `webServer` do `playwright.config.ts` sobe o Next em `:3100`, e é por isso que `JWT_ACCESS_SECRET` (middleware `jose`) e `BACKEND_INTERNAL_URL` vão no ambiente do comando — o Next **não** lê o `.env` da raiz. Se `curl` não devolver `{"status":"ok"}`, parar e reportar em vez de seguir para o Playwright.
+
+Expected: 7 testes PASS; os três PNGs de `docs/evidencias/onda2-shell/` criados.
 
 - [ ] Run: `cd app/frontend && npm run test` → toda a suíte Jest PASS (inclui os 12 arquivos novos + `terminologia`, `api`, `middleware` e as suítes de tela pré-existentes).
 - [ ] Commit previsto: `test(onda2): smoke do DS e evidencia do shell contra o prototipo`
@@ -2257,7 +2561,7 @@ rg -n "#[0-9A-Fa-f]{6}" src --glob '!app/globals.css' || echo "sem hex fora de g
 rg -n "SIMULAR PERFIL|PROFILE_ORDER|activeProfile" src || echo "sem simulador"
 ```
 
-Expected: suíte PASS; ambos os `rg` sem match (mensagem de fallback impressa).
+Expected: suíte PASS; ambos os `rg` sem match (mensagem de fallback impressa). O padrão de 6 dígitos não alcança os `#ccc`/`#fff` de `chart.tsx`, que são seletores de atributo (decisão 23) e já estão pinados pelo teste.
 
 - [ ] Abrir PR `feature/onda2-shell-ds → develop` com o template:
 
@@ -2269,7 +2573,7 @@ Plano tático: `docs/superpowers/plans/2026-07-25-onda2-shell-ds.md` (sha256 reg
 ### Escopo entregue (task a task)
 - Task 1 — tokens da paleta do protótipo em `globals.css`; hex avulso eliminado de `src`.
 - Task 2 — menu de 9 grupos e 39 itens com rótulos/rotas do protótipo; colapso e breadcrumb; rotas `/gestao/operacoes` e `/gestao/overbooking`.
-- Task 3 — visibilidade de grupo por RBAC real (snapshot do catálogo do backend); simulador de perfil ausente; identidade sem dado inventado.
+- Task 3 — visibilidade de grupo por RBAC real (snapshot do catálogo do backend); rota de entrada `/` pelo menu do perfil; simulador de perfil ausente; identidade sem dado inventado.
 - Task 4 — `BadgeProvisorio` (title citando a pendência) e alinhamento de `StatusPill`/`KpiCard`/`AlertItem`.
 - Task 5 — `PipelineBar` compartilhada.
 - Task 6 — base visual do modal Troca de Peça (sem regra de negócio; atomicidade é Onda 6).
@@ -2289,9 +2593,14 @@ Plano tático: `docs/superpowers/plans/2026-07-25-onda2-shell-ds.md` (sha256 reg
 - Decisão 16 — chip "Escopo" removido enquanto `/auth/me` não expõe representante.
 - Decisão 20 — login sem foto de CDN externo, sem credencial pré-preenchida, sem "Esqueci a senha"/"Lembrar minhas credenciais" e sem rodapé de protótipo.
 - Decisão 21 — comparação de shell é estrutural, não pixel-perfect.
+- Decisão 23 — hex remanescente apenas em seletor de atributo CSS (`chart.tsx`), com inventário pinado por teste.
+- Decisão 24 — `/cadastros/rotas` passa a exigir `ROTAS_*`; `/desossa/dashboard` deixa de aceitar `DISPONIBILIDADE_LER`.
+- Decisão 25 — `expedicao` perde Caminhões/Motoristas e `diretoria` perde Painel Geral/Relatórios no menu (reconciliação na Onda 3).
+- Decisão 26 — rota de entrada `/` e destino pós-login resolvidos pelo menu do perfil (matriz linha 2 refinada para não cair em rota fora do menu).
+- Decisão 29 — `button.tsx` ganha a variante `acao` para o CTA do login usar `--color-action-blue`.
 
 ### Fora de escopo
-Telas de domínio das Ondas 3–10; regra de Troca de Peça (Onda 6); matriz completa de permissões por perfil (Onda 3).
+Telas de domínio das Ondas 3–10; regra de Troca de Peça (Onda 6); matriz completa de permissões por perfil (Onda 3); alinhamento de filtros/visual de `/admin/auditoria` (Onda 3 — decisão 27); as sete dívidas herdadas da Onda 1 (Onda 6 — decisão 28 e seção "Dívidas herdadas da Onda 1").
 ```
 
 - [ ] Solicitar `/gate-pr onda2 <PR>`.
@@ -2303,11 +2612,13 @@ Telas de domínio das Ondas 3–10; regra de Troca de Peça (Onda 6); matriz com
 rg -n '\bT[B]D\b|\bT[O]DO\b|a[ ]definir|implementar[ ]depois|similar[ ]à[ ]Task' \
   docs/superpowers/plans/2026-07-25-onda2-shell-ds.md
 cd app/frontend
-rg -n "#[0-9A-Fa-f]{3,8}\b" src --glob '!app/globals.css'
+# hex de cor aplicada: filtra os seletores de atributo de chart.tsx (decisão 23)
+rg -n "#[0-9A-Fa-f]{3,8}\b" src --glob '!app/globals.css' | rg -v "\[[a-zA-Z-]+='#"
 rg -n "rgba?\(" src --glob '!app/globals.css'
 rg -n "SIMULAR PERFIL|PROFILE_ORDER|activeProfile|visibleGroups" src
+rg -n "push\('/gestao/dashboard'\)" src
 rg -n -i '\bmarcas?\b' src
-npm run test -- "menu-v2|menu-rbac|tokens-ds"
+npm run test -- "menu-v2|menu-rbac|tokens-ds|entrada"
 cd ../backend
 npm run rbac:snapshot && git diff --exit-code src/common/rbac/perfil-permissoes.snapshot.json
 ```
@@ -2315,11 +2626,13 @@ npm run rbac:snapshot && git diff --exit-code src/common/rbac/perfil-permissoes.
 Expected:
 
 ```text
-primeiro comando: zero ocorrências
-hex/rgba fora de globals.css: zero ocorrências
+primeiro comando (marcadores de pendência textual no plano): zero ocorrências
+hex de cor aplicada fora de globals.css: zero ocorrências (as 5 de chart.tsx são seletores de atributo e saem no filtro)
+rgba fora de globals.css: zero ocorrências
 simulador: zero ocorrências
+destino pós-login fixo no cliente: zero ocorrências (a rota de entrada é resolvida em `/`)
 terminologia: zero strings de UI com o rótulo banido
-menu-v2 + menu-rbac + tokens-ds: PASS
+menu-v2 + menu-rbac + tokens-ds + entrada: PASS
 snapshot RBAC: regeneração não produz diff (snapshot em dia com o catálogo)
 ```
 
@@ -2334,4 +2647,6 @@ Dado de identidade inventado (escopo/perfil): NÃO
 Regra de negócio de Troca de Peça implementada nesta onda: NÃO
 Tela de domínio das Ondas 3–10 implementada: NÃO
 Badge Provisório em pendência fechada por AD: NÃO
+Dívida herdada da Onda 1 executada nesta onda: NÃO (destino na seção "Dívidas herdadas da Onda 1")
+Rota morta como destino pós-login: NÃO (destino resolvido pelo menu do perfil, decisão 26)
 ```
