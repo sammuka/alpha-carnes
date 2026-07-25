@@ -361,7 +361,14 @@ tolerância só é *exibida*; nenhuma validação de recebimento passa a consumi
 
 **Decisão 18 — "Nota de Qualidade", "Total de Ocorrências (Ano)" e "Última Divergência" do fornecedor
 vêm do backend real.** Ocorrências e última divergência são calculadas de `ocorrencias_fornecedor`
-(tabela já existente) no endpoint `GET /fornecedores/:id/historico`. A **nota de qualidade** não tem
+(tabela já existente) no endpoint `GET /fornecedores/:id/historico`. O campo `ultimaDivergencia.tipo`
+**não** existe em `ocorrencias_fornecedor` (que tem `status`, `descricao`, `impacto`, …): vem de
+`divergencias_recebimento.tipo` via `LEFT JOIN` em `ocorrencias_fornecedor.divergencia_id` (FK opcional).
+Quando a ocorrência não tem divergência ligada (`divergencia_id` null), o fallback de `tipo` é
+`ocorrencias_fornecedor.descricao` (texto real da ocorrência — nunca rótulo inventado). O objeto
+`ultimaDivergencia` inteiro continua `null` quando não há nenhuma ocorrência — a tela mostra "—".
+No protótipo (`Fornecedores.tsx`), o rótulo entre parênteses em "Última Divergência" (ex.: "Falta de Peso")
+corresponde ao `tipo` da divergência, não ao `status` da ocorrência (`aberta`/`em_analise`/…). A **nota de qualidade** não tem
 origem no domínio e não é inventada: é campo editável do cadastro
 (`parametros_operacionais_json.notaQualidade`, valores `A`, `B`, `C`), exibido com o mesmo *badge* do
 protótipo e sem cálculo automático. Quando ausente, o bloco mostra "—".
@@ -2896,7 +2903,12 @@ Saída esperada: `Tests: 2 passed, 2 total`.
 
 ### Task 7 — Backend: contagens e histórico do fornecedor
 
-**7.1** Em `fornecedores.service.ts`, acrescentar:
+**7.1** Em `fornecedores.service.ts`, estender os imports existentes e acrescentar os métodos:
+
+```ts
+import { and, desc, eq, gte, ilike, isNull, or, sql } from 'drizzle-orm';
+import { divergenciasRecebimento, fornecedores, ocorrenciasFornecedor } from '../../../database/schema';
+```
 
 ```ts
   async contagens(): Promise<{ total: number; ativos: number; inativos: number }> {
@@ -2914,6 +2926,8 @@ Saída esperada: `Tests: 2 passed, 2 total`.
 
   /**
    * Histórico real de ocorrências do fornecedor (decisão 18 da Onda 3).
+   * `ultimaDivergencia.tipo` vem de `divergencias_recebimento.tipo` (LEFT JOIN) ou,
+   * sem divergência ligada, de `ocorrencias_fornecedor.descricao`.
    * `ultimaDivergencia` é null quando não há ocorrência — a tela mostra "—".
    */
   async historico(id: string): Promise<{
@@ -2932,8 +2946,15 @@ Saída esperada: `Tests: 2 passed, 2 total`.
           gte(ocorrenciasFornecedor.createdAt, inicioDoAno),
         )),
       this.db
-        .select({ data: ocorrenciasFornecedor.createdAt, tipo: ocorrenciasFornecedor.tipo })
+        .select({
+          data: ocorrenciasFornecedor.createdAt,
+          tipo: sql<string>`coalesce(${divergenciasRecebimento.tipo}, ${ocorrenciasFornecedor.descricao})`,
+        })
         .from(ocorrenciasFornecedor)
+        .leftJoin(
+          divergenciasRecebimento,
+          eq(ocorrenciasFornecedor.divergenciaId, divergenciasRecebimento.id),
+        )
         .where(eq(ocorrenciasFornecedor.fornecedorId, fornecedor.id))
         .orderBy(desc(ocorrenciasFornecedor.createdAt))
         .limit(1),
@@ -6009,7 +6030,10 @@ Renderizar `filtrosExtras` logo abaixo do campo de busca da coluna mestre. No co
 `blocoDetalheExtra` é o último bloco da coluna 2 — a quarta seção do protótipo
 ("Histórico & Ocorrências"). Props ausentes não mudam nada nas outras telas que usam o componente.
 
-**16.3** Substituir `app/frontend/src/app/(admin)/cadastros/fornecedores/fornecedores-client.tsx`:
+**16.3** Substituir `app/frontend/src/app/(admin)/cadastros/fornecedores/fornecedores-client.tsx`.
+O shape `{ data, tipo }` de `ultimaDivergencia` permanece; `tipo` é preenchido pelo backend com
+`divergencias_recebimento.tipo` (join) ou `ocorrencias_fornecedor.descricao` (fallback) — decisão 18,
+não o `status` da ocorrência.
 
 ```tsx
 'use client';
@@ -6029,6 +6053,7 @@ interface Contagens {
 
 interface Historico {
   ocorrenciasAno: number;
+  /** `tipo`: divergência ligada ou descricao da ocorrencia (decisao 18) */
   ultimaDivergencia: { data: string; tipo: string } | null;
 }
 
