@@ -3001,13 +3001,13 @@ DoD-23 e DoD-24:
 
 ```ts
   it('contagens de fornecedores batem com o banco', async () => {
-    await request(srv()).post('/fornecedores').set('Cookie', adminCookies)
+    await request(app.getHttpServer()).post('/fornecedores').set('Cookie', adminCookies)
       .send({ codigo: 'FOR-C1', razaoSocial: 'Ativo 1', documentoFiscal: '12345678000190' });
-    const inativo = await request(srv()).post('/fornecedores').set('Cookie', adminCookies)
+    const inativo = await request(app.getHttpServer()).post('/fornecedores').set('Cookie', adminCookies)
       .send({ codigo: 'FOR-C2', razaoSocial: 'Inativo 1', documentoFiscal: '98765432000110', status: 'inativo' });
     expect(inativo.status).toBe(201);
 
-    const contagens = await request(srv()).get('/fornecedores/contagens').set('Cookie', adminCookies);
+    const contagens = await request(app.getHttpServer()).get('/fornecedores/contagens').set('Cookie', adminCookies);
     expect(contagens.status).toBe(200);
     expect(contagens.body.total).toBe(contagens.body.ativos + contagens.body.inativos);
     expect(contagens.body.inativos).toBeGreaterThanOrEqual(1);
@@ -3658,7 +3658,7 @@ Saída esperada: `Tests: 5 passed, 5 total`.
 
 ```ts
   it('resumo de perfis conta usuarios reais e inclui perfil vazio', async () => {
-    const res = await request(srv()).get('/usuarios/resumo-perfis').set('Cookie', adminCookies);
+    const res = await request(app.getHttpServer()).get('/usuarios/resumo-perfis').set('Cookie', adminCookies);
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(11);
     expect(res.body[0].slug).toBe('administrador');
