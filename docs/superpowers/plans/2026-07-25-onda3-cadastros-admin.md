@@ -314,8 +314,9 @@ ativo por tipo". Os 6 valores são os mesmos, escritos com o rótulo do protóti
 O protótipo distingue **peça** de **parte** nos seis modelos, e `pedido`/`estoque` sozinhos perderiam essa
 distinção — o `slug` a preserva sem inventar rótulo. A coluna `campos` fica sem o sufixo `_json` porque o
 sufixo, no repositório, marca **saco aberto** de dados heterogêneos (`atributos_json`, `contatos_json`,
-`parametros_operacionais_json`), e `campos` é o oposto: conjunto **fechado** de 12 booleanos, com CHECK no
-banco e Zod no DTO. É o mesmo critério de `paradas` e `dias_atendimento` (decisão 15), também JSONB
+`parametros_operacionais_json`), e `campos` é o oposto: conjunto **fechado** de 12 booleanos, validado
+pelo Zod do DTO (Task 5.1) — sem CHECK de cardinalidade no banco, porque o PostgreSQL não permite
+subquery em CHECK. É o mesmo critério de `paradas` e `dias_atendimento` (decisão 15), também JSONB
 fechado e também sem sufixo. As convenções de schema (`docs/data/convencoes-schema.md` §JSONB) não exigem
 o sufixo.
 
@@ -344,12 +345,14 @@ Nenhum filtro roda sobre esses campos, então não há índice GIN (convenções
 
 **Decisão 16 — `modelos_etiqueta` guarda os 12 campos como JSONB `campos`**, com as 12 chaves booleanas
 do protótipo (`codigo`, `produto`, `peso`, `clientePedido`, `destino`, `origemFrigorifico`, `nfLote`,
-`dataHora`, `operador`, `caracteristicas`, `qrCode`, `codigoBarras`). O CHECK do banco garante a
-**cardinalidade** (o objeto tem exatamente 12 chaves); a identidade das 12 chaves é garantida pelo Zod do
-DTO (Task 5.1, `CAMPOS_ETIQUETA`), que rejeita chave desconhecida ou faltante com 400 — divisão
-intencional, porque um CHECK que enumerasse as 12 chaves teria de ser reescrito por migração quando **P9**
-fechar. DoD-20 testa as duas metades. A tela carrega o badge Provisório da pendência **P9** (campos finais
-da etiqueta) — a mesma pendência que o banner âmbar do protótipo anuncia.
+`dataHora`, `operador`, `caracteristicas`, `qrCode`, `codigoBarras`). O PostgreSQL **não** permite
+subquery em CHECK (`SQLSTATE 0A000`); por isso **não há** CHECK de cardinalidade no banco. A
+**cardinalidade** (=12) **e** a **identidade** das 12 chaves ficam no **Zod do DTO** (Task 5.1,
+`camposEtiquetaSchema` com `.strict()` sobre `CAMPOS_ETIQUETA`), que rejeita chave desconhecida ou
+faltante com 400 — divisão intencional em relação a um CHECK que enumerasse as 12 chaves e teria de ser
+reescrito por migração quando **P9** fechar. DoD-20 cobre cardinalidade e identidade via Zod/DTO. A tela
+carrega o badge Provisório da pendência **P9** (campos finais da etiqueta) — a mesma pendência que o
+banner âmbar do protótipo anuncia.
 
 **Decisão 17 — os campos do fornecedor que o protótipo mostra e o banco ainda não tem entram em
 `parametros_operacionais_json`:** `horarioLimiteRecebimento` (`"HH:MM"`), `capacidadeMaximaKg` (inteiro) e
@@ -887,7 +890,7 @@ essa string no `it(...)`.
 | DoD-17 | Frota respeita RBAC: leitura sem `*_LER` e escrita sem `*_GERENCIAR` devolvem 403 | `frota respeita RBAC de leitura e escrita` | `app/backend/test/integration/frota.e2e-spec.ts` |
 | DoD-18 | Toda escrita em frota grava linha em `auditoria` com dados anteriores e novos | `frota audita insert, update e delete` | `app/backend/test/integration/frota.e2e-spec.ts` |
 | DoD-19 | Executar `seedModelosEtiqueta` cria os 6 modelos do protótipo com **exatamente** os 12 campos da decisão 21 (o teste chama o seed; nenhum modelo é criado por `POST` na preparação) | `seed cria os 6 modelos com os campos do prototipo` | `app/backend/test/integration/modelos-etiqueta.e2e-spec.ts` |
-| DoD-20 | Alterar campos persiste as 12 chaves e rejeita objeto com chave desconhecida ou faltante (400) | `atualiza campos e rejeita conjunto de chaves invalido` | `app/backend/test/integration/modelos-etiqueta.e2e-spec.ts` |
+| DoD-20 | Alterar campos persiste as 12 chaves e rejeita objeto com chave desconhecida ou faltante (400) — invariante no Zod do DTO (`camposEtiquetaSchema`), não no banco | `atualiza campos e rejeita conjunto de chaves invalido` | `app/backend/test/integration/modelos-etiqueta.e2e-spec.ts` |
 | DoD-21 | Rota persiste paradas com ordem normalizada e aceita só os 7 dias canônicos | `rota persiste paradas ordenadas e dias validos` | `app/backend/test/integration/rotas-paradas.e2e-spec.ts` |
 | DoD-22 | Reordenar paradas persiste a nova ordem sem perder descrição | `reordenacao de paradas preserva descricoes` | `app/backend/test/integration/rotas-paradas.e2e-spec.ts` |
 | DoD-23 | `GET /fornecedores/contagens` devolve total, ativos e inativos coerentes com o banco | `contagens de fornecedores batem com o banco` | `app/backend/test/integration/cadastros-diversos.e2e-spec.ts` |
@@ -1247,10 +1250,6 @@ export const modelosEtiqueta = pgTable(
   },
   (t) => [
     check('chk_modelos_etiqueta_status', sql`${t.status} IN ('ativo','inativo')`),
-    check(
-      'chk_modelos_etiqueta_campos',
-      sql`(SELECT count(*) FROM jsonb_object_keys(${t.campos})) = 12`,
-    ),
     uniqueIndex('uq_modelos_etiqueta_slug').on(t.slug).where(sql`${t.deletedAt} IS NULL`),
     index('idx_modelos_etiqueta_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
   ],
@@ -1305,9 +1304,7 @@ CREATE TABLE IF NOT EXISTS "modelos_etiqueta" (
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
   "deleted_at" timestamp with time zone,
-  CONSTRAINT "chk_modelos_etiqueta_status" CHECK ("status" IN ('ativo','inativo')),
-  CONSTRAINT "chk_modelos_etiqueta_campos"
-    CHECK ((SELECT count(*) FROM jsonb_object_keys("campos")) = 12)
+  CONSTRAINT "chk_modelos_etiqueta_status" CHECK ("status" IN ('ativo','inativo'))
 );
 --> statement-breakpoint
 ALTER TABLE "perfis" ADD COLUMN IF NOT EXISTS "menus_visiveis" text[] DEFAULT '{}'::text[] NOT NULL;
@@ -8965,7 +8962,7 @@ O Worker executa na ordem numérica: as dependências acima estão satisfeitas p
    uma fórmula (por exemplo, derivada de ocorrências por recebimento), a mudança exige AD-xx em
    `docs/execucao/DECISOES.md` antes de virar cálculo.
 3. **Modelos de etiqueta com campos provisórios (P9).** O conjunto final de campos depende do cliente;
-   quando fechar, o badge Provisório sai por AD-xx e o CHECK das 12 chaves é revisto.
+   quando fechar, o badge Provisório sai por AD-xx e o `camposEtiquetaSchema` (Zod) é revisto.
 4. **Exclusividade da desossa restrita a TZ (P12).** As duas alternativas continuam sendo as únicas.
    Regra para outros cortes exige decisão registrada.
 5. **Exportação de auditoria limitada a 5 000 linhas (decisão 32).** Se o volume exigir exportação
