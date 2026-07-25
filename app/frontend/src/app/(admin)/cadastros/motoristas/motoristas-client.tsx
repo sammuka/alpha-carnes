@@ -1,0 +1,117 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { User } from 'lucide-react';
+import { toast } from 'sonner';
+import { CadastroTabelaDrawer } from '@/components/cadastros/cadastro-tabela-drawer';
+import { mensagemDeErro } from '@/lib/error-message';
+import type { Caminhao, Motorista } from '@/lib/frota';
+
+export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) {
+  const [caminhoes, setCaminhoes] = useState<Caminhao[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch('/api/cadastros/frota-caminhoes?page=1&pageSize=100', { cache: 'no-store' });
+      if (!res.ok) {
+        toast.error(await mensagemDeErro(res));
+        return;
+      }
+      const dados = (await res.json()) as { data: Caminhao[] };
+      setCaminhoes(dados.data);
+    })();
+  }, []);
+
+  return (
+    <CadastroTabelaDrawer<Motorista>
+      caminho="Cadastros & Regras / Motoristas"
+      titulo="Motoristas"
+      subtitulo="Motoristas vinculados às cargas e caminhões de expedição."
+      rotuloNovo="Novo Motorista"
+      rotuloSalvar="Salvar Motorista"
+      tituloDrawerNovo="Novo Motorista"
+      tituloDrawerEdicao={(m) => `Motorista — ${m.nome}`}
+      placeholderBusca="Buscar por nome ou documento"
+      substantivoSingular="motorista"
+      substantivoPlural="motoristas"
+      endpoint="/api/cadastros/frota-motoristas"
+      larguraDrawer={460}
+      podeGerenciar={podeGerenciar}
+      mensagemVazia="Nenhum motorista encontrado para os filtros aplicados."
+      statusDe={(m) => m.status}
+      filtros={[
+        {
+          nome: 'status',
+          rotuloTodos: 'Status: Todos',
+          opcoes: [
+            { valor: 'ativo', rotulo: 'Ativo' },
+            { valor: 'inativo', rotulo: 'Inativo' },
+          ],
+        },
+      ]}
+      colunas={[
+        {
+          chave: 'nome',
+          titulo: 'Nome',
+          render: (m) => (
+            <span className="flex items-center gap-1.5 font-bold text-text-strong">
+              <User className="size-3.5 text-text-muted" /> {m.nome}
+            </span>
+          ),
+        },
+        {
+          chave: 'documento',
+          titulo: 'Documento',
+          render: (m) => <span className="font-mono text-text-slate">{m.documento}</span>,
+        },
+        {
+          chave: 'telefone',
+          titulo: 'Telefone',
+          render: (m) => <span className="text-text-slate">{m.telefone ?? '—'}</span>,
+        },
+        {
+          chave: 'caminhaoPadrao',
+          titulo: 'Caminhão padrão',
+          render: (m) =>
+            m.caminhaoPadraoPlaca ? (
+              <span className="rounded bg-action-blue-bg px-1.5 py-0.5 font-mono text-[12px] font-semibold text-brand-navy-deep">
+                {m.caminhaoPadraoAtivo === false ? `${m.caminhaoPadraoPlaca} (inativo)` : m.caminhaoPadraoPlaca}
+              </span>
+            ) : (
+              <span className="text-text-muted">—</span>
+            ),
+        },
+      ]}
+      campos={[
+        { nome: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, placeholder: 'Ex: Carlos Souza' },
+        { nome: 'documento', rotulo: 'Documento', tipo: 'texto', obrigatorio: true, placeholder: 'CNH nº', monoespacado: true },
+        { nome: 'telefone', rotulo: 'Telefone', tipo: 'texto', placeholder: '(11) 90000-0000' },
+        {
+          nome: 'caminhaoPadraoId',
+          rotulo: 'Caminhão padrão',
+          tipo: 'select',
+          placeholder: 'Sem caminhão padrão',
+          opcoes: caminhoes.map((c) => ({
+            valor: c.id,
+            rotulo: c.status === 'ativo' ? c.placa : `${c.placa} (inativo)`,
+          })),
+        },
+      ]}
+      formularioVazio={{ nome: '', documento: '', telefone: '', caminhaoPadraoId: '', status: 'ativo' }}
+      paraFormulario={(m) => ({
+        nome: m.nome,
+        documento: m.documento,
+        telefone: m.telefone ?? '',
+        caminhaoPadraoId: m.caminhaoPadraoId ?? '',
+        status: m.status,
+      })}
+      paraPayload={(f) => ({
+        nome: (f.nome ?? '').trim(),
+        documento: (f.documento ?? '').trim(),
+        telefone: (f.telefone ?? '').trim() || undefined,
+        caminhaoPadraoId: (f.caminhaoPadraoId ?? '').trim() || null,
+        status: f.status,
+      })}
+    />
+  );
+}
