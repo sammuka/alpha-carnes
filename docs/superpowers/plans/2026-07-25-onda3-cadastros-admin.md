@@ -281,14 +281,57 @@ diferença aparece como nota na tela `/admin/perfis` (texto literal na Task 22).
 
 ### Modelo de dados
 
+#### Reconciliação com o plano mestre §3–§4
+
+O plano mestre (`docs/superpowers/plans/2026-07-22-implementacao-completa-prototipo-v1.1.md`) nomeia as
+três entidades novas desta onda em §3 e o endpoint de preview em §4. Onde este plano tático usa outro
+nome, a diferença é declarada aqui — nenhuma delas é implícita, e o Worker não tem escolha:
+
+**R1 — `caminhoes_cadastro` → `frota_caminhoes`; `motoristas` → `frota_motoristas`** (mestre §3, linhas
+102–103). É **rename explícito**, não entidade diferente: os campos são os mesmos do mestre, um a um —
+`placa` (unique), `descricao`, `capacidade` (aqui `capacidade_kg`, com a unidade no nome), `rota_padrao_id`
+e `status` em `frota_caminhoes`; `nome`, `documento`, `telefone`, `caminhao_padrao_id` e `status` em
+`frota_motoristas` (Task 1.4). O motivo é o da decisão 12: `caminhoes` já existe como carga da expedição
+(F5) e `motoristas` sem prefixo ficaria órfã do par — o prefixo `frota_` mantém as duas legíveis como um
+único módulo (`src/modules/frota/`) e elimina a ambiguidade de leitura entre cadastro e carga do dia. A FK
+`caminhoes.caminhao_cadastro_id` que o mestre prevê **mantém o nome do mestre** e fica para a Onda 9
+(decisão 13 e dívida 1).
+
+**R2 — `modelos_etiqueta.tipo` → `slug`; `campos_json` → `campos`** (mestre §3, linha 105). O `slug`
+**é** o `tipo` do mestre, com a mesma cardinalidade (uma linha por tipo, garantida por
+`uq_modelos_etiqueta_slug`) e por isso continua valendo a regra do mestre "impressão consome o modelo
+ativo por tipo". Os 6 valores são os mesmos, escritos com o rótulo do protótipo em vez da abreviação:
+
+| `tipo` do mestre | `slug` desta onda | nome exibido (`ModelosEtiqueta.tsx:44-69`) |
+|---|---|---|
+| `pedido` | `peca-pedido` | Peça para Pedido |
+| `estoque` | `peca-estoque` | Peça para Estoque |
+| `desossa` | `peca-desossa` | Peça para Desossa |
+| `parte_pedido` | `parte-pedido` | Parte para Pedido |
+| `parte_estoque` | `parte-estoque` | Parte para Estoque |
+| `unidade` | `produto-unidade` | Produto por Unidade |
+
+O protótipo distingue **peça** de **parte** nos seis modelos, e `pedido`/`estoque` sozinhos perderiam essa
+distinção — o `slug` a preserva sem inventar rótulo. A coluna `campos` fica sem o sufixo `_json` porque o
+sufixo, no repositório, marca **saco aberto** de dados heterogêneos (`atributos_json`, `contatos_json`,
+`parametros_operacionais_json`), e `campos` é o oposto: conjunto **fechado** de 12 booleanos, com CHECK no
+banco e Zod no DTO. É o mesmo critério de `paradas` e `dias_atendimento` (decisão 15), também JSONB
+fechado e também sem sufixo. As convenções de schema (`docs/data/convencoes-schema.md` §JSONB) não exigem
+o sufixo.
+
+**R3 — `GET /modelos-etiqueta/:id/preview`** (mestre §4, linha 169) **não é entregue nesta onda**:
+divergência autorizada **D18.c**, declarada na Task 18 com motivo e onda de destino (**Onda 6**, a onda
+das etiquetas e do gateway de impressão).
+
 **Decisão 12 — nomes das tabelas novas: `frota_caminhoes`, `frota_motoristas`, `modelos_etiqueta`.**
 O prefixo `frota_` evita colisão com a tabela `caminhoes` da expedição, que é entidade de carga e não de
 cadastro.
 
 **Decisão 13 — a ligação entre cadastro de frota e expedição fica fora desta onda.** `frota_caminhoes`
 não recebe FK de/para `caminhoes` (expedição), e `caminhoes.placa` não passa a referenciar o cadastro.
-Motivo: a expedição é escopo da Onda 7 e alterar sua chave agora violaria o *expand puro* (constraint 8).
-Registro explícito de dívida na seção "Dívidas deixadas por esta onda".
+Motivo: a carga da expedição é escopo da **Onda 9 (Carga)** no roadmap canônico §8 — planejamento,
+conferência e envio ao faturamento — e alterar sua chave agora violaria o *expand puro* (constraint 8).
+Registro explícito de dívida na seção "Dívidas deixadas por esta onda", com a Onda 9 como destino.
 
 **Decisão 14 — `frota_motoristas.caminhao_padrao_id` referencia `frota_caminhoes.id`** (nullable, com
 `ON DELETE` implícito ausente: o soft delete do caminhão não apaga a referência; a tela exibe o caminhão
@@ -301,9 +344,12 @@ Nenhum filtro roda sobre esses campos, então não há índice GIN (convenções
 
 **Decisão 16 — `modelos_etiqueta` guarda os 12 campos como JSONB `campos`**, com as 12 chaves booleanas
 do protótipo (`codigo`, `produto`, `peso`, `clientePedido`, `destino`, `origemFrigorifico`, `nfLote`,
-`dataHora`, `operador`, `caracteristicas`, `qrCode`, `codigoBarras`). O CHECK garante que o objeto tem
-exatamente essas 12 chaves. A tela carrega o badge Provisório da pendência **P9** (campos finais da
-etiqueta) — a mesma pendência que o banner âmbar do protótipo anuncia.
+`dataHora`, `operador`, `caracteristicas`, `qrCode`, `codigoBarras`). O CHECK do banco garante a
+**cardinalidade** (o objeto tem exatamente 12 chaves); a identidade das 12 chaves é garantida pelo Zod do
+DTO (Task 5.1, `CAMPOS_ETIQUETA`), que rejeita chave desconhecida ou faltante com 400 — divisão
+intencional, porque um CHECK que enumerasse as 12 chaves teria de ser reescrito por migração quando **P9**
+fechar. DoD-20 testa as duas metades. A tela carrega o badge Provisório da pendência **P9** (campos finais
+da etiqueta) — a mesma pendência que o banner âmbar do protótipo anuncia.
 
 **Decisão 17 — os campos do fornecedor que o protótipo mostra e o banco ainda não tem entram em
 `parametros_operacionais_json`:** `horarioLimiteRecebimento` (`"HH:MM"`), `capacidadeMaximaKg` (inteiro) e
@@ -320,6 +366,19 @@ protótipo e sem cálculo automático. Quando ausente, o bloco mostra "—".
 **Decisão 19 — os chips de contagem do master de fornecedores ("Todos (45)", "Ativos (42)",
 "Inativos (3)") usam contagem real** devolvida por `GET /fornecedores/contagens`
 (`{ total, ativos, inativos }`). Nenhum número fixo vai para a tela.
+
+A aparência dos três chips é a de `Fornecedores.tsx:74-76`, sem invenção de paleta: **o chip ativo é
+preenchido escuro com texto branco** (`bg-[#1F2633] hover:bg-[#1F2633] text-white`, o "Todos") e **os
+outros dois são `variant="outline"` com texto cinza** (`text-[#6B7081]`). Traduzido para os tokens já
+declarados no `globals.css` pela Onda 2 — `#1F2633` = `login-panel` e `#6B7081` = `login-text`, o par
+superfície-escura/texto-apagado do DS absorvido, que `login/page.tsx` e `pipeline-bar.tsx` já usam fora
+da tela de login: `bg-login-panel text-white hover:bg-login-panel` no chip ativo e `text-login-text` nos
+dois em outline. Chip de contagem **não** é chip de status: verde para "Ativos" e cinza-preenchido para
+"Inativos" seria paleta escolhida pelo plano, não pelo protótipo — proibido pelo Princípio I. **Nenhuma
+escala crua do Tailwind** (`green-*`, `slate-*`, `zinc-*`, `red-*`) aparece em nenhum trecho desta onda:
+cor de tela vem de token, e a equivalência por valor exato é a mesma regra da decisão 46. Como os dois
+hexadecimais dos chips já têm token, a onda continua com **19 tokens novos** — nenhum é criado por causa
+dos chips.
 
 **Decisão 20 — `perfis.menus_visiveis` é `TEXT[]`,** não JSONB: é lista curta de strings comparada por
 igualdade, e `TEXT[]` deixa o *seed* e o diff de auditoria legíveis.
@@ -379,8 +438,9 @@ README de evidências (Task 27.1):
   expiração é criado nesta onda** — a ação administrativa é escopo da Onda 4.
 
 A chave da cadência é `operacao.cadencia_dias_semana`, o nome já fixado no plano mestre §7 (P1), com valor
-padrão `'1,3,5'` (segunda, quarta e sexta). Nenhum serviço desta onda consome esse valor: a geração por
-cadência é escopo da Onda 4.
+padrão `'1,3,5'` (segunda, quarta e sexta). Nenhum serviço desta onda consome esse valor: a geração de
+Operações por cadência é escopo da **Onda 5 (Gestão)**, dona da tela `/gestao/operacoes` no roadmap
+canônico §8. O texto do cartão (Task 2.3) já remete o usuário a "Gestão / Operações" por isso.
 
 ### Permissões
 
@@ -480,7 +540,7 @@ Sobre a largura: o Portão 1 pediu `w-[460px]` "como Caminhões/Motoristas". O p
 larguras **diferentes** nas três telas — `Caminhoes.tsx:57` e `Motoristas.tsx:57` são `w-[460px]` e
 `Representantes.tsx:92` é `w-[520px]`. Fixar 460 em representantes seria afastar a tela do protótipo,
 o oposto do Princípio I. O componente por isso não tem largura única: a prop `larguraDrawer` recebe o
-valor da tela correspondente, e DoD-38 verifica os dois valores contra as três referências.
+valor da tela correspondente, e DoD-81 verifica os dois valores contra as três referências.
 
 **Decisão 36 — `/cadastros/produtos` mantém a lista e o CRUD atuais e ganha as 5 abas do protótipo**
 no drawer: Gerais, Comercial, Operacional, Estoque, Fiscal. Os campos fiscais (`ncm`, `cfop`,
@@ -844,9 +904,9 @@ essa string no `it(...)`.
 |---|---|---|---|
 | DoD-36 | O componente de lista+drawer mostra os registros do backend e o contador do protótipo com o `total` real, sem rodapé "Mostrando N de M" e sem botão "Filtros" | `lista registros do backend e mostra o contador do prototipo` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
 | DoD-37 | Sem permissão de gerenciar não há botão "Novo" nem ações de linha (decisão 40) | `sem permissao de gerenciar nao ha botao novo nem acoes de linha` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
-| DoD-38 | Clicar na linha abre o drawer em modo edição com os dados dela; clicar na célula de ações não abre | `clique na linha abre o drawer em edicao com a largura do prototipo` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
+| DoD-38 | Clicar na linha abre o drawer em modo edição, com os dados da linha nos campos e o botão de salvar da tela | `clique na linha abre o drawer em edicao com os dados da linha` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
 | DoD-39 | Erro do backend vira mensagem na tela e nenhuma linha falsa é exibida | `erro do backend aparece como mensagem, sem lista falsa` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
-| DoD-40 | Os chips de fornecedores mostram a contagem devolvida pelo backend | `chips mostram a contagem devolvida pelo backend` | `app/frontend/__tests__/fornecedores-contagens.test.tsx` |
+| DoD-40 | Os chips de fornecedores mostram a contagem devolvida pelo backend, com o chip ativo preenchido escuro (`bg-login-panel text-white`) e os outros dois em outline cinza (`text-login-text`) — `Fornecedores.tsx:74-76`, decisão 19 | `chips mostram a contagem devolvida pelo backend` | `app/frontend/__tests__/fornecedores-contagens.test.tsx` |
 | DoD-41 | Falha na contagem mostra erro e não inventa número (RA-06) | `falha nas contagens mostra erro e nao inventa numero` | `app/frontend/__tests__/fornecedores-contagens.test.tsx` |
 | DoD-42 | Reordenar parada na tela preserva as descrições e renumera a ordem | `reordena parada para cima preservando descricoes` | `app/frontend/__tests__/rotas-paradas.test.tsx` |
 | DoD-43 | Alternar dia de atendimento reflete no estado do botão | `alterna dia de atendimento` | `app/frontend/__tests__/rotas-paradas.test.tsx` |
@@ -886,8 +946,8 @@ essa string no `it(...)`.
 | DoD-77 | Cobertura de linha e de branch do backend ≥ 80 % é exigida pela configuração do Jest (o gate falha o build, não só avisa) | `jest exige 80 por cento de linha e de branch` | `app/backend/test/unit/cobertura-config.spec.ts` |
 | DoD-78 | Usuário sem menu nenhum não tem grupo visível nem rota de entrada | `usuario sem menu nao tem grupo nem rota de entrada` | `app/frontend/__tests__/menu-rbac.test.ts` |
 | DoD-79 | **(decisões 35 e 44)** Os `select` da barra de filtros vão para a consulta do backend (`status=` na query) — nenhum controle inerte | `select de status refaz a consulta com o filtro na query` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
-| DoD-80 | **(decisão 35)** A ação de linha alterna o status por `PATCH { status }` e a tela não tem exclusão (sem `Trash2`, sem `DELETE`) | `acao Power faz PATCH de status e nao abre o drawer nem oferece exclusao` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
-| DoD-81 | **(decisão 35)** O drawer respeita a largura configurada: 460 px em caminhões/motoristas e 520 px em representantes | `clique na linha abre o drawer em edicao com a largura do prototipo` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
+| DoD-80 | **(decisão 35)** A ação de linha alterna o status por `PATCH { status }` **sem abrir o drawer** (a célula de ações faz `stopPropagation`) e a tela não tem exclusão (sem `Trash2`, sem `DELETE`) | `acao Power faz PATCH de status e nao abre o drawer nem oferece exclusao` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
+| DoD-81 | **(decisão 35)** O drawer respeita a largura configurada: 460 px em caminhões/motoristas e 520 px em representantes | `drawer respeita a largura de 460 e 520 px por tela` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
 | DoD-82 | **(decisão 44)** `GET /representantes` filtra por `status` e `tipoCanal`; `GET /representantes/canais` devolve os canais distintos reais e nunca um vocabulário fixo | `representantes filtram por status e canal e listam canais reais` | `app/backend/test/integration/cadastros-f7.e2e-spec.ts` |
 | DoD-83 | **(decisão 45)** `GET /representantes` traz a contagem e `GET /representantes/:id` a lista de clientes vinculados, ambas derivadas de `clientes.representante_id` | `clientes vinculados vem de clientes.representante_id` | `app/backend/test/integration/cadastros-f7.e2e-spec.ts` |
 | DoD-84 | **(D13.b)** A tabela de representantes tem as 6 colunas desta onda (Nome, Tipo/canal, Contato, Clientes vinculados, Status, Ações) e nenhuma coluna "Usuários vinculados" | `tabela tem as 6 colunas do prototipo, sem Usuarios vinculados` | `app/frontend/__tests__/representantes-client.test.tsx` |
@@ -4973,14 +5033,24 @@ it('sem permissao de gerenciar nao ha botao novo nem acoes de linha', async () =
   expect(screen.queryByRole('button', { name: 'Inativar' })).not.toBeInTheDocument();
 });
 
-it('clique na linha abre o drawer em edicao com a largura do prototipo', async () => {
+it('clique na linha abre o drawer em edicao com os dados da linha', async () => {
   render(<CadastroTabelaDrawer<Linha> {...props} podeGerenciar />);
   fireEvent.click(await screen.findByText('Carlos Silva'));
   await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
   expect(screen.getByText('Representante — Carlos Silva')).toBeInTheDocument();
   expect(screen.getByLabelText(/Nome/)).toHaveValue('Carlos Silva');
-  expect(screen.getByRole('dialog').className).toContain('w-[460px]');
   expect(screen.getByRole('button', { name: 'Salvar Representante' })).toBeInTheDocument();
+});
+
+it('drawer respeita a largura de 460 e 520 px por tela', async () => {
+  const { unmount } = render(<CadastroTabelaDrawer<Linha> {...props} podeGerenciar />);
+  fireEvent.click(await screen.findByText('Carlos Silva'));
+  await waitFor(() => expect(screen.getByRole('dialog').className).toContain('w-[460px]'));
+  unmount();
+
+  render(<CadastroTabelaDrawer<Linha> {...props} larguraDrawer={520} podeGerenciar />);
+  fireEvent.click(await screen.findByText('Carlos Silva'));
+  await waitFor(() => expect(screen.getByRole('dialog').className).toContain('w-[520px]'));
 });
 
 it('select de status refaz a consulta com o filtro na query', async () => {
@@ -5027,8 +5097,9 @@ it('erro do backend aparece como mensagem, sem lista falsa', async () => {
 cd app/frontend && npx jest __tests__/cadastro-tabela-drawer.test.tsx
 ```
 
-Saída esperada: `Tests: 6 passed, 6 total`, com as linhas
-`✓ clique na linha abre o drawer em edicao com a largura do prototipo`,
+Saída esperada: `Tests: 7 passed, 7 total` — um teste por invariante, sem nome repetido —, com as linhas
+`✓ clique na linha abre o drawer em edicao com os dados da linha`,
+`✓ drawer respeita a largura de 460 e 520 px por tela`,
 `✓ select de status refaz a consulta com o filtro na query` e
 `✓ acao Power faz PATCH de status e nao abre o drawer nem oferece exclusao`.
 
@@ -5812,7 +5883,9 @@ Saída esperada: sem erros.
 
 ### Task 16 — Tela `/cadastros/fornecedores`
 
-Protótipo: `Fornecedores.tsx` — mestre-detalhe com chips de contagem no topo da lista e, no detalhe,
+Protótipo: `Fornecedores.tsx` — mestre-detalhe com os três chips de contagem no topo da lista
+(`:73-77`, dentro de um `flex gap-2 overflow-x-auto`: o ativo preenchido escuro, os outros dois em outline
+cinza — decisão 19) e, no detalhe,
 **quatro seções com ícone distribuídas em duas colunas** (`:130`, `grid grid-cols-2 gap-8`) —
 **não há `Tabs` neste arquivo**. As seções, com o `h3` `text-sm font-bold ... flex items-center gap-2
 border-b pb-2` e o ícone `w-4 h-4`, são: "Dados Principais" (`Building2`, `:135-136`) e "Endereço e
@@ -5972,12 +6045,14 @@ function Chips() {
   if (!contagens) return <p className="text-xs text-muted-foreground">Carregando contagens…</p>;
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <Badge variant="outline">Todos ({contagens.total})</Badge>
-      <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
+    <div className="flex gap-2 overflow-x-auto">
+      <Badge className="bg-login-panel text-white hover:bg-login-panel">
+        Todos ({contagens.total})
+      </Badge>
+      <Badge variant="outline" className="text-login-text">
         Ativos ({contagens.ativos})
       </Badge>
-      <Badge variant="outline" className="border-muted bg-muted/50 text-muted-foreground">
+      <Badge variant="outline" className="text-login-text">
         Inativos ({contagens.inativos})
       </Badge>
     </div>
@@ -6073,9 +6148,17 @@ it('chips mostram a contagem devolvida pelo backend', async () => {
   }) as unknown as typeof fetch;
 
   render(<FornecedoresClient podeGerenciar />);
-  expect(await screen.findByText('Todos (3)')).toBeInTheDocument();
-  expect(screen.getByText('Ativos (2)')).toBeInTheDocument();
-  expect(screen.getByText('Inativos (1)')).toBeInTheDocument();
+  const todos = await screen.findByText('Todos (3)');
+  const ativos = screen.getByText('Ativos (2)');
+  const inativos = screen.getByText('Inativos (1)');
+
+  // Fidelidade a Fornecedores.tsx:74-76: ativo preenchido escuro, os outros em outline cinza.
+  expect(todos.className).toContain('bg-login-panel');
+  expect(todos.className).toContain('text-white');
+  for (const chip of [ativos, inativos]) {
+    expect(chip.className).toContain('text-login-text');
+    expect(chip.className).not.toContain('bg-login-panel');
+  }
 });
 
 it('falha nas contagens mostra erro e nao inventa numero', async () => {
@@ -6377,6 +6460,17 @@ README de evidências (Task 27.1).
 cabeçalho, que o protótipo não tem porque marca campo em `useState` local (`:141-146`). Sem ele a
 marcação não chegaria ao banco e a tela seria um controle inerte (RA-06). O botão só aparece com
 `MODELOS_ETIQUETA_GERENCIAR` (decisão 40).
+
+**Divergência autorizada D18.c (R2/R3)** — o `GET /modelos-etiqueta/:id/preview` do plano mestre §4 **não
+é entregue nesta onda**. Motivo: o preview desta tela é o "Preview ao vivo" do protótipo (`:210-217`), que
+tem de reagir a **cada** clique de `Checkbox` antes de qualquer gravação (DoD-45); ele é composto dos 12
+booleanos que o cliente já tem em mão, sem nenhuma regra de domínio — uma ida ao servidor por clique
+tornaria o preview mais lento e, pior, impossível para o modelo ainda não salvo. Não há falha silenciosa
+nem dado inventado aqui: a fonte do preview é o próprio registro carregado por `GET /modelos-etiqueta`.
+O `preview` do mestre é a **renderização do layout físico** da etiqueta, que só faz sentido junto do
+gateway de impressora (ADR-010) e dos valores reais de uma peça — e esses só existem a partir da
+**Onda 6 (Recebimento & Balança — etiquetas)**, onda de destino deste endpoint, onde ele nasce com o
+teste de layout contra a impressora *fake*. Registrada no README de evidências (Task 27.1).
 
 **18.1** `page.tsx` no molde da Task 13.1, com `MODELOS_ETIQUETA_LER` / `MODELOS_ETIQUETA_GERENCIAR` e a
 mensagem "Você não tem permissão para visualizar modelos de etiqueta.".
@@ -8756,7 +8850,8 @@ Saída esperada: `Tests: 3 passed, 3 total` no frontend, `13 passed` no Playwrig
   `visível` para todas as 26, e a saída do teste `as 26 perdas herdadas da Onda 2 estao visiveis`;
 - a tabela dos **14 extras** da decisão 31 com "situação" = `removido`, e a saída do teste
   `os 14 extras herdados da Onda 2 sumiram do menu`;
-- as **treze** divergências autorizadas, cada uma com a justificativa e a linha do protótipo:
+- as **quatorze** divergências autorizadas, cada uma com a justificativa e a linha do protótipo (ou, em
+  D18.c, a linha do plano mestre):
   `/admin/perfis` (11 perfis canônicos e permissões reais em vez dos 8 perfis e 9 rótulos do mock —
   decisão 29), o `placeholder` do campo "Registro (ID)" da auditoria (decisão 31),
   `MODELOS_ETIQUETA_LER` concedida a `recebimento_pesagem` e `corte` além da linha 37 da matriz
@@ -8764,16 +8859,20 @@ Saída esperada: `Tests: 3 passed, 3 total` no frontend, `13 passed` no Playwrig
   Onda 4), **D13.c** (campo "Código" no drawer de representantes), **D16.a** ("Endereço e Contato" só
   com os campos que existem no schema), **D17.a** (botões de subir/descer parada e `Trash2` no lugar do
   `MapPin` riscado), **D18.a** (preview de etiqueta sem valores de exemplo), **D18.b** (botão "Salvar
-  Modelo"), **D22.a** (chips de menu clicáveis com os 39 do catálogo), **D23.a** (botão "Salvar" por
+  Modelo"), **D18.c** (`GET /modelos-etiqueta/:id/preview` do plano mestre §4 diferido para a Onda 6),
+  **D22.a** (chips de menu clicáveis com os 39 do catálogo), **D23.a** (botão "Salvar" por
   cartão de parâmetro) e **D41.a** (botões Anterior/Próxima quando `total > pageSize`);
+- a tabela de reconciliação de nomes com o plano mestre §3–§4 (**R1**, **R2** e **R3** da seção
+  "Modelo de dados"), para que a revisão de nomes não precise ser refeita nas ondas seguintes;
 - a lista dos 3 badges Provisório da onda e onde aparecem: P1 em `/admin/parametros`
   (`operacao.cadencia_dias_semana`), P12 em `/admin/parametros` (`operacao.regras_transformacao_tz`) e
   P9 em `/cadastros/modelos-etiqueta`; e a nota de que AD-01, AD-02 e AD-06 retiraram os badges de
   composição do boi casado, emissão fiscal e expiração de reserva.
 
 **27.2** Atualizar `docs/execucao/EXECUCAO-STATUS.md`: linha da Onda 3 para `aguardando_portao2`, com o sha
-do commit da implementação, e a seção de dívidas com as duas dívidas desta onda (ligação frota × expedição
-e a nota de qualidade do fornecedor como campo manual).
+do commit da implementação, e as **8 dívidas** da seção "Dívidas deixadas por esta onda", cada uma com a
+onda de destino: 1 e 7 na Onda 9 e na Onda 6, 6 na Onda 4, 8 na Onda 5, e 2 a 5 sem onda fixa porque
+dependem de decisão do cliente (AD-xx).
 
 **27.3** Gate local completo, na ordem:
 
@@ -8840,8 +8939,9 @@ O Worker executa na ordem numérica: as dependências acima estão satisfeitas p
 ## Dívidas deixadas por esta onda
 
 1. **Ligação frota × expedição (decisão 13).** `frota_caminhoes` e a tabela `caminhoes` da expedição
-   continuam desconectadas. Fechar na Onda 7 (Expedição), fazendo `caminhoes.caminhao_cadastro_id`
-   referenciar `frota_caminhoes.id` em migração expand → backfill → contract.
+   continuam desconectadas. Fechar na **Onda 9 (Carga)** — a onda que planeja e confere a carga do
+   caminhão no roadmap canônico §8 —, fazendo `caminhoes.caminhao_cadastro_id` referenciar
+   `frota_caminhoes.id` em migração expand → backfill → contract. O nome da coluna é o do plano mestre §3.
 2. **Nota de qualidade do fornecedor (decisão 18).** Continua sendo campo manual. Se o cliente definir
    uma fórmula (por exemplo, derivada de ocorrências por recebimento), a mudança exige AD-xx em
    `docs/execucao/DECISOES.md` antes de virar cálculo.
@@ -8854,6 +8954,13 @@ O Worker executa na ordem numérica: as dependências acima estão satisfeitas p
 6. **"Representantes permitidos" no usuário (decisão 43).** Linha 38 da matriz continua **Divergente**
    depois desta onda. Fecha na **Onda 4 (Comercial)** com tabela `usuarios_representantes`,
    `PUT /usuarios/:id/representantes`, o multisseletor no drawer e o filtro aplicado em pedidos e clientes.
+7. **`GET /modelos-etiqueta/:id/preview` do plano mestre §4 (D18.c).** A tela desta onda tem preview ao
+   vivo no cliente; a renderização do layout físico da etiqueta nasce na **Onda 6 (Recebimento & Balança
+   — etiquetas)**, junto do gateway de impressora (ADR-010), com teste de layout contra a impressora
+   *fake*.
+8. **Geração de Operações por cadência (P1).** O parâmetro `operacao.cadencia_dias_semana` é semeado e
+   editável nesta onda, mas nenhum serviço o consome: quem gera Operação a partir da cadência é a
+   **Onda 5 (Gestão)**, dona de `/gestao/operacoes`.
 
 ---
 
@@ -8878,10 +8985,16 @@ O Worker executa na ordem numérica: as dependências acima estão satisfeitas p
       escopo. O único item diferido é o escopo comercial "representantes permitidos" (linha 38 da
       matriz), com decisão numerada (43), onda de destino (4) e dívida registrada — o campo não aparece
       inerte em tela nesta onda.
-- [x] As treze divergências autorizadas estão numeradas e registradas no README de evidências:
+- [x] As quatorze divergências autorizadas estão numeradas e registradas no README de evidências:
       decisão 29 (`/admin/perfis`), decisão 31 (placeholder do campo Registro), decisão 27
       (`MODELOS_ETIQUETA_LER` além da linha 37 da matriz), D13.a, D13.b, D13.c, D16.a, D17.a, D18.a,
-      D18.b, D22.a, D23.a e D41.a.
+      D18.b, D18.c, D22.a, D23.a e D41.a.
+- [x] Todo nome que difere do plano mestre §3–§4 está reconciliado e numerado (R1 `frota_*`, R2
+      `slug`/`campos`, R3 `GET /modelos-etiqueta/:id/preview`), com onda de destino quando o item é
+      diferido.
+- [x] Toda dívida deixada aponta a onda de destino do roadmap canônico §8: frota × expedição na **Onda 9
+      (Carga)**, cadência das Operações na **Onda 5 (Gestão)**, "representantes permitidos" na **Onda 4
+      (Comercial)** e o preview do mestre na **Onda 6 (etiquetas)**.
 - [x] Rótulo, ícone e valor inicial de cada tela são os literais do `.tsx` do protótipo — inclusive
       "Transformação de Desossa (TZ)", "Simulador de Disponibilidade", "Reservar produto",
       "Quantidade a reservar", "Sequência de Paradas / Bairros", `MoveVertical`, "Todos os usuários",
