@@ -55,7 +55,6 @@ interface SidebarSection {
 export interface SidebarUser {
   nome: string;
   perfil: string;
-  escopo: string;
   inicial: string;
 }
 
@@ -104,45 +103,53 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 export function AppSidebar({ user, sections }: AppSidebarProps) {
   return (
-    <aside className="flex w-64 shrink-0 flex-col bg-gradient-to-b from-sidebar-gradient-start to-sidebar-gradient-end">
-      <div className="flex items-center gap-3 border-b border-white/10 px-4 py-5">
+    <aside
+      aria-label="Navegação principal"
+      className="flex w-64 shrink-0 flex-col bg-gradient-to-b from-sidebar-gradient-start to-sidebar-gradient-end px-4 pb-6 pt-5"
+    >
+      <div className="mb-4 flex h-12 w-full items-center gap-3 px-1">
         <AlphaLogo className="h-9 w-9 shrink-0" />
         <div className="min-w-0">
-          <p className="text-sm font-bold leading-tight tracking-wide text-white">AlphaCarnes</p>
-          <p className="text-[9px] font-semibold uppercase leading-tight tracking-[0.18em] text-white/55">
+          <p className="text-[16px] font-bold leading-tight text-white">AlphaCarnes</p>
+          <p className="mt-0.5 text-[9px] font-bold uppercase leading-none tracking-widest text-sidebar-text-muted">
             Distribuição de Carnes
           </p>
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-4">
-        {sections.map((section) => (
-          <NavGroup
-            key={section.title}
-            title={section.title}
-            defaultOpen={sections.length <= 3}
-            items={section.items.map((item) => ({
-              href: item.href,
-              label: item.label,
-              Icon: ICON_MAP[item.iconKey] ?? LayoutDashboard,
-            }))}
-          />
-        ))}
+      <nav className="flex w-full flex-1 flex-col gap-4 overflow-y-auto pr-0.5">
+        {sections.length === 0 ? (
+          <p className="px-1 text-[12px] leading-relaxed text-sidebar-text-muted">
+            Nenhum módulo liberado para o seu perfil. Solicite acesso ao administrador.
+          </p>
+        ) : (
+          sections.map((section) => (
+            <NavGroup
+              key={section.title}
+              title={section.title}
+              defaultOpen={sections.length <= 3}
+              items={section.items.map((item) => ({
+                href: item.href,
+                label: item.label,
+                Icon: ICON_MAP[item.iconKey] ?? LayoutDashboard,
+              }))}
+            />
+          ))
+        )}
       </nav>
 
-      <div className="border-t border-white/10 px-4 py-3">
-        <div className="flex items-center gap-3">
+      <div className="mt-4 border-t border-sidebar-border pt-3">
+        <div className="flex items-center gap-2.5 px-2 py-2">
           <div
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-xs font-bold text-white"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-blue-mid text-[10px] font-bold text-white"
             aria-hidden="true"
           >
             {user.inicial}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium leading-tight text-white">{user.nome}</p>
-            <p className="truncate text-[11px] leading-tight text-white/55">
+            <p className="truncate text-[12px] font-semibold leading-tight text-white">{user.nome}</p>
+            <p className="mt-0.5 truncate text-[10px] leading-tight text-sidebar-text-muted">
               {user.perfil}
-              {user.escopo ? ` · ${user.escopo}` : ''}
             </p>
           </div>
         </div>
