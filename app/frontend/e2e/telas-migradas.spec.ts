@@ -127,7 +127,7 @@ async function loginAdmin(
   expect(res.ok(), `login falhou: ${res.status()} ${await res.text()}`).toBeTruthy();
   await page.context().addCookies(cookiesFromResponse(res, baseURL));
   await page.goto('/gestao/dashboard');
-  await expect(page.getByRole('heading', { name: /Dashboard Operacional/i })).toBeVisible({
+  await expect(page.getByRole('heading', { name: /Painel Geral da Operação/i })).toBeVisible({
     timeout: 15_000,
   });
 }

@@ -34,6 +34,8 @@ import {
   Sticker,
   Settings,
   ScrollText,
+  AlertTriangle,
+  CalendarRange,
   type LucideIcon,
 } from 'lucide-react';
 import { AlphaLogo } from './alpha-logo';
@@ -96,6 +98,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Sticker,
   Settings,
   ScrollText,
+  AlertTriangle,
+  CalendarRange,
 };
 
 export function AppSidebar({ user, sections }: AppSidebarProps) {
