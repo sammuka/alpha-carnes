@@ -125,6 +125,23 @@
   --color-avatar-green-bg: rgba(24, 168, 74, 0.14);
   --color-avatar-amber-bg: rgba(245, 176, 25, 0.14);
 
+  /* Onda 3 — cadastros lista+drawer, modelos de etiqueta e perfis (protótipo v1.1) */
+  --color-table-zebra: #FAFAFA;
+  --color-table-row-hover: #FAFBFF;
+  --color-status-dot-ativo: #22C55E;
+  --color-danger-rose: #E11D48;
+  --color-info-surface: #F0F9FF;
+  --color-info-border: #BAE6FD;
+  --color-info-icon: #0284C7;
+  --color-info-ink: #0C4A6E;
+  --color-placeholder: #CBD5E1;
+  --color-brand-navy-deep: #1E3A5F;
+  --color-text-ink: #334155;
+  --color-warning-surface: #FFFBEB;
+  --color-warning-ink: #D97706;
+  --color-action-blue-ring: #93C5FD;
+  --color-code-surface: #0F172A;
+
   /* Raios */
   --radius: 0.75rem;
   --radius-lg: 0.75rem;
