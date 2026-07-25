@@ -133,14 +133,14 @@ Todos os caminhos são relativos a `src/app/pages/`.
 
 | Rota | Arquivo `.tsx` | Linhas | Blocos que o Worker precisa reproduzir |
 |---|---|---|---|
-| `/cadastros/representantes` | `Representantes.tsx` | 341 | header + botão "Novo Representante"; banner informativo azul; 3 filtros (busca, canal, status) + contador à direita; tabela de 7 colunas com linhas zebradas; drawer `w-[520px]` com nome, canal, contato, toggle de status, observação, clientes vinculados, usuários vinculados |
+| `/cadastros/representantes` | `Representantes.tsx` | 341 | header + botão "Novo Representante" (`:250`); banner informativo azul (`:258`); 3 filtros — busca, `select` de canal, `select` de status — e contador `ml-auto` "N representantes" (`:264-284`); tabela de 7 colunas (`:292`) com linhas zebradas e clique na linha (`:299`); ações `Pencil` + `Power`/`PowerOff` (`:311-320`), **sem exclusão**; drawer `w-[520px]` (`:92`) com nome, tipo/canal, contato, toggle de status, observação, clientes vinculados, usuários vinculados. A 7ª coluna e o bloco "Usuários vinculados" ficam fora desta onda — divergência **D13.b** (decisão 45) |
 | `/cadastros/produtos` | `Produtos.tsx` | 817 | filtros + busca; tabela; drawer com abas Gerais / Comercial / Operacional / Estoque / Fiscal |
 | `/cadastros/fornecedores` | `Fornecedores.tsx` | 231 | master `w-[400px]` (busca, botão `+`, 3 chips de contagem, cartões com nota de qualidade) + detail em 2 colunas (Dados Principais, Endereço e Contato, Parâmetros Operacionais, Histórico & Ocorrências) |
-| `/cadastros/caminhoes` | `Caminhoes.tsx` | 247 | header + "Novo Caminhão"; busca + filtro de status + contador; tabela de 6 colunas com placa em *chip* monoespaçado e ícone `Truck`; drawer `w-[460px]` |
-| `/cadastros/motoristas` | `Motoristas.tsx` | 250 | mesma estrutura de `Caminhoes.tsx` com campos nome, documento, telefone, caminhão padrão |
+| `/cadastros/caminhoes` | `Caminhoes.tsx` | 247 | header + "Novo Caminhão"; busca + `select` de status (`:185-188`) + contador "N caminhões" (`:189`); tabela de 6 colunas (`:198`) com placa em *chip* monoespaçado e ícone `Truck`, linhas zebradas e clique na linha (`:205-206`); ações `Pencil` + `Power`/`PowerOff` (`:218-227`), **sem exclusão**; drawer `w-[460px]` (`:57`) |
+| `/cadastros/motoristas` | `Motoristas.tsx` | 250 | mesma estrutura de `Caminhoes.tsx` (busca + `select` de status `:186-189`, contador `:190`, zebra e clique `:206-207`, `Pencil`+`Power`/`PowerOff` `:221-230`, drawer `w-[460px]` `:57`) com campos nome, documento, telefone, caminhão padrão |
 | `/cadastros/rotas` | `Itinerarios.tsx` | 129 | master `w-1/3` com cartões (nome, badge ativo, paradas, dias) + detail com nome/código, sequência de paradas reordenável e 7 chips de dias |
 | `/cadastros/regras-transformacao` | `RegraDesdobramento.tsx` | 548 | 2 abas ("Desdobramento de Compra" e "Transformação na Desossa"); tabela de itens comerciais com soma de fatores; **Simulador** (aba 1) e **Simulador de Disponibilidade** (aba 2) |
-| `/cadastros/modelos-etiqueta` | `ModelosEtiqueta.tsx` | 221 | banner âmbar de pendência; 3 colunas: lista `w-[260px]`, 12 *checkboxes* em 2 colunas, preview `w-[380px]` com etiqueta renderizada ao vivo |
+| `/cadastros/modelos-etiqueta` | `ModelosEtiqueta.tsx` | 221 | banner âmbar de pendência (`:158`); 3 colunas em `flex`: lista `w-[260px]` (`:165`), painel de campos `flex-1` com 12 `<input type="checkbox">` em `grid-cols-2` (`:194-205`), preview `w-[380px]` (`:210`) com etiqueta renderizada ao vivo |
 | `/admin/usuarios` | `Usuarios.tsx` | 121 | grid 12 colunas: lista de usuários (`col-span-8`) + "Resumo de Perfis" (`col-span-4`) com contagem por perfil e botão "Gerenciar Permissões (RBAC)" |
 | `/admin/perfis` | `PerfisAcesso.tsx` | 212 | matriz perfil × permissão com primeira coluna *sticky* e toggles; painel "Menus visíveis — {perfil}" com contador e chips em `grid-cols-3` |
 | `/admin/parametros` | `Parametros.tsx` | 182 | 3 grupos (Comercial, Operação, Fiscal) com ícone; cartões em `grid-cols-2`; tipos `toggle`, `texto` e `info`; badge Provisório |
@@ -164,7 +164,17 @@ Verificado no worktree em `5490189`:
 - A tabela `caminhoes` **já existe** e pertence à expedição (carga por caminhão, `operacao_id`,
   `status_caminhao`). Ela **não** é o cadastro de frota — por isso as tabelas novas se chamam
   `frota_caminhoes` e `frota_motoristas` (decisão 12).
-- `representantes` já tem `tipo_canal`, `contato`, `observacao` e `status`; nada de estrutura falta.
+- `representantes` tem **exatamente** `id`, `codigo`, `nome`, `tipo_canal`, `contato`, `status`,
+  `observacao`, `created_at`, `updated_at`, `deleted_at` (`representantes.schema.ts` linhas 6–17) — os
+  cinco campos da spec v1.1 §8.1 ("Nome, Tipo/canal, Contato, Status, Observação") mais código e
+  auditoria. Nada de estrutura falta e **nada é acrescentado nesta onda**: não existem `email`,
+  `telefone`, `regiao`, `comissao_percentual`, `data_admissao` nem `observacoes` (o campo real é
+  `observacao`, no singular), e a migração 0015 não os cria (Princípio I e RA-06).
+- `tipo_canal` é `TEXT` **sem CHECK** e não há vocabulário decidido em `docs_v2` §8.1 nem em
+  `DECISOES.md`; os dados existentes usam valores livres (`cadastros-f7.e2e-spec.ts:143` grava
+  `'atacado'`). A decisão 44 trata disso sem inventar enum.
+- "Clientes vinculados" tem origem real: `clientes.representante_id` (`clientes.schema.ts:10`).
+  "Usuários vinculados" **não** tem: a tabela `usuarios_representantes` só nasce na Onda 4 (decisão 43).
 - `rotas` tem `codigo`, `nome`, `regiao`, `representante_padrao`, `caminhao_padrao`, `motorista_padrao`,
   `observacoes`, `status`; faltam paradas e dias de atendimento.
 - Catálogo RBAC atual: 55 permissões, 11 perfis, snapshot em
@@ -438,9 +448,31 @@ aceita: nome, e-mail, senha (só na criação), ativo e perfis (múltipla escolh
 criador ≠ aprovador continua sendo aplicada pelo backend.
 
 **Decisão 35 — as três telas lista+drawer (`representantes`, `caminhoes`, `motoristas`) usam um único
-componente compartilhado** `CadastroTabelaDrawer`, parametrizado por colunas, campos do drawer e rótulos.
-O componente é escrito com as classes exatas do protótipo (Task 12) e as três telas passam apenas
-configuração — DRY sem perder fidelidade, porque as três telas do protótipo já são o mesmo layout.
+componente compartilhado** `CadastroTabelaDrawer`, parametrizado por colunas, campos do drawer, filtros,
+largura do drawer e rótulos. O componente porta o layout e o **comportamento** dos três `.tsx` do
+protótipo, item a item — DRY sem perder fidelidade, porque as três telas do protótipo já são o mesmo
+layout. O que o componente reproduz, com a fonte de cada item:
+
+| Elemento | Protótipo | Regra fixada para o componente |
+|---|---|---|
+| Cabeçalho | `Caminhoes.tsx:159-171`, `Representantes.tsx:244-256` | trilha `Cadastros & Regras / <tela>` em `text-[11px]`, `h1` em `text-[20px]`, subtítulo em `text-[12px]` e botão primário `bg-brand-navy-deep` com `Plus` — o mesmo cabeçalho que `produtos-client.tsx:249` já usa na Onda 2 |
+| Barra de filtros | `Caminhoes.tsx:174-190`, `Representantes.tsx:264-284` | busca `flex-1 min-w-[220px]` com ícone `Search` + **um `select` real por filtro configurado** + contador `ml-auto`. **Nenhum botão "Filtros"**: todo controle da barra muda a consulta ao backend (RA-06) |
+| Filtros por tela | `Caminhoes.tsx:185`, `Motoristas.tsx:186`, `Representantes.tsx:275-282` | caminhões e motoristas: `select` de status. Representantes: `select` de canal + `select` de status. A opção neutra usa o rótulo do protótipo (`Status: Todos`, `Canal: Todos`) |
+| Contador | `Caminhoes.tsx:189`, `Representantes.tsx:283` | `{total} {singular\|plural}` com o `total` do backend (decisão 41). Não existe rodapé "Mostrando N de M" |
+| Linhas | `Caminhoes.tsx:205-206` | zebra na linha ímpar (`bg-table-zebra`), `hover:bg-table-row-hover`, `cursor-pointer` e `onClick` que abre o drawer em edição; a célula de ações faz `stopPropagation` (`:216`) |
+| Ações de linha | `Caminhoes.tsx:218-227`, `Motoristas.tsx:221-230`, `Representantes.tsx:311-320` | `Pencil` (editar) + `Power`/`PowerOff` (alternar status por `PATCH { status }`). **Não existe exclusão**: nem `Trash2`, nem `window.confirm`, nem `DELETE` — o protótipo não tem exclusão nessas telas e o soft delete continua acessível só pela API |
+| Largura do drawer | `Caminhoes.tsx:57`, `Motoristas.tsx:57` = `w-[460px]`; `Representantes.tsx:92` = `w-[520px]` | prop `larguraDrawer: 460 \| 520`, com 460 em caminhões/motoristas e 520 em representantes |
+| Estado vazio | `Caminhoes.tsx:234`, `Representantes.tsx:328` | a frase literal do protótipo, passada por configuração |
+
+Nenhum item desta tabela é opcional para o Worker, e nenhuma divergência é autorizada aqui além das
+listadas na decisão 46 (tokens) e em D13.a, D13.b, D13.c (decisões 44, 45 e Task 13) e D41.a
+(paginação, decisão 41).
+
+Sobre a largura: o Portão 1 pediu `w-[460px]` "como Caminhões/Motoristas". O protótipo, porém, usa
+larguras **diferentes** nas três telas — `Caminhoes.tsx:57` e `Motoristas.tsx:57` são `w-[460px]` e
+`Representantes.tsx:92` é `w-[520px]`. Fixar 460 em representantes seria afastar a tela do protótipo,
+o oposto do Princípio I. O componente por isso não tem largura única: a prop `larguraDrawer` recebe o
+valor da tela correspondente, e DoD-38 verifica os dois valores contra as três referências.
 
 **Decisão 36 — `/cadastros/produtos` mantém a lista e o CRUD atuais e ganha as 5 abas do protótipo**
 no drawer: Gerais, Comercial, Operacional, Estoque, Fiscal. Os campos fiscais (`ncm`, `cfop`,
@@ -470,7 +502,13 @@ escrita ausentes** (não desabilitados), como já faz `produtos-client.tsx` com 
 
 **Decisão 41 — todas as listagens desta onda usam paginação do backend** (`page`, `pageSize`, `search`),
 com `pageSize` 20 por padrão, e o contador do protótipo ("N representantes", "N caminhões") mostra o
-`total` devolvido pelo backend, não o tamanho da página.
+`total` devolvido pelo backend, não o tamanho da página. O contador fica onde o protótipo o põe: na
+barra de filtros, alinhado à direita (`ml-auto`), com plural da própria tela
+(`representante/representantes`, `caminhão/caminhões`, `motorista/motoristas`). **Não existe rodapé
+"Mostrando N de M"** — essa frase não está em nenhum dos três `.tsx`. Os botões "Anterior"/"Próxima"
+são a única adição ao protótipo e só são renderizados quando `total > pageSize`; com o volume do
+protótipo (4 registros) a tela é idêntica à referência. Registrada como divergência **D41.a** no README
+de evidências: sem ela, a paginação do backend seria inalcançável pela tela (RA-05).
 
 **Decisão 42 — as mensagens de erro são as do backend.** O helper `mensagemDeErro` de
 `src/lib/error-message.ts` já traduz o envelope de erro; a tela mostra `toast` de `sonner` com essa
@@ -493,6 +531,77 @@ meia-entrega que o Princípio II proíbe. O que a Onda 4 entrega, junto das tela
 Nesta onda, o drawer de `/admin/usuarios` entrega perfil e status (o que já existe no backend) e **não**
 exibe campo de representantes — nada de controle inerte na tela (RA-06). A dívida está registrada na
 seção "Dívidas deixadas por esta onda".
+
+**Decisão 44 — os filtros de status e de canal filtram no backend, e o vocabulário de canal não é
+inventado.** Três consequências fixadas:
+
+1. `listarCadastroQuerySchema` (novo em `common/crud/paginacao.ts`, Task 4.0) estende `listarQuerySchema`
+   com `status: z.enum(['ativo','inativo']).optional()` e `tipoCanal: z.string().trim().min(1).optional()`.
+   `GET /representantes` (Task 13.0), `GET /frota/caminhoes` (4.5) e `GET /frota/motoristas` (4.6) passam
+   a usá-lo; o `select` da tela manda o parâmetro e a consulta muda de verdade (RA-06).
+   `listarQuerySchema` **não** é alterado — os demais controllers continuam como estão.
+2. `tipo_canal` continua `TEXT` livre: **nenhum** `CHECK`, `enum` de Zod ou migração o restringe.
+   `Representantes.tsx:7` fixa `"Interno" | "Representante"` no *mock* do protótipo, mas nem a spec v1.1
+   §8.1 nem `DECISOES.md` decidem esse vocabulário, e os dados atuais usam outros valores
+   (`cadastros-f7.e2e-spec.ts:143`). Transformar o mock em regra seria inventar domínio (Princípio VIII).
+3. Por isso o `select` de canal é populado por dado real: `GET /representantes/canais` devolve os
+   valores distintos e não nulos de `tipo_canal` entre os representantes não removidos, em ordem
+   alfabética (mesmo idioma de `GET /auditoria/facetas`, decisão 30). Estrutura idêntica ao protótipo
+   (opção neutra "Canal: Todos" + uma opção por canal); conteúdo real.
+
+**Divergência autorizada D13.a** — no drawer, "Tipo / canal" é `input` de texto e não o `select` de duas
+opções de `Representantes.tsx:121-128`, pela mesma razão do item 2: um `select` fechado criaria
+vocabulário que ninguém decidiu, e um `select` aberto não permitiria cadastrar canal novo. Fecha com
+AD-xx que fixe o vocabulário; nesse dia o campo vira `select` e o CHECK entra por migração.
+
+**Decisão 45 — "Clientes vinculados" vem do banco; "Usuários vinculados" é diferido com a decisão 43.**
+A contagem por representante sai de `clientes.representante_id` (`clientes.schema.ts:10`):
+`GET /representantes` devolve `clientesVinculados` (inteiro, subconsulta de contagem sobre clientes não
+removidos) e `GET /representantes/:id` devolve `clientesVinculados: { id, nomeFantasia, razaoSocial }[]`
+para o bloco do drawer (`Representantes.tsx:167-180`). A tela exibe `nomeFantasia ?? razaoSocial` — os
+dois campos vêm do backend, nenhum é fabricado.
+
+**Divergência autorizada D13.b** — a coluna "Usuários vinculados" (`Representantes.tsx:292`, `:307`) e o
+bloco homônimo do drawer (`:182-193`) **não** entram nesta onda: o vínculo usuário × representante é a
+tabela `usuarios_representantes`, que a decisão 43 difere para a Onda 4. Mostrar a coluna hoje só seria
+possível com um zero fixo — dado inventado (RA-06). A tabela desta onda tem 6 colunas (Nome, Tipo/canal,
+Contato, Clientes vinculados, Status, Ações); a 7ª volta na Onda 4, junto do multisseletor do usuário.
+
+**Decisão 46 — as cores do protótipo entram como token, nunca como hex literal.** `tokens-ds.test.ts`
+(Onda 2, decisão 23) reprova qualquer literal hexadecimal em `src` fora de `globals.css`, e o gate é
+executado no CI. O inventário completo de cores dos cinco `.tsx` desta onda
+(`rg -o '#[0-9A-Fa-f]{6}' Representantes.tsx Caminhoes.tsx Motoristas.tsx ModelosEtiqueta.tsx
+PerfisAcesso.tsx`) tem 32 valores distintos: 14 já têm token da Onda 2 e **18 não têm**. Os 18 entram
+em `globals.css` com a origem pinada, e o inventário de `tokens-ds.test.ts` passa a citá-los:
+
+| Token | Valor | Origem |
+|---|---|---|
+| `--color-table-zebra` | `#FAFAFA` | `Caminhoes.tsx:205` (linha ímpar) |
+| `--color-table-row-hover` | `#FAFBFF` | `Caminhoes.tsx:205` (`hover:`) |
+| `--color-status-dot-ativo` | `#22C55E` | `Caminhoes.tsx:36` (ponto do *pill* Ativo) |
+| `--color-success-surface` | `#F0FDF4` | `Caminhoes.tsx:35` (fundo do *pill* Ativo) |
+| `--color-success-strong` | `#15803D` | `Caminhoes.tsx:35` (texto do *pill* Ativo) |
+| `--color-danger-surface` | `#FFF1F2` | `Caminhoes.tsx:224` (`hover:` do `PowerOff`) |
+| `--color-danger-rose` | `#E11D48` | `Caminhoes.tsx:224` (ícone no `hover:` do `PowerOff`) |
+| `--color-info-surface` | `#F0F9FF` | `Representantes.tsx:103` (fundo do banner) |
+| `--color-info-border` | `#BAE6FD` | `Representantes.tsx:103` (borda do banner) |
+| `--color-info-icon` | `#0284C7` | `Representantes.tsx:104` (ícone `Info`) |
+| `--color-info-ink` | `#0C4A6E` | `Representantes.tsx:105` (texto do banner) |
+| `--color-placeholder` | `#CBD5E1` | `Representantes.tsx:115` (`placeholder:`) |
+| `--color-brand-navy-deep` | `#1E3A5F` | `Representantes.tsx:252` (botão primário da tela) |
+| `--color-text-ink` | `#334155` | `Representantes.tsx:176`, `PerfisAcesso.tsx:202` |
+| `--color-violet-surface` | `#F5F3FF` | `Representantes.tsx:71` (*chip* do canal Representante) |
+| `--color-warning-surface` | `#FFFBEB` | `ModelosEtiqueta.tsx:158` (fundo do banner P11) |
+| `--color-warning-ink` | `#D97706` | `ModelosEtiqueta.tsx:159` (ícone `AlertTriangle`) |
+| `--color-action-blue-ring` | `#93C5FD` | `ModelosEtiqueta.tsx:178` (borda do modelo selecionado) |
+
+As 14 cores restantes já têm token da Onda 2 e são reusadas pelo valor exato:
+`#F8FAFC` = `surface-subtle`, `#1E293B` = `text-strong`, `#475569` = `text-slate`,
+`#94A3B8` = `text-muted`, `#64748B` = `text-secondary`, `#374151` = `text-graphite`,
+`#E2E8F0` = `border`, `#F1F5F9` = `muted`, `#2563EB` = `action-blue`,
+`#1D4ED8` = `action-blue-hover`, `#EFF6FF` = `action-blue-bg`, `#7C3AED` = `status-pesado`,
+`#FDE68A` = `provisorio-border`, `#92400E` = `provisorio-text`.
+Nenhum arquivo novo desta onda escreve `#`.
 
 ---
 
@@ -540,8 +649,11 @@ app/backend/src/database/seed.ts                     seeds das decisões 21, 23 
 app/backend/src/app.module.ts                        FrotaModule, ModelosEtiquetaModule
 app/backend/src/common/rbac/permissoes.ts            6 permissões novas + atribuição (decisões 26 e 27)
 app/backend/src/common/rbac/perfil-permissoes.snapshot.json   regenerado
+app/backend/src/common/crud/paginacao.ts             listarCadastroQuerySchema (Task 4.0, decisão 44)
 app/backend/scripts/gerar-snapshot-perfis.ts         grava também o snapshot de menus (Task 11.1)
-app/backend/src/modules/auth/rbac.service.ts         menus visíveis no listar/definir
+app/backend/src/modules/auth/rbac.service.ts         menus visíveis no listar/definir + menusVisiveisDePerfis (Task 8.5)
+app/backend/src/modules/auth/auth.service.ts         montarMe: menusVisiveis no payload de /auth/me (Task 8.5)
+app/backend/src/modules/auth/auth.controller.ts      GET /auth/me delega a authService.montarMe (Task 8.5)
 app/backend/src/modules/perfis/perfis.controller.ts  GET /perfis/catalogo, PUT /perfis/:slug/menus
 app/backend/src/modules/perfis/perfis.service.ts     definirMenus + catálogo
 app/backend/src/modules/perfis/dto/perfil.dto.ts     definirMenusSchema
@@ -552,6 +664,8 @@ app/backend/src/modules/auditoria/auditoria.service.ts    facetas + filtro regis
 app/backend/src/modules/auditoria/dto/auditoria.dto.ts    registroBusca
 app/backend/src/modules/parametros/parametros.controller.ts  GET/PATCH por chave
 app/backend/src/modules/parametros/parametros.service.ts     detalharPorChave, atualizarPorChave
+app/backend/src/modules/cadastros/representantes/representantes.controller.ts  filtros + GET /canais (Task 13.0)
+app/backend/src/modules/cadastros/representantes/representantes.service.ts     filtros, canais, clientes vinculados
 app/backend/src/modules/cadastros/rotas/dto/rota.dto.ts      paradas, diasAtendimento
 app/backend/src/modules/cadastros/rotas/rotas.service.ts     persistência dos 2 campos
 app/backend/src/modules/cadastros/fornecedores/fornecedores.controller.ts  /contagens, /:id/historico
@@ -562,7 +676,7 @@ app/backend/src/modules/operacao/desossa/regras-transformacao.service.ts   simul
 app/backend/src/modules/cadastros/regras-desdobramento/regras-desdobramento.controller.ts  POST /simular
 app/backend/src/modules/cadastros/regras-desdobramento/regras-desdobramento.service.ts     simular
 app/backend/test/integration/cadastros-diversos.e2e-spec.ts  +2 casos (Task 7.3)
-app/backend/test/integration/cadastros-f7.e2e-spec.ts        +1 caso (Task 19.2)
+app/backend/test/integration/cadastros-f7.e2e-spec.ts        +3 casos (Tasks 13.0 e 19.2)
 app/backend/test/integration/rbac.e2e-spec.ts                +1 caso (Task 9.8)
 ```
 
@@ -573,6 +687,7 @@ app/frontend/src/lib/frota.ts
 app/frontend/src/lib/modelos-etiqueta.ts
 app/frontend/src/components/cadastros/cadastro-tabela-drawer.tsx
 app/frontend/src/app/(admin)/cadastros/representantes/representantes-client.tsx
+app/frontend/src/app/(admin)/cadastros/representantes/clientes-vinculados.tsx
 app/frontend/src/app/(admin)/cadastros/caminhoes/caminhoes-client.tsx
 app/frontend/src/app/(admin)/cadastros/motoristas/motoristas-client.tsx
 app/frontend/src/app/(admin)/cadastros/modelos-etiqueta/modelos-etiqueta-client.tsx
@@ -581,6 +696,7 @@ app/frontend/src/app/(admin)/cadastros/regras-transformacao/simulador-desossa.ts
 app/frontend/src/app/(admin)/admin/usuarios/resumo-perfis.tsx
 app/frontend/src/app/(admin)/admin/perfis/perfis-client.tsx
 app/frontend/src/app/(admin)/admin/parametros/parametros-client.tsx
+app/frontend/src/app/api/cadastros/representantes/canais/route.ts
 app/frontend/src/app/api/cadastros/frota-caminhoes/route.ts
 app/frontend/src/app/api/cadastros/frota-caminhoes/[id]/route.ts
 app/frontend/src/app/api/cadastros/frota-motoristas/route.ts
@@ -599,6 +715,7 @@ app/frontend/src/app/api/admin/usuarios/resumo-perfis/route.ts
 app/frontend/src/app/api/admin/auditoria/facetas/route.ts
 app/frontend/src/app/api/admin/auditoria/export/route.ts
 app/frontend/__tests__/cadastro-tabela-drawer.test.tsx
+app/frontend/__tests__/representantes-client.test.tsx
 app/frontend/__tests__/fornecedores-contagens.test.tsx
 app/frontend/__tests__/rotas-paradas.test.tsx
 app/frontend/__tests__/modelos-etiqueta.test.tsx
@@ -617,12 +734,16 @@ docs/execucao/evidencias/onda3-cadastros-admin/README.md
 ### Frontend — arquivos alterados
 
 ```
+app/frontend/src/app/globals.css                     18 tokens novos da decisão 46 (Task 12.1)
 app/frontend/src/lib/menu-v2.ts                      decisões 4, 5 e 9
 app/frontend/src/lib/auth.ts                         menusVisiveis no payload de getMe
+app/frontend/src/lib/representantes.ts               clientesVinculados (decisão 45)
 app/frontend/src/lib/cadastros-config.ts             fornecedor: 3 campos da decisão 17 + nota de qualidade
 app/frontend/src/app/(admin)/layout.tsx              consome filtrarMenuPorMenusVisiveis (Task 11.4)
+app/frontend/src/app/(admin)/page.tsx                rotaDeEntrada(user.menusVisiveis, user.perfis) (Task 11.5)
 app/frontend/__tests__/menu-rbac.test.ts             reescrito (Task 11.7)
 app/frontend/__tests__/menu-v2.test.ts               ajustado à nova assinatura (Task 11.6)
+app/frontend/__tests__/tokens-ds.test.ts             +18 tokens no inventário pinado (Task 12.1)
 app/frontend/src/app/(admin)/cadastros/representantes/page.tsx
 app/frontend/src/app/(admin)/cadastros/caminhoes/page.tsx
 app/frontend/src/app/(admin)/cadastros/motoristas/page.tsx
@@ -658,7 +779,7 @@ essa string no `it(...)`.
 | DoD-07 | As **26 perdas** declaradas na decisão 25 da Onda 2 estão, uma a uma, visíveis | `as 26 perdas herdadas da Onda 2 estao visiveis` | `app/frontend/__tests__/menu-rbac.test.ts` |
 | DoD-08 | Os **14 extras** declarados na decisão 31 da Onda 2 sumiram do menu de cada perfil | `os 14 extras herdados da Onda 2 sumiram do menu` | `app/frontend/__tests__/menu-rbac.test.ts` |
 | DoD-09 | A rota de entrada de cada perfil é a função primária da decisão 9 e pertence ao menu do próprio perfil | `rota de entrada bate com a funcao primaria do perfil: %s` | `app/frontend/__tests__/menu-rbac.test.ts` |
-| DoD-10 | Grupos visíveis por perfil batem com a tabela fixada (grupo aparece se e somente se tiver item visível) | `grupos visiveis batem com a tabela fixada: %s` | `app/frontend/__tests__/menu-rbac.test.ts` |
+| DoD-10 | Grupos visíveis por perfil batem com a tabela fixada **na ordem canônica do `MENU_V2`** (grupo aparece se e somente se tiver item visível), nos 11 perfis | `grupos visiveis batem com a tabela fixada: %s` | `app/frontend/__tests__/menu-rbac.test.ts` |
 | DoD-11 | `href` fora do catálogo canônico não vira item de menu | `href fora do catalogo nao vira item de menu` | `app/frontend/__tests__/menu-rbac.test.ts` |
 | DoD-12 | `PUT /perfis/:slug/menus` grava, audita antes/depois e rejeita `href` fora do catálogo com 400 sem gravar | `define menus visiveis, audita e rejeita href desconhecido` | `app/backend/test/integration/perfis-menus.e2e-spec.ts` |
 | DoD-13 | O seed devolve os 11 perfis ao estado canônico mesmo após alteração manual (decisão 23) | `seed de menus visiveis reconcilia perfil alterado` | `app/backend/test/integration/perfis-menus.e2e-spec.ts` |
@@ -672,7 +793,7 @@ essa string no `it(...)`.
 | DoD-16 | `frota_motoristas`: CRUD, documento único entre ativos e caminhão padrão opcional referenciando a frota | `motorista: ciclo CRUD, documento duplicado e caminhao padrao` | `app/backend/test/integration/frota.e2e-spec.ts` |
 | DoD-17 | Frota respeita RBAC: leitura sem `*_LER` e escrita sem `*_GERENCIAR` devolvem 403 | `frota respeita RBAC de leitura e escrita` | `app/backend/test/integration/frota.e2e-spec.ts` |
 | DoD-18 | Toda escrita em frota grava linha em `auditoria` com dados anteriores e novos | `frota audita insert, update e delete` | `app/backend/test/integration/frota.e2e-spec.ts` |
-| DoD-19 | Os 6 modelos de etiqueta do protótipo existem após o seed, com os campos da decisão 21 | `seed cria os 6 modelos com os campos do prototipo` | `app/backend/test/integration/modelos-etiqueta.e2e-spec.ts` |
+| DoD-19 | Executar `seedModelosEtiqueta` cria os 6 modelos do protótipo com **exatamente** os 12 campos da decisão 21 (o teste chama o seed; nenhum modelo é criado por `POST` na preparação) | `seed cria os 6 modelos com os campos do prototipo` | `app/backend/test/integration/modelos-etiqueta.e2e-spec.ts` |
 | DoD-20 | Alterar campos persiste as 12 chaves e rejeita objeto com chave desconhecida ou faltante (400) | `atualiza campos e rejeita conjunto de chaves invalido` | `app/backend/test/integration/modelos-etiqueta.e2e-spec.ts` |
 | DoD-21 | Rota persiste paradas com ordem normalizada e aceita só os 7 dias canônicos | `rota persiste paradas ordenadas e dias validos` | `app/backend/test/integration/rotas-paradas.e2e-spec.ts` |
 | DoD-22 | Reordenar paradas persiste a nova ordem sem perder descrição | `reordenacao de paradas preserva descricoes` | `app/backend/test/integration/rotas-paradas.e2e-spec.ts` |
@@ -699,18 +820,18 @@ essa string no `it(...)`.
 
 | # | Invariante | Teste | Arquivo |
 |---|---|---|---|
-| DoD-36 | O componente de lista+drawer mostra os registros do backend e o total real | `lista registros do backend e mostra o total real` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
+| DoD-36 | O componente de lista+drawer mostra os registros do backend e o contador do protótipo com o `total` real, sem rodapé "Mostrando N de M" e sem botão "Filtros" | `lista registros do backend e mostra o contador do prototipo` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
 | DoD-37 | Sem permissão de gerenciar não há botão "Novo" nem ações de linha (decisão 40) | `sem permissao de gerenciar nao ha botao novo nem acoes de linha` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
-| DoD-38 | O drawer abre em modo edição com os dados da linha selecionada | `drawer abre em modo edicao com os dados da linha` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
+| DoD-38 | Clicar na linha abre o drawer em modo edição com os dados dela; clicar na célula de ações não abre | `clique na linha abre o drawer em edicao com a largura do prototipo` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
 | DoD-39 | Erro do backend vira mensagem na tela e nenhuma linha falsa é exibida | `erro do backend aparece como mensagem, sem lista falsa` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
 | DoD-40 | Os chips de fornecedores mostram a contagem devolvida pelo backend | `chips mostram a contagem devolvida pelo backend` | `app/frontend/__tests__/fornecedores-contagens.test.tsx` |
 | DoD-41 | Falha na contagem mostra erro e não inventa número (RA-06) | `falha nas contagens mostra erro e nao inventa numero` | `app/frontend/__tests__/fornecedores-contagens.test.tsx` |
 | DoD-42 | Reordenar parada na tela preserva as descrições e renumera a ordem | `reordena parada para cima preservando descricoes` | `app/frontend/__tests__/rotas-paradas.test.tsx` |
 | DoD-43 | Alternar dia de atendimento reflete no estado do botão | `alterna dia de atendimento` | `app/frontend/__tests__/rotas-paradas.test.tsx` |
-| DoD-44 | A tela de etiquetas mostra os 12 campos canônicos com `Switch` | `modelos de etiqueta mostra os 12 campos canonicos` | `app/frontend/__tests__/modelos-etiqueta.test.tsx` |
+| DoD-44 | A tela de etiquetas mostra os 12 campos canônicos com `Checkbox` (`ModelosEtiqueta.tsx:198`), em `grid-cols-2` | `modelos de etiqueta mostra os 12 campos canonicos` | `app/frontend/__tests__/modelos-etiqueta.test.tsx` |
 | DoD-45 | A pré-visualização reflete em tempo real cada campo ligado ou desligado | `preview reflete os campos ligados` | `app/frontend/__tests__/modelos-etiqueta.test.tsx` |
 | DoD-46 | A tela exibe o badge Provisório da pendência P9 | `modelos de etiqueta exibe badge provisorio P9` | `app/frontend/__tests__/modelos-etiqueta.test.tsx` |
-| DoD-47 | Sem `MODELOS_ETIQUETA_GERENCIAR` os `Switch` ficam desabilitados e não há botão de salvar | `sem permissao de gerenciar modelo fica somente leitura` | `app/frontend/__tests__/modelos-etiqueta.test.tsx` |
+| DoD-47 | Sem `MODELOS_ETIQUETA_GERENCIAR` os `Checkbox` ficam desabilitados e não há botão de salvar | `sem permissao de gerenciar modelo fica somente leitura` | `app/frontend/__tests__/modelos-etiqueta.test.tsx` |
 | DoD-48 | O drawer de produto tem as 5 abas do protótipo | `drawer de produto tem as 5 abas do prototipo` | `app/frontend/__tests__/produtos-client.test.tsx` |
 | DoD-49 | A aba Fiscal envia os campos dentro de `atributosJson.fiscal` | `aba fiscal envia ncm dentro de atributosJson` | `app/frontend/__tests__/produtos-client.test.tsx` |
 | DoD-50 | O simulador de desdobramento exibe quantidade × fator por item e o total devolvido pela API | `simulador de desdobramento exibe fatores e total do backend` | `app/frontend/__tests__/simuladores-transformacao.test.tsx` |
@@ -733,7 +854,7 @@ essa string no `it(...)`.
 | DoD-67 | **(decisão 31)** UUID completo vira `registroId`; texto parcial vira `registroBusca` | `campo registro escolhe entre registroId e registroBusca` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
 | DoD-68 | **(decisão 32)** "Exportar CSV" chama a rota de exportação com os filtros correntes | `exportar csv usa os filtros correntes` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
 | DoD-69 | **(decisão 32)** Exportação truncada em 5 000 registros avisa o usuário | `exportacao truncada avisa o usuario` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
-| DoD-70 | As 17 rotas BFF da onda existem nos caminhos previstos | `todas as rotas BFF da Onda 3 existem` | `app/frontend/__tests__/bff-onda3.test.ts` |
+| DoD-70 | As 18 rotas BFF da onda existem nos caminhos previstos | `todas as rotas BFF da Onda 3 existem` | `app/frontend/__tests__/bff-onda3.test.ts` |
 | DoD-71 | O BFF repassa status e mensagem do backend em caso de erro, sem mascarar (RA-05) | `erro do backend vira status e message no BFF` | `app/frontend/__tests__/bff-onda3.test.ts` |
 | DoD-72 | Cada uma das 12 rotas abre com o título do protótipo, sem placeholder e sem erro de console | `rota <rota> abre com titulo e sem placeholder` | `app/frontend/e2e/onda3-cadastros-admin.spec.ts` |
 | DoD-73 | O menu do administrador leva às 12 rotas da onda | `menu do administrador leva as 12 rotas da onda` | `app/frontend/e2e/onda3-cadastros-admin.spec.ts` |
@@ -742,6 +863,14 @@ essa string no `it(...)`.
 | DoD-76 | Nenhuma tela da onda usa `PlaceholderPage` | `nenhuma tela da onda usa PlaceholderPage` | `app/frontend/__tests__/terminologia-onda3.test.ts` |
 | DoD-77 | Cobertura de linha e de branch do backend ≥ 80 % é exigida pela configuração do Jest (o gate falha o build, não só avisa) | `jest exige 80 por cento de linha e de branch` | `app/backend/test/unit/cobertura-config.spec.ts` |
 | DoD-78 | Usuário sem menu nenhum não tem grupo visível nem rota de entrada | `usuario sem menu nao tem grupo nem rota de entrada` | `app/frontend/__tests__/menu-rbac.test.ts` |
+| DoD-79 | **(decisões 35 e 44)** Os `select` da barra de filtros vão para a consulta do backend (`status=` na query) — nenhum controle inerte | `select de status refaz a consulta com o filtro na query` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
+| DoD-80 | **(decisão 35)** A ação de linha alterna o status por `PATCH { status }` e a tela não tem exclusão (sem `Trash2`, sem `DELETE`) | `acao Power faz PATCH de status e nao abre o drawer nem oferece exclusao` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
+| DoD-81 | **(decisão 35)** O drawer respeita a largura configurada: 460 px em caminhões/motoristas e 520 px em representantes | `clique na linha abre o drawer em edicao com a largura do prototipo` | `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` |
+| DoD-82 | **(decisão 44)** `GET /representantes` filtra por `status` e `tipoCanal`; `GET /representantes/canais` devolve os canais distintos reais e nunca um vocabulário fixo | `representantes filtram por status e canal e listam canais reais` | `app/backend/test/integration/cadastros-f7.e2e-spec.ts` |
+| DoD-83 | **(decisão 45)** `GET /representantes` traz a contagem e `GET /representantes/:id` a lista de clientes vinculados, ambas derivadas de `clientes.representante_id` | `clientes vinculados vem de clientes.representante_id` | `app/backend/test/integration/cadastros-f7.e2e-spec.ts` |
+| DoD-84 | **(D13.b)** A tabela de representantes tem as 6 colunas desta onda (Nome, Tipo/canal, Contato, Clientes vinculados, Status, Ações) e nenhuma coluna "Usuários vinculados" | `tabela tem as 6 colunas do prototipo, sem Usuarios vinculados` | `app/frontend/__tests__/representantes-client.test.tsx` |
+| DoD-85 | **(D13.a/D13.c)** O drawer tem exatamente Código, Nome, Tipo / canal, Contato, Observação e o interruptor de Status | `drawer traz codigo, nome, tipo/canal, contato, observacao e status` | `app/frontend/__tests__/representantes-client.test.tsx` |
+| DoD-86 | Nenhum campo fora do schema aparece na tela: `email`, `telefone`, `regiao`, `comissaoPercentual`, `dataAdmissao` e `observacoes` não existem em lugar nenhum (RA-06) | `nao existe campo de email, telefone, regiao, comissao ou data de admissao` | `app/frontend/__tests__/representantes-client.test.tsx` |
 
 ---
 
@@ -1196,7 +1325,7 @@ import { modelosEtiqueta, parametros, perfis } from './schema';
  * Sobrescreve alterações feitas em runtime (decisão 23 da Onda 3): rodar o seed
  * sempre devolve os 11 perfis ao estado canônico.
  */
-async function seedMenusVisiveis(db: Db): Promise<void> {
+export async function seedMenusVisiveis(db: Db): Promise<void> {
   for (const [slug, menus] of Object.entries(MENUS_VISIVEIS_POR_PERFIL)) {
     await db.update(perfis).set({ menusVisiveis: menus }).where(eq(perfis.slug, slug));
   }
@@ -1330,7 +1459,7 @@ const PARAMETROS_SEED = [
   },
 ] as const;
 
-async function seedParametros(db: Db): Promise<void> {
+export async function seedParametros(db: Db): Promise<void> {
   for (const p of PARAMETROS_SEED) {
     await db
       .insert(parametros)
@@ -1359,7 +1488,7 @@ const MODELOS_ETIQUETA_SEED = [
   { slug: 'produto-unidade', nome: 'Produto por Unidade', campos: camposEtiqueta({ peso: false, caracteristicas: false, qrCode: false, codigoBarras: true }) },
 ];
 
-async function seedModelosEtiqueta(db: Db): Promise<void> {
+export async function seedModelosEtiqueta(db: Db): Promise<void> {
   for (const m of MODELOS_ETIQUETA_SEED) {
     await db
       .insert(modelosEtiqueta)
@@ -1371,6 +1500,9 @@ async function seedModelosEtiqueta(db: Db): Promise<void> {
 
 > `Db` é o alias de tipo já usado no arquivo para `NodePgDatabase<typeof schema>`; reutilizar o alias
 > existente em vez de criar um novo. `sql` é importado apenas se o arquivo ainda não o importar.
+> As três funções (`seedMenusVisiveis`, `seedParametros`, `seedModelosEtiqueta`) são declaradas com
+> `export async function`: os testes das Tasks 5.5, 8.6 e 9.7 as chamam diretamente para provar
+> DoD-13, DoD-19 e DoD-31 sobre o seed real, e não sobre dados inseridos pelo próprio teste.
 
 **2.2** Chamar as três no corpo principal do seed, nesta ordem, após o seed de RBAC:
 
@@ -1471,6 +1603,23 @@ Saída esperada: suíte verde.
 
 ### Task 4 — Backend: módulo `frota` (caminhões de cadastro e motoristas)
 
+**4.0** Em `app/backend/src/common/crud/paginacao.ts`, acrescentar após `listarQuerySchema` — **sem
+alterá-lo**, para não mexer nos controllers das ondas anteriores (decisão 44.1):
+
+```ts
+/** Listagem de cadastro: paginação + busca + filtros de status e canal (decisão 44). */
+export const listarCadastroQuerySchema = listarQuerySchema.extend({
+  status: z.enum(['ativo', 'inativo']).optional(),
+  tipoCanal: z.string().trim().min(1).optional(),
+});
+
+export type ListarCadastroQuery = z.infer<typeof listarCadastroQuerySchema>;
+```
+
+As três listagens que a Onda 3 põe atrás de um `select` de status usam este schema: caminhões
+(4.3/4.5), motoristas (4.4/4.6) e representantes (13.0). `tipoCanal` só é lido por representantes; nas
+outras duas ele simplesmente não é aplicado.
+
 **4.1** `app/backend/src/modules/frota/dto/caminhao-cadastro.dto.ts`:
 
 ```ts
@@ -1525,7 +1674,7 @@ import { frotaCaminhoes, rotas } from '../../database/schema';
 import { AuditoriaService } from '../../common/auditoria/auditoria.service';
 import {
   calcularRange, montarPaginado, primeiroOuFalha,
-  type ListarQuery, type Paginado,
+  type ListarCadastroQuery, type Paginado,
 } from '../../common/crud/paginacao';
 import type { CreateCaminhaoCadastroDto, UpdateCaminhaoCadastroDto } from './dto/caminhao-cadastro.dto';
 
@@ -1543,13 +1692,14 @@ export class CaminhoesCadastroService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<CaminhaoCadastroLista>> {
+  async listar(query: ListarCadastroQuery): Promise<Paginado<CaminhaoCadastroLista>> {
     const { limit, offset } = calcularRange(query);
     const filtros = [query.incluirRemovidos ? undefined : isNull(frotaCaminhoes.deletedAt)];
     if (query.search) {
       const termo = `%${query.search}%`;
       filtros.push(or(ilike(frotaCaminhoes.placa, termo), ilike(frotaCaminhoes.descricao, termo)));
     }
+    if (query.status) filtros.push(eq(frotaCaminhoes.status, query.status));
     const where = and(...filtros.filter(Boolean));
 
     const [linhas, totalRow] = await Promise.all([
@@ -1703,7 +1853,7 @@ import { frotaCaminhoes, frotaMotoristas } from '../../database/schema';
 import { AuditoriaService } from '../../common/auditoria/auditoria.service';
 import {
   calcularRange, montarPaginado, primeiroOuFalha,
-  type ListarQuery, type Paginado,
+  type ListarCadastroQuery, type Paginado,
 } from '../../common/crud/paginacao';
 import type { CreateMotoristaDto, UpdateMotoristaDto } from './dto/motorista.dto';
 
@@ -1724,7 +1874,7 @@ export class MotoristasService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<MotoristaLista>> {
+  async listar(query: ListarCadastroQuery): Promise<Paginado<MotoristaLista>> {
     const { limit, offset } = calcularRange(query);
     const filtros = [query.incluirRemovidos ? undefined : isNull(frotaMotoristas.deletedAt)];
     if (query.search) {
@@ -1737,6 +1887,7 @@ export class MotoristasService {
         ),
       );
     }
+    if (query.status) filtros.push(eq(frotaMotoristas.status, query.status));
     const where = and(...filtros.filter(Boolean));
 
     const [linhas, totalRow] = await Promise.all([
@@ -1892,7 +2043,7 @@ import { RbacGuard } from '../../common/guards/rbac.guard';
 import { RequirePermissoes } from '../../common/rbac/require-permissoes.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CurrentUser, type CurrentUserPayload } from '../../common/decorators/current-user.decorator';
-import { listarQuerySchema, type ListarQuery } from '../../common/crud/paginacao';
+import { listarCadastroQuerySchema, type ListarCadastroQuery } from '../../common/crud/paginacao';
 import { CaminhoesCadastroService } from './caminhoes-cadastro.service';
 import {
   createCaminhaoCadastroSchema, updateCaminhaoCadastroSchema,
@@ -1907,7 +2058,7 @@ export class CaminhoesCadastroController {
 
   @Get()
   @RequirePermissoes('FROTA_CAMINHOES_LER')
-  listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
+  listar(@Query(new ZodValidationPipe(listarCadastroQuerySchema)) query: ListarCadastroQuery) {
     return this.service.listar(query);
   }
 
@@ -1960,7 +2111,7 @@ import { RbacGuard } from '../../common/guards/rbac.guard';
 import { RequirePermissoes } from '../../common/rbac/require-permissoes.decorator';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CurrentUser, type CurrentUserPayload } from '../../common/decorators/current-user.decorator';
-import { listarQuerySchema, type ListarQuery } from '../../common/crud/paginacao';
+import { listarCadastroQuerySchema, type ListarCadastroQuery } from '../../common/crud/paginacao';
 import { MotoristasService } from './motoristas.service';
 import {
   createMotoristaSchema, updateMotoristaSchema,
@@ -1975,7 +2126,7 @@ export class MotoristasController {
 
   @Get()
   @RequirePermissoes('FROTA_MOTORISTAS_LER')
-  listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
+  listar(@Query(new ZodValidationPipe(listarCadastroQuerySchema)) query: ListarCadastroQuery) {
     return this.service.listar(query);
   }
 
@@ -2428,8 +2579,30 @@ export class ModelosEtiquetaModule {}
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
+import { DRIZZLE } from '../../src/database/database.module';
 
-const SLUGS = ['peca-pedido', 'peca-estoque', 'peca-desossa', 'parte-pedido', 'parte-estoque', 'produto-unidade'];
+type Campos = Record<string, boolean>;
+
+/**
+ * Transcrição literal da decisão 21 (ModelosEtiqueta.tsx linhas 33–69) — escrita à mão aqui de
+ * propósito: o teste não importa o array do seed, senão compararia o seed consigo mesmo.
+ */
+const BASE: Campos = {
+  codigo: true, produto: true, peso: true, clientePedido: false, destino: true,
+  origemFrigorifico: true, nfLote: true, dataHora: true, operador: true,
+  caracteristicas: false, qrCode: true, codigoBarras: false,
+};
+
+const ESPERADO: Record<string, { nome: string; campos: Campos }> = {
+  'peca-pedido':     { nome: 'Peça para Pedido',    campos: { ...BASE, clientePedido: true, caracteristicas: true } },
+  'peca-estoque':    { nome: 'Peça para Estoque',   campos: { ...BASE, clientePedido: false, destino: true } },
+  'peca-desossa':    { nome: 'Peça para Desossa',   campos: { ...BASE, clientePedido: false, caracteristicas: true } },
+  'parte-pedido':    { nome: 'Parte para Pedido',   campos: { ...BASE, clientePedido: true, caracteristicas: true, origemFrigorifico: true } },
+  'parte-estoque':   { nome: 'Parte para Estoque',  campos: { ...BASE, clientePedido: false } },
+  'produto-unidade': { nome: 'Produto por Unidade', campos: { ...BASE, peso: false, caracteristicas: false, qrCode: false, codigoBarras: true } },
+};
+
+const SLUGS = Object.keys(ESPERADO);
 
 describe('Modelos de etiqueta e2e', () => {
   let app: INestApplication;
@@ -2439,18 +2612,10 @@ describe('Modelos de etiqueta e2e', () => {
     app = await createTestApp();
     const admin = await createTestUser(app, { perfil: 'administrador' });
     adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
-    for (const slug of SLUGS) {
-      await request(app.getHttpServer()).post('/modelos-etiqueta').set('Cookie', adminCookies).send({
-        slug,
-        nome: slug,
-        campos: {
-          codigo: true, produto: true, peso: true, clientePedido: slug.endsWith('pedido'),
-          destino: true, origemFrigorifico: true, nfLote: true, dataHora: true,
-          operador: true, caracteristicas: false, qrCode: slug !== 'produto-unidade',
-          codigoBarras: slug === 'produto-unidade',
-        },
-      });
-    }
+
+    // DoD-19 exige provar o SEED, não um POST do próprio teste (Task 2.1).
+    const { seedModelosEtiqueta } = await import('../../src/database/seed');
+    await seedModelosEtiqueta(app.get(DRIZZLE).db);
   });
 
   afterAll(async () => {
@@ -2461,12 +2626,19 @@ describe('Modelos de etiqueta e2e', () => {
   const srv = () => app.getHttpServer();
 
   it('seed cria os 6 modelos com os campos do prototipo', async () => {
-    const lista = await request(srv()).get('/modelos-etiqueta').set('Cookie', adminCookies);
+    const lista = await request(srv()).get('/modelos-etiqueta?pageSize=50').set('Cookie', adminCookies);
     expect(lista.status).toBe(200);
-    expect(lista.body.data.map((m: { slug: string }) => m.slug).sort()).toEqual([...SLUGS].sort());
-    const unidade = lista.body.data.find((m: { slug: string }) => m.slug === 'produto-unidade');
-    expect(unidade.campos.codigoBarras).toBe(true);
-    expect(unidade.campos.qrCode).toBe(false);
+
+    const porSlug = new Map(
+      (lista.body.data as { slug: string; nome: string; campos: Campos }[]).map((m) => [m.slug, m]),
+    );
+    expect([...porSlug.keys()].sort()).toEqual([...SLUGS].sort());
+
+    for (const slug of SLUGS) {
+      const modelo = porSlug.get(slug);
+      expect(modelo?.nome).toBe(ESPERADO[slug]!.nome);
+      expect(modelo?.campos).toEqual(ESPERADO[slug]!.campos);
+    }
   });
 
   it('atualiza campos e rejeita conjunto de chaves invalido', async () => {
@@ -2936,23 +3108,59 @@ import { DESCRICOES_PERMISSOES } from '../../common/rbac/permissoes';
 
 > `@Get('catalogo')` precisa vir **antes** de qualquer rota com parâmetro no mesmo controller.
 
-**8.5** Em `auth.service.ts` (ou onde `getMe` monta o payload do usuário), incluir a união dos menus
-visíveis dos perfis do usuário no retorno de `/auth/me`:
+**8.5** Incluir a união dos menus visíveis dos perfis do usuário no corpo de `GET /auth/me`. São três
+arquivos, nomeados aqui; o Worker não escolhe onde escrever. O ponto de partida é o estado real:
+`AuthController.me()` (`auth.controller.ts:86-90`) hoje devolve o payload do JWT (`return user;`), e
+`AuthService` não tem acesso ao banco — quem tem é `RbacService` (`rbac.service.ts:10-17`). Como a
+decisão 11 exige que a alteração de menus valha **na próxima navegação, sem relogar**, `menusVisiveis`
+**não** pode sair do JWT: é leitura de banco por requisição.
+
+**8.5.1** Em `app/backend/src/modules/auth/rbac.service.ts`, ao lado de `resolverPermissoes`:
 
 ```ts
-    const menusVisiveis = [
-      ...new Set(
-        (
-          await this.db
-            .select({ menus: schema.perfis.menusVisiveis })
-            .from(schema.perfis)
-            .where(inArray(schema.perfis.slug, perfisDoUsuario))
-        ).flatMap((r) => r.menus),
-      ),
-    ];
+  /**
+   * União dos menus visíveis dos perfis do usuário, em ordem canônica do catálogo.
+   * Lido do banco a cada requisição (decisão 11): alterar menus vale na próxima navegação.
+   */
+  async menusVisiveisDePerfis(perfis: string[]): Promise<string[]> {
+    if (perfis.length === 0) return [];
+
+    const rows = await this.db
+      .select({ menus: schema.perfis.menusVisiveis })
+      .from(schema.perfis)
+      .where(inArray(schema.perfis.slug, perfis));
+
+    const uniao = new Set(rows.flatMap((r) => r.menus));
+    return MENUS_CANONICOS.filter((href) => uniao.has(href));
+  }
 ```
 
-e devolver `menusVisiveis` junto de `permissoes` no corpo de `/auth/me`.
+com `import { MENUS_CANONICOS } from '../../common/rbac/menus-canonicos';` (`inArray` e `schema` já são
+importados no arquivo).
+
+**8.5.2** Em `app/backend/src/modules/auth/auth.service.ts`, acrescentar o método que monta o corpo do
+`/auth/me` (o `RbacService` já é injetado no construtor, linha 13):
+
+```ts
+  async montarMe(user: CurrentUserPayload): Promise<CurrentUserPayload & { menusVisiveis: string[] }> {
+    return { ...user, menusVisiveis: await this.rbacService.menusVisiveisDePerfis(user.perfis) };
+  }
+```
+
+com `import type { CurrentUserPayload } from '../../common/decorators/current-user.decorator';`.
+
+**8.5.3** Em `app/backend/src/modules/auth/auth.controller.ts`, trocar o corpo de `me()`:
+
+```ts
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async me(@CurrentUser() user: CurrentUserPayload) {
+    return this.authService.montarMe(user);
+  }
+```
+
+> O caso `retorna dados do usuário + permissões efetivas` de `auth.e2e-spec.ts:111` usa
+> `toHaveProperty` e continua verde com o campo novo; nenhum teste existente precisa mudar.
 
 **8.6** Criar `app/backend/test/integration/perfis-menus.e2e-spec.ts` (DoD-12, DoD-13, DoD-14, DoD-29):
 
@@ -3854,7 +4062,11 @@ const EXTRAS_HERDADOS: Record<string, string[]> = {
   diretoria: ['/comercial/clientes', '/comercial/pedidos', '/comercial/espelho'],
 };
 
-/** Grupos visíveis por perfil — consequência direta de `menus_visiveis` (decisão 9). */
+/**
+ * Grupos visíveis por perfil — consequência direta de `menus_visiveis` (decisão 9).
+ * Todas as listas estão na **ordem canônica do MENU_V2** (a mesma de `TODOS`), porque é essa a ordem
+ * que `filtrarMenuPorMenusVisiveis` devolve. Ordem alfabética aqui quebraria DoD-10 em 8 dos 11 perfis.
+ */
 const TODOS = [
   'COMERCIAL', 'GESTÃO', 'RECEBIMENTO & BALANÇA', 'DESOSSA', 'ESTOQUE',
   'CARGA', 'FATURAMENTO', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
@@ -3896,10 +4108,15 @@ function menusDe(perfil: string): string[] {
   return menus;
 }
 
+/**
+ * Não ordena de propósito: `GRUPOS_ESPERADOS` está na ordem canônica do MENU_V2 e DoD-10 compara
+ * com `toEqual`, que é sensível à ordem. `PERDAS_HERDADAS`/`EXTRAS_HERDADOS` são consumidas com
+ * `toContain`, então a ordem lá é irrelevante.
+ */
 function esperadoDe(tabela: Record<string, string[]>, perfil: string): string[] {
   const lista = tabela[perfil];
   if (!lista) throw new Error(`perfil fora da tabela fixada do plano: ${perfil}`);
-  return [...lista].sort();
+  return lista;
 }
 
 /** Matriz invertida: rota→perfis vira perfil→rotas. */
@@ -3977,8 +4194,10 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
   });
 
   it.each(PERFIS)('grupos visiveis batem com a tabela fixada: %s', (perfil) => {
-    const grupos = filtrarMenuPorMenusVisiveis(menusDe(perfil)).map((g) => g.title);
-    expect(grupos).toEqual(esperadoDe(GRUPOS_ESPERADOS, perfil));
+    const esperado = esperadoDe(GRUPOS_ESPERADOS, perfil);
+    // A tabela do plano precisa estar na ordem canônica; senão o toEqual abaixo vira loteria.
+    expect(esperado).toEqual(TODOS.filter((titulo) => esperado.includes(titulo)));
+    expect(filtrarMenuPorMenusVisiveis(menusDe(perfil)).map((g) => g.title)).toEqual(esperado);
   });
 
   it.each(PERFIS)('rota de entrada bate com a funcao primaria do perfil: %s', (perfil) => {
@@ -4044,27 +4263,64 @@ blocos `it.each` sobre os 11 perfis) e 4 em `menu-v2.test.ts`. Devem constar as 
 
 ### Task 12 — Componente compartilhado `CadastroTabelaDrawer`
 
-As telas de Representantes, Caminhões e Motoristas do protótipo têm o mesmo layout: cabeçalho com título,
-subtítulo e botão primário; barra de busca com `Search` à esquerda e botão "Filtros"; tabela com cabeçalho
-`bg-[#F8FAFC]`, linhas `hover:bg-[#F8FAFC]` e ações `Pencil`/`Trash2` à direita; rodapé "Mostrando N de M";
-e drawer lateral `w-[520px]` deslizando da direita (decisão 35).
+As telas de Representantes, Caminhões e Motoristas do protótipo são o mesmo layout: cabeçalho com
+título, subtítulo e botão primário; barra com busca (`Search` à esquerda), um `select` por filtro e o
+contador alinhado à direita; tabela com cabeçalho `bg-surface-subtle`, linhas zebradas clicáveis e ações
+`Pencil` + `Power`/`PowerOff`; e drawer lateral deslizando da direita. A decisão 35 fixa item a item o
+que o componente reproduz — inclusive o que ele **não** tem: botão "Filtros", exclusão e rodapé
+"Mostrando N de M".
 
-**12.1** Criar `app/frontend/src/components/cadastros/cadastro-tabela-drawer.tsx`:
+Três regras estruturais do componente, para as três telas ficarem idênticas por construção:
+
+1. as colunas **Status** e **Ações** não são configuráveis — o componente as renderiza sempre, nessa
+   ordem, no fim da tabela, com o mesmo *pill* e os mesmos dois botões dos três `.tsx`;
+2. o campo **Status** do drawer também é do componente: é a linha com `border-t`/`border-b` e o
+   interruptor de `Representantes.tsx:142-155`, não um `select` na grade de campos;
+3. todo `select` é elemento nativo, como no protótipo (`Caminhoes.tsx:185`, `Representantes.tsx:275`),
+   estilizado por token; o `Select` do Radix não entra nesta barra nem neste drawer.
+
+**12.1** Acrescentar ao bloco `:root` de `app/frontend/src/app/globals.css` os 18 tokens da decisão 46,
+com o comentário de origem, e citá-los no inventário de `app/frontend/__tests__/tokens-ds.test.ts`
+(no `it('globals.css declara os tokens de acao, superficie, login, pipeline e provisorio')`):
+
+```css
+  /* Onda 3 — cadastros lista+drawer, modelos de etiqueta e perfis (protótipo v1.1) */
+  --color-table-zebra: #FAFAFA;
+  --color-table-row-hover: #FAFBFF;
+  --color-status-dot-ativo: #22C55E;
+  --color-success-surface: #F0FDF4;
+  --color-success-strong: #15803D;
+  --color-danger-surface: #FFF1F2;
+  --color-danger-rose: #E11D48;
+  --color-info-surface: #F0F9FF;
+  --color-info-border: #BAE6FD;
+  --color-info-icon: #0284C7;
+  --color-info-ink: #0C4A6E;
+  --color-placeholder: #CBD5E1;
+  --color-brand-navy-deep: #1E3A5F;
+  --color-text-ink: #334155;
+  --color-violet-surface: #F5F3FF;
+  --color-warning-surface: #FFFBEB;
+  --color-warning-ink: #D97706;
+  --color-action-blue-ring: #93C5FD;
+```
+
+Sem esse passo, o gate `nenhum literal hexadecimal de cor em src fora de globals.css` reprova a onda
+inteira: nenhum arquivo da Task 12 em diante escreve `#`.
+
+**12.2** Criar `app/frontend/src/components/cadastros/cadastro-tabela-drawer.tsx`:
 
 ```tsx
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pencil, Plus, Search, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { Pencil, Plus, Power, PowerOff, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
 import { mensagemDeErro } from '@/lib/error-message';
+
+export type StatusCadastro = 'ativo' | 'inativo';
 
 export interface ColunaCadastro<T> {
   chave: string;
@@ -4076,31 +4332,47 @@ export interface ColunaCadastro<T> {
 export interface CampoCadastro {
   nome: string;
   rotulo: string;
-  tipo: 'texto' | 'numero' | 'data' | 'textarea' | 'select' | 'switch';
+  tipo: 'texto' | 'numero' | 'textarea' | 'select';
   obrigatorio?: boolean;
   placeholder?: string;
   colSpan?: 1 | 2;
   opcoes?: Array<{ valor: string; rotulo: string }>;
-  ajuda?: string;
+  monoespacado?: boolean;
+}
+
+/** Um `select` da barra de filtros. `''` é a opção neutra e não vai para a query. */
+export interface FiltroCadastro {
+  nome: string;
+  rotuloTodos: string;
+  opcoes: Array<{ valor: string; rotulo: string }>;
 }
 
 export interface CadastroTabelaDrawerProps<T extends { id: string }> {
+  /** Linha de trilha do cabeçalho, como em `produtos-client.tsx:249` ("Cadastros & Regras / Produtos"). */
+  caminho: string;
   titulo: string;
   subtitulo: string;
   rotuloNovo: string;
+  rotuloSalvar: string;
   tituloDrawerNovo: string;
-  tituloDrawerEdicao: string;
+  tituloDrawerEdicao: (registro: T) => string;
   placeholderBusca: string;
+  substantivoSingular: string;
   substantivoPlural: string;
   endpoint: string;
   colunas: ColunaCadastro<T>[];
   campos: CampoCadastro[];
+  filtros: FiltroCadastro[];
+  larguraDrawer: 460 | 520;
   podeGerenciar: boolean;
-  paraFormulario: (registro: T) => Record<string, string | boolean>;
-  formularioVazio: Record<string, string | boolean>;
-  paraPayload: (form: Record<string, string | boolean>) => Record<string, unknown>;
+  statusDe: (registro: T) => StatusCadastro;
+  paraFormulario: (registro: T) => Record<string, string>;
+  formularioVazio: Record<string, string>;
+  paraPayload: (form: Record<string, string>) => Record<string, unknown>;
   mensagemVazia: string;
-  cabecalhoExtra?: React.ReactNode;
+  bannerTopo?: React.ReactNode;
+  bannerDrawer?: React.ReactNode;
+  blocosDrawer?: (registro: T | null) => React.ReactNode;
 }
 
 interface Paginado<T> {
@@ -4110,33 +4382,56 @@ interface Paginado<T> {
   pageSize: number;
 }
 
+const PAGE_SIZE = 20;
+
+function StatusPillCadastro({ status }: { status: StatusCadastro }) {
+  return status === 'ativo' ? (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-success-surface px-2 py-0.5 text-[11px] font-semibold text-success-strong">
+      <span className="size-1.5 rounded-full bg-status-dot-ativo" /> Ativo
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+      <span className="size-1.5 rounded-full bg-text-muted" /> Inativo
+    </span>
+  );
+}
+
 export function CadastroTabelaDrawer<T extends { id: string }>({
+  caminho,
   titulo,
   subtitulo,
   rotuloNovo,
+  rotuloSalvar,
   tituloDrawerNovo,
   tituloDrawerEdicao,
   placeholderBusca,
+  substantivoSingular,
   substantivoPlural,
   endpoint,
   colunas,
   campos,
+  filtros,
+  larguraDrawer,
   podeGerenciar,
+  statusDe,
   paraFormulario,
   formularioVazio,
   paraPayload,
   mensagemVazia,
-  cabecalhoExtra,
+  bannerTopo,
+  bannerDrawer,
+  blocosDrawer,
 }: CadastroTabelaDrawerProps<T>) {
   const [busca, setBusca] = useState('');
   const [buscaAplicada, setBuscaAplicada] = useState('');
+  const [selecao, setSelecao] = useState<Record<string, string>>({});
   const [pagina, setPagina] = useState(1);
   const [resultado, setResultado] = useState<Paginado<T> | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [drawerAberto, setDrawerAberto] = useState(false);
   const [editando, setEditando] = useState<T | null>(null);
-  const [form, setForm] = useState<Record<string, string | boolean>>(formularioVazio);
+  const [form, setForm] = useState<Record<string, string>>(formularioVazio);
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
@@ -4147,12 +4442,26 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
     return () => clearTimeout(timer);
   }, [busca]);
 
+  /** Chave estável dos filtros: entra na dependência do `carregar` sem recriar o objeto. */
+  const filtrosQuery = useMemo(
+    () =>
+      filtros
+        .map((filtro) => [filtro.nome, selecao[filtro.nome] ?? ''] as const)
+        .filter(([, valor]) => valor !== ''),
+    [filtros, selecao],
+  );
+  const filtrosChave = filtrosQuery.map(([nome, valor]) => `${nome}=${valor}`).join('&');
+
   const carregar = useCallback(async () => {
     setCarregando(true);
     setErro(null);
     try {
-      const params = new URLSearchParams({ page: String(pagina), pageSize: '20' });
+      const params = new URLSearchParams({ page: String(pagina), pageSize: String(PAGE_SIZE) });
       if (buscaAplicada) params.set('search', buscaAplicada);
+      for (const par of filtrosChave.split('&').filter(Boolean)) {
+        const [nome, valor] = par.split('=');
+        if (nome && valor) params.set(nome, valor);
+      }
       const res = await fetch(`${endpoint}?${params.toString()}`, { cache: 'no-store' });
       if (!res.ok) {
         setErro(await mensagemDeErro(res));
@@ -4164,7 +4473,7 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
     } finally {
       setCarregando(false);
     }
-  }, [endpoint, pagina, buscaAplicada]);
+  }, [endpoint, pagina, buscaAplicada, filtrosChave]);
 
   useEffect(() => {
     void carregar();
@@ -4218,15 +4527,23 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
     }
   };
 
-  const remover = async (registro: T) => {
-    if (!window.confirm('Confirma a exclusão deste registro?')) return;
+  /**
+   * Protótipo: a única ação destrutiva da linha é alternar o status (`Power`/`PowerOff`).
+   * Não existe exclusão nestas telas; o soft delete continua acessível apenas pela API.
+   */
+  const alternarStatus = async (registro: T) => {
+    const novo: StatusCadastro = statusDe(registro) === 'ativo' ? 'inativo' : 'ativo';
     try {
-      const res = await fetch(`${endpoint}/${registro.id}`, { method: 'DELETE' });
+      const res = await fetch(`${endpoint}/${registro.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: novo }),
+      });
       if (!res.ok) {
         toast.error(await mensagemDeErro(res));
         return;
       }
-      toast.success('Registro removido.');
+      toast.success(novo === 'ativo' ? 'Registro ativado.' : 'Registro inativado.');
       await carregar();
     } catch {
       toast.error('Erro de conexão com o servidor.');
@@ -4235,106 +4552,166 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
 
   const total = resultado?.total ?? 0;
   const linhas = resultado?.data ?? [];
+  const colunasTotal = colunas.length + 1 + (podeGerenciar ? 1 : 0);
+  const classeDrawer = larguraDrawer === 520 ? 'w-[520px]' : 'w-[460px]';
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="flex h-full flex-col gap-5">
+      {/* Cabeçalho — Caminhoes.tsx:159-171 */}
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">{titulo}</h1>
-          <p className="text-sm text-muted-foreground">{subtitulo}</p>
+          <p className="mb-0.5 text-[11px] font-medium text-text-muted">{caminho}</p>
+          <h1 className="text-[20px] font-bold text-text-strong">{titulo}</h1>
+          <p className="mt-0.5 text-[12px] text-text-secondary">{subtitulo}</p>
         </div>
         {podeGerenciar && (
-          <Button onClick={abrirNovo}>
-            <Plus className="mr-2 size-4" />
-            {rotuloNovo}
-          </Button>
+          <button
+            type="button"
+            onClick={abrirNovo}
+            className="flex h-8 flex-shrink-0 items-center gap-1.5 rounded-md bg-brand-navy-deep px-4 text-[13px] font-semibold text-white transition-colors hover:bg-action-blue"
+          >
+            <Plus className="size-3.5" /> {rotuloNovo}
+          </button>
         )}
       </div>
 
-      {cabecalhoExtra}
+      {bannerTopo}
 
-      <Card className="overflow-hidden py-0">
-        <div className="flex flex-wrap items-center gap-3 border-b p-4">
-          <div className="relative min-w-[260px] flex-1">
-            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder={placeholderBusca}
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-            />
-          </div>
-          <Button variant="outline" onClick={() => void carregar()}>
-            <SlidersHorizontal className="mr-2 size-4" />
-            Filtros
-          </Button>
+      {/* Barra de filtros — Caminhoes.tsx:174-190 / Representantes.tsx:264-284 */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[220px] flex-1">
+          <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-text-muted" />
+          <input
+            type="text"
+            aria-label={placeholderBusca}
+            placeholder={placeholderBusca}
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            className="h-8 w-full rounded-md border border-border bg-card pr-3 pl-8 text-[13px] text-text-strong placeholder:text-placeholder focus:border-action-blue focus:outline-none"
+          />
         </div>
+        {filtros.map((filtro) => (
+          <select
+            key={filtro.nome}
+            aria-label={filtro.rotuloTodos}
+            value={selecao[filtro.nome] ?? ''}
+            onChange={(e) => {
+              const valor = e.target.value;
+              setSelecao((s) => ({ ...s, [filtro.nome]: valor }));
+              setPagina(1);
+            }}
+            className="h-8 rounded-md border border-border bg-card px-2.5 text-[13px] text-text-slate focus:border-action-blue focus:outline-none"
+          >
+            <option value="">{filtro.rotuloTodos}</option>
+            {filtro.opcoes.map((opcao) => (
+              <option key={opcao.valor} value={opcao.valor}>
+                {opcao.rotulo}
+              </option>
+            ))}
+          </select>
+        ))}
+        <span className="ml-auto text-[12px] text-text-muted">
+          {total} {total === 1 ? substantivoSingular : substantivoPlural}
+        </span>
+      </div>
 
-        {erro && (
-          <p role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-            {erro}
-          </p>
-        )}
+      {erro && (
+        <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
+          {erro}
+        </p>
+      )}
 
+      {/* Tabela — Caminhoes.tsx:193-242 */}
+      <div className="flex-1 overflow-hidden rounded-xl border border-border bg-card">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-[#F8FAFC] text-left text-xs font-semibold text-muted-foreground uppercase">
-              <tr>
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-muted bg-surface-subtle">
                 {colunas.map((coluna) => (
                   <th
                     key={coluna.chave}
-                    className={`px-4 py-3 ${coluna.alinhamento === 'direita' ? 'text-right' : ''}`}
+                    className={`px-4 py-2.5 text-[10px] font-bold tracking-wider whitespace-nowrap text-text-secondary uppercase ${
+                      coluna.alinhamento === 'direita' ? 'text-right' : 'text-left'
+                    }`}
                   >
                     {coluna.titulo}
                   </th>
                 ))}
-                {podeGerenciar && <th className="px-4 py-3 text-right">Ações</th>}
+                <th className="px-4 py-2.5 text-left text-[10px] font-bold tracking-wider whitespace-nowrap text-text-secondary uppercase">
+                  Status
+                </th>
+                {podeGerenciar && (
+                  <th className="px-4 py-2.5 text-left text-[10px] font-bold tracking-wider whitespace-nowrap text-text-secondary uppercase">
+                    Ações
+                  </th>
+                )}
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody>
               {carregando && (
                 <tr>
-                  <td colSpan={colunas.length + 1} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={colunasTotal} className="px-4 py-12 text-center text-[13px] text-text-muted">
                     Carregando…
                   </td>
                 </tr>
               )}
               {!carregando && linhas.length === 0 && (
                 <tr>
-                  <td colSpan={colunas.length + 1} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={colunasTotal} className="px-4 py-12 text-center text-[13px] text-text-muted">
                     {mensagemVazia}
                   </td>
                 </tr>
               )}
               {!carregando &&
-                linhas.map((registro) => (
-                  <tr key={registro.id} className="hover:bg-[#F8FAFC]">
+                linhas.map((registro, i) => (
+                  <tr
+                    key={registro.id}
+                    onClick={() => abrirEdicao(registro)}
+                    className={`cursor-pointer border-b border-surface-subtle transition-colors hover:bg-table-row-hover ${
+                      i % 2 !== 0 ? 'bg-table-zebra' : ''
+                    }`}
+                  >
                     {colunas.map((coluna) => (
                       <td
                         key={coluna.chave}
-                        className={`px-4 py-3 ${coluna.alinhamento === 'direita' ? 'text-right' : ''}`}
+                        className={`px-4 py-2.5 ${coluna.alinhamento === 'direita' ? 'text-right' : ''}`}
                       >
                         {coluna.render(registro)}
                       </td>
                     ))}
+                    <td className="px-4 py-2.5">
+                      <StatusPillCadastro status={statusDe(registro)} />
+                    </td>
                     {podeGerenciar && (
-                      <td className="px-4 py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Editar"
-                          onClick={() => abrirEdicao(registro)}
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Remover"
-                          onClick={() => void remover(registro)}
-                        >
-                          <Trash2 className="size-4 text-destructive" />
-                        </Button>
+                      <td className="px-4 py-2.5" onClick={(ev) => ev.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            title="Editar"
+                            aria-label="Editar"
+                            onClick={() => abrirEdicao(registro)}
+                            className="flex size-7 items-center justify-center rounded text-text-muted transition-colors hover:bg-muted hover:text-text-slate"
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            title={statusDe(registro) === 'ativo' ? 'Inativar' : 'Ativar'}
+                            aria-label={statusDe(registro) === 'ativo' ? 'Inativar' : 'Ativar'}
+                            onClick={() => void alternarStatus(registro)}
+                            className={`flex size-7 items-center justify-center rounded text-text-muted transition-colors ${
+                              statusDe(registro) === 'ativo'
+                                ? 'hover:bg-danger-surface hover:text-danger-rose'
+                                : 'hover:bg-success-surface hover:text-success-strong'
+                            }`}
+                          >
+                            {statusDe(registro) === 'ativo' ? (
+                              <PowerOff className="size-3.5" />
+                            ) : (
+                              <Power className="size-3.5" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -4342,158 +4719,201 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
             </tbody>
           </table>
         </div>
+      </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t p-4 text-sm text-muted-foreground">
-          <span>
-            Mostrando {linhas.length} de {total} {substantivoPlural}
-          </span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={pagina <= 1} onClick={() => setPagina((p) => p - 1)}>
-              Anterior
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={pagina * 20 >= total}
-              onClick={() => setPagina((p) => p + 1)}
-            >
-              Próxima
-            </Button>
-          </div>
-        </div>
-      </Card>
-
-      {drawerAberto && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40" role="dialog" aria-modal="true">
-          <div className="flex h-full w-[520px] flex-col bg-card shadow-xl">
-            <div className="flex items-center justify-between border-b p-5">
-              <h2 className="text-lg font-bold">{editando ? tituloDrawerEdicao : tituloDrawerNovo}</h2>
-              <Button variant="ghost" size="icon" aria-label="Fechar" onClick={fechar}>
-                <X className="size-4" />
-              </Button>
-            </div>
-
-            <div className="flex-1 space-y-4 overflow-auto p-5">
-              <div className="grid grid-cols-2 gap-4">
-                {campos.map((campo) => (
-                  <div
-                    key={campo.nome}
-                    className={`space-y-1.5 ${campo.colSpan === 2 ? 'col-span-2' : ''}`}
-                  >
-                    <Label htmlFor={campo.nome}>
-                      {campo.rotulo}
-                      {campo.obrigatorio && <span className="ml-1 text-destructive">*</span>}
-                    </Label>
-
-                    {campo.tipo === 'textarea' && (
-                      <Textarea
-                        id={campo.nome}
-                        rows={3}
-                        value={String(form[campo.nome] ?? '')}
-                        placeholder={campo.placeholder}
-                        onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
-                      />
-                    )}
-
-                    {campo.tipo === 'select' && (
-                      <Select
-                        value={String(form[campo.nome] ?? '')}
-                        onValueChange={(v) => setForm((f) => ({ ...f, [campo.nome]: v }))}
-                      >
-                        <SelectTrigger id={campo.nome}>
-                          <SelectValue placeholder={campo.placeholder ?? 'Selecione'} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(campo.opcoes ?? []).map((opcao) => (
-                            <SelectItem key={opcao.valor} value={opcao.valor}>
-                              {opcao.rotulo}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-
-                    {campo.tipo === 'switch' && (
-                      <div className="flex h-9 items-center gap-2">
-                        <Switch
-                          id={campo.nome}
-                          checked={form[campo.nome] === true}
-                          onCheckedChange={(v) => setForm((f) => ({ ...f, [campo.nome]: v }))}
-                        />
-                        <span className="text-sm text-muted-foreground">
-                          {form[campo.nome] === true ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </div>
-                    )}
-
-                    {(campo.tipo === 'texto' || campo.tipo === 'numero' || campo.tipo === 'data') && (
-                      <Input
-                        id={campo.nome}
-                        type={campo.tipo === 'numero' ? 'number' : campo.tipo === 'data' ? 'date' : 'text'}
-                        value={String(form[campo.nome] ?? '')}
-                        placeholder={campo.placeholder}
-                        onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
-                      />
-                    )}
-
-                    {campo.ajuda && <p className="text-xs text-muted-foreground">{campo.ajuda}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 border-t p-5">
-              <Button variant="outline" onClick={fechar}>
-                Cancelar
-              </Button>
-              <Button onClick={() => void salvar()} disabled={salvando}>
-                {salvando ? 'Salvando…' : 'Salvar'}
-              </Button>
-            </div>
-          </div>
+      {/* D41.a — só aparece quando a paginação do backend passa a existir de fato */}
+      {total > PAGE_SIZE && (
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            disabled={pagina <= 1}
+            onClick={() => setPagina((p) => p - 1)}
+            className="h-8 rounded-md border border-border px-3 text-[13px] font-medium text-text-secondary transition-colors hover:bg-surface-subtle disabled:opacity-50"
+          >
+            Anterior
+          </button>
+          <button
+            type="button"
+            disabled={pagina * PAGE_SIZE >= total}
+            onClick={() => setPagina((p) => p + 1)}
+            className="h-8 rounded-md border border-border px-3 text-[13px] font-medium text-text-secondary transition-colors hover:bg-surface-subtle disabled:opacity-50"
+          >
+            Próxima
+          </button>
         </div>
       )}
+
+      {/* Drawer — Caminhoes.tsx:55-126 / Representantes.tsx:90-207 */}
+      <Sheet open={drawerAberto} onOpenChange={(aberto) => { if (!aberto) fechar(); }}>
+        <SheetContent
+          side="right"
+          className={`${classeDrawer} flex max-w-full flex-col border-l border-border bg-card p-0 sm:max-w-full`}
+        >
+          <SheetHeader className="flex-shrink-0 border-b border-border px-6 py-4">
+            <SheetTitle className="text-[16px] font-bold text-text-strong">
+              {editando ? tituloDrawerEdicao(editando) : tituloDrawerNovo}
+            </SheetTitle>
+          </SheetHeader>
+
+          <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-6">
+            {bannerDrawer}
+
+            {campos.map((campo) => (
+              <div key={campo.nome} className="flex flex-col gap-1">
+                <label htmlFor={campo.nome} className="text-[12px] font-semibold text-text-graphite">
+                  {campo.rotulo}
+                  {campo.obrigatorio && <span className="ml-1 text-destructive">*</span>}
+                </label>
+
+                {campo.tipo === 'textarea' && (
+                  <textarea
+                    id={campo.nome}
+                    rows={3}
+                    value={form[campo.nome] ?? ''}
+                    placeholder={campo.placeholder}
+                    onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
+                    className="w-full resize-none rounded-md border border-border bg-card px-2.5 py-2 text-[13px] text-text-strong placeholder:text-placeholder focus:border-action-blue focus:outline-none"
+                  />
+                )}
+
+                {campo.tipo === 'select' && (
+                  <select
+                    id={campo.nome}
+                    value={form[campo.nome] ?? ''}
+                    onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
+                    className="h-8 w-full rounded-md border border-border bg-card px-2.5 text-[13px] text-text-strong focus:border-action-blue focus:outline-none"
+                  >
+                    {campo.placeholder && <option value="">{campo.placeholder}</option>}
+                    {(campo.opcoes ?? []).map((opcao) => (
+                      <option key={opcao.valor} value={opcao.valor}>
+                        {opcao.rotulo}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {(campo.tipo === 'texto' || campo.tipo === 'numero') && (
+                  <input
+                    id={campo.nome}
+                    type={campo.tipo === 'numero' ? 'number' : 'text'}
+                    value={form[campo.nome] ?? ''}
+                    placeholder={campo.placeholder}
+                    onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
+                    className={`h-8 w-full rounded-md border border-border bg-card px-2.5 text-[13px] text-text-strong placeholder:text-placeholder focus:border-action-blue focus:outline-none ${
+                      campo.monoespacado ? 'font-mono' : ''
+                    }`}
+                  />
+                )}
+              </div>
+            ))}
+
+            {/* Status é do componente, não da grade de campos — Representantes.tsx:142-155 */}
+            <div className="flex items-center justify-between border-t border-b border-muted py-2.5">
+              <span className="text-[13px] font-medium text-text-strong">Status</span>
+              <Switch
+                aria-label="Status"
+                checked={form.status === 'ativo'}
+                onCheckedChange={(v) => setForm((f) => ({ ...f, status: v ? 'ativo' : 'inativo' }))}
+              />
+            </div>
+
+            {blocosDrawer?.(editando)}
+          </div>
+
+          <div className="flex flex-shrink-0 items-center justify-end gap-3 border-t border-border bg-card px-6 py-4">
+            <button
+              type="button"
+              onClick={fechar}
+              className="h-8 rounded-md border border-border px-4 text-[13px] font-medium text-text-secondary transition-colors hover:bg-surface-subtle"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void salvar()}
+              disabled={salvando}
+              className="h-8 rounded-md bg-brand-navy-deep px-5 text-[13px] font-semibold text-white transition-colors hover:bg-action-blue disabled:opacity-60"
+            >
+              {salvando ? 'Salvando…' : rotuloSalvar}
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
 ```
 
-**12.2** Criar `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx` (DoD-36 a DoD-39):
+O `X` do cabeçalho do protótipo (`Caminhoes.tsx:62`) é o botão de fechar que o `SheetContent` do DS já
+renderiza em `absolute top-4 right-4` (`sheet.tsx:75`) — não se cria um segundo. `sm:max-w-full` anula
+o `sm:max-w-sm` do DS, que senão estrangularia os 460/520 px do protótipo.
+
+**12.3** Criar `app/frontend/__tests__/cadastro-tabela-drawer.test.tsx`
+(DoD-36, DoD-37, DoD-38, DoD-39, DoD-79, DoD-80, DoD-81):
 
 ```tsx
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { CadastroTabelaDrawer } from '../src/components/cadastros/cadastro-tabela-drawer';
+import {
+  CadastroTabelaDrawer,
+  type StatusCadastro,
+} from '../src/components/cadastros/cadastro-tabela-drawer';
 
-interface Linha { id: string; nome: string }
+interface Linha { id: string; nome: string; status: StatusCadastro }
+
+const LINHAS: Linha[] = [
+  { id: 'r1', nome: 'Carlos Silva', status: 'ativo' },
+  { id: 'r2', nome: 'Sabrina Alves', status: 'inativo' },
+];
 
 const props = {
+  caminho: 'Cadastros & Regras / Representantes',
   titulo: 'Representantes',
   subtitulo: 'Gestão da equipe comercial',
   rotuloNovo: 'Novo Representante',
+  rotuloSalvar: 'Salvar Representante',
   tituloDrawerNovo: 'Novo Representante',
-  tituloDrawerEdicao: 'Editar Representante',
-  placeholderBusca: 'Buscar representante...',
+  tituloDrawerEdicao: (r: Linha) => `Representante — ${r.nome}`,
+  placeholderBusca: 'Buscar por nome ou contato',
+  substantivoSingular: 'representante',
   substantivoPlural: 'representantes',
   endpoint: '/api/cadastros/representantes',
   colunas: [{ chave: 'nome', titulo: 'Nome', render: (r: Linha) => r.nome }],
   campos: [{ nome: 'nome', rotulo: 'Nome', tipo: 'texto' as const, obrigatorio: true }],
-  paraFormulario: (r: Linha) => ({ nome: r.nome }),
-  formularioVazio: { nome: '' },
-  paraPayload: (f: Record<string, string | boolean>) => ({ nome: f.nome }),
+  filtros: [
+    {
+      nome: 'status',
+      rotuloTodos: 'Status: Todos',
+      opcoes: [
+        { valor: 'ativo', rotulo: 'Ativo' },
+        { valor: 'inativo', rotulo: 'Inativo' },
+      ],
+    },
+  ],
+  larguraDrawer: 460 as const,
+  statusDe: (r: Linha) => r.status,
+  paraFormulario: (r: Linha) => ({ nome: r.nome, status: r.status }),
+  formularioVazio: { nome: '', status: 'ativo' },
+  paraPayload: (f: Record<string, string>) => ({ nome: f.nome, status: f.status }),
   mensagemVazia: 'Nenhum representante encontrado para os filtros aplicados.',
 };
 
-beforeEach(() => {
-  global.fetch = jest.fn().mockResolvedValue({
+function respostaOk(linhas: Linha[] = LINHAS) {
+  return {
     ok: true,
-    json: async () => ({ data: [{ id: 'r1', nome: 'Carlos Silva' }], total: 1, page: 1, pageSize: 20 }),
-  }) as unknown as typeof fetch;
+    json: async () => ({ data: linhas, total: linhas.length, page: 1, pageSize: 20 }),
+  };
+}
+
+beforeEach(() => {
+  global.fetch = jest.fn().mockResolvedValue(respostaOk()) as unknown as typeof fetch;
 });
 
-it('lista registros do backend e mostra o total real', async () => {
+it('lista registros do backend e mostra o contador do prototipo', async () => {
   render(<CadastroTabelaDrawer<Linha> {...props} podeGerenciar />);
   expect(await screen.findByText('Carlos Silva')).toBeInTheDocument();
-  expect(screen.getByText('Mostrando 1 de 1 representantes')).toBeInTheDocument();
+  expect(screen.getByText('2 representantes')).toBeInTheDocument();
+  expect(screen.queryByText(/Mostrando/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Filtros' })).not.toBeInTheDocument();
 });
 
 it('sem permissao de gerenciar nao ha botao novo nem acoes de linha', async () => {
@@ -4501,14 +4921,43 @@ it('sem permissao de gerenciar nao ha botao novo nem acoes de linha', async () =
   await screen.findByText('Carlos Silva');
   expect(screen.queryByRole('button', { name: 'Novo Representante' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Inativar' })).not.toBeInTheDocument();
 });
 
-it('drawer abre em modo edicao com os dados da linha', async () => {
+it('clique na linha abre o drawer em edicao com a largura do prototipo', async () => {
   render(<CadastroTabelaDrawer<Linha> {...props} podeGerenciar />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Editar' }));
+  fireEvent.click(await screen.findByText('Carlos Silva'));
   await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-  expect(screen.getByText('Editar Representante')).toBeInTheDocument();
+  expect(screen.getByText('Representante — Carlos Silva')).toBeInTheDocument();
   expect(screen.getByLabelText(/Nome/)).toHaveValue('Carlos Silva');
+  expect(screen.getByRole('dialog').className).toContain('w-[460px]');
+  expect(screen.getByRole('button', { name: 'Salvar Representante' })).toBeInTheDocument();
+});
+
+it('select de status refaz a consulta com o filtro na query', async () => {
+  render(<CadastroTabelaDrawer<Linha> {...props} podeGerenciar />);
+  await screen.findByText('Carlos Silva');
+  fireEvent.change(screen.getByLabelText('Status: Todos'), { target: { value: 'inativo' } });
+  await waitFor(() => {
+    const chamadas = (global.fetch as jest.Mock).mock.calls.map((c) => String(c[0]));
+    expect(chamadas.some((url) => url.includes('status=inativo'))).toBe(true);
+  });
+});
+
+it('acao Power faz PATCH de status e nao abre o drawer nem oferece exclusao', async () => {
+  render(<CadastroTabelaDrawer<Linha> {...props} podeGerenciar />);
+  await screen.findByText('Carlos Silva');
+  expect(screen.queryByRole('button', { name: 'Remover' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getAllByRole('button', { name: 'Inativar' })[0]);
+  await waitFor(() => {
+    const patch = (global.fetch as jest.Mock).mock.calls.find(
+      (c) => (c[1] as RequestInit | undefined)?.method === 'PATCH',
+    );
+    expect(patch).toBeDefined();
+    expect(String(patch![0])).toBe('/api/cadastros/representantes/r1');
+    expect(JSON.parse(String((patch![1] as RequestInit).body))).toEqual({ status: 'inativo' });
+  });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
 it('erro do backend aparece como mensagem, sem lista falsa', async () => {
@@ -4529,15 +4978,121 @@ it('erro do backend aparece como mensagem, sem lista falsa', async () => {
 cd app/frontend && npx jest __tests__/cadastro-tabela-drawer.test.tsx
 ```
 
-Saída esperada: `Tests: 4 passed, 4 total`.
+Saída esperada: `Tests: 6 passed, 6 total`, com as linhas
+`✓ clique na linha abre o drawer em edicao com a largura do prototipo`,
+`✓ select de status refaz a consulta com o filtro na query` e
+`✓ acao Power faz PATCH de status e nao abre o drawer nem oferece exclusao`.
 
 ---
 
 ### Task 13 — Tela `/cadastros/representantes`
 
-Protótipo: `Representantes.tsx`. Colunas: Código, Nome, Contato (e-mail + telefone em duas linhas),
-Região, Comissão (%), Status, Ações. Drawer com Código, Nome completo, E-mail, Telefone, Região,
-Comissão (%), Data de Admissão e Observações.
+Protótipo: `Representantes.tsx` (341 linhas). A entidade real tem **exatamente** seis campos além do
+id e dos timestamps — `codigo`, `nome`, `tipoCanal`, `contato`, `status`, `observacao`
+(`representantes.schema.ts:8-13`) — e o DTO do backend exige `codigo` e `nome`
+(`dto/representante.dto.ts:4-11`). O protótipo mostra Nome, Tipo/canal, Contato, Clientes vinculados,
+Usuários vinculados, Status e Ações (`:292`), e o drawer traz banner informativo, Nome, Tipo / canal,
+Contato, Status, Observação, Clientes vinculados e Usuários vinculados (`:102-193`).
+
+A tela desta onda é a interseção verificada dos dois: **Nome, Tipo/canal, Contato, Clientes vinculados,
+Status, Ações** na tabela; **Código, Nome, Tipo / canal, Contato, Observação** na grade do drawer, mais
+o Status do componente e o bloco "Clientes vinculados". Não existe `email`, `telefone`, `regiao`,
+`comissaoPercentual`, `dataAdmissao` nem `observacoes` (plural) — nem na tabela, nem no DTO, nem no
+protótipo; qualquer um deles seria campo inventado (RA-06, Princípio VIII). "Usuários vinculados" fica
+para a Onda 4 (**D13.b**), "Tipo / canal" é `input` de texto (**D13.a**) e "Código" é o único campo que
+o drawer do protótipo não tem (**D13.c**).
+
+**Divergência autorizada D13.c** — o drawer ganha o campo "Código", primeiro da grade, obrigatório e
+monoespaçado. `representantes.codigo` é `NOT NULL` com índice único (`representantes.schema.ts:8,20`) e
+`createRepresentanteSchema` o exige: sem o campo, ou o cadastro falha em 100% das tentativas, ou a tela
+geraria um código sozinha — dado inventado. O protótipo não o mostra porque seu *mock* nasce com
+`id: "REP-01"` fixo (`Representantes.tsx:24`).
+
+**13.0** Backend — filtros reais, canais e clientes vinculados (decisões 44 e 45). O
+`listarCadastroQuerySchema` já existe desde a Task 4.0; aqui ele é aplicado a representantes.
+
+Em `representantes.service.ts`, `listar` passa a receber `ListarCadastroQuery`, aplicar os dois filtros
+e devolver a contagem de clientes por representante; e ganha `canais()`:
+
+```ts
+async listar(query: ListarCadastroQuery): Promise<Paginado<RepresentanteComVinculos>> {
+  const { limit, offset } = calcularRange(query);
+  const filtros = [query.incluirRemovidos ? undefined : isNull(representantes.deletedAt)];
+  if (query.search) {
+    const termo = `%${query.search}%`;
+    filtros.push(
+      or(
+        ilike(representantes.nome, termo),
+        ilike(representantes.codigo, termo),
+        ilike(representantes.contato, termo),
+      ),
+    );
+  }
+  if (query.status) filtros.push(eq(representantes.status, query.status));
+  if (query.tipoCanal) filtros.push(eq(representantes.tipoCanal, query.tipoCanal));
+  const where = and(...filtros.filter(Boolean));
+
+  const contagemClientes = sql<number>`(
+    select count(*)::int from ${clientes}
+    where ${clientes.representanteId} = ${representantes.id}
+      and ${clientes.deletedAt} is null
+  )`;
+
+  const [linhas, totalRow] = await Promise.all([
+    this.db
+      .select({ ...getTableColumns(representantes), clientesVinculados: contagemClientes })
+      .from(representantes)
+      .where(where)
+      .orderBy(desc(representantes.createdAt))
+      .limit(limit)
+      .offset(offset),
+    this.db.select({ total: sql<number>`count(*)::int` }).from(representantes).where(where),
+  ]);
+
+  return montarPaginado(linhas, totalRow[0]?.total ?? 0, query);
+}
+
+/** Canais realmente usados, para o `select` da tela (decisão 44.3). */
+async canais(): Promise<string[]> {
+  const linhas = await this.db
+    .selectDistinct({ tipoCanal: representantes.tipoCanal })
+    .from(representantes)
+    .where(and(isNull(representantes.deletedAt), isNotNull(representantes.tipoCanal)))
+    .orderBy(representantes.tipoCanal);
+  return linhas.map((l) => l.tipoCanal).filter((c): c is string => c !== null);
+}
+```
+
+`detalhar` devolve o representante com a lista para o bloco do drawer:
+
+```ts
+async detalhar(id: string): Promise<RepresentanteComClientes> {
+  const representante = await this.buscarAtivo(id);
+  if (!representante) throw new NotFoundException('Representante não encontrado');
+
+  const vinculados = await this.db
+    .select({ id: clientes.id, nomeFantasia: clientes.nomeFantasia, razaoSocial: clientes.razaoSocial })
+    .from(clientes)
+    .where(and(eq(clientes.representanteId, id), isNull(clientes.deletedAt)))
+    .orderBy(clientes.razaoSocial);
+
+  return { ...representante, clientesVinculados: vinculados };
+}
+```
+
+Em `representantes.controller.ts`: `listar` troca `listarQuerySchema` por `listarCadastroQuerySchema`, e
+a rota de canais entra **antes** de `@Get(':id')` (senão `canais` casa como `:id`):
+
+```ts
+@Get('canais')
+@RequirePermissoes('REPRESENTANTES_LER')
+async canais() {
+  return this.representantesService.canais();
+}
+```
+
+`import { clientes, representantes } from '../../../database/schema';` e
+`import { getTableColumns, isNotNull } from 'drizzle-orm';` completam os imports do serviço.
 
 **13.1** Substituir `app/frontend/src/app/(admin)/cadastros/representantes/page.tsx`:
 
@@ -4561,126 +5116,337 @@ export default async function Page() {
 }
 ```
 
-**13.2** Criar `app/frontend/src/app/(admin)/cadastros/representantes/representantes-client.tsx`:
+**13.2** Em `app/frontend/src/lib/representantes.ts`, acrescentar à interface `Representante` os dois
+campos que o backend passa a devolver na Task 13.0 — e **nada além disso**:
+
+```ts
+export interface Representante {
+  id: string;
+  codigo: string;
+  nome: string;
+  tipoCanal: string | null;
+  contato: string | null;
+  status: StatusCadastro;
+  observacao: string | null;
+  /** Contagem em `GET /representantes`; lista em `GET /representantes/:id` (decisão 45). */
+  clientesVinculados?: number | ClienteVinculado[];
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface ClienteVinculado {
+  id: string;
+  nomeFantasia: string | null;
+  razaoSocial: string;
+}
+```
+
+`CriarRepresentanteDto` e `AtualizarRepresentanteDto` ficam como estão: já espelham exatamente o
+`createRepresentanteSchema` do backend.
+
+**13.3** Criar `app/frontend/src/app/api/cadastros/representantes/canais/route.ts`, no molde de
+`api/cadastros/representantes/route.ts`:
+
+```ts
+import { NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/api';
+
+export async function GET() {
+  const { data, error, status } = await fetchBackend<string[]>('/representantes/canais');
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 200 });
+}
+```
+
+**13.4** Criar `app/frontend/src/app/(admin)/cadastros/representantes/clientes-vinculados.tsx` — o bloco
+do drawer de `Representantes.tsx:167-180`, alimentado por `GET /api/cadastros/representantes/:id`:
 
 ```tsx
 'use client';
 
-import { Badge } from '@/components/ui/badge';
+import { useEffect, useState } from 'react';
+import { Users } from 'lucide-react';
+import type { ClienteVinculado } from '@/lib/representantes';
+
+export function ClientesVinculados({ representanteId }: { representanteId: string }) {
+  const [clientes, setClientes] = useState<ClienteVinculado[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ativo = true;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/cadastros/representantes/${representanteId}`, { cache: 'no-store' });
+        if (!res.ok) {
+          if (ativo) setErro('Não foi possível carregar os clientes vinculados.');
+          return;
+        }
+        const detalhe = (await res.json()) as { clientesVinculados: ClienteVinculado[] };
+        if (ativo) setClientes(detalhe.clientesVinculados);
+      } catch {
+        if (ativo) setErro('Não foi possível carregar os clientes vinculados.');
+      }
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [representanteId]);
+
+  if (erro) {
+    return <p role="alert" className="text-[12px] text-destructive">{erro}</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="flex items-center gap-1.5 text-[12px] font-semibold text-text-graphite">
+        <Users className="size-3.5 text-text-muted" /> Clientes vinculados
+        {clientes !== null && ` (${clientes.length})`}
+      </p>
+      {clientes === null ? (
+        <p className="text-[12px] text-text-muted">Carregando…</p>
+      ) : clientes.length === 0 ? (
+        <p className="text-[12px] text-text-muted">Nenhum cliente vinculado.</p>
+      ) : (
+        <div className="flex flex-col gap-1.5 rounded-lg bg-surface-subtle p-3">
+          {clientes.map((c) => (
+            <div key={c.id} className="text-[12px] text-text-ink">
+              {c.nomeFantasia ?? c.razaoSocial}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+**13.5** Criar `app/frontend/src/app/(admin)/cadastros/representantes/representantes-client.tsx`:
+
+```tsx
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Info } from 'lucide-react';
 import { CadastroTabelaDrawer } from '@/components/cadastros/cadastro-tabela-drawer';
 import type { Representante } from '@/lib/representantes';
+import { ClientesVinculados } from './clientes-vinculados';
+
+const BANNER = (
+  <div className="flex items-start gap-2 rounded-lg border border-info-border bg-info-surface p-3">
+    <Info className="mt-0.5 size-3.5 flex-shrink-0 text-info-icon" />
+    <p className="text-[12px] text-info-ink">
+      Todo cliente tem um vendedor/representante associado; o pedido herda do cliente.
+    </p>
+  </div>
+);
 
 export function RepresentantesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
+  const [canais, setCanais] = useState<string[]>([]);
+
+  // Opções reais de `tipo_canal` (decisão 44.3): sem canal cadastrado, o `select` não aparece.
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch('/api/cadastros/representantes/canais', { cache: 'no-store' });
+      if (res.ok) setCanais((await res.json()) as string[]);
+    })();
+  }, []);
+
   return (
     <CadastroTabelaDrawer<Representante>
+      caminho="Cadastros & Regras / Representantes"
       titulo="Representantes"
-      subtitulo="Gestão da equipe comercial e suas regiões de atuação"
+      subtitulo="Vendedores e representantes que atendem clientes e pedidos."
       rotuloNovo="Novo Representante"
+      rotuloSalvar="Salvar Representante"
       tituloDrawerNovo="Novo Representante"
-      tituloDrawerEdicao="Editar Representante"
-      placeholderBusca="Buscar por nome, código ou região..."
+      tituloDrawerEdicao={(r) => `Representante — ${r.nome}`}
+      placeholderBusca="Buscar por nome ou contato"
+      substantivoSingular="representante"
       substantivoPlural="representantes"
       endpoint="/api/cadastros/representantes"
+      larguraDrawer={520}
       podeGerenciar={podeGerenciar}
       mensagemVazia="Nenhum representante encontrado para os filtros aplicados."
+      bannerTopo={BANNER}
+      bannerDrawer={BANNER}
+      statusDe={(r) => r.status}
+      filtros={
+        canais.length > 0
+          ? [
+              {
+                nome: 'tipoCanal',
+                rotuloTodos: 'Canal: Todos',
+                opcoes: canais.map((c) => ({ valor: c, rotulo: c })),
+              },
+              {
+                nome: 'status',
+                rotuloTodos: 'Status: Todos',
+                opcoes: [
+                  { valor: 'ativo', rotulo: 'Ativo' },
+                  { valor: 'inativo', rotulo: 'Inativo' },
+                ],
+              },
+            ]
+          : [
+              {
+                nome: 'status',
+                rotuloTodos: 'Status: Todos',
+                opcoes: [
+                  { valor: 'ativo', rotulo: 'Ativo' },
+                  { valor: 'inativo', rotulo: 'Inativo' },
+                ],
+              },
+            ]
+      }
       colunas={[
-        { chave: 'codigo', titulo: 'Código', render: (r) => <span className="font-mono text-xs">{r.codigo}</span> },
-        { chave: 'nome', titulo: 'Nome', render: (r) => <span className="font-medium">{r.nome}</span> },
+        {
+          chave: 'nome',
+          titulo: 'Nome',
+          render: (r) => <span className="font-bold whitespace-nowrap text-text-strong">{r.nome}</span>,
+        },
+        {
+          chave: 'tipoCanal',
+          titulo: 'Tipo/canal',
+          render: (r) =>
+            r.tipoCanal ? (
+              <span className="inline-flex items-center rounded bg-action-blue-bg px-2 py-0.5 text-[11px] font-medium text-action-blue-hover">
+                {r.tipoCanal}
+              </span>
+            ) : (
+              <span className="text-text-muted">—</span>
+            ),
+        },
         {
           chave: 'contato',
           titulo: 'Contato',
-          render: (r) => (
-            <div className="text-xs text-muted-foreground">
-              <p>{r.email ?? '—'}</p>
-              <p>{r.telefone ?? '—'}</p>
-            </div>
-          ),
-        },
-        { chave: 'regiao', titulo: 'Região', render: (r) => r.regiao ?? '—' },
-        {
-          chave: 'comissao',
-          titulo: 'Comissão',
-          alinhamento: 'direita',
-          render: (r) => (r.comissaoPercentual ? `${r.comissaoPercentual}%` : '—'),
+          render: (r) => <span className="whitespace-nowrap text-text-slate">{r.contato ?? '—'}</span>,
         },
         {
-          chave: 'status',
-          titulo: 'Status',
+          chave: 'clientesVinculados',
+          titulo: 'Clientes vinculados',
           render: (r) => (
-            <Badge
-              variant="outline"
-              className={
-                r.status === 'ativo'
-                  ? 'border-green-200 bg-green-50 text-green-700'
-                  : 'border-muted bg-muted/50 text-muted-foreground'
-              }
-            >
-              {r.status === 'ativo' ? 'Ativo' : 'Inativo'}
-            </Badge>
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-text-slate">
+              {typeof r.clientesVinculados === 'number' ? r.clientesVinculados : 0}
+            </span>
           ),
         },
       ]}
       campos={[
-        { nome: 'codigo', rotulo: 'Código', tipo: 'texto', obrigatorio: true, placeholder: 'REP-001' },
-        { nome: 'nome', rotulo: 'Nome completo', tipo: 'texto', obrigatorio: true, colSpan: 2 },
-        { nome: 'email', rotulo: 'E-mail', tipo: 'texto', placeholder: 'nome@alphacarnes.com.br' },
-        { nome: 'telefone', rotulo: 'Telefone', tipo: 'texto', placeholder: '(11) 90000-0000' },
-        { nome: 'regiao', rotulo: 'Região', tipo: 'texto' },
-        { nome: 'comissaoPercentual', rotulo: 'Comissão (%)', tipo: 'numero' },
-        { nome: 'dataAdmissao', rotulo: 'Data de admissão', tipo: 'data' },
-        {
-          nome: 'status',
-          rotulo: 'Status',
-          tipo: 'select',
-          opcoes: [
-            { valor: 'ativo', rotulo: 'Ativo' },
-            { valor: 'inativo', rotulo: 'Inativo' },
-          ],
-        },
-        { nome: 'observacoes', rotulo: 'Observações', tipo: 'textarea', colSpan: 2 },
+        { nome: 'codigo', rotulo: 'Código', tipo: 'texto', obrigatorio: true, placeholder: 'REP-01', monoespacado: true },
+        { nome: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, placeholder: 'Ex: Sabrina' },
+        { nome: 'tipoCanal', rotulo: 'Tipo / canal', tipo: 'texto', placeholder: 'Ex: Interno' },
+        { nome: 'contato', rotulo: 'Contato', tipo: 'texto', placeholder: 'Telefone e/ou e-mail' },
+        { nome: 'observacao', rotulo: 'Observação', tipo: 'textarea' },
       ]}
-      formularioVazio={{
-        codigo: '', nome: '', email: '', telefone: '', regiao: '',
-        comissaoPercentual: '', dataAdmissao: '', status: 'ativo', observacoes: '',
-      }}
+      formularioVazio={{ codigo: '', nome: '', tipoCanal: '', contato: '', observacao: '', status: 'ativo' }}
       paraFormulario={(r) => ({
         codigo: r.codigo,
         nome: r.nome,
-        email: r.email ?? '',
-        telefone: r.telefone ?? '',
-        regiao: r.regiao ?? '',
-        comissaoPercentual: r.comissaoPercentual ?? '',
-        dataAdmissao: r.dataAdmissao ?? '',
+        tipoCanal: r.tipoCanal ?? '',
+        contato: r.contato ?? '',
+        observacao: r.observacao ?? '',
         status: r.status,
-        observacoes: r.observacoes ?? '',
       })}
       paraPayload={(f) => ({
-        codigo: String(f.codigo).trim(),
-        nome: String(f.nome).trim(),
-        email: String(f.email).trim() || undefined,
-        telefone: String(f.telefone).trim() || undefined,
-        regiao: String(f.regiao).trim() || undefined,
-        comissaoPercentual: String(f.comissaoPercentual).trim() || undefined,
-        dataAdmissao: String(f.dataAdmissao).trim() || undefined,
-        status: String(f.status),
-        observacoes: String(f.observacoes).trim() || undefined,
+        codigo: f.codigo.trim(),
+        nome: f.nome.trim(),
+        tipoCanal: f.tipoCanal.trim() || undefined,
+        contato: f.contato.trim() || undefined,
+        observacao: f.observacao.trim() || undefined,
+        status: f.status,
       })}
+      blocosDrawer={(r) => (r ? <ClientesVinculados representanteId={r.id} /> : null)}
     />
   );
 }
 ```
 
-**13.3** Em `app/frontend/src/lib/representantes.ts`, garantir que a interface `Representante` tem
-`dataAdmissao?: string | null` e `observacoes?: string | null` — se faltar, acrescentar os dois campos
-(o backend já os devolve).
+A coluna "Clientes vinculados" mostra a contagem que o backend devolve; enquanto a listagem não trouxer
+o campo (`typeof !== 'number'`), mostra `0` **porque o backend já contou zero** — a Task 13.0 torna o
+campo obrigatório na resposta, e o teste de integração da DoD-83 prova a contagem real.
+
+**13.6** Criar `app/frontend/__tests__/representantes-client.test.tsx` (DoD-84, DoD-85, DoD-86):
+
+```tsx
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { RepresentantesClient } from '../src/app/(admin)/cadastros/representantes/representantes-client';
+
+const REPRESENTANTE = {
+  id: 'r1',
+  codigo: 'REP-01',
+  nome: 'Sabrina',
+  tipoCanal: 'Interno',
+  contato: '(11) 98811-2233 · sabrina@alphacarnes.com.br',
+  status: 'ativo',
+  observacao: 'Time interno Alpha Carnes.',
+  clientesVinculados: 5,
+  createdAt: '2026-07-01T12:00:00.000Z',
+  updatedAt: '2026-07-01T12:00:00.000Z',
+  deletedAt: null,
+};
+
+const CAMPOS_INEXISTENTES = [/E-?mail/i, /Telefone/i, /Regi[ãa]o/i, /Comiss[ãa]o/i, /Data de admiss[ãa]o/i, /Observa[çc][õo]es/i];
+
+beforeEach(() => {
+  global.fetch = jest.fn(async (url: RequestInfo | URL) => {
+    const alvo = String(url);
+    if (alvo.includes('/canais')) return { ok: true, json: async () => ['Interno', 'Representante'] };
+    if (/representantes\/r1$/.test(alvo)) {
+      return {
+        ok: true,
+        json: async () => ({
+          ...REPRESENTANTE,
+          clientesVinculados: [{ id: 'c1', nomeFantasia: 'Mercado 300', razaoSocial: 'Mercado 300 Ltda' }],
+        }),
+      };
+    }
+    return { ok: true, json: async () => ({ data: [REPRESENTANTE], total: 1, page: 1, pageSize: 20 }) };
+  }) as unknown as typeof fetch;
+});
+
+it('tabela tem as 6 colunas do prototipo, sem Usuarios vinculados', async () => {
+  render(<RepresentantesClient podeGerenciar />);
+  await screen.findByText('Sabrina');
+  const cabecalhos = screen.getAllByRole('columnheader').map((th) => th.textContent);
+  expect(cabecalhos).toEqual(['Nome', 'Tipo/canal', 'Contato', 'Clientes vinculados', 'Status', 'Ações']);
+  expect(screen.getByText('5')).toBeInTheDocument();
+});
+
+it('drawer traz codigo, nome, tipo/canal, contato, observacao e status', async () => {
+  render(<RepresentantesClient podeGerenciar />);
+  fireEvent.click(await screen.findByText('Sabrina'));
+  await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+  expect(screen.getByLabelText(/Código/)).toHaveValue('REP-01');
+  expect(screen.getByLabelText(/^Nome/)).toHaveValue('Sabrina');
+  expect(screen.getByLabelText(/Tipo \/ canal/)).toHaveValue('Interno');
+  expect(screen.getByLabelText(/Contato/)).toHaveValue(REPRESENTANTE.contato);
+  expect(screen.getByLabelText(/Observação/)).toHaveValue(REPRESENTANTE.observacao);
+  expect(screen.getByRole('switch', { name: 'Status' })).toBeChecked();
+  expect(await screen.findByText('Mercado 300')).toBeInTheDocument();
+});
+
+it('nao existe campo de email, telefone, regiao, comissao ou data de admissao', async () => {
+  render(<RepresentantesClient podeGerenciar />);
+  fireEvent.click(await screen.findByText('Sabrina'));
+  await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+  for (const rotulo of CAMPOS_INEXISTENTES) {
+    expect(screen.queryByLabelText(rotulo)).not.toBeInTheDocument();
+  }
+});
+```
 
 **Verificação:**
 
 ```bash
-cd app/frontend && npx tsc --noEmit
+cd app/frontend && npx tsc --noEmit && npx jest __tests__/representantes-client.test.tsx
 ```
 
-Saída esperada: sem erros.
+Saída esperada: `tsc` sem erros e `Tests: 3 passed, 3 total` — os casos
+`tabela tem as 6 colunas do prototipo, sem Usuarios vinculados`,
+`drawer traz codigo, nome, tipo/canal, contato, observacao e status` e
+`nao existe campo de email, telefone, regiao, comissao ou data de admissao`, este último varrendo
+`screen.queryByLabelText` para os seis rótulos proibidos.
 
 ---
 
@@ -4705,7 +5471,6 @@ alimenta o `select` "Rota padrão" e vem da rota BFF de cadastros já existente:
 import { useEffect, useState } from 'react';
 import { Truck } from 'lucide-react';
 import { toast } from 'sonner';
-import { Badge } from '@/components/ui/badge';
 import { CadastroTabelaDrawer } from '@/components/cadastros/cadastro-tabela-drawer';
 import { mensagemDeErro } from '@/lib/error-message';
 import type { Caminhao } from '@/lib/frota';
@@ -4732,78 +5497,69 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
 
   return (
     <CadastroTabelaDrawer<Caminhao>
+      caminho="Cadastros & Regras / Caminhões"
       titulo="Caminhões"
       subtitulo="Frota utilizada nas cargas e rotas de expedição."
       rotuloNovo="Novo Caminhão"
+      rotuloSalvar="Salvar Caminhão"
       tituloDrawerNovo="Novo Caminhão"
-      tituloDrawerEdicao="Editar Caminhão"
+      tituloDrawerEdicao={(c) => `Caminhão — ${c.placa}`}
       placeholderBusca="Buscar por placa ou descrição"
+      substantivoSingular="caminhão"
       substantivoPlural="caminhões"
       endpoint="/api/cadastros/frota-caminhoes"
+      larguraDrawer={460}
       podeGerenciar={podeGerenciar}
       mensagemVazia="Nenhum caminhão encontrado para os filtros aplicados."
+      statusDe={(c) => c.status}
+      filtros={[
+        {
+          nome: 'status',
+          rotuloTodos: 'Status: Todos',
+          opcoes: [
+            { valor: 'ativo', rotulo: 'Ativo' },
+            { valor: 'inativo', rotulo: 'Inativo' },
+          ],
+        },
+      ]}
       colunas={[
         {
           chave: 'placa',
           titulo: 'Placa',
           render: (c) => (
-            <span className="flex w-fit items-center gap-1.5 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-bold text-primary">
+            <span className="flex w-fit items-center gap-1.5 rounded bg-action-blue-bg px-1.5 py-0.5 font-mono text-[12px] font-bold text-brand-navy-deep">
               <Truck className="size-3" /> {c.placa}
             </span>
           ),
         },
-        { chave: 'descricao', titulo: 'Descrição', render: (c) => c.descricao ?? '—' },
+        {
+          chave: 'descricao',
+          titulo: 'Descrição',
+          render: (c) => <span className="whitespace-nowrap text-text-strong">{c.descricao ?? '—'}</span>,
+        },
         {
           chave: 'capacidadeKg',
           titulo: 'Capacidade (kg)',
-          alinhamento: 'direita',
-          render: (c) => `${c.capacidadeKg.toLocaleString('pt-BR')} kg`,
-        },
-        { chave: 'rotaPadrao', titulo: 'Rota padrão', render: (c) => c.rotaPadraoNome ?? '—' },
-        {
-          chave: 'status',
-          titulo: 'Status',
           render: (c) => (
-            <Badge
-              variant="outline"
-              className={
-                c.status === 'ativo'
-                  ? 'border-green-200 bg-green-50 text-green-700'
-                  : 'border-muted bg-muted/50 text-muted-foreground'
-              }
-            >
-              {c.status === 'ativo' ? 'Ativo' : 'Inativo'}
-            </Badge>
+            <span className="font-mono text-text-slate">{c.capacidadeKg.toLocaleString('pt-BR')} kg</span>
           ),
+        },
+        {
+          chave: 'rotaPadrao',
+          titulo: 'Rota padrão',
+          render: (c) => <span className="text-text-slate">{c.rotaPadraoNome ?? '—'}</span>,
         },
       ]}
       campos={[
-        { nome: 'placa', rotulo: 'Placa', tipo: 'texto', obrigatorio: true, placeholder: 'ABC-1D23' },
-        {
-          nome: 'descricao',
-          rotulo: 'Descrição',
-          tipo: 'texto',
-          colSpan: 2,
-          placeholder: 'Ex: Baú refrigerado — Mercedes 710',
-        },
+        { nome: 'placa', rotulo: 'Placa', tipo: 'texto', obrigatorio: true, placeholder: 'ABC-1D23', monoespacado: true },
+        { nome: 'descricao', rotulo: 'Descrição', tipo: 'texto', placeholder: 'Ex: Baú refrigerado — Mercedes 710' },
         { nome: 'capacidadeKg', rotulo: 'Capacidade (kg)', tipo: 'numero' },
         {
           nome: 'rotaPadraoId',
           rotulo: 'Rota padrão',
           tipo: 'select',
-          opcoes: [
-            { valor: '', rotulo: 'Sem rota padrão' },
-            ...rotas.map((r) => ({ valor: r.id, rotulo: r.nome })),
-          ],
-        },
-        {
-          nome: 'status',
-          rotulo: 'Status',
-          tipo: 'select',
-          opcoes: [
-            { valor: 'ativo', rotulo: 'Ativo' },
-            { valor: 'inativo', rotulo: 'Inativo' },
-          ],
+          placeholder: 'Sem rota padrão',
+          opcoes: rotas.map((r) => ({ valor: r.id, rotulo: r.nome })),
         },
       ]}
       formularioVazio={{ placa: '', descricao: '', capacidadeKg: '0', rotaPadraoId: '', status: 'ativo' }}
@@ -4815,11 +5571,11 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         status: c.status,
       })}
       paraPayload={(f) => ({
-        placa: String(f.placa).trim().toUpperCase(),
-        descricao: String(f.descricao).trim() || undefined,
-        capacidadeKg: String(f.capacidadeKg).trim() || '0',
-        rotaPadraoId: String(f.rotaPadraoId).trim() || null,
-        status: String(f.status),
+        placa: f.placa.trim().toUpperCase(),
+        descricao: f.descricao.trim() || undefined,
+        capacidadeKg: f.capacidadeKg.trim() || '0',
+        rotaPadraoId: f.rotaPadraoId.trim() || null,
+        status: f.status,
       })}
     />
   );
@@ -4881,7 +5637,6 @@ mensagem "Você não tem permissão para visualizar motoristas.".
 import { useEffect, useState } from 'react';
 import { User } from 'lucide-react';
 import { toast } from 'sonner';
-import { Badge } from '@/components/ui/badge';
 import { CadastroTabelaDrawer } from '@/components/cadastros/cadastro-tabela-drawer';
 import { mensagemDeErro } from '@/lib/error-message';
 import type { Caminhao, Motorista } from '@/lib/frota';
@@ -4903,81 +5658,77 @@ export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) 
 
   return (
     <CadastroTabelaDrawer<Motorista>
+      caminho="Cadastros & Regras / Motoristas"
       titulo="Motoristas"
       subtitulo="Motoristas vinculados às cargas e caminhões de expedição."
       rotuloNovo="Novo Motorista"
+      rotuloSalvar="Salvar Motorista"
       tituloDrawerNovo="Novo Motorista"
-      tituloDrawerEdicao="Editar Motorista"
+      tituloDrawerEdicao={(m) => `Motorista — ${m.nome}`}
       placeholderBusca="Buscar por nome ou documento"
+      substantivoSingular="motorista"
       substantivoPlural="motoristas"
       endpoint="/api/cadastros/frota-motoristas"
+      larguraDrawer={460}
       podeGerenciar={podeGerenciar}
       mensagemVazia="Nenhum motorista encontrado para os filtros aplicados."
+      statusDe={(m) => m.status}
+      filtros={[
+        {
+          nome: 'status',
+          rotuloTodos: 'Status: Todos',
+          opcoes: [
+            { valor: 'ativo', rotulo: 'Ativo' },
+            { valor: 'inativo', rotulo: 'Inativo' },
+          ],
+        },
+      ]}
       colunas={[
         {
           chave: 'nome',
           titulo: 'Nome',
           render: (m) => (
-            <span className="flex items-center gap-1.5 font-bold">
-              <User className="size-3.5 text-muted-foreground" /> {m.nome}
+            <span className="flex items-center gap-1.5 font-bold text-text-strong">
+              <User className="size-3.5 text-text-muted" /> {m.nome}
             </span>
           ),
         },
-        { chave: 'documento', titulo: 'Documento', render: (m) => <span className="font-mono">{m.documento}</span> },
-        { chave: 'telefone', titulo: 'Telefone', render: (m) => m.telefone ?? '—' },
+        {
+          chave: 'documento',
+          titulo: 'Documento',
+          render: (m) => <span className="font-mono text-text-slate">{m.documento}</span>,
+        },
+        {
+          chave: 'telefone',
+          titulo: 'Telefone',
+          render: (m) => <span className="text-text-slate">{m.telefone ?? '—'}</span>,
+        },
         {
           chave: 'caminhaoPadrao',
           titulo: 'Caminhão padrão',
           render: (m) =>
             m.caminhaoPadraoPlaca ? (
-              <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-semibold text-primary">
+              <span className="rounded bg-action-blue-bg px-1.5 py-0.5 font-mono text-[12px] font-semibold text-brand-navy-deep">
                 {m.caminhaoPadraoAtivo === false ? `${m.caminhaoPadraoPlaca} (inativo)` : m.caminhaoPadraoPlaca}
               </span>
             ) : (
-              <span className="text-muted-foreground">—</span>
+              <span className="text-text-muted">—</span>
             ),
-        },
-        {
-          chave: 'status',
-          titulo: 'Status',
-          render: (m) => (
-            <Badge
-              variant="outline"
-              className={
-                m.status === 'ativo'
-                  ? 'border-green-200 bg-green-50 text-green-700'
-                  : 'border-muted bg-muted/50 text-muted-foreground'
-              }
-            >
-              {m.status === 'ativo' ? 'Ativo' : 'Inativo'}
-            </Badge>
-          ),
         },
       ]}
       campos={[
-        { nome: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, colSpan: 2, placeholder: 'Ex: Carlos Souza' },
-        { nome: 'documento', rotulo: 'Documento', tipo: 'texto', obrigatorio: true, placeholder: 'CNH nº' },
+        { nome: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, placeholder: 'Ex: Carlos Souza' },
+        { nome: 'documento', rotulo: 'Documento', tipo: 'texto', obrigatorio: true, placeholder: 'CNH nº', monoespacado: true },
         { nome: 'telefone', rotulo: 'Telefone', tipo: 'texto', placeholder: '(11) 90000-0000' },
         {
           nome: 'caminhaoPadraoId',
           rotulo: 'Caminhão padrão',
           tipo: 'select',
-          opcoes: [
-            { valor: '', rotulo: 'Sem caminhão padrão' },
-            ...caminhoes.map((c) => ({
-              valor: c.id,
-              rotulo: c.status === 'ativo' ? c.placa : `${c.placa} (inativo)`,
-            })),
-          ],
-        },
-        {
-          nome: 'status',
-          rotulo: 'Status',
-          tipo: 'select',
-          opcoes: [
-            { valor: 'ativo', rotulo: 'Ativo' },
-            { valor: 'inativo', rotulo: 'Inativo' },
-          ],
+          placeholder: 'Sem caminhão padrão',
+          opcoes: caminhoes.map((c) => ({
+            valor: c.id,
+            rotulo: c.status === 'ativo' ? c.placa : `${c.placa} (inativo)`,
+          })),
         },
       ]}
       formularioVazio={{ nome: '', documento: '', telefone: '', caminhaoPadraoId: '', status: 'ativo' }}
@@ -4989,11 +5740,11 @@ export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) 
         status: m.status,
       })}
       paraPayload={(f) => ({
-        nome: String(f.nome).trim(),
-        documento: String(f.documento).trim(),
-        telefone: String(f.telefone).trim() || undefined,
-        caminhaoPadraoId: String(f.caminhaoPadraoId).trim() || null,
-        status: String(f.status),
+        nome: f.nome.trim(),
+        documento: f.documento.trim(),
+        telefone: f.telefone.trim() || undefined,
+        caminhaoPadraoId: f.caminhaoPadraoId.trim() || null,
+        status: f.status,
       })}
     />
   );
@@ -5449,15 +6200,26 @@ Saída esperada: `Tests: 2 passed, 2 total`.
 
 ### Task 18 — Tela `/cadastros/modelos-etiqueta`
 
-Protótipo: `ModelosEtiqueta.tsx` — banner âmbar de pendência no topo e três colunas: lista de modelos
-(`w-[260px]`, cartões com nome e "N de 12 campos ativos"), campos configuráveis em `grid-cols-2` e
-"Preview ao vivo" (`w-[380px]`).
+Protótipo: `ModelosEtiqueta.tsx` — banner âmbar de pendência no topo (`:158-161`) e três colunas em um
+`flex gap-5 flex-1 min-h-0` (`:163`): lista de modelos `w-[260px] flex-shrink-0` (`:165`, cartões com
+nome e "N de 12 campos ativos"), campos configuráveis `flex-1` com `grid-cols-2` (`:190`, `:194`) e
+"Preview ao vivo" `w-[380px] flex-shrink-0` (`:210`). O Worker reproduz **estas** larguras; não existe
+grade de 12 colunas nesta tela.
+
+O controle de cada campo é `<input type="checkbox">` (`:197-202`) dentro de um `<label>` clicável
+(`:196`) — 12 checkboxes, não 12 `Switch`. A tela usa o `Checkbox` do DS (já absorvido na Onda 2), com
+`id` por campo e o rótulo associado, para manter acessibilidade e o mesmo desenho.
 
 **Divergência autorizada D18.a** — o preview do protótipo renderiza uma etiqueta com valores de exemplo
 (`EXEMPLO`, linhas 73–84: "ETQ-88391", "Restaurante Grill / #PV-1029", "Frigorífico Boi Forte"). Esses
 valores são dado de demonstração e não vão para a tela (decisão 2 e RA-06). O preview desta onda mantém a
 coluna, o título e a moldura da etiqueta e lista **os rótulos dos campos ligados**, atualizando a cada
-`Switch`. Registrada no README de evidências (Task 27.1).
+marcação. Registrada no README de evidências (Task 27.1).
+
+**Divergência autorizada D18.b** — o painel "Campos configuráveis" ganha o botão "Salvar Modelo" no
+cabeçalho, que o protótipo não tem porque marca campo em `useState` local (`:141-146`). Sem ele a
+marcação não chegaria ao banco e a tela seria um controle inerte (RA-06). O botão só aparece com
+`MODELOS_ETIQUETA_GERENCIAR` (decisão 40).
 
 **18.1** `page.tsx` no molde da Task 13.1, com `MODELOS_ETIQUETA_LER` / `MODELOS_ETIQUETA_GERENCIAR` e a
 mensagem "Você não tem permissão para visualizar modelos de etiqueta.".
@@ -5501,13 +6263,11 @@ export interface ModeloEtiqueta {
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Sticker } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { mensagemDeErro } from '@/lib/error-message';
 import { CAMPOS_ETIQUETA, type CampoEtiqueta, type ModeloEtiqueta } from '@/lib/modelos-etiqueta';
 
@@ -5567,109 +6327,128 @@ export function ModelosEtiquetaClient({ podeGerenciar }: { podeGerenciar: boolea
   const marcados = campos ? CAMPOS_ETIQUETA.filter((c) => campos[c.chave]) : [];
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex h-full flex-col gap-5">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Modelos de Etiqueta</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="mb-0.5 text-[11px] font-medium text-text-muted">Cadastros &amp; Regras / Modelos de Etiqueta</p>
+        <h1 className="text-[20px] font-bold text-text-strong">Modelos de Etiqueta</h1>
+        <p className="mt-0.5 text-[12px] text-text-secondary">
           Configure os campos exibidos em cada modelo de etiqueta usado na operação.
         </p>
       </div>
 
-      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
-        <BadgeProvisorio pendencia="P9" />
-        <p className="text-sm text-amber-900">
+      {/* Banner P9 — ModelosEtiqueta.tsx:158-161 */}
+      <div className="flex items-start gap-2 rounded-lg border border-provisorio-border bg-warning-surface p-3">
+        <AlertTriangle className="mt-0.5 size-3.5 flex-shrink-0 text-warning-ink" />
+        <p className="text-[12px] leading-snug text-provisorio-text">
           Modelo físico/campos finais da etiqueta pendentes de definição.
         </p>
+        <BadgeProvisorio pendencia="P9" />
       </div>
 
       {erro && (
-        <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
           {erro}
         </p>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-12">
-        <Card className="space-y-2 p-4 lg:col-span-3">
-          <p className="text-xs font-bold">Modelos</p>
-          {modelos.length === 0 && <p className="text-sm text-muted-foreground">Nenhum modelo cadastrado.</p>}
-          {modelos.map((modelo) => {
-            const ativos = CAMPOS_ETIQUETA.filter((c) => modelo.campos[c.chave]).length;
-            return (
-              <button
-                key={modelo.id}
-                type="button"
-                onClick={() => setSelecionado(modelo)}
-                className={`w-full rounded-md border p-4 text-left transition-colors ${
-                  selecionado?.id === modelo.id
-                    ? 'border-primary bg-background shadow-sm'
-                    : 'border-transparent bg-background hover:border-border'
-                }`}
-              >
-                <p className="text-sm font-bold">{modelo.nome}</p>
-                <p className="text-xs text-muted-foreground">
-                  {ativos} de {CAMPOS_ETIQUETA.length} campos ativos
-                </p>
-              </button>
-            );
-          })}
-        </Card>
+      <div className="flex min-h-0 flex-1 gap-5">
+        {/* Lista de modelos — :165-187 */}
+        <div className="flex w-[260px] flex-shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
+          <div className="border-b border-muted px-4 py-3">
+            <p className="text-[12px] font-bold text-text-strong">Modelos</p>
+          </div>
+          <div className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
+            {modelos.length === 0 && (
+              <p className="px-3 py-2 text-[13px] text-text-muted">Nenhum modelo cadastrado.</p>
+            )}
+            {modelos.map((modelo) => {
+              const ativo = selecionado?.id === modelo.id;
+              const ativos = CAMPOS_ETIQUETA.filter((c) => modelo.campos[c.chave]).length;
+              return (
+                <button
+                  key={modelo.id}
+                  type="button"
+                  onClick={() => setSelecionado(modelo)}
+                  className={`rounded-lg px-3 py-2.5 text-left transition-colors ${
+                    ativo
+                      ? 'border border-action-blue-ring bg-action-blue-bg'
+                      : 'border border-transparent hover:bg-surface-subtle'
+                  }`}
+                >
+                  <p className={`text-[13px] font-semibold ${ativo ? 'text-action-blue-hover' : 'text-text-strong'}`}>
+                    {modelo.nome}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-text-muted">
+                    {ativos} de {CAMPOS_ETIQUETA.length} campos ativos
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
-        <Card className="p-6 lg:col-span-5">
-          {!selecionado || !campos ? (
-            <p className="text-sm text-muted-foreground">Selecione um modelo.</p>
-          ) : (
-            <>
-              <div className="mb-6 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Sticker className="size-5 text-primary" />
-                  <div>
-                    <h2 className="text-lg font-bold">Campos configuráveis — {selecionado.nome}</h2>
-                    <p className="text-xs text-muted-foreground">
-                      {marcados.length} de {CAMPOS_ETIQUETA.length} campos ativos
-                    </p>
-                  </div>
-                </div>
-                {podeGerenciar && (
-                  <Button onClick={() => void salvar()} disabled={salvando}>
-                    {salvando ? 'Salvando…' : 'Salvar Modelo'}
-                  </Button>
-                )}
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
-                {CAMPOS_ETIQUETA.map((campo) => (
-                  <div key={campo.chave} className="flex items-center justify-between rounded-lg border px-4 py-3">
-                    <Label htmlFor={`campo-${campo.chave}`}>{campo.rotulo}</Label>
-                    <Switch
-                      id={`campo-${campo.chave}`}
-                      checked={campos[campo.chave]}
-                      disabled={!podeGerenciar}
-                      onCheckedChange={(v) => setCampos((c) => (c ? { ...c, [campo.chave]: v } : c))}
-                    />
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </Card>
-
-        <Card className="p-4 lg:col-span-4">
-          <p className="mb-3 text-xs font-bold">Preview ao vivo</p>
-          <div className="rounded-xl border-2 border-primary bg-muted/30 p-4 font-mono text-xs">
-            <p className="mb-3 text-[9px] font-black tracking-[0.2em] text-muted-foreground uppercase">
-              ALFA CARNES
+        {/* Campos configuráveis — :190-207 */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
+          <div className="flex items-center justify-between border-b border-muted px-4 py-3">
+            <p className="text-[12px] font-bold text-text-strong">
+              Campos configuráveis{selecionado ? ` — ${selecionado.nome}` : ''}
             </p>
-            {marcados.length === 0 ? (
-              <p className="text-muted-foreground">Nenhum campo selecionado.</p>
-            ) : (
-              <ul className="space-y-1">
-                {marcados.map((campo) => (
-                  <li key={campo.chave}>{campo.rotulo}</li>
-                ))}
-              </ul>
+            {podeGerenciar && selecionado && (
+              <button
+                type="button"
+                onClick={() => void salvar()}
+                disabled={salvando}
+                className="h-8 rounded-md bg-brand-navy-deep px-4 text-[13px] font-semibold text-white transition-colors hover:bg-action-blue disabled:opacity-60"
+              >
+                {salvando ? 'Salvando…' : 'Salvar Modelo'}
+              </button>
             )}
           </div>
-        </Card>
+          {!selecionado || !campos ? (
+            <p className="p-4 text-[13px] text-text-muted">Selecione um modelo.</p>
+          ) : (
+            <div className="grid flex-1 grid-cols-2 gap-2 overflow-y-auto p-4">
+              {CAMPOS_ETIQUETA.map((campo) => (
+                <Label
+                  key={campo.chave}
+                  htmlFor={`campo-${campo.chave}`}
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-[13px] font-normal text-text-ink transition-colors hover:bg-surface-subtle"
+                >
+                  <Checkbox
+                    id={`campo-${campo.chave}`}
+                    checked={campos[campo.chave]}
+                    disabled={!podeGerenciar}
+                    onCheckedChange={(v) => setCampos((c) => (c ? { ...c, [campo.chave]: v === true } : c))}
+                  />
+                  {campo.rotulo}
+                </Label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Preview ao vivo — :210-217, com D18.a */}
+        <div className="flex w-[380px] flex-shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
+          <div className="border-b border-muted px-4 py-3">
+            <p className="text-[12px] font-bold text-text-strong">Preview ao vivo</p>
+          </div>
+          <div className="flex flex-1 items-start justify-center overflow-y-auto p-4">
+            <div className="w-full rounded-xl border-2 border-action-blue bg-surface-subtle p-4 font-mono text-[12px] text-text-ink">
+              <p className="mb-3 text-[9px] font-black tracking-[0.2em] text-text-muted uppercase">
+                ALPHA CARNES
+              </p>
+              {marcados.length === 0 ? (
+                <p className="text-text-muted">Nenhum campo selecionado.</p>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {marcados.map((campo) => (
+                    <li key={campo.chave}>{campo.rotulo}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -5677,9 +6456,10 @@ export function ModelosEtiquetaClient({ podeGerenciar }: { podeGerenciar: boolea
 ```
 
 **18.4** Criar `app/frontend/__tests__/modelos-etiqueta.test.tsx` (DoD-44 a DoD-47) cobrindo: os 12
-`Switch` aparecem com os rótulos de `CAMPOS_ETIQUETA`; o badge `P9` está presente; sem
-`MODELOS_ETIQUETA_GERENCIAR` não há botão "Salvar Modelo" e os `Switch` ficam desabilitados; o `PATCH`
-envia o objeto `campos` com as 12 chaves.
+controles aparecem como `checkbox` (`screen.getAllByRole('checkbox')` devolve 12) com os rótulos de
+`CAMPOS_ETIQUETA`; marcar/desmarcar um deles muda o preview (DoD-45); o badge `P9` está presente; sem
+`MODELOS_ETIQUETA_GERENCIAR` não há botão "Salvar Modelo" e todos os `checkbox` vêm com `disabled`; o
+`PATCH` envia o objeto `campos` com as 12 chaves.
 
 **Verificação:**
 
@@ -7367,10 +8147,14 @@ Saída esperada: `Tests: 3 passed, 3 total` no frontend, `13 passed` no Playwrig
   `visível` para todas as 26, e a saída do teste `as 26 perdas herdadas da Onda 2 estao visiveis`;
 - a tabela dos **14 extras** da decisão 31 com "situação" = `removido`, e a saída do teste
   `os 14 extras herdados da Onda 2 sumiram do menu`;
-- as quatro divergências autorizadas: `/admin/perfis` (11 perfis canônicos e permissões reais em vez dos
-  8 perfis e 9 rótulos do mock — decisão 29), o `placeholder` do campo "Registro (ID)" da auditoria
-  (decisão 31), `MODELOS_ETIQUETA_LER` concedida a `recebimento_pesagem` e `corte` além da
-  linha 37 da matriz (decisão 27) e o preview de etiqueta sem valores de exemplo (D18.a);
+- as **nove** divergências autorizadas, cada uma com a justificativa e a linha do protótipo:
+  `/admin/perfis` (11 perfis canônicos e permissões reais em vez dos 8 perfis e 9 rótulos do mock —
+  decisão 29), o `placeholder` do campo "Registro (ID)" da auditoria (decisão 31),
+  `MODELOS_ETIQUETA_LER` concedida a `recebimento_pesagem` e `corte` além da linha 37 da matriz
+  (decisão 27), **D13.a** (tipo/canal como texto), **D13.b** ("Usuários vinculados" diferido para a
+  Onda 4), **D13.c** (campo "Código" no drawer de representantes), **D18.a** (preview de etiqueta sem
+  valores de exemplo), **D18.b** (botão "Salvar Modelo") e **D41.a** (botões Anterior/Próxima quando
+  `total > pageSize`);
 - a lista dos 3 badges Provisório da onda e onde aparecem: P1 em `/admin/parametros`
   (`operacao.cadencia_dias_semana`), P12 em `/admin/parametros` (`operacao.regras_transformacao_tz`) e
   P9 em `/cadastros/modelos-etiqueta`; e a nota de que AD-01, AD-02 e AD-06 retiraram os badges de
@@ -7478,20 +8262,19 @@ O Worker executa na ordem numérica: as dependências acima estão satisfeitas p
 ## Autorrevisão do plano (checklist do Portão 1)
 
 - [x] Toda tela do escopo tem `.tsx` de referência do protótipo citado com caminho e linhas.
-- [x] Todas as decisões estão numeradas (1–43) e nenhuma deixa escolha para o Worker.
+- [x] Todas as decisões estão numeradas (1–46) e nenhuma deixa escolha para o Worker.
 - [x] Nenhum marcador de pendência textual e nenhuma promessa de entrega adiada dentro de uma tela do
       escopo. O único item diferido é o escopo comercial "representantes permitidos" (linha 38 da
       matriz), com decisão numerada (43), onda de destino (4) e dívida registrada — o campo não aparece
       inerte em tela nesta onda.
-- [x] As quatro divergências autorizadas estão numeradas e registradas no README de evidências:
+- [x] As nove divergências autorizadas estão numeradas e registradas no README de evidências:
       decisão 29 (`/admin/perfis`), decisão 31 (placeholder do campo Registro), decisão 27
-      (`MODELOS_ETIQUETA_LER` além da linha 37 da matriz) e D18.a (preview de etiqueta sem valores de
-      exemplo).
+      (`MODELOS_ETIQUETA_LER` além da linha 37 da matriz), D13.a, D13.b, D13.c, D18.a, D18.b e D41.a.
 - [x] O rótulo banido pela v1.1 §6.8 não aparece no plano nem nos códigos propostos.
 - [x] As três dívidas herdadas da Onda 2 (decisões 25, 27 e 31 **da Onda 2**) estão no mapa DoD → teste,
       com invariante próprio e teste nomeado; nesta onda elas são fechadas pelas decisões 4/5 (menu),
       30 (filtros da auditoria) e 11.7 (aritmética das perdas e extras).
-- [x] Mapa DoD → teste é 1:1: 78 invariantes, cada um com um nome de teste e um arquivo.
+- [x] Mapa DoD → teste é 1:1: 86 invariantes, cada um com um nome de teste e um arquivo.
 - [x] Todas as pendências §16 usadas viram badge Provisório (P1 e P12 em `/admin/parametros`, P9 em
       modelos de etiqueta); AD-01, AD-02 e AD-06 retiram os badges que fecharam; nenhuma regra nova
       foi inventada.
