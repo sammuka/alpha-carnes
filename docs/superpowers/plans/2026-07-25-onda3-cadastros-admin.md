@@ -377,7 +377,7 @@ dois em outline. Chip de contagem **não** é chip de status: verde para "Ativos
 "Inativos" seria paleta escolhida pelo plano, não pelo protótipo — proibido pelo Princípio I. **Nenhuma
 escala crua do Tailwind** (`green-*`, `slate-*`, `zinc-*`, `red-*`) aparece em nenhum trecho desta onda:
 cor de tela vem de token, e a equivalência por valor exato é a mesma regra da decisão 46. Como os dois
-hexadecimais dos chips já têm token, a onda continua com **19 tokens novos** — nenhum é criado por causa
+hexadecimais dos chips já têm token, a onda continua com **15 tokens novos** — nenhum é criado por causa
 dos chips.
 
 **Decisão 20 — `perfis.menus_visiveis` é `TEXT[]`,** não JSONB: é lista curta de strings comparada por
@@ -645,9 +645,10 @@ Contato, Clientes vinculados, Status, Ações); a 7ª volta na Onda 4, junto do 
 (Onda 2, decisão 23) reprova qualquer literal hexadecimal em `src` fora de `globals.css`, e o gate é
 executado no CI. O inventário completo de cores dos cinco `.tsx` desta onda
 (`rg -o '#[0-9A-Fa-f]{6}' Representantes.tsx Caminhoes.tsx Motoristas.tsx ModelosEtiqueta.tsx
-PerfisAcesso.tsx`) tem 32 valores distintos: 14 já têm token da Onda 2 e **18 não têm**. A esses 18
-soma-se `--color-code-surface`, exigido pelo painel de diff de `Auditoria.tsx` (decisão 30) — **19
-tokens novos** ao todo. Os 19 entram em `globals.css` com a origem pinada, e o inventário de
+PerfisAcesso.tsx`) tem 32 valores distintos: **18 já têm token da Onda 2** e **14 não têm**. A esses 14
+soma-se `--color-code-surface`, exigido pelo painel de diff de `Auditoria.tsx` (decisão 30) — **15
+tokens novos** ao todo. Os 15 entram no bloco `@theme` de `globals.css` com a origem pinada (é o
+`@theme`, e não `:root`, que gera utilitário em Tailwind 4 — Task 12.1), e o inventário de
 `tokens-ds.test.ts` passa a citá-los:
 
 | Token | Valor | Origem |
@@ -655,9 +656,6 @@ tokens novos** ao todo. Os 19 entram em `globals.css` com a origem pinada, e o i
 | `--color-table-zebra` | `#FAFAFA` | `Caminhoes.tsx:205` (linha ímpar) |
 | `--color-table-row-hover` | `#FAFBFF` | `Caminhoes.tsx:205` (`hover:`) |
 | `--color-status-dot-ativo` | `#22C55E` | `Caminhoes.tsx:36` (ponto do *pill* Ativo) |
-| `--color-success-surface` | `#F0FDF4` | `Caminhoes.tsx:35` (fundo do *pill* Ativo) |
-| `--color-success-strong` | `#15803D` | `Caminhoes.tsx:35` (texto do *pill* Ativo) |
-| `--color-danger-surface` | `#FFF1F2` | `Caminhoes.tsx:224` (`hover:` do `PowerOff`) |
 | `--color-danger-rose` | `#E11D48` | `Caminhoes.tsx:224` (ícone no `hover:` do `PowerOff`) |
 | `--color-info-surface` | `#F0F9FF` | `Representantes.tsx:103` (fundo do banner) |
 | `--color-info-border` | `#BAE6FD` | `Representantes.tsx:103` (borda do banner) |
@@ -666,18 +664,31 @@ tokens novos** ao todo. Os 19 entram em `globals.css` com a origem pinada, e o i
 | `--color-placeholder` | `#CBD5E1` | `Representantes.tsx:115` (`placeholder:`) |
 | `--color-brand-navy-deep` | `#1E3A5F` | `Representantes.tsx:252` (botão primário da tela) |
 | `--color-text-ink` | `#334155` | `Representantes.tsx:176`, `PerfisAcesso.tsx:202` |
-| `--color-violet-surface` | `#F5F3FF` | `Representantes.tsx:71` (*chip* do canal Representante) |
 | `--color-warning-surface` | `#FFFBEB` | `ModelosEtiqueta.tsx:158` (fundo do aviso da pendência **P9** — modelo físico/campos finais da etiqueta) |
 | `--color-warning-ink` | `#D97706` | `ModelosEtiqueta.tsx:159` (ícone `AlertTriangle`) |
 | `--color-action-blue-ring` | `#93C5FD` | `ModelosEtiqueta.tsx:178` (borda do modelo selecionado) |
 | `--color-code-surface` | `#0F172A` | `Auditoria.tsx:128` (fundo dos `pre` do painel de diff) |
 
-As 14 cores restantes já têm token da Onda 2 e são reusadas pelo valor exato:
-`#F8FAFC` = `surface-subtle`, `#1E293B` = `text-strong`, `#475569` = `text-slate`,
+As 18 cores restantes já têm token declarado no `@theme` pela Onda 2 e são reusadas pelo valor exato,
+sem redeclaração: `#F8FAFC` = `surface-subtle`, `#1E293B` = `text-strong`, `#475569` = `text-slate`,
 `#94A3B8` = `text-muted`, `#64748B` = `text-secondary`, `#374151` = `text-graphite`,
 `#E2E8F0` = `border`, `#F1F5F9` = `muted`, `#2563EB` = `action-blue`,
 `#1D4ED8` = `action-blue-hover`, `#EFF6FF` = `action-blue-bg`, `#7C3AED` = `status-pesado`,
-`#FDE68A` = `provisorio-border`, `#92400E` = `provisorio-text`.
+`#FDE68A` = `provisorio-border`, `#92400E` = `provisorio-text`, `#F0FDF4` = `success-surface`,
+`#15803D` = `success-strong`, `#FFF1F2` = `danger-surface` e `#F5F3FF` = `violet-surface`.
+As quatro últimas vêm do bloco "Sinalizações densas" do `globals.css` real (linhas 112–117) com o hex
+idêntico: redeclará-las na Task 12.1 duplicaria chave num arquivo curado e creditaria à Onda 3 token
+que é da Onda 2. `violet-surface` além disso não é usada por nenhuma tela desta onda — o par de cores
+do *chip* de canal de `Representantes.tsx:71` depende do vocabulário fixo "Interno"/"Representante"
+que a decisão 44 recusa, então nenhum trecho emite `bg-violet-surface`, e ela fica fora do inventário
+da Task 12.1 pelos dois motivos.
+
+Um caso pede registro explícito para o Portão 2 não o ler como redeclaração: `#1E3A5F` também aparece
+no `@theme` da Onda 2, como `--color-sidebar-gradient-start` (linha 55), mas ali é **parada de
+gradiente da sidebar**, não cor de botão. O botão primário de `Representantes.tsx:252` recebe o alias
+`--color-brand-navy-deep`, da família `brand-navy-*` da paleta canônica do protótipo, no mesmo
+precedente que a Onda 2 já usa para `primary-hover`, `brand-navy` e `primary-dark` — três nomes
+semânticos com o mesmo `#265389`. É nome novo, e por isso conta entre os 15.
 Nenhum arquivo novo desta onda escreve `#`.
 
 ---
@@ -812,7 +823,7 @@ docs/execucao/evidencias/onda3-cadastros-admin/README.md
 ### Frontend — arquivos alterados
 
 ```
-app/frontend/src/app/globals.css                     19 tokens novos da decisão 46 (Task 12.1)
+app/frontend/src/app/globals.css                     15 tokens novos no bloco @theme, decisão 46 (Task 12.1)
 app/frontend/src/lib/error-message.ts                adaptador mensagemDeErro(res) (Task 12.1, decisão 42)
 app/frontend/src/lib/menu-v2.ts                      decisões 4, 5 e 9
 app/frontend/src/lib/auth.ts                         menusVisiveis no payload de getMe
@@ -825,7 +836,7 @@ app/frontend/src/app/(admin)/layout.tsx              filtrarMenuPorMenusVisiveis
 app/frontend/src/app/(admin)/page.tsx                rotaDeEntrada(user.menusVisiveis, user.perfis) (Task 11.5)
 app/frontend/__tests__/menu-rbac.test.ts             reescrito (Task 11.7)
 app/frontend/__tests__/menu-v2.test.ts               ajustado à nova assinatura (Task 11.6)
-app/frontend/__tests__/tokens-ds.test.ts             +19 tokens no inventário pinado (Task 12.1)
+app/frontend/__tests__/tokens-ds.test.ts             +15 tokens e recorte do @theme no inventário (Task 12.1)
 app/frontend/src/app/(admin)/cadastros/representantes/page.tsx
 app/frontend/src/app/(admin)/cadastros/caminhoes/page.tsx
 app/frontend/src/app/(admin)/cadastros/motoristas/page.tsx
@@ -4361,18 +4372,22 @@ Três regras estruturais do componente, para as três telas ficarem idênticas p
 3. todo `select` é elemento nativo, como no protótipo (`Caminhoes.tsx:185`, `Representantes.tsx:275`),
    estilizado por token; o `Select` do Radix não entra nesta barra nem neste drawer.
 
-**12.1** Acrescentar ao bloco `:root` de `app/frontend/src/app/globals.css` os 19 tokens da decisão 46,
-com o comentário de origem, e citá-los no inventário de `app/frontend/__tests__/tokens-ds.test.ts`
-(no `it('globals.css declara os tokens de acao, superficie, login, pipeline e provisorio')`):
+**12.1** Acrescentar ao bloco `@theme` de `app/frontend/src/app/globals.css` (linhas 3–134) os 15 tokens
+da decisão 46, com o comentário de origem, imediatamente antes do bloco `/* Raios */`. É o `@theme`, não
+um `:root`: o arquivo real **não tem** bloco `:root`, e em Tailwind 4 a diferença é funcional — só o que
+está dentro do `@theme` gera classe utilitária, de modo que um `--color-table-zebra` em `:root` não
+produziria `bg-table-zebra` e as telas nasceriam sem a cor do protótipo, sem erro visível e com o CI
+verde. Os 15 são citados no inventário de `app/frontend/__tests__/tokens-ds.test.ts` (no
+`it('globals.css declara os tokens de acao, superficie, login, pipeline e provisorio')`), que passa a
+recortar o trecho entre `@theme {` e o `}` de fecho e a conferir cada declaração **dentro** desse
+recorte — `globals.includes('--color-x:')` no arquivo inteiro é substring cego ao bloco e deixaria o
+defeito voltar sem o CI perceber:
 
 ```css
   /* Onda 3 — cadastros lista+drawer, modelos de etiqueta e perfis (protótipo v1.1) */
   --color-table-zebra: #FAFAFA;
   --color-table-row-hover: #FAFBFF;
   --color-status-dot-ativo: #22C55E;
-  --color-success-surface: #F0FDF4;
-  --color-success-strong: #15803D;
-  --color-danger-surface: #FFF1F2;
   --color-danger-rose: #E11D48;
   --color-info-surface: #F0F9FF;
   --color-info-border: #BAE6FD;
@@ -4381,12 +4396,16 @@ com o comentário de origem, e citá-los no inventário de `app/frontend/__tests
   --color-placeholder: #CBD5E1;
   --color-brand-navy-deep: #1E3A5F;
   --color-text-ink: #334155;
-  --color-violet-surface: #F5F3FF;
   --color-warning-surface: #FFFBEB;
   --color-warning-ink: #D97706;
   --color-action-blue-ring: #93C5FD;
   --color-code-surface: #0F172A;
 ```
+
+`success-surface`, `success-strong`, `danger-surface` e `violet-surface` **não** entram aqui: já estão
+no `@theme` desde a Onda 2 com o hex idêntico (linhas 112–117), e `bg-success-surface`,
+`text-success-strong` e `bg-danger-surface` funcionam nas telas desta onda por reuso, sem declaração
+nova (decisão 46).
 
 Sem esse passo, o gate `nenhum literal hexadecimal de cor em src fora de globals.css` reprova a onda
 inteira: nenhum arquivo da Task 12 em diante escreve `#`.
