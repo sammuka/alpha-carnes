@@ -4,6 +4,8 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../database/database.module';
 import * as schema from '../../database/schema';
 import { AuditoriaService } from '../../common/auditoria/auditoria.service';
+import { MENUS_CANONICOS, menusDesconhecidos } from '../../common/rbac/menus-canonicos';
+import { DESCRICOES_PERMISSOES } from '../../common/rbac/permissoes';
 import { RbacService } from '../auth/rbac.service';
 
 @Injectable()
@@ -21,6 +23,67 @@ export class PerfisService {
 
   async listar() {
     return this.rbacService.listarPerfisComPermissoes();
+  }
+
+  /**
+   * Define os menus visíveis do perfil (decisão 10 da Onda 3). Valida ANTES de mutar:
+   * href fora do catálogo canônico devolve 400 sem alterar nada (RA-05).
+   */
+  async definirMenus(slug: string, menus: string[], usuarioId: string) {
+    const desconhecidos = menusDesconhecidos(menus);
+    if (desconhecidos.length > 0) {
+      throw new BadRequestException(`Menus desconhecidos: ${desconhecidos.join(', ')}`);
+    }
+
+    const resultado = await this.rbacService.definirMenusDoPerfil(slug, menus);
+    if (!resultado) throw new NotFoundException('Perfil não encontrado');
+
+    await this.auditoria.registrar(this.db, {
+      tabela: 'perfis',
+      registroId: '00000000-0000-0000-0000-000000000000',
+      operacao: 'UPDATE',
+      modulo: 'perfis',
+      usuarioId,
+      dadosAnteriores: { slug, menusVisiveis: resultado.anterior },
+      dadosNovos: { slug, menusVisiveis: resultado.novo },
+    });
+
+    return { slug, menusVisiveis: resultado.novo };
+  }
+
+  /**
+   * Catálogo para a tela de perfis: permissões agrupadas por módulo (prefixo do código)
+   * e a lista canônica de menus. Cobre 100% de DESCRICOES_PERMISSOES (DoD-29).
+   */
+  catalogo() {
+    const MODULOS: Array<{ modulo: string; prefixos: string[] }> = [
+      { modulo: 'Administração', prefixos: ['USUARIOS_', 'PERFIS_', 'AUDITORIA_', 'PARAMETROS_'] },
+      { modulo: 'Cadastros', prefixos: ['CLIENTES_', 'FORNECEDORES_', 'ITENS_', 'PRODUTOS_', 'REPRESENTANTES_', 'ROTAS_', 'REGRAS_', 'FROTA_', 'MODELOS_ETIQUETA_'] },
+      { modulo: 'Comercial', prefixos: ['COMPRAS_PROGRAMADAS_', 'DISPONIBILIDADE_', 'PEDIDOS_', 'PEDIDO_', 'OVERBOOKING_', 'OPERACOES_'] },
+      { modulo: 'Recebimento', prefixos: ['RECEBIMENTO_', 'DIVERGENCIA_', 'OCORRENCIA_', 'CONFERENCIA_'] },
+      { modulo: 'Pesagem e Desossa', prefixos: ['PESAGEM_', 'PESO_', 'ASSOCIACAO_', 'LEITURA_', 'ETIQUETA_', 'CORTE_', 'DESOSSA_', 'ESTOQUE_'] },
+      { modulo: 'Expedição e Faturamento', prefixos: ['EXPEDICAO_', 'FATURAMENTO_', 'NFSE_'] },
+    ];
+
+    const codigos = Object.keys(DESCRICOES_PERMISSOES).sort();
+    const usados = new Set<string>();
+    const grupos = MODULOS.map(({ modulo, prefixos }) => {
+      const permissoes = codigos
+        .filter((c) => !usados.has(c) && prefixos.some((p) => c.startsWith(p)))
+        .map((codigo) => {
+          usados.add(codigo);
+          return { codigo, descricao: DESCRICOES_PERMISSOES[codigo as keyof typeof DESCRICOES_PERMISSOES] };
+        });
+      return { modulo, permissoes };
+    });
+
+    const restantes = codigos.filter((c) => !usados.has(c));
+    if (restantes.length > 0) {
+      // Falha explícita: permissão nova sem módulo é erro de configuração, não silêncio (RA-05).
+      throw new Error(`Permissões sem módulo no catálogo: ${restantes.join(', ')}`);
+    }
+
+    return { grupos, menus: [...MENUS_CANONICOS] };
   }
 
   /**

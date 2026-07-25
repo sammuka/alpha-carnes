@@ -6,7 +6,12 @@ import { RequirePermissoes } from '../../common/rbac/require-permissoes.decorato
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { CurrentUser, type CurrentUserPayload } from '../../common/decorators/current-user.decorator';
 import { PerfisService } from './perfis.service';
-import { definirPermissoesSchema, type DefinirPermissoesDto } from './dto/perfil.dto';
+import {
+  definirMenusSchema,
+  definirPermissoesSchema,
+  type DefinirMenusDto,
+  type DefinirPermissoesDto,
+} from './dto/perfil.dto';
 
 @SkipThrottle()
 @Controller('perfis')
@@ -18,6 +23,22 @@ export class PerfisController {
   @RequirePermissoes('PERFIS_GERENCIAR')
   async listar() {
     return this.perfisService.listar();
+  }
+
+  @Get('catalogo')
+  @RequirePermissoes('PERFIS_GERENCIAR')
+  catalogo() {
+    return this.perfisService.catalogo();
+  }
+
+  @Put(':slug/menus')
+  @RequirePermissoes('PERFIS_GERENCIAR')
+  async definirMenus(
+    @Param('slug') slug: string,
+    @Body(new ZodValidationPipe(definirMenusSchema)) dto: DefinirMenusDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.perfisService.definirMenus(slug, dto.menus, user.sub);
   }
 
   @Put(':slug/permissoes')

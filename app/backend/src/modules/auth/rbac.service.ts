@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { eq, inArray } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../database/database.module';
+import { MENUS_CANONICOS } from '../../common/rbac/menus-canonicos';
 import { DESCRICOES_PERMISSOES, MAPA_PERFIL_PERMISSOES } from '../../common/rbac/permissoes';
 import * as schema from '../../database/schema';
 
@@ -32,6 +33,22 @@ export class RbacService {
       .where(inArray(schema.perfis.slug, perfis));
 
     return [...new Set(rows.map((r) => r.codigo))];
+  }
+
+  /**
+   * União dos menus visíveis dos perfis do usuário, em ordem canônica do catálogo.
+   * Lido do banco a cada requisição (decisão 11): alterar menus vale na próxima navegação.
+   */
+  async menusVisiveisDePerfis(perfis: string[]): Promise<string[]> {
+    if (perfis.length === 0) return [];
+
+    const rows = await this.db
+      .select({ menus: schema.perfis.menusVisiveis })
+      .from(schema.perfis)
+      .where(inArray(schema.perfis.slug, perfis));
+
+    const uniao = new Set(rows.flatMap((r) => r.menus));
+    return MENUS_CANONICOS.filter((href) => uniao.has(href));
   }
 
   temPermissao(permissoes: string[], codigo: string): boolean {
@@ -91,9 +108,9 @@ export class RbacService {
     await this.ensurePermissoes();
   }
 
-  /** Lista todos os perfis com suas permissões (gestão em runtime — PERFIS_GERENCIAR). */
+  /** Lista todos os perfis com permissões e menus visíveis (PERFIS_GERENCIAR). */
   async listarPerfisComPermissoes(): Promise<
-    Array<{ id: string; slug: string; nome: string; permissoes: string[] }>
+    Array<{ id: string; slug: string; nome: string; permissoes: string[]; menusVisiveis: string[] }>
   > {
     const perfis = await this.db.select().from(schema.perfis).orderBy(schema.perfis.slug);
     const vinculos = await this.db
@@ -106,7 +123,28 @@ export class RbacService {
       slug: p.slug,
       nome: p.nome,
       permissoes: vinculos.filter((v) => v.perfilId === p.id).map((v) => v.codigo),
+      menusVisiveis: p.menusVisiveis,
     }));
+  }
+
+  /** Substitui a lista de menus visíveis do perfil. Devolve anterior e novo para auditoria. */
+  async definirMenusDoPerfil(
+    slug: string,
+    menus: string[],
+  ): Promise<{ anterior: string[]; novo: string[] } | null> {
+    return this.db.transaction(async (tx) => {
+      const perfil = await tx
+        .select()
+        .from(schema.perfis)
+        .where(eq(schema.perfis.slug, slug))
+        .then((r) => r[0] ?? null);
+      if (!perfil) return null;
+
+      const novo = [...new Set(menus)];
+      await tx.update(schema.perfis).set({ menusVisiveis: novo }).where(eq(schema.perfis.id, perfil.id));
+
+      return { anterior: perfil.menusVisiveis, novo };
+    });
   }
 
   /**

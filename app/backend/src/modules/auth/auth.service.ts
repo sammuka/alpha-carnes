@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { verify } from '@node-rs/argon2';
 import { createHash } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import type { CurrentUserPayload } from '../../common/decorators/current-user.decorator';
 import { AuthRepository } from './auth.repository';
 import { TokenService } from './token.service';
 import { RbacService } from './rbac.service';
@@ -14,6 +15,10 @@ export class AuthService {
     private readonly rbacService: RbacService,
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) {}
+
+  async montarMe(user: CurrentUserPayload): Promise<CurrentUserPayload & { menusVisiveis: string[] }> {
+    return { ...user, menusVisiveis: await this.rbacService.menusVisiveisDePerfis(user.perfis) };
+  }
 
   async login(
     email: string,

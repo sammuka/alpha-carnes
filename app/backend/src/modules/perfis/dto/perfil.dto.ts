@@ -5,3 +5,9 @@ export const definirPermissoesSchema = z.object({
 });
 
 export type DefinirPermissoesDto = z.infer<typeof definirPermissoesSchema>;
+
+export const definirMenusSchema = z.object({
+  menus: z.array(z.string().trim().min(1)).max(39),
+});
+
+export type DefinirMenusDto = z.infer<typeof definirMenusSchema>;
