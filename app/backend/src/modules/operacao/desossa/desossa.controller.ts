@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
+import { z } from 'zod';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RbacGuard } from '../../../common/guards/rbac.guard';
 import { RequirePermissoes } from '../../../common/rbac/require-permissoes.decorator';
@@ -14,6 +15,12 @@ import {
   type CreateRegraTransformacaoDto,
   type UpdateRegraTransformacaoDto,
 } from './dto/regra-transformacao.dto';
+
+const simularDesossaSchema = z.object({
+  tzLivre: z.coerce.number().int().min(0).max(100000),
+  produtoId: z.string().uuid().optional(),
+  quantidade: z.coerce.number().int().min(1).optional(),
+});
 
 @SkipThrottle()
 @Controller('desossa')
@@ -34,6 +41,12 @@ export class DesossaController {
   @RequirePermissoes('DESOSSA_LER')
   async listarRegras(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
     return this.regras.listar(query);
+  }
+
+  @Post('regras-transformacao/simular')
+  @RequirePermissoes('DESOSSA_LER')
+  async simular(@Body(new ZodValidationPipe(simularDesossaSchema)) dto: z.infer<typeof simularDesossaSchema>) {
+    return this.regras.simular(dto);
   }
 
   @Get('regras-transformacao/:id')

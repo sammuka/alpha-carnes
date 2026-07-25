@@ -5,6 +5,7 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import { itensComerciais, itensCompra, regrasDesdobramentoComercial } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
+import { multiplicar } from '../../../common/crud/decimal';
 import { calcularRange, montarPaginado, primeiroOuFalha, type ListarQuery, type Paginado } from '../../../common/crud/paginacao';
 import type { CreateRegraDesdobramentoDto, UpdateRegraDesdobramentoDto } from './dto/regra-desdobramento.dto';
 
@@ -213,6 +214,46 @@ export class RegrasDesdobramentoService {
       });
       return restaurada;
     });
+  }
+
+  /**
+   * Simulador da aba "Desdobramento de Compra" (RegraDesdobramento.tsx, linhas 203–240).
+   * Multiplica a quantidade comprada pelo fator de cada item comercial ativo do item de compra.
+   */
+  async simular(itemCompraId: string, quantidade: number): Promise<{
+    quantidade: number;
+    itens: Array<{ itemComercialId: string; descricao: string; fator: string; total: number }>;
+    somaFatores: number;
+    totalPartes: number;
+  }> {
+    const regras = await this.db
+      .select({
+        itemComercialId: regrasDesdobramentoComercial.itemComercialId,
+        descricao: itensComerciais.descricao,
+        fator: regrasDesdobramentoComercial.fatorQuantidade,
+      })
+      .from(regrasDesdobramentoComercial)
+      .innerJoin(itensComerciais, eq(regrasDesdobramentoComercial.itemComercialId, itensComerciais.id))
+      .where(and(
+        eq(regrasDesdobramentoComercial.itemCompraId, itemCompraId),
+        eq(regrasDesdobramentoComercial.status, 'ativo'),
+        isNull(regrasDesdobramentoComercial.deletedAt),
+      ))
+      .orderBy(itensComerciais.descricao);
+
+    const itens = regras.map((r) => ({
+      itemComercialId: r.itemComercialId,
+      descricao: r.descricao,
+      fator: r.fator,
+      total: multiplicar(r.fator, quantidade),
+    }));
+
+    return {
+      quantidade,
+      itens,
+      somaFatores: itens.reduce((s, i) => s + Number(i.fator), 0),
+      totalPartes: itens.reduce((s, i) => s + i.total, 0),
+    };
   }
 
   private async buscarAtivo(id: string, tx?: NodePgDatabase<typeof schema>): Promise<Regra | null> {

@@ -13,6 +13,26 @@ type Saida = typeof regrasTransformacaoSaidas.$inferSelect;
 
 export type RegraTransformacaoDetalhe = Regra & { saidas: Saida[] };
 
+type RegraAtivaComSaidas = {
+  id: string;
+  nome: string;
+  saidas: Array<{ produtoId: string; produtoNome: string; quantidadeFixa: string }>;
+};
+
+/** TZ que sobra depois de atender a reserva na alternativa que produz o produto pedido. */
+function tzRestante(
+  regras: Array<{ saidas: Array<{ produtoId: string; quantidadeFixa: string }> }>,
+  reserva: { produtoId: string; quantidade: number },
+  tzLivre: number,
+): number {
+  const produtora = regras.find((r) => r.saidas.some((s) => s.produtoId === reserva.produtoId));
+  if (!produtora) return tzLivre;
+  const saida = produtora.saidas.find((s) => s.produtoId === reserva.produtoId);
+  const porTz = Number(saida?.quantidadeFixa ?? 0);
+  if (porTz <= 0) return tzLivre;
+  return Math.max(0, tzLivre - Math.ceil(reserva.quantidade / porTz));
+}
+
 @Injectable()
 export class RegrasTransformacaoService {
   constructor(
@@ -159,6 +179,81 @@ export class RegrasTransformacaoService {
       });
       return { id, deletedAt: removida.deletedAt as Date };
     });
+  }
+
+  async listarAtivasComSaidas(): Promise<RegraAtivaComSaidas[]> {
+    const regras = await this.db
+      .select()
+      .from(regrasTransformacao)
+      .where(and(eq(regrasTransformacao.status, 'ativo'), isNull(regrasTransformacao.deletedAt)))
+      .orderBy(desc(regrasTransformacao.prioridade), desc(regrasTransformacao.createdAt));
+
+    const resultado: RegraAtivaComSaidas[] = [];
+    for (const regra of regras) {
+      const saidas = await this.db
+        .select({
+          produtoId: regrasTransformacaoSaidas.produtoId,
+          produtoNome: produtos.nome,
+          quantidadeFixa: regrasTransformacaoSaidas.quantidadeFixa,
+        })
+        .from(regrasTransformacaoSaidas)
+        .innerJoin(produtos, eq(regrasTransformacaoSaidas.produtoId, produtos.id))
+        .where(eq(regrasTransformacaoSaidas.regraId, regra.id));
+      resultado.push({ id: regra.id, nome: regra.nome, saidas });
+    }
+    return resultado;
+  }
+
+  /**
+   * Simulador da aba "Transformação de Desossa (TZ)".
+   * Dado o total de TZ livre e uma reserva pretendida, devolve o disponível por produto
+   * e as alternativas ainda possíveis depois da reserva.
+   */
+  async simular(input: { tzLivre: number; produtoId?: string; quantidade?: number }) {
+    const regras = await this.listarAtivasComSaidas();
+
+    const disponivelPorProduto = new Map<string, { produtoId: string; nome: string; disponivel: number }>();
+    for (const regra of regras) {
+      for (const saida of regra.saidas) {
+        const atual = disponivelPorProduto.get(saida.produtoId);
+        const disponivel = Number(saida.quantidadeFixa) * input.tzLivre;
+        if (!atual || disponivel > atual.disponivel) {
+          disponivelPorProduto.set(saida.produtoId, {
+            produtoId: saida.produtoId,
+            nome: saida.produtoNome,
+            disponivel,
+          });
+        }
+      }
+    }
+
+    const reserva = input.produtoId && input.quantidade ? { produtoId: input.produtoId, quantidade: input.quantidade } : null;
+
+    // Exclusividade: reservar N unidades de um produto consome N unidades de TZ na alternativa
+    // que o produz, e essas unidades deixam de estar disponíveis para as demais alternativas.
+    const alternativasPossiveis = regras
+      .filter((regra) => {
+        if (!reserva) return true;
+        const produz = regra.saidas.find((s) => s.produtoId === reserva.produtoId);
+        if (!produz) return tzRestante(regras, reserva, input.tzLivre) > 0;
+        return Number(produz.quantidadeFixa) * input.tzLivre >= reserva.quantidade;
+      })
+      .map((regra) => ({ id: regra.id, nome: regra.nome }));
+
+    const resultados = [...disponivelPorProduto.values()].map((p) => ({
+      ...p,
+      bloqueado:
+        reserva !== null &&
+        p.produtoId !== reserva.produtoId &&
+        alternativasPossiveis.length > 0 &&
+        !regras.some(
+          (r) =>
+            alternativasPossiveis.some((a) => a.id === r.id) &&
+            r.saidas.some((s) => s.produtoId === p.produtoId),
+        ),
+    }));
+
+    return { tzLivre: input.tzLivre, resultados, alternativasPossiveis };
   }
 
   async restaurar(id: string, usuarioId: string): Promise<RegraTransformacaoDetalhe> {
