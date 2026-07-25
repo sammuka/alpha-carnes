@@ -68,11 +68,12 @@ describe('menu canônico v2', () => {
     expect(atual).toHaveLength(39);
   });
 
-  it('todo grupo declara ao menos uma permissao de grupo e todo item ao menos uma permissao', () => {
+  it('MENU_V2 nao tem rota duplicada e todo item declara icone', () => {
+    const hrefs = MENU_V2.flatMap((g) => g.items.map((i) => i.href));
+    expect(new Set(hrefs).size).toBe(hrefs.length);
     for (const grupo of MENU_V2) {
-      expect(grupo.permissoesGrupo.length).toBeGreaterThan(0);
       for (const item of grupo.items) {
-        expect(item.permissoes.length).toBeGreaterThan(0);
+        expect(item.iconKey.length).toBeGreaterThan(0);
       }
     }
   });

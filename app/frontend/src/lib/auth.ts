@@ -5,6 +5,7 @@ export interface UserPayload {
   nome: string;
   perfis: string[];
   permissoes: string[];
+  menusVisiveis: string[];
 }
 
 export async function getMe(): Promise<UserPayload | null> {

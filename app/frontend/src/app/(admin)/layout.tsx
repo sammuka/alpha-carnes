@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getMe } from '@/lib/auth';
-import { filtrarMenuPorPermissoes } from '@/lib/menu-v2';
+import { filtrarMenuPorMenusVisiveis } from '@/lib/menu-v2';
 import { formatarPerfis } from '@/lib/perfis';
 import { AppSidebar, type SidebarUser } from '@/components/ui/app-sidebar';
 import { AdminHeader } from '@/components/ui/admin-header';
@@ -9,7 +9,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const user = await getMe();
   if (!user) redirect('/login');
 
-  const sections = filtrarMenuPorPermissoes(user.permissoes);
+  const sections = filtrarMenuPorMenusVisiveis(user.menusVisiveis);
 
   const sidebarUser: SidebarUser = {
     nome: user.nome,
