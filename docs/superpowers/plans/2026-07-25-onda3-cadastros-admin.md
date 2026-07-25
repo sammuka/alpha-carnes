@@ -36,7 +36,7 @@ matriz v1.1, e nenhuma das 12 rotas usa `PlaceholderPage`.
 | 6 | 35 | `/cadastros/rotas` | cliente real (387 linhas), sem paradas nem dias | paradas + dias de atendimento + master-detail |
 | 7 | 36 | `/cadastros/regras-transformacao` | cliente real (254 linhas), uma aba só | 2 abas + 2 simuladores |
 | 8 | 37 | `/cadastros/modelos-etiqueta` | `PlaceholderPage` | tabela nova `modelos_etiqueta` + tela com preview |
-| 9 | 38 | `/admin/usuarios` | cliente real (281 linhas) | alinhamento + resumo de perfis real |
+| 9 | 38 | `/admin/usuarios` | cliente real (281 linhas) | alinhamento + resumo de perfis real; "representantes permitidos" diferido para a Onda 4 (decisão 43) |
 | 10 | 39 | `/admin/perfis` | `PlaceholderPage` | matriz perfil × permissão + menus visíveis editáveis |
 | 11 | 40 | `/admin/parametros` | `PlaceholderPage` | 9 parâmetros seed, 3 grupos, badge Provisório |
 | 12 | 41 | `/admin/auditoria` | cliente real (238 linhas), filtros fora do protótipo | filtros + painel de diff + exportação CSV |
@@ -103,9 +103,18 @@ usuário não tenha a permissão da API continua devolvendo 403 no backend e men
 5. **Sem falha silenciosa e sem dado inventado (RA-05/RA-06).** Erro do backend vira mensagem na tela;
    contagem que não pode ser calculada não é exibida com número fictício.
 6. **Pendências da v1.1 §16 viram parâmetro + badge "Provisório" (Princípio VIII).** Nenhuma regra nova é
-   inventada. As pendências usadas nesta onda são P1 (cadência das operações), P9 (campos finais da
-   etiqueta), P11 (catálogo de produtos e composição do boi casado), P12 (outras transformações além do TZ)
-   e P15 (expiração da reserva em rascunho) — todas já registradas em `PENDENCIAS_ABERTAS`.
+   inventada. Só **três** pendências ainda abertas são usadas nesta onda, e apenas duas delas geram badge:
+   **P1** (§16.2 — cadência das operações; badge no parâmetro `operacao.cadencia_dias_semana`),
+   **P12** (§16.15 — outras transformações além do TZ; badge no parâmetro `operacao.regras_transformacao_tz`
+   e na aba 2 de regras de transformação) e **P9** (§16.12 — campos finais da etiqueta; badge apenas na
+   tela `/cadastros/modelos-etiqueta`). **P11** (§16.14 — catálogo oficial de produtos) é citada só como
+   motivo de **não** semear produtos (decisão 24), sem badge nesta onda.
+   **Decisões já registradas não voltam a ser pendência:** **AD-01** (composição do boi casado = 2 TZ +
+   2 DT + 2 PA) manda o badge Provisório da composição **sair** de todas as telas, Parâmetros inclusive;
+   **AD-02** (EISS Osasco) tira o badge da emissão fiscal e põe no lugar a nota "aguardando homologação";
+   **AD-06** (sem expiração automática de reserva de rascunho) proíbe criar TTL, job ou parâmetro pendente
+   de expiração. **P15** (marco exato de fechamento do pedido) **não** é usada nesta onda e não se confunde
+   com liberação de reserva.
 7. **Terminologia.** "Nome Fantasia" e "Buscar cliente". O rótulo banido pela v1.1 §6.8 não aparece em
    nenhuma tela, entidade, coluna, DTO, teste ou comentário desta onda — o teste novo
    `__tests__/terminologia-onda3.test.ts` varre os arquivos criados e alterados.
@@ -197,8 +206,10 @@ o que fecha a decisão 31.
 **Decisão 5 — regra de visibilidade final.** Item aparece se `href ∈ menusVisiveis(perfis do usuário)`
 (união quando o usuário tem mais de um perfil). Grupo aparece se tiver ao menos um item visível — o
 grupo deixa de ter lista própria de permissões. `filtrarMenuPorPermissoes(permissoes)` é substituída por
-`filtrarMenuPorRotas(menusVisiveis)`; `MenuGroupDef.permissoesGrupo` e `MenuItemDef.permissoes` saem de
-`menu-v2.ts` (decisão 6 explica por quê isso não afrouxa segurança).
+`filtrarMenuPorMenusVisiveis(menusVisiveis)` — **este é o único nome usado no plano inteiro**, e quem a
+consome é `src/app/(admin)/layout.tsx` (que já monta as `sections` e as passa ao `AppSidebar`, sem alterar
+`app-sidebar.tsx`). `MenuGroupDef.permissoesGrupo` e `MenuItemDef.permissoes` saem de `menu-v2.ts`
+(decisão 6 explica por quê isso não afrouxa segurança).
 
 **Decisão 6 — menu não é autorização.** A autorização continua exclusivamente no backend
 (`RbacGuard` + `@RequirePermissoes`, resolvida do banco por ADR-008) e no *server component* de cada
@@ -237,6 +248,14 @@ no doc 013, com fallback `null` só para perfil sem nenhum menu visível:
 | `faturamento` | `/faturamento/pre-faturamento` | doc 008 §4.2 |
 | `logistica` | `/faturamento/liberacao` | matriz linha 27 (liberação do caminhão) |
 | `diretoria` | `/gestao/dashboard` | matriz linha 6 |
+
+Esta tabela **substitui integralmente** a tabela da decisão 26 da Onda 2 e é a única fonte de verdade da
+rota de entrada: `ROTA_ENTRADA_POR_PERFIL` (Task 11.2) e `ROTAS_ENTRADA_ESPERADAS` (Task 11.7) repetem
+exatamente estes 11 pares, sem heurística de grupo de trabalho. As mudanças em relação à Onda 2 são
+`compras` (`/gestao/dashboard` → `/gestao/compras`, a tela de trabalho do comprador), `diretoria`
+(`/comercial/clientes` → `/gestao/dashboard`, matriz linha 6) e `conferente`/`logistica`, que deixam de
+ser `null` porque a decisão 4 lhes devolveu menu. `comercial` permanece em `/comercial/clientes`, como na
+Onda 2 e no doc 013 §2.4.
 
 Invariante testado (DoD-09): toda rota da tabela pertence ao menu visível do próprio perfil.
 
@@ -322,17 +341,36 @@ com grupo, tipo, título, descrição e sinalização de provisório idênticos 
 | `comercial.overbooking_permitido` | Comercial | toggle (padrão ligado) | não | — |
 | `comercial.prioridade_consumo` | Comercial | info | não | — |
 | `operacao.fifo_estoque` | Operação | toggle (padrão ligado) | não | — |
-| `operacao.cadencia_operacoes` | Operação | texto | sim | P1 |
-| `operacao.composicao_boi_casado` | Operação | info | sim | P11 |
-| `operacao.regras_transformacao_tz` | Operação | texto | sim | P12 |
+| `operacao.cadencia_dias_semana` | Operação | texto | **sim** | **P1** |
+| `operacao.composicao_boi_casado` | Operação | info | não (**AD-01**) | — |
+| `operacao.regras_transformacao_tz` | Operação | texto | **sim** | **P12** |
 | `fiscal.seguro_integrado` | Fiscal | toggle (padrão desligado) | não | — |
-| `fiscal.emissao_fiscal` | Fiscal | info | sim | P9 |
-| `fiscal.expiracao_reserva_rascunho` | Fiscal | texto | sim | P15 |
+| `fiscal.emissao_fiscal` | Fiscal | info | não (**AD-02**) | — |
+| `fiscal.expiracao_reserva_rascunho` | Fiscal | info | não (**AD-06**) | — |
 
-O valor de `operacao.composicao_boi_casado` é "2 TZ + 2 DT + 2 PA", conforme **AD-01**, e o de
-`fiscal.emissao_fiscal` cita a EISS Osasco-SP conforme **AD-02**. O badge Provisório usa o componente
-`BadgeProvisorio` já existente, com a pendência da última coluna — todas presentes em
-`PENDENCIAS_ABERTAS`.
+**Total de badges Provisório nesta tela: 2** (P1 e P12). O badge usa o componente `BadgeProvisorio` já
+existente, com a pendência da última coluna; as duas continuam abertas em `PENDENCIAS_ABERTAS`.
+
+Três cartões divergem do `provisorio: true` do mock de `Parametros.tsx` porque a decisão do cliente já foi
+registrada em `docs/execucao/DECISOES.md` — divergências autorizadas, numeradas aqui e registradas no
+README de evidências (Task 27.1):
+
+- **D25.a (AD-01)** — `operacao.composicao_boi_casado` deixa de ser provisório. Texto do cartão:
+  "2 TZ + 2 DT + 2 PA. Composição confirmada pelo cliente e registrada em AD-01; permanece parametrizável."
+  Nenhuma tela desta onda exibe badge Provisório para a composição do boi casado.
+- **D25.b (AD-02)** — `fiscal.emissao_fiscal` deixa de ser provisório e ganha a nota de homologação.
+  Texto do cartão: "Via sistema externo: NFS-e da Prefeitura de Osasco-SP (EISS), conforme AD-02.
+  Integração aguardando homologação."
+- **D25.c (AD-06)** — `fiscal.expiracao_reserva_rascunho` deixa de ser provisório e muda de `texto` para
+  `info`, porque AD-06 já decidiu o comportamento e um campo livre convidaria a inventar um TTL. Título
+  do cartão continua o do protótipo ("Expiração de reserva de rascunho"); o texto passa a ser:
+  "Sem expiração automática (AD-06). A reserva do rascunho é liberada por remoção/cancelamento pelo
+  vendedor ou pela ação administrativa auditada 'Liberar reserva'." **Nenhum TTL, job ou parâmetro de
+  expiração é criado nesta onda** — a ação administrativa é escopo da Onda 4.
+
+A chave da cadência é `operacao.cadencia_dias_semana`, o nome já fixado no plano mestre §7 (P1), com valor
+padrão `'1,3,5'` (segunda, quarta e sexta). Nenhum serviço desta onda consome esse valor: a geração por
+cadência é escopo da Onda 4.
 
 ### Permissões
 
@@ -346,6 +384,13 @@ O valor de `operacao.composicao_boi_casado` é "2 TZ + 2 DT + 2 PA", conforme **
 recebem `MODELOS_ETIQUETA_LER` (já operam etiquetagem via `ETIQUETA_GERENCIAR` e precisam consultar o
 modelo). Nenhuma permissão existente é removida de nenhum perfil nesta onda — remover permissão é
 mudança de superfície de API e sairia do escopo (o menu já não depende dela por causa da decisão 4).
+
+`MODELOS_ETIQUETA_LER` para `recebimento_pesagem` e `corte` é uma **divergência autorizada em relação à
+matriz**: a linha 37 dá a tela `/cadastros/modelos-etiqueta` apenas a `administrador` e `gestor`, e essa
+atribuição de menu **não muda** (DoD-06 continua exigindo zero extras no menu). A permissão é de leitura de
+API, necessária porque pesagem e corte imprimem etiqueta e leem o modelo ativo. Registrada no README de
+evidências (Task 27.1). Se o cliente recusar, o efeito é retirar duas entradas do mapa
+perfil→permissão — nenhuma tela desta onda depende dela.
 
 **Decisão 28 — o snapshot RBAC é regenerado** por `npm run rbac:snapshot` e commitado; o teste
 `menu-rbac.test.ts` lê o snapshot, então esquecer de regenerar quebra o CI.
@@ -431,6 +476,24 @@ com `pageSize` 20 por padrão, e o contador do protótipo ("N representantes", "
 `src/lib/error-message.ts` já traduz o envelope de erro; a tela mostra `toast` de `sonner` com essa
 mensagem e mantém o formulário aberto com os dados digitados.
 
+**Decisão 43 — "representantes permitidos" do usuário (linha 38 da matriz) é diferido para a Onda 4
+(Comercial), com escopo declarado aqui.** A matriz pede o campo em `/admin/usuarios`, mas o valor dele é
+um **filtro de dados comerciais** (docs_v2 03 §1.2 e §5.1: pedidos e clientes filtrados por representantes
+permitidos). Entregar só o campo nesta onda produziria uma configuração que a API ignora — exatamente a
+meia-entrega que o Princípio II proíbe. O que a Onda 4 entrega, junto das telas de pedidos e clientes:
+
+1. tabela `usuarios_representantes` (`usuario_id`, `representante_id`, PK composta, `created_at`) em
+   migração expand;
+2. `PUT /usuarios/:id/representantes` com auditoria antes/depois, no mesmo padrão de
+   `PUT /perfis/:slug/menus`;
+3. o multisseletor "Representantes permitidos" no drawer de `/admin/usuarios`;
+4. **a aplicação do escopo** nos serviços comerciais (`pedidos` e `clientes`): usuário com lista não vazia
+   só enxerga registros dos representantes listados, provado por teste de integração com dois usuários.
+
+Nesta onda, o drawer de `/admin/usuarios` entrega perfil e status (o que já existe no backend) e **não**
+exibe campo de representantes — nada de controle inerte na tela (RA-06). A dívida está registrada na
+seção "Dívidas deixadas por esta onda".
+
 ---
 
 ## Estrutura de arquivos
@@ -454,6 +517,7 @@ app/backend/src/modules/modelos-etiqueta/modelos-etiqueta.controller.ts
 app/backend/src/modules/modelos-etiqueta/modelos-etiqueta.service.ts
 app/backend/src/modules/modelos-etiqueta/dto/modelo-etiqueta.dto.ts
 app/backend/src/common/rbac/menus-canonicos.ts
+app/backend/src/common/rbac/perfil-menus.snapshot.json            (gerado por npm run rbac:snapshot)
 app/backend/test/integration/frota.e2e-spec.ts
 app/backend/test/integration/modelos-etiqueta.e2e-spec.ts
 app/backend/test/integration/perfis-menus.e2e-spec.ts
@@ -463,6 +527,7 @@ app/backend/test/integration/rotas-paradas.e2e-spec.ts
 app/backend/test/unit/menus-canonicos.spec.ts
 app/backend/test/unit/simulador-desdobramento.spec.ts
 app/backend/test/unit/simulador-desossa.spec.ts
+app/backend/test/unit/cobertura-config.spec.ts
 ```
 
 ### Backend — arquivos alterados
@@ -475,6 +540,7 @@ app/backend/src/database/seed.ts                     seeds das decisões 21, 23 
 app/backend/src/app.module.ts                        FrotaModule, ModelosEtiquetaModule
 app/backend/src/common/rbac/permissoes.ts            6 permissões novas + atribuição (decisões 26 e 27)
 app/backend/src/common/rbac/perfil-permissoes.snapshot.json   regenerado
+app/backend/scripts/gerar-snapshot-perfis.ts         grava também o snapshot de menus (Task 11.1)
 app/backend/src/modules/auth/rbac.service.ts         menus visíveis no listar/definir
 app/backend/src/modules/perfis/perfis.controller.ts  GET /perfis/catalogo, PUT /perfis/:slug/menus
 app/backend/src/modules/perfis/perfis.service.ts     definirMenus + catálogo
@@ -491,24 +557,28 @@ app/backend/src/modules/cadastros/rotas/rotas.service.ts     persistência dos 2
 app/backend/src/modules/cadastros/fornecedores/fornecedores.controller.ts  /contagens, /:id/historico
 app/backend/src/modules/cadastros/fornecedores/fornecedores.service.ts     contagens, historico
 app/backend/src/modules/cadastros/produtos/dto/produto.dto.ts              bloco fiscal em atributosJson
-app/backend/src/modules/desossa/regras-transformacao.controller.ts         POST /simular
-app/backend/src/modules/desossa/regras-transformacao.service.ts            simular
-app/backend/src/modules/cadastros/regras-desdobramento/*.controller.ts     POST /simular
-app/backend/src/modules/cadastros/regras-desdobramento/*.service.ts        simular
+app/backend/src/modules/operacao/desossa/desossa.controller.ts             POST /desossa/regras-transformacao/simular
+app/backend/src/modules/operacao/desossa/regras-transformacao.service.ts   simular
+app/backend/src/modules/cadastros/regras-desdobramento/regras-desdobramento.controller.ts  POST /simular
+app/backend/src/modules/cadastros/regras-desdobramento/regras-desdobramento.service.ts     simular
+app/backend/test/integration/cadastros-diversos.e2e-spec.ts  +2 casos (Task 7.3)
+app/backend/test/integration/cadastros-f7.e2e-spec.ts        +1 caso (Task 19.2)
+app/backend/test/integration/rbac.e2e-spec.ts                +1 caso (Task 9.8)
 ```
 
 ### Frontend — arquivos novos
 
 ```
-app/frontend/src/lib/menus-canonicos.ts
 app/frontend/src/lib/frota.ts
 app/frontend/src/lib/modelos-etiqueta.ts
-app/frontend/src/lib/parametros.ts
-app/frontend/src/components/cadastro-tabela-drawer.tsx
+app/frontend/src/components/cadastros/cadastro-tabela-drawer.tsx
 app/frontend/src/app/(admin)/cadastros/representantes/representantes-client.tsx
 app/frontend/src/app/(admin)/cadastros/caminhoes/caminhoes-client.tsx
 app/frontend/src/app/(admin)/cadastros/motoristas/motoristas-client.tsx
 app/frontend/src/app/(admin)/cadastros/modelos-etiqueta/modelos-etiqueta-client.tsx
+app/frontend/src/app/(admin)/cadastros/regras-transformacao/simulador-desdobramento.tsx
+app/frontend/src/app/(admin)/cadastros/regras-transformacao/simulador-desossa.tsx
+app/frontend/src/app/(admin)/admin/usuarios/resumo-perfis.tsx
 app/frontend/src/app/(admin)/admin/perfis/perfis-client.tsx
 app/frontend/src/app/(admin)/admin/parametros/parametros-client.tsx
 app/frontend/src/app/api/cadastros/frota-caminhoes/route.ts
@@ -524,18 +594,24 @@ app/frontend/src/app/api/desossa/regras-transformacao/simular/route.ts
 app/frontend/src/app/api/admin/perfis/catalogo/route.ts
 app/frontend/src/app/api/admin/perfis/[slug]/menus/route.ts
 app/frontend/src/app/api/admin/parametros/route.ts
-app/frontend/src/app/api/admin/parametros/[chave]/route.ts
+app/frontend/src/app/api/admin/parametros/chave/[chave]/route.ts
 app/frontend/src/app/api/admin/usuarios/resumo-perfis/route.ts
 app/frontend/src/app/api/admin/auditoria/facetas/route.ts
-app/frontend/src/app/api/admin/auditoria/exportar/route.ts
+app/frontend/src/app/api/admin/auditoria/export/route.ts
 app/frontend/__tests__/cadastro-tabela-drawer.test.tsx
-app/frontend/__tests__/menus-canonicos.test.ts
-app/frontend/__tests__/perfis-menus.test.tsx
-app/frontend/__tests__/parametros.test.tsx
-app/frontend/__tests__/auditoria.test.tsx
+app/frontend/__tests__/fornecedores-contagens.test.tsx
+app/frontend/__tests__/rotas-paradas.test.tsx
 app/frontend/__tests__/modelos-etiqueta.test.tsx
-app/frontend/e2e/cadastros-admin.spec.ts
-docs/evidencias/onda3-cadastros-admin/README.md
+app/frontend/__tests__/produtos-client.test.tsx
+app/frontend/__tests__/simuladores-transformacao.test.tsx
+app/frontend/__tests__/usuarios-client.test.tsx
+app/frontend/__tests__/perfis-client.test.tsx
+app/frontend/__tests__/parametros-client.test.tsx
+app/frontend/__tests__/auditoria-filtros.test.tsx
+app/frontend/__tests__/bff-onda3.test.ts
+app/frontend/__tests__/terminologia-onda3.test.ts
+app/frontend/e2e/onda3-cadastros-admin.spec.ts
+docs/execucao/evidencias/onda3-cadastros-admin/README.md
 ```
 
 ### Frontend — arquivos alterados
@@ -544,10 +620,9 @@ docs/evidencias/onda3-cadastros-admin/README.md
 app/frontend/src/lib/menu-v2.ts                      decisões 4, 5 e 9
 app/frontend/src/lib/auth.ts                         menusVisiveis no payload de getMe
 app/frontend/src/lib/cadastros-config.ts             fornecedor: 3 campos da decisão 17 + nota de qualidade
-app/frontend/src/components/ui/app-sidebar.tsx       consome filtrarMenuPorRotas
-app/frontend/__tests__/menu-rbac.test.ts             reescrito (Task 10)
-app/frontend/__tests__/menu-v2.test.ts               ajustado à nova assinatura
-app/frontend/__tests__/terminologia.test.ts          varre os arquivos novos
+app/frontend/src/app/(admin)/layout.tsx              consome filtrarMenuPorMenusVisiveis (Task 11.4)
+app/frontend/__tests__/menu-rbac.test.ts             reescrito (Task 11.7)
+app/frontend/__tests__/menu-v2.test.ts               ajustado à nova assinatura (Task 11.6)
 app/frontend/src/app/(admin)/cadastros/representantes/page.tsx
 app/frontend/src/app/(admin)/cadastros/caminhoes/page.tsx
 app/frontend/src/app/(admin)/cadastros/motoristas/page.tsx
@@ -584,7 +659,7 @@ essa string no `it(...)`.
 | DoD-08 | Os **14 extras** declarados na decisão 31 da Onda 2 sumiram do menu de cada perfil | `os 14 extras herdados da Onda 2 sumiram do menu` | `app/frontend/__tests__/menu-rbac.test.ts` |
 | DoD-09 | A rota de entrada de cada perfil é a função primária da decisão 9 e pertence ao menu do próprio perfil | `rota de entrada bate com a funcao primaria do perfil: %s` | `app/frontend/__tests__/menu-rbac.test.ts` |
 | DoD-10 | Grupos visíveis por perfil batem com a tabela fixada (grupo aparece se e somente se tiver item visível) | `grupos visiveis batem com a tabela fixada: %s` | `app/frontend/__tests__/menu-rbac.test.ts` |
-| DoD-11 | Usuário sem menu não tem grupo nem rota de entrada; `href` fora do catálogo não vira item | `href fora do catalogo nao vira item de menu` | `app/frontend/__tests__/menu-rbac.test.ts` |
+| DoD-11 | `href` fora do catálogo canônico não vira item de menu | `href fora do catalogo nao vira item de menu` | `app/frontend/__tests__/menu-rbac.test.ts` |
 | DoD-12 | `PUT /perfis/:slug/menus` grava, audita antes/depois e rejeita `href` fora do catálogo com 400 sem gravar | `define menus visiveis, audita e rejeita href desconhecido` | `app/backend/test/integration/perfis-menus.e2e-spec.ts` |
 | DoD-13 | O seed devolve os 11 perfis ao estado canônico mesmo após alteração manual (decisão 23) | `seed de menus visiveis reconcilia perfil alterado` | `app/backend/test/integration/perfis-menus.e2e-spec.ts` |
 | DoD-14 | Menu visível não concede acesso: perfil com a rota visível e sem a permissão recebe 403 na API | `menu visivel nao concede acesso a api` | `app/backend/test/integration/perfis-menus.e2e-spec.ts` |
@@ -614,11 +689,11 @@ essa string no `it(...)`.
 |---|---|---|---|
 | DoD-29 | `GET /perfis/catalogo` cobre 100 % de `DESCRICOES_PERMISSOES`, agrupado por módulo, e lista os 39 menus | `catalogo de permissoes cobre todo o mapa de descricoes` | `app/backend/test/integration/perfis-menus.e2e-spec.ts` |
 | DoD-30 | `GET /usuarios/resumo-perfis` devolve os 11 perfis em ordem canônica, com contagem real e zero quando vazio | `resumo de perfis conta usuarios reais e inclui perfil vazio` | `app/backend/test/integration/rbac.e2e-spec.ts` |
-| DoD-31 | As 9 chaves de parâmetro da decisão 25 existem após o seed, com grupo, tipo, texto e sinalização de provisório | `seed cria as 9 chaves de parametro da v1.1` | `app/backend/test/integration/parametros-onda3.e2e-spec.ts` |
+| DoD-31 | As 9 chaves da decisão 25 existem após o seed; exatamente 2 são provisórias (P1 e P12) e composição do boi casado, emissão fiscal e reserva de rascunho **não** são provisórias (AD-01, AD-02, AD-06) | `seed cria as 9 chaves de parametro da v1.1 com AD-01, AD-02 e AD-06 honradas` | `app/backend/test/integration/parametros-onda3.e2e-spec.ts` |
 | DoD-32 | `PATCH /parametros/chave/:chave` grava, audita e devolve 404 para chave inexistente | `atualiza parametro por chave, audita e 404 em chave desconhecida` | `app/backend/test/integration/parametros-onda3.e2e-spec.ts` |
 | DoD-33 | **(decisão 27 da Onda 2)** A auditoria filtra por período, usuário, módulo, operação e registro, combinados | `auditoria filtra por periodo, usuario, modulo, operacao e registro` | `app/backend/test/integration/auditoria-facetas.e2e-spec.ts` |
-| DoD-34 | **(decisão 27)** `GET /auditoria/facetas` devolve módulos, tabelas e usuários distintos reais do log | `facetas de auditoria listam valores distintos reais` | `app/backend/test/integration/auditoria-facetas.e2e-spec.ts` |
-| DoD-35 | **(decisão 27)** `registroBusca` casa por trecho; `registroId` exige UUID e rejeita texto livre com 400 | `filtro de registro aceita trecho e valida uuid` | `app/backend/test/integration/auditoria-facetas.e2e-spec.ts` |
+| DoD-34 | **(decisão 30)** `GET /auditoria/facetas` devolve módulos, tabelas e usuários distintos reais do log | `facetas de auditoria listam valores distintos reais` | `app/backend/test/integration/auditoria-facetas.e2e-spec.ts` |
+| DoD-35 | **(decisão 30)** `registroBusca` casa por trecho; `registroId` exige UUID e rejeita texto livre com 400 | `filtro de registro aceita trecho e valida uuid` | `app/backend/test/integration/auditoria-facetas.e2e-spec.ts` |
 
 ### Telas — fidelidade e comportamento
 
@@ -649,23 +724,24 @@ essa string no `it(...)`.
 | DoD-58 | A nota sobre menu valer na próxima navegação e permissão no próximo login está na tela (decisão 11) | `tela explica diferenca entre menu e permissao` | `app/frontend/__tests__/perfis-client.test.tsx` |
 | DoD-59 | Erro do backend não altera a matriz exibida e aparece como mensagem | `erro ao salvar perfil nao altera a matriz` | `app/frontend/__tests__/perfis-client.test.tsx` |
 | DoD-60 | `/admin/parametros` mostra os 3 grupos e os 9 cartões na ordem Comercial → Operação → Fiscal | `parametros mostra 3 grupos e 9 cartoes na ordem do prototipo` | `app/frontend/__tests__/parametros-client.test.tsx` |
-| DoD-61 | Exatamente os 5 parâmetros provisórios da decisão 25 exibem badge Provisório com a pendência certa | `apenas os 5 parametros provisorios exibem badge` | `app/frontend/__tests__/parametros-client.test.tsx` |
+| DoD-61 | Exatamente 2 cartões exibem badge Provisório (`operacao.cadencia_dias_semana` com P1 e `operacao.regras_transformacao_tz` com P12); os outros 7 não exibem badge nenhum | `apenas os 2 parametros provisorios exibem badge` | `app/frontend/__tests__/parametros-client.test.tsx` |
 | DoD-62 | Cartão do tipo `info` não tem botão "Salvar" | `parametro informativo nao tem botao salvar` | `app/frontend/__tests__/parametros-client.test.tsx` |
 | DoD-63 | Sem `PARAMETROS_GERENCIAR` nenhum controle é editável e não há botão "Salvar" | `sem permissao de gerenciar parametros fica somente leitura` | `app/frontend/__tests__/parametros-client.test.tsx` |
 | DoD-64 | Salvar envia `PATCH /parametros/chave/:chave` preservando as demais chaves de `valorJson` | `salvar parametro preserva as demais chaves do valorJson` | `app/frontend/__tests__/parametros-client.test.tsx` |
-| DoD-65 | **(decisão 27)** A tela mostra os 5 filtros do protótipo: Período, Usuário, Módulo, Operação e Registro | `auditoria mostra os cinco filtros do prototipo` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
-| DoD-66 | **(decisão 27)** Usuário e Módulo são populados por `GET /auditoria/facetas` | `selects de usuario e modulo vem das facetas` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
+| DoD-65 | **(decisão 30)** A tela mostra os 5 filtros do protótipo: Período, Usuário, Módulo, Operação e Registro | `auditoria mostra os cinco filtros do prototipo` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
+| DoD-66 | **(decisão 30)** Usuário e Módulo são populados por `GET /auditoria/facetas` | `selects de usuario e modulo vem das facetas` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
 | DoD-67 | **(decisão 31)** UUID completo vira `registroId`; texto parcial vira `registroBusca` | `campo registro escolhe entre registroId e registroBusca` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
 | DoD-68 | **(decisão 32)** "Exportar CSV" chama a rota de exportação com os filtros correntes | `exportar csv usa os filtros correntes` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
 | DoD-69 | **(decisão 32)** Exportação truncada em 5 000 registros avisa o usuário | `exportacao truncada avisa o usuario` | `app/frontend/__tests__/auditoria-filtros.test.tsx` |
-| DoD-70 | As 18 rotas BFF da onda existem nos caminhos previstos | `todas as rotas BFF da Onda 3 existem` | `app/frontend/__tests__/bff-onda3.test.ts` |
+| DoD-70 | As 17 rotas BFF da onda existem nos caminhos previstos | `todas as rotas BFF da Onda 3 existem` | `app/frontend/__tests__/bff-onda3.test.ts` |
 | DoD-71 | O BFF repassa status e mensagem do backend em caso de erro, sem mascarar (RA-05) | `erro do backend vira status e message no BFF` | `app/frontend/__tests__/bff-onda3.test.ts` |
 | DoD-72 | Cada uma das 12 rotas abre com o título do protótipo, sem placeholder e sem erro de console | `rota <rota> abre com titulo e sem placeholder` | `app/frontend/e2e/onda3-cadastros-admin.spec.ts` |
 | DoD-73 | O menu do administrador leva às 12 rotas da onda | `menu do administrador leva as 12 rotas da onda` | `app/frontend/e2e/onda3-cadastros-admin.spec.ts` |
 | DoD-74 | O rótulo banido pela v1.1 §6.8 não aparece em nenhum arquivo da onda | `nenhum arquivo da onda usa o rotulo banido pela v1.1` | `app/frontend/__tests__/terminologia-onda3.test.ts` |
 | DoD-75 | Nenhum arquivo da onda tem marcador de pendência textual ou dado de demonstração | `nenhum arquivo da onda tem marcador de pendencia ou dado de demonstracao` | `app/frontend/__tests__/terminologia-onda3.test.ts` |
 | DoD-76 | Nenhuma tela da onda usa `PlaceholderPage` | `nenhuma tela da onda usa PlaceholderPage` | `app/frontend/__tests__/terminologia-onda3.test.ts` |
-| DoD-77 | Cobertura de linha e de branch do backend ≥ 80 % | gate do CI | `npm run test:cov` |
+| DoD-77 | Cobertura de linha e de branch do backend ≥ 80 % é exigida pela configuração do Jest (o gate falha o build, não só avisa) | `jest exige 80 por cento de linha e de branch` | `app/backend/test/unit/cobertura-config.spec.ts` |
+| DoD-78 | Usuário sem menu nenhum não tem grupo visível nem rota de entrada | `usuario sem menu nao tem grupo nem rota de entrada` | `app/frontend/__tests__/menu-rbac.test.ts` |
 
 ---
 
@@ -1170,15 +1246,15 @@ const PARAMETROS_SEED = [
     },
   },
   {
-    chave: 'operacao.cadencia_operacoes',
+    chave: 'operacao.cadencia_dias_semana',
     descricao: 'Cadência de geração de Operações',
     valorJson: {
       grupo: 'Operação',
       tipo: 'texto',
       titulo: 'Cadência de geração de Operações',
       texto:
-        'Segunda, quarta e sexta. Dias da semana em que uma Operação é criada automaticamente (ver Gestão / Operações). Compra Programada e Pedido de Venda sempre se vinculam a uma Operação desta cadência, ou a uma extraordinária criada manualmente para datas fora do padrão.',
-      valor: '',
+        'Segunda, quarta e sexta. Dias da semana em que uma Operação é criada automaticamente (ver Gestão / Operações). Compra Programada e Pedido de Venda sempre se vinculam a uma Operação desta cadência, ou a uma extraordinária criada manualmente para datas fora do padrão. Cadência provisória — pendente de validação formal.',
+      valor: '1,3,5',
       provisorio: true,
       pendencia: 'P1',
     },
@@ -1190,10 +1266,11 @@ const PARAMETROS_SEED = [
       grupo: 'Operação',
       tipo: 'info',
       titulo: 'Composição do boi casado',
-      texto: '2 TZ + 2 DT + 2 PA. Composição registrada em AD-01 e usada como referência da compra programada.',
+      texto:
+        '2 TZ + 2 DT + 2 PA. Composição confirmada pelo cliente e registrada em AD-01; permanece parametrizável.',
       valor: null,
-      provisorio: true,
-      pendencia: 'P11',
+      provisorio: false,
+      pendencia: null,
     },
   },
   {
@@ -1230,23 +1307,25 @@ const PARAMETROS_SEED = [
       grupo: 'Fiscal',
       tipo: 'info',
       titulo: 'Emissão fiscal',
-      texto: 'NFS-e da Prefeitura de Osasco-SP via EISS, conforme AD-02.',
+      texto:
+        'Via sistema externo: NFS-e da Prefeitura de Osasco-SP (EISS), conforme AD-02. Integração aguardando homologação.',
       valor: null,
-      provisorio: true,
-      pendencia: 'P9',
+      provisorio: false,
+      pendencia: null,
     },
   },
   {
     chave: 'fiscal.expiracao_reserva_rascunho',
-    descricao: 'Expiração de reserva de rascunho',
+    descricao: 'Expiração de reserva de rascunho (AD-06)',
     valorJson: {
       grupo: 'Fiscal',
-      tipo: 'texto',
+      tipo: 'info',
       titulo: 'Expiração de reserva de rascunho',
-      texto: 'Liberação de reservas de pedidos em rascunho abandonados: pendente de decisão registrada.',
-      valor: '',
-      provisorio: true,
-      pendencia: 'P15',
+      texto:
+        "Sem expiração automática (AD-06). A reserva do rascunho é liberada por remoção/cancelamento pelo vendedor ou pela ação administrativa auditada 'Liberar reserva'.",
+      valor: null,
+      provisorio: false,
+      pendencia: null,
     },
   },
 ] as const;
@@ -1442,7 +1521,7 @@ import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../database/database.module';
 import * as schema from '../../database/schema';
-import { frotaCaminhoes } from '../../database/schema';
+import { frotaCaminhoes, rotas } from '../../database/schema';
 import { AuditoriaService } from '../../common/auditoria/auditoria.service';
 import {
   calcularRange, montarPaginado, primeiroOuFalha,
@@ -1451,6 +1530,7 @@ import {
 import type { CreateCaminhaoCadastroDto, UpdateCaminhaoCadastroDto } from './dto/caminhao-cadastro.dto';
 
 type CaminhaoCadastro = typeof frotaCaminhoes.$inferSelect;
+type CaminhaoCadastroLista = CaminhaoCadastro & { rotaPadraoNome: string | null };
 
 @Injectable()
 export class CaminhoesCadastroService {
@@ -1463,7 +1543,7 @@ export class CaminhoesCadastroService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<CaminhaoCadastro>> {
+  async listar(query: ListarQuery): Promise<Paginado<CaminhaoCadastroLista>> {
     const { limit, offset } = calcularRange(query);
     const filtros = [query.incluirRemovidos ? undefined : isNull(frotaCaminhoes.deletedAt)];
     if (query.search) {
@@ -1473,8 +1553,25 @@ export class CaminhoesCadastroService {
     const where = and(...filtros.filter(Boolean));
 
     const [linhas, totalRow] = await Promise.all([
-      this.db.select().from(frotaCaminhoes).where(where)
-        .orderBy(desc(frotaCaminhoes.createdAt)).limit(limit).offset(offset),
+      this.db
+        .select({
+          id: frotaCaminhoes.id,
+          placa: frotaCaminhoes.placa,
+          descricao: frotaCaminhoes.descricao,
+          capacidadeKg: frotaCaminhoes.capacidadeKg,
+          rotaPadraoId: frotaCaminhoes.rotaPadraoId,
+          rotaPadraoNome: rotas.nome,
+          status: frotaCaminhoes.status,
+          createdAt: frotaCaminhoes.createdAt,
+          updatedAt: frotaCaminhoes.updatedAt,
+          deletedAt: frotaCaminhoes.deletedAt,
+        })
+        .from(frotaCaminhoes)
+        .leftJoin(rotas, eq(frotaCaminhoes.rotaPadraoId, rotas.id))
+        .where(where)
+        .orderBy(desc(frotaCaminhoes.createdAt))
+        .limit(limit)
+        .offset(offset),
       this.db.select({ total: sql<number>`count(*)::int` }).from(frotaCaminhoes).where(where),
     ]);
 
@@ -1594,24 +1691,55 @@ export class CaminhoesCadastroService {
 }
 ```
 
-**4.4** `app/backend/src/modules/frota/motoristas.service.ts`: mesmo desenho de 4.3, trocando
-`frotaCaminhoes` por `frotaMotoristas`, a chave natural `placa` por `documento`, a mensagem de conflito
-por `'Já existe motorista ativo com este documento'`, a de ausência por `'Motorista não encontrado'`,
-a busca textual por `or(ilike(frotaMotoristas.nome, termo), ilike(frotaMotoristas.documento, termo), ilike(frotaMotoristas.telefone, termo))`
-e o conjunto de campos de escrita por:
+**4.4** `app/backend/src/modules/frota/motoristas.service.ts`:
 
 ```ts
-          nome: dto.nome ?? anterior.nome,
-          documento: dto.documento ?? anterior.documento,
-          telefone: dto.telefone ?? anterior.telefone,
-          caminhaoPadraoId:
-            dto.caminhaoPadraoId === undefined ? anterior.caminhaoPadraoId : dto.caminhaoPadraoId,
-          status: dto.status ?? anterior.status,
-```
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { DRIZZLE } from '../../database/database.module';
+import * as schema from '../../database/schema';
+import { frotaCaminhoes, frotaMotoristas } from '../../database/schema';
+import { AuditoriaService } from '../../common/auditoria/auditoria.service';
+import {
+  calcularRange, montarPaginado, primeiroOuFalha,
+  type ListarQuery, type Paginado,
+} from '../../common/crud/paginacao';
+import type { CreateMotoristaDto, UpdateMotoristaDto } from './dto/motorista.dto';
 
-A listagem devolve também a placa do caminhão padrão, por `leftJoin`:
+type Motorista = typeof frotaMotoristas.$inferSelect;
+type MotoristaLista = Motorista & {
+  caminhaoPadraoPlaca: string | null;
+  caminhaoPadraoAtivo: boolean | null;
+};
 
-```ts
+@Injectable()
+export class MotoristasService {
+  constructor(
+    @Inject(DRIZZLE) private readonly drizzle: { db: NodePgDatabase<typeof schema> },
+    private readonly auditoria: AuditoriaService,
+  ) {}
+
+  private get db() {
+    return this.drizzle.db;
+  }
+
+  async listar(query: ListarQuery): Promise<Paginado<MotoristaLista>> {
+    const { limit, offset } = calcularRange(query);
+    const filtros = [query.incluirRemovidos ? undefined : isNull(frotaMotoristas.deletedAt)];
+    if (query.search) {
+      const termo = `%${query.search}%`;
+      filtros.push(
+        or(
+          ilike(frotaMotoristas.nome, termo),
+          ilike(frotaMotoristas.documento, termo),
+          ilike(frotaMotoristas.telefone, termo),
+        ),
+      );
+    }
+    const where = and(...filtros.filter(Boolean));
+
+    const [linhas, totalRow] = await Promise.all([
       this.db
         .select({
           id: frotaMotoristas.id,
@@ -1620,7 +1748,7 @@ A listagem devolve também a placa do caminhão padrão, por `leftJoin`:
           telefone: frotaMotoristas.telefone,
           caminhaoPadraoId: frotaMotoristas.caminhaoPadraoId,
           caminhaoPadraoPlaca: frotaCaminhoes.placa,
-          caminhaoPadraoAtivo: sql<boolean>`${frotaCaminhoes.deleted_at} IS NULL`,
+          caminhaoPadraoAtivo: sql<boolean | null>`${frotaCaminhoes.deletedAt} IS NULL`,
           status: frotaMotoristas.status,
           createdAt: frotaMotoristas.createdAt,
           updatedAt: frotaMotoristas.updatedAt,
@@ -1632,6 +1760,126 @@ A listagem devolve também a placa do caminhão padrão, por `leftJoin`:
         .orderBy(desc(frotaMotoristas.createdAt))
         .limit(limit)
         .offset(offset),
+      this.db.select({ total: sql<number>`count(*)::int` }).from(frotaMotoristas).where(where),
+    ]);
+
+    return montarPaginado(linhas, totalRow[0]?.total ?? 0, query);
+  }
+
+  async detalhar(id: string): Promise<Motorista> {
+    const registro = await this.buscarAtivo(id);
+    if (!registro) throw new NotFoundException('Motorista não encontrado');
+    return registro;
+  }
+
+  async criar(dto: CreateMotoristaDto, usuarioId: string): Promise<Motorista> {
+    return this.db.transaction(async (tx) => {
+      await this.assertDocumentoLivre(tx, dto.documento);
+
+      const criado = primeiroOuFalha(
+        await tx.insert(frotaMotoristas).values({
+          nome: dto.nome,
+          documento: dto.documento,
+          telefone: dto.telefone,
+          caminhaoPadraoId: dto.caminhaoPadraoId ?? null,
+          status: dto.status,
+        }).returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'frota_motoristas', registroId: criado.id, operacao: 'INSERT',
+        modulo: 'cadastros', usuarioId, dadosAnteriores: {}, dadosNovos: criado,
+      });
+      return criado;
+    });
+  }
+
+  async atualizar(id: string, dto: UpdateMotoristaDto, usuarioId: string): Promise<Motorista> {
+    return this.db.transaction(async (tx) => {
+      const anterior = await this.buscarAtivo(id, tx);
+      if (!anterior) throw new NotFoundException('Motorista não encontrado');
+      if (dto.documento && dto.documento !== anterior.documento) {
+        await this.assertDocumentoLivre(tx, dto.documento);
+      }
+
+      const atualizado = primeiroOuFalha(
+        await tx.update(frotaMotoristas).set({
+          nome: dto.nome ?? anterior.nome,
+          documento: dto.documento ?? anterior.documento,
+          telefone: dto.telefone ?? anterior.telefone,
+          caminhaoPadraoId:
+            dto.caminhaoPadraoId === undefined ? anterior.caminhaoPadraoId : dto.caminhaoPadraoId,
+          status: dto.status ?? anterior.status,
+        }).where(eq(frotaMotoristas.id, id)).returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'frota_motoristas', registroId: id, operacao: 'UPDATE',
+        modulo: 'cadastros', usuarioId, dadosAnteriores: anterior, dadosNovos: atualizado,
+      });
+      return atualizado;
+    });
+  }
+
+  async remover(id: string, usuarioId: string): Promise<{ id: string; deletedAt: Date }> {
+    return this.db.transaction(async (tx) => {
+      const anterior = await this.buscarAtivo(id, tx);
+      if (!anterior) throw new NotFoundException('Motorista não encontrado');
+
+      const removido = primeiroOuFalha(
+        await tx.update(frotaMotoristas).set({ deletedAt: new Date() })
+          .where(eq(frotaMotoristas.id, id)).returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'frota_motoristas', registroId: id, operacao: 'DELETE',
+        modulo: 'cadastros', usuarioId, dadosAnteriores: anterior, dadosNovos: removido,
+      });
+      return { id, deletedAt: removido.deletedAt as Date };
+    });
+  }
+
+  async restaurar(id: string, usuarioId: string): Promise<Motorista> {
+    return this.db.transaction(async (tx) => {
+      const anterior = await tx.select().from(frotaMotoristas)
+        .where(eq(frotaMotoristas.id, id)).then((r) => r[0] ?? null);
+      if (!anterior) throw new NotFoundException('Motorista não encontrado');
+      if (!anterior.deletedAt) throw new ConflictException('Motorista não está removido');
+      await this.assertDocumentoLivre(tx, anterior.documento);
+
+      const restaurado = primeiroOuFalha(
+        await tx.update(frotaMotoristas).set({ deletedAt: null })
+          .where(eq(frotaMotoristas.id, id)).returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'frota_motoristas', registroId: id, operacao: 'UPDATE',
+        modulo: 'cadastros', usuarioId, dadosAnteriores: anterior, dadosNovos: restaurado,
+      });
+      return restaurado;
+    });
+  }
+
+  private async assertDocumentoLivre(
+    tx: NodePgDatabase<typeof schema>,
+    documento: string,
+  ): Promise<void> {
+    const existente = await tx.select({ id: frotaMotoristas.id }).from(frotaMotoristas)
+      .where(and(isNull(frotaMotoristas.deletedAt), eq(frotaMotoristas.documento, documento)))
+      .then((r) => r[0] ?? null);
+    if (existente) throw new ConflictException('Já existe motorista ativo com este documento');
+  }
+
+  private async buscarAtivo(
+    id: string,
+    tx?: NodePgDatabase<typeof schema>,
+  ): Promise<Motorista | null> {
+    const exec = tx ?? this.db;
+    return exec.select().from(frotaMotoristas)
+      .where(and(eq(frotaMotoristas.id, id), isNull(frotaMotoristas.deletedAt)))
+      .then((r) => r[0] ?? null);
+  }
+}
 ```
 
 **4.5** `app/backend/src/modules/frota/caminhoes-cadastro.controller.ts`:
@@ -1702,9 +1950,73 @@ export class CaminhoesCadastroController {
 }
 ```
 
-**4.6** `app/backend/src/modules/frota/motoristas.controller.ts`: mesma estrutura de 4.5 com
-`@Controller('frota/motoristas')`, permissões `FROTA_MOTORISTAS_LER`/`FROTA_MOTORISTAS_GERENCIAR`,
-serviço `MotoristasService` e DTOs de 4.2.
+**4.6** `app/backend/src/modules/frota/motoristas.controller.ts`:
+
+```ts
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RbacGuard } from '../../common/guards/rbac.guard';
+import { RequirePermissoes } from '../../common/rbac/require-permissoes.decorator';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { CurrentUser, type CurrentUserPayload } from '../../common/decorators/current-user.decorator';
+import { listarQuerySchema, type ListarQuery } from '../../common/crud/paginacao';
+import { MotoristasService } from './motoristas.service';
+import {
+  createMotoristaSchema, updateMotoristaSchema,
+  type CreateMotoristaDto, type UpdateMotoristaDto,
+} from './dto/motorista.dto';
+
+@SkipThrottle()
+@Controller('frota/motoristas')
+@UseGuards(JwtAuthGuard, RbacGuard)
+export class MotoristasController {
+  constructor(private readonly service: MotoristasService) {}
+
+  @Get()
+  @RequirePermissoes('FROTA_MOTORISTAS_LER')
+  listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
+    return this.service.listar(query);
+  }
+
+  @Get(':id')
+  @RequirePermissoes('FROTA_MOTORISTAS_LER')
+  detalhar(@Param('id') id: string) {
+    return this.service.detalhar(id);
+  }
+
+  @Post()
+  @RequirePermissoes('FROTA_MOTORISTAS_GERENCIAR')
+  criar(
+    @Body(new ZodValidationPipe(createMotoristaSchema)) dto: CreateMotoristaDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.criar(dto, user.sub);
+  }
+
+  @Patch(':id')
+  @RequirePermissoes('FROTA_MOTORISTAS_GERENCIAR')
+  atualizar(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateMotoristaSchema)) dto: UpdateMotoristaDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.atualizar(id, dto, user.sub);
+  }
+
+  @Delete(':id')
+  @RequirePermissoes('FROTA_MOTORISTAS_GERENCIAR')
+  remover(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.service.remover(id, user.sub);
+  }
+
+  @Post(':id/restaurar')
+  @RequirePermissoes('FROTA_MOTORISTAS_GERENCIAR')
+  restaurar(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.service.restaurar(id, user.sub);
+  }
+}
+```
 
 **4.7** `app/backend/src/modules/frota/frota.module.ts`:
 
@@ -1870,15 +2182,245 @@ export const updateModeloEtiquetaSchema = z.object({
 export type UpdateModeloEtiquetaDto = z.infer<typeof updateModeloEtiquetaSchema>;
 ```
 
-**5.2** `modelos-etiqueta.service.ts`: mesmo desenho do serviço de 4.3, com chave natural `slug`,
-mensagens `'Modelo de etiqueta não encontrado'` e `'Já existe modelo ativo com este slug'`,
-`modulo: 'cadastros'` na auditoria e ordenação `orderBy(modelosEtiqueta.nome)`.
+**5.2** `app/backend/src/modules/modelos-etiqueta/modelos-etiqueta.service.ts`:
 
-**5.3** `modelos-etiqueta.controller.ts`: `@Controller('modelos-etiqueta')`, `GET`/`GET :id` com
-`MODELOS_ETIQUETA_LER`; `POST`, `PATCH :id`, `DELETE :id`, `POST :id/restaurar` com
-`MODELOS_ETIQUETA_GERENCIAR`.
+```ts
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { and, asc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { DRIZZLE } from '../../database/database.module';
+import * as schema from '../../database/schema';
+import { modelosEtiqueta } from '../../database/schema';
+import { AuditoriaService } from '../../common/auditoria/auditoria.service';
+import {
+  calcularRange, montarPaginado, primeiroOuFalha,
+  type ListarQuery, type Paginado,
+} from '../../common/crud/paginacao';
+import type { CreateModeloEtiquetaDto, UpdateModeloEtiquetaDto } from './dto/modelo-etiqueta.dto';
 
-**5.4** `modelos-etiqueta.module.ts` no mesmo formato de 4.7, registrado em `app.module.ts`.
+type ModeloEtiqueta = typeof modelosEtiqueta.$inferSelect;
+
+@Injectable()
+export class ModelosEtiquetaService {
+  constructor(
+    @Inject(DRIZZLE) private readonly drizzle: { db: NodePgDatabase<typeof schema> },
+    private readonly auditoria: AuditoriaService,
+  ) {}
+
+  private get db() {
+    return this.drizzle.db;
+  }
+
+  async listar(query: ListarQuery): Promise<Paginado<ModeloEtiqueta>> {
+    const { limit, offset } = calcularRange(query);
+    const filtros = [query.incluirRemovidos ? undefined : isNull(modelosEtiqueta.deletedAt)];
+    if (query.search) {
+      const termo = `%${query.search}%`;
+      filtros.push(or(ilike(modelosEtiqueta.nome, termo), ilike(modelosEtiqueta.slug, termo)));
+    }
+    const where = and(...filtros.filter(Boolean));
+
+    const [linhas, totalRow] = await Promise.all([
+      this.db.select().from(modelosEtiqueta).where(where)
+        .orderBy(asc(modelosEtiqueta.nome)).limit(limit).offset(offset),
+      this.db.select({ total: sql<number>`count(*)::int` }).from(modelosEtiqueta).where(where),
+    ]);
+
+    return montarPaginado(linhas, totalRow[0]?.total ?? 0, query);
+  }
+
+  async detalhar(id: string): Promise<ModeloEtiqueta> {
+    const registro = await this.buscarAtivo(id);
+    if (!registro) throw new NotFoundException('Modelo de etiqueta não encontrado');
+    return registro;
+  }
+
+  async criar(dto: CreateModeloEtiquetaDto, usuarioId: string): Promise<ModeloEtiqueta> {
+    return this.db.transaction(async (tx) => {
+      await this.assertSlugLivre(tx, dto.slug);
+
+      const criado = primeiroOuFalha(
+        await tx.insert(modelosEtiqueta).values({
+          slug: dto.slug,
+          nome: dto.nome,
+          campos: dto.campos,
+          status: dto.status,
+        }).returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'modelos_etiqueta', registroId: criado.id, operacao: 'INSERT',
+        modulo: 'cadastros', usuarioId, dadosAnteriores: {}, dadosNovos: criado,
+      });
+      return criado;
+    });
+  }
+
+  async atualizar(id: string, dto: UpdateModeloEtiquetaDto, usuarioId: string): Promise<ModeloEtiqueta> {
+    return this.db.transaction(async (tx) => {
+      const anterior = await this.buscarAtivo(id, tx);
+      if (!anterior) throw new NotFoundException('Modelo de etiqueta não encontrado');
+
+      const atualizado = primeiroOuFalha(
+        await tx.update(modelosEtiqueta).set({
+          nome: dto.nome ?? anterior.nome,
+          campos: dto.campos ?? anterior.campos,
+          status: dto.status ?? anterior.status,
+        }).where(eq(modelosEtiqueta.id, id)).returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'modelos_etiqueta', registroId: id, operacao: 'UPDATE',
+        modulo: 'cadastros', usuarioId, dadosAnteriores: anterior, dadosNovos: atualizado,
+      });
+      return atualizado;
+    });
+  }
+
+  async remover(id: string, usuarioId: string): Promise<{ id: string; deletedAt: Date }> {
+    return this.db.transaction(async (tx) => {
+      const anterior = await this.buscarAtivo(id, tx);
+      if (!anterior) throw new NotFoundException('Modelo de etiqueta não encontrado');
+
+      const removido = primeiroOuFalha(
+        await tx.update(modelosEtiqueta).set({ deletedAt: new Date() })
+          .where(eq(modelosEtiqueta.id, id)).returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'modelos_etiqueta', registroId: id, operacao: 'DELETE',
+        modulo: 'cadastros', usuarioId, dadosAnteriores: anterior, dadosNovos: removido,
+      });
+      return { id, deletedAt: removido.deletedAt as Date };
+    });
+  }
+
+  async restaurar(id: string, usuarioId: string): Promise<ModeloEtiqueta> {
+    return this.db.transaction(async (tx) => {
+      const anterior = await tx.select().from(modelosEtiqueta)
+        .where(eq(modelosEtiqueta.id, id)).then((r) => r[0] ?? null);
+      if (!anterior) throw new NotFoundException('Modelo de etiqueta não encontrado');
+      if (!anterior.deletedAt) throw new ConflictException('Modelo de etiqueta não está removido');
+      await this.assertSlugLivre(tx, anterior.slug);
+
+      const restaurado = primeiroOuFalha(
+        await tx.update(modelosEtiqueta).set({ deletedAt: null })
+          .where(eq(modelosEtiqueta.id, id)).returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'modelos_etiqueta', registroId: id, operacao: 'UPDATE',
+        modulo: 'cadastros', usuarioId, dadosAnteriores: anterior, dadosNovos: restaurado,
+      });
+      return restaurado;
+    });
+  }
+
+  private async assertSlugLivre(tx: NodePgDatabase<typeof schema>, slug: string): Promise<void> {
+    const existente = await tx.select({ id: modelosEtiqueta.id }).from(modelosEtiqueta)
+      .where(and(isNull(modelosEtiqueta.deletedAt), eq(modelosEtiqueta.slug, slug)))
+      .then((r) => r[0] ?? null);
+    if (existente) throw new ConflictException('Já existe modelo ativo com este slug');
+  }
+
+  private async buscarAtivo(
+    id: string,
+    tx?: NodePgDatabase<typeof schema>,
+  ): Promise<ModeloEtiqueta | null> {
+    const exec = tx ?? this.db;
+    return exec.select().from(modelosEtiqueta)
+      .where(and(eq(modelosEtiqueta.id, id), isNull(modelosEtiqueta.deletedAt)))
+      .then((r) => r[0] ?? null);
+  }
+}
+```
+
+**5.3** `app/backend/src/modules/modelos-etiqueta/modelos-etiqueta.controller.ts`:
+
+```ts
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RbacGuard } from '../../common/guards/rbac.guard';
+import { RequirePermissoes } from '../../common/rbac/require-permissoes.decorator';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { CurrentUser, type CurrentUserPayload } from '../../common/decorators/current-user.decorator';
+import { listarQuerySchema, type ListarQuery } from '../../common/crud/paginacao';
+import { ModelosEtiquetaService } from './modelos-etiqueta.service';
+import {
+  createModeloEtiquetaSchema, updateModeloEtiquetaSchema,
+  type CreateModeloEtiquetaDto, type UpdateModeloEtiquetaDto,
+} from './dto/modelo-etiqueta.dto';
+
+@SkipThrottle()
+@Controller('modelos-etiqueta')
+@UseGuards(JwtAuthGuard, RbacGuard)
+export class ModelosEtiquetaController {
+  constructor(private readonly service: ModelosEtiquetaService) {}
+
+  @Get()
+  @RequirePermissoes('MODELOS_ETIQUETA_LER')
+  listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
+    return this.service.listar(query);
+  }
+
+  @Get(':id')
+  @RequirePermissoes('MODELOS_ETIQUETA_LER')
+  detalhar(@Param('id') id: string) {
+    return this.service.detalhar(id);
+  }
+
+  @Post()
+  @RequirePermissoes('MODELOS_ETIQUETA_GERENCIAR')
+  criar(
+    @Body(new ZodValidationPipe(createModeloEtiquetaSchema)) dto: CreateModeloEtiquetaDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.criar(dto, user.sub);
+  }
+
+  @Patch(':id')
+  @RequirePermissoes('MODELOS_ETIQUETA_GERENCIAR')
+  atualizar(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateModeloEtiquetaSchema)) dto: UpdateModeloEtiquetaDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.atualizar(id, dto, user.sub);
+  }
+
+  @Delete(':id')
+  @RequirePermissoes('MODELOS_ETIQUETA_GERENCIAR')
+  remover(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.service.remover(id, user.sub);
+  }
+
+  @Post(':id/restaurar')
+  @RequirePermissoes('MODELOS_ETIQUETA_GERENCIAR')
+  restaurar(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.service.restaurar(id, user.sub);
+  }
+}
+```
+
+**5.4** `app/backend/src/modules/modelos-etiqueta/modelos-etiqueta.module.ts`, registrado na lista
+`imports` de `app.module.ts`:
+
+```ts
+import { Module } from '@nestjs/common';
+import { DatabaseModule } from '../../database/database.module';
+import { AuditoriaModule } from '../../common/auditoria/auditoria.module';
+import { ModelosEtiquetaController } from './modelos-etiqueta.controller';
+import { ModelosEtiquetaService } from './modelos-etiqueta.service';
+
+@Module({
+  imports: [DatabaseModule, AuditoriaModule],
+  controllers: [ModelosEtiquetaController],
+  providers: [ModelosEtiquetaService],
+  exports: [ModelosEtiquetaService],
+})
+export class ModelosEtiquetaModule {}
+```
 
 **5.5** `app/backend/test/integration/modelos-etiqueta.e2e-spec.ts` cobrindo DoD-19 e DoD-20:
 
@@ -2420,6 +2962,7 @@ import request from 'supertest';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { MENUS_CANONICOS, MENUS_VISIVEIS_POR_PERFIL } from '../../src/common/rbac/menus-canonicos';
 import { DESCRICOES_PERMISSOES } from '../../src/common/rbac/permissoes';
+import { DRIZZLE } from '../../src/database/database.module';
 
 describe('Perfis — menus visíveis e catálogo', () => {
   let app: INestApplication;
@@ -2466,7 +3009,7 @@ describe('Perfis — menus visíveis e catálogo', () => {
   it('seed de menus visiveis reconcilia perfil alterado', async () => {
     await request(srv()).put('/perfis/corte/menus').set('Cookie', adminCookies).send({ menus: [] });
     const { seedMenusVisiveis } = await import('../../src/database/seed');
-    await seedMenusVisiveis(app.get('DRIZZLE').db);
+    await seedMenusVisiveis(app.get(DRIZZLE).db);
 
     const depois = await request(srv()).get('/perfis').set('Cookie', adminCookies);
     expect(depois.body.find((p: { slug: string }) => p.slug === 'corte').menusVisiveis)
@@ -2641,30 +3184,55 @@ com `atualizarValorSchema = z.object({ valorJson: z.record(z.string(), z.unknown
 
 ```ts
 // parametros-onda3.e2e-spec.ts
+import { DRIZZLE } from '../../src/database/database.module';
+
 const CHAVES = [
   'comercial.overbooking_permitido', 'comercial.prioridade_consumo', 'operacao.fifo_estoque',
-  'operacao.cadencia_operacoes', 'operacao.composicao_boi_casado', 'operacao.regras_transformacao_tz',
+  'operacao.cadencia_dias_semana', 'operacao.composicao_boi_casado', 'operacao.regras_transformacao_tz',
   'fiscal.seguro_integrado', 'fiscal.emissao_fiscal', 'fiscal.expiracao_reserva_rascunho',
 ];
 
-it('seed cria as 9 chaves de parametro da v1.1', async () => {
+it('seed cria as 9 chaves de parametro da v1.1 com AD-01, AD-02 e AD-06 honradas', async () => {
   const { seedParametros } = await import('../../src/database/seed');
-  await seedParametros(app.get('DRIZZLE').db);
+  await seedParametros(app.get(DRIZZLE).db);
 
   const lista = await request(srv()).get('/parametros?pageSize=100').set('Cookie', adminCookies);
   const chaves = lista.body.data.map((p: { chave: string }) => p.chave);
   for (const chave of CHAVES) expect(chaves).toContain(chave);
 
-  const boi = lista.body.data.find((p: { chave: string }) => p.chave === 'operacao.composicao_boi_casado');
-  expect(boi.valorJson.texto).toContain('2 TZ + 2 DT + 2 PA');
-  expect(boi.valorJson.provisorio).toBe(true);
-  expect(boi.valorJson.pendencia).toBe('P11');
+  const porChave = (chave: string) =>
+    lista.body.data.find((p: { chave: string }) => p.chave === chave).valorJson as {
+      texto: string; provisorio: boolean; pendencia: string | null; tipo: string;
+    };
 
-  const provisorios = lista.body.data.filter(
-    (p: { chave: string; valorJson: { provisorio?: boolean } }) =>
-      CHAVES.includes(p.chave) && p.valorJson.provisorio === true,
-  );
-  expect(provisorios).toHaveLength(5);
+  // AD-01: composição confirmada — sem badge Provisório.
+  const boi = porChave('operacao.composicao_boi_casado');
+  expect(boi.texto).toContain('2 TZ + 2 DT + 2 PA');
+  expect(boi.provisorio).toBe(false);
+  expect(boi.pendencia).toBeNull();
+
+  // AD-02: emissão fiscal decidida — nota de homologação no lugar do badge.
+  const fiscal = porChave('fiscal.emissao_fiscal');
+  expect(fiscal.provisorio).toBe(false);
+  expect(fiscal.texto).toContain('aguardando homologação');
+
+  // AD-06: sem TTL de reserva — cartão informativo, não parâmetro pendente.
+  const reserva = porChave('fiscal.expiracao_reserva_rascunho');
+  expect(reserva.provisorio).toBe(false);
+  expect(reserva.tipo).toBe('info');
+  expect(reserva.texto).toContain('Sem expiração automática');
+
+  const provisorios = lista.body.data
+    .filter(
+      (p: { chave: string; valorJson: { provisorio?: boolean } }) =>
+        CHAVES.includes(p.chave) && p.valorJson.provisorio === true,
+    )
+    .map((p: { chave: string; valorJson: { pendencia: string } }) => [p.chave, p.valorJson.pendencia])
+    .sort();
+  expect(provisorios).toEqual([
+    ['operacao.cadencia_dias_semana', 'P1'],
+    ['operacao.regras_transformacao_tz', 'P12'],
+  ]);
 });
 
 it('atualiza parametro por chave, audita e 404 em chave desconhecida', async () => {
@@ -3124,7 +3692,7 @@ export const ROTA_ENTRADA_POR_PERFIL: Record<string, string> = {
   gestor: '/gestao/dashboard',
   diretoria: '/gestao/dashboard',
   compras: '/gestao/compras',
-  comercial: '/comercial/pedidos',
+  comercial: '/comercial/clientes',
   recebimento_pesagem: '/recebimento/recebimento-carga',
   corte: '/desossa/dashboard',
   expedicao: '/carga/planejamento',
@@ -3310,7 +3878,7 @@ const ROTAS_ENTRADA_ESPERADAS: Record<string, string> = {
   gestor: '/gestao/dashboard',
   diretoria: '/gestao/dashboard',
   compras: '/gestao/compras',
-  comercial: '/comercial/pedidos',
+  comercial: '/comercial/clientes',
   recebimento_pesagem: '/recebimento/recebimento-carga',
   corte: '/desossa/dashboard',
   expedicao: '/carga/planejamento',
@@ -4118,36 +4686,80 @@ Saída esperada: sem erros.
 
 ### Task 14 — Tela `/cadastros/caminhoes`
 
-Protótipo: `Caminhoes.tsx`. Colunas: Placa, Modelo, Capacidade (kg), Tipo, Ano, Status, Ações.
+Protótipo: `Caminhoes.tsx` (247 linhas). A entidade tem **exatamente** cinco campos além do id —
+`placa`, `descricao`, `capacidadeKg`, `rotaPadrao` e `status` (`Ativo`/`Inativo`, linhas 9–16) — e a
+tabela tem **6 colunas**: `Placa`, `Descrição`, `Capacidade (kg)`, `Rota padrão`, `Status`, `Ações`
+(linha 198). Nenhum outro campo existe no protótipo, no schema da Task 1.4 ou no DTO da Task 4.1;
+nenhum é criado aqui (Princípio I e RA-06).
 
 **14.1** `app/frontend/src/app/(admin)/cadastros/caminhoes/page.tsx` segue o mesmo molde da Task 13.1,
 com `FROTA_CAMINHOES_LER` / `FROTA_CAMINHOES_GERENCIAR` e a mensagem
 "Você não tem permissão para visualizar caminhões.", renderizando `<CaminhoesClient ... />`.
 
-**14.2** Criar `app/frontend/src/app/(admin)/cadastros/caminhoes/caminhoes-client.tsx` com
-`CadastroTabelaDrawer<Caminhao>` e:
+**14.2** Criar `app/frontend/src/app/(admin)/cadastros/caminhoes/caminhoes-client.tsx`. A lista de rotas
+alimenta o `select` "Rota padrão" e vem da rota BFF de cadastros já existente:
 
 ```tsx
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Truck } from 'lucide-react';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { CadastroTabelaDrawer } from '@/components/cadastros/cadastro-tabela-drawer';
+import { mensagemDeErro } from '@/lib/error-message';
+import type { Caminhao } from '@/lib/frota';
+
+interface RotaOpcao {
+  id: string;
+  nome: string;
+}
+
+export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
+  const [rotas, setRotas] = useState<RotaOpcao[]>([]);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch('/api/cadastros/rotas?page=1&pageSize=100', { cache: 'no-store' });
+      if (!res.ok) {
+        toast.error(await mensagemDeErro(res));
+        return;
+      }
+      const dados = (await res.json()) as { data: RotaOpcao[] };
+      setRotas(dados.data);
+    })();
+  }, []);
+
+  return (
+    <CadastroTabelaDrawer<Caminhao>
       titulo="Caminhões"
-      subtitulo="Frota própria e agregada disponível para expedição"
+      subtitulo="Frota utilizada nas cargas e rotas de expedição."
       rotuloNovo="Novo Caminhão"
       tituloDrawerNovo="Novo Caminhão"
       tituloDrawerEdicao="Editar Caminhão"
-      placeholderBusca="Buscar por placa ou modelo..."
+      placeholderBusca="Buscar por placa ou descrição"
       substantivoPlural="caminhões"
       endpoint="/api/cadastros/frota-caminhoes"
-      mensagemVazia="Nenhum caminhão cadastrado."
+      podeGerenciar={podeGerenciar}
+      mensagemVazia="Nenhum caminhão encontrado para os filtros aplicados."
       colunas={[
-        { chave: 'placa', titulo: 'Placa', render: (c) => <span className="font-mono font-medium">{c.placa}</span> },
-        { chave: 'modelo', titulo: 'Modelo', render: (c) => c.modelo ?? '—' },
         {
-          chave: 'capacidade',
-          titulo: 'Capacidade',
-          alinhamento: 'direita',
-          render: (c) => (c.capacidadeKg ? `${Number(c.capacidadeKg).toLocaleString('pt-BR')} kg` : '—'),
+          chave: 'placa',
+          titulo: 'Placa',
+          render: (c) => (
+            <span className="flex w-fit items-center gap-1.5 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-bold text-primary">
+              <Truck className="size-3" /> {c.placa}
+            </span>
+          ),
         },
-        { chave: 'tipo', titulo: 'Tipo', render: (c) => (c.tipo === 'proprio' ? 'Próprio' : 'Agregado') },
-        { chave: 'ano', titulo: 'Ano', render: (c) => c.ano ?? '—' },
+        { chave: 'descricao', titulo: 'Descrição', render: (c) => c.descricao ?? '—' },
+        {
+          chave: 'capacidadeKg',
+          titulo: 'Capacidade (kg)',
+          alinhamento: 'direita',
+          render: (c) => `${c.capacidadeKg.toLocaleString('pt-BR')} kg`,
+        },
+        { chave: 'rotaPadrao', titulo: 'Rota padrão', render: (c) => c.rotaPadraoNome ?? '—' },
         {
           chave: 'status',
           titulo: 'Status',
@@ -4157,28 +4769,31 @@ com `FROTA_CAMINHOES_LER` / `FROTA_CAMINHOES_GERENCIAR` e a mensagem
               className={
                 c.status === 'ativo'
                   ? 'border-green-200 bg-green-50 text-green-700'
-                  : c.status === 'manutencao'
-                    ? 'border-amber-200 bg-amber-50 text-amber-700'
-                    : 'border-muted bg-muted/50 text-muted-foreground'
+                  : 'border-muted bg-muted/50 text-muted-foreground'
               }
             >
-              {c.status === 'ativo' ? 'Ativo' : c.status === 'manutencao' ? 'Manutenção' : 'Inativo'}
+              {c.status === 'ativo' ? 'Ativo' : 'Inativo'}
             </Badge>
           ),
         },
       ]}
       campos={[
         { nome: 'placa', rotulo: 'Placa', tipo: 'texto', obrigatorio: true, placeholder: 'ABC-1D23' },
-        { nome: 'modelo', rotulo: 'Modelo', tipo: 'texto' },
-        { nome: 'capacidadeKg', rotulo: 'Capacidade (kg)', tipo: 'numero' },
-        { nome: 'ano', rotulo: 'Ano', tipo: 'numero' },
         {
-          nome: 'tipo',
-          rotulo: 'Tipo',
+          nome: 'descricao',
+          rotulo: 'Descrição',
+          tipo: 'texto',
+          colSpan: 2,
+          placeholder: 'Ex: Baú refrigerado — Mercedes 710',
+        },
+        { nome: 'capacidadeKg', rotulo: 'Capacidade (kg)', tipo: 'numero' },
+        {
+          nome: 'rotaPadraoId',
+          rotulo: 'Rota padrão',
           tipo: 'select',
           opcoes: [
-            { valor: 'proprio', rotulo: 'Próprio' },
-            { valor: 'agregado', rotulo: 'Agregado' },
+            { valor: '', rotulo: 'Sem rota padrão' },
+            ...rotas.map((r) => ({ valor: r.id, rotulo: r.nome })),
           ],
         },
         {
@@ -4187,44 +4802,53 @@ com `FROTA_CAMINHOES_LER` / `FROTA_CAMINHOES_GERENCIAR` e a mensagem
           tipo: 'select',
           opcoes: [
             { valor: 'ativo', rotulo: 'Ativo' },
-            { valor: 'manutencao', rotulo: 'Manutenção' },
             { valor: 'inativo', rotulo: 'Inativo' },
           ],
         },
-        { nome: 'observacoes', rotulo: 'Observações', tipo: 'textarea', colSpan: 2 },
       ]}
-      formularioVazio={{ placa: '', modelo: '', capacidadeKg: '', ano: '', tipo: 'proprio', status: 'ativo', observacoes: '' }}
+      formularioVazio={{ placa: '', descricao: '', capacidadeKg: '0', rotaPadraoId: '', status: 'ativo' }}
+      paraFormulario={(c) => ({
+        placa: c.placa,
+        descricao: c.descricao ?? '',
+        capacidadeKg: String(c.capacidadeKg),
+        rotaPadraoId: c.rotaPadraoId ?? '',
+        status: c.status,
+      })}
+      paraPayload={(f) => ({
+        placa: String(f.placa).trim().toUpperCase(),
+        descricao: String(f.descricao).trim() || undefined,
+        capacidadeKg: String(f.capacidadeKg).trim() || '0',
+        rotaPadraoId: String(f.rotaPadraoId).trim() || null,
+        status: String(f.status),
+      })}
+    />
+  );
+}
 ```
 
-`paraFormulario` e `paraPayload` seguem exatamente o formato da Task 13.2 (strings vazias viram
-`undefined` no payload; `capacidadeKg` e `ano` são enviados como string e convertidos por `z.coerce`).
-
-**14.3** Criar `app/frontend/src/lib/frota.ts` com os tipos consumidos pelas duas telas:
+**14.3** Criar `app/frontend/src/lib/frota.ts` com os tipos consumidos pelas duas telas — um campo por
+coluna real do schema da Task 1.4, mais os dois campos derivados dos `leftJoin` das Tasks 4.3 e 4.4:
 
 ```ts
 export interface Caminhao {
   id: string;
   placa: string;
-  modelo: string | null;
-  capacidadeKg: string | null;
-  ano: number | null;
-  tipo: 'proprio' | 'agregado';
-  status: 'ativo' | 'manutencao' | 'inativo';
-  observacoes: string | null;
+  descricao: string | null;
+  capacidadeKg: number;
+  rotaPadraoId: string | null;
+  rotaPadraoNome: string | null;
+  status: 'ativo' | 'inativo';
 }
 
 export interface Motorista {
   id: string;
   nome: string;
-  cpf: string | null;
-  cnh: string | null;
-  categoriaCnh: string | null;
-  validadeCnh: string | null;
+  documento: string;
   telefone: string | null;
   caminhaoPadraoId: string | null;
   caminhaoPadraoPlaca: string | null;
+  caminhaoPadraoAtivo: boolean | null;
   status: 'ativo' | 'inativo';
-  observacoes: string | null;
 }
 ```
 
@@ -4240,38 +4864,29 @@ Saída esperada: sem erros.
 
 ### Task 15 — Tela `/cadastros/motoristas`
 
-Protótipo: `Motoristas.tsx`. Colunas: Nome, CPF, CNH (número + categoria), Validade CNH (com alerta
-`text-destructive` quando vencida ou a vencer em 30 dias), Telefone, Caminhão padrão, Status, Ações.
+Protótipo: `Motoristas.tsx` (250 linhas). A entidade tem `nome`, `documento`, `telefone`,
+`caminhaoPadrao` e `status` (linhas 9–16) e a tabela tem **6 colunas**: `Nome`, `Documento`, `Telefone`,
+`Caminhão padrão`, `Status`, `Ações` (linha 199). O documento é **um campo de texto livre único**
+(o protótipo semeia `"CNH 123.456.789-01"`); não existem `cpf`, `cnh`, `categoriaCnh`, `validadeCnh`,
+`observacoes` nem alerta de vencimento — nenhum deles é criado aqui (Princípio I e RA-06).
 
-**15.1** `page.tsx` no molde da Task 13.1 com `FROTA_MOTORISTAS_LER` / `FROTA_MOTORISTAS_GERENCIAR`.
+**15.1** `page.tsx` no molde da Task 13.1 com `FROTA_MOTORISTAS_LER` / `FROTA_MOTORISTAS_GERENCIAR` e a
+mensagem "Você não tem permissão para visualizar motoristas.".
 
-**15.2** `motoristas-client.tsx` usando `CadastroTabelaDrawer<Motorista>` com
-`endpoint="/api/cadastros/frota-motoristas"`, `substantivoPlural="motoristas"`,
-`mensagemVazia="Nenhum motorista cadastrado."` e a coluna de validade destacando o vencimento:
-
-```tsx
-        {
-          chave: 'validadeCnh',
-          titulo: 'Validade CNH',
-          render: (m) => {
-            if (!m.validadeCnh) return '—';
-            const validade = new Date(`${m.validadeCnh}T00:00:00`);
-            const limite = new Date();
-            limite.setDate(limite.getDate() + 30);
-            const critica = validade <= limite;
-            return (
-              <span className={critica ? 'font-medium text-destructive' : ''}>
-                {validade.toLocaleDateString('pt-BR')}
-              </span>
-            );
-          },
-        },
-```
-
-A coluna "Caminhão padrão" mostra `m.caminhaoPadraoPlaca ?? '—'`. O campo do drawer é um `select`
-carregado de `/api/cadastros/frota-caminhoes?pageSize=100`, montado no client:
+**15.2** Criar `app/frontend/src/app/(admin)/cadastros/motoristas/motoristas-client.tsx`:
 
 ```tsx
+'use client';
+
+import { useEffect, useState } from 'react';
+import { User } from 'lucide-react';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
+import { CadastroTabelaDrawer } from '@/components/cadastros/cadastro-tabela-drawer';
+import { mensagemDeErro } from '@/lib/error-message';
+import type { Caminhao, Motorista } from '@/lib/frota';
+
+export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) {
   const [caminhoes, setCaminhoes] = useState<Caminhao[]>([]);
 
   useEffect(() => {
@@ -4286,23 +4901,109 @@ carregado de `/api/cadastros/frota-caminhoes?pageSize=100`, montado no client:
     })();
   }, []);
 
-  const opcoesCaminhao = [
-    { valor: '', rotulo: 'Sem caminhão padrão' },
-    ...caminhoes.map((c) => ({
-      valor: c.id,
-      rotulo: c.status === 'ativo' ? `${c.placa} · ${c.modelo ?? 'sem modelo'}` : `${c.placa} (inativo)`,
-    })),
-  ];
+  return (
+    <CadastroTabelaDrawer<Motorista>
+      titulo="Motoristas"
+      subtitulo="Motoristas vinculados às cargas e caminhões de expedição."
+      rotuloNovo="Novo Motorista"
+      tituloDrawerNovo="Novo Motorista"
+      tituloDrawerEdicao="Editar Motorista"
+      placeholderBusca="Buscar por nome ou documento"
+      substantivoPlural="motoristas"
+      endpoint="/api/cadastros/frota-motoristas"
+      podeGerenciar={podeGerenciar}
+      mensagemVazia="Nenhum motorista encontrado para os filtros aplicados."
+      colunas={[
+        {
+          chave: 'nome',
+          titulo: 'Nome',
+          render: (m) => (
+            <span className="flex items-center gap-1.5 font-bold">
+              <User className="size-3.5 text-muted-foreground" /> {m.nome}
+            </span>
+          ),
+        },
+        { chave: 'documento', titulo: 'Documento', render: (m) => <span className="font-mono">{m.documento}</span> },
+        { chave: 'telefone', titulo: 'Telefone', render: (m) => m.telefone ?? '—' },
+        {
+          chave: 'caminhaoPadrao',
+          titulo: 'Caminhão padrão',
+          render: (m) =>
+            m.caminhaoPadraoPlaca ? (
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-semibold text-primary">
+                {m.caminhaoPadraoAtivo === false ? `${m.caminhaoPadraoPlaca} (inativo)` : m.caminhaoPadraoPlaca}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            ),
+        },
+        {
+          chave: 'status',
+          titulo: 'Status',
+          render: (m) => (
+            <Badge
+              variant="outline"
+              className={
+                m.status === 'ativo'
+                  ? 'border-green-200 bg-green-50 text-green-700'
+                  : 'border-muted bg-muted/50 text-muted-foreground'
+              }
+            >
+              {m.status === 'ativo' ? 'Ativo' : 'Inativo'}
+            </Badge>
+          ),
+        },
+      ]}
+      campos={[
+        { nome: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, colSpan: 2, placeholder: 'Ex: Carlos Souza' },
+        { nome: 'documento', rotulo: 'Documento', tipo: 'texto', obrigatorio: true, placeholder: 'CNH nº' },
+        { nome: 'telefone', rotulo: 'Telefone', tipo: 'texto', placeholder: '(11) 90000-0000' },
+        {
+          nome: 'caminhaoPadraoId',
+          rotulo: 'Caminhão padrão',
+          tipo: 'select',
+          opcoes: [
+            { valor: '', rotulo: 'Sem caminhão padrão' },
+            ...caminhoes.map((c) => ({
+              valor: c.id,
+              rotulo: c.status === 'ativo' ? c.placa : `${c.placa} (inativo)`,
+            })),
+          ],
+        },
+        {
+          nome: 'status',
+          rotulo: 'Status',
+          tipo: 'select',
+          opcoes: [
+            { valor: 'ativo', rotulo: 'Ativo' },
+            { valor: 'inativo', rotulo: 'Inativo' },
+          ],
+        },
+      ]}
+      formularioVazio={{ nome: '', documento: '', telefone: '', caminhaoPadraoId: '', status: 'ativo' }}
+      paraFormulario={(m) => ({
+        nome: m.nome,
+        documento: m.documento,
+        telefone: m.telefone ?? '',
+        caminhaoPadraoId: m.caminhaoPadraoId ?? '',
+        status: m.status,
+      })}
+      paraPayload={(f) => ({
+        nome: String(f.nome).trim(),
+        documento: String(f.documento).trim(),
+        telefone: String(f.telefone).trim() || undefined,
+        caminhaoPadraoId: String(f.caminhaoPadraoId).trim() || null,
+        status: String(f.status),
+      })}
+    />
+  );
+}
 ```
-
-Campos do drawer: Nome (obrigatório, `colSpan: 2`), CPF, Telefone, CNH, Categoria CNH
-(`select` com A, B, C, D, E), Validade CNH (`data`), Caminhão padrão (`select` com `opcoesCaminhao`),
-Status (`select` ativo/inativo) e Observações (`textarea`, `colSpan: 2`).
 
 **Verificação:**
 
 ```bash
-cd app/frontend && npx tsc --noEmit
+cd app/frontend && npx tsc --noEmit && npx eslint src/app/\(admin\)/cadastros/motoristas
 ```
 
 Saída esperada: sem erros.
@@ -4748,9 +5449,15 @@ Saída esperada: `Tests: 2 passed, 2 total`.
 
 ### Task 18 — Tela `/cadastros/modelos-etiqueta`
 
-Protótipo: `ModelosEtiqueta.tsx` — banner âmbar de pendência no topo, lista de modelos à esquerda
-(cartões com nome e contagem de campos) e, à direita, os 12 campos em `grid-cols-2` com `Switch` por
-campo mais um cartão de pré-visualização.
+Protótipo: `ModelosEtiqueta.tsx` — banner âmbar de pendência no topo e três colunas: lista de modelos
+(`w-[260px]`, cartões com nome e "N de 12 campos ativos"), campos configuráveis em `grid-cols-2` e
+"Preview ao vivo" (`w-[380px]`).
+
+**Divergência autorizada D18.a** — o preview do protótipo renderiza uma etiqueta com valores de exemplo
+(`EXEMPLO`, linhas 73–84: "ETQ-88391", "Restaurante Grill / #PV-1029", "Frigorífico Boi Forte"). Esses
+valores são dado de demonstração e não vão para a tela (decisão 2 e RA-06). O preview desta onda mantém a
+coluna, o título e a moldura da etiqueta e lista **os rótulos dos campos ligados**, atualizando a cada
+`Switch`. Registrada no README de evidências (Task 27.1).
 
 **18.1** `page.tsx` no molde da Task 13.1, com `MODELOS_ETIQUETA_LER` / `MODELOS_ETIQUETA_GERENCIAR` e a
 mensagem "Você não tem permissão para visualizar modelos de etiqueta.".
@@ -4758,19 +5465,20 @@ mensagem "Você não tem permissão para visualizar modelos de etiqueta.".
 **18.2** Criar `app/frontend/src/lib/modelos-etiqueta.ts`:
 
 ```ts
+/** Rótulos idênticos a ModelosEtiqueta.tsx linhas 18–31 — sem reescrita. */
 export const CAMPOS_ETIQUETA = [
-  { chave: 'codigo', rotulo: 'Código da peça/parte' },
+  { chave: 'codigo', rotulo: 'Código' },
   { chave: 'produto', rotulo: 'Produto' },
   { chave: 'peso', rotulo: 'Peso' },
-  { chave: 'clientePedido', rotulo: 'Cliente / Pedido' },
+  { chave: 'clientePedido', rotulo: 'Cliente/Pedido' },
   { chave: 'destino', rotulo: 'Destino' },
-  { chave: 'origemFrigorifico', rotulo: 'Origem (Frigorífico)' },
-  { chave: 'nfLote', rotulo: 'NF / Lote' },
-  { chave: 'dataHora', rotulo: 'Data e Hora' },
+  { chave: 'origemFrigorifico', rotulo: 'Origem/Frigorífico' },
+  { chave: 'nfLote', rotulo: 'NF/Lote' },
+  { chave: 'dataHora', rotulo: 'Data/hora' },
   { chave: 'operador', rotulo: 'Operador' },
   { chave: 'caracteristicas', rotulo: 'Características' },
   { chave: 'qrCode', rotulo: 'QR Code' },
-  { chave: 'codigoBarras', rotulo: 'Código de Barras' },
+  { chave: 'codigoBarras', rotulo: 'Código de barras' },
 ] as const;
 
 export type CampoEtiqueta = (typeof CAMPOS_ETIQUETA)[number]['chave'];
@@ -4779,11 +5487,13 @@ export interface ModeloEtiqueta {
   id: string;
   slug: string;
   nome: string;
-  descricao: string | null;
   campos: Record<CampoEtiqueta, boolean>;
   status: 'ativo' | 'inativo';
 }
 ```
+
+> A tabela `modelos_etiqueta` (Task 1.5) e os DTOs (Task 5.1) têm `slug`, `nome`, `campos` e `status`.
+> `descricao` não existe no protótipo nem no schema e **não** é lido em lugar nenhum da tela.
 
 **18.3** Criar `app/frontend/src/app/(admin)/cadastros/modelos-etiqueta/modelos-etiqueta-client.tsx`:
 
@@ -4861,15 +5571,14 @@ export function ModelosEtiquetaClient({ podeGerenciar }: { podeGerenciar: boolea
       <div>
         <h1 className="text-2xl font-bold text-foreground">Modelos de Etiqueta</h1>
         <p className="text-sm text-muted-foreground">
-          Configuração dos campos impressos em cada tipo de etiqueta
+          Configure os campos exibidos em cada modelo de etiqueta usado na operação.
         </p>
       </div>
 
       <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
         <BadgeProvisorio pendencia="P9" />
         <p className="text-sm text-amber-900">
-          O conjunto final de campos da etiqueta ainda depende de definição do cliente. A configuração
-          abaixo é provisória e pode mudar sem migração de dados.
+          Modelo físico/campos finais da etiqueta pendentes de definição.
         </p>
       </div>
 
@@ -4879,8 +5588,9 @@ export function ModelosEtiquetaClient({ podeGerenciar }: { podeGerenciar: boolea
         </p>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-12">
-        <Card className="space-y-2 p-4 lg:col-span-4">
+      <div className="grid gap-5 lg:grid-cols-12">
+        <Card className="space-y-2 p-4 lg:col-span-3">
+          <p className="text-xs font-bold">Modelos</p>
           {modelos.length === 0 && <p className="text-sm text-muted-foreground">Nenhum modelo cadastrado.</p>}
           {modelos.map((modelo) => {
             const ativos = CAMPOS_ETIQUETA.filter((c) => modelo.campos[c.chave]).length;
@@ -4896,13 +5606,15 @@ export function ModelosEtiquetaClient({ podeGerenciar }: { podeGerenciar: boolea
                 }`}
               >
                 <p className="text-sm font-bold">{modelo.nome}</p>
-                <p className="text-xs text-muted-foreground">{ativos} de 12 campos</p>
+                <p className="text-xs text-muted-foreground">
+                  {ativos} de {CAMPOS_ETIQUETA.length} campos ativos
+                </p>
               </button>
             );
           })}
         </Card>
 
-        <Card className="p-6 lg:col-span-8">
+        <Card className="p-6 lg:col-span-5">
           {!selecionado || !campos ? (
             <p className="text-sm text-muted-foreground">Selecione um modelo.</p>
           ) : (
@@ -4911,8 +5623,10 @@ export function ModelosEtiquetaClient({ podeGerenciar }: { podeGerenciar: boolea
                 <div className="flex items-center gap-3">
                   <Sticker className="size-5 text-primary" />
                   <div>
-                    <h2 className="text-lg font-bold">{selecionado.nome}</h2>
-                    <p className="text-xs text-muted-foreground">{selecionado.descricao ?? '—'}</p>
+                    <h2 className="text-lg font-bold">Campos configuráveis — {selecionado.nome}</h2>
+                    <p className="text-xs text-muted-foreground">
+                      {marcados.length} de {CAMPOS_ETIQUETA.length} campos ativos
+                    </p>
                   </div>
                 </div>
                 {podeGerenciar && (
@@ -4935,21 +5649,26 @@ export function ModelosEtiquetaClient({ podeGerenciar }: { podeGerenciar: boolea
                   </div>
                 ))}
               </div>
-
-              <div className="mt-6 rounded-lg border border-dashed border-border bg-muted/30 p-4">
-                <p className="mb-2 text-xs font-medium text-muted-foreground uppercase">Pré-visualização</p>
-                {marcados.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nenhum campo selecionado.</p>
-                ) : (
-                  <ul className="space-y-1 font-mono text-xs">
-                    {marcados.map((campo) => (
-                      <li key={campo.chave}>{campo.rotulo}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
             </>
           )}
+        </Card>
+
+        <Card className="p-4 lg:col-span-4">
+          <p className="mb-3 text-xs font-bold">Preview ao vivo</p>
+          <div className="rounded-xl border-2 border-primary bg-muted/30 p-4 font-mono text-xs">
+            <p className="mb-3 text-[9px] font-black tracking-[0.2em] text-muted-foreground uppercase">
+              ALFA CARNES
+            </p>
+            {marcados.length === 0 ? (
+              <p className="text-muted-foreground">Nenhum campo selecionado.</p>
+            ) : (
+              <ul className="space-y-1">
+                {marcados.map((campo) => (
+                  <li key={campo.chave}>{campo.rotulo}</li>
+                ))}
+              </ul>
+            )}
+          </div>
         </Card>
       </div>
     </div>
@@ -5091,7 +5810,10 @@ e garantir que `produtos.service.ts` grava `atributosJson` no `values` de `criar
 As outras quatro `TabsContent` recebem, sem alterar o markup interno, os blocos de campos já existentes na
 ordem da tabela acima.
 
-**19.3** Acrescentar a `app/frontend/__tests__/produtos-client.test.tsx` (DoD-48 e DoD-49):
+**19.3** Criar `app/frontend/__tests__/produtos-client.test.tsx` (DoD-48 e DoD-49), com o cabeçalho
+padrão dos testes de tela do repositório (`import { render, screen, fireEvent, waitFor } from
+'@testing-library/react'` e `import ProdutosClient from
+'@/app/(admin)/cadastros/produtos/produtos-client'`):
 
 ```tsx
 it('drawer de produto tem as 5 abas do prototipo', async () => {
@@ -5134,7 +5856,7 @@ it('aba fiscal envia ncm dentro de atributosJson', async () => {
 cd app/frontend && npx jest __tests__/produtos-client.test.tsx
 ```
 
-Saída esperada: suíte verde, com os dois casos novos.
+Saída esperada: `Tests: 2 passed, 2 total`.
 
 ---
 
@@ -5276,16 +5998,161 @@ export function SimuladorDesdobramento({ itemCompraId }: { itemCompraId: string 
 }
 ```
 
-**20.3** Criar `simulador-desossa.tsx` no mesmo padrão (mesmo cartão, mesmo tratamento de erro),
-chamando `POST /api/desossa/regras-transformacao/simular` com `{ tzLivre, produtoId, quantidade }`
-(os dois últimos opcionais) e exibindo:
+**20.3** Criar `app/frontend/src/app/(admin)/cadastros/regras-transformacao/simulador-desossa.tsx`:
 
-- os campos "Quantidade de TZ livre" (`number`), "Produto a reservar" (`select` alimentado por
-  `/api/cadastros/produtos?pageSize=100`) e "Quantidade" (`number`);
-- para cada item de `resultados`: `nome`, `disponivel` e o rótulo "Bloqueado pela reserva" quando
-  `bloqueado === true`;
-- o bloco "Alternativas ainda possíveis" com os `nome` devolvidos, e
-  "Nenhuma regra de transformação ativa cadastrada." quando `resultados` vier vazio.
+```tsx
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Calculator } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { mensagemDeErro } from '@/lib/error-message';
+
+interface Resultado {
+  tzLivre: number;
+  resultados: Array<{ produtoId: string; nome: string; disponivel: number; bloqueado: boolean }>;
+  alternativasPossiveis: Array<{ id: string; nome: string }>;
+}
+
+export function SimuladorDesossa() {
+  const [produtos, setProdutos] = useState<Array<{ id: string; nome: string }>>([]);
+  const [tzLivre, setTzLivre] = useState('100');
+  const [produtoId, setProdutoId] = useState('');
+  const [quantidade, setQuantidade] = useState('');
+  const [resultado, setResultado] = useState<Resultado | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [calculando, setCalculando] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch('/api/cadastros/produtos?pageSize=100', { cache: 'no-store' });
+      if (!res.ok) {
+        setErro(await mensagemDeErro(res));
+        return;
+      }
+      const corpo = (await res.json()) as { data: Array<{ id: string; nome: string }> };
+      setProdutos(corpo.data);
+    })();
+  }, []);
+
+  const simular = async () => {
+    setCalculando(true);
+    setErro(null);
+    try {
+      const res = await fetch('/api/desossa/regras-transformacao/simular', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tzLivre: Number(tzLivre),
+          produtoId: produtoId || undefined,
+          quantidade: quantidade ? Number(quantidade) : undefined,
+        }),
+      });
+      if (!res.ok) {
+        setErro(await mensagemDeErro(res));
+        setResultado(null);
+        return;
+      }
+      setResultado((await res.json()) as Resultado);
+    } catch {
+      setErro('Erro de conexão com o servidor.');
+      setResultado(null);
+    } finally {
+      setCalculando(false);
+    }
+  };
+
+  return (
+    <Card className="space-y-4 p-6">
+      <div className="flex items-center gap-2">
+        <Calculator className="size-5 text-primary" />
+        <h3 className="font-bold">Simulador</h3>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="tz-livre">Quantidade de TZ livre</Label>
+          <Input
+            id="tz-livre"
+            type="number"
+            min={0}
+            className="w-40"
+            value={tzLivre}
+            onChange={(e) => setTzLivre(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="produto-reserva">Produto a reservar</Label>
+          <select
+            id="produto-reserva"
+            className="h-9 w-56 rounded-md border border-input bg-background px-3 text-sm"
+            value={produtoId}
+            onChange={(e) => setProdutoId(e.target.value)}
+          >
+            <option value="">Nenhum</option>
+            {produtos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nome}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="qtd-reserva">Quantidade</Label>
+          <Input
+            id="qtd-reserva"
+            type="number"
+            min={1}
+            className="w-32"
+            value={quantidade}
+            onChange={(e) => setQuantidade(e.target.value)}
+          />
+        </div>
+        <Button onClick={() => void simular()} disabled={calculando}>
+          {calculando ? 'Calculando…' : 'Simular'}
+        </Button>
+      </div>
+
+      {erro && (
+        <p role="alert" className="text-sm text-destructive">
+          {erro}
+        </p>
+      )}
+
+      {resultado && (
+        <div className="space-y-2">
+          {resultado.resultados.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhuma regra de transformação ativa cadastrada.</p>
+          ) : (
+            resultado.resultados.map((item) => (
+              <div key={item.produtoId} className="flex justify-between rounded-md border px-4 py-2 text-sm">
+                <span>{item.nome}</span>
+                <span className="font-mono">
+                  {item.disponivel}
+                  {item.bloqueado && (
+                    <span className="ml-2 font-sans text-destructive">Bloqueado pela reserva</span>
+                  )}
+                </span>
+              </div>
+            ))
+          )}
+          <div>
+            <p className="text-sm font-medium">Alternativas ainda possíveis</p>
+            <ul className="text-sm text-muted-foreground">
+              {resultado.alternativasPossiveis.map((a) => (
+                <li key={a.id}>{a.nome}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+```
 
 **20.4** Criar `app/frontend/__tests__/simuladores-transformacao.test.tsx` (DoD-50 a DoD-52) cobrindo:
 (a) o simulador de desdobramento mostra `100 × 2 = 200` por item e o total devolvido pela API;
@@ -5411,7 +6278,9 @@ botão "Novo Usuário" e pelo `Pencil` de cada linha, com os campos:
 aparece somente com `USUARIOS_APROVAR` e chama `POST /api/admin/usuarios/:id/aprovar`; o erro de
 segregação criador ≠ aprovador vindo do backend aparece como `toast.error` com a mensagem do backend.
 
-**21.4** Acrescentar a `app/frontend/__tests__/usuarios-client.test.tsx` (DoD-53 e DoD-54):
+**21.4** Criar `app/frontend/__tests__/usuarios-client.test.tsx` (DoD-53 e DoD-54), com o cabeçalho
+padrão dos testes de tela (`@testing-library/react` + `import UsuariosClient from
+'@/app/(admin)/admin/usuarios/usuarios-client'`):
 
 ```tsx
 it('resumo de perfis usa contagem real do backend', async () => {
@@ -5445,7 +6314,7 @@ it('sem USUARIOS_APROVAR nao ha botao de aprovar', async () => {
 cd app/frontend && npx jest __tests__/usuarios-client.test.tsx
 ```
 
-Saída esperada: suíte verde, com os dois casos novos.
+Saída esperada: `Tests: 2 passed, 2 total`.
 
 ---
 
@@ -5902,8 +6771,10 @@ export function ParametrosClient({ podeGerenciar }: { podeGerenciar: boolean }) 
 ```
 
 **23.3** Criar `app/frontend/__tests__/parametros-client.test.tsx` (DoD-60 a DoD-64) cobrindo:
-os 9 parâmetros aparecem nos 3 grupos na ordem Comercial → Operação → Fiscal; os 5 provisórios exibem
-`BadgeProvisorio` com a pendência correta e os 4 restantes não exibem badge; o cartão `info` não tem botão
+os 9 parâmetros aparecem nos 3 grupos na ordem Comercial → Operação → Fiscal; **exatamente 2** cartões
+exibem `BadgeProvisorio` (`operacao.cadencia_dias_semana` com `P1` e `operacao.regras_transformacao_tz`
+com `P12`) e os outros 7 não exibem badge — inclusive composição do boi casado (AD-01), emissão fiscal
+(AD-02) e expiração de reserva de rascunho (AD-06); o cartão `info` não tem botão
 "Salvar"; sem `PARAMETROS_GERENCIAR` nenhum controle é editável e não há botão "Salvar"; salvar envia
 `PATCH /api/admin/parametros/chave/<chave>` preservando as demais chaves de `valorJson`.
 
@@ -6278,12 +7149,12 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
 |---|---|
 | `/api/cadastros/frota-motoristas` | `/frota/motoristas` |
 | `/api/cadastros/modelos-etiqueta` | `/modelos-etiqueta` |
-| `/api/admin/parametros` | `/parametros` |
 
 **25.4** Rotas de leitura simples (só `GET`, mesmo corpo da 25.1 com o caminho trocado):
 
 | rota BFF | rota do backend |
 |---|---|
+| `/api/admin/parametros` | `/parametros` |
 | `/api/cadastros/fornecedores/contagens` | `/fornecedores/contagens` |
 | `/api/cadastros/fornecedores/[id]/historico` | `/fornecedores/{id}/historico` |
 | `/api/admin/perfis/catalogo` | `/perfis/catalogo` |
@@ -6321,7 +7192,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ slug: strin
 }
 ```
 
-**25.6** Criar `app/frontend/__tests__/bff-onda3.test.ts` (DoD-70 e DoD-71) verificando, para cada uma das 18
+**25.6** Criar `app/frontend/__tests__/bff-onda3.test.ts` (DoD-70 e DoD-71) verificando, para cada uma das 17
 rotas novas, que o arquivo existe e que o handler devolve o status do backend em caso de erro:
 
 ```ts
@@ -6345,7 +7216,6 @@ const ROTAS = [
   'admin/auditoria/facetas/route.ts',
   'admin/auditoria/export/route.ts',
   'admin/parametros/route.ts',
-  'admin/parametros/[id]/route.ts',
   'admin/parametros/chave/[chave]/route.ts',
 ];
 
@@ -6453,20 +7323,43 @@ it('nenhuma tela da onda usa PlaceholderPage', () => {
 > `globSync` vem de `node:fs` (Node 22+, já exigido pelo `.nvmrc`). Se o ambiente reclamar do import,
 > usar `glob` do pacote `glob` já presente em `devDependencies` do frontend.
 
+**26.3** Criar `app/backend/test/unit/cobertura-config.spec.ts` (DoD-77). O gate de cobertura só protege a
+onda se estiver declarado no `jest.config.cjs` — este teste prova que o limite existe e continua em 80 %,
+para que ninguém o afrouxe junto com o volume de código novo:
+
+```ts
+import { createRequire } from 'node:module';
+
+const require = createRequire(__filename);
+
+it('jest exige 80 por cento de linha e de branch', () => {
+  const config = require('../../jest.config.cjs') as {
+    coverageThreshold?: { global?: { lines?: number; branches?: number } };
+  };
+  expect(config.coverageThreshold?.global?.lines).toBeGreaterThanOrEqual(80);
+  expect(config.coverageThreshold?.global?.branches).toBeGreaterThanOrEqual(80);
+});
+```
+
+`app/backend/jest.config.cjs` já traz `coverageThreshold: { global: { lines: 80, branches: 80 } }` na
+linha 27; o teste apenas impede que esse limite seja afrouxado sem alguém notar.
+
 **Verificação:**
 
 ```bash
 cd app/frontend && npx jest __tests__/terminologia-onda3.test.ts
 cd app/frontend && npx playwright test e2e/onda3-cadastros-admin.spec.ts
+cd app/backend && npx jest test/unit/cobertura-config.spec.ts
 ```
 
-Saída esperada: `Tests: 3 passed, 3 total` e `13 passed` no Playwright.
+Saída esperada: `Tests: 3 passed, 3 total` no frontend, `13 passed` no Playwright e
+`Tests: 1 passed, 1 total` no backend.
 
 ---
 
 ### Task 27 — Evidências, status e gate local
 
-**27.1** Criar `docs/execucao/evidencias/onda3/README.md` com:
+**27.1** Criar `docs/execucao/evidencias/onda3-cadastros-admin/README.md` com:
 
 - as 12 capturas lado a lado (protótipo × implementação), nomeadas
   `<rota-com-hifens>-prototipo.png` e `<rota-com-hifens>-app.png`;
@@ -6474,10 +7367,14 @@ Saída esperada: `Tests: 3 passed, 3 total` e `13 passed` no Playwright.
   `visível` para todas as 26, e a saída do teste `as 26 perdas herdadas da Onda 2 estao visiveis`;
 - a tabela dos **14 extras** da decisão 31 com "situação" = `removido`, e a saída do teste
   `os 14 extras herdados da Onda 2 sumiram do menu`;
-- as duas divergências autorizadas: `/admin/perfis` (11 perfis canônicos e permissões reais em vez dos
-  8 perfis e 9 rótulos do mock — decisão 29) e o `placeholder` do campo "Registro (ID)" da auditoria
-  (decisão 31);
-- a lista das 5 pendências com badge Provisório e onde aparecem (P1, P9, P11, P12, P15).
+- as quatro divergências autorizadas: `/admin/perfis` (11 perfis canônicos e permissões reais em vez dos
+  8 perfis e 9 rótulos do mock — decisão 29), o `placeholder` do campo "Registro (ID)" da auditoria
+  (decisão 31), `MODELOS_ETIQUETA_LER` concedida a `recebimento_pesagem` e `corte` além da
+  linha 37 da matriz (decisão 27) e o preview de etiqueta sem valores de exemplo (D18.a);
+- a lista dos 3 badges Provisório da onda e onde aparecem: P1 em `/admin/parametros`
+  (`operacao.cadencia_dias_semana`), P12 em `/admin/parametros` (`operacao.regras_transformacao_tz`) e
+  P9 em `/cadastros/modelos-etiqueta`; e a nota de que AD-01, AD-02 e AD-06 retiraram os badges de
+  composição do boi casado, emissão fiscal e expiração de reserva.
 
 **27.2** Atualizar `docs/execucao/EXECUCAO-STATUS.md`: linha da Onda 3 para `aguardando_portao2`, com o sha
 do commit da implementação, e a seção de dívidas com as duas dívidas desta onda (ligação frota × expedição
@@ -6559,6 +7456,9 @@ O Worker executa na ordem numérica: as dependências acima estão satisfeitas p
    Regra para outros cortes exige decisão registrada.
 5. **Exportação de auditoria limitada a 5 000 linhas (decisão 32).** Se o volume exigir exportação
    completa, o caminho é um endpoint de streaming no backend, não aumentar o limite no BFF.
+6. **"Representantes permitidos" no usuário (decisão 43).** Linha 38 da matriz continua **Divergente**
+   depois desta onda. Fecha na **Onda 4 (Comercial)** com tabela `usuarios_representantes`,
+   `PUT /usuarios/:id/representantes`, o multisseletor no drawer e o filtro aplicado em pedidos e clientes.
 
 ---
 
@@ -6578,15 +7478,23 @@ O Worker executa na ordem numérica: as dependências acima estão satisfeitas p
 ## Autorrevisão do plano (checklist do Portão 1)
 
 - [x] Toda tela do escopo tem `.tsx` de referência do protótipo citado com caminho e linhas.
-- [x] Todas as decisões estão numeradas (1–42) e nenhuma deixa escolha para o Worker.
-- [x] Nenhum marcador de pendência textual e nenhuma promessa de entrega adiada no documento: toda
-      task é executável como está, sem escopo remetido a onda futura dentro de uma tela do escopo.
+- [x] Todas as decisões estão numeradas (1–43) e nenhuma deixa escolha para o Worker.
+- [x] Nenhum marcador de pendência textual e nenhuma promessa de entrega adiada dentro de uma tela do
+      escopo. O único item diferido é o escopo comercial "representantes permitidos" (linha 38 da
+      matriz), com decisão numerada (43), onda de destino (4) e dívida registrada — o campo não aparece
+      inerte em tela nesta onda.
+- [x] As quatro divergências autorizadas estão numeradas e registradas no README de evidências:
+      decisão 29 (`/admin/perfis`), decisão 31 (placeholder do campo Registro), decisão 27
+      (`MODELOS_ETIQUETA_LER` além da linha 37 da matriz) e D18.a (preview de etiqueta sem valores de
+      exemplo).
 - [x] O rótulo banido pela v1.1 §6.8 não aparece no plano nem nos códigos propostos.
-- [x] As três dívidas herdadas da Onda 2 (decisões 25, 27 e 31) estão no mapa DoD → teste, com invariante
-      próprio e teste nomeado.
-- [x] Mapa DoD → teste é 1:1: 77 invariantes, cada um com um nome de teste e um arquivo.
-- [x] Todas as pendências §16 usadas viram parâmetro com badge Provisório (P1, P9, P11, P12, P15);
-      nenhuma regra nova foi inventada.
+- [x] As três dívidas herdadas da Onda 2 (decisões 25, 27 e 31 **da Onda 2**) estão no mapa DoD → teste,
+      com invariante próprio e teste nomeado; nesta onda elas são fechadas pelas decisões 4/5 (menu),
+      30 (filtros da auditoria) e 11.7 (aritmética das perdas e extras).
+- [x] Mapa DoD → teste é 1:1: 78 invariantes, cada um com um nome de teste e um arquivo.
+- [x] Todas as pendências §16 usadas viram badge Provisório (P1 e P12 em `/admin/parametros`, P9 em
+      modelos de etiqueta); AD-01, AD-02 e AD-06 retiram os badges que fecharam; nenhuma regra nova
+      foi inventada.
 - [x] Migração é expand puro, com rollback documentado e snapshot gerado por `drizzle-kit`.
 - [x] Todo comando tem saída esperada; o gate local cobre lint, tipos, migração, seed, snapshot RBAC,
       cobertura, build e E2E.
