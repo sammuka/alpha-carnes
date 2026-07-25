@@ -18,12 +18,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   };
 
   return (
-    <div className="flex min-h-screen" style={{ background: '#F5F7FA' }}>
+    <div className="flex min-h-screen bg-background">
       <AppSidebar user={sidebarUser} sections={sections} />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <AdminHeader user={sidebarUser} />
-        <main className="flex-1 p-4" style={{ background: '#F5F7FA' }}>
+        <main className="flex-1 bg-background p-4">
           {children}
         </main>
       </div>

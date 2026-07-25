@@ -70,6 +70,61 @@
   --color-info: #3B7FD4;
   --color-info-bg: #E8EEF5;
 
+  /* Paleta canônica do protótipo — src/imports/──PaletaDeCores──/index.tsx */
+  --color-brand-navy: #265389;
+  --color-brand-navy-hover: #1E4070;
+  --color-brand-navy-10: #E8EEF5;
+  --color-brand-blue-mid: #3B7FD4;
+
+  /* Ações — Login.tsx / PipelineBar.tsx / TrocaPeca.tsx */
+  --color-action-blue: #2563EB;
+  --color-action-blue-hover: #1D4ED8;
+  --color-action-blue-strong: #1844B8;
+  --color-action-blue-bg: #EFF6FF;
+  --color-action-blue-border: #BFDBFE;
+  --color-action-blue-text: #1E3A8A;
+
+  /* Superfícies, bordas e textos densos do protótipo */
+  --color-surface-subtle: #F8FAFC;
+  --color-surface-chip: #F0EFF5;
+  --color-border-chip: #E5E3ED;
+  --color-text-strong: #1E293B;
+  --color-text-slate: #475569;
+  --color-text-graphite: #374151;
+
+  /* Login — painel institucional (Login.tsx) */
+  --color-login-panel: #1F2633;
+  --color-login-panel-caption: #70748C;
+  --color-login-panel-text: #B0B4BD;
+  --color-login-heading: #1F1D2D;
+  --color-login-text: #6B7081;
+
+  /* PipelineBar */
+  --color-pipeline-done: #10B981;
+  --color-pipeline-future: #A1A5B3;
+
+  /* Badge "Provisório" (RegraDesdobramento.tsx) */
+  --color-provisorio-bg: #FEF3C7;
+  --color-provisorio-text: #92400E;
+  --color-provisorio-border: #FDE68A;
+
+  /* Sinalizações densas (TrocaPeca.tsx, LiberacaoCaminhao.tsx, Disponibilidade.tsx) */
+  --color-success-strong: #15803D;
+  --color-success-surface: #F0FDF4;
+  --color-danger-strong: #DC2626;
+  --color-danger-surface: #FFF1F2;
+  --color-violet-accent: #8B5CF6;
+  --color-violet-surface: #F5F3FF;
+
+  /* Popover da sidebar (Layout.tsx) */
+  --color-sidebar-popover: #0F2645;
+
+  /* Avatares de atividade — 14% sobre a paleta de status */
+  --color-avatar-blue-bg: rgba(59, 127, 212, 0.14);
+  --color-avatar-violet-bg: rgba(124, 58, 237, 0.14);
+  --color-avatar-green-bg: rgba(24, 168, 74, 0.14);
+  --color-avatar-amber-bg: rgba(245, 176, 25, 0.14);
+
   /* Raios */
   --radius: 0.75rem;
   --radius-lg: 0.75rem;

@@ -100,7 +100,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 export function AppSidebar({ user, sections }: AppSidebarProps) {
   return (
-    <aside className="flex w-64 shrink-0 flex-col bg-gradient-to-b from-[#1E3A5F] to-[#1B4E9B]">
+    <aside className="flex w-64 shrink-0 flex-col bg-gradient-to-b from-sidebar-gradient-start to-sidebar-gradient-end">
       <div className="flex items-center gap-3 border-b border-white/10 px-4 py-5">
         <AlphaLogo className="h-9 w-9 shrink-0" />
         <div className="min-w-0">
