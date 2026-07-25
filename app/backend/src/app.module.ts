@@ -15,6 +15,7 @@ import { UsuariosModule } from './modules/usuarios/usuarios.module';
 import { PerfisModule } from './modules/perfis/perfis.module';
 import { ClientesModule } from './modules/cadastros/clientes/clientes.module';
 import { FornecedoresModule } from './modules/cadastros/fornecedores/fornecedores.module';
+import { FrotaModule } from './modules/frota/frota.module';
 import { ItensCompraModule } from './modules/cadastros/itens-compra/itens-compra.module';
 import { ItensComerciaisModule } from './modules/cadastros/itens-comerciais/itens-comerciais.module';
 import { RegrasDesdobramentoModule } from './modules/cadastros/regras-desdobramento/regras-desdobramento.module';
@@ -66,6 +67,7 @@ import type { IncomingMessage } from 'http';
     PerfisModule,
     ClientesModule,
     FornecedoresModule,
+    FrotaModule,
     ItensCompraModule,
     ItensComerciaisModule,
     ProdutosModule,
