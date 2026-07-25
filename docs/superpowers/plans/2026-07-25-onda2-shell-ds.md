@@ -71,7 +71,7 @@
 24. **Correções de RBAC de UI complementares à decisão 14** (nenhuma permissão nova; apenas alinhamento recurso × permissão, auditável no Portão 2):
     - `/cadastros/rotas` passa a exigir `ROTAS_LER`/`ROTAS_GERENCIAR` (hoje exige `EXPEDICAO_GERENCIAR`/`CLIENTES_LER`): rota/itinerário é o recurso `ROTAS_*` do catálogo; exigir `CLIENTES_LER` abriria o item para os 11 perfis via `LEITURA_CADASTROS`.
     - `/desossa/dashboard` deixa de aceitar `DISPONIBILIDADE_LER` e passa a exigir `DESOSSA_LER`/`CORTE_GERENCIAR`: `DISPONIBILIDADE_LER` é transversal (10 dos 11 perfis) e não expressa acesso à desossa. Consequência: dentro do grupo `DESOSSA` (visível só para `administrador`, `gestor` e `corte`), os três mantêm o item — nenhum perfil perde acesso real.
-25. **Efeitos do gate de grupo declarados item a item — conjunto completo, calculado sobre 39 itens × 11 perfis** (Princípio II + RA-05). O cálculo compara, para cada par (perfil, rota), o que a coluna "Perfis RBAC" da matriz de rastreabilidade v1.1 atribui ao perfil (incluindo os papéis secundários "consulta"/"registro") com o que o menu desta onda mostra, já considerando as correções da decisão 30. Sobram **26 perdas**, e **todas** têm a mesma causa: o grupo inteiro não é visível para o perfil (em 15 delas o perfil também não teria a permissão do item). Nenhuma perda vem do filtro de item — isso é invariante testado.
+25. **Efeitos do gate de grupo declarados item a item — conjunto completo, calculado sobre 39 itens × 11 perfis** (Princípio II + RA-05). O cálculo compara, para cada par (perfil, rota), o que a coluna "Perfis RBAC" da matriz de rastreabilidade v1.1 atribui ao perfil (incluindo os papéis secundários "consulta"/"registro") com o que o menu desta onda mostra, já considerando as correções da decisão 30. Expressões não-nominais dessa coluna (ex.: "recortes p/ demais", "consulta geral") **não** entram no cálculo das perdas — só perfis nomeados. Sobram **26 perdas**, e **todas** têm a mesma causa: o grupo inteiro não é visível para o perfil (em 15 delas o perfil também não teria a permissão do item). Nenhuma perda vem do filtro de item — isso é invariante testado.
 
     | Perfil | Rota que a matriz atribui e o menu não mostra | Papel na matriz | Grupo que ficou invisível | Por que não é corrigida nesta onda | Destino |
     |---|---|---|---|---|---|
@@ -720,7 +720,7 @@ describe('NavGroup', () => {
     const painel = painelDe(screen.getByRole('button', { name: /GESTÃO/ }));
     expect(painel.className).toContain('overflow-hidden');
     expect(painel.className).toContain('transition-[max-height]');
-    expect(painel.className).toContain('duration-200');
+    expect(painel.className).toContain('duration-[220ms]');
   });
 
   it('abre o grupo automaticamente quando um item esta ativo', () => {
@@ -1055,7 +1055,7 @@ export function NavGroup({ title, items, defaultOpen = false }: NavGroupProps) {
       <div
         id={idPainel}
         data-state={open ? 'aberto' : 'fechado'}
-        className="overflow-hidden transition-[max-height] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]"
+        className="overflow-hidden transition-[max-height] duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
         style={{ maxHeight: open ? `${alturaItens}px` : '0px' }}
       >
         <div className="flex w-full flex-col gap-0.5 pb-1">
