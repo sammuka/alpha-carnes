@@ -8,7 +8,6 @@ import { cn } from '@/lib/cn';
 export interface AdminHeaderUser {
   nome: string;
   perfil: string;
-  escopo: string;
   inicial: string;
 }
 
@@ -67,10 +66,6 @@ export function AdminHeader({ user, className }: AdminHeaderProps) {
             ·
           </span>
           <MetaInline label="Perfil" value={user.perfil} />
-          <span className="text-muted-foreground/40" aria-hidden="true">
-            ·
-          </span>
-          <MetaInline label="Escopo" value={user.escopo} />
         </div>
 
         <span className="hidden text-xs text-muted-foreground lg:inline">{formatDate()}</span>

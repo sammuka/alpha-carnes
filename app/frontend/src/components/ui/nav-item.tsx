@@ -13,20 +13,21 @@ interface NavItemProps {
 
 export function NavItem({ href, label, Icon }: NavItemProps) {
   const pathname = usePathname();
-  const isActive = pathname === href || (href !== '/' && pathname.startsWith(href));
+  const isActive = pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
 
   return (
     <Link
       href={href}
+      aria-current={isActive ? 'page' : undefined}
       className={cn(
-        'flex h-[34px] items-center gap-2.5 rounded-md px-3 text-[13px] font-medium transition-colors',
+        'flex h-[34px] w-full items-center gap-3 rounded-lg px-2.5 text-[13px] font-medium transition-colors',
         isActive
-          ? 'bg-white/16 text-white'
-          : 'text-white/90 hover:bg-white/10 hover:text-white',
+          ? 'bg-sidebar-item-active text-white'
+          : 'text-sidebar-text hover:bg-sidebar-item-hover hover:text-white',
       )}
     >
-      <Icon size={18} strokeWidth={1.75} className="shrink-0" />
-      <span className="truncate">{label}</span>
+      <Icon size={18} strokeWidth={1.5} className="shrink-0" />
+      <span className="flex-1 truncate">{label}</span>
     </Link>
   );
 }

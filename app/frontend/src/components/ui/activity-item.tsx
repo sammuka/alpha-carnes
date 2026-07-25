@@ -1,15 +1,15 @@
 import { cn } from '@/lib/cn';
 
 const AVATAR_PALETTE = [
-  { bg: 'rgba(59, 127, 212, 0.14)', text: '#3B7FD4' },
-  { bg: 'rgba(124, 58, 237, 0.14)', text: '#7C3AED' },
-  { bg: 'rgba(24, 168, 74, 0.14)', text: '#18A84A' },
-  { bg: 'rgba(245, 176, 25, 0.14)', text: '#F5B019' },
-];
+  { bg: 'var(--color-avatar-blue-bg)', text: 'var(--color-status-recebido)' },
+  { bg: 'var(--color-avatar-violet-bg)', text: 'var(--color-status-pesado)' },
+  { bg: 'var(--color-avatar-green-bg)', text: 'var(--color-status-expedido)' },
+  { bg: 'var(--color-avatar-amber-bg)', text: 'var(--color-status-divergencia)' },
+] as const;
 
 function avatarColors(initials: string): { bg: string; text: string } {
   const index = initials.charCodeAt(0) % AVATAR_PALETTE.length;
-  return AVATAR_PALETTE[index] ?? { bg: 'rgba(59, 127, 212, 0.14)', text: '#3B7FD4' };
+  return AVATAR_PALETTE[index] ?? AVATAR_PALETTE[0];
 }
 
 interface ActivityItemProps {

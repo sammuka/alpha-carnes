@@ -9,7 +9,8 @@
     "lint": "eslint src --ext .ts,.tsx",
     "type-check": "tsc --noEmit",
     "test": "jest --passWithNoTests",
-    "e2e:jornada": "playwright test e2e/jornada-operacional.spec.ts"
+    "e2e:jornada": "playwright test e2e/jornada-operacional.spec.ts",
+    "e2e:shell": "playwright test e2e/shell-ds.spec.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "5.4.0",

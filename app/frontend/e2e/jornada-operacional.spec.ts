@@ -438,13 +438,13 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
 
     await page.getByLabel('E-mail').fill(ADMIN_EMAIL);
     await page.getByLabel('Senha').fill(auth.password);
-    await page.getByRole('button', { name: 'Entrar' }).click();
-    await expect(page.getByRole('heading', { name: 'Dashboard Operacional' })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Acessar Sistema' }).click();
+    await expect(page.getByRole('heading', { name: 'Painel Geral da Operação' })).toBeVisible({ timeout: 15_000 });
     await capture(
       page,
       steps,
       '02-dashboard',
-      'Dashboard Operacional',
+      'Painel Geral da Operação',
       'Confirmar autenticação, layout administrativo e navegação lateral.',
       'Login feito pela UI com usuário admin seedado.',
       'Dashboard carregado sem 404, com sidebar e indicadores operacionais.',

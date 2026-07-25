@@ -203,10 +203,10 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
         </div>
 
         <div className="xl:col-span-4">
-          <Card className="h-full rounded-xl border-border border-t-4 border-t-[#8B5CF6] shadow-sm">
+          <Card className="h-full rounded-xl border-border border-t-4 border-t-violet-accent shadow-sm">
             <CardContent className="flex flex-col gap-4 p-5">
               <div className="flex items-center gap-2">
-                <Calculator className="h-5 w-5 text-[#8B5CF6]" />
+                <Calculator className="h-5 w-5 text-violet-accent" />
                 <h2 className="text-base font-bold text-foreground">Simulador</h2>
               </div>
               <p className="text-sm text-muted-foreground">
@@ -223,7 +223,7 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
                 />
               </div>
               <div className="mt-2 border-t border-border pt-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-[#8B5CF6]">Resultado estimado</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-violet-accent">Resultado estimado</p>
                 <div className="mt-3 space-y-3 rounded-lg border border-border bg-background p-4">
                   {!simValido || regras.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
@@ -238,7 +238,7 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
                           <span className="truncate text-xs text-foreground">
                             {rotuloItemComercial(regra)}
                           </span>
-                          <span className="font-bold text-[#8B5CF6]">{resultado}</span>
+                          <span className="font-bold text-violet-accent">{resultado}</span>
                         </div>
                       );
                     })
