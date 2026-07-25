@@ -3534,6 +3534,9 @@ com `atualizarValorSchema = z.object({ valorJson: z.record(z.string(), z.unknown
 
 ```ts
 // parametros-onda3.e2e-spec.ts
+import { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { DRIZZLE } from '../../src/database/database.module';
 
 const CHAVES = [
@@ -3542,107 +3545,147 @@ const CHAVES = [
   'fiscal.seguro_integrado', 'fiscal.emissao_fiscal', 'fiscal.expiracao_reserva_rascunho',
 ];
 
-it('seed cria as 9 chaves de parametro da v1.1 com AD-01, AD-02 e AD-06 honradas', async () => {
-  const { seedParametros } = await import('../../src/database/seed');
-  await seedParametros(app.get(DRIZZLE).db);
+describe('Parametros Onda 3 e2e', () => {
+  let app: INestApplication;
+  let adminCookies: string;
 
-  const lista = await request(srv()).get('/parametros?pageSize=100').set('Cookie', adminCookies);
-  const chaves = lista.body.data.map((p: { chave: string }) => p.chave);
-  for (const chave of CHAVES) expect(chaves).toContain(chave);
+  beforeAll(async () => {
+    app = await createTestApp();
+    const admin = await createTestUser(app, { perfil: 'administrador' });
+    adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
+  });
 
-  const porChave = (chave: string) =>
-    lista.body.data.find((p: { chave: string }) => p.chave === chave).valorJson as {
-      texto: string; provisorio: boolean; pendencia: string | null; tipo: string;
-    };
+  afterAll(async () => {
+    await cleanupDb(app);
+    await app.close();
+  });
 
-  // AD-01: composição confirmada — sem badge Provisório.
-  const boi = porChave('operacao.composicao_boi_casado');
-  expect(boi.texto).toContain('2 TZ + 2 DT + 2 PA');
-  expect(boi.provisorio).toBe(false);
-  expect(boi.pendencia).toBeNull();
+  const srv = () => app.getHttpServer();
 
-  // AD-02: emissão fiscal decidida — nota de homologação no lugar do badge.
-  const fiscal = porChave('fiscal.emissao_fiscal');
-  expect(fiscal.provisorio).toBe(false);
-  expect(fiscal.texto).toContain('aguardando homologação');
+  it('seed cria as 9 chaves de parametro da v1.1 com AD-01, AD-02 e AD-06 honradas', async () => {
+    const { seedParametros } = await import('../../src/database/seed');
+    await seedParametros(app.get(DRIZZLE).db);
 
-  // AD-06: sem TTL de reserva — cartão informativo, não parâmetro pendente.
-  const reserva = porChave('fiscal.expiracao_reserva_rascunho');
-  expect(reserva.provisorio).toBe(false);
-  expect(reserva.tipo).toBe('info');
-  expect(reserva.texto).toContain('Sem expiração automática');
+    const lista = await request(srv()).get('/parametros?pageSize=100').set('Cookie', adminCookies);
+    const chaves = lista.body.data.map((p: { chave: string }) => p.chave);
+    for (const chave of CHAVES) expect(chaves).toContain(chave);
 
-  const provisorios = lista.body.data
-    .filter(
-      (p: { chave: string; valorJson: { provisorio?: boolean } }) =>
-        CHAVES.includes(p.chave) && p.valorJson.provisorio === true,
-    )
-    .map((p: { chave: string; valorJson: { pendencia: string } }) => [p.chave, p.valorJson.pendencia])
-    .sort();
-  expect(provisorios).toEqual([
-    ['operacao.cadencia_dias_semana', 'P1'],
-    ['operacao.regras_transformacao_tz', 'P12'],
-  ]);
-});
+    const porChave = (chave: string) =>
+      lista.body.data.find((p: { chave: string }) => p.chave === chave).valorJson as {
+        texto: string; provisorio: boolean; pendencia: string | null; tipo: string;
+      };
 
-it('atualiza parametro por chave, audita e 404 em chave desconhecida', async () => {
-  const patch = await request(srv())
-    .patch('/parametros/chave/fiscal.seguro_integrado').set('Cookie', adminCookies)
-    .send({ valorJson: { grupo: 'Fiscal', tipo: 'toggle', titulo: 'Seguro integrado', texto: 'x', valor: true, provisorio: false, pendencia: null } });
-  expect(patch.status).toBe(200);
-  expect(patch.body.valorJson.valor).toBe(true);
+    // AD-01: composição confirmada — sem badge Provisório.
+    const boi = porChave('operacao.composicao_boi_casado');
+    expect(boi.texto).toContain('2 TZ + 2 DT + 2 PA');
+    expect(boi.provisorio).toBe(false);
+    expect(boi.pendencia).toBeNull();
 
-  const log = await request(srv())
-    .get('/auditoria?tabela=parametros&operacao=UPDATE').set('Cookie', adminCookies);
-  expect(log.body.total).toBeGreaterThanOrEqual(1);
+    // AD-02: emissão fiscal decidida — nota de homologação no lugar do badge.
+    const fiscal = porChave('fiscal.emissao_fiscal');
+    expect(fiscal.provisorio).toBe(false);
+    expect(fiscal.texto).toContain('aguardando homologação');
 
-  const inexistente = await request(srv())
-    .patch('/parametros/chave/nao.existe').set('Cookie', adminCookies).send({ valorJson: {} });
-  expect(inexistente.status).toBe(404);
+    // AD-06: sem TTL de reserva — cartão informativo, não parâmetro pendente.
+    const reserva = porChave('fiscal.expiracao_reserva_rascunho');
+    expect(reserva.provisorio).toBe(false);
+    expect(reserva.tipo).toBe('info');
+    expect(reserva.texto).toContain('Sem expiração automática');
+
+    const provisorios = lista.body.data
+      .filter(
+        (p: { chave: string; valorJson: { provisorio?: boolean } }) =>
+          CHAVES.includes(p.chave) && p.valorJson.provisorio === true,
+      )
+      .map((p: { chave: string; valorJson: { pendencia: string } }) => [p.chave, p.valorJson.pendencia])
+      .sort();
+    expect(provisorios).toEqual([
+      ['operacao.cadencia_dias_semana', 'P1'],
+      ['operacao.regras_transformacao_tz', 'P12'],
+    ]);
+  });
+
+  it('atualiza parametro por chave, audita e 404 em chave desconhecida', async () => {
+    const patch = await request(srv())
+      .patch('/parametros/chave/fiscal.seguro_integrado').set('Cookie', adminCookies)
+      .send({ valorJson: { grupo: 'Fiscal', tipo: 'toggle', titulo: 'Seguro integrado', texto: 'x', valor: true, provisorio: false, pendencia: null } });
+    expect(patch.status).toBe(200);
+    expect(patch.body.valorJson.valor).toBe(true);
+
+    const log = await request(srv())
+      .get('/auditoria?tabela=parametros&operacao=UPDATE').set('Cookie', adminCookies);
+    expect(log.body.total).toBeGreaterThanOrEqual(1);
+
+    const inexistente = await request(srv())
+      .patch('/parametros/chave/nao.existe').set('Cookie', adminCookies).send({ valorJson: {} });
+    expect(inexistente.status).toBe(404);
+  });
 });
 ```
 
 ```ts
 // auditoria-facetas.e2e-spec.ts
-it('auditoria filtra por periodo, usuario, modulo, operacao e registro', async () => {
-  const criar = await request(srv()).post('/frota/caminhoes').set('Cookie', adminCookies)
-    .send({ placa: 'AUD-1A11' });
-  const registroId = criar.body.id as string;
-  const inicio = new Date(Date.now() - 60_000).toISOString();
-  const fim = new Date(Date.now() + 60_000).toISOString();
+import { INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 
-  const filtrado = await request(srv())
-    .get(`/auditoria?modulo=cadastros&operacao=INSERT&tabela=frota_caminhoes&registroId=${registroId}&dataInicio=${inicio}&dataFim=${fim}`)
-    .set('Cookie', adminCookies);
-  expect(filtrado.status).toBe(200);
-  expect(filtrado.body.total).toBe(1);
+describe('Auditoria facetas e2e', () => {
+  let app: INestApplication;
+  let adminCookies: string;
 
-  const foraDaJanela = await request(srv())
-    .get(`/auditoria?dataInicio=${new Date(Date.now() + 3_600_000).toISOString()}`)
-    .set('Cookie', adminCookies);
-  expect(foraDaJanela.body.total).toBe(0);
-});
+  beforeAll(async () => {
+    app = await createTestApp();
+    const admin = await createTestUser(app, { perfil: 'administrador' });
+    adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
+  });
 
-it('facetas de auditoria listam valores distintos reais', async () => {
-  const res = await request(srv()).get('/auditoria/facetas').set('Cookie', adminCookies);
-  expect(res.status).toBe(200);
-  expect(res.body.modulos).toContain('cadastros');
-  expect(res.body.tabelas).toContain('frota_caminhoes');
-  expect(res.body.usuarios.length).toBeGreaterThanOrEqual(1);
-});
+  afterAll(async () => {
+    await cleanupDb(app);
+    await app.close();
+  });
 
-it('filtro de registro aceita trecho e valida uuid', async () => {
-  const criar = await request(srv()).post('/frota/caminhoes').set('Cookie', adminCookies)
-    .send({ placa: 'AUD-2B22' });
-  const trecho = (criar.body.id as string).slice(0, 8);
+  const srv = () => app.getHttpServer();
 
-  const porTrecho = await request(srv())
-    .get(`/auditoria?registroBusca=${trecho}`).set('Cookie', adminCookies);
-  expect(porTrecho.body.total).toBeGreaterThanOrEqual(1);
+  it('auditoria filtra por periodo, usuario, modulo, operacao e registro', async () => {
+    const criar = await request(srv()).post('/frota/caminhoes').set('Cookie', adminCookies)
+      .send({ placa: 'AUD-1A11' });
+    const registroId = criar.body.id as string;
+    const inicio = new Date(Date.now() - 60_000).toISOString();
+    const fim = new Date(Date.now() + 60_000).toISOString();
 
-  const uuidInvalido = await request(srv())
-    .get('/auditoria?registroId=PED-123').set('Cookie', adminCookies);
-  expect(uuidInvalido.status).toBe(400);
+    const filtrado = await request(srv())
+      .get(`/auditoria?modulo=cadastros&operacao=INSERT&tabela=frota_caminhoes&registroId=${registroId}&dataInicio=${inicio}&dataFim=${fim}`)
+      .set('Cookie', adminCookies);
+    expect(filtrado.status).toBe(200);
+    expect(filtrado.body.total).toBe(1);
+
+    const foraDaJanela = await request(srv())
+      .get(`/auditoria?dataInicio=${new Date(Date.now() + 3_600_000).toISOString()}`)
+      .set('Cookie', adminCookies);
+    expect(foraDaJanela.body.total).toBe(0);
+  });
+
+  it('facetas de auditoria listam valores distintos reais', async () => {
+    const res = await request(srv()).get('/auditoria/facetas').set('Cookie', adminCookies);
+    expect(res.status).toBe(200);
+    expect(res.body.modulos).toContain('cadastros');
+    expect(res.body.tabelas).toContain('frota_caminhoes');
+    expect(res.body.usuarios.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('filtro de registro aceita trecho e valida uuid', async () => {
+    const criar = await request(srv()).post('/frota/caminhoes').set('Cookie', adminCookies)
+      .send({ placa: 'AUD-2B22' });
+    const trecho = (criar.body.id as string).slice(0, 8);
+
+    const porTrecho = await request(srv())
+      .get(`/auditoria?registroBusca=${trecho}`).set('Cookie', adminCookies);
+    expect(porTrecho.body.total).toBeGreaterThanOrEqual(1);
+
+    const uuidInvalido = await request(srv())
+      .get('/auditoria?registroId=PED-123').set('Cookie', adminCookies);
+    expect(uuidInvalido.status).toBe(400);
+  });
 });
 ```
 
@@ -3813,6 +3856,25 @@ de `db` que devolve as regras fixas do exemplo do protótipo:
 
 ```ts
 // simulador-desdobramento.spec.ts — DoD-26
+import { RegrasDesdobramentoService } from '../../src/modules/cadastros/regras-desdobramento/regras-desdobramento.service';
+
+function criarServiceCom(
+  regras: Array<{ itemComercialId: string; descricao: string; fator: string }>,
+) {
+  const db = {
+    select: jest.fn(() => ({
+      from: jest.fn(() => ({
+        innerJoin: jest.fn(() => ({
+          where: jest.fn(() => ({
+            orderBy: jest.fn(() => Promise.resolve(regras)),
+          })),
+        })),
+      })),
+    })),
+  };
+  return new RegrasDesdobramentoService({ db } as never, {} as never);
+}
+
 it('simulador de desdobramento multiplica fatores e soma partes', async () => {
   const service = criarServiceCom([
     { itemComercialId: 'c1', descricao: 'Traseiro', fator: '2' },
@@ -3828,6 +3890,25 @@ it('simulador de desdobramento multiplica fatores e soma partes', async () => {
 
 ```ts
 // simulador-desossa.spec.ts — DoD-27 e DoD-28
+import { RegrasTransformacaoService } from '../../src/modules/operacao/desossa/regras-transformacao.service';
+
+type RegraAtivaComSaidas = {
+  id: string;
+  nome: string;
+  saidas: Array<{ produtoId: string; produtoNome: string; quantidadeFixa: string }>;
+};
+
+function criarServiceCom(regras: RegraAtivaComSaidas[]) {
+  const service = new RegrasTransformacaoService({ db: {} as never } as never, {} as never);
+  jest
+    .spyOn(
+      service as RegrasTransformacaoService & { listarAtivasComSaidas: () => Promise<RegraAtivaComSaidas[]> },
+      'listarAtivasComSaidas',
+    )
+    .mockResolvedValue(regras);
+  return service;
+}
+
 it('simulador de desossa respeita exclusividade por unidade de TZ', async () => {
   const service = criarServiceCom([
     { id: 'a', nome: 'Alternativa A', saidas: [
