@@ -44,6 +44,7 @@ export const perfis = pgTable(
     slug:      text('slug').notNull().unique(),
     nome:      text('nome').notNull(),
     descricao: text('descricao'),
+    menusVisiveis: text('menus_visiveis').array().notNull().default(sql`'{}'::text[]`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { check, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 export const rotas = pgTable(
   'rotas',
@@ -12,6 +12,8 @@ export const rotas = pgTable(
     caminhaoPadrao: text('caminhao_padrao'),
     motoristaPadrao: text('motorista_padrao'),
     observacoes: text('observacoes'),
+    paradas: jsonb('paradas').notNull().default(sql`'[]'::jsonb`),
+    diasAtendimento: jsonb('dias_atendimento').notNull().default(sql`'[]'::jsonb`),
     status: text('status').notNull().default('ativo'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
