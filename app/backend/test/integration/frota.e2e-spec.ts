@@ -52,19 +52,29 @@ describe('Frota e2e (caminhões de cadastro e motoristas)', () => {
     const criar = await request(srv()).post('/frota/motoristas').set('Cookie', adminCookies)
       .send({ nome: 'Carlos Souza', documento: 'CNH 123', telefone: '(11) 98811-0011', caminhaoPadraoId: caminhao.body.id });
     expect(criar.status).toBe(201);
+    const id = criar.body.id as string;
 
     const dup = await request(srv()).post('/frota/motoristas').set('Cookie', adminCookies)
       .send({ nome: 'Outro', documento: 'CNH 123' });
     expect(dup.status).toBe(409);
 
-    const lista = await request(srv()).get('/frota/motoristas').set('Cookie', adminCookies);
+    const lista = await request(srv()).get('/frota/motoristas?search=Carlos&status=ativo').set('Cookie', adminCookies);
+    expect(lista.status).toBe(200);
     expect(lista.body.data[0].caminhaoPadraoPlaca).toBe('DEF-2E34');
 
+    const detalhe = await request(srv()).get(`/frota/motoristas/${id}`).set('Cookie', adminCookies);
+    expect(detalhe.status).toBe(200);
+
     const semCaminhao = await request(srv())
-      .patch(`/frota/motoristas/${criar.body.id}`).set('Cookie', adminCookies)
-      .send({ caminhaoPadraoId: null });
+      .patch(`/frota/motoristas/${id}`).set('Cookie', adminCookies)
+      .send({ caminhaoPadraoId: null, documento: 'CNH 456' });
     expect(semCaminhao.status).toBe(200);
     expect(semCaminhao.body.caminhaoPadraoId).toBeNull();
+
+    expect((await request(srv()).delete(`/frota/motoristas/${id}`).set('Cookie', adminCookies)).status).toBe(200);
+    expect((await request(srv()).get(`/frota/motoristas/${id}`).set('Cookie', adminCookies)).status).toBe(404);
+    expect((await request(srv()).post(`/frota/motoristas/${id}/restaurar`).set('Cookie', adminCookies)).status).toBe(201);
+    expect((await request(srv()).post(`/frota/motoristas/${id}/restaurar`).set('Cookie', adminCookies)).status).toBe(409);
   });
 
   it('frota respeita RBAC de leitura e escrita', async () => {

@@ -80,4 +80,32 @@ describe('Modelos de etiqueta e2e', () => {
       .send({ campos: { ...alvo.campos, inventado: true } });
     expect(sobrando.status).toBe(400);
   });
+
+  it('ciclo CRUD completo: criar, detalhar, listar com busca, remover e restaurar', async () => {
+    const criar = await request(srv()).post('/modelos-etiqueta').set('Cookie', adminCookies)
+      .send({
+        slug: 'teste-cobertura',
+        nome: 'Modelo Cobertura',
+        campos: BASE,
+        status: 'ativo',
+      });
+    expect(criar.status).toBe(201);
+    const id = criar.body.id as string;
+
+    const dup = await request(srv()).post('/modelos-etiqueta').set('Cookie', adminCookies)
+      .send({ slug: 'teste-cobertura', nome: 'Dup', campos: BASE });
+    expect(dup.status).toBe(409);
+
+    expect((await request(srv()).get(`/modelos-etiqueta/${id}`).set('Cookie', adminCookies)).status).toBe(200);
+
+    const busca = await request(srv()).get('/modelos-etiqueta?search=cobertura').set('Cookie', adminCookies);
+    expect(busca.status).toBe(200);
+    expect(busca.body.total).toBeGreaterThanOrEqual(1);
+
+    expect((await request(srv()).delete(`/modelos-etiqueta/${id}`).set('Cookie', adminCookies)).status).toBe(200);
+    expect((await request(srv()).get(`/modelos-etiqueta/${id}`).set('Cookie', adminCookies)).status).toBe(404);
+    expect((await request(srv()).post(`/modelos-etiqueta/${id}/restaurar`).set('Cookie', adminCookies)).status).toBe(201);
+    const jaAtivo = await request(srv()).post(`/modelos-etiqueta/${id}/restaurar`).set('Cookie', adminCookies);
+    expect([409, 404]).toContain(jaAtivo.status);
+  });
 });
