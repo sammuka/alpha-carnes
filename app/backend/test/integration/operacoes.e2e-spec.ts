@@ -3,6 +3,7 @@ import request from 'supertest';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
+import { OperacoesService } from '../../src/modules/operacoes/operacoes.service';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 
 describe('operacoes e2e', () => {
@@ -95,7 +96,17 @@ describe('operacoes e2e', () => {
       .query({ de: data, ate: data, status: 'aberta', pagina: 1, limite: 10 })
       .set('Cookie', gestorCookies);
     expect(lista.status).toBe(200);
-    expect(lista.body.data.some((o: { id: string }) => o.id === criar.body.id)).toBe(true);
+    expect(lista.body.total).toBeGreaterThanOrEqual(1);
+    expect(lista.body.page).toBe(1);
+    expect(lista.body.pageSize).toBe(10);
+    const encontrada = lista.body.data.find((o: { id: string }) => o.id === criar.body.id);
+    expect(encontrada).toBeDefined();
+    expect(typeof encontrada.comprasProgramadas).toBe('number');
+    expect(typeof encontrada.pedidosVenda).toBe('number');
+    expect(typeof encontrada.pendenciasOverbookingAbertas).toBe('number');
+    for (let i = 1; i < lista.body.data.length; i++) {
+      expect(lista.body.data[i - 1].data >= lista.body.data[i].data).toBe(true);
+    }
 
     const detalhe = await request(app.getHttpServer())
       .get(`/operacoes/${criar.body.id}`)
@@ -127,5 +138,68 @@ describe('operacoes e2e', () => {
       .set('Cookie', gestorCookies)
       .send({ status: 'aberta' });
     expect(invalida.status).toBe(409);
+  });
+
+  it('filtra por status', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/operacoes')
+      .query({ status: 'aberta', pagina: 1, limite: 50 })
+      .set('Cookie', gestorCookies);
+    expect(res.status).toBe(200);
+    for (const op of res.body.data) {
+      expect(op.status).toBe('aberta');
+    }
+  });
+
+  it('filtra por período', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/operacoes')
+      .query({ de: '2026-08-01', ate: '2026-08-07', pagina: 1, limite: 50 })
+      .set('Cookie', gestorCookies);
+    expect(res.status).toBe(200);
+    for (const op of res.body.data) {
+      expect(op.data >= '2026-08-01' && op.data <= '2026-08-07').toBe(true);
+    }
+  });
+
+  it('filtra por extraordinaria', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/operacoes')
+      .query({ extraordinaria: 'true', pagina: 1, limite: 50 })
+      .set('Cookie', gestorCookies);
+    expect(res.status).toBe(200);
+    for (const op of res.body.data) {
+      expect(op.extraordinaria).toBe(true);
+    }
+  });
+
+  it('traz contadores de compras, pedidos e pendências', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/operacoes')
+      .query({ pagina: 1, limite: 5 })
+      .set('Cookie', gestorCookies);
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBeGreaterThan(0);
+    for (const op of res.body.data) {
+      expect(op).toHaveProperty('comprasProgramadas');
+      expect(op).toHaveProperty('pedidosVenda');
+      expect(op).toHaveProperty('pendenciasOverbookingAbertas');
+    }
+  });
+
+  it('resolverCorrente devolve a próxima não fechada', async () => {
+    const service = app.get(OperacoesService);
+    const corrente = await service.resolverCorrente();
+    expect(corrente).toBeDefined();
+    expect(corrente.status).not.toBe('fechada');
+  });
+
+  it('resolverCorrente lança OPERACAO_INEXISTENTE em base vazia', async () => {
+    const { db } = app.get(DRIZZLE) as { db: import('drizzle-orm/node-postgres').NodePgDatabase<typeof schema> };
+    await db.update(schema.operacoes).set({ deletedAt: new Date() });
+    const service = app.get(OperacoesService);
+    await expect(service.resolverCorrente()).rejects.toMatchObject({
+      response: { message: 'OPERACAO_INEXISTENTE' },
+    });
   });
 });
