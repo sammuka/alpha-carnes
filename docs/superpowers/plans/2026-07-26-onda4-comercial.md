@@ -40,7 +40,8 @@ Jest (backend e frontend) · Playwright (e2e).
 | Protótipo UI | `F:/Projetos/alpha-carnes-prototipo` @ `feature/completude-v1.1` (`8d32aa4c`) |
 | Repositório | `sammuka/alpha-carnes` |
 | Branch de implementação | `feature/onda4-comercial` (criada a partir de `origin/develop` pelo Worker) |
-| Emenda | Portão 1 `ajustar` em `158da75` → achados 1–10 corrigidos; API real reauditada no worktree |
+| Emenda 1 | Portão 1 `ajustar` em `158da75` → achados 1–10 corrigidos; API real reauditada no worktree |
+| Emenda 2 | Re-Portão 1 `ajustar` em `8229ff9` → 6 achados novos corrigidos: estado **E** do mapa passa a `status_carga_item <> 'removido'` (padrão real de `conferencia`/`fechamento`/`carga`/`liberacao`/`consolidacao`); caminho literal para operação inexistente em AD-03; DoD-109/112 ganham task própria (Task 20); DoD-113 vira teste escrito em `menu-rbac.test.ts`; `salvarItens`, `precosDaUltimaPublicada`, `exigirTabela` e `detalhar` escritos por extenso; linha 3 da matriz fechada por **D31** |
 
 ---
 
@@ -294,7 +295,7 @@ SELECT p.item_comercial_base_id AS item_comercial_id,
   JOIN pecas p       ON p.id = ci.peca_id
  WHERE cam.operacao_id = $1
    AND ci.tipo_origem = 'peca'
-   AND ci.status_carga_item = 'em_carga'
+   AND ci.status_carga_item <> 'removido'
    AND cam.status_caminhao IN
        ('fechado','liberado_faturamento','faturado','liberado_saida','expedido')
    AND ci.deleted_at IS NULL
@@ -310,7 +311,7 @@ SELECT s.item_comercial_id,
   JOIN subitens s    ON s.id = ci.subitem_id
  WHERE cam.operacao_id = $1
    AND ci.tipo_origem = 'subitem'
-   AND ci.status_carga_item = 'em_carga'
+   AND ci.status_carga_item <> 'removido'
    AND cam.status_caminhao IN
        ('fechado','liberado_faturamento','faturado','liberado_saida','expedido')
    AND ci.deleted_at IS NULL
@@ -330,6 +331,21 @@ SELECT p.item_comercial_base_id AS item_comercial_id,
    AND r.deleted_at IS NULL
  GROUP BY p.item_comercial_base_id;
 ```
+
+**Nota sobre `status_carga_item` (estado E) — predicado é `<> 'removido'`, nunca `= 'em_carga'`.**
+`chk_carga_itens_status` admite `'em_carga' | 'conferido' | 'removido'`
+(`expedicao.schema.ts:80,93-95`) e a conferência **promove** o item de `'em_carga'` para
+`'conferido'` (`conferencia.service.ts:167-176`). Como o estado E só conta itens de caminhão já
+`fechado` — e o caminhão só fecha depois da conferência —, filtrar por `= 'em_carga'` esconderia
+justamente os itens conferidos, ou seja, a carga inteira do caso normal, reportando falta onde não
+há. O predicado correto é o mesmo que **todo** o resto do repositório usa para "item vivo na carga":
+`ne(cargaItens.statusCargaItem, 'removido')` em `consolidacao.service.ts:61`,
+`conferencia.service.ts:146,152`, `liberacao.service.ts:156` e `carga.service.ts:325,330`;
+`!== 'removido'` em `fechamento.service.ts:253`; e `<> 'removido'` nos índices únicos parciais
+`uq_carga_itens_peca` / `uq_carga_itens_subitem` (`0006_mixed_barracuda.sql:81-82`). As duas pernas
+do `UNION ALL` de E usam esse predicado. A fixture de DoD-99 (Task 10) obriga o caso: o caminhão
+fechado leva **um item `'conferido'` e um item `'em_carga'`**, e ambos aparecem em E; um terceiro
+item `'removido'` fica de fora.
 
 **Nota sobre `tipo_consumo = 'fisico'` (R e C).** `chk_reservas_tipo_consumo` admite
 `'fisico' | 'virtual' | 'overbooking'`, mas o motor de reserva de `PedidosService`
@@ -370,8 +386,9 @@ mesmos filtros da tela. Divergência **D-07**.
 
 **D23 — Clientes: `rota_id` substitui `rota_padrao`.** `clientes.rota_id uuid REFERENCES rotas(id)`
 entra no 0016 com backfill por `rotas.codigo` e depois `rotas.nome`; o 0017 remove `rota_padrao`. O
-`representante_id` já existe e é reusado. A herança do protótipo (banner "Representante e Rota
-definem a herança…") é informativa: os dois campos são do cliente e propagam para o pedido.
+`representante_id` já existe e é reusado. O banner do protótipo ("Representante e Rota definem a
+herança…") descreve um comportamento **executável**, não um aviso: a propagação dos dois campos
+para o pedido é a lacuna da linha 3 da matriz e está especificada em **D31**.
 
 **D24 — `necessitaCorteAcerto` entra em `preferenciasJsonSchema`.** Campo booleano opcional no JSONB
 de preferências (`app/backend/src/common/dto/json-cadastros.dto.ts`), sem migração de coluna.
@@ -425,6 +442,70 @@ próprio `pedido-novo.test.tsx`, ambos realinhados/removidos na mesma task.
 A matriz (linha 5) prescreve `GET /tabelas/:id/historico` sob o módulo `precos`; o plano anterior
 usava `/publicacoes`. Vale a matriz — nenhuma divergência nova é aberta. A **tabela** continua
 chamando-se `tabelas_preco_publicacoes` (é o log de publicação/reversão); só a rota se alinha.
+
+**D31 — A herança representante → rota no fluxo de pedido é implementada, não deixada como
+informativa.** A coluna "Lacuna" da **linha 3 da matriz** pede literalmente *"herança automática
+representante→rota no fluxo de pedido"*. Esta onda a fecha; **nenhuma divergência nova é aberta**
+(continuam 7). Regra, com o schema real e sem coluna nova:
+
+- **Rota** — `pedidos_venda.rota_prevista` é `TEXT` (`pedidos.schema.ts:21`). No `criar`, quando
+  `dto.rotaPrevista` **não** é enviado, o backend copia `rotas.nome` da rota do cliente
+  (`clientes.rota_id`, coluna criada no 0016 por D23). Cliente sem rota mantém `rota_prevista`
+  `NULL` — campo vazio na tela, nunca texto fabricado (RA-06). Enviar `rotaPrevista` explicitamente
+  continua sobrepondo a herança (o vendedor pode desviar a entrega do itinerário padrão).
+- **Representante** — **não** é copiado para `pedidos_venda`. Não existe
+  `pedidos_venda.representante_id` e criá-la duplicaria o dado: o representante do pedido é o do
+  cliente, via `clientes.representante_id` (coluna já existente, `clientes.schema.ts:10`). É a
+  mesma origem que o Espelho e o filtro do Pedido já usam por D26 — uma fonte só, sem divergir
+  quando o cadastro do cliente muda. `detalhar`/`listar` devolvem o representante por `join`.
+
+Código literal, no `criar` de `pedidos.service.ts`, dentro da transação e **depois** da checagem
+AD-03 (é leitura, não muta nada) e **antes** do `tx.insert(pedidosVenda)`:
+
+```ts
+/**
+ * Herança do cadastro do cliente para o pedido (matriz linha 3 / D31).
+ * Rota: copiada de clientes.rota_id → rotas.nome quando o DTO não a informa.
+ * Representante: NÃO é copiado — é derivado de clientes.representante_id na leitura.
+ */
+private async rotaHerdadaDoCliente(tx: Tx, clienteId: string): Promise<string | null> {
+  const [linha] = await tx
+    .select({ nomeRota: rotas.nome })
+    .from(clientes)
+    .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
+    .where(and(eq(clientes.id, clienteId), isNull(clientes.deletedAt)))
+    .limit(1);
+  if (!linha) throw new NotFoundException('Cliente não encontrado');
+  return linha.nomeRota ?? null;
+}
+```
+
+```ts
+// criar — substitui `rotaPrevista: dto.rotaPrevista` no values do insert.
+rotaPrevista: dto.rotaPrevista ?? (await this.rotaHerdadaDoCliente(tx, dto.clienteId)),
+```
+
+E na leitura (`detalhar`, hoje `pedidos.service.ts:118-128`), o representante entra como campo
+derivado ao lado do cliente já carregado, sem `select` extra na tela:
+
+```ts
+const [heranca] = await this.db
+  .select({
+    representanteId: clientes.representanteId,
+    representanteNome: representantes.nome,
+    rotaId: clientes.rotaId,
+    rotaNome: rotas.nome,
+  })
+  .from(clientes)
+  .leftJoin(representantes, eq(clientes.representanteId, representantes.id))
+  .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
+  .where(eq(clientes.id, pedido.clienteId))
+  .limit(1);
+return { ...pedido, heranca: heranca ?? null };
+```
+
+`listar` recebe os mesmos dois `leftJoin` para alimentar a coluna Representante da lista e o filtro
+por representante. Fixado por **DoD-119** (backend) e **DoD-120** (UI).
 
 ---
 
@@ -556,6 +637,7 @@ app/backend/src/realtime/events/eventos.ts            (+3 eventos e payloads)
 app/backend/src/modules/comercial/pedidos/pedidos.module.ts     (+ AdendosService)
 app/backend/src/modules/comercial/pedidos/pedidos.controller.ts (+4 rotas)
 app/backend/src/modules/comercial/pedidos/pedidos.service.ts    (AD-03, AD-06, rascunho,
+                                                                 herança representante/rota (D31),
                                                                  export de desafiosParaChallenge,
                                                                  extração de aplicarAlocacaoNoItem
                                                                  e dos helpers de adendo)
@@ -622,6 +704,7 @@ app/frontend/src/app/(admin)/comercial/tabela-precos/page.tsx   (deixa de ser pl
 app/frontend/src/app/(admin)/comercial/disponibilidade/page.tsx (mapa + grade)
 app/frontend/src/app/(admin)/comercial/espelho/page.tsx         (deixa de ser placeholder)
 app/frontend/src/lib/comercial.ts                                (tipos de adendo/mapa/rascunho)
+app/frontend/__tests__/menu-rbac.test.ts       (+ teste nomeado de DoD-113 — Task 3, passo 6)
 app/frontend/e2e/jornada-operacional.spec.ts   (dívida 9 da Onda 3 + fim da rota `/pedidos/novo`)
 app/frontend/e2e/telas-migradas.spec.ts                          (dívida 9 da Onda 3)
 app/frontend/e2e/telas-reais.spec.ts                             (dívida 9 da Onda 3)
@@ -691,7 +774,7 @@ via `test/helpers/test-app.ts`.
 | # | Regra (DoD) | Teste que falharia |
 |---|---|---|
 | DoD-98 | Mapa agrega exatamente os 8 estados `F/V/R/C/D/O/E/!` | `app/backend/test/integration/mapa-disponibilidade.e2e-spec.ts` › `mapa agrega os oito estados F V R C D O E e ocorrencia` |
-| DoD-99 | Cada estado sai do SQL de D17 (peça pesada livre = F, carga fechada = E, etc.) | `app/backend/test/integration/mapa-disponibilidade.e2e-spec.ts` › `deriva cada estado da tabela de origem correta` |
+| DoD-99 | Cada estado sai do SQL de D17 (peça pesada livre = F; carga fechada = E contando item `conferido` **e** `em_carga` e excluindo `removido`; etc.) | `app/backend/test/integration/mapa-disponibilidade.e2e-spec.ts` › `deriva cada estado da tabela de origem correta` |
 | DoD-100 | Drill-down devolve as unidades reais do estado clicado | `app/backend/test/integration/mapa-disponibilidade.e2e-spec.ts` › `drill-down devolve as unidades reais do estado selecionado` |
 | DoD-101 | O catálogo do mapa é o MVP seedado, nunca o catálogo legado da Grade do protótipo | `app/frontend/__tests__/onda4-disponibilidade.test.tsx` › `mapa usa o catalogo MVP e nao contem o catalogo legado da grade do prototipo` |
 | DoD-102 | Seed cria os 11 pares item comercial/produto com `legado_item_comercial_id` 1:1 e é idempotente | `app/backend/test/integration/seed-catalogo-mvp.e2e-spec.ts` › `seed cria onze pares item comercial e produto vinculados um para um` |
@@ -711,18 +794,21 @@ via `test/helpers/test-app.ts`.
 
 | # | Regra (DoD) | Teste que falharia |
 |---|---|---|
-| DoD-109 | Nenhuma das 5 rotas é `PlaceholderPage` | `app/frontend/__tests__/onda4-rotas.test.tsx` › `as cinco rotas comerciais nao renderizam PlaceholderPage` |
+| DoD-109 | Nenhuma das 5 rotas é `PlaceholderPage` | `app/frontend/__tests__/onda4-rotas.test.tsx` › `as cinco rotas comerciais nao renderizam PlaceholderPage` (teste **escrito** na Task 20, passo 1) |
 | DoD-110 | Nenhum literal hexadecimal de cor fora de `globals.css` | `app/frontend/__tests__/tokens-ds.test.ts` › `nenhum literal hexadecimal de cor em src fora de globals.css` |
 | DoD-111 | Nenhum componente chama o backend direto — só BFF (RA-01) | `app/frontend/__tests__/bff-onda4.test.ts` › `nenhuma tela da onda 4 chama o backend fora do BFF` |
-| DoD-112 | A palavra banida não aparece em nenhum arquivo da onda | `app/frontend/__tests__/onda4-rotas.test.tsx` › `nenhum arquivo da onda 4 usa o termo banido como rotulo` |
-| DoD-113 | Menu por perfil continua igual à matriz após as permissões novas | `app/frontend/__tests__/menu-rbac.test.ts` › `menus visiveis por perfil batem com a matriz` |
+| DoD-112 | A palavra banida não aparece em nenhum arquivo da onda | `app/frontend/__tests__/onda4-rotas.test.tsx` › `nenhum arquivo da onda 4 usa o termo banido como rotulo` (teste **escrito** na Task 20, passo 2) |
+| DoD-113 | Menu por perfil continua igual à matriz após as permissões novas | `app/frontend/__tests__/menu-rbac.test.ts` › `menus visiveis por perfil batem com a matriz apos as permissoes da onda 4` (teste **escrito** na Task 3, passo 6) |
 | DoD-114 | Cobertura backend ≥ 80% linha e branch | `npm run test:cov` (gate do CI, job `coverage`) |
-| DoD-115 | O legado de pedido não existe mais: sem `pedido-venda-client.tsx`, sem rota `/comercial/pedidos/novo` | `app/frontend/__tests__/onda4-rotas.test.tsx` › `o cliente legado de pedido e a rota novo nao existem mais` |
+| DoD-115 | O legado de pedido não existe mais: sem `pedido-venda-client.tsx`, sem rota `/comercial/pedidos/novo` | `app/frontend/__tests__/onda4-rotas.test.tsx` › `o cliente legado de pedido e a rota novo nao existem mais` (teste **escrito** na Task 16, passo 1) |
 | DoD-116 | `adendos_pedido.origem_consumo` é derivado do déficit do plano (D27), nunca de campo inexistente | `app/backend/test/unit/adendos.service.spec.ts` › `origem do adendo e virtual sem deficit e overbooking com deficit` |
 | DoD-117 | As 4 permissões novas entram no catálogo, nas descrições e no snapshot de perfis | `app/backend/test/unit/permissoes-onda4.spec.ts` › `perfis recebem as quatro permissoes novas da onda 4` |
 | DoD-118 | Os 3 eventos novos existem no catálogo com payload tipado | `app/backend/test/unit/eventos-onda4.spec.ts` › `catalogo expoe os tres eventos da onda 4` |
+| DoD-119 | **Linha 3 da matriz / D31**: o pedido herda a rota do cliente quando o DTO não a informa, mantém `null` se o cliente não tem rota, e o representante vem de `clientes.representante_id` | `app/backend/test/integration/pedidos-onda4.e2e-spec.ts` › `pedido herda rota do cliente e expoe o representante do cadastro` |
+| DoD-120 | **Linha 3 da matriz / D31**: selecionar o cliente no editor preenche Representante e Rota a partir do cadastro, sem lista fixa e sem valor fabricado | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `selecionar cliente herda representante e rota do cadastro no editor de pedido` |
+| DoD-121 | Criar pedido em data **sem operação ativa** não executa AD-03 e cria a operação do dia; a busca de pedido aberto em data sem operação devolve `404 OPERACAO_NAO_ENCONTRADA` | `app/backend/test/integration/pedidos-onda4.e2e-spec.ts` › `criar em data sem operacao nao checa AD-03 e cria a operacao do dia` |
 
-**49 itens de DoD** (DoD-70 a DoD-118), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
+**52 itens de DoD** (DoD-70 a DoD-121), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
 do CI.
 
 ---
@@ -911,7 +997,7 @@ ALTER TABLE "clientes" DROP COLUMN IF EXISTS "rota_padrao";
 **Files:** `app/backend/src/common/rbac/permissoes.ts`,
 `app/backend/src/common/rbac/perfil-permissoes.snapshot.json`,
 `app/backend/test/unit/permissoes-onda4.spec.ts`,
-`app/frontend/__tests__/menu-rbac.test.ts` (verificação).
+`app/frontend/__tests__/menu-rbac.test.ts` (teste nomeado de DoD-113).
 
 **Steps (TDD)**
 
@@ -979,7 +1065,39 @@ pushPermissoes('expedicao', 'ESPELHO_COMERCIAL_LER');
 
 5. Regerar o snapshot de perfis: `cd app/backend && npm run rbac:snapshot`. Sem isso,
    `test/unit/perfil-permissoes-snapshot.spec.ts` falha com as permissões novas.
-6. Rodar `npm run db:seed` e confirmar que `menu-rbac.test.ts` continua verde (DoD-113).
+6. **Escrever** o teste de DoD-113 em `app/frontend/__tests__/menu-rbac.test.ts` — hoje esse
+   arquivo **não** tem nenhum `it(...)` com esse nome (os existentes são `zero perdas: …`,
+   `zero extras: …`, `menus_visiveis do perfil sao exatamente os da matriz: %s`, entre outros,
+   em `menu-rbac.test.ts:161-270`). O teste novo entra no fim do `describe` já existente e usa os
+   helpers do próprio arquivo (`PERFIS`, `MATRIZ_RASTREABILIDADE`, `rotasVisiveis`,
+   `PERMISSOES_POR_PERFIL`), sem import novo além do snapshot já lido no topo:
+
+```ts
+it('menus visiveis por perfil batem com a matriz apos as permissoes da onda 4', () => {
+  // As 4 permissões da Onda 4 são de API, não de menu: o menu por perfil não pode se mexer.
+  for (const perfil of PERFIS) {
+    expect(rotasVisiveis(perfil).sort()).toEqual(menusDaMatriz(perfil));
+  }
+  expect(ROTAS_CANONICAS).toHaveLength(39);
+  expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(126);
+
+  // E as permissões novas chegaram ao snapshot, nos perfis de D21.
+  const novas = [
+    'TABELA_PRECO_LER', 'TABELA_PRECO_GERENCIAR',
+    'ESPELHO_COMERCIAL_LER', 'PEDIDO_RESERVA_LIBERAR',
+  ];
+  expect(PERMISSOES_POR_PERFIL.administrador).toEqual(expect.arrayContaining(novas));
+  expect(PERMISSOES_POR_PERFIL.gestor).toEqual(expect.arrayContaining(novas));
+  expect(PERMISSOES_POR_PERFIL.comercial)
+    .toEqual(expect.arrayContaining(['TABELA_PRECO_LER', 'ESPELHO_COMERCIAL_LER']));
+  expect(PERMISSOES_POR_PERFIL.comercial).not.toContain('PEDIDO_RESERVA_LIBERAR');
+  expect(PERMISSOES_POR_PERFIL.expedicao).toContain('ESPELHO_COMERCIAL_LER');
+});
+```
+
+   Ele roda **depois** do passo 5: sem `npm run rbac:snapshot`, `perfil-permissoes.snapshot.json`
+   ainda não tem as 4 permissões e este teste falha — que é exatamente o comportamento desejado.
+7. Rodar `npm run db:seed` e a suíte `menu-rbac.test.ts` inteira até verde.
 
 **Commit:** `feat(onda4): permissões de tabela de preços, espelho e liberação de reserva`
 
@@ -1136,16 +1254,17 @@ não existir depois do insert, o seed falha explicitamente em vez de inventar id
 
 ---
 
-## Task 6 — Unicidade AD-03 no backend
+## Task 6 — Unicidade AD-03 e herança do cadastro no backend
 
 **Files:** `pedidos.service.ts`, `pedidos.controller.ts`, `pedido.dto.ts`,
 `app/backend/test/integration/pedidos-onda4.e2e-spec.ts`.
 
 **Steps (TDD)**
 
-1. Testes primeiro (DoD-78, DoD-79), em `test/integration/pedidos-onda4.e2e-spec.ts` — precisam de
-   banco, então usam `createTestApp` + `seedComercialBase` (`test/helpers/`) e o service resolvido
-   do container:
+1. Testes primeiro (DoD-78, DoD-79, DoD-119 e DoD-121), em
+   `test/integration/pedidos-onda4.e2e-spec.ts` — precisam de banco, então usam `createTestApp` +
+   `seedComercialBase` (`test/helpers/`) e o service resolvido do container. Os dois primeiros
+   ficam aqui; os corpos de DoD-121 e DoD-119 estão nos passos 6 e 7:
 
 ```ts
 const service = app.get(PedidosService);
@@ -1207,17 +1326,153 @@ private async exigirUnicidadeAd03(
 
    `ne` entra na lista de imports de `drizzle-orm` do arquivo (hoje:
    `and, desc, eq, inArray, isNull, notInArray, sql`).
-3. Chamar `exigirUnicidadeAd03` em `criar` (logo depois de `encontrarAtivaPorData`, ainda no trecho
-   read-only, antes de `garantirOperacao`), em `incluirItemTransacional` (passando o próprio
-   `pedidoId` como ignorado, antes do `planejarSobLock`) e, por consequência, nos dois caminhos de
-   confirmação de overbooking, que reusam esses dois métodos com `confirmado = true`. Nenhuma
-   mutação pode existir antes da checagem.
-4. Expor `GET /comercial/pedidos/aberto?clienteId&itemComercialId&operacaoId`, que devolve o pedido
-   aberto e a quantidade atual (payload do `ModalAdendo`) ou `null`. **Declarar este handler antes
-   de `@Get(':id')`** no `PedidosController`, senão o Nest resolve `aberto` como `:id` e o
-   `ParseUUIDPipe`/`detalhar` quebra.
+3. **Caminho explícito quando não existe operação na data.** `exigirUnicidadeAd03` recebe
+   `operacaoId: string` (não `string | null`), mas em `criar` o valor vem de
+   `this.operacoes.encontrarAtivaPorData(tx, dto.dataOperacao)`, que **devolve `null` quando não há
+   operação ativa naquela data** (`operacoes.service.ts:94-99`). O plano fixa os dois ramos por
+   extenso; nenhum deles fica implícito e nenhum deles alarga a assinatura:
 
-**Commit:** `feat(onda4): unicidade AD-03 de pedido aberto por cliente, produto e operação`
+```ts
+// pedidos.service.ts › criar — depois de encontrarAtivaPorData, antes de planejarSobLock.
+// Sem operação ativa na data não pode existir pedido aberto para checar: pedidos_venda.operacao_id
+// é NOT NULL e FK para operacoes(id), logo o conjunto de conflitos é provadamente vazio.
+// A operação é criada logo abaixo por garantirOperacao (primeiro pedido do dia).
+if (operacaoExistente) {
+  await this.exigirUnicidadeAd03(
+    tx,
+    dto.clienteId,
+    operacaoExistente.id,
+    solicitados.map((s) => s.itemComercialId),
+  );
+}
+```
+
+   **Por que não é `throw` aqui.** Um `404`/`400` neste ponto quebraria o primeiro pedido de cada
+   data: `criar` cria a operação sob demanda via `garantirOperacao`
+   (`pedidos.service.ts:150-153`), e o próprio DoD-79 exercita duas datas novas (`2026-08-01` e
+   `2026-08-02`) — com `throw`, o teste nomeado do mapa DoD falharia por construção. O `throw`
+   explícito existe, porém, nos caminhos em que a operação é **entrada** e não pode ser inventada
+   (passo 4 e passo 5). DoD-121 fixa este ramo em teste.
+4. Nos demais chamadores a operação é dado persistido, nunca nulo: `incluirItemTransacional` e os
+   dois caminhos de confirmação de overbooking carregam o pedido antes, e
+   `pedidos_venda.operacao_id` é `NOT NULL`. Ainda assim, a leitura é explícita e falha alto se o
+   invariante for violado:
+
+```ts
+// pedidos.service.ts › incluirItemTransacional — antes do planejarSobLock, sem mutação anterior.
+if (!pedido.operacaoId) {
+  throw new ConflictException({
+    code: 'PEDIDO_SEM_OPERACAO',
+    message: 'Pedido sem operação vinculada; não é possível validar a unicidade AD-03.',
+  });
+}
+await this.exigirUnicidadeAd03(
+  tx, pedido.clienteId, pedido.operacaoId, [dto.itemComercialId], pedido.id,
+);
+```
+
+5. Expor `GET /comercial/pedidos/aberto?clienteId&itemComercialId&dataOperacao`, que devolve o
+   pedido aberto e a quantidade atual (payload do `ModalAdendo`) ou `null`. O parâmetro é
+   `dataOperacao` (e não `operacaoId`) porque é isso que o `PedidoEditor` tem em mãos — é o mesmo
+   campo de `CreatePedidoDto` (`pedido.dto.ts:35`). Aqui a resolução da operação é entrada do
+   usuário e o ramo nulo é **404 explícito**:
+
+```ts
+export const buscarPedidoAbertoSchema = z.object({
+  clienteId: z.string().uuid(),
+  itemComercialId: z.string().uuid(),
+  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dataOperacao deve ser YYYY-MM-DD'),
+});
+
+async buscarAberto(query: BuscarPedidoAbertoDto) {
+  return this.db.transaction(async (tx) => {
+    const operacao = await this.operacoes.encontrarAtivaPorData(tx, query.dataOperacao);
+    if (!operacao) {
+      throw new NotFoundException({
+        code: 'OPERACAO_NAO_ENCONTRADA',
+        message: `Não existe operação ativa em ${query.dataOperacao}.`,
+      });
+    }
+    const [aberto] = await tx
+      .select({
+        pedidoId: pedidosVenda.id,
+        status: pedidosVenda.status,
+        itemComercialId: pedidosVendaItens.itemComercialId,
+        quantidadeAtual: pedidosVendaItens.quantidadePedida,
+      })
+      .from(pedidosVendaItens)
+      .innerJoin(pedidosVenda, eq(pedidosVendaItens.pedidoVendaId, pedidosVenda.id))
+      .where(and(
+        eq(pedidosVenda.clienteId, query.clienteId),
+        eq(pedidosVenda.operacaoId, operacao.id),
+        eq(pedidosVendaItens.itemComercialId, query.itemComercialId),
+        inArray(pedidosVenda.status, [...PedidosService.STATUS_ABERTOS]),
+        isNull(pedidosVenda.deletedAt),
+        isNull(pedidosVendaItens.deletedAt),
+      ))
+      .limit(1);
+    return aberto ?? null;
+  });
+}
+```
+
+   **Declarar este handler antes de `@Get(':id')`** no `PedidosController`, senão o Nest resolve
+   `aberto` como `:id` e o `ParseUUIDPipe`/`detalhar` quebra.
+6. Teste do ramo nulo (DoD-121), em `test/integration/pedidos-onda4.e2e-spec.ts`:
+
+```ts
+it('criar em data sem operacao nao checa AD-03 e cria a operacao do dia', async () => {
+  const pedido = await service.criar({ ...dtoBase, dataOperacao: '2026-08-09' }, usuarioId);
+  expect(pedido.operacaoId).toEqual(expect.any(String));
+  await expect(service.buscarAberto({
+    clienteId: dtoBase.clienteId,
+    itemComercialId: dtoBase.itens[0].itemComercialId,
+    dataOperacao: '2026-08-10',
+  })).rejects.toMatchObject({
+    status: 404,
+    response: expect.objectContaining({ code: 'OPERACAO_NAO_ENCONTRADA' }),
+  });
+});
+```
+
+7. **Herança representante → rota no fluxo de pedido (D31).** Aplicar os três blocos literais de
+   D31: `rotaHerdadaDoCliente`, a linha `rotaPrevista:` do `insert` em `criar` e os dois
+   `leftJoin` de `detalhar`/`listar`. É a lacuna aberta da linha 3 da matriz e é fechada aqui, no
+   backend (RA-01) — o frontend só renderiza (Task 15, DoD-120). Teste de DoD-119:
+
+```ts
+it('pedido herda rota do cliente e expoe o representante do cadastro', async () => {
+  // Cliente com rota e representante no cadastro; DTO sem rotaPrevista.
+  const comHeranca = await service.criar(
+    { ...dtoBase, clienteId: ctx.clienteComRotaId, rotaPrevista: undefined }, usuarioId,
+  );
+  expect(comHeranca.rotaPrevista).toBe(ctx.nomeRotaDoCliente);
+  const detalhe = await service.detalhar(comHeranca.id);
+  expect(detalhe.heranca).toMatchObject({
+    representanteId: ctx.representanteId,
+    representanteNome: ctx.nomeRepresentante,
+    rotaNome: ctx.nomeRotaDoCliente,
+  });
+
+  // rotaPrevista explícita sobrepõe a herança.
+  const comDesvio = await service.criar(
+    { ...dtoBase, clienteId: ctx.clienteComRotaId, dataOperacao: '2026-08-03',
+      rotaPrevista: 'Entrega direta' }, usuarioId,
+  );
+  expect(comDesvio.rotaPrevista).toBe('Entrega direta');
+
+  // Cliente sem rota no cadastro fica null — nada é fabricado (RA-06).
+  const semRota = await service.criar(
+    { ...dtoBase, clienteId: ctx.clienteSemRotaId, dataOperacao: '2026-08-04',
+      rotaPrevista: undefined }, usuarioId,
+  );
+  expect(semRota.rotaPrevista).toBeNull();
+});
+```
+
+   `clientes`, `rotas` e `representantes` entram nos imports de schema de `pedidos.service.ts`.
+
+**Commit:** `feat(onda4): unicidade AD-03 e herança de representante e rota no pedido`
 
 ---
 
@@ -1873,8 +2128,118 @@ async publicar(id: string, dto: PublicarTabelaPrecoDto, usuarioId: string) {
 }
 ```
 
-   `salvarItens` faz o upsert e, se a tabela estava `publicada`, volta para `rascunho` gravando
-   `revertida_para_rascunho` em `tabelas_preco_publicacoes` (D16).
+   `salvarItens` faz o upsert dos preços e, se a tabela estava `publicada`, devolve ao `rascunho`
+   gravando `revertida_para_rascunho` no histórico (D16) — tudo na mesma transação:
+
+```ts
+async salvarItens(id: string, dto: SalvarItensTabelaPrecoDto, usuarioId: string) {
+  await this.db.transaction(async (tx) => {
+    const tabela = await this.exigirTabela(tx, id);
+    for (const item of dto.itens) {
+      await tx.insert(tabelasPrecoItens)
+        .values({
+          tabelaPrecoId: id,
+          produtoId: item.produtoId,
+          precoA: item.precoA ?? null, precoB: item.precoB ?? null,
+          precoC: item.precoC ?? null, precoD: item.precoD ?? null,
+        })
+        .onConflictDoUpdate({
+          // uq_tabelas_preco_itens_produto é índice TOTAL (a tabela é linha-filha e não tem
+          // deleted_at, ver 0016) — logo não leva targetWhere, ao contrário de uq_tabelas_preco_data.
+          target: [tabelasPrecoItens.tabelaPrecoId, tabelasPrecoItens.produtoId],
+          set: {
+            precoA: item.precoA ?? null, precoB: item.precoB ?? null,
+            precoC: item.precoC ?? null, precoD: item.precoD ?? null,
+            updatedAt: new Date(),
+          },
+        });
+    }
+    if (tabela.status === 'publicada') {
+      await tx.update(tabelasPreco)
+        .set({ status: 'rascunho', publicadaPor: null, publicadaEm: null, updatedAt: new Date() })
+        .where(eq(tabelasPreco.id, id));
+      await tx.insert(tabelasPrecoPublicacoes).values({
+        tabelaPrecoId: id, acao: 'revertida_para_rascunho', autorId: usuarioId,
+        observacao: 'Edição de tabela publicada (D16).',
+      });
+    }
+    await this.auditoria.registrar(tx, {
+      tabela: 'tabelas_preco', registroId: id, operacao: 'UPDATE',
+      modulo: 'comercial.precos', usuarioId,
+      dadosAnteriores: { status: tabela.status },
+      dadosNovos: { status: 'rascunho', produtosAlterados: dto.itens.map((i) => i.produtoId) },
+    });
+  });
+  return this.detalhar(id);
+}
+```
+
+   Os três helpers que `criar`, `publicar` e `salvarItens` chamam, por extenso — nenhum é citado
+   sem corpo:
+
+```ts
+/** Preços da última tabela publicada, indexados por produto. Vazio se nunca houve publicação. */
+private async precosDaUltimaPublicada(
+  tx: Tx,
+): Promise<Map<string, { precoA: string | null; precoB: string | null;
+                         precoC: string | null; precoD: string | null }>> {
+  const [ultima] = await tx.select({ id: tabelasPreco.id }).from(tabelasPreco)
+    .where(and(eq(tabelasPreco.status, 'publicada'), isNull(tabelasPreco.deletedAt)))
+    .orderBy(desc(tabelasPreco.data))
+    .limit(1);
+  if (!ultima) return new Map();
+  const linhas = await tx
+    .select({
+      produtoId: tabelasPrecoItens.produtoId,
+      precoA: tabelasPrecoItens.precoA, precoB: tabelasPrecoItens.precoB,
+      precoC: tabelasPrecoItens.precoC, precoD: tabelasPrecoItens.precoD,
+    })
+    .from(tabelasPrecoItens)
+    .where(eq(tabelasPrecoItens.tabelaPrecoId, ultima.id));
+  return new Map(linhas.map((l) => [l.produtoId, {
+    precoA: l.precoA, precoB: l.precoB, precoC: l.precoC, precoD: l.precoD,
+  }]));
+}
+
+/** Carrega a tabela sob lock de linha ou falha alto. Nunca devolve undefined mascarado. */
+private async exigirTabela(tx: Tx, id: string) {
+  const [tabela] = await tx.select().from(tabelasPreco)
+    .where(and(eq(tabelasPreco.id, id), isNull(tabelasPreco.deletedAt)))
+    .for('update')
+    .limit(1);
+  if (!tabela) throw new NotFoundException('Tabela de preços não encontrada');
+  return tabela;
+}
+
+/** Leitura da tabela com a grade completa e o histórico. Preço ausente permanece null (RA-06). */
+async detalhar(id: string) {
+  const [tabela] = await this.db.select().from(tabelasPreco)
+    .where(and(eq(tabelasPreco.id, id), isNull(tabelasPreco.deletedAt)))
+    .limit(1);
+  if (!tabela) throw new NotFoundException('Tabela de preços não encontrada');
+  const itens = await this.db
+    .select({
+      produtoId: produtos.id,
+      codigo: produtos.codigo,
+      nome: produtos.nome,
+      unidadePreco: produtos.unidadePreco,
+      provisorio: sql<boolean>`coalesce((${produtos.atributosJson}->>'provisorio')::boolean, false)`,
+      precoA: tabelasPrecoItens.precoA, precoB: tabelasPrecoItens.precoB,
+      precoC: tabelasPrecoItens.precoC, precoD: tabelasPrecoItens.precoD,
+    })
+    .from(tabelasPrecoItens)
+    .innerJoin(produtos, eq(tabelasPrecoItens.produtoId, produtos.id))
+    .where(eq(tabelasPrecoItens.tabelaPrecoId, id))
+    .orderBy(asc(produtos.codigo));
+  const historico = await this.db.select().from(tabelasPrecoPublicacoes)
+    .where(eq(tabelasPrecoPublicacoes.tabelaPrecoId, id))
+    .orderBy(desc(tabelasPrecoPublicacoes.criadoEm));
+  return { ...tabela, itens, historico };
+}
+```
+
+   `asc`, `desc`, `or` e `sql` entram nos imports de `drizzle-orm` do arquivo; `NotFoundException`
+   e `BadRequestException`, nos de `@nestjs/common`.
 4. Controller `@Controller('precos/tabelas')`, com `@UseGuards(JwtAuthGuard, RbacGuard)` e
    `@RequirePermissoes('…')` no padrão de `PedidosController`. Rotas: `GET /precos/tabelas`,
    `GET /precos/tabelas/:id`, `POST /precos/tabelas`, `PATCH /precos/tabelas/:id/itens`,
@@ -1901,6 +2266,40 @@ async publicar(id: string, dto: PublicarTabelaPrecoDto, usuarioId: string) {
    `test/helpers/onda4-fixtures.ts` que produzem pelo menos uma linha em cada estado de D17
    (peça pesada livre, saldo virtual, reserva de rascunho, reserva de pedido finalizado, peça
    `para_corte`, reserva de overbooking, item em caminhão `fechado`, peça `divergente`).
+
+   Para o estado **E**, a fixture é obrigatoriamente de três linhas em `carga_itens` do mesmo
+   caminhão `fechado`, cobrindo os três valores de `chk_carga_itens_status` (nota de D17):
+
+```ts
+/** Estado E — dois itens vivos (um já conferido) e um removido, no mesmo caminhão fechado. */
+export async function semearCargaFechadaParaMapa(db: Db, ctx: CtxFixture) {
+  await db.insert(cargaItens).values([
+    { caminhaoId: ctx.caminhaoFechadoId, tipoOrigem: 'peca',    pecaId: ctx.pecaConferidaId,
+      pedidoVendaId: ctx.pedidoId, pedidoVendaItemId: ctx.pedidoItemId,
+      statusCargaItem: 'conferido', conferido: true },
+    { caminhaoId: ctx.caminhaoFechadoId, tipoOrigem: 'subitem', subitemId: ctx.subitemEmCargaId,
+      pedidoVendaId: ctx.pedidoId, pedidoVendaItemId: ctx.pedidoItemId,
+      statusCargaItem: 'em_carga',  conferido: false },
+    { caminhaoId: ctx.caminhaoFechadoId, tipoOrigem: 'peca',    pecaId: ctx.pecaRemovidaId,
+      pedidoVendaId: ctx.pedidoId, pedidoVendaItemId: ctx.pedidoItemId,
+      statusCargaItem: 'removido',  conferido: false, observacoes: 'trocada antes do fechamento' },
+  ]);
+}
+```
+
+   E a asserção de DoD-99 para E pega o erro exato que a emenda corrige — o item `'conferido'`
+   **conta**, o `'removido'` **não**:
+
+```ts
+it('deriva cada estado da tabela de origem correta', async () => {
+  const mapa = await service.consultar(ctx.operacaoId);
+  const linha = mapa.find((l) => l.itemComercialId === ctx.itemComercialId)!;
+  // peça conferida + subitem em carga; a peça removida fica fora.
+  expect(linha.unidades.E).toBe(2);
+  expect(linha.estados.E).toBe(somarQtd(ctx.pesoPecaConferida, ctx.pesoSubitemEmCarga));
+  // ... demais estados F/V/R/C/D/O/! na mesma asserção
+});
+```
 2. DTO e contrato — o parâmetro é `operacaoId` (matriz linha 6:
    `GET /comercial/disponibilidade/mapa?operacaoId=`), que é a chave usada pelos 8 SQL de D17:
 
@@ -2168,24 +2567,49 @@ it('clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente', async
    `pedido-venda-client.tsx`: aquele arquivo é o legado que sai na Task 16 (D29). `pedidos/page.tsx`
    passa a renderizar `<PedidosClient …/>` sem a prop `modo`, porque lista e editor convivem na
    mesma rota, como no protótipo.
-2. Testes primeiro (DoD-87 a DoD-90).
+2. Testes primeiro (DoD-87 a DoD-90 e DoD-120).
 3. Lista de pedidos com os filtros, contadores e pílulas do protótipo, usando
    `rotuloStatusPedido(status, temReservaAtiva)`.
 4. `PedidoEditor`: seleção de cliente (campo **"Buscar cliente"**), seletor de produto, quantidade,
    tabela de itens com coluna **Origem** (`Físico` | `Virtual` | `Overbooking`), rodapé com "Salvar
    Rascunho" (`salvarComoRascunho: true`) e "Finalizar Pedido" (`POST /:id/finalizar`).
-5. `ModalOverbooking` renderiza **apenas** os números do `409`
+5. **Herança representante → rota no editor (D31 / linha 3 da matriz).** Ao escolher o cliente em
+   "Buscar cliente", o editor exibe **Representante** (somente leitura, vindo de
+   `heranca.representanteNome`) e **Rota** (pré-preenchida com `heranca.rotaNome`, editável — o
+   valor digitado vai como `rotaPrevista` e sobrepõe a herança no backend). Nenhum dos dois é
+   calculado no cliente: os dois vêm do payload do BFF (RA-01). Cliente sem representante ou sem
+   rota renderiza campo vazio com `placeholder="—"`, nunca texto fabricado (RA-06). Teste de
+   DoD-120:
+
+```tsx
+it('selecionar cliente herda representante e rota do cadastro no editor de pedido', async () => {
+  render(<PedidosClient {...props} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Novo pedido' }));
+  await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/ }));
+
+  expect(await screen.findByLabelText('Representante')).toHaveValue('Helena Prado');
+  expect(screen.getByLabelText('Representante')).toHaveAttribute('readonly');
+  expect(screen.getByLabelText('Rota')).toHaveValue('Rota Oeste');
+
+  // Cliente sem rota no cadastro não inventa itinerário.
+  await userEvent.click(screen.getByRole('option', { name: /Mercado Sem Rota/ }));
+  expect(screen.getByLabelText('Rota')).toHaveValue('');
+});
+```
+
+6. `ModalOverbooking` renderiza **apenas** os números do `409`
    (`disponivelAntes`, `quantidadeSolicitada`, `overbookingGerado`); nada é recalculado no cliente.
    Confirmar chama a rota de confirmação da Onda 1.
-6. `ModalAdendo` abre quando o `409` é `PEDIDO_ABERTO_EXISTENTE`, mostra o pedido aberto e a
-   quantidade atual, pede motivo e chama `POST /:id/adendos`. Rodapé com badge
-   `Provisório · P5` e o texto de D9.
-7. `ModalLiberarReserva` aparece na linha em rascunho com reserva ativa, exige justificativa de 10+
+7. `ModalAdendo` abre quando o `409` é `PEDIDO_ABERTO_EXISTENTE`, mostra o pedido aberto e a
+   quantidade atual, pede motivo e chama `POST /:id/adendos`. O pedido aberto vem de
+   `GET /api/comercial/pedidos/aberto?clienteId&itemComercialId&dataOperacao` (Task 6, passo 5).
+   Rodapé com badge `Provisório · P5` e o texto de D9.
+8. `ModalLiberarReserva` aparece na linha em rascunho com reserva ativa, exige justificativa de 10+
    caracteres e chama `POST /:id/liberar-reserva`. O botão só é renderizado se o usuário tem
    `PEDIDO_RESERVA_LIBERAR` (o `403` também é tratado).
-8. Linha do tempo do pedido (`HistoricoEntry`) alimentada por `GET /:id/adendos` + auditoria do
+9. Linha do tempo do pedido (`HistoricoEntry`) alimentada por `GET /:id/adendos` + auditoria do
    pedido.
-9. Assinar `ADENDO_REGISTRADO` e `RESERVA_LIBERADA_ADMIN` via `conectarRealtime` — sem polling.
+10. Assinar `ADENDO_REGISTRADO` e `RESERVA_LIBERADA_ADMIN` via `conectarRealtime` — sem polling.
 
 **Commit:** `feat(onda4): tela de pedidos com editor, overbooking, adendo e liberação de reserva`
 
@@ -2199,8 +2623,10 @@ it('clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente', async
 `app/frontend/e2e/jornada-operacional.spec.ts`,
 `app/frontend/__tests__/onda4-rotas.test.tsx`.
 
-Executada **depois** da Task 15 (a tela nova já existe) e **antes** da Task 20 (que realinha os
-specs herdados), para que o E2E nunca navegue para uma rota que acabou de sumir.
+Executada **depois** da Task 15 (a tela nova já existe) e **antes** da Task 21 (que realinha os
+specs herdados), para que o E2E nunca navegue para uma rota que acabou de sumir. Esta task **cria**
+`onda4-rotas.test.tsx` com o teste de DoD-115; os outros dois testes do arquivo (DoD-109 e DoD-112)
+são escritos na Task 20, depois que as 5 telas existem.
 
 **Steps (TDD)**
 
@@ -2308,7 +2734,72 @@ it('mapa usa o catalogo MVP e nao contem o catalogo legado da grade do prototipo
 
 ---
 
-## Task 20 — E2E, evidências e dívida 9 da Onda 3
+## Task 20 — Testes transversais das 5 rotas (DoD-109, DoD-112)
+
+**Files:** `app/frontend/__tests__/onda4-rotas.test.tsx` (o mesmo arquivo criado na Task 16).
+
+Task dedicada porque DoD-109 e DoD-112 só podem ficar verdes **depois** da última tela: a Task 16
+já cria `onda4-rotas.test.tsx` com o teste de DoD-115 (que depende só da remoção do legado), mas
+`as cinco rotas comerciais nao renderizam PlaceholderPage` exige `/comercial/tabela-precos`,
+`/comercial/disponibilidade` e `/comercial/espelho` prontas — Tasks 17, 18 e 19. Escrever esses
+dois testes na Task 16 os deixaria vermelhos por três tasks seguidas, quebrando o commit verde por
+task. Esta task roda **depois da Task 19** e **antes da Task 21**.
+
+**Steps (TDD)**
+
+1. DoD-109 — nenhuma das 5 rotas é `PlaceholderPage`. O teste é estrutural sobre o `page.tsx` de
+   cada rota, no mesmo estilo do teste de DoD-115 já escrito no arquivo:
+
+```ts
+const ROTAS_DA_ONDA = [
+  'clientes', 'pedidos', 'tabela-precos', 'disponibilidade', 'espelho',
+] as const;
+
+it('as cinco rotas comerciais nao renderizam PlaceholderPage', () => {
+  for (const rota of ROTAS_DA_ONDA) {
+    const caminho = join(RAIZ, rota, 'page.tsx');
+    expect(existsSync(caminho)).toBe(true);
+    const fonte = readFileSync(caminho, 'utf8');
+    expect(fonte).not.toMatch(/PlaceholderPage/);
+  }
+});
+```
+
+2. DoD-112 — a palavra banida (v1.1 §6.8) não aparece em nenhum arquivo da onda, nem como rótulo,
+   nem como campo, nem como tipo. Varre os `.tsx`/`.ts` das 5 rotas mais os módulos de apoio
+   criados nesta onda:
+
+```ts
+const ARQUIVOS_DA_ONDA = [
+  ...ROTAS_DA_ONDA.map((rota) => join(RAIZ, rota)),
+  join(__dirname, '../src/lib/precos.ts'),
+  join(__dirname, '../src/lib/espelho.ts'),
+  join(__dirname, '../src/lib/mapa-disponibilidade.ts'),
+  join(__dirname, '../src/lib/status-pedido.ts'),
+];
+
+const TERMO_BANIDO = /\b[Mm]arcas?\b/;
+
+it('nenhum arquivo da onda 4 usa o termo banido como rotulo', () => {
+  const infratores = arquivosDeCodigo(ARQUIVOS_DA_ONDA)
+    .filter((arquivo) => TERMO_BANIDO.test(readFileSync(arquivo, 'utf8')));
+  expect(infratores).toEqual([]);
+});
+```
+
+   `arquivosDeCodigo` é definido nesta task, no topo do arquivo: expande cada entrada da lista em
+   `.ts`/`.tsx` (`readdirSync` recursivo se for diretório, o próprio caminho se for arquivo). Os
+   imports do arquivo crescem de `{ existsSync }` para `{ existsSync, readdirSync, readFileSync }`
+   de `node:fs`. O `\b` é obrigatório: sem ele, `marcador`, `demarcar` e `marcado` dariam falso
+   positivo e o teste viraria ruído. É o mesmo recorte do `rg -nw` do gate local.
+3. Rodar `cd app/frontend && npm run test -- onda4-rotas` até verde. Os três testes do arquivo
+   (DoD-109, DoD-112 e DoD-115) passam juntos neste ponto.
+
+**Commit:** `test(onda4): testes transversais das cinco rotas comerciais`
+
+---
+
+## Task 21 — E2E, evidências e dívida 9 da Onda 3
 
 **Files:** `app/backend/test/integration/onda4-comercial.e2e-spec.ts` (D28),
 `app/frontend/e2e/onda4-comercial.spec.ts`, `app/frontend/e2e/jornada-operacional.spec.ts`,
@@ -2331,7 +2822,7 @@ it('mapa usa o catalogo MVP e nao contem o catalogo legado da grade do prototipo
 
 ---
 
-## Task 21 — Fechamento: status, gate e PR
+## Task 22 — Fechamento: status, gate e PR
 
 **Files:** `docs/execucao/EXECUCAO-STATUS.md`, relatório de implementação.
 
@@ -2405,9 +2896,17 @@ exata de `pipeline-execucao.md §6`.
 
 **Cobertura do escopo pedido.** As 5 rotas das linhas 3–7 da matriz têm task de backend, task de BFF,
 task de UI e teste nomeado. O DoD O4 dos quality-gates está integralmente mapeado: adendo com
-histórico (DoD-80..82, DoD-116), unicidade AD-03 (DoD-78/79), rascunho sem expiração automática com
-ação administrativa auditada (DoD-83..86), mapa teatro com drill-down (DoD-98..100) e catálogo MVP
-correto em vez do legado da Grade (DoD-101/102).
+histórico (DoD-80..82, DoD-116), unicidade AD-03 (DoD-78/79 e o ramo sem operação em DoD-121),
+rascunho sem expiração automática com ação administrativa auditada (DoD-83..86), mapa teatro com
+drill-down (DoD-98..100) e catálogo MVP correto em vez do legado da Grade (DoD-101/102). A única
+lacuna que a matriz apontava e que o plano anterior deixava em aberto — herança
+representante→rota no fluxo de pedido, linha 3 — é implementada por D31 e coberta por DoD-119/120.
+
+**Nenhum DoD sem task que o escreva.** Cada linha do mapa DoD aponta para um `it(...)` que alguma
+task desta onda escreve, com nome idêntico: DoD-109 e DoD-112 na Task 20, DoD-115 na Task 16,
+DoD-113 na Task 3 (o nome citado **não** existia em `menu-rbac.test.ts` e passou a ser escrito lá),
+DoD-119/121 na Task 6 e DoD-120 na Task 15. A Task 20 existe precisamente porque DoD-109 e DoD-112
+só ficam verdes depois da Task 19 — escrevê-los antes deixaria três tasks com commit vermelho.
 
 **Aderência à base real (emenda do Portão 1).** Todo código literal deste plano foi conferido contra
 `develop` no worktree em `158da75`, não contra a memória do plano mestre: assinatura de
@@ -2420,7 +2919,13 @@ com `user.sub`; helpers decimais reais (`somarQtd`, não `somaDecimal`); helpers
 (D28); índices únicos parciais exigindo `targetWhere` no `onConflictDoNothing`. Os quatro métodos
 que o plano anterior presumia existir (`carregarAbertoParaAdendo`, `exigirItemDoPedido`,
 `aplicarAlocacaoNoItem`, `abrirOuAcumularPendencia`) estão escritos por extenso na Task 7; nenhum
-helper é citado sem corpo.
+helper é citado sem corpo. Na segunda emenda o mesmo critério foi aplicado à Task 9: `salvarItens`,
+`precosDaUltimaPublicada`, `exigirTabela` e `detalhar` deixaram de ser prosa e estão escritos por
+extenso, já casados com o DDL real do 0016 — `tabelas_preco_itens` **não tem** `deleted_at` e seu
+índice único é total (logo o `onConflictDoUpdate` não leva `targetWhere`, ao contrário de
+`uq_tabelas_preco_data`), e o histórico usa a coluna `criado_em`, não `created_at`. O predicado do
+estado E do mapa foi reauditado contra os cinco services que tocam `carga_itens` e alinhado ao
+`<> 'removido'` que todos usam.
 
 **O que este plano deliberadamente não faz.** Não reescreve o motor de reserva/overbooking da Onda 1;
 não cria TTL de rascunho (AD-06 proíbe); não fecha as pendências abertas por conta própria — P5, P11
@@ -2443,7 +2948,7 @@ gate que o proíbem — em nenhum ponto como rótulo, campo, entidade, tipo ou t
 
 ## Contagens
 
-**21 tasks · 30 decisões de design · 49 itens de DoD (todos com teste 1:1) · 7 divergências
+**22 tasks · 31 decisões de design · 52 itens de DoD (todos com teste 1:1) · 7 divergências
 autorizadas.**
 
 Divergências autorizadas: **D-01** abas Fiscais/Contatos sem conteúdo no protótipo → conteúdo
@@ -2452,6 +2957,12 @@ derivado do JSONB já existente; **D-02** conjunto canônico único de códigos 
 explícita da tabela de preços do dia; **D-05** dados reais da API no lugar dos mocks do protótipo;
 **D-06** "Rascunho com reserva ativa" como rótulo derivado, não status de banco; **D-07** export do
 espelho gerado no servidor.
+
+**Nenhuma 8ª divergência foi aberta.** A lacuna da **linha 3 da matriz** (*"falta herança automática
+representante→rota no fluxo de pedido"*) deixou de ser informativa e passou a ser implementada por
+**D31**, com código literal (`rotaHerdadaDoCliente`, herança de `rotaPrevista` no `criar`, `leftJoin`
+de representante e rota em `detalhar`/`listar`), task (Task 6 passo 7 no backend, Task 15 passo 5 na
+UI) e DoD nomeado (**DoD-119** backend, **DoD-120** UI). O contador de divergências permanece 7.
 
 Pendências tratadas com parâmetro/badge, sem AD nova: **P5** (política de preço em adendo — badge no
 modal, D9), **P11** (catálogo oficial — seed Provisório, D5), **P15** (marco de fechamento do pedido
