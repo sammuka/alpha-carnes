@@ -31,6 +31,7 @@ import { OperacaoModule } from './modules/operacao/operacao.module';
 import { OperacoesModule } from './modules/operacoes/operacoes.module';
 import { DashboardModule } from './modules/gestao/dashboard/dashboard.module';
 import { AprovacoesModule } from './modules/gestao/aprovacoes/aprovacoes.module';
+import { SifModule } from './modules/gestao/sif/sif.module';
 import { AuditoriaConsultaModule } from './modules/auditoria/auditoria.module';
 import { AuditoriaModule } from './common/auditoria/auditoria.module';
 import { AuditoriaInterceptor } from './common/interceptors/auditoria.interceptor';
@@ -86,6 +87,7 @@ import type { IncomingMessage } from 'http';
     OperacaoModule,
     DashboardModule,
     AprovacoesModule,
+    SifModule,
     AuditoriaConsultaModule,
   ],
   controllers: [HealthController],
