@@ -22,3 +22,9 @@ export function extrairMensagemErro(body: unknown, fallback = 'Erro'): string {
 
   return fallback;
 }
+
+/** Lê o corpo de uma resposta de erro e devolve o texto exibível ao usuário. */
+export async function mensagemDeErro(res: Response, fallback = 'Falha na operação'): Promise<string> {
+  const body: unknown = await res.json().catch(() => null);
+  return extrairMensagemErro(body, fallback);
+}

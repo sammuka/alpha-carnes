@@ -1,5 +1,5 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../database/database.module';
 import * as schema from '../../database/schema';
@@ -9,6 +9,24 @@ import { calcularRange, montarPaginado, primeiroOuFalha, type ListarQuery, type 
 import type { CreateParametroDto, UpdateParametroDto } from './dto/parametro.dto';
 
 type Parametro = typeof parametros.$inferSelect;
+
+/**
+ * Ordem canônica das 9 chaves da v1.1 §16 (decisão 25), a mesma ordem dos
+ * cartões em `Parametros.tsx` do protótipo e da lista `PARAMETROS_SEED` em
+ * `database/seed.ts`. `createdAt desc` não é estável para isso porque o seed
+ * insere as chaves nessa mesma ordem, o que inverteria a exibição.
+ */
+const ORDEM_CANONICA_CHAVES: readonly string[] = [
+  'comercial.overbooking_permitido',
+  'comercial.prioridade_consumo',
+  'operacao.fifo_estoque',
+  'operacao.cadencia_dias_semana',
+  'operacao.composicao_boi_casado',
+  'operacao.regras_transformacao_tz',
+  'fiscal.seguro_integrado',
+  'fiscal.emissao_fiscal',
+  'fiscal.expiracao_reserva_rascunho',
+];
 
 @Injectable()
 export class ParametrosService {
@@ -31,8 +49,17 @@ export class ParametrosService {
     }
     const where = and(...filtros.filter(Boolean));
 
+    const casosOrdem = ORDEM_CANONICA_CHAVES.map((chave, indice) => sql`WHEN ${chave} THEN ${indice}`);
+    const ordemCanonica = sql`CASE ${parametros.chave} ${sql.join(casosOrdem, sql` `)} ELSE ${ORDEM_CANONICA_CHAVES.length} END`;
+
     const [linhas, totalRow] = await Promise.all([
-      this.db.select().from(parametros).where(where).orderBy(desc(parametros.createdAt)).limit(limit).offset(offset),
+      this.db
+        .select()
+        .from(parametros)
+        .where(where)
+        .orderBy(ordemCanonica, asc(parametros.createdAt))
+        .limit(limit)
+        .offset(offset),
       this.db.select({ total: sql<number>`count(*)::int` }).from(parametros).where(where),
     ]);
 
@@ -43,6 +70,25 @@ export class ParametrosService {
     const param = await this.buscarAtivo(id);
     if (!param) throw new NotFoundException('Parâmetro não encontrado');
     return param;
+  }
+
+  async detalharPorChave(chave: string): Promise<Parametro> {
+    const param = await this.db
+      .select()
+      .from(parametros)
+      .where(and(eq(parametros.chave, chave), isNull(parametros.deletedAt)))
+      .then((r) => r[0] ?? null);
+    if (!param) throw new NotFoundException('Parâmetro não encontrado');
+    return param;
+  }
+
+  async atualizarPorChave(
+    chave: string,
+    valorJson: Record<string, unknown>,
+    usuarioId: string,
+  ): Promise<Parametro> {
+    const atual = await this.detalharPorChave(chave);
+    return this.atualizar(atual.id, { valorJson }, usuarioId);
   }
 
   async criar(dto: CreateParametroDto, usuarioId: string): Promise<Parametro> {

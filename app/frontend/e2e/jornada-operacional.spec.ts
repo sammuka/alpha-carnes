@@ -134,13 +134,19 @@ function addDaysISO(offset: number): string {
 
 async function fillInputValue(page: Page, selector: string, value: string) {
   const input = page.locator(selector);
-  await input.evaluate((node, nextValue) => {
-    const element = node as HTMLInputElement;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-    setter?.call(element, nextValue);
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-  }, value);
+  await input.click();
+  await input.fill(value);
+  // Fallback para inputs controlados que ignoram fill nativo do Playwright.
+  const atual = await input.inputValue();
+  if (atual !== value) {
+    await input.evaluate((node, nextValue) => {
+      const element = node as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(element, nextValue);
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+  }
   await expect(input).toHaveValue(value);
 }
 
@@ -256,8 +262,16 @@ async function createCadastroViaUi(
   for (const label of options.checkboxLabels ?? []) {
     await page.getByLabel(label, { exact: true }).check();
   }
+  const postPromise = page.waitForResponse(
+    (res) =>
+      res.url().includes(`/api/cadastros/${options.recurso}`) &&
+      res.request().method() === 'POST',
+  );
   await page.getByRole('button', { name: 'Criar' }).click();
-  await expect(page).toHaveURL(new RegExp(`/cadastros/${options.recurso}`));
+  const postRes = await postPromise;
+  expect(postRes.ok(), `POST ${options.recurso} falhou: ${postRes.status()} ${await postRes.text()}`).toBeTruthy();
+  // Sai de /novo após persistência (evita falso positivo com /.../novo).
+  await expect(page).not.toHaveURL(new RegExp(`/cadastros/${options.recurso}/novo`));
   await capture(
     page,
     steps,
@@ -519,7 +533,10 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
 
     await page.goto(`${BASE_URL}/comercial/disponibilidade`);
     await fillInputValue(page, '#data', compra.dataOperacao);
-    await expect(page.getByText(itemComercialId)).toBeVisible({ timeout: 15_000 });
+    // A grade exibe só os 12 primeiros chars do UUID (slice) + reticências.
+    await expect(page.getByText(new RegExp(`${itemComercialId.slice(0, 12)}`))).toBeVisible({
+      timeout: 15_000,
+    });
     await capture(
       page,
       steps,

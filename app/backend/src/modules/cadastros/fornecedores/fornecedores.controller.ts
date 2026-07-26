@@ -26,6 +26,18 @@ export class FornecedoresController {
     return this.fornecedoresService.listar(query);
   }
 
+  @Get('contagens')
+  @RequirePermissoes('FORNECEDORES_LER')
+  contagens() {
+    return this.fornecedoresService.contagens();
+  }
+
+  @Get(':id/historico')
+  @RequirePermissoes('FORNECEDORES_LER')
+  historico(@Param('id') id: string) {
+    return this.fornecedoresService.historico(id);
+  }
+
   @Get(':id')
   @RequirePermissoes('FORNECEDORES_LER')
   async detalhar(@Param('id') id: string) {

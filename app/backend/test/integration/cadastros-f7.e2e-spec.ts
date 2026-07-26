@@ -135,6 +135,23 @@ describe('Cadastros F7 e2e (produtos, rotas, representantes)', () => {
     });
   });
 
+  describe('Produtos', () => {
+    it('produto persiste bloco fiscal em atributos_json', async () => {
+      const criar = await request(srv()).post('/produtos').set('Cookie', adminCookies).send({
+        codigo: 'PRD-FISCAL',
+        nome: 'Coxão mole',
+        tipoOperacional: 'peca_inteira_pesavel',
+        unidadePedido: 'Peça',
+        unidadePreco: 'kg',
+        atributosJson: { fiscal: { ncm: '0201.30.00', cfop: '5102' } },
+      });
+      expect(criar.status).toBe(201);
+
+      const detalhe = await request(srv()).get(`/produtos/${criar.body.id}`).set('Cookie', adminCookies);
+      expect(detalhe.body.atributosJson.fiscal).toEqual({ ncm: '0201.30.00', cfop: '5102' });
+    });
+  });
+
   describe('Representantes', () => {
     it('ciclo CRUD completo', async () => {
       const criar = await request(srv())
@@ -183,6 +200,102 @@ describe('Cadastros F7 e2e (produtos, rotas, representantes)', () => {
       expect(
         (await request(srv()).post(`/representantes/${criar.body.id}/restaurar`).set('Cookie', adminCookies)).status,
       ).toBe(409);
+    });
+
+    it('DoD-82: filtra por status e tipoCanal; /canais devolve canais reais sem nulos', async () => {
+      const repDistribuidor = await request(srv())
+        .post('/representantes')
+        .set('Cookie', adminCookies)
+        .send({ codigo: 'REP-DOD82-DISTRIB', nome: 'Representante Distribuidor', tipoCanal: 'distribuidor' });
+      expect(repDistribuidor.status).toBe(201);
+
+      const repIndustria = await request(srv())
+        .post('/representantes')
+        .set('Cookie', adminCookies)
+        .send({ codigo: 'REP-DOD82-INDUSTRIA', nome: 'Representante Indústria', tipoCanal: 'industria' });
+      expect(repIndustria.status).toBe(201);
+
+      const inativar = await request(srv())
+        .patch(`/representantes/${repIndustria.body.id}`)
+        .set('Cookie', adminCookies)
+        .send({ status: 'inativo' });
+      expect(inativar.status).toBe(200);
+
+      const porCanal = await request(srv())
+        .get('/representantes?tipoCanal=distribuidor')
+        .set('Cookie', adminCookies);
+      expect(porCanal.status).toBe(200);
+      expect(porCanal.body.data.length).toBeGreaterThan(0);
+      expect(porCanal.body.data.every((r: { tipoCanal: string }) => r.tipoCanal === 'distribuidor')).toBe(true);
+      expect(porCanal.body.data.some((r: { id: string }) => r.id === repDistribuidor.body.id)).toBe(true);
+      expect(porCanal.body.data.some((r: { id: string }) => r.id === repIndustria.body.id)).toBe(false);
+
+      const porStatus = await request(srv()).get('/representantes?status=inativo').set('Cookie', adminCookies);
+      expect(porStatus.status).toBe(200);
+      expect(porStatus.body.data.length).toBeGreaterThan(0);
+      expect(porStatus.body.data.every((r: { status: string }) => r.status === 'inativo')).toBe(true);
+      expect(porStatus.body.data.some((r: { id: string }) => r.id === repIndustria.body.id)).toBe(true);
+      expect(porStatus.body.data.some((r: { id: string }) => r.id === repDistribuidor.body.id)).toBe(false);
+
+      const canais = await request(srv()).get('/representantes/canais').set('Cookie', adminCookies);
+      expect(canais.status).toBe(200);
+      expect(canais.body).toContain('distribuidor');
+      expect(canais.body).toContain('industria');
+      expect(canais.body.every((c: unknown) => typeof c === 'string' && c.length > 0)).toBe(true);
+    });
+
+    it('DoD-83: clientesVinculados na listagem e no detalhe vem de clientes.representante_id, não de mock', async () => {
+      const representante = await request(srv())
+        .post('/representantes')
+        .set('Cookie', adminCookies)
+        .send({ codigo: 'REP-DOD83', nome: 'Representante Vinculado', tipoCanal: 'varejo' });
+      expect(representante.status).toBe(201);
+      const representanteId = representante.body.id as string;
+
+      const semVinculo = await request(srv())
+        .get(`/representantes/${representanteId}`)
+        .set('Cookie', adminCookies);
+      expect(semVinculo.body.clientesVinculados).toEqual([]);
+
+      const cliente = await request(srv())
+        .post('/clientes')
+        .set('Cookie', adminCookies)
+        .send({
+          codigo: 'CLI-DOD83',
+          razaoSocial: 'Cliente Vinculado DoD83 LTDA',
+          documentoFiscal: '11222333000181',
+          representanteId,
+        });
+      expect(cliente.status).toBe(201);
+
+      const lista = await request(srv())
+        .get(`/representantes?tipoCanal=varejo`)
+        .set('Cookie', adminCookies);
+      const naLista = lista.body.data.find((r: { id: string }) => r.id === representanteId);
+      expect(naLista).toBeDefined();
+      expect(naLista.clientesVinculados).toBe(1);
+
+      const detalheComVinculo = await request(srv())
+        .get(`/representantes/${representanteId}`)
+        .set('Cookie', adminCookies);
+      expect(detalheComVinculo.body.clientesVinculados).toEqual([
+        { id: cliente.body.id, nomeFantasia: null, razaoSocial: 'Cliente Vinculado DoD83 LTDA' },
+      ]);
+
+      // Remove o vínculo (soft delete do cliente) e confere que a contagem cai — prova que
+      // vem de uma consulta real ao banco, não de um valor fixo.
+      await request(srv()).delete(`/clientes/${cliente.body.id}`).set('Cookie', adminCookies);
+
+      const listaSemVinculo = await request(srv())
+        .get(`/representantes?tipoCanal=varejo`)
+        .set('Cookie', adminCookies);
+      const naListaDepois = listaSemVinculo.body.data.find((r: { id: string }) => r.id === representanteId);
+      expect(naListaDepois.clientesVinculados).toBe(0);
+
+      const detalheSemVinculo = await request(srv())
+        .get(`/representantes/${representanteId}`)
+        .set('Cookie', adminCookies);
+      expect(detalheSemVinculo.body.clientesVinculados).toEqual([]);
     });
   });
 });

@@ -1,9 +1,9 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, isNull, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { fornecedores } from '../../../database/schema';
+import { divergenciasRecebimento, fornecedores, ocorrenciasFornecedor } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { calcularRange, montarPaginado, primeiroOuFalha, type ListarQuery, type Paginado } from '../../../common/crud/paginacao';
 import type { CreateFornecedorDto, UpdateFornecedorDto } from './dto/fornecedor.dto';
@@ -20,6 +20,62 @@ export class FornecedoresService {
 
   private get db() {
     return this.drizzle.db;
+  }
+
+  async contagens(): Promise<{ total: number; ativos: number; inativos: number }> {
+    const linha = await this.db
+      .select({
+        total: sql<number>`count(*)::int`,
+        ativos: sql<number>`count(*) FILTER (WHERE ${fornecedores.status} = 'ativo')::int`,
+        inativos: sql<number>`count(*) FILTER (WHERE ${fornecedores.status} = 'inativo')::int`,
+      })
+      .from(fornecedores)
+      .where(isNull(fornecedores.deletedAt))
+      .then((r) => r[0]);
+    return linha ?? { total: 0, ativos: 0, inativos: 0 };
+  }
+
+  /**
+   * Histórico real de ocorrências do fornecedor (decisão 18 da Onda 3).
+   * `ultimaDivergencia.tipo` devolve o slug CHECK (`divergencias_recebimento.tipo`, LEFT JOIN)
+   * ou, sem divergência ligada, `ocorrencias_fornecedor.descricao` — nunca rótulo humano.
+   * A tradução para "Falta de Peso" etc. é só no frontend (`ROTULOS_TIPO_DIVERGENCIA`, Task 16.2.5).
+   * `ultimaDivergencia` é null quando não há ocorrência — a tela mostra "—".
+   */
+  async historico(id: string): Promise<{
+    ocorrenciasAno: number;
+    ultimaDivergencia: { data: Date; tipo: string } | null;
+  }> {
+    const fornecedor = await this.detalhar(id);
+    const inicioDoAno = new Date(new Date().getFullYear(), 0, 1);
+
+    const [contagem, ultima] = await Promise.all([
+      this.db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(ocorrenciasFornecedor)
+        .where(and(
+          eq(ocorrenciasFornecedor.fornecedorId, fornecedor.id),
+          gte(ocorrenciasFornecedor.createdAt, inicioDoAno),
+        )),
+      this.db
+        .select({
+          data: ocorrenciasFornecedor.createdAt,
+          tipo: sql<string>`coalesce(${divergenciasRecebimento.tipo}, ${ocorrenciasFornecedor.descricao})`,
+        })
+        .from(ocorrenciasFornecedor)
+        .leftJoin(
+          divergenciasRecebimento,
+          eq(ocorrenciasFornecedor.divergenciaId, divergenciasRecebimento.id),
+        )
+        .where(eq(ocorrenciasFornecedor.fornecedorId, fornecedor.id))
+        .orderBy(desc(ocorrenciasFornecedor.createdAt))
+        .limit(1),
+    ]);
+
+    return {
+      ocorrenciasAno: contagem[0]?.total ?? 0,
+      ultimaDivergencia: ultima[0] ?? null,
+    };
   }
 
   async listar(query: ListarQuery): Promise<Paginado<Fornecedor>> {

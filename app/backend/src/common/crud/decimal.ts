@@ -67,3 +67,9 @@ export function somarListaQtd(
 ): string {
   return valores.reduce<string>((total, valor) => somarQtd(total, valor), '0.000');
 }
+
+/** Multiplica duas quantidades sem drift de float; retorna número (simuladores). */
+export function multiplicar(a: number | string, b: number | string): number {
+  const resultado = (paraEscalado(a) * paraEscalado(b)) / FACTOR;
+  return Number(paraString(resultado));
+}

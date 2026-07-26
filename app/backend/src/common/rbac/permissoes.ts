@@ -25,6 +25,12 @@ export const PERMISSOES = {
   REGRAS_DESDOBRAMENTO_GERENCIAR: 'REGRAS_DESDOBRAMENTO_GERENCIAR',
   PARAMETROS_LER: 'PARAMETROS_LER',
   PARAMETROS_GERENCIAR: 'PARAMETROS_GERENCIAR',
+  FROTA_CAMINHOES_LER: 'FROTA_CAMINHOES_LER',
+  FROTA_CAMINHOES_GERENCIAR: 'FROTA_CAMINHOES_GERENCIAR',
+  FROTA_MOTORISTAS_LER: 'FROTA_MOTORISTAS_LER',
+  FROTA_MOTORISTAS_GERENCIAR: 'FROTA_MOTORISTAS_GERENCIAR',
+  MODELOS_ETIQUETA_LER: 'MODELOS_ETIQUETA_LER',
+  MODELOS_ETIQUETA_GERENCIAR: 'MODELOS_ETIQUETA_GERENCIAR',
 
   // ── F3 — Planejamento Comercial ───────────────────────────────────────────
   COMPRAS_PROGRAMADAS_LER: 'COMPRAS_PROGRAMADAS_LER',
@@ -311,6 +317,25 @@ pushPermissoes(
   'OPERACOES_GERENCIAR', 'PEDIDO_OVERBOOKING_CONFIRMAR', 'OVERBOOKING_RESOLVER',
   'PEDIDO_FORNECEDOR_GERENCIAR', 'CONFERENCIA_CONCLUIR', 'PEDIDO_FINALIZAR',
 );
+pushPermissoes(
+  'administrador',
+  'FROTA_CAMINHOES_LER', 'FROTA_CAMINHOES_GERENCIAR',
+  'FROTA_MOTORISTAS_LER', 'FROTA_MOTORISTAS_GERENCIAR',
+  'MODELOS_ETIQUETA_LER', 'MODELOS_ETIQUETA_GERENCIAR',
+);
+pushPermissoes(
+  'gestor',
+  'FROTA_CAMINHOES_LER', 'FROTA_CAMINHOES_GERENCIAR',
+  'FROTA_MOTORISTAS_LER', 'FROTA_MOTORISTAS_GERENCIAR',
+  'MODELOS_ETIQUETA_LER', 'MODELOS_ETIQUETA_GERENCIAR',
+);
+pushPermissoes(
+  'expedicao',
+  'FROTA_CAMINHOES_LER', 'FROTA_CAMINHOES_GERENCIAR',
+  'FROTA_MOTORISTAS_LER', 'FROTA_MOTORISTAS_GERENCIAR',
+);
+pushPermissoes('recebimento_pesagem', 'MODELOS_ETIQUETA_LER');
+pushPermissoes('corte', 'MODELOS_ETIQUETA_LER');
 
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
@@ -337,6 +362,12 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   REGRAS_DESDOBRAMENTO_GERENCIAR: 'Criar, editar, excluir e restaurar regras de desdobramento',
   PARAMETROS_LER: 'Consultar parâmetros do sistema',
   PARAMETROS_GERENCIAR: 'Gerenciar parâmetros do sistema',
+  FROTA_CAMINHOES_LER: 'Consultar caminhões da frota',
+  FROTA_CAMINHOES_GERENCIAR: 'Criar, editar, excluir e restaurar caminhões da frota',
+  FROTA_MOTORISTAS_LER: 'Consultar motoristas',
+  FROTA_MOTORISTAS_GERENCIAR: 'Criar, editar, excluir e restaurar motoristas',
+  MODELOS_ETIQUETA_LER: 'Consultar modelos de etiqueta',
+  MODELOS_ETIQUETA_GERENCIAR: 'Configurar campos dos modelos de etiqueta',
   COMPRAS_PROGRAMADAS_LER: 'Consultar compras programadas',
   COMPRAS_PROGRAMADAS_GERENCIAR: 'Criar, editar e confirmar compras programadas',
   DISPONIBILIDADE_LER: 'Consultar disponibilidade virtual do dia',

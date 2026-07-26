@@ -14,3 +14,9 @@ export const updateParametroSchema = z.object({
 });
 
 export type UpdateParametroDto = z.infer<typeof updateParametroSchema>;
+
+export const atualizarValorSchema = z.object({
+  valorJson: z.record(z.string(), z.unknown()),
+});
+
+export type AtualizarValorDto = z.infer<typeof atualizarValorSchema>;

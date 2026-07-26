@@ -31,8 +31,9 @@ export default async function EditarCadastroPage(props: {
 }
 
 function withoutSchema(config: typeof CADASTROS[string]) {
-  // schema é Zod — não serializável para Client Component
-  const { schema: _omitSchema, ...serializableConfig } = config;
+  // schema (Zod) e secoes.icone (componentes Lucide) não serializam para Client Component
+  const { schema: _omitSchema, secoes: _omitSecoes, ...serializableConfig } = config;
   void _omitSchema;
+  void _omitSecoes;
   return serializableConfig;
 }

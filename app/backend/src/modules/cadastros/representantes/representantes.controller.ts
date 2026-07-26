@@ -5,7 +5,7 @@ import { RbacGuard } from '../../../common/guards/rbac.guard';
 import { RequirePermissoes } from '../../../common/rbac/require-permissoes.decorator';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
-import { listarQuerySchema, type ListarQuery } from '../../../common/crud/paginacao';
+import { listarCadastroQuerySchema, type ListarCadastroQuery } from '../../../common/crud/paginacao';
 import { RepresentantesService } from './representantes.service';
 import {
   createRepresentanteSchema,
@@ -22,8 +22,14 @@ export class RepresentantesController {
 
   @Get()
   @RequirePermissoes('REPRESENTANTES_LER')
-  async listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
+  async listar(@Query(new ZodValidationPipe(listarCadastroQuerySchema)) query: ListarCadastroQuery) {
     return this.representantesService.listar(query);
+  }
+
+  @Get('canais')
+  @RequirePermissoes('REPRESENTANTES_LER')
+  async canais() {
+    return this.representantesService.canais();
   }
 
   @Get(':id')

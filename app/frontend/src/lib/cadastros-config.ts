@@ -1,7 +1,16 @@
 import { z } from 'zod';
 import type { FieldValues } from 'react-hook-form';
+import type { LucideIcon } from 'lucide-react';
+import { Building2, MapPin, Truck } from 'lucide-react';
 
 export type AbaCadastro = 'gerais' | 'fiscais' | 'contatos' | 'preferencias' | 'parametros';
+
+export interface SecaoCadastro {
+  chave: string;
+  titulo: string;
+  icone: LucideIcon;
+  coluna: 1 | 2;
+}
 
 export interface CampoConfig {
   nome: string;
@@ -11,6 +20,7 @@ export interface CampoConfig {
   opcoes?: Array<{ valor: string; rotulo: string }>;
   placeholder?: string;
   aba?: AbaCadastro;
+  secao?: string;
   jsonCampo?: string;
 }
 
@@ -26,6 +36,7 @@ export interface CadastroConfig {
   permissaoGerenciar: string;
   colunas: ColunaConfig[];
   campos: CampoConfig[];
+  secoes?: SecaoCadastro[];
   // Schema de validação do formulário; produz FieldValues compatível com react-hook-form.
   schema: z.ZodType<FieldValues, FieldValues>;
 }
@@ -80,6 +91,14 @@ const contatosFornecedorFormSchema = z
 const parametrosFornecedorFormSchema = z
   .object({
     romaneioAntecipado: z.boolean().optional(),
+    horarioLimiteRecebimento: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM')
+      .optional()
+      .or(z.literal('')),
+    capacidadeMaximaKg: z.coerce.number().int().min(0).optional(),
+    toleranciaDivergenciaPercentual: z.coerce.number().min(0).max(100).optional(),
+    notaQualidade: z.enum(['A', 'B', 'C']).optional(),
   })
   .optional();
 
@@ -236,52 +255,91 @@ export const fornecedoresConfig: CadastroConfig = {
     { campo: 'documentoFiscal', rotulo: 'CNPJ/CPF' },
     { campo: 'status', rotulo: 'Status' },
   ],
+  secoes: [
+    { chave: 'dados-principais', titulo: 'Dados Principais', icone: Building2, coluna: 1 },
+    { chave: 'endereco-contato', titulo: 'Endereço e Contato', icone: MapPin, coluna: 1 },
+    { chave: 'parametros-operacionais', titulo: 'Parâmetros Operacionais', icone: Truck, coluna: 2 },
+  ],
   campos: [
-    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true, aba: 'gerais' },
-    { nome: 'razaoSocial', rotulo: 'Razão Social', tipo: 'text', obrigatorio: true, aba: 'gerais' },
+    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true, secao: 'dados-principais' },
+    { nome: 'razaoSocial', rotulo: 'Razão Social', tipo: 'text', obrigatorio: true, secao: 'dados-principais' },
     {
       nome: 'documentoFiscal',
       rotulo: 'CNPJ/CPF',
       tipo: 'text',
       obrigatorio: true,
       placeholder: 'Somente números',
-      aba: 'gerais',
+      secao: 'dados-principais',
     },
-    { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes, aba: 'gerais' },
-    { nome: 'observacoes', rotulo: 'Observações', tipo: 'textarea', aba: 'gerais' },
+    { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes, secao: 'dados-principais' },
+    { nome: 'observacoes', rotulo: 'Observações', tipo: 'textarea', secao: 'dados-principais' },
     {
       nome: 'nome',
       rotulo: 'Nome do contato',
       tipo: 'text',
-      aba: 'contatos',
+      secao: 'endereco-contato',
       jsonCampo: 'contatosJson',
     },
     {
       nome: 'telefone',
       rotulo: 'Telefone',
       tipo: 'text',
-      aba: 'contatos',
+      secao: 'endereco-contato',
       jsonCampo: 'contatosJson',
     },
     {
       nome: 'email',
       rotulo: 'E-mail',
       tipo: 'text',
-      aba: 'contatos',
+      secao: 'endereco-contato',
       jsonCampo: 'contatosJson',
     },
     {
       nome: 'cargo',
       rotulo: 'Cargo',
       tipo: 'text',
-      aba: 'contatos',
+      secao: 'endereco-contato',
       jsonCampo: 'contatosJson',
     },
     {
       nome: 'romaneioAntecipado',
       rotulo: 'Romaneio antecipado',
       tipo: 'checkbox',
-      aba: 'parametros',
+      secao: 'parametros-operacionais',
+      jsonCampo: 'parametrosOperacionaisJson',
+    },
+    {
+      nome: 'horarioLimiteRecebimento',
+      rotulo: 'Horário Limite Recebimento',
+      tipo: 'text',
+      placeholder: 'HH:MM',
+      secao: 'parametros-operacionais',
+      jsonCampo: 'parametrosOperacionaisJson',
+    },
+    {
+      nome: 'capacidadeMaximaKg',
+      rotulo: 'Capacidade Max. Caminhão (kg)',
+      tipo: 'number',
+      secao: 'parametros-operacionais',
+      jsonCampo: 'parametrosOperacionaisJson',
+    },
+    {
+      nome: 'toleranciaDivergenciaPercentual',
+      rotulo: 'Tolerância de Divergência (%)',
+      tipo: 'number',
+      secao: 'parametros-operacionais',
+      jsonCampo: 'parametrosOperacionaisJson',
+    },
+    {
+      nome: 'notaQualidade',
+      rotulo: 'Nota de Qualidade',
+      tipo: 'select',
+      opcoes: [
+        { valor: 'A', rotulo: 'A (Excelente)' },
+        { valor: 'B', rotulo: 'B (Bom)' },
+        { valor: 'C', rotulo: 'C (Regular)' },
+      ],
+      secao: 'parametros-operacionais',
       jsonCampo: 'parametrosOperacionaisJson',
     },
   ],

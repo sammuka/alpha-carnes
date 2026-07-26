@@ -1,14 +1,24 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, ilike, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { representantes } from '../../../database/schema';
+import { clientes, representantes } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
-import { calcularRange, montarPaginado, primeiroOuFalha, type ListarQuery, type Paginado } from '../../../common/crud/paginacao';
+import {
+  calcularRange,
+  montarPaginado,
+  primeiroOuFalha,
+  type ListarCadastroQuery,
+  type Paginado,
+} from '../../../common/crud/paginacao';
 import type { CreateRepresentanteDto, UpdateRepresentanteDto } from './dto/representante.dto';
 
 type Representante = typeof representantes.$inferSelect;
+type RepresentanteComVinculos = Representante & { clientesVinculados: number };
+type RepresentanteComClientes = Representante & {
+  clientesVinculados: Array<{ id: string; nomeFantasia: string | null; razaoSocial: string }>;
+};
 
 @Injectable()
 export class RepresentantesService {
@@ -22,27 +32,67 @@ export class RepresentantesService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<Representante>> {
+  async listar(query: ListarCadastroQuery): Promise<Paginado<RepresentanteComVinculos>> {
     const { limit, offset } = calcularRange(query);
     const filtros = [query.incluirRemovidos ? undefined : isNull(representantes.deletedAt)];
     if (query.search) {
       const termo = `%${query.search}%`;
-      filtros.push(or(ilike(representantes.nome, termo), ilike(representantes.codigo, termo)));
+      filtros.push(
+        or(
+          ilike(representantes.nome, termo),
+          ilike(representantes.codigo, termo),
+          ilike(representantes.contato, termo),
+        ),
+      );
     }
+    if (query.status) filtros.push(eq(representantes.status, query.status));
+    if (query.tipoCanal) filtros.push(eq(representantes.tipoCanal, query.tipoCanal));
     const where = and(...filtros.filter(Boolean));
 
+    // "representantes"."id" precisa vir totalmente qualificado: interpolar ${representantes.id}
+    // aqui emitiria só "id", que o Postgres resolveria para clientes.id (mesmo nome de coluna),
+    // zerando a contagem sempre — bug real encontrado ao escrever o teste do DoD-83.
+    const contagemClientes = sql<number>`(
+    select count(*)::int from ${clientes}
+    where ${clientes.representanteId} = "representantes"."id"
+      and ${clientes.deletedAt} is null
+  )`;
+
     const [linhas, totalRow] = await Promise.all([
-      this.db.select().from(representantes).where(where).orderBy(desc(representantes.createdAt)).limit(limit).offset(offset),
+      this.db
+        .select({ ...getTableColumns(representantes), clientesVinculados: contagemClientes })
+        .from(representantes)
+        .where(where)
+        .orderBy(desc(representantes.createdAt))
+        .limit(limit)
+        .offset(offset),
       this.db.select({ total: sql<number>`count(*)::int` }).from(representantes).where(where),
     ]);
 
     return montarPaginado(linhas, totalRow[0]?.total ?? 0, query);
   }
 
-  async detalhar(id: string): Promise<Representante> {
+  /** Canais realmente usados, para o `select` da tela (decisão 44.3). */
+  async canais(): Promise<string[]> {
+    const linhas = await this.db
+      .selectDistinct({ tipoCanal: representantes.tipoCanal })
+      .from(representantes)
+      .where(and(isNull(representantes.deletedAt), isNotNull(representantes.tipoCanal)))
+      .orderBy(representantes.tipoCanal);
+    return linhas.map((l) => l.tipoCanal).filter((c): c is string => c !== null);
+  }
+
+  async detalhar(id: string): Promise<RepresentanteComClientes> {
     const representante = await this.buscarAtivo(id);
     if (!representante) throw new NotFoundException('Representante não encontrado');
-    return representante;
+
+    const vinculados = await this.db
+      .select({ id: clientes.id, nomeFantasia: clientes.nomeFantasia, razaoSocial: clientes.razaoSocial })
+      .from(clientes)
+      .where(and(eq(clientes.representanteId, id), isNull(clientes.deletedAt)))
+      .orderBy(clientes.razaoSocial);
+
+    return { ...representante, clientesVinculados: vinculados };
   }
 
   async criar(dto: CreateRepresentanteDto, usuarioId: string): Promise<Representante> {

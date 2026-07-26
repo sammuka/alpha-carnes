@@ -45,6 +45,9 @@ export class AuditoriaConsultaService {
     if (query.operacao) filtros.push(eq(auditoria.operacao, query.operacao));
     if (query.usuarioId) filtros.push(eq(auditoria.usuarioId, query.usuarioId));
     if (query.registroId) filtros.push(eq(auditoria.registroId, query.registroId));
+    if (query.registroBusca) {
+      filtros.push(sql`${auditoria.registroId}::text ILIKE ${`%${query.registroBusca}%`}`);
+    }
     if (query.tabela) filtros.push(eq(auditoria.tabela, query.tabela));
     if (query.dataInicio) filtros.push(gte(auditoria.createdAt, new Date(query.dataInicio)));
     if (query.dataFim) filtros.push(lte(auditoria.createdAt, new Date(query.dataFim)));
@@ -87,5 +90,28 @@ export class AuditoriaConsultaService {
     }));
 
     return montarPaginado(data, totalRow[0]?.total ?? 0, query);
+  }
+
+  /** Valores distintos existentes no log, para popular os selects da tela (decisão 30). */
+  async facetas(): Promise<{
+    modulos: string[];
+    tabelas: string[];
+    usuarios: Array<{ id: string; nome: string }>;
+  }> {
+    const [modulos, tabelas, pessoas] = await Promise.all([
+      this.db.selectDistinct({ modulo: auditoria.modulo }).from(auditoria).orderBy(auditoria.modulo),
+      this.db.selectDistinct({ tabela: auditoria.tabela }).from(auditoria).orderBy(auditoria.tabela),
+      this.db
+        .selectDistinct({ id: usuarios.id, nome: usuarios.nome })
+        .from(auditoria)
+        .innerJoin(usuarios, eq(auditoria.usuarioId, usuarios.id))
+        .orderBy(usuarios.nome),
+    ]);
+
+    return {
+      modulos: modulos.map((m) => m.modulo).filter((m): m is string => m !== null),
+      tabelas: tabelas.map((t) => t.tabela),
+      usuarios: pessoas,
+    };
   }
 }

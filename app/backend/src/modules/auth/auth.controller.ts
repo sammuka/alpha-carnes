@@ -85,7 +85,7 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  me(@CurrentUser() user: CurrentUserPayload) {
-    return user;
+  async me(@CurrentUser() user: CurrentUserPayload) {
+    return this.authService.montarMe(user);
   }
 }

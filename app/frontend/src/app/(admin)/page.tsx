@@ -6,7 +6,7 @@ export default async function EntradaPage() {
   const user = await getMe();
   if (!user) redirect('/login');
 
-  const rota = rotaDeEntrada(user.permissoes);
+  const rota = rotaDeEntrada(user.menusVisiveis, user.perfis);
   if (rota) redirect(rota);
 
   return (

@@ -18,10 +18,24 @@ describe('operacoes e2e', () => {
     comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
 
     const { db } = app.get<{ db: typeof schema extends never ? never : import('drizzle-orm/node-postgres').NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const valorCadencia = {
+      grupo: 'Operação',
+      tipo: 'texto',
+      titulo: 'Cadência de geração de Operações',
+      texto: 'Segunda, quarta e sexta.',
+      valor: '1,3,5',
+      dias: [1, 3, 5],
+      provisorio: true,
+      pendencia: 'P1',
+    };
     await db.insert(schema.parametros).values({
       chave: 'operacao.cadencia_dias_semana',
-      valorJson: { dias: [1, 3, 5], provisorio: true, ref: 'P1/v1.1 §16.2' },
-    }).onConflictDoNothing({ target: schema.parametros.chave });
+      descricao: 'Cadência de geração de Operações',
+      valorJson: valorCadencia,
+    }).onConflictDoUpdate({
+      target: schema.parametros.chave,
+      set: { valorJson: valorCadencia, deletedAt: null, updatedAt: new Date() },
+    });
   });
 
   afterAll(async () => {

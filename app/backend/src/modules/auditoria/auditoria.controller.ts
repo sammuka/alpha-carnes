@@ -13,6 +13,12 @@ import { listarAuditoriaQuerySchema, type ListarAuditoriaQuery } from './dto/aud
 export class AuditoriaController {
   constructor(private readonly service: AuditoriaConsultaService) {}
 
+  @Get('facetas')
+  @RequirePermissoes('AUDITORIA_VISUALIZAR')
+  facetas() {
+    return this.service.facetas();
+  }
+
   @Get()
   @RequirePermissoes('AUDITORIA_VISUALIZAR')
   listar(@Query(new ZodValidationPipe(listarAuditoriaQuerySchema)) query: ListarAuditoriaQuery) {

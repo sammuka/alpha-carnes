@@ -8,6 +8,7 @@ import { CurrentUser, type CurrentUserPayload } from '../../common/decorators/cu
 import { listarQuerySchema, type ListarQuery } from '../../common/crud/paginacao';
 import { ParametrosService } from './parametros.service';
 import {
+  atualizarValorSchema,
   createParametroSchema,
   updateParametroSchema,
   type CreateParametroDto,
@@ -24,6 +25,22 @@ export class ParametrosController {
   @RequirePermissoes('PARAMETROS_LER')
   async listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
     return this.parametrosService.listar(query);
+  }
+
+  @Get('chave/:chave')
+  @RequirePermissoes('PARAMETROS_LER')
+  detalharPorChave(@Param('chave') chave: string) {
+    return this.parametrosService.detalharPorChave(chave);
+  }
+
+  @Patch('chave/:chave')
+  @RequirePermissoes('PARAMETROS_GERENCIAR')
+  atualizarPorChave(
+    @Param('chave') chave: string,
+    @Body(new ZodValidationPipe(atualizarValorSchema)) dto: { valorJson: Record<string, unknown> },
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.parametrosService.atualizarPorChave(chave, dto.valorJson, user.sub);
   }
 
   @Get(':id')

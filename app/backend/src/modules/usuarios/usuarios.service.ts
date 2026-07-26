@@ -1,5 +1,5 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { hash } from '@node-rs/argon2';
 import { DRIZZLE } from '../../database/database.module';
@@ -89,6 +89,26 @@ export class UsuariosService {
     }
 
     return { message: 'Usuário aprovado', usuarioId };
+  }
+
+  /** Contagem de usuários ativos por perfil, nos 11 perfis canônicos e em ordem canônica. */
+  async resumoPerfis(): Promise<Array<{ slug: string; nome: string; total: number }>> {
+    const linhas = await this.db
+      .select({
+        slug: schema.perfis.slug,
+        nome: schema.perfis.nome,
+        total: sql<number>`count(${schema.usuariosPerfis.usuarioId}) FILTER (WHERE ${schema.usuarios.deletedAt} IS NULL)::int`,
+      })
+      .from(schema.perfis)
+      .leftJoin(schema.usuariosPerfis, eq(schema.perfis.id, schema.usuariosPerfis.perfilId))
+      .leftJoin(schema.usuarios, eq(schema.usuariosPerfis.usuarioId, schema.usuarios.id))
+      .groupBy(schema.perfis.slug, schema.perfis.nome);
+
+    const ORDEM = [
+      'administrador', 'gestor', 'compras', 'comercial', 'recebimento_pesagem', 'corte',
+      'expedicao', 'conferente', 'faturamento', 'logistica', 'diretoria',
+    ];
+    return ORDEM.map((slug) => linhas.find((l) => l.slug === slug) ?? { slug, nome: slug, total: 0 });
   }
 
   async listar() {

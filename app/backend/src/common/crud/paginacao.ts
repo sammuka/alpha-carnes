@@ -13,6 +13,14 @@ export const listarQuerySchema = z.object({
 
 export type ListarQuery = z.infer<typeof listarQuerySchema>;
 
+/** Listagem de cadastro: paginação + busca + filtros de status e canal (decisão 44). */
+export const listarCadastroQuerySchema = listarQuerySchema.extend({
+  status: z.enum(['ativo', 'inativo']).optional(),
+  tipoCanal: z.string().trim().min(1).optional(),
+});
+
+export type ListarCadastroQuery = z.infer<typeof listarCadastroQuerySchema>;
+
 export interface Paginado<T> {
   data: T[];
   total: number;

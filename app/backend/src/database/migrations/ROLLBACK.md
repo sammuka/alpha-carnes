@@ -46,3 +46,17 @@ Somente depois de restaurar `data_operacao` e o cache de NF:
 - Remover tabelas/colunas introduzidas na expand (`operacoes`, FKs nullable,
   `pedidos_fornecedor`, `notas_fiscais_fornecedor`, `conclusoes_conferencia*`,
   `pendencias_overbooking*`, etc.).
+
+## 0015 — Onda 3
+
+```sql
+DROP TRIGGER IF EXISTS "trg_modelos_etiqueta_updated_at" ON "modelos_etiqueta";
+DROP TRIGGER IF EXISTS "trg_frota_motoristas_updated_at" ON "frota_motoristas";
+DROP TRIGGER IF EXISTS "trg_frota_caminhoes_updated_at" ON "frota_caminhoes";
+DROP TABLE IF EXISTS "modelos_etiqueta";
+DROP TABLE IF EXISTS "frota_motoristas";
+DROP TABLE IF EXISTS "frota_caminhoes";
+ALTER TABLE "rotas" DROP COLUMN IF EXISTS "dias_atendimento";
+ALTER TABLE "rotas" DROP COLUMN IF EXISTS "paradas";
+ALTER TABLE "perfis" DROP COLUMN IF EXISTS "menus_visiveis";
+```

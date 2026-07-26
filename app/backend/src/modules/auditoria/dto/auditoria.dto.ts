@@ -7,6 +7,7 @@ export const listarAuditoriaQuerySchema = z.object({
   operacao: z.enum(['INSERT', 'UPDATE', 'DELETE', 'ACAO_MANUAL']).optional(),
   usuarioId: z.string().uuid().optional(),
   registroId: z.string().uuid().optional(),
+  registroBusca: z.string().trim().min(1).max(64).optional(),
   tabela: z.string().trim().optional(),
   dataInicio: z.string().datetime({ offset: true }).optional(),
   dataFim: z.string().datetime({ offset: true }).optional(),

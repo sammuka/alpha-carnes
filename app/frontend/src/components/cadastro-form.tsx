@@ -37,11 +37,16 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
       ? `/api/cadastros/${config.recurso}/${registro.id}`
       : `/api/cadastros/${config.recurso}`;
     // Nota: as rotas de página vivem em /cadastros/<recurso> (grupo de rota (admin) não entra na URL).
+    // Campos opcionais vazios (UUID, enum status, etc.) não podem ir como "" — o Zod do backend rejeita.
+    const payload: Record<string, unknown> = { ...valores };
+    for (const chave of Object.keys(payload)) {
+      if (payload[chave] === '') delete payload[chave];
+    }
     try {
       const res = await fetch(url, {
         method: registro ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(valores),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { message?: string };

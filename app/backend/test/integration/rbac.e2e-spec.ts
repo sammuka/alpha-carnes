@@ -129,5 +129,16 @@ describe('RBAC e2e', () => {
         .set('Cookie', comercialCookies);
       expect(res.status).toBe(403);
     });
+
+    it('resumo de perfis conta usuarios reais e inclui perfil vazio', async () => {
+      const res = await request(app.getHttpServer()).get('/usuarios/resumo-perfis').set('Cookie', adminCookies);
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(11);
+      expect(res.body[0].slug).toBe('administrador');
+      expect(res.body[0].total).toBeGreaterThanOrEqual(1);
+      expect(res.body.find((l: { slug: string }) => l.slug === 'logistica')).toEqual(
+        expect.objectContaining({ slug: 'logistica', total: 0 }),
+      );
+    });
   });
 });

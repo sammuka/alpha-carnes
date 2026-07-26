@@ -70,7 +70,10 @@ describe('RotasService — branches de erro', () => {
     };
     const service = new RotasService({ db } as never, auditoria as never);
     await expect(
-      service.criar({ codigo: 'R-DUP', nome: 'X', regiao: 'SP', status: 'ativo' }, 'user-1'),
+      service.criar(
+        { codigo: 'R-DUP', nome: 'X', regiao: 'SP', status: 'ativo', paradas: [], diasAtendimento: [] },
+        'user-1',
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 });

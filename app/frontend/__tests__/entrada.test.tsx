@@ -12,15 +12,25 @@ jest.mock('next/navigation', () => ({
   },
 }));
 
-const SNAPSHOT = join(
+const SNAPSHOT_PERM = join(
   __dirname, '..', '..', 'backend', 'src', 'common', 'rbac', 'perfil-permissoes.snapshot.json',
 );
-const PERMISSOES_POR_PERFIL = JSON.parse(readFileSync(SNAPSHOT, 'utf8')) as Record<string, string[]>;
+const SNAPSHOT_MENUS = join(
+  __dirname, '..', '..', 'backend', 'src', 'common', 'rbac', 'perfil-menus.snapshot.json',
+);
+const PERMISSOES_POR_PERFIL = JSON.parse(readFileSync(SNAPSHOT_PERM, 'utf8')) as Record<string, string[]>;
+const MENUS_POR_PERFIL = JSON.parse(readFileSync(SNAPSHOT_MENUS, 'utf8')) as Record<string, string[]>;
 
 function permissoesDe(perfil: string): string[] {
   const permissoes = PERMISSOES_POR_PERFIL[perfil];
   if (!permissoes) throw new Error(`perfil ausente no snapshot RBAC do backend: ${perfil}`);
   return permissoes;
+}
+
+function menusDe(perfil: string): string[] {
+  const menus = MENUS_POR_PERFIL[perfil];
+  if (!menus) throw new Error(`perfil ausente no snapshot de menus: ${perfil}`);
+  return menus;
 }
 
 const mockGetMe = getMe as jest.MockedFunction<typeof getMe>;
@@ -32,14 +42,22 @@ describe('rota de entrada /', () => {
 
   it('redireciona para a rota de entrada do perfil', async () => {
     mockGetMe.mockResolvedValue({
-      sub: 'u1', nome: 'Admin', perfis: ['administrador'], permissoes: permissoesDe('administrador'),
+      sub: 'u1',
+      nome: 'Admin',
+      perfis: ['administrador'],
+      permissoes: permissoesDe('administrador'),
+      menusVisiveis: menusDe('administrador'),
     });
     await expect(EntradaPage()).rejects.toThrow('REDIRECT:/gestao/dashboard');
   });
 
   it('redireciona para a rota do grupo de trabalho quando o dashboard nao esta no menu', async () => {
     mockGetMe.mockResolvedValue({
-      sub: 'u2', nome: 'Ludmila', perfis: ['expedicao'], permissoes: permissoesDe('expedicao'),
+      sub: 'u2',
+      nome: 'Ludmila',
+      perfis: ['expedicao'],
+      permissoes: permissoesDe('expedicao'),
+      menusVisiveis: menusDe('expedicao'),
     });
     await expect(EntradaPage()).rejects.toThrow('REDIRECT:/carga/planejamento');
   });
@@ -47,14 +65,22 @@ describe('rota de entrada /', () => {
   // `faturamento` vê GESTÃO só com Relatórios & SIF (decisão 30); o grupo de trabalho é FATURAMENTO
   it('ignora grupo de consulta com item unico ao escolher a entrada', async () => {
     mockGetMe.mockResolvedValue({
-      sub: 'u4', nome: 'Carla', perfis: ['faturamento'], permissoes: permissoesDe('faturamento'),
+      sub: 'u4',
+      nome: 'Carla',
+      perfis: ['faturamento'],
+      permissoes: permissoesDe('faturamento'),
+      menusVisiveis: menusDe('faturamento'),
     });
     await expect(EntradaPage()).rejects.toThrow('REDIRECT:/faturamento/pre-faturamento');
   });
 
   it('sem modulo liberado exibe aviso explicito sem redirecionar', async () => {
     mockGetMe.mockResolvedValue({
-      sub: 'u3', nome: 'Conferente', perfis: ['conferente'], permissoes: permissoesDe('conferente'),
+      sub: 'u3',
+      nome: 'Conferente',
+      perfis: ['conferente'],
+      permissoes: permissoesDe('conferente'),
+      menusVisiveis: [],
     });
     render(await EntradaPage());
     expect(screen.getByRole('heading', { name: 'Nenhum módulo liberado' })).toBeInTheDocument();

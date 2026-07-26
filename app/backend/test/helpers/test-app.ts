@@ -73,6 +73,7 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
       disponibilidades_virtuais, compras_programadas_itens, compras_programadas,
       operacoes,
       regras_desdobramento_comercial, regras_transformacao_saidas, regras_transformacao,
+      modelos_etiqueta, frota_motoristas, frota_caminhoes,
       produtos, rotas, representantes,
       clientes, fornecedores, itens_compra, itens_comerciais, parametros,
       refresh_tokens, usuarios_perfis, perfis_permissoes, permissoes, perfis, usuarios

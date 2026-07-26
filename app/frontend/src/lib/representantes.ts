@@ -8,9 +8,17 @@ export interface Representante {
   contato: string | null;
   status: StatusCadastro;
   observacao: string | null;
+  /** Contagem em `GET /representantes`; lista em `GET /representantes/:id` (decisão 45). */
+  clientesVinculados?: number | ClienteVinculado[];
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+}
+
+export interface ClienteVinculado {
+  id: string;
+  nomeFantasia: string | null;
+  razaoSocial: string;
 }
 
 export interface CriarRepresentanteDto {

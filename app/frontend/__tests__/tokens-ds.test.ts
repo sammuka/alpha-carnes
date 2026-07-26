@@ -85,6 +85,11 @@ describe('tokens do DS', () => {
   });
 
   it('globals.css declara os tokens de acao, superficie, login, pipeline e provisorio', () => {
+    const inicio = globals.indexOf('@theme {');
+    const fim = globals.indexOf('\n}', inicio);
+    expect(inicio).toBeGreaterThanOrEqual(0);
+    expect(fim).toBeGreaterThan(inicio);
+    const theme = globals.slice(inicio, fim + 2);
     const tokens = [
       '--color-action-blue', '--color-action-blue-hover', '--color-action-blue-strong',
       '--color-action-blue-bg', '--color-action-blue-border', '--color-action-blue-text',
@@ -100,8 +105,13 @@ describe('tokens do DS', () => {
       '--color-sidebar-popover',
       '--color-avatar-blue-bg', '--color-avatar-violet-bg',
       '--color-avatar-green-bg', '--color-avatar-amber-bg',
+      '--color-table-zebra', '--color-table-row-hover', '--color-status-dot-ativo',
+      '--color-danger-rose', '--color-info-surface', '--color-info-border',
+      '--color-info-icon', '--color-info-ink', '--color-placeholder',
+      '--color-brand-navy-deep', '--color-text-ink', '--color-warning-surface',
+      '--color-warning-ink', '--color-action-blue-ring', '--color-code-surface',
     ];
-    expect(tokens.filter((token) => !globals.includes(`${token}:`))).toEqual([]);
+    expect(tokens.filter((token) => !theme.includes(`${token}:`))).toEqual([]);
   });
 
   it('nenhum literal hexadecimal de cor em src fora de globals.css', () => {
