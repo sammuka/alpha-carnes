@@ -49,6 +49,7 @@ export const preferenciasJsonSchema = z
     observacaoDesossa: z.string().trim().max(500).optional(),
     observacaoCarga: z.string().trim().max(500).optional(),
     perfilGordura: z.string().trim().max(50).optional(),
+    necessitaCorteAcerto: z.boolean().optional(),
   })
   .partial()
   .optional();

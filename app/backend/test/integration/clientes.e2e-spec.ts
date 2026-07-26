@@ -208,7 +208,7 @@ describe('Clientes e2e (CRUD + RBAC + validação + soft delete + auditoria)', (
             documentoFiscal: '50000006000137',
             nomeFantasia: 'NF',
             status: 'ativo',
-            prioridade: 'baixa',
+            prioridade: 'normal',
             preferenciasJson: { aceitaSubstituicao: false },
             dadosFiscaisJson: { uf: 'SP' },
             dadosContatoJson: { nome: 'Contato' },
