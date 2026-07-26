@@ -1,10 +1,16 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, desc, eq, getTableColumns, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { comprasProgramadas, comprasProgramadasItens, operacoes } from '../../../database/schema';
+import {
+  auditoria,
+  comprasProgramadas,
+  comprasProgramadasItens,
+  operacoes,
+  usuarios,
+} from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import {
   calcularRange,
@@ -13,15 +19,24 @@ import {
   type ListarQuery,
   type Paginado,
 } from '../../../common/crud/paginacao';
+import {
+  compararQtd,
+  somarListaQtd,
+} from '../../../common/crud/decimal';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { OperacoesService } from '../../operacoes/operacoes.service';
-import { DisponibilidadeService, type DisponibilidadeGerada } from '../disponibilidade/disponibilidade.service';
+import {
+  DisponibilidadeService,
+  type DisponibilidadeGerada,
+  type ItemImpacto,
+} from '../disponibilidade/disponibilidade.service';
 import type {
+  AtualizarItemCompraDto,
   CreateCompraProgramadaDto,
-  UpdateCompraItemDto,
   UpdateCompraProgramadaDto,
 } from './dto/compra-programada.dto';
 
+type Tx = NodePgDatabase<typeof schema>;
 type CompraProgramadaDb = typeof comprasProgramadas.$inferSelect;
 type CompraProgramadaItem = typeof comprasProgramadasItens.$inferSelect;
 type CompraProgramada = CompraProgramadaDb & { dataOperacao: string };
@@ -32,6 +47,16 @@ const COMPRA_COM_DATA = {
   ...getTableColumns(comprasProgramadas),
   dataOperacao: operacoes.data,
 };
+
+export interface ImpactoCompra {
+  compraId: string;
+  operacaoId: string;
+  status: string;
+  itens: ItemImpacto[];
+  deficitTotal: string;
+  exigeConfirmacao: boolean;
+  resumo: string;
+}
 
 const STATUS_EDITAVEL = ['rascunho', 'em_negociacao'];
 
@@ -187,39 +212,48 @@ export class ComprasProgramadasService {
   async atualizarItem(
     compraId: string,
     itemId: string,
-    dto: UpdateCompraItemDto,
+    dto: AtualizarItemCompraDto,
     usuarioId: string,
-  ): Promise<CompraComItens> {
-    const compraAtualizadaId = await this.db.transaction(async (tx) => {
-      const compra = await this.buscarAtiva(compraId, tx);
-      if (!compra) throw new NotFoundException('Compra programada não encontrada');
-      // Imutabilidade: compra confirmada (ou cancelada) não permite editar item.
-      this.assertEditavel(compra.status);
+  ): Promise<{ item: CompraProgramadaItem; impacto: ImpactoCompra }> {
+    const resultado = await this.db.transaction(async (tx) => {
+      const compra = await this.buscarAtivaSobLock(tx, compraId);
+      if (compra.status === 'cancelada') {
+        throw new ConflictException('Compra cancelada não pode ser alterada');
+      }
 
-      const anterior = await tx
-        .select()
-        .from(comprasProgramadasItens)
-        .where(
-          and(
-            eq(comprasProgramadasItens.id, itemId),
-            eq(comprasProgramadasItens.compraProgramadaId, compraId),
-            isNull(comprasProgramadasItens.deletedAt),
-          ),
-        )
-        .then((r) => r[0] ?? null);
-      if (!anterior) throw new NotFoundException('Item da compra não encontrado');
+      const [item] = await tx.select().from(comprasProgramadasItens)
+        .where(and(
+          eq(comprasProgramadasItens.id, itemId),
+          eq(comprasProgramadasItens.compraProgramadaId, compraId),
+          isNull(comprasProgramadasItens.deletedAt),
+        ))
+        .for('update');
+      if (!item) throw new NotFoundException('Item da compra não encontrado');
 
-      const atualizado = primeiroOuFalha(
-        await tx
-          .update(comprasProgramadasItens)
-          .set({
-            quantidadeComprada:
-              dto.quantidadeComprada !== undefined ? String(dto.quantidadeComprada) : anterior.quantidadeComprada,
-            observacoes: dto.observacoes ?? anterior.observacoes,
-          })
-          .where(eq(comprasProgramadasItens.id, itemId))
-          .returning(),
-      );
+      const confirmada = compra.status === 'confirmada';
+      if (confirmada) {
+        const projetado = await this.disponibilidadeService.projetarImpacto(
+          tx, compraId, new Map([[item.itemCompraId, dto.quantidadeComprada]]),
+        );
+        const impacto = this.montarImpacto(compra, projetado);
+        if (impacto.exigeConfirmacao && !dto.confirmarDeficit) {
+          throw new ConflictException({
+            codigo: 'IMPACTO_CONFIRMACAO_NECESSARIA',
+            mensagem: 'A alteração projeta déficit; confirme para prosseguir.',
+            impacto,
+          });
+        }
+      }
+
+      const [atualizado] = await tx.update(comprasProgramadasItens)
+        .set({
+          quantidadeComprada: dto.quantidadeComprada,
+          observacoes: dto.observacoes ?? item.observacoes,
+          updatedAt: new Date(),
+        })
+        .where(eq(comprasProgramadasItens.id, itemId))
+        .returning();
+      if (!atualizado) throw new Error('Falha ao atualizar item da compra');
 
       await this.auditoria.registrar(tx, {
         tabela: 'compras_programadas_itens',
@@ -227,12 +261,107 @@ export class ComprasProgramadasService {
         operacao: 'UPDATE',
         modulo: 'comercial',
         usuarioId,
-        dadosAnteriores: anterior,
+        dadosAnteriores: item,
         dadosNovos: atualizado,
       });
-      return compra.id;
+
+      if (confirmada) await this.disponibilidadeService.recalcularParaCompra(tx, compra, usuarioId);
+
+      const itens = await this.disponibilidadeService.projetarImpacto(tx, compraId, new Map());
+      return { compra, item: atualizado, impacto: this.montarImpacto(compra, itens) };
     });
-    return this.detalhar(compraAtualizadaId);
+
+    if (resultado.compra.status === 'confirmada') {
+      const [linhaOperacao] = await this.db
+        .select({ data: operacoes.data })
+        .from(operacoes)
+        .where(eq(operacoes.id, resultado.compra.operacaoId));
+      if (!linhaOperacao) throw new NotFoundException('Operação da compra não encontrada');
+      const dataOperacao = linhaOperacao.data;
+      this.eventEmitter.emit(EVENTOS.COMPRA_ALTERADA_IMPACTO, {
+        compraId: resultado.compra.id,
+        operacaoId: resultado.compra.operacaoId,
+        dataOperacao,
+        deficitTotal: resultado.impacto.deficitTotal,
+        itens: resultado.impacto.itens.map((i) => ({
+          itemComercialId: i.itemComercialId,
+          delta: i.delta,
+          deficitProjetado: i.deficitProjetado,
+        })),
+      });
+    }
+    return { item: resultado.item, impacto: resultado.impacto };
+  }
+
+  /** Fotografia (ou simulação) do impacto na disponibilidade — não persiste nada. */
+  async impacto(compraId: string, simulacao: Map<string, string>): Promise<ImpactoCompra> {
+    const compra = await this.buscarAtiva(compraId);
+    if (!compra) throw new NotFoundException('Compra programada não encontrada');
+    const itens = await this.disponibilidadeService.projetarImpacto(this.db, compraId, simulacao);
+    return this.montarImpacto(compra, itens);
+  }
+
+  private montarImpacto(compra: CompraProgramadaDb, itens: ItemImpacto[]): ImpactoCompra {
+    const deficitTotal = somarListaQtd(itens.map((i) => i.deficitProjetado));
+    const trechos = itens
+      .filter((i) => compararQtd(i.delta, '0.000') !== 0)
+      .map((i) => {
+        const sinal = compararQtd(i.delta, '0.000') > 0 ? '+' : '-';
+        const deficit = compararQtd(i.deficitProjetado, '0.000') > 0
+          ? `; déficit projetado: ${i.deficitProjetado} ${i.codigo}`
+          : '';
+        return `${sinal}${i.delta.replace('-', '')} ${i.codigo} virtuais${deficit}`;
+      });
+    return {
+      compraId: compra.id,
+      operacaoId: compra.operacaoId,
+      status: compra.status,
+      itens,
+      deficitTotal,
+      exigeConfirmacao: compararQtd(deficitTotal, '0.000') > 0,
+      resumo: trechos.length ? `${trechos.join('; ')}.` : 'Nenhuma alteração de quantidade.',
+    };
+  }
+
+  /** Histórico derivado da auditoria (D5.9) — sem tabela paralela. */
+  async historico(compraId: string): Promise<Array<{
+    id: string; dataHora: string; usuarioNome: string | null; tabela: string;
+    operacao: string; dadosAnteriores: unknown; dadosNovos: unknown;
+  }>> {
+    const compra = await this.buscarAtiva(compraId);
+    if (!compra) throw new NotFoundException('Compra programada não encontrada');
+    const itens = await this.db.select({ id: comprasProgramadasItens.id })
+      .from(comprasProgramadasItens)
+      .where(eq(comprasProgramadasItens.compraProgramadaId, compraId));
+    const ids = [compraId, ...itens.map((i) => i.id)];
+
+    const linhas = await this.db.select({
+      id: auditoria.id,
+      tabela: auditoria.tabela,
+      operacao: auditoria.operacao,
+      dadosAnteriores: auditoria.dadosAnteriores,
+      dadosNovos: auditoria.dadosNovos,
+      createdAt: auditoria.createdAt,
+      usuarioNome: usuarios.nome,
+    })
+      .from(auditoria)
+      .leftJoin(usuarios, eq(usuarios.id, auditoria.usuarioId))
+      .where(and(
+        inArray(auditoria.tabela, ['compras_programadas', 'compras_programadas_itens']),
+        inArray(auditoria.registroId, ids),
+      ))
+      .orderBy(desc(auditoria.createdAt))
+      .limit(50);
+
+    return linhas.map((l) => ({
+      id: l.id,
+      dataHora: l.createdAt.toISOString(),
+      usuarioNome: l.usuarioNome,
+      tabela: l.tabela,
+      operacao: l.operacao,
+      dadosAnteriores: l.dadosAnteriores,
+      dadosNovos: l.dadosNovos,
+    }));
   }
 
   /**
@@ -335,12 +464,22 @@ export class ComprasProgramadasService {
     }
   }
 
-  private async buscarAtiva(id: string, tx?: NodePgDatabase<typeof schema>): Promise<CompraProgramadaDb | null> {
+  private async buscarAtiva(id: string, tx?: Tx): Promise<CompraProgramadaDb | null> {
     const exec = tx ?? this.db;
     return exec
       .select()
       .from(comprasProgramadas)
       .where(and(eq(comprasProgramadas.id, id), isNull(comprasProgramadas.deletedAt)))
       .then((r) => r[0] ?? null);
+  }
+
+  private async buscarAtivaSobLock(tx: Tx, id: string): Promise<CompraProgramadaDb> {
+    const [compra] = await tx
+      .select()
+      .from(comprasProgramadas)
+      .where(and(eq(comprasProgramadas.id, id), isNull(comprasProgramadas.deletedAt)))
+      .for('update');
+    if (!compra) throw new NotFoundException('Compra programada não encontrada');
+    return compra;
   }
 }
