@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase } from '../helpers/comercial-fixtures';
-import { montarCenarioPesagem, criarPedido, pesarPeca, fakes, type CenarioPesagem } from '../helpers/pesagem-fixtures';
+import { montarCenarioPesagem, criarPedido, criarOutroCliente, pesarPeca, fakes, type CenarioPesagem } from '../helpers/pesagem-fixtures';
 import {
   criarCaminhao, abrirCarga, vincularPedido, adicionarPecaNaCarga,
   adicionarSubitemNaCarga, iniciarConferencia, concluirConferencia, fecharCaminhao,
@@ -311,7 +311,7 @@ describe('Expedicao e2e (F5)', () => {
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const p2 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p1.pedidoItemId);
@@ -352,7 +352,7 @@ describe('Expedicao e2e (F5)', () => {
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const p2 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p1.pedidoItemId);
@@ -430,7 +430,7 @@ describe('Expedicao e2e (F5)', () => {
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const p2 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
       dataOperacao: c.dataOperacao, quantidade: 1,
     });
     const peca1Id = await pecaElegivel(c, p1.pedidoItemId);
@@ -790,7 +790,7 @@ describe('Expedicao e2e (F5)', () => {
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const p2 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pesarPeca(app, recebimentoCookies, {
@@ -922,7 +922,7 @@ describe('Expedicao e2e (F5)', () => {
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const p2 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p1.pedidoItemId);

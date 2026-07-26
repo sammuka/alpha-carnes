@@ -34,6 +34,7 @@ import {
   formatarQtd,
   minimoQtd,
   somarListaQtd,
+  somarQtd,
   subtrairQtd,
 } from '../../../common/crud/decimal';
 import { EVENTOS, type PayloadPorEvento } from '../../../realtime/events/eventos';
@@ -50,10 +51,10 @@ import {
   type OverbookingChallengeItem,
 } from './overbooking-challenge.exception';
 
-type PedidoVenda = typeof pedidosVenda.$inferSelect;
-type PedidoVendaItem = typeof pedidosVendaItens.$inferSelect;
+export type PedidoVenda = typeof pedidosVenda.$inferSelect;
+export type PedidoVendaItem = typeof pedidosVendaItens.$inferSelect;
 
-interface ItemSolicitado {
+export interface ItemSolicitado {
   itemComercialId: string;
   quantidade: number;
   observacoes?: string;
@@ -64,7 +65,7 @@ interface CoberturaPlanejada {
   quantidade: string;
 }
 
-interface PlanoItem {
+export interface PlanoItem {
   itemComercialId: string;
   quantidadeSolicitada: string;
   disponivelAntes: string;
@@ -72,7 +73,7 @@ interface PlanoItem {
   deficit: string;
 }
 
-type EventoDominio<N extends keyof PayloadPorEvento = keyof PayloadPorEvento> = {
+export type EventoDominio<N extends keyof PayloadPorEvento = keyof PayloadPorEvento> = {
   [K in N]: { nome: K; payload: PayloadPorEvento[K] };
 }[N];
 
@@ -83,7 +84,8 @@ function ehDuplicidadeDeItemNoPedido(error: unknown): boolean {
   return code === '23505' && constraint === 'uq_pedido_venda_item_comercial_ativo';
 }
 
-function desafiosParaChallenge(plano: PlanoItem[]): OverbookingChallengeItem[] {
+/** Traduz plano → itens de challenge. Exportado para o AdendosService reusar (D2). */
+export function desafiosParaChallenge(plano: PlanoItem[]): OverbookingChallengeItem[] {
   return plano
     .filter((p) => compararQtd(p.deficit, '0') > 0)
     .map((p) => ({
@@ -468,71 +470,164 @@ export class PedidosService {
         observacoes: solicitado.observacoes,
       }).returning();
       if (!item) throw new Error('Falha ao persistir item do pedido');
-
-      for (const cobertura of alocacao.coberturas) {
-        const atualizada = await tx.execute<{ id: string }>(sql`
-          UPDATE disponibilidades_virtuais
-          SET quantidade_reservada=quantidade_reservada+${cobertura.quantidade}::numeric,
-              quantidade_disponivel=quantidade_disponivel-${cobertura.quantidade}::numeric,
-              status=CASE
-                WHEN quantidade_disponivel-${cobertura.quantidade}::numeric=0 THEN 'esgotada'
-                ELSE 'parcialmente_reservada'
-              END
-          WHERE id=${cobertura.disponibilidadeId}
-            AND quantidade_disponivel >= ${cobertura.quantidade}::numeric
-          RETURNING id
-        `);
-        if (atualizada.rows.length !== 1) {
-          throw new ConflictException('Saldo mudou durante a confirmação; refaça a operação');
-        }
-        await tx.insert(reservasDisponibilidade).values({
-          disponibilidadeVirtualId: cobertura.disponibilidadeId,
-          pedidoVendaItemId: item.id,
-          quantidadeReservada: cobertura.quantidade,
-          tipoConsumo: 'virtual',
-          status: 'ativa',
-        });
-      }
-      if (!ehZero(alocacao.deficit)) {
-        if (!pedido.operacaoId) {
-          throw new ConflictException('Pedido sem operação não pode gerar overbooking');
-        }
-        await tx.insert(reservasDisponibilidade).values({
-          disponibilidadeVirtualId: null,
-          pedidoVendaItemId: item.id,
-          quantidadeReservada: alocacao.deficit,
-          tipoConsumo: 'overbooking',
-          status: 'ativa',
-        });
-        const [pendencia] = await tx.insert(pendenciasOverbooking).values({
-          pedidoVendaId: pedido.id, pedidoVendaItemId: item.id,
-          itemComercialId: item.itemComercialId, clienteId: pedido.clienteId,
-          vendedorUsuarioId: usuarioId, operacaoId: pedido.operacaoId,
-          quantidadeDeficit: alocacao.deficit,
-        }).returning();
-        if (!pendencia) throw new Error('Falha ao abrir pendência de overbooking');
-        await tx.insert(pendenciasOverbookingHistorico).values({
-          pendenciaId: pendencia.id, acao: 'confirmada_pelo_vendedor', autorId: usuarioId,
-        });
-        eventos.push({
-          nome: EVENTOS.PENDENCIA_OVERBOOKING_ABERTA,
-          payload: { pendenciaId: pendencia.id, pedidoVendaId: pedido.id },
-        });
-        eventos.push({
-          nome: EVENTOS.OVERBOOKING_CONFIRMADO,
-          payload: {
-            pedidoVendaId: pedido.id,
-            itemId: item.id,
-            quantidadeOverbooking: alocacao.deficit,
-          },
-        });
-      }
+      eventos.push(...await this.aplicarAlocacaoNoItem(tx, pedido, item, alocacao, usuarioId));
       eventos.push({
         nome: EVENTOS.PEDIDO_VENDA_ITEM_CRIADO,
         payload: { pedidoVendaId: pedido.id, itemId: item.id },
       });
     }
     return { pedido, eventos };
+  }
+
+  /**
+   * Consome as coberturas planejadas e o déficit de um item de pedido JÁ persistido.
+   * Extraído de persistirItensPlanejados para que o adendo reuse o motor de reserva
+   * sem duplicar regra (D2). Devolve os eventos a emitir após o commit.
+   */
+  async aplicarAlocacaoNoItem(
+    tx: Tx,
+    pedido: PedidoVenda,
+    item: PedidoVendaItem,
+    alocacao: PlanoItem,
+    usuarioId: string,
+  ): Promise<EventoDominio[]> {
+    const eventos: EventoDominio[] = [];
+    for (const cobertura of alocacao.coberturas) {
+      const atualizada = await tx.execute<{ id: string }>(sql`
+        UPDATE disponibilidades_virtuais
+        SET quantidade_reservada=quantidade_reservada+${cobertura.quantidade}::numeric,
+            quantidade_disponivel=quantidade_disponivel-${cobertura.quantidade}::numeric,
+            status=CASE
+              WHEN quantidade_disponivel-${cobertura.quantidade}::numeric=0 THEN 'esgotada'
+              ELSE 'parcialmente_reservada'
+            END
+        WHERE id=${cobertura.disponibilidadeId}
+          AND quantidade_disponivel >= ${cobertura.quantidade}::numeric
+        RETURNING id
+      `);
+      if (atualizada.rows.length !== 1) {
+        throw new ConflictException('Saldo mudou durante a confirmação; refaça a operação');
+      }
+      await tx.insert(reservasDisponibilidade).values({
+        disponibilidadeVirtualId: cobertura.disponibilidadeId,
+        pedidoVendaItemId: item.id,
+        quantidadeReservada: cobertura.quantidade,
+        tipoConsumo: 'virtual',
+        status: 'ativa',
+      });
+    }
+    if (ehZero(alocacao.deficit)) return eventos;
+
+    if (!pedido.operacaoId) {
+      throw new ConflictException('Pedido sem operação não pode gerar overbooking');
+    }
+    await tx.insert(reservasDisponibilidade).values({
+      disponibilidadeVirtualId: null,
+      pedidoVendaItemId: item.id,
+      quantidadeReservada: alocacao.deficit,
+      tipoConsumo: 'overbooking',
+      status: 'ativa',
+    });
+    const pendenciaId = await this.abrirOuAcumularPendencia(tx, pedido, item, alocacao.deficit, usuarioId);
+    eventos.push({
+      nome: EVENTOS.PENDENCIA_OVERBOOKING_ABERTA,
+      payload: { pendenciaId, pedidoVendaId: pedido.id },
+    });
+    eventos.push({
+      nome: EVENTOS.OVERBOOKING_CONFIRMADO,
+      payload: {
+        pedidoVendaId: pedido.id,
+        itemId: item.id,
+        quantidadeOverbooking: alocacao.deficit,
+      },
+    });
+    return eventos;
+  }
+
+  /**
+   * Abre a pendência de overbooking do item ou soma o déficit à pendência aberta.
+   * Só existe pendência aberta quando o item recebeu adendo deficitário antes; na
+   * criação do item o caminho é sempre o INSERT (comportamento da Onda 1 preservado).
+   * Acumular em vez de duplicar é obrigatório: atualizarOuCancelarPendencia
+   * (reduzirItem/removerItem) resolve UMA pendência aberta por item.
+   */
+  private async abrirOuAcumularPendencia(
+    tx: Tx,
+    pedido: PedidoVenda,
+    item: PedidoVendaItem,
+    deficit: string,
+    usuarioId: string,
+  ): Promise<string> {
+    const [aberta] = await tx.select().from(pendenciasOverbooking)
+      .where(and(
+        eq(pendenciasOverbooking.pedidoVendaItemId, item.id),
+        notInArray(pendenciasOverbooking.status, ['resolvida', 'cancelada']),
+        isNull(pendenciasOverbooking.deletedAt),
+      ))
+      .for('update')
+      .limit(1);
+    if (aberta) {
+      const acumulado = somarQtd(aberta.quantidadeDeficit, deficit);
+      await tx.update(pendenciasOverbooking)
+        .set({ quantidadeDeficit: acumulado, updatedAt: new Date() })
+        .where(eq(pendenciasOverbooking.id, aberta.id));
+      await tx.insert(pendenciasOverbookingHistorico).values({
+        pendenciaId: aberta.id,
+        acao: 'deficit_aumentado_por_adendo',
+        autorId: usuarioId,
+        detalheJson: { deficitAdicionado: deficit, deficitTotal: acumulado },
+      });
+      return aberta.id;
+    }
+    const [pendencia] = await tx.insert(pendenciasOverbooking).values({
+      pedidoVendaId: pedido.id, pedidoVendaItemId: item.id,
+      itemComercialId: item.itemComercialId, clienteId: pedido.clienteId,
+      vendedorUsuarioId: usuarioId, operacaoId: pedido.operacaoId,
+      quantidadeDeficit: deficit,
+    }).returning();
+    if (!pendencia) throw new Error('Falha ao abrir pendência de overbooking');
+    await tx.insert(pendenciasOverbookingHistorico).values({
+      pendenciaId: pendencia.id, acao: 'confirmada_pelo_vendedor', autorId: usuarioId,
+    });
+    return pendencia.id;
+  }
+
+  /** Carrega sob lock o pedido que vai receber adendo. Só estados abertos de AD-03 (D7). */
+  async carregarAbertoParaAdendo(tx: Tx, pedidoId: string): Promise<PedidoVenda> {
+    const [pedido] = await tx.select().from(pedidosVenda)
+      .where(and(eq(pedidosVenda.id, pedidoId), isNull(pedidosVenda.deletedAt)))
+      .for('update')
+      .limit(1);
+    if (!pedido) throw new NotFoundException('Pedido não encontrado');
+    if (!(PedidosService.STATUS_ABERTOS as readonly string[]).includes(pedido.status)) {
+      throw new ConflictException({
+        code: 'PEDIDO_NAO_ABERTO',
+        message: 'O adendo só se aplica a pedido aberto (rascunho, em elaboração ou aguardando '
+          + 'confirmação de overbooking).',
+      });
+    }
+    return pedido;
+  }
+
+  /** Exige que o produto JÁ esteja no pedido: adendo aumenta item, não cria item. */
+  async exigirItemDoPedido(
+    tx: Tx, pedidoId: string, itemComercialId: string,
+  ): Promise<PedidoVendaItem> {
+    const [item] = await tx.select().from(pedidosVendaItens)
+      .where(and(
+        eq(pedidosVendaItens.pedidoVendaId, pedidoId),
+        eq(pedidosVendaItens.itemComercialId, itemComercialId),
+        isNull(pedidosVendaItens.deletedAt),
+      ))
+      .for('update')
+      .limit(1);
+    if (!item) {
+      throw new NotFoundException({
+        code: 'ITEM_NAO_ESTA_NO_PEDIDO',
+        message: 'O produto não está neste pedido; use a inclusão de item.',
+      });
+    }
+    return item;
   }
 
   async reduzirItem(

@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase } from '../helpers/comercial-fixtures';
-import { montarCenarioPesagem, criarPedido, pesarPeca, fakes } from '../helpers/pesagem-fixtures';
+import { montarCenarioPesagem, criarPedido, criarOutroCliente, pesarPeca, fakes } from '../helpers/pesagem-fixtures';
 import { criarCaminhao, abrirCarga, vincularPedido, adicionarPecaNaCarga } from '../helpers/expedicao-fixtures';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
@@ -57,7 +57,7 @@ describe('Expedicao — concorrencia de transferencia (F5)', () => {
     // Pedido destino com saldo = 3
     const saldo = 3;
     const pDestino = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
       dataOperacao: c.dataOperacao, quantidade: saldo,
     });
 

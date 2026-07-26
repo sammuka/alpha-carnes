@@ -66,6 +66,22 @@ export async function montarCenarioPesagem(
   };
 }
 
+/**
+ * Cria um segundo cliente para cenários que precisam de dois pedidos abertos no
+ * mesmo item/operação (AD-03 permite só um pedido aberto por cliente+item+operação).
+ */
+export async function criarOutroCliente(app: INestApplication): Promise<string> {
+  const { db } = app.get<{ db: Db }>(DRIZZLE);
+  const sufixo = `${Math.round(performance.now() * 1000)}-${Math.floor(Math.random() * 1e6)}`;
+  const [cliente] = await db.insert(schema.clientes).values({
+    codigo: `CLIPES-${sufixo}`,
+    razaoSocial: 'Cliente Pesagem 2',
+    documentoFiscal: `DOCPES-${sufixo}`,
+  }).returning();
+  if (!cliente) throw new Error('Falha ao criar segundo cliente do teste');
+  return cliente.id;
+}
+
 /** Cria um pedido de venda sobre a compra, com um item de quantidade dada. */
 export async function criarPedido(
   app: INestApplication,
