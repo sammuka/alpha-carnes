@@ -49,6 +49,7 @@ describe('adendos (adendo com histórico append-only)', () => {
       compraProgramadaId,
       clienteId: base.clienteId,
       dataOperacao,
+      salvarComoRascunho: false,
       itens: [{ itemComercialId: base.itemComercialId, quantidadePedida }],
     }, usuarioId);
     const detalhe = await pedidos.detalhar(pedido.id);

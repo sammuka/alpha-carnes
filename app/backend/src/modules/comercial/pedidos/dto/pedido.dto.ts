@@ -35,6 +35,7 @@ export const createPedidoSchema = z.object({
   rotaPrevista: z.string().trim().max(100).optional(),
   prioridade: z.number().int().min(0).max(100).optional(),
   observacoesGerais: z.string().trim().max(1000).optional(),
+  salvarComoRascunho: z.boolean().optional().default(false),
   itens: itensCriacaoPedidoSchema,
 });
 
@@ -80,3 +81,8 @@ export const buscarPedidoAbertoSchema = z.object({
 });
 
 export type BuscarPedidoAbertoDto = z.infer<typeof buscarPedidoAbertoSchema>;
+
+export const liberarReservaSchema = z.object({
+  justificativa: z.string().trim().min(10, 'justificativa deve ter ao menos 10 caracteres').max(1000),
+});
+export type LiberarReservaDto = z.infer<typeof liberarReservaSchema>;

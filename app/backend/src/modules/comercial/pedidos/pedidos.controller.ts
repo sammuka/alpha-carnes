@@ -27,6 +27,7 @@ import {
   confirmarInclusaoOverbookingSchema,
   createPedidoSchema,
   incluirItemSchema,
+  liberarReservaSchema,
   reduzirItemSchema,
   removerItemSchema,
   type BuscarPedidoAbertoDto,
@@ -34,6 +35,7 @@ import {
   type ConfirmarInclusaoOverbookingDto,
   type CreatePedidoDto,
   type IncluirItemDto,
+  type LiberarReservaDto,
   type ReduzirItemDto,
   type RemoverItemDto,
 } from './dto/pedido.dto';
@@ -146,6 +148,17 @@ export class PedidosController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.service.cancelarPedido(id, dto.motivo, user.sub);
+  }
+
+  @Post(':id/liberar-reserva')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissoes('PEDIDO_RESERVA_LIBERAR')
+  async liberarReserva(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(liberarReservaSchema)) dto: LiberarReservaDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.liberarReservaAdministrativa(id, dto, user.sub);
   }
 
   @Post(':id/adendos')

@@ -43,6 +43,7 @@ import type {
   BuscarPedidoAbertoDto,
   CreatePedidoDto,
   IncluirItemDto,
+  LiberarReservaDto,
   ReduzirItemDto,
   RemoverItemDto,
 } from './dto/pedido.dto';
@@ -306,7 +307,8 @@ export class PedidosService {
         dataEntrega: dto.dataEntrega,
         rotaPrevista: dto.rotaPrevista ?? (await this.rotaHerdadaDoCliente(tx, dto.clienteId)),
         prioridade: dto.prioridade,
-        status: 'em_elaboracao_reserva_ativa',
+        // AD-06: rascunho também tem reserva ativa; a única diferença é o status inicial.
+        status: dto.salvarComoRascunho ? 'rascunho' : 'em_elaboracao_reserva_ativa',
         observacoesGerais: dto.observacoesGerais,
         usuarioCriacaoId: usuarioId,
       }).returning());
@@ -877,6 +879,64 @@ export class PedidosService {
         eventos: [{
           nome: EVENTOS.PEDIDO_FINALIZADO,
           payload: { pedidoVendaId: pedidoId },
+        }] as EventoDominio[],
+      };
+    });
+    this.emitirEventosPosCommit(resultado.eventos);
+    return resultado.pedido;
+  }
+
+  /** AD-06 — única liberação além de remoção/cancelamento pelo vendedor. Sem TTL, sem job. */
+  async liberarReservaAdministrativa(
+    pedidoId: string, dto: LiberarReservaDto, usuarioId: string,
+  ): Promise<{ id: string; status: string }> {
+    const resultado = await this.db.transaction(async (tx) => {
+      const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId);
+      if (pedido.status !== 'rascunho') {
+        throw new BadRequestException({
+          code: 'PEDIDO_NAO_ESTA_EM_RASCUNHO',
+          message: 'A liberação administrativa só se aplica a rascunho com reserva ativa.',
+        });
+      }
+      const itens = await tx.select().from(pedidosVendaItens)
+        .where(and(
+          eq(pedidosVendaItens.pedidoVendaId, pedido.id),
+          isNull(pedidosVendaItens.deletedAt),
+        ));
+      const reservasAtivas = await tx.select({ id: reservasDisponibilidade.id })
+        .from(reservasDisponibilidade)
+        .where(and(
+          inArray(reservasDisponibilidade.pedidoVendaItemId, itens.map((i) => i.id)),
+          eq(reservasDisponibilidade.status, 'ativa'),
+        ));
+      if (reservasAtivas.length === 0) {
+        throw new BadRequestException({
+          code: 'PEDIDO_SEM_RESERVA_ATIVA',
+          message: 'Este rascunho não tem reserva ativa a liberar.',
+        });
+      }
+      for (const item of itens) {
+        await this.liberarTodasReservasDoItem(tx, item.id);
+      }
+      await this.cancelarPendenciasDoPedido(tx, pedido.id, usuarioId);
+      const liberado = primeiroOuFalha(await tx.update(pedidosVenda)
+        .set({ status: 'cancelado', motivoCancelamento: dto.justificativa, updatedAt: new Date() })
+        .where(eq(pedidosVenda.id, pedido.id))
+        .returning());
+      await this.auditoria.registrar(tx, {
+        tabela: 'pedidos_venda', registroId: pedido.id, operacao: 'UPDATE',
+        modulo: 'comercial', usuarioId,
+        dadosAnteriores: { status: pedido.status },
+        dadosNovos: { status: 'cancelado', acao: 'liberar_reserva' },
+        justificativa: dto.justificativa,
+      });
+      return {
+        pedido: { id: liberado.id, status: liberado.status },
+        eventos: [{
+          nome: EVENTOS.RESERVA_LIBERADA_ADMIN,
+          payload: {
+            pedidoVendaId: pedido.id, autorId: usuarioId, justificativa: dto.justificativa,
+          },
         }] as EventoDominio[],
       };
     });

@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
@@ -22,6 +23,7 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
     compraProgramadaId: string;
     clienteId: string;
     dataOperacao: string;
+    salvarComoRascunho: boolean;
     itens: Array<{ itemComercialId: string; quantidadePedida: number }>;
   };
   let ctx: {
@@ -58,6 +60,7 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
       compraProgramadaId: compraIdPorData.get('2026-08-05')!,
       clienteId: base.clienteId,
       dataOperacao: '2026-08-05',
+      salvarComoRascunho: false,
       itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
     };
 
@@ -151,5 +154,121 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
         rotaPrevista: undefined }, usuarioId,
     );
     expect(semRota.rotaPrevista).toBeNull();
+  });
+});
+
+/**
+ * Task 8 — AD-06: liberação administrativa de reserva e rascunho explícito.
+ */
+describe('pedidos-onda4 (AD-06 liberar reserva administrativa)', () => {
+  let app: INestApplication;
+  let db: NodePgDatabase<typeof schema>;
+  let comprasCookies: string;
+  let comercialCookies: string;
+  let gestorCookies: string;
+  let base: { fornecedorId: string; itemCompraId: string; itemComercialId: string; clienteId: string };
+
+  beforeAll(async () => {
+    app = await createTestApp();
+    const compras = await createTestUser(app, { perfil: 'compras' });
+    const comercial = await createTestUser(app, { perfil: 'comercial' });
+    const gestor = await createTestUser(app, { perfil: 'gestor' });
+    comprasCookies = await loginCookies(app, compras.adminEmail, compras.adminPassword);
+    comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
+    gestorCookies = await loginCookies(app, gestor.adminEmail, gestor.adminPassword);
+
+    const drizzle = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    db = drizzle.db;
+    base = await seedComercialBase(app, { fator: 1 });
+  }, 60000);
+
+  afterAll(async () => {
+    await cleanupDb(app);
+    await app.close();
+  });
+
+  async function criarPedidoHttp(
+    dataOperacao: string, opts: { salvarComoRascunho?: boolean } = {},
+  ): Promise<{ id: string; status: string }> {
+    const { default: request } = await import('supertest');
+    const compraProgramadaId = await criarCompraConfirmada(app, comprasCookies, base, {
+      dataOperacao, quantidade: 10,
+    });
+    const res = await request(app.getHttpServer())
+      .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({
+        compraProgramadaId,
+        clienteId: base.clienteId,
+        dataOperacao,
+        salvarComoRascunho: opts.salvarComoRascunho,
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+      });
+    if (res.status !== 201) throw new Error(`Falha ao criar pedido: ${res.status} ${JSON.stringify(res.body)}`);
+    return res.body as { id: string; status: string };
+  }
+
+  async function itemIdDoPedido(pedidoId: string): Promise<string> {
+    const { default: request } = await import('supertest');
+    const det = await request(app.getHttpServer())
+      .get(`/comercial/pedidos/${pedidoId}`)
+      .set('Cookie', comercialCookies);
+    const itemId = (det.body.itens as Array<{ id: string }>)[0]?.id;
+    if (!itemId) throw new Error('Pedido sem itens');
+    return itemId;
+  }
+
+  it('salvarComoRascunho cria pedido em rascunho com reserva ativa', async () => {
+    const pedido = await criarPedidoHttp('2026-08-20', { salvarComoRascunho: true });
+    expect(pedido.status).toBe('rascunho');
+
+    const itemId = await itemIdDoPedido(pedido.id);
+    const reservas = await db.select().from(schema.reservasDisponibilidade)
+      .where(eq(schema.reservasDisponibilidade.pedidoVendaItemId, itemId));
+    expect(reservas.length).toBeGreaterThan(0);
+    expect(reservas.every((r) => r.status === 'ativa')).toBe(true);
+  });
+
+  it('liberar reserva exige justificativa libera reservas e registra auditoria', async () => {
+    const { default: request } = await import('supertest');
+    const pedido = await criarPedidoHttp('2026-08-21', { salvarComoRascunho: true });
+    const itemId = await itemIdDoPedido(pedido.id);
+
+    const semJustificativa = await request(app.getHttpServer())
+      .post(`/comercial/pedidos/${pedido.id}/liberar-reserva`)
+      .set('Cookie', gestorCookies)
+      .send({ justificativa: 'curta' });
+    expect(semJustificativa.status).toBe(400);
+
+    const liberado = await request(app.getHttpServer())
+      .post(`/comercial/pedidos/${pedido.id}/liberar-reserva`)
+      .set('Cookie', gestorCookies)
+      .send({ justificativa: 'Cliente desistiu da compra hoje pelo telefone' });
+    expect(liberado.status).toBe(200);
+    expect(liberado.body).toMatchObject({ id: pedido.id, status: 'cancelado' });
+
+    const reservas = await db.select().from(schema.reservasDisponibilidade)
+      .where(eq(schema.reservasDisponibilidade.pedidoVendaItemId, itemId));
+    expect(reservas.length).toBeGreaterThan(0);
+    expect(reservas.every((r) => r.status === 'liberada')).toBe(true);
+
+    const auditorias = await db.select().from(schema.auditoria)
+      .where(and(
+        eq(schema.auditoria.tabela, 'pedidos_venda'),
+        eq(schema.auditoria.registroId, pedido.id),
+        eq(schema.auditoria.operacao, 'UPDATE'),
+      ));
+    expect(auditorias.some((a) => a.justificativa?.includes('Cliente desistiu'))).toBe(true);
+  });
+
+  it('liberar reserva sem permissao retorna 403', async () => {
+    const { default: request } = await import('supertest');
+    const pedido = await criarPedidoHttp('2026-08-22', { salvarComoRascunho: true });
+
+    const res = await request(app.getHttpServer())
+      .post(`/comercial/pedidos/${pedido.id}/liberar-reserva`)
+      .set('Cookie', comercialCookies)
+      .send({ justificativa: 'Cliente desistiu da compra hoje pelo telefone' });
+    expect(res.status).toBe(403);
   });
 });

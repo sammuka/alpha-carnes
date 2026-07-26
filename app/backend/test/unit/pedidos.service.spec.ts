@@ -1,6 +1,27 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PedidosService } from '../../src/modules/comercial/pedidos/pedidos.service';
 import { EVENTOS } from '../../src/realtime/events/eventos';
+
+function fontesDoModulo(dir: string): string[] {
+  return readdirSync(dir).flatMap((nome) => {
+    const caminho = join(dir, nome);
+    if (statSync(caminho).isDirectory()) return fontesDoModulo(caminho);
+    return nome.endsWith('.ts') ? [caminho] : [];
+  });
+}
+
+// DoD-83 — AD-06 é liberação administrativa explícita; não pode voltar TTL/job de expiração.
+describe('PedidosService — AD-06 sem expiracao automatica', () => {
+  it('nao existe expiracao automatica de reserva de rascunho', () => {
+    const raiz = join(__dirname, '../../src/modules/comercial');
+    const suspeitos = fontesDoModulo(raiz).filter((f) =>
+      /@Cron|SchedulerRegistry|setTimeout\(|setInterval\(|expiraEm|ttlReserva/
+        .test(readFileSync(f, 'utf8')));
+    expect(suspeitos).toEqual([]);
+  });
+});
 
 // Verifica a ordem commit→emit (RA-04/ADR-004): o evento só sai DEPOIS que a
 // Promise de db.transaction resolve, e NÃO sai se a transação rejeita.
