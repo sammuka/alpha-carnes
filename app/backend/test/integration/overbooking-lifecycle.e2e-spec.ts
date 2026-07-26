@@ -66,7 +66,11 @@ describe('overbooking-lifecycle', () => {
     const res = await request(app.getHttpServer())
       .post(`/comercial/overbooking/${pend.id}/decisao`)
       .set('Cookie', comercialCookies)
-      .send({ caminho: 'compra_complementar', detalhe: { obs: 'negado' } });
+      .send({
+        caminho: 'compra_complementar',
+        compraProgramadaId: criar.body.id,
+        quantidade: '1.000',
+      });
     expect(res.status).toBe(403);
   });
 

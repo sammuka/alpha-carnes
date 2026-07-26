@@ -79,6 +79,8 @@ export type EventoDominio<N extends keyof PayloadPorEvento = keyof PayloadPorEve
   [K in N]: { nome: K; payload: PayloadPorEvento[K] };
 }[N];
 
+export type { EventoDominio };
+
 function ehDuplicidadeDeItemNoPedido(error: unknown): boolean {
   const pg = error as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
   const code = pg.code ?? pg.cause?.code;
@@ -267,67 +269,76 @@ export class PedidosService {
   }
 
   async criar(dto: CreatePedidoDto, usuarioId: string, confirmado = false) {
-    const resultado = await this.db.transaction(async (tx) => {
-      const solicitados: ItemSolicitado[] = dto.itens.map((item) => ({
-        itemComercialId: item.itemComercialId,
-        quantidade: item.quantidadePedida,
-        observacoes: item.observacoes,
-      }));
-      // O challenge é estritamente read-only: não chame garantirOperacao antes
-      // de decidir se a confirmação é necessária.
-      const operacaoExistente = await this.operacoes.encontrarAtivaPorData(
-        tx, dto.dataOperacao,
-      );
-      // Sem operação ativa na data não pode existir pedido aberto para checar: pedidos_venda.operacao_id
-      // é NOT NULL e FK para operacoes(id), logo o conjunto de conflitos é provadamente vazio.
-      // A operação é criada logo abaixo por garantirOperacao (primeiro pedido do dia).
-      if (operacaoExistente) {
-        await this.exigirUnicidadeAd03(
-          tx,
-          dto.clienteId,
-          operacaoExistente.id,
-          solicitados.map((s) => s.itemComercialId),
-        );
-      }
-      const plano = await this.planejarSobLock(
-        tx, operacaoExistente?.id ?? null, solicitados,
-      );
-      const desafios = desafiosParaChallenge(plano);
-      if (desafios.length && !confirmado) {
-        throw new OverbookingChallengeException(desafios);
-      }
-
-      const operacao = operacaoExistente
-        ?? (await this.operacoes.garantirOperacao(
-          tx, dto.dataOperacao, usuarioId,
-        )).operacao;
-      const pedido = primeiroOuFalha(await tx.insert(pedidosVenda).values({
-        compraProgramadaId: dto.compraProgramadaId,
-        clienteId: dto.clienteId,
-        operacaoId: operacao.id,
-        dataEntrega: dto.dataEntrega,
-        rotaPrevista: dto.rotaPrevista ?? (await this.rotaHerdadaDoCliente(tx, dto.clienteId)),
-        prioridade: dto.prioridade,
-        // AD-06: rascunho também tem reserva ativa; a única diferença é o status inicial.
-        status: dto.salvarComoRascunho ? 'rascunho' : 'em_elaboracao_reserva_ativa',
-        observacoesGerais: dto.observacoesGerais,
-        usuarioCriacaoId: usuarioId,
-      }).returning());
-
-      await this.auditoria.registrar(tx, {
-        tabela: 'pedidos_venda',
-        registroId: pedido.id,
-        operacao: 'INSERT',
-        modulo: 'comercial',
-        usuarioId,
-        dadosAnteriores: {},
-        dadosNovos: pedido,
-      });
-
-      return this.persistirItensPlanejados(tx, pedido, solicitados, plano, usuarioId);
-    });
+    const resultado = await this.db.transaction((tx) =>
+      this.criarNaTx(tx, dto, usuarioId, confirmado),
+    );
     this.emitirEventosPosCommit(resultado.eventos);
     return resultado.pedido;
+  }
+
+  async criarNaTx(
+    tx: Tx,
+    dto: CreatePedidoDto,
+    usuarioId: string,
+    confirmado: boolean,
+  ): Promise<{ pedido: PedidoVenda; eventos: EventoDominio[] }> {
+    const solicitados: ItemSolicitado[] = dto.itens.map((item) => ({
+      itemComercialId: item.itemComercialId,
+      quantidade: item.quantidadePedida,
+      observacoes: item.observacoes,
+    }));
+    // O challenge é estritamente read-only: não chame garantirOperacao antes
+    // de decidir se a confirmação é necessária.
+    const operacaoExistente = await this.operacoes.encontrarAtivaPorData(
+      tx, dto.dataOperacao,
+    );
+    // Sem operação ativa na data não pode existir pedido aberto para checar: pedidos_venda.operacao_id
+    // é NOT NULL e FK para operacoes(id), logo o conjunto de conflitos é provadamente vazio.
+    // A operação é criada logo abaixo por garantirOperacao (primeiro pedido do dia).
+    if (operacaoExistente) {
+      await this.exigirUnicidadeAd03(
+        tx,
+        dto.clienteId,
+        operacaoExistente.id,
+        solicitados.map((s) => s.itemComercialId),
+      );
+    }
+    const plano = await this.planejarSobLock(
+      tx, operacaoExistente?.id ?? null, solicitados,
+    );
+    const desafios = desafiosParaChallenge(plano);
+    if (desafios.length && !confirmado) {
+      throw new OverbookingChallengeException(desafios);
+    }
+
+    const operacao = operacaoExistente
+      ?? (await this.operacoes.garantirOperacao(
+        tx, dto.dataOperacao, usuarioId,
+      )).operacao;
+    const pedido = primeiroOuFalha(await tx.insert(pedidosVenda).values({
+      compraProgramadaId: dto.compraProgramadaId,
+      clienteId: dto.clienteId,
+      operacaoId: operacao.id,
+      dataEntrega: dto.dataEntrega,
+      rotaPrevista: dto.rotaPrevista ?? (await this.rotaHerdadaDoCliente(tx, dto.clienteId)),
+      prioridade: dto.prioridade,
+      // AD-06: rascunho também tem reserva ativa; a única diferença é o status inicial.
+      status: dto.salvarComoRascunho ? 'rascunho' : 'em_elaboracao_reserva_ativa',
+      observacoesGerais: dto.observacoesGerais,
+      usuarioCriacaoId: usuarioId,
+    }).returning());
+
+    await this.auditoria.registrar(tx, {
+      tabela: 'pedidos_venda',
+      registroId: pedido.id,
+      operacao: 'INSERT',
+      modulo: 'comercial',
+      usuarioId,
+      dadosAnteriores: {},
+      dadosNovos: pedido,
+    });
+
+    return this.persistirItensPlanejados(tx, pedido, solicitados, plano, usuarioId);
   }
 
   async incluirItem(
@@ -698,47 +709,59 @@ export class PedidosService {
     dto: ReduzirItemDto,
     usuarioId: string,
   ): Promise<void> {
-    const novaQuantidade = formatarQtd(dto.novaQuantidade);
-    await this.db.transaction(async (tx) => {
-      const item = await tx.select().from(pedidosVendaItens)
-        .where(and(
-          eq(pedidosVendaItens.id, itemId),
-          eq(pedidosVendaItens.pedidoVendaId, pedidoId),
-          isNull(pedidosVendaItens.deletedAt),
-        ))
-        .then((rows) => rows[0]);
-      if (!item) throw new NotFoundException('Item do pedido não encontrado');
-      if (compararQtd(novaQuantidade, item.quantidadePedida) >= 0) {
-        throw new ConflictException('A operação aceita somente redução');
-      }
-      const reducao = subtrairQtd(item.quantidadePedida, novaQuantidade);
-      const tirarOverbooking = minimoQtd(reducao, item.quantidadeOverbooking);
-      const devolverReal = subtrairQtd(reducao, tirarOverbooking);
-      if (!ehZero(tirarOverbooking)) {
-        await this.reduzirReservaOverbooking(tx, item.id, tirarOverbooking);
-        await this.atualizarOuCancelarPendencia(tx, item.id, tirarOverbooking, usuarioId);
-      }
-      if (!ehZero(devolverReal)) {
-        await this.liberarReservaReal(tx, item.id, devolverReal);
-      }
-      const novaOverbooking = subtrairQtd(item.quantidadeOverbooking, tirarOverbooking);
-      const novaReservada = subtrairQtd(item.quantidadeReservada, devolverReal);
-      const [itemAtualizado] = await tx.update(pedidosVendaItens).set({
-        quantidadePedida: novaQuantidade,
-        quantidadeReservada: novaReservada,
-        quantidadeOverbooking: novaOverbooking,
-        status: ehZero(novaOverbooking) ? 'totalmente_reservado' : 'overbooking_confirmado',
-        updatedAt: new Date(),
-      }).where(eq(pedidosVendaItens.id, itemId)).returning();
-      await this.auditoria.registrar(tx, {
-        tabela: 'pedidos_venda_itens',
-        registroId: itemId,
-        operacao: 'UPDATE',
-        modulo: 'comercial',
-        usuarioId,
-        dadosAnteriores: item,
-        dadosNovos: { ...itemAtualizado, motivo: dto.motivo },
-      });
+    await this.db.transaction((tx) =>
+      this.reduzirItemNaTx(
+        tx, pedidoId, itemId, formatarQtd(dto.novaQuantidade), dto.motivo, usuarioId,
+      ),
+    );
+  }
+
+  async reduzirItemNaTx(
+    tx: Tx,
+    pedidoId: string,
+    itemId: string,
+    novaQuantidade: string,
+    motivo: string,
+    usuarioId: string,
+  ): Promise<void> {
+    const item = await tx.select().from(pedidosVendaItens)
+      .where(and(
+        eq(pedidosVendaItens.id, itemId),
+        eq(pedidosVendaItens.pedidoVendaId, pedidoId),
+        isNull(pedidosVendaItens.deletedAt),
+      ))
+      .then((rows) => rows[0]);
+    if (!item) throw new NotFoundException('Item do pedido não encontrado');
+    if (compararQtd(novaQuantidade, item.quantidadePedida) >= 0) {
+      throw new ConflictException('A operação aceita somente redução');
+    }
+    const reducao = subtrairQtd(item.quantidadePedida, novaQuantidade);
+    const tirarOverbooking = minimoQtd(reducao, item.quantidadeOverbooking);
+    const devolverReal = subtrairQtd(reducao, tirarOverbooking);
+    if (!ehZero(tirarOverbooking)) {
+      await this.reduzirReservaOverbooking(tx, item.id, tirarOverbooking);
+      await this.atualizarOuCancelarPendencia(tx, item.id, tirarOverbooking, usuarioId);
+    }
+    if (!ehZero(devolverReal)) {
+      await this.liberarReservaReal(tx, item.id, devolverReal);
+    }
+    const novaOverbooking = subtrairQtd(item.quantidadeOverbooking, tirarOverbooking);
+    const novaReservada = subtrairQtd(item.quantidadeReservada, devolverReal);
+    const [itemAtualizado] = await tx.update(pedidosVendaItens).set({
+      quantidadePedida: novaQuantidade,
+      quantidadeReservada: novaReservada,
+      quantidadeOverbooking: novaOverbooking,
+      status: ehZero(novaOverbooking) ? 'totalmente_reservado' : 'overbooking_confirmado',
+      updatedAt: new Date(),
+    }).where(eq(pedidosVendaItens.id, itemId)).returning();
+    await this.auditoria.registrar(tx, {
+      tabela: 'pedidos_venda_itens',
+      registroId: itemId,
+      operacao: 'UPDATE',
+      modulo: 'comercial',
+      usuarioId,
+      dadosAnteriores: item,
+      dadosNovos: { ...itemAtualizado, motivo },
     });
   }
 
@@ -850,29 +873,39 @@ export class PedidosService {
     dto: RemoverItemDto,
     usuarioId: string,
   ): Promise<void> {
-    await this.db.transaction(async (tx) => {
-      const item = await this.obterItemAtivoSobLock(tx, pedidoId, itemId);
-      await this.liberarTodasReservasDoItem(tx, item.id);
-      if (!ehZero(item.quantidadeOverbooking)) {
-        await this.atualizarOuCancelarPendencia(
-          tx,
-          item.id,
-          item.quantidadeOverbooking,
-          usuarioId,
-        );
-      }
-      await tx.update(pedidosVendaItens)
-        .set({ deletedAt: new Date(), updatedAt: new Date() })
-        .where(eq(pedidosVendaItens.id, item.id));
-      await this.auditoria.registrar(tx, {
-        tabela: 'pedidos_venda_itens',
-        registroId: item.id,
-        operacao: 'DELETE',
-        modulo: 'comercial',
+    await this.db.transaction((tx) =>
+      this.removerItemNaTx(tx, pedidoId, itemId, dto.motivo, usuarioId),
+    );
+  }
+
+  async removerItemNaTx(
+    tx: Tx,
+    pedidoId: string,
+    itemId: string,
+    motivo: string,
+    usuarioId: string,
+  ): Promise<void> {
+    const item = await this.obterItemAtivoSobLock(tx, pedidoId, itemId);
+    await this.liberarTodasReservasDoItem(tx, item.id);
+    if (!ehZero(item.quantidadeOverbooking)) {
+      await this.atualizarOuCancelarPendencia(
+        tx,
+        item.id,
+        item.quantidadeOverbooking,
         usuarioId,
-        dadosAnteriores: item,
-        dadosNovos: { motivo: dto.motivo },
-      });
+      );
+    }
+    await tx.update(pedidosVendaItens)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(pedidosVendaItens.id, item.id));
+    await this.auditoria.registrar(tx, {
+      tabela: 'pedidos_venda_itens',
+      registroId: item.id,
+      operacao: 'DELETE',
+      modulo: 'comercial',
+      usuarioId,
+      dadosAnteriores: item,
+      dadosNovos: { motivo },
     });
   }
 
