@@ -69,11 +69,13 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
       etiquetas_impressoes, subitens, transformacoes, associacoes_peca_historico, pecas,
       ocorrencias_fornecedor_historico, ocorrencias_fornecedor,
       divergencias_recebimento, recebimentos_itens, recebimentos,
+      adendos_pedido,
       reservas_disponibilidade, pedidos_venda_itens, pedidos_venda,
       disponibilidades_virtuais, compras_programadas_itens, compras_programadas,
       operacoes,
       regras_desdobramento_comercial, regras_transformacao_saidas, regras_transformacao,
       modelos_etiqueta, frota_motoristas, frota_caminhoes,
+      tabelas_preco_publicacoes, tabelas_preco_itens, tabelas_preco,
       produtos, rotas, representantes,
       clientes, fornecedores, itens_compra, itens_comerciais, parametros,
       refresh_tokens, usuarios_perfis, perfis_permissoes, permissoes, perfis, usuarios
