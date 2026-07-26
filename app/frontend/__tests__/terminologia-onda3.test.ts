@@ -13,8 +13,13 @@ it('nenhum arquivo da onda usa o rotulo banido pela v1.1', () => {
 });
 
 it('nenhum arquivo da onda tem marcador de pendencia ou dado de demonstracao', () => {
-  const proibidos = /\b(TODO|TBD|FIXME|lorem ipsum)\b/i;
-  const infratores = ALVOS.filter((arquivo) => proibidos.test(readFileSync(join(process.cwd(), arquivo), 'utf8')));
+  // TODO precisa ser case-sensitive: case-insensitive colidiria com a palavra
+  // "Todo" do português (ex.: "Todo cliente tem..." — texto literal do protótipo).
+  const proibidos = [/\bTODO\b/, /\b(TBD|FIXME|lorem ipsum)\b/i];
+  const infratores = ALVOS.filter((arquivo) => {
+    const conteudo = readFileSync(join(process.cwd(), arquivo), 'utf8');
+    return proibidos.some((padrao) => padrao.test(conteudo));
+  });
   expect(infratores).toEqual([]);
 });
 

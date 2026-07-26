@@ -10,7 +10,7 @@ const BANNER = (
   <div className="flex items-start gap-2 rounded-lg border border-info-border bg-info-surface p-3">
     <Info className="mt-0.5 size-3.5 flex-shrink-0 text-info-icon" />
     <p className="text-[12px] text-info-ink">
-      Cada cliente tem um vendedor/representante associado; o pedido herda do cliente.
+      Todo cliente tem um vendedor/representante associado; o pedido herda do cliente.
     </p>
   </div>
 );
