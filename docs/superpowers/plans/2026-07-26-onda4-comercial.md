@@ -40,6 +40,7 @@ Jest (backend e frontend) · Playwright (e2e).
 | Protótipo UI | `F:/Projetos/alpha-carnes-prototipo` @ `feature/completude-v1.1` (`8d32aa4c`) |
 | Repositório | `sammuka/alpha-carnes` |
 | Branch de implementação | `feature/onda4-comercial` (criada a partir de `origin/develop` pelo Worker) |
+| Emenda | Portão 1 `ajustar` em `158da75` → achados 1–10 corrigidos; API real reauditada no worktree |
 
 ---
 
@@ -185,18 +186,158 @@ sozinha ao carregar. Divergência **D-04**.
 (`TabelaPrecos.tsx:152-155`), com o banner âmbar do protótipo (`TabelaPrecos.tsx:223-228`).
 
 **D17 — Mapa teatro: 8 estados derivados de tabelas reais, sem coluna nova.** Nenhum estado é
-inventado nem persistido:
+inventado nem persistido. O parâmetro de todas as consultas é `operacaoId` (matriz linha 6:
+`GET /comercial/disponibilidade/mapa?operacaoId=`), porque **`pecas` não tem `operacao_id`**: o elo
+com a operação é `pecas.recebimento_id → recebimentos.operacao_id`. O "produto" da peça é
+`pecas.item_comercial_base_id` (não existe `produto_id` em `pecas`); o do subitem é
+`subitens.item_comercial_id`. Cada estado é uma consulta agregada por `item_comercial_id`:
 
-| Estado | Rótulo | Origem (SQL, filtrado por operação) |
-|---|---|---|
-| `F` | Físico disponível | `pecas` com `status_peca = 'pesada'`, `pedido_venda_item_id IS NULL`, `deleted_at IS NULL` |
-| `V` | Virtual disponível | `disponibilidades_virtuais.quantidade_disponivel` |
-| `R` | Reservado (em elaboração) | `reservas_disponibilidade` ativas, `tipo_consumo IN ('fisico','virtual')`, pedido em `rascunho`/`em_elaboracao_reserva_ativa`/`aguardando_confirmacao_overbooking` |
-| `C` | Confirmado | mesmas reservas, pedido em `finalizado`/`parcialmente_atendido`/`atendido`/`faturado` |
-| `D` | Em desossa | `pecas` com `status_peca IN ('para_corte','em_transformacao')` |
-| `O` | Overbooking | `reservas_disponibilidade` ativas com `tipo_consumo = 'overbooking'` |
-| `E` | Expedido | `carga_itens` com `status_carga_item = 'em_carga'` em caminhão com `status_caminhao IN ('fechado','liberado_faturamento','faturado','liberado_saida','expedido')` |
-| `!` | Em ocorrência | `pecas` com `status_peca = 'divergente'` |
+| Estado | Rótulo | Tabela de origem | Chave de operação | Chave de produto |
+|---|---|---|---|---|
+| `F` | Físico disponível | `pecas` | `recebimentos.operacao_id` | `pecas.item_comercial_base_id` |
+| `V` | Virtual disponível | `disponibilidades_virtuais` | `disponibilidades_virtuais.operacao_id` | `disponibilidades_virtuais.item_comercial_id` |
+| `R` | Reservado (em elaboração) | `reservas_disponibilidade` | `pedidos_venda.operacao_id` | `pedidos_venda_itens.item_comercial_id` |
+| `C` | Confirmado | `reservas_disponibilidade` | `pedidos_venda.operacao_id` | `pedidos_venda_itens.item_comercial_id` |
+| `D` | Em desossa | `pecas` | `recebimentos.operacao_id` | `pecas.item_comercial_base_id` |
+| `O` | Overbooking | `reservas_disponibilidade` | `pedidos_venda.operacao_id` | `pedidos_venda_itens.item_comercial_id` |
+| `E` | Expedido | `carga_itens` | `caminhoes.operacao_id` | `pecas.item_comercial_base_id` ∪ `subitens.item_comercial_id` |
+| `!` | Em ocorrência | `pecas` | `recebimentos.operacao_id` | `pecas.item_comercial_base_id` |
+
+**SQL literal das 8 consultas** (`$1` = `operacaoId`). O `MapaService` executa exatamente estas
+oito e agrega o resultado por `item_comercial_id`:
+
+```sql
+-- F — peça pesada, livre (sem item de pedido), não removida.
+SELECT p.item_comercial_base_id AS item_comercial_id,
+       count(*)::int            AS unidades,
+       coalesce(sum(p.peso_original), 0)::numeric(15,3) AS quantidade
+  FROM pecas p
+  JOIN recebimentos r ON r.id = p.recebimento_id
+ WHERE r.operacao_id = $1
+   AND p.status_peca = 'pesada'
+   AND p.pedido_venda_item_id IS NULL
+   AND p.deleted_at IS NULL
+   AND r.deleted_at IS NULL
+ GROUP BY p.item_comercial_base_id;
+
+-- V — saldo virtual remanescente da operação.
+SELECT dv.item_comercial_id,
+       0::int                                      AS unidades,
+       sum(dv.quantidade_disponivel)::numeric(15,3) AS quantidade
+  FROM disponibilidades_virtuais dv
+ WHERE dv.operacao_id = $1
+ GROUP BY dv.item_comercial_id;
+
+-- R — reserva ativa de pedido ainda em elaboração.
+SELECT pvi.item_comercial_id,
+       0::int                                       AS unidades,
+       sum(rd.quantidade_reservada)::numeric(15,3)  AS quantidade
+  FROM reservas_disponibilidade rd
+  JOIN pedidos_venda_itens pvi ON pvi.id = rd.pedido_venda_item_id
+  JOIN pedidos_venda pv        ON pv.id = pvi.pedido_venda_id
+ WHERE pv.operacao_id = $1
+   AND rd.status = 'ativa'
+   AND rd.tipo_consumo IN ('fisico','virtual')
+   AND pv.status IN ('rascunho','em_elaboracao_reserva_ativa','aguardando_confirmacao_overbooking')
+   AND pvi.deleted_at IS NULL
+   AND pv.deleted_at IS NULL
+ GROUP BY pvi.item_comercial_id;
+
+-- C — mesma reserva, pedido já fechado comercialmente.
+SELECT pvi.item_comercial_id,
+       0::int                                       AS unidades,
+       sum(rd.quantidade_reservada)::numeric(15,3)  AS quantidade
+  FROM reservas_disponibilidade rd
+  JOIN pedidos_venda_itens pvi ON pvi.id = rd.pedido_venda_item_id
+  JOIN pedidos_venda pv        ON pv.id = pvi.pedido_venda_id
+ WHERE pv.operacao_id = $1
+   AND rd.status = 'ativa'
+   AND rd.tipo_consumo IN ('fisico','virtual')
+   AND pv.status IN ('finalizado','parcialmente_atendido','atendido','faturado')
+   AND pvi.deleted_at IS NULL
+   AND pv.deleted_at IS NULL
+ GROUP BY pvi.item_comercial_id;
+
+-- D — peça em fila de corte ou em transformação.
+SELECT p.item_comercial_base_id AS item_comercial_id,
+       count(*)::int            AS unidades,
+       coalesce(sum(p.peso_original), 0)::numeric(15,3) AS quantidade
+  FROM pecas p
+  JOIN recebimentos r ON r.id = p.recebimento_id
+ WHERE r.operacao_id = $1
+   AND p.status_peca IN ('para_corte','em_transformacao')
+   AND p.deleted_at IS NULL
+   AND r.deleted_at IS NULL
+ GROUP BY p.item_comercial_base_id;
+
+-- O — reserva ativa sem lastro (overbooking confirmado).
+SELECT pvi.item_comercial_id,
+       0::int                                       AS unidades,
+       sum(rd.quantidade_reservada)::numeric(15,3)  AS quantidade
+  FROM reservas_disponibilidade rd
+  JOIN pedidos_venda_itens pvi ON pvi.id = rd.pedido_venda_item_id
+  JOIN pedidos_venda pv        ON pv.id = pvi.pedido_venda_id
+ WHERE pv.operacao_id = $1
+   AND rd.status = 'ativa'
+   AND rd.tipo_consumo = 'overbooking'
+   AND pv.status <> 'cancelado'
+   AND pvi.deleted_at IS NULL
+   AND pv.deleted_at IS NULL
+ GROUP BY pvi.item_comercial_id;
+
+-- E — peça OU subitem em caminhão já fechado (UNION ALL; o agregador soma as duas pernas).
+SELECT p.item_comercial_base_id AS item_comercial_id,
+       count(*)::int            AS unidades,
+       coalesce(sum(p.peso_original), 0)::numeric(15,3) AS quantidade
+  FROM carga_itens ci
+  JOIN caminhoes cam ON cam.id = ci.caminhao_id
+  JOIN pecas p       ON p.id = ci.peca_id
+ WHERE cam.operacao_id = $1
+   AND ci.tipo_origem = 'peca'
+   AND ci.status_carga_item = 'em_carga'
+   AND cam.status_caminhao IN
+       ('fechado','liberado_faturamento','faturado','liberado_saida','expedido')
+   AND ci.deleted_at IS NULL
+   AND cam.deleted_at IS NULL
+   AND p.deleted_at IS NULL
+ GROUP BY p.item_comercial_base_id
+UNION ALL
+SELECT s.item_comercial_id,
+       count(*)::int                             AS unidades,
+       coalesce(sum(s.peso), 0)::numeric(15,3)   AS quantidade
+  FROM carga_itens ci
+  JOIN caminhoes cam ON cam.id = ci.caminhao_id
+  JOIN subitens s    ON s.id = ci.subitem_id
+ WHERE cam.operacao_id = $1
+   AND ci.tipo_origem = 'subitem'
+   AND ci.status_carga_item = 'em_carga'
+   AND cam.status_caminhao IN
+       ('fechado','liberado_faturamento','faturado','liberado_saida','expedido')
+   AND ci.deleted_at IS NULL
+   AND cam.deleted_at IS NULL
+   AND s.deleted_at IS NULL
+ GROUP BY s.item_comercial_id;
+
+-- ! — peça marcada divergente na destinação.
+SELECT p.item_comercial_base_id AS item_comercial_id,
+       count(*)::int            AS unidades,
+       coalesce(sum(p.peso_original), 0)::numeric(15,3) AS quantidade
+  FROM pecas p
+  JOIN recebimentos r ON r.id = p.recebimento_id
+ WHERE r.operacao_id = $1
+   AND p.status_peca = 'divergente'
+   AND p.deleted_at IS NULL
+   AND r.deleted_at IS NULL
+ GROUP BY p.item_comercial_base_id;
+```
+
+**Nota sobre `tipo_consumo = 'fisico'` (R e C).** `chk_reservas_tipo_consumo` admite
+`'fisico' | 'virtual' | 'overbooking'`, mas o motor de reserva de `PedidosService`
+(`persistirItensPlanejados`) hoje só grava `'virtual'` e `'overbooking'`; `'fisico'` existe no
+domínio e é lido por `liberarReservaReal`, porém nenhum writer o produz. Os filtros de R e C
+mantêm `IN ('fisico','virtual')` para acompanhar o CHECK — não é dado inventado, é o mesmo
+predicado já usado em `liberarReservaReal`. O teste de DoD-99 cobre apenas as reservas `'virtual'`
+e `'overbooking'`, que são as efetivamente produzíveis nesta onda.
 
 **D18 — Grade Tabular usa dados reais.** A aba Grade permanece sobre `disponibilidades_virtuais` da
 operação. O catálogo hard-coded do protótipo ("Dianteiro Bovino", "Traseiro Bovino"… em
@@ -243,6 +384,47 @@ para não invalidar linha existente fora do par.
 Onda 5.** Ela pertence a `/admin/usuarios`, que não está nas linhas 3–7 da matriz. O filtro por
 representante do Espelho e do Pedido usa `clientes.representante_id`, que já existe, sem depender
 daquela tabela.
+
+**D27 — `adendos_pedido.origem_consumo` é derivado do `PlanoItem`, não de um campo inexistente.**
+`planejarSobLock` devolve `PlanoItem[]`; **não existe `plano.origemPredominante`**. A regra de
+derivação é literal e única:
+
+```ts
+/** Origem do consumo do adendo, derivada do plano da Onda 1 (D27). */
+function origemDoAdendo(alocacao: PlanoItem): 'virtual' | 'overbooking' {
+  return ehZero(alocacao.deficit) ? 'virtual' : 'overbooking';
+}
+```
+
+O `CHECK` de `origem_consumo` continua com os três valores de `chk_reservas_tipo_consumo`
+(`'fisico'`, `'virtual'`, `'overbooking'`) para não divergir do vocabulário de
+`reservas_disponibilidade`, mas **o motor da Onda 4 nunca grava `'fisico'`**: não há writer de
+reserva física em `develop` (ver nota de D17). Um adendo parcialmente coberto (parte virtual, parte
+déficit) é gravado como `'overbooking'` — a linha do adendo é única e o déficit é a informação que
+gera pendência para o gestor. DoD-116 fixa essa derivação em teste.
+
+**D28 — Testes de backend ficam onde o repositório já os põe: `app/backend/test/`.** Não há
+nenhum `*.spec.ts` colocado ao lado do código em `app/backend/src` — `jest.config.cjs` usa
+`testRegex: '.*\\.(e2e-)?spec\\.ts$'` sobre `rootDir: '.'` e as 63 suítes vivem em
+`test/unit/*.spec.ts` (unitárias, sem banco) e `test/integration/*.e2e-spec.ts` (com Postgres, via
+`test/helpers/test-app.ts`). O plano segue essa convenção; o mapa DoD abaixo cita o arquivo real.
+Consequências diretas: `src/database/seed-catalogo-mvp.ts` **entra** no `collectCoverageFrom`
+(só `src/database/seed.ts` e `src/database/schema/**` estão excluídos), e
+`src/common/rbac/permissoes.ts` **não** entra.
+
+**D29 — O legado de pedidos sai nesta onda (Global Constraint 14).** `pedido-venda-client.tsx`
+(597 linhas), a rota `/comercial/pedidos/novo` e `__tests__/pedido-novo.test.tsx` são a
+implementação anterior, anterior ao protótipo, e **não** correspondem a `PedidoVenda.tsx`. Eles são
+**removidos**, não mantidos em paralelo: a tela nova (`pedidos-client.tsx` + `pedido-editor.tsx`) é
+master-detail em rota única, como o protótipo, e `/comercial/pedidos/novo` não existe na matriz
+(39 rotas) nem no menu canônico. Nenhum redirect é criado — rota inexistente na matriz não vira
+rota permanente. Os únicos consumidores externos são `e2e/jornada-operacional.spec.ts:551` e o
+próprio `pedido-novo.test.tsx`, ambos realinhados/removidos na mesma task.
+
+**D30 — Histórico da tabela de preços usa o caminho da matriz: `GET /precos/tabelas/:id/historico`.**
+A matriz (linha 5) prescreve `GET /tabelas/:id/historico` sob o módulo `precos`; o plano anterior
+usava `/publicacoes`. Vale a matriz — nenhuma divergência nova é aberta. A **tabela** continua
+chamando-se `tabelas_preco_publicacoes` (é o log de publicação/reversão); só a rota se alinha.
 
 ---
 
@@ -315,7 +497,10 @@ Provisório.
 
 ## Estrutura de arquivos
 
-### Backend — novos
+Verificado contra o worktree em `158da75`: o que já existe está em *alterados*, o que não existe
+está em *novos*. Testes de backend seguem D28 (`app/backend/test/…`).
+
+### Backend — novos (código)
 
 ```
 app/backend/src/database/migrations/0016_onda4_comercial_expand.sql
@@ -324,22 +509,37 @@ app/backend/src/database/schema/adendos-pedido.schema.ts
 app/backend/src/database/schema/tabelas-preco.schema.ts
 app/backend/src/database/seed-catalogo-mvp.ts
 app/backend/src/modules/comercial/adendos/adendos.service.ts
-app/backend/src/modules/comercial/adendos/adendos.service.spec.ts
 app/backend/src/modules/comercial/adendos/dto/adendo.dto.ts
 app/backend/src/modules/comercial/precos/precos.module.ts
 app/backend/src/modules/comercial/precos/precos.controller.ts
 app/backend/src/modules/comercial/precos/precos.service.ts
-app/backend/src/modules/comercial/precos/precos.service.spec.ts
 app/backend/src/modules/comercial/precos/dto/tabela-preco.dto.ts
 app/backend/src/modules/comercial/disponibilidade/mapa.service.ts
-app/backend/src/modules/comercial/disponibilidade/mapa.service.spec.ts
 app/backend/src/modules/comercial/disponibilidade/dto/mapa.dto.ts
 app/backend/src/modules/comercial/espelho/espelho.module.ts
 app/backend/src/modules/comercial/espelho/espelho.controller.ts
 app/backend/src/modules/comercial/espelho/espelho.service.ts
-app/backend/src/modules/comercial/espelho/espelho.service.spec.ts
 app/backend/src/modules/comercial/espelho/dto/espelho.dto.ts
-app/backend/test/onda4-comercial.e2e-spec.ts
+```
+
+### Backend — novos (testes, D28)
+
+```
+app/backend/test/helpers/onda4-fixtures.ts                     (fixtures dos 8 estados + catálogo)
+app/backend/test/unit/adendos.service.spec.ts
+app/backend/test/unit/precos.service.spec.ts
+app/backend/test/unit/espelho.service.spec.ts
+app/backend/test/unit/permissoes-onda4.spec.ts
+app/backend/test/unit/eventos-onda4.spec.ts
+app/backend/test/unit/onda4-schema.spec.ts
+app/backend/test/integration/adendos.e2e-spec.ts
+app/backend/test/integration/pedidos-onda4.e2e-spec.ts
+app/backend/test/integration/precos.e2e-spec.ts
+app/backend/test/integration/espelho.e2e-spec.ts
+app/backend/test/integration/mapa-disponibilidade.e2e-spec.ts
+app/backend/test/integration/clientes-onda4.e2e-spec.ts
+app/backend/test/integration/seed-catalogo-mvp.e2e-spec.ts
+app/backend/test/integration/onda4-comercial.e2e-spec.ts       (jornada ponta a ponta)
 ```
 
 ### Backend — alterados
@@ -347,19 +547,26 @@ app/backend/test/onda4-comercial.e2e-spec.ts
 ```
 app/backend/src/database/schema/index.ts              (exporta os 2 schemas novos)
 app/backend/src/database/schema/clientes.schema.ts    (+ rota_id, − rota_padrao)
+app/backend/src/database/migrations/ROLLBACK.md       (rollback de 0016/0017)
 app/backend/src/database/seed.ts                      (chama seedCatalogoMvp)
-app/backend/src/common/rbac/permissoes.ts             (+4 permissões, matriz de perfis)
+app/backend/src/common/rbac/permissoes.ts             (+4 permissões, +4 descrições, pushPermissoes)
+app/backend/src/common/rbac/perfil-permissoes.snapshot.json (regerado por `npm run rbac:snapshot`)
 app/backend/src/common/dto/json-cadastros.dto.ts      (+ necessitaCorteAcerto)
 app/backend/src/realtime/events/eventos.ts            (+3 eventos e payloads)
 app/backend/src/modules/comercial/pedidos/pedidos.module.ts     (+ AdendosService)
 app/backend/src/modules/comercial/pedidos/pedidos.controller.ts (+4 rotas)
-app/backend/src/modules/comercial/pedidos/pedidos.service.ts    (AD-03, AD-06, rascunho)
+app/backend/src/modules/comercial/pedidos/pedidos.service.ts    (AD-03, AD-06, rascunho,
+                                                                 export de desafiosParaChallenge,
+                                                                 extração de aplicarAlocacaoNoItem
+                                                                 e dos helpers de adendo)
 app/backend/src/modules/comercial/pedidos/dto/pedido.dto.ts     (+ salvarComoRascunho, liberar)
 app/backend/src/modules/comercial/disponibilidade/disponibilidade.module.ts     (+ MapaService)
 app/backend/src/modules/comercial/disponibilidade/disponibilidade.controller.ts (+2 rotas)
 app/backend/src/modules/cadastros/clientes/dto/cliente.dto.ts   (rotaId, prioridade, preferências)
-app/backend/src/modules/cadastros/clientes/clientes.service.ts  (rotaId)
+app/backend/src/modules/cadastros/clientes/clientes.service.ts  (rotaId, totalAtivos)
 app/backend/src/app.module.ts                          (+ PrecosModule, EspelhoModule)
+app/backend/test/unit/pedidos.service.spec.ts          (+ DoD-83 estrutural)
+app/backend/test/integration/clientes.e2e-spec.ts      (rota_padrao → rota_id nas asserções)
 ```
 
 ### Frontend — novos
@@ -369,9 +576,7 @@ app/frontend/src/lib/precos.ts
 app/frontend/src/lib/espelho.ts
 app/frontend/src/lib/mapa-disponibilidade.ts
 app/frontend/src/lib/status-pedido.ts
-app/frontend/src/app/api/comercial/pedidos/route.ts
 app/frontend/src/app/api/comercial/pedidos/aberto/route.ts
-app/frontend/src/app/api/comercial/pedidos/[id]/route.ts
 app/frontend/src/app/api/comercial/pedidos/[id]/adendos/route.ts
 app/frontend/src/app/api/comercial/pedidos/[id]/adendos/confirmar-overbooking/route.ts
 app/frontend/src/app/api/comercial/pedidos/[id]/liberar-reserva/route.ts
@@ -383,7 +588,7 @@ app/frontend/src/app/api/precos/tabelas/[id]/route.ts
 app/frontend/src/app/api/precos/tabelas/[id]/itens/route.ts
 app/frontend/src/app/api/precos/tabelas/[id]/publicar/route.ts
 app/frontend/src/app/api/precos/tabelas/[id]/copiar/route.ts
-app/frontend/src/app/(admin)/comercial/clientes/clientes-client.tsx
+app/frontend/src/app/api/precos/tabelas/[id]/historico/route.ts
 app/frontend/src/app/(admin)/comercial/pedidos/pedidos-client.tsx
 app/frontend/src/app/(admin)/comercial/pedidos/pedido-editor.tsx
 app/frontend/src/app/(admin)/comercial/pedidos/modal-overbooking.tsx
@@ -398,6 +603,7 @@ app/frontend/__tests__/onda4-pedidos.test.tsx
 app/frontend/__tests__/onda4-tabela-precos.test.tsx
 app/frontend/__tests__/onda4-disponibilidade.test.tsx
 app/frontend/__tests__/onda4-espelho.test.tsx
+app/frontend/__tests__/onda4-rotas.test.tsx
 app/frontend/__tests__/bff-onda4.test.ts
 app/frontend/e2e/onda4-comercial.spec.ts
 ```
@@ -405,99 +611,118 @@ app/frontend/e2e/onda4-comercial.spec.ts
 ### Frontend — alterados
 
 ```
-app/frontend/src/app/(admin)/comercial/clientes/page.tsx        (usa clientes-client)
-app/frontend/src/app/(admin)/comercial/pedidos/page.tsx         (usa pedidos-client)
+app/frontend/src/app/api/comercial/pedidos/route.ts             (+ salvarComoRascunho no POST)
+app/frontend/src/app/api/comercial/pedidos/[id]/route.ts        (+ PATCH de itens do rascunho)
+app/frontend/src/app/(admin)/comercial/clientes/clientes-client.tsx
+                                     (hoje 18 linhas sobre CadastroMasterDetail genérico →
+                                      master-detail fiel a Cadastros.tsx com as 4 abas)
+app/frontend/src/app/(admin)/comercial/clientes/page.tsx        (props do client novo)
+app/frontend/src/app/(admin)/comercial/pedidos/page.tsx         (usa pedidos-client, sem `modo`)
 app/frontend/src/app/(admin)/comercial/tabela-precos/page.tsx   (deixa de ser placeholder)
 app/frontend/src/app/(admin)/comercial/disponibilidade/page.tsx (mapa + grade)
 app/frontend/src/app/(admin)/comercial/espelho/page.tsx         (deixa de ser placeholder)
 app/frontend/src/lib/comercial.ts                                (tipos de adendo/mapa/rascunho)
-app/frontend/e2e/jornada-operacional.spec.ts                     (dívida 9 da Onda 3)
+app/frontend/e2e/jornada-operacional.spec.ts   (dívida 9 da Onda 3 + fim da rota `/pedidos/novo`)
 app/frontend/e2e/telas-migradas.spec.ts                          (dívida 9 da Onda 3)
 app/frontend/e2e/telas-reais.spec.ts                             (dívida 9 da Onda 3)
+```
+
+### Frontend — removidos (D29 / Global Constraint 14)
+
+```
+app/frontend/src/app/(admin)/comercial/pedidos/pedido-venda-client.tsx
+app/frontend/src/app/(admin)/comercial/pedidos/novo/page.tsx
+app/frontend/__tests__/pedido-novo.test.tsx
 ```
 
 ---
 
 ## Mapa DoD → teste (1:1)
 
-Cada linha: a regra e o **nome exato do teste que falha se a regra for violada**.
+Cada linha: a regra e o **nome exato do teste que falha se a regra for violada**, com o caminho
+real do arquivo (D28). `test/unit/*` roda sem banco; `test/integration/*` sobe o app com Postgres
+via `test/helpers/test-app.ts`.
 
 ### Clientes
 
 | # | Regra (DoD) | Teste que falharia |
 |---|---|---|
-| DoD-70 | A tela tem exatamente as 4 abas do protótipo, na ordem | `onda4-clientes.test.tsx` › `clientes exibe as 4 abas do prototipo na ordem` |
-| DoD-71 | Nenhum rótulo, atributo ou texto contém `[Mm]arca`; existe "Nome Fantasia" e "Buscar cliente" | `onda4-clientes.test.tsx` › `clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente` |
-| DoD-72 | Representante e Rota vêm da API de cadastros, nunca de lista fixa | `onda4-clientes.test.tsx` › `selects de representante e rota sao populados pela API de cadastros` |
-| DoD-73 | Aba Dados Fiscais & Endereço persiste em `dados_fiscais_json` | `clientes.service.spec.ts` › `persiste dados fiscais e endereco no jsonb sem perder chaves` |
-| DoD-74 | Aba Contatos persiste em `dados_contato_json` | `clientes.service.spec.ts` › `persiste lista de contatos no jsonb` |
-| DoD-75 | `necessitaCorteAcerto` é aceito e persistido nas preferências | `clientes.service.spec.ts` › `aceita necessitaCorteAcerto nas preferencias operacionais` |
-| DoD-76 | `rota_padrao` não existe mais; cliente grava `rota_id` FK | `clientes.service.spec.ts` › `cliente grava rota_id e o schema nao expoe rota_padrao` |
-| DoD-77 | Badge do cabeçalho mostra a contagem real de clientes ativos | `onda4-clientes.test.tsx` › `badge do cabecalho mostra a contagem real de clientes ativos` |
+| DoD-70 | A tela tem exatamente as 4 abas do protótipo, na ordem | `app/frontend/__tests__/onda4-clientes.test.tsx` › `clientes exibe as 4 abas do prototipo na ordem` |
+| DoD-71 | Nenhum rótulo, atributo ou texto contém `[Mm]arca`; existe "Nome Fantasia" e "Buscar cliente" | `app/frontend/__tests__/onda4-clientes.test.tsx` › `clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente` |
+| DoD-72 | Representante e Rota vêm da API de cadastros, nunca de lista fixa | `app/frontend/__tests__/onda4-clientes.test.tsx` › `selects de representante e rota sao populados pela API de cadastros` |
+| DoD-73 | Aba Dados Fiscais & Endereço persiste em `dados_fiscais_json` | `app/backend/test/integration/clientes-onda4.e2e-spec.ts` › `persiste dados fiscais e endereco no jsonb sem perder chaves` |
+| DoD-74 | Aba Contatos persiste em `dados_contato_json` | `app/backend/test/integration/clientes-onda4.e2e-spec.ts` › `persiste lista de contatos no jsonb` |
+| DoD-75 | `necessitaCorteAcerto` é aceito e persistido nas preferências | `app/backend/test/integration/clientes-onda4.e2e-spec.ts` › `aceita necessitaCorteAcerto nas preferencias operacionais` |
+| DoD-76 | `rota_padrao` não existe mais; cliente grava `rota_id` FK | `app/backend/test/unit/onda4-schema.spec.ts` › `cliente grava rota_id e o schema nao expoe rota_padrao` |
+| DoD-77 | Badge do cabeçalho mostra a contagem real de clientes ativos | `app/frontend/__tests__/onda4-clientes.test.tsx` › `badge do cabecalho mostra a contagem real de clientes ativos` |
 
 ### Pedidos
 
 | # | Regra (DoD) | Teste que falharia |
 |---|---|---|
-| DoD-78 | **AD-03**: pedido aberto duplicado em `(cliente, item, operação)` retorna `409 PEDIDO_ABERTO_EXISTENTE` | `pedidos.service.spec.ts` › `recusa segundo pedido aberto do mesmo cliente item e operacao com 409 PEDIDO_ABERTO_EXISTENTE` |
-| DoD-79 | **AD-03**: mesmo cliente e item em **operações diferentes** é permitido | `pedidos.service.spec.ts` › `permite pedidos abertos do mesmo cliente e item em operacoes diferentes` |
-| DoD-80 | Adendo grava histórico append-only em `adendos_pedido` + auditoria na mesma transação | `adendos.service.spec.ts` › `adendo grava linha em adendos_pedido e auditoria na mesma transacao` |
-| DoD-81 | Adendo com déficit devolve `409 OVERBOOKING_CONFIRMACAO_NECESSARIA` sem persistir nada | `adendos.service.spec.ts` › `adendo com deficit nao persiste e devolve challenge de overbooking` |
-| DoD-82 | Confirmação do adendo persiste quantidade, reserva de overbooking e pendência | `adendos.service.spec.ts` › `confirmacao do adendo persiste quantidade reserva overbooking e pendencia` |
-| DoD-83 | **AD-06**: não existe TTL/agendador de expiração de rascunho no código | `pedidos.service.spec.ts` › `nao existe expiracao automatica de reserva de rascunho` |
-| DoD-84 | **AD-06**: "Liberar reserva" exige justificativa, permissão, libera reservas e audita | `pedidos.service.spec.ts` › `liberar reserva exige justificativa libera reservas e registra auditoria` |
-| DoD-85 | `PEDIDO_RESERVA_LIBERAR` ausente → `403` | `pedidos.controller.spec.ts` › `liberar reserva sem permissao retorna 403` |
-| DoD-86 | `salvarComoRascunho: true` cria pedido em `rascunho` **com** reserva ativa | `pedidos.service.spec.ts` › `salvarComoRascunho cria pedido em rascunho com reserva ativa` |
-| DoD-87 | O rótulo "Rascunho com reserva ativa" é derivado e os 9 rótulos do protótipo existem | `onda4-pedidos.test.tsx` › `deriva os 9 rotulos de status do prototipo incluindo rascunho com reserva ativa` |
-| DoD-88 | Modal de overbooking mostra solicitado, disponível e déficit vindos do `409` | `onda4-pedidos.test.tsx` › `modal de overbooking renderiza o payload do 409 sem numero fabricado` |
-| DoD-89 | Modal de adendo mostra o pedido aberto existente e envia motivo | `onda4-pedidos.test.tsx` › `modal de adendo mostra pedido aberto existente e envia motivo` |
-| DoD-90 | Badge "Provisório · P5" presente no modal de adendo | `onda4-pedidos.test.tsx` › `modal de adendo exibe badge provisorio P5 da politica de preco` |
+| DoD-78 | **AD-03**: pedido aberto duplicado em `(cliente, item, operação)` retorna `409 PEDIDO_ABERTO_EXISTENTE` | `app/backend/test/integration/pedidos-onda4.e2e-spec.ts` › `recusa segundo pedido aberto do mesmo cliente item e operacao com 409 PEDIDO_ABERTO_EXISTENTE` |
+| DoD-79 | **AD-03**: mesmo cliente e item em **operações diferentes** é permitido | `app/backend/test/integration/pedidos-onda4.e2e-spec.ts` › `permite pedidos abertos do mesmo cliente e item em operacoes diferentes` |
+| DoD-80 | Adendo **incrementa** o item existente e grava histórico append-only em `adendos_pedido` + auditoria na mesma transação | `app/backend/test/integration/adendos.e2e-spec.ts` › `adendo incrementa o item e grava linha em adendos_pedido e auditoria na mesma transacao` |
+| DoD-81 | Adendo com déficit devolve `409 OVERBOOKING_CONFIRMACAO_NECESSARIA` sem persistir nada (nem `adendos_pedido`, nem reserva, nem mudança de quantidade) | `app/backend/test/integration/adendos.e2e-spec.ts` › `adendo com deficit nao persiste e devolve challenge de overbooking` |
+| DoD-82 | Confirmação do adendo soma a quantidade no item, cria a reserva de overbooking e acumula a pendência | `app/backend/test/integration/adendos.e2e-spec.ts` › `confirmacao do adendo soma quantidade cria reserva overbooking e acumula pendencia` |
+| DoD-83 | **AD-06**: não existe TTL/agendador de expiração de rascunho no código | `app/backend/test/unit/pedidos.service.spec.ts` › `nao existe expiracao automatica de reserva de rascunho` |
+| DoD-84 | **AD-06**: "Liberar reserva" exige justificativa, libera reservas, cancela pendências e audita | `app/backend/test/integration/pedidos-onda4.e2e-spec.ts` › `liberar reserva exige justificativa libera reservas e registra auditoria` |
+| DoD-85 | `PEDIDO_RESERVA_LIBERAR` ausente → `403` | `app/backend/test/integration/pedidos-onda4.e2e-spec.ts` › `liberar reserva sem permissao retorna 403` |
+| DoD-86 | `salvarComoRascunho: true` cria pedido em `rascunho` **com** reserva ativa | `app/backend/test/integration/pedidos-onda4.e2e-spec.ts` › `salvarComoRascunho cria pedido em rascunho com reserva ativa` |
+| DoD-87 | O rótulo "Rascunho com reserva ativa" é derivado e os 9 rótulos do protótipo existem | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `deriva os 9 rotulos de status do prototipo incluindo rascunho com reserva ativa` |
+| DoD-88 | Modal de overbooking mostra solicitado, disponível e déficit vindos do `409` | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `modal de overbooking renderiza o payload do 409 sem numero fabricado` |
+| DoD-89 | Modal de adendo mostra o pedido aberto existente e envia motivo | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `modal de adendo mostra pedido aberto existente e envia motivo` |
+| DoD-90 | Badge "Provisório · P5" presente no modal de adendo | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `modal de adendo exibe badge provisorio P5 da politica de preco` |
 
 ### Tabela de Preços
 
 | # | Regra (DoD) | Teste que falharia |
 |---|---|---|
-| DoD-91 | Grade tem as 4 faixas A/B/C/D e a coluna Unidade | `onda4-tabela-precos.test.tsx` › `grade exibe colunas produto unidade e as quatro faixas A B C D` |
-| DoD-92 | Publicar com preço faltando retorna `400 PRECOS_INCOMPLETOS` listando os produtos | `precos.service.spec.ts` › `publicar com preco faltando retorna 400 PRECOS_INCOMPLETOS com os produtos` |
-| DoD-93 | Publicação grava histórico, auditoria e emite `TABELA_PRECO_PUBLICADA` pós-commit | `precos.service.spec.ts` › `publicacao grava historico auditoria e emite evento pos commit` |
-| DoD-94 | Editar tabela publicada volta para rascunho e registra `revertida_para_rascunho` | `precos.service.spec.ts` › `editar tabela publicada volta para rascunho e registra reversao no historico` |
-| DoD-95 | Preço ausente é `null` e a UI mostra campo vazio, nunca `0,00` | `onda4-tabela-precos.test.tsx` › `preco ausente renderiza campo vazio e nunca zero fabricado` |
-| DoD-96 | Uma única tabela por data (índice único parcial) | `precos.service.spec.ts` › `recusa segunda tabela de preco para a mesma data` |
-| DoD-97 | `TABELA_PRECO_GERENCIAR` ausente → `403` em publicar | `precos.controller.spec.ts` › `publicar sem TABELA_PRECO_GERENCIAR retorna 403` |
+| DoD-91 | Grade tem as 4 faixas A/B/C/D e a coluna Unidade | `app/frontend/__tests__/onda4-tabela-precos.test.tsx` › `grade exibe colunas produto unidade e as quatro faixas A B C D` |
+| DoD-92 | Publicar com preço faltando retorna `400 PRECOS_INCOMPLETOS` listando os produtos | `app/backend/test/integration/precos.e2e-spec.ts` › `publicar com preco faltando retorna 400 PRECOS_INCOMPLETOS com os produtos` |
+| DoD-93 | Publicação emite `TABELA_PRECO_PUBLICADA` **depois** do commit (e não emite em rollback) | `app/backend/test/unit/precos.service.spec.ts` › `publicacao emite tabela_preco_publicada apos o commit` |
+| DoD-94 | Editar tabela publicada volta para rascunho e registra `revertida_para_rascunho` | `app/backend/test/integration/precos.e2e-spec.ts` › `editar tabela publicada volta para rascunho e registra reversao no historico` |
+| DoD-95 | Preço ausente é `null` e a UI mostra campo vazio, nunca `0,00` | `app/frontend/__tests__/onda4-tabela-precos.test.tsx` › `preco ausente renderiza campo vazio e nunca zero fabricado` |
+| DoD-96 | Uma única tabela por data (índice único parcial) | `app/backend/test/integration/precos.e2e-spec.ts` › `recusa segunda tabela de preco para a mesma data` |
+| DoD-97 | `TABELA_PRECO_GERENCIAR` ausente → `403` em publicar | `app/backend/test/integration/precos.e2e-spec.ts` › `publicar sem TABELA_PRECO_GERENCIAR retorna 403` |
 
 ### Disponibilidade
 
 | # | Regra (DoD) | Teste que falharia |
 |---|---|---|
-| DoD-98 | Mapa agrega exatamente os 8 estados `F/V/R/C/D/O/E/!` | `mapa.service.spec.ts` › `mapa agrega os oito estados F V R C D O E e ocorrencia` |
-| DoD-99 | Cada estado é derivado da tabela definida em D17 (peça pesada livre = F, etc.) | `mapa.service.spec.ts` › `deriva cada estado da tabela de origem correta` |
-| DoD-100 | Drill-down devolve as unidades reais do estado clicado | `mapa.service.spec.ts` › `drill-down devolve as unidades reais do estado selecionado` |
-| DoD-101 | O catálogo do mapa é o MVP seedado, nunca o catálogo legado da Grade do protótipo | `onda4-disponibilidade.test.tsx` › `mapa usa o catalogo MVP e nao contem o catalogo legado da grade do prototipo` |
-| DoD-102 | Seed cria os 11 pares item comercial/produto com `legado_item_comercial_id` 1:1 | `seed-catalogo-mvp.spec.ts` › `seed cria onze pares item comercial e produto vinculados um para um` |
-| DoD-103 | Itens do catálogo MVP nascem com badge Provisório · P11 na UI | `onda4-disponibilidade.test.tsx` › `catalogo MVP exibe badge provisorio P11` |
+| DoD-98 | Mapa agrega exatamente os 8 estados `F/V/R/C/D/O/E/!` | `app/backend/test/integration/mapa-disponibilidade.e2e-spec.ts` › `mapa agrega os oito estados F V R C D O E e ocorrencia` |
+| DoD-99 | Cada estado sai do SQL de D17 (peça pesada livre = F, carga fechada = E, etc.) | `app/backend/test/integration/mapa-disponibilidade.e2e-spec.ts` › `deriva cada estado da tabela de origem correta` |
+| DoD-100 | Drill-down devolve as unidades reais do estado clicado | `app/backend/test/integration/mapa-disponibilidade.e2e-spec.ts` › `drill-down devolve as unidades reais do estado selecionado` |
+| DoD-101 | O catálogo do mapa é o MVP seedado, nunca o catálogo legado da Grade do protótipo | `app/frontend/__tests__/onda4-disponibilidade.test.tsx` › `mapa usa o catalogo MVP e nao contem o catalogo legado da grade do prototipo` |
+| DoD-102 | Seed cria os 11 pares item comercial/produto com `legado_item_comercial_id` 1:1 e é idempotente | `app/backend/test/integration/seed-catalogo-mvp.e2e-spec.ts` › `seed cria onze pares item comercial e produto vinculados um para um` |
+| DoD-103 | Itens do catálogo MVP nascem com badge Provisório · P11 na UI | `app/frontend/__tests__/onda4-disponibilidade.test.tsx` › `catalogo MVP exibe badge provisorio P11` |
 
 ### Espelho Comercial
 
 | # | Regra (DoD) | Teste que falharia |
 |---|---|---|
-| DoD-104 | Os 3 agrupamentos (cliente, rota, representante) produzem totais coerentes | `espelho.service.spec.ts` › `agrupa por cliente rota e representante com totais coerentes` |
-| DoD-105 | Status derivado segue a precedência de D19 | `espelho.service.spec.ts` › `deriva status do item na precedencia cancelado faturado fechado atendido parcial aberto` |
-| DoD-106 | Export CSV usa os mesmos filtros e cabeçalho `text/csv` | `espelho.controller.spec.ts` › `export csv respeita filtros e devolve content-type text/csv` |
-| DoD-107 | `ESPELHO_COMERCIAL_LER` ausente → `403` | `espelho.controller.spec.ts` › `espelho sem ESPELHO_COMERCIAL_LER retorna 403` |
-| DoD-108 | Badge "Provisório · P15" presente no cabeçalho | `onda4-espelho.test.tsx` › `espelho exibe badge provisorio P15 do marco de fechamento` |
+| DoD-104 | Os 3 agrupamentos (cliente, rota, representante) produzem totais coerentes | `app/backend/test/integration/espelho.e2e-spec.ts` › `agrupa por cliente rota e representante com totais coerentes` |
+| DoD-105 | Status derivado segue a precedência de D19 | `app/backend/test/unit/espelho.service.spec.ts` › `deriva status do item na precedencia cancelado faturado fechado atendido parcial aberto` |
+| DoD-106 | Export CSV usa os mesmos filtros e cabeçalho `text/csv` | `app/backend/test/integration/espelho.e2e-spec.ts` › `export csv respeita filtros e devolve content-type text/csv` |
+| DoD-107 | `ESPELHO_COMERCIAL_LER` ausente → `403` | `app/backend/test/integration/espelho.e2e-spec.ts` › `espelho sem ESPELHO_COMERCIAL_LER retorna 403` |
+| DoD-108 | Badge "Provisório · P15" presente no cabeçalho | `app/frontend/__tests__/onda4-espelho.test.tsx` › `espelho exibe badge provisorio P15 do marco de fechamento` |
 
 ### Transversais
 
 | # | Regra (DoD) | Teste que falharia |
 |---|---|---|
-| DoD-109 | Nenhuma das 5 rotas é `PlaceholderPage` | `onda4-rotas.test.tsx` › `as cinco rotas comerciais nao renderizam PlaceholderPage` |
-| DoD-110 | Nenhum literal hexadecimal de cor fora de `globals.css` | `tokens-ds.test.ts` › `nenhum literal hexadecimal de cor em src fora de globals.css` |
-| DoD-111 | Nenhum componente chama o backend direto — só BFF (RA-01) | `bff-onda4.test.ts` › `nenhuma tela da onda 4 chama o backend fora do BFF` |
-| DoD-112 | A palavra banida não aparece em nenhum arquivo da onda | `onda4-rotas.test.tsx` › `nenhum arquivo da onda 4 usa o termo banido como rotulo` |
-| DoD-113 | Menu por perfil continua igual à matriz após as permissões novas | `menu-rbac.test.ts` › `menus visiveis por perfil batem com a matriz` |
+| DoD-109 | Nenhuma das 5 rotas é `PlaceholderPage` | `app/frontend/__tests__/onda4-rotas.test.tsx` › `as cinco rotas comerciais nao renderizam PlaceholderPage` |
+| DoD-110 | Nenhum literal hexadecimal de cor fora de `globals.css` | `app/frontend/__tests__/tokens-ds.test.ts` › `nenhum literal hexadecimal de cor em src fora de globals.css` |
+| DoD-111 | Nenhum componente chama o backend direto — só BFF (RA-01) | `app/frontend/__tests__/bff-onda4.test.ts` › `nenhuma tela da onda 4 chama o backend fora do BFF` |
+| DoD-112 | A palavra banida não aparece em nenhum arquivo da onda | `app/frontend/__tests__/onda4-rotas.test.tsx` › `nenhum arquivo da onda 4 usa o termo banido como rotulo` |
+| DoD-113 | Menu por perfil continua igual à matriz após as permissões novas | `app/frontend/__tests__/menu-rbac.test.ts` › `menus visiveis por perfil batem com a matriz` |
 | DoD-114 | Cobertura backend ≥ 80% linha e branch | `npm run test:cov` (gate do CI, job `coverage`) |
+| DoD-115 | O legado de pedido não existe mais: sem `pedido-venda-client.tsx`, sem rota `/comercial/pedidos/novo` | `app/frontend/__tests__/onda4-rotas.test.tsx` › `o cliente legado de pedido e a rota novo nao existem mais` |
+| DoD-116 | `adendos_pedido.origem_consumo` é derivado do déficit do plano (D27), nunca de campo inexistente | `app/backend/test/unit/adendos.service.spec.ts` › `origem do adendo e virtual sem deficit e overbooking com deficit` |
+| DoD-117 | As 4 permissões novas entram no catálogo, nas descrições e no snapshot de perfis | `app/backend/test/unit/permissoes-onda4.spec.ts` › `perfis recebem as quatro permissoes novas da onda 4` |
+| DoD-118 | Os 3 eventos novos existem no catálogo com payload tipado | `app/backend/test/unit/eventos-onda4.spec.ts` › `catalogo expoe os tres eventos da onda 4` |
 
-**45 itens de DoD** (DoD-70 a DoD-114), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
+**49 itens de DoD** (DoD-70 a DoD-118), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
 do CI.
 
 ---
@@ -641,7 +866,7 @@ export const adendosPedido = pgTable(
 
 **Steps (TDD)**
 
-1. Escrever o teste que falha primeiro, em `clientes.service.spec.ts`:
+1. Escrever o teste que falha primeiro, em `app/backend/test/unit/onda4-schema.spec.ts` (D28):
 
 ```ts
 it('cliente grava rota_id e o schema nao expoe rota_padrao', () => {
@@ -669,8 +894,10 @@ ALTER TABLE "clientes" DROP COLUMN IF EXISTS "rota_padrao";
 ```
 
 3. Acrescentar `{"idx": 17, ..., "tag": "0017_onda4_comercial_contract", ...}` ao journal.
-4. Remover `rotaPadrao` de `clientes.schema.ts` e de todo consumidor (`clientes.service.ts`,
-   `cliente.dto.ts`, `app/frontend/src/lib/clientes.ts`) — sem leitura dupla, sem fallback.
+4. Remover `rotaPadrao` de `clientes.schema.ts` e de todo consumidor. Localizar os consumidores com
+   `rg -n "rotaPadrao|rota_padrao" app/backend/src app/backend/test app/frontend/src` e ajustar
+   todos (inclusive `app/backend/test/integration/clientes.e2e-spec.ts`) — sem leitura dupla, sem
+   fallback.
 5. Registrar o passo de rollback em `migrations/ROLLBACK.md` no formato já usado pelas ondas
    anteriores.
 6. Rodar `npm run db:migrate` e o teste do passo 1 (agora verde).
@@ -681,11 +908,15 @@ ALTER TABLE "clientes" DROP COLUMN IF EXISTS "rota_padrao";
 
 ## Task 3 — Permissões novas e matriz de perfis
 
-**Files:** `permissoes.ts`, `permissoes.spec.ts`, `menu-rbac.test.ts` (verificação).
+**Files:** `app/backend/src/common/rbac/permissoes.ts`,
+`app/backend/src/common/rbac/perfil-permissoes.snapshot.json`,
+`app/backend/test/unit/permissoes-onda4.spec.ts`,
+`app/frontend/__tests__/menu-rbac.test.ts` (verificação).
 
 **Steps (TDD)**
 
-1. Teste primeiro, em `app/backend/src/common/rbac/permissoes.spec.ts`:
+1. Teste primeiro, em `app/backend/test/unit/permissoes-onda4.spec.ts` (D28, mesmo formato de
+   `test/unit/permissoes-onda1.spec.ts`):
 
 ```ts
 it('perfis recebem as quatro permissoes novas da onda 4', () => {
@@ -698,10 +929,17 @@ it('perfis recebem as quatro permissoes novas da onda 4', () => {
   ]));
   expect(MAPA_PERFIL_PERMISSOES.comercial).not.toContain(PERMISSOES.PEDIDO_RESERVA_LIBERAR);
   expect(MAPA_PERFIL_PERMISSOES.expedicao).toContain(PERMISSOES.ESPELHO_COMERCIAL_LER);
+  // DESCRICOES_PERMISSOES é Record<Permissao, string>: sem descrição, o type-check quebra.
+  for (const chave of [
+    PERMISSOES.TABELA_PRECO_LER, PERMISSOES.TABELA_PRECO_GERENCIAR,
+    PERMISSOES.ESPELHO_COMERCIAL_LER, PERMISSOES.PEDIDO_RESERVA_LIBERAR,
+  ]) {
+    expect(DESCRICOES_PERMISSOES[chave]).toEqual(expect.any(String));
+  }
 });
 ```
 
-2. Em `permissoes.ts`, no bloco da Onda 4:
+2. Em `PERMISSOES` (`permissoes.ts`), no bloco novo, logo após o bloco da Onda 1:
 
 ```ts
   // Onda 4 — Comercial (tabela de preços, espelho e liberação administrativa de reserva).
@@ -711,8 +949,37 @@ it('perfis recebem as quatro permissoes novas da onda 4', () => {
   PEDIDO_RESERVA_LIBERAR: 'PEDIDO_RESERVA_LIBERAR',
 ```
 
-3. Distribuir na `MAPA_PERFIL_PERMISSOES` conforme a tabela de D21.
-4. Rodar `npm run db:seed` e confirmar que `menu-rbac.test.ts` continua verde (DoD-113).
+3. Distribuir com o mesmo mecanismo já usado no arquivo (`pushPermissoes`, depois do objeto), na
+   composição de D21:
+
+```ts
+pushPermissoes(
+  'administrador',
+  'TABELA_PRECO_LER', 'TABELA_PRECO_GERENCIAR',
+  'ESPELHO_COMERCIAL_LER', 'PEDIDO_RESERVA_LIBERAR',
+);
+pushPermissoes(
+  'gestor',
+  'TABELA_PRECO_LER', 'TABELA_PRECO_GERENCIAR',
+  'ESPELHO_COMERCIAL_LER', 'PEDIDO_RESERVA_LIBERAR',
+);
+pushPermissoes('comercial', 'TABELA_PRECO_LER', 'ESPELHO_COMERCIAL_LER');
+pushPermissoes('expedicao', 'ESPELHO_COMERCIAL_LER');
+```
+
+4. Acrescentar as 4 entradas em `DESCRICOES_PERMISSOES` (o `Record<Permissao, string>` é total —
+   omitir qualquer uma quebra `npm run type-check`):
+
+```ts
+  TABELA_PRECO_LER: 'Consultar tabelas de preço e histórico de publicação',
+  TABELA_PRECO_GERENCIAR: 'Criar, editar, copiar e publicar tabelas de preço',
+  ESPELHO_COMERCIAL_LER: 'Consultar e exportar o espelho comercial',
+  PEDIDO_RESERVA_LIBERAR: 'Liberar administrativamente a reserva de um rascunho (AD-06)',
+```
+
+5. Regerar o snapshot de perfis: `cd app/backend && npm run rbac:snapshot`. Sem isso,
+   `test/unit/perfil-permissoes-snapshot.spec.ts` falha com as permissões novas.
+6. Rodar `npm run db:seed` e confirmar que `menu-rbac.test.ts` continua verde (DoD-113).
 
 **Commit:** `feat(onda4): permissões de tabela de preços, espelho e liberação de reserva`
 
@@ -720,11 +987,12 @@ it('perfis recebem as quatro permissoes novas da onda 4', () => {
 
 ## Task 4 — Eventos de domínio novos
 
-**Files:** `realtime/events/eventos.ts`, `eventos.spec.ts`.
+**Files:** `app/backend/src/realtime/events/eventos.ts`,
+`app/backend/test/unit/eventos-onda4.spec.ts`.
 
 **Steps (TDD)**
 
-1. Teste primeiro:
+1. Teste primeiro, em `app/backend/test/unit/eventos-onda4.spec.ts` (D28):
 
 ```ts
 it('catalogo expoe os tres eventos da onda 4', () => {
@@ -767,11 +1035,13 @@ it('catalogo expoe os tres eventos da onda 4', () => {
 
 ## Task 5 — Seed do catálogo MVP (11 pares, Provisório P11)
 
-**Files:** `seed-catalogo-mvp.ts`, `seed-catalogo-mvp.spec.ts`, `seed.ts`.
+**Files:** `app/backend/src/database/seed-catalogo-mvp.ts`, `app/backend/src/database/seed.ts`,
+`app/backend/test/integration/seed-catalogo-mvp.e2e-spec.ts`.
 
 **Steps (TDD)**
 
-1. Teste primeiro, em `seed-catalogo-mvp.spec.ts`:
+1. Teste primeiro, em `app/backend/test/integration/seed-catalogo-mvp.e2e-spec.ts` (precisa de
+   banco → `test/integration`, D28; o `db` sai de `app.get(DRIZZLE)` como em `seed.spec.ts`):
 
 ```ts
 it('seed cria onze pares item comercial e produto vinculados um para um', async () => {
@@ -813,16 +1083,28 @@ const CATALOGO_MVP = [
 
 export async function seedCatalogoMvp(db: Db): Promise<void> {
   for (const linha of CATALOGO_MVP) {
+    // uq_itens_comerciais_codigo e uq_produtos_codigo são índices PARCIAIS
+    // (WHERE deleted_at IS NULL): o ON CONFLICT precisa repetir o predicado,
+    // senão o Postgres não encontra o índice de arbitragem.
     const [item] = await db.insert(itensComerciais)
       .values({
         codigo: linha.codigo,
         descricao: linha.nome,
         unidadeComercial: linha.unidadePreco,
       })
-      .onConflictDoNothing({ target: itensComerciais.codigo })
+      .onConflictDoNothing({
+        target: itensComerciais.codigo,
+        targetWhere: isNull(itensComerciais.deletedAt),
+      })
       .returning();
-    const itemId = item?.id ?? (await db.select({ id: itensComerciais.id })
-      .from(itensComerciais).where(eq(itensComerciais.codigo, linha.codigo)))[0].id;
+    const itemId = item?.id ?? primeiroOuFalha(
+      await db.select({ id: itensComerciais.id }).from(itensComerciais)
+        .where(and(
+          eq(itensComerciais.codigo, linha.codigo),
+          isNull(itensComerciais.deletedAt),
+        )),
+      `item comercial ${linha.codigo} não encontrado após o seed`,
+    ).id;
     await db.insert(produtos)
       .values({
         codigo: linha.codigo,
@@ -835,10 +1117,16 @@ export async function seedCatalogoMvp(db: Db): Promise<void> {
         legadoItemComercialId: itemId,
         atributosJson: { provisorio: true, pendencia: 'P11', origem: 'prototipo_v1.1' },
       })
-      .onConflictDoNothing({ target: produtos.codigo });
+      .onConflictDoNothing({
+        target: produtos.codigo,
+        targetWhere: isNull(produtos.deletedAt),
+      });
   }
 }
 ```
+
+`primeiroOuFalha` vem de `src/common/crud/paginacao.ts` (já usado por `PedidosService`): se o item
+não existir depois do insert, o seed falha explicitamente em vez de inventar id (RA-05).
 
 3. Chamar `seedCatalogoMvp(db)` em `seed()`, depois do seed de RBAC.
 4. Atualizar a nota da Decisão 24 da Onda 3 **apenas no relatório da onda**, citando D5 deste plano
@@ -850,13 +1138,18 @@ export async function seedCatalogoMvp(db: Db): Promise<void> {
 
 ## Task 6 — Unicidade AD-03 no backend
 
-**Files:** `pedidos.service.ts`, `pedidos.controller.ts`, `pedido.dto.ts`, `pedidos.service.spec.ts`.
+**Files:** `pedidos.service.ts`, `pedidos.controller.ts`, `pedido.dto.ts`,
+`app/backend/test/integration/pedidos-onda4.e2e-spec.ts`.
 
 **Steps (TDD)**
 
-1. Testes primeiro (DoD-78, DoD-79):
+1. Testes primeiro (DoD-78, DoD-79), em `test/integration/pedidos-onda4.e2e-spec.ts` — precisam de
+   banco, então usam `createTestApp` + `seedComercialBase` (`test/helpers/`) e o service resolvido
+   do container:
 
 ```ts
+const service = app.get(PedidosService);
+
 it('recusa segundo pedido aberto do mesmo cliente item e operacao com 409 PEDIDO_ABERTO_EXISTENTE',
   async () => {
     await service.criar(dtoBase, usuarioId);
@@ -912,10 +1205,17 @@ private async exigirUnicidadeAd03(
 }
 ```
 
-3. Chamar `exigirUnicidadeAd03` em `criar`, em `incluirItem` (passando o próprio `pedidoId` como
-   ignorado) e nos dois endpoints de confirmação de overbooking, **antes** de qualquer mutação.
+   `ne` entra na lista de imports de `drizzle-orm` do arquivo (hoje:
+   `and, desc, eq, inArray, isNull, notInArray, sql`).
+3. Chamar `exigirUnicidadeAd03` em `criar` (logo depois de `encontrarAtivaPorData`, ainda no trecho
+   read-only, antes de `garantirOperacao`), em `incluirItemTransacional` (passando o próprio
+   `pedidoId` como ignorado, antes do `planejarSobLock`) e, por consequência, nos dois caminhos de
+   confirmação de overbooking, que reusam esses dois métodos com `confirmado = true`. Nenhuma
+   mutação pode existir antes da checagem.
 4. Expor `GET /comercial/pedidos/aberto?clienteId&itemComercialId&operacaoId`, que devolve o pedido
-   aberto e a quantidade atual (payload do `ModalAdendo`) ou `null`.
+   aberto e a quantidade atual (payload do `ModalAdendo`) ou `null`. **Declarar este handler antes
+   de `@Get(':id')`** no `PedidosController`, senão o Nest resolve `aberto` como `:id` e o
+   `ParseUUIDPipe`/`detalhar` quebra.
 
 **Commit:** `feat(onda4): unicidade AD-03 de pedido aberto por cliente, produto e operação`
 
@@ -923,12 +1223,49 @@ private async exigirUnicidadeAd03(
 
 ## Task 7 — Adendo com histórico
 
-**Files:** `adendos.service.ts`, `adendos.service.spec.ts`, `dto/adendo.dto.ts`,
-`pedidos.controller.ts`, `pedidos.module.ts`.
+**Files:** `adendos.service.ts`, `dto/adendo.dto.ts`, `pedidos.service.ts` (exportações e 3 métodos
+reusáveis), `pedidos.controller.ts`, `pedidos.module.ts`,
+`app/backend/test/unit/adendos.service.spec.ts`,
+`app/backend/test/integration/adendos.e2e-spec.ts`.
+
+### API real da Onda 1 que esta task consome (auditada em `develop`)
+
+Antes de qualquer código: a superfície real de `PedidosService` em
+`app/backend/src/modules/comercial/pedidos/pedidos.service.ts` é
+
+```ts
+async planejarSobLock(
+  tx: Tx, operacaoId: string | null, itens: ItemSolicitado[],
+): Promise<PlanoItem[]>                     // 3 parâmetros; NÃO existe { permitirOverbooking }
+
+async persistirItensPlanejados(
+  tx: Tx, pedido: PedidoVenda, solicitados: ItemSolicitado[], plano: PlanoItem[], usuarioId: string,
+): Promise<{ pedido: PedidoVenda; eventos: EventoDominio[] }>   // 5 parâmetros; sempre INSERT
+```
+
+Consequências que o Worker **não pode** ignorar:
+
+1. `planejarSobLock` é **puramente read-only e nunca lança** `OverbookingChallengeException`. Quem
+   lança é o chamador, depois de traduzir o plano:
+   `const desafios = desafiosParaChallenge(plano); if (desafios.length && !confirmado) throw new
+   OverbookingChallengeException(desafios);` — exatamente como `criar` (linhas 145-148) e
+   `incluirItemTransacional` (linhas 232-235) já fazem.
+2. `desafiosParaChallenge`, `PlanoItem` e `ItemSolicitado` são hoje **privados do módulo**
+   (função e interfaces sem `export`). A primeira alteração desta task é exportá-los, sem mudar
+   corpo nem semântica.
+3. `persistirItensPlanejados` **sempre faz `tx.insert(pedidosVendaItens)`**. O adendo precisa
+   **incrementar** um item que já existe → não pode chamá-lo. Para não duplicar o motor de reserva
+   (D2), o laço interno de consumo de saldo é **extraído** para um método público
+   `aplicarAlocacaoNoItem`, reusado pelos dois caminhos. Não existe parâmetro `itemExistenteId`.
+4. Não existe `plano.origemPredominante`: `plano` é `PlanoItem[]`. A origem do adendo é derivada
+   por D27.
 
 **Steps (TDD)**
 
-1. Testes primeiro (DoD-80, DoD-81, DoD-82) com os nomes exatos do mapa DoD.
+1. Testes primeiro (DoD-80, DoD-81, DoD-82, DoD-116) com os nomes exatos do mapa DoD:
+   `test/unit/adendos.service.spec.ts` cobre a derivação de origem (função pura) e a ordem
+   commit→emit; `test/integration/adendos.e2e-spec.ts` cobre incremento, challenge sem escrita e
+   confirmação com pendência acumulada.
 2. DTO:
 
 ```ts
@@ -942,73 +1279,345 @@ export type RegistrarAdendoDto = z.infer<typeof registrarAdendoSchema>;
 export const confirmarAdendoOverbookingSchema = registrarAdendoSchema;
 ```
 
-3. Service — reusa `planejarSobLock` da Onda 1 e nunca duplica a regra de reserva:
+3. **Em `pedidos.service.ts`** — três alterações mínimas, sem mudar comportamento existente.
+
+   3.1. Exportar o que o adendo precisa reusar:
 
 ```ts
+export interface ItemSolicitado {          // era `interface` sem export
+  itemComercialId: string;
+  quantidade: number;
+  observacoes?: string;
+}
+
+export interface PlanoItem {               // era `interface` sem export
+  itemComercialId: string;
+  quantidadeSolicitada: string;
+  disponivelAntes: string;
+  coberturas: CoberturaPlanejada[];
+  deficit: string;
+}
+
+/** Traduz plano → itens de challenge. Exportado para o AdendosService reusar (D2). */
+export function desafiosParaChallenge(plano: PlanoItem[]): OverbookingChallengeItem[] {
+  // corpo atual, inalterado
+}
+```
+
+   3.2. Extrair o laço de consumo de saldo de `persistirItensPlanejados` para um método público, de
+   modo que criação e adendo usem o **mesmo** motor. O corpo é o laço interno atual, com a única
+   diferença de **acumular** a pendência quando já existe uma aberta para o item (na criação nunca
+   existe, então o comportamento da Onda 1 é preservado bit a bit):
+
+```ts
+/**
+ * Consome as coberturas planejadas e o déficit de um item de pedido JÁ persistido.
+ * Extraído de persistirItensPlanejados para que o adendo reuse o motor de reserva
+ * sem duplicar regra (D2). Devolve os eventos a emitir após o commit.
+ */
+async aplicarAlocacaoNoItem(
+  tx: Tx,
+  pedido: PedidoVenda,
+  item: PedidoVendaItem,
+  alocacao: PlanoItem,
+  usuarioId: string,
+): Promise<EventoDominio[]> {
+  const eventos: EventoDominio[] = [];
+  for (const cobertura of alocacao.coberturas) {
+    const atualizada = await tx.execute<{ id: string }>(sql`
+      UPDATE disponibilidades_virtuais
+      SET quantidade_reservada=quantidade_reservada+${cobertura.quantidade}::numeric,
+          quantidade_disponivel=quantidade_disponivel-${cobertura.quantidade}::numeric,
+          status=CASE
+            WHEN quantidade_disponivel-${cobertura.quantidade}::numeric=0 THEN 'esgotada'
+            ELSE 'parcialmente_reservada'
+          END
+      WHERE id=${cobertura.disponibilidadeId}
+        AND quantidade_disponivel >= ${cobertura.quantidade}::numeric
+      RETURNING id
+    `);
+    if (atualizada.rows.length !== 1) {
+      throw new ConflictException('Saldo mudou durante a confirmação; refaça a operação');
+    }
+    await tx.insert(reservasDisponibilidade).values({
+      disponibilidadeVirtualId: cobertura.disponibilidadeId,
+      pedidoVendaItemId: item.id,
+      quantidadeReservada: cobertura.quantidade,
+      tipoConsumo: 'virtual',
+      status: 'ativa',
+    });
+  }
+  if (ehZero(alocacao.deficit)) return eventos;
+
+  if (!pedido.operacaoId) {
+    throw new ConflictException('Pedido sem operação não pode gerar overbooking');
+  }
+  await tx.insert(reservasDisponibilidade).values({
+    disponibilidadeVirtualId: null,
+    pedidoVendaItemId: item.id,
+    quantidadeReservada: alocacao.deficit,
+    tipoConsumo: 'overbooking',
+    status: 'ativa',
+  });
+  const pendenciaId = await this.abrirOuAcumularPendencia(tx, pedido, item, alocacao.deficit, usuarioId);
+  eventos.push({
+    nome: EVENTOS.PENDENCIA_OVERBOOKING_ABERTA,
+    payload: { pendenciaId, pedidoVendaId: pedido.id },
+  });
+  eventos.push({
+    nome: EVENTOS.OVERBOOKING_CONFIRMADO,
+    payload: {
+      pedidoVendaId: pedido.id,
+      itemId: item.id,
+      quantidadeOverbooking: alocacao.deficit,
+    },
+  });
+  return eventos;
+}
+
+/**
+ * Abre a pendência de overbooking do item ou soma o déficit à pendência aberta.
+ * Só existe pendência aberta quando o item recebeu adendo deficitário antes; na
+ * criação do item o caminho é sempre o INSERT (comportamento da Onda 1 preservado).
+ * Acumular em vez de duplicar é obrigatório: atualizarOuCancelarPendencia
+ * (reduzirItem/removerItem) resolve UMA pendência aberta por item.
+ */
+private async abrirOuAcumularPendencia(
+  tx: Tx,
+  pedido: PedidoVenda,
+  item: PedidoVendaItem,
+  deficit: string,
+  usuarioId: string,
+): Promise<string> {
+  const [aberta] = await tx.select().from(pendenciasOverbooking)
+    .where(and(
+      eq(pendenciasOverbooking.pedidoVendaItemId, item.id),
+      notInArray(pendenciasOverbooking.status, ['resolvida', 'cancelada']),
+      isNull(pendenciasOverbooking.deletedAt),
+    ))
+    .for('update')
+    .limit(1);
+  if (aberta) {
+    const acumulado = somarQtd(aberta.quantidadeDeficit, deficit);
+    await tx.update(pendenciasOverbooking)
+      .set({ quantidadeDeficit: acumulado, updatedAt: new Date() })
+      .where(eq(pendenciasOverbooking.id, aberta.id));
+    await tx.insert(pendenciasOverbookingHistorico).values({
+      pendenciaId: aberta.id,
+      acao: 'deficit_aumentado_por_adendo',
+      autorId: usuarioId,
+      detalheJson: { deficitAdicionado: deficit, deficitTotal: acumulado },
+    });
+    return aberta.id;
+  }
+  const [pendencia] = await tx.insert(pendenciasOverbooking).values({
+    pedidoVendaId: pedido.id, pedidoVendaItemId: item.id,
+    itemComercialId: item.itemComercialId, clienteId: pedido.clienteId,
+    vendedorUsuarioId: usuarioId, operacaoId: pedido.operacaoId,
+    quantidadeDeficit: deficit,
+  }).returning();
+  if (!pendencia) throw new Error('Falha ao abrir pendência de overbooking');
+  await tx.insert(pendenciasOverbookingHistorico).values({
+    pendenciaId: pendencia.id, acao: 'confirmada_pelo_vendedor', autorId: usuarioId,
+  });
+  return pendencia.id;
+}
+```
+
+   `persistirItensPlanejados` passa a delegar, mantendo o `PEDIDO_VENDA_ITEM_CRIADO` no lugar:
+
+```ts
+    if (!item) throw new Error('Falha ao persistir item do pedido');
+    eventos.push(...await this.aplicarAlocacaoNoItem(tx, pedido, item, alocacao, usuarioId));
+    eventos.push({
+      nome: EVENTOS.PEDIDO_VENDA_ITEM_CRIADO,
+      payload: { pedidoVendaId: pedido.id, itemId: item.id },
+    });
+```
+
+   3.3. Os dois carregadores usados pelo adendo — **definidos aqui, não presumidos**:
+
+```ts
+/** Carrega sob lock o pedido que vai receber adendo. Só estados abertos de AD-03 (D7). */
+async carregarAbertoParaAdendo(tx: Tx, pedidoId: string): Promise<PedidoVenda> {
+  const [pedido] = await tx.select().from(pedidosVenda)
+    .where(and(eq(pedidosVenda.id, pedidoId), isNull(pedidosVenda.deletedAt)))
+    .for('update')
+    .limit(1);
+  if (!pedido) throw new NotFoundException('Pedido não encontrado');
+  if (!(PedidosService.STATUS_ABERTOS as readonly string[]).includes(pedido.status)) {
+    throw new ConflictException({
+      code: 'PEDIDO_NAO_ABERTO',
+      message: 'O adendo só se aplica a pedido aberto (rascunho, em elaboração ou aguardando '
+        + 'confirmação de overbooking).',
+    });
+  }
+  return pedido;
+}
+
+/** Exige que o produto JÁ esteja no pedido: adendo aumenta item, não cria item. */
+async exigirItemDoPedido(
+  tx: Tx, pedidoId: string, itemComercialId: string,
+): Promise<PedidoVendaItem> {
+  const [item] = await tx.select().from(pedidosVendaItens)
+    .where(and(
+      eq(pedidosVendaItens.pedidoVendaId, pedidoId),
+      eq(pedidosVendaItens.itemComercialId, itemComercialId),
+      isNull(pedidosVendaItens.deletedAt),
+    ))
+    .for('update')
+    .limit(1);
+  if (!item) {
+    throw new NotFoundException({
+      code: 'ITEM_NAO_ESTA_NO_PEDIDO',
+      message: 'O produto não está neste pedido; use a inclusão de item.',
+    });
+  }
+  return item;
+}
+```
+
+   `PedidosService.STATUS_ABERTOS` é a constante criada na Task 6. `somarQtd` é o helper decimal
+   real de `src/common/crud/decimal.ts` (**não existe `somaDecimal`**; a lista exportada é
+   `subtrairQtd`, `somarQtd`, `formatarQtd`, `compararQtd`, `ehZero`, `minimoQtd`, `somarListaQtd`,
+   `multiplicar`).
+
+4. **`adendos.service.ts`** — o adendo, contra a API real. `AdendosService` injeta
+   `@Inject(DRIZZLE)`, `AuditoriaService`, `EventEmitter2` e `PedidosService`, e é declarado em
+   `pedidos.module.ts` (mesmo módulo, sem ciclo de import):
+
+```ts
+/** Origem do consumo do adendo, derivada do plano da Onda 1 (D27). */
+function origemDoAdendo(alocacao: PlanoItem): 'virtual' | 'overbooking' {
+  return ehZero(alocacao.deficit) ? 'virtual' : 'overbooking';
+}
+
 async registrar(
   pedidoId: string, dto: RegistrarAdendoDto, usuarioId: string, confirmado: boolean,
 ): Promise<AdendoResultado> {
-  return this.db.transaction(async (tx) => {
+  const resultado = await this.db.transaction(async (tx) => {
     const pedido = await this.pedidos.carregarAbertoParaAdendo(tx, pedidoId);
     const item = await this.pedidos.exigirItemDoPedido(tx, pedidoId, dto.itemComercialId);
-    const plano = await this.pedidos.planejarSobLock(tx, pedido.operacaoId, [{
-      itemComercialId: dto.itemComercialId, quantidade: dto.quantidadeAdicionada,
-    }], { permitirOverbooking: confirmado });
 
+    // 1) Planejamento read-only. Assinatura real: (tx, operacaoId, itens).
+    const [alocacao] = await this.pedidos.planejarSobLock(tx, pedido.operacaoId, [
+      { itemComercialId: dto.itemComercialId, quantidade: dto.quantidadeAdicionada },
+    ]);
+    if (!alocacao) throw new Error('planejarSobLock não devolveu alocação para o adendo');
+
+    // 2) O challenge é responsabilidade do CHAMADOR: planejarSobLock nunca lança.
+    //    Este throw acontece antes de qualquer INSERT/UPDATE → DoD-81.
+    const desafios = desafiosParaChallenge([alocacao]);
+    if (desafios.length && !confirmado) {
+      throw new OverbookingChallengeException(desafios);
+    }
+
+    // 3) Incremento do item existente (persistirItensPlanejados sempre INSERE; aqui é UPDATE).
     const anterior = item.quantidadePedida;
-    const resultante = somaDecimal(anterior, dto.quantidadeAdicionada);
-    await this.pedidos.persistirItensPlanejados(tx, pedido, plano, { itemExistenteId: item.id });
+    const resultante = somarQtd(anterior, dto.quantidadeAdicionada);
+    const reservadaAdicional = somarListaQtd(alocacao.coberturas.map((c) => c.quantidade));
+    const overbookingTotal = somarQtd(item.quantidadeOverbooking, alocacao.deficit);
+    const [itemAtualizado] = await tx.update(pedidosVendaItens).set({
+      quantidadePedida: resultante,
+      quantidadeReservada: somarQtd(item.quantidadeReservada, reservadaAdicional),
+      quantidadeOverbooking: overbookingTotal,
+      status: ehZero(overbookingTotal) ? 'totalmente_reservado' : 'overbooking_confirmado',
+      updatedAt: new Date(),
+    }).where(eq(pedidosVendaItens.id, item.id)).returning();
+    if (!itemAtualizado) throw new Error('Falha ao incrementar o item do pedido no adendo');
 
+    // 4) Reservas e pendência pelo motor da Onda 1, sem duplicar regra.
+    const eventos = await this.pedidos.aplicarAlocacaoNoItem(
+      tx, pedido, itemAtualizado, alocacao, usuarioId,
+    );
+
+    // 5) Histórico append-only + auditoria na MESMA transação (RA-02 / DoD-80).
     const [adendo] = await tx.insert(adendosPedido).values({
       pedidoVendaId: pedido.id,
       pedidoVendaItemId: item.id,
       itemComercialId: dto.itemComercialId,
       operacaoId: pedido.operacaoId,
       quantidadeAnterior: anterior,
-      quantidadeAdicionada: String(dto.quantidadeAdicionada),
+      quantidadeAdicionada: formatarQtd(dto.quantidadeAdicionada),
       quantidadeResultante: resultante,
-      origemConsumo: plano.origemPredominante,
+      origemConsumo: origemDoAdendo(alocacao),
       motivo: dto.motivo,
       autorId: usuarioId,
     }).returning();
+    if (!adendo) throw new Error('Falha ao registrar o adendo');
 
     await this.auditoria.registrar(tx, {
-      tabela: 'adendos_pedido', registroId: adendo.id, operacao: 'INSERT',
-      modulo: 'comercial.adendo', usuarioId,
-      dadosNovos: { pedidoVendaId: pedido.id, ...dto, quantidadeResultante: resultante },
+      tabela: 'adendos_pedido',
+      registroId: adendo.id,
+      operacao: 'INSERT',
+      modulo: 'comercial',
+      usuarioId,
+      dadosAnteriores: { quantidadePedida: anterior },
+      dadosNovos: adendo,
       justificativa: dto.motivo,
     });
-    return { adendo, item: { ...item, quantidadePedida: resultante } };
+
+    eventos.push({
+      nome: EVENTOS.ADENDO_REGISTRADO,
+      payload: {
+        adendoId: adendo.id,
+        pedidoVendaId: pedido.id,
+        itemComercialId: dto.itemComercialId,
+        quantidadeAdicionada: adendo.quantidadeAdicionada,
+        origemConsumo: origemDoAdendo(alocacao),
+      },
+    });
+    return { adendo, item: itemAtualizado, eventos };
   });
+
+  // Eventos SEMPRE fora da transação (RA-04), no padrão real do repositório:
+  // EventEmitter2 injetado, um emit por evento — igual a emitirEventosPosCommit.
+  for (const evento of resultado.eventos) {
+    this.eventEmitter.emit(evento.nome, evento.payload);
+  }
+  return { adendo: resultado.adendo, item: resultado.item };
+}
+
+/** Linha do tempo do pedido: histórico append-only, mais novo primeiro. */
+async listar(pedidoId: string) {
+  return this.db.select().from(adendosPedido)
+    .where(eq(adendosPedido.pedidoVendaId, pedidoId))
+    .orderBy(desc(adendosPedido.criadoEm));
 }
 ```
 
-   `planejarSobLock` com `permitirOverbooking: false` já lança
-   `OverbookingChallengeException` (`409`) **antes** de qualquer escrita — é o que garante DoD-81.
-4. Após o commit, emitir `ADENDO_REGISTRADO` pelo `RealtimeService`, no mesmo padrão dos serviços da
-   Onda 1 (nunca dentro da transação).
-5. Controller:
+5. Controller — no padrão real de `PedidosController` (`@RequirePermissoes('X')` com literal de
+   string, `@CurrentUser() user: CurrentUserPayload` e `user.sub`; **não** existem
+   `@RequerPermissao`, `@UsuarioAtual` nem `UsuarioAutenticado` no repositório):
 
 ```ts
 @Post(':id/adendos')
-@RequerPermissao(PERMISSOES.PEDIDOS_GERENCIAR)
-registrarAdendo(
-  @Param('id', ParseUUIDPipe) id: string,
+@HttpCode(HttpStatus.CREATED)
+@RequirePermissoes('PEDIDOS_GERENCIAR')
+async registrarAdendo(
+  @Param('id') id: string,
   @Body(new ZodValidationPipe(registrarAdendoSchema)) dto: RegistrarAdendoDto,
-  @UsuarioAtual() usuario: UsuarioAutenticado,
-) { return this.adendos.registrar(id, dto, usuario.id, false); }
+  @CurrentUser() user: CurrentUserPayload,
+) {
+  return this.adendos.registrar(id, dto, user.sub, false);
+}
 
 @Post(':id/adendos/confirmar-overbooking')
-@RequerPermissao(PERMISSOES.PEDIDO_OVERBOOKING_CONFIRMAR)
-confirmarAdendoOverbooking(
-  @Param('id', ParseUUIDPipe) id: string,
-  @Body(new ZodValidationPipe(confirmarAdendoOverbookingSchema)) dto: RegistrarAdendoDto,
-  @UsuarioAtual() usuario: UsuarioAutenticado,
-) { return this.adendos.registrar(id, dto, usuario.id, true); }
+@HttpCode(HttpStatus.CREATED)
+@RequirePermissoes('PEDIDO_OVERBOOKING_CONFIRMAR')
+async confirmarAdendoOverbooking(
+  @Param('id') id: string,
+  @Body(new ZodValidationPipe(registrarAdendoSchema)) dto: RegistrarAdendoDto,
+  @CurrentUser() user: CurrentUserPayload,
+) {
+  return this.adendos.registrar(id, dto, user.sub, true);
+}
 
 @Get(':id/adendos')
-@RequerPermissao(PERMISSOES.PEDIDOS_LER)
-listarAdendos(@Param('id', ParseUUIDPipe) id: string) { return this.adendos.listar(id); }
+@RequirePermissoes('PEDIDOS_LER')
+async listarAdendos(@Param('id') id: string) {
+  return this.adendos.listar(id);
+}
 ```
 
 **Commit:** `feat(onda4): adendo de pedido com histórico append-only e overbooking AD-05`
@@ -1017,18 +1626,33 @@ listarAdendos(@Param('id', ParseUUIDPipe) id: string) { return this.adendos.list
 
 ## Task 8 — AD-06: liberar reserva e rascunho explícito
 
-**Files:** `pedidos.service.ts`, `pedidos.controller.ts`, `pedido.dto.ts`, `pedidos.service.spec.ts`,
-`pedidos.controller.spec.ts`.
+**Files:** `pedidos.service.ts`, `pedidos.controller.ts`, `pedido.dto.ts`,
+`app/backend/test/unit/pedidos.service.spec.ts` (acrescenta DoD-83),
+`app/backend/test/integration/pedidos-onda4.e2e-spec.ts` (DoD-84 a DoD-86).
 
 **Steps (TDD)**
 
-1. Testes primeiro (DoD-83 a DoD-86). DoD-83 é um teste estrutural que impede a volta do TTL:
+1. Testes primeiro (DoD-83 a DoD-86). DoD-83 é um teste estrutural, sem banco, que impede a volta
+   do TTL — acrescentado a `test/unit/pedidos.service.spec.ts`, com varredura literal (sem helper
+   inventado):
 
 ```ts
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+
+function fontesDoModulo(dir: string): string[] {
+  return readdirSync(dir).flatMap((nome) => {
+    const caminho = join(dir, nome);
+    if (statSync(caminho).isDirectory()) return fontesDoModulo(caminho);
+    return nome.endsWith('.ts') ? [caminho] : [];
+  });
+}
+
 it('nao existe expiracao automatica de reserva de rascunho', () => {
-  const fontes = arquivosDoModulo('src/modules/comercial');
-  const suspeitos = fontes.filter((f) =>
-    /@Cron|SchedulerRegistry|setTimeout\(|setInterval\(|expiraEm|ttlReserva/.test(ler(f)));
+  const raiz = join(__dirname, '../../src/modules/comercial');
+  const suspeitos = fontesDoModulo(raiz).filter((f) =>
+    /@Cron|SchedulerRegistry|setTimeout\(|setInterval\(|expiraEm|ttlReserva/
+      .test(readFileSync(f, 'utf8')));
   expect(suspeitos).toEqual([]);
 });
 ```
@@ -1046,7 +1670,12 @@ export type LiberarReservaDto = z.infer<typeof liberarReservaSchema>;
 3. Em `criar`, o status inicial passa a ser
    `dto.salvarComoRascunho ? 'rascunho' : 'em_elaboracao_reserva_ativa'`; as reservas são criadas nos
    dois casos (AD-06: rascunho tem reserva ativa).
-4. Novo método, reusando o cancelamento existente para não duplicar a liberação de reservas:
+4. Novo método, reusando os métodos públicos que **já existem** em `PedidosService` — não há helper
+   novo a inventar: a liberação por item é `liberarTodasReservasDoItem(tx, itemId)` (linhas 492-511)
+   e o cancelamento de pendências do pedido é `cancelarPendenciasDoPedido(tx, pedidoId, usuarioId)`
+   (linhas 513-530). **Não existem** `liberarTodasReservasDoPedido`,
+   `cancelarPendenciasOverbookingDoPedido` nem `carregarComReservaAtiva`; o carregador com lock é
+   `obterPedidoAtivoSobLock(tx, pedidoId)` (privado, linhas 640-647) e é ele que se usa:
 
 ```ts
 /** AD-06 — única liberação além de remoção/cancelamento pelo vendedor. Sem TTL, sem job. */
@@ -1054,44 +1683,76 @@ async liberarReservaAdministrativa(
   pedidoId: string, dto: LiberarReservaDto, usuarioId: string,
 ): Promise<{ id: string; status: string }> {
   const resultado = await this.db.transaction(async (tx) => {
-    const pedido = await this.carregarComReservaAtiva(tx, pedidoId);
+    const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId);
     if (pedido.status !== 'rascunho') {
       throw new BadRequestException({
         code: 'PEDIDO_NAO_ESTA_EM_RASCUNHO',
         message: 'A liberação administrativa só se aplica a rascunho com reserva ativa.',
       });
     }
-    await this.liberarTodasReservasDoPedido(tx, pedido.id);
-    await this.cancelarPendenciasOverbookingDoPedido(tx, pedido.id, usuarioId);
-    await tx.update(pedidosVenda)
-      .set({ status: 'cancelado', updatedAt: new Date() })
-      .where(eq(pedidosVenda.id, pedido.id));
+    const itens = await tx.select().from(pedidosVendaItens)
+      .where(and(
+        eq(pedidosVendaItens.pedidoVendaId, pedido.id),
+        isNull(pedidosVendaItens.deletedAt),
+      ));
+    const reservasAtivas = await tx.select({ id: reservasDisponibilidade.id })
+      .from(reservasDisponibilidade)
+      .where(and(
+        inArray(reservasDisponibilidade.pedidoVendaItemId, itens.map((i) => i.id)),
+        eq(reservasDisponibilidade.status, 'ativa'),
+      ));
+    if (reservasAtivas.length === 0) {
+      throw new BadRequestException({
+        code: 'PEDIDO_SEM_RESERVA_ATIVA',
+        message: 'Este rascunho não tem reserva ativa a liberar.',
+      });
+    }
+    for (const item of itens) {
+      await this.liberarTodasReservasDoItem(tx, item.id);
+    }
+    await this.cancelarPendenciasDoPedido(tx, pedido.id, usuarioId);
+    const [liberado] = await tx.update(pedidosVenda)
+      .set({ status: 'cancelado', motivoCancelamento: dto.justificativa, updatedAt: new Date() })
+      .where(eq(pedidosVenda.id, pedido.id))
+      .returning();
+    if (!liberado) throw new Error('Falha ao liberar a reserva do rascunho');
     await this.auditoria.registrar(tx, {
       tabela: 'pedidos_venda', registroId: pedido.id, operacao: 'UPDATE',
-      modulo: 'comercial.pedido', usuarioId,
+      modulo: 'comercial', usuarioId,
       dadosAnteriores: { status: pedido.status },
       dadosNovos: { status: 'cancelado', acao: 'liberar_reserva' },
       justificativa: dto.justificativa,
     });
-    return { id: pedido.id, status: 'cancelado' as const };
+    return {
+      pedido: { id: pedido.id, status: 'cancelado' },
+      eventos: [{
+        nome: EVENTOS.RESERVA_LIBERADA_ADMIN,
+        payload: {
+          pedidoVendaId: pedido.id, autorId: usuarioId, justificativa: dto.justificativa,
+        },
+      }] as EventoDominio[],
+    };
   });
-  this.realtime.emitir(EVENTOS.RESERVA_LIBERADA_ADMIN, {
-    pedidoVendaId: resultado.id, autorId: usuarioId, justificativa: dto.justificativa,
-  });
-  return resultado;
+  // Não existe RealtimeService.emitir: o padrão real é EventEmitter2 pós-commit,
+  // pelo emitirEventosPosCommit privado que já existe no service (linhas 634-638).
+  this.emitirEventosPosCommit(resultado.eventos);
+  return resultado.pedido;
 }
 ```
 
-5. Controller:
+5. Controller — padrão real (literal de permissão, `@CurrentUser`, `user.sub`):
 
 ```ts
 @Post(':id/liberar-reserva')
-@RequerPermissao(PERMISSOES.PEDIDO_RESERVA_LIBERAR)
-liberarReserva(
-  @Param('id', ParseUUIDPipe) id: string,
+@HttpCode(HttpStatus.OK)
+@RequirePermissoes('PEDIDO_RESERVA_LIBERAR')
+async liberarReserva(
+  @Param('id') id: string,
   @Body(new ZodValidationPipe(liberarReservaSchema)) dto: LiberarReservaDto,
-  @UsuarioAtual() usuario: UsuarioAutenticado,
-) { return this.pedidos.liberarReservaAdministrativa(id, dto, usuario.id); }
+  @CurrentUser() user: CurrentUserPayload,
+) {
+  return this.service.liberarReservaAdministrativa(id, dto, user.sub);
+}
 ```
 
 **Commit:** `feat(onda4): liberação administrativa auditada de reserva e rascunho explícito (AD-06)`
@@ -1101,7 +1762,9 @@ liberarReserva(
 ## Task 9 — Módulo de Tabela de Preços
 
 **Files:** `precos.module.ts`, `precos.controller.ts`, `precos.service.ts`,
-`dto/tabela-preco.dto.ts`, `precos.service.spec.ts`, `precos.controller.spec.ts`, `app.module.ts`.
+`dto/tabela-preco.dto.ts`, `app.module.ts`,
+`app/backend/test/unit/precos.service.spec.ts` (DoD-93, ordem commit→emit),
+`app/backend/test/integration/precos.e2e-spec.ts` (DoD-92, DoD-94, DoD-96, DoD-97).
 
 **Steps (TDD)**
 
@@ -1170,7 +1833,7 @@ async criar(dto: CriarTabelaPrecoDto, usuarioId: string) {
 
 ```ts
 async publicar(id: string, dto: PublicarTabelaPrecoDto, usuarioId: string) {
-  const resultado = await this.db.transaction(async (tx) => {
+  const publicada = await this.db.transaction(async (tx) => {
     const tabela = await this.exigirTabela(tx, id);
     const incompletos = await tx
       .select({ codigo: produtos.codigo, nome: produtos.nome })
@@ -1201,17 +1864,24 @@ async publicar(id: string, dto: PublicarTabelaPrecoDto, usuarioId: string) {
     });
     return { id, data: tabela.data };
   });
-  this.realtime.emitir(EVENTOS.TABELA_PRECO_PUBLICADA, { ...resultado, autorId: usuarioId });
+  // Evento pós-commit com EventEmitter2 injetado — padrão real do repositório
+  // (não existe RealtimeService.emitir). RA-04 / DoD-93.
+  this.eventEmitter.emit(EVENTOS.TABELA_PRECO_PUBLICADA, {
+    tabelaPrecoId: publicada.id, data: publicada.data, autorId: usuarioId,
+  });
   return this.detalhar(id);
 }
 ```
 
    `salvarItens` faz o upsert e, se a tabela estava `publicada`, volta para `rascunho` gravando
    `revertida_para_rascunho` em `tabelas_preco_publicacoes` (D16).
-4. Controller com as rotas `GET /precos/tabelas`, `GET /precos/tabelas/:id`,
-   `POST /precos/tabelas`, `PATCH /precos/tabelas/:id/itens`, `POST /precos/tabelas/:id/copiar`,
-   `POST /precos/tabelas/:id/publicar` e `GET /precos/tabelas/:id/publicacoes` — leitura com
-   `TABELA_PRECO_LER`, escrita com `TABELA_PRECO_GERENCIAR`.
+4. Controller `@Controller('precos/tabelas')`, com `@UseGuards(JwtAuthGuard, RbacGuard)` e
+   `@RequirePermissoes('…')` no padrão de `PedidosController`. Rotas: `GET /precos/tabelas`,
+   `GET /precos/tabelas/:id`, `POST /precos/tabelas`, `PATCH /precos/tabelas/:id/itens`,
+   `POST /precos/tabelas/:id/copiar`, `POST /precos/tabelas/:id/publicar` e
+   **`GET /precos/tabelas/:id/historico`** (D30 — caminho da matriz; a tabela continua
+   `tabelas_preco_publicacoes`). Leitura com `TABELA_PRECO_LER`, escrita com
+   `TABELA_PRECO_GERENCIAR`.
 5. Registrar `PrecosModule` em `app.module.ts`.
 
 **Commit:** `feat(onda4): módulo de tabela de preços A/B/C/D com publicação auditada`
@@ -1220,17 +1890,23 @@ async publicar(id: string, dto: PublicarTabelaPrecoDto, usuarioId: string) {
 
 ## Task 10 — Mapa teatro e drill-down da Disponibilidade
 
-**Files:** `mapa.service.ts`, `mapa.service.spec.ts`, `dto/mapa.dto.ts`,
-`disponibilidade.controller.ts`, `disponibilidade.module.ts`.
+**Files:** `mapa.service.ts`, `dto/mapa.dto.ts`, `disponibilidade.controller.ts`,
+`disponibilidade.module.ts`, `app/backend/test/helpers/onda4-fixtures.ts`,
+`app/backend/test/integration/mapa-disponibilidade.e2e-spec.ts`.
 
 **Steps (TDD)**
 
-1. Testes primeiro (DoD-98 a DoD-100), montando fixtures que cobrem os 8 estados de D17.
-2. DTO e contrato:
+1. Testes primeiro (DoD-98 a DoD-100), em `test/integration/mapa-disponibilidade.e2e-spec.ts` — as
+   8 consultas são SQL sobre 6 tabelas, então o teste é de banco real, com fixtures em
+   `test/helpers/onda4-fixtures.ts` que produzem pelo menos uma linha em cada estado de D17
+   (peça pesada livre, saldo virtual, reserva de rascunho, reserva de pedido finalizado, peça
+   `para_corte`, reserva de overbooking, item em caminhão `fechado`, peça `divergente`).
+2. DTO e contrato — o parâmetro é `operacaoId` (matriz linha 6:
+   `GET /comercial/disponibilidade/mapa?operacaoId=`), que é a chave usada pelos 8 SQL de D17:
 
 ```ts
 export const consultarMapaSchema = z.object({
-  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  operacaoId: z.string().uuid(),
   itemComercialId: z.string().uuid().optional(),
 });
 
@@ -1238,24 +1914,36 @@ export const drillDownSchema = consultarMapaSchema.extend({
   estado: z.enum(['F', 'V', 'R', 'C', 'D', 'O', 'E', '!']),
 });
 
+export type EstadoMapa = 'F' | 'V' | 'R' | 'C' | 'D' | 'O' | 'E' | '!';
+
 export interface MapaProduto {
   itemComercialId: string;
   codigo: string;
   descricao: string;
-  provisorio: boolean;          // badge P11 do catálogo MVP
-  estados: Record<'F' | 'V' | 'R' | 'C' | 'D' | 'O' | 'E' | '!', number>;
-  saldoComercial: number;       // F + V − R − O
+  provisorio: boolean;                        // badge P11 do catálogo MVP
+  estados: Record<EstadoMapa, string>;        // NUMERIC(.,3) como string (sem drift — S4)
+  unidades: Record<EstadoMapa, number>;       // contagem de peças/subitens onde faz sentido
+  saldoComercial: string;                     // F + V − R − O, via somarQtd/subtrairQtd
 }
 ```
 
-3. `MapaService.consultar` executa uma consulta por estado, cada uma com a origem literal de D17, e
-   agrega por `item_comercial_id`. Nenhuma coluna nova, nenhum estado persistido.
-4. `MapaService.detalhar(itemComercialId, estado, dataOperacao)` devolve as unidades reais do estado:
-   peça (código, peso, recebimento de origem) para `F`/`D`/`E`/`!`; linha de disponibilidade virtual
-   (compra programada, fornecedor esperado) para `V`; reserva com pedido e cliente para `R`/`C`/`O`.
-5. Rotas: `GET /comercial/disponibilidade/mapa` e
-   `GET /comercial/disponibilidade/mapa/:itemComercialId/detalhe`, ambas com `DISPONIBILIDADE_LER`.
-   A rota `GET /comercial/disponibilidade` existente permanece intacta (Grade Tabular).
+3. `MapaService.consultar(operacaoId, itemComercialId?)` executa **as oito consultas literais de
+   D17** (uma por estado, `tx.execute(sql`…`)`), une os resultados por `item_comercial_id` e
+   completa o eixo com o catálogo (`itens_comerciais` ativos, `join produtos` por
+   `legado_item_comercial_id` para o badge Provisório). Estado sem linha vira `'0.000'`, nunca
+   `null` mascarado. Nenhuma coluna nova, nenhum estado persistido.
+4. `MapaService.detalhar(operacaoId, itemComercialId, estado)` devolve as unidades reais do estado,
+   reusando o mesmo `WHERE` da consulta agregada sem o `GROUP BY`:
+   - `F`/`D`/`!` → `pecas` (`etiqueta_atual`, `peso_original`, `status_peca`, `recebimento_id`),
+     via `join recebimentos` para filtrar `operacao_id`;
+   - `E` → `carga_itens` + `caminhoes` (placa, status) + peça **ou** subitem;
+   - `V` → `disponibilidades_virtuais` + `compras_programadas` (compra de origem);
+   - `R`/`C`/`O` → `reservas_disponibilidade` + `pedidos_venda_itens` + `pedidos_venda` + `clientes`.
+5. Rotas: `GET /comercial/disponibilidade/mapa?operacaoId=` e
+   `GET /comercial/disponibilidade/mapa/:itemComercialId/detalhe?operacaoId=&estado=`, ambas com
+   `@RequirePermissoes('DISPONIBILIDADE_LER')`. A rota `GET /comercial/disponibilidade` existente
+   permanece intacta (Grade Tabular). O handler do mapa é declarado **antes** de qualquer rota
+   `:param` no `DisponibilidadeController`.
 
 **Commit:** `feat(onda4): mapa teatro de disponibilidade com 8 estados e drill-down`
 
@@ -1264,7 +1952,9 @@ export interface MapaProduto {
 ## Task 11 — Espelho Comercial
 
 **Files:** `espelho.module.ts`, `espelho.controller.ts`, `espelho.service.ts`,
-`dto/espelho.dto.ts`, `espelho.service.spec.ts`, `espelho.controller.spec.ts`, `app.module.ts`.
+`dto/espelho.dto.ts`, `app.module.ts`,
+`app/backend/test/unit/espelho.service.spec.ts` (DoD-105, `derivarStatus` é função pura),
+`app/backend/test/integration/espelho.e2e-spec.ts` (DoD-104, DoD-106, DoD-107).
 
 **Steps (TDD)**
 
@@ -1309,7 +1999,9 @@ private derivarStatus(pedidoStatus: string, pedida: number, atendida: number): S
 ## Task 12 — Clientes no backend (rota, prioridade, preferências)
 
 **Files:** `json-cadastros.dto.ts`, `cliente.dto.ts`, `clientes.service.ts`,
-`clientes.service.spec.ts`.
+`app/backend/test/integration/clientes-onda4.e2e-spec.ts` (DoD-73 a DoD-75),
+`app/backend/test/unit/onda4-schema.spec.ts` (DoD-76),
+`app/backend/test/integration/clientes.e2e-spec.ts` (realinhar `rota_padrao` → `rota_id`).
 
 **Steps (TDD)**
 
@@ -1332,8 +2024,9 @@ private derivarStatus(pedidoStatus: string, pedida: number, atendida: number): S
 
 ## Task 13 — Camada BFF
 
-**Files:** as 15 rotas listadas em *Estrutura de arquivos* + `bff-onda4.test.ts` +
-`lib/precos.ts`, `lib/espelho.ts`, `lib/mapa-disponibilidade.ts`, `lib/status-pedido.ts`.
+**Files:** as **13 rotas novas + 2 alteradas** listadas em *Estrutura de arquivos* +
+`app/frontend/__tests__/bff-onda4.test.ts` + `lib/precos.ts`, `lib/espelho.ts`,
+`lib/mapa-disponibilidade.ts`, `lib/status-pedido.ts`.
 
 **Steps (TDD)**
 
@@ -1348,23 +2041,45 @@ it('nenhuma tela da onda 4 chama o backend fora do BFF', () => {
 });
 ```
 
-2. Implementar cada rota no padrão já usado no repositório (`fetchBackend`, erro repassado com o
-   status original, sem `catch` silencioso):
+2. Implementar cada rota nos **dois padrões que já existem** em `src/lib/api.ts`, escolhendo pelo
+   critério "o corpo do erro importa?":
+
+   **(a) Rotas cujo `409`/`400` carrega payload que a UI precisa** — adendo, confirmação,
+   criação de pedido, publicação de preços: usar `apiFetch` e repassar status **e corpo** sem
+   reescrever, exatamente como o `POST` de `api/comercial/pedidos/route.ts` já faz hoje. Reescrever
+   com `fetchBackend` **perderia** `OVERBOOKING_CONFIRMACAO_NECESSARIA`, `PEDIDO_ABERTO_EXISTENTE`
+   e `PRECOS_INCOMPLETOS`, que são o que monta os modais:
 
 ```ts
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const body = await req.json();
-  const { data, error, status } = await fetchBackend<AdendoResultado>(
-    `/comercial/pedidos/${id}/adendos`, { method: 'POST', body: JSON.stringify(body) },
-  );
-  if (error) return NextResponse.json({ message: error, status }, { status });
-  return NextResponse.json(data, { status: 201 });
+  const response = await apiFetch(`/comercial/pedidos/${id}/adendos`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json();
+  return NextResponse.json(payload, { status: response.status });
 }
 ```
 
-   O BFF do adendo **repassa o corpo do `409`** (challenge de overbooking e
-   `PEDIDO_ABERTO_EXISTENTE`) sem reescrever, porque a UI depende dele para montar os modais.
+   **(b) Rotas de leitura simples** — listagens, detalhe, mapa, espelho, histórico: usar
+   `fetchBackend<T>` com o repasse de status já padronizado, sem `catch` silencioso:
+
+```ts
+export async function GET(req: NextRequest) {
+  const qs = req.nextUrl.searchParams.toString();
+  const { data, error, status } = await fetchBackend<MapaResposta>(
+    `/comercial/disponibilidade/mapa${qs ? `?${qs}` : ''}`,
+  );
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status: 200 });
+}
+```
+
+   O export CSV do espelho é o único caso especial: o BFF repassa `Content-Type` e
+   `Content-Disposition` do backend com `new NextResponse(response.body, { status, headers })`,
+   sem reserializar o corpo.
 3. Criar os tipos compartilhados em `lib/*`, incluindo `status-pedido.ts` com a derivação de D11:
 
 ```ts
@@ -1394,12 +2109,17 @@ export function rotuloStatusPedido(status: string, temReservaAtiva: boolean): st
 
 ## Task 14 — Tela `/comercial/clientes`
 
-**Files:** `clientes-client.tsx`, `page.tsx`, `onda4-clientes.test.tsx`.
+**Files:** `clientes-client.tsx` (**existe** — 18 linhas delegando ao `CadastroMasterDetail`
+genérico da Onda 3; é **substituído**, não criado), `clientes/page.tsx`,
+`app/frontend/__tests__/onda4-clientes.test.tsx`.
 
 **Steps (TDD)**
 
 1. **Ler `F:\Projetos\alpha-carnes-prototipo\src\app\pages\Cadastros.tsx` inteiro antes de escrever**
-   (Princípio I).
+   (Princípio I). Ler também o `clientes-client.tsx` atual e o `clientesConfig` de
+   `src/lib/cadastros-config.ts`: o componente genérico não comporta as 4 abas do protótipo, então
+   a tela de Clientes deixa de usá-lo. `clientesConfig` permanece para os demais cadastros da
+   Onda 3 — nada mais é removido de `cadastros-config.ts`.
 2. Testes primeiro (DoD-70 a DoD-72, DoD-77):
 
 ```tsx
@@ -1439,11 +2159,15 @@ it('clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente', async
 ## Task 15 — Tela `/comercial/pedidos`
 
 **Files:** `pedidos-client.tsx`, `pedido-editor.tsx`, `modal-overbooking.tsx`, `modal-adendo.tsx`,
-`modal-liberar-reserva.tsx`, `page.tsx`, `onda4-pedidos.test.tsx`.
+`modal-liberar-reserva.tsx`, `pedidos/page.tsx`,
+`app/frontend/__tests__/onda4-pedidos.test.tsx`.
 
 **Steps (TDD)**
 
-1. **Ler `PedidoVenda.tsx` inteiro antes de escrever.**
+1. **Ler `PedidoVenda.tsx` inteiro antes de escrever.** A tela nova **não** estende
+   `pedido-venda-client.tsx`: aquele arquivo é o legado que sai na Task 16 (D29). `pedidos/page.tsx`
+   passa a renderizar `<PedidosClient …/>` sem a prop `modo`, porque lista e editor convivem na
+   mesma rota, como no protótipo.
 2. Testes primeiro (DoD-87 a DoD-90).
 3. Lista de pedidos com os filtros, contadores e pílulas do protótipo, usando
    `rotuloStatusPedido(status, temReservaAtiva)`.
@@ -1467,7 +2191,50 @@ it('clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente', async
 
 ---
 
-## Task 16 — Tela `/comercial/tabela-precos`
+## Task 16 — Remoção do legado de pedidos (D29 / Global Constraint 14)
+
+**Files:** `app/frontend/src/app/(admin)/comercial/pedidos/pedido-venda-client.tsx` (remover),
+`app/frontend/src/app/(admin)/comercial/pedidos/novo/page.tsx` (remover),
+`app/frontend/__tests__/pedido-novo.test.tsx` (remover),
+`app/frontend/e2e/jornada-operacional.spec.ts`,
+`app/frontend/__tests__/onda4-rotas.test.tsx`.
+
+Executada **depois** da Task 15 (a tela nova já existe) e **antes** da Task 20 (que realinha os
+specs herdados), para que o E2E nunca navegue para uma rota que acabou de sumir.
+
+**Steps (TDD)**
+
+1. Teste primeiro (DoD-115), em `app/frontend/__tests__/onda4-rotas.test.tsx`:
+
+```ts
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+const RAIZ = join(__dirname, '../src/app/(admin)/comercial');
+
+it('o cliente legado de pedido e a rota novo nao existem mais', () => {
+  expect(existsSync(join(RAIZ, 'pedidos/pedido-venda-client.tsx'))).toBe(false);
+  expect(existsSync(join(RAIZ, 'pedidos/novo/page.tsx'))).toBe(false);
+});
+```
+
+2. Remover os três arquivos e o diretório `pedidos/novo/`. Nada de redirect, nada de reexport, nada
+   de componente comentado: `/comercial/pedidos/novo` **não está** entre as 39 rotas da matriz nem
+   no menu canônico (`src/common/rbac/menus-canonicos.ts`), então não vira rota permanente. Quem
+   chegar por link antigo cai no `not-found` padrão do App Router.
+3. Remover o link `<Link href="/comercial/pedidos/novo">Novo pedido</Link>` — na tela nova o botão
+   "Novo pedido" abre o `PedidoEditor` na própria rota (Task 15), como no protótipo.
+4. Em `e2e/jornada-operacional.spec.ts:551`, trocar
+   `await page.goto(\`${BASE_URL}/comercial/pedidos/novo\`)` pela navegação a
+   `/comercial/pedidos` + clique em "Novo pedido", **sem afrouxar as asserções seguintes**.
+5. Conferir que não sobrou referência:
+   `rg -n "pedido-venda-client|pedidos/novo" app/frontend` deve devolver zero linhas.
+
+**Commit:** `refactor(onda4): remove o cliente de pedido legado e a rota /comercial/pedidos/novo`
+
+---
+
+## Task 17 — Tela `/comercial/tabela-precos`
 
 **Files:** `tabela-precos-client.tsx`, `page.tsx`, `onda4-tabela-precos.test.tsx`.
 
@@ -1482,7 +2249,7 @@ it('clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente', async
 5. Quando não existe tabela do dia, a tela mostra a mensagem "Nenhuma tabela de preços para
    <data>." e, para quem pode gerenciar, o botão **"Criar tabela do dia"** (divergência **D-04**).
 6. Banner âmbar quando uma tabela publicada é editada, com o texto do protótipo, e painel de
-   histórico alimentado por `GET /precos/tabelas/:id/publicacoes`.
+   histórico alimentado por `GET /precos/tabelas/:id/historico` (D30).
 7. `PRECOS_INCOMPLETOS` do backend vira alerta com a lista de produtos faltantes.
 8. Assinar `TABELA_PRECO_PUBLICADA` via `conectarRealtime`.
 
@@ -1490,7 +2257,7 @@ it('clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente', async
 
 ---
 
-## Task 17 — Tela `/comercial/disponibilidade` (mapa + grade)
+## Task 18 — Tela `/comercial/disponibilidade` (mapa + grade)
 
 **Files:** `mapa-teatro.tsx`, `detalhe-unidade.tsx`, `page.tsx`, `onda4-disponibilidade.test.tsx`.
 
@@ -1523,7 +2290,7 @@ it('mapa usa o catalogo MVP e nao contem o catalogo legado da grade do prototipo
 
 ---
 
-## Task 18 — Tela `/comercial/espelho`
+## Task 19 — Tela `/comercial/espelho`
 
 **Files:** `espelho-client.tsx`, `page.tsx`, `onda4-espelho.test.tsx`.
 
@@ -1541,11 +2308,11 @@ it('mapa usa o catalogo MVP e nao contem o catalogo legado da grade do prototipo
 
 ---
 
-## Task 19 — E2E, evidências e dívida 9 da Onda 3
+## Task 20 — E2E, evidências e dívida 9 da Onda 3
 
-**Files:** `app/backend/test/onda4-comercial.e2e-spec.ts`,
-`app/frontend/e2e/onda4-comercial.spec.ts`, `e2e/jornada-operacional.spec.ts`,
-`e2e/telas-migradas.spec.ts`, `e2e/telas-reais.spec.ts`,
+**Files:** `app/backend/test/integration/onda4-comercial.e2e-spec.ts` (D28),
+`app/frontend/e2e/onda4-comercial.spec.ts`, `app/frontend/e2e/jornada-operacional.spec.ts`,
+`app/frontend/e2e/telas-migradas.spec.ts`, `app/frontend/e2e/telas-reais.spec.ts`,
 `docs/evidencias/onda4-comercial/`.
 
 **Steps**
@@ -1555,7 +2322,8 @@ it('mapa usa o catalogo MVP e nao contem o catalogo legado da grade do prototipo
    reserva → criar/publicar tabela de preços → consultar mapa e espelho.
 2. E2E de frontend (Playwright) percorrendo as 5 telas com `HARDWARE_FAKE=1` e `NFSE_FAKE=1`.
 3. Realinhar os 3 specs herdados que ainda apontam para rotas antigas de pedido (dívida 9 do
-   relatório da Onda 3), sem afrouxar asserção.
+   relatório da Onda 3), sem afrouxar asserção. `jornada-operacional.spec.ts` já foi corrigido na
+   Task 16 quanto a `/comercial/pedidos/novo`; aqui fecha-se o restante da dívida.
 4. Capturar 1 screenshot por tela em `docs/evidencias/onda4-comercial/`, no mesmo padrão de
    `docs/evidencias/alpha-jornada-e2e/`, para a comparação lado a lado exigida no Portão 2.
 
@@ -1563,7 +2331,7 @@ it('mapa usa o catalogo MVP e nao contem o catalogo legado da grade do prototipo
 
 ---
 
-## Task 20 — Fechamento: status, gate e PR
+## Task 21 — Fechamento: status, gate e PR
 
 **Files:** `docs/execucao/EXECUCAO-STATUS.md`, relatório de implementação.
 
@@ -1604,6 +2372,15 @@ rg -nw -e '[Mm]arca' -e '[Mm]arcas' app/backend/src app/frontend/src
 # Nenhuma das 5 rotas segue placeholder
 rg -n "PlaceholderPage" "app/frontend/src/app/(admin)/comercial"
 
+# Legado de pedido eliminado (D29) — deve devolver zero linhas
+rg -n "pedido-venda-client|pedidos/novo" app/frontend
+
+# Coluna substituída não sobrou em lugar nenhum (Global Constraint 14)
+rg -n "rotaPadrao|rota_padrao" app/backend/src app/backend/test app/frontend/src
+
+# Snapshot de perfis regerado depois das 4 permissões novas
+cd app/backend && npm run rbac:snapshot && git diff --exit-code src/common/rbac/perfil-permissoes.snapshot.json; cd ../..
+
 # Cobertura acima do gate
 rg -n "All files" app/backend/coverage/lcov-report/index.html
 ```
@@ -1628,9 +2405,22 @@ exata de `pipeline-execucao.md §6`.
 
 **Cobertura do escopo pedido.** As 5 rotas das linhas 3–7 da matriz têm task de backend, task de BFF,
 task de UI e teste nomeado. O DoD O4 dos quality-gates está integralmente mapeado: adendo com
-histórico (DoD-80..82), unicidade AD-03 (DoD-78/79), rascunho sem expiração automática com ação
-administrativa auditada (DoD-83..86), mapa teatro com drill-down (DoD-98..100) e catálogo MVP correto
-em vez do legado da Grade (DoD-101/102).
+histórico (DoD-80..82, DoD-116), unicidade AD-03 (DoD-78/79), rascunho sem expiração automática com
+ação administrativa auditada (DoD-83..86), mapa teatro com drill-down (DoD-98..100) e catálogo MVP
+correto em vez do legado da Grade (DoD-101/102).
+
+**Aderência à base real (emenda do Portão 1).** Todo código literal deste plano foi conferido contra
+`develop` no worktree em `158da75`, não contra a memória do plano mestre: assinatura de
+`planejarSobLock` (3 parâmetros, read-only, sem `OverbookingChallengeException`) e de
+`persistirItensPlanejados` (5 parâmetros, sempre `INSERT`); emissão de evento por `EventEmitter2`
+pós-commit (não há `RealtimeService.emitir`); decorators `@RequirePermissoes('X')` + `@CurrentUser`
+com `user.sub`; helpers decimais reais (`somarQtd`, não `somaDecimal`); helpers de liberação reais
+(`liberarTodasReservasDoItem`, `cancelarPendenciasDoPedido`); `pecas` sem `operacao_id` (elo por
+`recebimentos.operacao_id`) e produto por `item_comercial_base_id`; testes em `app/backend/test/`
+(D28); índices únicos parciais exigindo `targetWhere` no `onConflictDoNothing`. Os quatro métodos
+que o plano anterior presumia existir (`carregarAbertoParaAdendo`, `exigirItemDoPedido`,
+`aplicarAlocacaoNoItem`, `abrirOuAcumularPendencia`) estão escritos por extenso na Task 7; nenhum
+helper é citado sem corpo.
 
 **O que este plano deliberadamente não faz.** Não reescreve o motor de reserva/overbooking da Onda 1;
 não cria TTL de rascunho (AD-06 proíbe); não fecha as pendências abertas por conta própria — P5, P11
@@ -1653,7 +2443,7 @@ gate que o proíbem — em nenhum ponto como rótulo, campo, entidade, tipo ou t
 
 ## Contagens
 
-**20 tasks · 26 decisões de design · 45 itens de DoD (todos com teste 1:1) · 7 divergências
+**21 tasks · 30 decisões de design · 49 itens de DoD (todos com teste 1:1) · 7 divergências
 autorizadas.**
 
 Divergências autorizadas: **D-01** abas Fiscais/Contatos sem conteúdo no protótipo → conteúdo
