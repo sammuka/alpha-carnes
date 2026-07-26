@@ -37,7 +37,16 @@ describe('Parametros Onda 3 e2e', () => {
     const porChave = (chave: string) =>
       lista.body.data.find((p: { chave: string }) => p.chave === chave).valorJson as {
         texto: string; provisorio: boolean; pendencia: string | null; tipo: string;
+        valor?: unknown; dias?: number[];
       };
+
+    // Cadência: cartão P1 + array `dias` consumido por gerar-cadencia.
+    const cadencia = porChave('operacao.cadencia_dias_semana');
+    expect(cadencia.tipo).toBe('texto');
+    expect(cadencia.valor).toBe('1,3,5');
+    expect(cadencia.dias).toEqual([1, 3, 5]);
+    expect(cadencia.provisorio).toBe(true);
+    expect(cadencia.pendencia).toBe('P1');
 
     // AD-01: composição confirmada — sem badge Provisório.
     const boi = porChave('operacao.composicao_boi_casado');

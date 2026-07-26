@@ -74,6 +74,8 @@ const PARAMETROS_SEED = [
       texto:
         'Segunda, quarta e sexta. Dias da semana em que uma Operação é criada automaticamente (ver Gestão / Operações). Compra Programada e Pedido de Venda sempre se vinculam a uma Operação desta cadência, ou a uma extraordinária criada manualmente para datas fora do padrão. Cadência provisória — pendente de validação formal.',
       valor: '1,3,5',
+      // Array consumido por POST /operacoes/gerar-cadencia (mesmo padrão da Onda 1).
+      dias: [1, 3, 5],
       provisorio: true,
       pendencia: 'P1',
     },
@@ -290,20 +292,6 @@ export async function seed() {
       .values({ usuarioId: admin.id, perfilId: adminPerfil.id })
       .onConflictDoNothing();
     console.log(`✅ Usuário admin verificado: ${adminEmail}`);
-
-    const PARAMETROS_ONDA1 = [
-      {
-        chave: 'operacao.cadencia_dias_semana',
-        valorJson: { dias: [1, 3, 5], provisorio: true, ref: 'P1/v1.1 §16.2' },
-        descricao: 'Cadência semanal de operações (provisório P1)',
-      },
-    ];
-    for (const parametro of PARAMETROS_ONDA1) {
-      await db.insert(schema.parametros)
-        .values(parametro)
-        .onConflictDoNothing({ target: schema.parametros.chave });
-    }
-    console.log(`✅ ${PARAMETROS_ONDA1.length} parâmetros da Onda 1 inseridos/verificados`);
 
     console.log('🎉 Seed concluído com sucesso!');
   } catch (err) {
