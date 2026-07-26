@@ -9,11 +9,11 @@
 > | Onda | 5 — Gestão |
 > | Branch de planejamento | `feature/onda5-plano-gestao` |
 > | Branch de implementação | `feature/onda5-gestao` (criada pelo Executor a partir de `develop` após Portão 1) |
-> | Base | `origin/develop` = `c2146fa` (Onda 3 mergeada em `030ee9e`) |
+> | Base | `origin/develop` = `4a3aa02` (Onda 3 mergeada em `030ee9e`; Onda 4 mergeada — migrations `0016_onda4_comercial_expand` + `0017_onda4_comercial_contract`) |
 > | Protótipo (fonte de verdade de UI) | `F:/Projetos/alpha-carnes-prototipo` @ `feature/completude-v1.1` = `8d32aa4cadff0a91ab155a9d47b019cd3731ce77` |
 > | Depende de | Onda 3 (mergeada) |
-> | Não depende de | Onda 4 (planejada em paralelo) — ver "Fronteira com a Onda 4" |
-> | Migration desta onda | `0016_onda5_gestao` |
+> | Não depende de | Onda 4 (já mergeada em `develop`; fronteira de arquivos permanece — ver "Fronteira com a Onda 4") |
+> | Migration desta onda | `0018_onda5_gestao` |
 > | Rotas do escopo | 6 (`/gestao/dashboard`, `/gestao/operacoes`, `/gestao/compras`, `/gestao/overbooking`, `/gestao/aprovacoes`, `/gestao/relatorios`) |
 
 ---
@@ -99,7 +99,7 @@ Nenhum evento é emitido dentro da transação; nenhuma regra de negócio vive n
 |---|---|---|
 | Backend | NestJS 11 + TypeScript 5 strict | `noUncheckedIndexedAccess` ligado — usar `primeiroOuFalha` |
 | Banco | PostgreSQL 18 | `NUMERIC` nativo para todo cálculo de quantidade/peso (sem float) |
-| ORM | Drizzle + `drizzle-kit` | migration `0016_onda5_gestao.sql` escrita à mão, registrada no `_journal.json` |
+| ORM | Drizzle + `drizzle-kit` | migration `0018_onda5_gestao.sql` escrita à mão, registrada no `_journal.json` |
 | Validação | Zod 4 | um schema por DTO, `ZodValidationPipe` no controller |
 | Tempo real | `EventEmitter2` + WebSocket nativo | eventos novos: `COMPRA_ALTERADA_IMPACTO`, `APROVACAO_REGISTRADA`, `APROVACAO_DECIDIDA`, `RELATORIO_SIF_GERADO`. Emitir não basta: cada um precisa de `@OnEvent` + `broadcast` em `realtime.gateway.ts` (Task 2.5) e de `dataOperacao` no payload, porque `roomsDaData(dataOperacao)` é o que define a room |
 | Frontend | Next.js 16 App Router + React 19 + Tailwind 4 + Shadcn/ui | DS v2 já absorvido (Onda 2); usar tokens, `KpiCard`, `StatusPill`, `AlertItem`, `ActivityItem`, `BadgeProvisorio` |
@@ -124,8 +124,9 @@ Nenhum evento é emitido dentro da transação; nenhuma regra de negócio vive n
    `auditoria` dentro da mesma transação, com `usuarioId` real.
 5. **Nenhuma falha silenciosa nem dado inventado (RA-05/RA-06).** Sem fallback textual do tipo
    "Desconhecido"; ausência de dado é `null` e a UI mostra vazio explícito ou erro. Mock só em teste.
-6. **Migration expand puro.** `0016_onda5_gestao` apenas **cria** tabelas, índices, CHECKs e um
-   trigger; não altera nem remove coluna existente. Nenhum `ALTER TABLE` manual fora da migration.
+6. **Migration expand puro.** `0018_onda5_gestao` (número seguinte ao contract da Onda 4) apenas
+   **cria** tabelas, índices, CHECKs e um trigger; não altera nem remove coluna existente. Nenhum
+   `ALTER TABLE` manual fora da migration.
 7. **Convenções de schema** (`docs/data/convencoes-schema.md`): PK `uuid` default `uuidv7()`;
    `TIMESTAMPTZ`; quantidades `NUMERIC(10,3)`; dinheiro `NUMERIC(15,2)`; status como `TEXT` + CHECK
    (nunca `pg ENUM`); soft delete `deleted_at`; `created_at`/`updated_at` em toda tabela de negócio;
@@ -158,7 +159,7 @@ plano segue para não criar dependência nem conflito estrutural:
 | `pedidos_venda` / `reservas_disponibilidade` | A Onda 5 **chama métodos públicos já existentes** do `PedidosService` (`criar`, `reduzirItem`, `removerItem`) e não edita a lógica de pedidos. Toques em arquivos de pedidos: (a) `exports: [PedidosService]` no `pedidos.module.ts` (Task 6), 1 linha idempotente; (b) extração de `criarNaTx`/`reduzirItemNaTx`/`removerItemNaTx` e `export` do tipo `EventoDominio` em `pedidos.service.ts` (Task 6.4), refatoração sem mudança de comportamento; (c) `dataOperacao` + `operacaoId` no payload do evento `PENDENCIA_OVERBOOKING_ABERTA` (`pedidos.service.ts:359-362`, Task 2.5), que altera só o objeto emitido. Nenhum dos três muda regra de pedido. |
 | `/comercial/*` | Fora do escopo. Nenhum arquivo em `app/frontend/src/app/(admin)/comercial/**` é criado ou alterado nesta onda. |
 | Disponibilidade | A Onda 5 altera `disponibilidade.service.ts` acrescentando `projetarImpacto` e `recalcularParaCompra` (métodos novos). Não altera `gerarParaCompra` nem `listarPedidosEmRisco`. |
-| Migration | Onda 4 e Onda 5 usam tags distintas; a Onda 5 é `0016_onda5_gestao`. Se a Onda 4 mergear antes e ocupar o número, o Executor renumera para o próximo livre **mantendo o mesmo conteúdo SQL** e re-roda `db:migrate` — registrar a renumeração no PR. |
+| Migration | Onda 4 **já ocupa** `0016_onda4_comercial_expand` e `0017_onda4_comercial_contract` em `develop` (`4a3aa02`). A Onda 5 usa **`0018_onda5_gestao`** (mesmo SQL expand puro; só o número/tag mudou). Se `develop` avançar e ocupar o 0018 antes do merge desta onda, o Executor renumera para o próximo livre **mantendo o mesmo conteúdo SQL** e re-roda `db:migrate` — registrar a renumeração no PR. |
 
 ---
 
@@ -183,7 +184,7 @@ espaçamentos, ordem dos blocos e textos; substitui apenas os dados de seed pelo
 
 ---
 
-## Estado atual verificado (baseline da onda, em `origin/develop` = `c2146fa`)
+## Estado atual verificado (baseline da onda, em `origin/develop` = `4a3aa02`)
 
 Auditoria feita no worktree `F:/Projetos/AlphaCarnes/.worktrees/onda5-plan`:
 
@@ -278,7 +279,7 @@ se não houver, a de maior `data`; se a tabela estiver vazia, retorna `404 OPERA
 **D5.4** — Nenhuma AD nova é criada. P8 permanece aberta e a tela SIF exibe `BadgeProvisorio` com
 `pendencia="P8"`. `/gestao/operacoes` exibe `BadgeProvisorio` com `pendencia="P1"` na cadência.
 
-### Modelo de dados (migration `0016_onda5_gestao`, expand puro)
+### Modelo de dados (migration `0018_onda5_gestao`, expand puro)
 
 **D5.5 — `relatorios_sif`** (um registro por Operação × tipo de relatório):
 
@@ -512,10 +513,11 @@ O saldo agregado de `disponibilidades_virtuais` **não muda** (a mesma quantidad
 
 **D5.18 — Transições.** `TRANSICOES_PENDENCIA` permanece como está (`dto/overbooking.dto.ts:43-62`).
 O caminho só é aceito se a transição a partir do status atual for válida; caso contrário `409`.
-Quando o déficit chega a zero pelos caminhos 1 e 2, o serviço aplica o status do caminho e, na mesma
-transação, a transição para `resolvida` (permitida por `TRANSICOES_PENDENCIA`). `resolvida` e
-`cancelada` são terminais: se o efeito já deixou a pendência em um deles (caminho 3 total), esse
-status prevalece e `decidir` apenas registra a decisão.
+Quando o déficit chega a zero pelo **caminho 2** (redistribuição), o serviço aplica o status do
+caminho e, na mesma transação, a transição para `resolvida` (permitida por `TRANSICOES_PENDENCIA`).
+O caminho 1 **não** abate déficit (`quantidadeAbatida='0.000'`, D5.15) e portanto não dispara essa
+transição. `resolvida` e `cancelada` são terminais: se o efeito já deixou a pendência em um deles
+(caminho 3 total → `cancelada`), esse status prevalece e `decidir` apenas registra a decisão.
 
 ### Aprovações & Ocorrências
 
@@ -660,7 +662,7 @@ explicando quando `status='pendente_dados'` (protótipo `278-279`).
 ### Backend — arquivos novos (26)
 
 ```
-src/database/migrations/0016_onda5_gestao.sql
+src/database/migrations/0018_onda5_gestao.sql
 src/database/schema/relatorios-sif.schema.ts
 src/database/schema/aprovacoes-operacionais.schema.ts
 src/modules/gestao/aprovacoes/aprovacoes.module.ts
@@ -691,12 +693,12 @@ test/helpers/recebimento-fixtures.ts
 ### Backend — arquivos alterados (29)
 
 ```
-src/database/migrations/meta/_journal.json          + entrada 0016
+src/database/migrations/meta/_journal.json          + entrada 0018 (idx 18, após 0017_onda4_comercial_contract)
 src/database/schema/index.ts                        + 2 exports
 src/database/seed.ts                                + parâmetro gestao.modelos_relatorio_sif
 src/common/rbac/permissoes.ts                       + 5 permissões, descrições e atribuições
 src/common/rbac/perfil-permissoes.snapshot.json     regerado por `npm run rbac:snapshot` (arquivo versionado, não é snapshot do Jest)
-src/realtime/events/eventos.ts                      + 4 eventos, payloads (todos com dataOperacao), PendenciaOverbookingPayload e os 3 contratos de pendência em PayloadPorEvento
+src/realtime/events/eventos.ts                      + 4 eventos, payloads (todos com dataOperacao), PendenciaOverbookingPayload, os 3 contratos de pendência em PayloadPorEvento e a chave reserva_disponibilidade_atualizada: ReservaAtualizadaPayload
 src/realtime/realtime.gateway.ts                    + 7 handlers @OnEvent (4 novos + 3 de pendência de overbooking)
 src/app.module.ts                                   + AprovacoesModule, SifModule
 src/modules/operacoes/operacoes.service.ts          + extraordinaria, contadores e resolverCorrente
@@ -719,6 +721,7 @@ test/unit/compras-programadas-branches.spec.ts      ajustado ao novo contrato de
 test/integration/parametros-onda3.e2e-spec.ts       + caso do parâmetro `gestao.modelos_relatorio_sif` (Task 3.2)
 test/integration/operacoes.e2e-spec.ts              + contadores e filtros (Task 4)
 test/unit/perfil-permissoes-snapshot.spec.ts        passa a validar as 5 permissões novas contra o JSON regerado (Task 2.6)
+test/unit/overbooking-branches.spec.ts              ajustado a dataDaOperacao + emissão RESOLVIDA no status terminal (Tasks 2.5.2 / 2.6 / 6.7)
 ```
 
 ### Frontend — arquivos novos (34)
@@ -832,7 +835,7 @@ Cada item do DoD e cada decisão verificável tem **um teste nomeado**. Nenhuma 
 | 2.6 | Caminho 2 recusa quantidade acima do saldo doador (409) | `overbooking-decisao.e2e-spec.ts` › "redistribuição acima do saldo" |
 | 2.7 | Caminho 3 parcial reduz o pedido original, cria pedido novo na operação destino e abate o déficit **uma única vez** | `overbooking-decisao.e2e-spec.ts` › "postergação parcial gera novo pedido e abate o déficit uma única vez" |
 | 2.8 | Caminho 3 recusa operação destino fechada ou anterior (409) | `overbooking-decisao.e2e-spec.ts` › "operação destino inválida" |
-| 2.9 | Déficit zerado pelos caminhos 1 e 2 leva a `resolvida` na mesma transação | `overbooking-decisao.e2e-spec.ts` › "déficit zero resolve a pendência" |
+| 2.9 | Déficit zerado pelo **caminho 2** (redistribuição) leva a `resolvida` na mesma transação. O caminho 1 **não** abate déficit (`quantidadeAbatida='0.000'`, D5.15 / Dívida 4) e não alcança este critério | `overbooking-decisao.e2e-spec.ts` › "déficit zero resolve a pendência" |
 | 2.10 | Transição inválida retorna 409 e não muda nada | `overbooking-decisao.e2e-spec.ts` › "transição inválida" |
 | 2.11 | `GET /:id/historico` devolve a linha do tempo ordenada | `overbooking-decisao.e2e-spec.ts` › "histórico ordenado" |
 | 2.12 | Tela mostra KPIs, filtro, detalhe e os 3 blocos de decisão do protótipo | `__tests__/overbooking-client.test.tsx` |
@@ -887,7 +890,7 @@ Cada item do DoD e cada decisão verificável tem **um teste nomeado**. Nenhuma 
 | 5.11 | Os 7 eventos (4 novos + 3 de pendência de overbooking) chegam ao WebSocket: `broadcast` nas rooms `dashboard` e `operacao:<dataOperacao>` | `test/unit/realtime-gateway-onda5.spec.ts` |
 | 5.12 | BFF de ocorrências de fornecedor repassa `PATCH /:id` e `POST /:id/encerrar` com status e corpo do backend | `__tests__/bff-onda5.test.ts` › "ocorrências de fornecedor" |
 | 5.13 | `GET /operacoes` mantém o envelope paginado e passa a trazer os 3 contadores, ordenado por `data` desc | `test/integration/operacoes.e2e-spec.ts` (asserções ajustadas + casos novos) |
-| 5.14 | `PayloadPorEvento` tipa os 3 eventos de pendência com `operacaoId`/`dataOperacao` e o evento RESOLVIDA aceita `resolvida\|cancelada`; `alterarStatus` emite RESOLVIDA também no `cancelada`, com o payload completo | `npm run type-check` (contrato do mapa) + `test/unit/overbooking-branches.spec.ts` › "alterarStatus emite RESOLVIDA no status terminal com operacaoId e dataOperacao" (arquivo existente, casos ajustados) |
+| 5.14 | `PayloadPorEvento` tipa os 3 eventos de pendência com `operacaoId`/`dataOperacao`, tipa `reserva_disponibilidade_atualizada: ReservaAtualizadaPayload` (necessário para o `as EventoDominio[]` da Task 6.3 caminho 2) e o evento RESOLVIDA aceita `resolvida\|cancelada`; `alterarStatus` emite RESOLVIDA também no `cancelada`, com o payload completo | `npm run type-check` (contrato do mapa — prova TS2352 fechado) + `test/unit/overbooking-branches.spec.ts` › "alterarStatus emite RESOLVIDA no status terminal com operacaoId e dataOperacao" (arquivo existente, casos ajustados) |
 
 **Totais:** 14 + 14 + 9 + 12 + 14 = **63 critérios verificáveis** (DoD 1 = 1.1–1.14; DoD 2 =
 2.1–2.14; DoD 3 = 3.1–3.9; DoD 4 = 4.1–4.12; Telas/RBAC = 5.1–5.14), distribuídos em **24 arquivos**
@@ -914,12 +917,12 @@ Regras válidas para todas as tasks:
 - Frontend: `cd app/frontend && npm run test -- <arquivo>`.
 - Proibido `--no-verify`, proibido `git push --force`.
 
-### Task 1 — Migration `0016_onda5_gestao`, schemas Drizzle e trigger de imutabilidade
+### Task 1 — Migration `0018_onda5_gestao`, schemas Drizzle e trigger de imutabilidade
 
 **Objetivo:** criar `relatorios_sif`, `relatorios_sif_versoes`, `aprovacoes_operacionais` e o trigger
 que torna `conclusoes_conferencia` imutável (D5.5–D5.8).
 
-**1.1** Criar `app/backend/src/database/migrations/0016_onda5_gestao.sql`:
+**1.1** Criar `app/backend/src/database/migrations/0018_onda5_gestao.sql`:
 
 ```sql
 -- Onda 5 — Gestão. Expand puro: apenas CREATE. Nenhum ALTER/DROP em objeto existente.
@@ -1047,9 +1050,9 @@ CREATE TRIGGER trg_aprovacoes_operacionais_updated_at
 > A função `set_updated_at()` já existe desde a migration `0000`. Se o nome divergir no banco, o
 > Executor usa o nome real conferido em `\df` — não cria função duplicada.
 
-**1.2** Registrar no `_journal.json` (após a entrada `0015_onda3_cadastros_admin`), com `idx: 16`,
-`version: "7"`, `when` = epoch em milissegundos do momento da criação, `tag: "0016_onda5_gestao"`,
-`breakpoints: true`.
+**1.2** Registrar no `_journal.json` (após a entrada `0017_onda4_comercial_contract`, que já existe
+em `develop`), com `idx: 18`, `version: "7"`, `when` = epoch em milissegundos do momento da criação,
+`tag: "0018_onda5_gestao"`, `breakpoints: true`.
 
 **1.3** Criar `src/database/schema/relatorios-sif.schema.ts`:
 
@@ -1124,9 +1127,63 @@ export const relatoriosSifVersoes = pgTable(
 );
 ```
 
-**1.4** Criar `src/database/schema/aprovacoes-operacionais.schema.ts` seguindo exatamente as colunas
-e CHECKs de D5.7 e do SQL acima (mesmo padrão do arquivo anterior; `solicitanteId` e
-`decididoPorId` referenciam `usuarios.id`; `operacaoId` referencia `operacoes.id`).
+**1.4** Criar `src/database/schema/aprovacoes-operacionais.schema.ts` — colunas e CHECKs idênticos
+a D5.7 e ao SQL de 1.1:
+
+```ts
+import { sql } from 'drizzle-orm';
+import {
+  check, index, pgTable, text, timestamp, uuid,
+} from 'drizzle-orm/pg-core';
+import { usuarios } from './auth.schema';
+import { operacoes } from './operacoes.schema';
+
+export const aprovacoesOperacionais = pgTable(
+  'aprovacoes_operacionais',
+  {
+    id:               uuid('id').primaryKey().default(sql`uuidv7()`),
+    operacaoId:       uuid('operacao_id').notNull().references(() => operacoes.id),
+    tipo:             text('tipo').notNull(),
+    origem:           text('origem').notNull(),
+    descricao:        text('descricao').notNull(),
+    impacto:          text('impacto').notNull(),
+    referenciaTabela: text('referencia_tabela'),
+    referenciaId:     uuid('referencia_id'),
+    solicitanteId:    uuid('solicitante_id').notNull().references(() => usuarios.id),
+    solicitadoEm:     timestamp('solicitado_em', { withTimezone: true }).notNull().defaultNow(),
+    status:           text('status').notNull().default('pendente'),
+    decisaoMotivo:    text('decisao_motivo'),
+    decididoPorId:    uuid('decidido_por_id').references(() => usuarios.id),
+    decididoEm:       timestamp('decidido_em', { withTimezone: true }),
+    createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt:        timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    check(
+      'chk_aprovacao_tipo',
+      sql`${t.tipo} IN ('divergencia_transformacao','estorno_fora_regra',
+                        'reabertura_carga_pedido','ajuste_estoque_relevante')`,
+    ),
+    check('chk_aprovacao_status', sql`${t.status} IN ('pendente','aprovada','rejeitada')`),
+    check(
+      'chk_aprovacao_decisao',
+      sql`(
+        (${t.status} = 'pendente'
+          AND ${t.decisaoMotivo} IS NULL AND ${t.decididoPorId} IS NULL AND ${t.decididoEm} IS NULL)
+        OR
+        (${t.status} IN ('aprovada','rejeitada')
+          AND ${t.decisaoMotivo} IS NOT NULL AND length(btrim(${t.decisaoMotivo})) >= 10
+          AND ${t.decididoPorId} IS NOT NULL AND ${t.decididoEm} IS NOT NULL)
+      )`,
+    ),
+    index('idx_aprovacoes_operacao').on(t.operacaoId).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_aprovacoes_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_aprovacoes_referencia').on(t.referenciaTabela, t.referenciaId)
+      .where(sql`${t.deletedAt} IS NULL`),
+  ],
+);
+```
 
 **1.5** Exportar em `src/database/schema/index.ts`:
 
@@ -1185,7 +1242,7 @@ describe('conclusoes_conferencia — imutabilidade (DoD 3)', () => {
 
 **Verificação:** `cd app/backend && npm run db:migrate && npm run test -- conclusao-imutavel`.
 
-**Commit:** `feat(onda5): migration 0016 com relatórios SIF, aprovações operacionais e trigger de imutabilidade`
+**Commit:** `feat(onda5): migration 0018 com relatórios SIF, aprovações operacionais e trigger de imutabilidade`
 
 ---
 
@@ -1314,10 +1371,19 @@ export interface PendenciaOverbookingPayload {
 **2.5.1 — `PayloadPorEvento` (obrigatório, senão a Task 6 não compila).** Os três eventos de
 pendência já estão tipados em `eventos.ts:287-298` e `pedidos.service.ts:71-73` deriva
 `EventoDominio` desse mapa. Acrescentar `operacaoId`/`dataOperacao` ao payload emitido **sem
-atualizar o mapa** quebraria o type-check em `pedidos.service.ts:359-362`. Substituir as três
-entradas por:
+atualizar o mapa** quebraria o type-check em `pedidos.service.ts:359-362`. Além disso, a interface
+avulsa `ReservaAtualizadaPayload` (`eventos.ts:77-83`) e o handler `@OnEvent(EVENTOS.RESERVA_ATUALIZADA)`
+no gateway (`realtime.gateway.ts:143-146`) **já existem**, mas `reserva_disponibilidade_atualizada`
+**não é chave** de `PayloadPorEvento` hoje — só entram os eventos da Onda 1. Sem essa chave, o
+retorno literal da Task 6.3 caminho 2 (`aplicarRedistribuicao`) que faz
+`eventos: [{ nome: EVENTOS.RESERVA_ATUALIZADA, payload: { … } }] as EventoDominio[]` falha com
+**TS2352** (`npx tsc --noEmit` reproduz). Substituir/acrescentar no mapa:
 
 ```ts
+  // Já existia como interface avulsa + handler no gateway; entra no mapa para
+  // EventoDominio aceitar EVENTOS.RESERVA_ATUALIZADA (Task 6.3 caminho 2).
+  reserva_disponibilidade_atualizada: ReservaAtualizadaPayload;
+
   pendencia_overbooking_aberta: PendenciaOverbookingPayload & { pedidoVendaId: string };
   pendencia_overbooking_atualizada: PendenciaOverbookingPayload;
   pendencia_overbooking_resolvida: PendenciaOverbookingPayload & {
@@ -1335,7 +1401,8 @@ entradas por:
 > interseção estreita apenas onde o contrato é terminal.
 
 Como `EventoDominio` é derivado de `PayloadPorEvento`, essa mudança é o que permite
-`pedidos.service.ts` empurrar o payload completo no array de eventos sem `as never`.
+`pedidos.service.ts` empurrar o payload completo no array de eventos sem `as never`, e o
+`as EventoDominio[]` da Task 6.3 tipar sem TS2352 (critério 5.14 / `npm run type-check`).
 
 ```ts
   @OnEvent(EVENTOS.PENDENCIA_OVERBOOKING_ABERTA)
@@ -1596,8 +1663,12 @@ async listar(query: ListarOperacoesDto): Promise<Paginado<OperacaoComContadores>
 }
 ```
 
-**4.3** Em `operacoes.controller.ts`, aplicar o `ZodValidationPipe(listarOperacoesSchema)` na query
-do `GET /operacoes`. Os demais endpoints permanecem inalterados.
+**4.3** Em `operacoes.controller.ts`, **não reaplicar** o `ZodValidationPipe(listarOperacoesSchema)` —
+ele **já existe** no baseline (`operacoes.controller.ts:27`, confirmado na seção "Estado atual
+verificado" e na lista de alterados: "sem mudança de pipe"). O único toque permitido neste arquivo
+é alinhar o tipo de retorno do `listar` ao `Paginado<OperacaoComContadores>` se o TypeScript do
+controller declarar o retorno explicitamente; caso contrário, o arquivo permanece intacto. Os demais
+endpoints permanecem inalterados.
 
 **4.4** Acrescentar `resolverCorrente()` ao serviço (usado pelo dashboard, D5.3):
 
@@ -2805,8 +2876,44 @@ async historico(@Param('id', ParseUUIDPipe) id: string) {
 }
 ```
 
-`historico(id)` no serviço devolve `pendenciasOverbookingHistorico` da pendência com o nome do autor
-(JOIN em `usuarios`), ordenado por `criadoEm ASC` (linha do tempo do protótipo).
+`historico(id)` no serviço — literal (o `detalhar` já embute histórico em `desc`, mas o endpoint
+dedicado da tela é a linha do tempo em `ASC` com o nome do autor):
+
+```ts
+async historico(id: string): Promise<Array<{
+  id: string;
+  acao: string;
+  autorNome: string | null;
+  detalheJson: unknown;
+  criadoEm: string;
+}>> {
+  // 404 se a pendência não existir (reusa a guarda de detalhar).
+  await this.detalhar(id);
+  const linhas = await this.db.select({
+    id: pendenciasOverbookingHistorico.id,
+    acao: pendenciasOverbookingHistorico.acao,
+    detalheJson: pendenciasOverbookingHistorico.detalheJson,
+    criadoEm: pendenciasOverbookingHistorico.criadoEm,
+    autorNome: usuarios.nome,
+  })
+    .from(pendenciasOverbookingHistorico)
+    .leftJoin(usuarios, eq(usuarios.id, pendenciasOverbookingHistorico.autorId))
+    .where(eq(pendenciasOverbookingHistorico.pendenciaId, id))
+    .orderBy(asc(pendenciasOverbookingHistorico.criadoEm));
+  return linhas.map((l) => ({
+    id: l.id,
+    acao: l.acao,
+    // Sem autor conhecido → null; a tela mostra "—". Não inventar nome (RA-06).
+    autorNome: l.autorNome,
+    detalheJson: l.detalheJson,
+    criadoEm: l.criadoEm.toISOString(),
+  }));
+}
+```
+
+Importar `asc` de `drizzle-orm` e `usuarios` do schema (já usados noutros serviços). `ParseUUIDPipe`
+nos novos `@Get(':id/…')` — o `@Get(':id')` existente continua com `@Param('id')` string; não
+alterar a assinatura antiga nesta task.
 
 **6.6** Completar o payload do `alterarStatus` existente (`overbooking.service.ts:103-108`), hoje
 `{ pendenciaId, status }`, para o mesmo formato do `decidir` — `{ pendenciaId, operacaoId,
@@ -3053,13 +3160,111 @@ export class AprovacoesService {
     });
     return aprovacao;
   }
+
+  /**
+   * Aba "ocorrências" da fila unificada (D5.19 / protótipo Aprovacoes.tsx:30-43).
+   * Caminho até a Operação: compra_programada.operacao_id OU divergencia/NF/conclusão →
+   * recebimentos.operacao_id. Colunas reais: notas_fiscais_fornecedor.chave (não chave_acesso);
+   * lote = coalesce(recebimentos.romaneio, recebimentos.nota_fiscal_fornecedor) — não existe
+   * numero_lote; fornecedor = razao_social (não há nome_fantasia em fornecedores).
+   */
+  private async listarOcorrencias(query: ListarAprovacoesDto) {
+    const daOperacao = sql`(
+      EXISTS (
+        SELECT 1 FROM compras_programadas cp
+         WHERE cp.id = ${ocorrenciasFornecedor.compraProgramadaId}
+           AND cp.operacao_id = ${query.operacaoId}
+           AND cp.deleted_at IS NULL
+      )
+      OR EXISTS (
+        SELECT 1 FROM divergencias_recebimento d
+          JOIN recebimentos r ON r.id = d.recebimento_id
+         WHERE d.id = ${ocorrenciasFornecedor.divergenciaId}
+           AND r.operacao_id = ${query.operacaoId}
+           AND r.deleted_at IS NULL
+      )
+      OR EXISTS (
+        SELECT 1 FROM notas_fiscais_fornecedor nf
+          JOIN recebimentos r ON r.id = nf.recebimento_id
+         WHERE nf.id = ${ocorrenciasFornecedor.nfFornecedorId}
+           AND r.operacao_id = ${query.operacaoId}
+           AND r.deleted_at IS NULL
+      )
+      OR EXISTS (
+        SELECT 1 FROM conclusoes_conferencia cc
+          JOIN recebimentos r ON r.id = cc.recebimento_id
+         WHERE cc.id = ${ocorrenciasFornecedor.conclusaoConferenciaId}
+           AND r.operacao_id = ${query.operacaoId}
+           AND r.deleted_at IS NULL
+      )
+    )`;
+    const filtros = [daOperacao];
+    if (query.status) filtros.push(eq(ocorrenciasFornecedor.status, query.status));
+    if (query.busca) {
+      filtros.push(sql`(
+        ${fornecedores.razaoSocial} ILIKE ${'%' + query.busca + '%'}
+        OR ${ocorrenciasFornecedor.descricao} ILIKE ${'%' + query.busca + '%'}
+      )`);
+    }
+    const where = and(...filtros);
+    const [linhas, totalRow] = await Promise.all([
+      this.db.select({
+        id: ocorrenciasFornecedor.id,
+        fornecedorNome: fornecedores.razaoSocial,
+        nfChave: sql<string | null>`(
+          SELECT nf.chave FROM notas_fiscais_fornecedor nf
+           WHERE nf.id = ${ocorrenciasFornecedor.nfFornecedorId}
+           LIMIT 1
+        )`,
+        pedidoLote: sql<string | null>`(
+          SELECT coalesce(r.romaneio, r.nota_fiscal_fornecedor)
+            FROM divergencias_recebimento d
+            JOIN recebimentos r ON r.id = d.recebimento_id
+           WHERE d.id = ${ocorrenciasFornecedor.divergenciaId}
+           LIMIT 1
+        )`,
+        produtosDivergentes: sql<number>`(
+          SELECT count(*)::int FROM divergencias_recebimento d
+           WHERE d.id = ${ocorrenciasFornecedor.divergenciaId}
+              OR d.conclusao_conferencia_id = ${ocorrenciasFornecedor.conclusaoConferenciaId}
+        )`,
+        difQtdTotal: sql<string | null>`(
+          SELECT coalesce(sum((item->>'qtdApurada')::numeric - (item->>'qtdNf')::numeric), 0)::text
+            FROM conclusoes_conferencia cc,
+                 jsonb_array_elements(cc.quadro_json) AS item
+           WHERE cc.id = ${ocorrenciasFornecedor.conclusaoConferenciaId}
+        )`,
+        difPesoTotal: sql<string | null>`(
+          SELECT coalesce(sum(
+            CASE
+              WHEN (item->>'pesoApurado') IS NULL OR (item->>'pesoNf') IS NULL THEN 0
+              ELSE (item->>'pesoApurado')::numeric - (item->>'pesoNf')::numeric
+            END
+          ), 0)::text
+            FROM conclusoes_conferencia cc,
+                 jsonb_array_elements(cc.quadro_json) AS item
+           WHERE cc.id = ${ocorrenciasFornecedor.conclusaoConferenciaId}
+        )`,
+        responsavelNome: usuarios.nome,
+        status: ocorrenciasFornecedor.status,
+        dataAbertura: ocorrenciasFornecedor.dataHoraAbertura,
+      })
+        .from(ocorrenciasFornecedor)
+        .innerJoin(fornecedores, eq(fornecedores.id, ocorrenciasFornecedor.fornecedorId))
+        .leftJoin(usuarios, eq(usuarios.id, ocorrenciasFornecedor.usuarioAberturaId))
+        .where(where)
+        .orderBy(desc(ocorrenciasFornecedor.dataHoraAbertura))
+        .limit(query.limite).offset((query.pagina - 1) * query.limite),
+      this.db.select({ total: sql<number>`count(*)::int` })
+        .from(ocorrenciasFornecedor)
+        .innerJoin(fornecedores, eq(fornecedores.id, ocorrenciasFornecedor.fornecedorId))
+        .where(where),
+    ]);
+    return montarPaginado(linhas, totalRow[0]?.total ?? 0,
+      { page: query.pagina, pageSize: query.limite });
+  }
 }
 ```
-
-`listarOcorrencias` projeta `ocorrencias_fornecedor` da operação (JOIN em `recebimentos` para chegar
-à operação), trazendo `fornecedorNome`, `nfChave`, `pedidoLote`, `produtosDivergentes` (contagem por
-`divergencias_recebimento`), `difQtdTotal`, `difPesoTotal`, `responsavelNome`, `status`,
-`dataAbertura` — exatamente os campos que o cartão do protótipo (`Aprovacoes.tsx:30-43`) exibe.
 
 **7.3** `comparativo.service.ts` (D5.20):
 
@@ -3177,10 +3382,29 @@ export class AprovacoesController {
 }
 ```
 
-**7.5** `aprovacoes.module.ts` importa `DatabaseModule`, `AuditoriaModule` e o módulo que provê
-`OcorrenciaFornecedorService`; declara `AprovacoesController`; provê `AprovacoesService` e
-`ComparativoService`; **exporta** `AprovacoesService` (para as ondas 7–10). Registrar em
-`app.module.ts`.
+**7.5** `aprovacoes.module.ts` — literal. `RecebimentoModule` já exporta `OcorrenciaFornecedorService`
+(`recebimento.module.ts:12-13,26-33`):
+
+```ts
+import { Module } from '@nestjs/common';
+import { AuditoriaModule } from '../../../common/auditoria/auditoria.module';
+import { DatabaseModule } from '../../../database/database.module';
+import { RecebimentoModule } from '../../operacao/recebimento/recebimento.module';
+import { AprovacoesController } from './aprovacoes.controller';
+import { AprovacoesService } from './aprovacoes.service';
+import { ComparativoService } from './comparativo.service';
+
+@Module({
+  imports: [DatabaseModule, AuditoriaModule, RecebimentoModule],
+  controllers: [AprovacoesController],
+  providers: [AprovacoesService, ComparativoService],
+  exports: [AprovacoesService],
+})
+export class AprovacoesModule {}
+```
+
+Registrar em `app.module.ts` junto de `SifModule` (Task 8.4):
+`imports: […, AprovacoesModule, SifModule]`.
 
 **7.6** Testes: `test/unit/aprovacoes-regras.spec.ts` (derivação de `difQtd`/`difPeso` e validação de
 motivo) e `test/integration/aprovacoes.e2e-spec.ts` (casos 3.3 a 3.8 e 5.6 do mapa DoD).
@@ -3489,11 +3713,102 @@ export class SifService {
 }
 ```
 
-**8.4** `sif.controller.ts`: `GET /sif/relatorios?operacaoId=` (`SIF_LER`),
-`GET /sif/relatorios/:id/versoes` (`SIF_LER`), `GET /sif/relatorios/:id/preview` (`SIF_LER`),
-`POST /sif/relatorios/:id/gerar` (`SIF_GERAR`),
-`POST /sif/relatorios/:id/retificar` (`SIF_GERAR`, body `{ motivo }` com `z.string().trim().min(10)`).
-Registrar `SifModule` em `app.module.ts`.
+**8.4** `dto/sif.dto.ts`, `sif.controller.ts` e `sif.module.ts` — literais:
+
+```ts
+// dto/sif.dto.ts
+import { z } from 'zod';
+
+export const listarSifSchema = z.object({
+  operacaoId: z.string().uuid(),
+});
+export type ListarSifDto = z.infer<typeof listarSifSchema>;
+
+export const retificarSifSchema = z.object({
+  motivo: z.string().trim().min(10).max(1000),
+});
+export type RetificarSifDto = z.infer<typeof retificarSifSchema>;
+```
+
+```ts
+// sif.controller.ts
+import {
+  Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards,
+} from '@nestjs/common';
+import { CurrentUser, type CurrentUserPayload } from '../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RbacGuard } from '../../common/guards/rbac.guard';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
+import { RequirePermissoes } from '../../common/rbac/require-permissoes.decorator';
+import {
+  listarSifSchema, retificarSifSchema,
+  type ListarSifDto, type RetificarSifDto,
+} from './dto/sif.dto';
+import { SifService } from './sif.service';
+
+@Controller('sif/relatorios')
+@UseGuards(JwtAuthGuard, RbacGuard)
+export class SifController {
+  constructor(private readonly service: SifService) {}
+
+  @Get()
+  @RequirePermissoes('SIF_LER')
+  listar(@Query(new ZodValidationPipe(listarSifSchema)) query: ListarSifDto) {
+    return this.service.listar(query.operacaoId);
+  }
+
+  @Get(':id/versoes')
+  @RequirePermissoes('SIF_LER')
+  versoes(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.versoes(id);
+  }
+
+  @Get(':id/preview')
+  @RequirePermissoes('SIF_LER')
+  preview(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.preview(id);
+  }
+
+  @Post(':id/gerar')
+  @RequirePermissoes('SIF_GERAR')
+  gerar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.gerar(id, user.sub);
+  }
+
+  @Post(':id/retificar')
+  @RequirePermissoes('SIF_GERAR')
+  retificar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(retificarSifSchema)) dto: RetificarSifDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.retificar(id, user.sub, dto.motivo);
+  }
+}
+```
+
+```ts
+// sif.module.ts
+import { Module } from '@nestjs/common';
+import { AuditoriaModule } from '../../common/auditoria/auditoria.module';
+import { DatabaseModule } from '../../database/database.module';
+import { SifCalculoService } from './sif-calculo.service';
+import { SifController } from './sif.controller';
+import { SifService } from './sif.service';
+
+@Module({
+  imports: [DatabaseModule, AuditoriaModule],
+  controllers: [SifController],
+  providers: [SifService, SifCalculoService],
+  exports: [SifService],
+})
+export class SifModule {}
+```
+
+Registrar `SifModule` (e `AprovacoesModule` da Task 7.5) em `app.module.ts`.
 
 **8.5** Testes: `test/unit/catalogo-sif.spec.ts` (derivação de status, 4 tipos, códigos) e
 `test/integration/sif.e2e-spec.ts` (casos 4.1 a 4.9, 4.12 e 5.6). O caso 4.12 é obrigatório e prova o
@@ -4242,7 +4557,7 @@ DoD→teste da onda de destino.
 | Risco | Probabilidade | Impacto | Mitigação |
 |---|---|---|---|
 | Conflito de merge com a Onda 4 em `pedidos.service.ts` (extração dos métodos `NaTx`, Task 6.4) | Média | Médio | Refatoração sem mudança de comportamento, coberta pelos testes existentes de pedidos; se a Onda 4 mergear antes, reaplicar a extração sobre o código novo e rodar `pedidos.e2e-spec.ts` como critério de aceite |
-| Número da migration colidir com a Onda 4 | Média | Baixo | Regra da seção "Fronteira com a Onda 4": renumerar mantendo o SQL e registrar no PR |
+| Número da migration colidir com a Onda 4 | Baixa (já mitigado: Onda 4 = `0016`/`0017`, Onda 5 = `0018`) | Baixo | Se `develop` ocupar o 0018 antes do merge, renumerar mantendo o SQL e registrar no PR |
 | Trigger de imutabilidade quebrar teste existente que faça `UPDATE` em `conclusoes_conferencia` | Baixa | Médio | Rodar a suíte inteira logo após a Task 1; se algum teste fizer `UPDATE`, o teste é que está errado (v1.1 §6.10.7) e deve ser corrigido no mesmo commit |
 | Cobertura cair abaixo de 80% pelo volume de código novo | Média | Alto (gate) | Cada task já traz o seu teste; rodar `test:cov` ao fim das tasks 5, 8 e 9, não só no gate final |
 | `projetarImpacto` com `VALUES` dinâmico gerar SQL inválido quando a simulação é vazia | Média | Médio | O ramo vazio usa `SELECT ... WHERE false`, coberto pelo caso 1.1 do mapa DoD |
@@ -4298,7 +4613,7 @@ quem implementa.
 | Global Constraints explícitas | Sim — 13 restrições |
 | Decisões de design fixadas (o Worker não escolhe) | Sim — D5.1 a D5.32 |
 | Referências do protótipo por tela, com arquivo e linhas | Sim — 7 linhas na tabela, commit do protótipo fixado |
-| Estrutura de arquivos (novos e alterados) | Sim — 25 novos + 22 alterados no backend; 34 novos + 12 alterados + 11 de teste no frontend |
+| Estrutura de arquivos (novos e alterados) | Sim — 26 novos + 29 alterados no backend; 34 novos + 12 alterados + 11 de teste no frontend |
 | Mapa DoD → teste 1:1 | Sim — 63 critérios, cada um com arquivo e nome de teste |
 | Schemas e caminhos auditados no código real, não presumidos | Sim — seção "Estado atual verificado" lista as colunas que **não** existem (`transformacoes.operacao_id`, `pecas.operacao_id`, `notas_fiscais.operacao_id`, `notas_fiscais_fornecedor.chave_acesso`, `recebimentos.numero_lote`, campo de seguro em `caminhoes`) e o JOIN correto de cada uma; os CHECKs que restringem os `UPDATE`s da onda (`chk_reservas_qtd_positiva`, `chk_pend_ovb_deficit`, `chk_pedidos_itens_pedida_positiva`) estão citados com arquivo e linha no ponto de uso |
 | Eventos novos com destino real (não só emitidos) | Sim — Task 2.5 liga os 7 eventos ao `realtime.gateway.ts`, com `dataOperacao` no payload (é a room) |
@@ -4324,18 +4639,18 @@ quem implementa.
 | Tasks | 18 |
 | Commits previstos | 18 |
 | Decisões de design fixadas | 32 (D5.1–D5.32) |
-| Critérios no mapa DoD → teste | 60 |
-| Migrations | 1 (`0016_onda5_gestao`) |
+| Critérios no mapa DoD → teste | 63 |
+| Migrations | 1 (`0018_onda5_gestao` — após `0016`/`0017` da Onda 4) |
 | Tabelas novas | 3 (`relatorios_sif`, `relatorios_sif_versoes`, `aprovacoes_operacionais`) |
 | Triggers novos | 4 (2 de imutabilidade + 2 de `updated_at`) |
 | Módulos NestJS novos | 2 (`gestao/aprovacoes`, `sif`) |
 | Endpoints novos | 13 (+2 alterados: `PATCH` de item da compra e `GET /gestao/dashboard`) |
 | Permissões novas | 5 |
-| Eventos novos | 4 (+3 existentes de pendência de overbooking ganham payload completo e handler no gateway) |
+| Eventos novos | 4 (+3 existentes de pendência de overbooking ganham payload completo e handler no gateway; + chave `reserva_disponibilidade_atualizada` em `PayloadPorEvento`) |
 | Handlers `@OnEvent` novos no gateway | 7 |
 | Parâmetros novos | 1 (`gestao.modelos_relatorio_sif`, provisório P8) |
-| Arquivos novos no backend | 25 |
-| Arquivos alterados no backend | 22 |
+| Arquivos novos no backend | 26 |
+| Arquivos alterados no backend | 29 |
 | Arquivos novos no frontend | 34 (12 de tela/lib/componente + 22 rotas BFF) |
 | Arquivos alterados no frontend | 12 |
 | Rotas BFF novas | 22 (19 dos endpoints das tasks 4–9 + 3 de ocorrências de fornecedor) |
