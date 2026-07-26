@@ -395,7 +395,10 @@ nunca `Number` em quantidade.
 passa a aceitar compra com status `confirmada`, além de `rascunho` e `em_negociacao`.
 `cancelada` continua imutável. Quando o status é `confirmada`, o serviço, **em uma transação**:
 
-1. `SELECT ... FOR UPDATE` na compra e nas `disponibilidades_virtuais` da compra;
+1. `SELECT ... FOR UPDATE` na linha da compra **e** na linha do item (`buscarAtivaSobLock` +
+   `.for('update')` no item, Task 5.3) — é esse par que serializa duas edições concorrentes; as
+   linhas de `disponibilidades_virtuais` são travadas pelo próprio `UPDATE` do passo 5, dentro da
+   mesma transação;
 2. recalcula o impacto com as quantidades novas;
 3. se `deficitTotal > 0` e o corpo não trouxer `confirmarDeficit: true`, lança
    `409 IMPACTO_CONFIRMACAO_NECESSARIA` com o payload `ImpactoCompra` e **não persiste nada**
@@ -405,6 +408,17 @@ passa a aceitar compra com status `confirmada`, além de `rascunho` e `em_negoci
    quantidade_disponivel = GREATEST(0, <projetada> - quantidade_reservada), status = <derivado>`;
 6. grava auditoria da compra, do item e de cada disponibilidade afetada;
 7. após o commit, emite `COMPRA_ALTERADA_IMPACTO`.
+
+Isto **revoga a guarda de imutabilidade do item** que hoje existe em
+`compras-programadas.service.ts:181` (`assertEditavel` dentro de `atualizarItem`) e o teste que a
+afirma (`compras-programadas.e2e-spec.ts:75-95`), substituído na Task 5.6. A imutabilidade do
+**cabeçalho** da compra confirmada continua valendo.
+
+Contrato do corpo e da resposta (detalhado e justificado na Task 5.2): `quantidadeComprada` passa a
+ser **obrigatória** e aceita `string` decimal ou `number`, normalizada para `string` NUMERIC de 3
+casas; `observacoes` **continua existindo** e continua sendo persistida — removê-la faria a tela
+atual (`compras-client.tsx:167-174`) perder dado em silêncio; a resposta 200 passa a ser
+`{ item, impacto }`.
 
 **D5.12 — Déficit não vira pendência automática nesta onda.** O déficit projetado é **exibido**
 (painel de impacto, KPI "Overbookings abertos" e alerta do dashboard) e fica registrado na
@@ -643,7 +657,7 @@ explicando quando `status='pendente_dados'` (protótipo `278-279`).
 
 ## Estrutura de arquivos
 
-### Backend — arquivos novos (25)
+### Backend — arquivos novos (26)
 
 ```
 src/database/migrations/0016_onda5_gestao.sql
@@ -664,6 +678,7 @@ test/unit/impacto-compra.spec.ts
 test/unit/catalogo-sif.spec.ts
 test/unit/aprovacoes-regras.spec.ts
 test/unit/realtime-gateway-onda5.spec.ts
+test/unit/permissoes-onda5.spec.ts
 test/integration/compras-impacto.e2e-spec.ts
 test/integration/overbooking-decisao.e2e-spec.ts
 test/integration/aprovacoes.e2e-spec.ts
@@ -673,14 +688,15 @@ test/integration/conclusao-imutavel.e2e-spec.ts
 test/helpers/recebimento-fixtures.ts
 ```
 
-### Backend — arquivos alterados (22)
+### Backend — arquivos alterados (29)
 
 ```
 src/database/migrations/meta/_journal.json          + entrada 0016
 src/database/schema/index.ts                        + 2 exports
 src/database/seed.ts                                + parâmetro gestao.modelos_relatorio_sif
 src/common/rbac/permissoes.ts                       + 5 permissões, descrições e atribuições
-src/realtime/events/eventos.ts                      + 4 eventos, payloads (todos com dataOperacao) e PendenciaOverbookingPayload
+src/common/rbac/perfil-permissoes.snapshot.json     regerado por `npm run rbac:snapshot` (arquivo versionado, não é snapshot do Jest)
+src/realtime/events/eventos.ts                      + 4 eventos, payloads (todos com dataOperacao), PendenciaOverbookingPayload e os 3 contratos de pendência em PayloadPorEvento
 src/realtime/realtime.gateway.ts                    + 7 handlers @OnEvent (4 novos + 3 de pendência de overbooking)
 src/app.module.ts                                   + AprovacoesModule, SifModule
 src/modules/operacoes/operacoes.service.ts          + extraordinaria, contadores e resolverCorrente
@@ -688,7 +704,7 @@ src/modules/operacoes/operacoes.controller.ts       (sem mudança de pipe — s�
 src/modules/operacoes/dto/operacao.dto.ts           + extraordinaria no listarOperacoesSchema existente
 src/modules/comercial/compras-programadas/compras-programadas.service.ts   + impacto, edição confirmada, histórico
 src/modules/comercial/compras-programadas/compras-programadas.controller.ts + 2 endpoints
-src/modules/comercial/compras-programadas/dto/compras-programadas.dto.ts   + simulação e confirmarDeficit
+src/modules/comercial/compras-programadas/dto/compra-programada.dto.ts     + impactoQuerySchema; updateCompraItemSchema → atualizarItemCompraSchema (substituição)
 src/modules/comercial/disponibilidade/disponibilidade.service.ts           + projetarImpacto, recalcularParaCompra
 src/modules/comercial/overbooking/overbooking.service.ts                   + cobertura, 3 caminhos e dataOperacao nos payloads
 src/modules/comercial/overbooking/overbooking.controller.ts                + 2 endpoints
@@ -698,6 +714,11 @@ src/modules/comercial/pedidos/pedidos.module.ts                            + exp
 src/modules/comercial/pedidos/pedidos.service.ts                           + criarNaTx, reduzirItemNaTx e removerItemNaTx (extração sem mudança de comportamento), export de EventoDominio e dataOperacao no payload de PENDENCIA_OVERBOOKING_ABERTA
 src/modules/gestao/dashboard/dashboard.service.ts   + operacaoId, 10 KPIs, alertas
 src/modules/gestao/dashboard/dashboard.controller.ts + query operacaoId
+test/integration/compras-programadas.e2e-spec.ts    ajustado ao novo contrato de item (Task 5.6) — D5.11 revoga a imutabilidade do item
+test/unit/compras-programadas-branches.spec.ts      ajustado ao novo contrato de item (Task 5.6)
+test/integration/parametros-onda3.e2e-spec.ts       + caso do parâmetro `gestao.modelos_relatorio_sif` (Task 3.2)
+test/integration/operacoes.e2e-spec.ts              + contadores e filtros (Task 4)
+test/unit/perfil-permissoes-snapshot.spec.ts        passa a validar as 5 permissões novas contra o JSON regerado (Task 2.6)
 ```
 
 ### Frontend — arquivos novos (34)
@@ -795,7 +816,9 @@ Cada item do DoD e cada decisão verificável tem **um teste nomeado**. Nenhuma 
 | 1.9 | Evento `COMPRA_ALTERADA_IMPACTO` é emitido **após** o commit | `compras-impacto.e2e-spec.ts` › "evento pós-commit" |
 | 1.10 | `GET /:id/historico` deriva de `auditoria` e traz autor, data e mudança | `compras-impacto.e2e-spec.ts` › "histórico derivado da auditoria" |
 | 1.11 | Modal de impacto renderiza colunas e o texto de déficit do protótipo | `__tests__/painel-impacto.test.tsx` |
-| 1.12 | Tela reenvia com `confirmarDeficit` após 409 | `__tests__/painel-impacto.test.tsx` › "salvar mesmo assim" |
+| 1.12 | Tela reenvia com `confirmarDeficit` após 409 | `__tests__/compras-client.test.tsx` › "salvar mesmo assim" |
+| 1.13 | `PATCH` do item aceita quantidade `number` **ou** `string`, preserva `observacoes` e devolve `{ item, impacto }` | `test/integration/compras-programadas.e2e-spec.ts` › "permite editar item enquanto em rascunho" (ajustado) |
+| 1.14 | D5.11 revoga a imutabilidade do **item**: compra confirmada sem déficit aceita edição e recalcula; compra **cancelada** continua em 409 | `compras-programadas.e2e-spec.ts` › "D5.11: compra confirmada aceita edição de item e recalcula a disponibilidade" + "IMUTABILIDADE: compra CANCELADA continua recusando edição de item (409)" |
 
 ### DoD 2 — Fila de overbooking com 3 caminhos
 
@@ -855,7 +878,7 @@ Cada item do DoD e cada decisão verificável tem **um teste nomeado**. Nenhuma 
 | 5.2 | Sem `operacaoId`, resolve a operação corrente; sem operação, 404 | `dashboard-operacao.e2e-spec.ts` › "operação corrente e 404" |
 | 5.3 | Alertas operacionais só aparecem quando há fato real | `dashboard-operacao.e2e-spec.ts` › "alertas derivados de dados reais" |
 | 5.4 | `/gestao/operacoes` lista, filtra por status, gera cadência e cria extraordinária | `__tests__/operacoes-client.test.tsx` |
-| 5.5 | As 5 permissões novas existem, têm descrição e estão no snapshot RBAC | `test/unit/rbac-permissoes.spec.ts` (arquivo existente, casos novos) |
+| 5.5 | As 5 permissões novas existem, têm descrição e estão no snapshot RBAC | `test/unit/permissoes-onda5.spec.ts` (novo) + `test/unit/perfil-permissoes-snapshot.spec.ts` (existente, contra o JSON regerado) |
 | 5.6 | Perfil sem permissão recebe 403 nos endpoints novos | `aprovacoes.e2e-spec.ts` e `sif.e2e-spec.ts` › "403 sem permissão" |
 | 5.7 | Rotas BFF repassam status e mensagem de erro do backend | `__tests__/bff-onda5.test.ts` |
 | 5.8 | As 6 rotas navegam pelo menu e renderizam sem erro de console | `e2e/onda5-gestao.spec.ts` |
@@ -864,9 +887,18 @@ Cada item do DoD e cada decisão verificável tem **um teste nomeado**. Nenhuma 
 | 5.11 | Os 7 eventos (4 novos + 3 de pendência de overbooking) chegam ao WebSocket: `broadcast` nas rooms `dashboard` e `operacao:<dataOperacao>` | `test/unit/realtime-gateway-onda5.spec.ts` |
 | 5.12 | BFF de ocorrências de fornecedor repassa `PATCH /:id` e `POST /:id/encerrar` com status e corpo do backend | `__tests__/bff-onda5.test.ts` › "ocorrências de fornecedor" |
 | 5.13 | `GET /operacoes` mantém o envelope paginado e passa a trazer os 3 contadores, ordenado por `data` desc | `test/integration/operacoes.e2e-spec.ts` (asserções ajustadas + casos novos) |
+| 5.14 | `PayloadPorEvento` tipa os 3 eventos de pendência com `operacaoId`/`dataOperacao` e o evento RESOLVIDA aceita `resolvida\|cancelada`; `alterarStatus` emite RESOLVIDA também no `cancelada`, com o payload completo | `npm run type-check` (contrato do mapa) + `test/unit/overbooking-branches.spec.ts` › "alterarStatus emite RESOLVIDA no status terminal com operacaoId e dataOperacao" (arquivo existente, casos ajustados) |
 
-**Totais:** 12 + 12 + 9 + 12 + 13 = **58 critérios verificáveis**, distribuídos em 4 arquivos de
-teste unitário de backend, 6 de integração de backend, 8 de teste de frontend e 1 suíte e2e.
+**Totais:** 14 + 14 + 9 + 12 + 14 = **63 critérios verificáveis** (DoD 1 = 1.1–1.14; DoD 2 =
+2.1–2.14; DoD 3 = 3.1–3.9; DoD 4 = 4.1–4.12; Telas/RBAC = 5.1–5.14), distribuídos em **24 arquivos**
+de teste: 6 unitários de backend, 8 de integração de backend, 9 de frontend e 1 suíte e2e
+Playwright.
+
+Cinco deles **já existem e são ajustados**, não criados: `compras-programadas.e2e-spec.ts`
+(Task 5.6), `overbooking-branches.spec.ts` (Tasks 2.5.2 e 6.7), `operacoes.e2e-spec.ts` (Task 4),
+`perfil-permissoes-snapshot.spec.ts` (Task 2.6) e `terminologia.test.ts` (Task 18).
+`test/unit/compras-programadas-branches.spec.ts` também é ajustado (Task 5.6), mas como teste de
+cobertura de branch não tem linha própria no mapa — entra no gate pelo `test:cov`.
 
 ---
 ## Tasks
@@ -1277,7 +1309,35 @@ export interface PendenciaOverbookingPayload {
   dataOperacao: string;
   status: string;
 }
+```
 
+**2.5.1 — `PayloadPorEvento` (obrigatório, senão a Task 6 não compila).** Os três eventos de
+pendência já estão tipados em `eventos.ts:287-298` e `pedidos.service.ts:71-73` deriva
+`EventoDominio` desse mapa. Acrescentar `operacaoId`/`dataOperacao` ao payload emitido **sem
+atualizar o mapa** quebraria o type-check em `pedidos.service.ts:359-362`. Substituir as três
+entradas por:
+
+```ts
+  pendencia_overbooking_aberta: PendenciaOverbookingPayload & { pedidoVendaId: string };
+  pendencia_overbooking_atualizada: PendenciaOverbookingPayload;
+  pendencia_overbooking_resolvida: PendenciaOverbookingPayload & {
+    // 'cancelada' também encerra a pendência e a tira da fila — ver Task 6.3.
+    status: 'resolvida' | 'cancelada';
+  };
+```
+
+> **Decisão (status terminal no evento RESOLVIDA).** O `decidir` da Task 6.3 emite
+> `PENDENCIA_OVERBOOKING_RESOLVIDA` quando `pendencia.status` é `'resolvida'` **ou** `'cancelada'`
+> (postergação total). O literal `status: 'resolvida'` de hoje rejeitaria esse caso. A escolha é
+> **alargar a união** no evento existente, não criar um quarto evento: para o consumidor os dois
+> status significam "saiu da fila", e um evento novo obrigaria mais um handler, mais uma room e mais
+> uma linha de DoD sem ganho funcional. `PendenciaOverbookingPayload` declara `status: string` e a
+> interseção estreita apenas onde o contrato é terminal.
+
+Como `EventoDominio` é derivado de `PayloadPorEvento`, essa mudança é o que permite
+`pedidos.service.ts` empurrar o payload completo no array de eventos sem `as never`.
+
+```ts
   @OnEvent(EVENTOS.PENDENCIA_OVERBOOKING_ABERTA)
   handlePendenciaAberta(payload: PendenciaOverbookingPayload): void {
     this.broadcast(EVENTOS.PENDENCIA_OVERBOOKING_ABERTA, payload, payload.dataOperacao);
@@ -1294,11 +1354,74 @@ export interface PendenciaOverbookingPayload {
   }
 ```
 
-Os emissores passam a preencher o payload completo: em `pedidos.service.ts:359-362` a abertura já
-tem `pedido.operacaoId` em mãos e a data da operação é a mesma que o método já usa nos demais
-eventos do pedido; em `overbooking.service.ts:103-108` (`alterarStatus`) e no `decidir` da Task 6.3,
-a data vem de `dataDaOperacao(tx, pendencia.operacaoId)`. **Só o payload muda** — nenhum fluxo de
-pedido é alterado, o que mantém a mitigação de conflito com a Onda 4 declarada na seção "Fronteira".
+**2.5.2 — emissores.** Os dois emissores existentes passam a preencher o payload completo. Nenhuma
+regra de pedido ou de transição de pendência é tocada — muda o objeto emitido e, em
+`alterarStatus`, **a escolha do evento para o status `cancelada`** (declarado abaixo). Isso mantém a
+mitigação de conflito com a Onda 4 declarada na seção "Fronteira".
+
+Em `pedidos.service.ts:359-362` a abertura já tem `pedido.operacaoId` em mãos e a data da operação é
+a mesma que o método já usa nos demais eventos do pedido:
+
+```ts
+        eventos.push({
+          nome: EVENTOS.PENDENCIA_OVERBOOKING_ABERTA,
+          payload: {
+            pendenciaId: pendencia.id,
+            pedidoVendaId: pedido.id,
+            operacaoId: pedido.operacaoId,
+            dataOperacao,
+            status: pendencia.status,
+          },
+        });
+```
+
+Em `overbooking.service.ts` o `alterarStatus` hoje emite `{ pendenciaId, status }` fora da transação
+(`overbooking.service.ts:103-108`) e **não tem** nenhum helper de data. Esta task cria o helper
+privado — literal, no mesmo arquivo, ao lado de `obterAtivaSobLock` (`overbooking.service.ts:121`) —
+e a Task 6 apenas o reutiliza (não redefinir lá):
+
+```ts
+/** Data da Operação — obrigatória nos payloads: é a room do broadcast (roomsDaData). */
+private async dataDaOperacao(tx: Tx, operacaoId: string): Promise<string> {
+  const [linha] = await tx.select({ data: operacoes.data }).from(operacoes)
+    .where(eq(operacoes.id, operacaoId));
+  if (!linha) throw new NotFoundException('Operação da pendência não encontrada');
+  return linha.data;
+}
+```
+
+`alterarStatus` passa a devolver a data junto da pendência (lida **dentro** da transação que já
+existe, para não abrir uma segunda conexão) e a emitir o payload completo depois do commit:
+
+```ts
+    const resultado = await this.db.transaction(async (tx) => {
+      // ... corpo atual inalterado até o `return`
+      return { pendencia, dataOperacao: await this.dataDaOperacao(tx, pendencia.operacaoId) };
+    });
+    this.eventEmitter.emit(
+      resultado.pendencia.status === 'resolvida' || resultado.pendencia.status === 'cancelada'
+        ? EVENTOS.PENDENCIA_OVERBOOKING_RESOLVIDA
+        : EVENTOS.PENDENCIA_OVERBOOKING_ATUALIZADA,
+      {
+        pendenciaId: resultado.pendencia.id,
+        operacaoId: resultado.pendencia.operacaoId,
+        dataOperacao: resultado.dataOperacao,
+        status: resultado.pendencia.status,
+      },
+    );
+    return resultado.pendencia;
+```
+
+`alterarStatus` continua devolvendo a pendência para `atualizar` (`overbooking.service.ts:118`) — o
+tipo de retorno público não muda. Importar `operacoes` de `../../../database/schema`
+(`NotFoundException` já está importado).
+
+> **Mudança de comportamento declarada.** Hoje `alterarStatus` só emite `..._RESOLVIDA` quando o
+> status é `'resolvida'`; `'cancelada'` sai como `..._ATUALIZADA` e a pendência **continuaria
+> aparecendo na fila** da tela nova. Como `'cancelada'` é terminal em `TRANSICOES_PENDENCIA` e a
+> Task 6.3 trata os dois status como "saiu da fila", os dois emissores passam a usar o mesmo
+> critério. É a única alteração de comportamento em código da Onda 1 nesta task, e está coberta pelo
+> critério 5.14 do mapa DoD.
 
 Nada mais muda no gateway: `broadcast` privado, `roomsDaData` e a guarda `podeAssinar` continuam
 como estão. Quem produz o `dataOperacao` é o serviço que emite (Task 5 já o tem; Tasks 6, 7 e 8 leem
@@ -1306,16 +1429,29 @@ como estão. Quem produz o `dataOperacao` é o serviço que emite (Task 5 já o 
 
 **2.6** Testes:
 
-- `test/unit/rbac-permissoes.spec.ts` (arquivo existente): "toda permissão nova tem descrição" e
-  "snapshot de permissões por perfil inclui as 5 chaves da Onda 5" (critério 5.5). Se o snapshot for
-  `toMatchSnapshot`, atualizar com `-u` e revisar o diff manualmente antes de commitar.
+- `test/unit/permissoes-onda5.spec.ts` (**arquivo novo**, critério 5.5): espelho literal de
+  `test/unit/permissoes-onda1.spec.ts`, que é o arquivo real desse padrão no repositório (não existe
+  `rbac-permissoes.spec.ts`). Declarar `CHAVES_ONDA5 = ['SIF_LER', 'SIF_GERAR', 'APROVACOES_LER',
+  'APROVACOES_DECIDIR', 'APROVACOES_SOLICITAR']` e repetir os dois casos: `PERMISSOES[chave] ===
+  chave` e `DESCRICOES_PERMISSOES[chave]` casando `/\S/`. O caso "todo `PERMISSOES` tem descrição e
+  vice-versa" já existe em `permissoes-onda1.spec.ts:23` e passa a cobrir as 5 chaves novas sem
+  edição.
+- `src/common/rbac/perfil-permissoes.snapshot.json` é um **arquivo versionado**, não um snapshot do
+  Jest: `test/unit/perfil-permissoes-snapshot.spec.ts:17` compara `MAPA_PERFIL_PERMISSOES` com esse
+  JSON. Depois de editar `permissoes.ts`, rodar `npm run rbac:snapshot`
+  (`scripts/gerar-snapshot-perfis.ts`), revisar o diff — só as 5 chaves novas nos 7 perfis de 2.3 —
+  e commitar o JSON junto. Sem isso o teste existente quebra. `-u` do Jest não tem efeito aqui.
+- `test/unit/overbooking-branches.spec.ts` (arquivo existente, critério 5.14): o fake de `db` já
+  cobre `alterarStatus` (linhas 43-65 e 145-160); acrescentar ao mock a leitura de `operacoes` que
+  `dataDaOperacao` faz e um caso "alterarStatus emite RESOLVIDA no status terminal com `operacaoId`
+  e `dataOperacao`", cobrindo `'resolvida'` e `'cancelada'`.
 - `test/unit/realtime-gateway-onda5.spec.ts` (**arquivo novo**, critério 5.11): instanciar o gateway
   com um `RealtimeHub` espionado, chamar cada um dos 7 handlers (4 novos + 3 de pendência de
   overbooking) com um payload que traz `dataOperacao: '2026-08-03'` e assertar `hub.broadcast`
   chamado para as rooms `dashboard` e `operacao:2026-08-03`, com o nome de evento correto e o
   payload íntegro.
 
-**Verificação:** `cd app/backend && npm run test -- rbac-permissoes realtime-gateway-onda5`.
+**Verificação:** `cd app/backend && npm run rbac:snapshot && npm run test -- permissoes-onda5 perfil-permissoes-snapshot realtime-gateway-onda5 overbooking-branches && npm run type-check` (o `type-check` é o que prova que `PayloadPorEvento` e `pedidos.service.ts` continuam coerentes).
 
 **Commit:** `feat(onda5): permissões de SIF e aprovações + eventos de gestão no gateway de tempo real`
 
@@ -1329,13 +1465,17 @@ como estão. Quem produz o `dataOperacao` é o serviço que emite (Task 5 já o 
 literal de D5.27 (chave `gestao.modelos_relatorio_sif`), mantendo a ordem alfabética por grupo já
 usada no arquivo. Atualizar o comentário do array de "As 9 chaves" para "As 10 chaves".
 
-**3.2** Teste em `test/integration/parametros.e2e-spec.ts` (existente):
+**3.2** Teste em `test/integration/parametros-onda3.e2e-spec.ts` (arquivo existente — não existe
+`parametros.e2e-spec.ts`). O arquivo já autentica por cookie (`loginCookies` + `.set('Cookie', …)`,
+`parametros-onda3.e2e-spec.ts:16-21`), que é a convenção de toda a suíte de integração; **não usar
+`Authorization: Bearer`**. A rota real de leitura por chave é `GET /parametros/chave/:chave`
+(`parametros.controller.ts:30`):
 
 ```ts
 it('expõe o parâmetro provisório dos modelos SIF (P8)', async () => {
-  const { body } = await request(app.getHttpServer())
-    .get('/admin/parametros/gestao.modelos_relatorio_sif')
-    .set('Authorization', `Bearer ${tokenAdministrador}`)
+  const { body } = await request(srv())
+    .get('/parametros/chave/gestao.modelos_relatorio_sif')
+    .set('Cookie', adminCookies)
     .expect(200);
 
   expect(body.valorJson.provisorio).toBe(true);
@@ -1343,10 +1483,14 @@ it('expõe o parâmetro provisório dos modelos SIF (P8)', async () => {
 });
 ```
 
+Acrescentar também `'gestao.modelos_relatorio_sif'` ao array `CHAVES`
+(`parametros-onda3.e2e-spec.ts:6-10`) e trocar o título do caso existente de "as 9 chaves" para
+"as 10 chaves", coerente com o comentário atualizado em 3.1.
+
 **3.3** Rodar `npm run db:seed` e conferir que rodar duas vezes não duplica (o seed é idempotente
 por chave).
 
-**Verificação:** `cd app/backend && npm run db:seed && npm run test -- parametros`.
+**Verificação:** `cd app/backend && npm run db:seed && npm run test -- parametros-onda3`.
 
 **Commit:** `feat(onda5): parâmetro provisório dos modelos de relatório SIF (P8)`
 
@@ -1650,7 +1794,8 @@ async recalcularParaCompra(
 }
 ```
 
-**5.2** Em `dto/compras-programadas.dto.ts`:
+**5.2** Em `dto/compra-programada.dto.ts` (nome real do arquivo, no singular — é o que
+`compras-programadas.service.ts:23` e `compras-programadas.controller.ts:17` importam):
 
 ```ts
 /** `simulacao=<itemCompraId>:<qtd>,<itemCompraId>:<qtd>` — read-only, pré-salvamento. */
@@ -1675,8 +1820,19 @@ export const impactoQuerySchema = z.object({
   }),
 });
 
+/**
+ * Substitui `updateCompraItemSchema` (linhas 41-46 do arquivo atual), que é removido no mesmo
+ * commit junto do tipo `UpdateCompraItemDto` — sem schema legado em paralelo.
+ */
 export const atualizarItemCompraSchema = z.object({
-  quantidadeComprada: z.string().regex(/^\d+(\.\d{1,3})?$/),
+  quantidadeComprada: z
+    .union([
+      z.string().trim().regex(/^\d+(\.\d{1,3})?$/, 'quantidade deve ter até 3 casas decimais'),
+      quantidadeSchema, // number positivo já existente no arquivo (linhas 5-8)
+    ])
+    .transform((valor) => (typeof valor === 'number' ? valor.toFixed(3) : valor))
+    .refine((valor) => Number(valor) > 0, 'quantidade deve ser maior que zero'),
+  observacoes: z.string().trim().max(500).optional(),
   confirmarDeficit: z.boolean().default(false),
 });
 
@@ -1684,13 +1840,60 @@ export type ImpactoQueryDto = z.infer<typeof impactoQuerySchema>;
 export type AtualizarItemCompraDto = z.infer<typeof atualizarItemCompraSchema>;
 ```
 
-**5.3** Em `compras-programadas.service.ts`:
+> **Decisão — contrato de `PATCH /comercial/compras-programadas/:id/itens/:itemId`.** O schema atual
+> aceita `quantidadeComprada` **number opcional** e `observacoes` opcional
+> (`compra-programada.dto.ts:41-46`), e há dois consumidores reais hoje:
+> `compras-client.tsx:167-174`, que envia `{ quantidadeComprada: number, observacoes }`, e
+> `compras-programadas.e2e-spec.ts:70`, que envia `{ quantidadeComprada: 20 }`. Trocar o campo por
+> `string` obrigatória e apagar `observacoes` faria a tela existente receber 400 na quantidade e
+> perder silenciosamente a observação já gravada — regressão silenciosa, proibida pelo Princípio
+> VIII e por RA-06. Portanto:
+> 1. **`quantidadeComprada` passa a ser obrigatória** (era opcional; um `PATCH` sem quantidade não
+>    tem o que projetar e hoje só resultava num UPDATE que reescrevia o valor anterior) e aceita
+>    `string` decimal **ou** `number`, normalizando para a `string` NUMERIC de 3 casas que D5.11/S4
+>    exigem. A borda continua tolerante, o núcleo continua exato.
+> 2. **`observacoes` é mantida** e continua sendo persistida pelo service. Não há dívida aberta:
+>    nenhum caminho de observação é removido.
+> 3. O retorno passa de `CompraProgramadaItem` para `{ item, impacto }` (ver 5.3) — mudança
+>    **declarada**, com os consumidores ajustados nas Tasks 5.6 e 14.2 no mesmo ciclo.
+
+**5.3** Em `compras-programadas.service.ts`.
+
+Membros reais do arquivo, para não inventar API: a dependência injetada chama-se
+**`this.disponibilidadeService`** (`compras-programadas.service.ts:38`), a leitura da compra é o
+privado **`buscarAtiva(id, tx?)`** que devolve `CompraProgramada | null` **sem lock**
+(`compras-programadas.service.ts:323-330`), e **não existem** `obterOuFalhar`, `obterSobLock` nem
+`dataDaOperacao`. O que esta task acrescenta de infraestrutura interna é um único privado novo,
+`buscarAtivaSobLock`, escrito literalmente (mesmo idioma de `pedidos.service.ts:640-644` e
+`overbooking.service.ts:121-125`):
+
+```ts
+/**
+ * Leitura da compra com `SELECT … FOR UPDATE`: D5.11 recalcula a disponibilidade a partir das
+ * quantidades da compra, então duas edições concorrentes precisam serializar na linha da compra.
+ * `buscarAtiva` (sem lock) continua servindo os GETs.
+ */
+private async buscarAtivaSobLock(tx: Tx, id: string): Promise<CompraProgramada> {
+  const [compra] = await tx
+    .select()
+    .from(comprasProgramadas)
+    .where(and(eq(comprasProgramadas.id, id), isNull(comprasProgramadas.deletedAt)))
+    .for('update');
+  if (!compra) throw new NotFoundException('Compra programada não encontrada');
+  return compra;
+}
+```
+
+`Tx` ainda não existe neste arquivo: acrescentar `type Tx = NodePgDatabase<typeof schema>;` junto
+dos aliases do topo (`compras-programadas.service.ts:25-27`), igual ao que
+`disponibilidade.service.ts:12` já faz.
 
 ```ts
 /** Fotografia (ou simulação) do impacto na disponibilidade — não persiste nada. */
 async impacto(compraId: string, simulacao: Map<string, string>): Promise<ImpactoCompra> {
-  const compra = await this.obterOuFalhar(compraId);
-  const itens = await this.disponibilidade.projetarImpacto(this.db, compraId, simulacao);
+  const compra = await this.buscarAtiva(compraId);
+  if (!compra) throw new NotFoundException('Compra programada não encontrada');
+  const itens = await this.disponibilidadeService.projetarImpacto(this.db, compraId, simulacao);
   return this.montarImpacto(compra, itens);
 }
 
@@ -1716,32 +1919,36 @@ private montarImpacto(compra: CompraProgramada, itens: ItemImpacto[]): ImpactoCo
   };
 }
 
-/** Altera a quantidade de um item. Compra confirmada recalcula a disponibilidade (D5.11). */
+/**
+ * Altera a quantidade de um item. **Substitui** o `atualizarItem` atual
+ * (`compras-programadas.service.ts:171-219`), que barrava compra confirmada via `assertEditavel` —
+ * é exatamente essa guarda que D5.11 revoga para o item. Compra confirmada recalcula a
+ * disponibilidade na mesma transação.
+ */
 async atualizarItem(
   compraId: string,
   itemId: string,
   dto: AtualizarItemCompraDto,
   usuarioId: string,
-): Promise<{ impacto: ImpactoCompra }> {
+): Promise<{ item: CompraProgramadaItem; impacto: ImpactoCompra }> {
   const resultado = await this.db.transaction(async (tx) => {
-    const compra = await this.obterSobLock(tx, compraId);
+    const compra = await this.buscarAtivaSobLock(tx, compraId);
     if (compra.status === 'cancelada') {
       throw new ConflictException('Compra cancelada não pode ser alterada');
     }
 
-    const item = await tx.select().from(comprasProgramadasItens)
+    const [item] = await tx.select().from(comprasProgramadasItens)
       .where(and(
         eq(comprasProgramadasItens.id, itemId),
         eq(comprasProgramadasItens.compraProgramadaId, compraId),
         isNull(comprasProgramadasItens.deletedAt),
       ))
-      .for('update')
-      .then((r) => r[0]);
+      .for('update');
     if (!item) throw new NotFoundException('Item da compra não encontrado');
 
     const confirmada = compra.status === 'confirmada';
     if (confirmada) {
-      const projetado = await this.disponibilidade.projetarImpacto(
+      const projetado = await this.disponibilidadeService.projetarImpacto(
         tx, compraId, new Map([[item.itemCompraId, dto.quantidadeComprada]]),
       );
       const impacto = this.montarImpacto(compra, projetado);
@@ -1755,7 +1962,11 @@ async atualizarItem(
     }
 
     const [atualizado] = await tx.update(comprasProgramadasItens)
-      .set({ quantidadeComprada: dto.quantidadeComprada, updatedAt: new Date() })
+      .set({
+        quantidadeComprada: dto.quantidadeComprada,
+        observacoes: dto.observacoes ?? item.observacoes,
+        updatedAt: new Date(),
+      })
       .where(eq(comprasProgramadasItens.id, itemId))
       .returning();
     if (!atualizado) throw new Error('Falha ao atualizar item da compra');
@@ -1770,14 +1981,22 @@ async atualizarItem(
       dadosNovos: atualizado,
     });
 
-    if (confirmada) await this.disponibilidade.recalcularParaCompra(tx, compra, usuarioId);
+    if (confirmada) await this.disponibilidadeService.recalcularParaCompra(tx, compra, usuarioId);
 
-    const itens = await this.disponibilidade.projetarImpacto(tx, compraId, new Map());
-    return { compra, impacto: this.montarImpacto(compra, itens) };
+    const itens = await this.disponibilidadeService.projetarImpacto(tx, compraId, new Map());
+    return { compra, item: atualizado, impacto: this.montarImpacto(compra, itens) };
   });
 
   if (resultado.compra.status === 'confirmada') {
-    const dataOperacao = await this.dataDaOperacao(resultado.compra.operacaoId);
+    // Mesma leitura pós-commit de `confirmar` (compras-programadas.service.ts:265-269), porém sem
+    // o `?? ''` de lá: `dataOperacao` é a room do broadcast e uma string vazia publicaria em
+    // `operacao:` — falha silenciosa (RA-05/RA-06). A operação é FK obrigatória da compra.
+    const [linhaOperacao] = await this.db
+      .select({ data: operacoes.data })
+      .from(operacoes)
+      .where(eq(operacoes.id, resultado.compra.operacaoId));
+    if (!linhaOperacao) throw new NotFoundException('Operação da compra não encontrada');
+    const dataOperacao = linhaOperacao.data;
     this.eventEmitter.emit(EVENTOS.COMPRA_ALTERADA_IMPACTO, {
       compraId: resultado.compra.id,
       operacaoId: resultado.compra.operacaoId,
@@ -1790,15 +2009,16 @@ async atualizarItem(
       })),
     });
   }
-  return { impacto: resultado.impacto };
+  return { item: resultado.item, impacto: resultado.impacto };
 }
 
 /** Histórico derivado da auditoria (D5.9) — sem tabela paralela. */
 async historico(compraId: string): Promise<Array<{
-  id: string; dataHora: string; usuarioNome: string; tabela: string;
+  id: string; dataHora: string;   usuarioNome: string | null; tabela: string;
   operacao: string; dadosAnteriores: unknown; dadosNovos: unknown;
 }>> {
-  await this.obterOuFalhar(compraId);
+  const compra = await this.buscarAtiva(compraId);
+  if (!compra) throw new NotFoundException('Compra programada não encontrada');
   const itens = await this.db.select({ id: comprasProgramadasItens.id })
     .from(comprasProgramadasItens)
     .where(eq(comprasProgramadasItens.compraProgramadaId, compraId));
@@ -1825,7 +2045,8 @@ async historico(compraId: string): Promise<Array<{
   return linhas.map((l) => ({
     id: l.id,
     dataHora: l.createdAt.toISOString(),
-    usuarioNome: l.usuarioNome ?? 'Sistema',
+    // Sem autor conhecido o campo vai `null` — a tela mostra "—". Não inventar nome (RA-06).
+    usuarioNome: l.usuarioNome,
     tabela: l.tabela,
     operacao: l.operacao,
     dadosAnteriores: l.dadosAnteriores,
@@ -1834,15 +2055,36 @@ async historico(compraId: string): Promise<Array<{
 }
 ```
 
-> `assertEditavel` continua existindo e continua guardando `atualizar` (campos de cabeçalho da
-> compra) e `remover`. A liberação de D5.11 vale **apenas** para `atualizarItem`, que tem a sua
-> própria guarda (`cancelada` bloqueada) e o seu próprio caminho de recálculo.
+> `assertEditavel` (`compras-programadas.service.ts:317-321`) continua existindo e continua guardando
+> `atualizar` (campos de cabeçalho da compra) e `cancelar`. A liberação de D5.11 vale **apenas** para
+> `atualizarItem`, que deixa de chamá-lo e passa a ter a sua própria guarda (`cancelada` bloqueada) e
+> o seu próprio caminho de recálculo. `buscarAtiva` continua sendo usado por `detalhar`, `atualizar`,
+> `confirmar` e `cancelar` — nada muda para eles.
 
-**5.4** Em `compras-programadas.controller.ts`:
+**Imports novos no arquivo:** `inArray` (de `drizzle-orm`, junto de `and/desc/eq/isNull/ne/sql`) e
+`auditoria` + `usuarios` (de `../../../database/schema`, junto de `comprasProgramadas`,
+`comprasProgramadasItens` e `operacoes`); `ItemImpacto` passa a ser importado do
+`disponibilidade.service.ts` no mesmo `import type` que já traz `DisponibilidadeGerada`
+(`compras-programadas.service.ts:18`). `NotFoundException` e `ConflictException` já estão
+importados.
+
+**5.4** Em `compras-programadas.controller.ts`.
+
+Idioma real deste controller (`compras-programadas.controller.ts:1-24`), válido para **todos** os
+controllers desta onda: o decorator de RBAC é `@RequirePermissoes(...)` (plural, de
+`common/rbac/require-permissoes.decorator.ts`) e o usuário vem de `@CurrentUser() user:
+CurrentUserPayload` (de `common/decorators/current-user.decorator.ts`), cujo id é **`user.sub`**.
+Não existem `@RequirePermissao`, `@UsuarioAtual` nem `UsuarioAutenticado`. `ParseUUIDPipe` vem de
+`@nestjs/common` e é usado só nos endpoints novos; os existentes ficam com `@Param('id')` como
+estão, para não mudar o código de erro de rotas já em produção.
+
+O `@Patch(':id/itens/:itemId')` **já existe** (`compras-programadas.controller.ts:56-65`): trocar o
+pipe de `updateCompraItemSchema` para `atualizarItemCompraSchema` e remover o import do schema
+antigo, que deixa de existir.
 
 ```ts
 @Get(':id/impacto')
-@RequirePermissao('COMPRAS_PROGRAMADAS_LER')
+@RequirePermissoes('COMPRAS_PROGRAMADAS_LER')
 async impacto(
   @Param('id', ParseUUIDPipe) id: string,
   @Query(new ZodValidationPipe(impactoQuerySchema)) query: ImpactoQueryDto,
@@ -1851,20 +2093,20 @@ async impacto(
 }
 
 @Get(':id/historico')
-@RequirePermissao('COMPRAS_PROGRAMADAS_LER')
+@RequirePermissoes('COMPRAS_PROGRAMADAS_LER')
 async historico(@Param('id', ParseUUIDPipe) id: string) {
   return this.service.historico(id);
 }
 
 @Patch(':id/itens/:itemId')
-@RequirePermissao('COMPRAS_PROGRAMADAS_GERENCIAR')
+@RequirePermissoes('COMPRAS_PROGRAMADAS_GERENCIAR')
 async atualizarItem(
   @Param('id', ParseUUIDPipe) id: string,
   @Param('itemId', ParseUUIDPipe) itemId: string,
   @Body(new ZodValidationPipe(atualizarItemCompraSchema)) dto: AtualizarItemCompraDto,
-  @UsuarioAtual() usuario: UsuarioAutenticado,
+  @CurrentUser() user: CurrentUserPayload,
 ) {
-  return this.service.atualizarItem(id, itemId, dto, usuario.id);
+  return this.service.atualizarItem(id, itemId, dto, user.sub);
 }
 ```
 
@@ -1882,31 +2124,43 @@ describe('montarImpacto', () => {
 
 `test/integration/compras-impacto.e2e-spec.ts` — cenário base: operação + item de compra
 "Boi casado" + regras AD-01 (2 TZ, 2 DT, 2 PA) + compra de 100 bois confirmada + pedido reservando
-150 TZ. Casos 1.1 a 1.10 do mapa DoD, um `it` por linha, com estes asserts centrais:
+150 TZ. Casos 1.1 a 1.10 do mapa DoD, um `it` por linha.
+
+Autenticação: **cookie**, não `Authorization: Bearer`. Toda a suíte de integração usa
+`createTestUser` + `loginCookies` e `.set('Cookie', …)` (ver
+`compras-programadas.e2e-spec.ts:12-19`); não há emissão de token bruto nos helpers.
+
+O helper existente é `lerDisponibilidade(app, itemComercialId)`
+(`test/helpers/comercial-fixtures.ts:66-82`) — dois argumentos, lendo direto pelo Drizzle, e filtra
+só por item comercial. Serve como está para este cenário (uma única compra); **não** inventar uma
+assinatura com `compraId`. Se algum caso desta onda precisar distinguir duas compras do mesmo item
+(DoD 2.3/2.4), acrescentar um terceiro parâmetro opcional `compraProgramadaId` ao helper, no commit
+que precisar dele. Asserts centrais:
 
 ```ts
 it('409 não persiste nada', async () => {
-  const antes = await lerDisponibilidade(app, compraId, tzId);
+  const antes = await lerDisponibilidade(app, tzId);
   const { body } = await request(app.getHttpServer())
     .patch(`/comercial/compras-programadas/${compraId}/itens/${itemId}`)
-    .set('Authorization', `Bearer ${tokenCompras}`)
+    .set('Cookie', comprasCookies)
     .send({ quantidadeComprada: '60.000' })
     .expect(409);
 
   expect(body.codigo).toBe('IMPACTO_CONFIRMACAO_NECESSARIA');
   expect(body.impacto.deficitTotal).toBe('30.000');
-  const depois = await lerDisponibilidade(app, compraId, tzId);
+  const depois = await lerDisponibilidade(app, tzId);
   expect(depois).toEqual(antes);
 });
 
 it('recálculo atômico da disponibilidade', async () => {
-  await request(app.getHttpServer())
+  const { body } = await request(app.getHttpServer())
     .patch(`/comercial/compras-programadas/${compraId}/itens/${itemId}`)
-    .set('Authorization', `Bearer ${tokenCompras}`)
+    .set('Cookie', comprasCookies)
     .send({ quantidadeComprada: '60.000', confirmarDeficit: true })
     .expect(200);
 
-  const dv = await lerDisponibilidade(app, compraId, tzId);
+  expect(body.item.quantidadeComprada).toBe('60.000');
+  const dv = await lerDisponibilidade(app, tzId);
   expect(dv.quantidadeTotalGerada).toBe('120.000');
   expect(dv.quantidadeReservada).toBe('150.000');
   expect(dv.quantidadeDisponivel).toBe('0.000');
@@ -1914,7 +2168,78 @@ it('recálculo atômico da disponibilidade', async () => {
 });
 ```
 
-**Verificação:** `cd app/backend && npm run test -- impacto-compra compras-impacto`.
+**5.6** Ajustar as suítes existentes que o novo contrato quebra — **no mesmo commit**, senão a Task 5
+entrega o CI vermelho.
+
+`test/integration/compras-programadas.e2e-spec.ts`:
+
+- Título do `describe` (linha 6): "CRUD + RBAC + imutabilidade" → "CRUD + RBAC + edição de item",
+  porque D5.11 revoga a imutabilidade **do item** (a do cabeçalho, via `assertEditavel`, continua).
+- "permite editar item enquanto em rascunho" (linhas 59-73): a resposta agora é
+  `{ item, impacto }`. Trocar `expect(Number(res.body.quantidadeComprada)).toBe(20)` por
+  `expect(Number(res.body.item.quantidadeComprada)).toBe(20)` e acrescentar
+  `expect(res.body.impacto).toBeDefined()`. O payload `{ quantidadeComprada: 20 }` (number) **segue
+  válido** pela união do schema de 5.2 — é justamente o caso que prova a decisão de contrato.
+- "IMUTABILIDADE: editar item após confirmar retorna 409" (linhas 75-95) — **este teste afirma o
+  contrário de D5.11 e é substituído**, não remendado. No lugar dele, dois casos:
+
+```ts
+it('D5.11: compra confirmada aceita edição de item e recalcula a disponibilidade', async () => {
+  // cenário do arquivo: seedComercialBase({ fator: 4 }), sem reserva nenhuma → sem déficit,
+  // portanto não exige confirmarDeficit.
+  const criar = await request(app.getHttpServer())
+    .post('/comercial/compras-programadas')
+    .set('Cookie', comprasCookies)
+    .send(novaCompra({ dataOperacao: '2026-07-04' }));
+  const compraId = criar.body.id;
+  const itemId = criar.body.itens[0].id;
+
+  await request(app.getHttpServer())
+    .post(`/comercial/compras-programadas/${compraId}/confirmar`)
+    .set('Cookie', comprasCookies)
+    .expect(201);
+
+  const editar = await request(app.getHttpServer())
+    .patch(`/comercial/compras-programadas/${compraId}/itens/${itemId}`)
+    .set('Cookie', comprasCookies)
+    .send({ quantidadeComprada: '99.000', observacoes: 'ajuste do fornecedor' });
+
+  expect(editar.status).toBe(200);
+  expect(editar.body.item.quantidadeComprada).toBe('99.000');
+  expect(editar.body.item.observacoes).toBe('ajuste do fornecedor'); // observação preservada
+  expect(editar.body.impacto.exigeConfirmacao).toBe(false);
+
+  const dv = await lerDisponibilidade(app, base.itemComercialId);
+  expect(Number(dv?.quantidadeTotalGerada)).toBe(99 * base.fator); // fator 4 do fixture
+});
+
+it('IMUTABILIDADE: compra CANCELADA continua recusando edição de item (409)', async () => {
+  /* cria, cancela via DELETE /:id e espera 409 no PATCH do item */
+});
+```
+
+O arquivo passa a importar `lerDisponibilidade` junto de `seedComercialBase`
+(`compras-programadas.e2e-spec.ts:4`); `base.itemComercialId` e `base.fator` já vêm do fixture
+(`comercial-fixtures.ts:56-62`).
+
+`test/unit/compras-programadas-branches.spec.ts` (casos das linhas 108-151):
+
+- os dois casos de 404 passam `{} as never` como dto; passar `{ quantidadeComprada: '25.000',
+  confirmarDeficit: false }`, já que a quantidade virou obrigatória;
+- "atualizarItem → usa quantidadeComprada informada no dto" espera `v.quantidadeComprada === '25'` a
+  partir de `{ quantidadeComprada: 25 }`; com a normalização de 5.2 o service recebe **`'25.000'`**
+  do pipe, então o dto do teste passa a ser `{ quantidadeComprada: '25.000' }` e a expectativa
+  `'25.000'`. O retorno passa a ser lido como `result.item`;
+- o mock precisa cobrir o novo caminho: `buscarAtivaSobLock` usa `.for('update')` e, para compra
+  `confirmada`, `atualizarItem` chama `projetarImpacto`/`recalcularParaCompra` — acrescentar os dois
+  ao fake de `DisponibilidadeService` já usado no arquivo.
+
+`app/frontend/src/app/api/comercial/compras-programadas/[id]/itens/[itemId]/route.ts`: o tipo do
+`fetchBackend` deixa de ser `CompraProgramadaDetalhe` e passa a ser
+`{ item: CompraProgramadaItem; impacto: ImpactoCompra }` (Task 14.1 declara os tipos). O repasse de
+status/corpo não muda — inclusive no 409, que a tela precisa ler íntegro.
+
+**Verificação:** `cd app/backend && npm run test -- impacto-compra compras-impacto compras-programadas`.
 
 **Commit:** `feat(onda5): painel de impacto e edição de compra confirmada com recálculo atômico`
 
@@ -1980,13 +2305,8 @@ private async obterAtiva(id: string): Promise<Pendencia> {
   return atual;
 }
 
-/** Data da Operação — obrigatória nos payloads: é a room do broadcast (roomsDaData). */
-private async dataDaOperacao(tx: Tx, operacaoId: string): Promise<string> {
-  const linha = await tx.select({ data: operacoes.data }).from(operacoes)
-    .where(eq(operacoes.id, operacaoId)).then((r) => r[0]);
-  if (!linha) throw new NotFoundException('Operação da pendência não encontrada');
-  return linha.data;
-}
+// `dataDaOperacao(tx, operacaoId)` já foi criado neste arquivo pela Task 2.5.2 — reusar, não
+// redefinir.
 
 async cobertura(id: string): Promise<CoberturaPendencia> {
   const pendencia = await this.obterAtiva(id);
@@ -2473,13 +2793,13 @@ Em `pedidos.module.ts`, adicionar `exports: [PedidosService]`; em `overbooking.m
 
 ```ts
 @Get(':id/cobertura')
-@RequirePermissao('PEDIDOS_LER')
+@RequirePermissoes('PEDIDOS_LER')
 async cobertura(@Param('id', ParseUUIDPipe) id: string) {
   return this.service.cobertura(id);
 }
 
 @Get(':id/historico')
-@RequirePermissao('PEDIDOS_LER')
+@RequirePermissoes('PEDIDOS_LER')
 async historico(@Param('id', ParseUUIDPipe) id: string) {
   return this.service.historico(id);
 }
@@ -2494,19 +2814,29 @@ dataOperacao, status }`, com `dataOperacao` lido por `dataDaOperacao(tx, atual.o
 transação e devolvido junto do agregado. Sem `dataOperacao` o handler da Task 2.5 publicaria em
 `operacao:undefined`. O comportamento de negócio de `alterarStatus` não muda.
 
-**6.7** Testes: `test/integration/overbooking-decisao.e2e-spec.ts`, casos 2.1 a 2.11 do mapa DoD.
+**6.7** Testes: `test/integration/overbooking-decisao.e2e-spec.ts`, casos 2.1 a 2.14 do mapa DoD.
+Autenticação por **cookie** (`loginCookies` + `.set('Cookie', …)`), como no restante da suíte — não
+há token bruto nos helpers.
+
+Antes dos casos novos, ajustar o **teste existente** que esta task quebra:
+`test/unit/overbooking-branches.spec.ts:164-192` ("decidir emite evento de resolvida") chama
+`decidir('p1', { status: 'resolvida', detalhe: { ok: true } }, 'user-1')`, que é a assinatura do
+`decidir` **alias** substituído em 6.3. Reescrever o caso para o DTO discriminado
+(`{ caminho: 'compra_complementar', compraProgramadaId, quantidade }`) e estender o fake de `db`
+com as leituras que os novos caminhos fazem. Sem isso a Task 6 entrega o CI vermelho.
+
 Asserts centrais:
 
 ```ts
 it('redistribuição preserva o agregado', async () => {
-  const antes = await lerDisponibilidade(app, compraId, tzId);
+  const antes = await lerDisponibilidade(app, tzId);
   await request(app.getHttpServer())
     .post(`/comercial/overbooking/${pendenciaId}/decisao`)
-    .set('Authorization', `Bearer ${tokenGestor}`)
+    .set('Cookie', gestorCookies)
     .send({ caminho: 'redistribuicao', reservaOrigemId, quantidade: '4.000' })
     .expect(201);
 
-  const depois = await lerDisponibilidade(app, compraId, tzId);
+  const depois = await lerDisponibilidade(app, tzId);
   expect(depois.quantidadeReservada).toBe(antes.quantidadeReservada);
   expect(depois.quantidadeDisponivel).toBe(antes.quantidadeDisponivel);
 
@@ -2519,7 +2849,7 @@ it('postergação parcial gera novo pedido e abate o déficit uma única vez', a
   // item de 10, déficit 6 → posterga 4: sobra item de 6 na origem e déficit 2 na pendência
   const { body } = await request(app.getHttpServer())
     .post(`/comercial/overbooking/${pendenciaId}/decisao`)
-    .set('Authorization', `Bearer ${tokenGestor}`)
+    .set('Cookie', gestorCookies)
     .send({
       caminho: 'novo_pedido', quantidade: '4.000',
       operacaoDestinoId: proximaOperacaoId, compraProgramadaId: compraDestinoId,
@@ -2538,7 +2868,7 @@ it('postergação total remove o item de origem e encerra a pendência', async (
   // item de 6 inteiramente em overbooking → posterga 6: reduzirItem seria inválido
   const { body } = await request(app.getHttpServer())
     .post(`/comercial/overbooking/${pendenciaId}/decisao`)
-    .set('Authorization', `Bearer ${tokenGestor}`)
+    .set('Cookie', gestorCookies)
     .send({
       caminho: 'novo_pedido', quantidade: '6.000',
       operacaoDestinoId: proximaOperacaoId, compraProgramadaId: compraDestinoId,
@@ -2815,34 +3145,34 @@ export class AprovacoesController {
   ) {}
 
   @Get()
-  @RequirePermissao('APROVACOES_LER')
+  @RequirePermissoes('APROVACOES_LER')
   listar(@Query(new ZodValidationPipe(listarAprovacoesSchema)) query: ListarAprovacoesDto) {
     return this.service.listar(query);
   }
 
   @Get('ocorrencias/:id/comparativo')
-  @RequirePermissao('APROVACOES_LER')
+  @RequirePermissoes('APROVACOES_LER')
   comparativoDaOcorrencia(@Param('id', ParseUUIDPipe) id: string) {
     return this.comparativo.doOcorrencia(id);
   }
 
   @Post('operacionais')
-  @RequirePermissao('APROVACOES_SOLICITAR')
+  @RequirePermissoes('APROVACOES_SOLICITAR')
   abrir(
     @Body(new ZodValidationPipe(abrirAprovacaoSchema)) dto: AbrirAprovacaoDto,
-    @UsuarioAtual() usuario: UsuarioAutenticado,
+    @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.service.abrir(dto, usuario.id);
+    return this.service.abrir(dto, user.sub);
   }
 
   @Post('operacionais/:id/decidir')
-  @RequirePermissao('APROVACOES_DECIDIR')
+  @RequirePermissoes('APROVACOES_DECIDIR')
   decidir(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(decidirAprovacaoSchema)) dto: DecidirAprovacaoDto,
-    @UsuarioAtual() usuario: UsuarioAutenticado,
+    @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.service.decidir(id, dto, usuario.id);
+    return this.service.decidir(id, dto, user.sub);
   }
 }
 ```
@@ -3694,8 +4024,9 @@ extraordinária, envia e trata erro do backend; badge P1 presente.
 
 **Protótipo:** `src/app/pages/CompraProgramada.tsx` (791 linhas).
 
-**14.1** `src/lib/comercial.ts`: acrescentar `ImpactoCompra`, `ItemImpacto` e `HistoricoCompraItem`
-(espelho dos contratos da Task 5).
+**14.1** `src/lib/comercial.ts`: acrescentar `ImpactoCompra`, `ItemImpacto`, `HistoricoCompraItem`
+(com `usuarioNome: string | null`) e `RespostaEdicaoItem = { item: CompraProgramadaItem; impacto:
+ImpactoCompra }` — espelho dos contratos da Task 5.
 
 **14.2** Em `compras-client.tsx` (D5.31), acrescentar:
 - o aviso do protótipo linha `653` acima da lista;
@@ -3706,8 +4037,18 @@ extraordinária, envia e trata erro do backend; badge P1 presente.
 - "Salvar alteração" → `PATCH /api/comercial/compras-programadas/:id/itens/:itemId`;
 - ao receber 409 com `codigo === 'IMPACTO_CONFIRMACAO_NECESSARIA'`, exibir o `impacto` do corpo do
   erro e habilitar "Salvar mesmo assim", que repete a chamada com `confirmarDeficit: true`;
-- bloco "Histórico de alterações desta compra" (`GET /:id/historico`), com data/hora, autor e
-  descrição da mudança montada a partir de `dadosAnteriores`/`dadosNovos`.
+- bloco "Histórico de alterações desta compra" (`GET /:id/historico`), com data/hora, autor
+  (`usuarioNome` nulo renderiza "—", nunca um nome inventado) e descrição da mudança montada a
+  partir de `dadosAnteriores`/`dadosNovos`.
+
+**14.2.1 — ajuste do caminho de salvamento que já existe.** `compras-client.tsx:164-176` já faz
+`PATCH /itens/:itemId` para cada item ao salvar, enviando `{ quantidadeComprada: number,
+observacoes }`. Com o contrato da Task 5.2 esse envio **continua válido** (a união aceita number e
+`observacoes` foi mantida), mas a resposta deixa de ser o item cru e passa a ser `{ item, impacto }`
+— hoje o retorno é ignorado, então nada quebra em runtime; o que muda é o tipo em
+`api/comercial/compras-programadas/[id]/itens/[itemId]/route.ts` (Task 5.6). O laço também passa a
+tratar o 409 `IMPACTO_CONFIRMACAO_NECESSARIA`: em vez de seguir para o próximo item silenciosamente,
+interrompe o salvamento e abre o painel de impacto (RA-05 — nenhuma falha silenciosa).
 
 **14.3** Teste `__tests__/painel-impacto.test.tsx` cobre o componente; o fluxo do modal (409 →
 "Salvar mesmo assim") é coberto em `__tests__/compras-client.test.tsx` (arquivo novo, mesmo commit).
@@ -3958,7 +4299,7 @@ quem implementa.
 | Decisões de design fixadas (o Worker não escolhe) | Sim — D5.1 a D5.32 |
 | Referências do protótipo por tela, com arquivo e linhas | Sim — 7 linhas na tabela, commit do protótipo fixado |
 | Estrutura de arquivos (novos e alterados) | Sim — 25 novos + 22 alterados no backend; 34 novos + 12 alterados + 11 de teste no frontend |
-| Mapa DoD → teste 1:1 | Sim — 60 critérios, cada um com arquivo e nome de teste |
+| Mapa DoD → teste 1:1 | Sim — 63 critérios, cada um com arquivo e nome de teste |
 | Schemas e caminhos auditados no código real, não presumidos | Sim — seção "Estado atual verificado" lista as colunas que **não** existem (`transformacoes.operacao_id`, `pecas.operacao_id`, `notas_fiscais.operacao_id`, `notas_fiscais_fornecedor.chave_acesso`, `recebimentos.numero_lote`, campo de seguro em `caminhoes`) e o JOIN correto de cada uma; os CHECKs que restringem os `UPDATE`s da onda (`chk_reservas_qtd_positiva`, `chk_pend_ovb_deficit`, `chk_pedidos_itens_pedida_positiva`) estão citados com arquivo e linha no ponto de uso |
 | Eventos novos com destino real (não só emitidos) | Sim — Task 2.5 liga os 7 eventos ao `realtime.gateway.ts`, com `dataOperacao` no payload (é a room) |
 | Rotas BFF compatíveis com o roteador do Next | Sim — só rotas explícitas; catch-all irmão de `[id]` é proibido e o `npm run build` da Task 10.7 é o gate |
