@@ -81,6 +81,12 @@ export const PERMISSOES = {
   PEDIDO_FORNECEDOR_GERENCIAR: 'PEDIDO_FORNECEDOR_GERENCIAR',
   CONFERENCIA_CONCLUIR: 'CONFERENCIA_CONCLUIR',
   PEDIDO_FINALIZAR: 'PEDIDO_FINALIZAR',
+
+  // Onda 4 — Comercial (tabela de preços, espelho e liberação administrativa de reserva).
+  TABELA_PRECO_LER: 'TABELA_PRECO_LER',
+  TABELA_PRECO_GERENCIAR: 'TABELA_PRECO_GERENCIAR',
+  ESPELHO_COMERCIAL_LER: 'ESPELHO_COMERCIAL_LER',
+  PEDIDO_RESERVA_LIBERAR: 'PEDIDO_RESERVA_LIBERAR',
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -336,6 +342,18 @@ pushPermissoes(
 );
 pushPermissoes('recebimento_pesagem', 'MODELOS_ETIQUETA_LER');
 pushPermissoes('corte', 'MODELOS_ETIQUETA_LER');
+pushPermissoes(
+  'administrador',
+  'TABELA_PRECO_LER', 'TABELA_PRECO_GERENCIAR',
+  'ESPELHO_COMERCIAL_LER', 'PEDIDO_RESERVA_LIBERAR',
+);
+pushPermissoes(
+  'gestor',
+  'TABELA_PRECO_LER', 'TABELA_PRECO_GERENCIAR',
+  'ESPELHO_COMERCIAL_LER', 'PEDIDO_RESERVA_LIBERAR',
+);
+pushPermissoes('comercial', 'TABELA_PRECO_LER', 'ESPELHO_COMERCIAL_LER');
+pushPermissoes('expedicao', 'ESPELHO_COMERCIAL_LER');
 
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
@@ -400,4 +418,8 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   PEDIDO_FORNECEDOR_GERENCIAR: 'Gerenciar pedidos ao fornecedor',
   CONFERENCIA_CONCLUIR: 'Concluir conferência Pedido×NF×Pesagem',
   PEDIDO_FINALIZAR: 'Finalizar pedido de venda',
+  TABELA_PRECO_LER: 'Consultar tabelas de preço e histórico de publicação',
+  TABELA_PRECO_GERENCIAR: 'Criar, editar, copiar e publicar tabelas de preço',
+  ESPELHO_COMERCIAL_LER: 'Consultar e exportar o espelho comercial',
+  PEDIDO_RESERVA_LIBERAR: 'Liberar administrativamente a reserva de um rascunho (AD-06)',
 };

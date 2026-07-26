@@ -270,4 +270,25 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     const titulos = new Set(PERFIS.flatMap((p) => filtrarMenuPorMenusVisiveis(menusDe(p)).map((g) => g.title)));
     expect([...titulos].sort()).toEqual(MENU_V2.map((g) => g.title).sort());
   });
+
+  it('menus visiveis por perfil batem com a matriz apos as permissoes da onda 4', () => {
+    // As 4 permissões da Onda 4 são de API, não de menu: o menu por perfil não pode se mexer.
+    for (const perfil of PERFIS) {
+      expect(rotasVisiveis(perfil).sort()).toEqual(menusDaMatriz(perfil));
+    }
+    expect(ROTAS_CANONICAS).toHaveLength(39);
+    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(126);
+
+    // E as permissões novas chegaram ao snapshot, nos perfis de D21.
+    const novas = [
+      'TABELA_PRECO_LER', 'TABELA_PRECO_GERENCIAR',
+      'ESPELHO_COMERCIAL_LER', 'PEDIDO_RESERVA_LIBERAR',
+    ];
+    expect(PERMISSOES_POR_PERFIL.administrador).toEqual(expect.arrayContaining(novas));
+    expect(PERMISSOES_POR_PERFIL.gestor).toEqual(expect.arrayContaining(novas));
+    expect(PERMISSOES_POR_PERFIL.comercial)
+      .toEqual(expect.arrayContaining(['TABELA_PRECO_LER', 'ESPELHO_COMERCIAL_LER']));
+    expect(PERMISSOES_POR_PERFIL.comercial).not.toContain('PEDIDO_RESERVA_LIBERAR');
+    expect(PERMISSOES_POR_PERFIL.expedicao).toContain('ESPELHO_COMERCIAL_LER');
+  });
 });
