@@ -49,9 +49,12 @@ export class RepresentantesService {
     if (query.tipoCanal) filtros.push(eq(representantes.tipoCanal, query.tipoCanal));
     const where = and(...filtros.filter(Boolean));
 
+    // "representantes"."id" precisa vir totalmente qualificado: interpolar ${representantes.id}
+    // aqui emitiria só "id", que o Postgres resolveria para clientes.id (mesmo nome de coluna),
+    // zerando a contagem sempre — bug real encontrado ao escrever o teste do DoD-83.
     const contagemClientes = sql<number>`(
     select count(*)::int from ${clientes}
-    where ${clientes.representanteId} = ${representantes.id}
+    where ${clientes.representanteId} = "representantes"."id"
       and ${clientes.deletedAt} is null
   )`;
 
