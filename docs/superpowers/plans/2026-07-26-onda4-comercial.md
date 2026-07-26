@@ -42,6 +42,7 @@ Jest (backend e frontend) · Playwright (e2e).
 | Branch de implementação | `feature/onda4-comercial` (criada a partir de `origin/develop` pelo Worker) |
 | Emenda 1 | Portão 1 `ajustar` em `158da75` → achados 1–10 corrigidos; API real reauditada no worktree |
 | Emenda 2 | Re-Portão 1 `ajustar` em `8229ff9` → 6 achados novos corrigidos: estado **E** do mapa passa a `status_carga_item <> 'removido'` (padrão real de `conferencia`/`fechamento`/`carga`/`liberacao`/`consolidacao`); caminho literal para operação inexistente em AD-03; DoD-109/112 ganham task própria (Task 20); DoD-113 vira teste escrito em `menu-rbac.test.ts`; `salvarItens`, `precosDaUltimaPublicada`, `exigirTabela` e `detalhar` escritos por extenso; linha 3 da matriz fechada por **D31** |
+| Emenda 3 | 3º Portão 1 `ajustar` em `a71d03f` → achados novos da Task 9: `criar` deixa de chamar `detalhar` **dentro** da transação (outra conexão do pool → 404 + rollback) e passa a lê-lo após o commit, como `publicar`/`salvarItens`; o `.returning()` de `criar` usa `primeiroOuFalha` (`noUncheckedIndexedAccess`); `POST /precos/tabelas/:id/copiar` ganha regra (D14), corpo literal e **DoD-122/123/124**, deixando de ser rota órfã. Menores: `PrecosController` e o `@Get('aberto')` de pedidos por extenso, `arquivos`/`ler` (Task 13) e `arquivosDeCodigo` (Task 20) definidos |
 
 ---
 
@@ -173,10 +174,24 @@ status.
 `tabelas_preco_publicacoes` (histórico append-only de `publicada` | `revertida_para_rascunho`).
 Índice único parcial em `data` com `deleted_at IS NULL`: uma tabela por dia.
 
-**D14 — Criar tabela do dia é ação explícita.** `POST /precos/tabelas { data }` cria o rascunho com
-uma linha por produto ativo do catálogo, copiando os preços da última tabela **publicada**; se não
-houver nenhuma, os 4 preços nascem `NULL` e a UI mostra campo vazio (RA-06). A tela não cria nada
-sozinha ao carregar. Divergência **D-04**.
+**D14 — Criar tabela do dia é ação explícita; copiar da anterior é outra ação explícita.**
+`POST /precos/tabelas { data }` cria o rascunho com uma linha por produto ativo do catálogo,
+copiando os preços da última tabela **publicada**; se não houver nenhuma, os 4 preços nascem `NULL`
+e a UI mostra campo vazio (RA-06). A tela não cria nada sozinha ao carregar. Divergência **D-04**.
+
+`POST /precos/tabelas/:id/copiar` é o botão **"Copiar tabela anterior"** do protótipo
+(`TabelaPrecos.tsx:158-162`) sobre uma tabela **já existente**, com corpo
+`{ origemId?: string }` e permissão `TABELA_PRECO_GERENCIAR`. Três regras, uma para cada
+ambiguidade que o endpoint teria:
+
+| Situação | Regra |
+|---|---|
+| **Sem `origemId`** | A origem é a última tabela **publicada com data anterior à do destino** — o "anterior" do rótulo, e o recorte que impede uma tabela publicada de copiar a si mesma. Se não existir nenhuma, `409 SEM_TABELA_PRECO_ANTERIOR` e nada é escrito: não se inventa preço nem se devolve sucesso vazio (RA-05/RA-06). Com `origemId`, a origem é aquela tabela (rascunho ou publicada), `404` se não existir e `400 COPIA_ORIGEM_IGUAL_AO_DESTINO` se for a própria. |
+| **Sobrescrita** | Para cada produto presente na origem, as 4 faixas do destino são **substituídas**, inclusive por `NULL` quando a origem não tem preço — copiar a ausência é copiar o dado real. Produto do destino que a origem não possui fica **intacto** (é o `{ ...it, ...TABELA_ANTERIOR[it.codigo] }` do protótipo). Produto da origem fora da grade do destino é ignorado: a grade é o catálogo ativo montado em `criar` e a cópia nunca insere linha nova. |
+| **Destino `publicada`** | Volta para `rascunho` e grava `revertida_para_rascunho` em `tabelas_preco_publicacoes`, exatamente como a edição de D16 e como `TabelaPrecos.tsx:160` faz. O botão **não** é bloqueado em tabela publicada — o protótipo não o bloqueia. |
+
+Tudo em uma transação com auditoria (`dadosNovos.acao = 'copiar_tabela_anterior'`). A cópia **não**
+emite evento: nada foi publicado. Cobertura: **DoD-122**, **DoD-123** e **DoD-124**.
 
 **D15 — Publicar exige tabela completa.** `POST /precos/tabelas/:id/publicar` retorna
 `400 PRECOS_INCOMPLETOS` com a lista de produtos sem os 4 preços. Sucesso grava `publicada_por`,
@@ -548,8 +563,8 @@ Caminho real localizado no protótipo (não existe `Clientes.tsx`; a tela de Cli
 
 ### 3. `/comercial/tabela-precos` → `src/app/pages/TabelaPrecos.tsx`
 
-- Cabeçalho com data, pílula de status (`Rascunho` | `Publicada`) e ações "Copiar da anterior",
-  "Salvar" e "Publicar".
+- Cabeçalho com data, pílula de status (`Rascunho` | `Publicada`) e as ações literais
+  "Copiar tabela anterior" (`202-206`), "Histórico" (`207-212`) e "Publicar" (`214-220`).
 - Grade com colunas Produto · Unidade · Preço A · Preço B · Preço C · Preço D.
 - `CATALOGO_INICIAL:29-41` — os 11 produtos e a unidade de preço (fonte do seed D5).
 - Banner âmbar de tabela publicada em edição (`223-228`) e `HISTORICO_INICIAL` (painel de histórico).
@@ -768,6 +783,9 @@ via `test/helpers/test-app.ts`.
 | DoD-95 | Preço ausente é `null` e a UI mostra campo vazio, nunca `0,00` | `app/frontend/__tests__/onda4-tabela-precos.test.tsx` › `preco ausente renderiza campo vazio e nunca zero fabricado` |
 | DoD-96 | Uma única tabela por data (índice único parcial) | `app/backend/test/integration/precos.e2e-spec.ts` › `recusa segunda tabela de preco para a mesma data` |
 | DoD-97 | `TABELA_PRECO_GERENCIAR` ausente → `403` em publicar | `app/backend/test/integration/precos.e2e-spec.ts` › `publicar sem TABELA_PRECO_GERENCIAR retorna 403` |
+| DoD-122 | **D14** — `POST /precos/tabelas/:id/copiar` sem `origemId` usa a última tabela **publicada com data anterior à do destino**; se não existir nenhuma, `409 SEM_TABELA_PRECO_ANTERIOR` e a grade fica intacta | `app/backend/test/integration/precos.e2e-spec.ts` › `copiar sem origemId usa a ultima publicada anterior e devolve 409 quando nao existe anterior` |
+| DoD-123 | **D14** — a cópia sobrescreve as 4 faixas de cada produto presente na origem, inclusive com `null`, e preserva os produtos que a origem não tem | `app/backend/test/integration/precos.e2e-spec.ts` › `copiar sobrescreve as faixas dos produtos da origem e preserva os ausentes` |
+| DoD-124 | **D14/D16** — copiar sobre tabela `publicada` devolve ao rascunho e registra `revertida_para_rascunho` no histórico | `app/backend/test/integration/precos.e2e-spec.ts` › `copiar em tabela publicada volta para rascunho e registra reversao no historico` |
 
 ### Disponibilidade
 
@@ -808,7 +826,7 @@ via `test/helpers/test-app.ts`.
 | DoD-120 | **Linha 3 da matriz / D31**: selecionar o cliente no editor preenche Representante e Rota a partir do cadastro, sem lista fixa e sem valor fabricado | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `selecionar cliente herda representante e rota do cadastro no editor de pedido` |
 | DoD-121 | Criar pedido em data **sem operação ativa** não executa AD-03 e cria a operação do dia; a busca de pedido aberto em data sem operação devolve `404 OPERACAO_NAO_ENCONTRADA` | `app/backend/test/integration/pedidos-onda4.e2e-spec.ts` › `criar em data sem operacao nao checa AD-03 e cria a operacao do dia` |
 
-**52 itens de DoD** (DoD-70 a DoD-121), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
+**55 itens de DoD** (DoD-70 a DoD-124), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
 do CI.
 
 ---
@@ -1416,8 +1434,24 @@ async buscarAberto(query: BuscarPedidoAbertoDto) {
 }
 ```
 
-   **Declarar este handler antes de `@Get(':id')`** no `PedidosController`, senão o Nest resolve
-   `aberto` como `:id` e o `ParseUUIDPipe`/`detalhar` quebra.
+   No `PedidosController`, o handler entra **entre `@Get()` e `@Get(':id')`**
+   (`pedidos.controller.ts:44-54`). A ordem é obrigatória: o Nest casa a primeira rota
+   compatível, então declarado depois de `@Get(':id')` a requisição cairia em `detalhar('aberto')`
+   e o Postgres rejeitaria `pedidos_venda.id = 'aberto'` como uuid inválido — erro 500 no lugar
+   do payload do modal.
+
+```ts
+@Get('aberto')
+@RequirePermissoes('PEDIDOS_LER')
+async buscarAberto(
+  @Query(new ZodValidationPipe(buscarPedidoAbertoSchema)) query: BuscarPedidoAbertoDto,
+) {
+  return this.service.buscarAberto(query);
+}
+```
+
+   `buscarPedidoAbertoSchema` e `BuscarPedidoAbertoDto` entram no import de `./dto/pedido.dto`
+   do controller, junto dos schemas já listados lá.
 6. Teste do ramo nulo (DoD-121), em `test/integration/pedidos-onda4.e2e-spec.ts`:
 
 ```ts
@@ -2019,11 +2053,13 @@ async liberarReserva(
 **Files:** `precos.module.ts`, `precos.controller.ts`, `precos.service.ts`,
 `dto/tabela-preco.dto.ts`, `app.module.ts`,
 `app/backend/test/unit/precos.service.spec.ts` (DoD-93, ordem commit→emit),
-`app/backend/test/integration/precos.e2e-spec.ts` (DoD-92, DoD-94, DoD-96, DoD-97).
+`app/backend/test/integration/precos.e2e-spec.ts` (DoD-92, DoD-94, DoD-96, DoD-97 e
+DoD-122 a DoD-124, os três da cópia).
 
 **Steps (TDD)**
 
-1. Testes primeiro (DoD-92 a DoD-94, DoD-96, DoD-97).
+1. Testes primeiro (DoD-92 a DoD-94, DoD-96, DoD-97, DoD-122, DoD-123 e DoD-124), com os nomes
+   exatos do *Mapa DoD → teste*.
 2. DTOs:
 
 ```ts
@@ -2052,7 +2088,7 @@ export const publicarTabelaPrecoSchema = z.object({
 
 ```ts
 async criar(dto: CriarTabelaPrecoDto, usuarioId: string) {
-  return this.db.transaction(async (tx) => {
+  const criada = await this.db.transaction(async (tx) => {
     const [existente] = await tx.select({ id: tabelasPreco.id }).from(tabelasPreco)
       .where(and(eq(tabelasPreco.data, dto.data), isNull(tabelasPreco.deletedAt)));
     if (existente) {
@@ -2061,8 +2097,14 @@ async criar(dto: CriarTabelaPrecoDto, usuarioId: string) {
         message: `Já existe tabela de preços para ${dto.data}.`,
       });
     }
-    const [tabela] = await tx.insert(tabelasPreco)
-      .values({ data: dto.data, observacao: dto.observacao }).returning();
+    // `primeiroOuFalha` (src/common/crud/paginacao.ts) porque sob `noUncheckedIndexedAccess`
+    // o `.returning()` é `T[]` e `linhas[0]` é `T | undefined` — mesmo padrão de
+    // `PedidosService.criar` (pedidos.service.ts:154) e dos 4 services de cadastros.
+    const tabela = primeiroOuFalha(
+      await tx.insert(tabelasPreco)
+        .values({ data: dto.data, observacao: dto.observacao }).returning(),
+      'Criação da tabela de preços não retornou registro',
+    );
     const catalogo = await tx.select({ id: produtos.id }).from(produtos)
       .where(and(eq(produtos.status, 'ativo'), eq(produtos.ativoVenda, true),
                  isNull(produtos.deletedAt)));
@@ -2079,10 +2121,19 @@ async criar(dto: CriarTabelaPrecoDto, usuarioId: string) {
       tabela: 'tabelas_preco', registroId: tabela.id, operacao: 'INSERT',
       modulo: 'comercial.precos', usuarioId, dadosNovos: { data: dto.data },
     });
-    return this.detalhar(tabela.id);
+    return tabela;
   });
+  // `detalhar` lê por `this.db`, que é OUTRA conexão do pool: chamado de dentro da transação
+  // ele não enxergaria as linhas ainda não commitadas e lançaria 404, revertendo a criação
+  // inteira. A leitura vai depois do commit — mesmo padrão de `publicar` e `salvarItens`.
+  return this.detalhar(criada.id);
 }
 ```
+
+   `primeiroOuFalha` entra nos imports de `../../../common/crud/paginacao`. É a única
+   desestruturação de `.returning()` da Task 9: os demais `const [x] = …` deste arquivo
+   (`existente`, `ultima`, `tabela` de `exigirTabela` e de `detalhar`) são `select` já
+   guardados por `if (!x)` ou por checagem de existência logo abaixo.
 
    `publicar` valida a completude antes de escrever:
 
@@ -2174,20 +2225,94 @@ async salvarItens(id: string, dto: SalvarItensTabelaPrecoDto, usuarioId: string)
 }
 ```
 
-   Os três helpers que `criar`, `publicar` e `salvarItens` chamam, por extenso — nenhum é citado
-   sem corpo:
+   `copiar` implementa a ação **"Copiar tabela anterior"** do protótipo
+   (`TabelaPrecos.tsx:158-162`) com as três regras de D14: origem, sobrescrita e destino publicado.
 
 ```ts
-/** Preços da última tabela publicada, indexados por produto. Vazio se nunca houve publicação. */
-private async precosDaUltimaPublicada(
-  tx: Tx,
-): Promise<Map<string, { precoA: string | null; precoB: string | null;
-                         precoC: string | null; precoD: string | null }>> {
-  const [ultima] = await tx.select({ id: tabelasPreco.id }).from(tabelasPreco)
-    .where(and(eq(tabelasPreco.status, 'publicada'), isNull(tabelasPreco.deletedAt)))
-    .orderBy(desc(tabelasPreco.data))
+async copiar(id: string, dto: CopiarTabelaPrecoDto, usuarioId: string) {
+  await this.db.transaction(async (tx) => {
+    const destino = await this.exigirTabela(tx, id);
+    if (dto.origemId === id) {
+      throw new BadRequestException({
+        code: 'COPIA_ORIGEM_IGUAL_AO_DESTINO',
+        message: 'A origem da cópia não pode ser a própria tabela.',
+      });
+    }
+    // Sem `origemId`, a origem é a última publicada ANTERIOR à data do destino — é o
+    // "Copiar tabela anterior" do protótipo, e o recorte por data também impede a tabela
+    // publicada de copiar a si mesma quando é a mais recente do banco.
+    const origem = dto.origemId
+      ? await this.precosDaTabela(tx, dto.origemId)
+      : await this.precosDaUltimaPublicada(tx, destino.data);
+    if (origem.size === 0) {
+      throw new ConflictException({
+        code: 'SEM_TABELA_PRECO_ANTERIOR',
+        message: dto.origemId
+          ? 'A tabela de origem não tem linhas para copiar.'
+          : 'Não existe tabela de preços publicada anterior para copiar.',
+      });
+    }
+    // Sobrescrita por produto presente na origem, inclusive com `null` (RA-06: copiar a
+    // ausência de preço é o dado real da origem). Produto do destino que a origem não tem
+    // fica intacto, e produto da origem que não está na grade do destino é ignorado — a
+    // grade do destino é o catálogo ativo montado em `criar` e a cópia não cria linha nova.
+    for (const [produtoId, faixas] of origem) {
+      await tx.update(tabelasPrecoItens)
+        .set({ ...faixas, updatedAt: new Date() })
+        .where(and(
+          eq(tabelasPrecoItens.tabelaPrecoId, id),
+          eq(tabelasPrecoItens.produtoId, produtoId),
+        ));
+    }
+    // Destino publicado volta ao rascunho, exatamente como no protótipo
+    // (`TabelaPrecos.tsx:160`) e pela mesma regra de D16 que `salvarItens` aplica.
+    if (destino.status === 'publicada') {
+      await tx.update(tabelasPreco)
+        .set({ status: 'rascunho', publicadaPor: null, publicadaEm: null, updatedAt: new Date() })
+        .where(eq(tabelasPreco.id, id));
+      await tx.insert(tabelasPrecoPublicacoes).values({
+        tabelaPrecoId: id, acao: 'revertida_para_rascunho', autorId: usuarioId,
+        observacao: 'Cópia de tabela anterior sobre tabela publicada (D14/D16).',
+      });
+    }
+    await this.auditoria.registrar(tx, {
+      tabela: 'tabelas_preco', registroId: id, operacao: 'UPDATE',
+      modulo: 'comercial.precos', usuarioId,
+      dadosAnteriores: { status: destino.status },
+      dadosNovos: {
+        acao: 'copiar_tabela_anterior',
+        origemId: dto.origemId ?? null,
+        status: 'rascunho',
+        produtosCopiados: [...origem.keys()],
+      },
+    });
+  });
+  return this.detalhar(id);
+}
+```
+
+   A cópia **não** emite evento: nada foi publicado. `detalhar` fica fora da transação pela
+   mesma razão de `criar`.
+
+   Os quatro helpers que `criar`, `publicar`, `salvarItens` e `copiar` chamam, por extenso —
+   nenhum é citado sem corpo:
+
+```ts
+// Alias local por arquivo, convenção do repositório (`disponibilidade.service.ts:12`).
+type Tx = NodePgDatabase<typeof schema>;
+
+type FaixasDePreco = {
+  precoA: string | null; precoB: string | null;
+  precoC: string | null; precoD: string | null;
+};
+type MapaDePrecos = Map<string, FaixasDePreco>;
+
+/** Preços de uma tabela específica, indexados por produto. Falha se a tabela não existe. */
+private async precosDaTabela(tx: Tx, tabelaPrecoId: string): Promise<MapaDePrecos> {
+  const [origem] = await tx.select({ id: tabelasPreco.id }).from(tabelasPreco)
+    .where(and(eq(tabelasPreco.id, tabelaPrecoId), isNull(tabelasPreco.deletedAt)))
     .limit(1);
-  if (!ultima) return new Map();
+  if (!origem) throw new NotFoundException('Tabela de preços de origem não encontrada');
   const linhas = await tx
     .select({
       produtoId: tabelasPrecoItens.produtoId,
@@ -2195,10 +2320,28 @@ private async precosDaUltimaPublicada(
       precoC: tabelasPrecoItens.precoC, precoD: tabelasPrecoItens.precoD,
     })
     .from(tabelasPrecoItens)
-    .where(eq(tabelasPrecoItens.tabelaPrecoId, ultima.id));
+    .where(eq(tabelasPrecoItens.tabelaPrecoId, origem.id));
   return new Map(linhas.map((l) => [l.produtoId, {
     precoA: l.precoA, precoB: l.precoB, precoC: l.precoC, precoD: l.precoD,
   }]));
+}
+
+/**
+ * Preços da última tabela publicada, indexados por produto. Vazio se nunca houve publicação.
+ * `anteriorA` restringe a busca às tabelas com data menor — usado por `copiar`; `criar` não
+ * passa nada porque a tabela do dia acabou de nascer em `rascunho`.
+ */
+private async precosDaUltimaPublicada(tx: Tx, anteriorA?: string): Promise<MapaDePrecos> {
+  const [ultima] = await tx.select({ id: tabelasPreco.id }).from(tabelasPreco)
+    .where(and(
+      eq(tabelasPreco.status, 'publicada'),
+      isNull(tabelasPreco.deletedAt),
+      ...(anteriorA ? [lt(tabelasPreco.data, anteriorA)] : []),
+    ))
+    .orderBy(desc(tabelasPreco.data))
+    .limit(1);
+  if (!ultima) return new Map();
+  return this.precosDaTabela(tx, ultima.id);
 }
 
 /** Carrega a tabela sob lock de linha ou falha alto. Nunca devolve undefined mascarado. */
@@ -2238,15 +2381,114 @@ async detalhar(id: string) {
 }
 ```
 
-   `asc`, `desc`, `or` e `sql` entram nos imports de `drizzle-orm` do arquivo; `NotFoundException`
-   e `BadRequestException`, nos de `@nestjs/common`.
-4. Controller `@Controller('precos/tabelas')`, com `@UseGuards(JwtAuthGuard, RbacGuard)` e
-   `@RequirePermissoes('…')` no padrão de `PedidosController`. Rotas: `GET /precos/tabelas`,
-   `GET /precos/tabelas/:id`, `POST /precos/tabelas`, `PATCH /precos/tabelas/:id/itens`,
-   `POST /precos/tabelas/:id/copiar`, `POST /precos/tabelas/:id/publicar` e
-   **`GET /precos/tabelas/:id/historico`** (D30 — caminho da matriz; a tabela continua
-   `tabelas_preco_publicacoes`). Leitura com `TABELA_PRECO_LER`, escrita com
-   `TABELA_PRECO_GERENCIAR`.
+   `asc`, `desc`, `lt`, `or` e `sql` entram nos imports de `drizzle-orm` do arquivo;
+   `NotFoundException`, `BadRequestException` e `ConflictException`, nos de `@nestjs/common`.
+4. Controller `@Controller('precos/tabelas')` no padrão de `PedidosController` (`@SkipThrottle`,
+   `@UseGuards(JwtAuthGuard, RbacGuard)`, `@RequirePermissoes` por rota, `@CurrentUser` com
+   `user.sub`, `ZodValidationPipe` no corpo). Leitura com `TABELA_PRECO_LER`, escrita com
+   `TABELA_PRECO_GERENCIAR`. As sete rotas, por extenso:
+
+```ts
+@SkipThrottle()
+@Controller('precos/tabelas')
+@UseGuards(JwtAuthGuard, RbacGuard)
+export class PrecosController {
+  constructor(private readonly service: PrecosService) {}
+
+  @Get()
+  @RequirePermissoes('TABELA_PRECO_LER')
+  async listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
+    return this.service.listar(query);
+  }
+
+  @Get(':id')
+  @RequirePermissoes('TABELA_PRECO_LER')
+  async detalhar(@Param('id') id: string) {
+    return this.service.detalhar(id);
+  }
+
+  // D30 — caminho da matriz; a tabela continua `tabelas_preco_publicacoes`.
+  @Get(':id/historico')
+  @RequirePermissoes('TABELA_PRECO_LER')
+  async historico(@Param('id') id: string) {
+    return this.service.historico(id);
+  }
+
+  @Post()
+  @RequirePermissoes('TABELA_PRECO_GERENCIAR')
+  async criar(
+    @Body(new ZodValidationPipe(criarTabelaPrecoSchema)) dto: CriarTabelaPrecoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.criar(dto, user.sub);
+  }
+
+  @Patch(':id/itens')
+  @RequirePermissoes('TABELA_PRECO_GERENCIAR')
+  async salvarItens(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(salvarItensTabelaPrecoSchema)) dto: SalvarItensTabelaPrecoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.salvarItens(id, dto, user.sub);
+  }
+
+  @Post(':id/copiar')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissoes('TABELA_PRECO_GERENCIAR')
+  async copiar(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(copiarTabelaPrecoSchema)) dto: CopiarTabelaPrecoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.copiar(id, dto, user.sub);
+  }
+
+  @Post(':id/publicar')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissoes('TABELA_PRECO_GERENCIAR')
+  async publicar(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(publicarTabelaPrecoSchema)) dto: PublicarTabelaPrecoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.publicar(id, dto, user.sub);
+  }
+}
+```
+
+   Não há ambiguidade de rota aqui: `:id` e `:id/historico` têm profundidades diferentes, ao
+   contrário do caso de `GET /comercial/pedidos/aberto` (Task 6, passo 5), onde a rota literal
+   colide com `:id`. `listar` e `historico` são leituras diretas por `this.db`, sem transação:
+
+```ts
+type TabelaPreco = typeof tabelasPreco.$inferSelect;   // padrão de `clientes.service.ts:11`
+
+async listar(query: ListarQuery): Promise<Paginado<TabelaPreco>> {
+  const { limit, offset } = calcularRange(query);
+  const where = query.incluirRemovidos ? undefined : isNull(tabelasPreco.deletedAt);
+  const [linhas, totalRow] = await Promise.all([
+    this.db.select().from(tabelasPreco).where(where)
+      .orderBy(desc(tabelasPreco.data)).limit(limit).offset(offset),
+    this.db.select({ total: sql<number>`count(*)::int` }).from(tabelasPreco).where(where),
+  ]);
+  return montarPaginado(linhas, totalRow[0]?.total ?? 0, query);
+}
+
+/** D30 — histórico append-only da tabela. 404 explícito se a tabela não existe. */
+async historico(id: string) {
+  const [tabela] = await this.db.select({ id: tabelasPreco.id }).from(tabelasPreco)
+    .where(and(eq(tabelasPreco.id, id), isNull(tabelasPreco.deletedAt)))
+    .limit(1);
+  if (!tabela) throw new NotFoundException('Tabela de preços não encontrada');
+  return this.db.select().from(tabelasPrecoPublicacoes)
+    .where(eq(tabelasPrecoPublicacoes.tabelaPrecoId, id))
+    .orderBy(desc(tabelasPrecoPublicacoes.criadoEm));
+}
+```
+
+   `calcularRange`, `montarPaginado`, `primeiroOuFalha`, `listarQuerySchema`, `ListarQuery` e
+   `Paginado` vêm de `../../../common/crud/paginacao`, como nos quatro services de cadastros.
 5. Registrar `PrecosModule` em `app.module.ts`.
 
 **Commit:** `feat(onda4): módulo de tabela de preços A/B/C/D com publicação auditada`
@@ -2429,9 +2671,25 @@ private derivarStatus(pedidoStatus: string, pedida: number, atendida: number): S
 
 **Steps (TDD)**
 
-1. Teste primeiro (DoD-111):
+1. Teste primeiro (DoD-111), com os dois helpers definidos no topo do próprio
+   `bff-onda4.test.ts` — nenhum é importado de lugar nenhum:
 
 ```ts
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const RAIZ_FRONTEND = join(__dirname, '..');
+
+/** Todos os `.ts`/`.tsx` sob um diretório do frontend, recursivo, em caminho absoluto. */
+function arquivos(diretorio: string): string[] {
+  const raiz = join(RAIZ_FRONTEND, diretorio);
+  return readdirSync(raiz, { recursive: true, encoding: 'utf8' })
+    .filter((relativo) => /\.tsx?$/.test(relativo))
+    .map((relativo) => join(raiz, relativo));
+}
+
+const ler = (arquivo: string) => readFileSync(arquivo, 'utf8');
+
 it('nenhuma tela da onda 4 chama o backend fora do BFF', () => {
   const telas = arquivos('src/app/(admin)/comercial');
   const vazamentos = telas.filter((f) =>
@@ -2439,6 +2697,10 @@ it('nenhuma tela da onda 4 chama o backend fora do BFF', () => {
   expect(vazamentos).toEqual([]);
 });
 ```
+
+   O recorte é `src/app/(admin)/comercial` — só as telas. As rotas de BFF vivem em
+   `src/app/api/**`, que é justamente onde `fetchBackend`/`apiFetch` **devem** aparecer, e por
+   isso ficam fora da varredura.
 
 2. Implementar cada rota nos **dois padrões que já existem** em `src/lib/api.ts`, escolhendo pelo
    critério "o corpo do erro importa?":
@@ -2668,8 +2930,17 @@ it('o cliente legado de pedido e a rota novo nao existem mais', () => {
 
 1. **Ler `TabelaPrecos.tsx` inteiro antes de escrever.**
 2. Testes primeiro (DoD-91, DoD-95).
-3. Cabeçalho com data, pílula de status e as ações "Copiar da anterior", "Salvar" e "Publicar"
-   (as duas últimas só com `TABELA_PRECO_GERENCIAR`).
+3. Cabeçalho com data, pílula de status e a barra de ações do protótipo
+   (`TabelaPrecos.tsx:199-221`): "Copiar tabela anterior", "Histórico" e "Publicar", com os
+   rótulos literais. Some-se a elas **"Salvar"**, que o protótipo não tem porque edita estado
+   local — é a mesma tela sobre dados reais da API (divergência **D-05**, já autorizada), e o
+   botão apenas dispara `PATCH /precos/tabelas/:id/itens` com as linhas alteradas. "Copiar tabela
+   anterior", "Salvar" e "Publicar" só aparecem com `TABELA_PRECO_GERENCIAR`. "Copiar tabela
+   anterior" chama `POST /api/precos/tabelas/${tabela.id}/copiar` com corpo `{}` (sem `origemId`:
+   a origem é a última publicada anterior, D14), recarrega a grade com o detalhe devolvido e a
+   confirmação inline do protótipo *"Preços da tabela anterior copiados. Revise antes de
+   publicar."*; `409 SEM_TABELA_PRECO_ANTERIOR` vira alerta explícito com a mensagem do backend,
+   nunca cópia silenciosa.
 4. Grade com Produto · Unidade · Preço A · B · C · D. Preço `null` renderiza `Input` vazio com
    `placeholder="—"`; nunca `0,00` (DoD-95).
 5. Quando não existe tabela do dia, a tela mostra a mensagem "Nenhuma tabela de preços para
@@ -2787,11 +3058,29 @@ it('nenhum arquivo da onda 4 usa o termo banido como rotulo', () => {
 });
 ```
 
-   `arquivosDeCodigo` é definido nesta task, no topo do arquivo: expande cada entrada da lista em
-   `.ts`/`.tsx` (`readdirSync` recursivo se for diretório, o próprio caminho se for arquivo). Os
-   imports do arquivo crescem de `{ existsSync }` para `{ existsSync, readdirSync, readFileSync }`
-   de `node:fs`. O `\b` é obrigatório: sem ele, `marcador`, `demarcar` e `marcado` dariam falso
-   positivo e o teste viraria ruído. É o mesmo recorte do `rg -nw` do gate local.
+   `arquivosDeCodigo` é definido nesta task, no topo do mesmo arquivo:
+
+```ts
+/** Expande a lista em caminhos de `.ts`/`.tsx`: diretório vira varredura recursiva, arquivo vai
+ *  como está. Entrada inexistente **falha** — todos os caminhos são criados por esta onda e um
+ *  `skip` silencioso deixaria o teste verde sem ter varrido nada (RA-05). */
+function arquivosDeCodigo(entradas: string[]): string[] {
+  return entradas.flatMap((entrada) => {
+    if (!existsSync(entrada)) {
+      throw new Error(`Caminho da onda 4 não existe: ${entrada}`);
+    }
+    if (!statSync(entrada).isDirectory()) return [entrada];
+    return readdirSync(entrada, { recursive: true, encoding: 'utf8' })
+      .filter((relativo) => /\.tsx?$/.test(relativo))
+      .map((relativo) => join(entrada, relativo));
+  });
+}
+```
+
+   Os imports do arquivo crescem de `{ existsSync }` para
+   `{ existsSync, readdirSync, readFileSync, statSync }` de `node:fs`. O `\b` do `TERMO_BANIDO`
+   é obrigatório: sem ele, `marcador`, `demarcar` e `marcado` dariam falso positivo e o teste
+   viraria ruído. É o mesmo recorte do `rg -nw` do gate local.
 3. Rodar `cd app/frontend && npm run test -- onda4-rotas` até verde. Os três testes do arquivo
    (DoD-109, DoD-112 e DoD-115) passam juntos neste ponto.
 
@@ -2905,7 +3194,7 @@ representante→rota no fluxo de pedido, linha 3 — é implementada por D31 e c
 **Nenhum DoD sem task que o escreva.** Cada linha do mapa DoD aponta para um `it(...)` que alguma
 task desta onda escreve, com nome idêntico: DoD-109 e DoD-112 na Task 20, DoD-115 na Task 16,
 DoD-113 na Task 3 (o nome citado **não** existia em `menu-rbac.test.ts` e passou a ser escrito lá),
-DoD-119/121 na Task 6 e DoD-120 na Task 15. A Task 20 existe precisamente porque DoD-109 e DoD-112
+DoD-119/121 na Task 6, DoD-120 na Task 15 e DoD-122/123/124 na Task 9, passo 1. A Task 20 existe precisamente porque DoD-109 e DoD-112
 só ficam verdes depois da Task 19 — escrevê-los antes deixaria três tasks com commit vermelho.
 
 **Aderência à base real (emenda do Portão 1).** Todo código literal deste plano foi conferido contra
@@ -2926,6 +3215,20 @@ extenso, já casados com o DDL real do 0016 — `tabelas_preco_itens` **não tem
 `uq_tabelas_preco_data`), e o histórico usa a coluna `criado_em`, não `created_at`. O predicado do
 estado E do mapa foi reauditado contra os cinco services que tocam `carga_itens` e alinhado ao
 `<> 'removido'` que todos usam.
+
+**Fronteira da transação e leitura pós-commit (emenda 3).** O `criar` da Task 9 devolvia
+`this.detalhar(...)` de **dentro** de `this.db.transaction`. `detalhar` lê por `this.db`, que é
+outra conexão do pool: a linha ainda não commitada não seria visível, o `NotFoundException` do
+próprio `detalhar` dispararia e derrubaria a criação inteira — 404 para o usuário e nenhuma tabela
+no banco. Agora a transação devolve a linha inserida e a leitura acontece depois do commit, que é o
+que `publicar` e `salvarItens` já faziam e o que `PedidosService.criar` faz em `develop`
+(`pedidos.service.ts:131-180`: transação → `emitirEventosPosCommit` → retorno). No mesmo passo, a
+única desestruturação de `.returning()` da Task 9 passou a `primeiroOuFalha`, o helper real de
+`src/common/crud/paginacao.ts` que `PedidosService` e os quatro services de cadastros já usam sob
+`noUncheckedIndexedAccess`; as demais desestruturações do plano são `select` guardados por `if (!x)`.
+`POST /precos/tabelas/:id/copiar`, que existia como rota sem regra nem teste, ganhou as três regras
+em D14 (origem, sobrescrita, destino publicado), corpo literal no service e no controller, e
+DoD-122/123/124 — e a Task 17 amarra o botão do protótipo a ela, então nenhuma ponta fica solta.
 
 **O que este plano deliberadamente não faz.** Não reescreve o motor de reserva/overbooking da Onda 1;
 não cria TTL de rascunho (AD-06 proíbe); não fecha as pendências abertas por conta própria — P5, P11
@@ -2948,8 +3251,13 @@ gate que o proíbem — em nenhum ponto como rótulo, campo, entidade, tipo ou t
 
 ## Contagens
 
-**22 tasks · 31 decisões de design · 52 itens de DoD (todos com teste 1:1) · 7 divergências
+**22 tasks · 31 decisões de design · 55 itens de DoD (todos com teste 1:1) · 7 divergências
 autorizadas.**
+
+Os 3 itens novos em relação à emenda 2 são **DoD-122**, **DoD-123** e **DoD-124**, as três regras
+de `POST /precos/tabelas/:id/copiar` fixadas em D14 (origem, sobrescrita e destino publicado). O
+número de decisões não muda: a cópia entrou como extensão de **D14**, que já era a decisão sobre
+de onde vêm os preços de uma tabela nova, e não como decisão nova.
 
 Divergências autorizadas: **D-01** abas Fiscais/Contatos sem conteúdo no protótipo → conteúdo
 derivado do JSONB já existente; **D-02** conjunto canônico único de códigos do catálogo;
