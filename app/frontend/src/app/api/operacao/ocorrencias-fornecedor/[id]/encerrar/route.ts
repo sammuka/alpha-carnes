@@ -5,7 +5,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
-  return repassar(`/comercial/overbooking/${id}/decisao`, {
+  return repassar(`/operacao/ocorrencias-fornecedor/${id}/encerrar`, {
     method: 'POST',
     body: await req.text(),
   });
