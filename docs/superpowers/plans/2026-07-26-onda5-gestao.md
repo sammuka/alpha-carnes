@@ -155,7 +155,7 @@ plano segue para não criar dependência nem conflito estrutural:
 |---|---|
 | `pendencias_overbooking` e `pendencias_overbooking_historico` | **Já existem** (Onda 1, migration `0012_onda1_expand`, `src/database/schema/pendencias-overbooking.schema.ts`). A Onda 5 **reutiliza** e não altera as tabelas. |
 | Quem **abre** a pendência | O vendedor, em `PedidosService.persistirItensPlanejados` (Onda 1, `pedidos.service.ts:349-362`). A Onda 5 **consome** a fila; não muda a abertura. Contrato consumido: `{ pedido_venda_id, pedido_venda_item_id, item_comercial_id, cliente_id, vendedor_usuario_id, operacao_id, quantidade_deficit, status }` — matriz linha 11. |
-| `pedidos_venda` / `reservas_disponibilidade` | A Onda 5 **chama métodos públicos já existentes** do `PedidosService` (`criar`, `reduzirItem`) e não edita a lógica de pedidos. Toques em arquivos de pedidos: (a) `exports: [PedidosService]` no `pedidos.module.ts` (Task 6), 1 linha idempotente; (b) extração de `criarNaTx`/`reduzirItemNaTx` em `pedidos.service.ts` (Task 6.4), refatoração sem mudança de comportamento; (c) `dataOperacao` + `operacaoId` no payload do evento `PENDENCIA_OVERBOOKING_ABERTA` (`pedidos.service.ts:359-362`, Task 2.5), que altera só o objeto emitido. Nenhum dos três muda regra de pedido. |
+| `pedidos_venda` / `reservas_disponibilidade` | A Onda 5 **chama métodos públicos já existentes** do `PedidosService` (`criar`, `reduzirItem`, `removerItem`) e não edita a lógica de pedidos. Toques em arquivos de pedidos: (a) `exports: [PedidosService]` no `pedidos.module.ts` (Task 6), 1 linha idempotente; (b) extração de `criarNaTx`/`reduzirItemNaTx`/`removerItemNaTx` e `export` do tipo `EventoDominio` em `pedidos.service.ts` (Task 6.4), refatoração sem mudança de comportamento; (c) `dataOperacao` + `operacaoId` no payload do evento `PENDENCIA_OVERBOOKING_ABERTA` (`pedidos.service.ts:359-362`, Task 2.5), que altera só o objeto emitido. Nenhum dos três muda regra de pedido. |
 | `/comercial/*` | Fora do escopo. Nenhum arquivo em `app/frontend/src/app/(admin)/comercial/**` é criado ou alterado nesta onda. |
 | Disponibilidade | A Onda 5 altera `disponibilidade.service.ts` acrescentando `projetarImpacto` e `recalcularParaCompra` (métodos novos). Não altera `gerarParaCompra` nem `listarPedidosEmRisco`. |
 | Migration | Onda 4 e Onda 5 usam tags distintas; a Onda 5 é `0016_onda5_gestao`. Se a Onda 4 mergear antes e ocupar o número, o Executor renumera para o próximo livre **mantendo o mesmo conteúdo SQL** e re-roda `db:migrate` — registrar a renumeração no PR. |
@@ -219,7 +219,17 @@ Auditoria feita no worktree `F:/Projetos/AlphaCarnes/.worktrees/onda5-plan`:
 | `notas_fiscais` | `faturamento.schema.ts:55-108` — tem `faturamento_id` e `caminhao_id`. **Não tem `operacao_id`** | `notas_fiscais.caminhao_id → caminhoes.operacao_id` (equivalente: `notas_fiscais.faturamento_id → faturamentos.operacao_id`) |
 | `notas_fiscais_fornecedor` | `notas-fiscais-fornecedor.schema.ts:17-34` — a coluna da chave da NF-e chama-se **`chave`** (não `chave_acesso`); tem `recebimento_id`, não tem `operacao_id` | `notas_fiscais_fornecedor.recebimento_id → recebimentos.operacao_id` |
 | `divergencias_recebimento` | `recebimentos.schema.ts:96-130` — tem `recebimento_id` e `status IN ('aberta','em_analise','aguardando_fornecedor','resolvida')`; **não tem `deleted_at`** (não filtrar por soft delete aqui) | `divergencias_recebimento.recebimento_id → recebimentos.operacao_id` |
+| `recebimentos` | `recebimentos.schema.ts:31-64` — **não tem `numero_lote`**; a referência textual do lote é `romaneio` (nullable), com `nota_fiscal_fornecedor` (nullable) como alternativa | `operacao_id` direto; o alerta de divergência usa `coalesce(romaneio, nota_fiscal_fornecedor)` e omite a referência quando ambos são nulos |
+| `caminhoes` | `expedicao.schema.ts:13-36` — **não existe coluna de seguro/averbação**; `fiscal.seguro_integrado` = "Não (manual)" (`seed.ts:112-118`). O estado real equivalente é `status_caminhao = 'faturado'` (NFS-e emitidas, aguardando `liberado_saida`, `liberacao.service.ts:80-102`) | `operacao_id` direto |
 | `recebimentos`, `caminhoes`, `faturamentos`, `compras_programadas`, `pedidos_venda`, `pendencias_overbooking` | Têm `operacao_id` direto | filtro direto |
+
+**CHECKs do banco que restringem os `UPDATE`s desta onda (auditados no schema real):**
+
+| CHECK | Arquivo | Consequência para o código da onda |
+|---|---|---|
+| `chk_reservas_qtd_positiva` (`quantidade_reservada > 0`) | `pedidos.schema.ts:96` | Liberar reserva é **só** `status='liberada'`; nunca gravar `quantidade_reservada = 0` (padrão de `pedidos.service.ts:439-441,484-486,502-509`) |
+| `chk_pend_ovb_deficit` (`quantidade_deficit > 0`) | `pendencias-overbooking.schema.ts:34` | Ao zerar o déficit, **não gravar** a coluna: preservar o último valor positivo e encerrar via `status` (contorno já comentado em `pedidos.service.ts:454-458`) |
+| `chk_pedidos_itens_pedida_positiva` (`quantidade_pedida > 0`) | `pedidos.schema.ts:64` | Zerar um item é impossível: postergar/retirar um item inteiro é `removerItem` (soft delete), não `reduzirItem` — que além do CHECK também exige `novaQuantidade` positiva no Zod (`dto/pedido.dto.ts:58`) |
 
 **Frontend — estado real das 6 rotas e do BFF:**
 
@@ -446,12 +456,17 @@ Compras) — a decisão é o compromisso rastreável.
 1. trava a reserva doadora (`reservas_disponibilidade`, `tipo_consumo IN ('fisico','virtual')`,
    `status='ativa'`) e a reserva de overbooking do item deficitário;
 2. `quantidade` ≤ saldo da doadora e ≤ `quantidade_deficit`, senão `409`;
-3. doadora: `quantidade_reservada -= quantidade` (vira `liberada` se zerar);
+3. doadora: `quantidade_reservada -= quantidade`; se esgotar, **só** `status='liberada'` — a
+   quantidade permanece positiva, porque `chk_reservas_qtd_positiva` (`pedidos.schema.ts:96`) proíbe
+   `quantidade_reservada = 0`;
 4. item deficitário ganha reserva `tipo_consumo='virtual'` na mesma `disponibilidade_virtual_id` da
    doadora, e sua reserva `overbooking` diminui na mesma quantidade;
 5. `pedidos_venda_itens` de ambos: `quantidade_reservada` e `quantidade_overbooking` ajustados;
 6. `pendencias_overbooking.quantidade_deficit -= quantidade`; status →
-   `redistribuicao_decidida` (ou `resolvida` se o déficit zerar);
+   `redistribuicao_decidida` (ou `resolvida` se o déficit zerar). Ao zerar, o `UPDATE` **não grava**
+   `quantidade_deficit`: `chk_pend_ovb_deficit` (`pendencias-overbooking.schema.ts:34`) exige `> 0`,
+   então o último déficit positivo é preservado e o encerramento fica no `status` — mesmo contorno
+   já em produção em `PedidosService.atualizarOuCancelarPendencia` (`pedidos.service.ts:454-458`);
 7. auditoria de cada linha tocada; após o commit, `RESERVA_ATUALIZADA` +
    `PENDENCIA_OVERBOOKING_ATUALIZADA` (ou `..._RESOLVIDA`).
 
@@ -459,23 +474,34 @@ O saldo agregado de `disponibilidades_virtuais` **não muda** (a mesma quantidad
 `quantidade_reservada` e `quantidade_disponivel` permanecem — invariante verificada em teste.
 
 **D5.17 — Caminho 3 · postergar (novo pedido).** `POST /:id/decisao` com
-`{ caminho: 'novo_pedido', quantidade, operacaoDestinoId }`. Efeito atômico:
+`{ caminho: 'novo_pedido', quantidade, operacaoDestinoId, compraProgramadaId }`. Efeito atômico:
 
-1. valida `quantidade ≤ quantidade_deficit` e que `operacaoDestinoId` é operação **não fechada** com
-   `data > data da operação da pendência`;
-2. reduz o item do pedido original com `PedidosService.reduzirItem` (método público existente, que
-   já libera a reserva de overbooking corretamente);
-3. cria um pedido novo com `PedidosService.criar({ clienteId, operacaoId: operacaoDestinoId, itens:
-   [{ itemComercialId, quantidade }] }, usuarioId, true)` — `confirmado = true` porque a decisão do
-   gestor é a confirmação explícita exigida por AD-05;
-4. `quantidade_deficit -= quantidade`; status → `novo_pedido_criado` (ou `resolvida` se zerar);
-   `decisao_json = { quantidade, operacaoDestinoId, novoPedidoId }`;
+1. valida `quantidade ≤ quantidade_deficit`, que `operacaoDestinoId` é operação **não fechada** com
+   `data > data da operação da pendência`, e que `compraProgramadaId` é uma compra não cancelada
+   **da operação de destino** (`pedidos_venda.compra_programada_id` é `NOT NULL`, `pedidos.schema.ts:17`);
+2. libera o item do pedido original **por uma única via**, escolhida pela quantidade:
+   - postergação **parcial** (`quantidade < quantidade_pedida`) → `reduzirItemNaTx`;
+   - postergação **total** (`quantidade = quantidade_pedida`) → `removerItemNaTx`, porque
+     `chk_pedidos_itens_pedida_positiva` (`pedidos.schema.ts:64`) e `reduzirItemSchema`
+     (`dto/pedido.dto.ts:58`) proíbem item com quantidade zero;
+3. cria um pedido novo com `PedidosService.criarNaTx({ compraProgramadaId, clienteId, dataOperacao:
+   <data da operação de destino>, itens: [{ itemComercialId, quantidadePedida }], observacoesGerais },
+   usuarioId, true)` — `confirmado = true` porque a decisão do gestor é a confirmação explícita
+   exigida por AD-05;
+4. **o déficit não é abatido duas vezes**: tanto `reduzirItemNaTx` quanto `removerItemNaTx` já
+   chamam `atualizarOuCancelarPendencia` (`pedidos.service.ts:404,542`), que reduz o
+   `quantidade_deficit` ou cancela a pendência. `decidir` **relê a pendência sob o mesmo lock** e
+   apenas grava a decisão: nunca subtrai de novo e nunca reabre um status terminal. Resultado:
+   parcial → `novo_pedido_criado` com o déficit já reduzido; total → `cancelada`;
+   `decisao_json = { quantidade, operacaoDestinoId, compraProgramadaId, itemOrigemRemovido, novoPedidoId }`;
 5. auditoria + histórico; após o commit, `PENDENCIA_OVERBOOKING_ATUALIZADA`/`..._RESOLVIDA`.
 
 **D5.18 — Transições.** `TRANSICOES_PENDENCIA` permanece como está (`dto/overbooking.dto.ts:43-62`).
 O caminho só é aceito se a transição a partir do status atual for válida; caso contrário `409`.
-Quando o déficit chega a zero, o serviço aplica o status do caminho e, na mesma transação, a
-transição para `resolvida` (permitida por `TRANSICOES_PENDENCIA`).
+Quando o déficit chega a zero pelos caminhos 1 e 2, o serviço aplica o status do caminho e, na mesma
+transação, a transição para `resolvida` (permitida por `TRANSICOES_PENDENCIA`). `resolvida` e
+`cancelada` são terminais: se o efeito já deixou a pendência em um deles (caminho 3 total), esse
+status prevalece e `decidir` apenas registra a decisão.
 
 ### Aprovações & Ocorrências
 
@@ -617,7 +643,7 @@ explicando quando `status='pendente_dados'` (protótipo `278-279`).
 
 ## Estrutura de arquivos
 
-### Backend — arquivos novos (24)
+### Backend — arquivos novos (25)
 
 ```
 src/database/migrations/0016_onda5_gestao.sql
@@ -644,6 +670,7 @@ test/integration/aprovacoes.e2e-spec.ts
 test/integration/sif.e2e-spec.ts
 test/integration/dashboard-operacao.e2e-spec.ts
 test/integration/conclusao-imutavel.e2e-spec.ts
+test/helpers/recebimento-fixtures.ts
 ```
 
 ### Backend — arquivos alterados (22)
@@ -668,7 +695,7 @@ src/modules/comercial/overbooking/overbooking.controller.ts                + 2 e
 src/modules/comercial/overbooking/dto/overbooking.dto.ts                   + DTOs por caminho
 src/modules/comercial/overbooking/overbooking.module.ts                    + import PedidosModule
 src/modules/comercial/pedidos/pedidos.module.ts                            + exports: [PedidosService]
-src/modules/comercial/pedidos/pedidos.service.ts                           + criarNaTx e reduzirItemNaTx (extração sem mudança de comportamento) e dataOperacao no payload de PENDENCIA_OVERBOOKING_ABERTA
+src/modules/comercial/pedidos/pedidos.service.ts                           + criarNaTx, reduzirItemNaTx e removerItemNaTx (extração sem mudança de comportamento), export de EventoDominio e dataOperacao no payload de PENDENCIA_OVERBOOKING_ABERTA
 src/modules/gestao/dashboard/dashboard.service.ts   + operacaoId, 10 KPIs, alertas
 src/modules/gestao/dashboard/dashboard.controller.ts + query operacaoId
 ```
@@ -780,12 +807,14 @@ Cada item do DoD e cada decisão verificável tem **um teste nomeado**. Nenhuma 
 | 2.4 | Caminho 1 recusa compra de operação anterior (409) | `overbooking-decisao.e2e-spec.ts` › "compra de operação passada é recusada" |
 | 2.5 | Caminho 2 transfere reserva e reduz déficit, mantendo o agregado da disponibilidade | `overbooking-decisao.e2e-spec.ts` › "redistribuição preserva o agregado" |
 | 2.6 | Caminho 2 recusa quantidade acima do saldo doador (409) | `overbooking-decisao.e2e-spec.ts` › "redistribuição acima do saldo" |
-| 2.7 | Caminho 3 reduz o pedido original e cria pedido novo na operação destino | `overbooking-decisao.e2e-spec.ts` › "postergação gera novo pedido" |
+| 2.7 | Caminho 3 parcial reduz o pedido original, cria pedido novo na operação destino e abate o déficit **uma única vez** | `overbooking-decisao.e2e-spec.ts` › "postergação parcial gera novo pedido e abate o déficit uma única vez" |
 | 2.8 | Caminho 3 recusa operação destino fechada ou anterior (409) | `overbooking-decisao.e2e-spec.ts` › "operação destino inválida" |
-| 2.9 | Déficit zerado leva a `resolvida` na mesma transação | `overbooking-decisao.e2e-spec.ts` › "déficit zero resolve a pendência" |
+| 2.9 | Déficit zerado pelos caminhos 1 e 2 leva a `resolvida` na mesma transação | `overbooking-decisao.e2e-spec.ts` › "déficit zero resolve a pendência" |
 | 2.10 | Transição inválida retorna 409 e não muda nada | `overbooking-decisao.e2e-spec.ts` › "transição inválida" |
 | 2.11 | `GET /:id/historico` devolve a linha do tempo ordenada | `overbooking-decisao.e2e-spec.ts` › "histórico ordenado" |
 | 2.12 | Tela mostra KPIs, filtro, detalhe e os 3 blocos de decisão do protótipo | `__tests__/overbooking-client.test.tsx` |
+| 2.13 | Caminho 3 total remove o item de origem (soft delete) e encerra a pendência em `cancelada`, sem reabrir status terminal | `overbooking-decisao.e2e-spec.ts` › "postergação total remove o item de origem e encerra a pendência" |
+| 2.14 | Caminho 3 recusa `compraProgramadaId` fora da operação de destino ou cancelada (409) | `overbooking-decisao.e2e-spec.ts` › "compra de destino inválida" |
 
 ### DoD 3 — Comparativo Pedido × NF × Pesagem imutável
 
@@ -1079,38 +1108,48 @@ migration para vê-lo falhar:
 
 ```ts
 import { INestApplication } from '@nestjs/common';
-import { createTestApp, cleanupDb, getDb } from '../helpers/test-app';
 import { sql } from 'drizzle-orm';
-import { criarConclusaoConferencia } from '../helpers/fixtures-recebimento';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { createTestApp, cleanupDb } from '../helpers/test-app';
+import { DRIZZLE } from '../../src/database/database.module';
+import * as schema from '../../src/database/schema';
+import { criarConclusaoConferencia } from '../helpers/recebimento-fixtures';
+
+type Db = NodePgDatabase<typeof schema>;
 
 describe('conclusoes_conferencia — imutabilidade (DoD 3)', () => {
   let app: INestApplication;
 
-  beforeAll(async () => { app = await createTestApp(); });
-  afterAll(async () => { await cleanupDb(); await app.close(); });
+  beforeAll(async () => { app = await createTestApp(); }, 60000);
+  afterAll(async () => { await cleanupDb(app); await app.close(); });
+
+  const db = () => app.get<{ db: Db }>(DRIZZLE).db;
 
   it('UPDATE bloqueado por trigger', async () => {
     const { conclusaoId } = await criarConclusaoConferencia(app);
-    const db = getDb(app);
     await expect(
-      db.execute(sql`UPDATE conclusoes_conferencia SET quadro_json = '[]'::jsonb WHERE id = ${conclusaoId}`),
+      db().execute(sql`UPDATE conclusoes_conferencia SET quadro_json = '[]'::jsonb WHERE id = ${conclusaoId}`),
     ).rejects.toThrow(/imutavel/i);
   });
 
   it('DELETE bloqueado por trigger', async () => {
     const { conclusaoId } = await criarConclusaoConferencia(app);
-    const db = getDb(app);
     await expect(
-      db.execute(sql`DELETE FROM conclusoes_conferencia WHERE id = ${conclusaoId}`),
+      db().execute(sql`DELETE FROM conclusoes_conferencia WHERE id = ${conclusaoId}`),
     ).rejects.toThrow(/imutavel/i);
   });
 });
 ```
 
-> `criarConclusaoConferencia` é um helper novo em `test/helpers/fixtures-recebimento.ts` que monta
+> `test/helpers/test-app.ts` **não exporta `getDb`** — o handle vem de `app.get(DRIZZLE)` e
+> `cleanupDb` recebe o `app` (assinaturas reais em `test/helpers/test-app.ts:58` e uso em
+> `test/integration/recebimento.e2e-spec.ts:5,12,16,35`, que é o padrão copiado acima).
+
+> `criarConclusaoConferencia` é um helper novo em `test/helpers/recebimento-fixtures.ts` (sufixo
+> `-fixtures` é a convenção do diretório: `comercial-fixtures.ts`, `pesagem-fixtures.ts`, …) que monta
 > operação → fornecedor → pedido ao fornecedor → recebimento → NF → pesagem → conclusão usando os
 > serviços reais (nunca `INSERT` cru), reaproveitando o fluxo já coberto por
-> `test/integration/recebimento.e2e-spec.ts`.
+> `test/integration/recebimento.e2e-spec.ts`, e devolve `{ conclusaoId }`.
 
 **Verificação:** `cd app/backend && npm run db:migrate && npm run test -- conclusao-imutavel`.
 
@@ -1904,6 +1943,7 @@ export const decidirPendenciaSchema = z.discriminatedUnion('caminho', [
   z.object({
     caminho: z.literal('novo_pedido'),
     operacaoDestinoId: z.string().uuid(),
+    compraProgramadaId: z.string().uuid(),
     quantidade: z.string().regex(/^\d+(\.\d{1,3})?$/),
     observacao: z.string().trim().max(500).optional(),
   }),
@@ -1914,11 +1954,21 @@ export type DecidirPendenciaDto = z.infer<typeof decidirPendenciaSchema>;
 
 `STATUS_POR_CAMINHO`, `statusDoCaminho` e `TRANSICOES_PENDENCIA` permanecem como estão.
 
+> O caminho 3 exige `compraProgramadaId` porque `pedidos_venda.compra_programada_id` é `NOT NULL`
+> (`pedidos.schema.ts:17`) e `createPedidoSchema` o exige como obrigatório
+> (`dto/pedido.dto.ts:31`). A UI escolhe entre as `comprasComplementares` da operação de destino
+> devolvidas por `GET /:id/cobertura` (D5.14) — nenhum id é adivinhado pelo backend.
+
 **6.2** Em `overbooking.service.ts`, acrescentar aos imports de `../../../database/schema` as tabelas
 usadas pelo código novo — `operacoes`, `reservasDisponibilidade`, `disponibilidadesVirtuais`,
-`pedidosVendaItens` — e aos de `drizzle-orm` os operadores `asc`, `gt`, `ne`, `inArray` (hoje o
-arquivo importa apenas `and, desc, eq, isNull, sql`). Em seguida, dois helpers privados (hoje só
-existe `obterAtivaSobLock`, `overbooking.service.ts:121-128`) e a leitura de fontes de cobertura:
+`pedidosVendaItens`, `comprasProgramadas` — e aos de `drizzle-orm` os operadores `asc`, `gt`, `ne`,
+`inArray` (hoje o arquivo importa apenas `and, desc, eq, isNull, sql`). Somam-se ainda
+`compararQtd`, `ehZero`, `formatarQtd` e `subtrairQtd` de `../../../common/crud/decimal`,
+`PedidosService` e o tipo `EventoDominio` de `../pedidos/pedidos.service` (exportado na Task 6.4), e
+a injeção de `private readonly pedidos: PedidosService` no construtor.
+
+Em seguida, dois helpers privados (hoje só existe `obterAtivaSobLock`,
+`overbooking.service.ts:121-128`) e a leitura de fontes de cobertura:
 
 ```ts
 /** Leitura sem lock, para os GETs (cobertura/histórico). */
@@ -2036,12 +2086,29 @@ async decidir(id: string, dto: DecidirPendenciaDto, usuarioId: string) {
         ? await this.aplicarRedistribuicao(tx, atual, dto, usuarioId)
         : await this.aplicarNovoPedido(tx, atual, dto, usuarioId);
 
-    const deficitRestante = subtrairQtd(atual.quantidadeDeficit, efeito.quantidadeAbatida);
-    const statusFinal: StatusPendencia = ehZero(deficitRestante) ? 'resolvida' : statusAlvo;
+    // O caminho 3 delega a PedidosService, que já grava o abate na pendência
+    // (reduz o déficit ou cancela). Reler sob o lock já mantido e NUNCA subtrair de
+    // novo — do contrário o déficit seria abatido duas vezes.
+    const aposEfeito = efeito.abatidoPeloEfeito ? await this.obterAtivaSobLock(tx, id) : atual;
+    const encerradaPeloEfeito =
+      aposEfeito.status === 'cancelada' || aposEfeito.status === 'resolvida';
+    const deficitRestante = encerradaPeloEfeito
+      ? '0.000'
+      : efeito.abatidoPeloEfeito
+        ? aposEfeito.quantidadeDeficit
+        : subtrairQtd(atual.quantidadeDeficit, efeito.quantidadeAbatida);
+    // 'cancelada' e 'resolvida' são terminais em TRANSICOES_PENDENCIA: o status gravado
+    // pelo efeito prevalece; decidir registra a decisão mas nunca reabre a pendência.
+    const statusFinal: StatusPendencia = encerradaPeloEfeito
+      ? (aposEfeito.status as StatusPendencia)
+      : ehZero(deficitRestante) ? 'resolvida' : statusAlvo;
 
     const [pendencia] = await tx.update(pendenciasOverbooking).set({
+      // chk_pend_ovb_deficit exige > 0: ao zerar, mantém o último déficit positivo e
+      // deixa o encerramento no status — mesmo contorno já usado em
+      // PedidosService.atualizarOuCancelarPendencia (pedidos.service.ts:454-458).
+      ...(ehZero(deficitRestante) ? {} : { quantidadeDeficit: deficitRestante }),
       status: statusFinal,
-      quantidadeDeficit: deficitRestante,
       decisaoJson: { caminho: dto.caminho, ...efeito.detalhe },
       responsavelId: usuarioId,
       updatedAt: new Date(),
@@ -2054,10 +2121,14 @@ async decidir(id: string, dto: DecidirPendenciaDto, usuarioId: string) {
       autorId: usuarioId,
       detalheJson: { caminho: dto.caminho, ...efeito.detalhe },
     });
-    if (statusFinal === 'resolvida' && statusAlvo !== 'resolvida') {
+    if (statusFinal !== statusAlvo) {
       await tx.insert(pendenciasOverbookingHistorico).values({
-        pendenciaId: id, acao: 'resolvida', autorId: usuarioId,
-        detalheJson: { motivo: 'déficit zerado pela decisão' },
+        pendenciaId: id, acao: statusFinal, autorId: usuarioId,
+        detalheJson: {
+          motivo: encerradaPeloEfeito
+            ? 'pendência encerrada pelo efeito da decisão sobre o item do pedido'
+            : 'déficit zerado pela decisão',
+        },
       });
     }
     await this.auditoria.registrar(tx, {
@@ -2073,8 +2144,9 @@ async decidir(id: string, dto: DecidirPendenciaDto, usuarioId: string) {
   });
 
   for (const evento of eventos) this.eventEmitter.emit(evento.nome, evento.payload);
+  // 'cancelada' também tira a pendência da fila: sai como RESOLVIDA para o gateway.
   this.eventEmitter.emit(
-    pendencia.status === 'resolvida'
+    pendencia.status === 'resolvida' || pendencia.status === 'cancelada'
       ? EVENTOS.PENDENCIA_OVERBOOKING_RESOLVIDA
       : EVENTOS.PENDENCIA_OVERBOOKING_ATUALIZADA,
     {
@@ -2085,6 +2157,19 @@ async decidir(id: string, dto: DecidirPendenciaDto, usuarioId: string) {
     },
   );
   return pendencia;
+}
+```
+
+Os três métodos privados devolvem o mesmo contrato:
+
+```ts
+interface EfeitoDecisao {
+  /** Quanto do déficit a decisão abate agora. */
+  quantidadeAbatida: string;
+  /** true quando o próprio efeito já gravou o abate na pendência (só o caminho 3, via PedidosService). */
+  abatidoPeloEfeito: boolean;
+  detalhe: Record<string, unknown>;
+  eventos: EventoDominio[];
 }
 ```
 
@@ -2119,6 +2204,7 @@ private async aplicarCompraComplementar(tx: Tx, pendencia: Pendencia, dto: Extra
 
   return {
     quantidadeAbatida: '0.000', // o abate ocorre quando a compra for confirmada/recebida
+    abatidoPeloEfeito: false,
     detalhe: {
       compraProgramadaId: dto.compraProgramadaId,
       operacaoDestinoId: linha.operacao_id,
@@ -2165,17 +2251,21 @@ private async aplicarRedistribuicao(tx: Tx, pendencia: Pendencia, dto: Extract<D
     throw new ConflictException('Quantidade acima do overbooking do pedido deficitário');
   }
 
+  // chk_reservas_qtd_positiva exige quantidade_reservada > 0 (pedidos.schema.ts:96):
+  // ao esgotar, só troca o status para 'liberada' e mantém a quantidade positiva —
+  // é o padrão de PedidosService.liberarReservaReal (pedidos.service.ts:484-486) e
+  // de reduzirReservaOverbooking (pedidos.service.ts:439-441).
   const saldoDoadora = subtrairQtd(doadora.quantidadeReservada, dto.quantidade);
   await tx.update(reservasDisponibilidade)
     .set(ehZero(saldoDoadora)
-      ? { status: 'liberada', quantidadeReservada: '0.000' }
+      ? { status: 'liberada' }
       : { quantidadeReservada: saldoDoadora })
     .where(eq(reservasDisponibilidade.id, doadora.id));
 
   const saldoOverbooking = subtrairQtd(overbooking.quantidadeReservada, dto.quantidade);
   await tx.update(reservasDisponibilidade)
     .set(ehZero(saldoOverbooking)
-      ? { status: 'liberada', quantidadeReservada: '0.000' }
+      ? { status: 'liberada' }
       : { quantidadeReservada: saldoOverbooking })
     .where(eq(reservasDisponibilidade.id, overbooking.id));
 
@@ -2212,6 +2302,7 @@ private async aplicarRedistribuicao(tx: Tx, pendencia: Pendencia, dto: Extract<D
 
   return {
     quantidadeAbatida: dto.quantidade,
+    abatidoPeloEfeito: false,
     detalhe: {
       reservaOrigemId: doadora.id,
       pedidoOrigemItemId: doadora.pedidoVendaItemId,
@@ -2246,12 +2337,12 @@ private async ajustarItemPedido(tx: Tx, itemId: string, deltaReservada: string, 
 }
 ```
 
-> Os únicos literais `'0.000'` que restam no caminho 2 são **valores de negócio**, não lacunas: o
-> `quantidadeReservada: '0.000'` do `set` é o saldo zerado que acompanha `status: 'liberada'`, e o
-> `'0.000'` passado a `ajustarItemPedido` é o delta nulo de `quantidade_overbooking` do pedido doador
-> (a doadora não tinha overbooking). Os saldos publicados em `ReservaAtualizadaPayload` são sempre
-> **lidos do banco** após os `UPDATE`s — nenhum saldo é digitado no código nem deixado para o Worker
-> resolver depois.
+> O único literal `'0.000'` do caminho 2 é o delta nulo de `quantidade_overbooking` passado a
+> `ajustarItemPedido` para o pedido doador (a doadora não tinha overbooking) — valor de negócio, não
+> lacuna. Nenhum `UPDATE` grava `quantidade_reservada = 0`: o CHECK `chk_reservas_qtd_positiva`
+> proíbe, e o esgotamento de uma reserva é representado **apenas** por `status = 'liberada'`. Os
+> saldos publicados em `ReservaAtualizadaPayload` são sempre **lidos do banco** após os `UPDATE`s —
+> nenhum saldo é digitado no código nem deixado para o Worker resolver depois.
 
 Caminho 3 (D5.17):
 
@@ -2270,25 +2361,59 @@ private async aplicarNovoPedido(tx: Tx, pendencia: Pendencia, dto: Extract<Decid
     throw new ConflictException('A operação de destino deve ser posterior à da pendência');
   }
 
+  const compra = await tx.select({ id: comprasProgramadas.id }).from(comprasProgramadas)
+    .where(and(
+      eq(comprasProgramadas.id, dto.compraProgramadaId),
+      eq(comprasProgramadas.operacaoId, destino.id),
+      ne(comprasProgramadas.status, 'cancelada'),
+      isNull(comprasProgramadas.deletedAt),
+    )).then((r) => r[0]);
+  if (!compra) {
+    throw new ConflictException('Compra programada não pertence à operação de destino ou está cancelada');
+  }
+
   const item = await tx.select().from(pedidosVendaItens)
     .where(eq(pedidosVendaItens.id, pendencia.pedidoVendaItemId)).for('update').then((r) => r[0]);
   if (!item) throw new NotFoundException('Item do pedido de origem não encontrado');
 
+  const motivo = `Postergado para a operação ${destino.data} (pendência de overbooking ${pendencia.id})`;
   const novaQuantidade = subtrairQtd(item.quantidadePedida, dto.quantidade);
-  await this.pedidos.reduzirItemNaTx(tx, pendencia.pedidoVendaId, item.id, novaQuantidade, usuarioId);
+  if (ehZero(novaQuantidade)) {
+    // chk_pedidos_itens_pedida_positiva exige quantidade_pedida > 0 (pedidos.schema.ts:64) e
+    // reduzirItemSchema exige novaQuantidade positiva (dto/pedido.dto.ts:58): postergar o item
+    // inteiro é REMOÇÃO. removerItemNaTx já libera todas as reservas, abate o déficit e cancela
+    // a pendência (pedidos.service.ts:538-561).
+    await this.pedidos.removerItemNaTx(tx, pendencia.pedidoVendaId, item.id, motivo, usuarioId);
+  } else {
+    await this.pedidos.reduzirItemNaTx(
+      tx, pendencia.pedidoVendaId, item.id, novaQuantidade, motivo, usuarioId,
+    );
+  }
 
+  // CreatePedidoDto real (dto/pedido.dto.ts:30-41): compraProgramadaId obrigatório, a operação
+  // entra por dataOperacao (YYYY-MM-DD) e não por operacaoId, o item usa quantidadePedida
+  // (number) e a observação do pedido é observacoesGerais.
   const novoPedido = await this.pedidos.criarNaTx(tx, {
+    compraProgramadaId: compra.id,
     clienteId: pendencia.clienteId,
-    operacaoId: destino.id,
-    itens: [{ itemComercialId: pendencia.itemComercialId, quantidade: dto.quantidade }],
-    observacoes: `Postergado da pendência de overbooking ${pendencia.id}`,
+    dataOperacao: destino.data,
+    observacoesGerais: motivo,
+    itens: [{
+      itemComercialId: pendencia.itemComercialId,
+      quantidadePedida: Number(dto.quantidade),
+    }],
   }, usuarioId, true);
 
   return {
     quantidadeAbatida: dto.quantidade,
+    // reduzirItemNaTx/removerItemNaTx já chamaram atualizarOuCancelarPendencia: o déficit
+    // desta pendência JÁ foi abatido no banco. decidir relê e não subtrai de novo.
+    abatidoPeloEfeito: true,
     detalhe: {
       quantidade: dto.quantidade,
       operacaoDestinoId: destino.id,
+      compraProgramadaId: compra.id,
+      itemOrigemRemovido: ehZero(novaQuantidade),
       novoPedidoId: novoPedido.pedido.id,
       observacao: dto.observacao ?? null,
     },
@@ -2297,14 +2422,47 @@ private async aplicarNovoPedido(tx: Tx, pendencia: Pendencia, dto: Extract<Decid
 }
 ```
 
-**6.4** Para que o caminho 3 rode **dentro da mesma transação**, `PedidosService` expõe duas
-variantes `NaTx` que já são o corpo interno dos métodos públicos existentes:
+> `criarNaTx` roda com `confirmado = true`: se a operação de destino não tiver saldo, o pedido novo
+> nasce em overbooking e **abre a sua própria pendência** na operação de destino (comportamento
+> normal de `persistirItensPlanejados`). Isso é o efeito real da postergação, não um erro — a decisão
+> do gestor é a confirmação explícita exigida por AD-05.
 
-- extrair de `criar(dto, usuarioId, confirmado)` o corpo transacional para
-  `criarNaTx(tx, dto, usuarioId, confirmado)`, deixando `criar` como
-  `this.db.transaction((tx) => this.criarNaTx(tx, ...))` seguido da emissão dos eventos;
-- extrair de `reduzirItem(pedidoId, itemId, dto, usuarioId)` o corpo para
-  `reduzirItemNaTx(tx, pedidoId, itemId, novaQuantidade, usuarioId)`.
+> Quando o item é removido por inteiro, `atualizarOuCancelarPendencia` deixa a pendência em
+> `cancelada` (terminal). `decidir` respeita esse status e apenas registra a decisão em
+> `decisao_json` + histórico: o resultado da postergação total é `status = 'cancelada'`, nunca
+> `resolvida`. A postergação parcial mantém a pendência viva em `novo_pedido_criado` com o déficit
+> já reduzido por `reduzirItemNaTx`.
+
+**6.4** Para que o caminho 3 rode **dentro da mesma transação**, `PedidosService` expõe três
+variantes `NaTx` que são exatamente o corpo interno dos métodos públicos existentes, com estas
+assinaturas:
+
+```ts
+export type EventoDominio<N extends keyof PayloadPorEvento = keyof PayloadPorEvento> = /* já existe, só passa a ser exportado */
+
+async criarNaTx(tx: Tx, dto: CreatePedidoDto, usuarioId: string, confirmado: boolean):
+  Promise<{ pedido: PedidoVenda; eventos: EventoDominio[] }>;
+
+async reduzirItemNaTx(tx: Tx, pedidoId: string, itemId: string,
+  novaQuantidade: string, motivo: string, usuarioId: string): Promise<void>;
+
+async removerItemNaTx(tx: Tx, pedidoId: string, itemId: string,
+  motivo: string, usuarioId: string): Promise<void>;
+```
+
+- `criar(dto, usuarioId, confirmado)` vira
+  `this.db.transaction((tx) => this.criarNaTx(tx, dto, usuarioId, confirmado))` seguido de
+  `emitirEventosPosCommit(resultado.eventos)` e `return resultado.pedido` — o corpo transacional
+  atual (`pedidos.service.ts:131-177`) migra inteiro para `criarNaTx`;
+- `reduzirItem(pedidoId, itemId, dto, usuarioId)` vira
+  `this.db.transaction((tx) => this.reduzirItemNaTx(tx, pedidoId, itemId,
+  formatarQtd(dto.novaQuantidade), dto.motivo, usuarioId))`. A quantidade entra na variante `NaTx`
+  já como string formatada e o motivo separado, porque `ReduzirItemDto.novaQuantidade` é `number`
+  (`dto/pedido.dto.ts:57-60`) e o overbooking já trabalha com strings de 3 casas;
+- `removerItem(pedidoId, itemId, dto, usuarioId)` vira
+  `this.db.transaction((tx) => this.removerItemNaTx(tx, pedidoId, itemId, dto.motivo, usuarioId))`;
+- `type EventoDominio` (`pedidos.service.ts:71-73`) passa a ser **exportado**, para o
+  `OverbookingService` tipar `efeito.eventos` sem redeclarar o tipo.
 
 Refatoração **sem mudança de comportamento**: os testes existentes de pedidos (`test/integration/
 pedidos.e2e-spec.ts`) devem continuar verdes sem alteração — é o critério de aceite da refatoração.
@@ -2357,20 +2515,47 @@ it('redistribuição preserva o agregado', async () => {
   expect(pendencia.status).toBe('redistribuicao_decidida');
 });
 
-it('postergação gera novo pedido', async () => {
+it('postergação parcial gera novo pedido e abate o déficit uma única vez', async () => {
+  // item de 10, déficit 6 → posterga 4: sobra item de 6 na origem e déficit 2 na pendência
   const { body } = await request(app.getHttpServer())
     .post(`/comercial/overbooking/${pendenciaId}/decisao`)
     .set('Authorization', `Bearer ${tokenGestor}`)
-    .send({ caminho: 'novo_pedido', quantidade: '6.000', operacaoDestinoId: proximaOperacaoId })
+    .send({
+      caminho: 'novo_pedido', quantidade: '4.000',
+      operacaoDestinoId: proximaOperacaoId, compraProgramadaId: compraDestinoId,
+    })
     .expect(201);
 
-  expect(body.status).toBe('resolvida');
+  expect(body.status).toBe('novo_pedido_criado');
+  expect(body.quantidadeDeficit).toBe('2.000'); // 6 − 4, e NÃO 6 − 4 − 4
   expect(body.decisaoJson.novoPedidoId).toEqual(expect.any(String));
   const novo = await lerPedido(app, body.decisaoJson.novoPedidoId);
   expect(novo.operacaoId).toBe(proximaOperacaoId);
+  expect(novo.itens[0].quantidadePedida).toBe('4.000');
+});
+
+it('postergação total remove o item de origem e encerra a pendência', async () => {
+  // item de 6 inteiramente em overbooking → posterga 6: reduzirItem seria inválido
+  const { body } = await request(app.getHttpServer())
+    .post(`/comercial/overbooking/${pendenciaId}/decisao`)
+    .set('Authorization', `Bearer ${tokenGestor}`)
+    .send({
+      caminho: 'novo_pedido', quantidade: '6.000',
+      operacaoDestinoId: proximaOperacaoId, compraProgramadaId: compraDestinoId,
+    })
+    .expect(201);
+
+  expect(body.status).toBe('cancelada'); // terminal gravado por removerItemNaTx
+  expect(body.decisaoJson.itemOrigemRemovido).toBe(true);
+  const origem = await lerPedido(app, pedidoOrigemId);
+  expect(origem.itens).toHaveLength(0); // soft delete
+  const novo = await lerPedido(app, body.decisaoJson.novoPedidoId);
   expect(novo.itens[0].quantidadePedida).toBe('6.000');
 });
 ```
+
+Fixture mínima dos dois casos: a operação de destino precisa existir com uma compra programada não
+cancelada (`compraDestinoId`), porque `pedidos_venda.compra_programada_id` é `NOT NULL`.
 
 **Verificação:** `cd app/backend && npm run test -- overbooking-decisao pedidos`.
 
@@ -3094,15 +3279,19 @@ if (!linha) throw new Error('Falha ao apurar os KPIs da operação');
 Os valores vão para `KpiDashboard.valor` como texto, na ordem acima; nenhum KPI é preenchido com
 zero por falta de leitura (RA-06).
 
-**9.3** Alertas (critério 5.3): cada alerta só é emitido se a consulta correspondente retornar > 0.
-Nenhum alerta fixo, nenhum texto de exemplo:
+**9.3** Alertas (critério 5.3): os **4 alertas** do protótipo (`Dashboard.tsx:37-42` — "Overbooking em
+aberto", "Divergência de recebimento", "TZ aguardando desossa", "Seguro pendente"), cada um emitido
+**só** se a consulta correspondente retornar > 0. Nenhum alerta fixo, nenhum texto de exemplo, nenhum
+horário sintético: `ocorridoEm` é sempre o instante do fato mais recente lido do banco (o protótipo
+mostra esse horário em `alerta.time`, `Dashboard.tsx:175`).
 
 ```ts
 private async montarAlertas(operacaoId: string): Promise<AlertaOperacional[]> {
-  const alertas: AlertaOperacional[] = [];
   const linha = await this.db.execute<{
-    overbooking: number; deficit: string; divergencias: number;
-    tz_aguardando: number; caminhoes_sem_seguro: number; ultimo_evento: string | null;
+    overbooking: number; overbooking_deficit: string; overbooking_em: string | null;
+    divergencias: number; divergencia_lote: string | null; divergencia_em: string | null;
+    tz_aguardando: number; tz_em: string | null;
+    seguro_pendente: number; seguro_placa: string | null; seguro_em: string | null;
   }>(sql`
     SELECT
       (SELECT count(*)::int FROM pendencias_overbooking po
@@ -3110,34 +3299,108 @@ private async montarAlertas(operacaoId: string): Promise<AlertaOperacional[]> {
           AND po.status IN ('aberta','em_analise')) AS overbooking,
       (SELECT coalesce(sum(po.quantidade_deficit), 0)::text FROM pendencias_overbooking po
         WHERE po.operacao_id = ${operacaoId} AND po.deleted_at IS NULL
-          AND po.status IN ('aberta','em_analise')) AS deficit,
+          AND po.status IN ('aberta','em_analise')) AS overbooking_deficit,
+      (SELECT max(po.created_at)::text FROM pendencias_overbooking po
+        WHERE po.operacao_id = ${operacaoId} AND po.deleted_at IS NULL
+          AND po.status IN ('aberta','em_analise')) AS overbooking_em,
+      -- divergencias_recebimento não tem operacao_id nem deleted_at
       (SELECT count(*)::int FROM divergencias_recebimento d
          JOIN recebimentos r ON r.id = d.recebimento_id
         WHERE r.operacao_id = ${operacaoId} AND d.status <> 'resolvida') AS divergencias,
+      -- recebimentos NÃO tem numero_lote: a referência real é romaneio, com a NF do
+      -- fornecedor como alternativa; ambas são nullable, então pode vir NULL.
+      (SELECT coalesce(r.romaneio, r.nota_fiscal_fornecedor) FROM divergencias_recebimento d
+         JOIN recebimentos r ON r.id = d.recebimento_id
+        WHERE r.operacao_id = ${operacaoId} AND d.status <> 'resolvida'
+        ORDER BY d.created_at DESC LIMIT 1) AS divergencia_lote,
+      (SELECT max(d.created_at)::text FROM divergencias_recebimento d
+         JOIN recebimentos r ON r.id = d.recebimento_id
+        WHERE r.operacao_id = ${operacaoId} AND d.status <> 'resolvida') AS divergencia_em,
+      -- pecas não tem operacao_id: chega por recebimentos
       (SELECT count(*)::int FROM pecas p
          JOIN recebimentos r ON r.id = p.recebimento_id
         WHERE r.operacao_id = ${operacaoId} AND p.deleted_at IS NULL
           AND p.status_peca = 'para_corte') AS tz_aguardando,
+      (SELECT max(p.updated_at)::text FROM pecas p
+         JOIN recebimentos r ON r.id = p.recebimento_id
+        WHERE r.operacao_id = ${operacaoId} AND p.deleted_at IS NULL
+          AND p.status_peca = 'para_corte') AS tz_em,
       (SELECT count(*)::int FROM caminhoes c
         WHERE c.operacao_id = ${operacaoId} AND c.deleted_at IS NULL
-          AND c.status_caminhao = 'liberado_faturamento') AS caminhoes_sem_seguro,
-      (SELECT max(a.created_at)::text FROM auditoria a) AS ultimo_evento
+          AND c.status_caminhao = 'faturado') AS seguro_pendente,
+      (SELECT c.placa FROM caminhoes c
+        WHERE c.operacao_id = ${operacaoId} AND c.deleted_at IS NULL
+          AND c.status_caminhao = 'faturado'
+        ORDER BY c.updated_at DESC LIMIT 1) AS seguro_placa,
+      (SELECT max(c.updated_at)::text FROM caminhoes c
+        WHERE c.operacao_id = ${operacaoId} AND c.deleted_at IS NULL
+          AND c.status_caminhao = 'faturado') AS seguro_em
   `).then((r) => r.rows[0]);
-  if (!linha) return alertas;
+  if (!linha) throw new Error('Falha ao apurar os alertas da operação');
 
-  const agora = new Date().toISOString();
-  if (linha.overbooking > 0) {
+  const alertas: AlertaOperacional[] = [];
+
+  if (linha.overbooking > 0 && linha.overbooking_em) {
     alertas.push({
-      chave: 'overbooking_aberto', severidade: 'critico',
+      chave: 'overbooking_aberto',
       titulo: 'Overbooking em aberto',
-      descricao: `${linha.overbooking} pendência(s) com déficit de ${linha.deficit} aguardando decisão.`,
-      ocorridoEm: agora,
+      descricao: `${linha.overbooking} pendência(s) com déficit de `
+        + `${formatarQtd(linha.overbooking_deficit)} aguardando decisão.`,
+      severidade: 'critico',
+      ocorridoEm: linha.overbooking_em,
     });
   }
-  // ... divergencia_recebimento, tz_aguardando_desossa, seguro_pendente com o mesmo padrão
+
+  if (linha.divergencias > 0 && linha.divergencia_em) {
+    // Sem romaneio nem NF do fornecedor, o alerta sai sem a referência do lote —
+    // nunca com um número inventado (RA-06).
+    const lote = linha.divergencia_lote ? `Lote ${linha.divergencia_lote} — ` : '';
+    alertas.push({
+      chave: 'divergencia_recebimento',
+      titulo: 'Divergência de recebimento',
+      descricao: `${lote}${linha.divergencias} divergência(s) encaminhada(s) ao administrativo.`,
+      severidade: 'atencao',
+      ocorridoEm: linha.divergencia_em,
+    });
+  }
+
+  if (linha.tz_aguardando > 0 && linha.tz_em) {
+    alertas.push({
+      chave: 'tz_aguardando_desossa',
+      titulo: 'TZ aguardando desossa',
+      descricao: `${linha.tz_aguardando} peça(s) disponível(is) aguardando encaminhamento à desossa.`,
+      severidade: 'informativo',
+      ocorridoEm: linha.tz_em,
+    });
+  }
+
+  if (linha.seguro_pendente > 0 && linha.seguro_placa && linha.seguro_em) {
+    alertas.push({
+      chave: 'seguro_pendente',
+      titulo: 'Seguro pendente',
+      descricao: `Caminhão ${linha.seguro_placa} faturado aguardando averbação manual de seguro `
+        + 'para liberação de saída.',
+      severidade: 'informativo',
+      ocorridoEm: linha.seguro_em,
+    });
+  }
+
   return alertas;
 }
 ```
+
+Acrescentar aos imports de `dashboard.service.ts` (hoje `dashboard.service.ts:1-6`)
+`formatarQtd` de `../../../common/crud/decimal`.
+
+> Severidade mapeia a cor do ponto no protótipo: `#FC5241` → `critico`, `#F5B019` → `atencao`,
+> `#7C3AED` e `#94A3B8` → `informativo` (`Dashboard.tsx:38-41`).
+
+> **Seguro não é campo do banco.** O parâmetro `fiscal.seguro_integrado` registra "Não (manual)"
+> (`seed.ts:112-118`) e não existe coluna de seguro/averbação em `caminhoes`
+> (`expedicao.schema.ts:13-36`). O único estado real que corresponde ao alerta é
+> `status_caminhao = 'faturado'` — NFS-e emitidas, aguardando `liberado_saida`, cujo passo restante
+> é manual (`liberacao.service.ts:80-102`). Nada de seguro é inventado: o alerta descreve o estado
+> que existe (Princípio VIII).
 
 **9.4** `dashboard.controller.ts`: query `z.object({ operacaoId: z.string().uuid().optional() })`;
 remover `dataOperacao`. Guarda inalterada.
@@ -3694,9 +3957,9 @@ quem implementa.
 | Global Constraints explícitas | Sim — 13 restrições |
 | Decisões de design fixadas (o Worker não escolhe) | Sim — D5.1 a D5.32 |
 | Referências do protótipo por tela, com arquivo e linhas | Sim — 7 linhas na tabela, commit do protótipo fixado |
-| Estrutura de arquivos (novos e alterados) | Sim — 24 novos + 22 alterados no backend; 34 novos + 12 alterados + 11 de teste no frontend |
-| Mapa DoD → teste 1:1 | Sim — 58 critérios, cada um com arquivo e nome de teste |
-| Schemas e caminhos auditados no código real, não presumidos | Sim — seção "Estado atual verificado" lista as colunas que **não** existem (`transformacoes.operacao_id`, `pecas.operacao_id`, `notas_fiscais.operacao_id`, `notas_fiscais_fornecedor.chave_acesso`) e o JOIN correto de cada uma |
+| Estrutura de arquivos (novos e alterados) | Sim — 25 novos + 22 alterados no backend; 34 novos + 12 alterados + 11 de teste no frontend |
+| Mapa DoD → teste 1:1 | Sim — 60 critérios, cada um com arquivo e nome de teste |
+| Schemas e caminhos auditados no código real, não presumidos | Sim — seção "Estado atual verificado" lista as colunas que **não** existem (`transformacoes.operacao_id`, `pecas.operacao_id`, `notas_fiscais.operacao_id`, `notas_fiscais_fornecedor.chave_acesso`, `recebimentos.numero_lote`, campo de seguro em `caminhoes`) e o JOIN correto de cada uma; os CHECKs que restringem os `UPDATE`s da onda (`chk_reservas_qtd_positiva`, `chk_pend_ovb_deficit`, `chk_pedidos_itens_pedida_positiva`) estão citados com arquivo e linha no ponto de uso |
 | Eventos novos com destino real (não só emitidos) | Sim — Task 2.5 liga os 7 eventos ao `realtime.gateway.ts`, com `dataOperacao` no payload (é a room) |
 | Rotas BFF compatíveis com o roteador do Next | Sim — só rotas explícitas; catch-all irmão de `[id]` é proibido e o `npm run build` da Task 10.7 é o gate |
 | Tasks com código literal | Sim — SQL, schemas Drizzle, DTOs Zod, métodos de service, controllers e testes escritos por extenso |
@@ -3708,7 +3971,7 @@ quem implementa.
 | Dívidas registradas | Sim — 5, com destino |
 | Riscos com mitigação | Sim — 6 |
 | Nenhuma AD inventada para pendência aberta | Sim — P8 e P1 seguem abertas, tratadas por parâmetro + badge (D5.4) |
-| Sem dependência de arquivos da Onda 4 | Sim — seção "Fronteira com a Onda 4"; único toque compartilhado é a extração `NaTx` em `pedidos.service.ts`, com mitigação declarada |
+| Sem dependência de arquivos da Onda 4 | Sim — seção "Fronteira com a Onda 4"; único toque compartilhado são as três extrações `NaTx` em `pedidos.service.ts`, com mitigação declarada |
 | Terminologia respeitada (termo banido ausente) | Sim — verificado no texto do plano e vigiado por teste (critério 5.9) |
 | Zero `TBD`, `TODO`, "a definir", "similar à Task" | Sim — nenhuma ocorrência |
 
@@ -3720,7 +3983,7 @@ quem implementa.
 | Tasks | 18 |
 | Commits previstos | 18 |
 | Decisões de design fixadas | 32 (D5.1–D5.32) |
-| Critérios no mapa DoD → teste | 58 |
+| Critérios no mapa DoD → teste | 60 |
 | Migrations | 1 (`0016_onda5_gestao`) |
 | Tabelas novas | 3 (`relatorios_sif`, `relatorios_sif_versoes`, `aprovacoes_operacionais`) |
 | Triggers novos | 4 (2 de imutabilidade + 2 de `updated_at`) |
@@ -3730,12 +3993,12 @@ quem implementa.
 | Eventos novos | 4 (+3 existentes de pendência de overbooking ganham payload completo e handler no gateway) |
 | Handlers `@OnEvent` novos no gateway | 7 |
 | Parâmetros novos | 1 (`gestao.modelos_relatorio_sif`, provisório P8) |
-| Arquivos novos no backend | 24 |
+| Arquivos novos no backend | 25 |
 | Arquivos alterados no backend | 22 |
 | Arquivos novos no frontend | 34 (12 de tela/lib/componente + 22 rotas BFF) |
 | Arquivos alterados no frontend | 12 |
 | Rotas BFF novas | 22 (19 dos endpoints das tasks 4–9 + 3 de ocorrências de fornecedor) |
 | Rotas BFF `[...path]` (catch-all) | 0 — proibidas: conflitariam com o `[id]` já existente |
-| Arquivos de teste novos | 10 backend + 11 frontend |
+| Arquivos de teste novos | 10 specs backend (+1 helper de fixtures) + 11 frontend |
 | Pendências fechadas | 0 (nenhuma AD nova — Princípio VIII) |
 | Dívidas deixadas | 5 |
