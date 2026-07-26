@@ -41,18 +41,24 @@ describe('OverbookingService — branches', () => {
   });
 
   it('alterarStatus 404 quando update não retorna linha', async () => {
-    const atual = { id: 'p1', status: 'aberta' };
+    const atual = { id: 'p1', status: 'aberta', operacaoId: 'op-1' };
     const db = {
       transaction: jest.fn(async (cb: (tx: object) => Promise<unknown>) => cb({
-        select: jest.fn().mockReturnValue({
-          from: () => ({
-            where: () => ({
-              for: () => ({
-                limit: () => Promise.resolve([atual]),
+        select: jest.fn()
+          .mockReturnValueOnce({
+            from: () => ({
+              where: () => ({
+                for: () => ({
+                  limit: () => Promise.resolve([atual]),
+                }),
               }),
             }),
+          })
+          .mockReturnValueOnce({
+            from: () => ({
+              where: () => Promise.resolve([{ data: '2026-08-03' }]),
+            }),
           }),
-        }),
         update: jest.fn(() => ({
           set: () => ({
             where: () => ({
@@ -162,19 +168,25 @@ describe('OverbookingService — branches', () => {
   });
 
   it('decidir emite evento de resolvida', async () => {
-    const atual = { id: 'p1', status: 'compra_complementar_programada' };
-    const atualizada = { id: 'p1', status: 'resolvida' };
+    const atual = { id: 'p1', status: 'compra_complementar_programada', operacaoId: 'op-1' };
+    const atualizada = { id: 'p1', status: 'resolvida', operacaoId: 'op-1' };
     const db = {
       transaction: jest.fn(async (cb: (tx: object) => Promise<unknown>) => cb({
-        select: jest.fn().mockReturnValue({
-          from: () => ({
-            where: () => ({
-              for: () => ({
-                limit: () => Promise.resolve([atual]),
+        select: jest.fn()
+          .mockReturnValueOnce({
+            from: () => ({
+              where: () => ({
+                for: () => ({
+                  limit: () => Promise.resolve([atual]),
+                }),
               }),
             }),
+          })
+          .mockReturnValueOnce({
+            from: () => ({
+              where: () => Promise.resolve([{ data: '2026-08-03' }]),
+            }),
           }),
-        }),
         update: jest.fn(() => ({
           set: () => ({
             where: () => ({
@@ -189,6 +201,64 @@ describe('OverbookingService — branches', () => {
     };
     const result = await service(db).decidir('p1', { status: 'resolvida', detalhe: { ok: true } }, 'user-1');
     expect(result.status).toBe('resolvida');
-    expect(emitter.emit).toHaveBeenCalled();
+    expect(emitter.emit).toHaveBeenCalledWith(
+      'pendencia_overbooking_resolvida',
+      expect.objectContaining({
+        pendenciaId: 'p1',
+        operacaoId: 'op-1',
+        dataOperacao: '2026-08-03',
+        status: 'resolvida',
+      }),
+    );
   });
+
+  it.each([
+    { statusTerminal: 'resolvida' as const, statusAtual: 'compra_complementar_programada' },
+    { statusTerminal: 'cancelada' as const, statusAtual: 'em_analise' },
+  ])(
+    'alterarStatus emite RESOLVIDA no status terminal $statusTerminal com operacaoId e dataOperacao',
+    async ({ statusTerminal, statusAtual }) => {
+      const atual = { id: 'p1', status: statusAtual, operacaoId: 'op-1' };
+      const atualizada = { id: 'p1', status: statusTerminal, operacaoId: 'op-1' };
+      const db = {
+        transaction: jest.fn(async (cb: (tx: object) => Promise<unknown>) => cb({
+          select: jest.fn()
+            .mockReturnValueOnce({
+              from: () => ({
+                where: () => ({
+                  for: () => ({
+                    limit: () => Promise.resolve([atual]),
+                  }),
+                }),
+              }),
+            })
+            .mockReturnValueOnce({
+              from: () => ({
+                where: () => Promise.resolve([{ data: '2026-08-03' }]),
+              }),
+            }),
+          update: jest.fn(() => ({
+            set: () => ({
+              where: () => ({
+                returning: () => Promise.resolve([atualizada]),
+              }),
+            }),
+          })),
+          insert: jest.fn(() => ({
+            values: () => Promise.resolve(undefined),
+          })),
+        })),
+      };
+      await service(db).alterarStatus('p1', statusTerminal, {}, 'user-1');
+      expect(emitter.emit).toHaveBeenCalledWith(
+        'pendencia_overbooking_resolvida',
+        expect.objectContaining({
+          pendenciaId: 'p1',
+          operacaoId: 'op-1',
+          dataOperacao: '2026-08-03',
+          status: statusTerminal,
+        }),
+      );
+    },
+  );
 });

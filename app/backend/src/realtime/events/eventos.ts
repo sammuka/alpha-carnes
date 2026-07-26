@@ -54,6 +54,11 @@ export const EVENTOS = {
   ADENDO_REGISTRADO: 'adendo_registrado',
   RESERVA_LIBERADA_ADMIN: 'reserva_liberada_admin',
   TABELA_PRECO_PUBLICADA: 'tabela_preco_publicada',
+  // ── Onda 5 — Gestão ───────────────────────────────────────────────────────
+  COMPRA_ALTERADA_IMPACTO: 'compra_programada_alterada_impacto',
+  APROVACAO_REGISTRADA: 'aprovacao_operacional_registrada',
+  APROVACAO_DECIDIDA: 'aprovacao_operacional_decidida',
+  RELATORIO_SIF_GERADO: 'relatorio_sif_gerado',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -280,26 +285,52 @@ export interface NfseErroEmissaoPayload {
   dataOperacao: string;
 }
 
+// ── Onda 5 — Gestão ───────────────────────────────────────────────────────
+
+export interface CompraAlteradaImpactoPayload {
+  compraId: string;
+  operacaoId: string;
+  dataOperacao: string;
+  deficitTotal: string;
+  itens: Array<{ itemComercialId: string; delta: string; deficitProjetado: string }>;
+}
+
+export interface AprovacaoOperacionalPayload {
+  aprovacaoId: string;
+  operacaoId: string;
+  dataOperacao: string;
+  tipo: string;
+  status: 'pendente' | 'aprovada' | 'rejeitada';
+}
+
+export interface RelatorioSifGeradoPayload {
+  relatorioId: string;
+  operacaoId: string;
+  dataOperacao: string;
+  versao: number;
+  tipoGeracao: 'gerado' | 'retificado';
+}
+
+export interface PendenciaOverbookingPayload {
+  pendenciaId: string;
+  operacaoId: string;
+  dataOperacao: string;
+  status: string;
+}
+
 /** Contratos tipados dos eventos Onda 1 (PayloadPorEvento). */
 export interface PayloadPorEvento {
   reserva_disponibilidade_atualizada: ReservaAtualizadaPayload;
+  pendencia_overbooking_aberta: PendenciaOverbookingPayload & { pedidoVendaId: string };
+  pendencia_overbooking_atualizada: PendenciaOverbookingPayload;
+  pendencia_overbooking_resolvida: PendenciaOverbookingPayload & {
+    status: 'resolvida' | 'cancelada';
+  };
   operacao_criada: { operacaoId: string; data: string };
   overbooking_confirmado: {
     pedidoVendaId: string;
     itemId: string;
     quantidadeOverbooking: string;
-  };
-  pendencia_overbooking_aberta: {
-    pendenciaId: string;
-    pedidoVendaId: string;
-  };
-  pendencia_overbooking_atualizada: {
-    pendenciaId: string;
-    status: string;
-  };
-  pendencia_overbooking_resolvida: {
-    pendenciaId: string;
-    status: 'resolvida';
   };
   pedido_finalizado: { pedidoVendaId: string };
   pedido_venda_item_criado: { pedidoVendaId: string; itemId: string };
@@ -336,4 +367,9 @@ export interface PayloadPorEvento {
     justificativa: string;
   };
   tabela_preco_publicada: { tabelaPrecoId: string; data: string; autorId: string };
+  // ── Onda 5 — Gestão ───────────────────────────────────────────────────────
+  compra_programada_alterada_impacto: CompraAlteradaImpactoPayload;
+  aprovacao_operacional_registrada: AprovacaoOperacionalPayload;
+  aprovacao_operacional_decidida: AprovacaoOperacionalPayload;
+  relatorio_sif_gerado: RelatorioSifGeradoPayload;
 }

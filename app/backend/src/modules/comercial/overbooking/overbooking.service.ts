@@ -14,6 +14,7 @@ import * as schema from '../../../database/schema';
 import {
   pendenciasOverbooking,
   pendenciasOverbookingHistorico,
+  operacoes,
 } from '../../../database/schema';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import type { Tx } from '../../operacoes/operacoes.service';
@@ -98,15 +99,20 @@ export class OverbookingService {
         tabela: 'pendencias_overbooking', registroId: id, operacao: 'UPDATE',
         modulo: 'comercial', usuarioId, dadosAnteriores: atual, dadosNovos: pendencia,
       });
-      return pendencia;
+      return { pendencia, dataOperacao: await this.dataDaOperacao(tx, pendencia.operacaoId) };
     });
     this.eventEmitter.emit(
-      resultado.status === 'resolvida'
+      resultado.pendencia.status === 'resolvida' || resultado.pendencia.status === 'cancelada'
         ? EVENTOS.PENDENCIA_OVERBOOKING_RESOLVIDA
         : EVENTOS.PENDENCIA_OVERBOOKING_ATUALIZADA,
-      { pendenciaId: resultado.id, status: resultado.status },
+      {
+        pendenciaId: resultado.pendencia.id,
+        operacaoId: resultado.pendencia.operacaoId,
+        dataOperacao: resultado.dataOperacao,
+        status: resultado.pendencia.status,
+      },
     );
-    return resultado;
+    return resultado.pendencia;
   }
 
   // usado pelo controller de decisão (alias tipado)
@@ -125,5 +131,13 @@ export class OverbookingService {
       .limit(1);
     if (!atual) throw new NotFoundException('Pendência não encontrada');
     return atual;
+  }
+
+  /** Data da Operação — obrigatória nos payloads: é a room do broadcast (roomsDaData). */
+  private async dataDaOperacao(tx: Tx, operacaoId: string): Promise<string> {
+    const [linha] = await tx.select({ data: operacoes.data }).from(operacoes)
+      .where(eq(operacoes.id, operacaoId));
+    if (!linha) throw new NotFoundException('Operação da pendência não encontrada');
+    return linha.data;
   }
 }
