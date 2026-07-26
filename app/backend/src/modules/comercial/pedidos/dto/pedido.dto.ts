@@ -72,3 +72,11 @@ export const removerItemSchema = z.object({
 });
 
 export type RemoverItemDto = z.infer<typeof removerItemSchema>;
+
+export const buscarPedidoAbertoSchema = z.object({
+  clienteId: z.string().uuid(),
+  itemComercialId: z.string().uuid(),
+  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dataOperacao deve ser YYYY-MM-DD'),
+});
+
+export type BuscarPedidoAbertoDto = z.infer<typeof buscarPedidoAbertoSchema>;

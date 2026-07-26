@@ -38,6 +38,20 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
 
   const srv = () => app.getHttpServer();
 
+  /** Onda 4 / AD-03: pedido aberto é único por (cliente, item, operação); cenários de
+   * déficit coletivo com 2 pedidos do mesmo item precisam de clientes distintos. */
+  async function criarOutroCliente(): Promise<string> {
+    const { db } = app.get<{ db: Db }>(DRIZZLE);
+    const sufixo = `${Math.round(performance.now() * 1000)}-${Math.floor(Math.random() * 1e6)}`;
+    const [cliente] = await db.insert(schema.clientes).values({
+      codigo: `CLIREC-${sufixo}`,
+      razaoSocial: 'Cliente Recebimento 2',
+      documentoFiscal: `DOCREC-${sufixo}`,
+    }).returning();
+    if (!cliente) throw new Error('Falha ao criar segundo cliente do teste');
+    return cliente.id;
+  }
+
   const divergenciaFalta = {
     tipo: 'falta',
     descricao: 'Chegou menos que o esperado',
@@ -273,12 +287,14 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
   it('déficit COLETIVO: 2 pedidos × 6, recebido 10 → ambos em risco (Σ reservas > recebido)', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-17', quantidade: 12 });
-    // 2 pedidos de 6 (Σ reservado = 12). Nenhum pedido isolado excede o recebido (10).
-    for (let i = 0; i < 2; i++) {
+    // 2 pedidos de 6 (Σ reservado = 12), de clientes distintos (AD-03 — Onda 4). Nenhum
+    // pedido isolado excede o recebido (10).
+    const outroClienteId = await criarOutroCliente();
+    for (const clienteId of [base.clienteId, outroClienteId]) {
       const p = await request(srv())
         .post('/comercial/pedidos')
         .set('Cookie', comercialCookies)
-        .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-17', itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }] });
+        .send({ compraProgramadaId: compraId, clienteId, dataOperacao: '2026-11-17', itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }] });
       expect(p.status).toBe(201);
     }
 

@@ -6,16 +6,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, desc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
+  clientes,
   pendenciasOverbooking,
   pendenciasOverbookingHistorico,
   pedidosVenda,
   pedidosVendaItens,
+  representantes,
   reservasDisponibilidade,
+  rotas,
 } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import {
@@ -36,6 +39,7 @@ import {
 import { EVENTOS, type PayloadPorEvento } from '../../../realtime/events/eventos';
 import { OperacoesService, type Tx } from '../../operacoes/operacoes.service';
 import type {
+  BuscarPedidoAbertoDto,
   CreatePedidoDto,
   IncluirItemDto,
   ReduzirItemDto,
@@ -93,6 +97,11 @@ function desafiosParaChallenge(plano: PlanoItem[]): OverbookingChallengeItem[] {
 
 @Injectable()
 export class PedidosService {
+  /** AD-03 — a chave funcional do pedido aberto é (cliente, item comercial, operação). */
+  private static readonly STATUS_ABERTOS = [
+    'rascunho', 'em_elaboracao_reserva_ativa', 'aguardando_confirmacao_overbooking',
+  ] as const;
+
   constructor(
     @Inject(DRIZZLE)
     private readonly drizzle: { db: NodePgDatabase<typeof schema> },
@@ -105,11 +114,43 @@ export class PedidosService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<PedidoVenda>> {
+  async listar(query: ListarQuery): Promise<Paginado<PedidoVenda & {
+    representanteId: string | null;
+    representanteNome: string | null;
+    rotaNome: string | null;
+  }>> {
     const { limit, offset } = calcularRange(query);
     const where = query.incluirRemovidos ? undefined : isNull(pedidosVenda.deletedAt);
     const [linhas, totalRow] = await Promise.all([
-      this.db.select().from(pedidosVenda).where(where).orderBy(desc(pedidosVenda.createdAt)).limit(limit).offset(offset),
+      this.db
+        .select({
+          id: pedidosVenda.id,
+          compraProgramadaId: pedidosVenda.compraProgramadaId,
+          clienteId: pedidosVenda.clienteId,
+          operacaoId: pedidosVenda.operacaoId,
+          dataEntrega: pedidosVenda.dataEntrega,
+          rotaPrevista: pedidosVenda.rotaPrevista,
+          prioridade: pedidosVenda.prioridade,
+          status: pedidosVenda.status,
+          observacoesGerais: pedidosVenda.observacoesGerais,
+          motivoCancelamento: pedidosVenda.motivoCancelamento,
+          usuarioCriacaoId: pedidosVenda.usuarioCriacaoId,
+          usuarioAprovacaoId: pedidosVenda.usuarioAprovacaoId,
+          createdAt: pedidosVenda.createdAt,
+          updatedAt: pedidosVenda.updatedAt,
+          deletedAt: pedidosVenda.deletedAt,
+          representanteId: clientes.representanteId,
+          representanteNome: representantes.nome,
+          rotaNome: rotas.nome,
+        })
+        .from(pedidosVenda)
+        .leftJoin(clientes, eq(pedidosVenda.clienteId, clientes.id))
+        .leftJoin(representantes, eq(clientes.representanteId, representantes.id))
+        .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
+        .where(where)
+        .orderBy(desc(pedidosVenda.createdAt))
+        .limit(limit)
+        .offset(offset),
       this.db.select({ total: sql<number>`count(*)::int` }).from(pedidosVenda).where(where),
     ]);
     return montarPaginado(linhas, totalRow[0]?.total ?? 0, query);
@@ -124,7 +165,101 @@ export class PedidosService {
       },
     });
     if (!pedido) throw new NotFoundException('Pedido não encontrado');
-    return pedido;
+    const [heranca] = await this.db
+      .select({
+        representanteId: clientes.representanteId,
+        representanteNome: representantes.nome,
+        rotaId: clientes.rotaId,
+        rotaNome: rotas.nome,
+      })
+      .from(clientes)
+      .leftJoin(representantes, eq(clientes.representanteId, representantes.id))
+      .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
+      .where(eq(clientes.id, pedido.clienteId))
+      .limit(1);
+    return { ...pedido, heranca: heranca ?? null };
+  }
+
+  /** Devolve o pedido aberto (payload do `ModalAdendo`) ou lança 404 se a data não tem operação. */
+  async buscarAberto(query: BuscarPedidoAbertoDto) {
+    return this.db.transaction(async (tx) => {
+      const operacao = await this.operacoes.encontrarAtivaPorData(tx, query.dataOperacao);
+      if (!operacao) {
+        throw new NotFoundException({
+          code: 'OPERACAO_NAO_ENCONTRADA',
+          message: `Não existe operação ativa em ${query.dataOperacao}.`,
+        });
+      }
+      const [aberto] = await tx
+        .select({
+          pedidoId: pedidosVenda.id,
+          status: pedidosVenda.status,
+          itemComercialId: pedidosVendaItens.itemComercialId,
+          quantidadeAtual: pedidosVendaItens.quantidadePedida,
+        })
+        .from(pedidosVendaItens)
+        .innerJoin(pedidosVenda, eq(pedidosVendaItens.pedidoVendaId, pedidosVenda.id))
+        .where(and(
+          eq(pedidosVenda.clienteId, query.clienteId),
+          eq(pedidosVenda.operacaoId, operacao.id),
+          eq(pedidosVendaItens.itemComercialId, query.itemComercialId),
+          inArray(pedidosVenda.status, [...PedidosService.STATUS_ABERTOS]),
+          isNull(pedidosVenda.deletedAt),
+          isNull(pedidosVendaItens.deletedAt),
+        ))
+        .limit(1);
+      return aberto ?? null;
+    });
+  }
+
+  /**
+   * AD-03 — recusa um novo pedido aberto do mesmo cliente/item comercial na mesma
+   * operação; a inclusão adicional deve ser feita via adendo (Task 7).
+   */
+  private async exigirUnicidadeAd03(
+    tx: Tx, clienteId: string, operacaoId: string, itensComerciaisIds: string[],
+    pedidoIdIgnorado?: string,
+  ): Promise<void> {
+    const conflitos = await tx
+      .select({
+        pedidoId: pedidosVenda.id,
+        itemComercialId: pedidosVendaItens.itemComercialId,
+        quantidadeAtual: pedidosVendaItens.quantidadePedida,
+        status: pedidosVenda.status,
+      })
+      .from(pedidosVendaItens)
+      .innerJoin(pedidosVenda, eq(pedidosVendaItens.pedidoVendaId, pedidosVenda.id))
+      .where(and(
+        eq(pedidosVenda.clienteId, clienteId),
+        eq(pedidosVenda.operacaoId, operacaoId),
+        inArray(pedidosVenda.status, [...PedidosService.STATUS_ABERTOS]),
+        inArray(pedidosVendaItens.itemComercialId, itensComerciaisIds),
+        isNull(pedidosVenda.deletedAt),
+        isNull(pedidosVendaItens.deletedAt),
+        pedidoIdIgnorado ? ne(pedidosVenda.id, pedidoIdIgnorado) : undefined,
+      ));
+    if (conflitos.length === 0) return;
+    throw new ConflictException({
+      code: 'PEDIDO_ABERTO_EXISTENTE',
+      message: 'Já existe pedido aberto deste cliente para o produto nesta operação. Use o adendo.',
+      conflitos,
+    });
+  }
+
+  /**
+   * Herança do cadastro do cliente para o pedido (matriz linha 3 / D31).
+   * Rota: copiada de clientes.rota_id → rotas.nome quando o DTO não a informa.
+   * Representante: NÃO é copiado — é derivado de clientes.representante_id na leitura.
+   */
+  private async rotaHerdadaDoCliente(tx: Tx, clienteId: string): Promise<string | null> {
+    const [linha] = await tx
+      .select({ nomeRota: rotas.nome })
+      .from(clientes)
+      .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
+      .where(and(eq(clientes.id, clienteId), isNull(clientes.deletedAt)))
+      .limit(1);
+    if (!linha) throw new NotFoundException('Cliente não encontrado');
+    return linha.nomeRota ?? null;
   }
 
   async criar(dto: CreatePedidoDto, usuarioId: string, confirmado = false) {
@@ -139,6 +274,17 @@ export class PedidosService {
       const operacaoExistente = await this.operacoes.encontrarAtivaPorData(
         tx, dto.dataOperacao,
       );
+      // Sem operação ativa na data não pode existir pedido aberto para checar: pedidos_venda.operacao_id
+      // é NOT NULL e FK para operacoes(id), logo o conjunto de conflitos é provadamente vazio.
+      // A operação é criada logo abaixo por garantirOperacao (primeiro pedido do dia).
+      if (operacaoExistente) {
+        await this.exigirUnicidadeAd03(
+          tx,
+          dto.clienteId,
+          operacaoExistente.id,
+          solicitados.map((s) => s.itemComercialId),
+        );
+      }
       const plano = await this.planejarSobLock(
         tx, operacaoExistente?.id ?? null, solicitados,
       );
@@ -156,7 +302,7 @@ export class PedidosService {
         clienteId: dto.clienteId,
         operacaoId: operacao.id,
         dataEntrega: dto.dataEntrega,
-        rotaPrevista: dto.rotaPrevista,
+        rotaPrevista: dto.rotaPrevista ?? (await this.rotaHerdadaDoCliente(tx, dto.clienteId)),
         prioridade: dto.prioridade,
         status: 'em_elaboracao_reserva_ativa',
         observacoesGerais: dto.observacoesGerais,
@@ -222,6 +368,18 @@ export class PedidosService {
     if (itemExistente.length) {
       throw new ConflictException('Item comercial já existe neste pedido');
     }
+
+    // Pedido é dado persistido com operacao_id NOT NULL; a leitura é explícita e
+    // falha alto se o invariante for violado (nunca infere ou inventa a operação).
+    if (!pedido.operacaoId) {
+      throw new ConflictException({
+        code: 'PEDIDO_SEM_OPERACAO',
+        message: 'Pedido sem operação vinculada; não é possível validar a unicidade AD-03.',
+      });
+    }
+    await this.exigirUnicidadeAd03(
+      tx, pedido.clienteId, pedido.operacaoId, [dto.itemComercialId], pedido.id,
+    );
 
     const solicitado: ItemSolicitado = {
       itemComercialId: dto.itemComercialId,

@@ -5,6 +5,8 @@ import { PedidosService } from '../../src/modules/comercial/pedidos/pedidos.serv
 function chain(rows: unknown[]) {
   const obj: Record<string, unknown> = {
     from: () => obj,
+    leftJoin: () => obj,
+    innerJoin: () => obj,
     where: () => obj,
     orderBy: () => obj,
     for: () => obj,
@@ -147,6 +149,10 @@ describe('PedidosService — branches', () => {
     const pedidoInserido = { id: 'p1', operacaoId: 'op-existente', clienteId: 'c1', status: 'em_elaboracao_reserva_ativa' };
     const tx = {
       execute: jest.fn().mockResolvedValue({ rows: [] }),
+      // 1ª chamada: exigirUnicidadeAd03 (sem conflitos); 2ª: rotaHerdadaDoCliente (cliente sem rota).
+      select: jest.fn()
+        .mockImplementationOnce(() => chain([]))
+        .mockImplementationOnce(() => chain([{ nomeRota: null }])),
       insert: jest.fn(() => ({ values: () => ({ returning: jest.fn(async () => [pedidoInserido]) }) })),
     };
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };

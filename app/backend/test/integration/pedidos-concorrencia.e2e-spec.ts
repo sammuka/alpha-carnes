@@ -53,6 +53,25 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
     return { base, compraId };
   }
 
+  /** Onda 4 / AD-03: pedido aberto é único por (cliente, item, operação); a concorrência
+   * anti-overbooking deste teste é sobre o saldo compartilhado do item, não sobre o
+   * cliente — por isso cada tentativa concorrente usa um cliente independente. */
+  async function criarClientesExtras(quantidade: number): Promise<string[]> {
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const ids: string[] = [];
+    for (let i = 0; i < quantidade; i += 1) {
+      const sufixo = `${Math.round(performance.now() * 1000)}-${i}-${Math.floor(Math.random() * 1e6)}`;
+      const [cliente] = await db.insert(schema.clientes).values({
+        codigo: `CLICC-${sufixo}`,
+        razaoSocial: `Cliente Concorrência ${i}`,
+        documentoFiscal: `DOCCC-${sufixo}`,
+      }).returning();
+      if (!cliente) throw new Error('Falha ao criar cliente extra do teste');
+      ids.push(cliente.id);
+    }
+    return ids;
+  }
+
   async function somaReservasAtivas(disponibilidadeId: string): Promise<number> {
     const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
     const rows = await db
@@ -83,12 +102,13 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
     const T = 10;
     const N = 20;
     const { base, compraId } = await cenarioComSaldo('2026-11-01', T);
+    const clientes = await criarClientesExtras(N);
 
     const resultados = await Promise.all(
-      Array.from({ length: N }, () =>
+      clientes.map((clienteId) =>
         criarSafe({
           compraProgramadaId: compraId,
-          clienteId: base.clienteId,
+          clienteId,
           dataOperacao: '2026-11-01',
           itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 1 }],
         }),
@@ -111,12 +131,13 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
     const N = 20;
     const r = 3;
     const { base, compraId } = await cenarioComSaldo('2026-11-02', T);
+    const clientes = await criarClientesExtras(N);
 
     const resultados = await Promise.all(
-      Array.from({ length: N }, () =>
+      clientes.map((clienteId) =>
         criarSafe({
           compraProgramadaId: compraId,
-          clienteId: base.clienteId,
+          clienteId,
           dataOperacao: '2026-11-02',
           itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: r }],
         }),
@@ -138,12 +159,13 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
 
   it('fronteira: T=10, 3 chamadas de 4 → 2 ok (8) + 1 challenge; saldo restante 2', async () => {
     const { base, compraId } = await cenarioComSaldo('2026-11-03', 10);
+    const clientes = await criarClientesExtras(3);
 
     const resultados = await Promise.all(
-      [4, 4, 4].map(() =>
+      clientes.map((clienteId) =>
         criarSafe({
           compraProgramadaId: compraId,
-          clienteId: base.clienteId,
+          clienteId,
           dataOperacao: '2026-11-03',
           itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 4 }],
         }),

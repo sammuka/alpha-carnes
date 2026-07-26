@@ -20,6 +20,7 @@ import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators
 import { listarQuerySchema, type ListarQuery } from '../../../common/crud/paginacao';
 import { PedidosService } from './pedidos.service';
 import {
+  buscarPedidoAbertoSchema,
   cancelarPedidoSchema,
   confirmarCriacaoOverbookingSchema,
   confirmarInclusaoOverbookingSchema,
@@ -27,6 +28,7 @@ import {
   incluirItemSchema,
   reduzirItemSchema,
   removerItemSchema,
+  type BuscarPedidoAbertoDto,
   type CancelarPedidoDto,
   type ConfirmarInclusaoOverbookingDto,
   type CreatePedidoDto,
@@ -45,6 +47,14 @@ export class PedidosController {
   @RequirePermissoes('PEDIDOS_LER')
   async listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
     return this.service.listar(query);
+  }
+
+  @Get('aberto')
+  @RequirePermissoes('PEDIDOS_LER')
+  async buscarAberto(
+    @Query(new ZodValidationPipe(buscarPedidoAbertoSchema)) query: BuscarPedidoAbertoDto,
+  ) {
+    return this.service.buscarAberto(query);
   }
 
   @Get(':id')
