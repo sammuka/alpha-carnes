@@ -51,6 +51,44 @@ export interface ConfirmacaoCompraProgramada {
   jaConfirmada: boolean;
 }
 
+export interface ItemImpacto {
+  itemComercialId: string;
+  codigo: string;
+  descricao: string;
+  quantidadeGeradaAtual: string;
+  quantidadeGeradaProjetada: string;
+  delta: string;
+  quantidadeReservada: string;
+  saldoAtual: string;
+  saldoProjetado: string;
+  deficitProjetado: string;
+}
+
+export interface ImpactoCompra {
+  compraId: string;
+  operacaoId: string;
+  status: string;
+  itens: ItemImpacto[];
+  deficitTotal: string;
+  exigeConfirmacao: boolean;
+  resumo: string;
+}
+
+export interface HistoricoCompraItem {
+  id: string;
+  dataHora: string;
+  usuarioNome: string | null;
+  tabela: string;
+  operacao: string;
+  dadosAnteriores: unknown;
+  dadosNovos: unknown;
+}
+
+export interface RespostaEdicaoItem {
+  item: CompraProgramadaItem;
+  impacto: ImpactoCompra;
+}
+
 export interface CriarCompraProgramadaDto {
   dataOperacao: string;
   fornecedorId: string;
