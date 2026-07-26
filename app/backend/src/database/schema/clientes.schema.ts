@@ -14,7 +14,6 @@ export const clientes = pgTable(
     nomeFantasia:            text('nome_fantasia'),
     documentoFiscal:         text('documento_fiscal').notNull(), // CNPJ ou CPF, só dígitos
     status:                  text('status').notNull().default('ativo'),
-    rotaPadrao:              text('rota_padrao'),
     rotaId:                  uuid('rota_id').references(() => rotas.id),
     prioridade:              text('prioridade'),
     preferenciasJson:        jsonb('preferencias_json').notNull().default(sql`'{}'::jsonb`),

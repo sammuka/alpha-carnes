@@ -60,3 +60,31 @@ ALTER TABLE "rotas" DROP COLUMN IF EXISTS "dias_atendimento";
 ALTER TABLE "rotas" DROP COLUMN IF EXISTS "paradas";
 ALTER TABLE "perfis" DROP COLUMN IF EXISTS "menus_visiveis";
 ```
+
+## Onda 4 — ordem de rollback (contract → expand)
+
+Rollback estrutural da Onda 4 **nesta ordem**:
+
+1. `0017_onda4_comercial_contract`
+2. `0016_onda4_comercial_expand`
+
+### 0017 (contract)
+
+Antes de dropar `clientes.rota_padrao`, restaurar o valor a partir de `rotas.codigo`
+via `clientes.rota_id` caso seja necessário reverter:
+
+```sql
+ALTER TABLE "clientes" ADD COLUMN IF NOT EXISTS "rota_padrao" text;
+UPDATE "clientes" c SET "rota_padrao" = r."codigo"
+  FROM "rotas" r WHERE c."rota_id" = r."id";
+```
+
+### 0016 (expand)
+
+```sql
+ALTER TABLE "clientes" DROP COLUMN IF EXISTS "rota_id";
+DROP TABLE IF EXISTS "tabelas_preco_publicacoes";
+DROP TABLE IF EXISTS "tabelas_preco_itens";
+DROP TABLE IF EXISTS "tabelas_preco";
+DROP TABLE IF EXISTS "adendos_pedido";
+```

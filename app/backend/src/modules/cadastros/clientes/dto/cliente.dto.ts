@@ -21,7 +21,6 @@ export const createClienteSchema = z.object({
   nomeFantasia: z.string().trim().max(200).optional(),
   documentoFiscal: documentoFiscalSchema,
   status: statusSchema.optional().default('ativo'),
-  rotaPadrao: z.string().trim().max(100).optional(),
   representanteId: z.string().uuid().optional(),
   prioridade: z.string().trim().max(50).optional(),
   preferenciasJson: preferenciasJsonSchema,
