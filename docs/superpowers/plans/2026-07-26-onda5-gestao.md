@@ -101,7 +101,7 @@ Nenhum evento é emitido dentro da transação; nenhuma regra de negócio vive n
 | Banco | PostgreSQL 18 | `NUMERIC` nativo para todo cálculo de quantidade/peso (sem float) |
 | ORM | Drizzle + `drizzle-kit` | migration `0016_onda5_gestao.sql` escrita à mão, registrada no `_journal.json` |
 | Validação | Zod 4 | um schema por DTO, `ZodValidationPipe` no controller |
-| Tempo real | `EventEmitter2` + WebSocket nativo | eventos novos: `COMPRA_ALTERADA_IMPACTO`, `APROVACAO_REGISTRADA`, `APROVACAO_DECIDIDA`, `RELATORIO_SIF_GERADO` |
+| Tempo real | `EventEmitter2` + WebSocket nativo | eventos novos: `COMPRA_ALTERADA_IMPACTO`, `APROVACAO_REGISTRADA`, `APROVACAO_DECIDIDA`, `RELATORIO_SIF_GERADO`. Emitir não basta: cada um precisa de `@OnEvent` + `broadcast` em `realtime.gateway.ts` (Task 2.5) e de `dataOperacao` no payload, porque `roomsDaData(dataOperacao)` é o que define a room |
 | Frontend | Next.js 16 App Router + React 19 + Tailwind 4 + Shadcn/ui | DS v2 já absorvido (Onda 2); usar tokens, `KpiCard`, `StatusPill`, `AlertItem`, `ActivityItem`, `BadgeProvisorio` |
 | Testes backend | Jest unit + integração com Postgres real | `createTestApp` / `cleanupDb` (`app/backend/test/helpers`) |
 | Testes frontend | Jest + Testing Library; Playwright e2e | `app/frontend/__tests__/*.test.tsx`, `app/frontend/e2e/*.spec.ts` |
@@ -155,7 +155,7 @@ plano segue para não criar dependência nem conflito estrutural:
 |---|---|
 | `pendencias_overbooking` e `pendencias_overbooking_historico` | **Já existem** (Onda 1, migration `0012_onda1_expand`, `src/database/schema/pendencias-overbooking.schema.ts`). A Onda 5 **reutiliza** e não altera as tabelas. |
 | Quem **abre** a pendência | O vendedor, em `PedidosService.persistirItensPlanejados` (Onda 1, `pedidos.service.ts:349-362`). A Onda 5 **consome** a fila; não muda a abertura. Contrato consumido: `{ pedido_venda_id, pedido_venda_item_id, item_comercial_id, cliente_id, vendedor_usuario_id, operacao_id, quantidade_deficit, status }` — matriz linha 11. |
-| `pedidos_venda` / `reservas_disponibilidade` | A Onda 5 **chama métodos públicos já existentes** do `PedidosService` (`criar`, `reduzirItem`) e não edita a lógica de pedidos. Único toque em arquivo de pedidos: `exports: [PedidosService]` no `pedidos.module.ts` (Task 6), alteração de 1 linha e idempotente perante a Onda 4. |
+| `pedidos_venda` / `reservas_disponibilidade` | A Onda 5 **chama métodos públicos já existentes** do `PedidosService` (`criar`, `reduzirItem`) e não edita a lógica de pedidos. Toques em arquivos de pedidos: (a) `exports: [PedidosService]` no `pedidos.module.ts` (Task 6), 1 linha idempotente; (b) extração de `criarNaTx`/`reduzirItemNaTx` em `pedidos.service.ts` (Task 6.4), refatoração sem mudança de comportamento; (c) `dataOperacao` + `operacaoId` no payload do evento `PENDENCIA_OVERBOOKING_ABERTA` (`pedidos.service.ts:359-362`, Task 2.5), que altera só o objeto emitido. Nenhum dos três muda regra de pedido. |
 | `/comercial/*` | Fora do escopo. Nenhum arquivo em `app/frontend/src/app/(admin)/comercial/**` é criado ou alterado nesta onda. |
 | Disponibilidade | A Onda 5 altera `disponibilidade.service.ts` acrescentando `projetarImpacto` e `recalcularParaCompra` (métodos novos). Não altera `gerarParaCompra` nem `listarPedidosEmRisco`. |
 | Migration | Onda 4 e Onda 5 usam tags distintas; a Onda 5 é `0016_onda5_gestao`. Se a Onda 4 mergear antes e ocupar o número, o Executor renumera para o próximo livre **mantendo o mesmo conteúdo SQL** e re-roda `db:migrate` — registrar a renumeração no PR. |
@@ -193,7 +193,10 @@ Auditoria feita no worktree `F:/Projetos/AlphaCarnes/.worktrees/onda5-plan`:
 |---|---|---|
 | Tabela `operacoes` | `src/database/schema/operacoes.schema.ts` | `data` única, `dia_semana`, `rotulo`, `status IN ('aberta','em_andamento','fechada')`, `extraordinaria`, `criada_por_id` |
 | Serviço de Operação | `src/modules/operacoes/operacoes.service.ts` | `garantirOperacao`, `listar`, `detalhar`, `gerarCadencia` (lê parâmetro `operacao.cadencia_dias_semana`), `criarExtraordinaria`, `alterarStatus` com `TRANSICOES_OPERACAO` |
-| Endpoints de Operação | `src/modules/operacoes/operacoes.controller.ts` | `GET /operacoes`, `GET /operacoes/:id`, `POST /operacoes/extraordinaria`, `POST /operacoes/gerar-cadencia`, `PATCH /operacoes/:id/status` |
+| Listagem de Operação **já paginada e filtrável** | `operacoes.service.ts:101-118` | `listar(query)` já devolve `Paginado<Operacao>` via `montarPaginado` e já filtra `de`, `ate`, `status`, `pagina`, `limite`; ordena por `asc(data)`. **A Task 4 não introduz o envelope** — ele existe |
+| DTO de Operação | `src/modules/operacoes/dto/operacao.dto.ts` (**nome real: `operacao.dto.ts`, singular**) | `listarOperacoesSchema` **já existe** (`de`, `ate`, `status`, `pagina` default 1, `limite` default 20, `refine` de `de <= ate`), além de `criarExtraordinariaSchema`, `gerarCadenciaSchema`, `alterarStatusOperacaoSchema` |
+| Endpoints de Operação | `src/modules/operacoes/operacoes.controller.ts` | `GET /operacoes` (**já com `ZodValidationPipe(listarOperacoesSchema)` na query**), `GET /operacoes/:id`, `POST /operacoes/extraordinaria`, `POST /operacoes/gerar-cadencia`, `PATCH /operacoes/:id/status` |
+| Gateway de tempo real | `src/realtime/realtime.gateway.ts`, `src/realtime/events/eventos.ts:58-60` | Um `@OnEvent` por evento chamando `this.broadcast(evento, payload, payload.dataOperacao)`; `roomsDaData(data)` devolve `['dashboard', 'operacao:<data>']`. **Evento sem handler no gateway não chega ao browser** |
 | Compras programadas | `compras-programadas.service.ts` / `.controller.ts` | CRUD + `confirmar` idempotente; `assertEditavel` hoje limita mutação a `rascunho`/`em_negociacao` |
 | Disponibilidade | `disponibilidade.service.ts:54-104` | `gerarParaCompra` calcula `SUM(fator × quantidade_comprada)` em SQL com `ON CONFLICT (compra_programada_id, item_comercial_id) DO NOTHING` |
 | Overbooking | `overbooking.service.ts`, `dto/overbooking.dto.ts` | `listar`/`detalhar`/`alterarStatus` com histórico e `TRANSICOES_PENDENCIA`; `decidir` hoje é apenas alias de `alterarStatus` (troca de status **sem efeito de domínio**) |
@@ -204,6 +207,32 @@ Auditoria feita no worktree `F:/Projetos/AlphaCarnes/.worktrees/onda5-plan`:
 | DS/UI | `src/components/ui/` | `KpiCard`, `StatusPill`, `AlertItem`, `ActivityItem`, `PipelineBar`, `BadgeProvisorio`, `CadastroTabelaDrawer` (Onda 3) |
 | Menu | `src/lib/menu-v2.ts:33-38`, `src/common/rbac/menus-canonicos.ts:12-17` | As 6 rotas de Gestão já estão no menu canônico e na visibilidade por perfil |
 | Permissões | `src/common/rbac/permissoes.ts` | `OPERACOES_GERENCIAR`, `COMPRAS_PROGRAMADAS_LER/GERENCIAR`, `DISPONIBILIDADE_LER`, `PEDIDOS_LER`, `OVERBOOKING_RESOLVER`, `OCORRENCIA_FORNECEDOR_GERENCIAR`, `AUDITORIA_VISUALIZAR` |
+| Ocorrências de fornecedor (API) | `ocorrencia-fornecedor.controller.ts` | `@Controller('operacao/ocorrencias-fornecedor')` com `GET /`, `GET /:id`, `POST /`, `PATCH /:id`, `POST /:id/encerrar`, todos sob `OCORRENCIA_FORNECEDOR_GERENCIAR`. **Não há nenhuma rota BFF para esse controller** — a Task 10 cria |
+| Proxy cru do BFF | `src/lib/api.ts:30-37` | `apiFetch(path, options)` devolve o `Response` bruto (status + corpo íntegros). `fetchBackend` **descarta o corpo do erro** (reduz a `{ message }`) — inutilizável no challenge 409 do painel de impacto |
+
+**Colunas que NÃO existem (checado no schema Drizzle — todo agrupamento por Operação exige JOIN):**
+
+| Tabela | Fato verificado | Caminho real até `operacao_id` |
+|---|---|---|
+| `transformacoes` | `transformacoes.schema.ts:9-46` — colunas: `peca_origem_id`, `tipo_transformacao`, `motivo`, `status_transformacao`, pesos. **Não tem `operacao_id`** | `transformacoes.peca_origem_id → pecas.id`, `pecas.recebimento_id → recebimentos.id`, `recebimentos.operacao_id` |
+| `pecas` | `pesagem.schema.ts:14-51` — tem `compra_programada_id` e `recebimento_id`. **Não tem `operacao_id`** | `pecas.recebimento_id → recebimentos.operacao_id` |
+| `notas_fiscais` | `faturamento.schema.ts:55-108` — tem `faturamento_id` e `caminhao_id`. **Não tem `operacao_id`** | `notas_fiscais.caminhao_id → caminhoes.operacao_id` (equivalente: `notas_fiscais.faturamento_id → faturamentos.operacao_id`) |
+| `notas_fiscais_fornecedor` | `notas-fiscais-fornecedor.schema.ts:17-34` — a coluna da chave da NF-e chama-se **`chave`** (não `chave_acesso`); tem `recebimento_id`, não tem `operacao_id` | `notas_fiscais_fornecedor.recebimento_id → recebimentos.operacao_id` |
+| `divergencias_recebimento` | `recebimentos.schema.ts:96-130` — tem `recebimento_id` e `status IN ('aberta','em_analise','aguardando_fornecedor','resolvida')`; **não tem `deleted_at`** (não filtrar por soft delete aqui) | `divergencias_recebimento.recebimento_id → recebimentos.operacao_id` |
+| `recebimentos`, `caminhoes`, `faturamentos`, `compras_programadas`, `pedidos_venda`, `pendencias_overbooking` | Têm `operacao_id` direto | filtro direto |
+
+**Frontend — estado real das 6 rotas e do BFF:**
+
+| Ativo | Fato verificado |
+|---|---|
+| `gestao/dashboard/page.tsx` + `dashboard-client.tsx` | Tela real parcial (5 agregações) — **alterar** |
+| `gestao/compras/page.tsx` + `compras-client.tsx` | Tela real (CRUD + confirmar) — **alterar** |
+| `gestao/operacoes/page.tsx`, `gestao/overbooking/page.tsx`, `gestao/aprovacoes/page.tsx`, `gestao/relatorios/page.tsx` | **Os 4 arquivos já existem** e renderizam `<PlaceholderPage title="…" />`. São **alterados**, não criados; o `*-client.tsx` de cada um é que é novo |
+| `src/lib/operacao.ts` | **Já existe** (domínio operacional de F4a/F4b/F5/F6a: recebimento, pesagem, corte, caminhão, conferência). O cliente de Operação desta onda vai em **`src/lib/gestao-operacoes.ts`** para não colidir por proximidade de nome |
+| BFF `comercial/compras-programadas/**` | Já existem: `route.ts` (GET, POST), `[id]/route.ts` (GET, PATCH, DELETE), `[id]/confirmar/route.ts` (POST), `[id]/itens/[itemId]/route.ts` (PATCH, hoje com `fetchBackend`) |
+| BFF `comercial/overbooking/**` | Já existem: `route.ts` (GET), `[id]/route.ts` (GET), `[id]/decisao/route.ts` (POST, hoje com `fetchBackend`). **Não há rota para `PATCH /:id/status`** |
+| BFF `gestao/dashboard/route.ts` | Já existe, hoje repassa `dataOperacao` |
+| **Rota catch-all é proibida nesta onda** | `src/app/api/comercial/compras-programadas/` e `src/app/api/comercial/overbooking/` já têm o segmento dinâmico `[id]`. Criar `[...path]` irmão de `[id]` no mesmo nível quebra o build do Next (`You cannot use different slug names for the same dynamic path`). A Task 10 usa **apenas rotas explícitas** |
 
 **Falta (é o que esta onda entrega):**
 
@@ -481,12 +510,12 @@ transação, no mesmo padrão de `OcorrenciaFornecedorService.abrirNaTx`.
 **D5.24 — Pendências de dados calculadas, nunca digitadas.** Cada tipo declara suas regras, avaliadas
 por SQL sobre dados reais da operação:
 
-| Tipo | Pendência emitida quando |
-|---|---|
-| `mapa_recebimento` | há `pecas` da operação sem `pedido_venda_id` e sem destino (`status_peca='pesada'`); há `notas_fiscais_fornecedor` da operação com `chave_acesso` nula |
-| `producao_desossa` | há `transformacoes` da operação com `status_transformacao <> 'concluida'` |
-| `controle_expedicao` | há `caminhoes` da operação com `status_caminhao` anterior a `fechado` |
-| `perdas_destinacao` | há `divergencias_recebimento` da operação com `status <> 'resolvida'` |
+| Tipo | Pendência emitida quando | Caminho até a Operação (nenhuma dessas tabelas tem `operacao_id`, exceto `caminhoes`) |
+|---|---|---|
+| `mapa_recebimento` | há `pecas` com `status_peca = 'pesada'` e `pedido_venda_id IS NULL`; há `notas_fiscais_fornecedor` com a coluna **`chave`** nula ou em branco | `pecas.recebimento_id → recebimentos.operacao_id`; `notas_fiscais_fornecedor.recebimento_id → recebimentos.operacao_id` |
+| `producao_desossa` | há `transformacoes` com `status_transformacao NOT IN ('concluida','cancelada')` — cancelada **não** é pendência, por isso `NOT IN` e não `<> 'concluida'` | `transformacoes.peca_origem_id → pecas.id → pecas.recebimento_id → recebimentos.operacao_id` |
+| `controle_expedicao` | há `caminhoes` com `status_caminhao IN ('planejado','aguardando_carga','em_carga','em_conferencia')` (todos anteriores a `fechado`) | `caminhoes.operacao_id` (direto) |
+| `perdas_destinacao` | há `divergencias_recebimento` com `status <> 'resolvida'` | `divergencias_recebimento.recebimento_id → recebimentos.operacao_id` |
 
 `status = 'pendente_dados'` quando a lista não é vazia; `'pronto_para_gerar'` quando é vazia e
 `versao_atual = 0`; `'gerado'`/`'retificado'` conforme o `tipo_geracao` da última versão.
@@ -588,7 +617,7 @@ explicando quando `status='pendente_dados'` (protótipo `278-279`).
 
 ## Estrutura de arquivos
 
-### Backend — arquivos novos (23)
+### Backend — arquivos novos (24)
 
 ```
 src/database/migrations/0016_onda5_gestao.sql
@@ -608,6 +637,7 @@ src/modules/sif/dto/sif.dto.ts
 test/unit/impacto-compra.spec.ts
 test/unit/catalogo-sif.spec.ts
 test/unit/aprovacoes-regras.spec.ts
+test/unit/realtime-gateway-onda5.spec.ts
 test/integration/compras-impacto.e2e-spec.ts
 test/integration/overbooking-decisao.e2e-spec.ts
 test/integration/aprovacoes.e2e-spec.ts
@@ -616,67 +646,89 @@ test/integration/dashboard-operacao.e2e-spec.ts
 test/integration/conclusao-imutavel.e2e-spec.ts
 ```
 
-### Backend — arquivos alterados (21)
+### Backend — arquivos alterados (22)
 
 ```
 src/database/migrations/meta/_journal.json          + entrada 0016
 src/database/schema/index.ts                        + 2 exports
 src/database/seed.ts                                + parâmetro gestao.modelos_relatorio_sif
 src/common/rbac/permissoes.ts                       + 5 permissões, descrições e atribuições
-src/realtime/events/eventos.ts                      + 4 eventos e payloads
+src/realtime/events/eventos.ts                      + 4 eventos, payloads (todos com dataOperacao) e PendenciaOverbookingPayload
+src/realtime/realtime.gateway.ts                    + 7 handlers @OnEvent (4 novos + 3 de pendência de overbooking)
 src/app.module.ts                                   + AprovacoesModule, SifModule
-src/modules/operacoes/operacoes.service.ts          + filtros e contadores na listagem
-src/modules/operacoes/operacoes.controller.ts       + query schema de listagem
-src/modules/operacoes/dto/operacoes.dto.ts          + listarOperacoesSchema
+src/modules/operacoes/operacoes.service.ts          + extraordinaria, contadores e resolverCorrente
+src/modules/operacoes/operacoes.controller.ts       (sem mudança de pipe — só o tipo de retorno)
+src/modules/operacoes/dto/operacao.dto.ts           + extraordinaria no listarOperacoesSchema existente
 src/modules/comercial/compras-programadas/compras-programadas.service.ts   + impacto, edição confirmada, histórico
 src/modules/comercial/compras-programadas/compras-programadas.controller.ts + 2 endpoints
 src/modules/comercial/compras-programadas/dto/compras-programadas.dto.ts   + simulação e confirmarDeficit
 src/modules/comercial/disponibilidade/disponibilidade.service.ts           + projetarImpacto, recalcularParaCompra
-src/modules/comercial/overbooking/overbooking.service.ts                   + cobertura e 3 caminhos
+src/modules/comercial/overbooking/overbooking.service.ts                   + cobertura, 3 caminhos e dataOperacao nos payloads
 src/modules/comercial/overbooking/overbooking.controller.ts                + 2 endpoints
 src/modules/comercial/overbooking/dto/overbooking.dto.ts                   + DTOs por caminho
 src/modules/comercial/overbooking/overbooking.module.ts                    + import PedidosModule
 src/modules/comercial/pedidos/pedidos.module.ts                            + exports: [PedidosService]
-src/modules/comercial/pedidos/pedidos.service.ts                           + criarNaTx e reduzirItemNaTx (extração sem mudança de comportamento)
+src/modules/comercial/pedidos/pedidos.service.ts                           + criarNaTx e reduzirItemNaTx (extração sem mudança de comportamento) e dataOperacao no payload de PENDENCIA_OVERBOOKING_ABERTA
 src/modules/gestao/dashboard/dashboard.service.ts   + operacaoId, 10 KPIs, alertas
 src/modules/gestao/dashboard/dashboard.controller.ts + query operacaoId
 ```
 
-### Frontend — arquivos novos (21)
+### Frontend — arquivos novos (34)
 
 ```
+src/lib/bff.ts                                      helper `repassar` (status + corpo íntegros)
 src/lib/sif.ts
 src/lib/aprovacoes.ts
 src/lib/overbooking.ts
-src/lib/operacoes.ts
+src/lib/gestao-operacoes.ts                         nome escolhido para não colidir com o `src/lib/operacao.ts` existente
 src/components/gestao/seletor-operacao.tsx
 src/components/gestao/painel-impacto.tsx
 src/components/gestao/quadro-comparativo.tsx
-src/app/(admin)/gestao/operacoes/page.tsx
 src/app/(admin)/gestao/operacoes/operacoes-client.tsx
-src/app/(admin)/gestao/overbooking/page.tsx
 src/app/(admin)/gestao/overbooking/overbooking-client.tsx
-src/app/(admin)/gestao/aprovacoes/page.tsx
 src/app/(admin)/gestao/aprovacoes/aprovacoes-client.tsx
-src/app/(admin)/gestao/relatorios/page.tsx
 src/app/(admin)/gestao/relatorios/relatorios-client.tsx
 src/app/api/operacoes/route.ts
-src/app/api/operacoes/[...path]/route.ts
-src/app/api/gestao/aprovacoes/[...path]/route.ts
-src/app/api/comercial/overbooking/[...path]/route.ts
-src/app/api/sif/[...path]/route.ts
-src/app/api/comercial/compras-programadas/[...path]/route.ts
+src/app/api/operacoes/[id]/route.ts
+src/app/api/operacoes/[id]/status/route.ts
+src/app/api/operacoes/extraordinaria/route.ts
+src/app/api/operacoes/gerar-cadencia/route.ts
+src/app/api/comercial/compras-programadas/[id]/impacto/route.ts
+src/app/api/comercial/compras-programadas/[id]/historico/route.ts
+src/app/api/comercial/overbooking/[id]/cobertura/route.ts
+src/app/api/comercial/overbooking/[id]/historico/route.ts
+src/app/api/comercial/overbooking/[id]/status/route.ts
+src/app/api/gestao/aprovacoes/route.ts
+src/app/api/gestao/aprovacoes/ocorrencias/[id]/comparativo/route.ts
+src/app/api/gestao/aprovacoes/operacionais/route.ts
+src/app/api/gestao/aprovacoes/operacionais/[id]/decidir/route.ts
+src/app/api/sif/relatorios/route.ts
+src/app/api/sif/relatorios/[id]/versoes/route.ts
+src/app/api/sif/relatorios/[id]/preview/route.ts
+src/app/api/sif/relatorios/[id]/gerar/route.ts
+src/app/api/sif/relatorios/[id]/retificar/route.ts
+src/app/api/operacao/ocorrencias-fornecedor/route.ts
+src/app/api/operacao/ocorrencias-fornecedor/[id]/route.ts
+src/app/api/operacao/ocorrencias-fornecedor/[id]/encerrar/route.ts
 ```
 
-### Frontend — arquivos alterados (6)
+Nenhuma rota `[...path]`: ver a restrição estrutural da Task 10.
+
+### Frontend — arquivos alterados (12)
 
 ```
 src/lib/gestao.ts                                   + tipos do dashboard v2, alertas, KPIs
-src/app/(admin)/gestao/dashboard/dashboard-client.tsx  10 KPIs, alertas, seletor de Operação
-src/app/api/gestao/dashboard/route.ts               operacaoId
-src/app/(admin)/gestao/compras/compras-client.tsx   modal de impacto + histórico
 src/lib/comercial.ts                                + tipos ImpactoCompra e HistoricoCompra
 src/lib/status-ui.ts                                + variantes de status de pendência, aprovação e SIF
+src/app/(admin)/gestao/dashboard/dashboard-client.tsx  10 KPIs, alertas, seletor de Operação
+src/app/(admin)/gestao/compras/compras-client.tsx   modal de impacto + histórico
+src/app/(admin)/gestao/operacoes/page.tsx           hoje `<PlaceholderPage />` → renderiza operacoes-client
+src/app/(admin)/gestao/overbooking/page.tsx         hoje `<PlaceholderPage />` → renderiza overbooking-client
+src/app/(admin)/gestao/aprovacoes/page.tsx          hoje `<PlaceholderPage />` → renderiza aprovacoes-client
+src/app/(admin)/gestao/relatorios/page.tsx          hoje `<PlaceholderPage />` → renderiza relatorios-client
+src/app/api/gestao/dashboard/route.ts               operacaoId + `repassar`
+src/app/api/comercial/compras-programadas/[id]/itens/[itemId]/route.ts  `repassar` (preserva o 409 com `impacto`)
+src/app/api/comercial/overbooking/[id]/decisao/route.ts                 `repassar` (preserva os 409 dos 3 caminhos)
 ```
 
 ### Testes de frontend novos (11)
@@ -764,6 +816,7 @@ Cada item do DoD e cada decisão verificável tem **um teste nomeado**. Nenhuma 
 | 4.9 | `preview` sem versão retorna 404 (não fabrica preview) | `sif.e2e-spec.ts` › "preview sem versão" |
 | 4.10 | Status derivado segue D5.24 | `test/unit/catalogo-sif.spec.ts` › "derivação de status" |
 | 4.11 | Tela exibe badge Provisório P8 e desabilita "Gerar" em `pendente_dados` | `__tests__/relatorios-sif-client.test.tsx` |
+| 4.12 | Pendência de `producao_desossa` é apurada pelo join `transformacoes → pecas → recebimentos` (transformação de outra Operação não conta) | `sif.e2e-spec.ts` › "pendência de desossa respeita a operação da peça" |
 
 ### Telas, RBAC e navegação
 
@@ -779,8 +832,11 @@ Cada item do DoD e cada decisão verificável tem **um teste nomeado**. Nenhuma 
 | 5.8 | As 6 rotas navegam pelo menu e renderizam sem erro de console | `e2e/onda5-gestao.spec.ts` |
 | 5.9 | Nenhuma tela da onda usa o termo banido; usa "Nome Fantasia"/"Buscar cliente" | `__tests__/terminologia.test.ts` (casos novos) |
 | 5.10 | Seletor de Operação sincroniza com `?operacaoId=` | `__tests__/seletor-operacao.test.tsx` |
+| 5.11 | Os 7 eventos (4 novos + 3 de pendência de overbooking) chegam ao WebSocket: `broadcast` nas rooms `dashboard` e `operacao:<dataOperacao>` | `test/unit/realtime-gateway-onda5.spec.ts` |
+| 5.12 | BFF de ocorrências de fornecedor repassa `PATCH /:id` e `POST /:id/encerrar` com status e corpo do backend | `__tests__/bff-onda5.test.ts` › "ocorrências de fornecedor" |
+| 5.13 | `GET /operacoes` mantém o envelope paginado e passa a trazer os 3 contadores, ordenado por `data` desc | `test/integration/operacoes.e2e-spec.ts` (asserções ajustadas + casos novos) |
 
-**Totais:** 12 + 12 + 9 + 11 + 10 = **54 critérios verificáveis**, distribuídos em 3 arquivos de
+**Totais:** 12 + 12 + 9 + 12 + 13 = **58 critérios verificáveis**, distribuídos em 4 arquivos de
 teste unitário de backend, 6 de integração de backend, 8 de teste de frontend e 1 suíte e2e.
 
 ---
@@ -1062,9 +1118,11 @@ describe('conclusoes_conferencia — imutabilidade (DoD 3)', () => {
 
 ---
 
-### Task 2 — Permissões novas e catálogo de eventos
+### Task 2 — Permissões novas, catálogo de eventos e broadcast no gateway
 
-**Objetivo:** registrar as 5 permissões de D5 e os 4 eventos novos.
+**Objetivo:** registrar as 5 permissões de D5 e os 4 eventos novos, **e ligá-los ao WebSocket** —
+sem `@OnEvent` no `realtime.gateway.ts` o evento é emitido, ninguém escuta e nenhuma tela atualiza
+(quebraria D5.30 e RA-04).
 
 **2.1** Em `src/common/rbac/permissoes.ts`, no objeto de permissões (após `OVERBOOKING_RESOLVER`):
 
@@ -1109,7 +1167,9 @@ pushPermissoes('expedicao',     'APROVACOES_SOLICITAR');
   RELATORIO_SIF_GERADO: 'relatorio_sif_gerado',
 ```
 
-e os payloads tipados:
+e os payloads tipados. **Todo payload desta onda carrega `dataOperacao`**, porque
+`roomsDaData(dataOperacao)` (`eventos.ts:58-60`) é o que decide a room do broadcast; um payload sem
+esse campo faria `broadcast` publicar em `operacao:undefined` e nenhum cliente receberia:
 
 ```ts
 export interface CompraAlteradaImpactoPayload {
@@ -1123,6 +1183,7 @@ export interface CompraAlteradaImpactoPayload {
 export interface AprovacaoOperacionalPayload {
   aprovacaoId: string;
   operacaoId: string;
+  dataOperacao: string;
   tipo: string;
   status: 'pendente' | 'aprovada' | 'rejeitada';
 }
@@ -1130,19 +1191,94 @@ export interface AprovacaoOperacionalPayload {
 export interface RelatorioSifGeradoPayload {
   relatorioId: string;
   operacaoId: string;
+  dataOperacao: string;
   versao: number;
   tipoGeracao: 'gerado' | 'retificado';
 }
 ```
 
-**2.5** Teste: em `test/unit/rbac-permissoes.spec.ts` (arquivo existente), adicionar os casos
-"toda permissão nova tem descrição" e "snapshot de permissões por perfil inclui as 5 chaves da
-Onda 5", cobrindo o critério 5.5 do mapa DoD. Se o snapshot for `toMatchSnapshot`, atualizar com
-`-u` e revisar o diff manualmente antes de commitar.
+**2.5** Em `src/realtime/realtime.gateway.ts`, importar os 3 tipos novos junto dos demais e
+acrescentar, ao fim dos handlers (após o bloco `F6a — Faturamento / NFS-e`), a seção da Onda 5. Sem
+isso os eventos não saem do processo:
 
-**Verificação:** `cd app/backend && npm run test -- rbac-permissoes`.
+```ts
+  // ── Onda 5 — Gestão ───────────────────────────────────────────────────────
 
-**Commit:** `feat(onda5): permissões de SIF e aprovações + eventos de gestão`
+  @OnEvent(EVENTOS.COMPRA_ALTERADA_IMPACTO)
+  handleCompraAlteradaImpacto(payload: CompraAlteradaImpactoPayload): void {
+    this.broadcast(EVENTOS.COMPRA_ALTERADA_IMPACTO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.APROVACAO_REGISTRADA)
+  handleAprovacaoRegistrada(payload: AprovacaoOperacionalPayload): void {
+    this.broadcast(EVENTOS.APROVACAO_REGISTRADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.APROVACAO_DECIDIDA)
+  handleAprovacaoDecidida(payload: AprovacaoOperacionalPayload): void {
+    this.broadcast(EVENTOS.APROVACAO_DECIDIDA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.RELATORIO_SIF_GERADO)
+  handleRelatorioSifGerado(payload: RelatorioSifGeradoPayload): void {
+    this.broadcast(EVENTOS.RELATORIO_SIF_GERADO, payload, payload.dataOperacao);
+  }
+```
+
+Os três eventos de pendência de overbooking (`PENDENCIA_OVERBOOKING_ABERTA`, `_ATUALIZADA`,
+`_RESOLVIDA`) existem desde a Onda 1 mas **também não têm handler no gateway** e são emitidos sem
+`dataOperacao` (`pedidos.service.ts:359-362`, `overbooking.service.ts:103-108`). D5.30 e as Tasks
+12.3/15.3 dependem deles para atualizar dashboard e fila em tempo real, então esta task fecha a
+lacuna junto:
+
+```ts
+export interface PendenciaOverbookingPayload {
+  pendenciaId: string;
+  operacaoId: string;
+  dataOperacao: string;
+  status: string;
+}
+
+  @OnEvent(EVENTOS.PENDENCIA_OVERBOOKING_ABERTA)
+  handlePendenciaAberta(payload: PendenciaOverbookingPayload): void {
+    this.broadcast(EVENTOS.PENDENCIA_OVERBOOKING_ABERTA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PENDENCIA_OVERBOOKING_ATUALIZADA)
+  handlePendenciaAtualizada(payload: PendenciaOverbookingPayload): void {
+    this.broadcast(EVENTOS.PENDENCIA_OVERBOOKING_ATUALIZADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PENDENCIA_OVERBOOKING_RESOLVIDA)
+  handlePendenciaResolvida(payload: PendenciaOverbookingPayload): void {
+    this.broadcast(EVENTOS.PENDENCIA_OVERBOOKING_RESOLVIDA, payload, payload.dataOperacao);
+  }
+```
+
+Os emissores passam a preencher o payload completo: em `pedidos.service.ts:359-362` a abertura já
+tem `pedido.operacaoId` em mãos e a data da operação é a mesma que o método já usa nos demais
+eventos do pedido; em `overbooking.service.ts:103-108` (`alterarStatus`) e no `decidir` da Task 6.3,
+a data vem de `dataDaOperacao(tx, pendencia.operacaoId)`. **Só o payload muda** — nenhum fluxo de
+pedido é alterado, o que mantém a mitigação de conflito com a Onda 4 declarada na seção "Fronteira".
+
+Nada mais muda no gateway: `broadcast` privado, `roomsDaData` e a guarda `podeAssinar` continuam
+como estão. Quem produz o `dataOperacao` é o serviço que emite (Task 5 já o tem; Tasks 6, 7 e 8 leem
+`operacoes.data` dentro da transação e o devolvem junto do agregado).
+
+**2.6** Testes:
+
+- `test/unit/rbac-permissoes.spec.ts` (arquivo existente): "toda permissão nova tem descrição" e
+  "snapshot de permissões por perfil inclui as 5 chaves da Onda 5" (critério 5.5). Se o snapshot for
+  `toMatchSnapshot`, atualizar com `-u` e revisar o diff manualmente antes de commitar.
+- `test/unit/realtime-gateway-onda5.spec.ts` (**arquivo novo**, critério 5.11): instanciar o gateway
+  com um `RealtimeHub` espionado, chamar cada um dos 7 handlers (4 novos + 3 de pendência de
+  overbooking) com um payload que traz `dataOperacao: '2026-08-03'` e assertar `hub.broadcast`
+  chamado para as rooms `dashboard` e `operacao:2026-08-03`, com o nome de evento correto e o
+  payload íntegro.
+
+**Verificação:** `cd app/backend && npm run test -- rbac-permissoes realtime-gateway-onda5`.
+
+**Commit:** `feat(onda5): permissões de SIF e aprovações + eventos de gestão no gateway de tempo real`
 
 ---
 
@@ -1182,17 +1318,26 @@ por chave).
 **Objetivo:** dar à tela `/gestao/operacoes` (protótipo `Operacoes.tsx`) exatamente os dados que ela
 mostra: lista filtrável por status e período, com contadores de compras e pedidos por operação.
 
-**4.1** Em `src/modules/operacoes/dto/operacoes.dto.ts`:
+**Delta real desta task** (o baseline já tem mais do que parece): `listarOperacoesSchema`,
+`ZodValidationPipe` na query do `GET /operacoes`, os filtros `de`/`ate`/`status` e o envelope
+`Paginado` **já existem** (`operacoes.service.ts:101-118`, `dto/operacao.dto.ts:5-13`,
+`operacoes.controller.ts:27`). Esta task acrescenta apenas: o filtro `extraordinaria`, os 3
+contadores por operação, a ordenação e o método `resolverCorrente`.
+
+**4.1** Em `src/modules/operacoes/dto/operacao.dto.ts` (nome real do arquivo, **singular**),
+acrescentar `extraordinaria` ao schema existente — sem recriar o schema nem mexer no `refine`:
 
 ```ts
 export const listarOperacoesSchema = z.object({
-  status: z.enum(['aberta', 'em_andamento', 'fechada']).optional(),
-  de: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  de: z.string().date().optional(),
+  ate: z.string().date().optional(),
+  status: statusOperacaoSchema.optional(),
   extraordinaria: z.union([z.boolean(), z.string()]).optional()
     .transform((v) => (v === undefined ? undefined : v === true || v === 'true')),
   pagina: z.coerce.number().int().positive().default(1),
-  limite: z.coerce.number().int().min(1).max(100).default(50),
+  limite: z.coerce.number().int().min(1).max(100).default(20),
+}).refine(({ de, ate }) => !de || !ate || de <= ate, {
+  message: 'de deve ser anterior ou igual a ate',
 });
 
 export type ListarOperacoesDto = z.infer<typeof listarOperacoesSchema>;
@@ -1210,8 +1355,11 @@ export interface OperacaoComContadores {
 }
 ```
 
-**4.2** Em `operacoes.service.ts`, substituir `listar` pela versão com filtros e contadores
-(uma query com `LEFT JOIN LATERAL` para não fazer N+1):
+**4.2** Em `operacoes.service.ts`, substituir o corpo de `listar` (linhas 101-118) pela versão com
+contadores. O retorno continua sendo o envelope `Paginado` montado por `montarPaginado` — **o envelope
+não é novidade desta onda**; o que muda é o tipo do item (`Operacao` → `OperacaoComContadores`), o
+filtro `extraordinaria` e a ordenação, que passa de `asc(data)` para `desc(data)` (a tela lista a
+operação mais recente primeiro, como o protótipo). Contadores por subselect correlacionado, sem N+1:
 
 ```ts
 async listar(query: ListarOperacoesDto): Promise<Paginado<OperacaoComContadores>> {
@@ -1287,9 +1435,22 @@ async resolverCorrente(): Promise<typeof operacoes.$inferSelect> {
 }
 ```
 
-**4.5** Testes em `test/integration/operacoes.e2e-spec.ts` (arquivo existente): "filtra por status",
-"filtra por período", "traz contadores de compras, pedidos e pendências", "resolverCorrente devolve
-a próxima não fechada", "resolverCorrente lança OPERACAO_INEXISTENTE em base vazia".
+**4.5** Testes em `test/integration/operacoes.e2e-spec.ts` (arquivo existente).
+
+Ajuste das asserções existentes: o teste de listagem da linha 94-98 já lê `lista.body.data` (o
+envelope existe hoje), então **nada quebra por causa do envelope**. O que precisa de ajuste é o
+efeito colateral da mudança de ordenação e do tipo do item:
+
+- na asserção existente `lista.body.data.some((o) => o.id === criar.body.id)`, acrescentar a
+  verificação dos 3 contadores no elemento encontrado (`comprasProgramadas`, `pedidosVenda`,
+  `pendenciasOverbookingAbertas` presentes e numéricos), para que o contrato novo fique coberto;
+- acrescentar a asserção de que `lista.body.data` vem ordenada por `data` **decrescente**, já que a
+  ordem mudou de `asc` para `desc`;
+- conferir que `lista.body.total`, `page` e `pageSize` continuam presentes (regressão do envelope).
+
+Casos novos: "filtra por status", "filtra por período", "filtra por extraordinaria", "traz contadores
+de compras, pedidos e pendências", "resolverCorrente devolve a próxima não fechada",
+"resolverCorrente lança OPERACAO_INEXISTENTE em base vazia".
 
 **Verificação:** `cd app/backend && npm run test -- operacoes`.
 
@@ -1753,9 +1914,30 @@ export type DecidirPendenciaDto = z.infer<typeof decidirPendenciaSchema>;
 
 `STATUS_POR_CAMINHO`, `statusDoCaminho` e `TRANSICOES_PENDENCIA` permanecem como estão.
 
-**6.2** Em `overbooking.service.ts`, acrescentar a leitura de fontes de cobertura:
+**6.2** Em `overbooking.service.ts`, acrescentar aos imports de `../../../database/schema` as tabelas
+usadas pelo código novo — `operacoes`, `reservasDisponibilidade`, `disponibilidadesVirtuais`,
+`pedidosVendaItens` — e aos de `drizzle-orm` os operadores `asc`, `gt`, `ne`, `inArray` (hoje o
+arquivo importa apenas `and, desc, eq, isNull, sql`). Em seguida, dois helpers privados (hoje só
+existe `obterAtivaSobLock`, `overbooking.service.ts:121-128`) e a leitura de fontes de cobertura:
 
 ```ts
+/** Leitura sem lock, para os GETs (cobertura/histórico). */
+private async obterAtiva(id: string): Promise<Pendencia> {
+  const atual = await this.db.select().from(pendenciasOverbooking)
+    .where(and(eq(pendenciasOverbooking.id, id), isNull(pendenciasOverbooking.deletedAt)))
+    .then((r) => r[0]);
+  if (!atual) throw new NotFoundException('Pendência não encontrada');
+  return atual;
+}
+
+/** Data da Operação — obrigatória nos payloads: é a room do broadcast (roomsDaData). */
+private async dataDaOperacao(tx: Tx, operacaoId: string): Promise<string> {
+  const linha = await tx.select({ data: operacoes.data }).from(operacoes)
+    .where(eq(operacoes.id, operacaoId)).then((r) => r[0]);
+  if (!linha) throw new NotFoundException('Operação da pendência não encontrada');
+  return linha.data;
+}
+
 async cobertura(id: string): Promise<CoberturaPendencia> {
   const pendencia = await this.obterAtiva(id);
   const operacao = await this.db.select().from(operacoes)
@@ -1838,7 +2020,7 @@ async cobertura(id: string): Promise<CoberturaPendencia> {
 
 ```ts
 async decidir(id: string, dto: DecidirPendenciaDto, usuarioId: string) {
-  const { pendencia, eventos } = await this.db.transaction(async (tx) => {
+  const { pendencia, eventos, dataOperacao } = await this.db.transaction(async (tx) => {
     const atual = await this.obterAtivaSobLock(tx, id);
     const statusAlvo = statusDoCaminho(dto.caminho);
     if (!TRANSICOES_PENDENCIA[atual.status as StatusPendencia].includes(statusAlvo)) {
@@ -1883,7 +2065,11 @@ async decidir(id: string, dto: DecidirPendenciaDto, usuarioId: string) {
       modulo: 'comercial', usuarioId, dadosAnteriores: atual, dadosNovos: pendencia,
     });
 
-    return { pendencia, eventos: efeito.eventos };
+    return {
+      pendencia,
+      eventos: efeito.eventos,
+      dataOperacao: await this.dataDaOperacao(tx, atual.operacaoId),
+    };
   });
 
   for (const evento of eventos) this.eventEmitter.emit(evento.nome, evento.payload);
@@ -1891,7 +2077,12 @@ async decidir(id: string, dto: DecidirPendenciaDto, usuarioId: string) {
     pendencia.status === 'resolvida'
       ? EVENTOS.PENDENCIA_OVERBOOKING_RESOLVIDA
       : EVENTOS.PENDENCIA_OVERBOOKING_ATUALIZADA,
-    { pendenciaId: pendencia.id, status: pendencia.status },
+    {
+      pendenciaId: pendencia.id,
+      operacaoId: pendencia.operacaoId,
+      dataOperacao,
+      status: pendencia.status,
+    },
   );
   return pendencia;
 }
@@ -1999,6 +2190,19 @@ private async aplicarRedistribuicao(tx: Tx, pendencia: Pendencia, dto: Extract<D
   await this.ajustarItemPedido(tx, doadora.pedidoVendaItemId, `-${dto.quantidade}`, '0.000');
   await this.ajustarItemPedido(tx, pendencia.pedidoVendaItemId, dto.quantidade, `-${dto.quantidade}`);
 
+  // Saldos reais da disponibilidade afetada, lidos APÓS os UPDATEs, para o payload do evento.
+  // Nunca publicar saldo literal: se a leitura falhar, o método falha (RA-05/RA-06).
+  const saldos = await tx.select({
+    quantidadeReservada: disponibilidadesVirtuais.quantidadeReservada,
+    quantidadeDisponivel: disponibilidadesVirtuais.quantidadeDisponivel,
+  })
+    .from(disponibilidadesVirtuais)
+    .where(eq(disponibilidadesVirtuais.id, doadora.disponibilidadeVirtualId))
+    .then((r) => r[0]);
+  if (!saldos) throw new NotFoundException('Disponibilidade virtual da reserva de origem não encontrada');
+
+  const dataOperacao = await this.dataDaOperacao(tx, pendencia.operacaoId);
+
   await this.auditoria.registrar(tx, {
     tabela: 'reservas_disponibilidade', registroId: doadora.id, operacao: 'UPDATE',
     modulo: 'comercial', usuarioId,
@@ -2019,9 +2223,9 @@ private async aplicarRedistribuicao(tx: Tx, pendencia: Pendencia, dto: Extract<D
       payload: {
         disponibilidadeId: doadora.disponibilidadeVirtualId,
         itemComercialId: pendencia.itemComercialId,
-        dataOperacao: await this.dataDaOperacao(tx, pendencia.operacaoId),
-        quantidadeReservada: '0.000',
-        quantidadeDisponivel: '0.000',
+        dataOperacao,
+        quantidadeReservada: saldos.quantidadeReservada,
+        quantidadeDisponivel: saldos.quantidadeDisponivel,
       },
     }] as EventoDominio[],
   };
@@ -2042,10 +2246,12 @@ private async ajustarItemPedido(tx: Tx, itemId: string, deltaReservada: string, 
 }
 ```
 
-> O payload de `RESERVA_ATUALIZADA` traz os saldos da disponibilidade lidos após o `UPDATE`; o
-> Worker substitui os literais `'0.000'` pela leitura real (`SELECT quantidade_reservada,
-> quantidade_disponivel FROM disponibilidades_virtuais WHERE id = ...`) feita ao final do método,
-> mantendo o contrato de `ReservaAtualizadaPayload`.
+> Os únicos literais `'0.000'` que restam no caminho 2 são **valores de negócio**, não lacunas: o
+> `quantidadeReservada: '0.000'` do `set` é o saldo zerado que acompanha `status: 'liberada'`, e o
+> `'0.000'` passado a `ajustarItemPedido` é o delta nulo de `quantidade_overbooking` do pedido doador
+> (a doadora não tinha overbooking). Os saldos publicados em `ReservaAtualizadaPayload` são sempre
+> **lidos do banco** após os `UPDATE`s — nenhum saldo é digitado no código nem deixado para o Worker
+> resolver depois.
 
 Caminho 3 (D5.17):
 
@@ -2124,7 +2330,13 @@ async historico(@Param('id', ParseUUIDPipe) id: string) {
 `historico(id)` no serviço devolve `pendenciasOverbookingHistorico` da pendência com o nome do autor
 (JOIN em `usuarios`), ordenado por `criadoEm ASC` (linha do tempo do protótipo).
 
-**6.6** Testes: `test/integration/overbooking-decisao.e2e-spec.ts`, casos 2.1 a 2.11 do mapa DoD.
+**6.6** Completar o payload do `alterarStatus` existente (`overbooking.service.ts:103-108`), hoje
+`{ pendenciaId, status }`, para o mesmo formato do `decidir` — `{ pendenciaId, operacaoId,
+dataOperacao, status }`, com `dataOperacao` lido por `dataDaOperacao(tx, atual.operacaoId)` dentro da
+transação e devolvido junto do agregado. Sem `dataOperacao` o handler da Task 2.5 publicaria em
+`operacao:undefined`. O comportamento de negócio de `alterarStatus` não muda.
+
+**6.7** Testes: `test/integration/overbooking-decisao.e2e-spec.ts`, casos 2.1 a 2.11 do mapa DoD.
 Asserts centrais:
 
 ```ts
@@ -2258,12 +2470,23 @@ export class AprovacoesService {
   }
 
   async abrir(dto: AbrirAprovacaoDto, usuarioId: string) {
-    const aprovacao = await this.db.transaction((tx) => this.abrirNaTx(tx, dto, usuarioId));
+    const { aprovacao, dataOperacao } = await this.db.transaction(async (tx) => {
+      const aprovacao = await this.abrirNaTx(tx, dto, usuarioId);
+      return { aprovacao, dataOperacao: await this.dataDaOperacao(tx, aprovacao.operacaoId) };
+    });
     this.eventEmitter.emit(EVENTOS.APROVACAO_REGISTRADA, {
-      aprovacaoId: aprovacao.id, operacaoId: aprovacao.operacaoId,
+      aprovacaoId: aprovacao.id, operacaoId: aprovacao.operacaoId, dataOperacao,
       tipo: aprovacao.tipo, status: aprovacao.status,
     });
     return aprovacao;
+  }
+
+  /** Data da Operação — obrigatória no payload: é a room do broadcast (roomsDaData). */
+  private async dataDaOperacao(tx: Tx, operacaoId: string): Promise<string> {
+    const linha = await tx.select({ data: operacoes.data }).from(operacoes)
+      .where(eq(operacoes.id, operacaoId)).then((r) => r[0]);
+    if (!linha) throw new NotFoundException('Operação da solicitação não encontrada');
+    return linha.data;
   }
 
   /** Usado pelas ondas 7–10 para abrir a solicitação dentro da própria transação. */
@@ -2284,7 +2507,7 @@ export class AprovacoesService {
   }
 
   async decidir(id: string, dto: DecidirAprovacaoDto, usuarioId: string) {
-    const aprovacao = await this.db.transaction(async (tx) => {
+    const { aprovacao, dataOperacao } = await this.db.transaction(async (tx) => {
       const atual = await tx.select().from(aprovacoesOperacionais)
         .where(and(eq(aprovacoesOperacionais.id, id), isNull(aprovacoesOperacionais.deletedAt)))
         .for('update').then((r) => r[0]);
@@ -2304,10 +2527,13 @@ export class AprovacoesService {
         tabela: 'aprovacoes_operacionais', registroId: id, operacao: 'UPDATE',
         modulo: 'gestao', usuarioId, dadosAnteriores: atual, dadosNovos: decidida,
       });
-      return decidida;
+      return {
+        aprovacao: decidida,
+        dataOperacao: await this.dataDaOperacao(tx, decidida.operacaoId),
+      };
     });
     this.eventEmitter.emit(EVENTOS.APROVACAO_DECIDIDA, {
-      aprovacaoId: aprovacao.id, operacaoId: aprovacao.operacaoId,
+      aprovacaoId: aprovacao.id, operacaoId: aprovacao.operacaoId, dataOperacao,
       tipo: aprovacao.tipo, status: aprovacao.status,
     });
     return aprovacao;
@@ -2490,7 +2716,12 @@ export function derivarStatus(
 }
 ```
 
-**8.2** `sif-calculo.service.ts` — pendências (D5.24) e conteúdo da versão (D5.26):
+**8.2** `sif-calculo.service.ts` — pendências (D5.24) e conteúdo da versão (D5.26).
+
+Regra de leitura obrigatória deste código: `pecas`, `transformacoes`, `notas_fiscais_fornecedor` e
+`divergencias_recebimento` **não têm `operacao_id`** — todo filtro por Operação passa por
+`recebimentos.operacao_id`, e `transformacoes` precisa de **dois saltos**
+(`transformacoes → pecas → recebimentos`). A coluna da chave da NF do fornecedor é `chave`.
 
 ```ts
 @Injectable()
@@ -2511,7 +2742,7 @@ export class SifCalculoService {
             (SELECT count(*)::int FROM notas_fiscais_fornecedor nf
                JOIN recebimentos r ON r.id = nf.recebimento_id
               WHERE r.operacao_id = ${operacaoId} AND nf.deleted_at IS NULL
-                AND (nf.chave_acesso IS NULL OR length(btrim(nf.chave_acesso)) = 0)) AS nfs_sem_chave
+                AND (nf.chave IS NULL OR length(btrim(nf.chave)) = 0)) AS nfs_sem_chave
         `).then((r) => r.rows[0]);
         const pendencias: string[] = [];
         if ((linha?.pecas_sem_destino ?? 0) > 0) {
@@ -2523,9 +2754,12 @@ export class SifCalculoService {
         return pendencias;
       }
       case 'producao_desossa': {
+        // transformacoes não tem operacao_id: peca_origem_id → pecas → recebimentos.operacao_id.
         const total = await this.contar(sql`
           SELECT count(*)::int AS total FROM transformacoes t
-           WHERE t.operacao_id = ${operacaoId} AND t.deleted_at IS NULL
+             JOIN pecas p ON p.id = t.peca_origem_id
+             JOIN recebimentos r ON r.id = p.recebimento_id
+           WHERE r.operacao_id = ${operacaoId} AND t.deleted_at IS NULL
              AND t.status_transformacao NOT IN ('concluida','cancelada')`);
         return total > 0 ? [`${total} transformação(ões) em aberto na desossa`] : [];
       }
@@ -2565,7 +2799,9 @@ export class SifCalculoService {
            JOIN recebimentos r ON r.id = p.recebimento_id
           WHERE r.operacao_id = ${operacaoId} AND p.deleted_at IS NULL) AS peso_recebido,
         (SELECT count(*)::int FROM transformacoes t
-          WHERE t.operacao_id = ${operacaoId} AND t.deleted_at IS NULL
+           JOIN pecas p2 ON p2.id = t.peca_origem_id
+           JOIN recebimentos r2 ON r2.id = p2.recebimento_id
+          WHERE r2.operacao_id = ${operacaoId} AND t.deleted_at IS NULL
             AND t.status_transformacao = 'concluida')::text AS transformacoes_concluidas,
         (SELECT count(*)::int FROM caminhoes c
           WHERE c.operacao_id = ${operacaoId} AND c.deleted_at IS NULL
@@ -2685,12 +2921,19 @@ export class SifService {
         tabela: 'relatorios_sif', registroId: relatorio.id, operacao: 'UPDATE',
         modulo: 'gestao', usuarioId, dadosAnteriores: relatorio, dadosNovos: atualizado,
       });
-      return { relatorio: atualizado, versao: linha };
+
+      // dataOperacao é a room do broadcast (roomsDaData) — sem ela o evento não chega ao browser.
+      const operacao = await tx.select({ data: operacoes.data }).from(operacoes)
+        .where(eq(operacoes.id, relatorio.operacaoId)).then((r) => r[0]);
+      if (!operacao) throw new NotFoundException('Operação do relatório não encontrada');
+
+      return { relatorio: atualizado, versao: linha, dataOperacao: operacao.data };
     });
 
     this.eventEmitter.emit(EVENTOS.RELATORIO_SIF_GERADO, {
       relatorioId: resultado.relatorio.id,
       operacaoId: resultado.relatorio.operacaoId,
+      dataOperacao: resultado.dataOperacao,
       versao: resultado.versao.versao,
       tipoGeracao,
     });
@@ -2738,7 +2981,12 @@ export class SifService {
 Registrar `SifModule` em `app.module.ts`.
 
 **8.5** Testes: `test/unit/catalogo-sif.spec.ts` (derivação de status, 4 tipos, códigos) e
-`test/integration/sif.e2e-spec.ts` (casos 4.1 a 4.9 e 5.6).
+`test/integration/sif.e2e-spec.ts` (casos 4.1 a 4.9, 4.12 e 5.6). O caso 4.12 é obrigatório e prova o
+join de dois saltos: semear duas operações, cada uma com um recebimento e uma peça, criar uma
+`transformacoes` em aberto **apenas** na operação B e assertar que `GET /sif/relatorios?operacaoId=A`
+devolve `producao_desossa` com `status='pronto_para_gerar'` e `pendenciasJson: []`, enquanto a
+operação B devolve `pendente_dados`. Se o SQL usasse `transformacoes.operacao_id`, o teste falharia
+com erro de coluna inexistente.
 
 **Verificação:** `cd app/backend && npm run test -- catalogo-sif sif`.
 
@@ -2779,21 +3027,72 @@ export interface DashboardOperacao {
 **9.2** `resumo(operacaoId?: string)` resolve a operação (`OperacoesService.resolverCorrente()`
 quando ausente) e monta os 10 KPIs **na ordem do protótipo** (`Dashboard.tsx:12-24`):
 
-| Ordem | `chave` | Fonte |
-|---|---|---|
-| 1 | `compras_programadas` | `count(compras_programadas)` da operação, não canceladas |
-| 2 | `disponibilidade_total` | `sum(quantidade_disponivel)` de `disponibilidades_virtuais` da operação |
-| 3 | `reservas_em_elaboracao` | `count(distinct pedidos_venda)` com `status='rascunho'` e reserva ativa |
-| 4 | `pedidos_finalizados` | `count(pedidos_venda)` com `status='finalizado'` |
-| 5 | `overbookings_abertos` | `count(pendencias_overbooking)` com `status IN ('aberta','em_analise')` |
-| 6 | `recebimentos_aguardados` | `count(recebimentos)` com `status IN ('pesagem_em_andamento','aguardando_conclusao_pesagem','aguardando_conferencia_final')` |
-| 7 | `divergencias_abertas` | `count(divergencias_recebimento)` com `status <> 'resolvida'` |
-| 8 | `pecas_em_desossa` | `count(pecas)` com `status_peca IN ('para_corte','em_transformacao')` |
-| 9 | `relatorios_sif_pendentes` | `count(relatorios_sif)` com `status='pendente_dados'` |
-| 10 | `faturamentos_pendentes` | `count(notas_fiscais)` com `status_nfse IN ('pendente','erro_emissao')` |
+| Ordem | `chave` | Fonte | Chegada à Operação |
+|---|---|---|---|
+| 1 | `compras_programadas` | `count(compras_programadas)` da operação, não canceladas | `operacao_id` direto |
+| 2 | `disponibilidade_total` | `sum(quantidade_disponivel)` de `disponibilidades_virtuais` da operação | via `compras_programadas.operacao_id` |
+| 3 | `reservas_em_elaboracao` | `count(distinct pedidos_venda)` com `status IN ('rascunho','em_elaboracao_reserva_ativa')` e reserva ativa — o default da tabela é `em_elaboracao_reserva_ativa` (`pedidos.schema.ts:23,33-36`), contar só `rascunho` daria zero permanente | `operacao_id` direto |
+| 4 | `pedidos_finalizados` | `count(pedidos_venda)` com `status='finalizado'` | `operacao_id` direto |
+| 5 | `overbookings_abertos` | `count(pendencias_overbooking)` com `status IN ('aberta','em_analise')` | `operacao_id` direto |
+| 6 | `recebimentos_aguardados` | `count(recebimentos)` com `status IN ('pesagem_em_andamento','aguardando_conclusao_pesagem','aguardando_conferencia_final')` | `operacao_id` direto |
+| 7 | `divergencias_abertas` | `count(divergencias_recebimento)` com `status <> 'resolvida'` | **JOIN** `recebimentos` |
+| 8 | `pecas_em_desossa` | `count(pecas)` com `status_peca IN ('para_corte','em_transformacao')` | **JOIN** `recebimentos` — `pecas` **não tem** `operacao_id` |
+| 9 | `relatorios_sif_pendentes` | `count(relatorios_sif)` com `status='pendente_dados'` | `operacao_id` direto |
+| 10 | `faturamentos_pendentes` | `count(notas_fiscais)` com `status_nfse IN ('pendente','erro_emissao')` | **JOIN** `caminhoes` — `notas_fiscais` **não tem** `operacao_id` |
 
-Todas as contagens em **uma** query com subselects (padrão já usado em Task 4), evitando N+1.
+Todas as contagens em **uma** query com subselects (padrão já usado em Task 4), evitando N+1. Os
+KPIs 7, 8 e 10 só existem com JOIN explícito; escrever `p.operacao_id` ou `nf.operacao_id` quebra em
+tempo de execução com "column does not exist":
+
+```ts
+const linha = await this.db.execute<Record<string, string>>(sql`
+  SELECT
+    (SELECT count(*)::int FROM compras_programadas cp
+      WHERE cp.operacao_id = ${operacaoId} AND cp.deleted_at IS NULL
+        AND cp.status <> 'cancelada')::text AS compras_programadas,
+    (SELECT coalesce(sum(dv.quantidade_disponivel), 0)::text FROM disponibilidades_virtuais dv
+       JOIN compras_programadas cp2 ON cp2.id = dv.compra_programada_id
+      WHERE cp2.operacao_id = ${operacaoId} AND cp2.deleted_at IS NULL) AS disponibilidade_total,
+    (SELECT count(DISTINCT pv.id)::int FROM pedidos_venda pv
+       JOIN pedidos_venda_itens pvi ON pvi.pedido_venda_id = pv.id AND pvi.deleted_at IS NULL
+       JOIN reservas_disponibilidade rd ON rd.pedido_venda_item_id = pvi.id AND rd.status = 'ativa'
+      WHERE pv.operacao_id = ${operacaoId} AND pv.deleted_at IS NULL
+        AND pv.status IN ('rascunho','em_elaboracao_reserva_ativa'))::text AS reservas_em_elaboracao,
+    (SELECT count(*)::int FROM pedidos_venda pv
+      WHERE pv.operacao_id = ${operacaoId} AND pv.deleted_at IS NULL
+        AND pv.status = 'finalizado')::text AS pedidos_finalizados,
+    (SELECT count(*)::int FROM pendencias_overbooking po
+      WHERE po.operacao_id = ${operacaoId} AND po.deleted_at IS NULL
+        AND po.status IN ('aberta','em_analise'))::text AS overbookings_abertos,
+    (SELECT count(*)::int FROM recebimentos r
+      WHERE r.operacao_id = ${operacaoId} AND r.deleted_at IS NULL
+        AND r.status IN ('pesagem_em_andamento','aguardando_conclusao_pesagem',
+                         'aguardando_conferencia_final'))::text AS recebimentos_aguardados,
+    -- divergencias_recebimento não tem operacao_id nem deleted_at
+    (SELECT count(*)::int FROM divergencias_recebimento d
+       JOIN recebimentos rd2 ON rd2.id = d.recebimento_id
+      WHERE rd2.operacao_id = ${operacaoId}
+        AND d.status <> 'resolvida')::text AS divergencias_abertas,
+    -- KPI 8: pecas.recebimento_id → recebimentos.operacao_id
+    (SELECT count(*)::int FROM pecas p
+       JOIN recebimentos rp ON rp.id = p.recebimento_id
+      WHERE rp.operacao_id = ${operacaoId} AND p.deleted_at IS NULL
+        AND p.status_peca IN ('para_corte','em_transformacao'))::text AS pecas_em_desossa,
+    (SELECT count(*)::int FROM relatorios_sif rs
+      WHERE rs.operacao_id = ${operacaoId} AND rs.deleted_at IS NULL
+        AND rs.status = 'pendente_dados')::text AS relatorios_sif_pendentes,
+    -- KPI 10: notas_fiscais.caminhao_id → caminhoes.operacao_id
+    (SELECT count(*)::int FROM notas_fiscais nf
+       JOIN caminhoes cam ON cam.id = nf.caminhao_id
+      WHERE cam.operacao_id = ${operacaoId} AND nf.deleted_at IS NULL
+        AND nf.status_nfse IN ('pendente','erro_emissao'))::text AS faturamentos_pendentes
+`).then((r) => r.rows[0]);
+if (!linha) throw new Error('Falha ao apurar os KPIs da operação');
+```
+
 `detalhe` reproduz o texto secundário do protótipo ("operações do dia", "saldo consolidado", …).
+Os valores vão para `KpiDashboard.valor` como texto, na ordem acima; nenhum KPI é preenchido com
+zero por falta de leitura (RA-06).
 
 **9.3** Alertas (critério 5.3): cada alerta só é emitido se a consulta correspondente retornar > 0.
 Nenhum alerta fixo, nenhum texto de exemplo:
@@ -2853,82 +3152,150 @@ remover `dataOperacao`. Guarda inalterada.
 ---
 ### Task 10 — Frontend: rotas BFF da Onda 5
 
-**Objetivo:** expor ao browser, sob `/api`, os endpoints das tasks 4–9, preservando status e corpo de
-erro (crítico para o challenge 409 do painel de impacto).
+**Objetivo:** expor ao browser, sob `/api`, os endpoints das tasks 4–9 **e os de ocorrências de
+fornecedor consumidos pela Task 16.2**, preservando status e corpo de erro (crítico para o challenge
+409 do painel de impacto).
 
-**10.1** Proxy genérico reutilizável em cada rota catch-all. Modelo literal
-(`src/app/api/comercial/compras-programadas/[...path]/route.ts`):
+**Restrição estrutural — proibido catch-all nesta onda.** `src/app/api/comercial/compras-programadas/`
+e `src/app/api/comercial/overbooking/` já contêm o segmento dinâmico `[id]`. Criar um `[...path]`
+irmão de `[id]` no mesmo nível faz o Next falhar no build com *"You cannot use different slug names
+for the same dynamic path"*. Todas as rotas desta task são **explícitas**, uma por endpoint, no mesmo
+padrão dos ~120 arquivos já existentes em `src/app/api/**`.
+
+**10.1** Helper único de repasse, para não duplicar o mesmo bloco em 20 arquivos (DRY) e para
+garantir que o corpo do erro chegue íntegro à tela. Arquivo novo `src/lib/bff.ts`:
 
 ```ts
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { apiFetch } from '@/lib/api';
 
-const BASE = '/comercial/compras-programadas';
-
-async function proxy(req: NextRequest, path: string[], method: string) {
-  const sufixo = path.length ? `/${path.map(encodeURIComponent).join('/')}` : '';
-  const busca = req.nextUrl.search;
-  const corpo = method === 'GET' ? undefined : await req.text();
-
-  const resposta = await apiFetch(`${BASE}${sufixo}${busca}`, {
-    method,
-    ...(corpo ? { body: corpo } : {}),
+/**
+ * Repassa a chamada ao backend preservando status e corpo — inclusive os de erro.
+ * `fetchBackend` não serve aqui: ele reduz o erro a `{ message }` e descarta o
+ * `impacto` do challenge 409 (D5.31) e as `pendencias` do 409 do SIF (D5.25).
+ */
+export async function repassar(
+  caminho: string,
+  init: { method?: string; body?: string } = {},
+): Promise<NextResponse> {
+  const resposta = await apiFetch(caminho, {
+    method: init.method ?? 'GET',
+    ...(init.body === undefined ? {} : { body: init.body }),
   });
-
-  // Preserva status e corpo do backend (challenge 409 chega íntegro à tela).
   const texto = await resposta.text();
-  return new NextResponse(texto, {
+  return new NextResponse(texto === '' ? null : texto, {
     status: resposta.status,
     headers: { 'Content-Type': 'application/json' },
   });
 }
+```
 
-export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  const { path } = await ctx.params;
-  return proxy(req, path, 'GET');
-}
+**10.2** Modelo literal de uma rota com parâmetro e query
+(`src/app/api/comercial/compras-programadas/[id]/impacto/route.ts`):
 
-export async function POST(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  const { path } = await ctx.params;
-  return proxy(req, path, 'POST');
-}
+```ts
+import { NextRequest } from 'next/server';
+import { repassar } from '@/lib/bff';
 
-export async function PATCH(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
-  const { path } = await ctx.params;
-  return proxy(req, path, 'PATCH');
+type Ctx = { params: Promise<{ id: string }> };
+
+export async function GET(req: NextRequest, ctx: Ctx) {
+  const { id } = await ctx.params;
+  return repassar(`/comercial/compras-programadas/${id}/impacto${req.nextUrl.search}`);
 }
 ```
 
-**10.2** Criar com o mesmo modelo, trocando apenas `BASE` e os verbos exportados:
-
-| Arquivo | `BASE` | Verbos |
-|---|---|---|
-| `src/app/api/operacoes/[...path]/route.ts` | `/operacoes` | GET, POST, PATCH |
-| `src/app/api/operacoes/route.ts` | `/operacoes` | GET (lista raiz, repassa `search`) |
-| `src/app/api/comercial/overbooking/[...path]/route.ts` | `/comercial/overbooking` | GET, POST, PATCH |
-| `src/app/api/gestao/aprovacoes/[...path]/route.ts` | `/gestao/aprovacoes` | GET, POST |
-| `src/app/api/sif/[...path]/route.ts` | `/sif` | GET, POST |
-| `src/app/api/comercial/compras-programadas/[...path]/route.ts` | `/comercial/compras-programadas` | GET, POST, PATCH |
-
-**10.3** Atualizar `src/app/api/gestao/dashboard/route.ts` para repassar `operacaoId`:
+e de uma rota com corpo (`src/app/api/sif/relatorios/[id]/retificar/route.ts`):
 
 ```ts
+import { NextRequest } from 'next/server';
+import { repassar } from '@/lib/bff';
+
+type Ctx = { params: Promise<{ id: string }> };
+
+export async function POST(req: NextRequest, ctx: Ctx) {
+  const { id } = await ctx.params;
+  return repassar(`/sif/relatorios/${id}/retificar`, {
+    method: 'POST',
+    body: await req.text(),
+  });
+}
+```
+
+**10.3** Rotas BFF **novas** (19 arquivos), uma por endpoint, todas com `repassar`:
+
+| Arquivo | Verbo(s) | Endpoint do backend |
+|---|---|---|
+| `src/app/api/operacoes/route.ts` | GET | `/operacoes` (repassa `search`) |
+| `src/app/api/operacoes/[id]/route.ts` | GET | `/operacoes/:id` |
+| `src/app/api/operacoes/[id]/status/route.ts` | PATCH | `/operacoes/:id/status` |
+| `src/app/api/operacoes/extraordinaria/route.ts` | POST | `/operacoes/extraordinaria` |
+| `src/app/api/operacoes/gerar-cadencia/route.ts` | POST | `/operacoes/gerar-cadencia` |
+| `src/app/api/comercial/compras-programadas/[id]/impacto/route.ts` | GET | `/comercial/compras-programadas/:id/impacto` |
+| `src/app/api/comercial/compras-programadas/[id]/historico/route.ts` | GET | `/comercial/compras-programadas/:id/historico` |
+| `src/app/api/comercial/overbooking/[id]/cobertura/route.ts` | GET | `/comercial/overbooking/:id/cobertura` |
+| `src/app/api/comercial/overbooking/[id]/historico/route.ts` | GET | `/comercial/overbooking/:id/historico` |
+| `src/app/api/comercial/overbooking/[id]/status/route.ts` | PATCH | `/comercial/overbooking/:id/status` |
+| `src/app/api/gestao/aprovacoes/route.ts` | GET | `/gestao/aprovacoes` (repassa `search`) |
+| `src/app/api/gestao/aprovacoes/ocorrencias/[id]/comparativo/route.ts` | GET | `/gestao/aprovacoes/ocorrencias/:id/comparativo` |
+| `src/app/api/gestao/aprovacoes/operacionais/route.ts` | POST | `/gestao/aprovacoes/operacionais` |
+| `src/app/api/gestao/aprovacoes/operacionais/[id]/decidir/route.ts` | POST | `/gestao/aprovacoes/operacionais/:id/decidir` |
+| `src/app/api/sif/relatorios/route.ts` | GET | `/sif/relatorios` (repassa `search`) |
+| `src/app/api/sif/relatorios/[id]/versoes/route.ts` | GET | `/sif/relatorios/:id/versoes` |
+| `src/app/api/sif/relatorios/[id]/preview/route.ts` | GET | `/sif/relatorios/:id/preview` |
+| `src/app/api/sif/relatorios/[id]/gerar/route.ts` | POST | `/sif/relatorios/:id/gerar` |
+| `src/app/api/sif/relatorios/[id]/retificar/route.ts` | POST | `/sif/relatorios/:id/retificar` |
+
+Em `src/app/api/operacoes/`, os segmentos estáticos `extraordinaria/` e `gerar-cadencia/` convivem
+com `[id]/` sem conflito: o Next resolve o estático antes do dinâmico. O conflito proibido é só entre
+**dois slugs diferentes** no mesmo nível.
+
+**10.4** Rotas BFF de **ocorrências de fornecedor** (3 arquivos novos) — a Task 16.2 chama
+`PATCH /operacao/ocorrencias-fornecedor/:id` e `POST .../:id/encerrar`, e hoje **não existe nenhuma
+rota BFF** para o `OcorrenciaFornecedorController`. Sem estes arquivos a aba 1 de `/gestao/aprovacoes`
+seria um 404:
+
+| Arquivo | Verbo(s) | Endpoint do backend |
+|---|---|---|
+| `src/app/api/operacao/ocorrencias-fornecedor/route.ts` | GET | `/operacao/ocorrencias-fornecedor` (repassa `search`) |
+| `src/app/api/operacao/ocorrencias-fornecedor/[id]/route.ts` | GET, PATCH | `/operacao/ocorrencias-fornecedor/:id` |
+| `src/app/api/operacao/ocorrencias-fornecedor/[id]/encerrar/route.ts` | POST | `/operacao/ocorrencias-fornecedor/:id/encerrar` |
+
+**10.5** Rotas BFF **alteradas** (3 arquivos existentes), todas trocando `fetchBackend` por
+`repassar`, porque as três participam de fluxos com corpo de erro significativo:
+
+| Arquivo | Motivo |
+|---|---|
+| `src/app/api/comercial/compras-programadas/[id]/itens/[itemId]/route.ts` | O `PATCH` é o do challenge 409: hoje usa `fetchBackend` e o `impacto` do corpo do erro é descartado, o que impede o "Salvar mesmo assim" (D5.31) |
+| `src/app/api/comercial/overbooking/[id]/decisao/route.ts` | Os 409 dos 3 caminhos (quantidade acima do saldo, operação destino inválida, transição inválida) precisam chegar com código e mensagem do backend |
+| `src/app/api/gestao/dashboard/route.ts` | Passa a repassar `operacaoId` e o 404 `OPERACAO_INEXISTENTE` íntegro (item 10.6) |
+
+**10.6** `src/app/api/gestao/dashboard/route.ts` repassando `operacaoId`:
+
+```ts
+import { NextRequest } from 'next/server';
+import { repassar } from '@/lib/bff';
+
 export async function GET(req: NextRequest) {
   const operacaoId = req.nextUrl.searchParams.get('operacaoId');
   const qs = operacaoId ? `?operacaoId=${encodeURIComponent(operacaoId)}` : '';
-  const { data, error, status } = await fetchBackend<DashboardOperacao>(`/gestao/dashboard${qs}`);
-  if (error) return NextResponse.json({ message: error }, { status });
-  return NextResponse.json(data, { status: 200 });
+  return repassar(`/gestao/dashboard${qs}`);
 }
 ```
 
-**10.4** Teste `__tests__/bff-onda5.test.ts` (critério 5.7): mockar `@/lib/api` e verificar, para
-cada rota, que o caminho montado é o esperado, que a query string é repassada e que um 409 do
-backend chega ao cliente com status 409 e corpo íntegro.
+**10.7** Testes:
 
-**Verificação:** `cd app/frontend && npm run test -- bff-onda5`.
+- `__tests__/bff-onda5.test.ts` (critério 5.7): mockar `@/lib/api` e verificar, para cada rota, que o
+  caminho montado é o esperado, que a query string é repassada, que um 409 do backend chega ao
+  cliente com status 409 **e corpo íntegro** (assertar a presença de `impacto` no corpo do 409 de
+  `PATCH .../itens/:itemId` e de `pendencias` no 409 de `POST /sif/relatorios/:id/gerar`) e que o
+  `PATCH` de ocorrência e o `POST .../encerrar` batem no caminho certo (critério 5.12).
+- Rodar `cd app/frontend && npm run build` ao fim da task: é o gate que provaria qualquer conflito de
+  slug se alguém reintroduzisse um catch-all.
 
-**Commit:** `feat(onda5): rotas BFF de operações, overbooking, aprovações, SIF e compras`
+**Verificação:** `cd app/frontend && npm run test -- bff-onda5 && npm run build`.
+
+**Commit:** `feat(onda5): rotas BFF de operações, overbooking, aprovações, SIF, compras e ocorrências`
 
 ---
 
@@ -2937,7 +3304,11 @@ backend chega ao cliente com status 409 e corpo íntegro.
 **Objetivo:** evitar duplicação (DRY) nas 6 telas: seletor de Operação, painel de impacto e quadro
 comparativo.
 
-**11.1** `src/lib/operacoes.ts` — tipos e cliente:
+**11.1** `src/lib/gestao-operacoes.ts` — tipos e cliente. **O nome do arquivo não é `operacoes.ts`**:
+`src/lib/operacao.ts` já existe e concentra o domínio operacional das ondas F4a–F6a (recebimento,
+pesagem, corte, caminhão, conferência). Dois arquivos com nomes quase idênticos no mesmo diretório
+confundiriam import e revisão; o cliente de Operação da Gestão vive em `gestao-operacoes.ts` e
+`operacao.ts` não é tocado.
 
 ```ts
 export interface Operacao {
@@ -3029,7 +3400,11 @@ some quando a lista vem vazia; erro do backend aparece; troca de operação refa
 
 **Protótipo:** `src/app/pages/Operacoes.tsx` (212 linhas) + `src/app/data/operacoes.ts`.
 
-**13.1** `page.tsx` (server component) renderiza `operacoes-client.tsx`.
+**13.1** `page.tsx` **já existe** e hoje devolve `<PlaceholderPage title="Operações" />`. É um
+arquivo **alterado**: passa a ser o server component que renderiza `operacoes-client.tsx`. O mesmo
+vale para os `page.tsx` de `/gestao/overbooking`, `/gestao/aprovacoes` e `/gestao/relatorios` nas
+Tasks 15, 16 e 17 — nenhum dos quatro é criado do zero, e o import de `PlaceholderPage` sai do
+arquivo (deixá-lo geraria lint de import não usado).
 
 **13.2** `operacoes-client.tsx`:
 - cabeçalho com título "Operações", subtítulo do protótipo e `BadgeProvisorio pendencia="P1"`
@@ -3063,15 +3438,13 @@ extraordinária, envia e trata erro do backend; badge P1 presente.
 - o aviso do protótipo linha `653` acima da lista;
 - botão "Editar" no cartão da compra **confirmada** que abre o modal de edição;
 - no modal, ao alterar qualquer quantidade, chamar
-  `GET /api/comercial/comprasprogramadas/:id/impacto?simulacao=...` (debounce de 300 ms) e renderizar
+  `GET /api/comercial/compras-programadas/:id/impacto?simulacao=...` (debounce de 300 ms) e renderizar
   `<PainelImpacto />` com a resposta;
 - "Salvar alteração" → `PATCH /api/comercial/compras-programadas/:id/itens/:itemId`;
 - ao receber 409 com `codigo === 'IMPACTO_CONFIRMACAO_NECESSARIA'`, exibir o `impacto` do corpo do
   erro e habilitar "Salvar mesmo assim", que repete a chamada com `confirmarDeficit: true`;
 - bloco "Histórico de alterações desta compra" (`GET /:id/historico`), com data/hora, autor e
   descrição da mudança montada a partir de `dadosAnteriores`/`dadosNovos`.
-
-> Atenção ao caminho correto do BFF: `/api/comercial/compras-programadas/:id/impacto`.
 
 **14.3** Teste `__tests__/painel-impacto.test.tsx` cobre o componente; o fluxo do modal (409 →
 "Salvar mesmo assim") é coberto em `__tests__/compras-client.test.tsx` (arquivo novo, mesmo commit).
@@ -3321,8 +3694,11 @@ quem implementa.
 | Global Constraints explícitas | Sim — 13 restrições |
 | Decisões de design fixadas (o Worker não escolhe) | Sim — D5.1 a D5.32 |
 | Referências do protótipo por tela, com arquivo e linhas | Sim — 7 linhas na tabela, commit do protótipo fixado |
-| Estrutura de arquivos (novos e alterados) | Sim — 23 novos + 21 alterados no backend; 21 novos + 6 alterados + 11 de teste no frontend |
-| Mapa DoD → teste 1:1 | Sim — 54 critérios, cada um com arquivo e nome de teste |
+| Estrutura de arquivos (novos e alterados) | Sim — 24 novos + 22 alterados no backend; 34 novos + 12 alterados + 11 de teste no frontend |
+| Mapa DoD → teste 1:1 | Sim — 58 critérios, cada um com arquivo e nome de teste |
+| Schemas e caminhos auditados no código real, não presumidos | Sim — seção "Estado atual verificado" lista as colunas que **não** existem (`transformacoes.operacao_id`, `pecas.operacao_id`, `notas_fiscais.operacao_id`, `notas_fiscais_fornecedor.chave_acesso`) e o JOIN correto de cada uma |
+| Eventos novos com destino real (não só emitidos) | Sim — Task 2.5 liga os 7 eventos ao `realtime.gateway.ts`, com `dataOperacao` no payload (é a room) |
+| Rotas BFF compatíveis com o roteador do Next | Sim — só rotas explícitas; catch-all irmão de `[id]` é proibido e o `npm run build` da Task 10.7 é o gate |
 | Tasks com código literal | Sim — SQL, schemas Drizzle, DTOs Zod, métodos de service, controllers e testes escritos por extenso |
 | TDD explícito por task | Sim — cada task nomeia o teste e o comando de verificação |
 | Commit declarado por task | Sim — 18 mensagens |
@@ -3344,19 +3720,22 @@ quem implementa.
 | Tasks | 18 |
 | Commits previstos | 18 |
 | Decisões de design fixadas | 32 (D5.1–D5.32) |
-| Critérios no mapa DoD → teste | 54 |
+| Critérios no mapa DoD → teste | 58 |
 | Migrations | 1 (`0016_onda5_gestao`) |
 | Tabelas novas | 3 (`relatorios_sif`, `relatorios_sif_versoes`, `aprovacoes_operacionais`) |
 | Triggers novos | 4 (2 de imutabilidade + 2 de `updated_at`) |
 | Módulos NestJS novos | 2 (`gestao/aprovacoes`, `sif`) |
 | Endpoints novos | 13 (+2 alterados: `PATCH` de item da compra e `GET /gestao/dashboard`) |
 | Permissões novas | 5 |
-| Eventos novos | 4 |
+| Eventos novos | 4 (+3 existentes de pendência de overbooking ganham payload completo e handler no gateway) |
+| Handlers `@OnEvent` novos no gateway | 7 |
 | Parâmetros novos | 1 (`gestao.modelos_relatorio_sif`, provisório P8) |
-| Arquivos novos no backend | 23 |
-| Arquivos alterados no backend | 21 |
-| Arquivos novos no frontend | 21 |
-| Arquivos alterados no frontend | 6 |
-| Arquivos de teste novos | 9 backend + 11 frontend |
+| Arquivos novos no backend | 24 |
+| Arquivos alterados no backend | 22 |
+| Arquivos novos no frontend | 34 (12 de tela/lib/componente + 22 rotas BFF) |
+| Arquivos alterados no frontend | 12 |
+| Rotas BFF novas | 22 (19 dos endpoints das tasks 4–9 + 3 de ocorrências de fornecedor) |
+| Rotas BFF `[...path]` (catch-all) | 0 — proibidas: conflitariam com o `[id]` já existente |
+| Arquivos de teste novos | 10 backend + 11 frontend |
 | Pendências fechadas | 0 (nenhuma AD nova — Princípio VIII) |
 | Dívidas deixadas | 5 |
