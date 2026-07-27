@@ -45,6 +45,7 @@ Jest (backend e frontend) · Playwright (e2e).
 | Emenda 3 | 3º Portão 1 `ajustar` em `a71d03f` → achados novos da Task 9: `criar` deixa de chamar `detalhar` **dentro** da transação (outra conexão do pool → 404 + rollback) e passa a lê-lo após o commit, como `publicar`/`salvarItens`; o `.returning()` de `criar` usa `primeiroOuFalha` (`noUncheckedIndexedAccess`); `POST /precos/tabelas/:id/copiar` ganha regra (D14), corpo literal e **DoD-122/123/124**, deixando de ser rota órfã. Menores: `PrecosController` e o `@Get('aberto')` de pedidos por extenso, `arquivos`/`ler` (Task 13) e `arquivosDeCodigo` (Task 20) definidos |
 | Emenda 4 | Execução bloqueada na Task 13: o plano atribuía um `PATCH` agregado a `app/frontend/src/app/api/comercial/pedidos/[id]/route.ts`, mas o contrato real é item-específico (`PATCH /comercial/pedidos/:id/itens/:itemId`, body `{ novaQuantidade, motivo }`) e aceita somente redução. Corrigido por **D32**, rota BFF aninhada literal, matriz de persistência do editor e **DoD-125/126**, sem criar endpoint backend nem regra de produto |
 | Emenda 5 | Re-Portão 1 `ajustar` em `0439140` → fecha os dois achados do Monitor: quantidade editada para `0` passa literalmente pelo `DELETE` item-específico (remoção integral + liberação da reserva), enquanto redução positiva continua no `PATCH`, aumento no adendo e produto ausente no `POST /itens`; DoD-125 deixa de inspecionar texto e executa `PATCH`/`DELETE` com `apiFetch` mockado, provando `204` vazio e preservação byte/status de `400`/`404`/`409` |
+| Emenda 6 | Re-Portão 1 `ajustar` em `7dde9fe` → a ausência de `PATCH` na rota raiz deixa de depender da regex estreita `export async function PATCH`: o teste importa o namespace real do módulo e afirma que suas exportações não contêm `PATCH`, cobrindo função, constante e reexport; o Jest dirigido é o gate autoritativo |
 | Worktree da Emenda 4 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix` |
 | Branch da Emenda 4 | `plan/onda4-task13-contract` |
 | Base da Emenda 4 | `origin/develop` = `c2fe0e09f230e7748d532d2292e059f027941e0e` |
@@ -2714,6 +2715,7 @@ import type { NextRequest } from 'next/server';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { apiFetch } from '@/lib/api';
+import * as rotaPedidoAgregado from '../src/app/api/comercial/pedidos/[id]/route';
 import {
   DELETE as removerItem,
   PATCH as reduzirItem,
@@ -2832,9 +2834,8 @@ it('BFF de item usa a rota aninhada e os contratos reais de reducao e remocao', 
     expect(await resposta.text()).toBe(caso.corpo);
   }
 
-  const rotaPedido = join(RAIZ_FRONTEND, 'src/app/api/comercial/pedidos/[id]/route.ts');
   const contratos = join(RAIZ_FRONTEND, 'src/lib/comercial.ts');
-  expect(ler(rotaPedido)).not.toMatch(/export async function PATCH/);
+  expect(Object.keys(rotaPedidoAgregado)).not.toContain('PATCH');
 
   const fonteContratos = ler(contratos);
   expect(fonteContratos).toMatch(
@@ -2850,7 +2851,10 @@ it('BFF de item usa a rota aninhada e os contratos reais de reducao e remocao', 
    desserialização/resserialização: trocar `response.body` por `await response.json()` +
    `NextResponse.json(...)` muda os bytes e falha. Consumir JSON no sucesso também falha antes das
    asserções porque `204` não tem corpo. Fixar `200`, inverter `PATCH`/`DELETE`, trocar seus bodies ou
-   omitir qualquer status de erro quebra as asserções correspondentes.
+   omitir qualquer status de erro quebra as asserções correspondentes. Como
+   `rotaPedidoAgregado` é o namespace importado do módulo real, `Object.keys(...)` contém toda
+   exportação nomeada: o teste falha igualmente se a rota raiz introduzir
+   `export async function PATCH`, `export const PATCH` ou `export { PATCH } from './outro-modulo'`.
 
 2. Implementar cada rota nos **dois padrões que já existem** em `src/lib/api.ts`, escolhendo pelo
    critério "o corpo do erro importa?":
@@ -3462,12 +3466,11 @@ rg -n "PlaceholderPage" "app/frontend/src/app/(admin)/comercial"
 # Legado de pedido eliminado (D29) — deve devolver zero linhas
 rg -n "pedido-venda-client|pedidos/novo" app/frontend
 
-# O comando Jest dirigido acima executa os handlers e prova 204/400/404/409 + matriz do editor.
-# Estes greps complementares provam a estrutura aninhada e que a rota raiz não ganhou PATCH.
+# O comando Jest dirigido acima executa os handlers, prova 204/400/404/409 + matriz do editor
+# e importa o namespace da rota raiz, falhando se qualquer export nomeado PATCH existir.
+# Este grep complementar prova somente a estrutura aninhada; não substitui o gate executável.
 rg -n "export async function (PATCH|DELETE)|/comercial/pedidos/\\$\\{id\\}/itens/\\$\\{itemId\\}" \
   "app/frontend/src/app/api/comercial/pedidos/[id]/itens/[itemId]/route.ts"
-rg -n "export async function PATCH" \
-  "app/frontend/src/app/api/comercial/pedidos/[id]/route.ts"   # deve devolver zero linhas
 
 # Coluna substituída não sobrou em lugar nenhum (Global Constraint 14)
 rg -n "rotaPadrao|rota_padrao" app/backend/src app/backend/test app/frontend/src
@@ -3554,7 +3557,9 @@ O protótipo e a v1.1 §6.3/§6.9 separam reduzir/remover (liberar reserva) de a
 Por isso D32 cria `api/comercial/pedidos/[id]/itens/[itemId]/route.ts`, preserva o body bruto —
 inclusive `204` sem corpo — e mantém `[id]/route.ts` sem `PATCH`. O teste importa os handlers e
 prova, com `apiFetch` mockado, método/body, `204` vazio e status+bytes exatos de `400`/`404`/`409`;
-não é mais inspeção textual. Task 15 consome a matriz literal: redução positiva=`PATCH` aninhado,
+também importa o namespace real da rota raiz e exige que nenhuma exportação nomeada `PATCH` exista,
+seja função, constante ou reexport — não há inspeção textual. Task 15 consome a matriz literal:
+redução positiva=`PATCH` aninhado,
 `0`/remoção=`DELETE` aninhado, aumento=`POST adendos`, inclusão nova=`POST itens`. O `0 → DELETE`
 vem diretamente do `min={0}`/remoção do protótipo e da liberação de reserva da v1.1 §6.3. Nenhum
 endpoint backend novo, divergência autorizada ou decisão de produto foi criado.
