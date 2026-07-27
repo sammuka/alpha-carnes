@@ -44,6 +44,7 @@ Jest (backend e frontend) · Playwright (e2e).
 | Emenda 2 | Re-Portão 1 `ajustar` em `8229ff9` → 6 achados novos corrigidos: estado **E** do mapa passa a `status_carga_item <> 'removido'` (padrão real de `conferencia`/`fechamento`/`carga`/`liberacao`/`consolidacao`); caminho literal para operação inexistente em AD-03; DoD-109/112 ganham task própria (Task 20); DoD-113 vira teste escrito em `menu-rbac.test.ts`; `salvarItens`, `precosDaUltimaPublicada`, `exigirTabela` e `detalhar` escritos por extenso; linha 3 da matriz fechada por **D31** |
 | Emenda 3 | 3º Portão 1 `ajustar` em `a71d03f` → achados novos da Task 9: `criar` deixa de chamar `detalhar` **dentro** da transação (outra conexão do pool → 404 + rollback) e passa a lê-lo após o commit, como `publicar`/`salvarItens`; o `.returning()` de `criar` usa `primeiroOuFalha` (`noUncheckedIndexedAccess`); `POST /precos/tabelas/:id/copiar` ganha regra (D14), corpo literal e **DoD-122/123/124**, deixando de ser rota órfã. Menores: `PrecosController` e o `@Get('aberto')` de pedidos por extenso, `arquivos`/`ler` (Task 13) e `arquivosDeCodigo` (Task 20) definidos |
 | Emenda 4 | Execução bloqueada na Task 13: o plano atribuía um `PATCH` agregado a `app/frontend/src/app/api/comercial/pedidos/[id]/route.ts`, mas o contrato real é item-específico (`PATCH /comercial/pedidos/:id/itens/:itemId`, body `{ novaQuantidade, motivo }`) e aceita somente redução. Corrigido por **D32**, rota BFF aninhada literal, matriz de persistência do editor e **DoD-125/126**, sem criar endpoint backend nem regra de produto |
+| Emenda 5 | Re-Portão 1 `ajustar` em `0439140` → fecha os dois achados do Monitor: quantidade editada para `0` passa literalmente pelo `DELETE` item-específico (remoção integral + liberação da reserva), enquanto redução positiva continua no `PATCH`, aumento no adendo e produto ausente no `POST /itens`; DoD-125 deixa de inspecionar texto e executa `PATCH`/`DELETE` com `apiFetch` mockado, provando `204` vazio e preservação byte/status de `400`/`404`/`409` |
 | Worktree da Emenda 4 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix` |
 | Branch da Emenda 4 | `plan/onda4-task13-contract` |
 | Base da Emenda 4 | `origin/develop` = `c2fe0e09f230e7748d532d2292e059f027941e0e` |
@@ -532,18 +533,20 @@ existe `PATCH` agregado no pedido.** O contrato auditado em
 
 | Ação no editor | BFF | Backend | Body | Semântica |
 |---|---|---|---|---|
-| Reduzir item persistido para quantidade `> 0` | `PATCH /api/comercial/pedidos/:id/itens/:itemId` | `PATCH /comercial/pedidos/:id/itens/:itemId` | `{ novaQuantidade: number, motivo: string }` | **somente redução**; `novaQuantidade >= quantidadePedida` retorna `409` |
-| Remover item persistido | `DELETE /api/comercial/pedidos/:id/itens/:itemId` | `DELETE /comercial/pedidos/:id/itens/:itemId` | `{ motivo: string }` | libera todas as reservas do item, trata a pendência e faz soft delete |
+| Reduzir item persistido para quantidade `> 0` e menor que a atual | `PATCH /api/comercial/pedidos/:id/itens/:itemId` | `PATCH /comercial/pedidos/:id/itens/:itemId` | `{ novaQuantidade, motivo: 'Redução de quantidade no editor de rascunho' }` | **somente redução positiva**; `reduzirItemSchema` exige `positive()` e `novaQuantidade >= quantidadePedida` retorna `409` |
+| Editar a quantidade persistida para `0` | `DELETE /api/comercial/pedidos/:id/itens/:itemId` | `DELETE /comercial/pedidos/:id/itens/:itemId` | `{ motivo: 'Remoção de item ao zerar quantidade no editor de rascunho' }` | `min={0}` do protótipo significa remoção integral: libera todas as reservas do item, trata a pendência e faz soft delete; **nunca** envia `novaQuantidade: 0` ao `PATCH` |
+| Remover item persistido pelo ícone `Trash2` | `DELETE /api/comercial/pedidos/:id/itens/:itemId` | `DELETE /comercial/pedidos/:id/itens/:itemId` | `{ motivo: 'Remoção de item no editor de rascunho' }` | mesma remoção integral sustentada por v1.1 §6.3, com motivo próprio da ação visual |
 | Aumentar item persistido | `POST /api/comercial/pedidos/:id/adendos` | `POST /comercial/pedidos/:id/adendos` | `{ itemComercialId, quantidadeAdicionada, motivo }` | aumento é **adendo** (v1.1 §5.7/§6.9), com histórico; não passa pelo `PATCH` de redução |
 | Incluir produto ainda ausente no pedido | `POST /api/comercial/pedidos/:id/itens` | `POST /comercial/pedidos/:id/itens` | `{ itemComercialId, quantidade, observacoes? }` | cria nova linha; challenge/confirmação de overbooking já é o contrato da Onda 1 |
 
 A rota `app/frontend/src/app/api/comercial/pedidos/[id]/route.ts` permanece com `GET` do detalhe e
 `DELETE` do **pedido inteiro**; ela **não recebe `PATCH`**. A nova rota é
 `app/frontend/src/app/api/comercial/pedidos/[id]/itens/[itemId]/route.ts`, com `PATCH` e `DELETE`.
-Ela usa `apiFetch` e devolve `response.body` bruto em `NextResponse`: o sucesso `void` do backend não
-é forçado por `response.json()` (o que viraria erro falso), e qualquer `400`/`404`/`409` mantém status
-e corpo. O BFF não revalida nem amplia a regra: os schemas Zod canônicos continuam no backend
-(RA-01). A matriz é fixada por **DoD-125** (proxy/contratos) e **DoD-126** (consumidor no editor).
+Ela usa `apiFetch` e devolve `response.body` bruto em `NextResponse`: inclusive uma resposta `204`
+sem corpo não é forçada por `response.json()` (o que viraria erro falso), e qualquer
+`400`/`404`/`409` mantém literalmente status e bytes do corpo. O BFF não revalida nem amplia a
+regra: os schemas Zod canônicos continuam no backend (RA-01). A matriz — incluindo `0 → DELETE` —
+é fixada por **DoD-125** (proxy/contratos executado) e **DoD-126** (consumidor no editor).
 
 ---
 
@@ -583,7 +586,9 @@ Caminho real localizado no protótipo (não existe `Clientes.tsx`; a tela de Cli
   confirmação. É o payload do `409 PEDIDO_ABERTO_EXISTENTE`.
 - Alteração de item persistido segue o comportamento do protótipo em `PedidoVenda.tsx:465-508`
   (reduzir devolve disponibilidade; remover libera a reserva; aumentar calcula apenas o incremento),
-  traduzido para os quatro endpoints reais de D32 — nunca para um `PATCH` agregado do pedido.
+  inclusive o `input min={0}` de `PedidoVenda.tsx:729-734`: `0` é remoção integral e vai ao
+  `DELETE`, redução ainda positiva vai ao `PATCH`, aumento vai ao adendo e produto ausente vai ao
+  `POST /itens`, conforme D32 — nunca para um `PATCH` agregado do pedido.
 - `HistoricoEntry`: linha do tempo do pedido (inclui adendos).
 - `PRODUTOS`, `CLIENTES`, `SEED_PEDIDOS`, `DISPONIBILIDADE_INICIAL` são mock (divergência **D-05**).
 
@@ -851,8 +856,8 @@ via `test/helpers/test-app.ts`.
 | DoD-119 | **Linha 3 da matriz / D31**: o pedido herda a rota do cliente quando o DTO não a informa, mantém `null` se o cliente não tem rota, e o representante vem de `clientes.representante_id` | `app/backend/test/integration/pedidos-onda4.e2e-spec.ts` › `pedido herda rota do cliente e expoe o representante do cadastro` |
 | DoD-120 | **Linha 3 da matriz / D31**: selecionar o cliente no editor preenche Representante e Rota a partir do cadastro, sem lista fixa e sem valor fabricado | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `selecionar cliente herda representante e rota do cadastro no editor de pedido` |
 | DoD-121 | Criar pedido em data **sem operação ativa** não executa AD-03 e cria a operação do dia; a busca de pedido aberto em data sem operação devolve `404 OPERACAO_NAO_ENCONTRADA` | `app/backend/test/integration/pedidos-onda4.e2e-spec.ts` › `criar em data sem operacao nao checa AD-03 e cria a operacao do dia` |
-| DoD-125 | **D32**: redução/remoção de item usam BFF aninhado `/:id/itens/:itemId`, encaminham os bodies reais e preservam status/body; `[id]/route.ts` não exporta `PATCH` | `app/frontend/__tests__/bff-onda4.test.ts` › `BFF de item usa a rota aninhada e os contratos reais de reducao e remocao` |
-| DoD-126 | **D32/v1.1 §6.3/§6.9**: no editor de pedido persistido, redução chama o `PATCH` aninhado, remoção chama o `DELETE` aninhado e aumento chama adendo — nunca `PATCH` agregado | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `edicao de rascunho reduz e remove pela rota aninhada e aumenta por adendo` |
+| DoD-125 | **D32**: teste executa `PATCH` e `DELETE` do BFF aninhado `/:id/itens/:itemId`, prova método/body sem troca, sucesso `204` com corpo vazio e preservação literal de status+bytes nos erros `400`/`404`/`409`; `[id]/route.ts` não exporta `PATCH` | `app/frontend/__tests__/bff-onda4.test.ts` › `BFF de item usa a rota aninhada e os contratos reais de reducao e remocao` |
+| DoD-126 | **D32/v1.1 §6.3/§6.9**: no editor persistido, redução positiva chama `PATCH`; quantidade `0` e ícone de remoção chamam `DELETE` com seus motivos; aumento chama adendo; produto ausente chama `POST /itens`; nunca há `PATCH` agregado nem `PATCH` com zero | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `edicao de rascunho traduz reducao zero remocao aumento e produto ausente para os endpoints reais` |
 
 **57 itens de DoD** (DoD-70 a DoD-126), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
 do CI.
@@ -2703,8 +2708,18 @@ private derivarStatus(pedidoStatus: string, pedida: number, atendida: number): S
    `bff-onda4.test.ts` — nenhum é importado de lugar nenhum:
 
 ```ts
+/** @jest-environment node */
+
+import type { NextRequest } from 'next/server';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { apiFetch } from '@/lib/api';
+import {
+  DELETE as removerItem,
+  PATCH as reduzirItem,
+} from '../src/app/api/comercial/pedidos/[id]/itens/[itemId]/route';
+
+jest.mock('@/lib/api', () => ({ apiFetch: jest.fn() }));
 
 const RAIZ_FRONTEND = join(__dirname, '..');
 
@@ -2730,27 +2745,95 @@ it('nenhuma tela da onda 4 chama o backend fora do BFF', () => {
    `src/app/api/**`, que é justamente onde `fetchBackend`/`apiFetch` **devem** aparecer, e por
    isso ficam fora da varredura.
 
-   No mesmo arquivo, escrever primeiro o teste de **DoD-125**. Ele trava o caminho, os dois bodies,
-   o repasse bruto da resposta `void`/erro e a ausência do `PATCH` agregado que causou o bloqueio:
+   O arquivo começa com `/** @jest-environment node */`: o Jest usa `Response`/`Headers` nativos do
+   Node 22 e o teste exercita streams reais, sem depender do polyfill mínimo de `jest.setup.ts`.
+   No mesmo arquivo, escrever primeiro o teste **executável** de **DoD-125**. Ele importa e chama as
+   funções da rota, mocka `apiFetch`, trava caminho/método/body, prova o repasse bruto de `204` vazio
+   e de `400`/`404`/`409`, e mantém a ausência do `PATCH` agregado que causou o bloqueio:
 
 ```ts
-it('BFF de item usa a rota aninhada e os contratos reais de reducao e remocao', () => {
-  const rotaItem = join(
-    RAIZ_FRONTEND,
-    'src/app/api/comercial/pedidos/[id]/itens/[itemId]/route.ts',
+const apiFetchMock = jest.mocked(apiFetch);
+
+function requisicaoCom(body: unknown): NextRequest {
+  return { json: jest.fn().mockResolvedValue(body) } as unknown as NextRequest;
+}
+
+function contexto(itemId: string) {
+  return { params: Promise.resolve({ id: 'pedido-1', itemId }) };
+}
+
+beforeEach(() => {
+  apiFetchMock.mockReset();
+});
+
+it('BFF de item usa a rota aninhada e os contratos reais de reducao e remocao', async () => {
+  const reducao = {
+    novaQuantidade: 4,
+    motivo: 'Redução de quantidade no editor de rascunho',
+  };
+  apiFetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+  const sucessoPatch = await reduzirItem(requisicaoCom(reducao), contexto('item-reduzido'));
+  expect(apiFetchMock).toHaveBeenLastCalledWith(
+    '/comercial/pedidos/pedido-1/itens/item-reduzido',
+    { method: 'PATCH', body: JSON.stringify(reducao) },
   );
+  expect(sucessoPatch.status).toBe(204);
+  expect(await sucessoPatch.text()).toBe('');
+
+  const remocao = { motivo: 'Remoção de item no editor de rascunho' };
+  apiFetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+  const sucessoDelete = await removerItem(requisicaoCom(remocao), contexto('item-removido'));
+  expect(apiFetchMock).toHaveBeenLastCalledWith(
+    '/comercial/pedidos/pedido-1/itens/item-removido',
+    { method: 'DELETE', body: JSON.stringify(remocao) },
+  );
+  expect(sucessoDelete.status).toBe(204);
+  expect(await sucessoDelete.text()).toBe('');
+
+  const erros = [
+    {
+      executar: reduzirItem,
+      method: 'PATCH',
+      itemId: 'item-400',
+      body: reducao,
+      status: 400,
+      corpo: '{ "statusCode":400, "message":"quantidade inválida" }\n',
+    },
+    {
+      executar: removerItem,
+      method: 'DELETE',
+      itemId: 'item-404',
+      body: remocao,
+      status: 404,
+      corpo: '{ "statusCode":404, "message":"item não encontrado" }\n',
+    },
+    {
+      executar: reduzirItem,
+      method: 'PATCH',
+      itemId: 'item-409',
+      body: reducao,
+      status: 409,
+      corpo: '{ "statusCode":409, "message":"conflito de edição" }\n',
+    },
+  ] as const;
+
+  for (const caso of erros) {
+    apiFetchMock.mockResolvedValueOnce(new Response(caso.corpo, {
+      status: caso.status,
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+    }));
+    const resposta = await caso.executar(requisicaoCom(caso.body), contexto(caso.itemId));
+    expect(apiFetchMock).toHaveBeenLastCalledWith(
+      `/comercial/pedidos/pedido-1/itens/${caso.itemId}`,
+      { method: caso.method, body: JSON.stringify(caso.body) },
+    );
+    expect(resposta.status).toBe(caso.status);
+    expect(resposta.headers.get('content-type')).toBe('application/json; charset=utf-8');
+    expect(await resposta.text()).toBe(caso.corpo);
+  }
+
   const rotaPedido = join(RAIZ_FRONTEND, 'src/app/api/comercial/pedidos/[id]/route.ts');
   const contratos = join(RAIZ_FRONTEND, 'src/lib/comercial.ts');
-
-  const fonteItem = ler(rotaItem);
-  expect(fonteItem).toContain('params: Promise<{ id: string; itemId: string }>');
-  expect(fonteItem).toMatch(/export async function PATCH/);
-  expect(fonteItem).toMatch(/export async function DELETE/);
-  expect(fonteItem).toContain('`/comercial/pedidos/${id}/itens/${itemId}`');
-  expect(fonteItem).toContain("method: 'PATCH'");
-  expect(fonteItem).toContain("method: 'DELETE'");
-  expect(fonteItem.match(/body: JSON\.stringify\(body\)/g)).toHaveLength(2);
-  expect(fonteItem).toContain('new NextResponse(response.body');
   expect(ler(rotaPedido)).not.toMatch(/export async function PATCH/);
 
   const fonteContratos = ler(contratos);
@@ -2762,6 +2845,12 @@ it('BFF de item usa a rota aninhada e os contratos reais de reducao e remocao', 
   );
 });
 ```
+
+   O espaço e a quebra de linha intencionais nos três `corpo` tornam o teste sensível a
+   desserialização/resserialização: trocar `response.body` por `await response.json()` +
+   `NextResponse.json(...)` muda os bytes e falha. Consumir JSON no sucesso também falha antes das
+   asserções porque `204` não tem corpo. Fixar `200`, inverter `PATCH`/`DELETE`, trocar seus bodies ou
+   omitir qualquer status de erro quebra as asserções correspondentes.
 
 2. Implementar cada rota nos **dois padrões que já existem** em `src/lib/api.ts`, escolhendo pelo
    critério "o corpo do erro importa?":
@@ -2814,7 +2903,7 @@ import type { ReduzirItemPedidoBody, RemoverItemPedidoBody } from '@/lib/comerci
 
 type Ctx = { params: Promise<{ id: string; itemId: string }> };
 
-/** Preserva status/body do backend inclusive quando o sucesso é 200 sem JSON. */
+/** Preserva status/body do backend inclusive quando o sucesso é 204 sem corpo. */
 function repassar(response: Response): NextResponse {
   const headers = new Headers();
   const contentType = response.headers.get('content-type');
@@ -2947,17 +3036,20 @@ it('clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente', async
    passa a renderizar `<PedidosClient …/>` sem a prop `modo`, porque lista e editor convivem na
    mesma rota, como no protótipo.
 2. Testes primeiro (DoD-87 a DoD-90, DoD-120 e DoD-126). O caso de DoD-126 monta um pedido
-   persistido, altera uma linha para baixo, remove outra e aumenta a terceira; então inspeciona
-   `global.fetch` e exige, respectivamente:
+   persistido com cinco linhas, reduz uma para quantidade positiva, zera outra pelo `input min={0}`,
+   remove a terceira pelo `Trash2`, aumenta a quarta e inclui um produto ausente; então inspeciona
+   `global.fetch` e exige a matriz completa:
 
 ```tsx
-it('edicao de rascunho reduz e remove pela rota aninhada e aumenta por adendo', async () => {
+it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente para os endpoints reais', async () => {
   render(<PedidosClient {...propsComPedidoPersistido} />);
   await abrirPedidoPersistido();
 
   await reduzirQuantidade('item-reduzido', 4);
-  await removerItem('item-removido');
+  await zerarQuantidade('item-zerado');
+  await removerItemPeloIcone('item-removido');
   await aumentarQuantidadeComoAdendo('item-aumentado', 3, 'Complemento solicitado pelo cliente');
+  await adicionarProdutoAusente('item-comercial-novo', 2);
 
   const chamadas = (global.fetch as jest.Mock).mock.calls;
   expect(chamadas).toContainEqual([
@@ -2967,6 +3059,15 @@ it('edicao de rascunho reduz e remove pela rota aninhada e aumenta por adendo', 
       body: JSON.stringify({
         novaQuantidade: 4,
         motivo: 'Redução de quantidade no editor de rascunho',
+      }),
+    }),
+  ]);
+  expect(chamadas).toContainEqual([
+    '/api/comercial/pedidos/pedido-1/itens/item-zerado',
+    expect.objectContaining({
+      method: 'DELETE',
+      body: JSON.stringify({
+        motivo: 'Remoção de item ao zerar quantidade no editor de rascunho',
       }),
     }),
   ]);
@@ -2988,14 +3089,29 @@ it('edicao de rascunho reduz e remove pela rota aninhada e aumenta por adendo', 
       }),
     }),
   ]);
+  expect(chamadas).toContainEqual([
+    '/api/comercial/pedidos/pedido-1/itens',
+    expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        itemComercialId: 'item-comercial-novo',
+        quantidade: 2,
+      }),
+    }),
+  ]);
+  expect(chamadas.some(([url, init]) =>
+    url === '/api/comercial/pedidos/pedido-1/itens/item-zerado'
+      && init?.method === 'PATCH')).toBe(false);
   expect(chamadas.some(([url, init]) =>
     url === '/api/comercial/pedidos/pedido-1' && init?.method === 'PATCH')).toBe(false);
 });
 ```
 
-   `propsComPedidoPersistido`, `abrirPedidoPersistido`, `reduzirQuantidade`, `removerItem` e
-   `aumentarQuantidadeComoAdendo` são helpers de interação definidos no próprio teste sobre os
-   rótulos do protótipo; não são API de produção.
+   `propsComPedidoPersistido`, `abrirPedidoPersistido`, `reduzirQuantidade`, `zerarQuantidade`,
+   `removerItemPeloIcone`, `aumentarQuantidadeComoAdendo` e `adicionarProdutoAusente` são helpers de
+   interação definidos no próprio teste sobre os rótulos do protótipo; não são API de produção.
+   O mock de `fetch` devolve `new Response(null, { status: 204 })` para as mutações
+   item-específicas; assim o consumidor também falha se tentar consumir JSON no sucesso vazio.
 3. Lista de pedidos com os filtros, contadores e pílulas do protótipo, usando
    `rotuloStatusPedido(status, temReservaAtiva)`.
 4. `PedidoEditor`: seleção de cliente (campo **"Buscar cliente"**), seletor de produto, quantidade,
@@ -3009,17 +3125,22 @@ it('edicao de rascunho reduz e remove pela rota aninhada e aumenta por adendo', 
    - quantidade menor e ainda positiva → `PATCH
      /api/comercial/pedidos/:id/itens/:itemId` com `{ novaQuantidade, motivo: 'Redução de quantidade
      no editor de rascunho' }`;
+   - quantidade igual a `0` no `input min={0}` do protótipo → `DELETE
+     /api/comercial/pedidos/:id/itens/:itemId` com
+     `{ motivo: 'Remoção de item ao zerar quantidade no editor de rascunho' }`; nunca enviar
+     `novaQuantidade: 0`, pois `reduzirItemSchema` exige número positivo;
    - exclusão pelo ícone `Trash2` → `DELETE /api/comercial/pedidos/:id/itens/:itemId` com
      `{ motivo: 'Remoção de item no editor de rascunho' }`;
    - quantidade maior → abrir `ModalAdendo`, obter o `motivo` que o DTO de adendo já exige e enviar
      somente o delta em `POST /api/comercial/pedidos/:id/adendos`; challenge deficitário confirma em
      `/adendos/confirmar-overbooking`.
 
-   Os dois motivos fixos descrevem a ação técnica efetivamente executada e alimentam a auditoria
-   exigida pelo backend; não são constante de regra de negócio. Em sucesso `void`, a tela recarrega o
-   detalhe do pedido; em `400`/`404`/`409`, mostra o corpo preservado pelo BFF. "Salvar Rascunho" em
-   pedido já existente apenas conclui a edição depois que as mutações item-específicas terminaram e
-   não altera o status (D12).
+   Os três motivos fixos descrevem a ação técnica efetivamente executada e alimentam a auditoria
+   exigida pelo backend; não são constante de regra de negócio. O helper de mutação testa
+   `response.ok` **antes** de ler corpo: em `204` vazio, não chama `json()` e recarrega o detalhe do
+   pedido; em `400`/`404`/`409`, lê e mostra o corpo preservado pelo BFF, sem converter falha em
+   sucesso. "Salvar Rascunho" em pedido já existente apenas conclui a edição depois que as mutações
+   item-específicas terminaram e não altera o status (D12).
 5. **Herança representante → rota no editor (D31 / linha 3 da matriz).** Ao escolher o cliente em
    "Buscar cliente", o editor exibe **Representante** (somente leitura, vindo de
    `heranca.representanteNome`) e **Rota** (pré-preenchida com `heranca.rotaNome`, editável — o
@@ -3321,6 +3442,7 @@ npm run lint
 npm run type-check
 cd app/backend && npm run db:migrate && npm run db:seed && cd ../..
 cd app/backend && HARDWARE_FAKE=1 NFSE_FAKE=1 npm run test:cov && cd ../..
+cd app/frontend && npm run test -- --runInBand bff-onda4.test.ts onda4-pedidos.test.tsx && cd ../..
 cd app/frontend && npm run test && cd ../..
 cd app/frontend && npx playwright test && cd ../..
 npm run build
@@ -3340,7 +3462,8 @@ rg -n "PlaceholderPage" "app/frontend/src/app/(admin)/comercial"
 # Legado de pedido eliminado (D29) — deve devolver zero linhas
 rg -n "pedido-venda-client|pedidos/novo" app/frontend
 
-# BFF de item do pedido é aninhado e a rota raiz não ganhou PATCH (D32 / DoD-125)
+# O comando Jest dirigido acima executa os handlers e prova 204/400/404/409 + matriz do editor.
+# Estes greps complementares provam a estrutura aninhada e que a rota raiz não ganhou PATCH.
 rg -n "export async function (PATCH|DELETE)|/comercial/pedidos/\\$\\{id\\}/itens/\\$\\{itemId\\}" \
   "app/frontend/src/app/api/comercial/pedidos/[id]/itens/[itemId]/route.ts"
 rg -n "export async function PATCH" \
@@ -3388,7 +3511,8 @@ DoD-113 na Task 3 (o nome citado **não** existia em `menu-rbac.test.ts` e passo
 DoD-119/121 na Task 6, DoD-120 na Task 15 e DoD-122/123/124 na Task 9, passo 1. A Task 20 existe precisamente porque DoD-109 e DoD-112
 só ficam verdes depois da Task 19 — escrevê-los antes deixaria três tasks com commit vermelho.
 DoD-125 é escrito na Task 13 sobre a rota BFF aninhada e DoD-126 na Task 15 sobre seu consumidor
-real; os dois impedem a volta do `PATCH` agregado inexistente.
+real; os dois impedem a volta do `PATCH` agregado inexistente, o envio de zero ao schema
+`positive()` e a perda de status/corpo no proxy.
 
 **Aderência à base real (emenda do Portão 1).** Todo código literal deste plano foi conferido contra
 `develop` no worktree em `158da75`, não contra a memória do plano mestre: assinatura de
@@ -3423,14 +3547,17 @@ que `publicar` e `salvarItens` já faziam e o que `PedidosService.criar` faz em 
 em D14 (origem, sobrescrita, destino publicado), corpo literal no service e no controller, e
 DoD-122/123/124 — e a Task 17 amarra o botão do protótipo a ela, então nenhuma ponta fica solta.
 
-**Contrato BFF de item na Task 13 (emenda 4).** O controller/backend real foi relido:
+**Contrato BFF de item na Task 13 (emendas 4–5).** O controller/backend real foi relido:
 `PATCH /comercial/pedidos/:id/itens/:itemId` recebe `reduzirItemSchema` (`novaQuantidade` +
 `motivo`) e o service rejeita aumento; `DELETE` no mesmo caminho recebe `removerItemSchema`.
 O protótipo e a v1.1 §6.3/§6.9 separam reduzir/remover (liberar reserva) de aumentar (adendo).
 Por isso D32 cria `api/comercial/pedidos/[id]/itens/[itemId]/route.ts`, preserva o body bruto —
-inclusive o sucesso sem JSON — e mantém `[id]/route.ts` sem `PATCH`. Task 15 consome a matriz
-literal: redução=`PATCH` aninhado, remoção=`DELETE` aninhado, aumento=`POST adendos`, inclusão nova=
-`POST itens`. Nenhum endpoint backend novo nem decisão de produto foi criado.
+inclusive `204` sem corpo — e mantém `[id]/route.ts` sem `PATCH`. O teste importa os handlers e
+prova, com `apiFetch` mockado, método/body, `204` vazio e status+bytes exatos de `400`/`404`/`409`;
+não é mais inspeção textual. Task 15 consome a matriz literal: redução positiva=`PATCH` aninhado,
+`0`/remoção=`DELETE` aninhado, aumento=`POST adendos`, inclusão nova=`POST itens`. O `0 → DELETE`
+vem diretamente do `min={0}`/remoção do protótipo e da liberação de reserva da v1.1 §6.3. Nenhum
+endpoint backend novo, divergência autorizada ou decisão de produto foi criado.
 
 **O que este plano deliberadamente não faz.** Não reescreve o motor de reserva/overbooking da Onda 1;
 não cria TTL de rascunho (AD-06 proíbe); não fecha as pendências abertas por conta própria — P5, P11
@@ -3448,6 +3575,8 @@ resolvida por D6 com um conjunto canônico único, evitando três catálogos inc
 **Verificação da regra "Zero".** O plano não contém `TBD`, `TODO`, "a definir", "implementar depois"
 nem "similar à Task". O termo banido pela v1.1 §6.8 aparece apenas na constraint 10 e no comando de
 gate que o proíbem — em nenhum ponto como rótulo, campo, entidade, tipo ou texto de UI.
+Quantidade editada para `0` não é pendência: D32 e Task 15 a encaminham explicitamente ao `DELETE`
+item-específico com motivo, e DoD-126 falha se reaparecer `PATCH` com zero.
 
 ---
 
@@ -3457,15 +3586,17 @@ gate que o proíbem — em nenhum ponto como rótulo, campo, entidade, tipo ou t
 autorizadas.**
 
 Os 2 itens novos em relação à emenda 3 são **DoD-125** e **DoD-126**: contrato do BFF
-item-específico e consumo correto no editor. A decisão nova é **D32**, que fixa a tradução sem
-inventar endpoint: redução/remoção usam `/:id/itens/:itemId`; aumento usa adendo. A Task 13 passa
-de **13 rotas novas + 2 alteradas** para **14 rotas novas + 1 alterada**: entra o arquivo aninhado e
-`api/comercial/pedidos/[id]/route.ts` deixa de ser alteração desta onda.
+item-específico e consumo correto no editor. A decisão nova da emenda 4 é **D32**, agora fechada pela
+emenda 5 para `0 → DELETE` e teste de proxy executável, sem nova decisão numerada: redução positiva
+usa `PATCH`, zero/remoção usam `DELETE`, aumento usa adendo e produto ausente usa `POST /itens`. A
+Task 13 passa de **13 rotas novas + 2 alteradas** para **14 rotas novas + 1 alterada**: entra o
+arquivo aninhado e `api/comercial/pedidos/[id]/route.ts` deixa de ser alteração desta onda.
 
 Contagem da estrutura listada: backend = **17 arquivos de código novos + 15 testes novos + 19
 alterados**; frontend = **35 novos (14 rotas BFF) + 12 alterados (1 rota BFF) + 3 removidos**. A
 emenda 4 não altera o total de arquivos frontend novos+alterados: reclassifica a rota raiz como
-inalterada e acrescenta a rota aninhada correta.
+inalterada e acrescenta a rota aninhada correta. A emenda 5 altera somente o conteúdo do plano e dos
+dois testes já contados; não adiciona, remove nem reclassifica arquivo de implementação.
 
 Divergências autorizadas: **D-01** abas Fiscais/Contatos sem conteúdo no protótipo → conteúdo
 derivado do JSONB já existente; **D-02** conjunto canônico único de códigos do catálogo;
