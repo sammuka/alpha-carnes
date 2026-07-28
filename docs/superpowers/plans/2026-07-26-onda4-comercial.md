@@ -48,7 +48,7 @@ Jest (backend e frontend) · Playwright (e2e).
 | Emenda 6 | Re-Portão 1 `ajustar` em `7dde9fe` → a ausência de `PATCH` na rota raiz deixa de depender da regex estreita `export async function PATCH`: o teste importa o namespace real do módulo e afirma que suas exportações não contêm `PATCH`, cobrindo função, constante e reexport; o Jest dirigido é o gate autoritativo |
 | Emenda 7 | Execução retomada após a Task 13 revelou duas exposições remanescentes do campo substituído em `clientesConfig` (`campos[].nome` e `schema`). A Task 2 passa a removê-las literalmente e ganha **DoD-127** executável; a Task 14 preserva o restante do config. O gate deixa de banir `rotaPadraoId`/`rotaPadraoNome` legítimos da frota e restringe a busca aos identificadores exatos `rotaPadrao`/`rota_padrao` nos consumidores de Clientes |
 | Emenda 8 | Gate local após a Task 21 revelou que o teste herdado `disponibilidade.test.tsx` ainda fixava a UI e o payload anteriores à Task 18: título antigo, lista sem `operacaoId` e Grade visível por padrão. A Task 18 passa a realinhar esse teste sem removê-lo nem afrouxá-lo: resposta atual da lista + mapa, navegação explícita para Grade, saldo real no DOM e atualização `reserva_disponibilidade_atualizada` sem novo fetch da lista (**DoD-128**); o mapa pode recarregar, como exige a implementação aprovada |
-| Emenda 9 | A jornada real da Task 21 chegou à Grade pelo código do item, mas a criação do pedido recebeu `400`: `GET /comercial/compras-programadas?pageSize=100` devolvia `operacaoId` sem `dataOperacao`; o BFF apenas repassava esse contrato incompleto e `PedidoEditor.payloadNovo()` enviava `undefined` ao schema do backend. **D33** corrige a origem e alinha toda a API pública: lista, detalhe e mutações derivam a data de `operacoes.data` pelo `operacaoId`; confirmação preserva seu envelope tipado; nenhum BFF/cliente fabrica fallback. **DoD-129/130** fixam todos os retornos e o consumo real no editor, e a Task 21 preserva Grade por código + criação do pedido como prova final |
+| Emenda 9 | A jornada real da Task 21 chegou à Grade pelo código do item, mas a criação do pedido recebeu `400`: `GET /comercial/compras-programadas?pageSize=100` devolvia `operacaoId` sem `dataOperacao`; o BFF apenas repassava esse contrato incompleto e `PedidoEditor.payloadNovo()` enviava `undefined` ao schema do backend. **D33** corrige a origem e alinha toda a API pública: lista, detalhe e mutações derivam a data de `operacoes.data` pelo `operacaoId`; confirmação preserva seu envelope tipado; nenhum BFF/editor fabrica fallback. **DoD-129/130/131** fixam todos os retornos, o consumo real no editor e o envelope BFF, e a Task 21 preserva Grade por código + criação do pedido como prova final. `/gestao/compras` permanece ownership da Onda 5, com ordem de integração explícita após o merge O4 |
 | Worktree da Emenda 4 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix` |
 | Branch da Emenda 4 | `plan/onda4-task13-contract` |
 | Base da Emenda 4 | `origin/develop` = `c2fe0e09f230e7748d532d2292e059f027941e0e` |
@@ -596,15 +596,22 @@ Em `confirmar()`, a leitura pós-commit também substitui a consulta avulsa que 
 vazia silenciosa (Princípio VII). O BFF continua proxy, porém seus genéricos passam a refletir
 literalmente a tabela: raiz `GET/POST` já estão corretos; `GET/PATCH/DELETE [id]` usam
 `CompraProgramadaDetalhe`; `PATCH [id]/itens/[itemId]` já usa esse detalhe; confirmação usa
-`ConfirmacaoCompraProgramada`. A tela `/gestao/compras` lê `body.compra` no sucesso de confirmação,
-em vez de tratar o envelope como detalhe.
+`ConfirmacaoCompraProgramada`.
+
+**Fronteira D1/Onda 5:** `/gestao/compras` não é alterada pela Onda 4. O consumidor atual ainda
+trata o envelope de confirmação como se fosse `CompraProgramadaDetalhe`; isso fica registrado como
+dependência obrigatória, não mascarada: depois do merge da Onda 4, a branch/PR da Onda 5 deve
+rebasear em `develop`, importar `ConfirmacaoCompraProgramada`, ler `body.compra` e adicionar o teste
+do consumidor antes de prosseguir ao Portão 2. A ordem é **merge O4 → rebase da PR #28/O5 →
+correção/teste em O5**. PR #28 não pode copiar o contrato antigo nem resolver o conflito escolhendo
+a versão pré-D33. Assim D1 permanece literal: esta onda toca somente as cinco rotas Comerciais.
 
 Não se adiciona `data_operacao` a `compras_programadas`, não se usa `createdAt`, data atual, string
 vazia ou o DTO original como substituto. `CompraProgramada` no frontend passa a espelhar
 `operacaoId: string` e continua exigindo `dataOperacao: string`; `PedidoEditor.payloadNovo()`
 consome a data recebida, sem `??`, `||`, `new Date()` ou outra fabricação no cliente
 (RA-01/RA-06). O contrato completo é fixado por **DoD-129**; **DoD-130** prova o consumidor que
-bloqueou a jornada.
+bloqueou a jornada e **DoD-131** prova o envelope no BFF.
 
 ---
 
@@ -801,7 +808,7 @@ app/frontend/__tests__/bff-onda4.test.ts
 app/frontend/e2e/onda4-comercial.spec.ts
 ```
 
-### Frontend — alterados (17 arquivos; 3 rotas BFF)
+### Frontend — alterados (16 arquivos; 3 rotas BFF)
 
 ```
 app/frontend/src/app/api/comercial/pedidos/route.ts             (+ salvarComoRascunho no POST)
@@ -817,7 +824,6 @@ app/frontend/src/app/(admin)/comercial/pedidos/page.tsx         (usa pedidos-cli
 app/frontend/src/app/(admin)/comercial/tabela-precos/page.tsx   (deixa de ser placeholder)
 app/frontend/src/app/(admin)/comercial/disponibilidade/page.tsx (mapa + grade)
 app/frontend/src/app/(admin)/comercial/espelho/page.tsx         (deixa de ser placeholder)
-app/frontend/src/app/(admin)/gestao/compras/compras-client.tsx  (lê body.compra na confirmação)
 app/frontend/src/lib/comercial.ts                                (tipos de adendo/mapa/rascunho)
 app/frontend/src/lib/cadastros-config.ts                         (remove as 2 exposições de
                                                                  clientesConfig.rotaPadrao)
@@ -935,10 +941,11 @@ via `test/helpers/test-app.ts`.
 | DoD-126 | **D32/v1.1 §6.3/§6.9**: no editor persistido, redução positiva chama `PATCH`; quantidade `0` e ícone de remoção chamam `DELETE` com seus motivos; aumento chama adendo; produto ausente chama `POST /itens`; nunca há `PATCH` agregado nem `PATCH` com zero | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `edicao de rascunho traduz reducao zero remocao aumento e produto ausente para os endpoints reais` |
 | DoD-129 | **D33**: lista, detalhe, criação, atualização do cabeçalho, atualização de item, confirmação e cancelamento devolvem a mesma `dataOperacao` de `operacoes.data`; lista preserva paginação/`incluirRemovidos`, mutações retornam detalhe pós-commit e confirmação preserva o envelope tipado sem string vazia | `app/backend/test/integration/compras-programadas.e2e-spec.ts` › `todos os retornos publicos derivam dataOperacao da operacao vinculada` |
 | DoD-130 | **D33**: com a resposta contratual real de `GET /compras-programadas`, criar pedido pelo editor envia `compraProgramadaId` e a `dataOperacao` exata no `POST /pedidos`; o campo nunca é `undefined` e não há fallback no frontend | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `novo pedido usa dataOperacao recebida da compra sem fallback` |
+| DoD-131 | **D33**: o BFF de confirmação preserva o envelope tipado `{ compra, jaConfirmada }`, chama o backend com `POST` e não achata nem descarta `compra.dataOperacao` | `app/frontend/__tests__/bff-onda4.test.ts` › `BFF de confirmar compra preserva o envelope canonico` |
 
-**61 itens de DoD** (DoD-70 a DoD-130), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
-do CI. A numeração é histórica: DoD-128 foi acrescentado pela emenda 8 e DoD-129/130 pela emenda 9,
-sem renumerar os contratos anteriores.
+**62 itens de DoD** (DoD-70 a DoD-131), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
+do CI. A numeração é histórica: DoD-128 foi acrescentado pela emenda 8 e DoD-129/130/131 pela
+emenda 9, sem renumerar os contratos anteriores.
 
 ---
 
@@ -1748,11 +1755,132 @@ return { compra, jaConfirmada: resultado.jaConfirmada };
    data e afirmar a data, os itens e `status = 'cancelada'` no `DELETE`. Nome literal:
 
 ```ts
+// Acrescentar aos imports existentes do spec:
+import { eq } from 'drizzle-orm';
+import { DRIZZLE } from '../../src/database/database.module';
+import { comprasProgramadas } from '../../src/database/schema';
+
 it('todos os retornos publicos derivam dataOperacao da operacao vinculada', async () => {
-  // POST → GET lista → GET detalhe → PATCH cabeçalho → PATCH item → POST confirmar.
-  // Segunda compra: POST → DELETE. Cada resposta compara com a data enviada na criação,
-  // e toda resposta detalhada mantém o array `itens`.
+  const diaPrincipal = '2026-09-21';
+  const criada = await request(app.getHttpServer())
+    .post('/comercial/compras-programadas')
+    .set('Cookie', comprasCookies)
+    .send(novaCompra({ dataOperacao: diaPrincipal }));
+  expect(criada.status).toBe(201);
+  expect(criada.body).toMatchObject({
+    dataOperacao: diaPrincipal,
+    status: 'rascunho',
+  });
+  expect(criada.body.itens).toHaveLength(1);
+  const compraId = String(criada.body.id);
+  const itemId = String(criada.body.itens[0].id);
+
+  const lista = await request(app.getHttpServer())
+    .get('/comercial/compras-programadas?page=1&pageSize=100&incluirRemovidos=true')
+    .set('Cookie', comprasCookies);
+  expect(lista.status).toBe(200);
+  expect(lista.body).toMatchObject({ page: 1, pageSize: 100 });
+  expect(lista.body.total).toBeGreaterThanOrEqual(1);
+  expect(lista.body.data.find((compra: { id: string }) => compra.id === compraId))
+    .toMatchObject({ id: compraId, dataOperacao: diaPrincipal });
+
+  const detalhe = await request(app.getHttpServer())
+    .get(`/comercial/compras-programadas/${compraId}`)
+    .set('Cookie', comprasCookies);
+  expect(detalhe.status).toBe(200);
+  expect(detalhe.body).toMatchObject({ id: compraId, dataOperacao: diaPrincipal });
+  expect(detalhe.body.itens).toHaveLength(1);
+
+  const cabecalho = await request(app.getHttpServer())
+    .patch(`/comercial/compras-programadas/${compraId}`)
+    .set('Cookie', comprasCookies)
+    .send({ numeroInterno: 'D33-001', status: 'em_negociacao' });
+  expect(cabecalho.status).toBe(200);
+  expect(cabecalho.body).toMatchObject({
+    id: compraId,
+    dataOperacao: diaPrincipal,
+    numeroInterno: 'D33-001',
+    status: 'em_negociacao',
+  });
+  expect(cabecalho.body.itens).toHaveLength(1);
+
+  const item = await request(app.getHttpServer())
+    .patch(`/comercial/compras-programadas/${compraId}/itens/${itemId}`)
+    .set('Cookie', comprasCookies)
+    .send({ quantidadeComprada: 25 });
+  expect(item.status).toBe(200);
+  expect(item.body).toMatchObject({ id: compraId, dataOperacao: diaPrincipal });
+  expect(item.body.itens.find((linha: { id: string }) => linha.id === itemId))
+    .toMatchObject({ id: itemId, quantidadeComprada: '25.000' });
+
+  const confirmada = await request(app.getHttpServer())
+    .post(`/comercial/compras-programadas/${compraId}/confirmar`)
+    .set('Cookie', comprasCookies)
+    .send();
+  expect(confirmada.status).toBe(201);
+  expect(confirmada.body.jaConfirmada).toBe(false);
+  expect(confirmada.body.compra).toMatchObject({
+    id: compraId,
+    dataOperacao: diaPrincipal,
+    status: 'confirmada',
+  });
+  expect(confirmada.body.compra.itens).toHaveLength(1);
+
+  const diaCancelada = '2026-09-22';
+  const paraCancelar = await request(app.getHttpServer())
+    .post('/comercial/compras-programadas')
+    .set('Cookie', comprasCookies)
+    .send(novaCompra({ dataOperacao: diaCancelada }));
+  expect(paraCancelar.status).toBe(201);
+  const cancelada = await request(app.getHttpServer())
+    .delete(`/comercial/compras-programadas/${paraCancelar.body.id}`)
+    .set('Cookie', comprasCookies)
+    .send();
+  expect(cancelada.status).toBe(200);
+  expect(cancelada.body).toMatchObject({
+    id: paraCancelar.body.id,
+    dataOperacao: diaCancelada,
+    status: 'cancelada',
+  });
+  expect(cancelada.body.itens).toHaveLength(1);
+
+  const { db } = app.get(DRIZZLE);
+  await db
+    .update(comprasProgramadas)
+    .set({ deletedAt: new Date('2026-09-23T12:00:00.000Z') })
+    .where(eq(comprasProgramadas.id, paraCancelar.body.id));
+
+  const semRemovidos = await request(app.getHttpServer())
+    .get('/comercial/compras-programadas?page=1&pageSize=100')
+    .set('Cookie', comprasCookies);
+  expect(semRemovidos.status).toBe(200);
+  expect(semRemovidos.body.data.some(
+    (compra: { id: string }) => compra.id === paraCancelar.body.id,
+  )).toBe(false);
+
+  const comRemovidos = await request(app.getHttpServer())
+    .get('/comercial/compras-programadas?page=1&pageSize=100&incluirRemovidos=true')
+    .set('Cookie', comprasCookies);
+  expect(comRemovidos.status).toBe(200);
+  expect(comRemovidos.body).toMatchObject({ page: 1, pageSize: 100 });
+  expect(comRemovidos.body.data.find(
+    (compra: { id: string }) => compra.id === paraCancelar.body.id,
+  )).toMatchObject({
+    id: paraCancelar.body.id,
+    dataOperacao: diaCancelada,
+    status: 'cancelada',
+  });
 });
+```
+
+   O teste legado `permite editar item enquanto em rascunho` no mesmo arquivo também muda sua
+   asserção, porque o `PATCH` de item deixa de devolver o item isolado:
+
+```ts
+expect(res.status).toBe(200);
+expect(res.body.dataOperacao).toBe('2026-07-03');
+expect(res.body.itens.find((item: { id: string }) => item.id === itemId))
+  .toMatchObject({ id: itemId, quantidadeComprada: '20.000' });
 ```
 
    Em `compras-programadas-branches.spec.ts`, acrescentar `innerJoin` ao mock de select; nos testes
@@ -2933,7 +3061,7 @@ private derivarStatus(pedidoStatus: string, pedida: number, atendida: number): S
 
 **Steps (TDD)**
 
-1. Teste primeiro (DoD-111), com os dois helpers definidos no topo do próprio
+1. Testes primeiro (DoD-111, DoD-125 e DoD-131), com os dois helpers definidos no topo do próprio
    `bff-onda4.test.ts` — nenhum é importado de lugar nenhum:
 
 ```ts
@@ -2942,14 +3070,20 @@ private derivarStatus(pedidoStatus: string, pedida: number, atendida: number): S
 import type { NextRequest } from 'next/server';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, fetchBackend } from '@/lib/api';
+import type { ConfirmacaoCompraProgramada } from '@/lib/comercial';
 import * as rotaPedidoAgregado from '../src/app/api/comercial/pedidos/[id]/route';
 import {
   DELETE as removerItem,
   PATCH as reduzirItem,
 } from '../src/app/api/comercial/pedidos/[id]/itens/[itemId]/route';
+import { POST as confirmarCompra } from
+  '../src/app/api/comercial/compras-programadas/[id]/confirmar/route';
 
-jest.mock('@/lib/api', () => ({ apiFetch: jest.fn() }));
+jest.mock('@/lib/api', () => ({
+  apiFetch: jest.fn(),
+  fetchBackend: jest.fn(),
+}));
 
 const RAIZ_FRONTEND = join(__dirname, '..');
 
@@ -2983,6 +3117,7 @@ it('nenhuma tela da onda 4 chama o backend fora do BFF', () => {
 
 ```ts
 const apiFetchMock = jest.mocked(apiFetch);
+const fetchBackendMock = jest.mocked(fetchBackend);
 
 function requisicaoCom(body: unknown): NextRequest {
   return { json: jest.fn().mockResolvedValue(body) } as unknown as NextRequest;
@@ -2994,6 +3129,7 @@ function contexto(itemId: string) {
 
 beforeEach(() => {
   apiFetchMock.mockReset();
+  fetchBackendMock.mockReset();
 });
 
 it('BFF de item usa a rota aninhada e os contratos reais de reducao e remocao', async () => {
@@ -3074,6 +3210,58 @@ it('BFF de item usa a rota aninhada e os contratos reais de reducao e remocao', 
   );
 });
 ```
+
+   No mesmo arquivo, a microprova executável de **DoD-131** usa o tipo compartilhado e o handler
+   real do BFF:
+
+```ts
+it('BFF de confirmar compra preserva o envelope canonico', async () => {
+  const envelope: ConfirmacaoCompraProgramada = {
+    compra: {
+      id: 'compra-1',
+      operacaoId: 'operacao-1',
+      dataOperacao: '2026-09-21',
+      fornecedorId: 'fornecedor-1',
+      numeroInterno: null,
+      referenciaExterna: null,
+      previsaoEntrega: null,
+      status: 'confirmada',
+      observacoes: null,
+      createdAt: '2026-09-20T10:00:00.000Z',
+      itens: [{
+        id: 'item-1',
+        compraProgramadaId: 'compra-1',
+        itemCompraId: 'item-compra-1',
+        quantidadeComprada: '25.000',
+        observacoes: null,
+      }],
+    },
+    jaConfirmada: false,
+  };
+  fetchBackendMock.mockResolvedValueOnce({
+    data: envelope,
+    error: null,
+    status: 201,
+  });
+
+  const resposta = await confirmarCompra(
+    {} as NextRequest,
+    { params: Promise.resolve({ id: 'compra-1' }) },
+  );
+
+  expect(fetchBackendMock).toHaveBeenCalledWith(
+    '/comercial/compras-programadas/compra-1/confirmar',
+    { method: 'POST' },
+  );
+  expect(resposta.status).toBe(200);
+  expect(await resposta.json()).toEqual(envelope);
+});
+```
+
+   Achatar para `data.compra`, remover `jaConfirmada`, perder `compra.dataOperacao` ou alterar o
+   método/caminho quebra o teste. Como `envelope` é anotado com
+   `ConfirmacaoCompraProgramada`, o Jest dirigido também falha em compilação se o tipo compartilhado
+   voltar a prometer `CompraProgramadaDetalhe` diretamente.
 
    O espaço e a quebra de linha intencionais nos três `corpo` tornam o teste sensível a
    desserialização/resserialização: trocar `response.body` por `await response.json()` +
@@ -3280,7 +3468,6 @@ it('clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente', async
 
 **Files:** `pedidos-client.tsx`, `pedido-editor.tsx`, `modal-overbooking.tsx`, `modal-adendo.tsx`,
 `modal-liberar-reserva.tsx`, `pedidos/page.tsx`,
-`app/frontend/src/app/(admin)/gestao/compras/compras-client.tsx`,
 `app/frontend/__tests__/onda4-pedidos.test.tsx`.
 
 **Steps (TDD)**
@@ -3385,9 +3572,24 @@ const compraDaApi: CompraProgramada = {
   createdAt: '2026-07-27T10:00:00.000Z',
 };
 
+// Dentro de instalarFetch(), substituir o ramo parcial da lista e inserir o POST específico
+// ANTES do fallback genérico de mutações 204:
+if (url === '/api/comercial/compras-programadas?pageSize=100') {
+  return json({
+    data: [compraDaApi],
+    page: 1,
+    pageSize: 100,
+    total: 1,
+  });
+}
+if (url === '/api/comercial/pedidos' && init?.method === 'POST') {
+  return json({ id: 'pedido-novo', status: 'rascunho' }, 201);
+}
+
 it('novo pedido usa dataOperacao recebida da compra sem fallback', async () => {
   render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
   await userEvent.click(await screen.findByRole('button', { name: 'Novo pedido' }));
+  await screen.findByRole('option', { name: compraDaApi.dataOperacao });
   fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'cliente-1' } });
   fireEvent.change(screen.getByLabelText('Operação'), { target: { value: compraDaApi.id } });
   fireEvent.change(screen.getByLabelText('Produto'), {
@@ -3412,6 +3614,12 @@ it('novo pedido usa dataOperacao recebida da compra sem fallback', async () => {
   });
 });
 ```
+
+   Adicionar `import type { CompraProgramada } from '@/lib/comercial';` no topo do spec. O helper
+   `json` já devolve `Response` com `application/json`; portanto o `201` acima é consumível por
+   `salvarNovo()` via `response.json()`. O fallback existente
+   `if (init?.method === 'PATCH' || init?.method === 'DELETE' || init?.method === 'POST')` continua
+   depois desses ramos e atende apenas as mutações vazias que realmente retornam `204`.
 
    O teste não aceita omitir `dataOperacao`, fabricá-la da data atual nem recuperá-la de um segundo
    endpoint. Remover o campo do mock contratual faz o fluxo falhar, em vez de ficar verde por
@@ -3482,34 +3690,6 @@ it('selecionar cliente herda representante e rota do cadastro no editor de pedid
 9. Linha do tempo do pedido (`HistoricoEntry`) alimentada por `GET /:id/adendos` + auditoria do
    pedido.
 10. Assinar `ADENDO_REGISTRADO` e `RESERVA_LIBERADA_ADMIN` via `conectarRealtime` — sem polling.
-11. **Consumidor do envelope de confirmação (D33).** Em
-    `app/frontend/src/app/(admin)/gestao/compras/compras-client.tsx`, importar
-    `ConfirmacaoCompraProgramada` e substituir o cast incorreto:
-
-```ts
-const body = await res.json().catch(() => ({})) as Partial<ConfirmacaoCompraProgramada>;
-if (!res.ok) {
-  setErro((body as { message?: string }).message ?? 'Erro ao confirmar compra');
-  setSalvando(false);
-  return;
-}
-if (!body.compra) {
-  setErro('Resposta inválida ao confirmar compra');
-  setSalvando(false);
-  return;
-}
-setCompra(body.compra);
-```
-
-    Não usar `body as CompraProgramadaDetalhe` nem fallback para reconstruir a compra. O
-    `type-check` cobre o BFF, o tipo compartilhado e este consumidor juntos. No mesmo
-    `onda4-pedidos.test.tsx`, acrescentar a microprova
-    `confirmacao de compra consome body.compra do envelope`: renderizar `ComprasClient` com a data
-    do relógio fixada, mockar lista+detalhe de uma compra `rascunho`, devolver
-    `{ compra: { ...detalhe, status: 'confirmada', dataOperacao }, jaConfirmada: false }` no POST de
-    confirmação, clicar **Confirmar compra** e exigir o status confirmado sem mensagem de resposta
-    inválida. Se o consumidor voltar a executar `setCompra(body)`, o teste falha porque `body.status`
-    não existe.
 
 **Commit:** `feat(onda4): tela de pedidos com editor, overbooking, adendo e liberação de reserva`
 
@@ -3851,6 +4031,11 @@ function arquivosDeCodigo(entradas: string[]): string[] {
    Task 16 quanto a `/comercial/pedidos/novo`; aqui fecha-se o restante da dívida.
 4. Capturar 1 screenshot por tela em `docs/evidencias/onda4-comercial/`, no mesmo padrão de
    `docs/evidencias/alpha-jornada-e2e/`, para a comparação lado a lado exigida no Portão 2.
+5. Registrar no relatório da Onda 4 a dependência D33 sem tocar código de Gestão:
+   `/gestao/compras` ainda consome incorretamente o envelope; após o merge O4, o Executor exige
+   rebase da PR #28/Onda 5 e o Worker O5 corrige `setCompra(body.compra)` com teste do consumidor
+   antes do Portão 2 da Onda 5. A ordem de integração é obrigatória: **O4 mergeada primeiro; O5
+   rebased e corrigida depois**.
 
 **Commit:** `test(onda4): e2e do comercial, realinhamento dos specs herdados e evidências`
 
@@ -3962,8 +4147,9 @@ real; os dois impedem a volta do `PATCH` agregado inexistente, o envio de zero a
 `positive()` e a perda de status/corpo no proxy. DoD-127 é escrito na Task 2 e falha se qualquer uma
 das duas exposições de `rotaPadrao` sobreviver em `clientesConfig`. DoD-128 é escrito pela retomada
 da Task 18; DoD-129 é escrito na Task 6 sobre os sete endpoints públicos de compras; DoD-130 é
-escrito na Task 15 sobre o `PedidoEditor`. A Task 21 executa a prova integrada Grade por código +
-criação do pedido, sem substituir esses testes dirigidos.
+escrito na Task 15 sobre o `PedidoEditor`; DoD-131 é escrito na Task 13 sobre o envelope real do
+BFF. A Task 21 executa a prova integrada Grade por código + criação do pedido, sem substituir esses
+testes dirigidos.
 
 **Aderência à base real (emenda do Portão 1).** Todo código literal deste plano foi conferido contra
 `develop` no worktree em `158da75`, não contra a memória do plano mestre: assinatura de
@@ -4016,13 +4202,15 @@ endpoint backend novo, divergência autorizada ou decisão de produto foi criado
 causa e sintoma: Grade já mostrava o `itemComercialCodigo`, mas o `POST /pedidos` recebia
 `dataOperacao: undefined` porque a lista de compras selecionava apenas
 `compras_programadas.*`. A auditoria não parou no GET: o backend devolvia seis shapes diferentes,
-enquanto os BFFs prometiam `CompraProgramadaDetalhe`, e a confirmação devolvia um envelope que
-`/gestao/compras` tratava como detalhe. D33 define uma projeção canônica por
+enquanto os BFFs prometiam `CompraProgramadaDetalhe`, e a confirmação devolvia um envelope que o
+consumidor de Gestão ainda trata como detalhe. D33 define uma projeção canônica por
 `compras_programadas.operacao_id → operacoes.data`, aplica leitura pós-commit em criar/atualizar
 cabeçalho/atualizar item/confirmar/cancelar, preserva o envelope de confirmação e elimina o
 fallback vazio dos eventos. DoD-129 exercita todos os endpoints públicos no app real; DoD-130
-exercita o editor com a resposta contratual e inspeciona o POST. O BFF não ganhou lógica de
-negócio nem fallback.
+exercita o editor com a resposta contratual e inspeciona o POST; DoD-131 executa o BFF de
+confirmação. O BFF não ganhou lógica de negócio nem fallback. A correção do consumidor de Gestão
+fica explicitamente na Onda 5, depois do merge/rebase, preservando D1 e evitando conflito com a PR
+#28.
 
 **O que este plano deliberadamente não faz.** Não reescreve o motor de reserva/overbooking da Onda 1;
 não cria TTL de rascunho (AD-06 proíbe); não fecha as pendências abertas por conta própria — P5, P11
@@ -4040,9 +4228,31 @@ resolvida por D6 com um conjunto canônico único, evitando três catálogos inc
 transação e chamam `detalhar` depois dela; o teste e2e verifica o shape retornado, impedindo a
 repetição do erro de visibilidade já corrigido na Task 9.
 
-**Verificação da regra "Zero".** O plano não contém `TBD`, `TODO`, "a definir", "implementar depois"
-nem "similar à Task". O termo banido pela v1.1 §6.8 aparece apenas na constraint 10 e no comando de
-gate que o proíbem — em nenhum ponto como rótulo, campo, entidade, tipo ou texto de UI.
+**Verificação da regra "Zero".** O escopo verificável termina antes desta Self-Review; assim a
+própria declaração de conformidade não pode se autoacusar. O comando literal usado pelo Planner e
+pelo Portão 1 é:
+
+```powershell
+$planoO4 = Get-Content -Raw docs/superpowers/plans/2026-07-26-onda4-comercial.md
+$escopoExecutavel = ($planoO4 -split '(?m)^## Self-Review$', 2)[0]
+$termosPendencia = @(
+  ('TB' + 'D'),
+  ('TO' + 'DO'),
+  ('a def' + 'inir'),
+  ('implementar de' + 'pois'),
+  ('similar à Ta' + 'sk')
+)
+$achados = @($termosPendencia | Where-Object {
+  $escopoExecutavel -cmatch [regex]::Escape($_)
+})
+if ($achados.Count -ne 0) {
+  throw "Termos de pendência encontrados no escopo executável: $($achados -join ', ')"
+}
+```
+
+O comando retorna zero achados no conteúdo operacional do plano. O termo banido pela v1.1 §6.8
+aparece apenas na constraint 10 e no comando de gate que o proíbem — em nenhum ponto como rótulo,
+campo, entidade, tipo ou texto de UI.
 Quantidade editada para `0` não é pendência: D32 e Task 15 a encaminham explicitamente ao `DELETE`
 item-específico com motivo, e DoD-126 falha se reaparecer `PATCH` com zero.
 O contrato removido de Clientes também não depende de busca ampla: DoD-76 cobre o schema backend,
@@ -4051,19 +4261,20 @@ Clientes, sem falsos positivos em `rotaPadraoId`/`rotaPadraoNome` de Frota. DoD-
 do teste herdado de Disponibilidade, mas o ancora no contrato pós-Task 18: Mapa padrão, respostas
 distintas para lista e `/mapa`, Grade explícita e mutação do saldo no DOM sem novo fetch da lista.
 D33 não admite `dataOperacao` opcional nem reconstrução no frontend: DoD-129 falha se qualquer
-retorno público perder a derivação e DoD-130 falha se o editor omitir a data no POST.
+retorno público perder a derivação, DoD-130 falha se o editor omitir a data no POST e DoD-131
+falha se o BFF achatar o envelope.
 
 ---
 
 ## Contagens
 
-**22 tasks · 33 decisões de design · 61 itens de DoD (todos com teste 1:1) · 7 divergências
+**22 tasks · 33 decisões de design · 62 itens de DoD (todos com teste 1:1) · 7 divergências
 autorizadas.**
 
 Os 2 itens novos em relação à emenda 3 são **DoD-125** e **DoD-126**: contrato do BFF
 item-específico e consumo correto no editor. A decisão nova da emenda 4 é **D32**, agora fechada pela
 emenda 5 para `0 → DELETE` e teste de proxy executável, sem nova decisão numerada: redução positiva
-usa `PATCH`, zero/remoção usam `DELETE`, aumento usa adendo e produto ausente usa `POST /itens`. A
+usa `PATCH`, zero/remoção usam `DELETE`, aumento usa adendo e produto ausente usa `POST /itens`.
 Na emenda 4, a Task 13 passou de **13 rotas novas + 2 alteradas** para **14 rotas novas + 1
 alterada**: entrou o arquivo aninhado e `api/comercial/pedidos/[id]/route.ts` deixou de ser
 alteração daquela emenda. A contagem corrente, após D33, está registrada abaixo.
@@ -4072,22 +4283,24 @@ substituído em `campos` e no schema, sem nova decisão numerada nem divergênci
 O item novo da emenda 8 é **DoD-128**: o teste herdado de Disponibilidade passa a provar o fluxo
 Mapa → Grade e a atualização realtime do saldo sem refetch da lista, sem alterar decisão de design
 nem abrir divergência.
-Os itens novos da emenda 9 são **DoD-129** e **DoD-130**: o primeiro cobre lista, detalhe e as cinco
-mutações públicas de compras programadas com a data derivada da operação; o segundo cobre o
-consumidor `PedidoEditor` até o body real do `POST /pedidos`. A decisão nova é **D33**. A Task 13
-passa, no estado atual do plano, a **14 rotas BFF novas + 3 alteradas**: a rota de pedido já contada
-e os dois alinhamentos tipados de compras (`[id]` e `[id]/confirmar`).
+Os itens novos da emenda 9 são **DoD-129**, **DoD-130** e **DoD-131**: o primeiro cobre lista,
+detalhe e as cinco mutações públicas de compras programadas com a data derivada da operação; o
+segundo cobre o consumidor `PedidoEditor` até o body real do `POST /pedidos`; o terceiro executa o
+BFF e preserva o envelope de confirmação. A decisão nova é **D33**. A Task 13 passa, no estado atual
+do plano, a **14 rotas BFF novas + 3 alteradas**: a rota de pedido já contada e os dois alinhamentos
+tipados de compras (`[id]` e `[id]/confirmar`).
 
 Contagem da estrutura listada: backend = **17 arquivos de código novos + 15 testes novos + 22
-alterados**; frontend = **35 novos (14 rotas BFF) + 17 alterados (3 rotas BFF) + 3 removidos**. A
+alterados**; frontend = **35 novos (14 rotas BFF) + 16 alterados (3 rotas BFF) + 3 removidos**. A
 emenda 4 não altera o total de arquivos frontend novos+alterados: reclassifica a rota raiz como
 inalterada e acrescenta a rota aninhada correta. A emenda 5 altera somente o conteúdo do plano e dos
 dois testes já contados; não adiciona, remove nem reclassifica arquivo de implementação.
 A emenda 7 acrescenta `app/frontend/src/lib/cadastros-config.ts` aos arquivos alterados; o spec de
 Clientes já estava entre os 35 arquivos novos e apenas recebe o teste adicional. A emenda 9
 acrescenta aos alterados backend o service e os dois testes preexistentes de compras; no frontend,
-acrescenta dois BFFs preexistentes e o consumidor `/gestao/compras`. `lib/comercial.ts` e
-`onda4-pedidos.test.tsx` já estavam contados.
+acrescenta somente os dois BFFs preexistentes. `lib/comercial.ts`, `bff-onda4.test.ts` e
+`onda4-pedidos.test.tsx` já estavam contados. O consumidor de Gestão permanece fora desta
+estrutura e é dependência explícita da Onda 5.
 
 Divergências autorizadas: **D-01** abas Fiscais/Contatos sem conteúdo no protótipo → conteúdo
 derivado do JSONB já existente; **D-02** conjunto canônico único de códigos do catálogo;
