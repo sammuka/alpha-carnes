@@ -9,6 +9,8 @@ export interface Paginado<T> {
 
 export interface DisponibilidadeDia {
   id: string;
+  operacaoId: string;
+  compraProgramadaId?: string;
   itemComercialId: string;
   dataOperacao: string;
   quantidadeTotalGerada: string;
