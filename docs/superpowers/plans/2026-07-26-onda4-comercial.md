@@ -571,7 +571,7 @@ type CompraProgramadaDb = typeof comprasProgramadas.$inferSelect;
 type CompraProgramadaItem = typeof comprasProgramadasItens.$inferSelect;
 type CompraProgramada = CompraProgramadaDb & { dataOperacao: string };
 type CompraComItens = CompraProgramada & { itens: CompraProgramadaItem[] };
-type ConfirmacaoCompra = { compra: CompraComItens; jaConfirmada: boolean };
+type ConfirmacaoCompraProgramada = { compra: CompraComItens; jaConfirmada: boolean };
 ```
 
 `listar()` projeta `{ ...getTableColumns(comprasProgramadas), dataOperacao: operacoes.data }` por
@@ -588,7 +588,7 @@ abre uma leitura por `this.db` dentro da transação:
 | `POST /comercial/compras-programadas` | `CompraComItens` |
 | `PATCH /comercial/compras-programadas/:id` | `CompraComItens` |
 | `PATCH /comercial/compras-programadas/:id/itens/:itemId` | `CompraComItens` |
-| `POST /comercial/compras-programadas/:id/confirmar` | `ConfirmacaoCompra`; preserva o envelope e `jaConfirmada`, mas `compra` é o detalhe canônico |
+| `POST /comercial/compras-programadas/:id/confirmar` | `ConfirmacaoCompraProgramada`; preserva o envelope e `jaConfirmada`, mas `compra` é o detalhe canônico |
 | `DELETE /comercial/compras-programadas/:id` | `CompraComItens` com `status = 'cancelada'` |
 
 Em `confirmar()`, a leitura pós-commit também substitui a consulta avulsa que hoje faz
