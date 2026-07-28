@@ -46,9 +46,13 @@ Jest (backend e frontend) · Playwright (e2e).
 | Emenda 4 | Execução bloqueada na Task 13: o plano atribuía um `PATCH` agregado a `app/frontend/src/app/api/comercial/pedidos/[id]/route.ts`, mas o contrato real é item-específico (`PATCH /comercial/pedidos/:id/itens/:itemId`, body `{ novaQuantidade, motivo }`) e aceita somente redução. Corrigido por **D32**, rota BFF aninhada literal, matriz de persistência do editor e **DoD-125/126**, sem criar endpoint backend nem regra de produto |
 | Emenda 5 | Re-Portão 1 `ajustar` em `0439140` → fecha os dois achados do Monitor: quantidade editada para `0` passa literalmente pelo `DELETE` item-específico (remoção integral + liberação da reserva), enquanto redução positiva continua no `PATCH`, aumento no adendo e produto ausente no `POST /itens`; DoD-125 deixa de inspecionar texto e executa `PATCH`/`DELETE` com `apiFetch` mockado, provando `204` vazio e preservação byte/status de `400`/`404`/`409` |
 | Emenda 6 | Re-Portão 1 `ajustar` em `7dde9fe` → a ausência de `PATCH` na rota raiz deixa de depender da regex estreita `export async function PATCH`: o teste importa o namespace real do módulo e afirma que suas exportações não contêm `PATCH`, cobrindo função, constante e reexport; o Jest dirigido é o gate autoritativo |
+| Emenda 7 | Execução retomada após a Task 13 revelou duas exposições remanescentes do campo substituído em `clientesConfig` (`campos[].nome` e `schema`). A Task 2 passa a removê-las literalmente e ganha **DoD-127** executável; a Task 14 preserva o restante do config. O gate deixa de banir `rotaPadraoId`/`rotaPadraoNome` legítimos da frota e restringe a busca aos identificadores exatos `rotaPadrao`/`rota_padrao` nos consumidores de Clientes |
 | Worktree da Emenda 4 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix` |
 | Branch da Emenda 4 | `plan/onda4-task13-contract` |
 | Base da Emenda 4 | `origin/develop` = `c2fe0e09f230e7748d532d2292e059f027941e0e` |
+| Worktree da Emenda 7 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix2` |
+| Branch da Emenda 7 | `plan/onda4-rotapadrao-contract` |
+| Base da Emenda 7 | `origin/develop` = `b84228c4212e3cdd4bd7ae9321d1378c72a84207` |
 
 ---
 
@@ -738,7 +742,7 @@ app/frontend/__tests__/bff-onda4.test.ts
 app/frontend/e2e/onda4-comercial.spec.ts
 ```
 
-### Frontend — alterados (12 arquivos; 1 rota BFF)
+### Frontend — alterados (13 arquivos; 1 rota BFF)
 
 ```
 app/frontend/src/app/api/comercial/pedidos/route.ts             (+ salvarComoRascunho no POST)
@@ -751,6 +755,8 @@ app/frontend/src/app/(admin)/comercial/tabela-precos/page.tsx   (deixa de ser pl
 app/frontend/src/app/(admin)/comercial/disponibilidade/page.tsx (mapa + grade)
 app/frontend/src/app/(admin)/comercial/espelho/page.tsx         (deixa de ser placeholder)
 app/frontend/src/lib/comercial.ts                                (tipos de adendo/mapa/rascunho)
+app/frontend/src/lib/cadastros-config.ts                         (remove as 2 exposições de
+                                                                 clientesConfig.rotaPadrao)
 app/frontend/__tests__/menu-rbac.test.ts       (+ teste nomeado de DoD-113 — Task 3, passo 6)
 app/frontend/e2e/jornada-operacional.spec.ts   (dívida 9 da Onda 3 + fim da rota `/pedidos/novo`)
 app/frontend/e2e/telas-migradas.spec.ts                          (dívida 9 da Onda 3)
@@ -785,6 +791,7 @@ via `test/helpers/test-app.ts`.
 | DoD-75 | `necessitaCorteAcerto` é aceito e persistido nas preferências | `app/backend/test/integration/clientes-onda4.e2e-spec.ts` › `aceita necessitaCorteAcerto nas preferencias operacionais` |
 | DoD-76 | `rota_padrao` não existe mais; cliente grava `rota_id` FK | `app/backend/test/unit/onda4-schema.spec.ts` › `cliente grava rota_id e o schema nao expoe rota_padrao` |
 | DoD-77 | Badge do cabeçalho mostra a contagem real de clientes ativos | `app/frontend/__tests__/onda4-clientes.test.tsx` › `badge do cabecalho mostra a contagem real de clientes ativos` |
+| DoD-127 | `clientesConfig` não expõe o identificador legado nem em `campos` nem no schema do formulário | `app/frontend/__tests__/onda4-clientes.test.tsx` › `config de clientes nao expoe o campo legado de rota` |
 
 ### Pedidos
 
@@ -860,7 +867,7 @@ via `test/helpers/test-app.ts`.
 | DoD-125 | **D32**: teste executa `PATCH` e `DELETE` do BFF aninhado `/:id/itens/:itemId`, prova método/body sem troca, sucesso `204` com corpo vazio e preservação literal de status+bytes nos erros `400`/`404`/`409`; `[id]/route.ts` não exporta `PATCH` | `app/frontend/__tests__/bff-onda4.test.ts` › `BFF de item usa a rota aninhada e os contratos reais de reducao e remocao` |
 | DoD-126 | **D32/v1.1 §6.3/§6.9**: no editor persistido, redução positiva chama `PATCH`; quantidade `0` e ícone de remoção chamam `DELETE` com seus motivos; aumento chama adendo; produto ausente chama `POST /itens`; nunca há `PATCH` agregado nem `PATCH` com zero | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `edicao de rascunho traduz reducao zero remocao aumento e produto ausente para os endpoints reais` |
 
-**57 itens de DoD** (DoD-70 a DoD-126), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
+**58 itens de DoD** (DoD-70 a DoD-127), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
 do CI.
 
 ---
@@ -1000,16 +1007,40 @@ export const adendosPedido = pgTable(
 
 ## Task 2 — Migração contract (`rota_padrao` sai)
 
-**Files:** `0017_onda4_comercial_contract.sql`, `meta/_journal.json`, `clientes.schema.ts`.
+**Files:** `0017_onda4_comercial_contract.sql`, `meta/_journal.json`, `clientes.schema.ts`,
+`app/frontend/src/lib/cadastros-config.ts`, `app/backend/test/unit/onda4-schema.spec.ts`,
+`app/frontend/__tests__/onda4-clientes.test.tsx`.
 
 **Steps (TDD)**
 
-1. Escrever o teste que falha primeiro, em `app/backend/test/unit/onda4-schema.spec.ts` (D28):
+1. Escrever primeiro os dois testes que falham. O teste de schema continua em
+   `app/backend/test/unit/onda4-schema.spec.ts` (D28):
 
 ```ts
 it('cliente grava rota_id e o schema nao expoe rota_padrao', () => {
   expect(Object.keys(clientes)).toContain('rotaId');
   expect(Object.keys(clientes)).not.toContain('rotaPadrao');
+});
+```
+
+   No arquivo `app/frontend/__tests__/onda4-clientes.test.tsx`, que esta task cria e a Task 14
+   completa, escrever **DoD-127**. O teste executa o config real e falha separadamente se a entrada
+   sobreviver na lista de campos ou no schema Zod:
+
+```ts
+import { clientesConfig } from '@/lib/cadastros-config';
+
+it('config de clientes nao expoe o campo legado de rota', () => {
+  const campoLegado = 'rotaPadrao';
+  const resultado = clientesConfig.schema.parse({
+    codigo: 'CLI-001',
+    razaoSocial: 'Cliente Contrato Ltda.',
+    documentoFiscal: '12345678000190',
+    [campoLegado]: 'Rota antiga',
+  });
+
+  expect(clientesConfig.campos.map((campo) => campo.nome)).not.toContain(campoLegado);
+  expect(resultado).not.toHaveProperty(campoLegado);
 });
 ```
 
@@ -1032,15 +1063,19 @@ ALTER TABLE "clientes" DROP COLUMN IF EXISTS "rota_padrao";
 ```
 
 3. Acrescentar `{"idx": 17, ..., "tag": "0017_onda4_comercial_contract", ...}` ao journal.
-4. Remover `rotaPadrao` de `clientes.schema.ts` e de todo consumidor. Localizar os consumidores com
-   `rg -n "rotaPadrao|rota_padrao" app/backend/src app/backend/test app/frontend/src` e ajustar
-   todos (inclusive `app/backend/test/integration/clientes.e2e-spec.ts`) — sem leitura dupla, sem
-   fallback.
+4. Remover `rotaPadrao` de `clientes.schema.ts` e de todo consumidor de **Clientes**, inclusive
+   `app/backend/test/integration/clientes.e2e-spec.ts`. Em
+   `app/frontend/src/lib/cadastros-config.ts`, remover exatamente as duas exposições do contrato
+   substituído: `{ nome: 'rotaPadrao', ... }` de `clientesConfig.campos` e
+   `rotaPadrao: z.string().optional()` de `clientesConfig.schema`. Não alterar
+   `rotaPadraoId`/`rotaPadraoNome` do domínio Frota. Sem leitura dupla, sem fallback.
 5. Registrar o passo de rollback em `migrations/ROLLBACK.md` no formato já usado pelas ondas
    anteriores.
-6. Rodar `npm run db:migrate` e o teste do passo 1 (agora verde).
+6. Rodar `npm run db:migrate` e os dois testes do passo 1 (agora verdes):
+   `cd app/backend && npm run test -- --runInBand test/unit/onda4-schema.spec.ts`;
+   `cd ../frontend && npm run test -- --runInBand onda4-clientes.test.tsx`.
 
-**Commit:** `refactor(onda4): contract remove clientes.rota_padrao em favor de rota_id`
+**Commit:** `refactor(onda4): remove contrato legado de rota dos clientes`
 
 ---
 
@@ -2990,7 +3025,8 @@ genérico da Onda 3; é **substituído**, não criado), `clientes/page.tsx`,
    (Princípio I). Ler também o `clientes-client.tsx` atual e o `clientesConfig` de
    `src/lib/cadastros-config.ts`: o componente genérico não comporta as 4 abas do protótipo, então
    a tela de Clientes deixa de usá-lo. `clientesConfig` permanece para os demais cadastros da
-   Onda 3 — nada mais é removido de `cadastros-config.ts`.
+   Onda 3, já sem as duas exposições de `rotaPadrao` removidas na Task 2; nada além dessas duas
+   entradas é removido de `cadastros-config.ts`.
 2. Testes primeiro (DoD-70 a DoD-72, DoD-77):
 
 ```tsx
@@ -3472,8 +3508,14 @@ rg -n "pedido-venda-client|pedidos/novo" app/frontend
 rg -n "export async function (PATCH|DELETE)|/comercial/pedidos/\\$\\{id\\}/itens/\\$\\{itemId\\}" \
   "app/frontend/src/app/api/comercial/pedidos/[id]/itens/[itemId]/route.ts"
 
-# Coluna substituída não sobrou em lugar nenhum (Global Constraint 14)
-rg -n "rotaPadrao|rota_padrao" app/backend/src app/backend/test app/frontend/src
+# Identificadores substituídos não sobraram nos consumidores de Clientes (Global Constraint 14).
+# `-w` exige o identificador exato e não captura rotaPadraoId/rotaPadraoNome de Frota.
+rg -n -w -e "rotaPadrao" -e "rota_padrao" \
+  app/backend/src/database/schema/clientes.schema.ts \
+  app/backend/src/modules/cadastros/clientes \
+  app/backend/test/integration/clientes.e2e-spec.ts \
+  app/frontend/src/lib/cadastros-config.ts \
+  "app/frontend/src/app/(admin)/comercial/clientes"
 
 # Snapshot de perfis regerado depois das 4 permissões novas
 cd app/backend && npm run rbac:snapshot && git diff --exit-code src/common/rbac/perfil-permissoes.snapshot.json; cd ../..
@@ -3515,7 +3557,8 @@ DoD-119/121 na Task 6, DoD-120 na Task 15 e DoD-122/123/124 na Task 9, passo 1. 
 só ficam verdes depois da Task 19 — escrevê-los antes deixaria três tasks com commit vermelho.
 DoD-125 é escrito na Task 13 sobre a rota BFF aninhada e DoD-126 na Task 15 sobre seu consumidor
 real; os dois impedem a volta do `PATCH` agregado inexistente, o envio de zero ao schema
-`positive()` e a perda de status/corpo no proxy.
+`positive()` e a perda de status/corpo no proxy. DoD-127 é escrito na Task 2 e falha se qualquer uma
+das duas exposições de `rotaPadrao` sobreviver em `clientesConfig`.
 
 **Aderência à base real (emenda do Portão 1).** Todo código literal deste plano foi conferido contra
 `develop` no worktree em `158da75`, não contra a memória do plano mestre: assinatura de
@@ -3582,12 +3625,15 @@ nem "similar à Task". O termo banido pela v1.1 §6.8 aparece apenas na constrai
 gate que o proíbem — em nenhum ponto como rótulo, campo, entidade, tipo ou texto de UI.
 Quantidade editada para `0` não é pendência: D32 e Task 15 a encaminham explicitamente ao `DELETE`
 item-específico com motivo, e DoD-126 falha se reaparecer `PATCH` com zero.
+O contrato removido de Clientes também não depende de busca ampla: DoD-76 cobre o schema backend,
+DoD-127 cobre as duas exposições do config frontend e o `rg -w` final limita-se aos consumidores de
+Clientes, sem falsos positivos em `rotaPadraoId`/`rotaPadraoNome` de Frota.
 
 ---
 
 ## Contagens
 
-**22 tasks · 32 decisões de design · 57 itens de DoD (todos com teste 1:1) · 7 divergências
+**22 tasks · 32 decisões de design · 58 itens de DoD (todos com teste 1:1) · 7 divergências
 autorizadas.**
 
 Os 2 itens novos em relação à emenda 3 são **DoD-125** e **DoD-126**: contrato do BFF
@@ -3596,12 +3642,16 @@ emenda 5 para `0 → DELETE` e teste de proxy executável, sem nova decisão num
 usa `PATCH`, zero/remoção usam `DELETE`, aumento usa adendo e produto ausente usa `POST /itens`. A
 Task 13 passa de **13 rotas novas + 2 alteradas** para **14 rotas novas + 1 alterada**: entra o
 arquivo aninhado e `api/comercial/pedidos/[id]/route.ts` deixa de ser alteração desta onda.
+O item novo da emenda 7 é **DoD-127**: o config frontend de Clientes deixa de expor o campo
+substituído em `campos` e no schema, sem nova decisão numerada nem divergência autorizada.
 
 Contagem da estrutura listada: backend = **17 arquivos de código novos + 15 testes novos + 19
-alterados**; frontend = **35 novos (14 rotas BFF) + 12 alterados (1 rota BFF) + 3 removidos**. A
+alterados**; frontend = **35 novos (14 rotas BFF) + 13 alterados (1 rota BFF) + 3 removidos**. A
 emenda 4 não altera o total de arquivos frontend novos+alterados: reclassifica a rota raiz como
 inalterada e acrescenta a rota aninhada correta. A emenda 5 altera somente o conteúdo do plano e dos
 dois testes já contados; não adiciona, remove nem reclassifica arquivo de implementação.
+A emenda 7 acrescenta `app/frontend/src/lib/cadastros-config.ts` aos arquivos alterados; o spec de
+Clientes já estava entre os 35 arquivos novos e apenas recebe o teste adicional.
 
 Divergências autorizadas: **D-01** abas Fiscais/Contatos sem conteúdo no protótipo → conteúdo
 derivado do JSONB já existente; **D-02** conjunto canônico único de códigos do catálogo;
