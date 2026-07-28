@@ -35,7 +35,9 @@ const ADMIN_PASSWORD =
 const TELAS_REAIS: { path: string; tituloEsperado: RegExp }[] = [
   { path: '/comercial/clientes', tituloEsperado: /clientes/i },
   { path: '/comercial/pedidos', tituloEsperado: /pedidos/i },
+  { path: '/comercial/tabela-precos', tituloEsperado: /tabela de preços/i },
   { path: '/comercial/disponibilidade', tituloEsperado: /disponibilidade/i },
+  { path: '/comercial/espelho', tituloEsperado: /espelho/i },
   { path: '/gestao/dashboard', tituloEsperado: /painel geral da operação|dashboard operacional/i },
   { path: '/gestao/compras', tituloEsperado: /compras/i },
   { path: '/recebimento/recebimento-carga', tituloEsperado: /recebimento/i },
