@@ -1,4 +1,4 @@
-import { mensagemDeErro } from '@/lib/error-message';
+import { extrairCodigoErro, extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 
 export type TipoAprovacao =
   | 'divergencia_transformacao'
@@ -79,9 +79,14 @@ export async function buscarComparativo(ocorrenciaId: string) {
   const res = await fetch(`/api/gestao/aprovacoes/ocorrencias/${ocorrenciaId}/comparativo`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const msg = (body as { message?: string }).message ?? '';
-    if (msg.includes('CONCLUSAO_INEXISTENTE')) return null;
-    throw new Error(await mensagemDeErro(res));
+    const msg = extrairMensagemErro(body, 'Falha ao carregar comparativo');
+    if (
+      extrairCodigoErro(body) === 'CONCLUSAO_INEXISTENTE' ||
+      msg.includes('CONCLUSAO_INEXISTENTE')
+    ) {
+      return null;
+    }
+    throw new Error(msg);
   }
   return res.json();
 }

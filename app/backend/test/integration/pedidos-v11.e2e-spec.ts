@@ -380,7 +380,12 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
     await request(app.getHttpServer())
       .post(`/comercial/overbooking/${pend.id}/decisao`)
       .set('Cookie', gestorCookies)
-      .send({ caminho: 'compra_complementar', detalhe: { obs: 'ok' } })
+      .send({
+        caminho: 'compra_complementar',
+        compraProgramadaId: compraId,
+        quantidade: String(pend.quantidadeDeficit),
+        observacao: 'ok',
+      })
       .expect(201);
 
     const invalida = await request(app.getHttpServer())

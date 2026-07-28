@@ -75,7 +75,7 @@ export class ComprasProgramadasService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<CompraProgramada>> {
+  async listar(query: ListarQuery): Promise<Paginado<CompraProgramada & { dataOperacao: string }>> {
     const { limit, offset } = calcularRange(query);
     const where = query.incluirRemovidos ? undefined : isNull(comprasProgramadas.deletedAt);
 

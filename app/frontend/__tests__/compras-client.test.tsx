@@ -12,7 +12,7 @@ jest.mock('../src/app/(admin)/gestao/compras/compras-edit-modal', () => ({
     ) : null,
 }));
 
-const DATA_FIXA = '2026-07-26';
+const DATA_FIXA = new Date().toISOString().slice(0, 10);
 
 const COMPRA_CONFIRMADA = {
   id: 'c1',

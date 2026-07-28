@@ -60,6 +60,7 @@ export class PerfisService {
       { modulo: 'Administração', prefixos: ['USUARIOS_', 'PERFIS_', 'AUDITORIA_', 'PARAMETROS_'] },
       { modulo: 'Cadastros', prefixos: ['CLIENTES_', 'FORNECEDORES_', 'ITENS_', 'PRODUTOS_', 'REPRESENTANTES_', 'ROTAS_', 'REGRAS_', 'FROTA_', 'MODELOS_ETIQUETA_'] },
       { modulo: 'Comercial', prefixos: ['COMPRAS_PROGRAMADAS_', 'DISPONIBILIDADE_', 'PEDIDOS_', 'PEDIDO_', 'OVERBOOKING_', 'OPERACOES_', 'TABELA_PRECO_', 'ESPELHO_COMERCIAL_'] },
+      { modulo: 'Gestão', prefixos: ['SIF_', 'APROVACOES_'] },
       { modulo: 'Recebimento', prefixos: ['RECEBIMENTO_', 'DIVERGENCIA_', 'OCORRENCIA_', 'CONFERENCIA_'] },
       { modulo: 'Pesagem e Desossa', prefixos: ['PESAGEM_', 'PESO_', 'ASSOCIACAO_', 'LEITURA_', 'ETIQUETA_', 'CORTE_', 'DESOSSA_', 'ESTOQUE_'] },
       { modulo: 'Expedição e Faturamento', prefixos: ['EXPEDICAO_', 'FATURAMENTO_', 'NFSE_'] },

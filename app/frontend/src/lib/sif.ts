@@ -1,4 +1,4 @@
-import { mensagemDeErro } from '@/lib/error-message';
+import { extrairCodigoErro, extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 
 export type StatusRelatorioSif =
   | 'pendente_dados'
@@ -72,9 +72,14 @@ export async function previewRelatorio(id: string) {
   const res = await fetch(`/api/sif/relatorios/${id}/preview`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    const msg = (body as { message?: string }).message ?? '';
-    if (msg.includes('SEM_VERSAO_GERADA')) return null;
-    throw new Error(await mensagemDeErro(res));
+    const msg = extrairMensagemErro(body, 'Falha ao carregar preview');
+    if (
+      extrairCodigoErro(body) === 'SEM_VERSAO_GERADA' ||
+      msg.includes('SEM_VERSAO_GERADA')
+    ) {
+      return null;
+    }
+    throw new Error(msg);
   }
   return res.json();
 }

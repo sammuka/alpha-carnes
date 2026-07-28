@@ -4,6 +4,7 @@ import { ComprasProgramadasService } from '../../src/modules/comercial/compras-p
 
 function makeSelectChain(rows: unknown[]) {
   const chain: {
+    innerJoin: (...args: unknown[]) => typeof chain;
     where: (...args: unknown[]) => typeof chain;
     innerJoin: (...args: unknown[]) => typeof chain;
     orderBy: (...args: unknown[]) => typeof chain;
@@ -11,6 +12,7 @@ function makeSelectChain(rows: unknown[]) {
     offset: (...args: unknown[]) => typeof chain;
     then: (cb: (r: unknown[]) => unknown) => unknown;
   } = {
+    innerJoin: () => chain,
     where: () => chain,
     innerJoin: () => chain,
     orderBy: () => chain,
@@ -45,6 +47,7 @@ describe('ComprasProgramadasService — branches', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('listar → sem linha de total usa 0', async () => {
+    let selectCall = 0;
     const db = {
       select: jest.fn(() => makeSelectChain([])),
     };

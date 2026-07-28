@@ -9,9 +9,7 @@ function chain(result: unknown) {
   terminal.orderBy = self;
   terminal.limit = () => Promise.resolve(result);
   terminal.innerJoin = self;
-  // Promise-like for await of query builders that end without explicit then
   Object.defineProperty(terminal, Symbol.toStringTag, { value: 'Promise' });
-  // Make awaitable: if awaited directly after where/groupBy
   (terminal as { then?: unknown }).then = (onFulfilled: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
     Promise.resolve(result).then(onFulfilled, onRejected);
   return {
@@ -19,22 +17,43 @@ function chain(result: unknown) {
   };
 }
 
-describe('DashboardService', () => {
-  function montarResumoBase() {
-    let selectCall = 0;
-    const db = {
-      select: jest.fn(() => {
-        const idx = selectCall++;
-        if (idx === 1) return chain([]);
-        if (idx === 2) return chain([{ total: 0 }]);
-        return chain([]);
-      }),
-    };
-    return new DashboardService({ db } as never);
-  }
+function operacoesMock(operacao = {
+  id: 'op1',
+  data: '2026-06-23',
+  rotulo: 'Operação teste',
+  status: 'aberta',
+  extraordinaria: false,
+}) {
+  return {
+    resolverCorrente: jest.fn().mockResolvedValue(operacao),
+    detalhar: jest.fn().mockResolvedValue(operacao),
+  };
+}
 
-  it('combina agregações com pedidos em andamento e atividades', async () => {
-    const service = montarResumoBase();
+function kpiRow() {
+  return {
+    compras_programadas: '1',
+    disponibilidade_total: '100.000',
+    reservas_em_elaboracao: '0',
+    pedidos_finalizados: '0',
+    overbookings_abertos: '0',
+    recebimentos_aguardados: '0',
+    divergencias_abertas: '0',
+    pecas_em_desossa: '0',
+    relatorios_sif_pendentes: '0',
+    faturamentos_pendentes: '0',
+  };
+}
+
+describe('DashboardService.resumo', () => {
+  it('combina KPIs com pedidos em andamento e atividades', async () => {
+    const db = {
+      execute: jest.fn()
+        .mockResolvedValueOnce({ rows: [kpiRow()] })
+        .mockResolvedValue({ rows: [{ overbooking: 0, divergencias: 0, tz_aguardando: 0, seguro_pendente: 0 }] }),
+      select: jest.fn(() => chain([])),
+    };
+    const service = new DashboardService({ db } as never, operacoesMock() as never);
     jest.spyOn(service as unknown as { listarPedidosEmAndamento: () => Promise<unknown> }, 'listarPedidosEmAndamento').mockResolvedValue([
       {
         pedidoId: 'p1',
@@ -54,7 +73,9 @@ describe('DashboardService', () => {
       },
     ]);
 
-    const res = await service.resumoDia('2026-06-23');
+    const res = await service.resumo();
+    expect(res.operacao.id).toBe('op1');
+    expect(res.kpis).toHaveLength(10);
     expect(res.pedidosEmAndamento).toHaveLength(1);
     expect(res.atividadesRecentes[0]?.descricao).toContain('criou');
   });
@@ -71,7 +92,6 @@ describe('DashboardService.listarPedidosEmAndamento', () => {
             {
               pedidoId: 'p1',
               status: 'em_elaboracao_reserva_ativa',
-              dataOperacao: '2026-06-23',
               clienteNome: null,
               clienteRazao: 'Cliente X',
             },
@@ -81,10 +101,10 @@ describe('DashboardService.listarPedidosEmAndamento', () => {
         return chain([{ total: '12.500' }]);
       }),
     };
-    const service = new DashboardService({ db } as never);
-    const pedidos = await (service as unknown as { listarPedidosEmAndamento: (d: string) => Promise<Array<{ produtoResumo: string; pesoTotalKg: string; clienteNome: string }>> }).listarPedidosEmAndamento(
-      '2026-06-23',
-    );
+    const service = new DashboardService({ db } as never, operacoesMock() as never);
+    const pedidos = await (service as unknown as {
+      listarPedidosEmAndamento: (operacaoId: string, dataOperacao: string) => Promise<Array<{ produtoResumo: string; pesoTotalKg: string; clienteNome: string }>>;
+    }).listarPedidosEmAndamento('op1', '2026-06-23');
     expect(pedidos[0]?.produtoResumo).toContain('PA');
     expect(pedidos[0]?.clienteNome).toBe('Cliente X');
     expect(pedidos[0]?.pesoTotalKg).toBe('12.500');
@@ -100,7 +120,6 @@ describe('DashboardService.listarPedidosEmAndamento', () => {
             {
               pedidoId: 'p1',
               status: 'em_elaboracao_reserva_ativa',
-              dataOperacao: '2026-06-23',
               clienteNome: 'Loja',
               clienteRazao: 'Loja LTDA',
             },
@@ -115,10 +134,10 @@ describe('DashboardService.listarPedidosEmAndamento', () => {
         return chain([{ total: '8.000' }]);
       }),
     };
-    const service = new DashboardService({ db } as never);
-    const pedidos = await (service as unknown as { listarPedidosEmAndamento: (d: string) => Promise<Array<{ produtoResumo: string; pesoTotalKg: string }>> }).listarPedidosEmAndamento(
-      '2026-06-23',
-    );
+    const service = new DashboardService({ db } as never, operacoesMock() as never);
+    const pedidos = await (service as unknown as {
+      listarPedidosEmAndamento: (operacaoId: string, dataOperacao: string) => Promise<Array<{ produtoResumo: string; pesoTotalKg: string }>>;
+    }).listarPedidosEmAndamento('op1', '2026-06-23');
     expect(pedidos[0]?.produtoResumo).toMatch(/\+/);
     expect(pedidos[0]?.pesoTotalKg).toBe('8.000');
   });
@@ -133,7 +152,6 @@ describe('DashboardService.listarPedidosEmAndamento', () => {
             {
               pedidoId: 'p1',
               status: 'em_elaboracao_reserva_ativa',
-              dataOperacao: '2026-06-23',
               clienteNome: 'Loja',
               clienteRazao: 'Loja',
             },
@@ -143,10 +161,10 @@ describe('DashboardService.listarPedidosEmAndamento', () => {
         return chain([{ total: '0' }]);
       }),
     };
-    const service = new DashboardService({ db } as never);
-    const pedidos = await (service as unknown as { listarPedidosEmAndamento: (d: string) => Promise<Array<{ produtoResumo: string }>> }).listarPedidosEmAndamento(
-      '2026-06-23',
-    );
+    const service = new DashboardService({ db } as never, operacoesMock() as never);
+    const pedidos = await (service as unknown as {
+      listarPedidosEmAndamento: (operacaoId: string, dataOperacao: string) => Promise<Array<{ produtoResumo: string }>>;
+    }).listarPedidosEmAndamento('op1', '2026-06-23');
     expect(pedidos[0]?.produtoResumo).toBe('—');
   });
 });
@@ -201,7 +219,7 @@ describe('DashboardService.listarAtividadesRecentes', () => {
         })),
       })),
     };
-    const service = new DashboardService({ db } as never);
+    const service = new DashboardService({ db } as never, operacoesMock() as never);
     const atividades = await (service as unknown as { listarAtividadesRecentes: (d: string) => Promise<unknown> }).listarAtividadesRecentes(
       '2026-06-23',
     );

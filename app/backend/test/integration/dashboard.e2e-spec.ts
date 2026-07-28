@@ -10,6 +10,12 @@ describe('Dashboard e2e', () => {
     app = await createTestApp();
     const admin = await createTestUser(app, { perfil: 'administrador' });
     adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
+
+    const hoje = new Date().toISOString().slice(0, 10);
+    await request(srv())
+      .post('/operacoes/extraordinaria')
+      .set('Cookie', adminCookies)
+      .send({ data: hoje, rotulo: 'Dashboard E2E setup' });
   });
 
   afterAll(async () => {
@@ -19,37 +25,43 @@ describe('Dashboard e2e', () => {
 
   const srv = () => app.getHttpServer();
 
-  it('GET /gestao/dashboard retorna resumo do dia', async () => {
+  it('GET /gestao/dashboard retorna resumo da operação corrente', async () => {
     const res = await request(srv()).get('/gestao/dashboard').set('Cookie', adminCookies);
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
-      comprasProgramadas: expect.objectContaining({ total: expect.any(Number), porStatus: expect.any(Object) }),
-      pedidos: expect.objectContaining({ total: expect.any(Number), porStatus: expect.any(Object) }),
-      pedidosEmAndamento: expect.any(Array),
-      atividadesRecentes: expect.any(Array),
-      divergenciasAbertas: expect.any(Number),
-      caminhoesDoDia: expect.any(Number),
-      disponibilidade: expect.objectContaining({
-        itens: expect.any(Number),
-        itensEsgotados: expect.any(Number),
-        quantidadeDisponivelTotal: expect.any(String),
+      operacao: expect.objectContaining({
+        id: expect.any(String),
+        data: expect.any(String),
+        rotulo: expect.any(String),
+        status: expect.any(String),
       }),
+      kpis: expect.any(Array),
+      pedidosEmAndamento: expect.any(Array),
+      alertas: expect.any(Array),
+      atividadesRecentes: expect.any(Array),
     });
+    expect(res.body.kpis).toHaveLength(10);
   });
 
-  it('GET /gestao/dashboard?dataOperacao=2026-06-01 filtra por data', async () => {
+  it('GET /gestao/dashboard?operacaoId= filtra por operação', async () => {
+    const op = await request(srv())
+      .post('/operacoes/extraordinaria')
+      .set('Cookie', adminCookies)
+      .send({ data: '2031-03-15', rotulo: 'Dashboard E2E' });
+    expect(op.status).toBe(201);
+
     const res = await request(srv())
       .get('/gestao/dashboard')
-      .query({ dataOperacao: '2026-06-01' })
+      .query({ operacaoId: op.body.id })
       .set('Cookie', adminCookies);
     expect(res.status).toBe(200);
-    expect(res.body.dataOperacao).toBe('2026-06-01');
+    expect(res.body.operacao).toMatchObject({ id: op.body.id, data: '2031-03-15' });
   });
 
-  it('dataOperacao inválida → 400', async () => {
+  it('operacaoId inválido → 400', async () => {
     const res = await request(srv())
       .get('/gestao/dashboard')
-      .query({ dataOperacao: '01-06-2026' })
+      .query({ operacaoId: 'nao-e-uuid' })
       .set('Cookie', adminCookies);
     expect(res.status).toBe(400);
   });

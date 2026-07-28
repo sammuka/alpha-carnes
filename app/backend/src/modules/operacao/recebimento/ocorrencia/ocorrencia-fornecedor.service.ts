@@ -61,7 +61,7 @@ export class OcorrenciaFornecedorService {
    */
   async abrirNaTx(
     tx: Tx,
-    dto: AbrirOcorrenciaDto,
+    dto: AbrirOcorrenciaDto & { conclusaoConferenciaId?: string },
     usuarioId: string,
   ): Promise<Ocorrencia> {
     const criada = primeiroOuFalha(
@@ -71,6 +71,7 @@ export class OcorrenciaFornecedorService {
           fornecedorId: dto.fornecedorId,
           compraProgramadaId: dto.compraProgramadaId,
           divergenciaId: dto.divergenciaId,
+          conclusaoConferenciaId: dto.conclusaoConferenciaId,
           descricao: dto.descricao,
           impacto: dto.impacto,
           status: 'aberta',
