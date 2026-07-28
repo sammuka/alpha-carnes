@@ -47,12 +47,16 @@ Jest (backend e frontend) · Playwright (e2e).
 | Emenda 5 | Re-Portão 1 `ajustar` em `0439140` → fecha os dois achados do Monitor: quantidade editada para `0` passa literalmente pelo `DELETE` item-específico (remoção integral + liberação da reserva), enquanto redução positiva continua no `PATCH`, aumento no adendo e produto ausente no `POST /itens`; DoD-125 deixa de inspecionar texto e executa `PATCH`/`DELETE` com `apiFetch` mockado, provando `204` vazio e preservação byte/status de `400`/`404`/`409` |
 | Emenda 6 | Re-Portão 1 `ajustar` em `7dde9fe` → a ausência de `PATCH` na rota raiz deixa de depender da regex estreita `export async function PATCH`: o teste importa o namespace real do módulo e afirma que suas exportações não contêm `PATCH`, cobrindo função, constante e reexport; o Jest dirigido é o gate autoritativo |
 | Emenda 7 | Execução retomada após a Task 13 revelou duas exposições remanescentes do campo substituído em `clientesConfig` (`campos[].nome` e `schema`). A Task 2 passa a removê-las literalmente e ganha **DoD-127** executável; a Task 14 preserva o restante do config. O gate deixa de banir `rotaPadraoId`/`rotaPadraoNome` legítimos da frota e restringe a busca aos identificadores exatos `rotaPadrao`/`rota_padrao` nos consumidores de Clientes |
+| Emenda 8 | Gate local após a Task 21 revelou que o teste herdado `disponibilidade.test.tsx` ainda fixava a UI e o payload anteriores à Task 18: título antigo, lista sem `operacaoId` e Grade visível por padrão. A Task 18 passa a realinhar esse teste sem removê-lo nem afrouxá-lo: resposta atual da lista + mapa, navegação explícita para Grade, saldo real no DOM e atualização `reserva_disponibilidade_atualizada` sem novo fetch da lista (**DoD-128**); o mapa pode recarregar, como exige a implementação aprovada |
 | Worktree da Emenda 4 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix` |
 | Branch da Emenda 4 | `plan/onda4-task13-contract` |
 | Base da Emenda 4 | `origin/develop` = `c2fe0e09f230e7748d532d2292e059f027941e0e` |
 | Worktree da Emenda 7 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix2` |
 | Branch da Emenda 7 | `plan/onda4-rotapadrao-contract` |
 | Base da Emenda 7 | `origin/develop` = `b84228c4212e3cdd4bd7ae9321d1378c72a84207` |
+| Worktree da Emenda 8 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix3` |
+| Branch da Emenda 8 | `plan/onda4-disponibilidade-test-contract` |
+| Base da Emenda 8 | `origin/develop` = `065406280fc01bfe213f7de14b220222c3bb6fe8` |
 
 ---
 
@@ -742,7 +746,7 @@ app/frontend/__tests__/bff-onda4.test.ts
 app/frontend/e2e/onda4-comercial.spec.ts
 ```
 
-### Frontend — alterados (13 arquivos; 1 rota BFF)
+### Frontend — alterados (14 arquivos; 1 rota BFF)
 
 ```
 app/frontend/src/app/api/comercial/pedidos/route.ts             (+ salvarComoRascunho no POST)
@@ -758,6 +762,8 @@ app/frontend/src/lib/comercial.ts                                (tipos de adend
 app/frontend/src/lib/cadastros-config.ts                         (remove as 2 exposições de
                                                                  clientesConfig.rotaPadrao)
 app/frontend/__tests__/menu-rbac.test.ts       (+ teste nomeado de DoD-113 — Task 3, passo 6)
+app/frontend/__tests__/disponibilidade.test.tsx (realinha contrato herdado ao mapa + grade e
+                                                 preserva atualização realtime sem refetch da lista)
 app/frontend/e2e/jornada-operacional.spec.ts   (dívida 9 da Onda 3 + fim da rota `/pedidos/novo`)
 app/frontend/e2e/telas-migradas.spec.ts                          (dívida 9 da Onda 3)
 app/frontend/e2e/telas-reais.spec.ts                             (dívida 9 da Onda 3)
@@ -836,6 +842,7 @@ via `test/helpers/test-app.ts`.
 | DoD-101 | O catálogo do mapa é o MVP seedado, nunca o catálogo legado da Grade do protótipo | `app/frontend/__tests__/onda4-disponibilidade.test.tsx` › `mapa usa o catalogo MVP e nao contem o catalogo legado da grade do prototipo` |
 | DoD-102 | Seed cria os 11 pares item comercial/produto com `legado_item_comercial_id` 1:1 e é idempotente | `app/backend/test/integration/seed-catalogo-mvp.e2e-spec.ts` › `seed cria onze pares item comercial e produto vinculados um para um` |
 | DoD-103 | Itens do catálogo MVP nascem com badge Provisório · P11 na UI | `app/frontend/__tests__/onda4-disponibilidade.test.tsx` › `catalogo MVP exibe badge provisorio P11` |
+| DoD-128 | A tela abre no Mapa com o payload atual (`operacaoId` + `/mapa`), a Grade exibe o saldo real após navegação explícita e `reserva_disponibilidade_atualizada` altera esse saldo no DOM sem refetch da lista; o mapa pode recarregar | `app/frontend/__tests__/disponibilidade.test.tsx` › `abre no mapa e atualiza o saldo real da grade por realtime sem refetch da lista` |
 
 ### Espelho Comercial
 
@@ -867,8 +874,9 @@ via `test/helpers/test-app.ts`.
 | DoD-125 | **D32**: teste executa `PATCH` e `DELETE` do BFF aninhado `/:id/itens/:itemId`, prova método/body sem troca, sucesso `204` com corpo vazio e preservação literal de status+bytes nos erros `400`/`404`/`409`; `[id]/route.ts` não exporta `PATCH` | `app/frontend/__tests__/bff-onda4.test.ts` › `BFF de item usa a rota aninhada e os contratos reais de reducao e remocao` |
 | DoD-126 | **D32/v1.1 §6.3/§6.9**: no editor persistido, redução positiva chama `PATCH`; quantidade `0` e ícone de remoção chamam `DELETE` com seus motivos; aumento chama adendo; produto ausente chama `POST /itens`; nunca há `PATCH` agregado nem `PATCH` com zero | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `edicao de rascunho traduz reducao zero remocao aumento e produto ausente para os endpoints reais` |
 
-**58 itens de DoD** (DoD-70 a DoD-127), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
-do CI.
+**59 itens de DoD** (DoD-70 a DoD-128), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
+do CI. A numeração é histórica: DoD-128 foi acrescentado pela emenda 8 sem renumerar os contratos
+anteriores.
 
 ---
 
@@ -3302,12 +3310,13 @@ it('o cliente legado de pedido e a rota novo nao existem mais', () => {
 
 ## Task 18 — Tela `/comercial/disponibilidade` (mapa + grade)
 
-**Files:** `mapa-teatro.tsx`, `detalhe-unidade.tsx`, `page.tsx`, `onda4-disponibilidade.test.tsx`.
+**Files:** `mapa-teatro.tsx`, `detalhe-unidade.tsx`, `page.tsx`,
+`onda4-disponibilidade.test.tsx`, `disponibilidade.test.tsx`.
 
 **Steps (TDD)**
 
 1. **Ler `Disponibilidade.tsx` inteiro antes de escrever.**
-2. Testes primeiro (DoD-101, DoD-103):
+2. Testes primeiro (DoD-101, DoD-103) em `onda4-disponibilidade.test.tsx`:
 
 ```tsx
 it('mapa usa o catalogo MVP e nao contem o catalogo legado da grade do prototipo', async () => {
@@ -3319,17 +3328,111 @@ it('mapa usa o catalogo MVP e nao contem o catalogo legado da grade do prototipo
 });
 ```
 
-3. `MapaTeatro`: uma faixa por produto do catálogo MVP, com os 8 blocos `F/V/R/C/D/O/E/!`, legenda e
+3. Realinhar, sem remover, os dois casos herdados de `disponibilidade.test.tsx` em um teste único
+   de regressão **DoD-128**, com o nome exato
+   `abre no mapa e atualiza o saldo real da grade por realtime sem refetch da lista`. O mock de
+   `fetch` é discriminado por URL: a lista devolve `operacaoId: 'operacao-1'` e saldo `40.000`; o
+   endpoint `/api/comercial/disponibilidade/mapa?operacaoId=operacao-1` devolve ao menos o produto
+   `Traseiro Bovino`. Não usar resposta única para todas as URLs. O corpo mínimo obrigatório é:
+
+```tsx
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+
+function resposta(body: unknown, status = 200) {
+  return Promise.resolve(new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  }));
+}
+
+it('abre no mapa e atualiza o saldo real da grade por realtime sem refetch da lista', async () => {
+  const fetchMock = jest.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.startsWith('/api/comercial/disponibilidade?dataOperacao=')) {
+      return resposta([{
+        id: 'd1',
+        operacaoId: 'operacao-1',
+        itemComercialId: 'item-1',
+        dataOperacao: '2026-06-07',
+        quantidadeTotalGerada: '40.000',
+        quantidadeReservada: '0.000',
+        quantidadeDisponivel: '40.000',
+        quantidadeRecebida: '0.000',
+        quantidadeComDivergencia: '0.000',
+        status: 'gerada',
+      }]);
+    }
+    if (url === '/api/comercial/disponibilidade/mapa?operacaoId=operacao-1') {
+      return resposta([{
+        itemComercialId: 'item-1',
+        codigo: 'TZ',
+        descricao: 'Traseiro Bovino',
+        provisorio: true,
+        estados: {
+          F: '2.000', V: '40.000', R: '0.000', C: '0.000',
+          D: '0.000', O: '0.000', E: '0.000', '!': '0.000',
+        },
+        unidades: { F: 1, V: 0, R: 0, C: 0, D: 0, O: 0, E: 0, '!': 0 },
+        saldoComercial: '40.000',
+      }]);
+    }
+    return resposta({ message: `URL inesperada: ${url}` }, 500);
+  });
+  global.fetch = fetchMock as unknown as typeof fetch;
+
+  render(<DisponibilidadePage />);
+  expect(await screen.findByRole('heading', { name: /^Disponibilidade$/ })).toBeInTheDocument();
+  expect(await screen.findByText('Traseiro Bovino')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: /^Grade$/ }));
+  expect(await screen.findByTestId('disp-d1-disponivel')).toHaveTextContent('40.000');
+
+  const contarLista = () => fetchMock.mock.calls.filter(([input]) =>
+    String(input).startsWith('/api/comercial/disponibilidade?dataOperacao=')).length;
+  const chamadasListaAntes = contarLista();
+  const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
+  if (!ws) throw new Error('WebSocket não instanciado');
+
+  act(() => {
+    ws.onmessage?.({
+      data: JSON.stringify({
+        type: 'reserva_disponibilidade_atualizada',
+        payload: {
+          disponibilidadeId: 'd1',
+          quantidadeReservada: '4.000',
+          quantidadeDisponivel: '36.000',
+        },
+      }),
+    });
+  });
+
+  await waitFor(() =>
+    expect(screen.getByTestId('disp-d1-disponivel')).toHaveTextContent('36.000'));
+  expect(contarLista()).toBe(chamadasListaAntes);
+  // A implementação aprovada pode recarregar somente o mapa após o evento.
+});
+```
+
+   O arquivo importa `fireEvent` junto de `render`, `screen`, `waitFor` e `act`, mantém o
+   `MockWebSocket` existente e adiciona um helper `resposta` equivalente ao usado pelos testes da
+   onda. O título exato, o produto do mapa antes da navegação, o botão Grade, o `operacaoId`, as duas
+   respostas por URL e o saldo mutado no DOM são obrigatórios: o teste deve falhar se voltar à tela
+   pré-Task 18 (`Disponibilidade virtual`, Grade padrão ou lista sem mapa).
+4. `MapaTeatro`: uma faixa por produto do catálogo MVP, com os 8 blocos `F/V/R/C/D/O/E/!`, legenda e
    as cores do protótipo (via tokens do DS, nunca hex literal).
-4. `DetalheUnidade`: painel lateral com as unidades reais do estado clicado, vindo de
+5. `DetalheUnidade`: painel lateral com as unidades reais do estado clicado, vindo de
    `/api/comercial/disponibilidade/mapa/[itemComercialId]/detalhe`.
-5. Produto com `atributosJson.provisorio === true` exibe badge `Provisório · P11`.
-6. A aba **Grade** mantém a tabela real já existente sobre `disponibilidades_virtuais`
+6. Produto com `atributosJson.provisorio === true` exibe badge `Provisório · P11`.
+7. A aba **Grade** mantém a tabela real já existente sobre `disponibilidades_virtuais`
    (divergência **D-03** — nenhum item hard-coded).
-7. Manter a assinatura realtime já presente na tela (`RESERVA_ATUALIZADA`,
+8. Manter a assinatura realtime já presente na tela (`RESERVA_ATUALIZADA`,
    `DISPONIBILIDADE_GERADA`) e acrescentar `ADENDO_REGISTRADO`.
 
 **Commit:** `feat(onda4): mapa teatro com drill-down e catálogo MVP na disponibilidade`
+
+Na retomada após a falha do gate da Task 21, não reescrever o commit histórico da Task 18: aplicar
+somente o realinhamento de `disponibilidade.test.tsx` e criar o commit corretivo
+`test(onda4): realinhar contrato herdado de disponibilidade`.
 
 ---
 
@@ -3482,7 +3585,7 @@ npm run lint
 npm run type-check
 cd app/backend && npm run db:migrate && npm run db:seed && cd ../..
 cd app/backend && HARDWARE_FAKE=1 NFSE_FAKE=1 npm run test:cov && cd ../..
-cd app/frontend && npm run test -- --runInBand bff-onda4.test.ts onda4-pedidos.test.tsx && cd ../..
+cd app/frontend && npm run test -- --runInBand bff-onda4.test.ts onda4-pedidos.test.tsx disponibilidade.test.tsx onda4-disponibilidade.test.tsx && cd ../..
 cd app/frontend && npm run test && cd ../..
 cd app/frontend && npx playwright test && cd ../..
 npm run build
@@ -3502,8 +3605,10 @@ rg -n "PlaceholderPage" "app/frontend/src/app/(admin)/comercial"
 # Legado de pedido eliminado (D29) — deve devolver zero linhas
 rg -n "pedido-venda-client|pedidos/novo" app/frontend
 
-# O comando Jest dirigido acima executa os handlers, prova 204/400/404/409 + matriz do editor
-# e importa o namespace da rota raiz, falhando se qualquer export nomeado PATCH existir.
+# O comando Jest dirigido acima executa os handlers, prova 204/400/404/409 + matriz do editor,
+# importa o namespace da rota raiz (falhando se qualquer export PATCH existir) e fixa o contrato
+# atual de Disponibilidade: Mapa padrão, payload lista+mapa, Grade explícita e realtime sem refetch
+# da lista. O mapa pode recarregar depois de reserva_disponibilidade_atualizada.
 # Este grep complementar prova somente a estrutura aninhada; não substitui o gate executável.
 rg -n "export async function (PATCH|DELETE)|/comercial/pedidos/\\$\\{id\\}/itens/\\$\\{itemId\\}" \
   "app/frontend/src/app/api/comercial/pedidos/[id]/itens/[itemId]/route.ts"
@@ -3627,13 +3732,15 @@ Quantidade editada para `0` não é pendência: D32 e Task 15 a encaminham expli
 item-específico com motivo, e DoD-126 falha se reaparecer `PATCH` com zero.
 O contrato removido de Clientes também não depende de busca ampla: DoD-76 cobre o schema backend,
 DoD-127 cobre as duas exposições do config frontend e o `rg -w` final limita-se aos consumidores de
-Clientes, sem falsos positivos em `rotaPadraoId`/`rotaPadraoNome` de Frota.
+Clientes, sem falsos positivos em `rotaPadraoId`/`rotaPadraoNome` de Frota. DoD-128 preserva o valor
+do teste herdado de Disponibilidade, mas o ancora no contrato pós-Task 18: Mapa padrão, respostas
+distintas para lista e `/mapa`, Grade explícita e mutação do saldo no DOM sem novo fetch da lista.
 
 ---
 
 ## Contagens
 
-**22 tasks · 32 decisões de design · 58 itens de DoD (todos com teste 1:1) · 7 divergências
+**22 tasks · 32 decisões de design · 59 itens de DoD (todos com teste 1:1) · 7 divergências
 autorizadas.**
 
 Os 2 itens novos em relação à emenda 3 são **DoD-125** e **DoD-126**: contrato do BFF
@@ -3644,9 +3751,12 @@ Task 13 passa de **13 rotas novas + 2 alteradas** para **14 rotas novas + 1 alte
 arquivo aninhado e `api/comercial/pedidos/[id]/route.ts` deixa de ser alteração desta onda.
 O item novo da emenda 7 é **DoD-127**: o config frontend de Clientes deixa de expor o campo
 substituído em `campos` e no schema, sem nova decisão numerada nem divergência autorizada.
+O item novo da emenda 8 é **DoD-128**: o teste herdado de Disponibilidade passa a provar o fluxo
+Mapa → Grade e a atualização realtime do saldo sem refetch da lista, sem alterar decisão de design
+nem abrir divergência.
 
 Contagem da estrutura listada: backend = **17 arquivos de código novos + 15 testes novos + 19
-alterados**; frontend = **35 novos (14 rotas BFF) + 13 alterados (1 rota BFF) + 3 removidos**. A
+alterados**; frontend = **35 novos (14 rotas BFF) + 14 alterados (1 rota BFF) + 3 removidos**. A
 emenda 4 não altera o total de arquivos frontend novos+alterados: reclassifica a rota raiz como
 inalterada e acrescenta a rota aninhada correta. A emenda 5 altera somente o conteúdo do plano e dos
 dois testes já contados; não adiciona, remove nem reclassifica arquivo de implementação.
