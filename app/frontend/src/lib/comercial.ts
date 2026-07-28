@@ -57,13 +57,17 @@ export interface PedidoVenda {
   id: string;
   compraProgramadaId: string;
   clienteId: string;
-  dataOperacao: string;
+  operacaoId?: string;
+  dataOperacao?: string;
   dataEntrega: string | null;
   rotaPrevista: string | null;
   prioridade: number | null;
   status: string;
   observacoesGerais: string | null;
   createdAt: string;
+  representanteId?: string | null;
+  representanteNome?: string | null;
+  rotaNome?: string | null;
 }
 
 export interface PedidoVendaItem {
@@ -74,15 +78,34 @@ export interface PedidoVendaItem {
   quantidadeReservada: string;
   quantidadePendente: string;
   quantidadeAtendida: string;
+  quantidadeOverbooking?: string;
   status: string;
   observacoes: string | null;
 }
 
 export interface PedidoVendaDetalhe extends PedidoVenda {
-  cliente?: { id: string; razaoSocial: string; codigo: string };
+  cliente?: {
+    id: string;
+    razaoSocial: string;
+    nomeFantasia?: string | null;
+    codigo: string;
+  };
+  heranca?: {
+    representanteId: string | null;
+    representanteNome: string | null;
+    rotaId: string | null;
+    rotaNome: string | null;
+  } | null;
   itens: Array<
     PedidoVendaItem & {
-      itemComercial?: { id: string; codigo: string; nome: string };
+      itemComercial?: { id: string; codigo: string; nome?: string; descricao?: string };
+      reservas?: Array<{
+        id: string;
+        status: string;
+        origem?: 'fisico' | 'virtual' | 'overbooking';
+        tipoConsumo?: 'fisico' | 'virtual' | 'overbooking';
+        disponibilidade?: { status?: string };
+      }>;
     }
   >;
 }
@@ -95,6 +118,7 @@ export interface CriarPedidoDto {
   rotaPrevista?: string;
   prioridade?: number;
   observacoesGerais?: string;
+  salvarComoRascunho?: boolean;
   itens: Array<{ itemComercialId: string; quantidadePedida: number; observacoes?: string }>;
 }
 
@@ -176,12 +200,16 @@ export interface AdendoPedido {
   id: string;
   pedidoVendaId: string;
   pedidoVendaItemId: string;
+  itemComercialId?: string;
+  operacaoId?: string;
   quantidadeAnterior: string;
   quantidadeAdicionada: string;
-  quantidadeNova: string;
+  quantidadeResultante?: string;
+  quantidadeNova?: string;
   origemConsumo: 'fisico' | 'virtual' | 'overbooking';
   motivo: string;
-  usuarioId: string;
+  autorId?: string;
+  usuarioId?: string;
   criadoEm: string;
 }
 
