@@ -742,7 +742,7 @@ app/frontend/__tests__/bff-onda4.test.ts
 app/frontend/e2e/onda4-comercial.spec.ts
 ```
 
-### Frontend — alterados (12 arquivos; 1 rota BFF)
+### Frontend — alterados (13 arquivos; 1 rota BFF)
 
 ```
 app/frontend/src/app/api/comercial/pedidos/route.ts             (+ salvarComoRascunho no POST)
@@ -3513,6 +3513,7 @@ rg -n "export async function (PATCH|DELETE)|/comercial/pedidos/\\$\\{id\\}/itens
 rg -n -w -e "rotaPadrao" -e "rota_padrao" \
   app/backend/src/database/schema/clientes.schema.ts \
   app/backend/src/modules/cadastros/clientes \
+  app/backend/test/integration/clientes.e2e-spec.ts \
   app/frontend/src/lib/cadastros-config.ts \
   "app/frontend/src/app/(admin)/comercial/clientes"
 
