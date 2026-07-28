@@ -163,6 +163,37 @@ export interface IncluirItemPedidoDto {
   observacoes?: string;
 }
 
+export interface ReduzirItemPedidoBody {
+  novaQuantidade: number;
+  motivo: string;
+}
+
+export interface RemoverItemPedidoBody {
+  motivo: string;
+}
+
+export interface AdendoPedido {
+  id: string;
+  pedidoVendaId: string;
+  pedidoVendaItemId: string;
+  quantidadeAnterior: string;
+  quantidadeAdicionada: string;
+  quantidadeNova: string;
+  origemConsumo: 'fisico' | 'virtual' | 'overbooking';
+  motivo: string;
+  usuarioId: string;
+  criadoEm: string;
+}
+
+export interface PedidoAbertoExistente {
+  code: 'PEDIDO_ABERTO_EXISTENTE';
+  message: string;
+  pedidoId: string;
+  status: string;
+  itemComercialId: string;
+  quantidadeAtual: string;
+}
+
 export type ConfirmarCriacaoOverbookingDto = CriarPedidoDto;
 export type ConfirmarInclusaoOverbookingDto = IncluirItemPedidoDto;
 
