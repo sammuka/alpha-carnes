@@ -48,6 +48,7 @@ Jest (backend e frontend) · Playwright (e2e).
 | Emenda 6 | Re-Portão 1 `ajustar` em `7dde9fe` → a ausência de `PATCH` na rota raiz deixa de depender da regex estreita `export async function PATCH`: o teste importa o namespace real do módulo e afirma que suas exportações não contêm `PATCH`, cobrindo função, constante e reexport; o Jest dirigido é o gate autoritativo |
 | Emenda 7 | Execução retomada após a Task 13 revelou duas exposições remanescentes do campo substituído em `clientesConfig` (`campos[].nome` e `schema`). A Task 2 passa a removê-las literalmente e ganha **DoD-127** executável; a Task 14 preserva o restante do config. O gate deixa de banir `rotaPadraoId`/`rotaPadraoNome` legítimos da frota e restringe a busca aos identificadores exatos `rotaPadrao`/`rota_padrao` nos consumidores de Clientes |
 | Emenda 8 | Gate local após a Task 21 revelou que o teste herdado `disponibilidade.test.tsx` ainda fixava a UI e o payload anteriores à Task 18: título antigo, lista sem `operacaoId` e Grade visível por padrão. A Task 18 passa a realinhar esse teste sem removê-lo nem afrouxá-lo: resposta atual da lista + mapa, navegação explícita para Grade, saldo real no DOM e atualização `reserva_disponibilidade_atualizada` sem novo fetch da lista (**DoD-128**); o mapa pode recarregar, como exige a implementação aprovada |
+| Emenda 9 | A jornada real da Task 21 chegou à Grade pelo código do item, mas a criação do pedido recebeu `400`: `GET /comercial/compras-programadas?pageSize=100` devolvia `operacaoId` sem `dataOperacao`; o BFF apenas repassava esse contrato incompleto e `PedidoEditor.payloadNovo()` enviava `undefined` ao schema do backend. **D33** corrige a origem e alinha toda a API pública: lista, detalhe e mutações derivam a data de `operacoes.data` pelo `operacaoId`; confirmação preserva seu envelope tipado; nenhum BFF/cliente fabrica fallback. **DoD-129/130** fixam todos os retornos e o consumo real no editor, e a Task 21 preserva Grade por código + criação do pedido como prova final |
 | Worktree da Emenda 4 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix` |
 | Branch da Emenda 4 | `plan/onda4-task13-contract` |
 | Base da Emenda 4 | `origin/develop` = `c2fe0e09f230e7748d532d2292e059f027941e0e` |
@@ -57,6 +58,9 @@ Jest (backend e frontend) · Playwright (e2e).
 | Worktree da Emenda 8 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix3` |
 | Branch da Emenda 8 | `plan/onda4-disponibilidade-test-contract` |
 | Base da Emenda 8 | `origin/develop` = `065406280fc01bfe213f7de14b220222c3bb6fe8` |
+| Worktree da Emenda 9 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix4` |
+| Branch da Emenda 9 | `plan/onda4-compra-data-operacao-contract` |
+| Base da Emenda 9 | `origin/develop` = `4507adf1da26b0bc89368fbe8d86ce4061d8adba` |
 
 ---
 
@@ -557,6 +561,51 @@ sem corpo não é forçada por `response.json()` (o que viraria erro falso), e q
 regra: os schemas Zod canônicos continuam no backend (RA-01). A matriz — incluindo `0 → DELETE` —
 é fixada por **DoD-125** (proxy/contratos executado) e **DoD-126** (consumidor no editor).
 
+**D33 — `dataOperacao` da compra é derivada da operação vinculada em toda representação pública,
+nunca uma coluna ou fallback do frontend.** `compras_programadas` persiste somente `operacao_id`; a
+data canônica está em `operacoes.data`. O tipo bruto Drizzle fica privado como
+`CompraProgramadaDb`; o contrato público passa a ser:
+
+```ts
+type CompraProgramadaDb = typeof comprasProgramadas.$inferSelect;
+type CompraProgramadaItem = typeof comprasProgramadasItens.$inferSelect;
+type CompraProgramada = CompraProgramadaDb & { dataOperacao: string };
+type CompraComItens = CompraProgramada & { itens: CompraProgramadaItem[] };
+type ConfirmacaoCompra = { compra: CompraComItens; jaConfirmada: boolean };
+```
+
+`listar()` projeta `{ ...getTableColumns(comprasProgramadas), dataOperacao: operacoes.data }` por
+`innerJoin(operacoes, eq(comprasProgramadas.operacaoId, operacoes.id))`, mantendo exatamente o
+`where` de soft delete, `incluirRemovidos`, `orderBy`, `limit`, `offset`, total e metadados de
+paginação já existentes. `detalhar()` usa a mesma projeção, mantém o filtro de compra ativa e anexa
+os itens. Toda mutação conclui sua transação e **só depois do commit** chama `detalhar(id)`; nunca
+abre uma leitura por `this.db` dentro da transação:
+
+| Endpoint público | Retorno canônico |
+|---|---|
+| `GET /comercial/compras-programadas` | `Paginado<CompraProgramada>` |
+| `GET /comercial/compras-programadas/:id` | `CompraComItens` |
+| `POST /comercial/compras-programadas` | `CompraComItens` |
+| `PATCH /comercial/compras-programadas/:id` | `CompraComItens` |
+| `PATCH /comercial/compras-programadas/:id/itens/:itemId` | `CompraComItens` |
+| `POST /comercial/compras-programadas/:id/confirmar` | `ConfirmacaoCompra`; preserva o envelope e `jaConfirmada`, mas `compra` é o detalhe canônico |
+| `DELETE /comercial/compras-programadas/:id` | `CompraComItens` com `status = 'cancelada'` |
+
+Em `confirmar()`, a leitura pós-commit também substitui a consulta avulsa que hoje faz
+`r[0]?.data ?? ''`: os eventos usam `compra.dataOperacao`; uma FK válida não pode virar string
+vazia silenciosa (Princípio VII). O BFF continua proxy, porém seus genéricos passam a refletir
+literalmente a tabela: raiz `GET/POST` já estão corretos; `GET/PATCH/DELETE [id]` usam
+`CompraProgramadaDetalhe`; `PATCH [id]/itens/[itemId]` já usa esse detalhe; confirmação usa
+`ConfirmacaoCompraProgramada`. A tela `/gestao/compras` lê `body.compra` no sucesso de confirmação,
+em vez de tratar o envelope como detalhe.
+
+Não se adiciona `data_operacao` a `compras_programadas`, não se usa `createdAt`, data atual, string
+vazia ou o DTO original como substituto. `CompraProgramada` no frontend passa a espelhar
+`operacaoId: string` e continua exigindo `dataOperacao: string`; `PedidoEditor.payloadNovo()`
+consome a data recebida, sem `??`, `||`, `new Date()` ou outra fabricação no cliente
+(RA-01/RA-06). O contrato completo é fixado por **DoD-129**; **DoD-130** prova o consumidor que
+bloqueou a jornada.
+
 ---
 
 ## Referências do protótipo (tela → arquivo `.tsx` do protótipo) — Princípio I
@@ -697,13 +746,19 @@ app/backend/src/modules/comercial/pedidos/pedidos.service.ts    (AD-03, AD-06, r
                                                                  extração de aplicarAlocacaoNoItem
                                                                  e dos helpers de adendo)
 app/backend/src/modules/comercial/pedidos/dto/pedido.dto.ts     (+ salvarComoRascunho, liberar)
+app/backend/src/modules/comercial/compras-programadas/compras-programadas.service.ts
+                                                     (D33: representação pública canônica)
 app/backend/src/modules/comercial/disponibilidade/disponibilidade.module.ts     (+ MapaService)
 app/backend/src/modules/comercial/disponibilidade/disponibilidade.controller.ts (+2 rotas)
 app/backend/src/modules/cadastros/clientes/dto/cliente.dto.ts   (rotaId, prioridade, preferências)
 app/backend/src/modules/cadastros/clientes/clientes.service.ts  (rotaId, totalAtivos)
 app/backend/src/app.module.ts                          (+ PrecosModule, EspelhoModule)
 app/backend/test/unit/pedidos.service.spec.ts          (+ DoD-83 estrutural)
+app/backend/test/unit/compras-programadas-branches.spec.ts
+                                                     (retornos pós-commit do contrato D33)
 app/backend/test/integration/clientes.e2e-spec.ts      (rota_padrao → rota_id nas asserções)
+app/backend/test/integration/compras-programadas.e2e-spec.ts
+                                                     (+ contrato público completo de dataOperacao)
 ```
 
 ### Frontend — novos (35 arquivos; 14 rotas BFF)
@@ -746,10 +801,14 @@ app/frontend/__tests__/bff-onda4.test.ts
 app/frontend/e2e/onda4-comercial.spec.ts
 ```
 
-### Frontend — alterados (14 arquivos; 1 rota BFF)
+### Frontend — alterados (17 arquivos; 3 rotas BFF)
 
 ```
 app/frontend/src/app/api/comercial/pedidos/route.ts             (+ salvarComoRascunho no POST)
+app/frontend/src/app/api/comercial/compras-programadas/[id]/route.ts
+                                                     (tipa DELETE como detalhe canônico)
+app/frontend/src/app/api/comercial/compras-programadas/[id]/confirmar/route.ts
+                                                     (tipa o envelope ConfirmacaoCompraProgramada)
 app/frontend/src/app/(admin)/comercial/clientes/clientes-client.tsx
                                      (hoje 18 linhas sobre CadastroMasterDetail genérico →
                                       master-detail fiel a Cadastros.tsx com as 4 abas)
@@ -758,6 +817,7 @@ app/frontend/src/app/(admin)/comercial/pedidos/page.tsx         (usa pedidos-cli
 app/frontend/src/app/(admin)/comercial/tabela-precos/page.tsx   (deixa de ser placeholder)
 app/frontend/src/app/(admin)/comercial/disponibilidade/page.tsx (mapa + grade)
 app/frontend/src/app/(admin)/comercial/espelho/page.tsx         (deixa de ser placeholder)
+app/frontend/src/app/(admin)/gestao/compras/compras-client.tsx  (lê body.compra na confirmação)
 app/frontend/src/lib/comercial.ts                                (tipos de adendo/mapa/rascunho)
 app/frontend/src/lib/cadastros-config.ts                         (remove as 2 exposições de
                                                                  clientesConfig.rotaPadrao)
@@ -873,10 +933,12 @@ via `test/helpers/test-app.ts`.
 | DoD-121 | Criar pedido em data **sem operação ativa** não executa AD-03 e cria a operação do dia; a busca de pedido aberto em data sem operação devolve `404 OPERACAO_NAO_ENCONTRADA` | `app/backend/test/integration/pedidos-onda4.e2e-spec.ts` › `criar em data sem operacao nao checa AD-03 e cria a operacao do dia` |
 | DoD-125 | **D32**: teste executa `PATCH` e `DELETE` do BFF aninhado `/:id/itens/:itemId`, prova método/body sem troca, sucesso `204` com corpo vazio e preservação literal de status+bytes nos erros `400`/`404`/`409`; `[id]/route.ts` não exporta `PATCH` | `app/frontend/__tests__/bff-onda4.test.ts` › `BFF de item usa a rota aninhada e os contratos reais de reducao e remocao` |
 | DoD-126 | **D32/v1.1 §6.3/§6.9**: no editor persistido, redução positiva chama `PATCH`; quantidade `0` e ícone de remoção chamam `DELETE` com seus motivos; aumento chama adendo; produto ausente chama `POST /itens`; nunca há `PATCH` agregado nem `PATCH` com zero | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `edicao de rascunho traduz reducao zero remocao aumento e produto ausente para os endpoints reais` |
+| DoD-129 | **D33**: lista, detalhe, criação, atualização do cabeçalho, atualização de item, confirmação e cancelamento devolvem a mesma `dataOperacao` de `operacoes.data`; lista preserva paginação/`incluirRemovidos`, mutações retornam detalhe pós-commit e confirmação preserva o envelope tipado sem string vazia | `app/backend/test/integration/compras-programadas.e2e-spec.ts` › `todos os retornos publicos derivam dataOperacao da operacao vinculada` |
+| DoD-130 | **D33**: com a resposta contratual real de `GET /compras-programadas`, criar pedido pelo editor envia `compraProgramadaId` e a `dataOperacao` exata no `POST /pedidos`; o campo nunca é `undefined` e não há fallback no frontend | `app/frontend/__tests__/onda4-pedidos.test.tsx` › `novo pedido usa dataOperacao recebida da compra sem fallback` |
 
-**59 itens de DoD** (DoD-70 a DoD-128), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
-do CI. A numeração é histórica: DoD-128 foi acrescentado pela emenda 8 sem renumerar os contratos
-anteriores.
+**61 itens de DoD** (DoD-70 a DoD-130), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
+do CI. A numeração é histórica: DoD-128 foi acrescentado pela emenda 8 e DoD-129/130 pela emenda 9,
+sem renumerar os contratos anteriores.
 
 ---
 
@@ -1349,17 +1411,21 @@ não existir depois do insert, o seed falha explicitamente em vez de inventar id
 
 ---
 
-## Task 6 — Unicidade AD-03 e herança do cadastro no backend
+## Task 6 — Unicidade AD-03, herança do cadastro e contrato da compra no backend
 
 **Files:** `pedidos.service.ts`, `pedidos.controller.ts`, `pedido.dto.ts`,
-`app/backend/test/integration/pedidos-onda4.e2e-spec.ts`.
+`compras-programadas.service.ts`,
+`app/backend/test/integration/pedidos-onda4.e2e-spec.ts`,
+`app/backend/test/integration/compras-programadas.e2e-spec.ts`,
+`app/backend/test/unit/compras-programadas-branches.spec.ts`.
 
 **Steps (TDD)**
 
-1. Testes primeiro (DoD-78, DoD-79, DoD-119 e DoD-121), em
-   `test/integration/pedidos-onda4.e2e-spec.ts` — precisam de banco, então usam `createTestApp` +
-   `seedComercialBase` (`test/helpers/`) e o service resolvido do container. Os dois primeiros
-   ficam aqui; os corpos de DoD-121 e DoD-119 estão nos passos 6 e 7:
+1. Testes primeiro: DoD-78, DoD-79, DoD-119 e DoD-121 em
+   `test/integration/pedidos-onda4.e2e-spec.ts`; DoD-129 em
+   `test/integration/compras-programadas.e2e-spec.ts`. Todos precisam de banco, então usam
+   `createTestApp` + `seedComercialBase` (`test/helpers/`) e o service resolvido do container. Os
+   dois primeiros ficam aqui; os corpos de DoD-121, DoD-119 e DoD-129 estão nos passos 6, 7 e 8:
 
 ```ts
 const service = app.get(PedidosService);
@@ -1583,7 +1649,121 @@ it('pedido herda rota do cliente e expoe o representante do cadastro', async () 
 
    `clientes`, `rotas` e `representantes` entram nos imports de schema de `pedidos.service.ts`.
 
-**Commit:** `feat(onda4): unicidade AD-03 e herança de representante e rota no pedido`
+8. **Contrato público de compras programadas (D33).** Em
+   `compras-programadas.service.ts`, importar `getTableColumns` de `drizzle-orm`, renomear o tipo
+   Drizzle para `CompraProgramadaDb` e declarar a projeção/tipos literais:
+
+```ts
+type CompraProgramadaDb = typeof comprasProgramadas.$inferSelect;
+type CompraProgramadaItem = typeof comprasProgramadasItens.$inferSelect;
+type CompraProgramada = CompraProgramadaDb & { dataOperacao: string };
+type CompraComItens = CompraProgramada & { itens: CompraProgramadaItem[] };
+
+const COMPRA_COM_DATA = {
+  ...getTableColumns(comprasProgramadas),
+  dataOperacao: operacoes.data,
+};
+```
+
+   Substituir a consulta de `listar` sem alterar o cálculo do total nem a montagem do paginado:
+
+```ts
+const [linhas, totalRow] = await Promise.all([
+  this.db
+    .select(COMPRA_COM_DATA)
+    .from(comprasProgramadas)
+    .innerJoin(operacoes, eq(comprasProgramadas.operacaoId, operacoes.id))
+    .where(where)
+    .orderBy(desc(comprasProgramadas.createdAt))
+    .limit(limit)
+    .offset(offset),
+  this.db.select({ total: sql<number>`count(*)::int` }).from(comprasProgramadas).where(where),
+]);
+```
+
+   `detalhar` faz a leitura canônica e só então lê os itens:
+
+```ts
+async detalhar(id: string): Promise<CompraComItens> {
+  const compra = await this.db
+    .select(COMPRA_COM_DATA)
+    .from(comprasProgramadas)
+    .innerJoin(operacoes, eq(comprasProgramadas.operacaoId, operacoes.id))
+    .where(and(eq(comprasProgramadas.id, id), isNull(comprasProgramadas.deletedAt)))
+    .limit(1)
+    .then((r) => r[0] ?? null);
+  if (!compra) throw new NotFoundException('Compra programada não encontrada');
+  const itens = await this.db
+    .select()
+    .from(comprasProgramadasItens)
+    .where(and(
+      eq(comprasProgramadasItens.compraProgramadaId, id),
+      isNull(comprasProgramadasItens.deletedAt),
+    ));
+  return { ...compra, itens };
+}
+```
+
+   Em `criar`, `atualizar`, `atualizarItem` e `cancelar`, manter integralmente as escritas e
+   auditorias atuais dentro da transação, mas fazer a transação devolver somente o id e chamar
+   `detalhar` depois do commit:
+
+```ts
+const compraId = await this.db.transaction(async (tx) => {
+  // corpo atual da mutação + auditoria, sem leitura por this.db
+  return idDaCompra;
+});
+return this.detalhar(compraId);
+```
+
+   Os retornos ficam `Promise<CompraComItens>` nos quatro métodos. Em `confirmar`, manter o
+   resultado transacional (`jaConfirmada` + disponibilidades) e a idempotência, mas substituir a
+   consulta avulsa de `operacoes.data` e o fallback `?? ''` por:
+
+```ts
+const compra = await this.detalhar(id); // depois do commit
+if (!resultado.jaConfirmada) {
+  this.eventEmitter.emit(EVENTOS.COMPRA_CONFIRMADA, {
+    compraId: compra.id,
+    dataOperacao: compra.dataOperacao,
+  });
+  this.eventEmitter.emit(EVENTOS.DISPONIBILIDADE_GERADA, {
+    compraId: compra.id,
+    dataOperacao: compra.dataOperacao,
+    itens: resultado.disponibilidades.map((d) => ({
+      disponibilidadeId: d.id,
+      itemComercialId: d.itemComercialId,
+      quantidadeTotalGerada: d.quantidadeTotalGerada,
+    })),
+  });
+}
+return { compra, jaConfirmada: resultado.jaConfirmada };
+```
+
+   Teste real de **DoD-129** em `compras-programadas.e2e-spec.ts`: criar uma compra em data única;
+   afirmar `dataOperacao` e `itens` no `POST`; localizar o mesmo id no `GET
+   ?page=1&pageSize=100&incluirRemovidos=true`, mantendo `page/pageSize/total`; afirmar a mesma data
+   no `GET :id`, no `PATCH :id`, no `PATCH :id/itens/:itemId` e em
+   `POST :id/confirmar` sob `body.compra`, junto de `jaConfirmada`. Criar uma segunda compra em outra
+   data e afirmar a data, os itens e `status = 'cancelada'` no `DELETE`. Nome literal:
+
+```ts
+it('todos os retornos publicos derivam dataOperacao da operacao vinculada', async () => {
+  // POST → GET lista → GET detalhe → PATCH cabeçalho → PATCH item → POST confirmar.
+  // Segunda compra: POST → DELETE. Cada resposta compara com a data enviada na criação,
+  // e toda resposta detalhada mantém o array `itens`.
+});
+```
+
+   Em `compras-programadas-branches.spec.ts`, acrescentar `innerJoin` ao mock de select; nos testes
+   de `atualizar`/`atualizarItem`, mockar `service.detalhar` e esperar o detalhe canônico depois da
+   transação. Substituir `confirmar → evento usa string vazia quando operação não é encontrada`
+   por `confirmar deriva dataOperacao no detalhe pos-commit`: `detalhar` devolve
+   `{ id: 'cp1', dataOperacao: '2026-06-23', itens: [] }`, os dois eventos recebem essa data e o
+   retorno mantém `{ compra, jaConfirmada }`. É proibido preservar a microprova do fallback vazio,
+   pois ela contradiz Princípio VII e D33.
+
+**Commit:** `feat(onda4): unicidade AD-03 e contrato canônico da compra no pedido`
 
 ---
 
@@ -2742,7 +2922,12 @@ private derivarStatus(pedidoStatus: string, pedida: number, atendida: number): S
 
 ## Task 13 — Camada BFF
 
-**Files:** as **14 rotas novas + 1 alterada** listadas em *Estrutura de arquivos* +
+**Files:** as **14 rotas novas + 3 alteradas** listadas em *Estrutura de arquivos* +
+`app/frontend/src/app/api/comercial/compras-programadas/route.ts` (auditada; shape já correto),
+`app/frontend/src/app/api/comercial/compras-programadas/[id]/route.ts`,
+`app/frontend/src/app/api/comercial/compras-programadas/[id]/confirmar/route.ts`,
+`app/frontend/src/app/api/comercial/compras-programadas/[id]/itens/[itemId]/route.ts`
+(auditada; shape já correto),
 `app/frontend/__tests__/bff-onda4.test.ts` + `lib/precos.ts`, `lib/espelho.ts`,
 `lib/mapa-disponibilidade.ts`, `lib/status-pedido.ts`, `lib/comercial.ts`.
 
@@ -3017,6 +3202,26 @@ export function rotuloStatusPedido(status: string, temReservaAtiva: boolean): st
 }
 ```
 
+5. **Alinhar os tipos BFF de compras à D33, sem transformar payload.** Em `lib/comercial.ts`,
+   acrescentar `CompraProgramada.operacaoId: string`, manter
+   `CompraProgramada.dataOperacao: string` obrigatório e declarar:
+
+```ts
+export interface ConfirmacaoCompraProgramada {
+  compra: CompraProgramadaDetalhe;
+  jaConfirmada: boolean;
+}
+```
+
+   A raiz `compras-programadas/route.ts` continua usando
+   `Paginado<CompraProgramada>` no `GET` e `CompraProgramadaDetalhe` no `POST`; nenhuma alteração de
+   runtime é necessária. Em `[id]/route.ts`, `GET` e `PATCH` já usam
+   `CompraProgramadaDetalhe`; trocar somente o genérico `unknown` do `DELETE` pelo mesmo tipo. Em
+   `[id]/itens/[itemId]/route.ts`, preservar `CompraProgramadaDetalhe`, agora correspondente ao
+   runtime pós-commit. Em `[id]/confirmar/route.ts`, trocar o import/genérico incorreto de
+   `CompraProgramadaDetalhe` por `ConfirmacaoCompraProgramada`. Nenhum BFF injeta, renomeia ou
+   calcula `dataOperacao`; o corpo do backend passa sem alteração.
+
 **Commit:** `feat(onda4): camada BFF do comercial (pedidos, adendos, preços, mapa e espelho)`
 
 ---
@@ -3075,6 +3280,7 @@ it('clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente', async
 
 **Files:** `pedidos-client.tsx`, `pedido-editor.tsx`, `modal-overbooking.tsx`, `modal-adendo.tsx`,
 `modal-liberar-reserva.tsx`, `pedidos/page.tsx`,
+`app/frontend/src/app/(admin)/gestao/compras/compras-client.tsx`,
 `app/frontend/__tests__/onda4-pedidos.test.tsx`.
 
 **Steps (TDD)**
@@ -3083,7 +3289,7 @@ it('clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente', async
    `pedido-venda-client.tsx`: aquele arquivo é o legado que sai na Task 16 (D29). `pedidos/page.tsx`
    passa a renderizar `<PedidosClient …/>` sem a prop `modo`, porque lista e editor convivem na
    mesma rota, como no protótipo.
-2. Testes primeiro (DoD-87 a DoD-90, DoD-120 e DoD-126). O caso de DoD-126 monta um pedido
+2. Testes primeiro (DoD-87 a DoD-90, DoD-120, DoD-126 e DoD-130). O caso de DoD-126 monta um pedido
    persistido com cinco linhas, reduz uma para quantidade positiva, zera outra pelo `input min={0}`,
    remove a terceira pelo `Trash2`, aumenta a quarta e inclui um produto ausente; então inspeciona
    `global.fetch` e exige a matriz completa:
@@ -3160,6 +3366,56 @@ it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente par
    interação definidos no próprio teste sobre os rótulos do protótipo; não são API de produção.
    O mock de `fetch` devolve `new Response(null, { status: 204 })` para as mutações
    item-específicas; assim o consumidor também falha se tentar consumir JSON no sucesso vazio.
+
+   Para **DoD-130**, o mock de `GET /api/comercial/compras-programadas?pageSize=100` usa a forma
+   pública real de D33 — campos persistidos + `dataOperacao` derivada — e o `POST` de pedido devolve
+   JSON válido. O teste percorre o editor, não chama `payloadNovo` isoladamente:
+
+```tsx
+const compraDaApi: CompraProgramada = {
+  id: 'compra-1',
+  operacaoId: 'operacao-1',
+  dataOperacao: '2026-07-28',
+  fornecedorId: 'fornecedor-1',
+  numeroInterno: null,
+  referenciaExterna: null,
+  previsaoEntrega: null,
+  status: 'confirmada',
+  observacoes: null,
+  createdAt: '2026-07-27T10:00:00.000Z',
+};
+
+it('novo pedido usa dataOperacao recebida da compra sem fallback', async () => {
+  render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Novo pedido' }));
+  fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'cliente-1' } });
+  fireEvent.change(screen.getByLabelText('Operação'), { target: { value: compraDaApi.id } });
+  fireEvent.change(screen.getByLabelText('Produto'), {
+    target: { value: 'item-comercial-novo' },
+  });
+  fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), {
+    target: { value: '2' },
+  });
+  await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Salvar Rascunho' }));
+
+  await waitFor(() => {
+    const chamada = (global.fetch as jest.Mock).mock.calls.find(([url, init]) =>
+      url === '/api/comercial/pedidos' && init?.method === 'POST');
+    expect(chamada).toBeDefined();
+    const payload = JSON.parse(String(chamada?.[1]?.body));
+    expect(payload).toMatchObject({
+      compraProgramadaId: compraDaApi.id,
+      dataOperacao: compraDaApi.dataOperacao,
+    });
+    expect(payload.dataOperacao).not.toBeUndefined();
+  });
+});
+```
+
+   O teste não aceita omitir `dataOperacao`, fabricá-la da data atual nem recuperá-la de um segundo
+   endpoint. Remover o campo do mock contratual faz o fluxo falhar, em vez de ficar verde por
+   fallback.
 3. Lista de pedidos com os filtros, contadores e pílulas do protótipo, usando
    `rotuloStatusPedido(status, temReservaAtiva)`.
 4. `PedidoEditor`: seleção de cliente (campo **"Buscar cliente"**), seletor de produto, quantidade,
@@ -3226,6 +3482,34 @@ it('selecionar cliente herda representante e rota do cadastro no editor de pedid
 9. Linha do tempo do pedido (`HistoricoEntry`) alimentada por `GET /:id/adendos` + auditoria do
    pedido.
 10. Assinar `ADENDO_REGISTRADO` e `RESERVA_LIBERADA_ADMIN` via `conectarRealtime` — sem polling.
+11. **Consumidor do envelope de confirmação (D33).** Em
+    `app/frontend/src/app/(admin)/gestao/compras/compras-client.tsx`, importar
+    `ConfirmacaoCompraProgramada` e substituir o cast incorreto:
+
+```ts
+const body = await res.json().catch(() => ({})) as Partial<ConfirmacaoCompraProgramada>;
+if (!res.ok) {
+  setErro((body as { message?: string }).message ?? 'Erro ao confirmar compra');
+  setSalvando(false);
+  return;
+}
+if (!body.compra) {
+  setErro('Resposta inválida ao confirmar compra');
+  setSalvando(false);
+  return;
+}
+setCompra(body.compra);
+```
+
+    Não usar `body as CompraProgramadaDetalhe` nem fallback para reconstruir a compra. O
+    `type-check` cobre o BFF, o tipo compartilhado e este consumidor juntos. No mesmo
+    `onda4-pedidos.test.tsx`, acrescentar a microprova
+    `confirmacao de compra consome body.compra do envelope`: renderizar `ComprasClient` com a data
+    do relógio fixada, mockar lista+detalhe de uma compra `rascunho`, devolver
+    `{ compra: { ...detalhe, status: 'confirmada', dataOperacao }, jaConfirmada: false }` no POST de
+    confirmação, clicar **Confirmar compra** e exigir o status confirmado sem mensagem de resposta
+    inválida. Se o consumidor voltar a executar `setCompra(body)`, o teste falha porque `body.status`
+    não existe.
 
 **Commit:** `feat(onda4): tela de pedidos com editor, overbooking, adendo e liberação de reserva`
 
@@ -3548,8 +3832,20 @@ function arquivosDeCodigo(entradas: string[]): string[] {
 
 1. E2E de backend cobrindo a jornada: criar pedido → tentar duplicar (`409
    PEDIDO_ABERTO_EXISTENTE`) → adendo com déficit (`409` de overbooking) → confirmar → liberar
-   reserva → criar/publicar tabela de preços → consultar mapa e espelho.
+   reserva → criar/publicar tabela de preços → consultar mapa e espelho. Antes dessa jornada, o
+   teste de DoD-129 em `compras-programadas.e2e-spec.ts` deve estar verde para todos os retornos
+   públicos; não se contorna o contrato preparando `dataOperacao` manualmente no pedido.
 2. E2E de frontend (Playwright) percorrendo as 5 telas com `HARDWARE_FAKE=1` e `NFSE_FAKE=1`.
+   Preservar literalmente a microprova que encontrou a regressão em
+   `jornada-operacional.spec.ts`: depois de criar/confirmar a compra, abrir Disponibilidade,
+   clicar **Grade** e exigir `page.getByText(itemComercialCodigo, { exact: true })`; em seguida
+   abrir Pedidos, clicar **Novo pedido**, selecionar `compra.compraProgramadaId`, cliente e o item
+   pelo código, preencher quantidade e criar o pedido. Interceptar o `POST
+   /api/comercial/pedidos`, afirmar que `request.postDataJSON()` contém
+   `{ compraProgramadaId: compra.compraProgramadaId, dataOperacao: compra.dataOperacao }`, que
+   `dataOperacao` não é `undefined`, e exigir resposta `2xx` + pedido visível. **Grade por código +
+   criação do pedido são uma única prova final; chegar à Grade sem criar o pedido não fecha a
+   Task 21.**
 3. Realinhar os 3 specs herdados que ainda apontam para rotas antigas de pedido (dívida 9 do
    relatório da Onda 3), sem afrouxar asserção. `jornada-operacional.spec.ts` já foi corrigido na
    Task 16 quanto a `/comercial/pedidos/novo`; aqui fecha-se o restante da dívida.
@@ -3584,6 +3880,7 @@ npm ci
 npm run lint
 npm run type-check
 cd app/backend && npm run db:migrate && npm run db:seed && cd ../..
+cd app/backend && npm run test -- --runInBand test/integration/compras-programadas.e2e-spec.ts && cd ../..
 cd app/backend && HARDWARE_FAKE=1 NFSE_FAKE=1 npm run test:cov && cd ../..
 cd app/frontend && npm run test -- --runInBand bff-onda4.test.ts onda4-pedidos.test.tsx disponibilidade.test.tsx onda4-disponibilidade.test.tsx && cd ../..
 cd app/frontend && npm run test && cd ../..
@@ -3663,7 +3960,10 @@ só ficam verdes depois da Task 19 — escrevê-los antes deixaria três tasks c
 DoD-125 é escrito na Task 13 sobre a rota BFF aninhada e DoD-126 na Task 15 sobre seu consumidor
 real; os dois impedem a volta do `PATCH` agregado inexistente, o envio de zero ao schema
 `positive()` e a perda de status/corpo no proxy. DoD-127 é escrito na Task 2 e falha se qualquer uma
-das duas exposições de `rotaPadrao` sobreviver em `clientesConfig`.
+das duas exposições de `rotaPadrao` sobreviver em `clientesConfig`. DoD-128 é escrito pela retomada
+da Task 18; DoD-129 é escrito na Task 6 sobre os sete endpoints públicos de compras; DoD-130 é
+escrito na Task 15 sobre o `PedidoEditor`. A Task 21 executa a prova integrada Grade por código +
+criação do pedido, sem substituir esses testes dirigidos.
 
 **Aderência à base real (emenda do Portão 1).** Todo código literal deste plano foi conferido contra
 `develop` no worktree em `158da75`, não contra a memória do plano mestre: assinatura de
@@ -3712,6 +4012,18 @@ redução positiva=`PATCH` aninhado,
 vem diretamente do `min={0}`/remoção do protótipo e da liberação de reserva da v1.1 §6.3. Nenhum
 endpoint backend novo, divergência autorizada ou decisão de produto foi criado.
 
+**Contrato de compras programadas na retomada da Task 21 (emenda 9).** A microprova real separou
+causa e sintoma: Grade já mostrava o `itemComercialCodigo`, mas o `POST /pedidos` recebia
+`dataOperacao: undefined` porque a lista de compras selecionava apenas
+`compras_programadas.*`. A auditoria não parou no GET: o backend devolvia seis shapes diferentes,
+enquanto os BFFs prometiam `CompraProgramadaDetalhe`, e a confirmação devolvia um envelope que
+`/gestao/compras` tratava como detalhe. D33 define uma projeção canônica por
+`compras_programadas.operacao_id → operacoes.data`, aplica leitura pós-commit em criar/atualizar
+cabeçalho/atualizar item/confirmar/cancelar, preserva o envelope de confirmação e elimina o
+fallback vazio dos eventos. DoD-129 exercita todos os endpoints públicos no app real; DoD-130
+exercita o editor com a resposta contratual e inspeciona o POST. O BFF não ganhou lógica de
+negócio nem fallback.
+
 **O que este plano deliberadamente não faz.** Não reescreve o motor de reserva/overbooking da Onda 1;
 não cria TTL de rascunho (AD-06 proíbe); não fecha as pendências abertas por conta própria — P5, P11
 e P15 recebem badge Provisório e ficam rastreáveis; não toca `/admin/usuarios` (dívida 6 da Onda 3
@@ -3724,6 +4036,9 @@ idempotente, sinalizado Provisório P11 e derivado do protótipo validado, não 
 *Derivação dos 8 estados do mapa* — cada estado tem origem SQL literal em D17 e teste dedicado, o
 que impede reinterpretação durante a implementação. (d) *Divergência de códigos no protótipo* —
 resolvida por D6 com um conjunto canônico único, evitando três catálogos incompatíveis em runtime.
+(e) *Leitura do detalhe antes do commit* — todos os mutadores de D33 devolvem somente o id dentro da
+transação e chamam `detalhar` depois dela; o teste e2e verifica o shape retornado, impedindo a
+repetição do erro de visibilidade já corrigido na Task 9.
 
 **Verificação da regra "Zero".** O plano não contém `TBD`, `TODO`, "a definir", "implementar depois"
 nem "similar à Task". O termo banido pela v1.1 §6.8 aparece apenas na constraint 10 e no comando de
@@ -3735,33 +4050,44 @@ DoD-127 cobre as duas exposições do config frontend e o `rg -w` final limita-s
 Clientes, sem falsos positivos em `rotaPadraoId`/`rotaPadraoNome` de Frota. DoD-128 preserva o valor
 do teste herdado de Disponibilidade, mas o ancora no contrato pós-Task 18: Mapa padrão, respostas
 distintas para lista e `/mapa`, Grade explícita e mutação do saldo no DOM sem novo fetch da lista.
+D33 não admite `dataOperacao` opcional nem reconstrução no frontend: DoD-129 falha se qualquer
+retorno público perder a derivação e DoD-130 falha se o editor omitir a data no POST.
 
 ---
 
 ## Contagens
 
-**22 tasks · 32 decisões de design · 59 itens de DoD (todos com teste 1:1) · 7 divergências
+**22 tasks · 33 decisões de design · 61 itens de DoD (todos com teste 1:1) · 7 divergências
 autorizadas.**
 
 Os 2 itens novos em relação à emenda 3 são **DoD-125** e **DoD-126**: contrato do BFF
 item-específico e consumo correto no editor. A decisão nova da emenda 4 é **D32**, agora fechada pela
 emenda 5 para `0 → DELETE` e teste de proxy executável, sem nova decisão numerada: redução positiva
 usa `PATCH`, zero/remoção usam `DELETE`, aumento usa adendo e produto ausente usa `POST /itens`. A
-Task 13 passa de **13 rotas novas + 2 alteradas** para **14 rotas novas + 1 alterada**: entra o
-arquivo aninhado e `api/comercial/pedidos/[id]/route.ts` deixa de ser alteração desta onda.
+Na emenda 4, a Task 13 passou de **13 rotas novas + 2 alteradas** para **14 rotas novas + 1
+alterada**: entrou o arquivo aninhado e `api/comercial/pedidos/[id]/route.ts` deixou de ser
+alteração daquela emenda. A contagem corrente, após D33, está registrada abaixo.
 O item novo da emenda 7 é **DoD-127**: o config frontend de Clientes deixa de expor o campo
 substituído em `campos` e no schema, sem nova decisão numerada nem divergência autorizada.
 O item novo da emenda 8 é **DoD-128**: o teste herdado de Disponibilidade passa a provar o fluxo
 Mapa → Grade e a atualização realtime do saldo sem refetch da lista, sem alterar decisão de design
 nem abrir divergência.
+Os itens novos da emenda 9 são **DoD-129** e **DoD-130**: o primeiro cobre lista, detalhe e as cinco
+mutações públicas de compras programadas com a data derivada da operação; o segundo cobre o
+consumidor `PedidoEditor` até o body real do `POST /pedidos`. A decisão nova é **D33**. A Task 13
+passa, no estado atual do plano, a **14 rotas BFF novas + 3 alteradas**: a rota de pedido já contada
+e os dois alinhamentos tipados de compras (`[id]` e `[id]/confirmar`).
 
-Contagem da estrutura listada: backend = **17 arquivos de código novos + 15 testes novos + 19
-alterados**; frontend = **35 novos (14 rotas BFF) + 14 alterados (1 rota BFF) + 3 removidos**. A
+Contagem da estrutura listada: backend = **17 arquivos de código novos + 15 testes novos + 22
+alterados**; frontend = **35 novos (14 rotas BFF) + 17 alterados (3 rotas BFF) + 3 removidos**. A
 emenda 4 não altera o total de arquivos frontend novos+alterados: reclassifica a rota raiz como
 inalterada e acrescenta a rota aninhada correta. A emenda 5 altera somente o conteúdo do plano e dos
 dois testes já contados; não adiciona, remove nem reclassifica arquivo de implementação.
 A emenda 7 acrescenta `app/frontend/src/lib/cadastros-config.ts` aos arquivos alterados; o spec de
-Clientes já estava entre os 35 arquivos novos e apenas recebe o teste adicional.
+Clientes já estava entre os 35 arquivos novos e apenas recebe o teste adicional. A emenda 9
+acrescenta aos alterados backend o service e os dois testes preexistentes de compras; no frontend,
+acrescenta dois BFFs preexistentes e o consumidor `/gestao/compras`. `lib/comercial.ts` e
+`onda4-pedidos.test.tsx` já estavam contados.
 
 Divergências autorizadas: **D-01** abas Fiscais/Contatos sem conteúdo no protótipo → conteúdo
 derivado do JSONB já existente; **D-02** conjunto canônico único de códigos do catálogo;
