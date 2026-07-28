@@ -533,8 +533,8 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
 
     await page.goto(`${BASE_URL}/comercial/disponibilidade`);
     await fillInputValue(page, '#data', compra.dataOperacao);
-    // A grade exibe só os 12 primeiros chars do UUID (slice) + reticências.
-    await expect(page.getByText(new RegExp(`${itemComercialId.slice(0, 12)}`))).toBeVisible({
+    await page.getByRole('button', { name: /^Grade$/ }).click();
+    await expect(page.getByText(itemComercialCodigo, { exact: true })).toBeVisible({
       timeout: 15_000,
     });
     await capture(

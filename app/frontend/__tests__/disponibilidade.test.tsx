@@ -1,4 +1,4 @@
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import DisponibilidadePage from '../src/app/(admin)/comercial/disponibilidade/page';
 
 class MockWebSocket {
@@ -24,6 +24,7 @@ class MockWebSocket {
 const disponibilidades = [
   {
     id: 'd1',
+    operacaoId: 'operacao-1',
     itemComercialId: 'item-1',
     dataOperacao: '2026-06-07',
     quantidadeTotalGerada: '40.000',
@@ -35,29 +36,69 @@ const disponibilidades = [
   },
 ];
 
+function resposta(body: unknown, status = 200) {
+  return Promise.resolve(new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  }));
+}
+
 describe('DisponibilidadePage', () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
     (global as unknown as { WebSocket: unknown }).WebSocket = MockWebSocket;
-    global.fetch = jest.fn(async () => ({
-      ok: true,
-      json: async () => disponibilidades,
-    })) as unknown as typeof fetch;
+    global.fetch = jest.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/comercial/disponibilidade?dataOperacao=')) {
+        return resposta(disponibilidades);
+      }
+      if (url === '/api/comercial/disponibilidade/mapa?operacaoId=operacao-1') {
+        return resposta([{
+          itemComercialId: 'item-1',
+          codigo: 'TZ',
+          descricao: 'Traseiro Bovino',
+          provisorio: true,
+          estados: {
+            F: '2.000',
+            V: '40.000',
+            R: '0.000',
+            C: '0.000',
+            D: '0.000',
+            O: '0.000',
+            E: '0.000',
+            '!': '0.000',
+          },
+          unidades: {
+            F: 1,
+            V: 0,
+            R: 0,
+            C: 0,
+            D: 0,
+            O: 0,
+            E: 0,
+            '!': 0,
+          },
+          saldoComercial: '40.000',
+        }]);
+      }
+      return resposta({ message: `URL inesperada: ${url}` }, 500);
+    }) as unknown as typeof fetch;
   });
 
-  it('renderiza o saldo do dia (smoke + fetch inicial)', async () => {
+  it('abre no mapa e atualiza o saldo real da grade por realtime sem refetch da lista', async () => {
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
     render(<DisponibilidadePage />);
-    expect(screen.getByText('Disponibilidade virtual')).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.getByTestId('disp-d1-disponivel')).toHaveTextContent('40.000');
-    });
-  });
 
-  it('atualiza o saldo ao receber evento WebSocket SEM refetch', async () => {
-    render(<DisponibilidadePage />);
-    await waitFor(() => expect(screen.getByTestId('disp-d1-disponivel')).toHaveTextContent('40.000'));
+    expect(await screen.findByRole('heading', { name: /^Disponibilidade$/ })).toBeInTheDocument();
+    expect(await screen.findByText('Traseiro Bovino')).toBeInTheDocument();
 
-    const ws = MockWebSocket.instances[0];
+    fireEvent.click(screen.getByRole('button', { name: /^Grade$/ }));
+    expect(await screen.findByTestId('disp-d1-disponivel')).toHaveTextContent('40.000');
+
+    const contarLista = () => fetchMock.mock.calls.filter(([input]) =>
+      String(input).startsWith('/api/comercial/disponibilidade?dataOperacao=')).length;
+    const chamadasListaAntes = contarLista();
+    const ws = MockWebSocket.instances[MockWebSocket.instances.length - 1];
     if (!ws) throw new Error('WebSocket não instanciado');
 
     act(() => {
@@ -69,8 +110,8 @@ describe('DisponibilidadePage', () => {
       });
     });
 
-    await waitFor(() => {
-      expect(screen.getByTestId('disp-d1-disponivel')).toHaveTextContent('36.000');
-    });
+    await waitFor(() =>
+      expect(screen.getByTestId('disp-d1-disponivel')).toHaveTextContent('36.000'));
+    expect(contarLista()).toBe(chamadasListaAntes);
   });
 });
