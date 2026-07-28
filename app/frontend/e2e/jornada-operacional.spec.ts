@@ -548,16 +548,17 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
       'Compra programada ainda não possui tela dedicada; por isso foi preparada via API autenticada.',
     );
 
-    await page.goto(`${BASE_URL}/comercial/pedidos/novo`);
-    await page.locator('#compraProgramadaId').fill(compra.compraProgramadaId);
-    await page.locator('#clienteId').fill(clienteId);
-    await fillInputValue(page, '#dataOperacao', compra.dataOperacao);
-    await page.locator('#itemComercialId').fill(itemComercialId);
-    await page.locator('#quantidadePedida').fill('2');
+    await page.goto(`${BASE_URL}/comercial/pedidos`);
+    await page.getByRole('button', { name: 'Novo pedido' }).click();
+    await page.locator('#pedido-operacao').selectOption(compra.compraProgramadaId);
+    await page.locator('#pedido-cliente').selectOption(clienteId);
+    await page.locator('#produto-novo').selectOption(itemComercialId);
+    await page.locator('#quantidade-produto-novo').fill('2');
+    await page.getByRole('button', { name: 'Adicionar produto' }).click();
     const pedidoResponse = page.waitForResponse((res) => res.url().includes('/api/comercial/pedidos') && res.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Criar pedido' }).click();
+    await page.getByRole('button', { name: 'Salvar Rascunho' }).click();
     const pedido = (await (await pedidoResponse).json()) as { id: string; status: string };
-    await expect(page.getByRole('status')).toContainText('Pedido criado');
+    await expect(page.getByText('Rascunho com reserva ativa')).toBeVisible();
     await capture(
       page,
       steps,
