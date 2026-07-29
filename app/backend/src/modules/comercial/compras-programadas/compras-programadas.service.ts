@@ -1,6 +1,6 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -22,9 +22,16 @@ import type {
   UpdateCompraProgramadaDto,
 } from './dto/compra-programada.dto';
 
-type CompraProgramada = typeof comprasProgramadas.$inferSelect;
+type CompraProgramadaDb = typeof comprasProgramadas.$inferSelect;
 type CompraProgramadaItem = typeof comprasProgramadasItens.$inferSelect;
+type CompraProgramada = CompraProgramadaDb & { dataOperacao: string };
 type CompraComItens = CompraProgramada & { itens: CompraProgramadaItem[] };
+type ConfirmacaoCompraProgramada = { compra: CompraComItens; jaConfirmada: boolean };
+
+const COMPRA_COM_DATA = {
+  ...getTableColumns(comprasProgramadas),
+  dataOperacao: operacoes.data,
+};
 
 const STATUS_EDITAVEL = ['rascunho', 'em_negociacao'];
 
@@ -49,8 +56,9 @@ export class ComprasProgramadasService {
 
     const [linhas, totalRow] = await Promise.all([
       this.db
-        .select()
+        .select(COMPRA_COM_DATA)
         .from(comprasProgramadas)
+        .innerJoin(operacoes, eq(comprasProgramadas.operacaoId, operacoes.id))
         .where(where)
         .orderBy(desc(comprasProgramadas.createdAt))
         .limit(limit)
@@ -62,7 +70,13 @@ export class ComprasProgramadasService {
   }
 
   async detalhar(id: string): Promise<CompraComItens> {
-    const compra = await this.buscarAtiva(id);
+    const compra = await this.db
+      .select(COMPRA_COM_DATA)
+      .from(comprasProgramadas)
+      .innerJoin(operacoes, eq(comprasProgramadas.operacaoId, operacoes.id))
+      .where(and(eq(comprasProgramadas.id, id), isNull(comprasProgramadas.deletedAt)))
+      .limit(1)
+      .then((r) => r[0] ?? null);
     if (!compra) throw new NotFoundException('Compra programada não encontrada');
     const itens = await this.db
       .select()
@@ -72,7 +86,7 @@ export class ComprasProgramadasService {
   }
 
   async criar(dto: CreateCompraProgramadaDto, usuarioId: string): Promise<CompraComItens> {
-    return this.db.transaction(async (tx) => {
+    const compraId = await this.db.transaction(async (tx) => {
       const { operacao } = await this.operacoes.garantirOperacao(tx, dto.dataOperacao, usuarioId);
 
       const compraExistenteNoDia = await tx
@@ -130,12 +144,13 @@ export class ComprasProgramadasService {
         dadosNovos: { ...criada, itens },
       });
 
-      return { ...criada, itens };
+      return criada.id;
     });
+    return this.detalhar(compraId);
   }
 
-  async atualizar(id: string, dto: UpdateCompraProgramadaDto, usuarioId: string): Promise<CompraProgramada> {
-    return this.db.transaction(async (tx) => {
+  async atualizar(id: string, dto: UpdateCompraProgramadaDto, usuarioId: string): Promise<CompraComItens> {
+    const compraId = await this.db.transaction(async (tx) => {
       const anterior = await this.buscarAtiva(id, tx);
       if (!anterior) throw new NotFoundException('Compra programada não encontrada');
       this.assertEditavel(anterior.status);
@@ -164,8 +179,9 @@ export class ComprasProgramadasService {
         dadosAnteriores: anterior,
         dadosNovos: atualizada,
       });
-      return atualizada;
+      return atualizada.id;
     });
+    return this.detalhar(compraId);
   }
 
   async atualizarItem(
@@ -173,8 +189,8 @@ export class ComprasProgramadasService {
     itemId: string,
     dto: UpdateCompraItemDto,
     usuarioId: string,
-  ): Promise<CompraProgramadaItem> {
-    return this.db.transaction(async (tx) => {
+  ): Promise<CompraComItens> {
+    const compraAtualizadaId = await this.db.transaction(async (tx) => {
       const compra = await this.buscarAtiva(compraId, tx);
       if (!compra) throw new NotFoundException('Compra programada não encontrada');
       // Imutabilidade: compra confirmada (ou cancelada) não permite editar item.
@@ -214,8 +230,9 @@ export class ComprasProgramadasService {
         dadosAnteriores: anterior,
         dadosNovos: atualizado,
       });
-      return atualizado;
+      return compra.id;
     });
+    return this.detalhar(compraAtualizadaId);
   }
 
   /**
@@ -224,7 +241,7 @@ export class ComprasProgramadasService {
    * chamadas concorrentes/repetidas não regeram saldo nem auditam duplicado.
    * Eventos publicados SOMENTE após o commit (ADR-004).
    */
-  async confirmar(id: string, usuarioId: string): Promise<{ compra: CompraProgramada; jaConfirmada: boolean }> {
+  async confirmar(id: string, usuarioId: string): Promise<ConfirmacaoCompraProgramada> {
     const resultado = await this.db.transaction(async (tx) => {
       const atual = await this.buscarAtiva(id, tx);
       if (!atual) throw new NotFoundException('Compra programada não encontrada');
@@ -242,7 +259,7 @@ export class ComprasProgramadasService {
 
       if (!confirmada) {
         // Já confirmada (por esta ou outra chamada concorrente) → no-op idempotente.
-        return { compra: atual, jaConfirmada: true, disponibilidades: [] as DisponibilidadeGerada[] };
+        return { jaConfirmada: true, disponibilidades: [] as DisponibilidadeGerada[] };
       }
 
       const disponibilidades = await this.disponibilidadeService.gerarParaCompra(tx, confirmada);
@@ -257,23 +274,20 @@ export class ComprasProgramadasService {
         dadosNovos: confirmada,
       });
 
-      return { compra: confirmada, jaConfirmada: false, disponibilidades };
+      return { jaConfirmada: false, disponibilidades };
     });
+
+    const compra = await this.detalhar(id);
 
     // PÓS-COMMIT: eventos de tempo real (não emite em no-op idempotente).
     if (!resultado.jaConfirmada) {
-      const dataOperacao = await this.db
-        .select({ data: operacoes.data })
-        .from(operacoes)
-        .where(eq(operacoes.id, resultado.compra.operacaoId))
-        .then((r) => r[0]?.data ?? '');
       this.eventEmitter.emit(EVENTOS.COMPRA_CONFIRMADA, {
-        compraId: resultado.compra.id,
-        dataOperacao,
+        compraId: compra.id,
+        dataOperacao: compra.dataOperacao,
       });
       this.eventEmitter.emit(EVENTOS.DISPONIBILIDADE_GERADA, {
-        compraId: resultado.compra.id,
-        dataOperacao,
+        compraId: compra.id,
+        dataOperacao: compra.dataOperacao,
         itens: resultado.disponibilidades.map((d) => ({
           disponibilidadeId: d.id,
           itemComercialId: d.itemComercialId,
@@ -282,11 +296,11 @@ export class ComprasProgramadasService {
       });
     }
 
-    return { compra: resultado.compra, jaConfirmada: resultado.jaConfirmada };
+    return { compra, jaConfirmada: resultado.jaConfirmada };
   }
 
-  async cancelar(id: string, usuarioId: string): Promise<CompraProgramada> {
-    return this.db.transaction(async (tx) => {
+  async cancelar(id: string, usuarioId: string): Promise<CompraComItens> {
+    const compraId = await this.db.transaction(async (tx) => {
       const anterior = await this.buscarAtiva(id, tx);
       if (!anterior) throw new NotFoundException('Compra programada não encontrada');
       if (anterior.status === 'confirmada') {
@@ -310,8 +324,9 @@ export class ComprasProgramadasService {
         dadosAnteriores: anterior,
         dadosNovos: cancelada,
       });
-      return cancelada;
+      return cancelada.id;
     });
+    return this.detalhar(compraId);
   }
 
   private assertEditavel(status: string): void {
@@ -320,7 +335,7 @@ export class ComprasProgramadasService {
     }
   }
 
-  private async buscarAtiva(id: string, tx?: NodePgDatabase<typeof schema>): Promise<CompraProgramada | null> {
+  private async buscarAtiva(id: string, tx?: NodePgDatabase<typeof schema>): Promise<CompraProgramadaDb | null> {
     const exec = tx ?? this.db;
     return exec
       .select()

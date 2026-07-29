@@ -69,7 +69,9 @@ describe('Compras programadas e2e (CRUD + RBAC + imutabilidade)', () => {
       .set('Cookie', comprasCookies)
       .send({ quantidadeComprada: 20 });
     expect(res.status).toBe(200);
-    expect(Number(res.body.quantidadeComprada)).toBe(20);
+    expect(res.body.dataOperacao).toBe('2026-07-03');
+    expect(res.body.itens.find((item: { id: string }) => item.id === itemId))
+      .toMatchObject({ id: itemId, quantidadeComprada: '20.000' });
   });
 
   it('IMUTABILIDADE: editar item após confirmar retorna 409', async () => {
@@ -199,5 +201,75 @@ describe('Compras programadas e2e (CRUD + RBAC + imutabilidade)', () => {
       .set('Cookie', comprasCookies)
       .send(novaCompra({ dataOperacao: dia }));
     expect(terceira.status).toBe(201);
+  });
+
+  it('todos os retornos publicos derivam dataOperacao da operacao vinculada', async () => {
+    const dataOperacao = '2026-09-21';
+    const criada = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao }));
+    expect(criada.status).toBe(201);
+    expect(criada.body).toMatchObject({ dataOperacao, status: 'rascunho' });
+    expect(criada.body.itens).toHaveLength(1);
+    const compraId = String(criada.body.id);
+    const itemId = String(criada.body.itens[0].id);
+
+    const lista = await request(app.getHttpServer())
+      .get('/comercial/compras-programadas?page=1&pageSize=100&incluirRemovidos=true')
+      .set('Cookie', comprasCookies);
+    expect(lista.status).toBe(200);
+    expect(lista.body).toMatchObject({ page: 1, pageSize: 100 });
+    expect(lista.body.data.find((compra: { id: string }) => compra.id === compraId))
+      .toMatchObject({ id: compraId, dataOperacao });
+
+    const detalhe = await request(app.getHttpServer())
+      .get(`/comercial/compras-programadas/${compraId}`)
+      .set('Cookie', comprasCookies);
+    expect(detalhe.status).toBe(200);
+    expect(detalhe.body).toMatchObject({ id: compraId, dataOperacao });
+    expect(detalhe.body.itens).toHaveLength(1);
+
+    const cabecalho = await request(app.getHttpServer())
+      .patch(`/comercial/compras-programadas/${compraId}`)
+      .set('Cookie', comprasCookies)
+      .send({ numeroInterno: 'D33-001', status: 'em_negociacao' });
+    expect(cabecalho.status).toBe(200);
+    expect(cabecalho.body).toMatchObject({ id: compraId, dataOperacao, numeroInterno: 'D33-001' });
+    expect(cabecalho.body.itens).toHaveLength(1);
+
+    const item = await request(app.getHttpServer())
+      .patch(`/comercial/compras-programadas/${compraId}/itens/${itemId}`)
+      .set('Cookie', comprasCookies)
+      .send({ quantidadeComprada: 25 });
+    expect(item.status).toBe(200);
+    expect(item.body).toMatchObject({ id: compraId, dataOperacao });
+    expect(item.body.itens.find((linha: { id: string }) => linha.id === itemId))
+      .toMatchObject({ id: itemId, quantidadeComprada: '25.000' });
+
+    const confirmada = await request(app.getHttpServer())
+      .post(`/comercial/compras-programadas/${compraId}/confirmar`)
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(confirmada.status).toBe(201);
+    expect(confirmada.body).toMatchObject({ jaConfirmada: false });
+    expect(confirmada.body.compra).toMatchObject({ id: compraId, dataOperacao, status: 'confirmada' });
+    expect(confirmada.body.compra.itens).toHaveLength(1);
+
+    const paraCancelar = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao: '2026-09-22' }));
+    const cancelada = await request(app.getHttpServer())
+      .delete(`/comercial/compras-programadas/${paraCancelar.body.id}`)
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(cancelada.status).toBe(200);
+    expect(cancelada.body).toMatchObject({
+      id: paraCancelar.body.id,
+      dataOperacao: '2026-09-22',
+      status: 'cancelada',
+    });
+    expect(cancelada.body.itens).toHaveLength(1);
   });
 });

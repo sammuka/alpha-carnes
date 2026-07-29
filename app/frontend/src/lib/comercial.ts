@@ -23,6 +23,7 @@ export interface DisponibilidadeDia {
 
 export interface CompraProgramada {
   id: string;
+  operacaoId: string;
   dataOperacao: string;
   fornecedorId: string;
   numeroInterno: string | null;
@@ -43,6 +44,11 @@ export interface CompraProgramadaItem {
 
 export interface CompraProgramadaDetalhe extends CompraProgramada {
   itens: CompraProgramadaItem[];
+}
+
+export interface ConfirmacaoCompraProgramada {
+  compra: CompraProgramadaDetalhe;
+  jaConfirmada: boolean;
 }
 
 export interface CriarCompraProgramadaDto {

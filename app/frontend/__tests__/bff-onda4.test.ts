@@ -3,14 +3,16 @@
 import type { NextRequest } from 'next/server';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, fetchBackend } from '@/lib/api';
 import * as rotaPedidoAgregado from '../src/app/api/comercial/pedidos/[id]/route';
 import {
   DELETE as removerItem,
   PATCH as reduzirItem,
 } from '../src/app/api/comercial/pedidos/[id]/itens/[itemId]/route';
+import { POST as confirmarCompra } from '../src/app/api/comercial/compras-programadas/[id]/confirmar/route';
+import type { ConfirmacaoCompraProgramada } from '@/lib/comercial';
 
-jest.mock('@/lib/api', () => ({ apiFetch: jest.fn() }));
+jest.mock('@/lib/api', () => ({ apiFetch: jest.fn(), fetchBackend: jest.fn() }));
 
 const RAIZ_FRONTEND = join(__dirname, '..');
 
@@ -24,6 +26,7 @@ function arquivos(diretorio: string): string[] {
 
 const ler = (arquivo: string) => readFileSync(arquivo, 'utf8');
 const apiFetchMock = jest.mocked(apiFetch);
+const fetchBackendMock = jest.mocked(fetchBackend);
 
 function requisicaoCom(body: unknown): NextRequest {
   return { json: jest.fn().mockResolvedValue(body) } as unknown as NextRequest;
@@ -35,6 +38,7 @@ function contexto(itemId: string) {
 
 beforeEach(() => {
   apiFetchMock.mockReset();
+  fetchBackendMock.mockReset();
 });
 
 it('nenhuma tela da onda 4 chama o backend fora do BFF', () => {
@@ -120,4 +124,36 @@ it('BFF de item usa a rota aninhada e os contratos reais de reducao e remocao', 
   expect(fonteContratos).toMatch(
     /interface RemoverItemPedidoBody[\s\S]*motivo: string;/,
   );
+});
+
+it('BFF de confirmar compra preserva o envelope canonico', async () => {
+  const envelope: ConfirmacaoCompraProgramada = {
+    compra: {
+      id: 'compra-1',
+      operacaoId: 'operacao-1',
+      dataOperacao: '2026-09-21',
+      fornecedorId: 'fornecedor-1',
+      numeroInterno: null,
+      referenciaExterna: null,
+      previsaoEntrega: null,
+      status: 'confirmada',
+      observacoes: null,
+      createdAt: '2026-09-20T10:00:00.000Z',
+      itens: [],
+    },
+    jaConfirmada: false,
+  };
+  fetchBackendMock.mockResolvedValueOnce({ data: envelope, error: null, status: 201 } as never);
+
+  const resposta = await confirmarCompra(
+    {} as NextRequest,
+    { params: Promise.resolve({ id: 'compra-1' }) },
+  );
+
+  expect(fetchBackendMock).toHaveBeenCalledWith(
+    '/comercial/compras-programadas/compra-1/confirmar',
+    { method: 'POST' },
+  );
+  expect(resposta.status).toBe(200);
+  expect(await resposta.json()).toEqual(envelope);
 });

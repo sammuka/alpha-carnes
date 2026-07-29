@@ -4,6 +4,7 @@ import { PedidosClient } from '../src/app/(admin)/comercial/pedidos/pedidos-clie
 import { ModalAdendo } from '../src/app/(admin)/comercial/pedidos/modal-adendo';
 import { ModalOverbooking } from '../src/app/(admin)/comercial/pedidos/modal-overbooking';
 import { ROTULOS_STATUS_PEDIDO, rotuloStatusPedido } from '@/lib/status-pedido';
+import type { CompraProgramada } from '@/lib/comercial';
 
 const pedido = {
   id: 'pedido-1',
@@ -88,6 +89,19 @@ const produtos = [
   },
 ];
 
+const compraDaApi: CompraProgramada = {
+  id: 'compra-1',
+  operacaoId: 'operacao-1',
+  dataOperacao: '2026-07-28',
+  fornecedorId: 'fornecedor-1',
+  numeroInterno: null,
+  referenciaExterna: null,
+  previsaoEntrega: null,
+  status: 'confirmada',
+  observacoes: null,
+  createdAt: '2026-07-27T10:00:00.000Z',
+};
+
 function json(body: unknown, status = 200) {
   return Promise.resolve(new Response(JSON.stringify(body), {
     status,
@@ -109,7 +123,7 @@ function instalarFetch() {
     }
     if (url === '/api/comercial/compras-programadas?pageSize=100') {
       return json({
-        data: [{ id: 'compra-1', dataOperacao: '2026-07-28', status: 'confirmada' }],
+        data: [compraDaApi],
         page: 1,
         pageSize: 100,
         total: 1,
@@ -123,6 +137,9 @@ function instalarFetch() {
       return json({ ...clientes[1], representanteNome: null, rotaNome: null });
     }
     if (url === '/api/comercial/pedidos/pedido-1/adendos') return json([]);
+    if (url === '/api/comercial/pedidos' && init?.method === 'POST') {
+      return json({ id: 'pedido-novo', status: 'rascunho' }, 201);
+    }
     if (url.startsWith('/api/admin/auditoria?')) {
       return json({ data: [], page: 1, pageSize: 50, total: 0 });
     }
@@ -219,6 +236,30 @@ it('selecionar cliente herda representante e rota do cadastro no editor de pedid
   fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'cliente-2' } });
   await waitFor(() => expect(screen.getByLabelText('Rota')).toHaveValue(''));
   expect(screen.getByLabelText('Rota')).toHaveAttribute('placeholder', '—');
+});
+
+it('novo pedido usa dataOperacao recebida da compra sem fallback', async () => {
+  render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Novo pedido' }));
+  await screen.findByRole('option', { name: compraDaApi.dataOperacao });
+  fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'cliente-1' } });
+  fireEvent.change(screen.getByLabelText('Operação'), { target: { value: compraDaApi.id } });
+  fireEvent.change(screen.getByLabelText('Produto'), { target: { value: 'item-comercial-novo' } });
+  fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
+  await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Salvar Rascunho' }));
+
+  await waitFor(() => {
+    const chamada = (global.fetch as jest.Mock).mock.calls.find(([url, init]) =>
+      url === '/api/comercial/pedidos' && init?.method === 'POST');
+    expect(chamada).toBeDefined();
+    const payload = JSON.parse(String(chamada?.[1]?.body));
+    expect(payload).toMatchObject({
+      compraProgramadaId: compraDaApi.id,
+      dataOperacao: compraDaApi.dataOperacao,
+    });
+    expect(payload.dataOperacao).not.toBeUndefined();
+  });
 });
 
 it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente para os endpoints reais', async () => {
