@@ -49,7 +49,7 @@ Jest (backend e frontend) · Playwright (e2e).
 | Emenda 7 | Execução retomada após a Task 13 revelou duas exposições remanescentes do campo substituído em `clientesConfig` (`campos[].nome` e `schema`). A Task 2 passa a removê-las literalmente e ganha **DoD-127** executável; a Task 14 preserva o restante do config. O gate deixa de banir `rotaPadraoId`/`rotaPadraoNome` legítimos da frota e restringe a busca aos identificadores exatos `rotaPadrao`/`rota_padrao` nos consumidores de Clientes |
 | Emenda 8 | Gate local após a Task 21 revelou que o teste herdado `disponibilidade.test.tsx` ainda fixava a UI e o payload anteriores à Task 18: título antigo, lista sem `operacaoId` e Grade visível por padrão. A Task 18 passa a realinhar esse teste sem removê-lo nem afrouxá-lo: resposta atual da lista + mapa, navegação explícita para Grade, saldo real no DOM e atualização `reserva_disponibilidade_atualizada` sem novo fetch da lista (**DoD-128**); o mapa pode recarregar, como exige a implementação aprovada |
 | Emenda 9 | A jornada real da Task 21 chegou à Grade pelo código do item, mas a criação do pedido recebeu `400`: `GET /comercial/compras-programadas?pageSize=100` devolvia `operacaoId` sem `dataOperacao`; o BFF apenas repassava esse contrato incompleto e `PedidoEditor.payloadNovo()` enviava `undefined` ao schema do backend. **D33** corrige a origem e alinha toda a API pública: lista, detalhe e mutações derivam a data de `operacoes.data` pelo `operacaoId`; confirmação preserva seu envelope tipado; nenhum BFF/editor fabrica fallback. **DoD-129/130/131** fixam todos os retornos, o consumo real no editor e o envelope BFF, e a Task 21 preserva Grade por código + criação do pedido como prova final. `/gestao/compras` permanece ownership da Onda 5, com ordem de integração explícita após o merge O4 |
-| Emenda 10 | A mesma microprova da Task 21 passou por Grade + `POST /pedidos`, abriu Recebimento e recebeu `400`: o contrato Onda 1/D3 exige `pedidoFornecedorId`, mas `IniciarRecebimentoPayload`, a tela e o Playwright ainda consultavam/selecionavam Compra Programada e enviavam `compraProgramadaId`. **D34** corrige a costura herdada sem fallback: consulta explicitamente Pedidos ao Fornecedor elegíveis (`enviado`/`aguardando_recebimento`), preview e itens nascem do snapshot do Pedido ao Fornecedor, BFF preserva método/status/body e a UI envia o id selecionado. **DoD-132..138** cobrem DTO, listagem/preview/início, BFF, UI e Playwright; a prova D33 Grade + criação do pedido continua una e anterior. A correção fica na Onda 4 porque bloqueia seu gate E2E, sem antecipar a completude funcional da Onda 6 nem tocar a Onda 5 |
+| Emenda 10 | A mesma microprova da Task 21 passou por Grade + `POST /pedidos`, abriu Recebimento e recebeu `400`: o contrato Onda 1/D3 exige `pedidoFornecedorId`, mas `IniciarRecebimentoPayload`, a tela e o Playwright ainda consultavam/selecionavam Compra Programada e enviavam `compraProgramadaId`. **D34** corrige a costura herdada sem fallback: consulta explicitamente Pedidos ao Fornecedor elegíveis (`enviado`/`aguardando_recebimento`) sob o recorte UI 1:1 de P7, preview e itens nascem do snapshot do Pedido ao Fornecedor, contexto/eventos pós-commit falham fechado, BFF preserva método/status/body/header sem inventar `content-type`, envelope não vaza `nfId` e o Playwright usa o Select Radix real. **DoD-132..138** cobrem DTO, listagem/preview/início, BFF, UI e Playwright; a prova D33 Grade + criação do pedido continua una e anterior. A correção fica na Onda 4 porque bloqueia seu gate E2E, sem antecipar a completude funcional da Onda 6 nem tocar a Onda 5 |
 | Worktree da Emenda 4 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix` |
 | Branch da Emenda 4 | `plan/onda4-task13-contract` |
 | Base da Emenda 4 | `origin/develop` = `c2fe0e09f230e7748d532d2292e059f027941e0e` |
@@ -64,7 +64,7 @@ Jest (backend e frontend) · Playwright (e2e).
 | Base da Emenda 9 | `origin/develop` = `4507adf1da26b0bc89368fbe8d86ce4061d8adba` |
 | Worktree da Emenda 10 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-recebimento-contract` |
 | Branch da Emenda 10 | `plan/onda4-recebimento-contract` |
-| Base da Emenda 10 | `origin/develop` = `b4ad3b39b11000099d19f713637c6bd9d24ff942` |
+| Base da Emenda 10 | `origin/develop` = `83270b75f480f0a2a3fb57306f895e88f5d4927d` |
 
 ---
 
@@ -625,8 +625,12 @@ proveniência.** Esta decisão não cria regra de produto: ela torna executável
 pela Onda 1/D3, pela v1.1 §6.10.2 e pela matriz linha 14. O identificador aceito por
 `POST /operacao/recebimentos` é exclusivamente `pedidoFornecedorId`. É proibido o BFF ou o cliente
 aceitar `compraProgramadaId` e procurar, escolher ou criar silenciosamente um Pedido ao Fornecedor.
-Essa tradução seria ambígua porque D3 preserva N recebimentos por Pedido ao Fornecedor e não fixa
-uma relação operacional 1:1 que autorize escolher um pedido pelo id da compra.
+Essa tradução seria ambígua porque o modelo D3 está **preparado** para N recebimentos por Pedido ao
+Fornecedor e não fixa uma relação operacional 1:1 que autorize escolher um pedido pelo id da compra.
+Porém P7 (`§16.8/§16.9`) continua sem decisão: conforme o plano mestre §7, a superfície desta emenda
+permanece **1:1 até confirmação**. A UI só oferece Pedido ao Fornecedor sem recebimento ativo anterior;
+o suporte 1:N continua no backend/schema herdado, sem botão, mensagem, repetição automática ou teste
+novo que o promova como comportamento de produto.
 
 Os estados recebíveis continuam exatamente os já usados por `RecebimentoService.iniciar`:
 `enviado` e `aguardando_recebimento`. Uma constante backend única
@@ -635,10 +639,13 @@ listagem explícita, preview e mutação; o frontend não recalcula elegibilidad
 existente continua exigindo `operacaoId`. Para a caixa global do protótipo, a mesma rota ganha o
 modo explícito e mutuamente exclusivo
 `GET /operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100`: este modo aplica
-`status IN ('enviado','aguardando_recebimento')`, `deleted_at IS NULL`, projeta os ids e nomes
-necessários e não aceita simultaneamente `operacaoId` ou `status`. Assim não existe cruzamento
-implícito de Operações: a intenção global está no contrato da URL e cada linha devolve
-`operacaoId` + `dataOperacao`.
+`status IN ('enviado','aguardando_recebimento')`, `deleted_at IS NULL` e
+`NOT EXISTS (SELECT 1 FROM recebimentos r WHERE r.pedido_fornecedor_id = pedidos_fornecedor.id
+AND r.deleted_at IS NULL AND r.status <> 'cancelado')`; um lote cancelado não bloqueia nova tentativa,
+mas um lote não cancelado oculta o pedido da lista. Pedido com status `recebido` já fica fora pelo
+próprio conjunto de estados. A consulta projeta os ids e nomes necessários e não aceita
+simultaneamente `operacaoId` ou `status`. Assim não existe cruzamento implícito de Operações: a
+intenção global está no contrato da URL e cada linha devolve `operacaoId` + `dataOperacao`.
 
 ```ts
 export const STATUS_PEDIDO_FORNECEDOR_RECEBIVEL = [
@@ -696,16 +703,22 @@ export type PrevisaoRecebimento = {
 };
 ```
 
-`jaPossuiRecebimento` sai do preview e nenhum Pedido ao Fornecedor some da lista por ter lote
-anterior: Onda 1/D3 e os testes existentes permitem N recebimentos do mesmo pedido. `iniciar`
-também passa a formar `recebimentos_itens` a partir de `pedidos_fornecedor_itens`, copiando
+`jaPossuiRecebimento` sai do preview porque a listagem recebível já aplica o recorte 1:1 provisório
+de P7: Pedido ao Fornecedor com recebimento não cancelado não chega ao seletor; pedido cujo único
+lote foi cancelado volta a ser elegível. O service herdado continua tecnicamente capaz de N
+recebimentos e seus testes preexistentes permanecem verdes, mas esta emenda não expõe nem acrescenta
+asserção de segunda criação `201`. `iniciar` também passa a formar `recebimentos_itens` a partir de
+`pedidos_fornecedor_itens`, copiando
 `quantidadePrevista` para `quantidadeEsperada`. `pesoPrevisto` permanece no snapshot de
 `pedidos_fornecedor_itens` e no preview; não se inventa coluna de peso esperado em
 `recebimentos_itens`. Ausência de itens retorna
-`409 Pedido ao fornecedor sem itens operacionais previstos`. O retorno público permanece
-literalmente `{ recebimento, jaIniciado }`; numa criação válida o endpoint responde `201` e
-`jaIniciado: false`. A emenda não transforma o campo em trava idempotente nem cria unicidade, pois
-isso revogaria o cenário N recebimentos.
+`409 Pedido ao fornecedor sem itens operacionais previstos`. Produto do snapshot é lido por
+`innerJoin(itens_comerciais)`; código, descrição, unidade e metadados operacionais não recebem
+`?? ''`. FK/read model incompleto falha explicitamente, em vez de produzir opção ou evento com valor
+inventado (Princípio VII). O retorno público permanece literalmente
+`{ recebimento, jaIniciado }`; numa criação válida o endpoint responde `201` e
+`jaIniciado: false`. `nfId` é detalhe interno usado somente para
+`NF_FORNECEDOR_REGISTRADA`, nunca chave do envelope público.
 
 O schema `iniciarRecebimentoSchema` fica estrito: exige `pedidoFornecedorId`, rejeita o payload
 legado com `400` e também rejeita chave desconhecida em vez de descartá-la. `iniciarConferencia`
@@ -713,8 +726,8 @@ legado com `400` e também rejeita chave desconhecida em vez de descartá-la. `i
 
 | BFF | Backend | Regra do proxy |
 |---|---|---|
-| `GET /api/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100` | mesma query em `/operacao/pedidos-fornecedor` | `apiFetch`; query, status, `content-type` e bytes preservados; tipo `Paginado<PedidoFornecedorResumoRecebivel>` |
-| `GET /api/operacao/recebimentos/previsao/:pedidoFornecedorId` | mesma rota dinâmica | `apiFetch`; preserva status, `content-type` e bytes |
+| `GET /api/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100` | mesma query em `/operacao/pedidos-fornecedor` | `apiFetch`; query, status e bytes preservados; `content-type` só é encaminhado se existir no upstream; tipo `Paginado<PedidoFornecedorResumoRecebivel>` |
+| `GET /api/operacao/recebimentos/previsao/:pedidoFornecedorId` | mesma rota dinâmica | `apiFetch`; preserva status e bytes; só encaminha `content-type` presente |
 | `POST /api/operacao/recebimentos` | `POST /operacao/recebimentos` | lê `req.text()` e encaminha bytes sem alterar chave; preserva `201/400/404/409`, cabeçalho e corpo |
 
 A porção tocada de `/recebimento/recebimento-carga` segue
@@ -736,7 +749,8 @@ ownership da Onda 6; D34 fecha somente a costura real que o E2E O4 obrigatoriame
 
 O Playwright preserva a prova única D33 (Grade por código + `POST /pedidos` verde) e, somente
 depois dela, cria/envia um Pedido ao Fornecedor pela API, abre
-`/recebimento/recebimento-carga`, seleciona o **id do Pedido ao Fornecedor**, preenche a NF e inicia
+`/recebimento/recebimento-carga`, abre o `Select` Radix pelo `role="combobox"`, escolhe a opção pelo
+`role="option"` e nome do Pedido ao Fornecedor, preenche a NF e inicia
 o lote. O teste afirma `response.status() === 201` **antes** de acessar `response.json()`, inspeciona
 o request body exato e verifica `{ recebimento.id, jaIniciado: false }`. Isso mata três classes de
 mutante: chave legada, mapeamento silencioso e leitura do body de uma resposta de erro como se fosse
@@ -1104,9 +1118,9 @@ via `test/helpers/test-app.ts`.
 | DoD-131 | **D33**: o BFF de confirmação preserva o envelope tipado `{ compra, jaConfirmada }`, chama o backend com `POST` e não achata nem descarta `compra.dataOperacao` | `app/frontend/__tests__/bff-onda4.test.ts` › `BFF de confirmar compra preserva o envelope canonico` |
 | DoD-132 | **D34/DTO**: `iniciarRecebimentoSchema` aceita `pedidoFornecedorId`, rejeita ausência, rejeita `compraProgramadaId` mesmo junto da chave correta e não aceita `iniciarConferencia` | `app/backend/test/unit/recebimento.dto.spec.ts` › `inicio de recebimento aceita somente pedidoFornecedorId e rejeita chaves legadas` |
 | DoD-133 | **D34/snapshot**: preview expõe `quantidade_prevista/peso_previsto` de `pedidos_fornecedor_itens` e a criação copia somente `quantidade_prevista` para `recebimentos_itens.quantidade_esperada`; mudança posterior na disponibilidade da compra não altera o esperado do lote e nenhuma coluna de peso é inventada no recebimento | `app/backend/test/unit/recebimento.service.spec.ts` › `preview e inicio usam o snapshot imutavel do Pedido ao Fornecedor` |
-| DoD-134 | **D34/consulta**: o modo explícito de elegíveis devolve somente `enviado`/`aguardando_recebimento`, com `id`, `operacaoId`, `dataOperacao`, fornecedor e proveniência; rejeita combinação com `operacaoId`/`status` e não esconde pedido por já possuir recebimento | `app/backend/test/integration/pedido-fornecedor.e2e-spec.ts` › `lista explicitamente Pedidos ao Fornecedor elegiveis para recebimento` |
-| DoD-135 | **D34/início**: preview por `pedidoFornecedorId` responde `200`; inexistente=`404 Pedido ao fornecedor não encontrado`, estado inválido=`409 Pedido ao fornecedor não está aguardando recebimento`, sem itens=`409 Pedido ao fornecedor sem itens operacionais previstos`; POST legado=`400 Validação falhou` com paths do Zod; POST canônico=`201 { recebimento, jaIniciado:false }` e um segundo lote do mesmo pedido também=`201` | `app/backend/test/integration/recebimento.e2e-spec.ts` › `preview e inicio de recebimento usam exclusivamente o Pedido ao Fornecedor` |
-| DoD-136 | **D34/BFF**: listagem mantém query e shape; preview e POST preservam path, método, `content-type`, status e bytes; nenhum handler troca `compraProgramadaId` por `pedidoFornecedorId` | `app/frontend/__tests__/bff-recebimento.test.ts` › `BFF de recebimento encaminha pedidoFornecedorId sem traducao silenciosa` |
+| DoD-134 | **D34/P7/consulta**: o modo explícito devolve somente `enviado`/`aguardando_recebimento` sem recebimento não cancelado, com `id`, `operacaoId`, `dataOperacao`, fornecedor e proveniência; lote cancelado não bloqueia, status `recebido` e lote ativo ficam fora; combinação com `operacaoId`/`status` retorna `400` | `app/backend/test/integration/pedido-fornecedor.e2e-spec.ts` › `lista explicitamente Pedidos ao Fornecedor elegiveis para recebimento` |
+| DoD-135 | **D34/início e envelope**: preview por `pedidoFornecedorId` responde `200`; inexistente=`404 Pedido ao fornecedor não encontrado`, estado inválido=`409 Pedido ao fornecedor não está aguardando recebimento`, sem itens=`409 Pedido ao fornecedor sem itens operacionais previstos`; POST legado=`400 Validação falhou`; POST canônico=`201` com chaves públicas exatas `recebimento`/`jaIniciado`, sem `nfId`; contexto pós-commit não usa vazio e os três eventos recebem ids/data canônicos | `app/backend/test/integration/recebimento.e2e-spec.ts` › `preview e inicio de recebimento usam exclusivamente o Pedido ao Fornecedor` |
+| DoD-136 | **D34/BFF**: listagem mantém query e shape; preview e POST preservam path, método, status e bytes; `content-type` é copiado somente quando presente e continua ausente quando o upstream o omite; nenhum handler troca `compraProgramadaId` por `pedidoFornecedorId` | `app/frontend/__tests__/bff-recebimento.test.ts` › `BFF de recebimento encaminha pedidoFornecedorId sem traducao silenciosa` |
 | DoD-137 | **D34/UI**: drawer acessível lista/seleciona o Pedido ao Fornecedor, mostra preview do snapshot, envia somente `pedidoFornecedorId` e, diante de `400`, exibe o erro sem navegar nem consumir o envelope como sucesso | `app/frontend/__tests__/recebimento.test.tsx` › `novo recebimento seleciona Pedido ao Fornecedor e envia seu id sem fallback` |
 | DoD-138 | **D34/Playwright**: a jornada conserva Grade+POST do pedido, cria/envia PF pelo helper backend autenticado, seleciona seu id na UI, exige status `201` antes do JSON e confirma `{ recebimento.id, jaIniciado:false }` | `app/frontend/e2e/jornada-operacional.spec.ts` › `jornada operacional completa` |
 
@@ -4286,12 +4300,14 @@ export const listarPedidosFornecedorSchema = z.union([
 ]);
 ```
 
-3. Em `pedido-fornecedor.service.ts`, declarar/exportar
+3. Em `pedido-fornecedor.service.ts`, acrescentar `notExists` ao import Drizzle (o `ne` real já está
+   importado) e declarar/exportar
    `STATUS_PEDIDO_FORNECEDOR_RECEBIVEL` e `pedidoFornecedorPodeReceber`. `listar` monta o `where`
    no backend; no ramo global usa `inArray`, e no ramo operacional preserva o filtro por
    `operacaoId`/`status`. Ambos projetam explicitamente o read model com joins em `fornecedores`,
-   `operacoes` e `compras_programadas`, mantendo paginação e `orderBy(desc(createdAt))`. Não filtrar
-   por existência de recebimento:
+   `operacoes` e `compras_programadas`, mantendo paginação e `orderBy(desc(createdAt))`. Somente o
+   ramo global acrescenta o recorte provisório 1:1 de P7 com `notExists`; o backend operacional e o
+   modelo 1:N herdados não são removidos:
 
 ```ts
 const selecaoResumo = {
@@ -4305,22 +4321,50 @@ const selecaoResumo = {
   compraProgramadaId: pedidosFornecedor.compraProgramadaId,
   numeroInternoCompra: comprasProgramadas.numeroInterno,
 };
+
+const semRecebimentoNaoCancelado = notExists(
+  this.db
+    .select({ um: sql`1` })
+    .from(recebimentos)
+    .where(and(
+      eq(recebimentos.pedidoFornecedorId, pedidosFornecedor.id),
+      isNull(recebimentos.deletedAt),
+      ne(recebimentos.status, 'cancelado'),
+    )),
+);
+
+const whereRecebiveis = and(
+  inArray(pedidosFornecedor.status, STATUS_PEDIDO_FORNECEDOR_RECEBIVEL),
+  isNull(pedidosFornecedor.deletedAt),
+  semRecebimentoNaoCancelado,
+);
 ```
 
    **DoD-134** usa a conexão de integração para inserir, na mesma Operação, um fixture de pedido em
-   cada um dos seis status e um fixture de recebimento ligado a um dos elegíveis — sem inventar
-   endpoints de lifecycle. Chama o modo global e exige somente os dois elegíveis, incluindo o
-   pedido com lote anterior e todos os ids/nomes. Depois chama combinações
+   cada um dos seis status e três pedidos adicionais: um elegível com recebimento não cancelado, um
+   elegível cujo único recebimento está `cancelado` e um em status `recebido` — sem inventar
+   endpoints de lifecycle. Chama o modo global e exige somente `enviado`/`aguardando_recebimento`
+   sem lote não cancelado; o pedido com lote ativo e o `recebido` ficam fora, enquanto o que só tem
+   lote cancelado volta à lista. Exige todos os ids/nomes e depois chama combinações
    `elegiveisRecebimento=true&operacaoId=...` e
    `elegiveisRecebimento=true&status=enviado`, esperando `400`. O teste operacional existente com
    `operacaoId` continua verde.
 
 4. Renomear controller/service para
    `previsaoDoPedidoFornecedor(pedidoFornecedorId)`. Primeiro buscar Pedido ao Fornecedor ativo e
-   aplicar o mesmo predicado de elegibilidade. Depois carregar sua compra/fornecedor/operação e
-   seus `pedidos_fornecedor_itens` com `leftJoin(itensComerciais)`. Quantidade e peso vêm somente
-   desse snapshot; o helper de metadados recebe `compraProgramadaId` apenas para unidade, balança,
-   origem e tipo de carga. Remover a consulta `existente` e `jaPossuiRecebimento`:
+   aplicar `pedidoFornecedorPodeReceber(status)` (a proteção de estado compartilhada; o
+   `notExists` de P7 pertence somente à listagem global/UI). Depois carregar sua
+   compra/fornecedor/operação e
+   seus `pedidos_fornecedor_itens` com `innerJoin(itensComerciais)`. Extrair essa leitura para
+   `carregarSnapshotPedidoFornecedor(tx, pedidoFornecedorId)`, usada sem bifurcação por preview e
+   início. Quantidade, peso, código e descrição vêm somente desse snapshot/join; o helper de
+   metadados recebe `compraProgramadaId` apenas para unidade, balança, origem e tipo de carga. Para
+   cada item, exigir
+   `metadados.get(itemComercialId)`; se faltar, lançar
+   `409 Pedido ao fornecedor com metadados operacionais incompletos`. É proibido preencher
+   `produtoCodigo`, `produtoDescricao`, `unidade`, `passaBalanca` ou `origemDescricao` com `''`,
+   `true`, `unidade` genérica ou qualquer outro fallback. Remover a consulta `existente` e
+   `jaPossuiRecebimento`:
 
 ```ts
 @Get('previsao/:pedidoFornecedorId')
@@ -4334,29 +4378,116 @@ previsao(@Param('pedidoFornecedorId') pedidoFornecedorId: string) {
    (`pedido.quantidadePrevista='12.000'`, `pedido.pesoPrevisto='850.000'`, disponibilidade
    atual=`99.000`) e exige `pesoPrevisto='850.000'` no preview e
    `recebimentos_itens.quantidadeEsperada='12.000'` na criação. O teste também prova que o insert
-   não recebe um campo de peso inexistente. O mutante que volta a `listarEsperadoDaCompra` falha.
+   não recebe um campo de peso inexistente. Um segundo caso remove o join/metadado de um item e
+   exige o `409` literal, sem objeto com código/descrição vazios. Os mutantes que voltam a
+   `listarEsperadoDaCompra`, `leftJoin` ou `?? ''` falham.
 
 5. Em `iniciar`, carregar a compra somente para metadados e ler os itens pelo
    `pedidoFornecedorId` dentro da mesma transação. Rejeitar pedido ausente (`404`), estado inválido
-   (`409`) e snapshot vazio (`409`). Manter duas criações válidas para o mesmo pedido, auditoria e
-   eventos pós-commit. Não adicionar `ON CONFLICT`, busca de lote anterior ou retorno idempotente.
-   O controller conserva `201`; o retorno segue:
+   (`409`) e snapshot vazio (`409`). Não adicionar `ON CONFLICT`, unicidade ou retorno idempotente:
+   o suporte 1:N herdado permanece preparado no backend, mas a emenda não cria segunda tentativa nem
+   asserção de segundo `201`. Preservar auditoria e eventos pós-commit. O controller conserva `201`;
+   separar resultado interno e público literalmente:
 
 ```ts
 type IniciarRecebimentoResultado = {
   recebimento: Recebimento;
   jaIniciado: false;
 };
+
+type InicioRecebimentoInterno = {
+  recebimento: Recebimento;
+  nfId: string | null;
+};
+
+type ContextoInicioPosCommit = {
+  recebimento: Recebimento;
+  compraProgramadaId: string;
+  dataOperacao: string;
+};
+```
+
+   A transação devolve `InicioRecebimentoInterno`. Depois do commit,
+   `carregarContextoInicioPosCommit(recebimentoId)` executa uma única consulta com
+   `innerJoin(pedidosFornecedor)` e `innerJoin(operacoes)`, projetando exatamente
+   `recebimento`, `pedidosFornecedor.compraProgramadaId` e `operacoes.data`. Se a consulta não
+   devolver linha, lança `InternalServerErrorException('Contexto canônico do recebimento não
+   encontrado após o commit')`; não usa `r[0]?.data ?? ''`, `r[0]?.id ?? ''`, optional chaining nem
+   valor substituto:
+
+```ts
+private async carregarContextoInicioPosCommit(
+  recebimentoId: string,
+): Promise<ContextoInicioPosCommit> {
+  const linha = await this.db
+    .select({
+      recebimento: recebimentos,
+      compraProgramadaId: pedidosFornecedor.compraProgramadaId,
+      dataOperacao: operacoes.data,
+    })
+    .from(recebimentos)
+    .innerJoin(
+      pedidosFornecedor,
+      eq(pedidosFornecedor.id, recebimentos.pedidoFornecedorId),
+    )
+    .innerJoin(operacoes, eq(operacoes.id, recebimentos.operacaoId))
+    .where(and(
+      eq(recebimentos.id, recebimentoId),
+      isNull(recebimentos.deletedAt),
+    ))
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (!linha) {
+    throw new InternalServerErrorException(
+      'Contexto canônico do recebimento não encontrado após o commit',
+    );
+  }
+  return linha;
+}
+```
+
+   A emissão e o retorno ficam copiáveis:
+
+```ts
+const interno: InicioRecebimentoInterno = await this.db.transaction(/* criação canônica */);
+const contexto = await this.carregarContextoInicioPosCommit(interno.recebimento.id);
+
+this.eventEmitter.emit(EVENTOS.RECEBIMENTO_INICIADO, {
+  recebimentoId: contexto.recebimento.id,
+  compraProgramadaId: contexto.compraProgramadaId,
+  dataOperacao: contexto.dataOperacao,
+});
+this.eventEmitter.emit(EVENTOS.RECEBIMENTO_ESTADO_ALTERADO, {
+  recebimentoId: contexto.recebimento.id,
+  statusAnterior: 'novo',
+  statusAtual: contexto.recebimento.status,
+});
+if (interno.nfId) {
+  this.eventEmitter.emit(EVENTOS.NF_FORNECEDOR_REGISTRADA, {
+    nfId: interno.nfId,
+    pedidoFornecedorId: contexto.recebimento.pedidoFornecedorId,
+    recebimentoId: contexto.recebimento.id,
+  });
+}
+
+return {
+  recebimento: contexto.recebimento,
+  jaIniciado: false,
+} satisfies IniciarRecebimentoResultado;
 ```
 
    **DoD-135** prepara pela conexão de integração os fixtures de rascunho e snapshot vazio que a
    API pública deliberadamente não cria, depois usa `supertest` e, antes de ler qualquer `body`,
    afirma cada `status`: preview `200`, id ausente `404`, rascunho `409`, snapshot vazio `409`, body
-   `{ compraProgramadaId }` `400`, body canônico `201` e repetição canônica `201`. Só depois de cada
-   status lê o body e exige as mensagens literais de D34; no `400`, exige
+   `{ compraProgramadaId }` `400` e body canônico `201`. Só depois de cada status lê o body e exige
+   as mensagens literais de D34; no `400`, exige
    `message === 'Validação falhou'` e `errors` apontando a ausência de `pedidoFornecedorId` e a
-   chave desconhecida. Por fim verifica ids distintos, `pedidoFornecedorId`, itens e
-   `jaIniciado === false`.
+   chave desconhecida. No sucesso, exige
+   `Object.keys(body).sort() === ['jaIniciado','recebimento']`, `nfId` ausente,
+   `pedidoFornecedorId`, itens e `jaIniciado === false`. O teste unitário captura os três eventos e
+   compara payloads exatos com ids/data sentinela; um caso sem a linha do join pós-commit exige o
+   erro explícito e zero evento, matando `?? ''`, projeção incompleta e vazamento de `nfId`. Os testes
+   herdados que exercitam a capacidade estrutural 1:N continuam verdes, sem ganhar exposição nova.
 
 6. Em `lib/operacao.ts`, substituir os tipos de preview/início pelos shapes de D34, adicionar
    `PedidoFornecedorResumoRecebivel` e manter `compraProgramadaId` apenas onde é proveniência.
@@ -4367,11 +4498,12 @@ type IniciarRecebimentoResultado = {
 
 ```ts
 async function responderBruto(upstream: Response) {
+  const headers = new Headers();
+  const contentType = upstream.headers.get('content-type');
+  if (contentType) headers.set('content-type', contentType);
   return new NextResponse(upstream.body, {
     status: upstream.status,
-    headers: {
-      'content-type': upstream.headers.get('content-type') ?? 'application/json',
-    },
+    headers,
   });
 }
 
@@ -4388,7 +4520,9 @@ export async function POST(req: NextRequest) {
    `pedidoFornecedorId` e prova igualdade do body upstream; um caso separado envia bytes com
    `compraProgramadaId` e prova que continuam iguais, sem tradução. O backend simulado devolve
    `201`, `400`, `404` e `409` com sentinelas de bytes diferentes; o teste exige status,
-   `content-type` e bytes exatos. O preview exige o path com o id do pedido. A listagem exige que
+   `content-type` e bytes exatos. Um quinto mutante devolve corpo/status **sem** header
+   `content-type` e exige `resposta.headers.has('content-type') === false`: o BFF nunca inventa
+   `application/json`. O preview exige o path com o id do pedido. A listagem exige que
    `elegiveisRecebimento=true` chegue intacto.
 
 7. Em `recebimento-carga-client.tsx`, remover `compras`, `fornecedoresMap`, `compraId`,
@@ -4405,10 +4539,14 @@ const payload: IniciarRecebimentoPayload = {
 };
 ```
 
-   Preservar o drawer e os blocos A–D do protótipo. O label/placeholder deve ser
+   A lista já chega do backend sem Pedido ao Fornecedor com recebimento não cancelado; não reimplementar
+   esse filtro no React nem oferecer ação para segundo lote (P7). Preservar o drawer e os blocos A–D
+   do protótipo. O label/placeholder deve ser
    `Pedido ao fornecedor`/`Selecione o pedido ao fornecedor`; a opção usa
    `${pedido.numero} — ${pedido.fornecedorNome} — ${pedido.dataOperacao}`; o quadro usa os itens do
-   preview. Desabilitar ações durante loading, sem pedido, sem NF ou sem itens. Exibir lista vazia
+   preview. O `Label` usa `htmlFor="pedido-fornecedor"` e o `SelectTrigger` Radix usa
+   `id="pedido-fornecedor"`, expondo `role="combobox"` e nome acessível. Desabilitar ações durante
+   loading, sem pedido, sem NF ou sem itens. Exibir lista vazia
    como `Nenhum Pedido ao Fornecedor aguardando recebimento.` e manter erro em `role="alert"`.
    `Criar Lote` e `Criar Lote e Ir para Balança` diferem somente na navegação após o mesmo `201`.
 
@@ -4440,7 +4578,14 @@ await backend(
 
 await page.goto(`${BASE_URL}/recebimento/recebimento-carga`);
 await page.getByRole('button', { name: 'Novo recebimento' }).click();
-await page.getByLabel('Pedido ao fornecedor').selectOption(pedidoFornecedor.id);
+const pedidoCombobox = page.getByRole('combobox', { name: 'Pedido ao fornecedor' });
+await pedidoCombobox.click();
+const pedidoOption = page.getByRole('option', {
+  name: new RegExp(pedidoFornecedor.numero.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+});
+await expect(pedidoOption).toBeVisible();
+await pedidoOption.click();
+await expect(pedidoCombobox).toContainText(pedidoFornecedor.numero);
 await expect(page.getByText(pedidoFornecedor.numero, { exact: false })).toBeVisible();
 await page.getByLabel('Número da NF-e').fill(`NF-${Date.now()}`);
 
@@ -4460,8 +4605,10 @@ expect(resultado.jaIniciado).toBe(false);
 expect(resultado.recebimento.id).toBeTruthy();
 ```
 
-   **DoD-138** é o acréscimo nomeado ao teste de jornada. Remover o preenchimento legado `#compra`;
-   não contornar a UI chamando o POST de recebimento diretamente. O objeto `resposta` do POST de
+   **DoD-138** é o acréscimo nomeado ao teste de jornada. O uso de
+   `getByRole('combobox')` → `getByRole('option')`, seguido da asserção do valor visível selecionado,
+   é obrigatório porque o componente real é Radix/Shadcn; `.selectOption()` é proibido. Remover o
+   preenchimento legado `#compra`; não contornar a UI chamando o POST de recebimento diretamente. O objeto `resposta` do POST de
    recebimento só chama `json()` depois da asserção literal `status() === 201`. Atualizar a
    evidência `09-recebimento` somente após o envelope canônico estar validado.
 
@@ -4483,16 +4630,31 @@ Set-Location ../..
 
 ## Task 23 — Fechamento: status, gate e PR
 
-**Files:** `docs/execucao/EXECUCAO-STATUS.md`, relatório de implementação.
+**Files do Worker:** código/testes/evidências já enumerados e
+`docs/evidencias/onda4-comercial/RELATORIO.md` (relatório no diretório de evidências; o Worker não
+edita `docs/execucao/`).
+
+**Arquivo exclusivo do Executor:** `docs/execucao/EXECUCAO-STATUS.md`.
 
 **Steps**
 
-1. Rodar o **Gate local completo** (seção seguinte) até verde.
-2. Escrever o relatório no formato de `pipeline-execucao.md §7`.
-3. Atualizar `EXECUCAO-STATUS.md` da Onda 4 para `aguardando_portao2` com o número do PR.
-4. Abrir o PR `feat(onda4): Comercial completo` → `develop`.
+1. O **Worker** roda o **Gate local completo** (seção seguinte) até verde.
+2. O **Worker** escreve `docs/evidencias/onda4-comercial/RELATORIO.md` no formato de
+   `pipeline-execucao.md §7`, inclui comandos, resultados, evidências e head testado; não edita
+   nenhum arquivo de `docs/execucao/`.
+3. O **Worker** commita código, testes, evidências e relatório, faz push e abre o PR
+   `feat(onda4): Comercial completo` → `develop`. Entrega ao Executor número do PR e SHA do head.
+4. O **Executor**, e somente ele, adquire o lock `onda4-status` por
+   `.codex/scripts/lock.ps1`, valida o resultado estruturado `status = 'acquired'`, confirma PR/head
+   e então atualiza `EXECUCAO-STATUS.md` para `aguardando_portao2` com o número do PR. O Executor
+   commita a transição em PR de coordenação quando exigido por `pipeline-execucao.md §4`, libera o
+   lock no `finally` com o mesmo token e valida `status = 'released'`.
+5. O Worker não edita, inclui byte a byte, commita ou faz push de
+   `docs/execucao/EXECUCAO-STATUS.md`; o Executor não altera código, testes, evidências ou relatório.
 
-**Commit:** `docs(onda4): relatório de implementação e status aguardando Portão 2`
+**Commit do Worker:** `docs(onda4): registrar relatório de implementação`
+
+**Commit de coordenação do Executor:** `chore(execucao): marcar Onda 4 aguardando Portão 2`
 
 ---
 
@@ -4560,7 +4722,7 @@ Abertura do PR:
 git push -u origin feature/onda4-comercial
 gh pr create --base develop --head feature/onda4-comercial \
   --title "feat(onda4): Comercial completo" \
-  --body-file docs/execucao/relatorios/onda4-comercial.md
+  --body-file docs/evidencias/onda4-comercial/RELATORIO.md
 ```
 
 ---
@@ -4594,7 +4756,10 @@ escrito na Task 15 sobre o `PedidoEditor`; DoD-131 é escrito na Task 13 sobre o
 BFF. A Task 21 executa a prova integrada Grade por código + criação do pedido, sem substituir esses
 testes dirigidos. DoD-132/133 são escritos na Task 22 nos testes unitários do DTO/service,
 DoD-134/135 nas integrações reais, DoD-136 no handler BFF executado, DoD-137 no cliente e
-DoD-138 no Playwright. O teste de browser exige o `201` antes do JSON; portanto um `400` já não consegue
+DoD-138 no Playwright. DoD-134 fixa o recorte 1:1 provisório de P7 sem remover a preparação 1:N do
+backend; DoD-135 prova contexto/eventos sem vazio e envelope público sem `nfId`; DoD-136 mantém
+`content-type` ausente quando o upstream não o envia; DoD-138 interage com o Select Radix por
+`combobox`/`option`. O teste de browser exige o `201` antes do JSON; portanto um `400` já não consegue
 produzir evidência falsa usando um id lido do corpo de erro.
 
 **Aderência à base real (emenda do Portão 1).** Todo código literal deste plano foi conferido contra
@@ -4664,10 +4829,12 @@ chegou legitimamente ao Recebimento e expôs outra costura herdada: o DTO NestJS
 o id da compra e o Playwright consumia o body antes de confirmar o status. A auditoria incluiu
 `pedido-fornecedor.dto/service/controller`, `recebimento.dto/service/controller`, schemas,
 integrações existentes, BFFs/tipos/tela, v1.1 §6.10 e `RecebimentoCarga.tsx`. D34 usa o snapshot
-`pedidos_fornecedor_itens`, mantém N recebimentos, cria consulta global **explícita** de elegíveis e
-elimina a escolha silenciosa de um pedido por compra. DoD-132..138 matam separadamente a chave
-legada, recomputação pela disponibilidade, status indevido, alias de preview, tradução no BFF,
-bloqueio depois do primeiro lote e leitura de JSON sem `201`.
+`pedidos_fornecedor_itens`, mantém o backend/schema preparado para 1:N e cria consulta global
+**explícita** que aplica o recorte UI 1:1 de P7: Pedido ao Fornecedor com recebimento não cancelado
+não é elegível, enquanto lote cancelado não bloqueia. DoD-132..138 matam separadamente a chave
+legada, recomputação pela disponibilidade, status indevido, alias de preview, tradução/header
+inventado no BFF, exposição indevida de segundo lote, vazios no contexto/evento, vazamento de `nfId`
+e leitura de JSON sem `201`.
 
 **Fronteira O4/O6 da emenda 10.** A rota de Recebimento pertence à Onda 6, mas o arquivo real já
 existe e é atravessado pela dívida 9/Task 21, cujo Playwright é gate da Onda 4. A emenda não declara
@@ -4677,8 +4844,9 @@ deixaria o gate O4 permanentemente vermelho e conservaria um contrato que contra
 isso a ownership literal está na Task 22 e a completude restante continua integral na Onda 6.
 
 **O que este plano deliberadamente não faz.** Não reescreve o motor de reserva/overbooking da Onda 1;
-não cria TTL de rascunho (AD-06 proíbe); não fecha as pendências abertas por conta própria — P5, P11
-e P15 recebem badge Provisório e ficam rastreáveis; não toca `/admin/usuarios` (dívida 6 da Onda 3
+não cria TTL de rascunho (AD-06 proíbe); não fecha as pendências abertas por conta própria — P7
+mantém UI 1:1/modelo 1:N preparado, e P5, P11 e P15 recebem badge Provisório e ficam rastreáveis;
+não toca `/admin/usuarios` (dívida 6 da Onda 3
 segue aberta e reprogramada por D26, sem invenção de AD); não adiciona cartão em `/admin/parametros`,
 preservando os 9 do protótipo; não cria unicidade Pedido ao Fornecedor→Recebimento, não escolhe
 Pedido ao Fornecedor por Compra Programada e não declara a Onda 6 entregue.
@@ -4693,9 +4861,12 @@ resolvida por D6 com um conjunto canônico único, evitando três catálogos inc
 transação e chamam `detalhar` depois dela; o teste e2e verifica o shape retornado, impedindo a
 repetição do erro de visibilidade já corrigido na Task 9. (f) *Dois ids parecem intercambiáveis* —
 D34 mantém `compraProgramadaId` apenas como proveniência e torna `pedidoFornecedorId` a única chave
-do início; DTO estrito, proxy byte a byte e teste do request impedem regressão. (g) *N recebimentos*
-— consulta/preview não escondem pedidos com lote anterior e o teste integrado cria dois ids
-distintos, preservando D3 sem decidir P8/P9.
+do início; DTO estrito, proxy byte a byte e teste do request impedem regressão. (g) *P7 ainda aberta*
+— a listagem/UI exclui pedido com recebimento não cancelado e não oferece segundo lote; lote
+cancelado volta a ser elegível, enquanto o backend/schema e seus testes herdados apenas permanecem
+preparados para 1:N, sem promover o comportamento antes da confirmação. (h) *Contexto/eventos e
+proxy* — joins obrigatórios falham fechado sem `?? ''`, `nfId` fica interno e o BFF não cria
+`content-type` ausente.
 
 **Verificação da regra "Zero".** O escopo verificável termina antes desta Self-Review; assim a
 própria declaração de conformidade não pode se autoacusar. O comando literal usado pelo Planner e
@@ -4798,6 +4969,6 @@ representante→rota no fluxo de pedido"*) deixou de ser informativa e passou a 
 de representante e rota em `detalhar`/`listar`), task (Task 6 passo 7 no backend, Task 15 passo 5 na
 UI) e DoD nomeado (**DoD-119** backend, **DoD-120** UI). O contador de divergências permanece 7.
 
-Pendências tratadas com parâmetro/badge, sem AD nova: **P5** (política de preço em adendo — badge no
-modal, D9), **P11** (catálogo oficial — seed Provisório, D5), **P15** (marco de fechamento do pedido
-— badge no espelho, D19).
+Pendências tratadas sem AD nova: **P5** (política de preço em adendo — badge no modal, D9), **P7**
+(UI 1:1 e modelo 1:N apenas preparado, D34), **P11** (catálogo oficial — seed Provisório, D5) e
+**P15** (marco de fechamento do pedido — badge no espelho, D19).
