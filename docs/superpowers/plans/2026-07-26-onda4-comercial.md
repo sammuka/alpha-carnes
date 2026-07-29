@@ -50,6 +50,7 @@ Jest (backend e frontend) · Playwright (e2e).
 | Emenda 8 | Gate local após a Task 21 revelou que o teste herdado `disponibilidade.test.tsx` ainda fixava a UI e o payload anteriores à Task 18: título antigo, lista sem `operacaoId` e Grade visível por padrão. A Task 18 passa a realinhar esse teste sem removê-lo nem afrouxá-lo: resposta atual da lista + mapa, navegação explícita para Grade, saldo real no DOM e atualização `reserva_disponibilidade_atualizada` sem novo fetch da lista (**DoD-128**); o mapa pode recarregar, como exige a implementação aprovada |
 | Emenda 9 | A jornada real da Task 21 chegou à Grade pelo código do item, mas a criação do pedido recebeu `400`: `GET /comercial/compras-programadas?pageSize=100` devolvia `operacaoId` sem `dataOperacao`; o BFF apenas repassava esse contrato incompleto e `PedidoEditor.payloadNovo()` enviava `undefined` ao schema do backend. **D33** corrige a origem e alinha toda a API pública: lista, detalhe e mutações derivam a data de `operacoes.data` pelo `operacaoId`; confirmação preserva seu envelope tipado; nenhum BFF/editor fabrica fallback. **DoD-129/130/131** fixam todos os retornos, o consumo real no editor e o envelope BFF, e a Task 21 preserva Grade por código + criação do pedido como prova final. `/gestao/compras` permanece ownership da Onda 5, com ordem de integração explícita após o merge O4 |
 | Emenda 10 | A mesma microprova da Task 21 passou por Grade + `POST /pedidos`, abriu Recebimento e recebeu `400`: o contrato Onda 1/D3 exige `pedidoFornecedorId`, mas `IniciarRecebimentoPayload`, a tela e o Playwright ainda consultavam/selecionavam Compra Programada e enviavam `compraProgramadaId`. **D34** corrige a costura herdada sem fallback: consulta explicitamente Pedidos ao Fornecedor elegíveis (`enviado`/`aguardando_recebimento`) sob o recorte UI 1:1 de P7, preview e itens nascem do snapshot do Pedido ao Fornecedor, contexto/eventos pós-commit falham fechado, BFF preserva método/status/body/header sem inventar `content-type`, envelope não vaza `nfId` e o Playwright usa o Select Radix real. **DoD-132..138** cobrem DTO, listagem/preview/início, BFF, UI e Playwright; a prova D33 Grade + criação do pedido continua una e anterior. A correção fica na Onda 4 porque bloqueia seu gate E2E, sem antecipar a completude funcional da Onda 6 nem tocar a Onda 5 |
+| Emenda 11 | A execução pós-D34 chegou pela UI até a segunda peça em `para_corte` e gerou a evidência 11, mas o trecho herdado seguinte navegou para `/operacao/corte`, que o `next.config.ts` redireciona a `/desossa/pesagem-destinacao`; a página de destino ainda é `PlaceholderPage` e pertence integralmente à Onda 7. **D35** torna `para_corte` o handoff ativo e verificável da jornada O4, remove por inteiro as etapas 12–19 herdadas (Desossa, Carga, Faturamento e a falsa conclusão de auditoria), preserva todas as provas 1–11/D33/D34 e registra as continuações nas ondas donas sem antecipar código. **DoD-139/140** fixam API + UI + screenshot/relatório do último estado real e uma microprova executável que falha se a jornada voltar a navegar ou chamar APIs das Ondas 7/9/10 |
 | Worktree da Emenda 4 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix` |
 | Branch da Emenda 4 | `plan/onda4-task13-contract` |
 | Base da Emenda 4 | `origin/develop` = `c2fe0e09f230e7748d532d2292e059f027941e0e` |
@@ -65,6 +66,10 @@ Jest (backend e frontend) · Playwright (e2e).
 | Worktree da Emenda 10 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-recebimento-contract` |
 | Branch da Emenda 10 | `plan/onda4-recebimento-contract` |
 | Base da Emenda 10 | `origin/develop` = `83270b75f480f0a2a3fb57306f895e88f5d4927d` |
+| Worktree da Emenda 11 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-e2e-handoff` |
+| Branch da Emenda 11 | `plan/onda4-e2e-handoff` |
+| Base da Emenda 11 | `origin/develop` = `2cad85628c2b05336f549dc517f4b4a211aa9583` |
+| Checkpoint de execução obrigatório | `feature/onda4-comercial` @ `be4df89f` (D34 concluída); D35 é executada imediatamente depois desse commit, sem reexecutar nem reescrever D33/D34 |
 
 ---
 
@@ -113,10 +118,12 @@ Vinculantes, na ordem da [constituição](../../governance/constituicao.md):
 ## Decisões de design (fixadas — só reabrir se houver quebra)
 
 **D1 — Escopo funcional é o das linhas 3–7 da matriz.** As cinco rotas Comerciais continuam sendo
-a entrega O4. A única costura externa tocada é a abertura já existente de
+a entrega O4. As únicas costuras externas tocadas são a abertura já existente de
 `/recebimento/recebimento-carga`, estritamente nos arquivos/contratos de D34 porque a jornada
 obrigatória da Task 21 a atravessa e o cliente legado contradiz D3; isso não antecipa a entrega da
-linha 14/Onda 6. Backend alterado apenas onde as cinco telas ou essa costura exigem.
+linha 14/Onda 6, e a retirada documental/teste do trecho herdado pós-`para_corte`, estritamente
+nos arquivos de jornada/evidência de D35. Backend alterado apenas onde as cinco telas ou D34 exigem;
+D35 não altera código de produto, rota, redirect, BFF, schema ou API.
 
 **D2 — A Onda 1 não é reescrita.** `PedidosService.planejarSobLock`, `persistirItensPlanejados`,
 `OverbookingChallengeException`, `reservas_disponibilidade` tipadas e `pendencias_overbooking`
@@ -761,6 +768,57 @@ o request body exato e verifica `{ recebimento.id, jaIniciado: false }`. Isso ma
 mutante: chave legada, mapeamento silencioso e leitura do body de uma resposta de erro como se fosse
 sucesso.
 
+**D35 — A jornada narrativa da O4 termina no handoff real `para_corte`; não usa implementação
+legada de ondas futuras como prova de completude.** O checkpoint executável é o commit D34
+`be4df89f` da branch `feature/onda4-comercial`. Nesse objeto, as provas 1–11 já percorrem, em ordem:
+login, dashboard, quatro cadastros, Grade da Disponibilidade, criação real do Pedido, criação real
+do Recebimento a partir do Pedido ao Fornecedor, primeira peça associada/etiquetada e segunda peça
+destinada à Desossa. A UI exibe `statusPeca = 'para_corte'`, mas o passo seguinte faz
+`page.goto('/operacao/corte')`; o `next.config.ts` redireciona essa URL a
+`/desossa/pesagem-destinacao`, cujo `page.tsx` ainda renderiza `PlaceholderPage`. Aceitar a página,
+seguir por APIs antigas de corte ou chamar esse trecho de E2E completo daria falso verde e violaria
+os Princípios I e II.
+
+O limite ativo fica fixado em três camadas, todas obrigatórias e sobre a mesma `pecaCorte.id`:
+
+1. **API real:** depois de clicar `Desossa`, a jornada chama, pelo helper autenticado já existente,
+   `GET /operacao/pesagem/pecas/:id` e exige `id === pecaCorte.id` e
+   `statusPeca === 'para_corte'`. Nenhum objeto preparado no cliente substitui essa releitura.
+2. **UI real:** a tela permanece em `/recebimento/pesagem-destinacao`, exibe
+   `[data-testid="peca-status"]` com `para_corte`, mantém visível a identificação da peça e permite
+   capturar `11-pesagem-para-corte.png` somente depois das duas asserções da API.
+3. **evidência real:** `docs/evidencias/alpha-jornada-e2e/index.html` contém exatamente 11 seções
+   `.step`, referencia `11-pesagem-para-corte.png`, registra a peça e o status canônico no contexto
+   e declara explicitamente `Limite ativo da Onda 4: para_corte`. O relatório não declara Corte,
+   Carga, Faturamento ou auditoria desses domínios como validados.
+
+As etapas herdadas 12–19 são **removidas como bloco coeso**, não desabilitadas:
+
+| trecho herdado removido | onda dona | contrato que o plano futuro deve transformar em DoD testável antes de executar |
+|---|---|---|
+| Evidência 12 — Corte/Transformação, navegação `/operacao/corte` → `/desossa/pesagem-destinacao`, criação/pesagem/associação/etiqueta de subitem e conclusão | **Onda 7 — Desossa** (matriz 17–19) | Plano tático O7 deve cobrir painel/Modo TV, regra exclusiva parametrizada, checklist, divergência, peça mãe, etiqueta e rastreabilidade ponta a ponta; a rota deixa de ser placeholder somente no PR O7 aprovado |
+| Evidências 13–15 — planejamento, conferência/fechamento e detalhe da carga, inclusive preparação por API | **Onda 9 — Carga** (matriz 23–25) | Plano tático O9 deve cobrir UI fiel de planejamento, bipagem/conferência, congelamento após fechamento e envio para faturamento; backend legado não vale sozinho como DoD de UI |
+| Evidências 16–18 — consolidação, emissão e cancelamento fiscal | **Onda 10 — Faturamento** (matriz 26–29) | Plano tático O10 deve cobrir adapter EISS/flag RTC, Notas/XML, Seguro F6b, liberação e checklist; fake determinístico continua obrigatório no CI, mas não autoriza a O4 a declarar a UI futura pronta |
+| Evidência 19 — abertura genérica de `/admin/auditoria` e texto incorreto que a chamava de placeholder | **Tela entregue na Onda 3; auditoria de domínio é responsabilidade transversal das Ondas 7/9/10** | A tela filtrável existente não prova que eventos futuros existem. Cada plano O7/O9/O10 deve mapear suas mutações críticas a auditoria transacional e teste próprio; a O4 não recaptura a tela para simular essa prova |
+
+Essa reestruturação preserva completude **por escopo**: a O4 continua completa nas cinco telas
+Comerciais e nas costuras D33/D34 que seu gate realmente atravessa; não degrada uma feature da O4.
+As features futuras saem inteiras da jornada O4 e permanecem inteiras nas ondas donas, conforme o
+grafo canônico O6 → O7 → O9 e O8 + O9 → O10. Não se cria `skip`, `test.fixme`, teste condicionado, aceitação de
+placeholder, chamada direta às APIs futuras, comentário com bloco morto nem variável residual de
+subitem/caminhão/faturamento.
+
+A guarda de fronteira tem duas partes executáveis. Durante a jornada, o listener de navegação do
+frame principal acumula os caminhos realmente visitados e, ao final, exige zero entrada com os
+prefixos montados em runtime `desossa`, `carga`, `faturamento` ou com os aliases legados
+`operacao/corte`, `operacao/expedicao`, `operacao/faturamento`; prefetch e chamadas de assets não
+contam como navegação. Um segundo teste Playwright, sem subir outra jornada, lê
+`jornada-operacional.spec.ts` até o marcador `// D35: contrato estático da fronteira` e falha se
+encontrar `page.goto(...)` para esses caminhos ou chamada do helper `backend(...)` aos namespaces
+`/operacao/corte`, `/operacao/expedicao` ou `/operacao/faturamento`. Os fragmentos dos caminhos são
+concatenados no próprio teste para que a tabela de mapeamento do relatório não se autoacuse.
+Assim, reintroduzir UI ou API futura no fluxo quebra o gate antes de produzir relatório.
+
 ---
 
 ## Referências do protótipo (tela → arquivo `.tsx` do protótipo) — Princípio I
@@ -1002,10 +1060,34 @@ app/frontend/__tests__/menu-rbac.test.ts       (+ teste nomeado de DoD-113 — T
 app/frontend/__tests__/disponibilidade.test.tsx (realinha contrato herdado ao mapa + grade e
                                                  preserva atualização realtime sem refetch da lista)
 app/frontend/__tests__/recebimento.test.tsx       (seleção, preview, payload e acessibilidade D34)
-app/frontend/e2e/jornada-operacional.spec.ts   (dívida 9 da Onda 3 + fim da rota `/pedidos/novo`)
+app/frontend/e2e/jornada-operacional.spec.ts   (dívida 9 da Onda 3 + D33/D34 + limite D35
+                                                 em `para_corte`, sem ondas futuras)
 app/frontend/e2e/telas-migradas.spec.ts                          (dívida 9 da Onda 3)
 app/frontend/e2e/telas-reais.spec.ts                             (dívida 9 da Onda 3)
 ```
+
+### Evidência narrativa alterada por D35
+
+```text
+docs/evidencias/alpha-jornada-e2e/
+├── 01-login.png
+├── 02-dashboard.png
+├── 03-clientes.png
+├── 04-fornecedores.png
+├── 05-itens-compra.png
+├── 06-itens-comerciais.png
+├── 07-disponibilidade.png
+├── 08-pedido.png
+├── 09-recebimento.png
+├── 10-pesagem-associada.png
+├── 11-pesagem-para-corte.png
+└── index.html
+```
+
+Arquivos `12-*` a `19-*` não são gerados, copiados nem mantidos no artefato corrente: o diretório
+é limpo deterministicamente no início da jornada. A matriz de handoff futuro vive no `index.html`
+e no `docs/evidencias/onda4-comercial/RELATORIO.md`, sem screenshot que sugira execução de
+O7/O9/O10.
 
 ### Frontend — movido (1 rota BFF)
 
@@ -1127,11 +1209,14 @@ via `test/helpers/test-app.ts`.
 | DoD-135 | **D34/início e envelope**: preview por `pedidoFornecedorId` responde `200`; inexistente=`404 Pedido ao fornecedor não encontrado`, estado inválido=`409 Pedido ao fornecedor não está aguardando recebimento`, sem itens=`409 Pedido ao fornecedor sem itens operacionais previstos`; POST legado=`400 Validação falhou`; POST canônico=`201` com chaves públicas exatas `recebimento`/`jaIniciado`, sem `nfId`; contexto pós-commit não usa vazio e os três eventos recebem ids/data canônicos | `app/backend/test/integration/recebimento.e2e-spec.ts` › `preview e inicio de recebimento usam exclusivamente o Pedido ao Fornecedor` |
 | DoD-136 | **D34/BFF**: listagem mantém query e shape; preview e POST preservam path, método, status e bytes; `content-type` é copiado somente quando presente e continua ausente quando o upstream o omite; nenhum handler troca `compraProgramadaId` por `pedidoFornecedorId` | `app/frontend/__tests__/bff-recebimento.test.ts` › `BFF de recebimento encaminha pedidoFornecedorId sem traducao silenciosa` |
 | DoD-137 | **D34/UI e fidelidade estrutural**: o drawer tem o título literal `Novo Recebimento de Carga`; expõe, em ordem DOM, os cabeçalhos `A — Pedido ao Fornecedor`, `B — Nota Fiscal recebida`, `C — Transporte` e `D — Observações internas`; não conserva o título curto nem as seções numeradas 1–4; lista/seleciona o Pedido ao Fornecedor, mostra preview do snapshot, envia somente `pedidoFornecedorId` e, diante de `400`, exibe o erro sem navegar nem consumir o envelope como sucesso | `app/frontend/__tests__/recebimento.test.tsx` › `novo recebimento seleciona Pedido ao Fornecedor e envia seu id sem fallback` |
-| DoD-138 | **D34/Playwright**: a jornada conserva Grade+POST do pedido, cria/envia PF pelo helper backend autenticado, seleciona seu id na UI, exige status `201` antes do JSON e confirma `{ recebimento.id, jaIniciado:false }` | `app/frontend/e2e/jornada-operacional.spec.ts` › `jornada operacional completa` |
+| DoD-138 | **D34/Playwright**: a jornada conserva Grade+POST do pedido, cria/envia PF pelo helper backend autenticado, seleciona seu id na UI, exige status `201` antes do JSON e confirma `{ recebimento.id, jaIniciado:false }` | `app/frontend/e2e/jornada-operacional.spec.ts` › `cria dados, executa a O4 ate o handoff para_corte e gera evidencia HTML` |
+| DoD-139 | **D35/handoff real**: sobre a mesma segunda peça, a UI e `GET /operacao/pesagem/pecas/:id` confirmam `para_corte`; a URL permanece em Pesagem, a evidência 11 só nasce depois da releitura canônica e o HTML final contém exatamente 11 passos + contexto/limite explícito | `app/frontend/e2e/jornada-operacional.spec.ts` › `cria dados, executa a O4 ate o handoff para_corte e gera evidencia HTML` |
+| DoD-140 | **D35/fronteira sem falso verde**: a jornada não navega para aliases/rotas de Desossa, Carga ou Faturamento, não chama APIs futuras e não conserva símbolos/ids das etapas 12–19; relatório mapeia O7/O9/O10 e auditoria transversal sem alegar validação | `app/frontend/e2e/jornada-operacional.spec.ts` › `contrato estatico impede a jornada O4 de atravessar ondas futuras` |
 
-**69 itens de DoD** (DoD-70 a DoD-138), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
+**71 itens de DoD** (DoD-70 a DoD-140), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
 do CI. A numeração é histórica: DoD-128 foi acrescentado pela emenda 8, DoD-129/130/131 pela
-emenda 9 e DoD-132..138 pela emenda 10, sem renumerar os contratos anteriores.
+emenda 9, DoD-132..138 pela emenda 10 e DoD-139/140 pela emenda 11, sem renumerar os contratos
+anteriores.
 
 ---
 
@@ -4680,7 +4765,7 @@ expect(resultado.jaIniciado).toBe(false);
 expect(resultado.recebimento.id).toBeTruthy();
 ```
 
-   **DoD-138** é o acréscimo nomeado ao teste de jornada. O uso de
+   **DoD-138** permanece no teste de jornada, cujo nome final é fixado por D35. O uso de
    `getByRole('combobox')` → `getByRole('option')`, seguido da asserção do valor visível selecionado,
    é obrigatório porque o componente real é Radix/Shadcn; `.selectOption()` é proibido. Remover o
    preenchimento legado `#compra`; não contornar a UI chamando o POST de recebimento diretamente. O objeto `resposta` do POST de
@@ -4703,7 +4788,203 @@ Set-Location ../..
 
 ---
 
-## Task 23 — Fechamento: status, gate e PR
+## Task 23 — D35: encerrar a jornada O4 no handoff real `para_corte`
+
+**Checkpoint:** executar imediatamente sobre `feature/onda4-comercial` @ `be4df89f`, depois da
+Task 22/D34. Não reescrever commits anteriores nem repetir D33/D34.
+
+**Files:** `app/frontend/e2e/jornada-operacional.spec.ts`,
+`docs/evidencias/alpha-jornada-e2e/`,
+`docs/evidencias/onda4-comercial/RELATORIO.md`.
+
+**Ownership:** teste e evidência da O4 somente. Nenhum arquivo de `src/`, backend, BFF, rota,
+redirect, schema, migration, `docs/execucao/`, plano de O7/O9/O10 ou protótipo é alterado.
+
+**Steps**
+
+1. Em `jornada-operacional.spec.ts`, renomear o teste principal para
+   `cria dados, executa a O4 ate o handoff para_corte e gera evidencia HTML`. Preservar byte a byte
+   a ordem lógica e as asserções D33/D34 entre login e criação da segunda peça; D35 começa somente
+   depois do clique `Desossa`.
+
+2. Remover o estado morto das etapas futuras:
+
+   - apagar `PedidoDetalhe` e a leitura do detalhe usada apenas para obter
+     `pedidoVendaItemId`;
+   - em `RunContext` e no array `ids`, remover `pedidoVendaItemId`, `subitemId` e `caminhaoId`;
+   - remover as variáveis `pedidoVendaItemId`, `subitem`, `caminhao` e todo o bloco iniciado por
+     `page.goto(\`${BASE_URL}/operacao/corte\`)` até a captura `19-auditoria`;
+   - manter `pecaId` (primeira peça associada) e `pecaCorteId` (handoff);
+   - não envolver o bloco removido em condição, comentário, função sem chamada ou teste
+     desabilitado.
+
+3. Registrar as navegações reais do frame principal no início do teste, antes do primeiro
+   `page.goto`, sem considerar prefetch:
+
+```ts
+const caminhosVisitados: string[] = [];
+page.on('framenavigated', (frame) => {
+  if (frame === page.mainFrame()) {
+    caminhosVisitados.push(new URL(frame.url()).pathname);
+  }
+});
+```
+
+4. Depois do clique `Desossa` e da asserção UI já existente, reler a mesma peça pela API e só então
+   capturar a evidência 11:
+
+```ts
+type PecaNoHandoff = { id: string; statusPeca: string };
+
+await expect(page.getByTestId('peca-status')).toContainText('para_corte', {
+  timeout: 10_000,
+});
+const pecaNoHandoff = await backend<PecaNoHandoff>(
+  request,
+  auth.cookieHeader,
+  'GET',
+  `/operacao/pesagem/pecas/${pecaCorte.id}`,
+);
+expect(pecaNoHandoff).toEqual(expect.objectContaining({
+  id: pecaCorte.id,
+  statusPeca: 'para_corte',
+}));
+await expect(page).toHaveURL(
+  new RegExp(`/recebimento/pesagem-destinacao\\?recebimentoId=${recebimentoId}`),
+);
+await page.getByRole('button', { name: 'Confirmar e imprimir etiqueta' }).click();
+await capture(
+  page,
+  steps,
+  '11-pesagem-para-corte',
+  'Handoff para Desossa',
+  'Provar o último estado real da Onda 4 antes da Desossa.',
+  'A segunda peça foi pesada e destinada à Desossa pela UI; a API canônica foi relida.',
+  'Peça confirmada em para_corte na UI e na API. A continuação pertence à Onda 7.',
+);
+```
+
+   O texto antigo que dizia apenas “pesada, pronta para ser cortada” é removido: a evidência nasce
+   depois do estado efetivo `para_corte`, não antes.
+
+5. Ainda no teste principal, construir os prefixos em runtime e provar que nenhuma navegação do
+   frame principal atravessou a fronteira:
+
+```ts
+const caminhosFuturos = [
+  ['desossa'],
+  ['carga'],
+  ['faturamento'],
+  ['operacao', 'corte'],
+  ['operacao', 'expedicao'],
+  ['operacao', 'faturamento'],
+].map((partes) => `/${partes.join('/')}`);
+
+const navegacoesFuturas = caminhosVisitados.filter((caminho) =>
+  caminhosFuturos.some((prefixo) =>
+    caminho === prefixo || caminho.startsWith(`${prefixo}/`),
+  ),
+);
+expect(navegacoesFuturas).toEqual([]);
+expect(steps).toHaveLength(11);
+```
+
+   Essa asserção é executada antes de `writeReport`; se houver redirect ao placeholder ou qualquer
+   rota futura, o HTML não é aceito como evidência verde.
+
+6. Em `writeReport`, substituir “Cobertura e Lacunas” por `Limite ativo e próximos handoffs`.
+   O primeiro item declara literalmente:
+   `Onda 4 validada até o status para_corte: UI, API e evidência 11 sobre a mesma peça.` Depois,
+   renderizar uma tabela com as quatro linhas de D35: Desossa→O7/matriz 17–19,
+   Carga→O9/matriz 23–25, Faturamento→O10/matriz 26–29 e auditoria futura como DoD transversal das
+   respectivas ondas (a tela `/admin/auditoria` já foi entregue pela Onda 3 e não prova eventos que
+   ainda não existem). Nenhuma linha usa “validado”, “concluído” ou “verde” para O7/O9/O10.
+
+   `RunContext` ganha `limiteAtivo: 'para_corte'`; o bloco de rastreabilidade exibe
+   `Limite ativo da Onda 4` e `Peça no handoff`. Imediatamente após `writeReport`, validar o artefato:
+
+```ts
+const relatorioPath = path.join(EVIDENCE_DIR, 'index.html');
+expect(fs.existsSync(relatorioPath)).toBe(true);
+const relatorio = fs.readFileSync(relatorioPath, 'utf8');
+expect((relatorio.match(/<section class="step"/g) ?? [])).toHaveLength(11);
+expect(relatorio).toContain('Limite ativo da Onda 4: para_corte');
+expect(relatorio).toContain('11-pesagem-para-corte.png');
+expect(relatorio).not.toMatch(
+  /(?:src|id)="(?:12|13|14|15|16|17|18|19)-/,
+);
+```
+
+7. Acrescentar, ao final do arquivo e fora do teste narrativo, a microprova estática. O marcador
+   abaixo é literal; ele impede que o teste inspecione a própria implementação:
+
+```ts
+// D35: contrato estático da fronteira
+test('contrato estatico impede a jornada O4 de atravessar ondas futuras', async () => {
+  const arquivo = fs.readFileSync(__filename, 'utf8');
+  const fonteDaJornada = arquivo.split('// D35: contrato estático da fronteira')[0] ?? '';
+  const escaparRegex = (valor: string) =>
+    valor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const caminhos = [
+    ['operacao', 'corte'],
+    ['operacao', 'expedicao'],
+    ['operacao', 'faturamento'],
+    ['desossa'],
+    ['carga'],
+    ['faturamento'],
+  ].map((partes) => `/${partes.join('/')}`);
+  for (const caminho of caminhos) {
+    expect(fonteDaJornada).not.toMatch(
+      new RegExp(`page\\.goto\\([^\\n]*${escaparRegex(caminho)}`),
+    );
+  }
+
+  const namespacesApi = [
+    ['operacao', 'corte'],
+    ['operacao', 'expedicao'],
+    ['operacao', 'faturamento'],
+  ].map((partes) => `/${partes.join('/')}`);
+  for (const namespace of namespacesApi) {
+    expect(fonteDaJornada).not.toMatch(
+      new RegExp(`backend[\\s\\S]{0,320}${escaparRegex(namespace)}`),
+    );
+  }
+
+  expect(fonteDaJornada).not.toMatch(
+    new RegExp(`\\b${['subitem', 'Id'].join('')}\\b`),
+  );
+  expect(fonteDaJornada).not.toMatch(
+    new RegExp(`\\b${['caminhao', 'Id'].join('')}\\b`),
+  );
+});
+```
+
+   A concatenação impede que os próprios vetores de proteção sejam confundidos com navegação ou
+   API ativa. O teste falha se alguém recolocar a continuação antiga ou seus ids mortos.
+
+8. Atualizar `docs/evidencias/onda4-comercial/RELATORIO.md` com uma seção `Handoff E2E D35`,
+   contendo: checkpoint `be4df89f`; comando dirigido e resultado; API/UI `para_corte`; screenshot
+   11; total 11; matriz futura O7/O9/O10; nota de que `/admin/auditoria` é tela O3 e que os eventos
+   das futuras mutações ficam nos DoDs transversais das ondas donas. Não apagar resultados,
+   comandos, screenshots nem cobertura dedicados já registrados para as cinco telas O4/D33/D34.
+
+9. Rodar o gate dirigido a partir do ambiente canônico já usado por D34:
+
+```powershell
+Set-Location app/frontend
+npx playwright test e2e/jornada-operacional.spec.ts
+Set-Location ../..
+```
+
+   Resultado exigido: **2 testes aprovados**, `index.html` com 11 seções e zero navegação futura.
+   Em seguida rodar o Playwright completo no Gate local; não substituir um pelo outro.
+
+**Commit:** `test(onda4): fixar handoff e2e no status para_corte`
+
+---
+
+## Task 24 — Fechamento: status, gate e PR
 
 **Files do Worker:** código/testes/evidências já enumerados e
 `docs/evidencias/onda4-comercial/RELATORIO.md` (relatório no diretório de evidências; o Worker não
@@ -4749,6 +5030,7 @@ cd app/backend && HARDWARE_FAKE=1 NFSE_FAKE=1 npm run test:cov && cd ../..
 cd app/frontend && npm run test -- --runInBand bff-onda4.test.ts onda4-pedidos.test.tsx disponibilidade.test.tsx onda4-disponibilidade.test.tsx && cd ../..
 cd app/frontend && npm run test -- --runInBand bff-recebimento.test.ts recebimento.test.tsx && cd ../..
 cd app/frontend && npm run test && cd ../..
+cd app/frontend && npx playwright test e2e/jornada-operacional.spec.ts && cd ../..
 cd app/frontend && npx playwright test && cd ../..
 npm run build
 npm audit --omit=dev --audit-level=high        # AD-08
@@ -4789,6 +5071,18 @@ cd app/backend && npm run rbac:snapshot && git diff --exit-code src/common/rbac/
 
 # Cobertura acima do gate
 rg -n "All files" app/backend/coverage/lcov-report/index.html
+
+# D35 — o artefato corrente termina em 11 e não conserva screenshots futuros.
+$passosD35 = @(Get-ChildItem docs/evidencias/alpha-jornada-e2e -Filter '*.png')
+if ($passosD35.Count -ne 11) { throw "D35 exige 11 screenshots; encontrados $($passosD35.Count)" }
+if (Get-ChildItem docs/evidencias/alpha-jornada-e2e -Filter '*.png' |
+    Where-Object { $_.BaseName -match '^(12|13|14|15|16|17|18|19)-' }) {
+  throw 'D35 encontrou evidência de onda futura no artefato O4'
+}
+$relatorioD35 = Get-Content -Raw docs/evidencias/alpha-jornada-e2e/index.html
+if ($relatorioD35 -notmatch 'Limite ativo da Onda 4: para_corte') {
+  throw 'D35 sem limite ativo explícito no relatório'
+}
 ```
 
 Abertura do PR:
@@ -4839,6 +5133,10 @@ produzir evidência falsa usando um id lido do corpo de erro.
 DoD-137 também deixa de aceitar a estrutura herdada: exige o título literal, os quatro cabeçalhos
 A–D em ordem DOM, a ausência das seções numeradas 1–4 e a permanência dos controles funcionais
 nos blocos definidos, sem enfraquecer as provas de seleção, payload, sucesso e erro.
+DoD-139/140 são escritos na Task 23 sobre o checkpoint D34 `be4df89f`: o primeiro fecha o
+handoff pela mesma peça na API/UI/evidência, e o segundo impede navegação ou API de ondas futuras.
+O teste dirigido executa ambos; o Playwright completo os repete dentro do gate, sem substituir
+nenhuma prova backend/frontend dedicada das Tasks anteriores.
 
 **Aderência à base real (emenda do Portão 1).** Todo código literal deste plano foi conferido contra
 `develop` no worktree em `158da75`, não contra a memória do plano mestre: assinatura de
@@ -4923,6 +5221,15 @@ mockados, sem suporte no DTO desta abertura, não são materializados com dados 
 deixaria o gate O4 permanentemente vermelho e conservaria um contrato que contradiz a Onda 1; por
 isso a ownership literal está na Task 22 e a completude restante continua integral na Onda 6.
 
+**Fronteira E2E O4/O7/O9/O10 da emenda 11.** A falha posterior a D34 não revela regra ausente da
+O4: ela revela que o teste narrativo herdado atravessava um redirect para a página placeholder da
+O7 e, depois, simulava O9/O10 por telas/serviços legados. O status `para_corte` já é produzido e
+relido pela API de Pesagem; portanto D35 não toma decisão de produto nem reescopa feature O4.
+A Task 23 remove completamente o bloco 12–19, limpa seus ids, fixa 11 evidências, prova o último
+estado real e converte a continuação em matriz rastreável de ondas/DoDs futuros. A tela de Auditoria
+já entregue na Onda 3 não é usada como atalho: cada futura onda continua obrigada a testar seus
+próprios registros transacionais.
+
 **O que este plano deliberadamente não faz.** Não reescreve o motor de reserva/overbooking da Onda 1;
 não cria TTL de rascunho (AD-06 proíbe); não fecha as pendências abertas por conta própria — P7
 mantém UI 1:1/modelo 1:N preparado, e P5, P11 e P15 recebem badge Provisório e ficam rastreáveis;
@@ -4946,7 +5253,9 @@ do início; DTO estrito, proxy byte a byte e teste do request impedem regressão
 cancelado volta a ser elegível, enquanto o backend/schema e seus testes herdados apenas permanecem
 preparados para 1:N, sem promover o comportamento antes da confirmação. (h) *Contexto/eventos e
 proxy* — joins obrigatórios falham fechado sem `?? ''`, `nfId` fica interno e o BFF não cria
-`content-type` ausente.
+`content-type` ausente. (i) *Jornada herdada cria falso verde por atravessar onda futura* — D35
+combina guarda runtime do frame principal, microprova estática de navegação/API, releitura canônica
+da peça e contagem exata do relatório; reinserir o trecho futuro quebra o gate.
 
 **Verificação da regra "Zero".** O escopo verificável termina antes desta Self-Review; assim a
 própria declaração de conformidade não pode se autoacusar. O comando literal usado pelo Planner e
@@ -4985,13 +5294,15 @@ retorno público perder a derivação, DoD-130 falha se o editor omitir a data n
 falha se o BFF achatar o envelope. D34 não admite alias ou fallback: DoD-132 rejeita as chaves
 legadas, DoD-133 ancora o snapshot, DoD-134/135 cobrem estados/status/envelope, DoD-136 compara os
 bytes do proxy, DoD-137 cobre título, blocos A–D em ordem, ausência da estrutura 1–4 e tratamento
-de erro da UI, e DoD-138 exige o `201` antes de consumir JSON.
+de erro da UI, e DoD-138 exige o `201` antes de consumir JSON. D35 não admite continuação implícita:
+DoD-139 exige `para_corte` na API/UI e 11 passos; DoD-140 falha com qualquer navegação/API ativa de
+O7/O9/O10 ou estado morto das etapas removidas.
 
 ---
 
 ## Contagens
 
-**23 tasks · 34 decisões de design · 69 itens de DoD (todos com teste 1:1) · 7 divergências
+**24 tasks · 35 decisões de design · 71 itens de DoD (todos com teste 1:1) · 7 divergências
 autorizadas.**
 
 Os 2 itens novos em relação à emenda 3 são **DoD-125** e **DoD-126**: contrato do BFF
@@ -5016,6 +5327,10 @@ Os sete itens da emenda 10 são **DoD-132..138**: DTO estrito, snapshot do Pedid
 consulta recebível, preview/início integrado, proxy sem tradução, UI e Playwright com status antes
 do body. A decisão nova é **D34** e a implementação ganha a Task 22; o fechamento anterior passa a
 Task 23 sem mudar conteúdo.
+Os dois itens da emenda 11 são **DoD-139/140**: handoff `para_corte` comprovado na mesma peça e
+fronteira executável contra navegação/API futura. A decisão nova é **D35**, a implementação ganha a
+Task 23 a partir de `be4df89f` e o fechamento passa a Task 24. Não nasce divergência autorizada,
+arquivo de produto, endpoint ou decisão de negócio.
 
 Contagem da estrutura listada: backend = **17 arquivos de código novos + 15 testes novos + 31
 alterados**; frontend = **36 novos (14 rotas BFF) + 21 alterados (5 rotas BFF) + 1 rota BFF movida
@@ -5033,6 +5348,9 @@ e 4 testes backend preexistentes aos alterados; no frontend acrescenta o teste B
 acrescenta 5 arquivos preexistentes aos alterados (as duas raízes BFF, o client, os
 tipos e o teste UI), preserva `jornada-operacional.spec.ts` já contado e move a rota dinâmica de
 preview sem manter alias.
+A emenda 11 altera somente `jornada-operacional.spec.ts` já contado e os artefatos/relatório de
+evidência já pertencentes à Task 21/fechamento; as contagens de código frontend/backend permanecem
+inalteradas.
 
 Divergências autorizadas: **D-01** abas Fiscais/Contatos sem conteúdo no protótipo → conteúdo
 derivado do JSONB já existente; **D-02** conjunto canônico único de códigos do catálogo;
@@ -5042,7 +5360,8 @@ explícita da tabela de preços do dia; **D-05** dados reais da API no lugar dos
 espelho gerado no servidor.
 
 **Nenhuma 8ª divergência foi aberta.** D34 corrige uma incompatibilidade de contrato com D3 e a
-v1.1 §6.10; não autoriza afastamento do protótipo e não declara a Onda 6 concluída. A lacuna da
+v1.1 §6.10; D35 corrige apenas a fronteira da evidência herdada. Nenhuma das duas autoriza
+afastamento do protótipo ou declara O6/O7/O9/O10 concluída. A lacuna da
 **linha 3 da matriz** (*"falta herança automática
 representante→rota no fluxo de pedido"*) deixou de ser informativa e passou a ser implementada por
 **D31**, com código literal (`rotaHerdadaDoCliente`, herança de `rotaPrevista` no `criar`, `leftJoin`
