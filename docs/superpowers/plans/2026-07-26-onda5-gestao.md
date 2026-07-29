@@ -4509,8 +4509,11 @@ uso de "Nome Fantasia"/"Buscar cliente" onde houver cliente.
 no mesmo formato do usado em `docs/evidencias/alpha-jornada-e2e/`. Capturas geradas pelo Playwright
 contra o app real com banco semeado — proibido print do protótipo.
 
-**18.4** Atualizar `docs/execucao/EXECUCAO-STATUS.md` (linha da Onda 5) para `aguardando_portao2`
-com o número do PR de implementação, e registrar as dívidas na seção própria deste plano.
+**18.4** Consolidar no README de evidências da onda os comandos executados, resultados, cobertura,
+SHAs e caminhos das capturas produzidas em 18.1–18.3. O Worker encerra a task entregando ao
+Executor esse pacote de código, testes e evidências; **não** edita `docs/execucao/EXECUCAO-STATUS.md`
+nem este plano. As cinco dívidas já estão fixadas na seção "Dívidas deixadas por esta onda"; qualquer
+mudança futura nelas exige uma nova atuação do Planner, nunca uma edição pelo Worker.
 
 **18.5** Gate local completo, na raiz do repositório:
 
@@ -4604,6 +4607,11 @@ git push origin feature/onda5-gestao
 gh pr view 28 --json headRefOid,baseRefName,isDraft,statusCheckRollup,url
 ```
 
+Com o pacote de evidências entregue pelo Worker, o **Executor** atualiza, em commit de coordenação
+separado, a linha da Onda 5 em `docs/execucao/EXECUCAO-STATUS.md` para `aguardando_portao2` e registra
+o número real da PR de implementação. O Executor não edita este plano nem redefine suas dívidas; o
+Worker não participa dessa mudança de estado.
+
 Atualizar a descrição da PR #28 com os quatro itens originais, o quinto item de escopo por
 representante, o hash deste plano, as evidências e o gate descritos na Task 22. O procedimento de
 incorporação do `develop` pós-O4 e a proteção contra sobrescrita remota estão fixados na E5.1.6.
@@ -4637,7 +4645,21 @@ quem implementa.
 | Nenhuma AD inventada para pendência aberta | Sim — P8 e P1 seguem abertas, tratadas por parâmetro + badge (D5.4) |
 | Dependência da Onda 4 controlada | Sim — Tasks 19–22 só iniciam pós-merge O4 e atualização da PR #28; conflitos e regressões estão fixados na E5.1.6 |
 | Terminologia respeitada (termo banido ausente) | Sim — verificado no texto do plano e vigiado por teste (critério 5.9) |
-| Zero `TBD`, `TODO`, "a definir", "similar à Task" | Sim — nenhuma ocorrência |
+| Varredura dos marcadores de incompletude proibidos pelo gate textual | Sim — o comando abaixo retorna zero no conteúdo normativo sem fazer a própria especificação gerar falso positivo |
+
+```powershell
+$plano = 'docs/superpowers/plans/2026-07-26-onda5-gestao.md'
+$marcadores = @(
+  ('TB' + 'D'),
+  ('TO' + 'DO'),
+  ('a def' + 'inir'),
+  ('implementar de' + 'pois'),
+  ('similar à Ta' + 'sk')
+)
+rg -n -e ($marcadores -join '|') -- $plano
+if ($LASTEXITCODE -eq 1) { 'OK: nenhum marcador proibido'; exit 0 }
+exit $LASTEXITCODE
+```
 
 ### Contagens
 
@@ -5827,45 +5849,48 @@ import { PUT as putRepresentantes } from
 jest.mock('@/lib/api', () => ({ apiFetch: jest.fn() }));
 const apiFetchMock = jest.mocked(apiFetch);
 
-it('repassa representantes permitidos sem mascarar erro', async () => {
-  const requestBytes = new TextEncoder().encode(
-    '{"representantes":["00000000-0000-4000-8000-000000000001"]}',
-  );
-  const responseBytes = new TextEncoder().encode(
-    '{"code":"REPRESENTANTES_INVALIDOS","detalhe":"á"}',
-  );
-  apiFetchMock.mockResolvedValueOnce(new Response(responseBytes, {
-    status: 403,
-    headers: { 'Content-Type': 'application/problem+json; charset=utf-8' },
-  }));
+it.each([400, 403] as const)(
+  'repassa representantes permitidos sem mascarar erro HTTP %s',
+  async (statusBackend) => {
+    const requestBytes = new TextEncoder().encode(
+      '{"representantes":["00000000-0000-4000-8000-000000000001"]}',
+    );
+    const responseBytes = new TextEncoder().encode(
+      '{"code":"REPRESENTANTES_INVALIDOS","detalhe":"á"}',
+    );
+    apiFetchMock.mockResolvedValueOnce(new Response(responseBytes, {
+      status: statusBackend,
+      headers: { 'Content-Type': 'application/problem+json; charset=utf-8' },
+    }));
 
-  const request = new NextRequest(
-    'http://localhost/api/admin/usuarios/u-1/representantes',
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: requestBytes,
-    },
-  );
-  const response = await putRepresentantes(request, {
-    params: Promise.resolve({ id: 'u-1' }),
-  });
+    const request = new NextRequest(
+      'http://localhost/api/admin/usuarios/u-1/representantes',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: requestBytes,
+      },
+    );
+    const response = await putRepresentantes(request, {
+      params: Promise.resolve({ id: 'u-1' }),
+    });
 
-  expect(apiFetchMock).toHaveBeenCalledWith(
-    '/usuarios/u-1/representantes',
-    expect.objectContaining({
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-    }),
-  );
-  const [, init] = apiFetchMock.mock.calls[0]!;
-  expect(new Uint8Array(init!.body as ArrayBuffer)).toEqual(requestBytes);
-  expect(response.status).toBe(403);
-  expect(response.headers.get('content-type')).toBe(
-    'application/problem+json; charset=utf-8',
-  );
-  expect(new Uint8Array(await response.arrayBuffer())).toEqual(responseBytes);
-});
+    expect(apiFetchMock).toHaveBeenCalledWith(
+      '/usuarios/u-1/representantes',
+      expect.objectContaining({
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const [, init] = apiFetchMock.mock.calls[0]!;
+    expect(new Uint8Array(init!.body as ArrayBuffer)).toEqual(requestBytes);
+    expect(response.status).toBe(statusBackend);
+    expect(response.headers.get('content-type')).toBe(
+      'application/problem+json; charset=utf-8',
+    );
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(responseBytes);
+  },
+);
 ```
 
 Criação já usa `POST /api/admin/usuarios`; o body ganha `representantes`. Opções usam o BFF
@@ -6238,7 +6263,7 @@ As 28 linhas abaixo somam-se às 63 originais. Total normativo: **91** critério
 | 6.18 | Pedido não recebe coluna/valor duplicado de representante | `escopo-representantes.e2e-spec.ts` › "deriva representante somente de clientes.representante_id" |
 | 6.19 | Representantes lista contagem e detalhe lista usuários vinculados reais | `usuarios-representantes.e2e-spec.ts` › "projeta usuários vinculados ordenados por representante" |
 | 6.20 | `/auth/me` devolve `todos` ou nomes reais do conjunto restrito | `usuarios-representantes.e2e-spec.ts` › "auth me expõe escopo real da sessão" |
-| 6.21 | BFF do `PUT` preserva cookie, body, status 400/403 e corpo | `bff-onda5.test.ts` › "repassa representantes permitidos sem mascarar erro" |
+| 6.21 | BFF do `PUT` preserva cookie, body, status 400/403 e corpo | `bff-onda5.test.ts` › `it.each([400, 403])` "repassa representantes permitidos sem mascarar erro HTTP %s" |
 | 6.22 | Drawer mostra loading, erro+retry, vazio Todos e lista real | `usuarios-client.test.tsx` › "renderiza todos os estados de representantes permitidos" |
 | 6.23 | Criação envia representantes no POST; edição usa PUT só quando muda; erro mantém drawer aberto | `usuarios-client.test.tsx` › "salva criação atômica e edição dedicada sem estado otimista falso" |
 | 6.24 | Representantes repõe sétima coluna com `usuariosVinculadosCount`; o drawer busca `GET /api/cadastros/representantes/:id` e mostra loading, erro+retry, vazio e `usuariosVinculados[]` real | `representantes-client.test.tsx` › "busca o detalhe e mostra usuários vinculados em todos os estados" |
@@ -6257,8 +6282,8 @@ snapshot de RBAC existente ganha uma asserção negativa: a emenda não acrescen
 
 **Pré-condição bloqueante:** O4 mergeada em `develop`; PR #28 atualizada sobre esse head; árvore
 limpa. O Executor registra no comentário da PR #28 os SHAs de `develop` e `HEAD` antes da emenda.
-Se a O4 não estiver mergeada, parar como `requires-human`; não implementar um segundo contrato
-comercial.
+Se a O4 não estiver mergeada, parar como `blocked`; é uma dependência técnica ainda não satisfeita,
+não uma decisão do Quality Owner, e não autoriza implementar um segundo contrato comercial.
 
 1. Rodar os testes 6.1–6.5 em vermelho.
 2. Criar `0019_onda5_usuarios_representantes.sql`, atualizar `_journal.json`,
