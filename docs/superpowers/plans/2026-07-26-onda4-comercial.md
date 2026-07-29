@@ -51,6 +51,7 @@ Jest (backend e frontend) · Playwright (e2e).
 | Emenda 9 | A jornada real da Task 21 chegou à Grade pelo código do item, mas a criação do pedido recebeu `400`: `GET /comercial/compras-programadas?pageSize=100` devolvia `operacaoId` sem `dataOperacao`; o BFF apenas repassava esse contrato incompleto e `PedidoEditor.payloadNovo()` enviava `undefined` ao schema do backend. **D33** corrige a origem e alinha toda a API pública: lista, detalhe e mutações derivam a data de `operacoes.data` pelo `operacaoId`; confirmação preserva seu envelope tipado; nenhum BFF/editor fabrica fallback. **DoD-129/130/131** fixam todos os retornos, o consumo real no editor e o envelope BFF, e a Task 21 preserva Grade por código + criação do pedido como prova final. `/gestao/compras` permanece ownership da Onda 5, com ordem de integração explícita após o merge O4 |
 | Emenda 10 | A mesma microprova da Task 21 passou por Grade + `POST /pedidos`, abriu Recebimento e recebeu `400`: o contrato Onda 1/D3 exige `pedidoFornecedorId`, mas `IniciarRecebimentoPayload`, a tela e o Playwright ainda consultavam/selecionavam Compra Programada e enviavam `compraProgramadaId`. **D34** corrige a costura herdada sem fallback: consulta explicitamente Pedidos ao Fornecedor elegíveis (`enviado`/`aguardando_recebimento`) sob o recorte UI 1:1 de P7, preview e itens nascem do snapshot do Pedido ao Fornecedor, contexto/eventos pós-commit falham fechado, BFF preserva método/status/body/header sem inventar `content-type`, envelope não vaza `nfId` e o Playwright usa o Select Radix real. **DoD-132..138** cobrem DTO, listagem/preview/início, BFF, UI e Playwright; a prova D33 Grade + criação do pedido continua una e anterior. A correção fica na Onda 4 porque bloqueia seu gate E2E, sem antecipar a completude funcional da Onda 6 nem tocar a Onda 5 |
 | Emenda 11 | A execução pós-D34 chegou pela UI até a segunda peça em `para_corte` e gerou a evidência 11, mas o trecho herdado seguinte navegou para `/operacao/corte`, que o `next.config.ts` redireciona a `/desossa/pesagem-destinacao`; a página de destino ainda é `PlaceholderPage` e pertence integralmente à Onda 7. **D35** torna `para_corte` o handoff ativo e verificável da jornada O4, remove por inteiro as etapas 12–19 herdadas (Desossa, Carga, Faturamento e a falsa conclusão de auditoria), preserva todas as provas 1–11/D33/D34 e registra as continuações nas ondas donas sem antecipar código. **DoD-139/140** fixam API + UI + screenshot/relatório do último estado real e uma microprova executável que falha se a jornada voltar a navegar ou chamar APIs das Ondas 7/9/10 |
+| Emenda 12 | O Portão 2 da PR #35 marcou `ajustar` no veredito `3244d49`: `0016`/`0017` e o journal foram escritos sem os snapshots correspondentes, sem proveniência reproduzível de `drizzle-kit generate`. **D36** substitui integralmente a receita manual de D3/Tasks 1–2 por três estágios canônicos: expand estrutural gerado, backfill+guarda criado com `generate --custom` e contract estrutural gerado. O Worker não edita journal/snapshot, não escreve `ALTER TABLE` nem índice à mão, declara `idx_clientes_rota` no schema e prova cadeia de ids, hashes, drift zero, migração limpa/legada, guarda, rerun, seed e rollback gerado. **DoD-141..147** fecham o único bloqueio material sem reabrir D33–D35 nem reduzir a completude da O4 |
 | Worktree da Emenda 4 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix` |
 | Branch da Emenda 4 | `plan/onda4-task13-contract` |
 | Base da Emenda 4 | `origin/develop` = `c2fe0e09f230e7748d532d2292e059f027941e0e` |
@@ -69,7 +70,10 @@ Jest (backend e frontend) · Playwright (e2e).
 | Worktree da Emenda 11 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-e2e-handoff` |
 | Branch da Emenda 11 | `plan/onda4-e2e-handoff` |
 | Base da Emenda 11 | `origin/develop` = `2cad85628c2b05336f549dc517f4b4a211aa9583` |
-| Checkpoint de execução obrigatório | `feature/onda4-comercial` @ `be4df89f` (D34 concluída); D35 é executada imediatamente depois desse commit, sem reexecutar nem reescrever D33/D34 |
+| Worktree da Emenda 12 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-drizzle-migrations` |
+| Branch da Emenda 12 | `plan/onda4-drizzle-generated-migrations` |
+| Base da Emenda 12 | `origin/develop` = `06a729102b75e20ffc5581c6cf59b9ccc2a2277a` |
+| Checkpoint de execução obrigatório | PR #35, author head `b5a1175afaebe7d40af42c25f79141e67d57ff2e`, veredito Portão 2 `ajustar` em `3244d49068864d8b9d3515100df7513245e55d70`; D36 corrige somente a cadeia de migrations e seus testes/documentação, preservando byte a byte os contratos D33–D35 já aprovados |
 
 ---
 
@@ -129,9 +133,12 @@ D35 não altera código de produto, rota, redirect, BFF, schema ou API.
 `OverbookingChallengeException`, `reservas_disponibilidade` tipadas e `pendencias_overbooking`
 permanecem como estão. Adendo e unicidade AD-03 **chamam** esses blocos.
 
-**D3 — Migrações `0016_onda4_comercial_expand.sql` (cria/adiciona) e
-`0017_onda4_comercial_contract.sql` (remove `clientes.rota_padrao`).** Backfill vai no 0016, depois
-do `ADD COLUMN`. O 0017 tem guarda que aborta se restar `rota_padrao` não migrado.
+**D3 — Migrações em três estágios gerados, conforme D36.** `0016_onda4_comercial_expand.sql`
+cria/adiciona a estrutura a partir do schema Drizzle; `0017_onda4_comercial_backfill.sql` nasce
+exclusivamente por `drizzle-kit generate --custom` e recebe apenas DML/PLpgSQL de backfill e guarda;
+`0018_onda4_comercial_contract.sql` remove `clientes.rota_padrao` a partir da remoção no schema.
+Cada estágio possui snapshot gerado e entrada contígua no journal. D36 substitui qualquer texto
+anterior que prescreva SQL estrutural, journal ou snapshot manual.
 
 **D4 — O "produto" da tabela de preços é `produtos`; o "produto" da cadeia comercial é
 `itens_comerciais`.** `tabelas_preco_itens.produto_id → produtos.id` (igual ao plano mestre §3.2),
@@ -432,7 +439,9 @@ mesmos filtros da tela. Divergência **D-07**.
 `TABELA_PRECO_PUBLICADA = 'tabela_preco_publicada'`, com payload tipado em `PayloadPorEvento`.
 
 **D23 — Clientes: `rota_id` substitui `rota_padrao`.** `clientes.rota_id uuid REFERENCES rotas(id)`
-entra no 0016 com backfill por `rotas.codigo` e depois `rotas.nome`; o 0017 remove `rota_padrao`. O
+e seu índice parcial entram no 0016 estrutural gerado; o 0017 custom faz backfill determinístico
+por `rotas.codigo` e depois por nome único e aborta se restar legado; o 0018 gerado remove
+`rota_padrao`. O
 `representante_id` já existe e é reusado. O banner do protótipo ("Representante e Rota definem a
 herança…") descreve um comportamento **executável**, não um aviso: a propagação dos dois campos
 para o pedido é a lacuna da linha 3 da matriz e está especificada em **D31**.
@@ -819,6 +828,62 @@ encontrar `page.goto(...)` para esses caminhos ou chamada do helper `backend(...
 concatenados no próprio teste para que a tabela de mapeamento do relatório não se autoacuse.
 Assim, reintroduzir UI ou API futura no fluxo quebra o gate antes de produzir relatório.
 
+**D36 — A cadeia O4 é regenerada de `0015` e nenhum metadado é reparado à mão.** O achado do
+Portão 2 não se resolve anexando snapshots aos arquivos existentes. O Worker parte do author head
+da PR #35, restaura **somente** `app/backend/src/database/migrations/` da base `06a7291` para apagar
+os artefatos O4 sem proveniência, mantém o código funcional já entregue e reconstrói os três
+estados do schema:
+
+1. **Expand:** `clientes` conserva temporariamente `rotaPadrao`, ganha `rotaId` e o índice parcial
+   `idx_clientes_rota` declarado em `clientes.schema.ts`; os schemas de adendo/tabela de preço
+   permanecem exportados. Executa `npm run db:generate -- --name=onda4_comercial_expand`, que deve
+   criar exatamente `0016_onda4_comercial_expand.sql`, `meta/0016_snapshot.json` e a entrada 16.
+2. **Backfill + guarda:** sem mudar o schema, executa
+   `npm run db:generate -- --custom --name=onda4_comercial_backfill`. O gerador deve criar
+   exatamente `0017_onda4_comercial_backfill.sql`, `meta/0017_snapshot.json` e a entrada 17. Somente
+   esse SQL vazio recebe edição humana, limitada a `UPDATE`, CTE, `DO`/`RAISE EXCEPTION`,
+   comentários e `statement-breakpoint`; ele não contém `CREATE`, `ALTER`, `DROP`, `TRUNCATE` nem
+   criação de índice.
+3. **Contract:** somente após o backfill/guarda estar fixado, remove `rotaPadrao` do schema e de seus
+   consumidores e executa `npm run db:generate -- --name=onda4_comercial_contract`. O gerador deve
+   criar exatamente `0018_onda4_comercial_contract.sql`, `meta/0018_snapshot.json` e a entrada 18.
+
+`drizzle-kit` 0.31.10 cria snapshot e journal inclusive no modo `--custom`; isso satisfaz a frase
+constitucional “migrations somente via `drizzle-kit generate`”. A permissão para SQL custom é
+estreita: DML de preservação e a guarda não são deriváveis de um schema declarativo. Todos os DDLs,
+inclusive o `ALTER TABLE` gerado no expand/contract e todos os índices, nascem exclusivamente do
+delta de schema. É proibido renomear migration gerada, editar `meta/_journal.json`, editar qualquer
+`*_snapshot.json`, copiar snapshot anterior, trocar `id`/`prevId` ou corrigir SQL estrutural depois
+da geração. Se o SQL estrutural sair incorreto, volta-se ao estado `0015`, corrige-se o schema e
+gera-se novamente a cadeia inteira.
+
+O backfill é determinístico e preservador. Primeiro associa por `rotas.codigo`; depois associa por
+`rotas.nome` apenas quando existe **uma única** rota não removida com aquele nome. Ambos os passos
+atuam somente onde `rota_id IS NULL`. Nenhum `ORDER BY`, primeiro resultado ou combinação
+`codigo OR nome` pode decidir silenciosamente entre duas rotas. A guarda conta **todos** os
+clientes, inclusive soft-deletados, cujo `rota_padrao` não nulo continua sem `rota_id`; qualquer
+pendência levanta `backfill incompleto` e impede a entrada 18. Rota removida ou nome ambíguo não é
+inventado: o operador corrige o dado de origem, reaplica a migration idempotente e só então o
+contract pode executar.
+
+A proveniência é parte do gate. `0016.prevId` deve ser o `id` real de `0015_snapshot.json`;
+`0017.prevId` deve ser o `id` real de `0016`; `0018.prevId` deve ser o `id` real de `0017`; os
+quatro ids são UUIDs distintos, versões/dialeto são coerentes e o journal tem índices 15–18
+contíguos com tags exatas. O Worker registra no corpo da PR os SHA-256 reais de `0016.sql`,
+`0016_snapshot.json`, `0017.sql`, `0017_snapshot.json`, `0018.sql`, `0018_snapshot.json` e
+`_journal.json`. Depois de todos os testes, repete os hashes e exige igualdade byte a byte.
+Uma segunda execução de `npm run db:generate -- --name=onda4_drift_probe` deve responder
+`No schema changes, nothing to migrate`, não criar `0019` e deixar o diretório sem diff.
+
+Rollback é operacional e forward-only, sem down SQL manual: `ROLLBACK.md` manda restaurar a versão
+anterior da aplicação somente depois de, em hotfix isolada, reintroduzir `rotaPadrao` no schema,
+gerar `onda4_comercial_rollback_expand`, criar por `generate --custom` o backfill inverso
+`rota_id → rotas.codigo` com guarda e aplicar essas migrations. As estruturas novas permanecem
+aditivas durante o rollback de aplicação, preservando dados O4; qualquer limpeza posterior é outra
+cadeia gerada e outro gate. A receita é provada em cópia descartável sob `.codex/runtime/`, nunca
+pela inclusão de migrations de rollback na cadeia 0016–0018 nem por `ALTER TABLE` colado no
+documento.
+
 ---
 
 ## Referências do protótipo (tela → arquivo `.tsx` do protótipo) — Princípio I
@@ -902,7 +967,11 @@ está em *novos*. Testes de backend seguem D28 (`app/backend/test/…`).
 
 ```
 app/backend/src/database/migrations/0016_onda4_comercial_expand.sql
-app/backend/src/database/migrations/0017_onda4_comercial_contract.sql
+app/backend/src/database/migrations/0017_onda4_comercial_backfill.sql
+app/backend/src/database/migrations/0018_onda4_comercial_contract.sql
+app/backend/src/database/migrations/meta/0016_snapshot.json
+app/backend/src/database/migrations/meta/0017_snapshot.json
+app/backend/src/database/migrations/meta/0018_snapshot.json
 app/backend/src/database/schema/adendos-pedido.schema.ts
 app/backend/src/database/schema/tabelas-preco.schema.ts
 app/backend/src/database/seed-catalogo-mvp.ts
@@ -924,12 +993,14 @@ app/backend/src/modules/comercial/espelho/dto/espelho.dto.ts
 
 ```
 app/backend/test/helpers/onda4-fixtures.ts                     (fixtures dos 8 estados + catálogo)
+app/backend/test/helpers/onda4-migrations.ts                   (DB dedicado e cadeia 0015–0018)
 app/backend/test/unit/adendos.service.spec.ts
 app/backend/test/unit/precos.service.spec.ts
 app/backend/test/unit/espelho.service.spec.ts
 app/backend/test/unit/permissoes-onda4.spec.ts
 app/backend/test/unit/eventos-onda4.spec.ts
 app/backend/test/unit/onda4-schema.spec.ts
+app/backend/test/unit/onda4-migrations-meta.spec.ts
 app/backend/test/integration/adendos.e2e-spec.ts
 app/backend/test/integration/pedidos-onda4.e2e-spec.ts
 app/backend/test/integration/precos.e2e-spec.ts
@@ -938,14 +1009,16 @@ app/backend/test/integration/mapa-disponibilidade.e2e-spec.ts
 app/backend/test/integration/clientes-onda4.e2e-spec.ts
 app/backend/test/integration/seed-catalogo-mvp.e2e-spec.ts
 app/backend/test/integration/onda4-comercial.e2e-spec.ts       (jornada ponta a ponta)
+app/backend/test/integration/onda4-migrations.e2e-spec.ts      (D36: clean/legacy/guarda/rerun)
 ```
 
 ### Backend — alterados
 
 ```
 app/backend/src/database/schema/index.ts              (exporta os 2 schemas novos)
-app/backend/src/database/schema/clientes.schema.ts    (+ rota_id, − rota_padrao)
-app/backend/src/database/migrations/ROLLBACK.md       (rollback de 0016/0017)
+app/backend/src/database/schema/clientes.schema.ts    (+ rota_id/index, − rota_padrao)
+app/backend/src/database/migrations/meta/_journal.json (somente saída gerada 0016–0018)
+app/backend/src/database/migrations/ROLLBACK.md       (rollback forward-only gerado de 0016–0018)
 app/backend/src/database/seed.ts                      (chama seedCatalogoMvp)
 app/backend/src/common/rbac/permissoes.ts             (+4 permissões, +4 descrições, pushPermissoes)
 app/backend/src/common/rbac/perfil-permissoes.snapshot.json (regerado por `npm run rbac:snapshot`)
@@ -1212,108 +1285,60 @@ via `test/helpers/test-app.ts`.
 | DoD-138 | **D34/Playwright**: a jornada conserva Grade+POST do pedido, cria/envia PF pelo helper backend autenticado, seleciona seu id na UI, exige status `201` antes do JSON e confirma `{ recebimento.id, jaIniciado:false }` | `app/frontend/e2e/jornada-operacional.spec.ts` › `cria dados, executa a O4 ate o handoff para_corte e gera evidencia HTML` |
 | DoD-139 | **D35/handoff real**: sobre a mesma segunda peça, a UI e `GET /operacao/pesagem/pecas/:id` confirmam `para_corte`; a URL permanece em Pesagem, a evidência 11 só nasce depois da releitura canônica e o HTML final contém exatamente 11 passos + contexto/limite explícito | `app/frontend/e2e/jornada-operacional.spec.ts` › `cria dados, executa a O4 ate o handoff para_corte e gera evidencia HTML` |
 | DoD-140 | **D35/fronteira sem falso verde**: a jornada não navega para aliases/rotas de Desossa, Carga ou Faturamento, não chama APIs futuras e não conserva símbolos/ids das etapas 12–19; relatório mapeia O7/O9/O10 e auditoria transversal sem alegar validação | `app/frontend/e2e/jornada-operacional.spec.ts` › `contrato estatico impede a jornada O4 de atravessar ondas futuras` |
+| DoD-141 | **D36/proveniência:** existem SQL+snapshot para 0016/0017/0018; journal 15–18 é contíguo; `prevId` encadeia os ids UUID distintos; tags/versão/dialeto conferem; não há snapshot órfão/fabricado nem entrada manual extra | `app/backend/test/unit/onda4-migrations-meta.spec.ts` › `encadeia journal e snapshots gerados de 0015 a 0018` |
+| DoD-142 | **D36/fronteira estrutural:** 0016 contém os DDLs e `idx_clientes_rota` vindos do schema; 0017 contém somente DML/CTE/DO/guarda, sem `CREATE`/`ALTER`/`DROP`/`TRUNCATE`; 0018 contém o DROP gerado de `rota_padrao`; o schema final contém `rotaId`+índice e não expõe `rotaPadrao` | `app/backend/test/unit/onda4-migrations-meta.spec.ts` › `separa ddl gerado de sql custom preservador` |
+| DoD-143 | **D36/backfill:** código tem precedência, nome só associa quando único, rota removida/nome ambíguo não produz associação, clientes ativos e soft-deletados são preservados e reaplicar 0017 não altera linhas já migradas | `app/backend/test/integration/onda4-migrations.e2e-spec.ts` › `0017 faz backfill deterministico e idempotente sem inventar rota` |
+| DoD-144 | **D36/guarda:** legado sem correspondência faz 0017 lançar `backfill incompleto`, conserva `rota_padrao`, impede 0018 e permite corrigir o dado e retomar sem perda | `app/backend/test/integration/onda4-migrations.e2e-spec.ts` › `guarda bloqueia o contract ate todo legado estar associado` |
+| DoD-145 | **D36/clean e legado:** banco limpo migra 0000→0018; banco parado em 0015 com fixtures migra 0016→0018; ambos terminam com quatro tabelas O4, FK/índice, sem `rota_padrao`, com seed idempotente e segunda execução de migrate sem efeito | `app/backend/test/integration/onda4-migrations.e2e-spec.ts` › `cadeia gerada migra bancos limpo e legado ate o contract` |
+| DoD-146 | **D36/drift e hashes:** os sete SHA-256 registrados antes/depois dos testes são iguais; `db:generate --name=onda4_drift_probe` informa ausência de mudança, não cria 0019 e deixa `migrations/` e schema sem diff | comando de gate da Task 2 › `drizzle nao encontra drift depois da cadeia 0016 a 0018` |
+| DoD-147 | **D36/rollback:** em cópia descartável, rollback de aplicação é preparado somente por expand gerada + custom backfill inverso, restaura `rota_padrao` por `rotas.codigo`, preserva estruturas/dados O4 e permite inicializar a revisão anterior sem SQL estrutural manual | `app/backend/test/integration/onda4-migrations.e2e-spec.ts` › `receita de rollback gerado restaura compatibilidade sem perder dados O4` |
 
-**71 itens de DoD** (DoD-70 a DoD-140), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
-do CI. A numeração é histórica: DoD-128 foi acrescentado pela emenda 8, DoD-129/130/131 pela
-emenda 9, DoD-132..138 pela emenda 10 e DoD-139/140 pela emenda 11, sem renumerar os contratos
-anteriores.
+**78 itens de DoD** (DoD-70 a DoD-147), todos com teste ou gate nomeado 1:1 — DoD-114 é o gate de
+cobertura do CI e DoD-146 é o gate de drift/hashes. A numeração é histórica: DoD-128 foi
+acrescentado pela emenda 8, DoD-129/130/131 pela emenda 9, DoD-132..138 pela emenda 10,
+DoD-139/140 pela emenda 11 e DoD-141..147 pela emenda 12, sem renumerar os contratos anteriores.
 
 ---
 
 ## Task 1 — Migração expand + schemas Drizzle
 
-**Files:** `0016_onda4_comercial_expand.sql`, `meta/_journal.json`, `adendos-pedido.schema.ts`,
-`tabelas-preco.schema.ts`, `clientes.schema.ts`, `schema/index.ts`.
+**Files:** `0016_onda4_comercial_expand.sql`, `0017_onda4_comercial_backfill.sql`,
+`0018_onda4_comercial_contract.sql`, `meta/0016_snapshot.json`, `meta/0017_snapshot.json`,
+`meta/0018_snapshot.json`, `meta/_journal.json`, `adendos-pedido.schema.ts`,
+`tabelas-preco.schema.ts`, `clientes.schema.ts`, `schema/index.ts`,
+`test/unit/onda4-migrations-meta.spec.ts`, `test/helpers/onda4-migrations.ts`,
+`test/integration/onda4-migrations.e2e-spec.ts`.
 
 **Steps**
 
-1. Criar `app/backend/src/database/migrations/0016_onda4_comercial_expand.sql`:
+1. No author head fixado em D36, confirmar que o diff funcional D33–D35 está limpo e restaurar
+   apenas a origem da cadeia:
 
-```sql
--- Onda 4 — Comercial. Expand: cria tabelas novas e adiciona clientes.rota_id (com backfill).
-CREATE TABLE IF NOT EXISTS "adendos_pedido" (
-  "id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
-  "pedido_venda_id" uuid NOT NULL REFERENCES "pedidos_venda"("id"),
-  "pedido_venda_item_id" uuid NOT NULL REFERENCES "pedidos_venda_itens"("id"),
-  "item_comercial_id" uuid NOT NULL REFERENCES "itens_comerciais"("id"),
-  "operacao_id" uuid NOT NULL REFERENCES "operacoes"("id"),
-  "quantidade_anterior" numeric(10,3) NOT NULL,
-  "quantidade_adicionada" numeric(10,3) NOT NULL,
-  "quantidade_resultante" numeric(10,3) NOT NULL,
-  "origem_consumo" text NOT NULL,
-  "motivo" text NOT NULL,
-  "autor_id" uuid NOT NULL REFERENCES "usuarios"("id"),
-  "criado_em" timestamp with time zone DEFAULT now() NOT NULL,
-  CONSTRAINT "chk_adendos_pedido_quantidade" CHECK ("quantidade_adicionada" > 0),
-  CONSTRAINT "chk_adendos_pedido_origem" CHECK ("origem_consumo" IN ('fisico','virtual','overbooking'))
-);
---> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_adendos_pedido_pedido" ON "adendos_pedido" ("pedido_venda_id");
---> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "tabelas_preco" (
-  "id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
-  "data" date NOT NULL,
-  "status" text DEFAULT 'rascunho' NOT NULL,
-  "observacao" text,
-  "publicada_por" uuid REFERENCES "usuarios"("id"),
-  "publicada_em" timestamp with time zone,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "deleted_at" timestamp with time zone,
-  CONSTRAINT "chk_tabelas_preco_status" CHECK ("status" IN ('rascunho','publicada'))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "uq_tabelas_preco_data"
-  ON "tabelas_preco" ("data") WHERE "deleted_at" IS NULL;
---> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "tabelas_preco_itens" (
-  "id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
-  "tabela_preco_id" uuid NOT NULL REFERENCES "tabelas_preco"("id"),
-  "produto_id" uuid NOT NULL REFERENCES "produtos"("id"),
-  "preco_a" numeric(15,2),
-  "preco_b" numeric(15,2),
-  "preco_c" numeric(15,2),
-  "preco_d" numeric(15,2),
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  CONSTRAINT "chk_tabelas_preco_itens_positivos" CHECK (
-    ("preco_a" IS NULL OR "preco_a" > 0) AND ("preco_b" IS NULL OR "preco_b" > 0) AND
-    ("preco_c" IS NULL OR "preco_c" > 0) AND ("preco_d" IS NULL OR "preco_d" > 0)
-  )
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "uq_tabelas_preco_itens_produto"
-  ON "tabelas_preco_itens" ("tabela_preco_id", "produto_id");
---> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "tabelas_preco_publicacoes" (
-  "id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
-  "tabela_preco_id" uuid NOT NULL REFERENCES "tabelas_preco"("id"),
-  "acao" text NOT NULL,
-  "autor_id" uuid NOT NULL REFERENCES "usuarios"("id"),
-  "observacao" text,
-  "criado_em" timestamp with time zone DEFAULT now() NOT NULL,
-  CONSTRAINT "chk_tabelas_preco_publicacoes_acao"
-    CHECK ("acao" IN ('publicada','revertida_para_rascunho'))
-);
---> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_tabelas_preco_publicacoes_tabela"
-  ON "tabelas_preco_publicacoes" ("tabela_preco_id");
---> statement-breakpoint
-ALTER TABLE "clientes" ADD COLUMN IF NOT EXISTS "rota_id" uuid REFERENCES "rotas"("id");
---> statement-breakpoint
-UPDATE "clientes" c SET "rota_id" = r."id"
-  FROM "rotas" r
- WHERE c."rota_id" IS NULL AND c."rota_padrao" IS NOT NULL
-   AND (r."codigo" = c."rota_padrao" OR r."nome" = c."rota_padrao")
-   AND r."deleted_at" IS NULL;
---> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_clientes_rota" ON "clientes" ("rota_id")
-  WHERE "deleted_at" IS NULL;
+```powershell
+git restore --source=06a729102b75e20ffc5581c6cf59b9ccc2a2277a -- `
+  app/backend/src/database/migrations
+if (Test-Path app/backend/src/database/migrations/0016_onda4_comercial_expand.sql) {
+  throw 'restauração a 0015 falhou'
+}
 ```
 
-2. Acrescentar a entrada `{"idx": 16, "version": "7", "when": 1785110400000, "tag":
-   "0016_onda4_comercial_expand", "breakpoints": true}` em `meta/_journal.json`.
-3. Criar `adendos-pedido.schema.ts` espelhando o SQL (append-only: só `criadoEm`, sem `deletedAt`,
+   Não restaurar schemas, services, testes de produto ou evidências. O resultado esperado é o
+   diretório de migrations exatamente na entrada 15, com `0015_snapshot.json` como último snapshot.
+2. Escrever primeiro `onda4-migrations-meta.spec.ts`. O teste lê JSON/SQL reais, fixa a cadeia
+   0015→0016→0017→0018 e falha se houver ausência, id repetido, `prevId` quebrado, tag incorreta,
+   DDL no custom ou índice ausente no expand. Neste ponto ele deve falhar porque 0016–0018 ainda
+   não existem.
+3. Preparar o **estado expand** nos schemas: criar/exportar `adendos-pedido.schema.ts` e
+   `tabelas-preco.schema.ts`; em `clientes.schema.ts`, manter temporariamente
+   `rotaPadrao: text('rota_padrao')`, manter `rotaId: uuid('rota_id').references(() => rotas.id)` e
+   acrescentar no callback:
+
+```ts
+index('idx_clientes_rota').on(t.rotaId).where(sql`${t.deletedAt} IS NULL`)
+```
+
+   Essa declaração é obrigatória: escrever `CREATE INDEX` diretamente na migration é proibido.
+4. Criar `adendos-pedido.schema.ts` (append-only: só `criadoEm`, sem `deletedAt`,
    como `pendencias_overbooking_historico`):
 
 ```ts
@@ -1341,89 +1366,189 @@ export const adendosPedido = pgTable(
 );
 ```
 
-4. Criar `tabelas-preco.schema.ts` com `tabelasPreco`, `tabelasPrecoItens` e
-   `tabelasPrecoPublicacoes` espelhando o SQL acima.
-5. Em `clientes.schema.ts`, adicionar `rotaId: uuid('rota_id').references(() => rotas.id)`.
-   **Não** remover `rotaPadrao` ainda (Task 2 faz o contract).
-6. Exportar os dois arquivos novos em `schema/index.ts`.
-7. Rodar `cd app/backend && npm run db:migrate` contra Postgres 18 local e conferir que as 4 tabelas
-   existem e que `clientes.rota_id` foi criado.
+5. Criar `tabelas-preco.schema.ts` com o contrato completo já aprovado: `tabelasPreco` tem UUID,
+   data, status `rascunho|publicada`, observação, autor/data de publicação, timestamps/soft delete,
+   CHECK de status e `uq_tabelas_preco_data` parcial; `tabelasPrecoItens` tem UUID, FKs de tabela e
+   produto, preços A–D `numeric(15,2)` nullable/positivos, timestamps, CHECK conjunto e unicidade
+   total `(tabela_preco_id, produto_id)`; `tabelasPrecoPublicacoes` é append-only, com UUID, FKs de
+   tabela/autor, ação `publicada|revertida_para_rascunho`, observação, `criado_em`, CHECK e índice
+   por tabela. Não reduzir campos, checks, FKs ou índices para facilitar a geração.
+6. Exportar os dois arquivos novos em `schema/index.ts` e confirmar que
+   `clientes.schema.ts` ainda expõe simultaneamente `rotaPadrao` e `rotaId`.
+7. Gerar o expand, sem criar/renomear arquivos antes ou depois:
 
-**Commit:** `feat(onda4): migração expand e schemas de adendo e tabela de preços`
+```powershell
+Set-Location app/backend
+npm run db:generate -- --name=onda4_comercial_expand
+Set-Location ../..
+```
+
+   O único resultado aceito é `0016_onda4_comercial_expand.sql` +
+   `meta/0016_snapshot.json` + entrada 16 `0016_onda4_comercial_expand`. Inspecionar, sem editar:
+   quatro tabelas, FKs/checks/índices, `rota_id` nullable e `idx_clientes_rota` parcial existem;
+   `rota_padrao` não é removida; não há `UPDATE` nem guarda no expand.
+8. Rodar o teste de metadata em vermelho parcial: ele agora encontra 0016/snapshot/cadeia desde
+   0015, mas continua falhando pela ausência legítima de 0017/0018.
+
+**Commit:** `fix(onda4): gerar expand comercial com snapshot drizzle`
 
 ---
 
-## Task 2 — Migração contract (`rota_padrao` sai)
+## Task 2 — Backfill custom gerado + contract gerado + provas de reversibilidade
 
-**Files:** `0017_onda4_comercial_contract.sql`, `meta/_journal.json`, `clientes.schema.ts`,
+**Files:** os arquivos da Task 1, `clientes.schema.ts`,
 `app/frontend/src/lib/cadastros-config.ts`, `app/backend/test/unit/onda4-schema.spec.ts`,
-`app/frontend/__tests__/onda4-clientes.test.tsx`.
+`app/frontend/__tests__/onda4-clientes.test.tsx` e `migrations/ROLLBACK.md`.
 
 **Steps (TDD)**
 
-1. Escrever primeiro os dois testes que falham. O teste de schema continua em
-   `app/backend/test/unit/onda4-schema.spec.ts` (D28):
+1. Criar o helper/teste de migrations em banco PostgreSQL dedicado, seguindo o isolamento de
+   `onda1-migrations`: reset até `0015`, aplicação por tag, fixtures e consultas de catálogo.
+   Escrever em vermelho os cenários DoD-143–145: match por código; fallback por nome único;
+   colisão código×nome em que código vence; dois nomes iguais; rota soft-deletada; cliente ativo e
+   soft-deletado; legado sem match; correção+rereexecução; banco limpo; banco legado; migrate/seed
+   repetidos. Nenhum teste executa contra o banco compartilhado das demais suites.
+2. Com o schema ainda no estado expand, gerar o invólucro custom:
 
-```ts
-it('cliente grava rota_id e o schema nao expoe rota_padrao', () => {
-  expect(Object.keys(clientes)).toContain('rotaId');
-  expect(Object.keys(clientes)).not.toContain('rotaPadrao');
-});
+```powershell
+Set-Location app/backend
+npm run db:generate -- --custom --name=onda4_comercial_backfill
+Set-Location ../..
 ```
 
-   No arquivo `app/frontend/__tests__/onda4-clientes.test.tsx`, que esta task cria e a Task 14
-   completa, escrever **DoD-127**. O teste executa o config real e falha separadamente se a entrada
-   sobreviver na lista de campos ou no schema Zod:
-
-```ts
-import { clientesConfig } from '@/lib/cadastros-config';
-
-it('config de clientes nao expoe o campo legado de rota', () => {
-  const campoLegado = 'rotaPadrao';
-  const resultado = clientesConfig.schema.parse({
-    codigo: 'CLI-001',
-    razaoSocial: 'Cliente Contrato Ltda.',
-    documentoFiscal: '12345678000190',
-    [campoLegado]: 'Rota antiga',
-  });
-
-  expect(clientesConfig.campos.map((campo) => campo.nome)).not.toContain(campoLegado);
-  expect(resultado).not.toHaveProperty(campoLegado);
-});
-```
-
-2. Criar `0017_onda4_comercial_contract.sql` com guarda que aborta em backfill incompleto:
+   Confirmar a criação automática de `0017_onda4_comercial_backfill.sql`,
+   `meta/0017_snapshot.json` e entrada 17. Sem editar os dois últimos, substituir apenas o
+   comentário do SQL custom pelo conteúdo abaixo:
 
 ```sql
--- Onda 4 — Comercial. Contract: remove clientes.rota_padrao após o backfill do 0016.
+-- Onda 4 — Comercial. Backfill preservador + guarda pré-contract.
+UPDATE "clientes" AS c
+   SET "rota_id" = r."id"
+  FROM "rotas" AS r
+ WHERE c."rota_id" IS NULL
+   AND c."rota_padrao" IS NOT NULL
+   AND r."deleted_at" IS NULL
+   AND r."codigo" = c."rota_padrao";
+--> statement-breakpoint
+WITH "rotas_nome_unico" AS (
+  SELECT "nome", min("id"::text)::uuid AS "id"
+    FROM "rotas"
+   WHERE "deleted_at" IS NULL
+   GROUP BY "nome"
+  HAVING count(*) = 1
+)
+UPDATE "clientes" AS c
+   SET "rota_id" = r."id"
+  FROM "rotas_nome_unico" AS r
+ WHERE c."rota_id" IS NULL
+   AND c."rota_padrao" IS NOT NULL
+   AND r."nome" = c."rota_padrao";
+--> statement-breakpoint
 DO $$
 DECLARE pendentes integer;
 BEGIN
   SELECT count(*) INTO pendentes
     FROM "clientes"
-   WHERE "deleted_at" IS NULL AND "rota_padrao" IS NOT NULL AND "rota_id" IS NULL;
+   WHERE "rota_padrao" IS NOT NULL
+     AND "rota_id" IS NULL;
   IF pendentes > 0 THEN
     RAISE EXCEPTION 'backfill incompleto: % cliente(s) com rota_padrao sem rota_id', pendentes;
   END IF;
 END $$;
---> statement-breakpoint
-ALTER TABLE "clientes" DROP COLUMN IF EXISTS "rota_padrao";
 ```
 
-3. Acrescentar `{"idx": 17, ..., "tag": "0017_onda4_comercial_contract", ...}` ao journal.
-4. Remover `rotaPadrao` de `clientes.schema.ts` e de todo consumidor de **Clientes**, inclusive
-   `app/backend/test/integration/clientes.e2e-spec.ts`. Em
-   `app/frontend/src/lib/cadastros-config.ts`, remover exatamente as duas exposições do contrato
-   substituído: `{ nome: 'rotaPadrao', ... }` de `clientesConfig.campos` e
-   `rotaPadrao: z.string().optional()` de `clientesConfig.schema`. Não alterar
-   `rotaPadraoId`/`rotaPadraoNome` do domínio Frota. Sem leitura dupla, sem fallback.
-5. Registrar o passo de rollback em `migrations/ROLLBACK.md` no formato já usado pelas ondas
-   anteriores.
-6. Rodar `npm run db:migrate` e os dois testes do passo 1 (agora verdes):
-   `cd app/backend && npm run test -- --runInBand test/unit/onda4-schema.spec.ts`;
-   `cd ../frontend && npm run test -- --runInBand onda4-clientes.test.tsx`.
+   O teste estático deve rejeitar DDL no arquivo custom. O teste de integração prova que a guarda
+   falha antes de 0018 e que o `UPDATE` repetido é idempotente.
+3. Escrever primeiro os dois testes de contrato final. `onda4-schema.spec.ts` exige `rotaId`, o
+   índice `idx_clientes_rota` e ausência de `rotaPadrao`. Em
+   `onda4-clientes.test.tsx`, DoD-127 executa `clientesConfig` e falha separadamente se
+   `rotaPadrao` sobreviver em `campos` ou no schema Zod. Remover então `rotaPadrao` do schema e de
+   todo consumidor de **Clientes**, inclusive `clientes.e2e-spec.ts`; no config remover exatamente
+   as duas exposições do campo. Não tocar `rotaPadraoId`/`rotaPadraoNome` do domínio Frota e não
+   criar leitura dupla ou fallback.
+4. Gerar o contract a partir desse delta declarativo:
 
-**Commit:** `refactor(onda4): remove contrato legado de rota dos clientes`
+```powershell
+Set-Location app/backend
+npm run db:generate -- --name=onda4_comercial_contract
+Set-Location ../..
+```
+
+   Confirmar `0018_onda4_comercial_contract.sql` + `meta/0018_snapshot.json` + entrada 18. O SQL
+   deve conter a remoção gerada de `clientes.rota_padrao`; não adicionar guarda ou editar o
+   `ALTER TABLE`. Se qualquer outro DDL não explicado aparecer, descartar 0016–0018, corrigir os
+   estados de schema e regenerar desde a Task 1.
+5. Completar `onda4-migrations-meta.spec.ts`: além da cadeia de ids, ele lê o callback do schema
+   final, os três SQLs e garante a separação DDL/custom de DoD-142. Completar as integrações:
+   depois de 0016 a coluna antiga e a nova coexistem; depois de 0017 os casos determinísticos estão
+   associados; pendência impede avançar; depois de 0018 a coluna antiga não existe, a FK e o índice
+   existem e as quatro tabelas O4 preservam dados.
+6. Reescrever a seção O4 de `ROLLBACK.md`. Remover todo bloco com `ALTER TABLE`/`DROP TABLE`
+   manual. Fixar o procedimento:
+   (a) abrir hotfix do SHA em produção; (b) reintroduzir `rotaPadrao` no schema e gerar
+   `onda4_comercial_rollback_expand`; (c) gerar `--custom
+   --name=onda4_comercial_rollback_backfill` e preencher somente
+   `UPDATE clientes ... FROM rotas ... SET rota_padrao=rotas.codigo` + guarda; (d) migrar; (e)
+   somente então restaurar a versão anterior da aplicação. Não remover `rota_id` nem as tabelas O4
+   nessa reversão de aplicação.
+7. Em `onda4-migrations.e2e-spec.ts`, provar a receita de rollback em
+   `.codex/runtime/o4-rollback-probe`: copiar schema/migrations finais para a área descartável,
+   gerar ali expand+custom inverso com o mesmo `drizzle.config.ts`, aplicar sobre DB final com
+   clientes/rotas e dados O4, e verificar `rota_padrao=rotas.codigo`, contagens/hash dos dados O4
+   inalterados e consulta legada funcionando. Apagar somente esse diretório descartável após
+   validar seu caminho absoluto sob `.codex/runtime`; nenhum artefato de probe entra no diff.
+8. Executar os testes dirigidos:
+
+```powershell
+Set-Location app/backend
+npm run test -- --runInBand test/unit/onda4-schema.spec.ts `
+  test/unit/onda4-migrations-meta.spec.ts `
+  test/integration/onda4-migrations.e2e-spec.ts
+npm run db:migrate
+npm run db:seed
+npm run db:migrate
+npm run db:seed
+Set-Location ../frontend
+npm run test -- --runInBand onda4-clientes.test.tsx
+Set-Location ../..
+```
+
+9. Registrar e congelar a proveniência. O corpo da PR recebe a tabela caminho→SHA-256 produzida
+   antes do gate. Depois de todos os testes, rodar o drift probe e comparar:
+
+```powershell
+$artefatosO4 = @(
+  'app/backend/src/database/migrations/0016_onda4_comercial_expand.sql',
+  'app/backend/src/database/migrations/meta/0016_snapshot.json',
+  'app/backend/src/database/migrations/0017_onda4_comercial_backfill.sql',
+  'app/backend/src/database/migrations/meta/0017_snapshot.json',
+  'app/backend/src/database/migrations/0018_onda4_comercial_contract.sql',
+  'app/backend/src/database/migrations/meta/0018_snapshot.json',
+  'app/backend/src/database/migrations/meta/_journal.json'
+)
+$hashAntes = $artefatosO4 | ForEach-Object {
+  [pscustomobject]@{ Path = $_; Hash = (Get-FileHash -Algorithm SHA256 $_).Hash }
+}
+Set-Location app/backend
+$saidaDrift = npm run db:generate -- --name=onda4_drift_probe 2>&1
+if ($LASTEXITCODE -ne 0 -or ($saidaDrift -join "`n") -notmatch 'No schema changes') {
+  throw "drift Drizzle: $($saidaDrift -join "`n")"
+}
+Set-Location ../..
+if (Test-Path app/backend/src/database/migrations/0019*) { throw 'drift criou 0019' }
+$hashDepois = $artefatosO4 | ForEach-Object {
+  [pscustomobject]@{ Path = $_; Hash = (Get-FileHash -Algorithm SHA256 $_).Hash }
+}
+if (Compare-Object $hashAntes $hashDepois -Property Path,Hash) {
+  throw 'artefatos de migration mudaram durante o gate'
+}
+git diff --check
+```
+
+   Commitar antes da execução final e exigir também `git status --short` vazio depois do probe.
+
+**Commits:** `fix(onda4): gerar backfill e contract com metadados drizzle` e
+`test(onda4): provar cadeia e rollback das migrations geradas`
 
 ---
 
@@ -5023,6 +5148,7 @@ npm ci
 npm run lint
 npm run type-check
 cd app/backend && npm run db:migrate && npm run db:seed && cd ../..
+cd app/backend && npm run test -- --runInBand test/unit/onda4-migrations-meta.spec.ts test/integration/onda4-migrations.e2e-spec.ts && cd ../..
 cd app/backend && npm run test -- --runInBand test/integration/compras-programadas.e2e-spec.ts && cd ../..
 cd app/backend && npm run test -- --runInBand test/unit/recebimento.dto.spec.ts test/unit/recebimento.service.spec.ts && cd ../..
 cd app/backend && npm run test -- --runInBand test/integration/pedido-fornecedor.e2e-spec.ts test/integration/recebimento.e2e-spec.ts && cd ../..
@@ -5238,8 +5364,9 @@ segue aberta e reprogramada por D26, sem invenção de AD); não adiciona cartã
 preservando os 9 do protótipo; não cria unicidade Pedido ao Fornecedor→Recebimento, não escolhe
 Pedido ao Fornecedor por Compra Programada e não declara a Onda 6 entregue.
 
-**Riscos e mitigação.** (a) *Backfill de `rota_padrao`* — o contract do 0017 aborta com exceção se
-sobrar linha não migrada, em vez de perder dado silenciosamente. (b) *Seed do catálogo* — é
+**Riscos e mitigação.** (a) *Backfill de `rota_padrao`* — o custom gerado 0017 faz código→nome
+único, inclui clientes soft-deletados e aborta antes do contract 0018 se sobrar linha não migrada;
+snapshots/journal encadeados, hashes e drift zero impedem reparo manual silencioso. (b) *Seed do catálogo* — é
 idempotente, sinalizado Provisório P11 e derivado do protótipo validado, não de suposição. (c)
 *Derivação dos 8 estados do mapa* — cada estado tem origem SQL literal em D17 e teste dedicado, o
 que impede reinterpretação durante a implementação. (d) *Divergência de códigos no protótipo* —
@@ -5297,12 +5424,16 @@ bytes do proxy, DoD-137 cobre título, blocos A–D em ordem, ausência da estru
 de erro da UI, e DoD-138 exige o `201` antes de consumir JSON. D35 não admite continuação implícita:
 DoD-139 exige `para_corte` na API/UI e 11 passos; DoD-140 falha com qualquer navegação/API ativa de
 O7/O9/O10 ou estado morto das etapas removidas.
+D36 não admite “consertar metadata”: DoD-141/142 exigem a cadeia gerada e separam DDL de custom;
+DoD-143/144 provam associação determinística e bloqueio sem perda; DoD-145 cobre banco limpo e
+legado; DoD-146 congela hashes e drift zero; DoD-147 prova rollback de aplicação por novas
+migrations geradas, sem down SQL manual.
 
 ---
 
 ## Contagens
 
-**24 tasks · 35 decisões de design · 71 itens de DoD (todos com teste 1:1) · 7 divergências
+**24 tasks · 36 decisões de design · 78 itens de DoD (todos com teste/gate 1:1) · 7 divergências
 autorizadas.**
 
 Os 2 itens novos em relação à emenda 3 são **DoD-125** e **DoD-126**: contrato do BFF
@@ -5331,8 +5462,12 @@ Os dois itens da emenda 11 são **DoD-139/140**: handoff `para_corte` comprovado
 fronteira executável contra navegação/API futura. A decisão nova é **D35**, a implementação ganha a
 Task 23 a partir de `be4df89f` e o fechamento passa a Task 24. Não nasce divergência autorizada,
 arquivo de produto, endpoint ou decisão de negócio.
+Os sete itens da emenda 12 são **DoD-141..147**: proveniência/metadata, separação DDL/custom,
+backfill determinístico, guarda, bancos limpo+legado, drift/hashes e rollback gerado. A decisão nova
+é **D36**; Tasks 1–2 substituem a receita de migrations, sem task de produto nova e sem reabrir
+D33–D35.
 
-Contagem da estrutura listada: backend = **17 arquivos de código novos + 15 testes novos + 31
+Contagem da estrutura listada: backend = **21 arquivos de código novos + 18 testes novos + 32
 alterados**; frontend = **36 novos (14 rotas BFF) + 21 alterados (5 rotas BFF) + 1 rota BFF movida
 e 3 removidos**.
 emenda 4 não altera o total de arquivos frontend novos+alterados: reclassifica a rota raiz como
@@ -5351,6 +5486,9 @@ preview sem manter alias.
 A emenda 11 altera somente `jornada-operacional.spec.ts` já contado e os artefatos/relatório de
 evidência já pertencentes à Task 21/fechamento; as contagens de código frontend/backend permanecem
 inalteradas.
+A emenda 12 substitui dois SQLs sem proveniência por três SQLs + três snapshots gerados, acrescenta
+dois helpers/testes de migration e um teste estático de metadata, e passa a contar `_journal.json`
+entre os alterados; não toca frontend nem código de produto.
 
 Divergências autorizadas: **D-01** abas Fiscais/Contatos sem conteúdo no protótipo → conteúdo
 derivado do JSONB já existente; **D-02** conjunto canônico único de códigos do catálogo;
