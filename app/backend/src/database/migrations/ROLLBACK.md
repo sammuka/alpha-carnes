@@ -61,30 +61,25 @@ ALTER TABLE "rotas" DROP COLUMN IF EXISTS "paradas";
 ALTER TABLE "perfis" DROP COLUMN IF EXISTS "menus_visiveis";
 ```
 
-## Onda 4 — ordem de rollback (contract → expand)
+## Onda 4 — rollback de aplicação gerado
 
-Rollback estrutural da Onda 4 **nesta ordem**:
+A reversão da aplicação segue a ordem lógica `0018` → `0017` → `0016`, mas não
+remove `rota_id`, índices nem as quatro tabelas da Onda 4. O objetivo é restaurar
+compatibilidade com a revisão anterior sem perder dados:
 
-1. `0017_onda4_comercial_contract`
-2. `0016_onda4_comercial_expand`
+1. abrir um hotfix no SHA que está em produção;
+2. reintroduzir `rotaPadrao: text('rota_padrao')` em
+   `clientes.schema.ts` e executar `drizzle-kit generate
+   --name=onda4_comercial_rollback_expand`;
+3. sem alterar o schema, executar `drizzle-kit generate --custom
+   --name=onda4_comercial_rollback_backfill`;
+4. preencher somente o SQL custom com o `UPDATE` que restaura
+   `clientes.rota_padrao` a partir de `rotas.codigo` via `rota_id`, seguido de
+   uma guarda `DO`/`RAISE EXCEPTION` para qualquer associação não restaurada;
+5. aplicar as duas migrations geradas e somente então restaurar a revisão
+   anterior da aplicação.
 
-### 0017 (contract)
-
-Antes de dropar `clientes.rota_padrao`, restaurar o valor a partir de `rotas.codigo`
-via `clientes.rota_id` caso seja necessário reverter:
-
-```sql
-ALTER TABLE "clientes" ADD COLUMN IF NOT EXISTS "rota_padrao" text;
-UPDATE "clientes" c SET "rota_padrao" = r."codigo"
-  FROM "rotas" r WHERE c."rota_id" = r."id";
-```
-
-### 0016 (expand)
-
-```sql
-ALTER TABLE "clientes" DROP COLUMN IF EXISTS "rota_id";
-DROP TABLE IF EXISTS "tabelas_preco_publicacoes";
-DROP TABLE IF EXISTS "tabelas_preco_itens";
-DROP TABLE IF EXISTS "tabelas_preco";
-DROP TABLE IF EXISTS "adendos_pedido";
-```
+Todo DDL desse hotfix nasce do delta do schema pelo Drizzle. O arquivo custom
+contém somente DML/PLpgSQL; journal e snapshots não são editados. Essa reversão
+preserva `rota_id`, `adendos_pedido`, `tabelas_preco`,
+`tabelas_preco_itens` e `tabelas_preco_publicacoes`.

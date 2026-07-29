@@ -30,6 +30,7 @@ export const clientes = pgTable(
     uniqueIndex('uq_clientes_codigo').on(t.codigo).where(sql`${t.deletedAt} IS NULL`),
     uniqueIndex('uq_clientes_documento_fiscal').on(t.documentoFiscal).where(sql`${t.deletedAt} IS NULL`),
     index('idx_clientes_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_clientes_rota').on(t.rotaId).where(sql`${t.deletedAt} IS NULL`),
     // JSONB filtrável (preferências) com índice GIN (convenção de schema).
     index('idx_clientes_preferencias_gin').using('gin', t.preferenciasJson),
   ],
