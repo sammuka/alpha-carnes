@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import request from 'supertest';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
@@ -82,10 +82,35 @@ describe('conferencia-tripla', () => {
       .expect(201);
     const recebimentoId = iniciado.body.recebimento.id as string;
 
-    // Caixaria: entrada direta sem balança
-    await db.insert(schema.recebimentosItens).values({
-      recebimentoId,
-      itemComercialId: caixa!.id,
+    // A fixture injeta a caixaria direto no PF, sem metadado de compra:
+    // o início materializa a linha conservadoramente como item de balança.
+    const [caixaMaterializada] = await db.select()
+      .from(schema.recebimentosItens)
+      .where(and(
+        eq(schema.recebimentosItens.recebimentoId, recebimentoId),
+        eq(schema.recebimentosItens.itemComercialId, caixa!.id),
+      ))
+      .limit(1);
+    expect(caixaMaterializada).toMatchObject({
+      quantidadeEsperada: '10.000',
+      quantidadeRecebida: '0.000',
+      requerBalanca: true,
+      statusApuracao: 'aguardando',
+    });
+
+    // Adapta a linha existente ao cenário sintético de caixaria direta.
+    await db.update(schema.recebimentosItens)
+      .set({
+        quantidadeRecebida: '10.000',
+        requerBalanca: false,
+        statusApuracao: 'entrada_direta',
+      })
+      .where(eq(schema.recebimentosItens.id, caixaMaterializada!.id));
+    const [caixaRecebida] = await db.select()
+      .from(schema.recebimentosItens)
+      .where(eq(schema.recebimentosItens.id, caixaMaterializada!.id))
+      .limit(1);
+    expect(caixaRecebida).toMatchObject({
       quantidadeEsperada: '10.000',
       quantidadeRecebida: '10.000',
       requerBalanca: false,
