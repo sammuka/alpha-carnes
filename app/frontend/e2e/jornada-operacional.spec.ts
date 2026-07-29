@@ -78,11 +78,6 @@ interface CadastroRegistro {
   documentoFiscal?: string;
 }
 
-interface PedidoDetalhe {
-  id: string;
-  itens: Array<{ id: string }>;
-}
-
 interface StepEvidence {
   id: string;
   title: string;
@@ -103,13 +98,13 @@ interface RunContext {
   itemComercialId: string;
   compraProgramadaId: string;
   pedidoVendaId: string;
-  pedidoVendaItemId: string;
   recebimentoId: string;
   pecaId: string;
   pecaCorteId: string;
-  subitemId: string;
-  caminhaoId: string;
+  limiteAtivo: 'para_corte';
 }
+
+type PecaNoHandoff = { id: string; statusPeca: string };
 
 function ensureCleanDirs() {
   fs.rmSync(SCREENSHOTS_DIR, { recursive: true, force: true });
@@ -347,9 +342,8 @@ function writeReport(steps: StepEvidence[], context: RunContext, observations: s
     ['Pedido venda', context.pedidoVendaId],
     ['Recebimento', context.recebimentoId],
     ['Peça carga', context.pecaId],
-    ['Peça corte', context.pecaCorteId],
-    ['Subitem', context.subitemId],
-    ['Caminhão', context.caminhaoId],
+    ['Peça no handoff', context.pecaCorteId],
+    ['Limite ativo da Onda 4', context.limiteAtivo],
   ];
 
   const html = `<!doctype html>
@@ -380,6 +374,9 @@ function writeReport(steps: StepEvidence[], context: RunContext, observations: s
     .note { margin:14px 0; padding:10px 12px; border-radius:8px; border:1px solid #92400e; background:rgba(146,64,14,.18); color:#fde68a; }
     img { display:block; width:100%; margin-top:18px; border:1px solid var(--line); border-radius:10px; box-shadow:0 18px 50px rgba(0,0,0,.45); }
     ul { margin:10px 0 0; color:#d4d4d8; }
+    table { width:100%; margin-top:16px; border-collapse:collapse; }
+    th, td { border:1px solid var(--line); padding:10px; text-align:left; vertical-align:top; }
+    th { color:var(--green); background:#111113; font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
   </style>
 </head>
 <body>
@@ -395,17 +392,27 @@ function writeReport(steps: StepEvidence[], context: RunContext, observations: s
   <main class="wrap">
     <section class="context">
       <h2>Rastreabilidade dos Dados</h2>
+      <p>Limite ativo da Onda 4: para_corte</p>
       <div class="context-grid">
         ${ids.map(([label, value]) => `<div><strong>${escapeHtml(label)}</strong><p><code>${escapeHtml(value)}</code></p></div>`).join('')}
       </div>
     </section>
     <section class="coverage">
-      <h2>Cobertura e Lacunas</h2>
+      <h2>Limite ativo e próximos handoffs</h2>
       <ul>
-        <li>Validado em tela: login, dashboard, cadastros, disponibilidade, pedido, recebimento, pesagem, corte, expedição, detalhe de caminhão, faturamento e auditoria.</li>
-        <li>Preparado por API por ainda não haver tela dedicada: regra de desdobramento, compra programada, vínculo/carga/conferência/fechamento de expedição.</li>
-        <li>Auditoria ainda é tela informativa; o backend registra eventos, mas a visualização filtrável segue pendente.</li>
+        <li>Onda 4 validada até o status para_corte: UI, API e evidência 11 sobre a mesma peça.</li>
       </ul>
+      <table>
+        <thead>
+          <tr><th>Handoff futuro</th><th>Onda dona</th><th>Contrato futuro</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Desossa</td><td>Onda 7 · matriz 17–19</td><td>Painel/Modo TV, regra exclusiva parametrizada, checklist, divergência, peça mãe, etiqueta e rastreabilidade ponta a ponta.</td></tr>
+          <tr><td>Carga</td><td>Onda 9 · matriz 23–25</td><td>Planejamento, bipagem/conferência, congelamento após fechamento e envio para faturamento.</td></tr>
+          <tr><td>Faturamento</td><td>Onda 10 · matriz 26–29</td><td>Adapter EISS/flag RTC, Notas/XML, Seguro F6b, liberação e checklist.</td></tr>
+          <tr><td>Auditoria futura</td><td>DoD transversal das Ondas 7/9/10</td><td>A tela /admin/auditoria pertence à Onda 3 e não prova eventos que ainda não existem; cada onda dona deve testar suas mutações críticas.</td></tr>
+        </tbody>
+      </table>
     </section>
     ${observations.length > 0 ? `<section class="observations"><h2>Observações Técnicas</h2><ul>${observations.map((o) => `<li>${escapeHtml(o)}</li>`).join('')}</ul></section>` : ''}
     ${rows}
@@ -419,11 +426,12 @@ function writeReport(steps: StepEvidence[], context: RunContext, observations: s
 test.describe('Jornada Operacional AlphaCarnes', () => {
   test.setTimeout(600_000);
 
-  test('cria dados, executa fluxos implementados e gera evidência HTML', async ({ page, request }) => {
+  test('cria dados, executa a O4 ate o handoff para_corte e gera evidencia HTML', async ({ page, request }) => {
     ensureCleanDirs();
 
     const steps: StepEvidence[] = [];
     const observations: string[] = [];
+    const caminhosVisitados: string[] = [];
     const runId = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
     const seed = Number(runId.slice(-9));
     const codigo = (prefix: string) => `E2E-${prefix}-${runId}`;
@@ -436,6 +444,11 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
       if (res.status() >= 500) observations.push(`HTTP ${res.status()}: ${res.url()}`);
     });
     page.on('requestfailed', (req) => observations.push(`Request failed: ${req.url()} - ${req.failure()?.errorText ?? 'unknown'}`));
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) {
+        caminhosVisitados.push(new URL(frame.url()).pathname);
+      }
+    });
 
     const auth = await loginBackend(request);
 
@@ -580,10 +593,6 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
       `Pedido criado com status ${pedido.status}.`,
       'A UX atual ainda exige UUIDs; o relatório registra esse ponto para evolução posterior.',
     );
-    const pedidoDetalhe = await backend<PedidoDetalhe>(request, auth.cookieHeader, 'GET', `/comercial/pedidos/${pedido.id}`);
-    const pedidoVendaItemId = pedidoDetalhe.itens[0]?.id;
-    if (!pedidoVendaItemId) throw new Error('Pedido criado sem item retornado no detalhe');
-
     const pedidoFornecedor = await backend<{ id: string; numero: string }>(
       request,
       auth.cookieHeader,
@@ -661,176 +670,48 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     await page.getByRole('button', { name: 'Capturar Peso' }).click();
     const pecaCorte = (await (await pecaCorteResponse).json()) as { id: string };
     await expect(page.getByTestId('peca-status')).toContainText('pesada', { timeout: 10_000 });
-    await page.getByRole('button', { name: 'Desossa' }).click();
+    await page.getByTestId('peca-atual').getByRole('button', { name: 'Desossa' }).click();
     await expect(page.getByTestId('peca-status')).toContainText('para_corte', { timeout: 10_000 });
+    const pecaNoHandoff = await backend<PecaNoHandoff>(
+      request,
+      auth.cookieHeader,
+      'GET',
+      `/operacao/pesagem/pecas/${pecaCorte.id}`,
+    );
+    expect(pecaNoHandoff).toEqual(expect.objectContaining({
+      id: pecaCorte.id,
+      statusPeca: 'para_corte',
+    }));
+    await expect(page).toHaveURL(
+      new RegExp(`/recebimento/pesagem-destinacao\\?recebimentoId=${recebimentoId}`),
+    );
     await page.getByRole('button', { name: 'Confirmar e imprimir etiqueta' }).click();
     await capture(
       page,
       steps,
       '11-pesagem-para-corte',
-      'Peça Pesada para Corte',
-      'Gerar uma segunda peça para validar o fluxo de transformação.',
-      'Nova captura automática sobre o mesmo recebimento e item comercial.',
-      'Peça ficou no status pesada, pronta para ser cortada.',
+      'Handoff para Desossa',
+      'Provar o último estado real da Onda 4 antes da Desossa.',
+      'A segunda peça foi pesada e destinada à Desossa pela UI; a API canônica foi relida.',
+      'Peça confirmada em para_corte na UI e na API. A continuação pertence à Onda 7.',
     );
 
-    await page.goto(`${BASE_URL}/operacao/corte`);
-    await expect(page.getByText('Balança: disponivel')).toBeVisible({ timeout: 15_000 });
-    await page.locator('#pecaId').fill(pecaCorte.id);
-    await fillInputValue(page, '#dataOp', compra.dataOperacao);
-    await page.getByRole('button', { name: 'Iniciar corte' }).click();
-    await expect(page.getByTestId('corte-atual')).toBeVisible({ timeout: 10_000 });
-    await page.locator('#itemComercialSubitem').fill(itemComercialId);
-    const subitemResponse = page.waitForResponse((res) => res.url().includes('/api/operacao/corte/') && res.url().includes('/subitens') && res.request().method() === 'POST');
-    await page.getByRole('button', { name: '+ Adicionar subitem' }).click();
-    const subitem = (await (await subitemResponse).json()) as { id: string };
-    await page.getByRole('button', { name: 'Pesar automático' }).click();
-    await expect(page.getByTestId('subitem-status')).toContainText('pesado', { timeout: 10_000 });
-    await page.getByRole('button', { name: 'Sugerir pedido' }).click();
-    await page.getByLabel(`Item do pedido ${subitem.id}`).fill(pedidoVendaItemId);
-    await page.getByRole('button', { name: 'Associar' }).click();
-    await expect(page.getByTestId('subitem-status')).toContainText('associado', { timeout: 10_000 });
-    await page.getByRole('button', { name: 'Emitir etiqueta' }).click();
-    await expect(page.getByText('QR-SUB-')).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Concluir corte' }).click();
-    await expect(page.getByText('Transformação concluída')).toBeVisible({ timeout: 10_000 });
-    await capture(
-      page,
-      steps,
-      '12-corte',
-      'Corte e Transformação',
-      'Transformar uma peça em subitem, pesar, associar, etiquetar e concluir.',
-      'Subitem criado com o item comercial correto e associado ao pedido por sugestão/ID.',
-      'Transformação concluída com rastreabilidade da peça de origem para o subitem.',
-    );
+    const caminhosFuturos = [
+      ['desossa'],
+      ['carga'],
+      ['faturamento'],
+      ['operacao', 'corte'],
+      ['operacao', 'expedicao'],
+      ['operacao', 'faturamento'],
+    ].map((partes) => `/${partes.join('/')}`);
 
-    const caminhao = await backend<{ id: string }>(request, auth.cookieHeader, 'POST', '/operacao/expedicao/caminhoes', {
-      placa: `E2E${runId.slice(-4)}`,
-      motorista: 'Motorista E2E',
-      rota: 'Rota E2E Osasco',
-      dataOperacao: compra.dataOperacao,
-    });
-    await backend(request, auth.cookieHeader, 'POST', `/operacao/expedicao/caminhoes/${caminhao.id}/pedidos`, {
-      pedidoVendaId: pedido.id,
-      ordemNaCarga: 1,
-    });
-
-    await page.goto(`${BASE_URL}/operacao/expedicao`);
-    await fillInputValue(page, '#data-operacao', compra.dataOperacao);
-    await expect(page.getByText('Motorista E2E')).toBeVisible({ timeout: 15_000 });
-    await capture(
-      page,
-      steps,
-      '13-expedicao-planejada',
-      'Expedição Planejada',
-      'Listar caminhão criado para a data operacional da jornada.',
-      'Caminhão e vínculo com pedido foram preparados via API; a tela filtra a data escolhida.',
-      'Caminhão aparece em tela com status planejado e ação para abrir carga.',
-      'A criação de caminhão e vínculo de pedido ainda não possuem formulário dedicado.',
+    const navegacoesFuturas = caminhosVisitados.filter((caminho) =>
+      caminhosFuturos.some((prefixo) =>
+        caminho === prefixo || caminho.startsWith(`${prefixo}/`),
+      ),
     );
-    await page.getByTestId('btn-abrir-carga').click();
-    await expect(page.getByTestId('status-badge')).toContainText('em carga', { timeout: 10_000 });
-
-    await backend(request, auth.cookieHeader, 'POST', `/operacao/expedicao/caminhoes/${caminhao.id}/itens`, {
-      tipoOrigem: 'peca',
-      id: peca.id,
-    });
-    await backend(request, auth.cookieHeader, 'POST', `/operacao/expedicao/caminhoes/${caminhao.id}/itens`, {
-      tipoOrigem: 'subitem',
-      id: subitem.id,
-    });
-    await backend(request, auth.cookieHeader, 'POST', `/operacao/expedicao/caminhoes/${caminhao.id}/conferencia/iniciar`);
-    await backend(request, auth.cookieHeader, 'POST', `/operacao/expedicao/caminhoes/${caminhao.id}/conferencia/registrar-item`, {
-      tipoOrigem: 'peca',
-      modoCaptura: 'manual_assistido',
-      codigo: `QR-${peca.id}`,
-      motivo: 'Conferência E2E por código impresso',
-    });
-    await backend(request, auth.cookieHeader, 'POST', `/operacao/expedicao/caminhoes/${caminhao.id}/conferencia/registrar-item`, {
-      tipoOrigem: 'subitem',
-      modoCaptura: 'manual_assistido',
-      codigo: `QR-SUB-${subitem.id}`,
-      motivo: 'Conferência E2E por código impresso',
-    });
-    await backend(request, auth.cookieHeader, 'POST', `/operacao/expedicao/caminhoes/${caminhao.id}/conferencia/concluir`);
-    await backend(request, auth.cookieHeader, 'POST', `/operacao/expedicao/caminhoes/${caminhao.id}/fechar`, {});
-    await page.goto(`${BASE_URL}/operacao/expedicao`);
-    await fillInputValue(page, '#data-operacao', compra.dataOperacao);
-    await expect(page.getByTestId('status-badge')).toContainText('fechado', { timeout: 15_000 });
-    await capture(
-      page,
-      steps,
-      '14-expedicao-fechada',
-      'Expedição Fechada',
-      'Validar reflexo em tela após carga, conferência e fechamento.',
-      'Itens foram carregados e conferidos via API autenticada por falta de tela de detalhe operacional completa.',
-      'Caminhão aparece fechado, pronto para faturamento.',
-    );
-
-    await page.getByTestId('link-detalhe').click();
-    await expect(page.getByRole('heading', { name: /Caminhão/ })).toBeVisible({ timeout: 10_000 });
-    await capture(
-      page,
-      steps,
-      '15-expedicao-detalhe',
-      'Detalhe do Caminhão',
-      'Abrir a rota de detalhe exposta pela listagem de expedição.',
-      'Clique no link Ver detalhe do caminhão.',
-      'Página de detalhe carrega status, pedido vinculado, previsto e carregado.',
-    );
-
-    await page.goto(`${BASE_URL}/operacao/faturamento`);
-    await page.locator('#caminhao-id').fill(caminhao.id);
-    await page.getByRole('button', { name: 'Consolidar' }).click();
-    await expect(page.getByTestId('lista-pedidos')).toBeVisible({ timeout: 15_000 });
-    await capture(
-      page,
-      steps,
-      '16-faturamento-consolidado',
-      'Faturamento Consolidado',
-      'Consolidar caminhão fechado e listar pedidos faturáveis.',
-      'ID do caminhão informado na tela de faturamento.',
-      'Pedido aparece consolidado, sem bloqueios críticos.',
-    );
-
-    await page.getByLabel('Valor (R$)').fill('1500.00');
-    await page.getByRole('button', { name: 'Emitir NFS-e' }).click();
-    await expect(page.getByText('NFS-e nº')).toBeVisible({ timeout: 20_000 });
-    await capture(
-      page,
-      steps,
-      '17-nfse-emitida',
-      'NFS-e Emitida',
-      'Emitir NFS-e pelo gateway fake determinístico.',
-      'Valor informado e ação Emitir NFS-e executada na UI.',
-      'Nota emitida com número e código de verificação fake.',
-    );
-
-    await page.getByLabel('Motivo do cancelamento').fill('Cancelamento validado pela jornada E2E');
-    await page.getByTestId('btn-cancelar').click();
-    await expect(page.getByText('cancelada')).toBeVisible({ timeout: 15_000 });
-    await capture(
-      page,
-      steps,
-      '18-nfse-cancelada',
-      'NFS-e Cancelada',
-      'Validar cancelamento auditável de NFS-e emitida.',
-      'Motivo de cancelamento preenchido e ação Cancelar executada.',
-      'Nota fiscal passou para status cancelada.',
-    );
-
-    await page.goto(`${BASE_URL}/admin/auditoria`);
-    await expect(page.getByRole('heading', { name: 'Auditoria' })).toBeVisible({ timeout: 10_000 });
-    await capture(
-      page,
-      steps,
-      '19-auditoria',
-      'Auditoria',
-      'Registrar o estado atual da tela administrativa de auditoria.',
-      'Abertura da rota /admin/auditoria.',
-      'Tela informativa carregada; listagem filtrável de eventos ainda está pendente.',
-      'O backend registra auditoria nas mutações; a UI ainda é placeholder.',
-    );
+    expect(navegacoesFuturas).toEqual([]);
+    expect(steps).toHaveLength(11);
 
     writeReport(
       steps,
@@ -843,16 +724,62 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
         itemComercialId,
         compraProgramadaId: compra.compraProgramadaId,
         pedidoVendaId: pedido.id,
-        pedidoVendaItemId,
         recebimentoId,
         pecaId: peca.id,
         pecaCorteId: pecaCorte.id,
-        subitemId: subitem.id,
-        caminhaoId: caminhao.id,
+        limiteAtivo: 'para_corte',
       },
       observations,
     );
 
-    expect(fs.existsSync(path.join(EVIDENCE_DIR, 'index.html'))).toBe(true);
+    const relatorioPath = path.join(EVIDENCE_DIR, 'index.html');
+    expect(fs.existsSync(relatorioPath)).toBe(true);
+    const relatorio = fs.readFileSync(relatorioPath, 'utf8');
+    expect((relatorio.match(/<section class="step"/g) ?? [])).toHaveLength(11);
+    expect(relatorio).toContain('Limite ativo da Onda 4: para_corte');
+    expect(relatorio).toContain('11-pesagem-para-corte.png');
+    expect(relatorio).not.toMatch(
+      /(?:src|id)="(?:12|13|14|15|16|17|18|19)-/,
+    );
   });
+});
+
+// D35: contrato estático da fronteira
+test('contrato estatico impede a jornada O4 de atravessar ondas futuras', async () => {
+  const arquivo = fs.readFileSync(__filename, 'utf8');
+  const fonteDaJornada = arquivo.split('// D35: contrato estático da fronteira')[0] ?? '';
+  const escaparRegex = (valor: string) =>
+    valor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const caminhos = [
+    ['operacao', 'corte'],
+    ['operacao', 'expedicao'],
+    ['operacao', 'faturamento'],
+    ['desossa'],
+    ['carga'],
+    ['faturamento'],
+  ].map((partes) => `/${partes.join('/')}`);
+  for (const caminho of caminhos) {
+    expect(fonteDaJornada).not.toMatch(
+      new RegExp(`page\\.goto\\([^\\n]*${escaparRegex(caminho)}`),
+    );
+  }
+
+  const namespacesApi = [
+    ['operacao', 'corte'],
+    ['operacao', 'expedicao'],
+    ['operacao', 'faturamento'],
+  ].map((partes) => `/${partes.join('/')}`);
+  for (const namespace of namespacesApi) {
+    expect(fonteDaJornada).not.toMatch(
+      new RegExp(`backend[\\s\\S]{0,320}${escaparRegex(namespace)}`),
+    );
+  }
+
+  expect(fonteDaJornada).not.toMatch(
+    new RegExp(`\\b${['subitem', 'Id'].join('')}\\b`),
+  );
+  expect(fonteDaJornada).not.toMatch(
+    new RegExp(`\\b${['caminhao', 'Id'].join('')}\\b`),
+  );
 });
