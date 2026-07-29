@@ -51,7 +51,7 @@ Jest (backend e frontend) · Playwright (e2e).
 | Emenda 9 | A jornada real da Task 21 chegou à Grade pelo código do item, mas a criação do pedido recebeu `400`: `GET /comercial/compras-programadas?pageSize=100` devolvia `operacaoId` sem `dataOperacao`; o BFF apenas repassava esse contrato incompleto e `PedidoEditor.payloadNovo()` enviava `undefined` ao schema do backend. **D33** corrige a origem e alinha toda a API pública: lista, detalhe e mutações derivam a data de `operacoes.data` pelo `operacaoId`; confirmação preserva seu envelope tipado; nenhum BFF/editor fabrica fallback. **DoD-129/130/131** fixam todos os retornos, o consumo real no editor e o envelope BFF, e a Task 21 preserva Grade por código + criação do pedido como prova final. `/gestao/compras` permanece ownership da Onda 5, com ordem de integração explícita após o merge O4 |
 | Emenda 10 | A mesma microprova da Task 21 passou por Grade + `POST /pedidos`, abriu Recebimento e recebeu `400`: o contrato Onda 1/D3 exige `pedidoFornecedorId`, mas `IniciarRecebimentoPayload`, a tela e o Playwright ainda consultavam/selecionavam Compra Programada e enviavam `compraProgramadaId`. **D34** corrige a costura herdada sem fallback: consulta explicitamente Pedidos ao Fornecedor elegíveis (`enviado`/`aguardando_recebimento`) sob o recorte UI 1:1 de P7, preview e itens nascem do snapshot do Pedido ao Fornecedor, contexto/eventos pós-commit falham fechado, BFF preserva método/status/body/header sem inventar `content-type`, envelope não vaza `nfId` e o Playwright usa o Select Radix real. **DoD-132..138** cobrem DTO, listagem/preview/início, BFF, UI e Playwright; a prova D33 Grade + criação do pedido continua una e anterior. A correção fica na Onda 4 porque bloqueia seu gate E2E, sem antecipar a completude funcional da Onda 6 nem tocar a Onda 5 |
 | Emenda 11 | A execução pós-D34 chegou pela UI até a segunda peça em `para_corte` e gerou a evidência 11, mas o trecho herdado seguinte navegou para `/operacao/corte`, que o `next.config.ts` redireciona a `/desossa/pesagem-destinacao`; a página de destino ainda é `PlaceholderPage` e pertence integralmente à Onda 7. **D35** torna `para_corte` o handoff ativo e verificável da jornada O4, remove por inteiro as etapas 12–19 herdadas (Desossa, Carga, Faturamento e a falsa conclusão de auditoria), preserva todas as provas 1–11/D33/D34 e registra as continuações nas ondas donas sem antecipar código. **DoD-139/140** fixam API + UI + screenshot/relatório do último estado real e uma microprova executável que falha se a jornada voltar a navegar ou chamar APIs das Ondas 7/9/10 |
-| Emenda 12 | O Portão 2 da PR #35 marcou `ajustar` no veredito `3244d49`: `0016`/`0017` e o journal foram escritos sem os snapshots correspondentes, sem proveniência reproduzível de `drizzle-kit generate`. **D36** substitui integralmente a receita manual de D3/Tasks 1–2 por três estágios canônicos: expand estrutural gerado, backfill+guarda criado com `generate --custom` e contract estrutural gerado. O Worker não edita journal/snapshot, não escreve `ALTER TABLE` nem índice à mão, declara `idx_clientes_rota` no schema e prova cadeia de ids, hashes, drift zero, migração limpa/legada, guarda, rerun, seed e rollback gerado. **DoD-141..147** fecham o único bloqueio material sem reabrir D33–D35 nem reduzir a completude da O4 |
+| Emenda 12 | O Portão 2 da PR #35 marcou `ajustar` no veredito `3244d49`: `0016`/`0017` e o journal foram escritos sem os snapshots correspondentes, sem proveniência reproduzível de `drizzle-kit generate`. **D36** substitui integralmente a receita manual de D3/Tasks 1–2 por três estágios canônicos: expand estrutural gerado, backfill+guarda criado com `generate --custom` e contract estrutural gerado. O Worker não edita journal/snapshot, não escreve `ALTER TABLE` nem índice à mão, declara `idx_clientes_rota` no schema e prova cadeia de ids, hashes, drift zero, migração limpa/legada, guarda, rerun, seed e rollback gerado. **DoD-141..147** fecham o bloqueio material sem reabrir D33–D35 nem reduzir a completude da O4. O Portão 1 de D36 em `09e2fed` acrescentou um único ajuste operacional: a Task 24 reutiliza obrigatoriamente a PR #35/branch `feature/onda4-comercial`, publica no relatório e no body as provas/hashes D36 e só cria PR se a consulta comprovar que nenhuma PR aberta existe para a branch |
 | Worktree da Emenda 4 | `F:/Projetos/AlphaCarnes/.worktrees/o4-plan-fix` |
 | Branch da Emenda 4 | `plan/onda4-task13-contract` |
 | Base da Emenda 4 | `origin/develop` = `c2fe0e09f230e7748d532d2292e059f027941e0e` |
@@ -1290,7 +1290,7 @@ via `test/helpers/test-app.ts`.
 | DoD-143 | **D36/backfill:** código tem precedência, nome só associa quando único, rota removida/nome ambíguo não produz associação, clientes ativos e soft-deletados são preservados e reaplicar 0017 não altera linhas já migradas | `app/backend/test/integration/onda4-migrations.e2e-spec.ts` › `0017 faz backfill deterministico e idempotente sem inventar rota` |
 | DoD-144 | **D36/guarda:** legado sem correspondência faz 0017 lançar `backfill incompleto`, conserva `rota_padrao`, impede 0018 e permite corrigir o dado e retomar sem perda | `app/backend/test/integration/onda4-migrations.e2e-spec.ts` › `guarda bloqueia o contract ate todo legado estar associado` |
 | DoD-145 | **D36/clean e legado:** banco limpo migra 0000→0018; banco parado em 0015 com fixtures migra 0016→0018; ambos terminam com quatro tabelas O4, FK/índice, sem `rota_padrao`, com seed idempotente e segunda execução de migrate sem efeito | `app/backend/test/integration/onda4-migrations.e2e-spec.ts` › `cadeia gerada migra bancos limpo e legado ate o contract` |
-| DoD-146 | **D36/drift e hashes:** os sete SHA-256 registrados antes/depois dos testes são iguais; `db:generate --name=onda4_drift_probe` informa ausência de mudança, não cria 0019 e deixa `migrations/` e schema sem diff | comando de gate da Task 2 › `drizzle nao encontra drift depois da cadeia 0016 a 0018` |
+| DoD-146 | **D36/drift, hashes e publicação:** os sete SHA-256 antes/depois são iguais; `db:generate --name=onda4_drift_probe` informa ausência de mudança, não cria 0019 e deixa `migrations/`/schema sem diff; relatório e body da PR #35 contêm a mesma tabela caminho→SHA-256, comandos/resultados clean/legacy/guarda/rollback e heads testado/publicado | comando de gate da Task 2 + Task 24 › `drizzle nao encontra drift e a PR 35 publica a proveniencia D36` |
 | DoD-147 | **D36/rollback:** em cópia descartável, rollback de aplicação é preparado somente por expand gerada + custom backfill inverso, restaura `rota_padrao` por `rotas.codigo`, preserva estruturas/dados O4 e permite inicializar a revisão anterior sem SQL estrutural manual | `app/backend/test/integration/onda4-migrations.e2e-spec.ts` › `receita de rollback gerado restaura compatibilidade sem perder dados O4` |
 
 **78 itens de DoD** (DoD-70 a DoD-147), todos com teste ou gate nomeado 1:1 — DoD-114 é o gate de
@@ -5120,17 +5120,68 @@ edita `docs/execucao/`).
 **Steps**
 
 1. O **Worker** roda o **Gate local completo** (seção seguinte) até verde.
-2. O **Worker** escreve `docs/evidencias/onda4-comercial/RELATORIO.md` no formato de
-   `pipeline-execucao.md §7`, inclui comandos, resultados, evidências e head testado; não edita
-   nenhum arquivo de `docs/execucao/`.
-3. O **Worker** commita código, testes, evidências e relatório, faz push e abre o PR
-   `feat(onda4): Comercial completo` → `develop`. Entrega ao Executor número do PR e SHA do head.
-4. O **Executor**, e somente ele, adquire o lock `onda4-status` por
+2. O **Worker** acrescenta ao `docs/evidencias/onda4-comercial/RELATORIO.md`, sem apagar as
+   evidências anteriores, uma seção final `## D36 — migrations Drizzle geradas`. A seção usa o
+   formato de `pipeline-execucao.md §7` e contém obrigatoriamente, nesta ordem:
+   (a) `headTestadoD36 = git rev-parse HEAD` antes do commit documental; (b) versões de Node/npm,
+   `drizzle-kit`/`drizzle-orm` e PostgreSQL; (c) comando e saída resumida dos três `generate`,
+   deixando explícito que 0017 foi `--custom`; (d) `git diff --check`; (e) resultados nomeados dos
+   cenários clean, legacy, guarda, correção+rereexecução, seed/migrate idempotentes e rollback
+   gerado; (f) saída do drift probe, ausência de 0019 e `git diff` zero após o probe; (g) a tabela
+   literal abaixo, preenchida com os hashes reais **anteriores** e **posteriores** ao gate:
+
+| Caminho | SHA-256 antes | SHA-256 depois | Resultado |
+|---|---|---|---|
+| `app/backend/src/database/migrations/0016_onda4_comercial_expand.sql` | `<64 hex>` | `<64 hex>` | `igual` |
+| `app/backend/src/database/migrations/meta/0016_snapshot.json` | `<64 hex>` | `<64 hex>` | `igual` |
+| `app/backend/src/database/migrations/0017_onda4_comercial_backfill.sql` | `<64 hex>` | `<64 hex>` | `igual` |
+| `app/backend/src/database/migrations/meta/0017_snapshot.json` | `<64 hex>` | `<64 hex>` | `igual` |
+| `app/backend/src/database/migrations/0018_onda4_comercial_contract.sql` | `<64 hex>` | `<64 hex>` | `igual` |
+| `app/backend/src/database/migrations/meta/0018_snapshot.json` | `<64 hex>` | `<64 hex>` | `igual` |
+| `app/backend/src/database/migrations/meta/_journal.json` | `<64 hex>` | `<64 hex>` | `igual` |
+
+   Placeholder, hash truncado, apenas “verde” sem comando/contagem ou tabela fora do relatório
+   falham DoD-146. O Worker não edita nenhum arquivo de `docs/execucao/`.
+3. O **Worker** commita código, testes, evidências e relatório e faz push **na branch já existente**
+   `feature/onda4-comercial`. A PR canônica continua sendo a **#35**; não se abre outra PR para a
+   mesma head branch. Depois do push, exige que `git ls-remote origin
+   refs/heads/feature/onda4-comercial` seja igual a `git rev-parse HEAD` e guarda esse valor como
+   `headPublicadoD36`.
+4. O **Worker** consulta a PR por branch antes de qualquer escrita remota:
+
+```powershell
+$repo = 'sammuka/alpha-carnes'
+$branchO4 = 'feature/onda4-comercial'
+$prsO4 = @(gh pr list --repo $repo --head $branchO4 --state open `
+  --json number,url,headRefName,headRefOid | ConvertFrom-Json)
+if ($prsO4.Count -gt 1) { throw 'mais de uma PR aberta para feature/onda4-comercial' }
+if ($prsO4.Count -eq 1 -and $prsO4[0].number -ne 35) {
+  throw "PR inesperada para a branch: #$($prsO4[0].number)"
+}
+```
+
+   Com a PR #35 encontrada, o Worker gera o body determinístico em
+   `.codex/runtime/onda4-pr35-body.md`: conteúdo integral do relatório versionado, seguido de uma
+   seção `## Publicação` com `PR: #35`, `headTestadoD36` e `headPublicadoD36`. Antes de gravar,
+   resolve os caminhos e exige que o destino permaneça sob `.codex/runtime`; usa UTF-8 sem BOM e
+   newline LF. Então executa `gh pr edit 35 --repo $repo --body-file
+   .codex/runtime/onda4-pr35-body.md`. Como o body incorpora o relatório, a tabela
+   caminho→SHA-256 e todas as provas D36 ficam idênticas nos dois lugares.
+5. `gh pr create` existe somente no ramo `$prsO4.Count -eq 0`, para recuperação excepcional quando
+   a PR #35 não estiver aberta. Nesse ramo, usa o mesmo body file, título
+   `feat(onda4): Comercial completo`, base `develop`, head `feature/onda4-comercial`, registra o
+   número retornado e para para o Executor reconciliar a ausência da #35; nunca tenta criar PR
+   depois de encontrar a #35.
+6. O Worker lê novamente a PR e exige: número 35 no caminho normal, `headRefOid` igual ao
+   `headPublicadoD36`, body contendo os dois heads, os sete caminhos, quatorze hashes de 64 hex e
+   os marcadores `clean`, `legacy`, `guarda`, `rollback` e `No schema changes`. Só então entrega ao
+   Executor número da PR e SHA publicado.
+7. O **Executor**, e somente ele, adquire o lock `onda4-status` por
    `.codex/scripts/lock.ps1`, valida o resultado estruturado `status = 'acquired'`, confirma PR/head
    e então atualiza `EXECUCAO-STATUS.md` para `aguardando_portao2` com o número do PR. O Executor
    commita a transição em PR de coordenação quando exigido por `pipeline-execucao.md §4`, libera o
    lock no `finally` com o mesmo token e valida `status = 'released'`.
-5. O Worker não edita, inclui byte a byte, commita ou faz push de
+8. O Worker não edita, inclui byte a byte, commita ou faz push de
    `docs/execucao/EXECUCAO-STATUS.md`; o Executor não altera código, testes, evidências ou relatório.
 
 **Commit do Worker:** `docs(onda4): registrar relatório de implementação`
@@ -5211,13 +5262,84 @@ if ($relatorioD35 -notmatch 'Limite ativo da Onda 4: para_corte') {
 }
 ```
 
-Abertura do PR:
+Atualização da PR canônica:
 
-```bash
+```powershell
 git push -u origin feature/onda4-comercial
-gh pr create --base develop --head feature/onda4-comercial \
-  --title "feat(onda4): Comercial completo" \
-  --body-file docs/evidencias/onda4-comercial/RELATORIO.md
+$headPublicadoD36 = git rev-parse HEAD
+$headRemotoD36 = (git ls-remote origin refs/heads/feature/onda4-comercial).Split("`t")[0]
+if ($headRemotoD36 -ne $headPublicadoD36) { throw 'push O4 não confirmou o head local' }
+
+$repo = 'sammuka/alpha-carnes'
+$branchO4 = 'feature/onda4-comercial'
+$prsO4 = @(gh pr list --repo $repo --head $branchO4 --state open `
+  --json number,url,headRefName,headRefOid | ConvertFrom-Json)
+if ($prsO4.Count -gt 1) { throw 'mais de uma PR aberta para a branch O4' }
+
+New-Item -ItemType Directory -Force '.codex/runtime' | Out-Null
+$runtimeRaiz = (Resolve-Path '.codex/runtime').Path
+$bodyPr35 = [IO.Path]::GetFullPath((Join-Path $runtimeRaiz 'onda4-pr35-body.md'))
+if (-not $bodyPr35.StartsWith($runtimeRaiz + [IO.Path]::DirectorySeparatorChar)) {
+  throw 'body fora de .codex/runtime'
+}
+$relatorio = Get-Content -Raw 'docs/evidencias/onda4-comercial/RELATORIO.md'
+$headTestadoD36 = [regex]::Match(
+  $relatorio,
+  '(?m)^headTestadoD36\s*=\s*([0-9a-f]{40})$'
+).Groups[1].Value
+if (-not $headTestadoD36) { throw 'relatório sem headTestadoD36' }
+$body = $relatorio.TrimEnd() + "`n`n## Publicação`n`n" +
+  "- PR: #35`n- headTestadoD36: $headTestadoD36`n" +
+  "- headPublicadoD36: $headPublicadoD36`n"
+[IO.File]::WriteAllText(
+  $bodyPr35,
+  $body.Replace("`r`n", "`n"),
+  [Text.UTF8Encoding]::new($false)
+)
+
+if ($prsO4.Count -eq 1) {
+  if ($prsO4[0].number -ne 35) { throw "PR inesperada: #$($prsO4[0].number)" }
+  gh pr edit 35 --repo $repo --body-file $bodyPr35
+} else {
+  gh pr create --repo $repo --base develop --head $branchO4 `
+    --title 'feat(onda4): Comercial completo' --body-file $bodyPr35
+  throw 'PR #35 ausente; PR de recuperação criada e requer reconciliação do Executor'
+}
+
+$pr35 = gh pr view 35 --repo $repo --json number,headRefOid,body | ConvertFrom-Json
+if ($pr35.headRefOid -ne $headPublicadoD36) { throw 'PR #35 não aponta para o head publicado' }
+if ($pr35.body -notmatch [regex]::Escape($headTestadoD36) -or
+    $pr35.body -notmatch [regex]::Escape($headPublicadoD36)) {
+  throw 'body da PR #35 não registra os heads D36'
+}
+$secaoD36 = [regex]::Match(
+  $pr35.body,
+  '(?ms)^## D36 — migrations Drizzle geradas\s*(.+?)(?=^## Publicação$)'
+).Groups[1].Value
+if (-not $secaoD36) { throw 'body da PR #35 sem seção D36' }
+$caminhosHashD36 = @(
+  '0016_onda4_comercial_expand.sql',
+  'meta/0016_snapshot.json',
+  '0017_onda4_comercial_backfill.sql',
+  'meta/0017_snapshot.json',
+  '0018_onda4_comercial_contract.sql',
+  'meta/0018_snapshot.json',
+  'meta/_journal.json'
+)
+foreach ($caminho in $caminhosHashD36) {
+  $linha = @($secaoD36 -split "`n" | Where-Object { $_ -match [regex]::Escape($caminho) })
+  if ($linha.Count -ne 1 -or
+      ([regex]::Matches($linha[0], '(?i)\b[0-9a-f]{64}\b')).Count -ne 2 -or
+      $linha[0] -notmatch '\|\s*igual\s*\|') {
+    throw "linha de hash D36 inválida: $caminho"
+  }
+}
+foreach ($marcador in @('clean','legacy','guarda','rollback','No schema changes')) {
+  if ($secaoD36 -notmatch [regex]::Escape($marcador)) {
+    throw "prova D36 ausente no body: $marcador"
+  }
+}
+Remove-Item -LiteralPath $bodyPr35
 ```
 
 ---
@@ -5426,8 +5548,11 @@ DoD-139 exige `para_corte` na API/UI e 11 passos; DoD-140 falha com qualquer nav
 O7/O9/O10 ou estado morto das etapas removidas.
 D36 não admite “consertar metadata”: DoD-141/142 exigem a cadeia gerada e separam DDL de custom;
 DoD-143/144 provam associação determinística e bloqueio sem perda; DoD-145 cobre banco limpo e
-legado; DoD-146 congela hashes e drift zero; DoD-147 prova rollback de aplicação por novas
-migrations geradas, sem down SQL manual.
+legado; DoD-146 congela hashes/drift zero e exige a mesma proveniência no relatório e no body da
+PR #35 reutilizada; DoD-147 prova rollback de aplicação por novas migrations geradas, sem down SQL
+manual. A criação de PR só existe no ramo comprovado de ausência; o caminho normal faz push na
+`feature/onda4-comercial`, edita #35 por body file determinístico sob `.codex/runtime` e verifica o
+head remoto/body antes de entregar ao Executor.
 
 ---
 
