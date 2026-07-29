@@ -59,48 +59,69 @@ describe('RecebimentoService — branches', () => {
     expect(result.data).toEqual([]);
   });
 
-  it('previsaoDaCompra → sem itens esperados não consulta itens comerciais', async () => {
-    const db = {
-      query: { comprasProgramadas: { findFirst: jest.fn().mockResolvedValue({
-        id: 'cp1', status: 'confirmada', numeroInterno: 'NI-1', fornecedorId: 'f1', observacoes: null,
-        fornecedor: { razaoSocial: 'Fornecedor X' },
-      }) } },
-      select: jest.fn(() => chain([])),
+  it('previsaoDoPedidoFornecedor → sem itens do snapshot não resolve metadados', async () => {
+    const cabecalho = {
+      pedido: {
+        id: 'pf1',
+        numero: 'PF-1',
+        status: 'enviado',
+        operacaoId: 'op1',
+        compraProgramadaId: 'cp1',
+        fornecedorId: 'f1',
+      },
+      fornecedorNome: 'Fornecedor X',
+      dataOperacao: '2026-06-23',
+      numeroInternoCompra: 'NI-1',
+      observacoesCompra: null,
     };
-    disponibilidade.listarEsperadoDaCompra.mockResolvedValue([]);
-    (resolverMetadadosItensPrevistos as jest.Mock).mockResolvedValue(new Map());
+    let call = 0;
+    const db = {
+      select: jest.fn(() => chain(call++ === 0 ? [cabecalho] : [])),
+    };
     const service = makeService(db);
-    const result = await service.previsaoDaCompra('cp1');
-    expect(result.itensOperacionais).toEqual([]);
-    expect(result.jaPossuiRecebimento).toBe(false);
+    await expect(service.previsaoDoPedidoFornecedor('pf1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(resolverMetadadosItensPrevistos).not.toHaveBeenCalled();
   });
 
-  it('previsaoDaCompra → sem origem/metadado usa numeroInterno como origem', async () => {
-    const db = {
-      query: { comprasProgramadas: { findFirst: jest.fn().mockResolvedValue({
-        id: 'cp1', status: 'confirmada', numeroInterno: null, fornecedorId: 'f1', observacoes: null,
-        fornecedor: { razaoSocial: 'Fornecedor X' },
-      }) } },
-      select: jest.fn(() => chain([])),
+  it('previsaoDoPedidoFornecedor → sem metadado operacional falha fechado', async () => {
+    const cabecalho = {
+      pedido: {
+        id: 'pf1',
+        numero: 'PF-1',
+        status: 'aguardando_recebimento',
+        operacaoId: 'op1',
+        compraProgramadaId: 'cp1',
+        fornecedorId: 'f1',
+      },
+      fornecedorNome: 'Fornecedor X',
+      dataOperacao: '2026-06-23',
+      numeroInternoCompra: null,
+      observacoesCompra: null,
     };
-    disponibilidade.listarEsperadoDaCompra.mockResolvedValue([
-      { itemComercialId: 'ic1', quantidadeTotalGerada: '5' },
-    ]);
+    let call = 0;
+    const db = {
+      select: jest.fn(() => chain(call++ === 0
+        ? [cabecalho]
+        : [{
+            itemComercialId: 'ic1',
+            produtoCodigo: 'IC-1',
+            produtoDescricao: 'Item 1',
+            quantidadePrevista: '5.000',
+            pesoPrevisto: null,
+          }])),
+    };
     (resolverMetadadosItensPrevistos as jest.Mock).mockResolvedValue(new Map());
     const service = makeService(db);
-    const result = await service.previsaoDaCompra('cp1');
-    expect(result.itensOperacionais[0]?.origemDescricao).toBe('Compra');
+    await expect(service.previsaoDoPedidoFornecedor('pf1')).rejects.toThrow(
+      'Pedido ao fornecedor com metadados operacionais incompletos',
+    );
   });
 
   it('iniciar → lança 404 se compra programada não encontrada', async () => {
-    const pedido = { id: 'pf1', status: 'enviado', compraProgramadaId: 'cp1', deletedAt: null };
-    let call = 0;
     const tx = {
-      select: jest.fn(() => {
-        call++;
-        if (call === 1) return chain([pedido]);
-        return chain([]);
-      }),
+      select: jest.fn(() => chain([])),
     };
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
     const service = makeService(db);
@@ -111,30 +132,43 @@ describe('RecebimentoService — branches', () => {
 
   it('iniciar → sucesso com dataHoraChegada informada, item sem balança e evento sem data resolvida', async () => {
     const pedido = { id: 'pf1', status: 'enviado', compraProgramadaId: 'cp1', fornecedorId: 'f1', operacaoId: 'op1', deletedAt: null };
-    const compra = { id: 'cp1', numeroInterno: 'NI-1', deletedAt: null };
+    const cabecalho = {
+      pedido,
+      fornecedorNome: 'Fornecedor X',
+      dataOperacao: '2026-06-23',
+      numeroInternoCompra: 'NI-1',
+      observacoesCompra: null,
+    };
+    const itemSnapshot = {
+      itemComercialId: 'icA',
+      produtoCodigo: 'IC-A',
+      produtoDescricao: 'Item A',
+      quantidadePrevista: '5.000',
+      pesoPrevisto: null,
+    };
     const criado = { id: 'r1', operacaoId: 'op1', pedidoFornecedorId: 'pf1', status: 'pesagem_em_andamento' };
-    disponibilidade.listarEsperadoDaCompra.mockResolvedValue([
-      { itemComercialId: 'icA', quantidadeTotalGerada: '5' },
-      { itemComercialId: 'icB', quantidadeTotalGerada: '3' },
-    ]);
     (resolverMetadadosItensPrevistos as jest.Mock).mockResolvedValue(
       new Map([['icA', { itemComercialId: 'icA', origemDescricao: 'X', unidadeEsperada: 'kg', requerBalanca: false }]]),
     );
 
-    let selectCall = 0;
+    const respostasSnapshot = [
+      [cabecalho],
+      [itemSnapshot],
+      [{ descricao: 'Boi', quantidade: '5.000' }],
+    ];
     const tx = {
-      select: jest.fn(() => {
-        selectCall++;
-        if (selectCall === 1) return chain([pedido]);
-        return chain([compra]);
-      }),
+      select: jest.fn(() => chain(respostasSnapshot.shift() ?? [])),
       insert: jest.fn(() => ({
         values: () => ({ returning: jest.fn(async () => [criado]) }),
       })),
     };
     const db = {
       transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)),
-      select: jest.fn(() => chain([])),
+      select: jest.fn(() => chain([{
+        recebimento: criado,
+        compraProgramadaId: 'cp1',
+        dataOperacao: undefined,
+      }])),
     };
     const service = makeService(db);
     const result = await service.iniciar(
