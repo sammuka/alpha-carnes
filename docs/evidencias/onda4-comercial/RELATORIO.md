@@ -1,4 +1,4 @@
-# Relatório — Onda 4 (PR a abrir)
+# Relatório — Onda 4 (PR #35)
 
 ## O que foi implementado
 
