@@ -141,3 +141,92 @@ revalidou as cinco rotas com os adaptadores fake obrigatórios.
    o limite de produção.
 
 Não há pendência funcional conhecida da Onda 4 nem entrega parcial postergada como MVP.
+
+## D36 — migrations Drizzle geradas
+
+headTestadoD36 = d0d155e010c7377c66ca55117ae45e9fe4445ecb
+
+### Ambiente e proveniência
+
+- Node `v22.17.0`
+- npm `10.9.2`
+- `drizzle-kit` `0.31.10`
+- `drizzle-orm` `0.45.2`
+- PostgreSQL `18.4 (Debian 18.4-1.pgdg13+1)`
+
+A cadeia foi reconstruída em worktree descartável a partir do estado 0015. O
+wrapper `npm run db:generate -- --name=...` não preservou a opção `--name`
+neste npm e produziu um nome aleatório; o probe inteiro foi descartado antes
+de qualquer cópia. A reconstrução canônica reiniciou em 0015 com o mesmo
+binário local fixado no lockfile:
+
+```text
+npx drizzle-kit generate --name onda4_comercial_expand
+→ 0016_onda4_comercial_expand.sql + meta/0016_snapshot.json
+
+npx drizzle-kit generate --custom --name onda4_comercial_backfill
+→ 0017_onda4_comercial_backfill.sql + meta/0017_snapshot.json
+
+npx drizzle-kit generate --name onda4_comercial_contract
+→ 0018_onda4_comercial_contract.sql + meta/0018_snapshot.json
+```
+
+O 0016 contém quatro tabelas, FKs, checks, índices, `rota_id` nullable e
+`idx_clientes_rota` parcial, todos derivados do schema. O 0017 foi criado por
+`--custom` e contém somente dois `UPDATE`, uma CTE e `DO`/`RAISE EXCEPTION`;
+não contém `CREATE`, `ALTER`, `DROP` ou `TRUNCATE`. O 0018 contém somente o
+`DROP COLUMN rota_padrao` gerado. `git diff --check` terminou sem achados.
+
+Encadeamento gerado:
+
+| Snapshot | id | prevId |
+|---|---|---|
+| 0015 | `69479d67-08ba-44a9-b6b0-74fd443083d2` | `d7911d91-f225-4076-88dd-40101d983018` |
+| 0016 | `69450b9a-8249-412e-91d4-7ac0a748b597` | `69479d67-08ba-44a9-b6b0-74fd443083d2` |
+| 0017 | `3a5f6b11-60d1-482a-9e79-a7a2f6e3328f` | `69450b9a-8249-412e-91d4-7ac0a748b597` |
+| 0018 | `ea2d4278-a135-49f6-8eb3-832fc028e6fc` | `3a5f6b11-60d1-482a-9e79-a7a2f6e3328f` |
+
+### Provas executadas
+
+- `clean`: banco dedicado vazio executou `npm run db:migrate`, `npm run
+  db:seed` e o mesmo par novamente. As duas migrations e os dois seeds
+  concluíram com sucesso; cada seed confirmou 11 perfis, 65 permissões e 11
+  pares do catálogo.
+- `legacy`: banco parado em 0015, com `rotas` e `clientes.rota_padrao` reais,
+  avançou por 0016→0018; o backfill preservou os dados e o segundo migrate não
+  criou nova entrada.
+- `guarda`: legado sem correspondência levantou `backfill incompleto`, manteve
+  `rota_padrao` e impediu o contract. Depois da correção da rota, a mesma
+  sequência foi reaplicada com sucesso e sem perda.
+- Backfill: código teve precedência, nome foi usado apenas quando único, nome
+  ambíguo e rota removida não produziram associação; clientes ativos e
+  soft-deletados foram cobertos e a reaplicação não mudou os ids já migrados.
+- `rollback`: o probe descartável gerou 0019 rollback-expand e 0020
+  rollback-backfill custom inverso. Restaurou `rota_padrao` por `rotas.codigo`
+  e preservou `rota_id`, `idx_clientes_rota`, as quatro tabelas e o dado O4.
+- Metadata/schema/migrations: 3 suites, 7 testes, todos aprovados.
+- Integrações O4 relevantes: 10 suites, 101 testes, todos aprovados.
+- Frontend Clientes O4: 1 suite, 5 testes, todos aprovados.
+- `npm run lint` e `npm run type-check` na raiz: backend e frontend aprovados.
+
+### Drift e hashes
+
+O probe final executou:
+
+```text
+npx drizzle-kit generate --name onda4_drift_probe
+No schema changes, nothing to migrate
+```
+
+Não foi criado 0019, os sete artefatos conservaram seus hashes e o worktree
+permaneceu sem diff após o probe.
+
+| Caminho | SHA-256 antes | SHA-256 depois | Resultado |
+|---|---|---|---|
+| `app/backend/src/database/migrations/0016_onda4_comercial_expand.sql` | `d4a548ec868d6a031cc93ff3a71c8a143bb7cd3fd5a62308f3ebfdcfada99b29` | `d4a548ec868d6a031cc93ff3a71c8a143bb7cd3fd5a62308f3ebfdcfada99b29` | `igual` |
+| `app/backend/src/database/migrations/meta/0016_snapshot.json` | `eea35af1b0cf3cf0255eab45b8a1d01068c66ca5be8c583d053144186675e952` | `eea35af1b0cf3cf0255eab45b8a1d01068c66ca5be8c583d053144186675e952` | `igual` |
+| `app/backend/src/database/migrations/0017_onda4_comercial_backfill.sql` | `0254ad18c44bcb715a774326265360455e5b6edc8bdda27bc59c2e96505914dd` | `0254ad18c44bcb715a774326265360455e5b6edc8bdda27bc59c2e96505914dd` | `igual` |
+| `app/backend/src/database/migrations/meta/0017_snapshot.json` | `13cde55a84834bdb24b1d5d026e7215794571cedea9044d2251c0531432c5ff2` | `13cde55a84834bdb24b1d5d026e7215794571cedea9044d2251c0531432c5ff2` | `igual` |
+| `app/backend/src/database/migrations/0018_onda4_comercial_contract.sql` | `977e16d5a8dbb780fcc3fa7de97eb3949fbe0005fb2633d60273fa753167744d` | `977e16d5a8dbb780fcc3fa7de97eb3949fbe0005fb2633d60273fa753167744d` | `igual` |
+| `app/backend/src/database/migrations/meta/0018_snapshot.json` | `6eb065cb2165f901616fb6ff91a31ce7b523a1e93411b374eaf865837a0ad185` | `6eb065cb2165f901616fb6ff91a31ce7b523a1e93411b374eaf865837a0ad185` | `igual` |
+| `app/backend/src/database/migrations/meta/_journal.json` | `a136d1bad4d724e0cc1a5c1a301cfde38ed5a9e39410c580d93469f978263247` | `a136d1bad4d724e0cc1a5c1a301cfde38ed5a9e39410c580d93469f978263247` | `igual` |
