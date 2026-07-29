@@ -1,8 +1,10 @@
-import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { RecebimentoCargaClient } from '../src/app/(admin)/recebimento/recebimento-carga/recebimento-carga-client';
 
+const pushMock = jest.fn();
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: pushMock }),
 }));
 
 class MockWebSocket {
@@ -103,9 +105,14 @@ function mockFetchRecebimento() {
 
 describe('RecebimentoCargaClient', () => {
   beforeEach(() => {
+    Element.prototype.hasPointerCapture ??= () => false;
+    Element.prototype.setPointerCapture ??= () => undefined;
+    Element.prototype.releasePointerCapture ??= () => undefined;
+    Element.prototype.scrollIntoView ??= () => undefined;
     MockWebSocket.instances = [];
     (global as unknown as { WebSocket: unknown }).WebSocket = MockWebSocket;
     mockFetchRecebimento();
+    pushMock.mockReset();
   });
 
   it('renderiza o título e lista enriquecida (smoke)', async () => {
@@ -163,5 +170,141 @@ describe('RecebimentoCargaClient', () => {
     });
 
     await waitFor(() => expect(fetchSpy.mock.calls.length).toBeGreaterThan(chamadasAntes));
+  });
+
+  it('novo recebimento seleciona Pedido ao Fornecedor e envia seu id sem fallback', async () => {
+    const user = userEvent.setup();
+    const pedido = {
+      id: 'pf-1',
+      numero: 'PF-0001',
+      status: 'aguardando_recebimento',
+      fornecedorId: 'f1',
+      fornecedorNome: 'Frigorífico Boi Forte',
+      operacaoId: 'op1',
+      dataOperacao: '2026-07-29',
+      compraProgramadaId: 'c1',
+      numeroInternoCompra: 'PC-2091',
+    };
+    const previsao = {
+      pedidoFornecedorId: pedido.id,
+      numeroPedidoFornecedor: pedido.numero,
+      statusPedidoFornecedor: pedido.status,
+      operacaoId: pedido.operacaoId,
+      dataOperacao: pedido.dataOperacao,
+      compraProgramadaId: pedido.compraProgramadaId,
+      numeroInternoCompra: pedido.numeroInternoCompra,
+      fornecedorId: pedido.fornecedorId,
+      fornecedorNome: pedido.fornecedorNome,
+      tipoCarga: 'Boi',
+      observacoesCompra: null,
+      resumoCompra: '10.000 Boi',
+      itensOperacionais: [{
+        itemComercialId: 'item-1',
+        produtoCodigo: 'TZ',
+        produtoDescricao: 'Traseiro',
+        quantidadePrevista: '20.000',
+        pesoPrevisto: '850.000',
+        unidade: 'peca',
+        passaBalanca: true,
+        origemDescricao: 'PC-2091 / Regra Boi → TZ',
+      }],
+    };
+    let responderErro = false;
+    global.fetch = jest.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/operacao/recebimentos?pageSize')) {
+        return { ok: true, json: async () => ({ data: [], page: 1, pageSize: 50, total: 0 }) };
+      }
+      if (url.includes('/api/operacao/pedidos-fornecedor?')) {
+        return { ok: true, json: async () => ({ data: [pedido], page: 1, pageSize: 100, total: 1 }) };
+      }
+      if (url.includes(`/api/operacao/recebimentos/previsao/${pedido.id}`)) {
+        return { ok: true, json: async () => previsao };
+      }
+      if (url === '/api/operacao/recebimentos' && init?.method === 'POST') {
+        if (responderErro) {
+          return { ok: false, status: 400, json: async () => ({ message: 'sentinela D34' }) };
+        }
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ recebimento: { id: 'r-novo' }, jaIniciado: false }),
+        };
+      }
+      if (url.includes('/api/operacao/recebimentos/r-novo')) {
+        return { ok: true, json: async () => ({ ...recebimentoDetalhe, id: 'r-novo' }) };
+      }
+      return { ok: true, json: async () => ({ data: [] }) };
+    }) as unknown as typeof fetch;
+
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Novo recebimento' }));
+    const drawer = screen.getByRole('dialog', { name: 'Novo Recebimento de Carga' });
+    expect(within(drawer).queryByRole('heading', { name: 'Novo recebimento' })).not.toBeInTheDocument();
+    const nomesDosBlocos = [
+      'A — Pedido ao Fornecedor',
+      'B — Nota Fiscal recebida',
+      'C — Transporte',
+      'D — Observações internas',
+    ];
+    const cabecalhos = within(drawer).getAllByRole('heading', { level: 3 });
+    expect(cabecalhos.map((cabecalho) => cabecalho.textContent)).toEqual(nomesDosBlocos);
+    for (const nomeAntigo of [
+      '1. Pedido de Compra',
+      '2. Dados da NF / Romaneio',
+      '3. Veículo e doca',
+      '4. Resumo e criação do lote',
+    ]) {
+      expect(within(drawer).queryByRole('heading', { name: nomeAntigo })).not.toBeInTheDocument();
+    }
+    const [blocoA, blocoB, blocoC, blocoD] = cabecalhos.map((cabecalho) => {
+      const section = cabecalho.closest('section');
+      if (!section) throw new Error(`Bloco sem section: ${cabecalho.textContent}`);
+      return section;
+    });
+    const pedidoCombobox = within(blocoA!).getByRole('combobox', { name: 'Pedido ao fornecedor' });
+    expect(within(blocoA!).getByLabelText('Doca / área')).toBeInTheDocument();
+    expect(within(blocoB!).getByLabelText(/Número da NF-e/)).toBeInTheDocument();
+    expect(within(blocoC!).getByLabelText('Placa')).toBeInTheDocument();
+    expect(within(blocoC!).getByLabelText('Motorista')).toBeInTheDocument();
+    expect(within(blocoD!).getByLabelText('Observações internas')).toBeInTheDocument();
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+      '/api/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100',
+      { cache: 'no-store' },
+    ));
+    await user.click(pedidoCombobox);
+    await user.click(await screen.findByRole('option', { name: /PF-0001/ }));
+    await waitFor(() => expect(screen.getByText('TZ — Traseiro')).toBeInTheDocument());
+    fireEvent.change(within(blocoB!).getByLabelText(/Número da NF-e/), {
+      target: { value: 'NF-123' },
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Criar Lote' }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+      '/api/operacao/recebimentos',
+      expect.objectContaining({ method: 'POST' }),
+    ));
+    const post = (global.fetch as jest.Mock).mock.calls.find(
+      ([url, init]) => url === '/api/operacao/recebimentos' && init?.method === 'POST',
+    );
+    const body = JSON.parse(post[1].body);
+    expect(body).toEqual(expect.objectContaining({ pedidoFornecedorId: pedido.id }));
+    expect(body).not.toHaveProperty('compraProgramadaId');
+    expect(body).not.toHaveProperty('iniciarConferencia');
+    await waitFor(() => expect(screen.queryByRole('dialog', {
+      name: 'Novo Recebimento de Carga',
+    })).not.toBeInTheDocument());
+
+    responderErro = true;
+    fireEvent.click(screen.getByRole('button', { name: 'Novo recebimento' }));
+    const segundoDrawer = screen.getByRole('dialog', { name: 'Novo Recebimento de Carga' });
+    const segundoCombobox = within(segundoDrawer).getByRole('combobox', { name: 'Pedido ao fornecedor' });
+    await user.click(segundoCombobox);
+    await user.click(await screen.findByRole('option', { name: /PF-0001/ }));
+    fireEvent.change(within(segundoDrawer).getByLabelText(/Número da NF-e/), {
+      target: { value: 'NF-ERRO' },
+    });
+    fireEvent.click(within(segundoDrawer).getByRole('button', { name: 'Criar Lote' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('sentinela D34'));
+    expect(pushMock).not.toHaveBeenCalled();
   });
 });

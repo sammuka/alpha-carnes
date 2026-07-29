@@ -46,10 +46,10 @@ export class RecebimentoController {
     return this.service.listar(query);
   }
 
-  @Get('previsao/:compraProgramadaId')
+  @Get('previsao/:pedidoFornecedorId')
   @RequirePermissoes('RECEBIMENTO_LER')
-  async previsao(@Param('compraProgramadaId') compraProgramadaId: string) {
-    return this.service.previsaoDaCompra(compraProgramadaId);
+  async previsao(@Param('pedidoFornecedorId') pedidoFornecedorId: string) {
+    return this.service.previsaoDoPedidoFornecedor(pedidoFornecedorId);
   }
 
   @Get(':id')

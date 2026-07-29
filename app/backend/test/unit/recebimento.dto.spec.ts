@@ -4,6 +4,19 @@ import {
 } from '../../src/modules/operacao/recebimento/dto/recebimento.dto';
 
 describe('iniciarRecebimentoSchema', () => {
+  it('inicio de recebimento aceita somente pedidoFornecedorId e rejeita chaves legadas', () => {
+    const pedidoFornecedorId = '019ea000-0000-7000-8000-000000000001';
+    expect(iniciarRecebimentoSchema.parse({ pedidoFornecedorId })).toEqual({ pedidoFornecedorId });
+    expect(() => iniciarRecebimentoSchema.parse({ compraProgramadaId: pedidoFornecedorId })).toThrow();
+    expect(() => iniciarRecebimentoSchema.parse({
+      pedidoFornecedorId,
+      compraProgramadaId: pedidoFornecedorId,
+    })).toThrow();
+    expect(() => iniciarRecebimentoSchema.parse({
+      pedidoFornecedorId,
+      iniciarConferencia: true,
+    })).toThrow();
+  });
   const base = {
     pedidoFornecedorId: '019ea000-0000-7000-8000-000000000001',
   };

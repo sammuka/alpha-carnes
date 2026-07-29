@@ -122,25 +122,30 @@ export interface PrevisaoItemOperacional {
   produtoCodigo: string;
   produtoDescricao: string;
   quantidadePrevista: string;
+  pesoPrevisto: string | null;
   unidade: string;
   passaBalanca: boolean;
   origemDescricao: string;
 }
 
 export interface PrevisaoRecebimento {
+  pedidoFornecedorId: string;
+  numeroPedidoFornecedor: string;
+  statusPedidoFornecedor: 'enviado' | 'aguardando_recebimento';
+  operacaoId: string;
+  dataOperacao: string;
   compraProgramadaId: string;
-  numeroInterno: string | null;
+  numeroInternoCompra: string | null;
   fornecedorId: string;
   fornecedorNome: string;
   tipoCarga: string | null;
   observacoesCompra: string | null;
   resumoCompra: string;
   itensOperacionais: PrevisaoItemOperacional[];
-  jaPossuiRecebimento: boolean;
 }
 
 export interface IniciarRecebimentoPayload {
-  compraProgramadaId: string;
+  pedidoFornecedorId: string;
   nfeNumero: string;
   nfeSerie?: string;
   nfeChave?: string;
@@ -153,12 +158,11 @@ export interface IniciarRecebimentoPayload {
   placaVeiculo?: string;
   motorista?: string;
   doca?: string;
-  iniciarConferencia?: boolean;
 }
 
 export interface IniciarRecebimentoResultado {
   recebimento: RecebimentoResumo;
-  jaIniciado: boolean;
+  jaIniciado: false;
 }
 
 // ── F4b — Pesagem + Associação + Etiquetagem ──────────────────────────────────
@@ -367,6 +371,18 @@ export interface PedidoFornecedorItem {
 
 export interface PedidoFornecedorDetalhe extends PedidoFornecedor {
   itens: PedidoFornecedorItem[];
+}
+
+export interface PedidoFornecedorResumoRecebivel {
+  id: string;
+  numero: string;
+  status: 'enviado' | 'aguardando_recebimento';
+  fornecedorId: string;
+  fornecedorNome: string;
+  operacaoId: string;
+  dataOperacao: string;
+  compraProgramadaId: string;
+  numeroInternoCompra: string | null;
 }
 
 export interface CriarPedidoFornecedorDto {

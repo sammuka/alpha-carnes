@@ -181,4 +181,80 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
       .expect(200);
     expect(lista.body.data.some((p: { id: string }) => p.id === pedidoId)).toBe(true);
   });
+
+  it('lista explicitamente Pedidos ao Fornecedor elegiveis para recebimento', async () => {
+    const { db } = app.get(DRIZZLE);
+    const enviado = await pedidoPronto('2026-08-11');
+    await db.update(schema.pedidosFornecedor)
+      .set({ status: 'enviado' })
+      .where(eq(schema.pedidosFornecedor.id, enviado.pedidoId));
+    const aguardando = await pedidoPronto('2026-08-12');
+    const recebido = await pedidoPronto('2026-08-13');
+    await db.update(schema.pedidosFornecedor)
+      .set({ status: 'recebido' })
+      .where(eq(schema.pedidosFornecedor.id, recebido.pedidoId));
+    const rascunho = await pedidoPronto('2026-08-16');
+    await db.update(schema.pedidosFornecedor)
+      .set({ status: 'rascunho' })
+      .where(eq(schema.pedidosFornecedor.id, rascunho.pedidoId));
+    const encerrado = await pedidoPronto('2026-08-17');
+    await db.update(schema.pedidosFornecedor)
+      .set({ status: 'encerrado' })
+      .where(eq(schema.pedidosFornecedor.id, encerrado.pedidoId));
+    const cancelado = await pedidoPronto('2026-08-18');
+    await db.update(schema.pedidosFornecedor)
+      .set({ status: 'cancelado' })
+      .where(eq(schema.pedidosFornecedor.id, cancelado.pedidoId));
+    const comLoteAtivo = await pedidoPronto('2026-08-14');
+    await request(app.getHttpServer())
+      .post('/operacao/recebimentos')
+      .set('Cookie', recebimentoCookies)
+      .send({ pedidoFornecedorId: comLoteAtivo.pedidoId })
+      .expect(201);
+    const comLoteCancelado = await pedidoPronto('2026-08-15');
+    const loteCancelado = await request(app.getHttpServer())
+      .post('/operacao/recebimentos')
+      .set('Cookie', recebimentoCookies)
+      .send({ pedidoFornecedorId: comLoteCancelado.pedidoId })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/operacao/recebimentos/${loteCancelado.body.recebimento.id}/cancelar`)
+      .set('Cookie', recebimentoCookies)
+      .send()
+      .expect(201);
+
+    const lista = await request(app.getHttpServer())
+      .get('/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100')
+      .set('Cookie', recebimentoCookies)
+      .expect(200);
+    const ids = new Set((lista.body.data as Array<{ id: string }>).map((pedido) => pedido.id));
+    expect(ids.has(enviado.pedidoId)).toBe(true);
+    expect(ids.has(aguardando.pedidoId)).toBe(true);
+    expect(ids.has(comLoteCancelado.pedidoId)).toBe(true);
+    expect(ids.has(recebido.pedidoId)).toBe(false);
+    expect(ids.has(rascunho.pedidoId)).toBe(false);
+    expect(ids.has(encerrado.pedidoId)).toBe(false);
+    expect(ids.has(cancelado.pedidoId)).toBe(false);
+    expect(ids.has(comLoteAtivo.pedidoId)).toBe(false);
+    expect(lista.body.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: enviado.pedidoId,
+        fornecedorId: enviado.base.fornecedorId,
+        operacaoId: enviado.operacaoId,
+        compraProgramadaId: enviado.compraId,
+        dataOperacao: '2026-08-11',
+      }),
+    ]));
+    expect(lista.body.data.every((pedido: { status: string }) =>
+      ['enviado', 'aguardando_recebimento'].includes(pedido.status))).toBe(true);
+
+    await request(app.getHttpServer())
+      .get(`/operacao/pedidos-fornecedor?elegiveisRecebimento=true&operacaoId=${enviado.operacaoId}`)
+      .set('Cookie', recebimentoCookies)
+      .expect(400);
+    await request(app.getHttpServer())
+      .get('/operacao/pedidos-fornecedor?elegiveisRecebimento=true&status=enviado')
+      .set('Cookie', recebimentoCookies)
+      .expect(400);
+  });
 });

@@ -557,8 +557,19 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     await page.getByRole('button', { name: 'Adicionar produto' }).click();
     const pedidoResponse = page.waitForResponse((res) => res.url().includes('/api/comercial/pedidos') && res.request().method() === 'POST');
     await page.getByRole('button', { name: 'Salvar Rascunho' }).click();
-    const pedido = (await (await pedidoResponse).json()) as { id: string; status: string };
-    await expect(page.getByText('Rascunho com reserva ativa')).toBeVisible();
+    const respostaPedido = await pedidoResponse;
+    expect(respostaPedido.status()).toBeGreaterThanOrEqual(200);
+    expect(respostaPedido.status()).toBeLessThan(300);
+    expect(respostaPedido.request().postDataJSON()).toEqual(expect.objectContaining({
+      compraProgramadaId: compra.compraProgramadaId,
+      dataOperacao: compra.dataOperacao,
+    }));
+    expect(respostaPedido.request().postDataJSON().dataOperacao).toBeDefined();
+    const pedido = (await respostaPedido.json()) as { id: string; status: string };
+    const artigoPedido = page.locator('article').filter({ hasText: pedido.id });
+    await expect(
+      artigoPedido.locator('span', { hasText: /^Rascunho com reserva ativa$/ }),
+    ).toBeVisible();
     await capture(
       page,
       steps,
@@ -573,43 +584,69 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     const pedidoVendaItemId = pedidoDetalhe.itens[0]?.id;
     if (!pedidoVendaItemId) throw new Error('Pedido criado sem item retornado no detalhe');
 
-    await page.goto(`${BASE_URL}/operacao/recebimento`);
-    await page.locator('#compra').fill(compra.compraProgramadaId);
+    const pedidoFornecedor = await backend<{ id: string; numero: string }>(
+      request,
+      auth.cookieHeader,
+      'POST',
+      '/operacao/pedidos-fornecedor',
+      { compraProgramadaId: compra.compraProgramadaId },
+    );
+    await backend(
+      request,
+      auth.cookieHeader,
+      'POST',
+      `/operacao/pedidos-fornecedor/${pedidoFornecedor.id}/enviar`,
+    );
+
+    await page.goto(`${BASE_URL}/recebimento/recebimento-carga`);
+    await page.getByTestId('btn-novo-recebimento').click();
+    const novoRecebimento = page.getByRole('dialog', { name: 'Novo Recebimento de Carga' });
+    const pedidoCombobox = novoRecebimento.getByRole('combobox', {
+      name: 'Pedido ao fornecedor',
+    });
+    await pedidoCombobox.click();
+    const pedidoOption = page.getByRole('option', {
+      name: new RegExp(pedidoFornecedor.numero.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    });
+    await expect(pedidoOption).toBeVisible();
+    await pedidoOption.click();
+    await expect(pedidoCombobox).toContainText(pedidoFornecedor.numero);
+    await expect(novoRecebimento.getByText(pedidoFornecedor.numero, { exact: false })).toBeVisible();
+    await novoRecebimento.locator('#nfeNumero').fill(`NF-E2E-${runId}`);
     const recebimentoResponse = page.waitForResponse((res) => res.url().includes('/api/operacao/recebimentos') && res.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Iniciar recebimento' }).click();
-    const recebimentoBody = (await (await recebimentoResponse).json()) as { recebimento: { id: string } };
+    await novoRecebimento.getByTestId('btn-criar-ir-balanca').click();
+    const respostaRecebimento = await recebimentoResponse;
+    expect(respostaRecebimento.status()).toBe(201);
+    expect(respostaRecebimento.request().postDataJSON()).toEqual(expect.objectContaining({
+      pedidoFornecedorId: pedidoFornecedor.id,
+    }));
+    expect(respostaRecebimento.request().postDataJSON()).not.toHaveProperty('compraProgramadaId');
+    const recebimentoBody = (await respostaRecebimento.json()) as {
+      recebimento: { id: string };
+      jaIniciado: false;
+    };
+    expect(recebimentoBody.jaIniciado).toBe(false);
+    expect(recebimentoBody.recebimento.id).toBeTruthy();
     const recebimentoId = recebimentoBody.recebimento.id;
-    await expect(page.getByTestId('receb-status')).toContainText('em_andamento');
-    await page.getByLabel(`Quantidade recebida ${itemComercialId}`).fill('4');
-    await page.getByRole('button', { name: 'Registrar' }).click();
-    await expect(page.getByText('conforme')).toBeVisible({ timeout: 10_000 });
-    await page.getByTestId('btn-concluir').click();
-    await expect(page.getByTestId('receb-status')).toContainText('concluido', { timeout: 10_000 });
+    await expect(page).toHaveURL(new RegExp(`/recebimento/pesagem-destinacao\\?recebimentoId=${recebimentoId}`));
+    await expect(page.getByTestId('status-dispositivos')).toContainText('Balança');
     await capture(
       page,
       steps,
       '09-recebimento',
-      'Recebimento',
-      'Iniciar recebimento, conferir item esperado e concluir sem divergência.',
-      'Compra confirmada informada na tela; quantidade recebida igual à esperada.',
-      'Recebimento concluído e disponibilidade física atualizada.',
+      'Recebimento e Balança',
+      'Criar lote de recebimento pela tela vigente e encaminhar para a balança.',
+      `Pedido ao Fornecedor ${pedidoFornecedor.numero} foi selecionado e a NF-e informada no novo recebimento.`,
+      'Lote criado e aberto na tela de Pesagem e Destinação.',
     );
 
-    await page.goto(`${BASE_URL}/operacao/pesagem`);
-    await expect(page.getByText('Balança: disponivel')).toBeVisible({ timeout: 15_000 });
-    await page.locator('#receb').fill(recebimentoId);
-    await page.locator('#item').fill(itemComercialId);
-    await fillInputValue(page, '#data', compra.dataOperacao);
-
     const pecaResponse = page.waitForResponse((res) => res.url().includes('/api/operacao/pesagem/pecas') && res.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Capturar peso automático' }).click();
+    await page.getByRole('button', { name: 'Capturar Peso' }).click();
     const peca = (await (await pecaResponse).json()) as { id: string };
-    await page.getByRole('button', { name: 'Sugerir pedido' }).click();
-    await expect(page.getByText('Sugerido: pedido')).toBeVisible({ timeout: 10_000 });
-    await page.getByRole('button', { name: 'Confirmar associação' }).click();
+    await page.getByRole('button', { name: 'Vincular' }).click();
     await expect(page.getByTestId('peca-status')).toContainText('associada', { timeout: 10_000 });
-    await page.getByRole('button', { name: 'Emitir etiqueta' }).click();
-    await expect(page.getByTestId('etiqueta-atual')).toContainText('QR-', { timeout: 10_000 });
+    await page.getByRole('button', { name: 'Confirmar e imprimir etiqueta' }).click();
+    await expect(page.getByRole('button', { name: /Etiqueta: QR-/ })).toBeVisible({ timeout: 10_000 });
     await capture(
       page,
       steps,
@@ -621,9 +658,12 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     );
 
     const pecaCorteResponse = page.waitForResponse((res) => res.url().includes('/api/operacao/pesagem/pecas') && res.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Capturar peso automático' }).click();
+    await page.getByRole('button', { name: 'Capturar Peso' }).click();
     const pecaCorte = (await (await pecaCorteResponse).json()) as { id: string };
     await expect(page.getByTestId('peca-status')).toContainText('pesada', { timeout: 10_000 });
+    await page.getByRole('button', { name: 'Desossa' }).click();
+    await expect(page.getByTestId('peca-status')).toContainText('para_corte', { timeout: 10_000 });
+    await page.getByRole('button', { name: 'Confirmar e imprimir etiqueta' }).click();
     await capture(
       page,
       steps,

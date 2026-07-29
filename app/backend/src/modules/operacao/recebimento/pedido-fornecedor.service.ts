@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, notExists, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { montarPaginado, primeiroOuFalha, type Paginado } from '../../../common/crud/paginacao';
@@ -14,6 +14,8 @@ import * as schema from '../../../database/schema';
 import {
   comprasProgramadas,
   disponibilidadesVirtuais,
+  fornecedores,
+  operacoes,
   pedidosFornecedor,
   pedidosFornecedorItens,
   recebimentos,
@@ -28,6 +30,27 @@ import type {
 
 type PedidoFornecedor = typeof pedidosFornecedor.$inferSelect;
 
+export const STATUS_PEDIDO_FORNECEDOR_RECEBIVEL = [
+  'enviado',
+  'aguardando_recebimento',
+] as const;
+
+export function pedidoFornecedorPodeReceber(status: string): boolean {
+  return STATUS_PEDIDO_FORNECEDOR_RECEBIVEL.some((recebivel) => recebivel === status);
+}
+
+export type PedidoFornecedorResumoRecebivel = {
+  id: string;
+  numero: string;
+  status: (typeof STATUS_PEDIDO_FORNECEDOR_RECEBIVEL)[number];
+  fornecedorId: string;
+  fornecedorNome: string;
+  operacaoId: string;
+  dataOperacao: string;
+  compraProgramadaId: string;
+  numeroInternoCompra: string | null;
+};
+
 @Injectable()
 export class PedidoFornecedorService {
   constructor(
@@ -41,22 +64,63 @@ export class PedidoFornecedorService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarPedidosFornecedorDto): Promise<Paginado<PedidoFornecedor>> {
+  async listar(
+    query: ListarPedidosFornecedorDto,
+  ): Promise<Paginado<PedidoFornecedor | PedidoFornecedorResumoRecebivel>> {
     const page = query.pagina;
     const pageSize = query.limite;
-    const filtros = [
-      eq(pedidosFornecedor.operacaoId, query.operacaoId),
-      isNull(pedidosFornecedor.deletedAt),
-    ];
-    if (query.status) filtros.push(eq(pedidosFornecedor.status, query.status));
-    const where = and(...filtros);
+    const modoRecebimento = 'elegiveisRecebimento' in query && query.elegiveisRecebimento === true;
+    const semRecebimentoNaoCancelado = notExists(
+      this.db
+        .select({ um: sql`1` })
+        .from(recebimentos)
+        .where(and(
+          eq(recebimentos.pedidoFornecedorId, pedidosFornecedor.id),
+          isNull(recebimentos.deletedAt),
+          ne(recebimentos.status, 'cancelado'),
+        )),
+    );
+    const where = modoRecebimento
+      ? and(
+          inArray(pedidosFornecedor.status, STATUS_PEDIDO_FORNECEDOR_RECEBIVEL),
+          isNull(pedidosFornecedor.deletedAt),
+          semRecebimentoNaoCancelado,
+        )
+      : and(
+          eq(pedidosFornecedor.operacaoId, query.operacaoId),
+          isNull(pedidosFornecedor.deletedAt),
+          query.status ? eq(pedidosFornecedor.status, query.status) : undefined,
+        );
+    const selecaoResumo = {
+      id: pedidosFornecedor.id,
+      numero: pedidosFornecedor.numero,
+      status: pedidosFornecedor.status,
+      fornecedorId: pedidosFornecedor.fornecedorId,
+      fornecedorNome: fornecedores.razaoSocial,
+      operacaoId: pedidosFornecedor.operacaoId,
+      dataOperacao: operacoes.data,
+      compraProgramadaId: pedidosFornecedor.compraProgramadaId,
+      numeroInternoCompra: comprasProgramadas.numeroInterno,
+    };
     const [linhas, totalRow] = await Promise.all([
-      this.db.select().from(pedidosFornecedor).where(where)
+      modoRecebimento
+        ? this.db.select(selecaoResumo).from(pedidosFornecedor)
+          .innerJoin(fornecedores, eq(fornecedores.id, pedidosFornecedor.fornecedorId))
+          .innerJoin(operacoes, eq(operacoes.id, pedidosFornecedor.operacaoId))
+          .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pedidosFornecedor.compraProgramadaId))
+          .where(where)
+          .orderBy(desc(pedidosFornecedor.createdAt))
+          .limit(pageSize).offset((page - 1) * pageSize)
+        : this.db.select().from(pedidosFornecedor).where(where)
         .orderBy(desc(pedidosFornecedor.createdAt))
         .limit(pageSize).offset((page - 1) * pageSize),
       this.db.select({ total: sql<number>`count(*)::int` }).from(pedidosFornecedor).where(where),
     ]);
-    return montarPaginado(linhas, totalRow[0]?.total ?? 0, { page, pageSize });
+    return montarPaginado<PedidoFornecedor | PedidoFornecedorResumoRecebivel>(
+      linhas as unknown as Array<PedidoFornecedor | PedidoFornecedorResumoRecebivel>,
+      totalRow[0]?.total ?? 0,
+      { page, pageSize },
+    );
   }
 
   async detalhar(id: string) {
