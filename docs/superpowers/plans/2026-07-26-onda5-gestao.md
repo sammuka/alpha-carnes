@@ -192,7 +192,7 @@ Protótipo em `F:/Projetos/alpha-carnes-prototipo`, branch `feature/completude-v
 | Dados de operação (todas as telas) | `src/app/data/operacoes.ts` (98 linhas) | `Operacao`, `DIAS_SEMANA`, `CADENCIA_OPERACAO_PADRAO`, `gerarOperacoesEntre`, `OPERACOES_SEED` — o rótulo da operação (`label`) é a fonte do texto exibido nos seletores de Operação de todas as 6 telas |
 | `/admin/usuarios` | `src/app/pages/Usuarios.tsx` | Cabeçalho e ações, grade `8/4`, lista de usuários e resumo de perfis; a emenda preserva essa composição e completa o drawer real com o campo funcional exigido pela documentação |
 | `/cadastros/representantes` | `src/app/pages/Representantes.tsx` | Sétima coluna "Usuários vinculados" e bloco homônimo no drawer; ambos retornam como projeção reversa real de `usuarios_representantes` |
-| Shell autenticado | `src/app/Layout.tsx` | Identificação "Escopo" no cabeçalho; o valor deixa de ser seed e passa a vir de `/auth/me` |
+| Shell autenticado | `src/app/components/Layout.tsx` | Identificação "Escopo" no cabeçalho; o valor deixa de ser seed e passa a vir de `/auth/me` |
 
 Regra de leitura obrigatória para o Worker: **antes de cada task de tela**, abrir o arquivo do
 protótipo indicado e a tela real correspondente lado a lado. A tela real reproduz cabeçalho,
@@ -4621,8 +4621,8 @@ quem implementa.
 | Global Constraints explícitas | Sim — 14 restrições |
 | Decisões de design fixadas (o Worker não escolhe) | Sim — D5.1 a D5.32 |
 | Referências do protótipo por tela, com arquivo e linhas | Sim — 10 linhas na tabela, commit do protótipo fixado |
-| Estrutura de arquivos (novos e alterados) | Sim — união final recalculada na E5.1.8: 30 novos + 43 alterados no backend; 36 novos + 19 alterados no frontend |
-| Mapa DoD → teste 1:1 | Sim — 89 critérios (63 originais + 26 da E5.1), cada um com arquivo e nome de teste |
+| Estrutura de arquivos (novos e alterados) | Sim — união final recalculada na E5.1.8: 30 novos + 43 alterados no backend; 37 novos + 19 alterados no frontend |
+| Mapa DoD → teste 1:1 | Sim — 91 critérios (63 originais + 28 da E5.1), cada um com arquivo e nome de teste |
 | Schemas e caminhos auditados no código real, não presumidos | Sim — seção "Estado atual verificado" lista as colunas que **não** existem (`transformacoes.operacao_id`, `pecas.operacao_id`, `notas_fiscais.operacao_id`, `notas_fiscais_fornecedor.chave_acesso`, `recebimentos.numero_lote`, campo de seguro em `caminhoes`) e o JOIN correto de cada uma; os CHECKs que restringem os `UPDATE`s da onda (`chk_reservas_qtd_positiva`, `chk_pend_ovb_deficit`, `chk_pedidos_itens_pedida_positiva`) estão citados com arquivo e linha no ponto de uso |
 | Eventos novos com destino real (não só emitidos) | Sim — Task 2.5 liga os 7 eventos ao `realtime.gateway.ts`, com `dataOperacao` no payload (é a room) |
 | Rotas BFF compatíveis com o roteador do Next | Sim — só rotas explícitas; catch-all irmão de `[id]` é proibido e o `npm run build` da Task 10.7 é o gate |
@@ -4647,7 +4647,7 @@ quem implementa.
 | Tasks | 22 |
 | Commits previstos | 22 |
 | Decisões de design fixadas | 46 (D5.1–D5.46) |
-| Critérios no mapa DoD → teste | 89 |
+| Critérios no mapa DoD → teste | 91 |
 | Migrations | 2 (`0018_onda5_gestao` + `0019_onda5_usuarios_representantes`) |
 | Tabelas novas | 4 (`relatorios_sif`, `relatorios_sif_versoes`, `aprovacoes_operacionais`, `usuarios_representantes`) |
 | Triggers novos | 4 (2 de imutabilidade + 2 de `updated_at`) |
@@ -4659,7 +4659,7 @@ quem implementa.
 | Parâmetros novos | 1 (`gestao.modelos_relatorio_sif`, provisório P8) |
 | Arquivos novos no backend | 30 |
 | Arquivos alterados no backend | 43 (união, sem contar `_journal.json` e `pedidos.service.ts` duas vezes) |
-| Arquivos novos no frontend | 36 sem testes (14 de tela/lib/componente + 22 rotas BFF) |
+| Arquivos novos no frontend | 37 sem testes (15 de tela/lib/componente + 22 rotas BFF) |
 | Arquivos alterados no frontend | 19 |
 | Rotas BFF novas | 22 (19 dos endpoints das tasks 4–9 + 3 de ocorrências de fornecedor) |
 | Rotas BFF `[...path]` (catch-all) | 0 — proibidas: conflitariam com o `[id]` já existente |
@@ -4687,7 +4687,7 @@ quem implementa.
 | Onda 4 D26 | A dívida pertence à Onda 5; o representante de Pedido é sempre derivado de `clientes.representante_id` |
 | Protótipo `Usuarios.tsx` | Preservar cabeçalho, ações, grade `8/4`, lista e resumo de perfis; completar o drawer sem redesenhar a página |
 | Protótipo `Representantes.tsx` | Repor a sétima coluna e o bloco "Usuários vinculados" no drawer |
-| Protótipo `Layout.tsx` + dívida da Onda 2 D16 | Repor "Escopo" no cabeçalho com valor real de `/auth/me`, sem seed |
+| Protótipo `src/app/components/Layout.tsx` + dívida da Onda 2 D16 | Repor "Escopo" no cabeçalho com valor real de `/auth/me`, sem seed |
 
 ### Regra fechada, sem decisão local
 
@@ -4785,6 +4785,7 @@ dedicado e preserva a separação de responsabilidades fixada por O3 D43.
 `GET /usuarios` e `GET /usuarios/:id` passam a devolver:
 
 ```ts
+ultimoAcesso: string | null;
 representantesPermitidos: Array<{
   id: string;
   nome: string;
@@ -4795,46 +4796,260 @@ escopoRepresentantes: 'todos' | 'restrito';
 ```
 
 A API sempre ordena o array por `nome`, depois `id`. A UI não deriva o significado pela presença
-de texto; usa `escopoRepresentantes`.
+de texto; usa `escopoRepresentantes`. `PROJECAO_USUARIO` passa a projetar literalmente
+`ultimoAcesso: schema.usuarios.ultimoAcesso`; a coluna já existe e é atualizada por
+`AuthRepository.updateUltimoAcesso`, portanto é proibido fabricar ou recalcular esse valor no
+frontend.
 
 ### D5.36 — Serviço e auditoria da associação
 
-Em `UsuariosService`:
+Em `UsuariosService`, acrescentar `BadRequestException` aos imports de `@nestjs/common`, `asc` aos
+imports de `drizzle-orm` e usar o tipo de banco já vigente no arquivo:
 
 ```ts
+type Db = NodePgDatabase<typeof schema>;
+
+type RepresentantePermitido = {
+  id: string;
+  nome: string;
+  status: string;
+  deletedAt: Date | null;
+};
+
+function mesmosIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, indice) => id === b[indice]);
+}
+```
+
+O carregador abaixo é a única leitura da associação usada por lista, detalhe e resposta das
+mutações. Ele faz uma consulta em lote, inclui vínculos com representante inativo/removido e fixa
+a ordenação `nome`, depois `id`:
+
+```ts
+private async representantesPorUsuario(
+  exec: Db,
+  usuariosIds: string[],
+): Promise<Map<string, RepresentantePermitido[]>> {
+  const resultado = new Map<string, RepresentantePermitido[]>();
+  for (const id of usuariosIds) resultado.set(id, []);
+  if (usuariosIds.length === 0) return resultado;
+
+  const linhas = await exec
+    .select({
+      usuarioId: schema.usuariosRepresentantes.usuarioId,
+      id: schema.representantes.id,
+      nome: schema.representantes.nome,
+      status: schema.representantes.status,
+      deletedAt: schema.representantes.deletedAt,
+    })
+    .from(schema.usuariosRepresentantes)
+    .innerJoin(
+      schema.representantes,
+      eq(
+        schema.representantes.id,
+        schema.usuariosRepresentantes.representanteId,
+      ),
+    )
+    .where(inArray(schema.usuariosRepresentantes.usuarioId, usuariosIds))
+    .orderBy(
+      schema.usuariosRepresentantes.usuarioId,
+      asc(schema.representantes.nome),
+      asc(schema.representantes.id),
+    );
+
+  for (const linha of linhas) {
+    resultado.get(linha.usuarioId)?.push({
+      id: linha.id,
+      nome: linha.nome,
+      status: linha.status,
+      deletedAt: linha.deletedAt,
+    });
+  }
+  return resultado;
+}
+
+private async detalharNaTx(id: string, tx: Db) {
+  const usuario = await tx
+    .select(PROJECAO_USUARIO)
+    .from(schema.usuarios)
+    .where(and(eq(schema.usuarios.id, id), isNull(schema.usuarios.deletedAt)))
+    .then((linhas) => linhas[0] ?? null);
+  if (!usuario) throw new NotFoundException('Usuário não encontrado');
+
+  const [perfis, porUsuario] = await Promise.all([
+    this.perfisDoUsuario(id, tx),
+    this.representantesPorUsuario(tx, [id]),
+  ]);
+  const representantesPermitidos = porUsuario.get(id) ?? [];
+  return {
+    ...usuario,
+    perfis,
+    representantesPermitidos,
+    escopoRepresentantes:
+      representantesPermitidos.length === 0 ? 'todos' as const : 'restrito' as const,
+  };
+}
+```
+
+O helper transacional é literal. O lock acontece antes da leitura do conjunto anterior; a
+validação diferencia ID inexistente de vínculo removido já herdado; o no-op retorna o detalhe real
+sem `DELETE`, `INSERT` nem auditoria:
+
+```ts
+private async definirRepresentantesNaTx(
+  tx: Db,
+  usuarioId: string,
+  representantesSolicitados: string[],
+  autorUsuarioId: string,
+) {
+  const usuario = await tx
+    .select({ id: schema.usuarios.id })
+    .from(schema.usuarios)
+    .where(and(
+      eq(schema.usuarios.id, usuarioId),
+      isNull(schema.usuarios.deletedAt),
+    ))
+    .for('update')
+    .limit(1)
+    .then((linhas) => linhas[0] ?? null);
+  if (!usuario) throw new NotFoundException('Usuário não encontrado');
+
+  const anterioresRows = await tx
+    .select({ representanteId: schema.usuariosRepresentantes.representanteId })
+    .from(schema.usuariosRepresentantes)
+    .where(eq(schema.usuariosRepresentantes.usuarioId, usuarioId))
+    .orderBy(schema.usuariosRepresentantes.representanteId);
+  const idsAnterioresOrdenados = anterioresRows.map((linha) => linha.representanteId);
+  const anteriores = new Set(idsAnterioresOrdenados);
+  const idsNovosOrdenados = [...representantesSolicitados].sort();
+
+  const candidatos = idsNovosOrdenados.length === 0
+    ? []
+    : await tx
+      .select({
+        id: schema.representantes.id,
+        deletedAt: schema.representantes.deletedAt,
+      })
+      .from(schema.representantes)
+      .where(inArray(schema.representantes.id, idsNovosOrdenados));
+  const candidatosPorId = new Map(candidatos.map((linha) => [linha.id, linha]));
+  const invalidos = idsNovosOrdenados.filter((id) => {
+    const candidato = candidatosPorId.get(id);
+    return !candidato || (candidato.deletedAt !== null && !anteriores.has(id));
+  });
+  if (invalidos.length > 0) {
+    throw new BadRequestException({
+      code: 'REPRESENTANTES_INVALIDOS',
+      message: 'Representantes permitidos contêm ID inexistente ou removido',
+      representantes: invalidos,
+    });
+  }
+
+  if (mesmosIds(idsAnterioresOrdenados, idsNovosOrdenados)) {
+    return this.detalharNaTx(usuarioId, tx);
+  }
+
+  await tx
+    .delete(schema.usuariosRepresentantes)
+    .where(eq(schema.usuariosRepresentantes.usuarioId, usuarioId));
+  if (idsNovosOrdenados.length > 0) {
+    await tx.insert(schema.usuariosRepresentantes).values(
+      idsNovosOrdenados.map((representanteId) => ({
+        usuarioId,
+        representanteId,
+      })),
+    );
+  }
+
+  await this.auditoria.registrar(tx, {
+    tabela: 'usuarios_representantes',
+    registroId: usuarioId,
+    operacao: 'UPDATE',
+    modulo: 'usuarios',
+    usuarioId: autorUsuarioId,
+    dadosAnteriores: { representantes: idsAnterioresOrdenados },
+    dadosNovos: { representantes: idsNovosOrdenados },
+  });
+  return this.detalharNaTx(usuarioId, tx);
+}
+
 async definirRepresentantes(
   usuarioId: string,
   representantes: string[],
   autorUsuarioId: string,
-): Promise<UsuarioDetalhe>
+) {
+  return this.db.transaction((tx) =>
+    this.definirRepresentantesNaTx(
+      tx,
+      usuarioId,
+      representantes,
+      autorUsuarioId,
+    ),
+  );
+}
 ```
 
-O método abre `db.transaction`, trava o usuário com `FOR UPDATE`, lê o conjunto anterior ordenado,
-valida todos os IDs e substitui o conjunto. Um ID pode ser gravado se o representante não estiver
-removido; um ID removido só pode permanecer quando já fazia parte do conjunto anterior. ID
-inexistente ou uma nova associação com removido retorna `400` com o erro de validação existente.
-
-Ainda dentro da transação, registrar:
+`createUsuarioSchema` já normaliza duplicidade; o service ainda ordena para estabilizar no-op e
+auditoria. No corpo transacional existente de `criar`, depois de `vincularPerfis` e antes da
+auditoria de `usuarios`, executar:
 
 ```ts
-auditoria.registrar(tx, {
-  tabela: 'usuarios_representantes',
-  registroId: usuarioId,
-  operacao: 'UPDATE',
+await this.definirRepresentantesNaTx(
+  tx,
+  usuario.id,
+  dto.representantes,
+  criadorId,
+);
+
+await this.auditoria.registrar(tx, {
+  tabela: 'usuarios',
+  registroId: usuario.id,
+  operacao: 'INSERT',
   modulo: 'usuarios',
-  usuarioId: autorUsuarioId,
-  dadosAnteriores: { representantes: idsAnterioresOrdenados },
-  dadosNovos: { representantes: idsNovosOrdenados },
+  usuarioId: criadorId,
+  dadosAnteriores: {},
+  dadosNovos: usuario,
+});
+return this.detalharNaTx(usuario.id, tx);
+```
+
+Assim usuário, perfis, vínculos e as duas auditorias aplicáveis ficam na mesma transação. Conjunto
+inicial vazio não cria auditoria falsa da associação; a auditoria do novo usuário permanece.
+
+Em `listar()`, manter a consulta única de usuários e trocar as leituras auxiliares por um
+`Promise.all` de **duas consultas em lote** — Perfis e Representantes — usando todos os IDs da
+página. O mapper final é literal:
+
+```ts
+const [perfisRows, representantesPorUsuario] = await Promise.all([
+  this.db
+    .select({ usuarioId: schema.usuariosPerfis.usuarioId, slug: schema.perfis.slug })
+    .from(schema.usuariosPerfis)
+    .innerJoin(schema.perfis, eq(schema.usuariosPerfis.perfilId, schema.perfis.id))
+    .where(inArray(schema.usuariosPerfis.usuarioId, ids)),
+  this.representantesPorUsuario(this.db, ids),
+]);
+
+const perfisPorUsuario = new Map<string, string[]>();
+for (const row of perfisRows) {
+  const atuais = perfisPorUsuario.get(row.usuarioId) ?? [];
+  atuais.push(row.slug);
+  perfisPorUsuario.set(row.usuarioId, atuais);
+}
+
+return usuarios.map((usuario) => {
+  const representantesPermitidos = representantesPorUsuario.get(usuario.id) ?? [];
+  return {
+    ...usuario,
+    perfis: perfisPorUsuario.get(usuario.id) ?? [],
+    representantesPermitidos,
+    escopoRepresentantes:
+      representantesPermitidos.length === 0 ? 'todos' as const : 'restrito' as const,
+  };
 });
 ```
 
-Mesmo conjunto normalizado é no-op: não reescreve linhas nem cria auditoria falsa. Criação de
-usuário reutiliza um helper privado `definirRepresentantesNaTx`, grava usuário, perfis, vínculos e
-auditoria em uma única transação. Falha em qualquer parte reverte tudo.
-
-`listar()` carrega os vínculos de todos os usuários retornados em uma consulta em lote e monta os
-arrays em memória, no mesmo padrão já usado para Perfis; é proibido executar uma query por usuário.
-`detalhar()` carrega apenas o conjunto do ID solicitado.
+`detalhar(id)` passa a chamar `detalharNaTx(id, this.db)`. É proibida query por usuário na lista.
 
 ### D5.37 — Controller e RBAC fixos
 
@@ -4861,26 +5076,49 @@ Não criar `USUARIOS_REPRESENTANTES_GERENCIAR`, não conceder o endpoint a `gest
 
 ### D5.38 — Predicado único de autorização
 
-Criar `app/backend/src/common/rbac/escopo-representantes.ts`. O arquivo exporta um builder Drizzle
-que recebe `usuarioId` e a coluna de representante do recurso. O SQL equivalente é:
+Criar `app/backend/src/common/rbac/escopo-representantes.ts` com este conteúdo completo:
 
-```sql
-NOT EXISTS (
-  SELECT 1
-  FROM usuarios_representantes ur_any
-  WHERE ur_any.usuario_id = :usuario_id
-)
-OR EXISTS (
-  SELECT 1
-  FROM usuarios_representantes ur_allowed
-  WHERE ur_allowed.usuario_id = :usuario_id
-    AND ur_allowed.representante_id = clientes.representante_id
-)
+```ts
+import { sql, type SQL } from 'drizzle-orm';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { usuariosRepresentantes } from '../../database/schema';
+
+/**
+ * Autorização correlacionada por representante.
+ *
+ * Sem linha em usuarios_representantes: Todos.
+ * Com ao menos uma linha: somente igualdade com um ID vinculado.
+ * representanteId NULL: autorizado apenas no caso Todos; no caso restrito,
+ * `IS NOT NULL` é falso e o recurso permanece oculto.
+ */
+export function escopoRepresentantes(
+  usuarioId: string,
+  representanteId: AnyPgColumn,
+): SQL<boolean> {
+  return sql<boolean>`(
+    NOT EXISTS (
+      SELECT 1
+      FROM ${usuariosRepresentantes} AS ur_any
+      WHERE ur_any.usuario_id = ${usuarioId}
+    )
+    OR (
+      ${representanteId} IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM ${usuariosRepresentantes} AS ur_allowed
+        WHERE ur_allowed.usuario_id = ${usuarioId}
+          AND ur_allowed.representante_id = ${representanteId}
+      )
+    )
+  )`;
+}
 ```
 
-O predicado não consulta `representantes.status` nem `deleted_at`; caso contrário, inativar um
-representante poderia ampliar indevidamente o escopo. Para usuário restrito, cliente sem
-representante não é acessível. Contagem e linhas usam o mesmo predicado.
+Este é o builder usado em todos os `where` abaixo; não criar uma segunda variante por módulo. Ele
+não consulta `representantes.status` nem `deleted_at`, portanto inativar/remover logicamente um
+representante nunca transforma escopo restrito em Todos. O teste 6.11 exercita também
+`representante_id IS NULL`: Todos enxerga, restrito recebe 404/linha ausente. Linhas e todas as
+contagens usam o mesmo fragmento.
 
 ### D5.39 — Cobertura completa de Clientes
 
@@ -4889,16 +5127,107 @@ Depois do merge da Onda 4, alterar literalmente:
 - `app/backend/src/modules/cadastros/clientes/clientes.controller.ts`;
 - `app/backend/src/modules/cadastros/clientes/clientes.service.ts`.
 
-O controller passa `user.sub` a listar, detalhar, criar, atualizar, remover e restaurar. O service:
+No controller, os seis métodos recebem `@CurrentUser()`; nenhuma assinatura de rota fica implícita:
 
-- inclui o predicado D5.38 na query de lista **e** na query de total;
-- inclui o predicado no detalhe e nos lookups usados por update/remove/restore;
-- antes de criar, verifica se `dto.representanteId` pertence ao escopo quando ele é restrito;
-- antes de trocar o representante, valida simultaneamente acesso ao cliente atual e ao
-  representante de destino;
-- mantém os erros existentes `Cliente não encontrado` para tudo que estiver fora do escopo;
-- mantém as regras da Onda 4 de representante obrigatório e não cria bypass administrativo no
-  frontend. Administrador sem vínculos já possui escopo "Todos".
+| Método HTTP | Chamada literal ao service |
+|---|---|
+| `GET /clientes` | `listar(query, user.sub)` |
+| `GET /clientes/:id` | `detalhar(id, user.sub)` |
+| `POST /clientes` | `criar(dto, user.sub)` |
+| `PATCH /clientes/:id` | `atualizar(id, dto, user.sub)` |
+| `DELETE /clientes/:id` | `remover(id, user.sub)` |
+| `POST /clientes/:id/restaurar` | `restaurar(id, user.sub)` |
+
+Os quatro métodos que hoje não recebem usuário ficam assim; os outros dois já têm o decorator e
+apenas preservam a chamada mostrada na tabela:
+
+```ts
+async listar(
+  @Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery,
+  @CurrentUser() user: CurrentUserPayload,
+) {
+  return this.clientesService.listar(query, user.sub);
+}
+
+async detalhar(
+  @Param('id') id: string,
+  @CurrentUser() user: CurrentUserPayload,
+) {
+  return this.clientesService.detalhar(id, user.sub);
+}
+```
+
+No service, importar `escopoRepresentantes` e substituir `buscarAtivo` pelo lookup único abaixo.
+`incluirRemovido=true` existe exclusivamente para a restauração; o escopo continua aplicado:
+
+```ts
+private async buscarNoEscopo(
+  id: string,
+  usuarioId: string,
+  exec: NodePgDatabase<typeof schema> = this.db,
+  incluirRemovido = false,
+): Promise<Cliente | null> {
+  return exec
+    .select()
+    .from(clientes)
+    .where(and(
+      eq(clientes.id, id),
+      incluirRemovido ? undefined : isNull(clientes.deletedAt),
+      escopoRepresentantes(usuarioId, clientes.representanteId),
+    ))
+    .then((linhas) => linhas[0] ?? null);
+}
+
+private async exigirRepresentanteNoEscopo(
+  tx: NodePgDatabase<typeof schema>,
+  representanteId: string,
+  usuarioId: string,
+): Promise<void> {
+  const permitido = await tx
+    .select({ id: representantes.id })
+    .from(representantes)
+    .where(and(
+      eq(representantes.id, representanteId),
+      escopoRepresentantes(usuarioId, representantes.id),
+    ))
+    .limit(1)
+    .then((linhas) => linhas[0] ?? null);
+  if (!permitido) throw new NotFoundException('Cliente não encontrado');
+}
+```
+
+As assinaturas e os pontos de guarda são fixos:
+
+```ts
+async listar(query: ListarQuery, usuarioId: string)
+async detalhar(id: string, usuarioId: string)
+async criar(dto: CreateClienteDto, usuarioId: string)
+async atualizar(id: string, dto: UpdateClienteDto, usuarioId: string)
+async remover(id: string, usuarioId: string)
+async restaurar(id: string, usuarioId: string)
+```
+
+- `listar`: acrescentar
+  `escopoRepresentantes(usuarioId, clientes.representanteId)` ao `where` usado por linhas e
+  `totalRow`; acrescentá-lo também ao `where` independente de `totalAtivosRow`. Assim busca,
+  paginação, total e badge ativo têm a mesma fronteira.
+- `detalhar`: usar `buscarNoEscopo(id, usuarioId)`; a query de nomes de rota/representante só roda
+  depois desse retorno autorizado e continua filtrada pelo mesmo `id`.
+- `criar`: dentro da transação e antes de `assertUnico`/`INSERT`, executar
+  `exigirRepresentanteNoEscopo(tx, dto.representanteId, usuarioId)`.
+- `atualizar`: a primeira leitura dentro da transação é
+  `buscarNoEscopo(id, usuarioId, tx)`; se `dto.representanteId` estiver presente, executar
+  `exigirRepresentanteNoEscopo(tx, dto.representanteId, usuarioId)` antes do `UPDATE`, mesmo quando
+  o valor coincide com o anterior.
+- `remover`: a primeira leitura dentro da transação é
+  `buscarNoEscopo(id, usuarioId, tx)`.
+- `restaurar`: a primeira leitura dentro da transação é
+  `buscarNoEscopo(id, usuarioId, tx, true)`; registro fora do escopo e ID inexistente produzem o
+  mesmo `NotFoundException('Cliente não encontrado')`.
+
+O restante dos corpos O4 — unicidade, `representanteId` obrigatório, rota, auditoria e retorno —
+permanece byte a byte. Não existe bypass de administrador no frontend: administrador sem vínculos
+já satisfaz Todos pelo builder D5.38.
 
 ### D5.40 — Cobertura completa de Pedidos e Adendos
 
@@ -4908,38 +5237,524 @@ Depois do merge da Onda 4 e da atualização da PR #28, alterar literalmente:
 - `app/backend/src/modules/comercial/pedidos/pedidos.service.ts`;
 - `app/backend/src/modules/comercial/pedidos/adendos.service.ts`.
 
-O `usuarioId` autenticado chega a todas as operações públicas: listar, detalhar, buscar pedido
-aberto, criar, confirmar, incluir/reduzir/remover item, finalizar, cancelar, liberar, listar/criar
-adendo e confirmar adendo com overbooking. Cada lookup liga Pedido a Cliente e aplica D5.38. Criar Pedido
-valida o Cliente escolhido. Nenhuma ação fora do escopo muda banco, reserva, evento ou auditoria.
+O controller passa `user.sub` em **cada** rota. Este é o mapa normativo completo, conferido contra
+o controller pós-O4:
 
-Os métodos `*NaTx` da Onda 5 recebem o contexto de usuário ou são chamados apenas depois de um
-guard de domínio no mesmo `tx`; não pode existir caminho público que os invoque sem a verificação.
-O conflito esperado em `pedidos.service.ts` é resolvido reaplicando a extração `NaTx` da Task 6.4
-sobre a versão final da Onda 4, preservando `clientes.representante_id` como fonte única.
+| Endpoint | Chamada ao service |
+|---|---|
+| `GET /comercial/pedidos` | `service.listar(query, user.sub)` |
+| `GET /comercial/pedidos/aberto` | `service.buscarAberto(query, user.sub)` |
+| `GET /comercial/pedidos/:id` | `service.detalhar(id, user.sub)` |
+| `POST /comercial/pedidos` | `service.criar(dto, user.sub, false)` |
+| `POST /comercial/pedidos/confirmar-overbooking` | `service.criar(dto, user.sub, true)` |
+| `POST /comercial/pedidos/:id/itens` | `service.incluirItem(id, dto, user.sub, false)` |
+| `POST /comercial/pedidos/:id/itens/confirmar-overbooking` | `service.incluirItem(id, dto, user.sub, true)` |
+| `PATCH /comercial/pedidos/:id/itens/:itemId` | `service.reduzirItem(id, itemId, dto, user.sub)` |
+| `DELETE /comercial/pedidos/:id/itens/:itemId` | `service.removerItem(id, itemId, dto, user.sub)` |
+| `POST /comercial/pedidos/:id/finalizar` | `service.finalizar(id, user.sub)` |
+| `DELETE /comercial/pedidos/:id` | `service.cancelarPedido(id, dto.motivo, user.sub)` |
+| `POST /comercial/pedidos/:id/liberar-reserva` | `service.liberarReservaAdministrativa(id, dto, user.sub)` |
+| `GET /comercial/pedidos/:id/adendos` | `adendos.listar(id, user.sub)` |
+| `POST /comercial/pedidos/:id/adendos` | `adendos.registrar(id, dto, user.sub, false)` |
+| `POST /comercial/pedidos/:id/adendos/confirmar-overbooking` | `adendos.registrar(id, dto, user.sub, true)` |
+
+Os três `GET` atuais ganham o decorator literalmente:
+
+```ts
+async listar(
+  @Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery,
+  @CurrentUser() user: CurrentUserPayload,
+) {
+  return this.service.listar(query, user.sub);
+}
+
+async buscarAberto(
+  @Query(new ZodValidationPipe(buscarPedidoAbertoSchema)) query: BuscarPedidoAbertoDto,
+  @CurrentUser() user: CurrentUserPayload,
+) {
+  return this.service.buscarAberto(query, user.sub);
+}
+
+async detalhar(
+  @Param('id') id: string,
+  @CurrentUser() user: CurrentUserPayload,
+) {
+  return this.service.detalhar(id, user.sub);
+}
+
+async listarAdendos(
+  @Param('id') id: string,
+  @CurrentUser() user: CurrentUserPayload,
+) {
+  return this.adendos.listar(id, user.sub);
+}
+```
+
+No `PedidosService`, importar `getTableColumns` e `escopoRepresentantes`. O guard único do
+agregado, com e sem lock, é:
+
+```ts
+async exigirPedidoNoEscopo(
+  tx: NodePgDatabase<typeof schema>,
+  pedidoId: string,
+  usuarioId: string,
+  bloquear: boolean,
+): Promise<PedidoVenda> {
+  const consulta = tx
+    .select(getTableColumns(pedidosVenda))
+    .from(pedidosVenda)
+    .innerJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
+    .where(and(
+      eq(pedidosVenda.id, pedidoId),
+      isNull(pedidosVenda.deletedAt),
+      escopoRepresentantes(usuarioId, clientes.representanteId),
+    ));
+  const linhas = bloquear
+    ? await consulta.for('update').limit(1)
+    : await consulta.limit(1);
+  const pedido = linhas[0];
+  if (!pedido) throw new NotFoundException('Pedido não encontrado');
+  return pedido;
+}
+
+private async exigirClienteNoEscopo(
+  tx: NodePgDatabase<typeof schema>,
+  clienteId: string,
+  usuarioId: string,
+) {
+  const cliente = await tx
+    .select({
+      id: clientes.id,
+      representanteId: clientes.representanteId,
+      rotaId: clientes.rotaId,
+    })
+    .from(clientes)
+    .where(and(
+      eq(clientes.id, clienteId),
+      isNull(clientes.deletedAt),
+      escopoRepresentantes(usuarioId, clientes.representanteId),
+    ))
+    .limit(1)
+    .then((linhas) => linhas[0] ?? null);
+  if (!cliente) throw new NotFoundException('Cliente não encontrado');
+  return cliente;
+}
+```
+
+`obterPedidoAtivoSobLock` passa a receber `usuarioId` e delega sem outro lookup:
+
+```ts
+private obterPedidoAtivoSobLock(
+  tx: NodePgDatabase<typeof schema>,
+  pedidoId: string,
+  usuarioId: string,
+): Promise<PedidoVenda> {
+  return this.exigirPedidoNoEscopo(tx, pedidoId, usuarioId, true);
+}
+```
+
+O guard do item primeiro autoriza o Pedido e só depois lê/trava o item; assim ID de item válido em
+Pedido proibido também vira 404:
+
+```ts
+private async obterItemAtivoSobLock(
+  tx: NodePgDatabase<typeof schema>,
+  pedidoId: string,
+  itemId: string,
+  usuarioId: string,
+): Promise<PedidoVendaItem> {
+  await this.exigirPedidoNoEscopo(tx, pedidoId, usuarioId, true);
+  const item = await tx
+    .select()
+    .from(pedidosVendaItens)
+    .where(and(
+      eq(pedidosVendaItens.id, itemId),
+      eq(pedidosVendaItens.pedidoVendaId, pedidoId),
+      isNull(pedidosVendaItens.deletedAt),
+    ))
+    .for('update')
+    .limit(1)
+    .then((linhas) => linhas[0] ?? null);
+  if (!item) throw new NotFoundException('Item do pedido não encontrado');
+  return item;
+}
+```
+
+Aplicação método a método no service:
+
+| Método público pós-O4 | Guarda literal antes de ler/mutar |
+|---|---|
+| `listar(query, usuarioId)` | `innerJoin(clientes, ...)` + D5.38 tanto na query de linhas quanto em `totalRow` |
+| `detalhar(id, usuarioId)` | abrir `db.transaction`; `exigirPedidoNoEscopo(tx, id, usuarioId, false)` antes da query relacional existente |
+| `buscarAberto(query, usuarioId)` | acrescentar `innerJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))` e D5.38 ao `where` que já filtra cliente/operação/item/status |
+| `criar(dto, usuarioId, confirmado)` | `exigirClienteNoEscopo(tx, dto.clienteId, usuarioId)` como primeira leitura na transação, antes de unicidade, planejamento, challenge ou `garantirOperacao` |
+| `incluirItem(...)` / `incluirItemTransacional(...)` | `obterPedidoAtivoSobLock(tx, pedidoId, usuarioId)` |
+| `reduzirItem(...)` | `obterItemAtivoSobLock(tx, pedidoId, itemId, usuarioId)` substitui o `select` atual |
+| `removerItem(...)` | `obterItemAtivoSobLock(tx, pedidoId, itemId, usuarioId)` |
+| `cancelarPedido(...)` | `obterPedidoAtivoSobLock(tx, pedidoId, usuarioId)` |
+| `finalizar(...)` | `obterPedidoAtivoSobLock(tx, pedidoId, usuarioId)` |
+| `liberarReservaAdministrativa(...)` | `obterPedidoAtivoSobLock(tx, pedidoId, usuarioId)` antes de ler itens/reservas |
+| `carregarAbertoParaAdendo(tx, pedidoId, usuarioId)` | `exigirPedidoNoEscopo(tx, pedidoId, usuarioId, true)` e depois a validação dos status abertos |
+| `exigirItemDoPedido(tx, pedidoId, itemComercialId, usuarioId)` | `exigirPedidoNoEscopo(tx, pedidoId, usuarioId, true)` antes do lookup do item |
+
+Em `listar`, a query de total deixa de ler apenas `pedidosVenda`; ela repete o mesmo join e
+predicado:
+
+```ts
+const filtroEscopo = escopoRepresentantes(usuarioId, clientes.representanteId);
+const where = and(
+  query.incluirRemovidos ? undefined : isNull(pedidosVenda.deletedAt),
+  filtroEscopo,
+);
+
+const totalRow = await this.db
+  .select({ total: sql<number>`count(*)::int` })
+  .from(pedidosVenda)
+  .innerJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
+  .where(where);
+```
+
+Em `AdendosService`, `registrar` mantém a assinatura pós-O4 e substitui exatamente as duas
+primeiras leituras da transação pelo bloco abaixo; todo o corpo posterior — planejamento,
+challenge read-only, update, reservas, adendo, auditoria, coleta e emissão pós-commit — permanece
+inalterado:
+
+```ts
+const pedido = await this.pedidos.carregarAbertoParaAdendo(
+  tx,
+  pedidoId,
+  usuarioId,
+);
+const item = await this.pedidos.exigirItemDoPedido(
+  tx,
+  pedidoId,
+  dto.itemComercialId,
+  usuarioId,
+);
+```
+
+`listar` recebe o usuário e tem corpo completo:
+
+```ts
+
+async listar(pedidoId: string, usuarioId: string) {
+  return this.db.transaction(async (tx) => {
+    await this.pedidos.exigirPedidoNoEscopo(tx, pedidoId, usuarioId, false);
+    return tx
+      .select()
+      .from(adendosPedido)
+      .where(eq(adendosPedido.pedidoVendaId, pedidoId))
+      .orderBy(desc(adendosPedido.criadoEm));
+  });
+}
+```
+
+Essa substituição não autoriza implementação alternativa. Os helpers transacionais de saldo/reserva/evento
+(`planejarSobLock`, `persistirItensPlanejados`, `aplicarAlocacaoNoItem`,
+`reduzirReservaOverbooking`, `liberarReservaReal`, `liberarTodasReservasDoItem`,
+`cancelarPendenciasDoPedido`) não são entradas HTTP e só podem ser chamados no `tx` iniciado por
+um método da tabela acima, após o guard. Os `*NaTx` introduzidos pela Task 6.4 obedecem à mesma
+regra e não criam caminho público sem `usuarioId`.
+
+Nenhuma ação fora do escopo chega a `INSERT`, `UPDATE`, `DELETE`, reserva, evento ou auditoria. O
+conflito esperado em `pedidos.service.ts` é resolvido reaplicando a extração `NaTx` da Task 6.4
+sobre a versão final da Onda 4 e mantendo `clientes.representante_id` como fonte única.
 
 ### D5.41 — Projeção reversa em Representantes
 
-Em `RepresentantesService`, lista e detalhe passam a calcular `usuariosVinculadosCount` com
-`COUNT(DISTINCT usuarios_representantes.usuario_id)` considerando usuários não removidos. O
-detalhe devolve:
+Em `RepresentantesService`, a lista passa a calcular `usuariosVinculadosCount` com usuários não
+removidos. Acrescentar ao `select` já existente de `listar`:
 
 ```ts
-usuariosVinculados: Array<{
+const contagemUsuarios = sql<number>`(
+  SELECT count(DISTINCT ur.usuario_id)::int
+  FROM usuarios_representantes ur
+  INNER JOIN usuarios u ON u.id = ur.usuario_id
+  WHERE ur.representante_id = "representantes"."id"
+    AND u.deleted_at IS NULL
+)`;
+
+// No select da lista:
+usuariosVinculadosCount: contagemUsuarios,
+```
+
+O tipo da linha da lista ganha `usuariosVinculadosCount: number`; ele nunca recebe o array de
+detalhe. No método `detalhar`, depois de autorizar/carregar o representante, executar esta query:
+
+```ts
+const usuariosVinculados = await this.db
+  .select({
+    id: schema.usuarios.id,
+    nome: schema.usuarios.nome,
+    email: schema.usuarios.email,
+    ativo: schema.usuarios.ativo,
+  })
+  .from(schema.usuariosRepresentantes)
+  .innerJoin(
+    schema.usuarios,
+    eq(schema.usuarios.id, schema.usuariosRepresentantes.usuarioId),
+  )
+  .where(and(
+    eq(schema.usuariosRepresentantes.representanteId, id),
+    isNull(schema.usuarios.deletedAt),
+  ))
+  .orderBy(asc(schema.usuarios.nome), asc(schema.usuarios.id));
+
+return {
+  ...representante,
+  clientesVinculados,
+  usuariosVinculados,
+};
+```
+
+No frontend, `app/frontend/src/lib/representantes.ts` declara sem união ambígua:
+
+```ts
+export interface UsuarioVinculado {
   id: string;
   nome: string;
   email: string;
   ativo: boolean;
-}>;
+}
+
+export interface Representante {
+  // campos vigentes
+  clientesVinculados?: number | ClienteVinculado[];
+  usuariosVinculadosCount: number;
+  usuariosVinculados?: UsuarioVinculado[];
+}
 ```
 
-Ordenar por `nome`, depois `id`. Não materializar contagem em coluna. A UI real de
-`/cadastros/representantes` repõe a sétima coluna e o bloco do drawer exatamente nos lugares do
-protótipo; zero vira `0`/estado vazio explícito, nunca dado de exemplo.
+A tabela de `representantes-client.tsx` acrescenta a sétima coluna literal do protótipo:
+
+```tsx
+{
+  chave: 'usuariosVinculadosCount',
+  titulo: 'Usuários vinculados',
+  render: (representante) => (
+    <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-text-slate">
+      {representante.usuariosVinculadosCount}
+    </span>
+  ),
+}
+```
+
+O registro da lista **não** é usado como detalhe. Criar
+`app/frontend/src/app/(admin)/cadastros/representantes/usuarios-vinculados.tsx`; este componente é
+o consumidor fixo de `GET /api/cadastros/representantes/:id`, BFF de detalhe já existente:
+
+```tsx
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { extrairMensagemErro } from '@/lib/error-message';
+import type { Representante, UsuarioVinculado } from '@/lib/representantes';
+import { Button } from '@/components/ui/button';
+
+export function UsuariosVinculados({
+  representanteId,
+}: {
+  representanteId: string;
+}) {
+  const [usuarios, setUsuarios] = useState<UsuarioVinculado[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const carregar = useCallback(async () => {
+    setUsuarios(null);
+    setErro(null);
+    try {
+      const resposta = await fetch(
+        `/api/cadastros/representantes/${representanteId}`,
+        { cache: 'no-store' },
+      );
+      if (!resposta.ok) {
+        const corpo = await resposta.json().catch(() => ({}));
+        setErro(extrairMensagemErro(
+          corpo,
+          'Não foi possível carregar os usuários vinculados.',
+        ));
+        return;
+      }
+      const detalhe = (await resposta.json()) as Representante;
+      setUsuarios(detalhe.usuariosVinculados ?? []);
+    } catch {
+      setErro('Não foi possível carregar os usuários vinculados.');
+    }
+  }, [representanteId]);
+
+  useEffect(() => {
+    void carregar();
+  }, [carregar]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[12px] font-semibold text-text-graphite">
+        Usuários vinculados{usuarios !== null ? ` (${usuarios.length})` : ''}
+      </p>
+      {erro ? (
+        <div className="flex flex-col items-start gap-2">
+          <p role="alert" className="text-[12px] text-destructive">{erro}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void carregar()}
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      ) : usuarios === null ? (
+        <p aria-busy="true" className="text-[12px] text-text-muted">
+          Carregando usuários vinculados…
+        </p>
+      ) : usuarios.length === 0 ? (
+        <p className="text-[12px] text-text-muted">Nenhum usuário vinculado.</p>
+      ) : (
+        <div className="flex flex-col gap-1.5 rounded-lg bg-surface-subtle p-3">
+          {usuarios.map((usuario) => (
+            <div key={usuario.id} className="text-[12px] text-text-ink">
+              <span className="font-medium">{usuario.nome}</span>
+              <span className="ml-1 text-text-muted">{usuario.email}</span>
+              {!usuario.ativo && <span className="ml-1">(Inativo)</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+Em `representantes-client.tsx`, o consumidor do drawer fica explícito e preserva a ordem do
+protótipo — Clientes, depois Usuários:
+
+```tsx
+blocosDrawer={(representante) => (
+  representante ? (
+    <>
+      <ClientesVinculados representanteId={representante.id} />
+      <UsuariosVinculados representanteId={representante.id} />
+    </>
+  ) : null
+)}
+```
+
+`representantes-client.test.tsx` importa `UsuariosVinculados` e prova, no teste nomeado do critério
+6.24, a URL exata do BFF, estado `aria-busy`, resposta com dois usuários ordenados, vazio, erro real
+e clique em `Tentar novamente`. Um mutante que renderiza apenas
+`usuariosVinculadosCount` do registro resumido deve falhar. Não materializar contagem em coluna de
+banco; zero na tabela vira `0` e o drawer usa o estado vazio literal, nunca dado de exemplo.
+
+O teste 6.24 é escrito por extenso no arquivo existente:
+
+```tsx
+it('busca o detalhe e mostra usuários vinculados em todos os estados', async () => {
+  let concluirPrimeira!: (response: Response) => void;
+  const fetchMock = jest.fn()
+    .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      concluirPrimeira = resolve;
+    }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({
+      id: 'r1',
+      usuariosVinculados: [
+        { id: 'u1', nome: 'Ana', email: 'ana@alpha.test', ativo: true },
+        { id: 'u2', nome: 'Beto', email: 'beto@alpha.test', ativo: false },
+      ],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({
+      id: 'r1',
+      usuariosVinculados: [],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  global.fetch = fetchMock as unknown as typeof fetch;
+
+  const primeira = render(<UsuariosVinculados representanteId="r1" />);
+  expect(screen.getByText('Carregando usuários vinculados…')).toHaveAttribute(
+    'aria-busy',
+    'true',
+  );
+  concluirPrimeira(new Response(JSON.stringify({
+    message: 'Falha real do backend',
+  }), { status: 503, headers: { 'Content-Type': 'application/json' } }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Falha real do backend');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+  expect(await screen.findByText('ana@alpha.test')).toBeInTheDocument();
+  expect(screen.getByText('beto@alpha.test')).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/cadastros/representantes/r1',
+    { cache: 'no-store' },
+  );
+
+  primeira.unmount();
+  render(<UsuariosVinculados representanteId="r1" />);
+  expect(await screen.findByText('Nenhum usuário vinculado.')).toBeInTheDocument();
+});
+```
 
 ### D5.42 — `/auth/me` e identificação do escopo
 
-`AuthRepository` lê os representantes vinculados e `AuthService.montarMe` acrescenta:
+Em `AuthRepository`, acrescentar `asc` ao import de `drizzle-orm` e implementar a leitura completa,
+sem filtrar `status`/`deletedAt` do representante:
+
+```ts
+export interface RepresentanteDoEscopo {
+  id: string;
+  nome: string;
+}
+
+async representantesDoUsuario(
+  usuarioId: string,
+): Promise<RepresentanteDoEscopo[]> {
+  return this.db
+    .select({
+      id: schema.representantes.id,
+      nome: schema.representantes.nome,
+    })
+    .from(schema.usuariosRepresentantes)
+    .innerJoin(
+      schema.representantes,
+      eq(
+        schema.representantes.id,
+        schema.usuariosRepresentantes.representanteId,
+      ),
+    )
+    .where(eq(schema.usuariosRepresentantes.usuarioId, usuarioId))
+    .orderBy(asc(schema.representantes.nome), asc(schema.representantes.id));
+}
+```
+
+`AuthService.montarMe` substitui o corpo atual por:
+
+```ts
+async montarMe(user: CurrentUserPayload): Promise<
+  CurrentUserPayload & {
+    menusVisiveis: string[];
+    escopoRepresentantes: {
+      tipo: 'todos' | 'restrito';
+      representantes: Array<{ id: string; nome: string }>;
+    };
+  }
+> {
+  const [menusVisiveis, representantes] = await Promise.all([
+    this.rbacService.menusVisiveisDePerfis(user.perfis),
+    this.authRepository.representantesDoUsuario(user.sub),
+  ]);
+  return {
+    ...user,
+    menusVisiveis,
+    escopoRepresentantes: {
+      tipo: representantes.length === 0 ? 'todos' : 'restrito',
+      representantes,
+    },
+  };
+}
+```
+
+O JWT não ganha IDs de representante e não vira cache de autorização; cada `/auth/me` e cada
+endpoint de domínio consultam o banco vigente. `tipo='todos'` somente quando não há linha na
+associação.
+
+O frontend estende `UserPayload` literalmente:
 
 ```ts
 escopoRepresentantes: {
@@ -4948,8 +5763,8 @@ escopoRepresentantes: {
 };
 ```
 
-`tipo='todos'` somente quando não há linhas na associação. O frontend estende `UserPayload`,
-passa o valor pelo layout e repõe no `AdminHeader` o rótulo "Escopo" do protótipo:
+`app/frontend/src/app/(admin)/layout.tsx` passa `user.escopoRepresentantes` ao `AdminHeader`; o
+header repõe o rótulo "Escopo" do protótipo `src/app/components/Layout.tsx`:
 
 - Todos → `Todos`;
 - um vínculo → nome do representante;
@@ -4960,15 +5775,104 @@ O cabeçalho não decide autorização e não oferece seletor. É apenas identif
 
 ### D5.43 — BFF
 
-Criar somente:
+Criar somente a rota nova
+`app/frontend/src/app/api/admin/usuarios/[id]/representantes/route.ts`, com este conteúdo completo.
+Ela usa `apiFetch`, não `fetchBackend`, e encaminha o `ReadableStream` da resposta: bytes,
+`Content-Type` e status 200/400/403/404 permanecem os do backend.
 
-`app/frontend/src/app/api/admin/usuarios/[id]/representantes/route.ts`
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { apiFetch } from '@/lib/api';
 
-com `PUT`, usando o helper BFF vigente para repassar cookie, status e corpo sem transformar erro.
+type Contexto = { params: Promise<{ id: string }> };
+
+export async function PUT(
+  request: NextRequest,
+  contexto: Contexto,
+): Promise<NextResponse> {
+  const { id } = await contexto.params;
+  const contentType = request.headers.get('content-type') ?? 'application/json';
+  const resposta = await apiFetch(
+    `/usuarios/${encodeURIComponent(id)}/representantes`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType },
+      body: await request.arrayBuffer(),
+    },
+  );
+
+  const headers = new Headers();
+  const responseContentType = resposta.headers.get('content-type');
+  if (responseContentType) headers.set('Content-Type', responseContentType);
+  return new NextResponse(resposta.body, {
+    status: resposta.status,
+    headers,
+  });
+}
+```
+
+O teste 6.21 instancia o handler real, mocka `apiFetch` com um corpo binário conhecido e compara
+`Uint8Array(await response.arrayBuffer())`, status e `Content-Type`; deve falhar se o handler
+chamar `response.json()`, `response.text()`, `fetchBackend`, hardcodar status ou reconstruir
+`{ message }`.
+
+Bloco literal em `bff-onda5.test.ts`:
+
+```ts
+import { NextRequest } from 'next/server';
+import { apiFetch } from '@/lib/api';
+import { PUT as putRepresentantes } from
+  '@/app/api/admin/usuarios/[id]/representantes/route';
+
+jest.mock('@/lib/api', () => ({ apiFetch: jest.fn() }));
+const apiFetchMock = jest.mocked(apiFetch);
+
+it('repassa representantes permitidos sem mascarar erro', async () => {
+  const requestBytes = new TextEncoder().encode(
+    '{"representantes":["00000000-0000-4000-8000-000000000001"]}',
+  );
+  const responseBytes = new TextEncoder().encode(
+    '{"code":"REPRESENTANTES_INVALIDOS","detalhe":"á"}',
+  );
+  apiFetchMock.mockResolvedValueOnce(new Response(responseBytes, {
+    status: 403,
+    headers: { 'Content-Type': 'application/problem+json; charset=utf-8' },
+  }));
+
+  const request = new NextRequest(
+    'http://localhost/api/admin/usuarios/u-1/representantes',
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: requestBytes,
+    },
+  );
+  const response = await putRepresentantes(request, {
+    params: Promise.resolve({ id: 'u-1' }),
+  });
+
+  expect(apiFetchMock).toHaveBeenCalledWith(
+    '/usuarios/u-1/representantes',
+    expect.objectContaining({
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+  const [, init] = apiFetchMock.mock.calls[0]!;
+  expect(new Uint8Array(init!.body as ArrayBuffer)).toEqual(requestBytes);
+  expect(response.status).toBe(403);
+  expect(response.headers.get('content-type')).toBe(
+    'application/problem+json; charset=utf-8',
+  );
+  expect(new Uint8Array(await response.arrayBuffer())).toEqual(responseBytes);
+});
+```
+
 Criação já usa `POST /api/admin/usuarios`; o body ganha `representantes`. Opções usam o BFF
-paginal existente de `GET /api/cadastros/representantes`: a UI percorre as páginas ou pesquisa no
-servidor e oferece "Carregar mais", sem truncar silenciosamente no primeiro lote. Não criar
-catch-all, proxy direto do browser, fallback ou mock.
+paginado existente de `GET /api/cadastros/representantes`: a UI percorre as páginas, mantendo
+`page` e `pageSize`, e oferece `Carregar mais` enquanto `data.length < total`. Busca envia
+`search` ao servidor e reinicia em `page=1`; não truncar silenciosamente no primeiro lote. Não
+criar catch-all, proxy direto do browser, fallback ou mock.
 
 ### D5.44 — UI completa de `/admin/usuarios`
 
@@ -4986,6 +5890,217 @@ Preservar a página e o drawer existentes e criar
 - edição salva dados básicos primeiro e executa o `PUT` somente se o conjunto mudou; se uma das
   ações falhar, o drawer permanece aberto, mostra o erro real e recarrega o estado confirmado pelo
   backend antes de permitir nova tentativa.
+
+O cabeçalho e a tabela reproduzem também os dois elementos existentes no protótipo
+`src/app/pages/Usuarios.tsx`, hoje ausentes na tela real:
+
+1. botão `Filtros`, com ícone `Filter`, `variant="outline"` e posição imediatamente antes de
+   `Novo Usuário`;
+2. coluna `Último Acesso` entre `Status` e `Ações`.
+
+`Filtros` não pode ser inerte. Ele é o trigger de um `Popover` com dois filtros sobre dados reais
+já carregados: `Perfil de acesso` (`Todos` + os perfis retornados por `/api/admin/perfis`) e
+`Status` (`Todos`, `Ativo`, `Inativo`), além de `Limpar filtros`. O estado fechado mantém
+exatamente a composição do protótipo; o protótipo não define a superfície aberta, portanto o
+popover usa apenas componentes/tokens do DS e não altera a grade `8/4`. Aplicação literal:
+
+```tsx
+const [perfilFiltro, setPerfilFiltro] = useState('todos');
+const [statusFiltro, setStatusFiltro] = useState<'todos' | 'ativo' | 'inativo'>('todos');
+
+const usuariosFiltrados = usuarios.filter((usuario) => {
+  const atendePerfil =
+    perfilFiltro === 'todos' || usuario.perfis.includes(perfilFiltro);
+  const atendeStatus =
+    statusFiltro === 'todos'
+    || (statusFiltro === 'ativo' ? usuario.ativo : !usuario.ativo);
+  return atendePerfil && atendeStatus;
+});
+```
+
+O trigger e os controles têm nomes acessíveis fixos:
+
+```tsx
+<Popover>
+  <PopoverTrigger asChild>
+    <Button variant="outline" aria-label="Filtros">
+      <Filter className="mr-2 h-4 w-4" />
+      Filtros
+    </Button>
+  </PopoverTrigger>
+  <PopoverContent align="end" className="w-72 space-y-3">
+    <label className="block text-sm font-medium" htmlFor="filtro-perfil">
+      Perfil de acesso
+    </label>
+    <select
+      id="filtro-perfil"
+      value={perfilFiltro}
+      onChange={(event) => setPerfilFiltro(event.target.value)}
+      className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
+    >
+      <option value="todos">Todos</option>
+      {perfis.map((perfil) => (
+        <option key={perfil.slug} value={perfil.slug}>{perfil.nome}</option>
+      ))}
+    </select>
+    <label className="block text-sm font-medium" htmlFor="filtro-status">
+      Status
+    </label>
+    <select
+      id="filtro-status"
+      value={statusFiltro}
+      onChange={(event) =>
+        setStatusFiltro(event.target.value as 'todos' | 'ativo' | 'inativo')
+      }
+      className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
+    >
+      <option value="todos">Todos</option>
+      <option value="ativo">Ativo</option>
+      <option value="inativo">Inativo</option>
+    </select>
+    <Button
+      type="button"
+      variant="ghost"
+      onClick={() => {
+        setPerfilFiltro('todos');
+        setStatusFiltro('todos');
+      }}
+    >
+      Limpar filtros
+    </Button>
+  </PopoverContent>
+</Popover>
+```
+
+O `tbody` itera `usuariosFiltrados`. Combinação sem resultado renderiza
+`Nenhum usuário encontrado para os filtros aplicados.`; a lista não é sobrescrita e limpar repõe
+todos os registros.
+
+`Usuario` em `src/lib/usuarios.ts` ganha `ultimoAcesso: string | null`. A célula usa somente o
+valor real entregue pelo backend:
+
+```tsx
+function formatarUltimoAcesso(valor: string | null): string {
+  if (valor === null) return 'Nunca acessou';
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(valor));
+}
+
+<th className="pb-3 font-medium">Último Acesso</th>
+// na linha:
+<td className="py-4 text-muted-foreground">
+  {formatarUltimoAcesso(usuario.ultimoAcesso)}
+</td>
+```
+
+Não usar `createdAt`, relógio local relativo, seed nem texto de exemplo como substituto de
+`ultimoAcesso`. `null` é mostrado explicitamente como `Nunca acessou`.
+
+Em `usuarios-client.test.tsx`, os dois testes novos usam a resposta realista abaixo para
+`/api/admin/usuarios` e a lista de perfis para `/api/admin/perfis`; o mock de
+`/resumo-perfis` continua devolvendo seu array vigente:
+
+```ts
+const USUARIOS_FILTRO = [
+  {
+    id: 'u-admin',
+    nome: 'Ana Costa',
+    email: 'ana@alphacarnes.com',
+    ativo: true,
+    perfis: ['administrador'],
+    ultimoAcesso: '2026-07-28T11:30:00.000Z',
+    representantesPermitidos: [],
+    escopoRepresentantes: 'todos',
+    createdAt: '2026-07-01T12:00:00.000Z',
+    updatedAt: '2026-07-28T11:30:00.000Z',
+    deletedAt: null,
+  },
+  {
+    id: 'u-comercial',
+    nome: 'Carlos Souza',
+    email: 'carlos@alphacarnes.com',
+    ativo: false,
+    perfis: ['comercial'],
+    ultimoAcesso: null,
+    representantesPermitidos: [],
+    escopoRepresentantes: 'todos',
+    createdAt: '2026-07-01T12:00:00.000Z',
+    updatedAt: '2026-07-01T12:00:00.000Z',
+    deletedAt: null,
+  },
+];
+
+beforeEach(() => {
+  global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith('/api/admin/usuarios')) {
+      return { ok: true, json: async () => USUARIOS_FILTRO };
+    }
+    if (url.endsWith('/api/admin/perfis')) {
+      return {
+        ok: true,
+        json: async () => [
+          { slug: 'administrador', nome: 'Administrador', permissoes: [] },
+          { slug: 'comercial', nome: 'Comercial', permissoes: [] },
+        ],
+      };
+    }
+    if (url.endsWith('/api/admin/usuarios/resumo-perfis')) {
+      return { ok: true, json: async () => [] };
+    }
+    throw new Error(`URL inesperada no teste: ${url}`);
+  }) as unknown as typeof fetch;
+});
+
+it('filtra usuários por perfil e status sem ação inerte', async () => {
+  render(<UsuariosAdminClient permissoes={['USUARIOS_LER']} />);
+  await screen.findByText('Ana Costa');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Filtros' }));
+  fireEvent.change(screen.getByLabelText('Perfil de acesso'), {
+    target: { value: 'comercial' },
+  });
+  expect(screen.queryByText('Ana Costa')).not.toBeInTheDocument();
+  expect(screen.getByText('Carlos Souza')).toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText('Status'), {
+    target: { value: 'ativo' },
+  });
+  expect(screen.getByText(
+    'Nenhum usuário encontrado para os filtros aplicados.',
+  )).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros' }));
+  expect(screen.getByText('Ana Costa')).toBeInTheDocument();
+  expect(screen.getByText('Carlos Souza')).toBeInTheDocument();
+});
+
+it('renderiza último acesso real e ausência explícita', async () => {
+  render(<UsuariosAdminClient permissoes={['USUARIOS_LER']} />);
+  await screen.findByText('Ana Costa');
+
+  const cabecalhos = screen
+    .getAllByRole('columnheader')
+    .map((elemento) => elemento.textContent);
+  expect(cabecalhos).toEqual([
+    'Nome / E-mail',
+    'Perfis',
+    'Status',
+    'Último Acesso',
+    'Ações',
+  ]);
+  expect(screen.getByText(/28\/07\/2026.*08:30/)).toBeInTheDocument();
+  expect(screen.getByText('Nunca acessou')).toBeInTheDocument();
+});
+```
+
+Antes de cada teste, o mock obrigatório roteia URLs por pathname; é proibido responder com o
+mesmo shape a Usuários, Perfis e Resumo. O primeiro teste mata botão inerte, filtro que não combina
+Perfil+Status e limpeza que não repõe a lista; o segundo mata coluna ausente, uso de `createdAt` e
+placeholder para `null`.
 
 Estados obrigatórios:
 
@@ -5059,11 +6174,12 @@ app/backend/test/helpers/test-app.ts
 Se a Onda 4 localizar `adendos.*` em subpasta diferente, o Worker segue o arquivo real que declara
 `AdendosController`/`AdendosService`, registra o caminho no PR e não cria uma segunda classe.
 
-### Frontend novos — delta +2; união sem testes = 36
+### Frontend novos — delta +3; união sem testes = 37
 
 ```text
 app/frontend/src/app/api/admin/usuarios/[id]/representantes/route.ts
 app/frontend/src/app/(admin)/admin/usuarios/_components/representantes-permitidos.tsx
+app/frontend/src/app/(admin)/cadastros/representantes/usuarios-vinculados.tsx
 ```
 
 ### Frontend alterados — delta +7; união da Onda 5 = 19
@@ -5098,7 +6214,7 @@ app/frontend/__tests__/terminologia.test.ts
 
 ## E5.1.4 Mapa DoD → teste 1:1 adicional
 
-As 26 linhas abaixo somam-se às 63 originais. Total normativo: **89** critérios.
+As 28 linhas abaixo somam-se às 63 originais. Total normativo: **91** critérios.
 
 | # | Critério | Teste literal |
 |---|---|---|
@@ -5125,9 +6241,11 @@ As 26 linhas abaixo somam-se às 63 originais. Total normativo: **89** critério
 | 6.21 | BFF do `PUT` preserva cookie, body, status 400/403 e corpo | `bff-onda5.test.ts` › "repassa representantes permitidos sem mascarar erro" |
 | 6.22 | Drawer mostra loading, erro+retry, vazio Todos e lista real | `usuarios-client.test.tsx` › "renderiza todos os estados de representantes permitidos" |
 | 6.23 | Criação envia representantes no POST; edição usa PUT só quando muda; erro mantém drawer aberto | `usuarios-client.test.tsx` › "salva criação atômica e edição dedicada sem estado otimista falso" |
-| 6.24 | Representantes repõe sétima coluna e bloco do drawer com estado vazio real | `representantes-client.test.tsx` › "mostra usuários vinculados na tabela e no detalhe" |
+| 6.24 | Representantes repõe sétima coluna com `usuariosVinculadosCount`; o drawer busca `GET /api/cadastros/representantes/:id` e mostra loading, erro+retry, vazio e `usuariosVinculados[]` real | `representantes-client.test.tsx` › "busca o detalhe e mostra usuários vinculados em todos os estados" |
 | 6.25 | Header identifica Todos, um nome e múltiplos sem permitir editar escopo | `admin-header.test.tsx` › "renderiza o escopo real da sessão" |
 | 6.26 | Jornada admin define escopo e dois usuários comerciais veem clientes/pedidos distintos | `e2e/onda5-usuarios-representantes.spec.ts` › "admin configura escopo e backend o aplica ponta a ponta" |
+| 6.27 | Ação `Filtros` ocupa a posição do protótipo, abre controles funcionais de Perfil/Status, combina os predicados, mostra vazio e `Limpar filtros` repõe a lista | `usuarios-client.test.tsx` › "filtra usuários por perfil e status sem ação inerte" |
+| 6.28 | Coluna `Último Acesso` ocupa a posição do protótipo, formata o timestamp real e mostra `Nunca acessou` somente para `null` | `usuarios-client.test.tsx` › "renderiza último acesso real e ausência explícita" |
 
 `terminologia.test.ts` inclui `usuarios-client.tsx`,
 `representantes-permitidos.tsx`, `representantes-client.tsx` e `admin-header.tsx` na varredura. O
@@ -5178,11 +6296,15 @@ npm run type-check
 
 ### Task 21 — BFF, Usuários, Representantes e header
 
-1. Escrever 6.21–6.25 em vermelho.
-2. Criar o BFF e o componente; alterar os sete arquivos frontend inventariados.
-3. Conferir `Usuarios.tsx`, `Representantes.tsx` e `Layout.tsx` no commit de protótipo fixado antes
-   de editar cada superfície.
-4. Rodar:
+1. Escrever 6.21–6.25 e 6.27–6.28 em vermelho.
+2. Criar o BFF e os dois componentes; alterar os sete arquivos frontend inventariados.
+3. Conferir `src/app/pages/Usuarios.tsx`, `src/app/pages/Representantes.tsx` e
+   `src/app/components/Layout.tsx` no commit de protótipo fixado antes de editar cada superfície.
+4. Provar que o drawer de Representantes chama o BFF de detalhe; o item da lista só fornece
+   `usuariosVinculadosCount` e não pode alimentar o bloco de usuários.
+5. Provar que `Filtros` altera o conjunto renderizado e que `Último Acesso` usa
+   `usuarios.ultimo_acesso`, incluindo o caso `null`.
+6. Rodar:
 
 ```bash
 cd app/frontend
@@ -5203,7 +6325,7 @@ npm run build
    - referência à emenda E5.1 e hash do plano;
    - SHA da O4 mergeada e SHA da atualização da branch;
    - migration `0019`;
-   - matriz dos 26 testes;
+   - matriz dos 28 testes;
    - evidências das três superfícies;
    - conflitos resolvidos, especialmente `pedidos.service.ts`;
    - confirmação de que nenhum perfil/permissão novo foi criado.
@@ -5254,9 +6376,9 @@ uma sexta dívida e não fecha P1/P8.
 | Migration/constraints/índices/política de remoção | Sim — D5.33–D5.34 |
 | DTO/service/controller/RBAC/auditoria | Sim — D5.35–D5.37 |
 | Escopo completo em Clientes/Pedidos/Adendos | Sim — D5.38–D5.40 |
-| BFF e UI com todos os estados | Sim — D5.43–D5.44 |
-| Fidelidade a Usuários/Representantes/Layout | Sim — arquivos e superfícies fixados |
-| Mapa DoD→teste 1:1 | Sim — 26 critérios adicionais, todos nomeados |
+| BFF e UI com todos os estados | Sim — D5.41, D5.43–D5.44 fixam produtor, detalhe, bytes/status, loading, erro/retry, vazio, filtros e Último Acesso |
+| Fidelidade a Usuários/Representantes/Layout | Sim — `Usuarios.tsx`, `Representantes.tsx` e `src/app/components/Layout.tsx` no pin fixado |
+| Mapa DoD→teste 1:1 | Sim — 28 critérios adicionais, todos nomeados |
 | Arquivos, tasks, ordem e commits literais | Sim — inventário e Tasks 19–22 |
 | Impacto pós-O4 na PR #28 | Sim — pré-condição, conflito, atualização e gate explícitos |
 | Perfil ou permissão inventados | Não — snapshot deve permanecer sem nova chave |
@@ -5269,14 +6391,14 @@ uma sexta dívida e não fecha P1/P8.
 | Tasks | 22 |
 | Commits previstos | 22 |
 | Decisões fixadas | 46 (D5.1–D5.46) |
-| Critérios DoD→teste | 89 (63 + 26) |
+| Critérios DoD→teste | 91 (63 + 28) |
 | Migrations | 2 (`0018` + `0019`) |
 | Tabelas novas | 4 (3 originais + `usuarios_representantes`) |
 | Endpoints novos | 14 (13 originais + `PUT /usuarios/:id/representantes`) |
 | Permissões novas | 5 originais; **0** pela emenda |
 | Arquivos backend novos | 30 |
 | Arquivos backend alterados, união | 43 |
-| Arquivos frontend novos, sem testes | 36 |
+| Arquivos frontend novos, sem testes | 37 |
 | Arquivos frontend alterados, união | 19 |
 | Specs backend novas | 13 + 1 helper original |
 | Specs frontend novas | 12 |
