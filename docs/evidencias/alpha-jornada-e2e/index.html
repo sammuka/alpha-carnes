@@ -37,7 +37,7 @@
     <p>Relatório gerado pela automação Playwright com dados inseridos no banco atual e telas capturadas no navegador Chromium.</p>
     <div class="badges">
       <span class="badge">11 telas capturadas</span>
-      <span class="badge">Run 20260729070514</span>
+      <span class="badge">Run 20260729085454</span>
       <span class="badge">Data 2026-08-01</span>
     </div>
   </header>
@@ -46,7 +46,7 @@
       <h2>Rastreabilidade dos Dados</h2>
       <p>Limite ativo da Onda 4: para_corte</p>
       <div class="context-grid">
-        <div><strong>Run ID</strong><p><code>20260729070514</code></p></div><div><strong>Data operacional</strong><p><code>2026-08-01</code></p></div><div><strong>Cliente</strong><p><code>019facb1-300f-79da-94eb-4ed76f4203b2</code></p></div><div><strong>Fornecedor</strong><p><code>019facb1-3bf4-7456-9336-58e2f2973bf2</code></p></div><div><strong>Item compra</strong><p><code>019facb1-4e7a-7ccc-8eba-b34f5ffa4c8a</code></p></div><div><strong>Item comercial</strong><p><code>019facb1-57a8-775b-8ac8-eb7f24e57664</code></p></div><div><strong>Compra programada</strong><p><code>019facb1-5c40-7aeb-a809-8c0cd64f0659</code></p></div><div><strong>Pedido venda</strong><p><code>019facb1-6953-7456-99b6-27d046987b4d</code></p></div><div><strong>Recebimento</strong><p><code>019facb1-7874-7116-9cdd-8ff0fc0f9dba</code></p></div><div><strong>Peça carga</strong><p><code>019facb1-8318-7fc6-825c-2dbccc239aa0</code></p></div><div><strong>Peça no handoff</strong><p><code>019facb1-9540-7b42-8ad2-285d244336e0</code></p></div><div><strong>Limite ativo da Onda 4</strong><p><code>para_corte</code></p></div>
+        <div><strong>Run ID</strong><p><code>20260729085454</code></p></div><div><strong>Data operacional</strong><p><code>2026-08-01</code></p></div><div><strong>Cliente</strong><p><code>019fad15-98ad-7965-bc99-166229180c02</code></p></div><div><strong>Fornecedor</strong><p><code>019fad15-a491-7d81-a334-d8f73381d403</code></p></div><div><strong>Item compra</strong><p><code>019fad15-b72f-7d20-926f-5c1e3f8fa09b</code></p></div><div><strong>Item comercial</strong><p><code>019fad15-bff5-78f4-96d3-eae5f4777445</code></p></div><div><strong>Compra programada</strong><p><code>019fad15-c462-7457-b3bf-19842abfdf60</code></p></div><div><strong>Pedido venda</strong><p><code>019fad15-d0d6-7719-ae7b-86dad72285f0</code></p></div><div><strong>Recebimento</strong><p><code>019fad15-e082-769d-be0a-d0e611c48c59</code></p></div><div><strong>Peça carga</strong><p><code>019fad15-eb19-7978-90e0-71b1ec6cd064</code></p></div><div><strong>Peça no handoff</strong><p><code>019fad15-fd5b-7d2e-9af8-f8093da41e93</code></p></div><div><strong>Limite ativo da Onda 4</strong><p><code>para_corte</code></p></div>
       </div>
     </section>
     <section class="coverage">
@@ -66,7 +66,7 @@
         </tbody>
       </table>
     </section>
-    <section class="observations"><h2>Observações Técnicas</h2><ul><li>Console warning: WebSocket connection to 'ws://localhost:4001/' failed: WebSocket is closed before the connection is established.</li><li>Console error: Failed to load resource: the server responded with a status of 409 (Conflict)</li></ul></section>
+    <section class="observations"><h2>Observações Técnicas</h2><ul><li>Console warning: WebSocket connection to 'ws://127.0.0.1:4001/' failed: WebSocket is closed before the connection is established.</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console warning: WebSocket connection to 'ws://127.0.0.1:4001/' failed: WebSocket is closed before the connection is established.</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: Failed to load resource: the server responded with a status of 409 (Conflict)</li></ul></section>
     
         <section class="step" id="01-login">
           <div class="step-head">
@@ -209,12 +209,12 @@
             <span>09</span>
             <div>
               <h2>Recebimento e Balança</h2>
-              <code>http://localhost:3100/recebimento/pesagem-destinacao?recebimentoId=019facb1-7874-7116-9cdd-8ff0fc0f9dba</code>
+              <code>http://localhost:3100/recebimento/pesagem-destinacao?recebimentoId=019fad15-e082-769d-be0a-d0e611c48c59</code>
             </div>
           </div>
           <div class="meta-grid">
             <div><strong>Objetivo</strong><p>Criar lote de recebimento pela tela vigente e encaminhar para a balança.</p></div>
-            <div><strong>Ação</strong><p>Pedido ao Fornecedor PF-E2E-20260729070514-3-1785308736591 foi selecionado e a NF-e informada no novo recebimento.</p></div>
+            <div><strong>Ação</strong><p>Pedido ao Fornecedor PF-E2E-20260729085454-3-1785315316707 foi selecionado e a NF-e informada no novo recebimento.</p></div>
             <div><strong>Resultado</strong><p>Lote criado e aberto na tela de Pesagem e Destinação.</p></div>
           </div>
           
@@ -226,7 +226,7 @@
             <span>10</span>
             <div>
               <h2>Pesagem, Associação e Etiqueta</h2>
-              <code>http://localhost:3100/recebimento/pesagem-destinacao?recebimentoId=019facb1-7874-7116-9cdd-8ff0fc0f9dba</code>
+              <code>http://localhost:3100/recebimento/pesagem-destinacao?recebimentoId=019fad15-e082-769d-be0a-d0e611c48c59</code>
             </div>
           </div>
           <div class="meta-grid">
@@ -243,7 +243,7 @@
             <span>11</span>
             <div>
               <h2>Handoff para Desossa</h2>
-              <code>http://localhost:3100/recebimento/pesagem-destinacao?recebimentoId=019facb1-7874-7116-9cdd-8ff0fc0f9dba</code>
+              <code>http://localhost:3100/recebimento/pesagem-destinacao?recebimentoId=019fad15-e082-769d-be0a-d0e611c48c59</code>
             </div>
           </div>
           <div class="meta-grid">
