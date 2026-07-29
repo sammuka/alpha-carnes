@@ -730,11 +730,16 @@ legado com `400` e também rejeita chave desconhecida em vez de descartá-la. `i
 | `GET /api/operacao/recebimentos/previsao/:pedidoFornecedorId` | mesma rota dinâmica | `apiFetch`; preserva status e bytes; só encaminha `content-type` presente |
 | `POST /api/operacao/recebimentos` | `POST /operacao/recebimentos` | lê `req.text()` e encaminha bytes sem alterar chave; preserva `201/400/404/409`, cabeçalho e corpo |
 
-A porção tocada de `/recebimento/recebimento-carga` segue
-`src/app/pages/RecebimentoCarga.tsx:619-837`: drawer lateral, título
-`Novo Recebimento de Carga`, blocos A–D na ordem, seleção do Pedido ao Fornecedor, quadro
-Produto/Qtd prevista/Unidade/Balança, aviso de carga automática, NF/romaneio, transporte e
-observações. A v1.1 §6.10 tem precedência sobre o rótulo isolado `Pedido de compra` do protótipo:
+A porção tocada de `/recebimento/recebimento-carga` transforma explicitamente a estrutura real
+atual (`SheetTitle` `Novo recebimento` e seções `1. Pedido de Compra` a
+`4. Resumo e criação do lote`) na estrutura de
+`src/app/pages/RecebimentoCarga.tsx:619-837`: drawer lateral, título literal
+`Novo Recebimento de Carga` e blocos `A — Pedido ao Fornecedor`,
+`B — Nota Fiscal recebida`, `C — Transporte` e `D — Observações internas`, nessa ordem no DOM.
+Seleção do Pedido ao Fornecedor, quadro Produto/Qtd prevista/Unidade/Balança, aviso de carga
+automática, NF/romaneio, transporte e observações ocupam esses blocos conforme o mapeamento
+executável da Task 22; as ações ficam no rodapé do drawer. A v1.1 §6.10 tem precedência sobre o
+rótulo isolado `Pedido de compra` do protótipo:
 o label acessível é `Pedido ao fornecedor` e a opção exibe
 `numero — fornecedor — data da operação`. Todos os labels usam `htmlFor`, o select tem nome
 acessível, loading/sem elegíveis/erro são perceptíveis sem depender de cor e o erro do backend usa
@@ -1121,7 +1126,7 @@ via `test/helpers/test-app.ts`.
 | DoD-134 | **D34/P7/consulta**: o modo explícito devolve somente `enviado`/`aguardando_recebimento` sem recebimento não cancelado, com `id`, `operacaoId`, `dataOperacao`, fornecedor e proveniência; lote cancelado não bloqueia, status `recebido` e lote ativo ficam fora; combinação com `operacaoId`/`status` retorna `400` | `app/backend/test/integration/pedido-fornecedor.e2e-spec.ts` › `lista explicitamente Pedidos ao Fornecedor elegiveis para recebimento` |
 | DoD-135 | **D34/início e envelope**: preview por `pedidoFornecedorId` responde `200`; inexistente=`404 Pedido ao fornecedor não encontrado`, estado inválido=`409 Pedido ao fornecedor não está aguardando recebimento`, sem itens=`409 Pedido ao fornecedor sem itens operacionais previstos`; POST legado=`400 Validação falhou`; POST canônico=`201` com chaves públicas exatas `recebimento`/`jaIniciado`, sem `nfId`; contexto pós-commit não usa vazio e os três eventos recebem ids/data canônicos | `app/backend/test/integration/recebimento.e2e-spec.ts` › `preview e inicio de recebimento usam exclusivamente o Pedido ao Fornecedor` |
 | DoD-136 | **D34/BFF**: listagem mantém query e shape; preview e POST preservam path, método, status e bytes; `content-type` é copiado somente quando presente e continua ausente quando o upstream o omite; nenhum handler troca `compraProgramadaId` por `pedidoFornecedorId` | `app/frontend/__tests__/bff-recebimento.test.ts` › `BFF de recebimento encaminha pedidoFornecedorId sem traducao silenciosa` |
-| DoD-137 | **D34/UI**: drawer acessível lista/seleciona o Pedido ao Fornecedor, mostra preview do snapshot, envia somente `pedidoFornecedorId` e, diante de `400`, exibe o erro sem navegar nem consumir o envelope como sucesso | `app/frontend/__tests__/recebimento.test.tsx` › `novo recebimento seleciona Pedido ao Fornecedor e envia seu id sem fallback` |
+| DoD-137 | **D34/UI e fidelidade estrutural**: o drawer tem o título literal `Novo Recebimento de Carga`; expõe, em ordem DOM, os cabeçalhos `A — Pedido ao Fornecedor`, `B — Nota Fiscal recebida`, `C — Transporte` e `D — Observações internas`; não conserva o título curto nem as seções numeradas 1–4; lista/seleciona o Pedido ao Fornecedor, mostra preview do snapshot, envia somente `pedidoFornecedorId` e, diante de `400`, exibe o erro sem navegar nem consumir o envelope como sucesso | `app/frontend/__tests__/recebimento.test.tsx` › `novo recebimento seleciona Pedido ao Fornecedor e envia seu id sem fallback` |
 | DoD-138 | **D34/Playwright**: a jornada conserva Grade+POST do pedido, cria/envia PF pelo helper backend autenticado, seleciona seu id na UI, exige status `201` antes do JSON e confirma `{ recebimento.id, jaIniciado:false }` | `app/frontend/e2e/jornada-operacional.spec.ts` › `jornada operacional completa` |
 
 **69 itens de DoD** (DoD-70 a DoD-138), todos com teste nomeado 1:1 — DoD-114 é o gate de cobertura
@@ -4540,8 +4545,30 @@ const payload: IniciarRecebimentoPayload = {
 ```
 
    A lista já chega do backend sem Pedido ao Fornecedor com recebimento não cancelado; não reimplementar
-   esse filtro no React nem oferecer ação para segundo lote (P7). Preservar o drawer e os blocos A–D
-   do protótipo. O label/placeholder deve ser
+   esse filtro no React nem oferecer ação para segundo lote (P7). A UI real **não** possui hoje a
+   estrutura do protótipo: substituir o `SheetTitle` `Novo recebimento` e as quatro seções numeradas
+   por `SheetTitle` `Novo Recebimento de Carga` e quatro elementos `section`, cada um rotulado por
+   um `h3`, exatamente nesta ordem no DOM:
+
+   | ordem | cabeçalho literal | conteúdo e movimentação dos controles reais |
+   |---|---|---|
+   | A | `A — Pedido ao Fornecedor` | select canônico do Pedido ao Fornecedor; aviso de itens carregados automaticamente; quadro `Produto`/`Qtd prevista`/`Unidade`/`Balança`; o controle atual `Doca` sai da seção 3 e passa ao fim deste bloco, com label `Doca / área`, preservando `formNfe.doca`, `id="doca"` e o mesmo valor enviado |
+   | B | `B — Nota Fiscal recebida` | texto explicativo atual e os controles funcionais `Número da NF-e`, `Série`, `Data emissão`, `Chave NF-e`, `Romaneio`, `Peso bruto NF (kg)`, `Peso líquido NF (kg)` e `Volumes NF`, com os mesmos ids, estados, validações e campos do payload |
+   | C | `C — Transporte` | controles atuais `Placa` e `Motorista`, preservando `formNfe.placaVeiculo`/`formNfe.motorista`, ids, labels e payload; `Doca` não se duplica aqui porque foi movida para A |
+   | D | `D — Observações internas` | o `Textarea` atual `Observação` sai da seção 2, passa para este bloco e recebe label acessível `Observações internas`, preservando `formNfe.observacoes`, `id="obs"` e o mesmo campo do payload |
+
+   A seção atual `4. Resumo e criação do lote` deixa de existir: seus dados não são perdidos, pois
+   pedido/fornecedor/itens permanecem visíveis no bloco A, NF/romaneio no B e transporte em A/C.
+   `Cancelar`, `Criar Lote` e `Criar Lote e Ir para Balança` saem dessa seção e vão para um rodapé
+   irmão, posterior aos quatro blocos, preservando handlers, nomes acessíveis, estados
+   `disabled`, o mesmo `201` e a diferença de navegação já fixada por D34. Não introduzir nesta
+   costura os controles exclusivamente mockados do protótipo (`Conferente responsável` hardcoded,
+   carregar/anexar NF, CPF/RG, telefone, transportadora e lacre): não há campo real correspondente
+   no DTO desta abertura e inventá-los violaria RA-06; a completude funcional desses pontos
+   permanece na Onda 6. Essa remoção de mocks não autoriza renomear, reordenar ou omitir os quatro
+   blocos estruturais acima.
+
+   O label/placeholder da seleção deve ser
    `Pedido ao fornecedor`/`Selecione o pedido ao fornecedor`; a opção usa
    `${pedido.numero} — ${pedido.fornecedorNome} — ${pedido.dataOperacao}`; o quadro usa os itens do
    preview. O `Label` usa `htmlFor="pedido-fornecedor"` e o `SelectTrigger` Radix usa
@@ -4550,11 +4577,59 @@ const payload: IniciarRecebimentoPayload = {
    como `Nenhum Pedido ao Fornecedor aguardando recebimento.` e manter erro em `role="alert"`.
    `Criar Lote` e `Criar Lote e Ir para Balança` diferem somente na navegação após o mesmo `201`.
 
-   **DoD-137** atualiza o fixture herdado e cria o teste nomeado: abre o drawer pelo nome
-   acessível; espera a opção PF; seleciona; exige o quadro; preenche NF; intercepta a chamada de
-   criação; prova que o body tem `pedidoFornecedorId`, não tem `compraProgramadaId` nem
-   `iniciarConferencia`; devolve `201` com envelope e exige sucesso. Repetir com resposta `400`
-   contendo uma sentinela e exigir `role="alert"` sem navegar. Isso mata o acesso otimista ao body.
+   Para preservar acessibilidade na transformação, cada `section` recebe `aria-labelledby` apontando
+   para o `id` de seu `h3`; todos os controles mantêm `Label htmlFor`/`id`, o Select Radix conserva
+   `role="combobox"` e nome `Pedido ao fornecedor`, o erro conserva `role="alert"` e o foco/teclado
+   nativos de `Sheet`, `Select`, `Input`, `Textarea` e `Button` não são substituídos por `div`
+   clicável.
+
+   **DoD-137** atualiza o fixture herdado e cria o teste nomeado. Além do fluxo já contratado, o
+   teste importa `within`, abre o drawer e executa literalmente a prova estrutural abaixo antes de
+   selecionar o Pedido ao Fornecedor:
+
+```tsx
+const drawer = screen.getByRole('dialog', {
+  name: 'Novo Recebimento de Carga',
+});
+const nomesDosBlocos = [
+  'A — Pedido ao Fornecedor',
+  'B — Nota Fiscal recebida',
+  'C — Transporte',
+  'D — Observações internas',
+];
+const cabecalhos = within(drawer).getAllByRole('heading', { level: 3 });
+expect(cabecalhos.map((cabecalho) => cabecalho.textContent)).toEqual(nomesDosBlocos);
+expect(within(drawer).queryByRole('heading', { name: 'Novo recebimento' })).not.toBeInTheDocument();
+for (const nomeAntigo of [
+  '1. Pedido de Compra',
+  '2. Dados da NF / Romaneio',
+  '3. Veículo e doca',
+  '4. Resumo e criação do lote',
+]) {
+  expect(within(drawer).queryByRole('heading', { name: nomeAntigo })).not.toBeInTheDocument();
+}
+
+const [blocoA, blocoB, blocoC, blocoD] = cabecalhos.map((cabecalho) => {
+  const section = cabecalho.closest('section');
+  if (!section) throw new Error(`Bloco sem section: ${cabecalho.textContent}`);
+  return section;
+});
+expect(within(blocoA!).getByRole('combobox', { name: 'Pedido ao fornecedor' })).toBeInTheDocument();
+expect(within(blocoA!).getByLabelText('Doca / área')).toBeInTheDocument();
+expect(within(blocoB!).getByLabelText(/Número da NF-e/)).toBeInTheDocument();
+expect(within(blocoC!).getByLabelText('Placa')).toBeInTheDocument();
+expect(within(blocoC!).getByLabelText('Motorista')).toBeInTheDocument();
+expect(within(blocoD!).getByLabelText('Observações internas')).toBeInTheDocument();
+```
+
+   A igualdade do array prova a ordem DOM e mata troca/omissão dos blocos. A consulta exata do
+   `dialog` mata o mutante que conserva `Novo recebimento`; as asserções negativas matam o mutante
+   que apenas acrescenta A–D e preserva as seções 1–4. Em seguida, o mesmo teste espera a opção PF,
+   seleciona, exige o quadro, preenche NF, intercepta a chamada de criação e prova que o body tem
+   `pedidoFornecedorId`, não tem `compraProgramadaId` nem `iniciarConferencia`; devolve `201` com
+   envelope e exige sucesso. Repetir com resposta `400` contendo uma sentinela e exigir
+   `role="alert"` sem navegar. Isso mata o acesso otimista ao body e preserva integralmente as
+   provas anteriores de D34.
 
 8. Em `jornada-operacional.spec.ts`, preservar sem alteração lógica a sequência D33 já verde:
    Grade pelo código → criação do pedido → resposta `2xx` → pedido visível. Depois, reutilizar
@@ -4761,6 +4836,9 @@ backend; DoD-135 prova contexto/eventos sem vazio e envelope público sem `nfId`
 `content-type` ausente quando o upstream não o envia; DoD-138 interage com o Select Radix por
 `combobox`/`option`. O teste de browser exige o `201` antes do JSON; portanto um `400` já não consegue
 produzir evidência falsa usando um id lido do corpo de erro.
+DoD-137 também deixa de aceitar a estrutura herdada: exige o título literal, os quatro cabeçalhos
+A–D em ordem DOM, a ausência das seções numeradas 1–4 e a permanência dos controles funcionais
+nos blocos definidos, sem enfraquecer as provas de seleção, payload, sucesso e erro.
 
 **Aderência à base real (emenda do Portão 1).** Todo código literal deste plano foi conferido contra
 `develop` no worktree em `158da75`, não contra a memória do plano mestre: assinatura de
@@ -4839,7 +4917,9 @@ e leitura de JSON sem `201`.
 **Fronteira O4/O6 da emenda 10.** A rota de Recebimento pertence à Onda 6, mas o arquivo real já
 existe e é atravessado pela dívida 9/Task 21, cujo Playwright é gate da Onda 4. A emenda não declara
 a tela concluída nem antecipa Troca de Peça, etiquetas, acumuladores ou conclusão tripla: altera
-somente seleção, preview e criação do lote, preservando o layout A–D do protótipo. Adiar essa costura
+somente seleção, preview e criação do lote, transformando a estrutura real 1–4 no layout A–D do
+protótipo. Os controles funcionais atuais são redistribuídos sem perda e os controles apenas
+mockados, sem suporte no DTO desta abertura, não são materializados com dados inventados. Adiar essa costura
 deixaria o gate O4 permanentemente vermelho e conservaria um contrato que contradiz a Onda 1; por
 isso a ownership literal está na Task 22 e a completude restante continua integral na Onda 6.
 
@@ -4904,8 +4984,8 @@ D33 não admite `dataOperacao` opcional nem reconstrução no frontend: DoD-129 
 retorno público perder a derivação, DoD-130 falha se o editor omitir a data no POST e DoD-131
 falha se o BFF achatar o envelope. D34 não admite alias ou fallback: DoD-132 rejeita as chaves
 legadas, DoD-133 ancora o snapshot, DoD-134/135 cobrem estados/status/envelope, DoD-136 compara os
-bytes do proxy, DoD-137 cobre o tratamento de erro da UI e DoD-138 exige o `201` antes de consumir
-JSON.
+bytes do proxy, DoD-137 cobre título, blocos A–D em ordem, ausência da estrutura 1–4 e tratamento
+de erro da UI, e DoD-138 exige o `201` antes de consumir JSON.
 
 ---
 
