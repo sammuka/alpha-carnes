@@ -8,7 +8,7 @@
 > |---|---|
 > | Onda | 5 — Gestão |
 > | Branch de planejamento | `plan/onda5-usuarios-representantes` (emenda E5.1 sobre o plano original) |
-> | Branch de implementação | `feature/onda5-gestao` (PR #28 já aberto; receberá a emenda somente após o merge da Onda 4 e atualização sobre `develop`) |
+> | Branch de implementação | `feature/onda5-gestao` (PR #28 já aberto; receberá a emenda somente após o merge da Onda 4 e o rebase obrigatório sobre o `develop` pós-O4) |
 > | Base desta emenda | `origin/develop` = `b4ad3b39b11000099d19f713637c6bd9d24ff942`; a Onda 4 ainda não está em `develop` nesta base |
 > | Protótipo (fonte de verdade de UI) | `F:/Projetos/alpha-carnes-prototipo` @ `feature/completude-v1.1` = `8d32aa4cadff0a91ab155a9d47b019cd3731ce77` |
 > | Depende de | Onda 3 (mergeada) e, para aplicar o escopo em Clientes/Pedidos, Onda 4 mergeada em `develop` |
@@ -147,10 +147,12 @@ Nenhum evento é emitido dentro da transação; nenhuma regra de negócio vive n
 11. **Fakes obrigatórios em teste**: `HARDWARE_FAKE=1`, `NFSE_FAKE=1`. Nenhum teste toca dispositivo
     ou EISS real.
 12. **Commits atômicos por task**, mensagem `tipo(onda5): descrição` em português, sem `--no-verify`,
-    push non-force.
+    push non-force. A única exceção é a atualização não fast-forward causada pelo rebase obrigatório
+    da branch já publicada da PR #28, conduzida pelo Executor conforme a E5.1.6 exclusivamente com
+    `--force-with-lease`.
 13. **Precedência obrigatória da Onda 4 para a emenda E5.1.** As Tasks 1–18 originais continuam
     independentes; as Tasks 19–22 só começam depois que a Onda 4 estiver mergeada em `develop` e a
-    branch da PR #28 tiver incorporado esse `develop`, pois a autorização será aplicada sobre as
+    branch da PR #28 tiver sido obrigatoriamente rebaseada sobre esse `develop`, pois a autorização será aplicada sobre as
     versões finais de `clientes.service.ts`, `pedidos.service.ts` e `adendos.service.ts`.
 14. **Escopo é autorização de dados, não filtro visual.** Somente o backend decide se o usuário
     acessa o representante. A UI não envia parâmetro para ampliar escopo; todo endpoint de leitura
@@ -172,7 +174,7 @@ Tasks 1–18; as exceções literais das Tasks 19–22 estão na seção "Emenda
 | `pedidos_venda` / `reservas_disponibilidade` | A Onda 5 **chama métodos públicos já existentes** do `PedidosService` (`criar`, `reduzirItem`, `removerItem`) e não edita a lógica de pedidos. Toques em arquivos de pedidos: (a) `exports: [PedidosService]` no `pedidos.module.ts` (Task 6), 1 linha idempotente; (b) extração de `criarNaTx`/`reduzirItemNaTx`/`removerItemNaTx` e `export` do tipo `EventoDominio` em `pedidos.service.ts` (Task 6.4), refatoração sem mudança de comportamento; (c) `dataOperacao` + `operacaoId` no payload do evento `PENDENCIA_OVERBOOKING_ABERTA` (`pedidos.service.ts:359-362`, Task 2.5), que altera só o objeto emitido. Nenhum dos três muda regra de pedido. |
 | `/comercial/*` | Fora do escopo. Nenhum arquivo em `app/frontend/src/app/(admin)/comercial/**` é criado ou alterado nesta onda. |
 | Disponibilidade | A Onda 5 altera `disponibilidade.service.ts` acrescentando `projetarImpacto` e `recalcularParaCompra` (métodos novos). Não altera `gerarParaCompra` nem `listarPedidosEmRisco`. |
-| Migration | A branch da Onda 4 reserva `0016_onda4_comercial_expand` e `0017_onda4_comercial_contract`; a E5.1 só começa depois que ambas estiverem em `develop`. A parte original usa `0018_onda5_gestao` e a emenda usa `0019_onda5_usuarios_representantes`. Se o `develop` pós-O4 ocupar um número, o Executor renumera para os próximos dois livres, preserva a ordem/conteúdo e registra a renumeração na PR #28. |
+| Migration | A branch da Onda 4 reserva `0016_onda4_comercial_expand` e `0017_onda4_comercial_contract`; a E5.1 só começa depois que ambas estiverem em `develop` **e** a PR #28/O5 tiver sido rebaseada sobre esse head. A parte original usa `0018_onda5_gestao` e a emenda usa `0019_onda5_usuarios_representantes`. Se o `develop` pós-O4 ocupar um número, o Executor renumera para os próximos dois livres, preserva a ordem/conteúdo e registra a renumeração na PR #28. |
 
 ---
 
@@ -204,7 +206,8 @@ espaçamentos, ordem dos blocos e textos; substitui apenas os dados de seed pelo
 
 > Esta seção preserva a auditoria histórica do plano original em `4a3aa02`. A base viva da emenda
 > é `b4ad3b39b11000099d19f713637c6bd9d24ff942`, fixada no quadro do topo; os fatos comerciais que
-> dependem da O4 devem ser lidos na versão mergeada exigida pela Task 19.
+> dependem da O4 devem ser lidos na versão mergeada, seguida do rebase obrigatório da PR #28,
+> exigida pela Task 19.
 
 Auditoria feita no worktree `F:/Projetos/AlphaCarnes/.worktrees/onda5-plan`:
 
@@ -4581,7 +4584,7 @@ DoD→teste da onda de destino.
 
 | Risco | Probabilidade | Impacto | Mitigação |
 |---|---|---|---|
-| Conflito de merge com a Onda 4 em `pedidos.service.ts` (extração dos métodos `NaTx`, Task 6.4) | Média | Médio | Refatoração sem mudança de comportamento, coberta pelos testes existentes de pedidos; se a Onda 4 mergear antes, reaplicar a extração sobre o código novo e rodar `pedidos.e2e-spec.ts` como critério de aceite |
+| Conflito durante o rebase obrigatório da PR #28 sobre a Onda 4 em `pedidos.service.ts` (extração dos métodos `NaTx`, Task 6.4) | Média | Médio | Refatoração sem mudança de comportamento, coberta pelos testes existentes de pedidos; depois do merge da Onda 4, preservar ambos os contratos ao resolver o rebase e rodar `pedidos.e2e-spec.ts` como critério de aceite |
 | Número da migration colidir com a Onda 4 | Baixa (já mitigado: Onda 4 = `0016`/`0017`, Onda 5 = `0018`) | Baixo | Se `develop` ocupar o 0018 antes do merge, renumerar mantendo o SQL e registrar no PR |
 | Trigger de imutabilidade quebrar teste existente que faça `UPDATE` em `conclusoes_conferencia` | Baixa | Médio | Rodar a suíte inteira logo após a Task 1; se algum teste fizer `UPDATE`, o teste é que está errado (v1.1 §6.10.7) e deve ser corrigido no mesmo commit |
 | Cobertura cair abaixo de 80% pelo volume de código novo | Média | Alto (gate) | Cada task já traz o seu teste; rodar `test:cov` ao fim das tasks 5, 8 e 9, não só no gate final |
@@ -4589,7 +4592,7 @@ DoD→teste da onda de destino.
 | Divergência visual com o protótipo detectada só no Portão 2 | Média | Alto | Evidência PNG por rota na Task 18 e leitura obrigatória do `.tsx` do protótipo antes de cada task de tela |
 | Escopo aplicado só à listagem, deixando detalhe ou mutação acessível | Média | Crítico | Matriz literal de métodos em D5.39–D5.40 e testes 6.12–6.17 com prova de não mutação |
 | Inativar/remover representante ampliar usuário restrito para Todos | Baixa | Crítico | Preservar associação, autorizar pelo ID sem filtrar status/delete e provar com 6.11 |
-| Aplicar E5.1 antes do merge O4 ou perder código ao atualizar a PR #28 | Média | Alto | Task 19 bloqueia; E5.1.6 fixa conferência de SHAs, conflito conhecido e `--force-with-lease` apenas com coordenação |
+| Aplicar E5.1 antes do merge O4 ou perder código ao rebasear a PR #28 | Média | Alto | Task 19 bloqueia; E5.1.6 fixa merge O4 → rebase obrigatório da PR #28/O5 → correção/teste, conferência de SHAs, conflito conhecido e `--force-with-lease` somente sob coordenação do Executor |
 
 ---
 
@@ -4614,7 +4617,8 @@ Worker não participa dessa mudança de estado.
 
 Atualizar a descrição da PR #28 com os quatro itens originais, o quinto item de escopo por
 representante, o hash deste plano, as evidências e o gate descritos na Task 22. O procedimento de
-incorporação do `develop` pós-O4 e a proteção contra sobrescrita remota estão fixados na E5.1.6.
+rebase obrigatório sobre o `develop` pós-O4 e a proteção contra sobrescrita remota estão fixados na
+E5.1.6.
 
 O Portão 2 é solicitado somente depois do CI verde no head do PR. Nenhum veredito é escrito por
 quem implementa.
@@ -4638,12 +4642,12 @@ quem implementa.
 | TDD explícito por task | Sim — cada task nomeia o teste e o comando de verificação |
 | Commit declarado por task | Sim — 22 mensagens |
 | Gate local completo | Sim — Task 18.5 |
-| PR de implementação descrita | Sim — PR #28 existente é atualizada após a Task 22; segunda PR é proibida |
+| PR de implementação descrita | Sim — a descrição da PR #28 existente é atualizada após a Task 22; segunda PR é proibida |
 | Ordem de execução e paralelismo | Sim — grafo original + cadeia bloqueante das 22 tasks na E5.1.6 |
 | Dívidas registradas | Sim — 5 remanescentes, com destino; dívida O3 D43/O4 D26 reparada pela E5.1 |
 | Riscos com mitigação | Sim — 9 |
 | Nenhuma AD inventada para pendência aberta | Sim — P8 e P1 seguem abertas, tratadas por parâmetro + badge (D5.4) |
-| Dependência da Onda 4 controlada | Sim — Tasks 19–22 só iniciam pós-merge O4 e atualização da PR #28; conflitos e regressões estão fixados na E5.1.6 |
+| Dependência da Onda 4 controlada | Sim — Tasks 19–22 só iniciam após merge O4 → rebase obrigatório da PR #28/O5 → correção/teste; conflitos e regressões estão fixados na E5.1.6 |
 | Terminologia respeitada (termo banido ausente) | Sim — verificado no texto do plano e vigiado por teste (critério 5.9) |
 | Varredura dos marcadores de incompletude proibidos pelo gate textual | Sim — o comando abaixo retorna zero no conteúdo normativo sem fazer a própria especificação gerar falso positivo |
 
@@ -5253,7 +5257,8 @@ já satisfaz Todos pelo builder D5.38.
 
 ### D5.40 — Cobertura completa de Pedidos e Adendos
 
-Depois do merge da Onda 4 e da atualização da PR #28, alterar literalmente:
+Depois do merge da Onda 4 e do rebase obrigatório da PR #28/O5 sobre o `develop` pós-O4, alterar
+literalmente:
 
 - `app/backend/src/modules/comercial/pedidos/pedidos.controller.ts`;
 - `app/backend/src/modules/comercial/pedidos/pedidos.service.ts`;
@@ -6278,10 +6283,11 @@ snapshot de RBAC existente ganha uma asserção negativa: a emenda não acrescen
 
 ## E5.1.5 Tasks executáveis
 
-### Task 19 — Base pós-O4, migration, schema e contrato
+### Task 19 — Rebase obrigatório pós-O4, migration, schema e contrato
 
-**Pré-condição bloqueante:** O4 mergeada em `develop`; PR #28 atualizada sobre esse head; árvore
-limpa. O Executor registra no comentário da PR #28 os SHAs de `develop` e `HEAD` antes da emenda.
+**Pré-condição bloqueante:** O4 mergeada em `develop`; PR #28/O5 obrigatoriamente rebaseada sobre
+esse head; árvore limpa. O Executor registra no comentário da PR #28 os SHAs de `develop`, do head
+anterior ao rebase e do novo `HEAD` antes da emenda.
 Se a O4 não estiver mergeada, parar como `blocked`; é uma dependência técnica ainda não satisfeita,
 não uma decisão do Quality Owner, e não autoriza implementar um segundo contrato comercial.
 
@@ -6340,7 +6346,7 @@ npm run build
 
 **Commit:** `feat(onda5): completar representantes permitidos na interface`
 
-### Task 22 — E2E, regressão, evidências e atualização da PR #28
+### Task 22 — E2E, regressão, evidências e atualização da descrição da PR #28
 
 1. Escrever e executar 6.26 com dois usuários comerciais, dois representantes, dois clientes e
    dois pedidos. Não usar seed como prova de autorização.
@@ -6348,7 +6354,7 @@ npm run build
 3. Rodar o gate completo da Task 18.5, incluindo suites O4 e o novo E2E.
 4. Acrescentar à descrição da PR #28:
    - referência à emenda E5.1 e hash do plano;
-   - SHA da O4 mergeada e SHA da atualização da branch;
+   - SHA da O4 mergeada, SHA anterior e SHA resultante do rebase obrigatório da branch;
    - migration `0019`;
    - matriz dos 28 testes;
    - evidências das três superfícies;
@@ -6364,23 +6370,26 @@ npm run build
 ```text
 Tasks 1–18 originais
   └─ Onda 4 mergeada em develop
-      └─ atualizar feature/onda5-gestao (PR #28) sobre develop
-          └─ Task 19 migration/schema/DTO
-              └─ Task 20 backend e autorização
-                  └─ Task 21 BFF/UI
-                      └─ Task 22 E2E/evidências/gate/PR
+      └─ rebase obrigatório de feature/onda5-gestao (PR #28/O5) sobre develop
+          └─ corrigir conflitos e testar a base rebaseada
+              └─ Task 19 migration/schema/DTO
+                  └─ Task 20 backend e autorização
+                      └─ Task 21 BFF/UI
+                          └─ Task 22 E2E/evidências/gate/PR
 ```
 
 Na data desta emenda, a PR #28 é draft, head `feature/onda5-gestao` em
 `b5ed772c7c12dd8015343ba1fabd7263b8772b9c`, base `develop`; a O4 ainda não está mergeada em
 `develop`. Esses SHAs são evidência de planejamento, não autorização para executar.
 
-O Executor pode incorporar o novo `develop` por merge ou por rebase conforme o rito vigente, mas
-não pode sobrescrever trabalho remoto sem conferir `git status`, `git log --left-right` e o head
-da PR. Se usar rebase em branch publicada, qualquer atualização não fast-forward exige
-coordenação explícita e `--force-with-lease`, nunca `--force`. O conflito conhecido é
-`pedidos.service.ts`; resolver preservando simultaneamente a implementação O4 e os métodos `NaTx`
-da O5, depois executar todas as suites citadas na Task 20.
+O contrato literal e obrigatório é **merge O4 → rebase PR #28/O5 → correção/teste**; incorporar o
+novo `develop` por merge na PR #28 é proibido. O Executor conduz o rebase e não pode sobrescrever
+trabalho remoto sem conferir `git status`, `git log --left-right` e o head da PR. Como a branch é
+publicada, qualquer atualização não fast-forward usa `--force-with-lease` somente sob coordenação
+do Executor, nunca `--force`. O conflito conhecido é `pedidos.service.ts`; resolver preservando
+simultaneamente a implementação O4 e os métodos `NaTx` da O5, depois executar todas as suites
+citadas na Task 20. Se a O4 ainda não estiver mergeada, o estado permanece `blocked`, sem decisão
+humana a solicitar e sem alternativa de merge na PR #28.
 
 ## E5.1.7 Dívida reparada e dívidas remanescentes
 
@@ -6405,7 +6414,7 @@ uma sexta dívida e não fecha P1/P8.
 | Fidelidade a Usuários/Representantes/Layout | Sim — `Usuarios.tsx`, `Representantes.tsx` e `src/app/components/Layout.tsx` no pin fixado |
 | Mapa DoD→teste 1:1 | Sim — 28 critérios adicionais, todos nomeados |
 | Arquivos, tasks, ordem e commits literais | Sim — inventário e Tasks 19–22 |
-| Impacto pós-O4 na PR #28 | Sim — pré-condição, conflito, atualização e gate explícitos |
+| Impacto pós-O4 na PR #28 | Sim — contrato obrigatório merge O4 → rebase PR #28/O5 → correção/teste, conflito e gate explícitos |
 | Perfil ou permissão inventados | Não — snapshot deve permanecer sem nova chave |
 | Dado, fallback, seed de runtime ou controle inerte | Não |
 | Dívida órfã ainda aberta | Não — E5.1.7 fecha o único item em escopo |
