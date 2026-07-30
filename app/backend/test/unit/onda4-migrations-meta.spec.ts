@@ -48,6 +48,7 @@ describe('Onda 4 — proveniência das migrations D36', () => {
       { idx: 16, tag: '0016_onda4_comercial_expand' },
       { idx: 17, tag: '0017_onda4_comercial_backfill' },
       { idx: 18, tag: '0018_onda4_comercial_contract' },
+      { idx: 19, tag: '0019_onda5_gestao' },
     ]);
     expect(entries.every((entry) =>
       entry.version === '7' && entry.breakpoints,

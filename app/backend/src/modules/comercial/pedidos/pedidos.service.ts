@@ -467,13 +467,6 @@ export class PedidosService {
     usuarioId: string,
   ): Promise<{ pedido: PedidoVenda; eventos: EventoDominio[] }> {
     const eventos: EventoDominio[] = [];
-    let dataOperacao: string | undefined;
-    if (pedido.operacaoId) {
-      const [linha] = await tx.select({ data: operacoes.data }).from(operacoes)
-        .where(eq(operacoes.id, pedido.operacaoId));
-      if (!linha) throw new NotFoundException('Operação do pedido não encontrada');
-      dataOperacao = linha.data;
-    }
     for (const [indice, alocacao] of plano.entries()) {
       const solicitado = solicitados[indice];
       if (!solicitado) throw new Error('Plano sem item solicitado correspondente');

@@ -267,9 +267,8 @@ describe('Compras programadas e2e (CRUD + RBAC + edição de item)', () => {
       .set('Cookie', comprasCookies)
       .send({ quantidadeComprada: 25 });
     expect(item.status).toBe(200);
-    expect(item.body).toMatchObject({ id: compraId, dataOperacao });
-    expect(item.body.itens.find((linha: { id: string }) => linha.id === itemId))
-      .toMatchObject({ id: itemId, quantidadeComprada: '25.000' });
+    expect(item.body.item).toMatchObject({ id: itemId, quantidadeComprada: '25.000' });
+    expect(item.body.impacto).toMatchObject({ compraId, deficitTotal: '0.000', exigeConfirmacao: false });
 
     const confirmada = await request(app.getHttpServer())
       .post(`/comercial/compras-programadas/${compraId}/confirmar`)

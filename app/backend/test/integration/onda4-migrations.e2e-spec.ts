@@ -277,6 +277,27 @@ describe('Onda 4 — migrations geradas D36', () => {
       fs.cpSync(MIGRATIONS_DIR, path.join(probe, 'migrations'), {
         recursive: true,
       });
+      // Probe O4: baseline até 0018 — O5 no repo real não entra na receita de rollback.
+      fs.rmSync(path.join(probe, 'migrations/0019_onda5_gestao.sql'), { force: true });
+      const probeJournal = JSON.parse(
+        fs.readFileSync(path.join(probe, 'migrations/meta/_journal.json'), 'utf8'),
+      ) as { version: string; dialect: string; entries: Array<{ idx: number; tag: string }> };
+      probeJournal.entries = probeJournal.entries.filter((entry) => entry.idx <= 18);
+      fs.writeFileSync(
+        path.join(probe, 'migrations/meta/_journal.json'),
+        `${JSON.stringify(probeJournal, null, 2)}\n`,
+        'utf8',
+      );
+      const probeSchemaIndex = path.join(probe, 'schema/index.ts');
+      const o4SchemaLines = fs.readFileSync(probeSchemaIndex, 'utf8')
+        .split(/\r?\n/)
+        .filter((line) =>
+          !line.includes('relatorios-sif.schema') &&
+          !line.includes('aprovacoes-operacionais.schema'),
+        );
+      fs.writeFileSync(probeSchemaIndex, `${o4SchemaLines.join('\n')}\n`, 'utf8');
+      fs.rmSync(path.join(probe, 'schema/relatorios-sif.schema.ts'), { force: true });
+      fs.rmSync(path.join(probe, 'schema/aprovacoes-operacionais.schema.ts'), { force: true });
       fs.writeFileSync(
         path.join(probe, 'drizzle.config.ts'),
         [

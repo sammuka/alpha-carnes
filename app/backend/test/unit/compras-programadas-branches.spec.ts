@@ -6,7 +6,6 @@ function makeSelectChain(rows: unknown[]) {
   const chain: {
     innerJoin: (...args: unknown[]) => typeof chain;
     where: (...args: unknown[]) => typeof chain;
-    innerJoin: (...args: unknown[]) => typeof chain;
     orderBy: (...args: unknown[]) => typeof chain;
     limit: (...args: unknown[]) => typeof chain;
     offset: (...args: unknown[]) => typeof chain;
@@ -14,7 +13,6 @@ function makeSelectChain(rows: unknown[]) {
   } = {
     innerJoin: () => chain,
     where: () => chain,
-    innerJoin: () => chain,
     orderBy: () => chain,
     limit: () => chain,
     offset: () => chain,
