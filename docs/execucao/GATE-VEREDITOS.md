@@ -1,0 +1,11 @@
+# Vereditos de Gate — AlphaCarnes
+
+> **Escritor único: Monitor. Append-only** — nunca editar/remover linhas anteriores.
+> Formato: `| data-hora | onda | portão (1=plano, 2=PR, A=adversarial) | veredito (aprovado/ajustar/bloqueado) | evidência (link/comando) | feedback resumido |`
+> Critérios: [`pipeline-execucao.md`](../governance/pipeline-execucao.md) §3–§4; princípios: [`constituicao.md`](../governance/constituicao.md).
+
+| Data/hora | Onda | Portão | Veredito | Evidência | Feedback |
+|---|---|---|---|---|---|
+| 2026-07-29T07:55:00Z | Onda 4 | 2 | aprovado | [PR #35](https://github.com/sammuka/alpha-carnes/pull/35) (SHA `3390f29`) | Aprovado no regate do Portão 2. Cadeia Drizzle D36 gerada com metadados e snapshots. Suíte local 936/936 backend, 217/217 frontend e 25/25 Playwright. |
+| 2026-07-30T04:30:00Z | Onda 5 | 2 | aprovado | [PR #36](https://github.com/sammuka/alpha-carnes/pull/36) (SHA `b5ed772`) | Portão 2 aprovado. 1013 testes backend, 221 frontend. GitHub Actions CI 8/8 jobs verdes com protocolo de janela pública temporária executado. |
+| 2026-07-30T04:37:00Z | Onda 6 | 2 | aprovado | [PR #37](https://github.com/sammuka/alpha-carnes/pull/37) (SHA `eda7320`) | Portão 2 aprovado. Fluxo §6.10 completo, pesagem touch c/ Troca de Peça e etiquetas 5 estados. GitHub Actions CI 8/8 jobs verdes com janela pública temporária. |
