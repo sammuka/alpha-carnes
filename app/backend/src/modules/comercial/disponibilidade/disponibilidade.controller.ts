@@ -1,17 +1,38 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RbacGuard } from '../../../common/guards/rbac.guard';
 import { RequirePermissoes } from '../../../common/rbac/require-permissoes.decorator';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { DisponibilidadeService } from './disponibilidade.service';
+import { MapaService } from './mapa.service';
 import { listarDisponibilidadeSchema, type ListarDisponibilidadeQuery } from './dto/disponibilidade.dto';
+import { consultarMapaSchema, drillDownSchema, type ConsultarMapaDto, type DrillDownDto } from './dto/mapa.dto';
 
 @SkipThrottle()
 @Controller('comercial/disponibilidade')
 @UseGuards(JwtAuthGuard, RbacGuard)
 export class DisponibilidadeController {
-  constructor(private readonly service: DisponibilidadeService) {}
+  constructor(
+    private readonly service: DisponibilidadeService,
+    private readonly mapa: MapaService,
+  ) {}
+
+  // Declarado antes de qualquer rota `:param` — evita colisão de path.
+  @Get('mapa')
+  @RequirePermissoes('DISPONIBILIDADE_LER')
+  async consultarMapa(@Query(new ZodValidationPipe(consultarMapaSchema)) query: ConsultarMapaDto) {
+    return this.mapa.consultar(query.operacaoId, query.itemComercialId);
+  }
+
+  @Get('mapa/:itemComercialId/detalhe')
+  @RequirePermissoes('DISPONIBILIDADE_LER')
+  async detalharMapa(
+    @Param('itemComercialId') itemComercialId: string,
+    @Query(new ZodValidationPipe(drillDownSchema)) query: DrillDownDto,
+  ) {
+    return this.mapa.detalhar(query.operacaoId, itemComercialId, query.estado);
+  }
 
   @Get()
   @RequirePermissoes('DISPONIBILIDADE_LER')

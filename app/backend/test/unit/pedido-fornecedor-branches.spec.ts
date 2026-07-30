@@ -25,6 +25,11 @@ describe('PedidoFornecedorService — branches', () => {
       select: jest.fn()
         .mockReturnValueOnce({
           from: () => ({
+            where: () => ({}),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: () => ({
             where: () => ({
               orderBy: () => ({
                 limit: () => ({
@@ -53,6 +58,11 @@ describe('PedidoFornecedorService — branches', () => {
   it('listar usa total 0 quando count vem vazio', async () => {
     const db = {
       select: jest.fn()
+        .mockReturnValueOnce({
+          from: () => ({
+            where: () => ({}),
+          }),
+        })
         .mockReturnValueOnce({
           from: () => ({
             where: () => ({

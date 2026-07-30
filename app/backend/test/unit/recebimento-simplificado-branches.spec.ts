@@ -5,6 +5,15 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { RecebimentoService } from '../../src/modules/operacao/recebimento/recebimento.service';
 
+jest.mock('../../src/modules/operacao/recebimento/recebimento-metadados.helper', () => ({
+  resolverMetadadosItensPrevistos: jest.fn(),
+  derivarTipoCarga: jest.fn().mockResolvedValue(null),
+  contarPecasPorItem: jest.fn().mockResolvedValue(new Map()),
+  calcularProgressoBalanca: jest.fn().mockReturnValue(0),
+}));
+
+import { resolverMetadadosItensPrevistos } from '../../src/modules/operacao/recebimento/recebimento-metadados.helper';
+
 function makeSelectChain(rows: unknown[]) {
   const terminal = {
     then: (cb: (r: unknown[]) => unknown) => cb(rows),
@@ -82,49 +91,82 @@ function makeService(db: ReturnType<typeof makeDb>['db']) {
 }
 
 describe('RecebimentoService — fluxo simplificado (branches)', () => {
-  it('previsaoDaCompra → 404 se compra não existe', async () => {
-    const { db } = makeDb([]);
-    db.query.comprasProgramadas.findFirst = jest.fn().mockResolvedValue(null);
+  it('previsaoDoPedidoFornecedor → 404 se pedido não existe', async () => {
+    const { db } = makeDb([], [[]]);
     const { service } = makeService(db);
 
-    await expect(service.previsaoDaCompra('c-missing')).rejects.toThrow(NotFoundException);
+    await expect(service.previsaoDoPedidoFornecedor('pf-missing')).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
-  it('previsaoDaCompra → 409 se compra não confirmada', async () => {
-    const { db } = makeDb([]);
-    db.query.comprasProgramadas.findFirst = jest.fn().mockResolvedValue({
-      id: 'c1',
-      status: 'rascunho',
-      fornecedor: { razaoSocial: 'F' },
-    });
+  it('previsaoDoPedidoFornecedor → 409 se pedido não está recebível', async () => {
+    const { db } = makeDb([], [[{
+      pedido: {
+        id: 'pf1',
+        numero: 'PF-1',
+        status: 'rascunho',
+        operacaoId: 'op1',
+        compraProgramadaId: 'c1',
+        fornecedorId: 'f1',
+      },
+      fornecedorNome: 'Fornecedor X',
+      dataOperacao: '2026-06-23',
+      numeroInternoCompra: 'PC-1',
+      observacoesCompra: null,
+    }]]);
     const { service } = makeService(db);
 
-    await expect(service.previsaoDaCompra('c1')).rejects.toThrow(ConflictException);
+    await expect(service.previsaoDoPedidoFornecedor('pf1')).rejects.toThrow(
+      ConflictException,
+    );
   });
 
-  it('previsaoDaCompra → monta resumo e flag jaPossuiRecebimento', async () => {
+  it('previsaoDoPedidoFornecedor → monta resumo do snapshot canônico', async () => {
+    const cabecalho = {
+      pedido: {
+        id: 'pf1',
+        numero: 'PF-1',
+        status: 'enviado',
+        operacaoId: 'op1',
+        compraProgramadaId: 'c1',
+        fornecedorId: 'f1',
+      },
+      fornecedorNome: 'Fornecedor X',
+      dataOperacao: '2026-06-23',
+      numeroInternoCompra: 'PC-1',
+      observacoesCompra: 'obs',
+    };
     const { db } = makeDb(
       [],
-      [[{ id: 'rec-existente' }], [], [{ descricao: 'Boi', quantidade: '10.000', unidade: 'cab' }], [{ categoria: 'Bovino' }]],
+      [
+        [cabecalho],
+        [{
+          itemComercialId: 'ic1',
+          produtoCodigo: 'IC-1',
+          produtoDescricao: 'Item 1',
+          quantidadePrevista: '40.000',
+          pesoPrevisto: '120.000',
+        }],
+        [{ descricao: 'Boi', quantidade: '10.000' }],
+      ],
     );
-    db.query.comprasProgramadas.findFirst = jest.fn().mockResolvedValue({
-      id: 'c1',
-      status: 'confirmada',
-      numeroInterno: 'PC-1',
-      fornecedorId: 'f1',
-      observacoes: 'obs',
-      fornecedor: { razaoSocial: 'Fornecedor X' },
-    });
+    (resolverMetadadosItensPrevistos as jest.Mock).mockResolvedValue(new Map([
+      ['ic1', {
+        itemComercialId: 'ic1',
+        origemDescricao: 'Compra PC-1',
+        unidadeEsperada: 'cab',
+        requerBalanca: true,
+      }],
+    ]));
+    const { service } = makeService(db);
 
-    const { service, disponibilidade } = makeService(db);
-    disponibilidade.listarEsperadoDaCompra.mockResolvedValue([
-      { itemComercialId: 'ic1', quantidadeTotalGerada: '40.000' },
-    ]);
-
-    const res = await service.previsaoDaCompra('c1');
-    expect(res.jaPossuiRecebimento).toBe(true);
+    const res = await service.previsaoDoPedidoFornecedor('pf1');
+    expect(res.pedidoFornecedorId).toBe('pf1');
+    expect(res.numeroPedidoFornecedor).toBe('PF-1');
     expect(res.itensOperacionais).toHaveLength(1);
     expect(res.itensOperacionais[0]?.quantidadePrevista).toBe('40.000');
+    expect(res.itensOperacionais[0]?.pesoPrevisto).toBe('120.000');
   });
 
   it('atualizarNfe → 404 se recebimento não existe', async () => {
@@ -203,11 +245,22 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
   });
 
   it('iniciar → 409 quando compra confirmada não tem itens operacionais', async () => {
-    const pedido = { id: 'pf1', status: 'aguardando_recebimento', compraProgramadaId: 'c1', fornecedorId: 'f1', operacaoId: 'op1' };
-    const compra = { id: 'c1', status: 'confirmada', fornecedorId: 'f1', numeroInterno: 'PC' };
-    const { db } = makeDb([[pedido], [compra]]);
-    const { service, disponibilidade } = makeService(db);
-    disponibilidade.listarEsperadoDaCompra.mockResolvedValue([]);
+    const cabecalho = {
+      pedido: {
+        id: 'pf1',
+        numero: 'PF-1',
+        status: 'aguardando_recebimento',
+        compraProgramadaId: 'c1',
+        fornecedorId: 'f1',
+        operacaoId: 'op1',
+      },
+      fornecedorNome: 'Fornecedor X',
+      dataOperacao: '2026-06-23',
+      numeroInternoCompra: 'PC',
+      observacoesCompra: null,
+    };
+    const { db } = makeDb([[cabecalho], []]);
+    const { service } = makeService(db);
 
     await expect(
       service.iniciar({ pedidoFornecedorId: '019ea000-0000-7000-8000-000000000001' } as never, 'u1'),

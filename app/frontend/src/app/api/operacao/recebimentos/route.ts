@@ -1,20 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchBackend } from '@/lib/api';
-import type { IniciarRecebimentoResultado } from '@/lib/operacao';
+import { apiFetch } from '@/lib/api';
+
+async function responderBruto(upstream: Response) {
+  const headers = new Headers();
+  const contentType = upstream.headers.get('content-type');
+  if (contentType) headers.set('content-type', contentType);
+  return new NextResponse(upstream.body, { status: upstream.status, headers });
+}
 export async function GET(req: NextRequest) {
   const qs = req.nextUrl.search;
-  const { data, error, status } = await fetchBackend<unknown>(`/operacao/recebimentos${qs}`);
-  if (error) return NextResponse.json({ message: error }, { status });
-  return NextResponse.json(data, { status: 200 });
+  return responderBruto(await apiFetch(`/operacao/recebimentos${qs}`));
 }
 
 // BFF: inicia recebimento (deriva itens esperados no backend).
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { data, error, status } = await fetchBackend<IniciarRecebimentoResultado>('/operacao/recebimentos', {
+  const body = await req.text();
+  return responderBruto(await apiFetch('/operacao/recebimentos', {
     method: 'POST',
-    body: JSON.stringify(body),
-  });
-  if (error) return NextResponse.json({ message: error }, { status });
-  return NextResponse.json(data, { status: 201 });
+    body,
+  }));
 }

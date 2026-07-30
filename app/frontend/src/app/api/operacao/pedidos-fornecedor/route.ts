@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchBackend } from '@/lib/api';
-import type { Paginado } from '@/lib/comercial';
-import type { PedidoFornecedor, PedidoFornecedorDetalhe } from '@/lib/operacao';
+import { apiFetch, fetchBackend } from '@/lib/api';
+import type { PedidoFornecedorDetalhe } from '@/lib/operacao';
+
+async function responderBruto(upstream: Response) {
+  const headers = new Headers();
+  const contentType = upstream.headers.get('content-type');
+  if (contentType) headers.set('content-type', contentType);
+  return new NextResponse(upstream.body, { status: upstream.status, headers });
+}
 
 export async function GET(req: NextRequest) {
   const qs = req.nextUrl.searchParams.toString();
-  const { data, error, status } = await fetchBackend<Paginado<PedidoFornecedor>>(
+  return responderBruto(await apiFetch(
     `/operacao/pedidos-fornecedor${qs ? `?${qs}` : ''}`,
-  );
-  if (error) return NextResponse.json({ message: error }, { status });
-  return NextResponse.json(data, { status: 200 });
+  ));
 }
 
 export async function POST(req: NextRequest) {

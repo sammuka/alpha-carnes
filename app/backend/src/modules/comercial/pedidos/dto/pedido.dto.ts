@@ -35,6 +35,7 @@ export const createPedidoSchema = z.object({
   rotaPrevista: z.string().trim().max(100).optional(),
   prioridade: z.number().int().min(0).max(100).optional(),
   observacoesGerais: z.string().trim().max(1000).optional(),
+  salvarComoRascunho: z.boolean().optional().default(false),
   itens: itensCriacaoPedidoSchema,
 });
 
@@ -72,3 +73,16 @@ export const removerItemSchema = z.object({
 });
 
 export type RemoverItemDto = z.infer<typeof removerItemSchema>;
+
+export const buscarPedidoAbertoSchema = z.object({
+  clienteId: z.string().uuid(),
+  itemComercialId: z.string().uuid(),
+  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dataOperacao deve ser YYYY-MM-DD'),
+});
+
+export type BuscarPedidoAbertoDto = z.infer<typeof buscarPedidoAbertoSchema>;
+
+export const liberarReservaSchema = z.object({
+  justificativa: z.string().trim().min(10, 'justificativa deve ter ao menos 10 caracteres').max(1000),
+});
+export type LiberarReservaDto = z.infer<typeof liberarReservaSchema>;

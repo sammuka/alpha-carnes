@@ -26,7 +26,7 @@ export const iniciarRecebimentoSchema = z.object({
   motorista: z.string().trim().max(200).optional(),
   doca: z.string().trim().max(50).optional(),
   observacoes: z.string().trim().max(1000).optional(),
-});
+}).strict();
 
 export type IniciarRecebimentoDto = z.infer<typeof iniciarRecebimentoSchema>;
 

@@ -26,6 +26,7 @@ import { RotasModule } from './modules/cadastros/rotas/rotas.module';
 import { ProntidaoModule } from './modules/cadastros/prontidao/prontidao.module';
 import { ParametrosModule } from './modules/parametros/parametros.module';
 import { ComercialModule } from './modules/comercial/comercial.module';
+import { EspelhoModule } from './modules/comercial/espelho/espelho.module';
 import { OperacaoModule } from './modules/operacao/operacao.module';
 import { OperacoesModule } from './modules/operacoes/operacoes.module';
 import { DashboardModule } from './modules/gestao/dashboard/dashboard.module';
@@ -80,6 +81,7 @@ import type { IncomingMessage } from 'http';
     ParametrosModule,
     OperacoesModule,
     ComercialModule,
+    EspelhoModule,
     OperacaoModule,
     DashboardModule,
     AuditoriaConsultaModule,

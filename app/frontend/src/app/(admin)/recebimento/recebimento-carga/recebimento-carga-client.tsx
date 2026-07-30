@@ -20,6 +20,7 @@ import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import {
   TIPOS_DIVERGENCIA,
   type IniciarRecebimentoPayload,
+  type PedidoFornecedorResumoRecebivel,
   type PaginadoRecebimento,
   type PrevisaoRecebimento,
   type RecebimentoDetalhe,
@@ -53,6 +54,7 @@ import {
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
@@ -67,7 +69,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/cn';
-import type { CompraProgramada, Paginado } from '@/lib/comercial';
+import type { Paginado } from '@/lib/comercial';
 
 const STATUS_RECEB_LABEL: Record<StatusRecebimento, string> = {
   aguardando_conferencia: 'Aguardando conferência',
@@ -151,12 +153,6 @@ const formDivergenciaVazio = (): FormDivergencia => ({
   acaoImediata: '',
 });
 
-function labelCompra(c: CompraProgramada, fornecedor?: string): string {
-  const pc = c.numeroInterno ?? c.id.slice(0, 8);
-  const forn = fornecedor ? ` — ${fornecedor}` : '';
-  return `${pc}${forn}`;
-}
-
 function formatDataHora(iso: string | null | undefined): string {
   if (!iso) return '—';
   try {
@@ -208,12 +204,12 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   const podeGerenciar = permissoes.includes('RECEBIMENTO_GERENCIAR');
 
   const [lista, setLista] = useState<RecebimentoResumoEnriquecido[]>([]);
-  const [compras, setCompras] = useState<CompraProgramada[]>([]);
-  const [fornecedoresMap, setFornecedoresMap] = useState<Record<string, string>>({});
+  const [pedidosRecebiveis, setPedidosRecebiveis] = useState<PedidoFornecedorResumoRecebivel[]>([]);
+  const [carregandoPedidos, setCarregandoPedidos] = useState(false);
   const [busca, setBusca] = useState('');
   const [sheetAberto, setSheetAberto] = useState(false);
   const [sheetNfeAberto, setSheetNfeAberto] = useState(false);
-  const [compraId, setCompraId] = useState('');
+  const [pedidoFornecedorId, setPedidoFornecedorId] = useState('');
   const [previsao, setPrevisao] = useState<PrevisaoRecebimento | null>(null);
   const [formNfe, setFormNfe] = useState<FormNfe>(formNfeVazio);
   const [formMetadados, setFormMetadados] = useState<FormMetadados>(formMetadadosVazio);
@@ -254,19 +250,20 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     }
   }, [podeLer]);
 
-  const carregarCompras = useCallback(async () => {
-    const [cRes, fRes] = await Promise.all([
-      fetch('/api/comercial/compras-programadas?pageSize=50', { cache: 'no-store' }),
-      fetch('/api/cadastros/fornecedores?pageSize=100', { cache: 'no-store' }),
-    ]);
-    if (fRes.ok) {
-      const f = (await fRes.json()) as Paginado<{ id: string; razaoSocial: string }>;
-      setFornecedoresMap(Object.fromEntries(f.data.map((x) => [x.id, x.razaoSocial])));
+  const carregarPedidosRecebiveis = useCallback(async () => {
+    setCarregandoPedidos(true);
+    const res = await fetch(
+      '/api/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100',
+      { cache: 'no-store' },
+    );
+    const body = await res.json().catch(() => ({}));
+    setCarregandoPedidos(false);
+    if (!res.ok) {
+      setPedidosRecebiveis([]);
+      setErro((body as { message?: string }).message ?? 'Erro ao carregar Pedidos ao Fornecedor');
+      return;
     }
-    if (cRes.ok) {
-      const pag = (await cRes.json()) as Paginado<CompraProgramada>;
-      setCompras(pag.data.filter((c) => c.status === 'confirmada'));
-    }
+    setPedidosRecebiveis((body as Paginado<PedidoFornecedorResumoRecebivel>).data);
   }, []);
 
   const carregarPrevisao = useCallback(async (id: string) => {
@@ -317,13 +314,13 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
 
   useEffect(() => {
     void carregarLista();
-    void carregarCompras();
-  }, [carregarLista, carregarCompras]);
+    void carregarPedidosRecebiveis();
+  }, [carregarLista, carregarPedidosRecebiveis]);
 
   useEffect(() => {
-    if (compraId) void carregarPrevisao(compraId);
+    if (pedidoFornecedorId) void carregarPrevisao(pedidoFornecedorId);
     else setPrevisao(null);
-  }, [compraId, carregarPrevisao]);
+  }, [pedidoFornecedorId, carregarPrevisao]);
 
   useEffect(() => {
     if (!detalhe) return;
@@ -350,11 +347,6 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     return desconectar;
   }, [detalhe, recebimentoId, carregarDetalhe, carregarLista]);
 
-  const comprasDisponiveis = useMemo(() => {
-    const comRecebimento = new Set(lista.filter((r) => r.status !== 'cancelado').map((r) => r.compraProgramadaId));
-    return compras.filter((c) => !comRecebimento.has(c.id));
-  }, [compras, lista]);
-
   const listaFiltrada = lista.filter((r) => {
     if (!busca) return true;
     const q = busca.toLowerCase();
@@ -368,9 +360,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   });
 
   const montarPayload = (): IniciarRecebimentoPayload | null => {
-    if (!compraId || !formNfe.nfeNumero.trim()) return null;
+    if (!pedidoFornecedorId || !formNfe.nfeNumero.trim()) return null;
     const payload: IniciarRecebimentoPayload = {
-      compraProgramadaId: compraId,
+      pedidoFornecedorId,
       nfeNumero: formNfe.nfeNumero.trim(),
     };
     if (formNfe.nfeSerie) payload.nfeSerie = formNfe.nfeSerie.trim();
@@ -391,11 +383,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     if (!podeGerenciar) return;
     const payload = montarPayload();
     if (!payload || !previsao || previsao.itensOperacionais.length === 0) {
-      setErro('Informe o pedido de compra, NF-e e confirme que há itens previstos.');
-      return;
-    }
-    if (previsao.jaPossuiRecebimento) {
-      setErro('Esta compra já possui lote de recebimento aberto.');
+      setErro('Informe o Pedido ao Fornecedor, NF-e e confirme que há itens previstos.');
       return;
     }
     setSalvando(true);
@@ -403,7 +391,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     const res = await fetch('/api/operacao/recebimentos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, iniciarConferencia: irParaBalanca }),
+      body: JSON.stringify(payload),
     });
     const body = await res.json().catch(() => ({}));
     setSalvando(false);
@@ -413,7 +401,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     }
     const rec = (body as { recebimento: { id: string } }).recebimento;
     setSheetAberto(false);
-    setCompraId('');
+    setPedidoFornecedorId('');
     setPrevisao(null);
     setFormNfe(formNfeVazio());
     await carregarLista();
@@ -581,11 +569,12 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   };
 
   const abrirNovo = () => {
-    setCompraId('');
+    setPedidoFornecedorId('');
     setPrevisao(null);
     setFormNfe(formNfeVazio());
     setErro(null);
     setSheetAberto(true);
+    void carregarPedidosRecebiveis();
   };
 
   if (!podeLer) {
@@ -615,7 +604,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
         <div>
           <h1 className="text-2xl font-bold">Recebimento de carga</h1>
           <p className="text-sm text-muted-foreground">
-            Abertura de lotes a partir do Pedido de Compra — conferência na balança
+            Abertura de lotes a partir do Pedido ao Fornecedor — conferência na balança
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -960,35 +949,50 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
       )}
 
       <Sheet open={sheetAberto} onOpenChange={setSheetAberto}>
-        <SheetContent className="overflow-y-auto sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle>Novo recebimento</SheetTitle>
+        <SheetContent className="flex flex-col overflow-hidden p-0 sm:max-w-lg">
+          <SheetHeader className="border-b px-6 py-4">
+            <SheetTitle>Novo Recebimento de Carga</SheetTitle>
+            <SheetDescription className="sr-only">
+              Selecione o Pedido ao Fornecedor e informe os dados da chegada da carga.
+            </SheetDescription>
           </SheetHeader>
+          {erro && (
+            <div role="alert" className="mx-6 mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {erro}
+            </div>
+          )}
 
-          <div className="mt-6 space-y-8">
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold">1. Pedido de Compra</h3>
+          <div className="flex-1 space-y-8 overflow-y-auto px-6 py-5">
+            <section className="space-y-3" aria-labelledby="bloco-pedido-fornecedor">
+              <h3 id="bloco-pedido-fornecedor" className="text-sm font-semibold">
+                A — Pedido ao Fornecedor
+              </h3>
               <div>
-                <Label>Pedido de Compra</Label>
-                <Select value={compraId} onValueChange={setCompraId}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecione o pedido confirmado" />
+                <Label htmlFor="pedido-fornecedor">Pedido ao fornecedor</Label>
+                <Select value={pedidoFornecedorId} onValueChange={setPedidoFornecedorId}>
+                  <SelectTrigger id="pedido-fornecedor" className="mt-1">
+                    <SelectValue placeholder="Selecione o pedido ao fornecedor" />
                   </SelectTrigger>
                   <SelectContent>
-                    {comprasDisponiveis.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {labelCompra(c, fornecedoresMap[c.fornecedorId])}
+                    {pedidosRecebiveis.map((pedido) => (
+                      <SelectItem key={pedido.id} value={pedido.id}>
+                        {pedido.numero} — {pedido.fornecedorNome} — {pedido.dataOperacao}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {!carregandoPedidos && pedidosRecebiveis.length === 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Nenhum Pedido ao Fornecedor aguardando recebimento.
+                  </p>
+                )}
               </div>
 
               {previsao && (
                 <div className="space-y-3 rounded-md border bg-muted/30 p-3 text-sm">
-                  <Badge variant="secondary">Importado do Pedido de Compra</Badge>
+                  <Badge variant="secondary">Itens carregados automaticamente</Badge>
                   <p>
-                    <span className="text-muted-foreground">Pedido:</span> {previsao.numeroInterno ?? previsao.compraProgramadaId.slice(0, 8)}
+                    <span className="text-muted-foreground">Pedido:</span> {previsao.numeroPedidoFornecedor}
                   </p>
                   <p>
                     <span className="text-muted-foreground">Fornecedor:</span> {previsao.fornecedorNome}
@@ -1005,26 +1009,42 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                     </p>
                   )}
                   <div>
-                    <p className="mb-1 font-medium">Itens operacionais previstos</p>
-                    <ul className="space-y-1 text-xs">
-                      {previsao.itensOperacionais.map((i) => (
-                        <li key={i.itemComercialId}>
-                          {i.produtoCodigo || i.produtoDescricao} — {i.quantidadePrevista} {i.unidade} — passa pela
-                          balança: {i.passaBalanca ? 'Sim' : 'Não'}
-                        </li>
-                      ))}
-                    </ul>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Produto</TableHead>
+                          <TableHead>Qtd prevista</TableHead>
+                          <TableHead>Unidade</TableHead>
+                          <TableHead>Balança</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {previsao.itensOperacionais.map((item) => (
+                          <TableRow key={item.itemComercialId}>
+                            <TableCell>{item.produtoCodigo} — {item.produtoDescricao}</TableCell>
+                            <TableCell>{item.quantidadePrevista}</TableCell>
+                            <TableCell>{item.unidade}</TableCell>
+                            <TableCell>{item.passaBalanca ? 'Sim' : 'Não — Entrada direta'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Os dados previstos vêm do Pedido de Compra. Para alterar, ajuste o pedido de compra ou registre a
-                    diferença após a conferência na balança.
+                    Os itens esperados vêm do Pedido ao Fornecedor. Não é necessário redigitar a carga.
                   </p>
                 </div>
               )}
+              <div>
+                <Label htmlFor="doca">Doca / área</Label>
+                <Input id="doca" value={formNfe.doca} onChange={(e) => setFormNfe((p) => ({ ...p, doca: e.target.value }))} />
+              </div>
             </section>
 
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold">2. Dados da NF / Romaneio</h3>
+            <section className="space-y-3" aria-labelledby="bloco-nota-fiscal">
+              <h3 id="bloco-nota-fiscal" className="text-sm font-semibold">
+                B — Nota Fiscal recebida
+              </h3>
               <p className="text-xs text-muted-foreground">
                 Informe apenas os dados complementares da NF/romaneio. A conferência real de peças, pesos e quantidades
                 será feita na balança.
@@ -1066,16 +1086,14 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                     <Input id="nfeVolumes" type="number" step="1" value={formNfe.nfeVolumes} onChange={(e) => setFormNfe((p) => ({ ...p, nfeVolumes: e.target.value }))} />
                   </div>
                 </div>
-                <div>
-                  <Label htmlFor="obs">Observação</Label>
-                  <Textarea id="obs" rows={2} value={formNfe.observacoes} onChange={(e) => setFormNfe((p) => ({ ...p, observacoes: e.target.value }))} />
-                </div>
               </div>
             </section>
 
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold">3. Veículo e doca</h3>
-              <div className="grid gap-3 sm:grid-cols-3">
+            <section className="space-y-3" aria-labelledby="bloco-transporte">
+              <h3 id="bloco-transporte" className="text-sm font-semibold">
+                C — Transporte
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="placa">Placa</Label>
                   <Input id="placa" value={formNfe.placaVeiculo} onChange={(e) => setFormNfe((p) => ({ ...p, placaVeiculo: e.target.value }))} />
@@ -1084,57 +1102,36 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                   <Label htmlFor="motorista">Motorista</Label>
                   <Input id="motorista" value={formNfe.motorista} onChange={(e) => setFormNfe((p) => ({ ...p, motorista: e.target.value }))} />
                 </div>
-                <div>
-                  <Label htmlFor="doca">Doca</Label>
-                  <Input id="doca" value={formNfe.doca} onChange={(e) => setFormNfe((p) => ({ ...p, doca: e.target.value }))} />
-                </div>
               </div>
             </section>
 
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold">4. Resumo e criação do lote</h3>
-              {previsao && formNfe.nfeNumero && (
-                <div className="rounded-md border p-3 text-sm">
-                  <p>
-                    <strong>PC:</strong> {previsao.numeroInterno ?? '—'} · <strong>Fornecedor:</strong> {previsao.fornecedorNome}
-                  </p>
-                  <p>
-                    <strong>NF-e:</strong> {formNfe.nfeNumero}
-                    {formNfe.romaneio ? ` · Romaneio: ${formNfe.romaneio}` : ''}
-                  </p>
-                  {(formNfe.placaVeiculo || formNfe.motorista || formNfe.doca) && (
-                    <p>
-                      {formNfe.placaVeiculo ? `Placa: ${formNfe.placaVeiculo}` : ''}
-                      {formNfe.motorista ? ` · Motorista: ${formNfe.motorista}` : ''}
-                      {formNfe.doca ? ` · Doca: ${formNfe.doca}` : ''}
-                    </p>
-                  )}
-                  <p>
-                    <strong>Itens previstos:</strong> {previsao.itensOperacionais.length}
-                  </p>
-                </div>
-              )}
-              <div className="flex flex-col gap-2">
-                <Button variant="outline" onClick={() => setSheetAberto(false)}>
-                  Cancelar
-                </Button>
-                <Button
-                  disabled={salvando || !compraId || !formNfe.nfeNumero || !previsao?.itensOperacionais.length}
-                  onClick={() => void criarLote(false)}
-                  data-testid="btn-criar-lote"
-                >
-                  Criar Lote
-                </Button>
-                <Button
-                  disabled={salvando || !compraId || !formNfe.nfeNumero || !previsao?.itensOperacionais.length}
-                  onClick={() => void criarLote(true)}
-                  data-testid="btn-criar-ir-balanca"
-                >
-                  <ArrowRight className="mr-1 h-4 w-4" />
-                  Criar Lote e Ir para Balança
-                </Button>
-              </div>
+            <section className="space-y-3" aria-labelledby="bloco-observacoes">
+              <h3 id="bloco-observacoes" className="text-sm font-semibold">
+                D — Observações internas
+              </h3>
+              <Label htmlFor="obs">Observações internas</Label>
+              <Textarea id="obs" rows={3} value={formNfe.observacoes} onChange={(e) => setFormNfe((p) => ({ ...p, observacoes: e.target.value }))} />
             </section>
+          </div>
+          <div className="flex flex-col gap-2 border-t bg-background px-6 py-4">
+            <Button variant="outline" onClick={() => setSheetAberto(false)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={salvando || carregandoPedidos || !pedidoFornecedorId || !formNfe.nfeNumero || !previsao?.itensOperacionais.length}
+              onClick={() => void criarLote(false)}
+              data-testid="btn-criar-lote"
+            >
+              Criar Lote
+            </Button>
+            <Button
+              disabled={salvando || carregandoPedidos || !pedidoFornecedorId || !formNfe.nfeNumero || !previsao?.itensOperacionais.length}
+              onClick={() => void criarLote(true)}
+              data-testid="btn-criar-ir-balanca"
+            >
+              <ArrowRight className="mr-1 h-4 w-4" />
+              Criar Lote e Ir para Balança
+            </Button>
           </div>
         </SheetContent>
       </Sheet>

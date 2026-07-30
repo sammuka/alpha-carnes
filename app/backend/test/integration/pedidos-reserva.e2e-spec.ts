@@ -1,10 +1,27 @@
 import { INestApplication } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
+import { DRIZZLE } from '../../src/database/database.module';
+import * as schema from '../../src/database/schema';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase, lerDisponibilidade } from '../helpers/comercial-fixtures';
 import { challengePayload } from '../helpers/overbooking-fixtures';
 import { EVENTOS } from '../../src/realtime/events/eventos';
+
+/** Segundo cliente independente, usado onde o AD-03 (Onda 4) impede reusar o mesmo
+ * cliente/item/operação de outro pedido aberto no mesmo cenário de teste. */
+async function criarOutroCliente(app: INestApplication): Promise<string> {
+  const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+  const sufixo = `${Math.round(performance.now() * 1000)}-${Math.floor(Math.random() * 1e6)}`;
+  const [cliente] = await db.insert(schema.clientes).values({
+    codigo: `CLI2-${sufixo}`,
+    razaoSocial: 'Cliente Reserva 2',
+    documentoFiscal: `DOC2-${sufixo}`,
+  }).returning();
+  if (!cliente) throw new Error('Falha ao criar segundo cliente do teste');
+  return cliente.id;
+}
 
 describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)', () => {
   let app: INestApplication;
@@ -148,12 +165,15 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
       })
       .expect(201);
 
+    // Onda 4 / AD-03: o pedido aberto é único por (cliente, item, operação); o saldo
+    // zerado é exercitado aqui por um segundo cliente disputando o mesmo item/operação.
+    const outroClienteId = await criarOutroCliente(app);
     const challenge = await request(app.getHttpServer())
       .post('/comercial/pedidos')
       .set('Cookie', comercialCookies)
       .send({
         compraProgramadaId: compraId,
-        clienteId: base.clienteId,
+        clienteId: outroClienteId,
         dataOperacao: '2026-10-04',
         itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
       });
@@ -165,7 +185,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
       .set('Cookie', comercialCookies)
       .send({
         compraProgramadaId: compraId,
-        clienteId: base.clienteId,
+        clienteId: outroClienteId,
         dataOperacao: '2026-10-04',
         itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
       });

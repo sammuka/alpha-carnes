@@ -6,16 +6,20 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, desc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
+  clientes,
   pendenciasOverbooking,
   pendenciasOverbookingHistorico,
   pedidosVenda,
   pedidosVendaItens,
+  representantes,
+  operacoes,
   reservasDisponibilidade,
+  rotas,
 } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import {
@@ -31,13 +35,16 @@ import {
   formatarQtd,
   minimoQtd,
   somarListaQtd,
+  somarQtd,
   subtrairQtd,
 } from '../../../common/crud/decimal';
 import { EVENTOS, type PayloadPorEvento } from '../../../realtime/events/eventos';
 import { OperacoesService, type Tx } from '../../operacoes/operacoes.service';
 import type {
+  BuscarPedidoAbertoDto,
   CreatePedidoDto,
   IncluirItemDto,
+  LiberarReservaDto,
   ReduzirItemDto,
   RemoverItemDto,
 } from './dto/pedido.dto';
@@ -46,10 +53,10 @@ import {
   type OverbookingChallengeItem,
 } from './overbooking-challenge.exception';
 
-type PedidoVenda = typeof pedidosVenda.$inferSelect;
-type PedidoVendaItem = typeof pedidosVendaItens.$inferSelect;
+export type PedidoVenda = typeof pedidosVenda.$inferSelect;
+export type PedidoVendaItem = typeof pedidosVendaItens.$inferSelect;
 
-interface ItemSolicitado {
+export interface ItemSolicitado {
   itemComercialId: string;
   quantidade: number;
   observacoes?: string;
@@ -60,7 +67,7 @@ interface CoberturaPlanejada {
   quantidade: string;
 }
 
-interface PlanoItem {
+export interface PlanoItem {
   itemComercialId: string;
   quantidadeSolicitada: string;
   disponivelAntes: string;
@@ -68,7 +75,7 @@ interface PlanoItem {
   deficit: string;
 }
 
-type EventoDominio<N extends keyof PayloadPorEvento = keyof PayloadPorEvento> = {
+export type EventoDominio<N extends keyof PayloadPorEvento = keyof PayloadPorEvento> = {
   [K in N]: { nome: K; payload: PayloadPorEvento[K] };
 }[N];
 
@@ -79,7 +86,8 @@ function ehDuplicidadeDeItemNoPedido(error: unknown): boolean {
   return code === '23505' && constraint === 'uq_pedido_venda_item_comercial_ativo';
 }
 
-function desafiosParaChallenge(plano: PlanoItem[]): OverbookingChallengeItem[] {
+/** Traduz plano → itens de challenge. Exportado para o AdendosService reusar (D2). */
+export function desafiosParaChallenge(plano: PlanoItem[]): OverbookingChallengeItem[] {
   return plano
     .filter((p) => compararQtd(p.deficit, '0') > 0)
     .map((p) => ({
@@ -93,6 +101,11 @@ function desafiosParaChallenge(plano: PlanoItem[]): OverbookingChallengeItem[] {
 
 @Injectable()
 export class PedidosService {
+  /** AD-03 — a chave funcional do pedido aberto é (cliente, item comercial, operação). */
+  private static readonly STATUS_ABERTOS = [
+    'rascunho', 'em_elaboracao_reserva_ativa', 'aguardando_confirmacao_overbooking',
+  ] as const;
+
   constructor(
     @Inject(DRIZZLE)
     private readonly drizzle: { db: NodePgDatabase<typeof schema> },
@@ -105,11 +118,43 @@ export class PedidosService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<PedidoVenda>> {
+  async listar(query: ListarQuery): Promise<Paginado<PedidoVenda & {
+    representanteId: string | null;
+    representanteNome: string | null;
+    rotaNome: string | null;
+  }>> {
     const { limit, offset } = calcularRange(query);
     const where = query.incluirRemovidos ? undefined : isNull(pedidosVenda.deletedAt);
     const [linhas, totalRow] = await Promise.all([
-      this.db.select().from(pedidosVenda).where(where).orderBy(desc(pedidosVenda.createdAt)).limit(limit).offset(offset),
+      this.db
+        .select({
+          id: pedidosVenda.id,
+          compraProgramadaId: pedidosVenda.compraProgramadaId,
+          clienteId: pedidosVenda.clienteId,
+          operacaoId: pedidosVenda.operacaoId,
+          dataEntrega: pedidosVenda.dataEntrega,
+          rotaPrevista: pedidosVenda.rotaPrevista,
+          prioridade: pedidosVenda.prioridade,
+          status: pedidosVenda.status,
+          observacoesGerais: pedidosVenda.observacoesGerais,
+          motivoCancelamento: pedidosVenda.motivoCancelamento,
+          usuarioCriacaoId: pedidosVenda.usuarioCriacaoId,
+          usuarioAprovacaoId: pedidosVenda.usuarioAprovacaoId,
+          createdAt: pedidosVenda.createdAt,
+          updatedAt: pedidosVenda.updatedAt,
+          deletedAt: pedidosVenda.deletedAt,
+          representanteId: clientes.representanteId,
+          representanteNome: representantes.nome,
+          rotaNome: rotas.nome,
+        })
+        .from(pedidosVenda)
+        .leftJoin(clientes, eq(pedidosVenda.clienteId, clientes.id))
+        .leftJoin(representantes, eq(clientes.representanteId, representantes.id))
+        .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
+        .where(where)
+        .orderBy(desc(pedidosVenda.createdAt))
+        .limit(limit)
+        .offset(offset),
       this.db.select({ total: sql<number>`count(*)::int` }).from(pedidosVenda).where(where),
     ]);
     return montarPaginado(linhas, totalRow[0]?.total ?? 0, query);
@@ -124,7 +169,101 @@ export class PedidosService {
       },
     });
     if (!pedido) throw new NotFoundException('Pedido não encontrado');
-    return pedido;
+    const [heranca] = await this.db
+      .select({
+        representanteId: clientes.representanteId,
+        representanteNome: representantes.nome,
+        rotaId: clientes.rotaId,
+        rotaNome: rotas.nome,
+      })
+      .from(clientes)
+      .leftJoin(representantes, eq(clientes.representanteId, representantes.id))
+      .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
+      .where(eq(clientes.id, pedido.clienteId))
+      .limit(1);
+    return { ...pedido, heranca: heranca ?? null };
+  }
+
+  /** Devolve o pedido aberto (payload do `ModalAdendo`) ou lança 404 se a data não tem operação. */
+  async buscarAberto(query: BuscarPedidoAbertoDto) {
+    return this.db.transaction(async (tx) => {
+      const operacao = await this.operacoes.encontrarAtivaPorData(tx, query.dataOperacao);
+      if (!operacao) {
+        throw new NotFoundException({
+          code: 'OPERACAO_NAO_ENCONTRADA',
+          message: `Não existe operação ativa em ${query.dataOperacao}.`,
+        });
+      }
+      const [aberto] = await tx
+        .select({
+          pedidoId: pedidosVenda.id,
+          status: pedidosVenda.status,
+          itemComercialId: pedidosVendaItens.itemComercialId,
+          quantidadeAtual: pedidosVendaItens.quantidadePedida,
+        })
+        .from(pedidosVendaItens)
+        .innerJoin(pedidosVenda, eq(pedidosVendaItens.pedidoVendaId, pedidosVenda.id))
+        .where(and(
+          eq(pedidosVenda.clienteId, query.clienteId),
+          eq(pedidosVenda.operacaoId, operacao.id),
+          eq(pedidosVendaItens.itemComercialId, query.itemComercialId),
+          inArray(pedidosVenda.status, [...PedidosService.STATUS_ABERTOS]),
+          isNull(pedidosVenda.deletedAt),
+          isNull(pedidosVendaItens.deletedAt),
+        ))
+        .limit(1);
+      return aberto ?? null;
+    });
+  }
+
+  /**
+   * AD-03 — recusa um novo pedido aberto do mesmo cliente/item comercial na mesma
+   * operação; a inclusão adicional deve ser feita via adendo (Task 7).
+   */
+  private async exigirUnicidadeAd03(
+    tx: Tx, clienteId: string, operacaoId: string, itensComerciaisIds: string[],
+    pedidoIdIgnorado?: string,
+  ): Promise<void> {
+    const conflitos = await tx
+      .select({
+        pedidoId: pedidosVenda.id,
+        itemComercialId: pedidosVendaItens.itemComercialId,
+        quantidadeAtual: pedidosVendaItens.quantidadePedida,
+        status: pedidosVenda.status,
+      })
+      .from(pedidosVendaItens)
+      .innerJoin(pedidosVenda, eq(pedidosVendaItens.pedidoVendaId, pedidosVenda.id))
+      .where(and(
+        eq(pedidosVenda.clienteId, clienteId),
+        eq(pedidosVenda.operacaoId, operacaoId),
+        inArray(pedidosVenda.status, [...PedidosService.STATUS_ABERTOS]),
+        inArray(pedidosVendaItens.itemComercialId, itensComerciaisIds),
+        isNull(pedidosVenda.deletedAt),
+        isNull(pedidosVendaItens.deletedAt),
+        pedidoIdIgnorado ? ne(pedidosVenda.id, pedidoIdIgnorado) : undefined,
+      ));
+    if (conflitos.length === 0) return;
+    throw new ConflictException({
+      code: 'PEDIDO_ABERTO_EXISTENTE',
+      message: 'Já existe pedido aberto deste cliente para o produto nesta operação. Use o adendo.',
+      conflitos,
+    });
+  }
+
+  /**
+   * Herança do cadastro do cliente para o pedido (matriz linha 3 / D31).
+   * Rota: copiada de clientes.rota_id → rotas.nome quando o DTO não a informa.
+   * Representante: NÃO é copiado — é derivado de clientes.representante_id na leitura.
+   */
+  private async rotaHerdadaDoCliente(tx: Tx, clienteId: string): Promise<string | null> {
+    const [linha] = await tx
+      .select({ nomeRota: rotas.nome })
+      .from(clientes)
+      .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
+      .where(and(eq(clientes.id, clienteId), isNull(clientes.deletedAt)))
+      .limit(1);
+    if (!linha) throw new NotFoundException('Cliente não encontrado');
+    return linha.nomeRota ?? null;
   }
 
   async criar(dto: CreatePedidoDto, usuarioId: string, confirmado = false) {
@@ -139,6 +278,17 @@ export class PedidosService {
       const operacaoExistente = await this.operacoes.encontrarAtivaPorData(
         tx, dto.dataOperacao,
       );
+      // Sem operação ativa na data não pode existir pedido aberto para checar: pedidos_venda.operacao_id
+      // é NOT NULL e FK para operacoes(id), logo o conjunto de conflitos é provadamente vazio.
+      // A operação é criada logo abaixo por garantirOperacao (primeiro pedido do dia).
+      if (operacaoExistente) {
+        await this.exigirUnicidadeAd03(
+          tx,
+          dto.clienteId,
+          operacaoExistente.id,
+          solicitados.map((s) => s.itemComercialId),
+        );
+      }
       const plano = await this.planejarSobLock(
         tx, operacaoExistente?.id ?? null, solicitados,
       );
@@ -156,9 +306,10 @@ export class PedidosService {
         clienteId: dto.clienteId,
         operacaoId: operacao.id,
         dataEntrega: dto.dataEntrega,
-        rotaPrevista: dto.rotaPrevista,
+        rotaPrevista: dto.rotaPrevista ?? (await this.rotaHerdadaDoCliente(tx, dto.clienteId)),
         prioridade: dto.prioridade,
-        status: 'em_elaboracao_reserva_ativa',
+        // AD-06: rascunho também tem reserva ativa; a única diferença é o status inicial.
+        status: dto.salvarComoRascunho ? 'rascunho' : 'em_elaboracao_reserva_ativa',
         observacoesGerais: dto.observacoesGerais,
         usuarioCriacaoId: usuarioId,
       }).returning());
@@ -222,6 +373,18 @@ export class PedidosService {
     if (itemExistente.length) {
       throw new ConflictException('Item comercial já existe neste pedido');
     }
+
+    // Pedido é dado persistido com operacao_id NOT NULL; a leitura é explícita e
+    // falha alto se o invariante for violado (nunca infere ou inventa a operação).
+    if (!pedido.operacaoId) {
+      throw new ConflictException({
+        code: 'PEDIDO_SEM_OPERACAO',
+        message: 'Pedido sem operação vinculada; não é possível validar a unicidade AD-03.',
+      });
+    }
+    await this.exigirUnicidadeAd03(
+      tx, pedido.clienteId, pedido.operacaoId, [dto.itemComercialId], pedido.id,
+    );
 
     const solicitado: ItemSolicitado = {
       itemComercialId: dto.itemComercialId,
@@ -310,71 +473,216 @@ export class PedidosService {
         observacoes: solicitado.observacoes,
       }).returning();
       if (!item) throw new Error('Falha ao persistir item do pedido');
-
-      for (const cobertura of alocacao.coberturas) {
-        const atualizada = await tx.execute<{ id: string }>(sql`
-          UPDATE disponibilidades_virtuais
-          SET quantidade_reservada=quantidade_reservada+${cobertura.quantidade}::numeric,
-              quantidade_disponivel=quantidade_disponivel-${cobertura.quantidade}::numeric,
-              status=CASE
-                WHEN quantidade_disponivel-${cobertura.quantidade}::numeric=0 THEN 'esgotada'
-                ELSE 'parcialmente_reservada'
-              END
-          WHERE id=${cobertura.disponibilidadeId}
-            AND quantidade_disponivel >= ${cobertura.quantidade}::numeric
-          RETURNING id
-        `);
-        if (atualizada.rows.length !== 1) {
-          throw new ConflictException('Saldo mudou durante a confirmação; refaça a operação');
-        }
-        await tx.insert(reservasDisponibilidade).values({
-          disponibilidadeVirtualId: cobertura.disponibilidadeId,
-          pedidoVendaItemId: item.id,
-          quantidadeReservada: cobertura.quantidade,
-          tipoConsumo: 'virtual',
-          status: 'ativa',
-        });
-      }
-      if (!ehZero(alocacao.deficit)) {
-        if (!pedido.operacaoId) {
-          throw new ConflictException('Pedido sem operação não pode gerar overbooking');
-        }
-        await tx.insert(reservasDisponibilidade).values({
-          disponibilidadeVirtualId: null,
-          pedidoVendaItemId: item.id,
-          quantidadeReservada: alocacao.deficit,
-          tipoConsumo: 'overbooking',
-          status: 'ativa',
-        });
-        const [pendencia] = await tx.insert(pendenciasOverbooking).values({
-          pedidoVendaId: pedido.id, pedidoVendaItemId: item.id,
-          itemComercialId: item.itemComercialId, clienteId: pedido.clienteId,
-          vendedorUsuarioId: usuarioId, operacaoId: pedido.operacaoId,
-          quantidadeDeficit: alocacao.deficit,
-        }).returning();
-        if (!pendencia) throw new Error('Falha ao abrir pendência de overbooking');
-        await tx.insert(pendenciasOverbookingHistorico).values({
-          pendenciaId: pendencia.id, acao: 'confirmada_pelo_vendedor', autorId: usuarioId,
-        });
-        eventos.push({
-          nome: EVENTOS.PENDENCIA_OVERBOOKING_ABERTA,
-          payload: { pendenciaId: pendencia.id, pedidoVendaId: pedido.id },
-        });
-        eventos.push({
-          nome: EVENTOS.OVERBOOKING_CONFIRMADO,
-          payload: {
-            pedidoVendaId: pedido.id,
-            itemId: item.id,
-            quantidadeOverbooking: alocacao.deficit,
-          },
-        });
-      }
+      eventos.push(...await this.aplicarAlocacaoNoItem(tx, pedido, item, alocacao, usuarioId));
       eventos.push({
         nome: EVENTOS.PEDIDO_VENDA_ITEM_CRIADO,
         payload: { pedidoVendaId: pedido.id, itemId: item.id },
       });
     }
     return { pedido, eventos };
+  }
+
+  /**
+   * Consome as coberturas planejadas e o déficit de um item de pedido JÁ persistido.
+   * Extraído de persistirItensPlanejados para que o adendo reuse o motor de reserva
+   * sem duplicar regra (D2). Devolve os eventos a emitir após o commit.
+   */
+  async aplicarAlocacaoNoItem(
+    tx: Tx,
+    pedido: PedidoVenda,
+    item: PedidoVendaItem,
+    alocacao: PlanoItem,
+    usuarioId: string,
+  ): Promise<EventoDominio[]> {
+    const eventos: EventoDominio[] = [];
+    let dataOperacao: string | undefined;
+    if (alocacao.coberturas.length > 0 && pedido.operacaoId) {
+      const [operacao] = await tx.select({ data: operacoes.data })
+        .from(operacoes)
+        .where(eq(operacoes.id, pedido.operacaoId))
+        .limit(1);
+      dataOperacao = operacao?.data;
+    }
+    for (const cobertura of alocacao.coberturas) {
+      const atualizada = await tx.execute<{
+        id: string;
+        quantidade_reservada: string;
+        quantidade_disponivel: string;
+      }>(sql`
+        UPDATE disponibilidades_virtuais
+        SET quantidade_reservada=quantidade_reservada+${cobertura.quantidade}::numeric,
+            quantidade_disponivel=quantidade_disponivel-${cobertura.quantidade}::numeric,
+            status=CASE
+              WHEN quantidade_disponivel-${cobertura.quantidade}::numeric=0 THEN 'esgotada'
+              ELSE 'parcialmente_reservada'
+            END
+        WHERE id=${cobertura.disponibilidadeId}
+          AND quantidade_disponivel >= ${cobertura.quantidade}::numeric
+        RETURNING id, quantidade_reservada, quantidade_disponivel
+      `);
+      if (atualizada.rows.length !== 1) {
+        throw new ConflictException('Saldo mudou durante a confirmação; refaça a operação');
+      }
+      await tx.insert(reservasDisponibilidade).values({
+        disponibilidadeVirtualId: cobertura.disponibilidadeId,
+        pedidoVendaItemId: item.id,
+        quantidadeReservada: cobertura.quantidade,
+        tipoConsumo: 'virtual',
+        status: 'ativa',
+      });
+      const linha = atualizada.rows[0]!;
+      eventos.push({
+        nome: EVENTOS.RESERVA_ATUALIZADA,
+        payload: {
+          disponibilidadeId: linha.id,
+          itemComercialId: alocacao.itemComercialId,
+          dataOperacao: dataOperacao ?? '',
+          quantidadeReservada: linha.quantidade_reservada,
+          quantidadeDisponivel: linha.quantidade_disponivel,
+        },
+      });
+    }
+    if (ehZero(alocacao.deficit)) return eventos;
+
+    if (!pedido.operacaoId) {
+      throw new ConflictException('Pedido sem operação não pode gerar overbooking');
+    }
+    await this.abrirOuAcumularReservaOverbooking(tx, item.id, alocacao.deficit);
+    const pendenciaId = await this.abrirOuAcumularPendencia(tx, pedido, item, alocacao.deficit, usuarioId);
+    eventos.push({
+      nome: EVENTOS.PENDENCIA_OVERBOOKING_ABERTA,
+      payload: { pendenciaId, pedidoVendaId: pedido.id },
+    });
+    eventos.push({
+      nome: EVENTOS.OVERBOOKING_CONFIRMADO,
+      payload: {
+        pedidoVendaId: pedido.id,
+        itemId: item.id,
+        quantidadeOverbooking: alocacao.deficit,
+      },
+    });
+    return eventos;
+  }
+
+  /**
+   * Abre ou acumula a reserva de overbooking do item. Espelha abrirOuAcumularPendencia:
+   * reduzirReservaOverbooking e liberarTodasReservasDoItem operam sobre UMA linha ativa.
+   */
+  private async abrirOuAcumularReservaOverbooking(
+    tx: Tx,
+    itemId: string,
+    deficit: string,
+  ): Promise<void> {
+    const [ativa] = await tx.select().from(reservasDisponibilidade)
+      .where(and(
+        eq(reservasDisponibilidade.pedidoVendaItemId, itemId),
+        eq(reservasDisponibilidade.tipoConsumo, 'overbooking'),
+        eq(reservasDisponibilidade.status, 'ativa'),
+      ))
+      .for('update')
+      .limit(1);
+    if (ativa) {
+      await tx.update(reservasDisponibilidade)
+        .set({
+          quantidadeReservada: somarQtd(ativa.quantidadeReservada, deficit),
+          updatedAt: new Date(),
+        })
+        .where(eq(reservasDisponibilidade.id, ativa.id));
+      return;
+    }
+    await tx.insert(reservasDisponibilidade).values({
+      disponibilidadeVirtualId: null,
+      pedidoVendaItemId: itemId,
+      quantidadeReservada: deficit,
+      tipoConsumo: 'overbooking',
+      status: 'ativa',
+    });
+  }
+
+  /**
+   * Abre a pendência de overbooking do item ou soma o déficit à pendência aberta.
+   * Só existe pendência aberta quando o item recebeu adendo deficitário antes; na
+   * criação do item o caminho é sempre o INSERT (comportamento da Onda 1 preservado).
+   * Acumular em vez de duplicar é obrigatório: atualizarOuCancelarPendencia
+   * (reduzirItem/removerItem) resolve UMA pendência aberta por item.
+   */
+  private async abrirOuAcumularPendencia(
+    tx: Tx,
+    pedido: PedidoVenda,
+    item: PedidoVendaItem,
+    deficit: string,
+    usuarioId: string,
+  ): Promise<string> {
+    const [aberta] = await tx.select().from(pendenciasOverbooking)
+      .where(and(
+        eq(pendenciasOverbooking.pedidoVendaItemId, item.id),
+        notInArray(pendenciasOverbooking.status, ['resolvida', 'cancelada']),
+        isNull(pendenciasOverbooking.deletedAt),
+      ))
+      .for('update')
+      .limit(1);
+    if (aberta) {
+      const acumulado = somarQtd(aberta.quantidadeDeficit, deficit);
+      await tx.update(pendenciasOverbooking)
+        .set({ quantidadeDeficit: acumulado, updatedAt: new Date() })
+        .where(eq(pendenciasOverbooking.id, aberta.id));
+      await tx.insert(pendenciasOverbookingHistorico).values({
+        pendenciaId: aberta.id,
+        acao: 'deficit_aumentado_por_adendo',
+        autorId: usuarioId,
+        detalheJson: { deficitAdicionado: deficit, deficitTotal: acumulado },
+      });
+      return aberta.id;
+    }
+    const [pendencia] = await tx.insert(pendenciasOverbooking).values({
+      pedidoVendaId: pedido.id, pedidoVendaItemId: item.id,
+      itemComercialId: item.itemComercialId, clienteId: pedido.clienteId,
+      vendedorUsuarioId: usuarioId, operacaoId: pedido.operacaoId,
+      quantidadeDeficit: deficit,
+    }).returning();
+    if (!pendencia) throw new Error('Falha ao abrir pendência de overbooking');
+    await tx.insert(pendenciasOverbookingHistorico).values({
+      pendenciaId: pendencia.id, acao: 'confirmada_pelo_vendedor', autorId: usuarioId,
+    });
+    return pendencia.id;
+  }
+
+  /** Carrega sob lock o pedido que vai receber adendo. Só estados abertos de AD-03 (D7). */
+  async carregarAbertoParaAdendo(tx: Tx, pedidoId: string): Promise<PedidoVenda> {
+    const [pedido] = await tx.select().from(pedidosVenda)
+      .where(and(eq(pedidosVenda.id, pedidoId), isNull(pedidosVenda.deletedAt)))
+      .for('update')
+      .limit(1);
+    if (!pedido) throw new NotFoundException('Pedido não encontrado');
+    if (!(PedidosService.STATUS_ABERTOS as readonly string[]).includes(pedido.status)) {
+      throw new ConflictException({
+        code: 'PEDIDO_NAO_ABERTO',
+        message: 'O adendo só se aplica a pedido aberto (rascunho, em elaboração ou aguardando '
+          + 'confirmação de overbooking).',
+      });
+    }
+    return pedido;
+  }
+
+  /** Exige que o produto JÁ esteja no pedido: adendo aumenta item, não cria item. */
+  async exigirItemDoPedido(
+    tx: Tx, pedidoId: string, itemComercialId: string,
+  ): Promise<PedidoVendaItem> {
+    const [item] = await tx.select().from(pedidosVendaItens)
+      .where(and(
+        eq(pedidosVendaItens.pedidoVendaId, pedidoId),
+        eq(pedidosVendaItens.itemComercialId, itemComercialId),
+        isNull(pedidosVendaItens.deletedAt),
+      ))
+      .for('update')
+      .limit(1);
+    if (!item) {
+      throw new NotFoundException({
+        code: 'ITEM_NAO_ESTA_NO_PEDIDO',
+        message: 'O produto não está neste pedido; use a inclusão de item.',
+      });
+    }
+    return item;
   }
 
   async reduzirItem(
@@ -624,6 +932,64 @@ export class PedidosService {
         eventos: [{
           nome: EVENTOS.PEDIDO_FINALIZADO,
           payload: { pedidoVendaId: pedidoId },
+        }] as EventoDominio[],
+      };
+    });
+    this.emitirEventosPosCommit(resultado.eventos);
+    return resultado.pedido;
+  }
+
+  /** AD-06 — única liberação além de remoção/cancelamento pelo vendedor. Sem TTL, sem job. */
+  async liberarReservaAdministrativa(
+    pedidoId: string, dto: LiberarReservaDto, usuarioId: string,
+  ): Promise<{ id: string; status: string }> {
+    const resultado = await this.db.transaction(async (tx) => {
+      const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId);
+      if (pedido.status !== 'rascunho') {
+        throw new BadRequestException({
+          code: 'PEDIDO_NAO_ESTA_EM_RASCUNHO',
+          message: 'A liberação administrativa só se aplica a rascunho com reserva ativa.',
+        });
+      }
+      const itens = await tx.select().from(pedidosVendaItens)
+        .where(and(
+          eq(pedidosVendaItens.pedidoVendaId, pedido.id),
+          isNull(pedidosVendaItens.deletedAt),
+        ));
+      const reservasAtivas = await tx.select({ id: reservasDisponibilidade.id })
+        .from(reservasDisponibilidade)
+        .where(and(
+          inArray(reservasDisponibilidade.pedidoVendaItemId, itens.map((i) => i.id)),
+          eq(reservasDisponibilidade.status, 'ativa'),
+        ));
+      if (reservasAtivas.length === 0) {
+        throw new BadRequestException({
+          code: 'PEDIDO_SEM_RESERVA_ATIVA',
+          message: 'Este rascunho não tem reserva ativa a liberar.',
+        });
+      }
+      for (const item of itens) {
+        await this.liberarTodasReservasDoItem(tx, item.id);
+      }
+      await this.cancelarPendenciasDoPedido(tx, pedido.id, usuarioId);
+      const liberado = primeiroOuFalha(await tx.update(pedidosVenda)
+        .set({ status: 'cancelado', motivoCancelamento: dto.justificativa, updatedAt: new Date() })
+        .where(eq(pedidosVenda.id, pedido.id))
+        .returning());
+      await this.auditoria.registrar(tx, {
+        tabela: 'pedidos_venda', registroId: pedido.id, operacao: 'UPDATE',
+        modulo: 'comercial', usuarioId,
+        dadosAnteriores: { status: pedido.status },
+        dadosNovos: { status: 'cancelado', acao: 'liberar_reserva' },
+        justificativa: dto.justificativa,
+      });
+      return {
+        pedido: { id: liberado.id, status: liberado.status },
+        eventos: [{
+          nome: EVENTOS.RESERVA_LIBERADA_ADMIN,
+          payload: {
+            pedidoVendaId: pedido.id, autorId: usuarioId, justificativa: dto.justificativa,
+          },
         }] as EventoDominio[],
       };
     });

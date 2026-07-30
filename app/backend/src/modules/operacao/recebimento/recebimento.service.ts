@@ -1,6 +1,12 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -13,6 +19,7 @@ import { notasFiscaisFornecedor, operacoes,
   itensCompra,
   pecas,
   pedidosFornecedor,
+  pedidosFornecedorItens,
   pedidosVenda,
   recebimentos,
   recebimentosItens,
@@ -42,6 +49,7 @@ import {
   persistirNfDeCamposUiNaTx,
   temCamposNfEstruturados,
 } from './nota-fiscal-fornecedor.persistence';
+import { pedidoFornecedorPodeReceber } from './pedido-fornecedor.service';
 
 type Tx = NodePgDatabase<typeof schema>;
 type Recebimento = typeof recebimentos.$inferSelect;
@@ -66,22 +74,63 @@ export interface PrevisaoItemOperacional {
   produtoCodigo: string;
   produtoDescricao: string;
   quantidadePrevista: string;
+  pesoPrevisto: string | null;
   unidade: string;
   passaBalanca: boolean;
   origemDescricao: string;
 }
 
 export interface PrevisaoRecebimento {
+  pedidoFornecedorId: string;
+  numeroPedidoFornecedor: string;
+  statusPedidoFornecedor: 'enviado' | 'aguardando_recebimento';
+  operacaoId: string;
+  dataOperacao: string;
   compraProgramadaId: string;
-  numeroInterno: string | null;
+  numeroInternoCompra: string | null;
   fornecedorId: string;
   fornecedorNome: string;
   tipoCarga: string | null;
   observacoesCompra: string | null;
   resumoCompra: string;
   itensOperacionais: PrevisaoItemOperacional[];
-  jaPossuiRecebimento: boolean;
 }
+
+type IniciarRecebimentoResultado = {
+  recebimento: Recebimento;
+  jaIniciado: false;
+};
+
+type InicioRecebimentoInterno = {
+  recebimento: Recebimento;
+  nfId: string | null;
+};
+
+type ContextoInicioPosCommit = {
+  recebimento: Recebimento;
+  compraProgramadaId: string;
+  dataOperacao: string;
+};
+
+type SnapshotPedidoFornecedor = {
+  pedido: typeof pedidosFornecedor.$inferSelect;
+  fornecedorNome: string;
+  dataOperacao: string;
+  numeroInternoCompra: string | null;
+  observacoesCompra: string | null;
+  tipoCarga: string | null;
+  resumoCompra: string;
+  itens: Array<{
+    itemComercialId: string;
+    produtoCodigo: string;
+    produtoDescricao: string;
+    quantidadePrevista: string;
+    pesoPrevisto: string | null;
+    unidade: string;
+    passaBalanca: boolean;
+    origemDescricao: string;
+  }>;
+};
 
 export interface AcaoLote {
   id: string;
@@ -169,77 +218,22 @@ export class RecebimentoService {
     return montarPaginado(enriquecidos, totalRow[0]?.total ?? 0, query);
   }
 
-  async previsaoDaCompra(compraProgramadaId: string): Promise<PrevisaoRecebimento> {
-    const compra = await this.db.query.comprasProgramadas.findFirst({
-      where: and(eq(comprasProgramadas.id, compraProgramadaId), isNull(comprasProgramadas.deletedAt)),
-      with: { fornecedor: true },
-    });
-    if (!compra) throw new NotFoundException('Compra programada não encontrada');
-    if (compra.status !== 'confirmada') {
-      throw new ConflictException('Somente compras confirmadas podem abrir recebimento');
-    }
-
-    const existente = await this.db
-      .select({ id: recebimentos.id })
-      .from(recebimentos)
-      .innerJoin(pedidosFornecedor, eq(pedidosFornecedor.id, recebimentos.pedidoFornecedorId))
-      .where(and(
-        eq(pedidosFornecedor.compraProgramadaId, compraProgramadaId),
-        isNull(recebimentos.deletedAt),
-      ))
-      .then((r) => r[0] ?? null);
-
-    const esperados = await this.disponibilidade.listarEsperadoDaCompra(this.db, compraProgramadaId);
-    const ids = esperados.map((e) => e.itemComercialId);
-    const metadados = await resolverMetadadosItensPrevistos(this.db, compraProgramadaId, compra.numeroInterno, ids);
-
-    const comerciais = ids.length
-      ? await this.db
-          .select()
-          .from(itensComerciais)
-          .where(inArray(itensComerciais.id, ids))
-      : [];
-
-    const comercialMap = new Map(comerciais.map((c) => [c.id, c]));
-
-    const itensCompraLinhas = await this.db
-      .select({
-        descricao: itensCompra.descricao,
-        quantidade: comprasProgramadasItens.quantidadeComprada,
-        unidade: itensCompra.unidadeCompra,
-      })
-      .from(comprasProgramadasItens)
-      .innerJoin(itensCompra, eq(itensCompra.id, comprasProgramadasItens.itemCompraId))
-      .where(and(eq(comprasProgramadasItens.compraProgramadaId, compraProgramadaId), isNull(comprasProgramadasItens.deletedAt)));
-
-    const resumoCompra = itensCompraLinhas
-      .map((i) => `${i.quantidade} ${i.descricao}`)
-      .join(' + ');
-
-    const tipoCarga = await derivarTipoCarga(this.db, compraProgramadaId);
-
+  async previsaoDoPedidoFornecedor(pedidoFornecedorId: string): Promise<PrevisaoRecebimento> {
+    const snapshot = await this.carregarSnapshotPedidoFornecedor(this.db, pedidoFornecedorId);
     return {
-      compraProgramadaId: compra.id,
-      numeroInterno: compra.numeroInterno,
-      fornecedorId: compra.fornecedorId,
-      fornecedorNome: compra.fornecedor.razaoSocial,
-      tipoCarga,
-      observacoesCompra: compra.observacoes,
-      resumoCompra,
-      itensOperacionais: esperados.map((e) => {
-        const meta = metadados.get(e.itemComercialId);
-        const ic = comercialMap.get(e.itemComercialId);
-        return {
-          itemComercialId: e.itemComercialId,
-          produtoCodigo: ic?.codigo ?? '',
-          produtoDescricao: ic?.descricao ?? '',
-          quantidadePrevista: e.quantidadeTotalGerada,
-          unidade: meta?.unidadeEsperada ?? ic?.unidadeComercial ?? 'unidade',
-          passaBalanca: meta?.requerBalanca ?? true,
-          origemDescricao: meta?.origemDescricao ?? compra.numeroInterno ?? 'Compra',
-        };
-      }),
-      jaPossuiRecebimento: Boolean(existente),
+      pedidoFornecedorId: snapshot.pedido.id,
+      numeroPedidoFornecedor: snapshot.pedido.numero,
+      statusPedidoFornecedor: snapshot.pedido.status as 'enviado' | 'aguardando_recebimento',
+      operacaoId: snapshot.pedido.operacaoId,
+      dataOperacao: snapshot.dataOperacao,
+      compraProgramadaId: snapshot.pedido.compraProgramadaId,
+      numeroInternoCompra: snapshot.numeroInternoCompra,
+      fornecedorId: snapshot.pedido.fornecedorId,
+      fornecedorNome: snapshot.fornecedorNome,
+      tipoCarga: snapshot.tipoCarga,
+      observacoesCompra: snapshot.observacoesCompra,
+      resumoCompra: snapshot.resumoCompra,
+      itensOperacionais: snapshot.itens,
     };
   }
 
@@ -293,41 +287,23 @@ export class RecebimentoService {
     };
   }
 
-  async iniciar(dto: IniciarRecebimentoDto, usuarioId: string): Promise<{ recebimento: Recebimento; jaIniciado: boolean }> {
-    const resultado = await this.db.transaction(async (tx) => {
-      const pedido = await tx.select().from(pedidosFornecedor)
-        .where(and(
-          eq(pedidosFornecedor.id, dto.pedidoFornecedorId),
-          isNull(pedidosFornecedor.deletedAt),
-        ))
-        .then((r) => r[0] ?? null);
-      if (!pedido) throw new NotFoundException('Pedido ao fornecedor não encontrado');
-      if (!['enviado', 'aguardando_recebimento'].includes(pedido.status)) {
-        throw new ConflictException('Pedido ao fornecedor não está aguardando recebimento');
-      }
-
-      const compra = await tx
-        .select()
-        .from(comprasProgramadas)
-        .where(and(
-          eq(comprasProgramadas.id, pedido.compraProgramadaId),
-          isNull(comprasProgramadas.deletedAt),
-        ))
-        .then((r) => r[0] ?? null);
-      if (!compra) throw new NotFoundException('Compra programada não encontrada');
-
-      const esperados = await this.disponibilidade.listarEsperadoDaCompra(tx, compra.id);
-      if (esperados.length === 0) {
-        throw new ConflictException('Compra confirmada sem itens operacionais previstos');
+  async iniciar(
+    dto: IniciarRecebimentoDto,
+    usuarioId: string,
+  ): Promise<IniciarRecebimentoResultado> {
+    const interno: InicioRecebimentoInterno = await this.db.transaction(async (tx) => {
+      const snapshot = await this.carregarSnapshotPedidoFornecedor(tx, dto.pedidoFornecedorId);
+      if (snapshot.itens.length === 0) {
+        throw new ConflictException('Pedido ao fornecedor sem itens operacionais previstos');
       }
 
       const criado = primeiroOuFalha(
         await tx
           .insert(recebimentos)
           .values({
-            pedidoFornecedorId: pedido.id,
-            fornecedorId: pedido.fornecedorId,
-            operacaoId: pedido.operacaoId,
+            pedidoFornecedorId: snapshot.pedido.id,
+            fornecedorId: snapshot.pedido.fornecedorId,
+            operacaoId: snapshot.pedido.operacaoId,
             dataHoraChegada: dto.dataHoraChegada ? new Date(dto.dataHoraChegada) : undefined,
             notaFiscalFornecedor: dto.nfeNumero,
             romaneio: dto.romaneio,
@@ -341,21 +317,17 @@ export class RecebimentoService {
           .returning(),
       );
 
-      const ids = esperados.map((e) => e.itemComercialId);
-      const metadados = await resolverMetadadosItensPrevistos(tx, compra.id, compra.numeroInterno, ids);
-
       await tx.insert(recebimentosItens).values(
-        esperados.map((e) => {
-          const meta = metadados.get(e.itemComercialId);
-          const requerBalanca = meta?.requerBalanca ?? true;
+        snapshot.itens.map((item) => {
+          const requerBalanca = item.passaBalanca;
           const entradaDireta = !requerBalanca;
           return {
             recebimentoId: criado.id,
-            itemComercialId: e.itemComercialId,
-            origemDescricao: meta?.origemDescricao,
-            quantidadeEsperada: e.quantidadeTotalGerada,
-            quantidadeRecebida: entradaDireta ? e.quantidadeTotalGerada : '0',
-            unidadeEsperada: meta?.unidadeEsperada,
+            itemComercialId: item.itemComercialId,
+            origemDescricao: item.origemDescricao,
+            quantidadeEsperada: item.quantidadePrevista,
+            quantidadeRecebida: entradaDireta ? item.quantidadePrevista : '0',
+            unidadeEsperada: item.unidade,
             requerBalanca,
             statusApuracao: entradaDireta ? ('entrada_direta' as const) : ('aguardando' as const),
           };
@@ -375,7 +347,7 @@ export class RecebimentoService {
       let nfId: string | null = null;
       if (temCamposNfEstruturados(dto)) {
         const nf = await persistirNfDeCamposUiNaTx(tx, this.auditoria, {
-          pedidoFornecedorId: pedido.id,
+          pedidoFornecedorId: snapshot.pedido.id,
           recebimentoId: criado.id,
           campos: dto,
           usuarioId,
@@ -383,37 +355,28 @@ export class RecebimentoService {
         nfId = nf.id;
       }
 
-      return { recebimento: criado, jaIniciado: false, nfId };
+      return { recebimento: criado, nfId };
     });
 
-    const dataOperacao = await this.db
-      .select({ data: operacoes.data })
-      .from(operacoes)
-      .where(eq(operacoes.id, resultado.recebimento.operacaoId))
-      .then((r) => r[0]?.data ?? '');
-    const compraProgramadaId = await this.db
-      .select({ id: pedidosFornecedor.compraProgramadaId })
-      .from(pedidosFornecedor)
-      .where(eq(pedidosFornecedor.id, resultado.recebimento.pedidoFornecedorId))
-      .then((r) => r[0]?.id ?? '');
+    const contexto = await this.carregarContextoInicioPosCommit(interno.recebimento.id);
     this.eventEmitter.emit(EVENTOS.RECEBIMENTO_INICIADO, {
-      recebimentoId: resultado.recebimento.id,
-      compraProgramadaId,
-      dataOperacao,
+      recebimentoId: contexto.recebimento.id,
+      compraProgramadaId: contexto.compraProgramadaId,
+      dataOperacao: contexto.dataOperacao,
     });
     this.eventEmitter.emit(EVENTOS.RECEBIMENTO_ESTADO_ALTERADO, {
-      recebimentoId: resultado.recebimento.id,
+      recebimentoId: contexto.recebimento.id,
       statusAnterior: 'novo',
-      statusAtual: resultado.recebimento.status,
+      statusAtual: contexto.recebimento.status,
     });
-    if (resultado.nfId) {
+    if (interno.nfId) {
       this.eventEmitter.emit(EVENTOS.NF_FORNECEDOR_REGISTRADA, {
-        nfId: resultado.nfId,
-        pedidoFornecedorId: resultado.recebimento.pedidoFornecedorId,
-        recebimentoId: resultado.recebimento.id,
+        nfId: interno.nfId,
+        pedidoFornecedorId: contexto.recebimento.pedidoFornecedorId,
+        recebimentoId: contexto.recebimento.id,
       });
     }
-    return resultado;
+    return { recebimento: contexto.recebimento, jaIniciado: false };
   }
 
   async atualizarNfe(recebimentoId: string, dto: AtualizarNfeDto, usuarioId: string): Promise<Recebimento> {
@@ -888,6 +851,134 @@ export class RecebimentoService {
   private calcularDivergente(esperada: string, recebida: string): string {
     const diff = subtrairQtd(esperada, recebida);
     return compararQtd(diff, '0') < 0 ? subtrairQtd('0', diff) : diff;
+  }
+
+  private async carregarSnapshotPedidoFornecedor(
+    tx: Tx,
+    pedidoFornecedorId: string,
+  ): Promise<SnapshotPedidoFornecedor> {
+    const cabecalho = await tx
+      .select({
+        pedido: pedidosFornecedor,
+        fornecedorNome: fornecedores.razaoSocial,
+        dataOperacao: operacoes.data,
+        numeroInternoCompra: comprasProgramadas.numeroInterno,
+        observacoesCompra: comprasProgramadas.observacoes,
+      })
+      .from(pedidosFornecedor)
+      .innerJoin(fornecedores, eq(fornecedores.id, pedidosFornecedor.fornecedorId))
+      .innerJoin(operacoes, eq(operacoes.id, pedidosFornecedor.operacaoId))
+      .innerJoin(
+        comprasProgramadas,
+        and(
+          eq(comprasProgramadas.id, pedidosFornecedor.compraProgramadaId),
+          isNull(comprasProgramadas.deletedAt),
+        ),
+      )
+      .where(and(
+        eq(pedidosFornecedor.id, pedidoFornecedorId),
+        isNull(pedidosFornecedor.deletedAt),
+      ))
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (!cabecalho) {
+      throw new NotFoundException('Pedido ao fornecedor não encontrado');
+    }
+    if (!pedidoFornecedorPodeReceber(cabecalho.pedido.status)) {
+      throw new ConflictException('Pedido ao fornecedor não está aguardando recebimento');
+    }
+
+    const itensSnapshot = await tx
+      .select({
+        itemComercialId: pedidosFornecedorItens.itemComercialId,
+        produtoCodigo: itensComerciais.codigo,
+        produtoDescricao: itensComerciais.descricao,
+        quantidadePrevista: pedidosFornecedorItens.quantidadePrevista,
+        pesoPrevisto: pedidosFornecedorItens.pesoPrevisto,
+      })
+      .from(pedidosFornecedorItens)
+      .innerJoin(
+        itensComerciais,
+        eq(itensComerciais.id, pedidosFornecedorItens.itemComercialId),
+      )
+      .where(and(
+        eq(pedidosFornecedorItens.pedidoFornecedorId, pedidoFornecedorId),
+        isNull(pedidosFornecedorItens.deletedAt),
+      ));
+    if (itensSnapshot.length === 0) {
+      throw new ConflictException('Pedido ao fornecedor sem itens operacionais previstos');
+    }
+
+    const metadados = await resolverMetadadosItensPrevistos(
+      tx,
+      cabecalho.pedido.compraProgramadaId,
+      cabecalho.numeroInternoCompra,
+      itensSnapshot.map((item) => item.itemComercialId),
+    );
+    const itens = itensSnapshot.map((item) => {
+      const metadado = metadados.get(item.itemComercialId);
+      if (!metadado) {
+        throw new ConflictException(
+          'Pedido ao fornecedor com metadados operacionais incompletos',
+        );
+      }
+      return {
+        ...item,
+        unidade: metadado.unidadeEsperada,
+        passaBalanca: metadado.requerBalanca,
+        origemDescricao: metadado.origemDescricao,
+      };
+    });
+
+    const itensCompraLinhas = await tx
+      .select({
+        descricao: itensCompra.descricao,
+        quantidade: comprasProgramadasItens.quantidadeComprada,
+      })
+      .from(comprasProgramadasItens)
+      .innerJoin(itensCompra, eq(itensCompra.id, comprasProgramadasItens.itemCompraId))
+      .where(and(
+        eq(comprasProgramadasItens.compraProgramadaId, cabecalho.pedido.compraProgramadaId),
+        isNull(comprasProgramadasItens.deletedAt),
+      ));
+
+    return {
+      ...cabecalho,
+      tipoCarga: await derivarTipoCarga(tx, cabecalho.pedido.compraProgramadaId),
+      resumoCompra: itensCompraLinhas
+        .map((item) => `${item.quantidade} ${item.descricao}`)
+        .join(' + '),
+      itens,
+    };
+  }
+
+  private async carregarContextoInicioPosCommit(
+    recebimentoId: string,
+  ): Promise<ContextoInicioPosCommit> {
+    const linha = await this.db
+      .select({
+        recebimento: recebimentos,
+        compraProgramadaId: pedidosFornecedor.compraProgramadaId,
+        dataOperacao: operacoes.data,
+      })
+      .from(recebimentos)
+      .innerJoin(
+        pedidosFornecedor,
+        eq(pedidosFornecedor.id, recebimentos.pedidoFornecedorId),
+      )
+      .innerJoin(operacoes, eq(operacoes.id, recebimentos.operacaoId))
+      .where(and(
+        eq(recebimentos.id, recebimentoId),
+        isNull(recebimentos.deletedAt),
+      ))
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (!linha) {
+      throw new InternalServerErrorException(
+        'Contexto canônico do recebimento não encontrado após o commit',
+      );
+    }
+    return linha;
   }
 
   private async contextoOperacional(

@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { check, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { representantes } from './representantes.schema';
+import { rotas } from './rotas.schema';
 
 // ── clientes ──────────────────────────────────────────────────────────────────
 export const clientes = pgTable(
@@ -13,7 +14,7 @@ export const clientes = pgTable(
     nomeFantasia:            text('nome_fantasia'),
     documentoFiscal:         text('documento_fiscal').notNull(), // CNPJ ou CPF, só dígitos
     status:                  text('status').notNull().default('ativo'),
-    rotaPadrao:              text('rota_padrao'),
+    rotaId:                  uuid('rota_id').references(() => rotas.id),
     prioridade:              text('prioridade'),
     preferenciasJson:        jsonb('preferencias_json').notNull().default(sql`'{}'::jsonb`),
     dadosFiscaisJson:        jsonb('dados_fiscais_json').notNull().default(sql`'{}'::jsonb`),
@@ -29,6 +30,7 @@ export const clientes = pgTable(
     uniqueIndex('uq_clientes_codigo').on(t.codigo).where(sql`${t.deletedAt} IS NULL`),
     uniqueIndex('uq_clientes_documento_fiscal').on(t.documentoFiscal).where(sql`${t.deletedAt} IS NULL`),
     index('idx_clientes_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_clientes_rota').on(t.rotaId).where(sql`${t.deletedAt} IS NULL`),
     // JSONB filtrável (preferências) com índice GIN (convenção de schema).
     index('idx_clientes_preferencias_gin').using('gin', t.preferenciasJson),
   ],

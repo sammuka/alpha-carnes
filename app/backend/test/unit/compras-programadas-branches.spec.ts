@@ -5,12 +5,14 @@ import { ComprasProgramadasService } from '../../src/modules/comercial/compras-p
 function makeSelectChain(rows: unknown[]) {
   const chain: {
     where: (...args: unknown[]) => typeof chain;
+    innerJoin: (...args: unknown[]) => typeof chain;
     orderBy: (...args: unknown[]) => typeof chain;
     limit: (...args: unknown[]) => typeof chain;
     offset: (...args: unknown[]) => typeof chain;
     then: (cb: (r: unknown[]) => unknown) => unknown;
   } = {
     where: () => chain,
+    innerJoin: () => chain,
     orderBy: () => chain,
     limit: () => chain,
     offset: () => chain,
@@ -40,9 +42,7 @@ describe('ComprasProgramadasService — branches', () => {
 
   it('listar → sem linha de total usa 0', async () => {
     const db = {
-      select: jest.fn((sel?: unknown) => (sel
-        ? { from: () => ({ where: () => Promise.resolve([]) }) }
-        : makeSelectChain([{ id: 'cp1' }]))),
+      select: jest.fn(() => makeSelectChain([])),
     };
     const service = makeService(db);
     const result = await service.listar({ page: 1, pageSize: 20 } as never);
@@ -54,6 +54,7 @@ describe('ComprasProgramadasService — branches', () => {
     const tx = { select: jest.fn(() => makeSelectChain([{ id: 'cp-existente' }])) };
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
     const service = makeService(db);
+    jest.spyOn(service, 'detalhar').mockResolvedValue({ id: 'cp1', dataOperacao: '2026-07-01', itens: [] } as never);
     await expect(
       service.criar({ dataOperacao: '2026-06-23', fornecedorId: 'f1', itens: [] } as never, 'u1'),
     ).rejects.toBeInstanceOf(ConflictException);
@@ -96,13 +97,14 @@ describe('ComprasProgramadasService — branches', () => {
     };
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
     const service = makeService(db);
+    jest.spyOn(service, 'detalhar').mockResolvedValue({ id: 'cp1', dataOperacao: '2026-07-01', itens: [] } as never);
     const result = await service.atualizar('cp1', {
       numeroInterno: 'NOVO-1',
       observacoes: 'obs-nova',
       status: 'em_negociacao',
       previsaoEntrega: '2026-07-01',
     } as never, 'u1');
-    expect(result).toEqual(atualizada);
+    expect(result).toMatchObject({ id: 'cp1', dataOperacao: '2026-07-01', itens: [] });
   });
 
   it('atualizarItem → lança 404 se compra não encontrada', async () => {
@@ -124,6 +126,7 @@ describe('ComprasProgramadasService — branches', () => {
     };
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
     const service = makeService(db);
+    jest.spyOn(service, 'detalhar').mockResolvedValue({ id: 'cp1', dataOperacao: '2026-07-01', itens: [] } as never);
     await expect(service.atualizarItem('cp1', 'it-x', {} as never, 'u1')).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -147,11 +150,12 @@ describe('ComprasProgramadasService — branches', () => {
     };
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
     const service = makeService(db);
+    jest.spyOn(service, 'detalhar').mockResolvedValue({ id: 'cp1', dataOperacao: '2026-07-01', itens: [] } as never);
     const result = await service.atualizarItem('cp1', 'it1', { quantidadeComprada: 25 } as never, 'u1');
-    expect(result).toEqual(atualizado);
+    expect(result).toMatchObject({ id: 'cp1', dataOperacao: '2026-07-01', itens: [] });
   });
 
-  it('confirmar → evento usa string vazia quando operação não é encontrada', async () => {
+  it('confirmar deriva dataOperacao no detalhe pos-commit', async () => {
     const atual = { id: 'cp1', status: 'rascunho', operacaoId: 'op1', deletedAt: null };
     const confirmada = { id: 'cp1', status: 'confirmada', operacaoId: 'op1' };
     const tx = {
@@ -164,15 +168,15 @@ describe('ComprasProgramadasService — branches', () => {
         }),
       })),
     };
-    const dbSelect = jest.fn(() => makeSelectChain([]));
     const db = {
       transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)),
-      select: dbSelect,
     };
     const service = makeService(db);
+    const compra = { id: 'cp1', dataOperacao: '2026-06-23', itens: [] };
+    jest.spyOn(service, 'detalhar').mockResolvedValue(compra as never);
     const emitSpy = jest.spyOn(emitter, 'emit');
-    await service.confirmar('cp1', 'u1');
-    expect(emitSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ dataOperacao: '' }));
+    await expect(service.confirmar('cp1', 'u1')).resolves.toEqual({ compra, jaConfirmada: false });
+    expect(emitSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ dataOperacao: '2026-06-23' }));
   });
 
   it('cancelar → lança 404 se compra não encontrada', async () => {

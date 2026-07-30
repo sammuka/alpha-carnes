@@ -41,9 +41,9 @@ type TelaSpec = {
 const ROTAS_V2: TelaSpec[] = [
   { path: '/comercial/clientes', tituloEsperado: /clientes/i },
   { path: '/comercial/pedidos', tituloEsperado: /pedidos/i },
-  { path: '/comercial/tabela-precos', placeholder: true, tituloEsperado: /tabela de preços/i },
+  { path: '/comercial/tabela-precos', tituloEsperado: /tabela de preços/i },
   { path: '/comercial/disponibilidade', tituloEsperado: /disponibilidade/i },
-  { path: '/comercial/espelho', placeholder: true, tituloEsperado: /espelho/i },
+  { path: '/comercial/espelho', tituloEsperado: /espelho/i },
   { path: '/gestao/dashboard', tituloEsperado: /painel geral da operação|dashboard operacional/i },
   { path: '/gestao/compras', tituloEsperado: /compras/i },
   { path: '/gestao/aprovacoes', placeholder: true, tituloEsperado: /aprovações/i },

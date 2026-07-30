@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AlphaCarnes - Jornada E2E Visual</title>
+  <style>
+    :root { color-scheme: dark; --bg:#09090b; --panel:#18181b; --muted:#a1a1aa; --text:#f4f4f5; --line:#27272a; --blue:#60a5fa; --green:#86efac; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Segoe UI, system-ui, sans-serif; background:var(--bg); color:var(--text); line-height:1.55; }
+    header { padding:48px; border-bottom:1px solid var(--line); background:linear-gradient(135deg,#0f172a,#111827); }
+    h1 { margin:0 0 12px; font-size:32px; }
+    h2 { margin:0; font-size:22px; }
+    p { margin:6px 0 0; color:#d4d4d8; }
+    code { color:#bfdbfe; font-size:12px; }
+    .badges { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
+    .badge { border:1px solid #1d4ed8; color:#bfdbfe; border-radius:999px; padding:5px 12px; font-size:12px; background:rgba(37,99,235,.15); }
+    .wrap { max-width:1180px; margin:0 auto; padding:36px; }
+    .context, .coverage, .observations { border:1px solid var(--line); background:var(--panel); border-radius:10px; padding:18px; margin-bottom:24px; }
+    .context-grid, .meta-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+    .context-grid div, .meta-grid div { border:1px solid var(--line); border-radius:8px; padding:12px; background:#111113; }
+    .context-grid strong, .meta-grid strong { display:block; color:var(--green); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+    .step { margin:0 0 56px; padding-bottom:48px; border-bottom:1px solid var(--line); }
+    .step-head { display:flex; align-items:flex-start; gap:14px; margin-bottom:16px; }
+    .step-head span { width:38px; height:38px; display:grid; place-items:center; border-radius:8px; background:#2563eb; font-weight:700; }
+    .note { margin:14px 0; padding:10px 12px; border-radius:8px; border:1px solid #92400e; background:rgba(146,64,14,.18); color:#fde68a; }
+    img { display:block; width:100%; margin-top:18px; border:1px solid var(--line); border-radius:10px; box-shadow:0 18px 50px rgba(0,0,0,.45); }
+    ul { margin:10px 0 0; color:#d4d4d8; }
+    table { width:100%; margin-top:16px; border-collapse:collapse; }
+    th, td { border:1px solid var(--line); padding:10px; text-align:left; vertical-align:top; }
+    th { color:var(--green); background:#111113; font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AlphaCarnes - Jornada E2E Visual</h1>
+    <p>Relatório gerado pela automação Playwright com dados inseridos no banco atual e telas capturadas no navegador Chromium.</p>
+    <div class="badges">
+      <span class="badge">11 telas capturadas</span>
+      <span class="badge">Run 20260729085454</span>
+      <span class="badge">Data 2026-08-01</span>
+    </div>
+  </header>
+  <main class="wrap">
+    <section class="context">
+      <h2>Rastreabilidade dos Dados</h2>
+      <p>Limite ativo da Onda 4: para_corte</p>
+      <div class="context-grid">
+        <div><strong>Run ID</strong><p><code>20260729085454</code></p></div><div><strong>Data operacional</strong><p><code>2026-08-01</code></p></div><div><strong>Cliente</strong><p><code>019fad15-98ad-7965-bc99-166229180c02</code></p></div><div><strong>Fornecedor</strong><p><code>019fad15-a491-7d81-a334-d8f73381d403</code></p></div><div><strong>Item compra</strong><p><code>019fad15-b72f-7d20-926f-5c1e3f8fa09b</code></p></div><div><strong>Item comercial</strong><p><code>019fad15-bff5-78f4-96d3-eae5f4777445</code></p></div><div><strong>Compra programada</strong><p><code>019fad15-c462-7457-b3bf-19842abfdf60</code></p></div><div><strong>Pedido venda</strong><p><code>019fad15-d0d6-7719-ae7b-86dad72285f0</code></p></div><div><strong>Recebimento</strong><p><code>019fad15-e082-769d-be0a-d0e611c48c59</code></p></div><div><strong>Peça carga</strong><p><code>019fad15-eb19-7978-90e0-71b1ec6cd064</code></p></div><div><strong>Peça no handoff</strong><p><code>019fad15-fd5b-7d2e-9af8-f8093da41e93</code></p></div><div><strong>Limite ativo da Onda 4</strong><p><code>para_corte</code></p></div>
+      </div>
+    </section>
+    <section class="coverage">
+      <h2>Limite ativo e próximos handoffs</h2>
+      <ul>
+        <li>Onda 4 validada até o status para_corte: UI, API e evidência 11 sobre a mesma peça.</li>
+      </ul>
+      <table>
+        <thead>
+          <tr><th>Handoff futuro</th><th>Onda dona</th><th>Contrato futuro</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Desossa</td><td>Onda 7 · matriz 17–19</td><td>Painel/Modo TV, regra exclusiva parametrizada, checklist, divergência, peça mãe, etiqueta e rastreabilidade ponta a ponta.</td></tr>
+          <tr><td>Carga</td><td>Onda 9 · matriz 23–25</td><td>Planejamento, bipagem/conferência, congelamento após fechamento e envio para faturamento.</td></tr>
+          <tr><td>Faturamento</td><td>Onda 10 · matriz 26–29</td><td>Adapter EISS/flag RTC, Notas/XML, Seguro F6b, liberação e checklist.</td></tr>
+          <tr><td>Auditoria futura</td><td>DoD transversal das Ondas 7/9/10</td><td>A tela /admin/auditoria pertence à Onda 3 e não prova eventos que ainda não existem; cada onda dona deve testar suas mutações críticas.</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="observations"><h2>Observações Técnicas</h2><ul><li>Console warning: WebSocket connection to 'ws://127.0.0.1:4001/' failed: WebSocket is closed before the connection is established.</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console warning: WebSocket connection to 'ws://127.0.0.1:4001/' failed: WebSocket is closed before the connection is established.</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: WebSocket connection to 'ws://127.0.0.1:4001/' failed: HTTP Authentication failed; no valid credentials available</li><li>Console error: Failed to load resource: the server responded with a status of 409 (Conflict)</li></ul></section>
+    
+        <section class="step" id="01-login">
+          <div class="step-head">
+            <span>01</span>
+            <div>
+              <h2>Login</h2>
+              <code>http://localhost:3100/login</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Validar a identidade visual e o ponto de entrada autenticado.</p></div>
+            <div><strong>Ação</strong><p>Abertura da rota /login antes de preencher credenciais.</p></div>
+            <div><strong>Resultado</strong><p>Tela de login renderizada com logo, e-mail, senha e botão de entrada.</p></div>
+          </div>
+          
+          <img src="01-login.png" alt="Login" loading="lazy" />
+        </section>
+
+        <section class="step" id="02-dashboard">
+          <div class="step-head">
+            <span>02</span>
+            <div>
+              <h2>Painel Geral da Operação</h2>
+              <code>http://localhost:3100/gestao/dashboard</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Confirmar autenticação, layout administrativo e navegação lateral.</p></div>
+            <div><strong>Ação</strong><p>Login feito pela UI com usuário admin seedado.</p></div>
+            <div><strong>Resultado</strong><p>Dashboard carregado sem 404, com sidebar e indicadores operacionais.</p></div>
+          </div>
+          
+          <img src="02-dashboard.png" alt="Painel Geral da Operação" loading="lazy" />
+        </section>
+
+        <section class="step" id="03-clientes">
+          <div class="step-head">
+            <span>03</span>
+            <div>
+              <h2>Cadastro de Clientes</h2>
+              <code>http://localhost:3100/cadastros/clientes</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Criar e listar cadastro de clientes usando a tela de cadastro.</p></div>
+            <div><strong>Ação</strong><p>Formulário preenchido e salvo em /cadastros/clientes/novo.</p></div>
+            <div><strong>Resultado</strong><p>Registro criado e visível na listagem do módulo.</p></div>
+          </div>
+          
+          <img src="03-clientes.png" alt="Cadastro de Clientes" loading="lazy" />
+        </section>
+
+        <section class="step" id="04-fornecedores">
+          <div class="step-head">
+            <span>04</span>
+            <div>
+              <h2>Cadastro de Fornecedores</h2>
+              <code>http://localhost:3100/cadastros/fornecedores</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Criar e listar cadastro de fornecedores usando a tela de cadastro.</p></div>
+            <div><strong>Ação</strong><p>Formulário preenchido e salvo em /cadastros/fornecedores/novo.</p></div>
+            <div><strong>Resultado</strong><p>Registro criado e visível na listagem do módulo.</p></div>
+          </div>
+          
+          <img src="04-fornecedores.png" alt="Cadastro de Fornecedores" loading="lazy" />
+        </section>
+
+        <section class="step" id="05-itens-compra">
+          <div class="step-head">
+            <span>05</span>
+            <div>
+              <h2>Cadastro de Itens de Compra</h2>
+              <code>http://localhost:3100/cadastros/produtos</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Criar e listar cadastro de itens de compra usando a tela de cadastro.</p></div>
+            <div><strong>Ação</strong><p>Formulário preenchido e salvo em /cadastros/itens-compra/novo.</p></div>
+            <div><strong>Resultado</strong><p>Registro criado e visível na listagem do módulo.</p></div>
+          </div>
+          
+          <img src="05-itens-compra.png" alt="Cadastro de Itens de Compra" loading="lazy" />
+        </section>
+
+        <section class="step" id="06-itens-comerciais">
+          <div class="step-head">
+            <span>06</span>
+            <div>
+              <h2>Cadastro de Itens Comerciais</h2>
+              <code>http://localhost:3100/cadastros/produtos</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Criar e listar cadastro de itens comerciais usando a tela de cadastro.</p></div>
+            <div><strong>Ação</strong><p>Formulário preenchido e salvo em /cadastros/itens-comerciais/novo.</p></div>
+            <div><strong>Resultado</strong><p>Registro criado e visível na listagem do módulo.</p></div>
+          </div>
+          
+          <img src="06-itens-comerciais.png" alt="Cadastro de Itens Comerciais" loading="lazy" />
+        </section>
+
+        <section class="step" id="07-disponibilidade">
+          <div class="step-head">
+            <span>07</span>
+            <div>
+              <h2>Disponibilidade Comercial</h2>
+              <code>http://localhost:3100/comercial/disponibilidade</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Validar saldo virtual gerado a partir de compra programada confirmada.</p></div>
+            <div><strong>Ação</strong><p>Regra de desdobramento e compra confirmada foram criadas via API; a consulta foi feita em tela.</p></div>
+            <div><strong>Resultado</strong><p>A disponibilidade do item comercial aparece para a data operacional escolhida.</p></div>
+          </div>
+          <p class="note">Compra programada ainda não possui tela dedicada; por isso foi preparada via API autenticada.</p>
+          <img src="07-disponibilidade.png" alt="Disponibilidade Comercial" loading="lazy" />
+        </section>
+
+        <section class="step" id="08-pedido">
+          <div class="step-head">
+            <span>08</span>
+            <div>
+              <h2>Pedido de Venda</h2>
+              <code>http://localhost:3100/comercial/pedidos</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Criar pedido com reserva de saldo virtual.</p></div>
+            <div><strong>Ação</strong><p>Preenchimento manual dos IDs técnicos exigidos pela tela atual.</p></div>
+            <div><strong>Resultado</strong><p>Pedido criado com status rascunho.</p></div>
+          </div>
+          <p class="note">A UX atual ainda exige UUIDs; o relatório registra esse ponto para evolução posterior.</p>
+          <img src="08-pedido.png" alt="Pedido de Venda" loading="lazy" />
+        </section>
+
+        <section class="step" id="09-recebimento">
+          <div class="step-head">
+            <span>09</span>
+            <div>
+              <h2>Recebimento e Balança</h2>
+              <code>http://localhost:3100/recebimento/pesagem-destinacao?recebimentoId=019fad15-e082-769d-be0a-d0e611c48c59</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Criar lote de recebimento pela tela vigente e encaminhar para a balança.</p></div>
+            <div><strong>Ação</strong><p>Pedido ao Fornecedor PF-E2E-20260729085454-3-1785315316707 foi selecionado e a NF-e informada no novo recebimento.</p></div>
+            <div><strong>Resultado</strong><p>Lote criado e aberto na tela de Pesagem e Destinação.</p></div>
+          </div>
+          
+          <img src="09-recebimento.png" alt="Recebimento e Balança" loading="lazy" />
+        </section>
+
+        <section class="step" id="10-pesagem-associada">
+          <div class="step-head">
+            <span>10</span>
+            <div>
+              <h2>Pesagem, Associação e Etiqueta</h2>
+              <code>http://localhost:3100/recebimento/pesagem-destinacao?recebimentoId=019fad15-e082-769d-be0a-d0e611c48c59</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Capturar peso automático, aceitar sugestão e emitir etiqueta QR.</p></div>
+            <div><strong>Ação</strong><p>Peça pesada pelo gateway fake, associada ao item do pedido e etiquetada.</p></div>
+            <div><strong>Resultado</strong><p>Peça ficou elegível para expedição.</p></div>
+          </div>
+          
+          <img src="10-pesagem-associada.png" alt="Pesagem, Associação e Etiqueta" loading="lazy" />
+        </section>
+
+        <section class="step" id="11-pesagem-para-corte">
+          <div class="step-head">
+            <span>11</span>
+            <div>
+              <h2>Handoff para Desossa</h2>
+              <code>http://localhost:3100/recebimento/pesagem-destinacao?recebimentoId=019fad15-e082-769d-be0a-d0e611c48c59</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Provar o último estado real da Onda 4 antes da Desossa.</p></div>
+            <div><strong>Ação</strong><p>A segunda peça foi pesada e destinada à Desossa pela UI; a API canônica foi relida.</p></div>
+            <div><strong>Resultado</strong><p>Peça confirmada em para_corte na UI e na API. A continuação pertence à Onda 7.</p></div>
+          </div>
+          
+          <img src="11-pesagem-para-corte.png" alt="Handoff para Desossa" loading="lazy" />
+        </section>
+  </main>
+</body>
+</html>

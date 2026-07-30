@@ -37,15 +37,24 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
   it('emite recebimento_iniciado APÓS o commit', async () => {
     const { service, emitSpy, ordem, db } = montar(async () => ({
       recebimento: { id: 'r1', operacaoId: 'op1', pedidoFornecedorId: 'pf1' },
-      jaIniciado: false,
+      nfId: null,
     }));
-    db.select = jest.fn()
-      .mockReturnValueOnce({
-        from: () => ({ where: () => ({ then: (cb: (r: unknown[]) => unknown) => cb([{ data: '2026-06-06' }]) }) }),
-      })
-      .mockReturnValueOnce({
-        from: () => ({ where: () => ({ then: (cb: (r: unknown[]) => unknown) => cb([{ id: 'c1' }]) }) }),
-      });
+    const chain = {
+      from: jest.fn(),
+      innerJoin: jest.fn(),
+      where: jest.fn(),
+      limit: jest.fn(),
+      then: (cb: (r: unknown[]) => unknown) => cb([{
+        recebimento: { id: 'r1', operacaoId: 'op1', pedidoFornecedorId: 'pf1', status: 'pesagem_em_andamento' },
+        compraProgramadaId: 'c1',
+        dataOperacao: '2026-06-06',
+      }]),
+    };
+    chain.from.mockReturnValue(chain);
+    chain.innerJoin.mockReturnValue(chain);
+    chain.where.mockReturnValue(chain);
+    chain.limit.mockReturnValue(chain);
+    db.select = jest.fn().mockReturnValue(chain);
 
     await service.iniciar({ pedidoFornecedorId: '019ea000-0000-7000-8000-000000000001' } as never, 'user-1');
 
@@ -59,15 +68,24 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
   it('emite recebimento_iniciado também em reabertura (N lotes por PF)', async () => {
     const { service, emitSpy, db } = montar(async () => ({
       recebimento: { id: 'r2', operacaoId: 'op1', pedidoFornecedorId: 'pf1', status: 'pesagem_em_andamento' },
-      jaIniciado: false,
+      nfId: null,
     }));
-    db.select = jest.fn()
-      .mockReturnValueOnce({
-        from: () => ({ where: () => ({ then: (cb: (r: unknown[]) => unknown) => cb([{ data: '2026-06-06' }]) }) }),
-      })
-      .mockReturnValueOnce({
-        from: () => ({ where: () => ({ then: (cb: (r: unknown[]) => unknown) => cb([{ id: 'c1' }]) }) }),
-      });
+    const chain = {
+      from: jest.fn(),
+      innerJoin: jest.fn(),
+      where: jest.fn(),
+      limit: jest.fn(),
+      then: (cb: (r: unknown[]) => unknown) => cb([{
+        recebimento: { id: 'r2', operacaoId: 'op1', pedidoFornecedorId: 'pf1', status: 'pesagem_em_andamento' },
+        compraProgramadaId: 'c1',
+        dataOperacao: '2026-06-06',
+      }]),
+    };
+    chain.from.mockReturnValue(chain);
+    chain.innerJoin.mockReturnValue(chain);
+    chain.where.mockReturnValue(chain);
+    chain.limit.mockReturnValue(chain);
+    db.select = jest.fn().mockReturnValue(chain);
 
     await service.iniciar({ pedidoFornecedorId: '019ea000-0000-7000-8000-000000000001' } as never, 'user-1');
     expect(emitSpy).toHaveBeenCalledWith(
@@ -84,6 +102,30 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
     await expect(
       service.iniciar({ pedidoFornecedorId: '019ea000-0000-7000-8000-000000000001' } as never, 'user-1'),
     ).rejects.toThrow('falha simulada');
+    expect(emitSpy).not.toHaveBeenCalled();
+  });
+
+  it('contexto pos-commit usa ids e data canonicos e falha fechado antes dos eventos', async () => {
+    const { service, emitSpy, db } = montar(async () => ({
+      recebimento: { id: 'r-sem-contexto', operacaoId: 'op1', pedidoFornecedorId: 'pf1' },
+      nfId: 'nf-interna',
+    }));
+    const chain = {
+      from: jest.fn(),
+      innerJoin: jest.fn(),
+      where: jest.fn(),
+      limit: jest.fn(),
+      then: (cb: (r: unknown[]) => unknown) => cb([]),
+    };
+    chain.from.mockReturnValue(chain);
+    chain.innerJoin.mockReturnValue(chain);
+    chain.where.mockReturnValue(chain);
+    chain.limit.mockReturnValue(chain);
+    db.select = jest.fn().mockReturnValue(chain);
+
+    await expect(
+      service.iniciar({ pedidoFornecedorId: '019ea000-0000-7000-8000-000000000001' } as never, 'user-1'),
+    ).rejects.toThrow('Contexto canônico do recebimento não encontrado após o commit');
     expect(emitSpy).not.toHaveBeenCalled();
   });
 
@@ -205,5 +247,127 @@ describe('RecebimentoService — cálculo de divergente (decimal exato)', () => 
   });
   it('excedente: esperada 0, recebida 5 → 5.000', () => {
     expect(calc('0.000', '5.000')).toBe('5.000');
+  });
+});
+
+describe('RecebimentoService — snapshot canônico do Pedido ao Fornecedor', () => {
+  function chain(rows: unknown[]) {
+    const q = {
+      from: jest.fn(),
+      innerJoin: jest.fn(),
+      leftJoin: jest.fn(),
+      where: jest.fn(),
+      limit: jest.fn(),
+      then: (resolve: (value: unknown[]) => unknown) => resolve(rows),
+    };
+    q.from.mockReturnValue(q);
+    q.innerJoin.mockReturnValue(q);
+    q.leftJoin.mockReturnValue(q);
+    q.where.mockReturnValue(q);
+    q.limit.mockReturnValue(q);
+    return q;
+  }
+
+  const cabecalho = {
+    pedido: {
+      id: 'pf1',
+      numero: 'PF-001',
+      status: 'aguardando_recebimento',
+      fornecedorId: 'f1',
+      operacaoId: 'op1',
+      compraProgramadaId: 'c1',
+    },
+    fornecedorNome: 'Fornecedor Canônico',
+    dataOperacao: '2026-07-29',
+    numeroInternoCompra: 'PC-001',
+    observacoesCompra: null,
+  };
+  const itemSnapshot = {
+    itemComercialId: 'i1',
+    produtoCodigo: 'TZ',
+    produtoDescricao: 'Traseiro',
+    quantidadePrevista: '12.000',
+    pesoPrevisto: '850.000',
+  };
+  const snapshotSelects = (): unknown[][] => [
+    [cabecalho],
+    [itemSnapshot],
+    [{ id: 'i1', codigo: 'TZ', unidadeComercial: 'peca' }],
+    [{ itemComercialId: 'i1', passaBalanca: true }],
+    [{ itemComercialId: 'i1', itemComercialCodigo: 'TZ', itemCompraDescricao: 'Boi' }],
+    [{ descricao: 'Boi', quantidade: '99.000' }],
+    [{ categoria: 'Boi' }],
+  ];
+
+  function serviceCom(db: Record<string, unknown>) {
+    return new RecebimentoService(
+      { db } as never,
+      { registrar: jest.fn() } as never,
+      new EventEmitter2(),
+      { listarEsperadoDaCompra: jest.fn(() => [{ itemComercialId: 'i1', quantidadeTotalGerada: '99.000' }]) } as never,
+      {} as never,
+      {} as never,
+    );
+  }
+
+  it('preview e inicio usam o snapshot imutavel do Pedido ao Fornecedor', async () => {
+    const previewRows = snapshotSelects();
+    const previewDb = {
+      select: jest.fn(() => chain(previewRows.shift() ?? [])),
+    };
+    const preview = await serviceCom(previewDb).previsaoDoPedidoFornecedor('pf1');
+    expect(preview.itensOperacionais[0]).toEqual(expect.objectContaining({
+      quantidadePrevista: '12.000',
+      pesoPrevisto: '850.000',
+    }));
+
+    const inicioRows = snapshotSelects();
+    inicioRows.push([{
+      recebimento: {
+        id: 'r1',
+        pedidoFornecedorId: 'pf1',
+        operacaoId: 'op1',
+        status: 'pesagem_em_andamento',
+      },
+      compraProgramadaId: 'c1',
+      dataOperacao: '2026-07-29',
+    }]);
+    const itensInseridos: Array<Record<string, unknown>> = [];
+    const insert = jest.fn()
+      .mockImplementationOnce(() => ({
+        values: () => ({ returning: async () => [{
+          id: 'r1',
+          pedidoFornecedorId: 'pf1',
+          operacaoId: 'op1',
+          status: 'pesagem_em_andamento',
+        }] }),
+      }))
+      .mockImplementationOnce(() => ({
+        values: async (values: Array<Record<string, unknown>>) => {
+          itensInseridos.push(...values);
+        },
+      }));
+    const inicioDb: Record<string, unknown> = {
+      select: jest.fn(() => chain(inicioRows.shift() ?? [])),
+      insert,
+    };
+    inicioDb.transaction = async (callback: (tx: unknown) => unknown) => callback(inicioDb);
+
+    await serviceCom(inicioDb).iniciar({ pedidoFornecedorId: 'pf1' } as never, 'user-1');
+    expect(itensInseridos).toEqual([
+      expect.objectContaining({
+        itemComercialId: 'i1',
+        quantidadeEsperada: '12.000',
+      }),
+    ]);
+    expect(itensInseridos[0]).not.toHaveProperty('pesoEsperado');
+  });
+
+  it('snapshot incompleto falha sem fabricar codigo ou descricao', async () => {
+    const rows = snapshotSelects();
+    rows[2] = [];
+    const db = { select: jest.fn(() => chain(rows.shift() ?? [])) };
+    await expect(serviceCom(db).previsaoDoPedidoFornecedor('pf1'))
+      .rejects.toThrow('Pedido ao fornecedor com metadados operacionais incompletos');
   });
 });

@@ -38,6 +38,20 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
 
   const srv = () => app.getHttpServer();
 
+  /** Onda 4 / AD-03: pedido aberto é único por (cliente, item, operação); cenários de
+   * déficit coletivo com 2 pedidos do mesmo item precisam de clientes distintos. */
+  async function criarOutroCliente(): Promise<string> {
+    const { db } = app.get<{ db: Db }>(DRIZZLE);
+    const sufixo = `${Math.round(performance.now() * 1000)}-${Math.floor(Math.random() * 1e6)}`;
+    const [cliente] = await db.insert(schema.clientes).values({
+      codigo: `CLIREC-${sufixo}`,
+      razaoSocial: 'Cliente Recebimento 2',
+      documentoFiscal: `DOCREC-${sufixo}`,
+    }).returning();
+    if (!cliente) throw new Error('Falha ao criar segundo cliente do teste');
+    return cliente.id;
+  }
+
   const divergenciaFalta = {
     tipo: 'falta',
     descricao: 'Chegou menos que o esperado',
@@ -273,12 +287,14 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
   it('déficit COLETIVO: 2 pedidos × 6, recebido 10 → ambos em risco (Σ reservas > recebido)', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-17', quantidade: 12 });
-    // 2 pedidos de 6 (Σ reservado = 12). Nenhum pedido isolado excede o recebido (10).
-    for (let i = 0; i < 2; i++) {
+    // 2 pedidos de 6 (Σ reservado = 12), de clientes distintos (AD-03 — Onda 4). Nenhum
+    // pedido isolado excede o recebido (10).
+    const outroClienteId = await criarOutroCliente();
+    for (const clienteId of [base.clienteId, outroClienteId]) {
       const p = await request(srv())
         .post('/comercial/pedidos')
         .set('Cookie', comercialCookies)
-        .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-17', itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }] });
+        .send({ compraProgramadaId: compraId, clienteId, dataOperacao: '2026-11-17', itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }] });
       expect(p.status).toBe(201);
     }
 
@@ -410,17 +426,87 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     expect(res.status).toBe(200);
   });
 
-  it('GET previsao da compra confirmada retorna itens operacionais readonly', async () => {
+  it('preview e inicio de recebimento usam exclusivamente o Pedido ao Fornecedor', async () => {
     const base = await seedComercialBase(app, { fator: 4 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-21', quantidade: 10 });
+    const pedidoFornecedorId = await criarPedidoFornecedorEnviado(app, comprasCookies, compraId);
 
-    const res = await request(srv())
-      .get(`/operacao/recebimentos/previsao/${compraId}`)
+    const preview = await request(srv())
+      .get(`/operacao/recebimentos/previsao/${pedidoFornecedorId}`)
       .set('Cookie', recebimentoCookies);
-    expect(res.status).toBe(200);
-    expect(res.body.itensOperacionais).toHaveLength(1);
-    expect(Number(res.body.itensOperacionais[0].quantidadePrevista)).toBe(40);
-    expect(res.body.jaPossuiRecebimento).toBe(false);
+    expect(preview.status).toBe(200);
+    expect(preview.body.pedidoFornecedorId).toBe(pedidoFornecedorId);
+    expect(preview.body.itensOperacionais).toHaveLength(1);
+    expect(Number(preview.body.itensOperacionais[0].quantidadePrevista)).toBe(40);
+    expect(preview.body).not.toHaveProperty('jaPossuiRecebimento');
+
+    const ausente = await request(srv())
+      .get('/operacao/recebimentos/previsao/019ea000-0000-7000-8000-000000000999')
+      .set('Cookie', recebimentoCookies);
+    expect(ausente.status).toBe(404);
+    expect(ausente.body.message.message).toBe('Pedido ao fornecedor não encontrado');
+
+    const compraRascunhoPf = await criarCompraConfirmada(
+      app,
+      comprasCookies,
+      base,
+      { dataOperacao: '2026-12-21', quantidade: 2 },
+    );
+    const pfRascunho = await request(srv())
+      .post('/operacao/pedidos-fornecedor')
+      .set('Cookie', comprasCookies)
+      .send({ compraProgramadaId: compraRascunhoPf })
+      .expect(201);
+    const estadoInvalido = await request(srv())
+      .get(`/operacao/recebimentos/previsao/${pfRascunho.body.id}`)
+      .set('Cookie', recebimentoCookies);
+    expect(estadoInvalido.status).toBe(409);
+    expect(estadoInvalido.body.message.message).toBe(
+      'Pedido ao fornecedor não está aguardando recebimento',
+    );
+
+    const compraSemItens = await criarCompraConfirmada(
+      app,
+      comprasCookies,
+      base,
+      { dataOperacao: '2026-12-22', quantidade: 3 },
+    );
+    const pfSemItens = await criarPedidoFornecedorEnviado(app, comprasCookies, compraSemItens);
+    const { db } = app.get<{ db: Db }>(DRIZZLE);
+    await db.update(schema.pedidosFornecedorItens)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.pedidosFornecedorItens.pedidoFornecedorId, pfSemItens));
+    const semItens = await request(srv())
+      .get(`/operacao/recebimentos/previsao/${pfSemItens}`)
+      .set('Cookie', recebimentoCookies);
+    expect(semItens.status).toBe(409);
+    expect(semItens.body.message.message).toBe(
+      'Pedido ao fornecedor sem itens operacionais previstos',
+    );
+
+    const legado = await request(srv())
+      .post('/operacao/recebimentos')
+      .set('Cookie', recebimentoCookies)
+      .send({ compraProgramadaId: compraId });
+    expect(legado.status).toBe(400);
+    expect(legado.body.message.message).toBe('Validação falhou');
+    expect(JSON.stringify(legado.body.message.errors)).toContain('pedidoFornecedorId');
+    expect(JSON.stringify(legado.body.message.errors)).toContain('compraProgramadaId');
+
+    const inicio = await request(srv())
+      .post('/operacao/recebimentos')
+      .set('Cookie', recebimentoCookies)
+      .send({ pedidoFornecedorId });
+    expect(inicio.status).toBe(201);
+    expect(Object.keys(inicio.body).sort()).toEqual(['jaIniciado', 'recebimento']);
+    expect(inicio.body).not.toHaveProperty('nfId');
+    expect(inicio.body.jaIniciado).toBe(false);
+    expect(inicio.body.recebimento.pedidoFornecedorId).toBe(pedidoFornecedorId);
+
+    const itens = await db.select().from(schema.recebimentosItens)
+      .where(eq(schema.recebimentosItens.recebimentoId, inicio.body.recebimento.id));
+    expect(itens).toHaveLength(1);
+    expect(Number(itens[0]?.quantidadeEsperada)).toBe(40);
   });
 
   it('iniciar via Pedido ao Fornecedor → status pesagem_em_andamento', async () => {
@@ -450,7 +536,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     expect(res.status).toBe(400);
   });
 
-  it('GET previsao compra rascunho → 409', async () => {
+  it('GET previsao por id que não é Pedido ao Fornecedor → 404', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const criar = await request(srv())
       .post('/comercial/compras-programadas')
@@ -459,7 +545,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const res = await request(srv())
       .get(`/operacao/recebimentos/previsao/${criar.body.id}`)
       .set('Cookie', recebimentoCookies);
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(404);
   });
 
   it('PATCH nfe em lote aberto → 200 e reflete no detalhe', async () => {

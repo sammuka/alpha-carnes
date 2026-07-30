@@ -126,7 +126,6 @@ export const clientesConfig: CadastroConfig = {
       aba: 'gerais',
     },
     { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes, aba: 'gerais' },
-    { nome: 'rotaPadrao', rotulo: 'Rota padrão', tipo: 'text', aba: 'gerais' },
     {
       nome: 'representanteId',
       rotulo: 'Representante (UUID)',
@@ -234,7 +233,6 @@ export const clientesConfig: CadastroConfig = {
     nomeFantasia: z.string().optional(),
     documentoFiscal: z.string().regex(documentoRegex, documentoMsg),
     status: z.enum(['ativo', 'inativo']).optional(),
-    rotaPadrao: z.string().optional(),
     representanteId: z.string().uuid().optional().or(z.literal('')),
     prioridade: z.string().optional(),
     observacoesOperacionais: z.string().optional(),

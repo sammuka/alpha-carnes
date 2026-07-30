@@ -4,14 +4,29 @@ export const criarPedidoFornecedorSchema = z.object({
   compraProgramadaId: z.string().uuid(),
 });
 
-export const listarPedidosFornecedorSchema = z.object({
-  status: z.enum([
-    'rascunho', 'enviado', 'aguardando_recebimento', 'recebido', 'encerrado', 'cancelado',
-  ]).optional(),
-  operacaoId: z.string().uuid(), // obrigatório: nenhuma consulta operacional cruza Operações implicitamente
+const statusPedidoFornecedorSchema = z.enum([
+  'rascunho', 'enviado', 'aguardando_recebimento',
+  'recebido', 'encerrado', 'cancelado',
+]);
+const paginaPedidoFornecedorSchema = {
   pagina: z.coerce.number().int().positive().default(1),
   limite: z.coerce.number().int().min(1).max(100).default(20),
-});
+};
+
+export const listarPedidosFornecedorSchema = z.union([
+  z.object({
+    operacaoId: z.string().uuid(),
+    status: statusPedidoFornecedorSchema.optional(),
+    elegiveisRecebimento: z.never().optional(),
+    ...paginaPedidoFornecedorSchema,
+  }).strict(),
+  z.object({
+    elegiveisRecebimento: z.literal('true').transform(() => true as const),
+    operacaoId: z.never().optional(),
+    status: z.never().optional(),
+    ...paginaPedidoFornecedorSchema,
+  }).strict(),
+]);
 
 export const registrarNfSchema = z.object({
   numero: z.string().trim().min(1).max(60),

@@ -50,6 +50,10 @@ export const EVENTOS = {
   NFSE_EMITIDA: 'nfse_emitida',
   NFSE_CANCELADA: 'nfse_cancelada',
   NFSE_ERRO_EMISSAO: 'nfse_erro_emissao',
+  // ── Onda 4 — Comercial ────────────────────────────────────────────────────
+  ADENDO_REGISTRADO: 'adendo_registrado',
+  RESERVA_LIBERADA_ADMIN: 'reserva_liberada_admin',
+  TABELA_PRECO_PUBLICADA: 'tabela_preco_publicada',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -278,6 +282,7 @@ export interface NfseErroEmissaoPayload {
 
 /** Contratos tipados dos eventos Onda 1 (PayloadPorEvento). */
 export interface PayloadPorEvento {
+  reserva_disponibilidade_atualizada: ReservaAtualizadaPayload;
   operacao_criada: { operacaoId: string; data: string };
   overbooking_confirmado: {
     pedidoVendaId: string;
@@ -317,4 +322,18 @@ export interface PayloadPorEvento {
     statusAnterior: string;
     statusAtual: string;
   };
+  // ── Onda 4 — Comercial ────────────────────────────────────────────────────
+  adendo_registrado: {
+    adendoId: string;
+    pedidoVendaId: string;
+    itemComercialId: string;
+    quantidadeAdicionada: string;
+    origemConsumo: 'fisico' | 'virtual' | 'overbooking';
+  };
+  reserva_liberada_admin: {
+    pedidoVendaId: string;
+    autorId: string;
+    justificativa: string;
+  };
+  tabela_preco_publicada: { tabelaPrecoId: string; data: string; autorId: string };
 }

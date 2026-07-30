@@ -7,6 +7,7 @@ import * as schema from './schema';
 import { DESCRICOES_PERMISSOES, MAPA_PERFIL_PERMISSOES } from '../common/rbac/permissoes';
 import { MENUS_VISIVEIS_POR_PERFIL } from '../common/rbac/menus-canonicos';
 import { modelosEtiqueta, parametros, perfis } from './schema';
+import { seedCatalogoMvp } from './seed-catalogo-mvp';
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -262,6 +263,9 @@ export async function seed() {
     await seedParametros(db);
     await seedModelosEtiqueta(db);
     console.log('✅ Menus visíveis, parâmetros e modelos de etiqueta reconciliados');
+
+    await seedCatalogoMvp(db);
+    console.log('✅ Catálogo MVP (11 pares) semeado — Provisório P11');
 
     // 4. Inserir usuário admin
     const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@alphacarnes.local';

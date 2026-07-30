@@ -26,3 +26,5 @@ export * from './regras-transformacao.schema';
 export * from './transformacoes.schema';
 export * from './expedicao.schema';
 export * from './faturamento.schema';
+export * from './adendos-pedido.schema';
+export * from './tabelas-preco.schema';

@@ -3,12 +3,13 @@ import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { clientes } from '../../../database/schema';
+import { clientes, representantes, rotas } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { calcularRange, montarPaginado, primeiroOuFalha, type ListarQuery, type Paginado } from '../../../common/crud/paginacao';
 import type { CreateClienteDto, UpdateClienteDto } from './dto/cliente.dto';
 
 type Cliente = typeof clientes.$inferSelect;
+type ClienteComVinculos = Cliente & { rotaNome: string | null; representanteNome: string | null };
 
 @Injectable()
 export class ClientesService {
@@ -22,7 +23,7 @@ export class ClientesService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<Cliente>> {
+  async listar(query: ListarQuery): Promise<Paginado<Cliente> & { totalAtivos: number }> {
     const { limit, offset } = calcularRange(query);
     const filtros = [query.incluirRemovidos ? undefined : isNull(clientes.deletedAt)];
     if (query.search) {
@@ -38,18 +39,34 @@ export class ClientesService {
     }
     const where = and(...filtros.filter(Boolean));
 
-    const [linhas, totalRow] = await Promise.all([
+    // `totalAtivos` é o badge do cabeçalho (DoD-77): contagem real de clientes ativos,
+    // independente da paginação/busca corrente — por isso não usa `where` acima.
+    const [linhas, totalRow, totalAtivosRow] = await Promise.all([
       this.db.select().from(clientes).where(where).orderBy(desc(clientes.createdAt)).limit(limit).offset(offset),
       this.db.select({ total: sql<number>`count(*)::int` }).from(clientes).where(where),
+      this.db.select({ total: sql<number>`count(*)::int` }).from(clientes)
+        .where(and(eq(clientes.status, 'ativo'), isNull(clientes.deletedAt))),
     ]);
 
-    return montarPaginado(linhas, totalRow[0]?.total ?? 0, query);
+    return {
+      ...montarPaginado(linhas, totalRow[0]?.total ?? 0, query),
+      totalAtivos: totalAtivosRow[0]?.total ?? 0,
+    };
   }
 
-  async detalhar(id: string): Promise<Cliente> {
+  async detalhar(id: string): Promise<ClienteComVinculos> {
     const cliente = await this.buscarAtivo(id);
     if (!cliente) throw new NotFoundException('Cliente não encontrado');
-    return cliente;
+
+    // Nome da rota e do representante para a tela (D23) — join só na leitura de detalhe.
+    const [vinculos] = await this.db
+      .select({ rotaNome: rotas.nome, representanteNome: representantes.nome })
+      .from(clientes)
+      .leftJoin(rotas, eq(rotas.id, clientes.rotaId))
+      .leftJoin(representantes, eq(representantes.id, clientes.representanteId))
+      .where(eq(clientes.id, id));
+
+    return { ...cliente, rotaNome: vinculos?.rotaNome ?? null, representanteNome: vinculos?.representanteNome ?? null };
   }
 
   async criar(dto: CreateClienteDto, usuarioId: string): Promise<Cliente> {
@@ -65,8 +82,8 @@ export class ClientesService {
             nomeFantasia: dto.nomeFantasia,
             documentoFiscal: dto.documentoFiscal,
             status: dto.status,
-            rotaPadrao: dto.rotaPadrao,
             representanteId: dto.representanteId,
+            rotaId: dto.rotaId,
             prioridade: dto.prioridade,
             preferenciasJson: dto.preferenciasJson ?? {},
             dadosFiscaisJson: dto.dadosFiscaisJson ?? {},
@@ -105,8 +122,8 @@ export class ClientesService {
             nomeFantasia: dto.nomeFantasia ?? anterior.nomeFantasia,
             documentoFiscal: dto.documentoFiscal ?? anterior.documentoFiscal,
             status: dto.status ?? anterior.status,
-            rotaPadrao: dto.rotaPadrao ?? anterior.rotaPadrao,
             representanteId: dto.representanteId ?? anterior.representanteId,
+            rotaId: dto.rotaId !== undefined ? dto.rotaId : anterior.rotaId,
             prioridade: dto.prioridade ?? anterior.prioridade,
             preferenciasJson: dto.preferenciasJson ?? anterior.preferenciasJson,
             dadosFiscaisJson: dto.dadosFiscaisJson ?? anterior.dadosFiscaisJson,
