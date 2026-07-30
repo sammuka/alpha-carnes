@@ -562,6 +562,7 @@ export class OverbookingService {
       clienteId: pendencia.clienteId,
       dataOperacao: destino.data,
       observacoesGerais: motivo,
+      salvarComoRascunho: false,
       itens: [{
         itemComercialId: pendencia.itemComercialId,
         quantidadePedida: Number(dto.quantidade),

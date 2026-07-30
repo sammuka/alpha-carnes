@@ -79,8 +79,6 @@ export type EventoDominio<N extends keyof PayloadPorEvento = keyof PayloadPorEve
   [K in N]: { nome: K; payload: PayloadPorEvento[K] };
 }[N];
 
-export type { EventoDominio };
-
 function ehDuplicidadeDeItemNoPedido(error: unknown): boolean {
   const pg = error as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
   const code = pg.code ?? pg.cause?.code;
@@ -565,11 +563,24 @@ export class PedidosService {
     if (!pedido.operacaoId) {
       throw new ConflictException('Pedido sem operação não pode gerar overbooking');
     }
+    if (!dataOperacao) {
+      const [operacao] = await tx.select({ data: operacoes.data })
+        .from(operacoes)
+        .where(eq(operacoes.id, pedido.operacaoId))
+        .limit(1);
+      dataOperacao = operacao?.data;
+    }
     await this.abrirOuAcumularReservaOverbooking(tx, item.id, alocacao.deficit);
-    const pendenciaId = await this.abrirOuAcumularPendencia(tx, pedido, item, alocacao.deficit, usuarioId);
+    const pendencia = await this.abrirOuAcumularPendencia(tx, pedido, item, alocacao.deficit, usuarioId);
     eventos.push({
       nome: EVENTOS.PENDENCIA_OVERBOOKING_ABERTA,
-      payload: { pendenciaId, pedidoVendaId: pedido.id },
+      payload: {
+        pendenciaId: pendencia.id,
+        pedidoVendaId: pedido.id,
+        operacaoId: pedido.operacaoId,
+        dataOperacao: dataOperacao ?? '',
+        status: pendencia.status,
+      },
     });
     eventos.push({
       nome: EVENTOS.OVERBOOKING_CONFIRMADO,
@@ -630,7 +641,7 @@ export class PedidosService {
     item: PedidoVendaItem,
     deficit: string,
     usuarioId: string,
-  ): Promise<string> {
+  ): Promise<{ id: string; status: string }> {
     const [aberta] = await tx.select().from(pendenciasOverbooking)
       .where(and(
         eq(pendenciasOverbooking.pedidoVendaItemId, item.id),
@@ -650,7 +661,7 @@ export class PedidosService {
         autorId: usuarioId,
         detalheJson: { deficitAdicionado: deficit, deficitTotal: acumulado },
       });
-      return aberta.id;
+      return { id: aberta.id, status: aberta.status };
     }
     const [pendencia] = await tx.insert(pendenciasOverbooking).values({
       pedidoVendaId: pedido.id, pedidoVendaItemId: item.id,
@@ -662,7 +673,7 @@ export class PedidosService {
     await tx.insert(pendenciasOverbookingHistorico).values({
       pendenciaId: pendencia.id, acao: 'confirmada_pelo_vendedor', autorId: usuarioId,
     });
-    return pendencia.id;
+    return { id: pendencia.id, status: pendencia.status };
   }
 
   /** Carrega sob lock o pedido que vai receber adendo. Só estados abertos de AD-03 (D7). */
