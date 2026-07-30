@@ -15,7 +15,7 @@
 | 7 | Desossa (painel aeroporto/TV, pesagem c/ exclusividade, etiquetas) | 6 | aprovado_portao2 | [`2026-07-30-onda7-desossa.md`](../superpowers/plans/2026-07-30-onda7-desossa.md) | [#38](https://github.com/sammuka/alpha-carnes/pull/38) | `e73aa82` | Portão 2 aprovado (SHA `e73aa82`), CI GitHub Actions 8/8 verde |
 | 8 | Estoque (consulta FIFO, entrada, ajustes) | 7 | aprovado_portao2 | [`2026-07-30-onda8-estoque.md`](../superpowers/plans/2026-07-30-onda8-estoque.md) | [#39](https://github.com/sammuka/alpha-carnes/pull/39) | `8b6cbe4` | Portão 2 aprovado (SHA `8b6cbe4`), CI GitHub Actions 8/8 verde |
 | 9 | Carga (planejamento, conferência, enviar p/ faturamento) | 7 | aprovado_portao2 | [`2026-07-30-onda9-carga.md`](../superpowers/plans/2026-07-30-onda9-carga.md) | [#40](https://github.com/sammuka/alpha-carnes/pull/40) | `60326c7` | Portão 2 aprovado (SHA `60326c7`), CI GitHub Actions 8/8 verde |
-| 10 | Faturamento (adapter EISS real + RTC, Notas/XML, Seguro F6b, Liberação c/ checklist) | 8, 9 | planejando | just-in-time | — | — | Elaborando plano tático (Portão 1) |
+| 10 | Faturamento (adapter EISS real + RTC, Notas/XML, Seguro F6b, Liberação c/ checklist) | 8, 9 | aprovado_portao2 | [`2026-07-30-onda10-faturamento.md`](../superpowers/plans/2026-07-30-onda10-faturamento.md) | [#41](https://github.com/sammuka/alpha-carnes/pull/41) | `bb7530d` | Portão 2 aprovado (SHA `bb7530d`), CI GitHub Actions 8/8 verde |
 
 ## Histórico pré-pipeline (fases F1–F6a — concluídas sob o framework anterior)
 
