@@ -155,3 +155,148 @@ describe('PedidosService — branches de conflito', () => {
     expect(plano[0]?.coberturas).toEqual([]);
   });
 });
+
+describe('PedidosService — aplicarAlocacaoNoItem', () => {
+  const auditoria = { registrar: jest.fn() };
+  const emitter = new EventEmitter2();
+
+  function service() {
+    return new PedidosService({ db: {} } as never, auditoria as never, emitter, {} as never);
+  }
+
+  const pedido = { id: 'p1', operacaoId: 'op1', clienteId: 'c1' } as never;
+  const item = { id: 'pi1', itemComercialId: 'ic1' } as never;
+
+  it('emite RESERVA_ATUALIZADA para cada cobertura virtual', async () => {
+    const tx = {
+      select: jest.fn(() => ({
+        from: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([{ data: '2026-06-06' }]),
+          }),
+        }),
+      })),
+      execute: jest.fn().mockResolvedValue({
+        rows: [{ id: 'd1', quantidade_reservada: '4.000', quantidade_disponivel: '0.000' }],
+      }),
+      insert: jest.fn(() => ({ values: () => Promise.resolve(undefined) })),
+    };
+
+    const eventos = await service().aplicarAlocacaoNoItem(
+      tx as never,
+      pedido,
+      item,
+      {
+        itemComercialId: 'ic1',
+        quantidadeSolicitada: '4.000',
+        disponivelAntes: '4.000',
+        coberturas: [{ disponibilidadeId: 'd1', quantidade: '4.000' }],
+        deficit: '0.000',
+      },
+      'user-1',
+    );
+
+    expect(eventos).toEqual([{
+      nome: EVENTOS.RESERVA_ATUALIZADA,
+      payload: {
+        disponibilidadeId: 'd1',
+        itemComercialId: 'ic1',
+        dataOperacao: '2026-06-06',
+        quantidadeReservada: '4.000',
+        quantidadeDisponivel: '0.000',
+      },
+    }]);
+  });
+
+  it('acumula reserva overbooking ativa em vez de inserir nova linha', async () => {
+    const reservaAtiva = {
+      id: 'ro1',
+      pedidoVendaItemId: 'pi1',
+      tipoConsumo: 'overbooking',
+      status: 'ativa',
+      quantidadeReservada: '97.000',
+    };
+    const updateSet = jest.fn(() => ({ where: () => Promise.resolve(undefined) }));
+    let selectCall = 0;
+    const tx = {
+      select: jest.fn(() => {
+        selectCall += 1;
+        const rows = selectCall === 1 ? [reservaAtiva] : [];
+        return {
+          from: () => ({
+            where: () => ({
+              for: () => ({
+                limit: () => Promise.resolve(rows),
+              }),
+            }),
+          }),
+        };
+      }),
+      update: jest.fn(() => ({ set: updateSet })),
+      insert: jest.fn(() => ({
+        values: () => ({
+          returning: () => Promise.resolve([{ id: 'pend1' }]),
+        }),
+      })),
+    };
+
+    const eventos = await service().aplicarAlocacaoNoItem(
+      tx as never,
+      pedido,
+      item,
+      {
+        itemComercialId: 'ic1',
+        quantidadeSolicitada: '10.000',
+        disponivelAntes: '0.000',
+        coberturas: [],
+        deficit: '10.000',
+      },
+      'user-1',
+    );
+
+    expect(tx.insert).toHaveBeenCalledTimes(2);
+    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({
+      quantidadeReservada: '107.000',
+    }));
+    expect(eventos.some((e) => e.nome === EVENTOS.OVERBOOKING_CONFIRMADO)).toBe(true);
+  });
+
+  it('insere reserva overbooking quando não há linha ativa', async () => {
+    const insertValues = jest.fn(() => ({
+      returning: () => Promise.resolve([{ id: 'pend1' }]),
+    }));
+    const tx = {
+      select: jest.fn(() => ({
+        from: () => ({
+          where: () => ({
+            for: () => ({
+              limit: () => Promise.resolve([]),
+            }),
+          }),
+        }),
+      })),
+      insert: jest.fn(() => ({ values: insertValues })),
+    };
+
+    await service().aplicarAlocacaoNoItem(
+      tx as never,
+      pedido,
+      item,
+      {
+        itemComercialId: 'ic1',
+        quantidadeSolicitada: '5.000',
+        disponivelAntes: '0.000',
+        coberturas: [],
+        deficit: '5.000',
+      },
+      'user-1',
+    );
+
+    expect(insertValues).toHaveBeenCalledWith(expect.objectContaining({
+      pedidoVendaItemId: 'pi1',
+      quantidadeReservada: '5.000',
+      tipoConsumo: 'overbooking',
+      status: 'ativa',
+    }));
+  });
+});

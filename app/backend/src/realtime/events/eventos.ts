@@ -282,6 +282,7 @@ export interface NfseErroEmissaoPayload {
 
 /** Contratos tipados dos eventos Onda 1 (PayloadPorEvento). */
 export interface PayloadPorEvento {
+  reserva_disponibilidade_atualizada: ReservaAtualizadaPayload;
   operacao_criada: { operacaoId: string; data: string };
   overbooking_confirmado: {
     pedidoVendaId: string;

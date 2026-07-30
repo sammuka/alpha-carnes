@@ -17,6 +17,7 @@ import {
   pedidosVenda,
   pedidosVendaItens,
   representantes,
+  operacoes,
   reservasDisponibilidade,
   rotas,
 } from '../../../database/schema';
@@ -494,8 +495,20 @@ export class PedidosService {
     usuarioId: string,
   ): Promise<EventoDominio[]> {
     const eventos: EventoDominio[] = [];
+    let dataOperacao: string | undefined;
+    if (alocacao.coberturas.length > 0 && pedido.operacaoId) {
+      const [operacao] = await tx.select({ data: operacoes.data })
+        .from(operacoes)
+        .where(eq(operacoes.id, pedido.operacaoId))
+        .limit(1);
+      dataOperacao = operacao?.data;
+    }
     for (const cobertura of alocacao.coberturas) {
-      const atualizada = await tx.execute<{ id: string }>(sql`
+      const atualizada = await tx.execute<{
+        id: string;
+        quantidade_reservada: string;
+        quantidade_disponivel: string;
+      }>(sql`
         UPDATE disponibilidades_virtuais
         SET quantidade_reservada=quantidade_reservada+${cobertura.quantidade}::numeric,
             quantidade_disponivel=quantidade_disponivel-${cobertura.quantidade}::numeric,
@@ -505,7 +518,7 @@ export class PedidosService {
             END
         WHERE id=${cobertura.disponibilidadeId}
           AND quantidade_disponivel >= ${cobertura.quantidade}::numeric
-        RETURNING id
+        RETURNING id, quantidade_reservada, quantidade_disponivel
       `);
       if (atualizada.rows.length !== 1) {
         throw new ConflictException('Saldo mudou durante a confirmação; refaça a operação');
@@ -517,19 +530,24 @@ export class PedidosService {
         tipoConsumo: 'virtual',
         status: 'ativa',
       });
+      const linha = atualizada.rows[0]!;
+      eventos.push({
+        nome: EVENTOS.RESERVA_ATUALIZADA,
+        payload: {
+          disponibilidadeId: linha.id,
+          itemComercialId: alocacao.itemComercialId,
+          dataOperacao: dataOperacao ?? '',
+          quantidadeReservada: linha.quantidade_reservada,
+          quantidadeDisponivel: linha.quantidade_disponivel,
+        },
+      });
     }
     if (ehZero(alocacao.deficit)) return eventos;
 
     if (!pedido.operacaoId) {
       throw new ConflictException('Pedido sem operação não pode gerar overbooking');
     }
-    await tx.insert(reservasDisponibilidade).values({
-      disponibilidadeVirtualId: null,
-      pedidoVendaItemId: item.id,
-      quantidadeReservada: alocacao.deficit,
-      tipoConsumo: 'overbooking',
-      status: 'ativa',
-    });
+    await this.abrirOuAcumularReservaOverbooking(tx, item.id, alocacao.deficit);
     const pendenciaId = await this.abrirOuAcumularPendencia(tx, pedido, item, alocacao.deficit, usuarioId);
     eventos.push({
       nome: EVENTOS.PENDENCIA_OVERBOOKING_ABERTA,
@@ -544,6 +562,41 @@ export class PedidosService {
       },
     });
     return eventos;
+  }
+
+  /**
+   * Abre ou acumula a reserva de overbooking do item. Espelha abrirOuAcumularPendencia:
+   * reduzirReservaOverbooking e liberarTodasReservasDoItem operam sobre UMA linha ativa.
+   */
+  private async abrirOuAcumularReservaOverbooking(
+    tx: Tx,
+    itemId: string,
+    deficit: string,
+  ): Promise<void> {
+    const [ativa] = await tx.select().from(reservasDisponibilidade)
+      .where(and(
+        eq(reservasDisponibilidade.pedidoVendaItemId, itemId),
+        eq(reservasDisponibilidade.tipoConsumo, 'overbooking'),
+        eq(reservasDisponibilidade.status, 'ativa'),
+      ))
+      .for('update')
+      .limit(1);
+    if (ativa) {
+      await tx.update(reservasDisponibilidade)
+        .set({
+          quantidadeReservada: somarQtd(ativa.quantidadeReservada, deficit),
+          updatedAt: new Date(),
+        })
+        .where(eq(reservasDisponibilidade.id, ativa.id));
+      return;
+    }
+    await tx.insert(reservasDisponibilidade).values({
+      disponibilidadeVirtualId: null,
+      pedidoVendaItemId: itemId,
+      quantidadeReservada: deficit,
+      tipoConsumo: 'overbooking',
+      status: 'ativa',
+    });
   }
 
   /**

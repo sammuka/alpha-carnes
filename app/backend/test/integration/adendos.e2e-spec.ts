@@ -152,7 +152,8 @@ describe('adendos (adendo com histórico append-only)', () => {
         eq(schema.reservasDisponibilidade.pedidoVendaItemId, itemId),
         eq(schema.reservasDisponibilidade.tipoConsumo, 'overbooking'),
       ));
-    expect(reservasOverbookingApos).toHaveLength(2);
+    expect(reservasOverbookingApos).toHaveLength(1);
+    expect(reservasOverbookingApos[0]?.quantidadeReservada).toBe('107.000');
 
     const pendenciasDoItem = await db.select().from(schema.pendenciasOverbooking)
       .where(eq(schema.pendenciasOverbooking.pedidoVendaItemId, itemId));
