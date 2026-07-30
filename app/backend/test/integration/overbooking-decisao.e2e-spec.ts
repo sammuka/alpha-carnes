@@ -10,6 +10,7 @@ import {
   loginCookies,
 } from '../helpers/test-app';
 import { lerDisponibilidade, seedComercialBase } from '../helpers/comercial-fixtures';
+import { criarOutroCliente } from '../helpers/pesagem-fixtures';
 
 async function lerPendencia(app: INestApplication, id: string) {
   const res = await request(app.getHttpServer())
@@ -74,13 +75,14 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
     base: { clienteId: string; itemComercialId: string },
     dataOperacao: string,
     quantidade: number,
+    clienteId?: string,
   ) {
     const pedido = await request(app.getHttpServer())
       .post('/comercial/pedidos/confirmar-overbooking')
       .set('Cookie', comercialCookies)
       .send({
         compraProgramadaId: compraId,
-        clienteId: base.clienteId,
+        clienteId: clienteId ?? base.clienteId,
         dataOperacao,
         itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: quantidade }],
       })
@@ -208,7 +210,10 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
       })
       .expect(201);
 
-    const { pendenciaId } = await criarPedidoOverbooking(compraId, base, '2026-12-07', 8);
+    const clienteOverbooking = await criarOutroCliente(app);
+    const { pendenciaId } = await criarPedidoOverbooking(
+      compraId, base, '2026-12-07', 8, clienteOverbooking,
+    );
 
     const cobertura = await request(app.getHttpServer())
       .get(`/comercial/overbooking/${pendenciaId}/cobertura`)
@@ -245,7 +250,10 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 8 }],
       })
       .expect(201);
-    const { pendenciaId } = await criarPedidoOverbooking(compraId, base, '2026-12-08', 8);
+    const clienteOverbooking = await criarOutroCliente(app);
+    const { pendenciaId } = await criarPedidoOverbooking(
+      compraId, base, '2026-12-08', 8, clienteOverbooking,
+    );
     const cobertura = await request(app.getHttpServer())
       .get(`/comercial/overbooking/${pendenciaId}/cobertura`)
       .set('Cookie', gestorCookies)
@@ -274,8 +282,9 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }],
       })
       .expect(201);
+    const clienteOverbooking = await criarOutroCliente(app);
     const { pendenciaId, pedidoId: pedidoOrigemId } = await criarPedidoOverbooking(
-      compraId, base, '2026-12-09', 10,
+      compraId, base, '2026-12-09', 10, clienteOverbooking,
     );
 
     const compraDestino = await request(app.getHttpServer())
@@ -332,8 +341,9 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }],
       })
       .expect(201);
+    const clienteOverbooking = await criarOutroCliente(app);
     const { pendenciaId, pedidoId: pedidoOrigemId } = await criarPedidoOverbooking(
-      compraId, base, '2026-12-11', 6,
+      compraId, base, '2026-12-11', 6, clienteOverbooking,
     );
 
     const compraDestino = await request(app.getHttpServer())
@@ -467,7 +477,10 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 8 }],
       })
       .expect(201);
-    const { pendenciaId } = await criarPedidoOverbooking(compraId, base, '2026-12-17', 4);
+    const clienteOverbooking = await criarOutroCliente(app);
+    const { pendenciaId } = await criarPedidoOverbooking(
+      compraId, base, '2026-12-17', 4, clienteOverbooking,
+    );
     const cobertura = await request(app.getHttpServer())
       .get(`/comercial/overbooking/${pendenciaId}/cobertura`)
       .set('Cookie', gestorCookies)
