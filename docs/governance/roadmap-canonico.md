@@ -1,6 +1,6 @@
 # Roadmap Canônico — AlphaCarnes
 
-> **Status:** Vigente
+> **Status:** Vigente · **Atualizado em 2026-07-23** — adicionado o **Ciclo v1.1** (seção 8), que sucede as fases F1–F6a já concluídas. Subordinado à [`constituicao.md`](constituicao.md): em especial, **toda onda do Ciclo v1.1 entrega telas idênticas ao protótipo validado (Princípio I — NÃO-NEGOCIÁVEL) e features completas, nunca mínimas (Princípio II)**.
 > **Fonte de verdade única** para o faseamento de execução e para os gates de revisão.
 > Reconcilia o roadmap de engenharia ([`../architecture/roadmap-e2e.md`](../architecture/roadmap-e2e.md), 9 fases) com o roadmap de implantação de negócio ([`../015-roadmap-de-implantacao-fases-riscos-premissas-e-dependencias.md`](../015-roadmap-de-implantacao-fases-riscos-premissas-e-dependencias.md), 6 fases).
 
@@ -113,4 +113,49 @@ Cada fase Fx (e os sub-gates F4a/b/c) tem:
 - **Gates transversais** — aplicados a todo PR, definidos em [`quality-gates.md`](quality-gates.md#gates-transversais).
 - **Definition of Done (DoD) específica** — invariantes testáveis da fase, definidos em [`quality-gates.md`](quality-gates.md#dod-por-fase).
 
-O processo de revisão e merge que aplica esses gates está em [`framework-revisao.md`](framework-revisao.md).
+O processo de revisão e merge que aplica esses gates está em [`framework-revisao.md`](framework-revisao.md). Para o Ciclo v1.1 (seção 8), o rito completo — com Portão 1 (gate de plano) e Portão 2 (gate de PR, incluindo a auditoria de fidelidade ao protótipo) — está em [`pipeline-execucao.md`](pipeline-execucao.md).
+
+## 8. Ciclo v1.1 — Implementação completa do protótipo (vigente)
+
+**Status das fases anteriores:** F1, F2, F3, F4a/b/c, F5 e F6a **concluídas** (PRs #1–#8 + absorção do protótipo v2 em `540abea`). F6b, F8 e F9 são absorvidas pelas ondas abaixo (F6b → Onda 10; hardening/estoque → Ondas 8 e seguintes). O escopo, o modelo de dados e os contratos do ciclo estão no [plano mestre](../superpowers/plans/2026-07-22-implementacao-completa-prototipo-v1.1.md); a cobertura tela a tela (39/39 rotas) está na [matriz de rastreabilidade](../superpowers/plans/2026-07-22-matriz-rastreabilidade-v1.1.md).
+
+### Princípios de ordenação (vinculantes)
+
+1. **Fidelidade ao protótipo é o critério de pronto de toda onda com UI.** O protótipo `feature/completude-v1.1` (39 rotas, validado com o usuário) é o contrato visual: cada tela entra idêntica — componentes, layout, fontes, cores, menu, fluxo — e o Portão 2 compara tela a tela contra o `.tsx` correspondente do protótipo antes do merge. Nenhuma onda fecha com tela "aproximada".
+2. **Correção estrutural antes de features** (Onda 1): as divergências D1 (overbooking), D2 (entidade Operação) e D3 (Pedido ao Fornecedor) corrigem a fundação sob a qual todas as telas seguintes serão construídas.
+3. **Shell/DS antes de qualquer tela** (Onda 2): os tokens e componentes do protótipo são centralizados uma única vez; das Ondas 3–10, nenhuma tela introduz cor/fonte/estrutura fora deles.
+4. Completude E2E por onda: uma feature entra com todos os modais/estados/ações do protótipo ou é reescopada para outra onda inteira — nunca entra pela metade (Princípio II).
+
+### Ondas e grafo
+
+| Onda | Escopo | Depende de | DoD |
+|---|---|---|---|
+| 0 | Pipeline de governança (constituição, gates, skills, workflows, estado vivo) | — | artefatos criados e rito validável |
+| 1 | Correção estrutural: `operacoes` (D2), overbooking v1.1 (D1), Pedido ao Fornecedor + conferência tripla (D3), terminologia (D5), CLAUDE.md (D9) | 0 | [quality-gates §Ondas](quality-gates.md) |
+| 2 | Shell + DS **fiéis ao protótipo**: Layout/menu 9 grupos, breadcrumb, tokens completos da paleta, componentes compartilhados (PipelineBar, badge Provisório, TrocaPeca base), login fiel | 1 | idem |
+| 3 | Cadastros & Regras completos + Admin (Caminhões, Motoristas, Modelos de Etiqueta, Produtos/Fornecedores/Rotas/Representantes fiéis, Regras de Transformação c/ simuladores, Usuários/Perfis 11/Parâmetros/Auditoria) | 2 | idem |
+| 4 | Comercial (Clientes, Pedidos c/ adendo+overbooking, Tabela de Preços, Disponibilidade-mapa teatro, Espelho) | 3 | idem |
+| 5 | Gestão (Painel Geral, Operações UI, Compras c/ painel de impacto, Pendências Overbooking, Aprovações & Ocorrências, Relatórios SIF) | 3 | idem |
+| 6 | Recebimento & Balança (fluxo §6.10 completo, pesagem c/ Troca de Peça e estorno, etiquetas 5 estados) | 4, 5 | idem |
+| 7 | Desossa (painel aeroporto/Modo TV, pesagem c/ exclusividade de regra, etiquetas) | 6 | idem |
+| 8 | Estoque (consulta FIFO + destinar, entrada de caixarias, ajustes c/ aprovação) | 7 | idem |
+| 9 | Carga (planejamento, conferência por bipagem, enviar p/ faturamento) | 7 | idem |
+| 10 | Faturamento (adapter EISS real — AD-02 — + flag RTC, Notas/XML, Seguro Manual F6b, Liberação c/ checklist) | 8, 9 | idem |
+
+```mermaid
+flowchart TD
+    O0["Onda 0 Pipeline"] --> O1["Onda 1 Correcao estrutural"]
+    O1 --> O2["Onda 2 Shell + DS fiel ao prototipo"]
+    O2 --> O3["Onda 3 Cadastros e Admin"]
+    O3 --> O4["Onda 4 Comercial"]
+    O3 --> O5["Onda 5 Gestao"]
+    O4 --> O6["Onda 6 Recebimento e Balanca"]
+    O5 --> O6
+    O6 --> O7["Onda 7 Desossa"]
+    O7 --> O8["Onda 8 Estoque"]
+    O7 --> O9["Onda 9 Carga"]
+    O8 --> O10["Onda 10 Faturamento"]
+    O9 --> O10
+```
+
+Estado corrente por onda: [`../execucao/EXECUCAO-STATUS.md`](../execucao/EXECUCAO-STATUS.md). Decisões que fecham pendências: [`../execucao/DECISOES.md`](../execucao/DECISOES.md) (AD-01: boi casado = 2 TZ + 2 DT + 2 PA; AD-02: fiscal = EISS Osasco).

@@ -222,6 +222,45 @@ Monta a carga física por caminhão e a congela no fechamento. **Reusa** o contr
 - Congelamento registra impacto de peso/qualidade (RA-06).
 - Controle de entradas/saídas de estoque com inventário; relatório de aproveitamento e perdas.
 
+## DoD do Ciclo v1.1 (ondas — vigente)
+
+> Ondas definidas em [`roadmap-canonico.md`](roadmap-canonico.md#8-ciclo-v11--implementação-completa-do-protótipo-vigente); rito de gates em [`pipeline-execucao.md`](pipeline-execucao.md); princípios em [`constituicao.md`](constituicao.md).
+
+### Gate transversal adicional do Ciclo v1.1 — Fidelidade ao protótipo (Princípio I, NÃO-NEGOCIÁVEL)
+
+Vale para **todo PR com UI**, somado aos gates transversais acima:
+- Cada tela do PR referencia no plano tático o arquivo `.tsx` de origem no protótipo (`feature/completude-v1.1`) e é **estruturalmente idêntica** a ele: seções, abas, modais, botões, rótulos, estados visuais, fluxo de navegação.
+- Zero cores hex fora dos tokens do DS/paleta do protótipo; fonte única Inter; menu com os 9 grupos, ordem e rótulos do protótipo.
+- Terminologia: "Nome Fantasia" / "Buscar cliente"; **zero ocorrências de "Marca"** em UI (teste/grep no gate).
+- Pendências abertas (P1–P15 do plano mestre §7) aparecem como parâmetro + badge "Provisório" — nunca regra fixa; badge só sai com AD-xx registrada em [`../execucao/DECISOES.md`](../execucao/DECISOES.md).
+- Evidência no PR: screenshot Playwright por tela, comparável lado a lado com a rota equivalente do protótipo. Divergência não autorizada pelo plano = **reprovação**, mesmo que "melhore" a tela.
+
+### Onda 1 — Correção estrutural
+- **Operação (D2):** tabela `operacoes` criada; toda tabela de fato referencia `operacao_id` (backfill de `dataOperacao` provado por migration aplicada em banco com dados); todos os writers (`compras_programadas`, `disponibilidades_virtuais`, `pedidos_venda`, `recebimentos`, `caminhoes`, `faturamentos`) gravam a FK; `data_operacao` sai no contract `0014`; geração por cadência **parametrizada** (default seg/qua/sex marcado provisório — P1) idempotente por janela; operação extraordinária criável; teste prova unicidade por data.
+- **Overbooking (D1/AD-05):** tentativa de criação/inclusão acima do saldo retorna `409 OVERBOOKING_CONFIRMACAO_NECESSARIA` com payload do modal e **zero mutação** em pedido, item, reserva, saldo e pendência; confirmação explícita retorna `201` na criação ou `200` na inclusão/aumento e cria reserva `tipo_consumo='overbooking'` **e** `pendencias_overbooking` na mesma transação (teste prova atomicidade); o CHECK ≥0 do saldo real **permanece** e overbooking nunca o viola (teste de concorrência: N confirmações paralelas não corrompem o saldo físico/virtual); reduzir/remover/cancelar trata separadamente as parcelas real e overbooking, atualiza/cancela a pendência e nunca credita overbooking no saldo; venda jamais é bloqueada após confirmação.
+- **Pedido ao Fornecedor (D3):** recebimento só nasce de `pedido_fornecedor` (iniciar sem ele → 409); NF do fornecedor registrada como entidade com itens; migration preserva pedidos/itens/NFs históricos; acumuladores por produto vêm das peças para itens pesáveis e de `recebimentos_itens.quantidade_recebida` para caixarias/entrada direta (nunca digitados como total de conferência); `Concluir pesagem` transiciona para revisão obrigatória (concluir sem revisão → 409); `conclusoes_conferencia` imutável pós-gravação (update → 409) e `conclusoes_conferencia_nfs` preserva todas as NFs consideradas; divergência usa tipos v1.1 e gera ocorrência vinculada à conclusão e, quando atribuível a uma única nota, à NF, tudo na mesma transação; estados v1.1 §6.10.5 com CHECK.
+- **Terminologia (D5):** zero "marca" em UI/rotulagem (grep no CI ou teste dedicado).
+- **CLAUDE.md (D9):** corrigido — sem "Fase 0 sem código"; registra docs_v2 v1.1 como fonte funcional e a governança vigente.
+- Cobertura backend ≥ 80% (linha e branch) nos services tocados.
+
+### Onda 2 — Shell + DS
+- Tokens completos da paleta do protótipo centralizados (globals.css/@theme) — **zero hex avulso** nas telas (grep).
+- Layout com sidebar em gradiente, menu 9 grupos (ordem/rótulos do protótipo), breadcrumb, colapso por grupo; `visibleGroups` dirigido por RBAC real (não simulador).
+- Componentes compartilhados portados: PipelineBar, badge "Provisório" (com `title` citando a pendência), base do modal TrocaPeca, StatusPill/KpiCard/AlertItem alinhados.
+- Login fiel ao protótipo (painel de marca + formulário) mantendo o fluxo JWT real.
+- Smoke tests de render por componente; screenshot de shell comparado ao protótipo.
+
+### Ondas 3–10 — regra geral
+Cada onda tem plano tático próprio (padrão F4c) aprovado no **Portão 1**, cujo "Mapa DoD → teste" é a DoD específica da onda — derivada das linhas correspondentes da [matriz de rastreabilidade](../superpowers/plans/2026-07-22-matriz-rastreabilidade-v1.1.md) e dos invariantes do plano mestre §3–§4. Invariantes mínimos por onda (não exaustivo):
+- **O3:** CRUDs completos com RBAC (403 testado por permissão), 11 perfis canônicos com recorte `ESTOQUE_*` conforme AD-04, simuladores de regras funcionais, seed AD-01 sem badge + regras TZ A/B com badge (P12/§16.15), preview de modelo de etiqueta.
+- **O4:** adendo com histórico e unicidade de pedido aberto por cliente+produto+operação (AD-03); rascunho sem expiração automática e ação administrativa auditada “Liberar reserva” (AD-06); mapa teatro com estados F/V/R/C/D/O/E/! agregados + drill-down; catálogo MVP correto (nunca o legado da aba Grade); tabela de preços com publicação auditada.
+- **O5:** painel de impacto na edição de compra confirmada; fila de pendências de overbooking com decisão em 3 caminhos; comparativo Pedido×NF×Pesagem imutável; SIF com versionamento/retificação (P8).
+- **O6:** Troca de Peça atômica preservando pesos e invalidando etiqueta (teste dos 9 passos numa transação); estorno conforme regras doc 04 §3.2; acumuladores em tempo real.
+- **O7:** exclusividade de regra por unidade de TZ (teste: alternativa A escolhida bloqueia saídas da B); checklist esperado×registrado; divergência de transformação formal; painel Modo TV via eventos (RA-04).
+- **O8:** ajuste com segregação criador≠aprovador e limiar parametrizado; FIFO como sugestão parametrizável (P3).
+- **O9:** UI fiel sobre o backend F5 existente; bipagem reusa contrato ADR-009.
+- **O10:** adapter EISS real atrás da mesma porta (fake segue no CI — Princípio V); flag RTC; checklist de liberação calculado bloqueando por requisito faltante (teste por requisito); trava de cancelamento pós-liberação.
+
 ## Como o gate decide
 
 ```mermaid
