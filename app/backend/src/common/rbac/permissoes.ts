@@ -50,6 +50,7 @@ export const PERMISSOES = {
   PESAGEM_GERENCIAR: 'PESAGEM_GERENCIAR', // pesar peça / status dispositivos
   PESO_MANUAL: 'PESO_MANUAL', // captura manual assistida de peso (ADR-009)
   ASSOCIACAO_GERENCIAR: 'ASSOCIACAO_GERENCIAR', // confirmar/redirecionar/sem-cobertura
+  ASSOCIACAO_ESTORNAR: 'ASSOCIACAO_ESTORNAR', // desfazer destinação já confirmada (doc 013 §4.3)
   LEITURA_MANUAL: 'LEITURA_MANUAL', // digitar QR quando leitor indisponível (ADR-009)
   ETIQUETA_GERENCIAR: 'ETIQUETA_GERENCIAR', // emitir/reimprimir etiqueta
 
@@ -368,6 +369,12 @@ pushPermissoes('recebimento_pesagem', 'APROVACOES_LER', 'APROVACOES_SOLICITAR');
 pushPermissoes('corte',         'APROVACOES_SOLICITAR');
 pushPermissoes('expedicao',     'APROVACOES_SOLICITAR');
 
+// Onda 6 — estorno de destinação é exceção operacional (doc 013 §4.3): só escalada.
+// recebimento_pesagem e corte têm ASSOCIACAO_GERENCIAR e deliberadamente NÃO recebem esta
+// permissão — é a segregação "quem associa não estorna" (D6.3/D6.19).
+pushPermissoes('administrador', 'ASSOCIACAO_ESTORNAR');
+pushPermissoes('gestor',        'ASSOCIACAO_ESTORNAR');
+
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   USUARIOS_GERENCIAR: 'Criar e editar usuários',
@@ -412,6 +419,7 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   PESAGEM_GERENCIAR: 'Registrar pesagem de peças e operar a captura',
   PESO_MANUAL: 'Registrar peso manual assistido (fallback ADR-009)',
   ASSOCIACAO_GERENCIAR: 'Confirmar, redirecionar e destinar peças a pedidos',
+  ASSOCIACAO_ESTORNAR: 'Estornar associação/destinação já confirmada de uma peça',
   LEITURA_MANUAL: 'Digitar identificador QR quando o leitor está indisponível',
   ETIQUETA_GERENCIAR: 'Emitir e reimprimir etiquetas de peça',
   CORTE_GERENCIAR: 'Iniciar, executar e concluir cortes/transformações de peças',
