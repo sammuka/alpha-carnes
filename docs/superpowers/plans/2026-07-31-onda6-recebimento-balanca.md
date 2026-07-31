@@ -43,6 +43,22 @@ O veredito conferiu o mapa das dívidas na numeração anterior. A emenda inseri
 | (e) rota BFF duplicada de NF | 6.24 | **6.24** (igual) |
 | (f) contrato de `nfeVolumes` | 6.25 | **6.38 (backend) + 6.39 (tela)** — separados para manter 1:1 |
 
+## Emenda 2 — resposta ao Portão 1 `ajustar` (veredito `abd7039`)
+
+Os oito bloqueantes da emenda 1 foram confirmados fechados pelo Monitor por leitura e execução; o
+veredito `ajustar` desta rodada aponta dois defeitos introduzidos pelo próprio código literal que a
+emenda 1 tornou copiável, mais cinco achados menores. Nenhum escopo novo.
+
+| # | Bloqueante do veredito | Onde está fechado nesta emenda |
+|---|---|---|
+| A | `EtiquetaService.listar()` (Task 6.3) filtrava por `estado` no mesmo `WHERE` cujo resultado `agruparPorPeca` interpreta como "primeira linha = vigente, demais = histórico" — uma peça cuja vigente é `cancelada` mas que tem uma linha `ativa` anterior aparecia como vigente `ativa` sob `?estado=ativa`, e o histórico devolvido ficava truncado ao estado filtrado, contradizendo a precedência de D6.2 | Task 6.3 reescrita: o filtro de `estado` sai do `WHERE` de linhas — que continua sempre buscando o histórico completo por peça — e passa a avaliar a vigente **depois** de `agruparPorPeca` determinar qual linha é a vigente de cada peça. DoD 6.32 ganha a asserção nomeada do caso |
+| B | DoD 6.22 nomeava `montarPatchCabecalhoUi` e `extrairPayloadNfUi`, que hoje não são exportados de `nota-fiscal-fornecedor.persistence.ts`; a primeira só tem chamador dentro de `persistirNfCabecalhoUiNaTx` (função transacional), inalcançável por `test/unit` sem banco, e o parâmetro `extras` da segunda nunca é passado por nenhum chamador real | Task 8 ganha o passo **8.5**: as duas funções recebem `export`, no mesmo precedente das quatro puras já exportadas no arquivo (`temCamposNfEstruturados`, `mesclarPayloadNfCabecalho`, `mesclarPayloadNfCompleta`, `mapearCamposNfParaRegistrar`). Task 9.3 atualizada — os cinco casos de 6.22 importam as duas diretamente, sem passar por função transacional |
+| menor | `EtiquetaListada.codigo` lia `pecas.etiquetaAtual` — o código **atual** da peça, não o da etiqueta daquela linha; `etiquetas_impressoes` não tem coluna de código (só `payload`), então uma linha cancelada/invalidada exibiria o código da etiqueta nova | Task 6.3: `codigo` passa a vir de `payload->>'qr'`, o mesmo campo gravado por `emitir`/`reimprimir`/`emitirNaTx`/`troca-peca.service.ts` |
+| menor | D6.13 descrevia o conteúdo esperado de `0021` como "15 colunas, 4 CHECKs e 5 FKs", mas a Task 1.1 declara 8 `.references()` (recebimento, pedido, item, 2 peças, 2 etiquetas, operador) | D6.13 corrigida para "8 FKs" — contagem batida com o `pgTable('trocas_peca')` literal da Task 1.1 |
+| menor | Task 4.3 chamava `this.etiqueta.imprimirPayload(...)` antes da transação, mas as checagens sob lock (peça já associada, item comercial divergente, carga fechada) só rodam dentro dela — um 409 deixava etiqueta física impressa sem fato de negócio | A chamada de impressão move para **dentro** da transação, logo após as três checagens sob lock e antes das mutações (passos 3–9) — nenhum 409 acima imprime fisicamente |
+| menor | `agruparPorPeca` e `paginarEmMemoria` eram citadas como "funções puras no mesmo arquivo" sem corpo literal; `paginarEmMemoria` não existe hoje em `common/crud/paginacao.ts` (que só tem `montarPaginado`) | Task 6.3 ganha os dois corpos literais, reusando `montarPaginado`/`Paginado<T>` já existentes |
+| menor | Na tela de Etiquetas, "Preview da etiqueta" (`EtiquetasRecebimento.tsx:185-224`) e "Modal Reimprimir (inclui pendente)" (`:227-296`) estão no bloco a reproduzir, mas não apareciam na Task 11.2 nem em critério algum | Task 11.2 ganha o preview no drawer e o modal Reimprimir, ligado à rota BFF **já existente** `POST /api/operacao/pesagem/pecas/:id/etiqueta/reimprimir` — nenhum endpoint novo. DoD 6.29 alinhada à fórmula "renderiza os blocos do protótipo" de 6.26/6.27 |
+
 ## Goal
 
 Fechar as três rotas de recebimento/balança com backend transacional, UI idêntica ao protótipo e
@@ -327,7 +343,9 @@ Estado atual verificado: último arquivo é `0020_onda5_usuarios_representantes.
 
 Conteúdo esperado, derivado exclusivamente do delta de `pesagem.schema.ts` (Task 1):
 
-1. `CREATE TABLE "trocas_peca"` com as 15 colunas, 4 CHECKs e 5 FKs declaradas no schema.
+1. `CREATE TABLE "trocas_peca"` com as 15 colunas, 4 CHECKs e 8 FKs declaradas no schema (Task 1.1:
+   `recebimentoId`, `pedidoVendaId`, `pedidoVendaItemId`, `pecaRetiradaId`, `pecaInseridaId`,
+   `etiquetaInvalidadaId`, `etiquetaEmitidaId`, `operadorId`).
 2. Os 4 índices de `trocas_peca`.
 3. `ALTER TABLE "etiquetas_impressoes" ADD COLUMN "estado" text DEFAULT 'emitida' NOT NULL`,
    `"motivo_cancelamento" text`, `"invalidada_em" timestamp with time zone`,
@@ -494,10 +512,10 @@ Cada linha é um critério de pronto e o teste **único** que o prova. Portão 2
 | 6.26 | Recebimento de Carga fiel: 7 status de lote, comparativo, conclusão obrigatória, entrada direta, cancelar lote, drawer novo recebimento | `app/frontend/__tests__/recebimento.test.tsx` › “Recebimento de Carga renderiza os blocos do protótipo” |
 | 6.27 | Pesagem fiel: chips de características, selo pref. compatível, modal etiqueta, estorno | `app/frontend/__tests__/pesagem.test.tsx` › “Pesagem & Destinação renderiza os blocos do protótipo” |
 | 6.28 | Troca de Peça: 6 passos ligados ao backend, resultado com etiqueta invalidada | `app/frontend/__tests__/troca-peca-modal.test.tsx` › “conclui os 6 passos e exibe o resultado do backend” |
-| 6.29 | Etiquetas: 5 rótulos do protótipo derivados de §10.4, regras `cancelavel`/`reimprimivel` | `app/frontend/__tests__/etiquetas-recebimento.test.tsx` › “mapeia estado do domínio para os rótulos do protótipo” |
+| 6.29 | Etiquetas: 5 rótulos do protótipo derivados de §10.4, regras `cancelavel`/`reimprimivel`, preview da etiqueta e modal Reimprimir (inclui pendente) no drawer | `app/frontend/__tests__/etiquetas-recebimento.test.tsx` › “renderiza os blocos do protótipo” (mesma fórmula de 6.26/6.27), cobrindo o mapeamento de rótulos, o preview e o modal Reimprimir chamando a rota de reimpressão |
 | 6.30 | Nenhum termo banido nas telas da onda; “Nome Fantasia”/“Buscar cliente” onde há cliente | `app/frontend/__tests__/terminologia.test.ts` › “rotas de recebimento sem termo banido” |
 | 6.31 | Jornada E2E das 3 rotas com banco semeado, sem erro de console | `app/frontend/e2e/onda6-recebimento.spec.ts` › “percorre as 3 rotas de recebimento pelo menu” |
-| 6.32 | `GET /operacao/etiquetas` filtra por recebimento, estado e busca, e devolve `estado`, `statusImpressao`, `motivoCancelamento` | `test/integration/etiqueta.e2e-spec.ts` › “lista etiquetas do recebimento filtrando por estado e busca” |
+| 6.32 | `GET /operacao/etiquetas` filtra por recebimento, estado e busca, devolve `estado`/`statusImpressao`/`motivoCancelamento`, e uma peça com vigente `cancelada` (histórico com linha `ativa` anterior) não aparece no filtro `?estado=ativa` nem tem o histórico truncado (D6.2) | `test/integration/etiqueta.e2e-spec.ts` › “lista etiquetas do recebimento filtrando por estado e busca” e “peça com vigente cancelada não aparece no filtro estado=ativa e mantém o histórico completo” |
 | 6.33 | Bloqueio D6.18 é calculado: peça em transformação ou em carga fechada vem `bloqueada: true` | mesmo arquivo › “marca bloqueada para peça em transformação e para peça em carga fechada” |
 | 6.34 | **D6.13** `0021` é expand puro gerado: sem `UPDATE`/`INSERT`/`DELETE`/`TRUNCATE`; `0022` é só DML/guarda, sem `CREATE`/`ALTER`/`DROP` | `test/unit/onda6-migrations-meta.spec.ts` › “separa ddl gerado de sql custom de backfill” |
 | 6.35 | **D6.13** backfill promove reimpressa/ativa corretamente, não toca estado já promovido e é idempotente ao reaplicar | `test/integration/onda6-migrations.e2e-spec.ts` › “0022 faz backfill determinístico e idempotente do estado da etiqueta” |
@@ -960,10 +978,6 @@ export class TrocaPecaService {
   async executar(dto: ExecutarTrocaDto, operadorId: string): Promise<ResultadoTrocaPeca> {
     const contexto = await this.validarTroca(dto);
 
-    // REFINO 1 / ADR-010: impressão FÍSICA é best-effort e roda fora da transação, igual ao que
-    // EtiquetaService.emitir já faz (etiqueta.service.ts:53-55). O fato de negócio é a linha.
-    const impressao = await this.etiqueta.imprimirPayload(contexto.payloadEtiqueta);
-
     const resultado = await this.db.transaction(async (tx) => {
       // 1 e 2 — revalida sob lock. Ordem determinística de lock evita deadlock com a troca inversa.
       const [primeiroId, segundoId] = [dto.pecaRetiradaId, dto.pecaInseridaId].sort();
@@ -985,6 +999,13 @@ export class TrocaPecaService {
       if (await pecaEmCargaFechada(tx, retirada.id)) {
         throw new ConflictException('Peça retirada já está em carga fechada — troca bloqueada');
       }
+
+      // Impressão física só DEPOIS de todas as checagens sob lock passarem: um 409 acima nunca
+      // deixa etiqueta física impressa sem fato de negócio associado (RA-02). Best-effort — nunca
+      // lança; falha vira status_impressao='falha_impressao', o mesmo padrão do precedente
+      // etiqueta.service.ts:43-55, aplicado aqui dentro do lock porque a checagem depende de
+      // duas peças e não pode ser feita antes de travá-las.
+      const impressao = await this.etiqueta.imprimirPayload(contexto.payloadEtiqueta);
 
       // 3 e 4 — desassocia a antiga e a destina (estoque → em_sobra; desossa → para_corte).
       const statusRetirada = dto.destinoRetirada === 'estoque' ? 'em_sobra' : 'para_corte';
@@ -1673,21 +1694,68 @@ export interface EtiquetaListada {
   }>;
 }
 
+/** Linha bruta da consulta — mesmo shape de `EtiquetaListada`, sem o array de histórico. */
+type LinhaEtiqueta = Omit<EtiquetaListada, 'historico'>;
+
+/**
+ * Agrupa linhas (peça × etiqueta) por peça. `linhas` já vem ordenada por `createdAt DESC` pela
+ * consulta de `listar()`, então a primeira ocorrência de cada `pecaId` é a etiqueta vigente
+ * (D6.2) e as demais compõem o histórico completo. Função pura, módulo, testável sem I/O — mesmo
+ * padrão de `carga-fechada.ts` (Task 4.2).
+ */
+export function agruparPorPeca(linhas: LinhaEtiqueta[]): EtiquetaListada[] {
+  const porPeca = new Map<string, EtiquetaListada>();
+  for (const linha of linhas) {
+    const vigente = porPeca.get(linha.pecaId);
+    if (!vigente) {
+      porPeca.set(linha.pecaId, { ...linha, historico: [] });
+      continue;
+    }
+    vigente.historico.push({
+      id: linha.id,
+      estado: linha.estado,
+      statusImpressao: linha.statusImpressao,
+      reimpressao: linha.reimpressao,
+      motivoCancelamento: linha.motivoCancelamento,
+      operadorId: linha.operadorId,
+      createdAt: linha.createdAt,
+    });
+  }
+  return [...porPeca.values()];
+}
+
+/**
+ * Pagina um array já pronto em memória — a listagem já é filtrada por recebimento (D6.15) e a
+ * maior carga observada é de ~200 peças por lote. Reusa o envelope de `montarPaginado`.
+ */
+export function paginarEmMemoria<T>(itens: T[], page: number, pageSize: number): Paginado<T> {
+  const inicio = (page - 1) * pageSize;
+  return montarPaginado(itens.slice(inicio, inicio + pageSize), itens.length, { page, pageSize });
+}
+
+  /**
+   * `estado` NÃO entra no `WHERE` desta consulta: filtrar aqui truncaria o histórico e faria uma
+   * linha antiga `ativa` aparecer como vigente de uma peça cuja etiqueta atual já é terminal —
+   * violando a precedência de D6.2 (`cancelada`/`invalidada_por_troca` nunca "voltam" a ser uma
+   * etiqueta ativa antiga) e RA-06. O histórico completo é sempre buscado por peça; o filtro de
+   * `estado` só é aplicado DEPOIS de `agruparPorPeca` determinar qual linha é a vigente real.
+   */
   async listar(filtros: ListarEtiquetasDto): Promise<Paginado<EtiquetaListada>> {
     const condicoes = [isNull(pecas.deletedAt), isNotNull(etiquetasImpressoes.pecaId)];
     if (filtros.recebimentoId) condicoes.push(eq(pecas.recebimentoId, filtros.recebimentoId));
-    if (filtros.estado) condicoes.push(eq(etiquetasImpressoes.estado, filtros.estado));
     if (filtros.busca) {
       const q = `%${filtros.busca.toLowerCase()}%`;
       condicoes.push(sql`(lower(coalesce(${pecas.etiquetaAtual}, '')) LIKE ${q}
                           OR lower(${pecas.id}::text) LIKE ${q})`);
     }
 
-    const linhas = await this.db
+    const linhas: LinhaEtiqueta[] = await this.db
       .select({
         id: etiquetasImpressoes.id,
         pecaId: pecas.id,
-        codigo: pecas.etiquetaAtual,
+        // Código DESTA etiqueta, não o atual da peça (que muda após troca) — payload é o único
+        // lugar que guarda o QR gravado no momento da emissão (emitir/reimprimir/emitirNaTx).
+        codigo: sql<string | null>`${etiquetasImpressoes.payload}->>'qr'`,
         estado: etiquetasImpressoes.estado,
         statusImpressao: etiquetasImpressoes.statusImpressao,
         reimpressao: etiquetasImpressoes.reimpressao,
@@ -1706,14 +1774,21 @@ export interface EtiquetaListada {
       .where(and(...condicoes))
       .orderBy(desc(etiquetasImpressoes.createdAt));
 
-    // Agrupa por peça: a primeira linha (mais recente) é a vigente; as demais viram histórico.
-    return paginarEmMemoria(agruparPorPeca(linhas), filtros.page, filtros.pageSize);
+    // Agrupa por peça (histórico completo, nunca truncado): a primeira linha (mais recente) é a
+    // vigente; as demais viram histórico. O filtro de estado avalia a vigente JÁ DETERMINADA —
+    // nunca uma linha isolada — então uma peça com vigente `cancelada` não some do resultado nem
+    // "vira" `ativa` só porque teve uma linha `ativa` no passado.
+    const agrupadas = agruparPorPeca(linhas);
+    const filtradas = filtros.estado
+      ? agrupadas.filter((e) => e.estado === filtros.estado)
+      : agrupadas;
+    return paginarEmMemoria(filtradas, filtros.page, filtros.pageSize);
   }
 ```
 
-`agruparPorPeca` e `paginarEmMemoria` são funções puras no mesmo arquivo, testáveis sem I/O; o
-agrupamento em memória é aceitável porque a listagem já é filtrada por recebimento e a maior carga
-observada é de ~200 peças por lote.
+`agruparPorPeca` e `paginarEmMemoria` (acima) são funções puras de módulo, fora da classe, no
+mesmo arquivo — importar `montarPaginado`/`Paginado` de `common/crud/paginacao` ao lado dos
+demais imports do arquivo.
 
 **6.4** `etiqueta.controller.ts` (novo) — resolve o bloqueante 5 fixando o prefixo:
 
@@ -1962,6 +2037,47 @@ O mesmo `.for('update')` entra em `buscarNfCabecalhoAtivaPorRecebimento`. `busca
 
 **8.4** Testes 6.17–6.20 nos arquivos citados no mapa, mais os cinco casos de 6.22 (D6.20).
 
+**8.5 (fecha o bloqueante B do Portão 1 — DoD 6.22).** `montarPatchCabecalhoUi` (`:212`) e
+`extrairPayloadNfUi` (`:41`) ganham `export`, no mesmo precedente das quatro puras já exportadas
+neste arquivo (`temCamposNfEstruturados`, `mesclarPayloadNfCabecalho`, `mesclarPayloadNfCompleta`,
+`mapearCamposNfParaRegistrar`). Sem isso os dois casos nomeados em 6.22 não compilam:
+`montarPatchCabecalhoUi` só tem chamador dentro de `persistirNfCabecalhoUiNaTx` — função
+transacional inalcançável por `test/unit` sem banco — e o parâmetro `extras` de
+`extrairPayloadNfUi` nunca é passado por nenhum chamador real, então o ramo "preserva extras" do
+caso 6.22 ficaria intestável mesmo passando pelo wrapper `mapearCamposNfParaRegistrar`.
+
+```ts
+// nota-fiscal-fornecedor.persistence.ts:41 — ganha `export`, assinatura inalterada.
+export function extrairPayloadNfUi(
+  dto: Partial<NfCamposUi>,
+  extras?: Record<string, unknown>,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = { ...extras };
+  if (dto.nfeVolumes !== undefined) payload.volumes = dto.nfeVolumes;
+  if (dto.nfePesoLiquido !== undefined) payload.pesoLiquido = dto.nfePesoLiquido;
+  return payload;
+}
+```
+
+```ts
+// nota-fiscal-fornecedor.persistence.ts:212 — ganha `export`, assinatura inalterada.
+export function montarPatchCabecalhoUi(
+  campos: Partial<NfCamposUi>,
+  existente?: typeof notasFiscaisFornecedor.$inferSelect,
+): Partial<typeof notasFiscaisFornecedor.$inferInsert> {
+  const patch: Partial<typeof notasFiscaisFornecedor.$inferInsert> = {};
+  if (campos.nfeSerie !== undefined) patch.serie = campos.nfeSerie;
+  if (campos.nfeChave !== undefined) patch.chave = campos.nfeChave;
+  if (campos.nfeDataEmissao !== undefined) patch.dataEmissao = campos.nfeDataEmissao;
+  if (campos.nfePesoBruto !== undefined) {
+    patch.pesoTotalDeclarado = formatarQtd(campos.nfePesoBruto);
+  } else if (existente) {
+    patch.pesoTotalDeclarado = existente.pesoTotalDeclarado;
+  }
+  return patch;
+}
+```
+
 **Commit:** `fix(onda6): quita dívidas h/c/d de NF do fornecedor da Onda 1`
 
 ---
@@ -2001,8 +2117,9 @@ test('glob de cobertura por arquivo inclui persistence.ts', () => {
 
 **9.3** Completar `test/unit/nota-fiscal-fornecedor.persistence.spec.ts` com os cinco casos
 nomeados em 6.22 até o arquivo passar o próprio gate (≥80% linha **e** branch). O arquivo hoje tem
-6 casos cobrindo só as quatro funções puras exportadas; os cinco novos alcançam
-`montarPatchCabecalhoUi`, `extrairPayloadNfUi` e os ramos de `temCamposNfEstruturados`.
+6 casos cobrindo só as quatro funções puras exportadas; a Task 8.5 exporta `montarPatchCabecalhoUi`
+e `extrairPayloadNfUi`, e os cinco novos casos **importam as duas diretamente** (sem passar por
+função transacional) e cobrem os ramos de `temCamposNfEstruturados`.
 
 **Commit:** `test(onda6): estende gate ACMR e cobre a persistência de NF`
 
@@ -2278,6 +2395,22 @@ em timeline (`EtiquetasRecebimento.tsx:462`, alimentado por `etiqueta.historico`
 vermelho de motivo quando cancelada (`:384`), e o rodapé ganha o botão **Cancelar etiqueta**
 (`:489-492`) abrindo o modal de `:308-313` — o aviso “irá invalidá-la e estornar a ação
 operacional vinculada” é literal do protótipo.
+
+O drawer ganha também o **preview da etiqueta** (`LabelPreview` do protótipo,
+`EtiquetasRecebimento.tsx:185-224`) — mesmo layout do cartão, mas só com os campos que
+`GET /operacao/etiquetas` realmente devolve: código (`etiqueta.codigo`), peso
+(`etiqueta.pesoOriginal`), destino (`rotuloDestinoPeca(etiqueta.statusPeca)`, o mesmo helper de
+`@/lib/status-ui` já usado pela tabela atual e por `troca-peca-modal.tsx` na Task 11.1 — sem regra
+nova), operador e emissão (`etiqueta.createdAt`). O protótipo também mostra produto/lote/NF-e/
+origem, que `EtiquetaListada` não modela hoje — nota honesta (Princípio VIII): nenhum desses
+quatro campos é inventado ou mockado; o preview simplesmente não os renderiza até uma onda futura
+estender o contrato. O botão
+**Reimprimir** (habilitado por `reimprimivel`) abre o modal `:227-296`, que distingue "Imprimir
+etiqueta pendente" de "Reimprimir etiqueta" conforme `estado === 'emitida'` e exige motivo só no
+segundo caso. O modal chama a rota BFF **já existente**
+`POST /api/operacao/pesagem/pecas/:pecaId/etiqueta/reimprimir` (que repassa a
+`EtiquetaService.reimprimir()` de `etiqueta.service.ts:93`, já implementada) — nenhum endpoint
+novo, backend ou BFF, é criado para isto.
 
 **11.3 `pesagem-destinacao-client.tsx` (956 linhas).** Acrescentar: os chips de característica
 alimentando `captura_meta` (já existem em `:333-335`, agora também enviados na sugestão), o selo
