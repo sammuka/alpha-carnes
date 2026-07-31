@@ -1,5 +1,11 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { hash } from '@node-rs/argon2';
 import { DRIZZLE } from '../../database/database.module';
@@ -10,12 +16,26 @@ import { RbacService } from '../auth/rbac.service';
 import type { CreateUsuarioDto } from './dto/create-usuario.dto';
 import type { UpdateUsuarioDto } from './dto/update-usuario.dto';
 
+type Db = NodePgDatabase<typeof schema>;
+
+type RepresentantePermitido = {
+  id: string;
+  nome: string;
+  status: string;
+  deletedAt: Date | null;
+};
+
+function mesmosIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, indice) => id === b[indice]);
+}
+
 // Projeção pública de usuário (nunca expõe senhaHash).
 const PROJECAO_USUARIO = {
   id: schema.usuarios.id,
   nome: schema.usuarios.nome,
   email: schema.usuarios.email,
   ativo: schema.usuarios.ativo,
+  ultimoAcesso: schema.usuarios.ultimoAcesso,
   createdAt: schema.usuarios.createdAt,
   updatedAt: schema.usuarios.updatedAt,
   deletedAt: schema.usuarios.deletedAt,
@@ -55,6 +75,13 @@ export class UsuariosService {
         await this.vincularPerfis(tx, usuario.id, dto.perfis);
       }
 
+      await this.definirRepresentantesNaTx(
+        tx,
+        usuario.id,
+        dto.representantes,
+        criadorId,
+      );
+
       await this.auditoria.registrar(tx, {
         tabela: 'usuarios',
         registroId: usuario.id,
@@ -64,7 +91,7 @@ export class UsuariosService {
         dadosAnteriores: {},
         dadosNovos: usuario,
       });
-      return usuario;
+      return this.detalharNaTx(usuario.id, tx);
     });
   }
 
@@ -77,7 +104,6 @@ export class UsuariosService {
 
     if (!usuario) throw new NotFoundException('Usuário não encontrado');
 
-    // SF-01: criador não pode aprovar o usuário que ele mesmo criou.
     if (usuario.criadoPorId) {
       try {
         this.rbacService.assertCriadorNaoAprovador(usuario.criadoPorId, aprovadorId);
@@ -91,7 +117,6 @@ export class UsuariosService {
     return { message: 'Usuário aprovado', usuarioId };
   }
 
-  /** Contagem de usuários ativos por perfil, nos 11 perfis canônicos e em ordem canônica. */
   async resumoPerfis(): Promise<Array<{ slug: string; nome: string; total: number }>> {
     const linhas = await this.db
       .select({
@@ -120,30 +145,51 @@ export class UsuariosService {
     if (usuarios.length === 0) return [];
 
     const ids = usuarios.map((u) => u.id);
-    const perfisRows = await this.db
-      .select({ usuarioId: schema.usuariosPerfis.usuarioId, slug: schema.perfis.slug })
-      .from(schema.usuariosPerfis)
-      .innerJoin(schema.perfis, eq(schema.usuariosPerfis.perfilId, schema.perfis.id))
-      .where(inArray(schema.usuariosPerfis.usuarioId, ids));
+    const [perfisRows, representantesPorUsuario] = await Promise.all([
+      this.db
+        .select({ usuarioId: schema.usuariosPerfis.usuarioId, slug: schema.perfis.slug })
+        .from(schema.usuariosPerfis)
+        .innerJoin(schema.perfis, eq(schema.usuariosPerfis.perfilId, schema.perfis.id))
+        .where(inArray(schema.usuariosPerfis.usuarioId, ids)),
+      this.representantesPorUsuario(this.db, ids),
+    ]);
 
     const perfisPorUsuario = new Map<string, string[]>();
     for (const row of perfisRows) {
-      const atual = perfisPorUsuario.get(row.usuarioId) ?? [];
-      atual.push(row.slug);
-      perfisPorUsuario.set(row.usuarioId, atual);
+      const atuais = perfisPorUsuario.get(row.usuarioId) ?? [];
+      atuais.push(row.slug);
+      perfisPorUsuario.set(row.usuarioId, atuais);
     }
 
-    return usuarios.map((u) => ({
-      ...u,
-      perfis: perfisPorUsuario.get(u.id) ?? [],
-    }));
+    return usuarios.map((usuario) => {
+      const representantesPermitidos = representantesPorUsuario.get(usuario.id) ?? [];
+      return {
+        ...usuario,
+        perfis: perfisPorUsuario.get(usuario.id) ?? [],
+        representantesPermitidos,
+        escopoRepresentantes:
+          representantesPermitidos.length === 0 ? 'todos' as const : 'restrito' as const,
+      };
+    });
   }
 
   async detalhar(id: string) {
-    const usuario = await this.buscarAtivo(id);
-    if (!usuario) throw new NotFoundException('Usuário não encontrado');
-    const perfis = await this.perfisDoUsuario(id);
-    return { ...usuario, perfis };
+    return this.detalharNaTx(id, this.db);
+  }
+
+  async definirRepresentantes(
+    usuarioId: string,
+    representantes: string[],
+    autorUsuarioId: string,
+  ) {
+    return this.db.transaction((tx) =>
+      this.definirRepresentantesNaTx(
+        tx,
+        usuarioId,
+        representantes,
+        autorUsuarioId,
+      ),
+    );
   }
 
   async atualizar(id: string, dto: UpdateUsuarioDto, autorId: string) {
@@ -243,11 +289,10 @@ export class UsuariosService {
         dadosAnteriores: anterior,
         dadosNovos: restaurado,
       });
-      return restaurado;
+      return this.detalharNaTx(id, tx);
     });
   }
 
-  /** Define o conjunto de perfis de um usuário (substitui os atuais). Auditado. */
   async definirPerfis(id: string, slugs: string[], autorId: string) {
     return this.db.transaction(async (tx) => {
       const usuario = await this.buscarAtivo(id, tx);
@@ -271,7 +316,148 @@ export class UsuariosService {
     });
   }
 
-  private async buscarAtivo(id: string, tx?: NodePgDatabase<typeof schema>) {
+  private async representantesPorUsuario(
+    exec: Db,
+    usuariosIds: string[],
+  ): Promise<Map<string, RepresentantePermitido[]>> {
+    const resultado = new Map<string, RepresentantePermitido[]>();
+    for (const id of usuariosIds) resultado.set(id, []);
+    if (usuariosIds.length === 0) return resultado;
+
+    const linhas = await exec
+      .select({
+        usuarioId: schema.usuariosRepresentantes.usuarioId,
+        id: schema.representantes.id,
+        nome: schema.representantes.nome,
+        status: schema.representantes.status,
+        deletedAt: schema.representantes.deletedAt,
+      })
+      .from(schema.usuariosRepresentantes)
+      .innerJoin(
+        schema.representantes,
+        eq(
+          schema.representantes.id,
+          schema.usuariosRepresentantes.representanteId,
+        ),
+      )
+      .where(inArray(schema.usuariosRepresentantes.usuarioId, usuariosIds))
+      .orderBy(
+        schema.usuariosRepresentantes.usuarioId,
+        asc(schema.representantes.nome),
+        asc(schema.representantes.id),
+      );
+
+    for (const linha of linhas) {
+      resultado.get(linha.usuarioId)?.push({
+        id: linha.id,
+        nome: linha.nome,
+        status: linha.status,
+        deletedAt: linha.deletedAt,
+      });
+    }
+    return resultado;
+  }
+
+  private async detalharNaTx(id: string, tx: Db) {
+    const usuario = await tx
+      .select(PROJECAO_USUARIO)
+      .from(schema.usuarios)
+      .where(and(eq(schema.usuarios.id, id), isNull(schema.usuarios.deletedAt)))
+      .then((linhas) => linhas[0] ?? null);
+    if (!usuario) throw new NotFoundException('Usuário não encontrado');
+
+    const [perfis, porUsuario] = await Promise.all([
+      this.perfisDoUsuario(id, tx),
+      this.representantesPorUsuario(tx, [id]),
+    ]);
+    const representantesPermitidos = porUsuario.get(id) ?? [];
+    return {
+      ...usuario,
+      perfis,
+      representantesPermitidos,
+      escopoRepresentantes:
+        representantesPermitidos.length === 0 ? 'todos' as const : 'restrito' as const,
+    };
+  }
+
+  private async definirRepresentantesNaTx(
+    tx: Db,
+    usuarioId: string,
+    representantesSolicitados: string[],
+    autorUsuarioId: string,
+  ) {
+    const usuario = await tx
+      .select({ id: schema.usuarios.id })
+      .from(schema.usuarios)
+      .where(and(
+        eq(schema.usuarios.id, usuarioId),
+        isNull(schema.usuarios.deletedAt),
+      ))
+      .for('update')
+      .limit(1)
+      .then((linhas) => linhas[0] ?? null);
+    if (!usuario) throw new NotFoundException('Usuário não encontrado');
+
+    const anterioresRows = await tx
+      .select({ representanteId: schema.usuariosRepresentantes.representanteId })
+      .from(schema.usuariosRepresentantes)
+      .where(eq(schema.usuariosRepresentantes.usuarioId, usuarioId))
+      .orderBy(schema.usuariosRepresentantes.representanteId);
+    const idsAnterioresOrdenados = anterioresRows.map((linha) => linha.representanteId);
+    const anteriores = new Set(idsAnterioresOrdenados);
+    const idsNovosOrdenados = [...representantesSolicitados].sort();
+
+    const candidatos = idsNovosOrdenados.length === 0
+      ? []
+      : await tx
+        .select({
+          id: schema.representantes.id,
+          deletedAt: schema.representantes.deletedAt,
+        })
+        .from(schema.representantes)
+        .where(inArray(schema.representantes.id, idsNovosOrdenados));
+    const candidatosPorId = new Map(candidatos.map((linha) => [linha.id, linha]));
+    const invalidos = idsNovosOrdenados.filter((id) => {
+      const candidato = candidatosPorId.get(id);
+      return !candidato || (candidato.deletedAt !== null && !anteriores.has(id));
+    });
+    if (invalidos.length > 0) {
+      throw new BadRequestException({
+        code: 'REPRESENTANTES_INVALIDOS',
+        message: 'Representantes permitidos contêm ID inexistente ou removido',
+        representantes: invalidos,
+      });
+    }
+
+    if (mesmosIds(idsAnterioresOrdenados, idsNovosOrdenados)) {
+      return this.detalharNaTx(usuarioId, tx);
+    }
+
+    await tx
+      .delete(schema.usuariosRepresentantes)
+      .where(eq(schema.usuariosRepresentantes.usuarioId, usuarioId));
+    if (idsNovosOrdenados.length > 0) {
+      await tx.insert(schema.usuariosRepresentantes).values(
+        idsNovosOrdenados.map((representanteId) => ({
+          usuarioId,
+          representanteId,
+        })),
+      );
+    }
+
+    await this.auditoria.registrar(tx, {
+      tabela: 'usuarios_representantes',
+      registroId: usuarioId,
+      operacao: 'UPDATE',
+      modulo: 'usuarios',
+      usuarioId: autorUsuarioId,
+      dadosAnteriores: { representantes: idsAnterioresOrdenados },
+      dadosNovos: { representantes: idsNovosOrdenados },
+    });
+    return this.detalharNaTx(usuarioId, tx);
+  }
+
+  private async buscarAtivo(id: string, tx?: Db) {
     const exec = tx ?? this.db;
     return exec
       .select(PROJECAO_USUARIO)
@@ -280,7 +466,7 @@ export class UsuariosService {
       .then((r) => r[0] ?? null);
   }
 
-  private async perfisDoUsuario(id: string, tx?: NodePgDatabase<typeof schema>): Promise<string[]> {
+  private async perfisDoUsuario(id: string, tx?: Db): Promise<string[]> {
     const exec = tx ?? this.db;
     const rows = await exec
       .select({ slug: schema.perfis.slug })
@@ -290,9 +476,8 @@ export class UsuariosService {
     return rows.map((r) => r.slug);
   }
 
-  /** Vincula um usuário a perfis pelos slugs. Slugs inexistentes → 400 explícito. */
   private async vincularPerfis(
-    tx: NodePgDatabase<typeof schema>,
+    tx: Db,
     usuarioId: string,
     slugs: string[],
   ): Promise<string[]> {

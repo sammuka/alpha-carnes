@@ -78,7 +78,7 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
       tabelas_preco_publicacoes, tabelas_preco_itens, tabelas_preco,
       produtos, rotas, representantes,
       clientes, fornecedores, itens_compra, itens_comerciais, parametros,
-      refresh_tokens, usuarios_perfis, perfis_permissoes, permissoes, perfis, usuarios
+      refresh_tokens, usuarios_representantes, usuarios_perfis, perfis_permissoes, permissoes, perfis, usuarios
     RESTART IDENTITY CASCADE
   `);
 }

@@ -79,6 +79,12 @@ compatibilidade com a revisão anterior sem perder dados:
 5. aplicar as duas migrations geradas e somente então restaurar a revisão
    anterior da aplicação.
 
+## 0020 — Onda 5 E5.1 (usuarios_representantes)
+
+```sql
+DROP TABLE IF EXISTS usuarios_representantes;
+```
+
 Todo DDL desse hotfix nasce do delta do schema pelo Drizzle. O arquivo custom
 contém somente DML/PLpgSQL; journal e snapshots não são editados. Essa reversão
 preserva `rota_id`, `adendos_pedido`, `tabelas_preco`,
