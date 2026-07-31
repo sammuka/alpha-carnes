@@ -1,5 +1,9 @@
-import { PlaceholderPage } from '@/components/placeholder-page';
+import { redirect } from 'next/navigation';
+import { getMe } from '@/lib/auth';
+import { RelatoriosClient } from './relatorios-client';
 
-export default function Page() {
-  return <PlaceholderPage title="Relatórios de Gestão" />;
+export default async function GestaoRelatoriosPage() {
+  const user = await getMe();
+  if (!user) redirect('/login');
+  return <RelatoriosClient permissoes={user.permissoes} />;
 }

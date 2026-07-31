@@ -102,3 +102,20 @@ if (typeof globalThis.Response === 'undefined') {
     init?: ResponseInit,
   ) => new Resp(JSON.stringify(body), init);
 }
+
+// jsdom não expõe ResizeObserver; @radix-ui/react-use-size (usado pelo Switch, entre
+// outros primitivos) o invoca em um layout effect assim que o componente monta —
+// sem o polyfill, qualquer teste que abra um formulário com <Switch> falha com
+// "ResizeObserver is not defined" antes mesmo de qualquer asserção.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  class JestResizeObserver {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    writable: true,
+    value: JestResizeObserver,
+  });
+}

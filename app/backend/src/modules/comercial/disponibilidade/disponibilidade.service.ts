@@ -5,6 +5,11 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import { disponibilidadesVirtuais, operacoes } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
+import {
+  compararQtd,
+  formatarQtd,
+  subtrairQtd,
+} from '../../../common/crud/decimal';
 import type { ListarDisponibilidadeQuery } from './dto/disponibilidade.dto';
 
 type DisponibilidadeVirtual = typeof disponibilidadesVirtuais.$inferSelect;
@@ -28,6 +33,19 @@ export interface PedidoEmRisco {
   itemComercialId: string;
   quantidadeReservada: string;
   quantidadeRecebida: string;
+}
+
+export interface ItemImpacto {
+  itemComercialId: string;
+  codigo: string;
+  descricao: string;
+  quantidadeGeradaAtual: string;
+  quantidadeGeradaProjetada: string;
+  delta: string;
+  quantidadeReservada: string;
+  saldoAtual: string;
+  saldoProjetado: string;
+  deficitProjetado: string;
 }
 
 @Injectable()
@@ -215,6 +233,137 @@ export class DisponibilidadeService {
       quantidadeReservada: r.quantidade_reservada,
       quantidadeRecebida: r.quantidade_recebida,
     }));
+  }
+
+  /**
+   * Projeta, sem persistir, o efeito de novas quantidades compradas sobre a
+   * disponibilidade virtual da compra. Todo cálculo em NUMERIC no banco (S4).
+   * `simulacao` mapeia item_compra_id -> nova quantidade comprada.
+   */
+  async projetarImpacto(
+    tx: Tx,
+    compraId: string,
+    simulacao: Map<string, string>,
+  ): Promise<ItemImpacto[]> {
+    const overrides = [...simulacao.entries()];
+    const overrideSql = overrides.length
+      ? sql`(VALUES ${sql.join(
+        overrides.map(([itemCompraId, qtd]) => sql`(${itemCompraId}::uuid, ${qtd}::numeric)`),
+        sql`, `,
+      )}) AS o(item_compra_id, quantidade)`
+      : sql`(SELECT NULL::uuid AS item_compra_id, NULL::numeric AS quantidade WHERE false) AS o`;
+
+    const linhas = await tx.execute<{
+      item_comercial_id: string; codigo: string; descricao: string;
+      gerada_atual: string; gerada_projetada: string;
+      reservada: string; saldo_atual: string;
+    }>(sql`
+    WITH projecao AS (
+      SELECT r.item_comercial_id,
+             SUM(r.fator_quantidade * COALESCE(o.quantidade, cpi.quantidade_comprada)) AS gerada_projetada
+      FROM compras_programadas_itens cpi
+      JOIN regras_desdobramento_comercial r
+        ON r.item_compra_id = cpi.item_compra_id
+       AND r.deleted_at IS NULL AND r.status = 'ativo'
+       AND r.vigencia_inicio <= now()
+       AND (r.vigencia_fim IS NULL OR r.vigencia_fim >= now())
+      LEFT JOIN ${overrideSql} ON o.item_compra_id = cpi.item_compra_id
+      WHERE cpi.compra_programada_id = ${compraId} AND cpi.deleted_at IS NULL
+      GROUP BY r.item_comercial_id
+    )
+    SELECT p.item_comercial_id,
+           ic.codigo, ic.descricao,
+           COALESCE(dv.quantidade_total_gerada, 0)::text AS gerada_atual,
+           p.gerada_projetada::text                      AS gerada_projetada,
+           COALESCE(dv.quantidade_reservada, 0)::text    AS reservada,
+           COALESCE(dv.quantidade_disponivel, 0)::text   AS saldo_atual
+    FROM projecao p
+    JOIN itens_comerciais ic ON ic.id = p.item_comercial_id
+    LEFT JOIN disponibilidades_virtuais dv
+      ON dv.compra_programada_id = ${compraId} AND dv.item_comercial_id = p.item_comercial_id
+    ORDER BY ic.codigo
+  `);
+
+    return linhas.rows.map((l) => {
+      const projetada = formatarQtd(l.gerada_projetada);
+      const atual = formatarQtd(l.gerada_atual);
+      const reservada = formatarQtd(l.reservada);
+      const saldoProjetado = compararQtd(projetada, reservada) > 0
+        ? subtrairQtd(projetada, reservada) : '0.000';
+      const deficitProjetado = compararQtd(reservada, projetada) > 0
+        ? subtrairQtd(reservada, projetada) : '0.000';
+      return {
+        itemComercialId: l.item_comercial_id,
+        codigo: l.codigo,
+        descricao: l.descricao,
+        quantidadeGeradaAtual: atual,
+        quantidadeGeradaProjetada: projetada,
+        delta: subtrairQtd(projetada, atual),
+        quantidadeReservada: reservada,
+        saldoAtual: formatarQtd(l.saldo_atual),
+        saldoProjetado,
+        deficitProjetado,
+      };
+    });
+  }
+
+  /**
+   * Aplica na disponibilidade virtual as quantidades já persistidas na compra.
+   * Clampa o saldo em zero (o excedente reservado vira déficit visível — D5.12) e
+   * deriva o status (D5.13). Sempre dentro da transação da alteração.
+   */
+  async recalcularParaCompra(
+    tx: Tx,
+    compra: CompraProgramada,
+    usuarioId: string,
+  ): Promise<void> {
+    const anteriores = await tx.select().from(disponibilidadesVirtuais)
+      .where(eq(disponibilidadesVirtuais.compraProgramadaId, compra.id));
+
+    const atualizadas = await tx.execute<{
+      id: string; item_comercial_id: string;
+      quantidade_total_gerada: string; quantidade_reservada: string;
+      quantidade_disponivel: string; status: string;
+    }>(sql`
+    WITH projecao AS (
+      SELECT r.item_comercial_id,
+             SUM(r.fator_quantidade * cpi.quantidade_comprada) AS gerada
+      FROM compras_programadas_itens cpi
+      JOIN regras_desdobramento_comercial r
+        ON r.item_compra_id = cpi.item_compra_id
+       AND r.deleted_at IS NULL AND r.status = 'ativo'
+       AND r.vigencia_inicio <= now()
+       AND (r.vigencia_fim IS NULL OR r.vigencia_fim >= now())
+      WHERE cpi.compra_programada_id = ${compra.id} AND cpi.deleted_at IS NULL
+      GROUP BY r.item_comercial_id
+    )
+    UPDATE disponibilidades_virtuais dv
+       SET quantidade_total_gerada = p.gerada,
+           quantidade_disponivel   = GREATEST(0, p.gerada - dv.quantidade_reservada),
+           status = CASE
+             WHEN dv.quantidade_reservada = 0 THEN 'gerada'
+             WHEN GREATEST(0, p.gerada - dv.quantidade_reservada) = 0 THEN 'esgotada'
+             ELSE 'parcialmente_reservada'
+           END
+      FROM projecao p
+     WHERE dv.compra_programada_id = ${compra.id}
+       AND dv.item_comercial_id = p.item_comercial_id
+    RETURNING dv.id, dv.item_comercial_id, dv.quantidade_total_gerada,
+              dv.quantidade_reservada, dv.quantidade_disponivel, dv.status
+  `);
+
+    for (const linha of atualizadas.rows) {
+      const anterior = anteriores.find((a) => a.id === linha.id) ?? null;
+      await this.auditoria.registrar(tx, {
+        tabela: 'disponibilidades_virtuais',
+        registroId: linha.id,
+        operacao: 'UPDATE',
+        modulo: 'comercial',
+        usuarioId,
+        dadosAnteriores: anterior ?? {},
+        dadosNovos: linha,
+      });
+    }
   }
 
   async listar(query: ListarDisponibilidadeQuery): Promise<DisponibilidadeVirtual[]> {

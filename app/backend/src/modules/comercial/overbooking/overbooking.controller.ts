@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -18,7 +19,6 @@ import {
   alterarPendenciaSchema,
   decidirPendenciaSchema,
   listarPendenciasSchema,
-  statusDoCaminho,
   type AlterarPendenciaDto,
   type DecidirPendenciaDto,
   type ListarPendenciasDto,
@@ -37,6 +37,18 @@ export class OverbookingController {
     return this.service.listar(query);
   }
 
+  @Get(':id/cobertura')
+  @RequirePermissoes('PEDIDOS_LER')
+  cobertura(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.cobertura(id);
+  }
+
+  @Get(':id/historico')
+  @RequirePermissoes('PEDIDOS_LER')
+  historico(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.historico(id);
+  }
+
   @Get(':id')
   @RequirePermissoes('PEDIDOS_LER')
   detalhar(@Param('id') id: string) {
@@ -50,7 +62,7 @@ export class OverbookingController {
     @Body(new ZodValidationPipe(decidirPendenciaSchema)) dto: DecidirPendenciaDto,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.service.alterarStatus(id, statusDoCaminho(dto.caminho), dto.detalhe, user.sub);
+    return this.service.decidir(id, dto, user.sub);
   }
 
   @Patch(':id/status')

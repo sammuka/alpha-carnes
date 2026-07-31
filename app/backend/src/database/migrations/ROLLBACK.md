@@ -79,6 +79,33 @@ compatibilidade com a revisão anterior sem perder dados:
 5. aplicar as duas migrations geradas e somente então restaurar a revisão
    anterior da aplicação.
 
+## 0019 — Onda 5 (relatorios_sif, aprovacoes_operacionais)
+
+```sql
+DROP TRIGGER IF EXISTS "trg_aprovacoes_operacionais_updated_at" ON "aprovacoes_operacionais";
+DROP TRIGGER IF EXISTS "trg_relatorios_sif_updated_at" ON "relatorios_sif";
+DROP TRIGGER IF EXISTS "trg_conclusoes_conferencia_nfs_imutavel" ON "conclusoes_conferencia_nfs";
+DROP TRIGGER IF EXISTS "trg_conclusoes_conferencia_imutavel" ON "conclusoes_conferencia";
+DROP FUNCTION IF EXISTS "conclusao_conferencia_imutavel"();
+DROP TABLE IF EXISTS "aprovacoes_operacionais";
+DROP TABLE IF EXISTS "relatorios_sif_versoes";
+DROP TABLE IF EXISTS "relatorios_sif";
+```
+
+Os índices e constraints das três tabelas (`uq_relatorios_sif_operacao_tipo`,
+`idx_relatorios_sif_status`, `idx_relatorios_sif_pendencias_gin`, `uq_sif_versao`,
+`idx_sif_versao_relatorio`, `idx_aprovacoes_operacao`, `idx_aprovacoes_status`,
+`idx_aprovacoes_referencia` e as FKs para `operacoes`/`usuarios`/`relatorios_sif`) caem
+junto com os `DROP TABLE`, sem passo adicional. Os dois triggers de imutabilidade do
+comparativo Pedido × NF × Pesagem (`conclusoes_conferencia*`) precisam ser removidos
+**antes** da função `conclusao_conferencia_imutavel()`, pois dependem dela.
+
+## 0020 — Onda 5 E5.1 (usuarios_representantes)
+
+```sql
+DROP TABLE IF EXISTS usuarios_representantes;
+```
+
 Todo DDL desse hotfix nasce do delta do schema pelo Drizzle. O arquivo custom
 contém somente DML/PLpgSQL; journal e snapshots não são editados. Essa reversão
 preserva `rota_id`, `adendos_pedido`, `tabelas_preco`,

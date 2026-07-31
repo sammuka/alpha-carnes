@@ -1,8 +1,10 @@
 import { relations, sql } from 'drizzle-orm';
+import { representantes } from './representantes.schema';
 import {
   boolean,
   index,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -112,10 +114,29 @@ export const refreshTokens = pgTable(
   ],
 );
 
+// ── usuarios_representantes ───────────────────────────────────────────────────
+export const usuariosRepresentantes = pgTable(
+  'usuarios_representantes',
+  {
+    usuarioId: uuid('usuario_id')
+      .notNull()
+      .references(() => usuarios.id, { onDelete: 'restrict' }),
+    representanteId: uuid('representante_id')
+      .notNull()
+      .references(() => representantes.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.usuarioId, t.representanteId], name: 'pk_usuarios_representantes' }),
+    index('idx_usuarios_representantes_representante').on(t.representanteId),
+  ],
+);
+
 // ── Relations ─────────────────────────────────────────────────────────────────
 export const usuariosRelations = relations(usuarios, ({ many }) => ({
   perfis: many(usuariosPerfis),
   refreshTokens: many(refreshTokens),
+  representantesPermitidos: many(usuariosRepresentantes),
 }));
 
 export const perfisRelations = relations(perfis, ({ many }) => ({
@@ -139,4 +160,15 @@ export const perfisPermissoesRelations = relations(perfisPermissoes, ({ one }) =
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
   usuario: one(usuarios, { fields: [refreshTokens.usuarioId], references: [usuarios.id] }),
+}));
+
+export const usuariosRepresentantesRelations = relations(usuariosRepresentantes, ({ one }) => ({
+  usuario: one(usuarios, {
+    fields: [usuariosRepresentantes.usuarioId],
+    references: [usuarios.id],
+  }),
+  representante: one(representantes, {
+    fields: [usuariosRepresentantes.representanteId],
+    references: [representantes.id],
+  }),
 }));

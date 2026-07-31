@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RbacGuard } from '../../../common/guards/rbac.guard';
@@ -9,11 +9,13 @@ import { listarQuerySchema, type ListarQuery } from '../../../common/crud/pagina
 import { ComprasProgramadasService } from './compras-programadas.service';
 import {
   createCompraProgramadaSchema,
-  updateCompraItemSchema,
   updateCompraProgramadaSchema,
+  impactoQuerySchema,
+  atualizarItemCompraSchema,
   type CreateCompraProgramadaDto,
-  type UpdateCompraItemDto,
   type UpdateCompraProgramadaDto,
+  type ImpactoQueryDto,
+  type AtualizarItemCompraDto,
 } from './dto/compra-programada.dto';
 
 @SkipThrottle()
@@ -26,6 +28,21 @@ export class ComprasProgramadasController {
   @RequirePermissoes('COMPRAS_PROGRAMADAS_LER')
   async listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
     return this.service.listar(query);
+  }
+
+  @Get(':id/impacto')
+  @RequirePermissoes('COMPRAS_PROGRAMADAS_LER')
+  async impacto(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query(new ZodValidationPipe(impactoQuerySchema)) query: ImpactoQueryDto,
+  ) {
+    return this.service.impacto(id, query.simulacao);
+  }
+
+  @Get(':id/historico')
+  @RequirePermissoes('COMPRAS_PROGRAMADAS_LER')
+  async historico(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.historico(id);
   }
 
   @Get(':id')
@@ -56,9 +73,9 @@ export class ComprasProgramadasController {
   @Patch(':id/itens/:itemId')
   @RequirePermissoes('COMPRAS_PROGRAMADAS_GERENCIAR')
   async atualizarItem(
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
-    @Body(new ZodValidationPipe(updateCompraItemSchema)) dto: UpdateCompraItemDto,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body(new ZodValidationPipe(atualizarItemCompraSchema)) dto: AtualizarItemCompraDto,
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.service.atualizarItem(id, itemId, dto, user.sub);

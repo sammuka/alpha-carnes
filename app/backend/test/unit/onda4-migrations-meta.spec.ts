@@ -37,7 +37,7 @@ function readMigration(tag: string): string {
 }
 
 describe('Onda 4 — proveniência das migrations D36', () => {
-  it('encadeia journal e snapshots gerados de 0015 a 0018', () => {
+  it('encadeia journal e snapshots gerados de 0015 a 0020', () => {
     const journal = readJson<Journal>(path.join(META_DIR, '_journal.json'));
     const entries = journal.entries.filter((entry) => entry.idx >= 15);
 
@@ -48,12 +48,14 @@ describe('Onda 4 — proveniência das migrations D36', () => {
       { idx: 16, tag: '0016_onda4_comercial_expand' },
       { idx: 17, tag: '0017_onda4_comercial_backfill' },
       { idx: 18, tag: '0018_onda4_comercial_contract' },
+      { idx: 19, tag: '0019_onda5_gestao' },
+      { idx: 20, tag: '0020_onda5_usuarios_representantes' },
     ]);
     expect(entries.every((entry) =>
       entry.version === '7' && entry.breakpoints,
     )).toBe(true);
 
-    const snapshots = [15, 16, 17, 18].map((idx) =>
+    const snapshots = [15, 16, 17, 18, 19, 20].map((idx) =>
       readJson<Snapshot>(
         path.join(META_DIR, `${String(idx).padStart(4, '0')}_snapshot.json`),
       ),
@@ -61,7 +63,7 @@ describe('Onda 4 — proveniência das migrations D36', () => {
     const uuid =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-    expect(new Set(snapshots.map((snapshot) => snapshot.id)).size).toBe(4);
+    expect(new Set(snapshots.map((snapshot) => snapshot.id)).size).toBe(6);
     expect(snapshots.every((snapshot) =>
       uuid.test(snapshot.id) &&
       snapshot.version === '7' &&
@@ -70,7 +72,10 @@ describe('Onda 4 — proveniência das migrations D36', () => {
     expect(snapshots[1]!.prevId).toBe(snapshots[0]!.id);
     expect(snapshots[2]!.prevId).toBe(snapshots[1]!.id);
     expect(snapshots[3]!.prevId).toBe(snapshots[2]!.id);
+    expect(snapshots[4]!.prevId).toBe(snapshots[3]!.id);
+    expect(snapshots[5]!.prevId).toBe(snapshots[4]!.id);
 
+    // Asserções de coluna O4 permanecem nos snapshots O4 (16–18).
     expect(snapshots[1]!.tables['public.clientes']!.columns).toHaveProperty(
       'rota_padrao',
     );

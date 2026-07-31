@@ -176,6 +176,7 @@ describe('OperacoesService — branches', () => {
       de: '2026-09-01',
       ate: '2026-09-30',
       status: 'aberta',
+      extraordinaria: undefined,
       pagina: 1,
       limite: 10,
     });

@@ -16,8 +16,27 @@ export class AuthService {
     @InjectPinoLogger(AuthService.name) private readonly logger: PinoLogger,
   ) {}
 
-  async montarMe(user: CurrentUserPayload): Promise<CurrentUserPayload & { menusVisiveis: string[] }> {
-    return { ...user, menusVisiveis: await this.rbacService.menusVisiveisDePerfis(user.perfis) };
+  async montarMe(user: CurrentUserPayload): Promise<
+    CurrentUserPayload & {
+      menusVisiveis: string[];
+      escopoRepresentantes: {
+        tipo: 'todos' | 'restrito';
+        representantes: Array<{ id: string; nome: string }>;
+      };
+    }
+  > {
+    const [menusVisiveis, representantes] = await Promise.all([
+      this.rbacService.menusVisiveisDePerfis(user.perfis),
+      this.authRepository.representantesDoUsuario(user.sub),
+    ]);
+    return {
+      ...user,
+      menusVisiveis,
+      escopoRepresentantes: {
+        tipo: representantes.length === 0 ? 'todos' : 'restrito',
+        representantes,
+      },
+    };
   }
 
   async login(

@@ -37,10 +37,39 @@ export const updateCompraProgramadaSchema = z.object({
 
 export type UpdateCompraProgramadaDto = z.infer<typeof updateCompraProgramadaSchema>;
 
-// Atualização de um item da compra (apenas enquanto não confirmada).
-export const updateCompraItemSchema = z.object({
-  quantidadeComprada: quantidadeSchema.optional(),
-  observacoes: z.string().trim().max(500).optional(),
+/** `simulacao=<itemCompraId>:<qtd>,<itemCompraId>:<qtd>` — read-only, pré-salvamento. */
+export const impactoQuerySchema = z.object({
+  simulacao: z.string().trim().optional().transform((valor, ctx) => {
+    const mapa = new Map<string, string>();
+    if (!valor) return mapa;
+    for (const par of valor.split(',')) {
+      const [id, qtd] = par.split(':');
+      const idOk = z.string().uuid().safeParse(id ?? '');
+      const qtdOk = /^\d+(\.\d{1,3})?$/.test(qtd ?? '');
+      if (!idOk.success || !qtdOk) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Simulação inválida em "${par}": use <itemCompraId>:<quantidade>`,
+        });
+        return z.NEVER;
+      }
+      mapa.set(idOk.data, qtd as string);
+    }
+    return mapa;
+  }),
 });
 
-export type UpdateCompraItemDto = z.infer<typeof updateCompraItemSchema>;
+export const atualizarItemCompraSchema = z.object({
+  quantidadeComprada: z
+    .union([
+      z.string().trim().regex(/^\d+(\.\d{1,3})?$/, 'quantidade deve ter até 3 casas decimais'),
+      quantidadeSchema,
+    ])
+    .transform((valor) => (typeof valor === 'number' ? valor.toFixed(3) : valor))
+    .refine((valor) => Number(valor) > 0, 'quantidade deve ser maior que zero'),
+  observacoes: z.string().trim().max(500).optional(),
+  confirmarDeficit: z.boolean().default(false),
+});
+
+export type ImpactoQueryDto = z.infer<typeof impactoQuerySchema>;
+export type AtualizarItemCompraDto = z.infer<typeof atualizarItemCompraSchema>;

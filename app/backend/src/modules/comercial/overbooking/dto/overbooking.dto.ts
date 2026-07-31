@@ -14,10 +14,27 @@ export const listarPendenciasSchema = z.object({
   limite: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-export const decidirPendenciaSchema = z.object({
-  caminho: z.enum(['compra_complementar', 'redistribuicao', 'novo_pedido']),
-  detalhe: z.record(z.string(), z.unknown()).default({}),
-});
+export const decidirPendenciaSchema = z.discriminatedUnion('caminho', [
+  z.object({
+    caminho: z.literal('compra_complementar'),
+    compraProgramadaId: z.string().uuid(),
+    quantidade: z.string().regex(/^\d+(\.\d{1,3})?$/),
+    observacao: z.string().trim().max(500).optional(),
+  }),
+  z.object({
+    caminho: z.literal('redistribuicao'),
+    reservaOrigemId: z.string().uuid(),
+    quantidade: z.string().regex(/^\d+(\.\d{1,3})?$/),
+    observacao: z.string().trim().max(500).optional(),
+  }),
+  z.object({
+    caminho: z.literal('novo_pedido'),
+    operacaoDestinoId: z.string().uuid(),
+    compraProgramadaId: z.string().uuid(),
+    quantidade: z.string().regex(/^\d+(\.\d{1,3})?$/),
+    observacao: z.string().trim().max(500).optional(),
+  }),
+]);
 
 export const alterarPendenciaSchema = z.object({
   status: statusPendenciaSchema,

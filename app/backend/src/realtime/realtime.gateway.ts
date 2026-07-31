@@ -43,6 +43,10 @@ import {
   type NfseEmitidaPayload,
   type NfseCanceladaPayload,
   type NfseErroEmissaoPayload,
+  type CompraAlteradaImpactoPayload,
+  type AprovacaoOperacionalPayload,
+  type RelatorioSifGeradoPayload,
+  type PendenciaOverbookingPayload,
 } from './events/eventos';
 
 /** Socket autenticado: carrega o payload do usuário validado no handshake. */
@@ -293,6 +297,43 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.NFSE_ERRO_EMISSAO)
   handleNfseErroEmissao(payload: NfseErroEmissaoPayload): void {
     this.broadcast(EVENTOS.NFSE_ERRO_EMISSAO, payload, payload.dataOperacao);
+  }
+
+  // ── Onda 5 — Gestão ───────────────────────────────────────────────────────
+
+  @OnEvent(EVENTOS.COMPRA_ALTERADA_IMPACTO)
+  handleCompraAlteradaImpacto(payload: CompraAlteradaImpactoPayload): void {
+    this.broadcast(EVENTOS.COMPRA_ALTERADA_IMPACTO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.APROVACAO_REGISTRADA)
+  handleAprovacaoRegistrada(payload: AprovacaoOperacionalPayload): void {
+    this.broadcast(EVENTOS.APROVACAO_REGISTRADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.APROVACAO_DECIDIDA)
+  handleAprovacaoDecidida(payload: AprovacaoOperacionalPayload): void {
+    this.broadcast(EVENTOS.APROVACAO_DECIDIDA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.RELATORIO_SIF_GERADO)
+  handleRelatorioSifGerado(payload: RelatorioSifGeradoPayload): void {
+    this.broadcast(EVENTOS.RELATORIO_SIF_GERADO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PENDENCIA_OVERBOOKING_ABERTA)
+  handlePendenciaAberta(payload: PendenciaOverbookingPayload & { pedidoVendaId: string }): void {
+    this.broadcast(EVENTOS.PENDENCIA_OVERBOOKING_ABERTA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PENDENCIA_OVERBOOKING_ATUALIZADA)
+  handlePendenciaAtualizada(payload: PendenciaOverbookingPayload): void {
+    this.broadcast(EVENTOS.PENDENCIA_OVERBOOKING_ATUALIZADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PENDENCIA_OVERBOOKING_RESOLVIDA)
+  handlePendenciaResolvida(payload: PendenciaOverbookingPayload): void {
+    this.broadcast(EVENTOS.PENDENCIA_OVERBOOKING_RESOLVIDA, payload, payload.dataOperacao);
   }
 
   private broadcast(evento: string, payload: unknown, dataOperacao: string): void {

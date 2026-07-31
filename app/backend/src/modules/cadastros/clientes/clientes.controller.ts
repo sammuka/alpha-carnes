@@ -17,14 +17,20 @@ export class ClientesController {
 
   @Get()
   @RequirePermissoes('CLIENTES_LER')
-  async listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
-    return this.clientesService.listar(query);
+  async listar(
+    @Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.clientesService.listar(query, user.sub);
   }
 
   @Get(':id')
   @RequirePermissoes('CLIENTES_LER')
-  async detalhar(@Param('id') id: string) {
-    return this.clientesService.detalhar(id);
+  async detalhar(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.clientesService.detalhar(id, user.sub);
   }
 
   @Post()

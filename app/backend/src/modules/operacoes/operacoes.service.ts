@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, asc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lte, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { z } from 'zod';
 import { AuditoriaService } from '../../common/auditoria/auditoria.service';
@@ -23,6 +23,7 @@ import type {
   GerarCadenciaDto,
   ListarOperacoesDto,
   StatusOperacao,
+  OperacaoComContadores,
 } from './dto/operacao.dto';
 
 export type Tx = NodePgDatabase<typeof schema>;
@@ -98,23 +99,69 @@ export class OperacoesService {
       .then((rows) => rows[0] ?? null);
   }
 
-  async listar(query: ListarOperacoesDto): Promise<Paginado<Operacao>> {
-    const page = query.pagina;
-    const pageSize = query.limite;
-    const limit = pageSize;
-    const offset = (page - 1) * pageSize;
+  async listar(query: ListarOperacoesDto): Promise<Paginado<OperacaoComContadores>> {
     const filtros = [isNull(operacoes.deletedAt)];
+    if (query.status) filtros.push(eq(operacoes.status, query.status));
     if (query.de) filtros.push(gte(operacoes.data, query.de));
     if (query.ate) filtros.push(lte(operacoes.data, query.ate));
-    if (query.status) filtros.push(eq(operacoes.status, query.status));
+    if (query.extraordinaria !== undefined) {
+      filtros.push(eq(operacoes.extraordinaria, query.extraordinaria));
+    }
     const where = and(...filtros);
+    const limit = query.limite;
+    const offset = (query.pagina - 1) * query.limite;
 
     const [linhas, totalRow] = await Promise.all([
-      this.db.select().from(operacoes).where(where)
-        .orderBy(asc(operacoes.data)).limit(limit).offset(offset),
+      this.db
+        .select({
+          id: operacoes.id,
+          data: operacoes.data,
+          diaSemana: operacoes.diaSemana,
+          rotulo: operacoes.rotulo,
+          status: operacoes.status,
+          extraordinaria: operacoes.extraordinaria,
+          comprasProgramadas: sql<number>`(
+          SELECT count(*)::int FROM compras_programadas cp
+          WHERE cp.operacao_id = ${operacoes.id} AND cp.deleted_at IS NULL
+        )`,
+          pedidosVenda: sql<number>`(
+          SELECT count(*)::int FROM pedidos_venda pv
+          WHERE pv.operacao_id = ${operacoes.id} AND pv.deleted_at IS NULL
+        )`,
+          pendenciasOverbookingAbertas: sql<number>`(
+          SELECT count(*)::int FROM pendencias_overbooking po
+          WHERE po.operacao_id = ${operacoes.id} AND po.deleted_at IS NULL
+            AND po.status IN ('aberta','em_analise')
+        )`,
+        })
+        .from(operacoes)
+        .where(where)
+        .orderBy(desc(operacoes.data))
+        .limit(limit)
+        .offset(offset),
       this.db.select({ total: sql<number>`count(*)::int` }).from(operacoes).where(where),
     ]);
-    return montarPaginado(linhas, totalRow[0]?.total ?? 0, { page, pageSize });
+
+    return montarPaginado(
+      linhas as OperacaoComContadores[],
+      totalRow[0]?.total ?? 0,
+      { page: query.pagina, pageSize: query.limite },
+    );
+  }
+
+  /** Operação corrente: a próxima não fechada; senão a mais recente. Nunca inventa data. */
+  async resolverCorrente(): Promise<typeof operacoes.$inferSelect> {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const proxima = await this.db.select().from(operacoes)
+      .where(and(isNull(operacoes.deletedAt), gte(operacoes.data, hoje), ne(operacoes.status, 'fechada')))
+      .orderBy(asc(operacoes.data)).limit(1).then((r) => r[0]);
+    if (proxima) return proxima;
+
+    const ultima = await this.db.select().from(operacoes)
+      .where(isNull(operacoes.deletedAt))
+      .orderBy(desc(operacoes.data)).limit(1).then((r) => r[0]);
+    if (!ultima) throw new NotFoundException('OPERACAO_INEXISTENTE');
+    return ultima;
   }
 
   async detalhar(id: string): Promise<Operacao> {

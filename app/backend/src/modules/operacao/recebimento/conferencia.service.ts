@@ -308,6 +308,7 @@ export class ConferenciaService {
           {
             fornecedorId: recebimento.fornecedorId,
             divergenciaId: divergencia.id,
+            conclusaoConferenciaId: conclusao.id,
             compraProgramadaId: recebimento.compraProgramadaId,
             descricao: `Divergência ${divergencia.tipo}: ${divergencia.descricao}`,
           },

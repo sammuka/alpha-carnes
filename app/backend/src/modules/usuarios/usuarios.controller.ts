@@ -21,8 +21,10 @@ import { UsuariosService } from './usuarios.service';
 import { createUsuarioSchema, type CreateUsuarioDto } from './dto/create-usuario.dto';
 import {
   definirPerfisSchema,
+  definirRepresentantesSchema,
   updateUsuarioSchema,
   type DefinirPerfisDto,
+  type DefinirRepresentantesDto,
   type UpdateUsuarioDto,
 } from './dto/update-usuario.dto';
 
@@ -89,6 +91,20 @@ export class UsuariosController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.usuariosService.definirPerfis(id, dto.perfis, user.sub);
+  }
+
+  @Put(':id/representantes')
+  @RequirePermissoes('USUARIOS_GERENCIAR')
+  definirRepresentantes(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(definirRepresentantesSchema)) dto: DefinirRepresentantesDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.usuariosService.definirRepresentantes(
+      id,
+      dto.representantes,
+      user.sub,
+    );
   }
 
   @Post(':id/aprovar')

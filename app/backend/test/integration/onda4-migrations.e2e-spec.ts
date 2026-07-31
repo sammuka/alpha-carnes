@@ -243,8 +243,9 @@ describe('Onda 4 — migrations geradas D36', () => {
   }, 300_000);
 
   it('receita de rollback gerado restaura compatibilidade sem perder dados O4', async () => {
-    await resetOnda4Database();
-    await migrateOnda4WithDrizzle();
+    // Baseline O4 puro: migra só até 0018 (sem 0019/0020), para o generate não ver tabelas O5.
+    await migrarAteOnda4('0018_onda4_comercial_contract');
+    await markDrizzleThrough('0018_onda4_comercial_contract');
 
     const routeId = await insertRoute('ROLLBACK-ROTA', 'Rollback rota');
     const { rows: clients } = await (await onda4Pool()).query<{ id: string }>(
@@ -277,6 +278,63 @@ describe('Onda 4 — migrations geradas D36', () => {
       fs.cpSync(MIGRATIONS_DIR, path.join(probe, 'migrations'), {
         recursive: true,
       });
+      // Probe O4: baseline até 0018 — SQL/snapshots/schemas O5 não entram na receita.
+      for (const o5Artifact of [
+        'migrations/0019_onda5_gestao.sql',
+        'migrations/0020_onda5_usuarios_representantes.sql',
+        'migrations/meta/0019_snapshot.json',
+        'migrations/meta/0020_snapshot.json',
+        'schema/relatorios-sif.schema.ts',
+        'schema/aprovacoes-operacionais.schema.ts',
+      ]) {
+        fs.rmSync(path.join(probe, o5Artifact), { force: true });
+      }
+      const probeJournal = JSON.parse(
+        fs.readFileSync(path.join(probe, 'migrations/meta/_journal.json'), 'utf8'),
+      ) as { version: string; dialect: string; entries: Array<{ idx: number; tag: string }> };
+      probeJournal.entries = probeJournal.entries.filter((entry) => entry.idx <= 18);
+      fs.writeFileSync(
+        path.join(probe, 'migrations/meta/_journal.json'),
+        `${JSON.stringify(probeJournal, null, 2)}\n`,
+        'utf8',
+      );
+      const probeSchemaIndex = path.join(probe, 'schema/index.ts');
+      const o4SchemaLines = fs.readFileSync(probeSchemaIndex, 'utf8')
+        .split(/\r?\n/)
+        .filter((line) =>
+          !line.includes('relatorios-sif.schema') &&
+          !line.includes('aprovacoes-operacionais.schema') &&
+          !line.includes('usuarios-representantes.schema'),
+        );
+      fs.writeFileSync(probeSchemaIndex, `${o4SchemaLines.join('\n')}\n`, 'utf8');
+
+      // usuarios_representantes vive em auth.schema (O5) — remove do probe para o
+      // generate não divergir do snapshot 0018.
+      const probeAuthSchema = path.join(probe, 'schema/auth.schema.ts');
+      let authSchema = fs.readFileSync(probeAuthSchema, 'utf8');
+      authSchema = authSchema.replace(
+        /import \{ representantes \} from '\.\/representantes\.schema';\r?\n/,
+        '',
+      );
+      const tableStart = authSchema.indexOf('export const usuariosRepresentantes = pgTable');
+      const relationsStart = authSchema.indexOf('export const usuariosRelations');
+      if (tableStart < 0 || relationsStart < 0) {
+        throw new Error('auth.schema do probe sem bloco usuariosRepresentantes esperado');
+      }
+      const commentStart = authSchema.lastIndexOf('\n//', tableStart);
+      authSchema = `${authSchema.slice(0, commentStart)}\n${authSchema.slice(relationsStart)}`;
+      authSchema = authSchema.replace(
+        /\s*representantesPermitidos: many\(usuariosRepresentantes\),/,
+        '',
+      );
+      const urRelations = authSchema.indexOf('export const usuariosRepresentantesRelations');
+      if (urRelations >= 0) {
+        authSchema = authSchema.slice(0, urRelations).trimEnd() + '\n';
+      }
+      // primaryKey só era usado pela tabela O5 removida
+      authSchema = authSchema.replace(/^\s*primaryKey,\r?\n/m, '');
+      fs.writeFileSync(probeAuthSchema, authSchema, 'utf8');
+
       fs.writeFileSync(
         path.join(probe, 'drizzle.config.ts'),
         [

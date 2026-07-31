@@ -22,7 +22,7 @@ export async function seedMenusVisiveis(db: Db): Promise<void> {
   }
 }
 
-/** As 9 chaves da v1.1 §16 exibidas em Administração / Parâmetros (decisão 25 da Onda 3). */
+/** As 10 chaves da v1.1 §16 exibidas em Administração / Parâmetros (decisão 25 da Onda 3). */
 const PARAMETROS_SEED = [
   {
     chave: 'comercial.overbooking_permitido',
@@ -107,6 +107,20 @@ const PARAMETROS_SEED = [
       valor: '',
       provisorio: true,
       pendencia: 'P12',
+    },
+  },
+  {
+    chave: 'gestao.modelos_relatorio_sif',
+    descricao: 'Modelos oficiais dos relatórios SIF',
+    valorJson: {
+      grupo: 'Operação',
+      tipo: 'texto',
+      titulo: 'Modelos oficiais dos relatórios SIF',
+      texto:
+        'Lista provisória: mapa de recebimento diário, relatório de produção/desossa, controle de expedição, relatório de perdas e destinação. Nomes e layouts provisórios — a lista oficial e os modelos exigidos pelo SIF ainda não foram entregues pelo cliente.',
+      valor: 'mapa_recebimento,producao_desossa,controle_expedicao,perdas_destinacao',
+      provisorio: true,
+      pendencia: 'P8',
     },
   },
   {

@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, desc, eq, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -21,6 +21,7 @@ import {
   reservasDisponibilidade,
   rotas,
 } from '../../../database/schema';
+import { escopoRepresentantes } from '../../../common/rbac/escopo-representantes';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import {
   calcularRange,
@@ -118,13 +119,17 @@ export class PedidosService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<PedidoVenda & {
+  async listar(query: ListarQuery, usuarioId: string): Promise<Paginado<PedidoVenda & {
     representanteId: string | null;
     representanteNome: string | null;
     rotaNome: string | null;
   }>> {
     const { limit, offset } = calcularRange(query);
-    const where = query.incluirRemovidos ? undefined : isNull(pedidosVenda.deletedAt);
+    const filtroEscopo = escopoRepresentantes(usuarioId, clientes.representanteId);
+    const where = and(
+      query.incluirRemovidos ? undefined : isNull(pedidosVenda.deletedAt),
+      filtroEscopo,
+    );
     const [linhas, totalRow] = await Promise.all([
       this.db
         .select({
@@ -148,44 +153,51 @@ export class PedidosService {
           rotaNome: rotas.nome,
         })
         .from(pedidosVenda)
-        .leftJoin(clientes, eq(pedidosVenda.clienteId, clientes.id))
+        .innerJoin(clientes, eq(pedidosVenda.clienteId, clientes.id))
         .leftJoin(representantes, eq(clientes.representanteId, representantes.id))
         .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
         .where(where)
         .orderBy(desc(pedidosVenda.createdAt))
         .limit(limit)
         .offset(offset),
-      this.db.select({ total: sql<number>`count(*)::int` }).from(pedidosVenda).where(where),
+      this.db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(pedidosVenda)
+        .innerJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
+        .where(where),
     ]);
     return montarPaginado(linhas, totalRow[0]?.total ?? 0, query);
   }
 
-  async detalhar(id: string) {
-    const pedido = await this.db.query.pedidosVenda.findFirst({
-      where: and(eq(pedidosVenda.id, id), isNull(pedidosVenda.deletedAt)),
-      with: {
-        cliente: true,
-        itens: { with: { itemComercial: true, reservas: { with: { disponibilidade: true } } } },
-      },
+  async detalhar(id: string, usuarioId: string) {
+    return this.db.transaction(async (tx) => {
+      await this.exigirPedidoNoEscopo(tx, id, usuarioId, false);
+      const pedido = await this.db.query.pedidosVenda.findFirst({
+        where: and(eq(pedidosVenda.id, id), isNull(pedidosVenda.deletedAt)),
+        with: {
+          cliente: true,
+          itens: { with: { itemComercial: true, reservas: { with: { disponibilidade: true } } } },
+        },
+      });
+      if (!pedido) throw new NotFoundException('Pedido não encontrado');
+      const [heranca] = await this.db
+        .select({
+          representanteId: clientes.representanteId,
+          representanteNome: representantes.nome,
+          rotaId: clientes.rotaId,
+          rotaNome: rotas.nome,
+        })
+        .from(clientes)
+        .leftJoin(representantes, eq(clientes.representanteId, representantes.id))
+        .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
+        .where(eq(clientes.id, pedido.clienteId))
+        .limit(1);
+      return { ...pedido, heranca: heranca ?? null };
     });
-    if (!pedido) throw new NotFoundException('Pedido não encontrado');
-    const [heranca] = await this.db
-      .select({
-        representanteId: clientes.representanteId,
-        representanteNome: representantes.nome,
-        rotaId: clientes.rotaId,
-        rotaNome: rotas.nome,
-      })
-      .from(clientes)
-      .leftJoin(representantes, eq(clientes.representanteId, representantes.id))
-      .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
-      .where(eq(clientes.id, pedido.clienteId))
-      .limit(1);
-    return { ...pedido, heranca: heranca ?? null };
   }
 
   /** Devolve o pedido aberto (payload do `ModalAdendo`) ou lança 404 se a data não tem operação. */
-  async buscarAberto(query: BuscarPedidoAbertoDto) {
+  async buscarAberto(query: BuscarPedidoAbertoDto, usuarioId: string) {
     return this.db.transaction(async (tx) => {
       const operacao = await this.operacoes.encontrarAtivaPorData(tx, query.dataOperacao);
       if (!operacao) {
@@ -203,6 +215,7 @@ export class PedidosService {
         })
         .from(pedidosVendaItens)
         .innerJoin(pedidosVenda, eq(pedidosVendaItens.pedidoVendaId, pedidosVenda.id))
+        .innerJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
         .where(and(
           eq(pedidosVenda.clienteId, query.clienteId),
           eq(pedidosVenda.operacaoId, operacao.id),
@@ -210,6 +223,7 @@ export class PedidosService {
           inArray(pedidosVenda.status, [...PedidosService.STATUS_ABERTOS]),
           isNull(pedidosVenda.deletedAt),
           isNull(pedidosVendaItens.deletedAt),
+          escopoRepresentantes(usuarioId, clientes.representanteId),
         ))
         .limit(1);
       return aberto ?? null;
@@ -267,67 +281,77 @@ export class PedidosService {
   }
 
   async criar(dto: CreatePedidoDto, usuarioId: string, confirmado = false) {
-    const resultado = await this.db.transaction(async (tx) => {
-      const solicitados: ItemSolicitado[] = dto.itens.map((item) => ({
-        itemComercialId: item.itemComercialId,
-        quantidade: item.quantidadePedida,
-        observacoes: item.observacoes,
-      }));
-      // O challenge é estritamente read-only: não chame garantirOperacao antes
-      // de decidir se a confirmação é necessária.
-      const operacaoExistente = await this.operacoes.encontrarAtivaPorData(
-        tx, dto.dataOperacao,
-      );
-      // Sem operação ativa na data não pode existir pedido aberto para checar: pedidos_venda.operacao_id
-      // é NOT NULL e FK para operacoes(id), logo o conjunto de conflitos é provadamente vazio.
-      // A operação é criada logo abaixo por garantirOperacao (primeiro pedido do dia).
-      if (operacaoExistente) {
-        await this.exigirUnicidadeAd03(
-          tx,
-          dto.clienteId,
-          operacaoExistente.id,
-          solicitados.map((s) => s.itemComercialId),
-        );
-      }
-      const plano = await this.planejarSobLock(
-        tx, operacaoExistente?.id ?? null, solicitados,
-      );
-      const desafios = desafiosParaChallenge(plano);
-      if (desafios.length && !confirmado) {
-        throw new OverbookingChallengeException(desafios);
-      }
-
-      const operacao = operacaoExistente
-        ?? (await this.operacoes.garantirOperacao(
-          tx, dto.dataOperacao, usuarioId,
-        )).operacao;
-      const pedido = primeiroOuFalha(await tx.insert(pedidosVenda).values({
-        compraProgramadaId: dto.compraProgramadaId,
-        clienteId: dto.clienteId,
-        operacaoId: operacao.id,
-        dataEntrega: dto.dataEntrega,
-        rotaPrevista: dto.rotaPrevista ?? (await this.rotaHerdadaDoCliente(tx, dto.clienteId)),
-        prioridade: dto.prioridade,
-        // AD-06: rascunho também tem reserva ativa; a única diferença é o status inicial.
-        status: dto.salvarComoRascunho ? 'rascunho' : 'em_elaboracao_reserva_ativa',
-        observacoesGerais: dto.observacoesGerais,
-        usuarioCriacaoId: usuarioId,
-      }).returning());
-
-      await this.auditoria.registrar(tx, {
-        tabela: 'pedidos_venda',
-        registroId: pedido.id,
-        operacao: 'INSERT',
-        modulo: 'comercial',
-        usuarioId,
-        dadosAnteriores: {},
-        dadosNovos: pedido,
-      });
-
-      return this.persistirItensPlanejados(tx, pedido, solicitados, plano, usuarioId);
-    });
+    const resultado = await this.db.transaction((tx) =>
+      this.criarNaTx(tx, dto, usuarioId, confirmado),
+    );
     this.emitirEventosPosCommit(resultado.eventos);
     return resultado.pedido;
+  }
+
+  async criarNaTx(
+    tx: Tx,
+    dto: CreatePedidoDto,
+    usuarioId: string,
+    confirmado: boolean,
+  ): Promise<{ pedido: PedidoVenda; eventos: EventoDominio[] }> {
+    await this.exigirClienteNoEscopo(tx, dto.clienteId, usuarioId);
+    const solicitados: ItemSolicitado[] = dto.itens.map((item) => ({
+      itemComercialId: item.itemComercialId,
+      quantidade: item.quantidadePedida,
+      observacoes: item.observacoes,
+    }));
+    // O challenge é estritamente read-only: não chame garantirOperacao antes
+    // de decidir se a confirmação é necessária.
+    const operacaoExistente = await this.operacoes.encontrarAtivaPorData(
+      tx, dto.dataOperacao,
+    );
+    // Sem operação ativa na data não pode existir pedido aberto para checar: pedidos_venda.operacao_id
+    // é NOT NULL e FK para operacoes(id), logo o conjunto de conflitos é provadamente vazio.
+    // A operação é criada logo abaixo por garantirOperacao (primeiro pedido do dia).
+    if (operacaoExistente) {
+      await this.exigirUnicidadeAd03(
+        tx,
+        dto.clienteId,
+        operacaoExistente.id,
+        solicitados.map((s) => s.itemComercialId),
+      );
+    }
+    const plano = await this.planejarSobLock(
+      tx, operacaoExistente?.id ?? null, solicitados,
+    );
+    const desafios = desafiosParaChallenge(plano);
+    if (desafios.length && !confirmado) {
+      throw new OverbookingChallengeException(desafios);
+    }
+
+    const operacao = operacaoExistente
+      ?? (await this.operacoes.garantirOperacao(
+        tx, dto.dataOperacao, usuarioId,
+      )).operacao;
+    const pedido = primeiroOuFalha(await tx.insert(pedidosVenda).values({
+      compraProgramadaId: dto.compraProgramadaId,
+      clienteId: dto.clienteId,
+      operacaoId: operacao.id,
+      dataEntrega: dto.dataEntrega,
+      rotaPrevista: dto.rotaPrevista ?? (await this.rotaHerdadaDoCliente(tx, dto.clienteId)),
+      prioridade: dto.prioridade,
+      // AD-06: rascunho também tem reserva ativa; a única diferença é o status inicial.
+      status: dto.salvarComoRascunho ? 'rascunho' : 'em_elaboracao_reserva_ativa',
+      observacoesGerais: dto.observacoesGerais,
+      usuarioCriacaoId: usuarioId,
+    }).returning());
+
+    await this.auditoria.registrar(tx, {
+      tabela: 'pedidos_venda',
+      registroId: pedido.id,
+      operacao: 'INSERT',
+      modulo: 'comercial',
+      usuarioId,
+      dadosAnteriores: {},
+      dadosNovos: pedido,
+    });
+
+    return this.persistirItensPlanejados(tx, pedido, solicitados, plano, usuarioId);
   }
 
   async incluirItem(
@@ -358,7 +382,7 @@ export class PedidosService {
     usuarioId: string,
     confirmado: boolean,
   ): Promise<{ pedido: PedidoVenda; eventos: EventoDominio[] }> {
-    const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId);
+    const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId, usuarioId);
     if (pedido.status === 'cancelado' || pedido.status === 'finalizado') {
       throw new ConflictException('Pedido não aceita novos itens');
     }
@@ -547,11 +571,24 @@ export class PedidosService {
     if (!pedido.operacaoId) {
       throw new ConflictException('Pedido sem operação não pode gerar overbooking');
     }
+    if (!dataOperacao) {
+      const [operacao] = await tx.select({ data: operacoes.data })
+        .from(operacoes)
+        .where(eq(operacoes.id, pedido.operacaoId))
+        .limit(1);
+      dataOperacao = operacao?.data;
+    }
     await this.abrirOuAcumularReservaOverbooking(tx, item.id, alocacao.deficit);
-    const pendenciaId = await this.abrirOuAcumularPendencia(tx, pedido, item, alocacao.deficit, usuarioId);
+    const pendencia = await this.abrirOuAcumularPendencia(tx, pedido, item, alocacao.deficit, usuarioId);
     eventos.push({
       nome: EVENTOS.PENDENCIA_OVERBOOKING_ABERTA,
-      payload: { pendenciaId, pedidoVendaId: pedido.id },
+      payload: {
+        pendenciaId: pendencia.id,
+        pedidoVendaId: pedido.id,
+        operacaoId: pedido.operacaoId,
+        dataOperacao: dataOperacao ?? '',
+        status: pendencia.status,
+      },
     });
     eventos.push({
       nome: EVENTOS.OVERBOOKING_CONFIRMADO,
@@ -612,7 +649,7 @@ export class PedidosService {
     item: PedidoVendaItem,
     deficit: string,
     usuarioId: string,
-  ): Promise<string> {
+  ): Promise<{ id: string; status: string }> {
     const [aberta] = await tx.select().from(pendenciasOverbooking)
       .where(and(
         eq(pendenciasOverbooking.pedidoVendaItemId, item.id),
@@ -632,7 +669,7 @@ export class PedidosService {
         autorId: usuarioId,
         detalheJson: { deficitAdicionado: deficit, deficitTotal: acumulado },
       });
-      return aberta.id;
+      return { id: aberta.id, status: aberta.status };
     }
     const [pendencia] = await tx.insert(pendenciasOverbooking).values({
       pedidoVendaId: pedido.id, pedidoVendaItemId: item.id,
@@ -644,16 +681,12 @@ export class PedidosService {
     await tx.insert(pendenciasOverbookingHistorico).values({
       pendenciaId: pendencia.id, acao: 'confirmada_pelo_vendedor', autorId: usuarioId,
     });
-    return pendencia.id;
+    return { id: pendencia.id, status: pendencia.status };
   }
 
   /** Carrega sob lock o pedido que vai receber adendo. Só estados abertos de AD-03 (D7). */
-  async carregarAbertoParaAdendo(tx: Tx, pedidoId: string): Promise<PedidoVenda> {
-    const [pedido] = await tx.select().from(pedidosVenda)
-      .where(and(eq(pedidosVenda.id, pedidoId), isNull(pedidosVenda.deletedAt)))
-      .for('update')
-      .limit(1);
-    if (!pedido) throw new NotFoundException('Pedido não encontrado');
+  async carregarAbertoParaAdendo(tx: Tx, pedidoId: string, usuarioId: string): Promise<PedidoVenda> {
+    const pedido = await this.exigirPedidoNoEscopo(tx, pedidoId, usuarioId, true);
     if (!(PedidosService.STATUS_ABERTOS as readonly string[]).includes(pedido.status)) {
       throw new ConflictException({
         code: 'PEDIDO_NAO_ABERTO',
@@ -666,8 +699,9 @@ export class PedidosService {
 
   /** Exige que o produto JÁ esteja no pedido: adendo aumenta item, não cria item. */
   async exigirItemDoPedido(
-    tx: Tx, pedidoId: string, itemComercialId: string,
+    tx: Tx, pedidoId: string, itemComercialId: string, usuarioId: string,
   ): Promise<PedidoVendaItem> {
+    await this.exigirPedidoNoEscopo(tx, pedidoId, usuarioId, true);
     const [item] = await tx.select().from(pedidosVendaItens)
       .where(and(
         eq(pedidosVendaItens.pedidoVendaId, pedidoId),
@@ -691,47 +725,52 @@ export class PedidosService {
     dto: ReduzirItemDto,
     usuarioId: string,
   ): Promise<void> {
-    const novaQuantidade = formatarQtd(dto.novaQuantidade);
-    await this.db.transaction(async (tx) => {
-      const item = await tx.select().from(pedidosVendaItens)
-        .where(and(
-          eq(pedidosVendaItens.id, itemId),
-          eq(pedidosVendaItens.pedidoVendaId, pedidoId),
-          isNull(pedidosVendaItens.deletedAt),
-        ))
-        .then((rows) => rows[0]);
-      if (!item) throw new NotFoundException('Item do pedido não encontrado');
-      if (compararQtd(novaQuantidade, item.quantidadePedida) >= 0) {
-        throw new ConflictException('A operação aceita somente redução');
-      }
-      const reducao = subtrairQtd(item.quantidadePedida, novaQuantidade);
-      const tirarOverbooking = minimoQtd(reducao, item.quantidadeOverbooking);
-      const devolverReal = subtrairQtd(reducao, tirarOverbooking);
-      if (!ehZero(tirarOverbooking)) {
-        await this.reduzirReservaOverbooking(tx, item.id, tirarOverbooking);
-        await this.atualizarOuCancelarPendencia(tx, item.id, tirarOverbooking, usuarioId);
-      }
-      if (!ehZero(devolverReal)) {
-        await this.liberarReservaReal(tx, item.id, devolverReal);
-      }
-      const novaOverbooking = subtrairQtd(item.quantidadeOverbooking, tirarOverbooking);
-      const novaReservada = subtrairQtd(item.quantidadeReservada, devolverReal);
-      const [itemAtualizado] = await tx.update(pedidosVendaItens).set({
-        quantidadePedida: novaQuantidade,
-        quantidadeReservada: novaReservada,
-        quantidadeOverbooking: novaOverbooking,
-        status: ehZero(novaOverbooking) ? 'totalmente_reservado' : 'overbooking_confirmado',
-        updatedAt: new Date(),
-      }).where(eq(pedidosVendaItens.id, itemId)).returning();
-      await this.auditoria.registrar(tx, {
-        tabela: 'pedidos_venda_itens',
-        registroId: itemId,
-        operacao: 'UPDATE',
-        modulo: 'comercial',
-        usuarioId,
-        dadosAnteriores: item,
-        dadosNovos: { ...itemAtualizado, motivo: dto.motivo },
-      });
+    await this.db.transaction((tx) =>
+      this.reduzirItemNaTx(
+        tx, pedidoId, itemId, formatarQtd(dto.novaQuantidade), dto.motivo, usuarioId,
+      ),
+    );
+  }
+
+  async reduzirItemNaTx(
+    tx: Tx,
+    pedidoId: string,
+    itemId: string,
+    novaQuantidade: string,
+    motivo: string,
+    usuarioId: string,
+  ): Promise<void> {
+    const item = await this.obterItemAtivoSobLock(tx, pedidoId, itemId, usuarioId);
+    if (compararQtd(novaQuantidade, item.quantidadePedida) >= 0) {
+      throw new ConflictException('A operação aceita somente redução');
+    }
+    const reducao = subtrairQtd(item.quantidadePedida, novaQuantidade);
+    const tirarOverbooking = minimoQtd(reducao, item.quantidadeOverbooking);
+    const devolverReal = subtrairQtd(reducao, tirarOverbooking);
+    if (!ehZero(tirarOverbooking)) {
+      await this.reduzirReservaOverbooking(tx, item.id, tirarOverbooking);
+      await this.atualizarOuCancelarPendencia(tx, item.id, tirarOverbooking, usuarioId);
+    }
+    if (!ehZero(devolverReal)) {
+      await this.liberarReservaReal(tx, item.id, devolverReal);
+    }
+    const novaOverbooking = subtrairQtd(item.quantidadeOverbooking, tirarOverbooking);
+    const novaReservada = subtrairQtd(item.quantidadeReservada, devolverReal);
+    const [itemAtualizado] = await tx.update(pedidosVendaItens).set({
+      quantidadePedida: novaQuantidade,
+      quantidadeReservada: novaReservada,
+      quantidadeOverbooking: novaOverbooking,
+      status: ehZero(novaOverbooking) ? 'totalmente_reservado' : 'overbooking_confirmado',
+      updatedAt: new Date(),
+    }).where(eq(pedidosVendaItens.id, itemId)).returning();
+    await this.auditoria.registrar(tx, {
+      tabela: 'pedidos_venda_itens',
+      registroId: itemId,
+      operacao: 'UPDATE',
+      modulo: 'comercial',
+      usuarioId,
+      dadosAnteriores: item,
+      dadosNovos: { ...itemAtualizado, motivo },
     });
   }
 
@@ -843,35 +882,45 @@ export class PedidosService {
     dto: RemoverItemDto,
     usuarioId: string,
   ): Promise<void> {
-    await this.db.transaction(async (tx) => {
-      const item = await this.obterItemAtivoSobLock(tx, pedidoId, itemId);
-      await this.liberarTodasReservasDoItem(tx, item.id);
-      if (!ehZero(item.quantidadeOverbooking)) {
-        await this.atualizarOuCancelarPendencia(
-          tx,
-          item.id,
-          item.quantidadeOverbooking,
-          usuarioId,
-        );
-      }
-      await tx.update(pedidosVendaItens)
-        .set({ deletedAt: new Date(), updatedAt: new Date() })
-        .where(eq(pedidosVendaItens.id, item.id));
-      await this.auditoria.registrar(tx, {
-        tabela: 'pedidos_venda_itens',
-        registroId: item.id,
-        operacao: 'DELETE',
-        modulo: 'comercial',
+    await this.db.transaction((tx) =>
+      this.removerItemNaTx(tx, pedidoId, itemId, dto.motivo, usuarioId),
+    );
+  }
+
+  async removerItemNaTx(
+    tx: Tx,
+    pedidoId: string,
+    itemId: string,
+    motivo: string,
+    usuarioId: string,
+  ): Promise<void> {
+    const item = await this.obterItemAtivoSobLock(tx, pedidoId, itemId, usuarioId);
+    await this.liberarTodasReservasDoItem(tx, item.id);
+    if (!ehZero(item.quantidadeOverbooking)) {
+      await this.atualizarOuCancelarPendencia(
+        tx,
+        item.id,
+        item.quantidadeOverbooking,
         usuarioId,
-        dadosAnteriores: item,
-        dadosNovos: { motivo: dto.motivo },
-      });
+      );
+    }
+    await tx.update(pedidosVendaItens)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(pedidosVendaItens.id, item.id));
+    await this.auditoria.registrar(tx, {
+      tabela: 'pedidos_venda_itens',
+      registroId: item.id,
+      operacao: 'DELETE',
+      modulo: 'comercial',
+      usuarioId,
+      dadosAnteriores: item,
+      dadosNovos: { motivo },
     });
   }
 
   async cancelarPedido(pedidoId: string, motivo: string, usuarioId: string): Promise<PedidoVenda> {
     return this.db.transaction(async (tx) => {
-      const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId);
+      const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId, usuarioId);
       if (pedido.status === 'cancelado') throw new ConflictException('Pedido já cancelado');
       const itens = await tx.select().from(pedidosVendaItens)
         .where(and(
@@ -899,7 +948,7 @@ export class PedidosService {
 
   async finalizar(pedidoId: string, usuarioId: string): Promise<PedidoVenda> {
     const resultado = await this.db.transaction(async (tx) => {
-      const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId);
+      const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId, usuarioId);
       if (pedido.status === 'cancelado') throw new ConflictException('Pedido cancelado');
       if (pedido.status === 'finalizado') throw new ConflictException('Pedido já finalizado');
 
@@ -944,7 +993,7 @@ export class PedidosService {
     pedidoId: string, dto: LiberarReservaDto, usuarioId: string,
   ): Promise<{ id: string; status: string }> {
     const resultado = await this.db.transaction(async (tx) => {
-      const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId);
+      const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId, usuarioId);
       if (pedido.status !== 'rascunho') {
         throw new BadRequestException({
           code: 'PEDIDO_NAO_ESTA_EM_RASCUNHO',
@@ -1003,20 +1052,67 @@ export class PedidosService {
     }
   }
 
-  private async obterPedidoAtivoSobLock(tx: Tx, pedidoId: string): Promise<PedidoVenda> {
-    const [pedido] = await tx.select().from(pedidosVenda)
-      .where(and(eq(pedidosVenda.id, pedidoId), isNull(pedidosVenda.deletedAt)))
-      .for('update')
-      .limit(1);
+  private async obterPedidoAtivoSobLock(
+    tx: Tx,
+    pedidoId: string,
+    usuarioId: string,
+  ): Promise<PedidoVenda> {
+    return this.exigirPedidoNoEscopo(tx, pedidoId, usuarioId, true);
+  }
+
+  async exigirPedidoNoEscopo(
+    tx: NodePgDatabase<typeof schema>,
+    pedidoId: string,
+    usuarioId: string,
+    bloquear: boolean,
+  ): Promise<PedidoVenda> {
+    const consulta = tx
+      .select(getTableColumns(pedidosVenda))
+      .from(pedidosVenda)
+      .innerJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
+      .where(and(
+        eq(pedidosVenda.id, pedidoId),
+        isNull(pedidosVenda.deletedAt),
+        escopoRepresentantes(usuarioId, clientes.representanteId),
+      ));
+    const linhas = bloquear
+      ? await consulta.for('update').limit(1)
+      : await consulta.limit(1);
+    const pedido = linhas[0];
     if (!pedido) throw new NotFoundException('Pedido não encontrado');
     return pedido;
+  }
+
+  private async exigirClienteNoEscopo(
+    tx: NodePgDatabase<typeof schema>,
+    clienteId: string,
+    usuarioId: string,
+  ) {
+    const cliente = await tx
+      .select({
+        id: clientes.id,
+        representanteId: clientes.representanteId,
+        rotaId: clientes.rotaId,
+      })
+      .from(clientes)
+      .where(and(
+        eq(clientes.id, clienteId),
+        isNull(clientes.deletedAt),
+        escopoRepresentantes(usuarioId, clientes.representanteId),
+      ))
+      .limit(1)
+      .then((linhas) => linhas[0] ?? null);
+    if (!cliente) throw new NotFoundException('Cliente não encontrado');
+    return cliente;
   }
 
   private async obterItemAtivoSobLock(
     tx: Tx,
     pedidoId: string,
     itemId: string,
+    usuarioId: string,
   ): Promise<PedidoVendaItem> {
+    await this.exigirPedidoNoEscopo(tx, pedidoId, usuarioId, true);
     const [item] = await tx.select().from(pedidosVendaItens)
       .where(and(
         eq(pedidosVendaItens.id, itemId),

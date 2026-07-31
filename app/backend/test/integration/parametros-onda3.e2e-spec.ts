@@ -6,6 +6,7 @@ import { DRIZZLE } from '../../src/database/database.module';
 const CHAVES = [
   'comercial.overbooking_permitido', 'comercial.prioridade_consumo', 'operacao.fifo_estoque',
   'operacao.cadencia_dias_semana', 'operacao.composicao_boi_casado', 'operacao.regras_transformacao_tz',
+  'gestao.modelos_relatorio_sif',
   'fiscal.seguro_integrado', 'fiscal.emissao_fiscal', 'fiscal.expiracao_reserva_rascunho',
 ];
 
@@ -26,7 +27,7 @@ describe('Parametros Onda 3 e2e', () => {
 
   const srv = () => app.getHttpServer();
 
-  it('seed cria as 9 chaves de parametro da v1.1 com AD-01, AD-02 e AD-06 honradas', async () => {
+  it('seed cria as 10 chaves de parametro da v1.1 com AD-01, AD-02 e AD-06 honradas', async () => {
     const { seedParametros } = await import('../../src/database/seed');
     await seedParametros(app.get(DRIZZLE).db);
 
@@ -73,9 +74,20 @@ describe('Parametros Onda 3 e2e', () => {
       .map((p: { chave: string; valorJson: { pendencia: string } }) => [p.chave, p.valorJson.pendencia])
       .sort();
     expect(provisorios).toEqual([
+      ['gestao.modelos_relatorio_sif', 'P8'],
       ['operacao.cadencia_dias_semana', 'P1'],
       ['operacao.regras_transformacao_tz', 'P12'],
     ]);
+  });
+
+  it('expõe o parâmetro provisório dos modelos SIF (P8)', async () => {
+    const { body } = await request(srv())
+      .get('/parametros/chave/gestao.modelos_relatorio_sif')
+      .set('Cookie', adminCookies)
+      .expect(200);
+
+    expect(body.valorJson.provisorio).toBe(true);
+    expect(body.valorJson.pendencia).toBe('P8');
   });
 
   it('atualiza parametro por chave, audita e 404 em chave desconhecida', async () => {

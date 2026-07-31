@@ -21,6 +21,7 @@ import type {
   DisponibilidadeDia,
   Paginado,
 } from '@/lib/comercial';
+import { ComprasEditModal } from './compras-edit-modal';
 
 interface CadastroItem {
   id: string;
@@ -77,6 +78,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const [itensCompra, setItensCompra] = useState<CadastroItem[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [modalEditar, setModalEditar] = useState(false);
 
   const editavel = compra ? ['rascunho', 'em_negociacao'].includes(compra.status) : true;
 
@@ -164,7 +166,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
         for (const [idx, item] of compra.itens.entries()) {
           const linha = itensValidos[idx];
           if (linha) {
-            await fetch(`/api/comercial/compras-programadas/${compra.id}/itens/${item.id}`, {
+            const res = await fetch(`/api/comercial/compras-programadas/${compra.id}/itens/${item.id}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -172,6 +174,21 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                 observacoes: linha.observacoes,
               }),
             });
+            if (res.status === 409) {
+              const body = await res.json().catch(() => ({}));
+              if ((body as { codigo?: string }).codigo === 'IMPACTO_CONFIRMACAO_NECESSARIA') {
+                setModalEditar(true);
+                setErro('Alteração projeta déficit — use o painel de impacto para confirmar.');
+                setSalvando(false);
+                return;
+              }
+            }
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              setErro((body as { message?: string }).message ?? 'Erro ao salvar item');
+              setSalvando(false);
+              return;
+            }
           }
         }
       } else {
@@ -225,7 +242,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Compra Programada</h1>
+          <h1 className="text-2xl font-bold">Compra Programada (Pedido de Compra)</h1>
           <p className="text-sm text-muted-foreground">Planejamento de compra e geração de disponibilidade virtual</p>
         </div>
         {podeGerenciar && editavel && (
@@ -247,6 +264,16 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
       {erro && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           {erro}
+        </div>
+      )}
+
+      <p className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+        Alterar uma compra confirmada recalcula imediatamente a disponibilidade virtual impactada.
+      </p>
+
+      {compra?.status === 'confirmada' && podeGerenciar && (
+        <div className="flex justify-end">
+          <Button variant="outline" onClick={() => setModalEditar(true)}>Editar compra confirmada</Button>
         </div>
       )}
 
@@ -415,6 +442,16 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
           </Card>
         </div>
       </div>
+
+      <ComprasEditModal
+        open={modalEditar}
+        compra={compra?.status === 'confirmada' ? compra : null}
+        onClose={() => setModalEditar(false)}
+        onSalvo={() => {
+          void carregarCompraDia();
+          void carregarDisponibilidade();
+        }}
+      />
     </div>
   );
 }

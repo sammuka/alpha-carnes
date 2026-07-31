@@ -52,22 +52,29 @@ export class PedidosController {
 
   @Get()
   @RequirePermissoes('PEDIDOS_LER')
-  async listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
-    return this.service.listar(query);
+  async listar(
+    @Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.listar(query, user.sub);
   }
 
   @Get('aberto')
   @RequirePermissoes('PEDIDOS_LER')
   async buscarAberto(
     @Query(new ZodValidationPipe(buscarPedidoAbertoSchema)) query: BuscarPedidoAbertoDto,
+    @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.service.buscarAberto(query);
+    return this.service.buscarAberto(query, user.sub);
   }
 
   @Get(':id')
   @RequirePermissoes('PEDIDOS_LER')
-  async detalhar(@Param('id') id: string) {
-    return this.service.detalhar(id);
+  async detalhar(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.detalhar(id, user.sub);
   }
 
   @Post()
@@ -185,7 +192,10 @@ export class PedidosController {
 
   @Get(':id/adendos')
   @RequirePermissoes('PEDIDOS_LER')
-  async listarAdendos(@Param('id') id: string) {
-    return this.adendos.listar(id);
+  async listarAdendos(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.adendos.listar(id, user.sub);
   }
 }

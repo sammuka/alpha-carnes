@@ -56,6 +56,10 @@ export interface SidebarUser {
   nome: string;
   perfil: string;
   inicial: string;
+  escopoRepresentantes?: {
+    tipo: 'todos' | 'restrito';
+    representantes: Array<{ id: string; nome: string }>;
+  };
 }
 
 interface AppSidebarProps {

@@ -7,14 +7,9 @@ import { RequireQualquerPermissao } from '../../../common/rbac/require-qualquer-
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { DashboardService } from './dashboard.service';
 
-const dataOperacaoSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'dataOperacao deve ser YYYY-MM-DD')
-  .optional();
-
-function hojeISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+const resumoQuerySchema = z.object({
+  operacaoId: z.string().uuid().optional(),
+});
 
 @SkipThrottle()
 @Controller('gestao/dashboard')
@@ -24,7 +19,7 @@ export class DashboardController {
 
   @Get()
   @RequireQualquerPermissao('COMPRAS_PROGRAMADAS_LER', 'DISPONIBILIDADE_LER')
-  async resumo(@Query('dataOperacao', new ZodValidationPipe(dataOperacaoSchema)) dataOperacao?: string) {
-    return this.service.resumoDia(dataOperacao ?? hojeISO());
+  resumo(@Query(new ZodValidationPipe(resumoQuerySchema)) query: { operacaoId?: string }) {
+    return this.service.resumo(query.operacaoId);
   }
 }

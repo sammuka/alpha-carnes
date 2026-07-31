@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { Edit2, Plus, Trash2, UserCircle } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Edit2, Filter, Plus, Trash2, UserCircle } from 'lucide-react';
 import type { CriarUsuarioDto, PerfilComPermissoes, Usuario } from '@/lib/usuarios';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,10 +10,21 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import { extrairMensagemErro } from '@/lib/error-message';
+import { RepresentantesPermitidos } from './_components/representantes-permitidos';
 import { ResumoPerfis } from './resumo-perfis';
+
+function formatarUltimoAcesso(valor: string | null): string {
+  if (valor === null) return 'Nunca acessou';
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(valor));
+}
 
 export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
   const pode = (p: string) => permissoes.includes(p);
@@ -23,10 +34,15 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
   const [loading, setLoading] = useState(true);
   const [sheetAberto, setSheetAberto] = useState(false);
   const [editando, setEditando] = useState<Usuario | null>(null);
-  const [form, setForm] = useState<CriarUsuarioDto>({ nome: '', email: '', password: '', perfis: [] });
+  const [form, setForm] = useState<CriarUsuarioDto>({
+    nome: '', email: '', password: '', perfis: [], representantes: [],
+  });
+  const [representantesSelecionados, setRepresentantesSelecionados] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [ativo, setAtivo] = useState(true);
   const [aprovando, setAprovando] = useState(false);
+  const [perfilFiltro, setPerfilFiltro] = useState('todos');
+  const [statusFiltro, setStatusFiltro] = useState<'todos' | 'ativo' | 'inativo'>('todos');
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -55,9 +71,19 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
     void carregar();
   }, [carregar]);
 
+  const usuariosFiltrados = useMemo(() => usuarios.filter((usuario) => {
+    const atendePerfil =
+      perfilFiltro === 'todos' || usuario.perfis.includes(perfilFiltro);
+    const atendeStatus =
+      statusFiltro === 'todos'
+      || (statusFiltro === 'ativo' ? usuario.ativo : !usuario.ativo);
+    return atendePerfil && atendeStatus;
+  }), [usuarios, perfilFiltro, statusFiltro]);
+
   function abrirNovo() {
     setEditando(null);
-    setForm({ nome: '', email: '', password: '', perfis: [] });
+    setForm({ nome: '', email: '', password: '', perfis: [], representantes: [] });
+    setRepresentantesSelecionados([]);
     setAtivo(true);
     setSheetAberto(true);
   }
@@ -65,6 +91,7 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
   function abrirEditar(u: Usuario) {
     setEditando(u);
     setForm({ nome: u.nome, email: u.email, password: '', perfis: u.perfis });
+    setRepresentantesSelecionados(u.representantesPermitidos.map((r) => r.id));
     setAtivo(u.ativo);
     setSheetAberto(true);
   }
@@ -86,17 +113,41 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
           return;
         }
         if (pode('PERFIS_GERENCIAR') && form.perfis) {
-          await fetch(`/api/admin/usuarios/${editando.id}/perfis`, {
+          const resPerfis = await fetch(`/api/admin/usuarios/${editando.id}/perfis`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ perfis: form.perfis }),
           });
+          if (!resPerfis.ok) {
+            setErro(extrairMensagemErro(await resPerfis.json().catch(() => ({})), 'Falha ao atualizar perfis'));
+            await carregar();
+            return;
+          }
+        }
+        const anteriores = [...editando.representantesPermitidos.map((r) => r.id)].sort();
+        const novos = [...representantesSelecionados].sort();
+        const mudouRep = anteriores.length !== novos.length
+          || anteriores.some((id, i) => id !== novos[i]);
+        if (pode('USUARIOS_GERENCIAR') && mudouRep) {
+          const resRep = await fetch(`/api/admin/usuarios/${editando.id}/representantes`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ representantes: representantesSelecionados }),
+          });
+          if (!resRep.ok) {
+            setErro(extrairMensagemErro(await resRep.json().catch(() => ({})), 'Falha ao atualizar representantes'));
+            await carregar();
+            return;
+          }
         }
       } else {
         const res = await fetch('/api/admin/usuarios', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form),
+          body: JSON.stringify({
+            ...form,
+            representantes: representantesSelecionados,
+          }),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -154,12 +205,63 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
           <h1 className="text-2xl font-bold text-foreground">Gestão de Usuários & Perfis</h1>
           <p className="text-sm text-muted-foreground">Controle de acesso (RBAC) e permissões no sistema</p>
         </div>
-        {pode('USUARIOS_GERENCIAR') && (
-          <Button onClick={abrirNovo}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Usuário
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" aria-label="Filtros">
+                <Filter className="mr-2 h-4 w-4" />
+                Filtros
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 space-y-3">
+              <label className="block text-sm font-medium" htmlFor="filtro-perfil">
+                Perfil de acesso
+              </label>
+              <select
+                id="filtro-perfil"
+                value={perfilFiltro}
+                onChange={(event) => setPerfilFiltro(event.target.value)}
+                className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
+              >
+                <option value="todos">Todos</option>
+                {perfis.map((perfil) => (
+                  <option key={perfil.slug} value={perfil.slug}>{perfil.nome}</option>
+                ))}
+              </select>
+              <label className="block text-sm font-medium" htmlFor="filtro-status">
+                Status
+              </label>
+              <select
+                id="filtro-status"
+                value={statusFiltro}
+                onChange={(event) =>
+                  setStatusFiltro(event.target.value as 'todos' | 'ativo' | 'inativo')
+                }
+                className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
+              >
+                <option value="todos">Todos</option>
+                <option value="ativo">Ativo</option>
+                <option value="inativo">Inativo</option>
+              </select>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setPerfilFiltro('todos');
+                  setStatusFiltro('todos');
+                }}
+              >
+                Limpar filtros
+              </Button>
+            </PopoverContent>
+          </Popover>
+          {pode('USUARIOS_GERENCIAR') && (
+            <Button onClick={abrirNovo}>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo Usuário
+            </Button>
+          )}
+        </div>
       </div>
 
       {erro && (
@@ -177,6 +279,10 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
           <div className="overflow-auto p-5">
             {loading ? (
               <p className="text-sm text-muted-foreground">Carregando…</p>
+            ) : usuariosFiltrados.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhum usuário encontrado para os filtros aplicados.
+              </p>
             ) : (
               <table className="w-full text-sm">
                 <thead>
@@ -184,11 +290,12 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
                     <th className="pb-3 font-medium">Nome / E-mail</th>
                     <th className="pb-3 font-medium">Perfis</th>
                     <th className="pb-3 text-center font-medium">Status</th>
+                    <th className="pb-3 font-medium">Último Acesso</th>
                     <th className="pb-3 text-right font-medium">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {usuarios.map((u) => (
+                  {usuariosFiltrados.map((u) => (
                     <tr key={u.id} className="hover:bg-muted/40">
                       <td className="py-4">
                         <p className="font-semibold">{u.nome}</p>
@@ -208,6 +315,9 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
                           variant={u.ativo ? 'expedido' : 'bloqueado'}
                           label={u.ativo ? 'Ativo' : 'Inativo'}
                         />
+                      </td>
+                      <td className="py-4 text-muted-foreground">
+                        {formatarUltimoAcesso(u.ultimoAcesso)}
                       </td>
                       <td className="py-4 text-right">
                         {pode('USUARIOS_GERENCIAR') && (
@@ -235,7 +345,7 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
       </div>
 
       <Sheet open={sheetAberto} onOpenChange={setSheetAberto}>
-        <SheetContent className="w-[520px] sm:max-w-[520px]">
+        <SheetContent className="w-[520px] sm:max-w-[520px] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{editando ? 'Editar Usuário' : 'Novo Usuário'}</SheetTitle>
           </SheetHeader>
@@ -304,6 +414,14 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
                   </div>
                 ))}
               </div>
+            )}
+
+            {pode('USUARIOS_GERENCIAR') && (
+              <RepresentantesPermitidos
+                selecionados={representantesSelecionados}
+                vinculadosIniciais={editando?.representantesPermitidos ?? []}
+                onChange={setRepresentantesSelecionados}
+              />
             )}
 
             <SheetFooter className="flex-row justify-between gap-2">

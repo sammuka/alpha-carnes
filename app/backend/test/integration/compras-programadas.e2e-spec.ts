@@ -1,9 +1,9 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
-import { seedComercialBase } from '../helpers/comercial-fixtures';
+import { seedComercialBase, lerDisponibilidade } from '../helpers/comercial-fixtures';
 
-describe('Compras programadas e2e (CRUD + RBAC + imutabilidade)', () => {
+describe('Compras programadas e2e (CRUD + RBAC + edição de item)', () => {
   let app: INestApplication;
   let comprasCookies: string;
   let comercialCookies: string;
@@ -69,12 +69,11 @@ describe('Compras programadas e2e (CRUD + RBAC + imutabilidade)', () => {
       .set('Cookie', comprasCookies)
       .send({ quantidadeComprada: 20 });
     expect(res.status).toBe(200);
-    expect(res.body.dataOperacao).toBe('2026-07-03');
-    expect(res.body.itens.find((item: { id: string }) => item.id === itemId))
-      .toMatchObject({ id: itemId, quantidadeComprada: '20.000' });
+    expect(Number(res.body.item.quantidadeComprada)).toBe(20);
+    expect(res.body.impacto).toBeDefined();
   });
 
-  it('IMUTABILIDADE: editar item após confirmar retorna 409', async () => {
+  it('D5.11: compra confirmada aceita edição de item e recalcula a disponibilidade', async () => {
     const criar = await request(app.getHttpServer())
       .post('/comercial/compras-programadas')
       .set('Cookie', comprasCookies)
@@ -82,17 +81,42 @@ describe('Compras programadas e2e (CRUD + RBAC + imutabilidade)', () => {
     const compraId = criar.body.id;
     const itemId = criar.body.itens[0].id;
 
-    const confirmar = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .post(`/comercial/compras-programadas/${compraId}/confirmar`)
       .set('Cookie', comprasCookies)
-      .send();
-    expect(confirmar.status).toBe(201);
-    expect(confirmar.body.compra.status).toBe('confirmada');
+      .expect(201);
 
     const editar = await request(app.getHttpServer())
       .patch(`/comercial/compras-programadas/${compraId}/itens/${itemId}`)
       .set('Cookie', comprasCookies)
-      .send({ quantidadeComprada: 99 });
+      .send({ quantidadeComprada: '99.000', observacoes: 'ajuste do fornecedor' });
+
+    expect(editar.status).toBe(200);
+    expect(editar.body.item.quantidadeComprada).toBe('99.000');
+    expect(editar.body.item.observacoes).toBe('ajuste do fornecedor');
+    expect(editar.body.impacto.exigeConfirmacao).toBe(false);
+
+    const dv = await lerDisponibilidade(app, base.itemComercialId);
+    expect(Number(dv?.quantidadeTotalGerada)).toBe(99 * base.fator);
+  });
+
+  it('IMUTABILIDADE: compra CANCELADA continua recusando edição de item (409)', async () => {
+    const criar = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao: '2026-07-05' }));
+    const compraId = criar.body.id;
+    const itemId = criar.body.itens[0].id;
+
+    await request(app.getHttpServer())
+      .delete(`/comercial/compras-programadas/${compraId}`)
+      .set('Cookie', comprasCookies)
+      .send();
+
+    const editar = await request(app.getHttpServer())
+      .patch(`/comercial/compras-programadas/${compraId}/itens/${itemId}`)
+      .set('Cookie', comprasCookies)
+      .send({ quantidadeComprada: '99.000' });
     expect(editar.status).toBe(409);
   });
 
@@ -243,9 +267,8 @@ describe('Compras programadas e2e (CRUD + RBAC + imutabilidade)', () => {
       .set('Cookie', comprasCookies)
       .send({ quantidadeComprada: 25 });
     expect(item.status).toBe(200);
-    expect(item.body).toMatchObject({ id: compraId, dataOperacao });
-    expect(item.body.itens.find((linha: { id: string }) => linha.id === itemId))
-      .toMatchObject({ id: itemId, quantidadeComprada: '25.000' });
+    expect(item.body.item).toMatchObject({ id: itemId, quantidadeComprada: '25.000' });
+    expect(item.body.impacto).toMatchObject({ compraId, deficitTotal: '0.000', exigeConfirmacao: false });
 
     const confirmada = await request(app.getHttpServer())
       .post(`/comercial/compras-programadas/${compraId}/confirmar`)

@@ -1,5 +1,5 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, getTableColumns, ilike, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, ilike, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -15,9 +15,13 @@ import {
 import type { CreateRepresentanteDto, UpdateRepresentanteDto } from './dto/representante.dto';
 
 type Representante = typeof representantes.$inferSelect;
-type RepresentanteComVinculos = Representante & { clientesVinculados: number };
+type RepresentanteComVinculos = Representante & {
+  clientesVinculados: number;
+  usuariosVinculadosCount: number;
+};
 type RepresentanteComClientes = Representante & {
   clientesVinculados: Array<{ id: string; nomeFantasia: string | null; razaoSocial: string }>;
+  usuariosVinculados: Array<{ id: string; nome: string; email: string; ativo: boolean }>;
 };
 
 @Injectable()
@@ -58,9 +62,21 @@ export class RepresentantesService {
       and ${clientes.deletedAt} is null
   )`;
 
+    const contagemUsuarios = sql<number>`(
+  SELECT count(DISTINCT ur.usuario_id)::int
+  FROM usuarios_representantes ur
+  INNER JOIN usuarios u ON u.id = ur.usuario_id
+  WHERE ur.representante_id = "representantes"."id"
+    AND u.deleted_at IS NULL
+)`;
+
     const [linhas, totalRow] = await Promise.all([
       this.db
-        .select({ ...getTableColumns(representantes), clientesVinculados: contagemClientes })
+        .select({
+          ...getTableColumns(representantes),
+          clientesVinculados: contagemClientes,
+          usuariosVinculadosCount: contagemUsuarios,
+        })
         .from(representantes)
         .where(where)
         .orderBy(desc(representantes.createdAt))
@@ -92,7 +108,25 @@ export class RepresentantesService {
       .where(and(eq(clientes.representanteId, id), isNull(clientes.deletedAt)))
       .orderBy(clientes.razaoSocial);
 
-    return { ...representante, clientesVinculados: vinculados };
+    const usuariosVinculados = await this.db
+      .select({
+        id: schema.usuarios.id,
+        nome: schema.usuarios.nome,
+        email: schema.usuarios.email,
+        ativo: schema.usuarios.ativo,
+      })
+      .from(schema.usuariosRepresentantes)
+      .innerJoin(
+        schema.usuarios,
+        eq(schema.usuarios.id, schema.usuariosRepresentantes.usuarioId),
+      )
+      .where(and(
+        eq(schema.usuariosRepresentantes.representanteId, id),
+        isNull(schema.usuarios.deletedAt),
+      ))
+      .orderBy(asc(schema.usuarios.nome), asc(schema.usuarios.id));
+
+    return { ...representante, clientesVinculados: vinculados, usuariosVinculados };
   }
 
   async criar(dto: CreateRepresentanteDto, usuarioId: string): Promise<Representante> {

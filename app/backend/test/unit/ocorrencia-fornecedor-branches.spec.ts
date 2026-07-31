@@ -44,6 +44,29 @@ describe('OcorrenciaFornecedorService — branches', () => {
     expect(result.data).toEqual([{ id: 'oc1' }]);
   });
 
+  it('abrirNaTx → preserva o vínculo com a conclusão da conferência tripla', async () => {
+    const valuesOcorrencia = jest.fn((values: Record<string, unknown>) => {
+      expect(values.conclusaoConferenciaId).toBe('cc1');
+      return { returning: jest.fn(async () => [{ id: 'oc1', ...values }]) };
+    });
+    const tx = {
+      insert: jest.fn()
+        .mockReturnValueOnce({ values: valuesOcorrencia })
+        .mockReturnValueOnce({ values: jest.fn(async () => undefined) }),
+    };
+    const service = new OcorrenciaFornecedorService({} as never, auditoria as never, emitter);
+
+    await service.abrirNaTx(
+      tx as never,
+      {
+        fornecedorId: 'f1',
+        conclusaoConferenciaId: 'cc1',
+        descricao: 'Divergência da conferência',
+      } as never,
+      'u1',
+    );
+  });
+
   it('atualizar → sem status/impacto no dto preserva valores anteriores', async () => {
     const anterior = { id: 'oc1', status: 'aberta', impacto: 'baixo', deletedAt: null };
     const atualizada = { id: 'oc1', status: 'aberta', impacto: 'baixo' };

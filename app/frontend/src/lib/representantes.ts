@@ -1,5 +1,12 @@
 export type StatusCadastro = 'ativo' | 'inativo';
 
+export interface UsuarioVinculado {
+  id: string;
+  nome: string;
+  email: string;
+  ativo: boolean;
+}
+
 export interface Representante {
   id: string;
   codigo: string;
@@ -10,6 +17,8 @@ export interface Representante {
   observacao: string | null;
   /** Contagem em `GET /representantes`; lista em `GET /representantes/:id` (decisão 45). */
   clientesVinculados?: number | ClienteVinculado[];
+  usuariosVinculadosCount: number;
+  usuariosVinculados?: UsuarioVinculado[];
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;

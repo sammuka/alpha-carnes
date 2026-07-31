@@ -125,7 +125,7 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
       clienteId: dtoBase.clienteId,
       itemComercialId: dtoBase.itens[0]!.itemComercialId,
       dataOperacao: '2026-08-10',
-    })).rejects.toMatchObject({
+    }, usuarioId)).rejects.toMatchObject({
       status: 404,
       response: expect.objectContaining({ code: 'OPERACAO_NAO_ENCONTRADA' }),
     });
@@ -136,7 +136,7 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
       { ...dtoBase, clienteId: ctx.clienteComRotaId, rotaPrevista: undefined }, usuarioId,
     );
     expect(comHeranca.rotaPrevista).toBe(ctx.nomeRotaDoCliente);
-    const detalhe = await service.detalhar(comHeranca.id);
+    const detalhe = await service.detalhar(comHeranca.id, usuarioId);
     expect(detalhe.heranca).toMatchObject({
       representanteId: ctx.representanteId,
       representanteNome: ctx.nomeRepresentante,

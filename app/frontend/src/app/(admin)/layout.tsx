@@ -16,6 +16,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     nome: user.nome,
     perfil: formatarPerfis(user.perfis ?? []) ?? 'Sem perfil atribuído',
     inicial: user.nome.charAt(0).toUpperCase(),
+    escopoRepresentantes: user.escopoRepresentantes,
   };
 
   return (

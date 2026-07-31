@@ -5,6 +5,7 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import { clientes, representantes, rotas } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
+import { escopoRepresentantes } from '../../../common/rbac/escopo-representantes';
 import { calcularRange, montarPaginado, primeiroOuFalha, type ListarQuery, type Paginado } from '../../../common/crud/paginacao';
 import type { CreateClienteDto, UpdateClienteDto } from './dto/cliente.dto';
 
@@ -23,9 +24,12 @@ export class ClientesService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<Cliente> & { totalAtivos: number }> {
+  async listar(query: ListarQuery, usuarioId: string): Promise<Paginado<Cliente> & { totalAtivos: number }> {
     const { limit, offset } = calcularRange(query);
-    const filtros = [query.incluirRemovidos ? undefined : isNull(clientes.deletedAt)];
+    const filtros = [
+      query.incluirRemovidos ? undefined : isNull(clientes.deletedAt),
+      escopoRepresentantes(usuarioId, clientes.representanteId),
+    ];
     if (query.search) {
       const termo = `%${query.search}%`;
       filtros.push(
@@ -39,13 +43,15 @@ export class ClientesService {
     }
     const where = and(...filtros.filter(Boolean));
 
-    // `totalAtivos` é o badge do cabeçalho (DoD-77): contagem real de clientes ativos,
-    // independente da paginação/busca corrente — por isso não usa `where` acima.
     const [linhas, totalRow, totalAtivosRow] = await Promise.all([
       this.db.select().from(clientes).where(where).orderBy(desc(clientes.createdAt)).limit(limit).offset(offset),
       this.db.select({ total: sql<number>`count(*)::int` }).from(clientes).where(where),
       this.db.select({ total: sql<number>`count(*)::int` }).from(clientes)
-        .where(and(eq(clientes.status, 'ativo'), isNull(clientes.deletedAt))),
+        .where(and(
+          eq(clientes.status, 'ativo'),
+          isNull(clientes.deletedAt),
+          escopoRepresentantes(usuarioId, clientes.representanteId),
+        )),
     ]);
 
     return {
@@ -54,11 +60,10 @@ export class ClientesService {
     };
   }
 
-  async detalhar(id: string): Promise<ClienteComVinculos> {
-    const cliente = await this.buscarAtivo(id);
+  async detalhar(id: string, usuarioId: string): Promise<ClienteComVinculos> {
+    const cliente = await this.buscarNoEscopo(id, usuarioId);
     if (!cliente) throw new NotFoundException('Cliente não encontrado');
 
-    // Nome da rota e do representante para a tela (D23) — join só na leitura de detalhe.
     const [vinculos] = await this.db
       .select({ rotaNome: rotas.nome, representanteNome: representantes.nome })
       .from(clientes)
@@ -71,6 +76,9 @@ export class ClientesService {
 
   async criar(dto: CreateClienteDto, usuarioId: string): Promise<Cliente> {
     return this.db.transaction(async (tx) => {
+      if (dto.representanteId) {
+        await this.exigirRepresentanteNoEscopo(tx, dto.representanteId, usuarioId);
+      }
       await this.assertUnico(tx, dto.codigo, dto.documentoFiscal, null);
 
       const criado = primeiroOuFalha(
@@ -108,8 +116,12 @@ export class ClientesService {
 
   async atualizar(id: string, dto: UpdateClienteDto, usuarioId: string): Promise<Cliente> {
     return this.db.transaction(async (tx) => {
-      const anterior = await this.buscarAtivo(id, tx);
+      const anterior = await this.buscarNoEscopo(id, usuarioId, tx);
       if (!anterior) throw new NotFoundException('Cliente não encontrado');
+
+      if (dto.representanteId !== undefined) {
+        await this.exigirRepresentanteNoEscopo(tx, dto.representanteId, usuarioId);
+      }
 
       await this.assertUnico(tx, dto.codigo ?? anterior.codigo, dto.documentoFiscal ?? anterior.documentoFiscal, id);
 
@@ -149,7 +161,7 @@ export class ClientesService {
 
   async remover(id: string, usuarioId: string): Promise<{ id: string; deletedAt: Date }> {
     return this.db.transaction(async (tx) => {
-      const anterior = await this.buscarAtivo(id, tx);
+      const anterior = await this.buscarNoEscopo(id, usuarioId, tx);
       if (!anterior) throw new NotFoundException('Cliente não encontrado');
 
       const removido = primeiroOuFalha(
@@ -171,15 +183,10 @@ export class ClientesService {
 
   async restaurar(id: string, usuarioId: string): Promise<Cliente> {
     return this.db.transaction(async (tx) => {
-      const anterior = await tx
-        .select()
-        .from(clientes)
-        .where(eq(clientes.id, id))
-        .then((r) => r[0] ?? null);
+      const anterior = await this.buscarNoEscopo(id, usuarioId, tx, true);
       if (!anterior) throw new NotFoundException('Cliente não encontrado');
       if (!anterior.deletedAt) throw new ConflictException('Cliente não está removido');
 
-      // Ao restaurar, garante que código/documento não colidem com outro registro ativo.
       await this.assertUnico(tx, anterior.codigo, anterior.documentoFiscal, id);
 
       const restaurado = primeiroOuFalha(
@@ -199,17 +206,40 @@ export class ClientesService {
     });
   }
 
-  /** Busca um cliente ativo (deleted_at IS NULL). */
-  private async buscarAtivo(id: string, tx?: NodePgDatabase<typeof schema>): Promise<Cliente | null> {
-    const exec = tx ?? this.db;
+  private async buscarNoEscopo(
+    id: string,
+    usuarioId: string,
+    exec: NodePgDatabase<typeof schema> = this.db,
+    incluirRemovido = false,
+  ): Promise<Cliente | null> {
     return exec
       .select()
       .from(clientes)
-      .where(and(eq(clientes.id, id), isNull(clientes.deletedAt)))
-      .then((r) => r[0] ?? null);
+      .where(and(
+        eq(clientes.id, id),
+        incluirRemovido ? undefined : isNull(clientes.deletedAt),
+        escopoRepresentantes(usuarioId, clientes.representanteId),
+      ))
+      .then((linhas) => linhas[0] ?? null);
   }
 
-  /** Garante unicidade de codigo e documentoFiscal entre registros ativos (exceto o próprio id). */
+  private async exigirRepresentanteNoEscopo(
+    tx: NodePgDatabase<typeof schema>,
+    representanteId: string,
+    usuarioId: string,
+  ): Promise<void> {
+    const permitido = await tx
+      .select({ id: representantes.id })
+      .from(representantes)
+      .where(and(
+        eq(representantes.id, representanteId),
+        escopoRepresentantes(usuarioId, representantes.id),
+      ))
+      .limit(1)
+      .then((linhas) => linhas[0] ?? null);
+    if (!permitido) throw new NotFoundException('Cliente não encontrado');
+  }
+
   private async assertUnico(
     tx: NodePgDatabase<typeof schema>,
     codigo: string,

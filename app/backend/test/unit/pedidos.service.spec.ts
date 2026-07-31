@@ -208,6 +208,14 @@ describe('PedidosService — aplicarAlocacaoNoItem', () => {
     }]);
   });
 
+  function selectChain(rows: unknown[]) {
+    const whereResult = {
+      for: () => ({ limit: () => Promise.resolve(rows) }),
+      limit: () => Promise.resolve(rows),
+    };
+    return { from: () => ({ where: () => whereResult }) };
+  }
+
   it('acumula reserva overbooking ativa em vez de inserir nova linha', async () => {
     const reservaAtiva = {
       id: 'ro1',
@@ -217,21 +225,11 @@ describe('PedidosService — aplicarAlocacaoNoItem', () => {
       quantidadeReservada: '97.000',
     };
     const updateSet = jest.fn(() => ({ where: () => Promise.resolve(undefined) }));
-    let selectCall = 0;
     const tx = {
-      select: jest.fn(() => {
-        selectCall += 1;
-        const rows = selectCall === 1 ? [reservaAtiva] : [];
-        return {
-          from: () => ({
-            where: () => ({
-              for: () => ({
-                limit: () => Promise.resolve(rows),
-              }),
-            }),
-          }),
-        };
-      }),
+      select: jest.fn()
+        .mockImplementationOnce(() => selectChain([{ data: '2026-06-06' }]))
+        .mockImplementationOnce(() => selectChain([reservaAtiva]))
+        .mockImplementationOnce(() => selectChain([])),
       update: jest.fn(() => ({ set: updateSet })),
       insert: jest.fn(() => ({
         values: () => ({
@@ -266,15 +264,10 @@ describe('PedidosService — aplicarAlocacaoNoItem', () => {
       returning: () => Promise.resolve([{ id: 'pend1' }]),
     }));
     const tx = {
-      select: jest.fn(() => ({
-        from: () => ({
-          where: () => ({
-            for: () => ({
-              limit: () => Promise.resolve([]),
-            }),
-          }),
-        }),
-      })),
+      select: jest.fn()
+        .mockImplementationOnce(() => selectChain([{ data: '2026-06-06' }]))
+        .mockImplementationOnce(() => selectChain([]))
+        .mockImplementationOnce(() => selectChain([])),
       insert: jest.fn(() => ({ values: insertValues })),
     };
 

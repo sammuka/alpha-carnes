@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AlphaCarnes - Onda 5 Gestão E2E</title>
+  <style>
+    :root { color-scheme: dark; --bg:#09090b; --panel:#18181b; --muted:#a1a1aa; --text:#f4f4f5; --line:#27272a; --blue:#60a5fa; --green:#86efac; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Segoe UI, system-ui, sans-serif; background:var(--bg); color:var(--text); line-height:1.55; }
+    header { padding:48px; border-bottom:1px solid var(--line); background:linear-gradient(135deg,#0f172a,#111827); }
+    h1 { margin:0 0 12px; font-size:32px; }
+    h2 { margin:0; font-size:22px; }
+    p { margin:6px 0 0; color:#d4d4d8; }
+    code { color:#bfdbfe; font-size:12px; }
+    .badges { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
+    .badge { border:1px solid #1d4ed8; color:#bfdbfe; border-radius:999px; padding:5px 12px; font-size:12px; background:rgba(37,99,235,.15); }
+    .wrap { max-width:1180px; margin:0 auto; padding:36px; }
+    .context, .coverage, .observations { border:1px solid var(--line); background:var(--panel); border-radius:10px; padding:18px; margin-bottom:24px; }
+    .context-grid, .meta-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+    .context-grid div, .meta-grid div { border:1px solid var(--line); border-radius:8px; padding:12px; background:#111113; }
+    .context-grid strong, .meta-grid strong { display:block; color:var(--green); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+    .step { margin:0 0 56px; padding-bottom:48px; border-bottom:1px solid var(--line); }
+    .step-head { display:flex; align-items:flex-start; gap:14px; margin-bottom:16px; }
+    .step-head span { width:38px; height:38px; display:grid; place-items:center; border-radius:8px; background:#2563eb; font-weight:700; }
+    .note { margin:14px 0; padding:10px 12px; border-radius:8px; border:1px solid #92400e; background:rgba(146,64,14,.18); color:#fde68a; }
+    img { display:block; width:100%; margin-top:18px; border:1px solid var(--line); border-radius:10px; box-shadow:0 18px 50px rgba(0,0,0,.45); }
+    ul { margin:10px 0 0; color:#d4d4d8; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AlphaCarnes — Onda 5 Gestão E2E</h1>
+    <p>Evidências Playwright das 6 rotas de Gestão com dados reais no banco semeado.</p>
+    <div class="badges">
+      <span class="badge">10 capturas</span>
+      <span class="badge">Run 20260728111401</span>
+      <span class="badge">Data 2026-08-27</span>
+    </div>
+  </header>
+  <main class="wrap">
+    <section class="context">
+      <h2>Rastreabilidade dos Dados</h2>
+      <div class="context-grid"><div><strong>Run ID</strong><p><code>20260728111401</code></p></div><div><strong>Operação</strong><p><code>019fa849-e00f-7a51-ba76-e964e104c69e</code></p></div><div><strong>Data operacional</strong><p><code>2026-08-27</code></p></div><div><strong>Compra programada</strong><p><code>019fa849-e123-7952-83a2-a00cf6902388</code></p></div><div><strong>Fornecedor</strong><p><code>019fa86e-7f5f-765a-bdb8-3333558abfa0</code></p></div><div><strong>Cliente</strong><p><code>019fa86e-811f-7906-9104-a48f36840e21</code></p></div><div><strong>Item compra</strong><p><code>019fa86e-7ff7-76e2-a9a1-3f91f4253555</code></p></div><div><strong>Item comercial</strong><p><code>019fa86e-808b-7660-bbb7-d50dc08e8330</code></p></div><div><strong>Ocorrência</strong><p><code>019fa86e-8b97-76fd-8d4e-f6235ad914b3</code></p></div></div>
+    </section>
+    <section class="coverage">
+      <h2>Cobertura</h2>
+      <ul>
+        <li>6 rotas de Gestão navegadas via menu como perfil gestor.</li>
+        <li>Painel de impacto, decisão de overbooking, comparativo imutável e versões SIF quando dados disponíveis.</li>
+      </ul>
+    </section>
+    <section class="observations"><h2>Observações</h2><ul></ul></section>
+
+        <section class="step" id="01-dashboard">
+          <div class="step-head">
+            <span>01</span>
+            <div>
+              <h2>Painel Geral da Operação</h2>
+              <code>http://localhost:3100/gestao/dashboard?operacaoId=019fa849-e00f-7a51-ba76-e964e104c69e</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Validar rota /gestao/dashboard após navegação pelo menu.</p></div>
+            <div><strong>Ação</strong><p>Clicar em &quot;Painel Geral da Operação&quot; na sidebar.</p></div>
+            <div><strong>Resultado</strong><p>Tela carregada com título esperado e blocos-chave visíveis.</p></div>
+          </div>
+
+          <img src="01-dashboard.png" alt="Painel Geral da Operação" loading="lazy" />
+        </section>
+
+        <section class="step" id="02-operacoes">
+          <div class="step-head">
+            <span>02</span>
+            <div>
+              <h2>Operações</h2>
+              <code>http://localhost:3100/gestao/operacoes</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Validar rota /gestao/operacoes após navegação pelo menu.</p></div>
+            <div><strong>Ação</strong><p>Clicar em &quot;Operações&quot; na sidebar.</p></div>
+            <div><strong>Resultado</strong><p>Tela carregada com título esperado e blocos-chave visíveis.</p></div>
+          </div>
+
+          <img src="02-operacoes.png" alt="Operações" loading="lazy" />
+        </section>
+
+        <section class="step" id="03-compras">
+          <div class="step-head">
+            <span>03</span>
+            <div>
+              <h2>Compras</h2>
+              <code>http://localhost:3100/gestao/compras</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Validar rota /gestao/compras após navegação pelo menu.</p></div>
+            <div><strong>Ação</strong><p>Clicar em &quot;Compras&quot; na sidebar.</p></div>
+            <div><strong>Resultado</strong><p>Tela carregada com título esperado e blocos-chave visíveis.</p></div>
+          </div>
+
+          <img src="03-compras.png" alt="Compras" loading="lazy" />
+        </section>
+
+        <section class="step" id="04-overbooking">
+          <div class="step-head">
+            <span>04</span>
+            <div>
+              <h2>Pendências de Overbooking</h2>
+              <code>http://localhost:3100/gestao/overbooking?operacaoId=019fa849-e00f-7a51-ba76-e964e104c69e</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Validar rota /gestao/overbooking após navegação pelo menu.</p></div>
+            <div><strong>Ação</strong><p>Clicar em &quot;Pendências de Overbooking&quot; na sidebar.</p></div>
+            <div><strong>Resultado</strong><p>Tela carregada com título esperado e blocos-chave visíveis.</p></div>
+          </div>
+
+          <img src="04-overbooking.png" alt="Pendências de Overbooking" loading="lazy" />
+        </section>
+
+        <section class="step" id="05-aprovacoes">
+          <div class="step-head">
+            <span>05</span>
+            <div>
+              <h2>Aprovações &amp; Ocorrências</h2>
+              <code>http://localhost:3100/gestao/aprovacoes?operacaoId=019fa849-e00f-7a51-ba76-e964e104c69e</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Validar rota /gestao/aprovacoes após navegação pelo menu.</p></div>
+            <div><strong>Ação</strong><p>Clicar em &quot;Aprovações &amp; Ocorrências&quot; na sidebar.</p></div>
+            <div><strong>Resultado</strong><p>Tela carregada com título esperado e blocos-chave visíveis.</p></div>
+          </div>
+
+          <img src="05-aprovacoes.png" alt="Aprovações &amp; Ocorrências" loading="lazy" />
+        </section>
+
+        <section class="step" id="06-relatorios">
+          <div class="step-head">
+            <span>06</span>
+            <div>
+              <h2>Relatórios &amp; SIF</h2>
+              <code>http://localhost:3100/gestao/relatorios?operacaoId=019fa849-e00f-7a51-ba76-e964e104c69e</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Validar rota /gestao/relatorios após navegação pelo menu.</p></div>
+            <div><strong>Ação</strong><p>Clicar em &quot;Relatórios &amp; SIF&quot; na sidebar.</p></div>
+            <div><strong>Resultado</strong><p>Tela carregada com título esperado e blocos-chave visíveis.</p></div>
+          </div>
+
+          <img src="06-relatorios.png" alt="Relatórios &amp; SIF" loading="lazy" />
+        </section>
+
+        <section class="step" id="07-impacto-deficit">
+          <div class="step-head">
+            <span>07</span>
+            <div>
+              <h2>Painel de impacto — déficit projetado</h2>
+              <code>http://localhost:3100/gestao/compras</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Demonstrar recálculo pré-salvamento ao reduzir compra confirmada.</p></div>
+            <div><strong>Ação</strong><p>Abrir modal de edição e reduzir quantidade abaixo das reservas.</p></div>
+            <div><strong>Resultado</strong><p>Painel de impacto exibe déficit projetado antes de confirmar.</p></div>
+          </div>
+
+          <img src="07-impacto-deficit.png" alt="Painel de impacto — déficit projetado" loading="lazy" />
+        </section>
+
+        <section class="step" id="08-overbooking-decisao">
+          <div class="step-head">
+            <span>08</span>
+            <div>
+              <h2>Overbooking — três caminhos de decisão</h2>
+              <code>http://localhost:3100/gestao/overbooking?operacaoId=019fa849-e00f-7a51-ba76-e964e104c69e</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Evidenciar os blocos de decisão da pendência selecionada.</p></div>
+            <div><strong>Ação</strong><p>Selecionar pendência aberta na fila mestre-detalhe.</p></div>
+            <div><strong>Resultado</strong><p>Três caminhos (compra complementar, redistribuição, postergar) visíveis.</p></div>
+          </div>
+
+          <img src="08-overbooking-decisao.png" alt="Overbooking — três caminhos de decisão" loading="lazy" />
+        </section>
+
+        <section class="step" id="09-comparativo-imutavel">
+          <div class="step-head">
+            <span>09</span>
+            <div>
+              <h2>Comparativo Pedido × NF × Pesagem</h2>
+              <code>http://localhost:3100/gestao/aprovacoes?operacaoId=019fa849-e00f-7a51-ba76-e964e104c69e</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Evidenciar quadro imutável na aba de ocorrências.</p></div>
+            <div><strong>Ação</strong><p>Selecionar a ocorrência vinculada à conferência tripla concluída neste run.</p></div>
+            <div><strong>Resultado</strong><p>Quadro comparativo renderizado com aviso de imutabilidade.</p></div>
+          </div>
+
+          <img src="09-comparativo-imutavel.png" alt="Comparativo Pedido × NF × Pesagem" loading="lazy" />
+        </section>
+
+        <section class="step" id="10-sif-versoes">
+          <div class="step-head">
+            <span>10</span>
+            <div>
+              <h2>Relatórios SIF — histórico de versões</h2>
+              <code>http://localhost:3100/gestao/relatorios?operacaoId=019fa849-e00f-7a51-ba76-e964e104c69e</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Evidenciar modal de versões do relatório SIF.</p></div>
+            <div><strong>Ação</strong><p>Abrir Histórico no primeiro relatório da operação.</p></div>
+            <div><strong>Resultado</strong><p>Modal de versões aberto (vazio ou com versões geradas).</p></div>
+          </div>
+
+          <img src="10-sif-versoes.png" alt="Relatórios SIF — histórico de versões" loading="lazy" />
+        </section>
+  </main>
+</body>
+</html>

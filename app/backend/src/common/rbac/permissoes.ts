@@ -78,6 +78,11 @@ export const PERMISSOES = {
   OPERACOES_GERENCIAR: 'OPERACOES_GERENCIAR',
   PEDIDO_OVERBOOKING_CONFIRMAR: 'PEDIDO_OVERBOOKING_CONFIRMAR',
   OVERBOOKING_RESOLVER: 'OVERBOOKING_RESOLVER',
+  SIF_LER: 'SIF_LER',
+  SIF_GERAR: 'SIF_GERAR',
+  APROVACOES_LER: 'APROVACOES_LER',
+  APROVACOES_DECIDIR: 'APROVACOES_DECIDIR',
+  APROVACOES_SOLICITAR: 'APROVACOES_SOLICITAR',
   PEDIDO_FORNECEDOR_GERENCIAR: 'PEDIDO_FORNECEDOR_GERENCIAR',
   CONFERENCIA_CONCLUIR: 'CONFERENCIA_CONCLUIR',
   PEDIDO_FINALIZAR: 'PEDIDO_FINALIZAR',
@@ -355,6 +360,14 @@ pushPermissoes(
 pushPermissoes('comercial', 'TABELA_PRECO_LER', 'ESPELHO_COMERCIAL_LER');
 pushPermissoes('expedicao', 'ESPELHO_COMERCIAL_LER');
 
+pushPermissoes('administrador', 'SIF_LER', 'SIF_GERAR', 'APROVACOES_LER', 'APROVACOES_DECIDIR', 'APROVACOES_SOLICITAR');
+pushPermissoes('gestor',        'SIF_LER', 'SIF_GERAR', 'APROVACOES_LER', 'APROVACOES_DECIDIR', 'APROVACOES_SOLICITAR');
+pushPermissoes('faturamento',   'SIF_LER', 'SIF_GERAR', 'APROVACOES_SOLICITAR');
+pushPermissoes('diretoria',     'SIF_LER', 'APROVACOES_LER');
+pushPermissoes('recebimento_pesagem', 'APROVACOES_LER', 'APROVACOES_SOLICITAR');
+pushPermissoes('corte',         'APROVACOES_SOLICITAR');
+pushPermissoes('expedicao',     'APROVACOES_SOLICITAR');
+
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   USUARIOS_GERENCIAR: 'Criar e editar usuários',
@@ -415,6 +428,11 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   OPERACOES_GERENCIAR: 'Criar, iniciar e fechar operações',
   PEDIDO_OVERBOOKING_CONFIRMAR: 'Confirmar inclusão com overbooking',
   OVERBOOKING_RESOLVER: 'Tratar pendências de overbooking',
+  SIF_LER: 'Consultar relatórios SIF e suas versões',
+  SIF_GERAR: 'Gerar e retificar versões de relatório SIF',
+  APROVACOES_LER: 'Consultar a fila de aprovações e ocorrências',
+  APROVACOES_DECIDIR: 'Aprovar ou rejeitar solicitações operacionais',
+  APROVACOES_SOLICITAR: 'Abrir solicitação de aprovação operacional',
   PEDIDO_FORNECEDOR_GERENCIAR: 'Gerenciar pedidos ao fornecedor',
   CONFERENCIA_CONCLUIR: 'Concluir conferência Pedido×NF×Pesagem',
   PEDIDO_FINALIZAR: 'Finalizar pedido de venda',

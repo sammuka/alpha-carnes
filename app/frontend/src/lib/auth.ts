@@ -6,6 +6,10 @@ export interface UserPayload {
   perfis: string[];
   permissoes: string[];
   menusVisiveis: string[];
+  escopoRepresentantes: {
+    tipo: 'todos' | 'restrito';
+    representantes: Array<{ id: string; nome: string }>;
+  };
 }
 
 export async function getMe(): Promise<UserPayload | null> {

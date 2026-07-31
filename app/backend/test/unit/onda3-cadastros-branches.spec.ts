@@ -459,12 +459,16 @@ describe('RepresentantesService — branches Onda 3', () => {
     const dbDetalhe = {
       select: jest.fn()
         .mockImplementationOnce(() => selectChain([rep]))
-        .mockImplementationOnce(() => selectChain([{ id: 'c1', nomeFantasia: 'F', razaoSocial: 'RS' }])),
+        .mockImplementationOnce(() => selectChain([{ id: 'c1', nomeFantasia: 'F', razaoSocial: 'RS' }]))
+        .mockImplementationOnce(() => selectChain([
+          { id: 'u1', nome: 'Ana', email: 'a@test.local', ativo: true },
+        ])),
     };
     const s1 = new RepresentantesService({ db: dbDetalhe } as never, auditoria as never);
     await expect(s1.detalhar('r1')).resolves.toMatchObject({
       id: 'r1',
       clientesVinculados: [{ id: 'c1' }],
+      usuariosVinculados: [{ id: 'u1', nome: 'Ana' }],
     });
 
     const txDup = { select: jest.fn(() => selectChain([{ id: 'outro' }])) };
