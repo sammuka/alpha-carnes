@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase } from '../helpers/comercial-fixtures';
@@ -171,8 +171,17 @@ describe('Troca de Peça e2e (v1.1 §6.13 + P10)', () => {
     });
     expect(res.status).toBeGreaterThanOrEqual(400);
 
-    const countTrocas = await db().select({ n: sql<number>`count(*)::int` }).from(schema.trocasPeca);
-    expect(countTrocas[0]!.n).toBe(0);
+    // Escopo às peças deste caso — testes anteriores no mesmo DB já deixam trocas legítimas.
+    const trocasDestaTentativa = await db()
+      .select()
+      .from(schema.trocasPeca)
+      .where(
+        and(
+          eq(schema.trocasPeca.pecaRetiradaId, pecaRetiradaId),
+          eq(schema.trocasPeca.pecaInseridaId, pecaInseridaId),
+        ),
+      );
+    expect(trocasDestaTentativa).toHaveLength(0);
 
     const etiquetaDepois = await db()
       .select()

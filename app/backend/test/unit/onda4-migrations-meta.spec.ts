@@ -39,7 +39,10 @@ function readMigration(tag: string): string {
 describe('Onda 4 — proveniência das migrations D36', () => {
   it('encadeia journal e snapshots gerados de 0015 a 0020', () => {
     const journal = readJson<Journal>(path.join(META_DIR, '_journal.json'));
-    const entries = journal.entries.filter((entry) => entry.idx >= 15);
+    // Escopo O3→O5: ondas posteriores (O6+) têm meta própria e não entram aqui.
+    const entries = journal.entries.filter(
+      (entry) => entry.idx >= 15 && entry.idx <= 20,
+    );
 
     expect(journal.version).toBe('7');
     expect(journal.dialect).toBe('postgresql');

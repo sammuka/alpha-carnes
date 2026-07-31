@@ -201,6 +201,7 @@ describe('PedidoFornecedorService — branches', () => {
       serie: '1',
       dataEmissao: '2026-07-01',
       itens: [{ itemComercialId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
+      confirmarSubstituicaoCabecalho: false,
     };
     await expect(service(db).registrarNf('pf-1', nfBase, 'user-1'))
       .rejects.toBeInstanceOf(NotFoundException);
@@ -228,6 +229,7 @@ describe('PedidoFornecedorService — branches', () => {
       dataEmissao: '2026-07-01',
       recebimentoId: '019ea000-0000-7000-8000-0000000000rc',
       itens: [{ itemComercialId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
+      confirmarSubstituicaoCabecalho: false,
     }, 'user-1')).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -320,6 +322,8 @@ describe('PedidoFornecedorService — branches', () => {
         where: () => ({
           orderBy: () => ({
             limit: () => Promise.resolve(rows),
+            // D6.10 — buscarNfCabecalhoAtivaPorNumero usa FOR UPDATE
+            for: () => Promise.resolve(rows),
             then: (cb: (r: unknown[]) => unknown) => cb(rows),
           }),
           then: (cb: (r: unknown[]) => unknown) => cb(rows),
@@ -358,6 +362,7 @@ describe('PedidoFornecedorService — branches', () => {
         quantidadeDeclarada: 1,
         pesoDeclarado: 10,
       }],
+      confirmarSubstituicaoCabecalho: false,
     }, 'user-1');
     expect(result.id).toBe('nf-1');
     expect(emitter.emit).toHaveBeenCalled();
@@ -388,6 +393,7 @@ describe('PedidoFornecedorService — branches', () => {
       serie: '1',
       dataEmissao: '2026-07-01',
       itens: [{ itemComercialId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
+      confirmarSubstituicaoCabecalho: false,
     }, 'user-1')).rejects.toBeInstanceOf(ConflictException);
   });
 });
