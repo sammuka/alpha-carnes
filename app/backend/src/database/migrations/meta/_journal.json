@@ -148,6 +148,13 @@
       "when": 1785459703644,
       "tag": "0020_onda5_usuarios_representantes",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785513991714,
+      "tag": "0021_onda6_recebimento_balanca_expand",
+      "breakpoints": true
     }
   ]
 }
