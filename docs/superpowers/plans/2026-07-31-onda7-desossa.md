@@ -118,7 +118,9 @@ Fecha **todos** os bloqueantes do Gate local `npm run test:cov` após DoD 7.6/7.
 | 4 | `onda4-migrations.e2e-spec.ts` probe: `divergencias-transformacao.schema.ts` importa `aprovacoes-operacionais` (removido do probe); schema O7 em `transformacoes`/`regras` geraria DDL extra | Task 16 Step F: remover `0023`+divergencias do probe; restaurar fixtures pré-O7; filtrar `index.ts` |
 | 5 | (dívida menor) scripts `capture-onda7-*.mjs` untracked sem PNGs — Gate UI ambíguo | Task 16 Step H: Step literal commit+run dos scripts **após** `test:cov` verde; **não** bloqueia Step G |
 
-**Expected PASS após aplicar Emenda 7 sobre tip `34524a4` (ou tip atual de `feature/onda7-desossa`):**
+**Emenda 7.1 (Portão 1 `afe9dc4` — fecha Expected PASS factível):** patches literais adicionais em `expedicao.e2e-spec.ts` (`subitem sem etiqueta nao e elegivel`) e `corte.e2e-spec.ts` (`concluir com subitem sem etiqueta`) — padrão reetiqueta (`itemSaidaCanonicoCb` + `alinharPedidoItemComSaidaCorte` antes do `associar`). Ver seção **Emenda 7.1** abaixo e Task 16 Steps B/C/G.
+
+**Expected PASS após aplicar Emenda 7 + Emenda 7.1 sobre tip `34524a4` (ou tip atual de `feature/onda7-desossa`, ex. `6e8cad0`):** Steps A–F **e** patches Emenda 7.1 (its citados em Step B/C) → `npm run test:cov` exit 0 é **factível** (zero FAIL; cobertura ≥80% linha e branch). **Proibido** tratar FAIL de `expedicao.e2e-spec.ts` / it sem etiqueta de `corte.e2e-spec.ts` como “parar e reportar” — esses its têm patch literal nesta emenda.
 
 ```bash
 cd app/backend && npm run test:cov
@@ -133,6 +135,26 @@ cd app/backend && npm run test:cov
 3. `POST /operacao/corte/:id/regra` com `TZ_A`
 4. `itemComercialId` de **saída** (`CB` / `JAC` via `legadoItemComercialId`) — **nunca** item da mãe/recebimento sem reconciliar
 5. Antes de `concluir` com sucesso: checklist completo **ou** `POST .../divergencia` (DoD 7.9)
+
+---
+
+## Emenda 7.1 — Portão 1 Emenda 7 veredito `ajustar` (`afe9dc4`)
+
+Fecha **item a item** o feedback do Monitor no tip plano `afe9dc4` / tip impl `6e8cad0` (`feature/onda7-desossa`). Ancestral: Emenda 7 (Task 14 Steps A–F) + PR #49. **Não** altera produção O7.
+
+| # | Achado Monitor (`afe9dc4`) | Fechamento Emenda 7.1 |
+|---|---|---|
+| 1 | Expected PASS Step G não factível: Task 16 marcava `expedicao.e2e-spec.ts` intocável + “parar e reportar”, mas it `subitem sem etiqueta nao e elegivel` (~L609–643) faz `addSub`+`associar` manual com item da mãe → após Step A o subitem vira CB → 409 `Item de pedido incompatível` **antes** do 409 de carga | Task 16 Step C: patch literal (padrão reetiqueta) nesse it; arquivo **sai** da lista de intocáveis; Step G **não** usa “reportar se expedicao falhar” como fechamento |
+| 2 | Step B incompleto em `corte.e2e-spec.ts`: it `concluir com subitem sem etiqueta` (~L169–186) associa sem alinhar → 409 deixa de provar ausência de etiqueta | Task 16 Step B: old/new com `itemSaidaCanonicoCb`/`alinharPedidoItemComSaidaCorte` antes do `associar`; `concluir` cru + `expect(409)` |
+| 3 | Reafirmar Expected PASS factível no cabeçalho Emenda 7 / Step G após A–F **e** (1)(2) | Cabeçalho Emenda 7 + Emenda 7.1 + Step G: Expected PASS factível após A–F + patches 7.1; zero “reportar se expedicao falhar” como escape do bloqueante #1 |
+
+**Expected PASS após Emenda 7 Steps A–F + Emenda 7.1 (patches B/C dos its citados):**
+
+```bash
+cd app/backend && npm run test:cov
+# Expected: exit 0 — zero FAIL (inclui expedicao it sem etiqueta + corte it sem etiqueta)
+# Expected: cobertura ≥80% linha e branch
+```
 
 ---
 
@@ -438,7 +460,7 @@ Onda aditiva. Emergência: `DROP TABLE divergencias_transformacao;` + drop das c
 | 7.23 | Cobertura ≥80% linha e branch nos services tocados | `npm run test:cov` |
 | 7.24 | Zero rótulo `Marca` nas telas da onda | grep |
 | 7.25 | Nenhum AD novo em `DECISOES.md` | diff vazio |
-| 7.26 | Gate local `test:cov` verde com DoD 7.6/7.7/7.9: helpers O7-aware + suítes legadas + `corte-branches` DI + meta O6 idx≤22 + probe O4 sem `divergencias-transformacao` | Task 16 (`npm run test:cov`) |
+| 7.26 | Gate local `test:cov` verde com DoD 7.6/7.7/7.9: helpers O7-aware + suítes legadas (incl. patches Emenda 7.1 em `expedicao`/`corte` its manuais) + `corte-branches` DI + meta O6 idx≤22 + probe O4 sem `divergencias-transformacao` | Task 16 (`npm run test:cov`) |
 
 ---
 
@@ -3987,7 +4009,8 @@ rg -n "\bMarca\b" "app/frontend/src/app/(admin)/desossa" && echo FAIL || echo OK
 - Modify: `app/backend/test/integration/subitens.e2e-spec.ts`
 - Modify: `app/backend/test/integration/reetiqueta-subitem.e2e-spec.ts`
 - Modify: `app/backend/test/integration/corte-concorrencia.e2e-spec.ts`
-- **Não** modificar (herdam Step A): `expedicao.e2e-spec.ts`, `faturamento.e2e-spec.ts`, `rastreabilidade-corte.e2e-spec.ts`, `conferencia.e2e-spec.ts` — se Step G falhar nesses arquivos, **parar e reportar** (não improvisar patch)
+- Modify: `app/backend/test/integration/expedicao.e2e-spec.ts` (**Emenda 7.1** — it `subitem sem etiqueta nao e elegivel`; padrão reetiqueta)
+- **Não** modificar (herdam Step A / `subitemCompleto`): `faturamento.e2e-spec.ts`, `rastreabilidade-corte.e2e-spec.ts`, `conferencia.e2e-spec.ts` — se Step G falhar **nesses três** após A–F + Emenda 7.1, **parar e reportar** (não improvisar patch). `expedicao.e2e-spec.ts` **não** está nesta lista.
 - Modify: `app/backend/test/unit/corte-branches.spec.ts`
 - Modify: `app/backend/test/unit/onda6-migrations-meta.spec.ts`
 - Modify: `app/backend/test/integration/onda4-migrations.e2e-spec.ts`
@@ -4324,6 +4347,8 @@ import {
   subitemCompleto,
   concluirCorteOnda7,
   fecharChecklistSeDivergente,
+  itemSaidaCanonicoCb,
+  alinharPedidoItemComSaidaCorte,
 } from '../helpers/corte-fixtures';
 ```
 
@@ -4427,7 +4452,55 @@ Destinação mista — trocar só o concluir final:
     expect(ok.body.diferencaPeso).toBe('0.000');
 ```
 
-Testes que **esperam** 409 em `concluir` (sem destino / sem etiqueta) **não** usam `concluirCorteOnda7` — o 409 de `CHECKLIST_DIVERGENTE` ou de destino/etiqueta permanece aceitável (`expect(res.status).toBe(409)`).
+**Emenda 7.1 — it `concluir com subitem sem etiqueta` (~L169–186 tip `6e8cad0`):** alinha pedido/saída CB antes do `associar` (padrão reetiqueta). Mantém `concluir` **cru** (não `concluirCorteOnda7`) + `expect(409)` — o 409 prova ausência de etiqueta (não incompatibilidade de item).
+
+```ts
+# old_string
+  it('concluir com subitem sem etiqueta → 409', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-10-15');
+    const p = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId,
+      clienteId: c.clienteId,
+      itemComercialId: c.itemComercialId,
+      dataOperacao: c.dataOperacao,
+      quantidade: 5,
+    });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    await pesarSubitem(app, corteCookies, subId);
+    // Associa mas NÃO emite etiqueta
+    await request(srv()).post(`/operacao/corte/subitens/${subId}/associar`).set('Cookie', corteCookies).send({ pedidoVendaItemId: p.pedidoItemId });
+    const res = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({ justificativaDiferenca: 'perda nos aparas' });
+    expect(res.status).toBe(409);
+  });
+# new_string
+  it('concluir com subitem sem etiqueta → 409', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-10-15');
+    // Emenda 7.1: saída CB + alinhar antes do associar — 409 do concluir prova ausência de etiqueta
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const p = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId,
+      clienteId: c.clienteId,
+      itemComercialId: itemSaidaCbId,
+      dataOperacao: c.dataOperacao,
+      quantidade: 5,
+    });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
+    await pesarSubitem(app, corteCookies, subId);
+    await alinharPedidoItemComSaidaCorte(app, p.pedidoItemId, itemSaidaCbId);
+    // Associa mas NÃO emite etiqueta
+    await request(srv()).post(`/operacao/corte/subitens/${subId}/associar`).set('Cookie', corteCookies).send({ pedidoVendaItemId: p.pedidoItemId });
+    const res = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({ justificativaDiferenca: 'perda nos aparas' });
+    expect(res.status).toBe(409);
+  });
+```
+
+Testes que **esperam** 409 em `concluir` (sem destino / sem etiqueta) **não** usam `concluirCorteOnda7` — `concluir` cru + `expect(res.status).toBe(409)`. It sem destino (~L158) herda remap de `adicionarSubitem` (Step A); it sem etiqueta usa o patch Emenda 7.1 acima.
 
 - [ ] **Step C: Patches literais — suítes com `adicionarSubitem` + `associar` manual**
 
@@ -4737,9 +4810,107 @@ e no mesmo teste o 2º subitem:
     const sub2 = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
 ```
 
-#### `conferencia.e2e-spec.ts` / `faturamento.e2e-spec.ts` / `expedicao.e2e-spec.ts` / `rastreabilidade-corte.e2e-spec.ts`
+#### `expedicao.e2e-spec.ts` (**Emenda 7.1** — sai da lista de intocáveis)
 
-Herdam `subitemCompleto` (Step A) — **zero** patch nestes arquivos nesta emenda. Qualquer FAIL em Step G → parar e reportar.
+Import (topo do arquivo tip `6e8cad0` L9):
+
+```ts
+# old_string
+import { iniciarCorte, subitemCompleto } from '../helpers/corte-fixtures';
+# new_string
+import {
+  iniciarCorte,
+  subitemCompleto,
+  itemSaidaCanonicoCb,
+  alinharPedidoItemComSaidaCorte,
+} from '../helpers/corte-fixtures';
+```
+
+It `subitem sem etiqueta nao e elegivel` (~L609–643 tip `6e8cad0`) — padrão reetiqueta: pedido/saída CB + alinhar antes do `associar`; 409 da carga prova ausência de etiqueta (não incompatibilidade de item):
+
+```ts
+# old_string
+  it('subitem sem etiqueta nao e elegivel (409)', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-12-18');
+    const p = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      dataOperacao: c.dataOperacao, quantidade: 5,
+    });
+    const pecaId = await pesarPeca(app, recebimentoCookies, {
+      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+    });
+    await request(srv())
+      .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
+      .set('Cookie', recebimentoCookies)
+      .send({ pedidoVendaItemId: p.pedidoItemId });
+
+    // Cortar e criar subitem SEM etiqueta (pesado + associado mas sem emitir etiqueta)
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    fakes(app).balanca.definirPeso('6.000');
+    const { adicionarSubitem: addSub, pesarSubitem: pesarSub } = await import('../helpers/corte-fixtures');
+    const subId = await addSub(app, corteCookies, transfId, c.itemComercialId);
+    await pesarSub(app, corteCookies, subId);
+    await request(srv())
+      .post(`/operacao/corte/subitens/${subId}/associar`)
+      .set('Cookie', corteCookies)
+      .send({ pedidoVendaItemId: p.pedidoItemId });
+    // subitem esta 'associado' mas SEM etiqueta_atual
+
+    const caminhaoId = await criarCaminhao(app, expedicaoCookies, { dataOperacao: c.dataOperacao });
+    await abrirCarga(app, expedicaoCookies, caminhaoId);
+    const res = await request(srv())
+      .post(`/operacao/expedicao/caminhoes/${caminhaoId}/itens`)
+      .set('Cookie', expedicaoCookies)
+      .send({ tipoOrigem: 'subitem', id: subId });
+    expect(res.status).toBe(409);
+  });
+# new_string
+  it('subitem sem etiqueta nao e elegivel (409)', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-12-18');
+    // Emenda 7.1: saída CB + alinhar — 409 da carga prova ausência de etiqueta
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const p = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId,
+      dataOperacao: c.dataOperacao, quantidade: 5,
+    });
+    const pecaId = await pesarPeca(app, recebimentoCookies, {
+      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+    });
+    await request(srv())
+      .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
+      .set('Cookie', recebimentoCookies)
+      .send({ pedidoVendaItemId: p.pedidoItemId });
+
+    // Cortar e criar subitem SEM etiqueta (pesado + associado mas sem emitir etiqueta)
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    fakes(app).balanca.definirPeso('6.000');
+    const { adicionarSubitem: addSub, pesarSubitem: pesarSub } = await import('../helpers/corte-fixtures');
+    const subId = await addSub(app, corteCookies, transfId, itemSaidaCbId);
+    await pesarSub(app, corteCookies, subId);
+    await alinharPedidoItemComSaidaCorte(app, p.pedidoItemId, itemSaidaCbId);
+    await request(srv())
+      .post(`/operacao/corte/subitens/${subId}/associar`)
+      .set('Cookie', corteCookies)
+      .send({ pedidoVendaItemId: p.pedidoItemId });
+    // subitem esta 'associado' mas SEM etiqueta_atual
+
+    const caminhaoId = await criarCaminhao(app, expedicaoCookies, { dataOperacao: c.dataOperacao });
+    await abrirCarga(app, expedicaoCookies, caminhaoId);
+    const res = await request(srv())
+      .post(`/operacao/expedicao/caminhoes/${caminhaoId}/itens`)
+      .set('Cookie', expedicaoCookies)
+      .send({ tipoOrigem: 'subitem', id: subId });
+    expect(res.status).toBe(409);
+  });
+```
+
+Demais its de `expedicao.e2e-spec.ts` que usam `subitemCompleto` / `subitemElegivel` herdam Step A — **zero** patch adicional.
+
+#### `conferencia.e2e-spec.ts` / `faturamento.e2e-spec.ts` / `rastreabilidade-corte.e2e-spec.ts`
+
+Herdam `subitemCompleto` (Step A) — **zero** patch nestes arquivos nesta emenda. Qualquer FAIL em Step G **nesses três** → parar e reportar. `expedicao.e2e-spec.ts` **não** entra aqui (patch Emenda 7.1 acima).
 
 - [ ] **Step D: `corte-branches.spec.ts` — injetar `ChecklistCorteService`**
 
@@ -4941,18 +5112,22 @@ cd app/backend && npx jest test/integration/onda4-migrations.e2e-spec.ts -v --te
 # Expected: PASS
 ```
 
-- [ ] **Step G: Gate `test:cov` (Expected PASS Emenda 7)**
+- [ ] **Step G: Gate `test:cov` (Expected PASS Emenda 7 + Emenda 7.1 — factível)**
+
+Após Steps A–F **e** patches Emenda 7.1 (Step B it sem etiqueta + Step C `expedicao` it sem etiqueta), o Gate é **factível** — `exit 0` sem FAIL. **Proibido** fechar o bloqueante Monitor #1 com “parar e reportar se expedicao falhar”.
 
 ```bash
 cd app/backend && npm run test:cov
 # Expected: exit 0 — 0 FAIL
 # Expected: suítes legadas corte/subitens/reetiqueta/concorrencia/expedicao/faturamento/conferencia/rastreabilidade PASS
+# Expected: corte it 'concluir com subitem sem etiqueta' PASS (409 de etiqueta, não incompatibilidade)
+# Expected: expedicao it 'subitem sem etiqueta nao e elegivel' PASS (409 de carga, não incompatibilidade)
 # Expected: corte-branches PASS; onda6-migrations-meta PASS; onda4-migrations PASS
 # Expected: onda7-desossa.spec.ts continua PASS
 # Expected: coverage ≥80% linha e branch
 ```
 
-Se **qualquer** FAIL restar após Steps A–F: **parar e reportar** (não improvisar). Anexar nome do spec + mensagem.
+Se FAIL restar **após** A–F + Emenda 7.1 em arquivo **fora** dos patches literais (ex.: `faturamento`/`conferencia`/`rastreabilidade-corte`): **parar e reportar** (não improvisar). Anexar nome do spec + mensagem.
 
 - [ ] **Step H (após G verde; não bloqueia G): evidências Playwright lado a lado**
 
@@ -4982,6 +5157,7 @@ git add app/backend/test/helpers/corte-fixtures.ts \
   app/backend/test/integration/subitens.e2e-spec.ts \
   app/backend/test/integration/reetiqueta-subitem.e2e-spec.ts \
   app/backend/test/integration/corte-concorrencia.e2e-spec.ts \
+  app/backend/test/integration/expedicao.e2e-spec.ts \
   app/backend/test/unit/corte-branches.spec.ts \
   app/backend/test/unit/onda6-migrations-meta.spec.ts \
   app/backend/test/integration/onda4-migrations.e2e-spec.ts
@@ -4990,10 +5166,11 @@ test(onda7): desbloqueia Gate local — suítes legadas e meta O6/O4
 
 ### Descrição Detalhada:
 Helpers de corte passam a bindar TZ_A, usar saídas CB/JAC e fechar checklist
-antes de concluir; meta O6 isola journal 20..22; probe O4 restaura schemas pré-O7.
+antes de concluir; patches Emenda 7.1 alinham its manuais de corte/expedicao;
+meta O6 isola journal 20..22; probe O4 restaura schemas pré-O7.
 
 ### Motivo da Mudança:
-Emenda 7 — Gate test:cov quebrava por DoD 7.6/7.7/7.9 sem literais no plano.
+Emenda 7 + 7.1 — Gate test:cov quebrava por DoD 7.6/7.7/7.9 sem literais no plano.
 
 ### Impacto:
 Suítes F4c/expedição/faturamento herdam fluxo O7 sem regressão da suíte nova.
@@ -5008,12 +5185,12 @@ EOF
 
 > Task do **Executor/Worker na implementação**, não deste PR de plano.
 
-> **Pré-requisito Emenda 7:** Task 16 Step G (`npm run test:cov`) **PASS** no tip de `feature/onda7-desossa` (base `34524a4` + patches Task 16). Sem isso, **não** abrir PR de implementação.
+> **Pré-requisito Emenda 7 + 7.1:** Task 16 Step G (`npm run test:cov`) **PASS** no tip de `feature/onda7-desossa` (base `34524a4`/`6e8cad0` + patches Task 16 A–F + Emenda 7.1). Sem isso, **não** abrir PR de implementação.
 
 ```bash
 npm ci
 cd app/backend && npm run lint && npm run test:cov && npm run build
-# Expected PASS Emenda 7: exit 0 — 0 FAIL (suítes legadas + meta O6/O4 + onda7-desossa)
+# Expected PASS Emenda 7 + 7.1: exit 0 — 0 FAIL (suítes legadas + meta O6/O4 + onda7-desossa)
 cd app/frontend && npm run lint && npm run test && npm run build
 # Step H (evidências) se ainda sem PNGs em docs/evidencias/onda7-desossa/
 gh pr create --base develop --title "feat(onda7): Desossa e Transformação" --body "..."
@@ -5068,6 +5245,7 @@ Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13. **T16 (Emenda 7) é o
 8. **Emenda 5 vs veredito `04bc197`:** (1) DoD 7.21b + Task 13 leem `res.body.data` / `json.data` (tip `Paginado`/`montarPaginado`; zero `itens` no envelope); (2) fixtures DoD 7.21b literais com `operacaoId`/`subitemId` tipados (HTTP + SQL XOR `subitem`, sem reticências).
 9. **Emenda 6 vs veredito `9608d20`:** (1) ambas fixtures DoD 7.21b, após `iniciarCorte`, buscam `TZ_A`, `POST /operacao/corte/:id/regra`, e usam `itemComercialId` de saída CB (seed Task 2) em `criarPedido`/`subitemCompleto` — Expected PASS factível contra DoD 7.6/7.7; zero `c.itemComercialId` da mãe nesses calls.
 10. **Emenda 7 vs Gate local tip `34524a4`:** (1) `corte-fixtures` O7-aware (bind TZ_A + saída CB/JAC + alinhar pedido + `concluirCorteOnda7`); (2) patches literais corte/subitens/reetiqueta/concorrência; (3) `makeChecklist` no `corte-branches`; (4) meta O6 `idx<=22`; (5) probe O4 remove `0023`+`divergencias-transformacao` e restaura schemas pré-O7; (6) Expected PASS `npm run test:cov`; zero TBD/TODO/similar à Task.
+11. **Emenda 7.1 vs veredito `afe9dc4`:** (1) `expedicao.e2e-spec.ts` it `subitem sem etiqueta nao e elegivel` — patch literal padrão reetiqueta (`itemSaidaCanonicoCb`+`alinhar` antes do `associar`); arquivo fora da lista de intocáveis; (2) `corte.e2e-spec.ts` it `concluir com subitem sem etiqueta` — mesma alinhagem + `concluir` cru + `expect(409)`; (3) cabeçalho Emenda 7 + Step G reafirmam Expected PASS factível após A–F **e** (1)(2) — zero escape “reportar se expedicao falhar”.
 
 ---
 
