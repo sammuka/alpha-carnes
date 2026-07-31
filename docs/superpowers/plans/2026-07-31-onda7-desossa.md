@@ -106,6 +106,58 @@ Fecha **todos** os bloqueantes e menores do Portão 1 da Emenda 5 (`9608d20`), i
 
 ---
 
+## Emenda 7 — Gate local bloqueado (Worker tip `34524a4` / branch `feature/onda7-desossa`)
+
+Fecha **todos** os bloqueantes do Gate local `npm run test:cov` após DoD 7.6/7.7/7.9 no tip de implementação, item a item. Ancestral obrigatório: Emenda 6 + Portão 1 aprovado `7aba152` / tip plano mergeado `39156dd` (PR #47) / pin sha256-lf pré-Emenda 7 `56f24730…572b`. Suíte nova `onda7-desossa.spec.ts` **PASS** isolada — **não** alterar produção O7; só helpers/suítes legadas/meta/probe.
+
+| # | Achado (Gate `test:cov` @ `34524a4`) | Fechamento nesta emenda |
+|---|---|---|
+| 1 | Helpers/suítes legadas chamam `adicionarSubitem`/`subitemCompleto` sem `POST .../regra` e/ou com `itemComercialId` da mãe → 409 `REGRA_TRANSFORMACAO_OBRIGATORIA` / `SAIDA_FORA_DA_REGRA`; concluir sem checklist fechado → 409 `CHECKLIST_DIVERGENTE`; cascata `id` undefined → 500/400 | Task 16 Step A–C: helpers O7-aware (seed+bind `TZ_A` + saída CB/JAC + alinhar pedido + `concluirCorteOnda7`); patches literais nos specs que associam fora de `subitemCompleto` |
+| 2 | `corte-branches.spec.ts`: `new CorteService(db, auditoria, emitter)` sem `ChecklistCorteService` | Task 16 Step D: `makeChecklist()` + 4º arg em **todas** as 21 construções |
+| 3 | `onda6-migrations-meta.spec.ts`: `filter(idx >= 20)` inclui journal `0023` e quebra `toEqual` até 0022 | Task 16 Step E: filtrar `idx >= 20 && idx <= 22` (escopo O6) |
+| 4 | `onda4-migrations.e2e-spec.ts` probe: `divergencias-transformacao.schema.ts` importa `aprovacoes-operacionais` (removido do probe); schema O7 em `transformacoes`/`regras` geraria DDL extra | Task 16 Step F: remover `0023`+divergencias do probe; restaurar fixtures pré-O7; filtrar `index.ts` |
+| 5 | (dívida menor) scripts `capture-onda7-*.mjs` untracked sem PNGs — Gate UI ambíguo | Task 16 Step H: Step literal commit+run dos scripts **após** `test:cov` verde; **não** bloqueia Step G |
+
+**Emenda 7.1 (Portão 1 `afe9dc4` — fecha Expected PASS factível):** patches literais adicionais em `expedicao.e2e-spec.ts` (`subitem sem etiqueta nao e elegivel`) e `corte.e2e-spec.ts` (`concluir com subitem sem etiqueta`) — padrão reetiqueta (`itemSaidaCanonicoCb` + `alinharPedidoItemComSaidaCorte` antes do `associar`). Ver seção **Emenda 7.1** abaixo e Task 16 Steps B/C/G.
+
+**Expected PASS após aplicar Emenda 7 + Emenda 7.1 sobre tip `34524a4` (ou tip atual de `feature/onda7-desossa`, ex. `6e8cad0`):** Steps A–F **e** patches Emenda 7.1 (its citados em Step B/C) → `npm run test:cov` exit 0 é **factível** (zero FAIL; cobertura ≥80% linha e branch). **Proibido** tratar FAIL de `expedicao.e2e-spec.ts` / it sem etiqueta de `corte.e2e-spec.ts` como “parar e reportar” — esses its têm patch literal nesta emenda.
+
+```bash
+cd app/backend && npm run test:cov
+# Expected: exit 0 — zero FAIL; cobertura ≥80% linha e branch
+```
+
+**Proibido:** inventar AD para P6/P12; rótulo `[Mm]arca`; alterar código na branch de plano; “similar à Task” / TBD / TODO.
+
+**Ordem canônica herdada da Emenda 6 (agora nos helpers):**
+1. `seedCatalogoMvp` + `seedRegrasTransformacaoTz`
+2. `iniciarCorte` → `transformacaoId`
+3. `POST /operacao/corte/:id/regra` com `TZ_A`
+4. `itemComercialId` de **saída** (`CB` / `JAC` via `legadoItemComercialId`) — **nunca** item da mãe/recebimento sem reconciliar
+5. Antes de `concluir` com sucesso: checklist completo **ou** `POST .../divergencia` (DoD 7.9)
+
+---
+
+## Emenda 7.1 — Portão 1 Emenda 7 veredito `ajustar` (`afe9dc4`)
+
+Fecha **item a item** o feedback do Monitor no tip plano `afe9dc4` / tip impl `6e8cad0` (`feature/onda7-desossa`). Ancestral: Emenda 7 (Task 14 Steps A–F) + PR #49. **Não** altera produção O7.
+
+| # | Achado Monitor (`afe9dc4`) | Fechamento Emenda 7.1 |
+|---|---|---|
+| 1 | Expected PASS Step G não factível: Task 16 marcava `expedicao.e2e-spec.ts` intocável + “parar e reportar”, mas it `subitem sem etiqueta nao e elegivel` (~L609–643) faz `addSub`+`associar` manual com item da mãe → após Step A o subitem vira CB → 409 `Item de pedido incompatível` **antes** do 409 de carga | Task 16 Step C: patch literal (padrão reetiqueta) nesse it; arquivo **sai** da lista de intocáveis; Step G **não** usa “reportar se expedicao falhar” como fechamento |
+| 2 | Step B incompleto em `corte.e2e-spec.ts`: it `concluir com subitem sem etiqueta` (~L169–186) associa sem alinhar → 409 deixa de provar ausência de etiqueta | Task 16 Step B: old/new com `itemSaidaCanonicoCb`/`alinharPedidoItemComSaidaCorte` antes do `associar`; `concluir` cru + `expect(409)` |
+| 3 | Reafirmar Expected PASS factível no cabeçalho Emenda 7 / Step G após A–F **e** (1)(2) | Cabeçalho Emenda 7 + Emenda 7.1 + Step G: Expected PASS factível após A–F + patches 7.1; zero “reportar se expedicao falhar” como escape do bloqueante #1 |
+
+**Expected PASS após Emenda 7 Steps A–F + Emenda 7.1 (patches B/C dos its citados):**
+
+```bash
+cd app/backend && npm run test:cov
+# Expected: exit 0 — zero FAIL (inclui expedicao it sem etiqueta + corte it sem etiqueta)
+# Expected: cobertura ≥80% linha e branch
+```
+
+---
+
 ## Global Constraints
 
 - Constituição: Princípio I (fidelidade absoluta ao protótipo), II (completude E2E), V (gateways/fakes), VIII (não inventar pendência), RA-01..06.
@@ -408,6 +460,7 @@ Onda aditiva. Emergência: `DROP TABLE divergencias_transformacao;` + drop das c
 | 7.23 | Cobertura ≥80% linha e branch nos services tocados | `npm run test:cov` |
 | 7.24 | Zero rótulo `Marca` nas telas da onda | grep |
 | 7.25 | Nenhum AD novo em `DECISOES.md` | diff vazio |
+| 7.26 | Gate local `test:cov` verde com DoD 7.6/7.7/7.9: helpers O7-aware + suítes legadas (incl. patches Emenda 7.1 em `expedicao`/`corte` its manuais) + `corte-branches` DI + meta O6 idx≤22 + probe O4 sem `divergencias-transformacao` | Task 16 (`npm run test:cov`) |
 
 ---
 
@@ -3945,14 +3998,1201 @@ rg -n "\bMarca\b" "app/frontend/src/app/(admin)/desossa" && echo FAIL || echo OK
 
 ---
 
+### Task 16 — Emenda 7: desbloquear Gate local (suítes legadas + meta + probe O4)
+
+> Task do **Worker na branch `feature/onda7-desossa`** (tip base `34524a4` ou tip atual). **Não** altera regras de negócio O7; só testa/helpers/meta para herdarem DoD 7.6/7.7/7.9.
+> Executar **antes** do Gate final da Task 15 (`test:cov`). Após verde, seguir Task 15 (PR impl).
+
+**Files:**
+- Replace: `app/backend/test/helpers/corte-fixtures.ts`
+- Modify: `app/backend/test/integration/corte.e2e-spec.ts`
+- Modify: `app/backend/test/integration/subitens.e2e-spec.ts`
+- Modify: `app/backend/test/integration/reetiqueta-subitem.e2e-spec.ts`
+- Modify: `app/backend/test/integration/corte-concorrencia.e2e-spec.ts`
+- Modify: `app/backend/test/integration/expedicao.e2e-spec.ts` (**Emenda 7.1** — it `subitem sem etiqueta nao e elegivel`; padrão reetiqueta)
+- **Não** modificar (herdam Step A / `subitemCompleto`): `faturamento.e2e-spec.ts`, `rastreabilidade-corte.e2e-spec.ts`, `conferencia.e2e-spec.ts` — se Step G falhar **nesses três** após A–F + Emenda 7.1, **parar e reportar** (não improvisar patch). `expedicao.e2e-spec.ts` **não** está nesta lista.
+- Modify: `app/backend/test/unit/corte-branches.spec.ts`
+- Modify: `app/backend/test/unit/onda6-migrations-meta.spec.ts`
+- Modify: `app/backend/test/integration/onda4-migrations.e2e-spec.ts`
+- Create: `app/backend/test/helpers/fixtures/transformacoes.schema.pre-onda7.ts`
+- Create: `app/backend/test/helpers/fixtures/regras-transformacao.schema.pre-onda7.ts`
+- (Step H, após cov verde) Create/commit: `app/frontend/scripts/capture-onda7-app.mjs`, `capture-onda7-prototipo.mjs` + PNGs em `docs/evidencias/onda7-desossa/`
+
+- [ ] **Step A: Substituir `corte-fixtures.ts` pelo arquivo literal abaixo (O7-aware)**
+
+```ts
+// app/backend/test/helpers/corte-fixtures.ts
+import type { INestApplication } from '@nestjs/common';
+import { and, eq, isNull } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { DRIZZLE } from '../../src/database/database.module';
+import * as schema from '../../src/database/schema';
+import { seedCatalogoMvp } from '../../src/database/seed-catalogo-mvp';
+import { seedRegrasTransformacaoTz } from '../../src/database/seed-regras-transformacao-tz';
+
+type Db = NodePgDatabase<typeof schema>;
+
+function dbOf(app: INestApplication): Db {
+  return app.get<{ db: Db }>(DRIZZLE).db;
+}
+
+/**
+ * Emenda 7 — seed Task 2 (catálogo MVP + regras TZ A/B) e devolve
+ * legadoItemComercialId do produto CB (saída canônica Alternativa A).
+ */
+export async function itemSaidaCanonicoCb(app: INestApplication): Promise<string> {
+  const db = dbOf(app);
+  await seedCatalogoMvp(db);
+  await seedRegrasTransformacaoTz(db);
+  const [saidaCb] = await db
+    .select({ itemComercialId: schema.produtos.legadoItemComercialId })
+    .from(schema.produtos)
+    .where(and(eq(schema.produtos.codigo, 'CB'), isNull(schema.produtos.deletedAt)))
+    .limit(1);
+  if (!saidaCb?.itemComercialId) {
+    throw new Error('Produto CB seed sem legadoItemComercialId (catálogo MVP / Task 2)');
+  }
+  return saidaCb.itemComercialId;
+}
+
+/**
+ * Emenda 7 — seed + bind TZ_A na transformação; devolve ids de saída CB/JAC.
+ * Idempotente: re-bind da mesma TZ_A com subitens já existentes é permitido pelo tip.
+ */
+export async function prepararTransformacaoComRegraTzA(
+  app: INestApplication,
+  cookies: string,
+  transformacaoId: string,
+): Promise<{ regraId: string; itemSaidaCbId: string; itemSaidaJacId: string }> {
+  const { default: request } = await import('supertest');
+  const db = dbOf(app);
+  await seedCatalogoMvp(db);
+  await seedRegrasTransformacaoTz(db);
+
+  const [regraA] = await db
+    .select({ id: schema.regrasTransformacao.id })
+    .from(schema.regrasTransformacao)
+    .where(
+      and(
+        eq(schema.regrasTransformacao.codigo, 'TZ_A'),
+        isNull(schema.regrasTransformacao.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!regraA) {
+    throw new Error('Regra seed TZ_A ausente — rode seedRegrasTransformacaoTz (Task 2)');
+  }
+
+  const bind = await request(app.getHttpServer())
+    .post(`/operacao/corte/${transformacaoId}/regra`)
+    .set('Cookie', cookies)
+    .send({ regraTransformacaoId: regraA.id });
+  if (bind.status !== 200 && bind.status !== 201) {
+    throw new Error(
+      `Falha ao vincular TZ_A na transformação: ${bind.status} ${JSON.stringify(bind.body)}`,
+    );
+  }
+
+  const [saidaCb] = await db
+    .select({ itemComercialId: schema.produtos.legadoItemComercialId })
+    .from(schema.produtos)
+    .where(and(eq(schema.produtos.codigo, 'CB'), isNull(schema.produtos.deletedAt)))
+    .limit(1);
+  const [saidaJac] = await db
+    .select({ itemComercialId: schema.produtos.legadoItemComercialId })
+    .from(schema.produtos)
+    .where(and(eq(schema.produtos.codigo, 'JAC'), isNull(schema.produtos.deletedAt)))
+    .limit(1);
+  if (!saidaCb?.itemComercialId || !saidaJac?.itemComercialId) {
+    throw new Error('Produtos CB/JAC seed sem legadoItemComercialId (catálogo MVP / Task 2)');
+  }
+  return {
+    regraId: regraA.id,
+    itemSaidaCbId: saidaCb.itemComercialId,
+    itemSaidaJacId: saidaJac.itemComercialId,
+  };
+}
+
+/** Se item informado já é saída da regra, mantém; senão CB (Emenda 6/7). */
+export function resolverItemSaidaRegra(
+  itemComercialId: string,
+  saidas: { itemSaidaCbId: string; itemSaidaJacId: string },
+): string {
+  if (
+    itemComercialId === saidas.itemSaidaCbId ||
+    itemComercialId === saidas.itemSaidaJacId
+  ) {
+    return itemComercialId;
+  }
+  return saidas.itemSaidaCbId;
+}
+
+/**
+ * Emenda 7 — alinha `pedidos_venda_itens.item_comercial_id` à saída efetiva
+ * para `associar` não falhar com "Item de pedido incompatível".
+ */
+export async function alinharPedidoItemComSaidaCorte(
+  app: INestApplication,
+  pedidoVendaItemId: string,
+  itemSaidaId: string,
+): Promise<void> {
+  const db = dbOf(app);
+  const [item] = await db
+    .select({
+      id: schema.pedidosVendaItens.id,
+      itemComercialId: schema.pedidosVendaItens.itemComercialId,
+    })
+    .from(schema.pedidosVendaItens)
+    .where(eq(schema.pedidosVendaItens.id, pedidoVendaItemId))
+    .limit(1);
+  if (!item) {
+    throw new Error(`Pedido item ${pedidoVendaItemId} ausente para alinhar saída O7`);
+  }
+  if (item.itemComercialId === itemSaidaId) return;
+  await db
+    .update(schema.pedidosVendaItens)
+    .set({ itemComercialId: itemSaidaId, updatedAt: new Date() })
+    .where(eq(schema.pedidosVendaItens.id, pedidoVendaItemId));
+}
+
+/**
+ * Emenda 7 / DoD 7.9 — se checklist divergente sem divergência aberta,
+ * abre `subpeca_faltante` (TZ_A incompleta é o caso legado típico).
+ */
+export async function fecharChecklistSeDivergente(
+  app: INestApplication,
+  cookies: string,
+  transformacaoId: string,
+): Promise<void> {
+  const { default: request } = await import('supertest');
+  const chk = await request(app.getHttpServer())
+    .get(`/operacao/corte/${transformacaoId}/checklist`)
+    .set('Cookie', cookies);
+  if (chk.status !== 200) {
+    throw new Error(
+      `Falha ao obter checklist: ${chk.status} ${JSON.stringify(chk.body)}`,
+    );
+  }
+  if (chk.body.divergente && !chk.body.divergenciaAbertaId) {
+    const div = await request(app.getHttpServer())
+      .post(`/operacao/corte/${transformacaoId}/divergencia`)
+      .set('Cookie', cookies)
+      .send({
+        tipo: 'subpeca_faltante',
+        detalhe: { origem: 'fixture-legado-onda7' },
+        observacao: 'Fixture legada: checklist incompleto vs regra TZ_A',
+      });
+    if (div.status !== 200 && div.status !== 201) {
+      throw new Error(
+        `Falha ao abrir divergência de transformação: ${div.status} ${JSON.stringify(div.body)}`,
+      );
+    }
+  }
+}
+
+/** Conclui corte fechando checklist (DoD 7.9) quando necessário. */
+export async function concluirCorteOnda7(
+  app: INestApplication,
+  cookies: string,
+  transformacaoId: string,
+  body: Record<string, unknown> = {},
+) {
+  const { default: request } = await import('supertest');
+  await fecharChecklistSeDivergente(app, cookies, transformacaoId);
+  return request(app.getHttpServer())
+    .post(`/operacao/corte/${transformacaoId}/concluir`)
+    .set('Cookie', cookies)
+    .send(body);
+}
+
+/** Inicia um corte sobre uma peça e retorna o id da transformação. */
+export async function iniciarCorte(
+  app: INestApplication,
+  cookies: string,
+  pecaId: string,
+  body: Partial<{ tipoTransformacao: string; motivo: string; motivoDetalhe: string }> = {},
+): Promise<string> {
+  const { default: request } = await import('supertest');
+  const res = await request(app.getHttpServer())
+    .post(`/operacao/corte/pecas/${pecaId}/iniciar`)
+    .set('Cookie', cookies)
+    .send({
+      tipoTransformacao: body.tipoTransformacao ?? 'subdivisao',
+      motivo: body.motivo ?? 'necessidade_operacional',
+      motivoDetalhe: body.motivoDetalhe,
+    });
+  if (res.status !== 200 && res.status !== 201) {
+    throw new Error(
+      `Falha ao iniciar corte: ${res.status} ${JSON.stringify(res.body)}`,
+    );
+  }
+  if (!res.body?.id) {
+    throw new Error(`iniciarCorte sem id: ${JSON.stringify(res.body)}`);
+  }
+  return res.body.id as string;
+}
+
+/**
+ * Gera um subitem na transformação; retorna o id.
+ * Emenda 7: bind TZ_A + remapeia item fora das saídas → CB.
+ */
+export async function adicionarSubitem(
+  app: INestApplication,
+  cookies: string,
+  transformacaoId: string,
+  itemComercialId: string,
+): Promise<string> {
+  const { default: request } = await import('supertest');
+  const saidas = await prepararTransformacaoComRegraTzA(app, cookies, transformacaoId);
+  const itemEfetivo = resolverItemSaidaRegra(itemComercialId, saidas);
+  const res = await request(app.getHttpServer())
+    .post(`/operacao/corte/${transformacaoId}/subitens`)
+    .set('Cookie', cookies)
+    .send({ itemComercialId: itemEfetivo });
+  if (res.status !== 200 && res.status !== 201) {
+    throw new Error(
+      `Falha ao adicionar subitem: ${res.status} ${JSON.stringify(res.body)}`,
+    );
+  }
+  if (!res.body?.id) {
+    throw new Error(`adicionarSubitem sem id: ${JSON.stringify(res.body)}`);
+  }
+  return res.body.id as string;
+}
+
+/** Pesa um subitem (automático por padrão). Retorna a resposta completa. */
+export async function pesarSubitem(
+  app: INestApplication,
+  cookies: string,
+  subitemId: string,
+  body: Record<string, unknown> = { modoCaptura: 'automatico' },
+) {
+  const { default: request } = await import('supertest');
+  return request(app.getHttpServer())
+    .post(`/operacao/corte/subitens/${subitemId}/pesar`)
+    .set('Cookie', cookies)
+    .send(body);
+}
+
+/**
+ * Leva um subitem até 'associado' + etiqueta emitida — destino completo para concluir.
+ * Emenda 7: bind+saída+alinha pedidoVendaItemId à saída efetiva (DoD 7.6/7.7).
+ */
+export async function subitemCompleto(
+  app: INestApplication,
+  cookies: string,
+  transformacaoId: string,
+  itemComercialId: string,
+  pedidoVendaItemId: string,
+): Promise<string> {
+  const { default: request } = await import('supertest');
+  const saidas = await prepararTransformacaoComRegraTzA(app, cookies, transformacaoId);
+  const itemEfetivo = resolverItemSaidaRegra(itemComercialId, saidas);
+  await alinharPedidoItemComSaidaCorte(app, pedidoVendaItemId, itemEfetivo);
+
+  const resAdd = await request(app.getHttpServer())
+    .post(`/operacao/corte/${transformacaoId}/subitens`)
+    .set('Cookie', cookies)
+    .send({ itemComercialId: itemEfetivo });
+  if (resAdd.status !== 200 && resAdd.status !== 201) {
+    throw new Error(
+      `Falha ao adicionar subitem (completo): ${resAdd.status} ${JSON.stringify(resAdd.body)}`,
+    );
+  }
+  const subitemId = resAdd.body.id as string;
+  if (!subitemId) {
+    throw new Error(`subitemCompleto sem id: ${JSON.stringify(resAdd.body)}`);
+  }
+
+  await pesarSubitem(app, cookies, subitemId);
+  const assoc = await request(app.getHttpServer())
+    .post(`/operacao/corte/subitens/${subitemId}/associar`)
+    .set('Cookie', cookies)
+    .send({ pedidoVendaItemId });
+  if (assoc.status !== 200 && assoc.status !== 201) {
+    throw new Error(
+      `Falha ao associar subitem: ${assoc.status} ${JSON.stringify(assoc.body)}`,
+    );
+  }
+  const etiq = await request(app.getHttpServer())
+    .post(`/operacao/corte/subitens/${subitemId}/etiqueta`)
+    .set('Cookie', cookies)
+    .send();
+  if (etiq.status !== 200 && etiq.status !== 201) {
+    throw new Error(
+      `Falha ao emitir etiqueta de subitem: ${etiq.status} ${JSON.stringify(etiq.body)}`,
+    );
+  }
+  return subitemId;
+}
+```
+
+```bash
+cd app/backend && npx tsc --noEmit -p tsconfig.json 2>&1 | head -40
+# Expected: sem erro apontando corte-fixtures.ts
+```
+
+- [ ] **Step B: Patches literais — `corte.e2e-spec.ts` (concluir com sucesso via `concluirCorteOnda7`)**
+
+Import:
+
+```ts
+# old_string
+import { iniciarCorte, adicionarSubitem, pesarSubitem, subitemCompleto } from '../helpers/corte-fixtures';
+# new_string
+import {
+  iniciarCorte,
+  adicionarSubitem,
+  pesarSubitem,
+  subitemCompleto,
+  concluirCorteOnda7,
+  fecharChecklistSeDivergente,
+  itemSaidaCanonicoCb,
+  alinharPedidoItemComSaidaCorte,
+} from '../helpers/corte-fixtures';
+```
+
+Conservação de peso (Σ > original) — trocar `subitemCompleto`+`concluir` de sucesso:
+
+```ts
+# old_string
+    fakes(app).balanca.definirPeso('13.000');
+    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+
+    const semJust = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({});
+    expect(semJust.status).toBe(409);
+
+    const comJust = await request(srv())
+      .post(`/operacao/corte/${transfId}/concluir`)
+      .set('Cookie', corteCookies)
+      .send({ justificativaDiferenca: 'ganho por hidratação medido' });
+    expect(comJust.status).toBe(201);
+    expect(comJust.body.statusTransformacao).toBe('concluida');
+# new_string
+    fakes(app).balanca.definirPeso('13.000');
+    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+
+    // Emenda 7: fechar checklist (DoD 7.9) antes de exercitar justificativa de peso
+    await fecharChecklistSeDivergente(app, corteCookies, transfId);
+
+    const semJust = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({});
+    expect(semJust.status).toBe(409);
+
+    const comJust = await concluirCorteOnda7(app, corteCookies, transfId, {
+      justificativaDiferenca: 'ganho por hidratação medido',
+    });
+    expect(comJust.status).toBe(201);
+    expect(comJust.body.statusTransformacao).toBe('concluida');
+```
+
+Conservação de peso (perda):
+
+```ts
+# old_string
+    fakes(app).balanca.definirPeso('10.000'); // perda de 2.500
+    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+
+    const semJust = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({});
+    expect(semJust.status).toBe(409);
+
+    const comJust = await request(srv())
+      .post(`/operacao/corte/${transfId}/concluir`)
+      .set('Cookie', corteCookies)
+      .send({ justificativaDiferenca: 'apara removida conforme padrão' });
+    expect(comJust.status).toBe(201);
+# new_string
+    fakes(app).balanca.definirPeso('10.000'); // perda de 2.500
+    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+
+    await fecharChecklistSeDivergente(app, corteCookies, transfId);
+
+    const semJust = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({});
+    expect(semJust.status).toBe(409);
+
+    const comJust = await concluirCorteOnda7(app, corteCookies, transfId, {
+      justificativaDiferenca: 'apara removida conforme padrão',
+    });
+    expect(comJust.status).toBe(201);
+```
+
+Conclusão idempotente (dois subitens) — caminho único (sem bifurcação):
+
+```ts
+# old_string
+    fakes(app).balanca.definirPeso('6.250');
+    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+
+    const ok = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({});
+    expect(ok.status).toBe(201);
+# new_string
+    fakes(app).balanca.definirPeso('6.250');
+    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+
+    // Emenda 7 / DoD 7.9: 2× CB deixa JAC pendente → concluirCorteOnda7 abre divergência
+    const ok = await concluirCorteOnda7(app, corteCookies, transfId, {});
+    expect(ok.status).toBe(201);
+```
+
+Destinação mista — trocar só o concluir final:
+
+```ts
+# old_string
+    // Concluir com Σ = peso_original (6.250 × 2 = 12.500 → sem justificativa)
+    const ok = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({});
+    expect(ok.status).toBe(201);
+    expect(ok.body.statusTransformacao).toBe('concluida');
+    expect(ok.body.diferencaPeso).toBe('0.000');
+# new_string
+    // Emenda 7: DoD 7.9 — fechar checklist antes do 201
+    const ok = await concluirCorteOnda7(app, corteCookies, transfId, {});
+    expect(ok.status).toBe(201);
+    expect(ok.body.statusTransformacao).toBe('concluida');
+    expect(ok.body.diferencaPeso).toBe('0.000');
+```
+
+**Emenda 7.1 — it `concluir com subitem sem etiqueta` (~L169–186 tip `6e8cad0`):** alinha pedido/saída CB antes do `associar` (padrão reetiqueta). Mantém `concluir` **cru** (não `concluirCorteOnda7`) + `expect(409)` — o 409 prova ausência de etiqueta (não incompatibilidade de item).
+
+```ts
+# old_string
+  it('concluir com subitem sem etiqueta → 409', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-10-15');
+    const p = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId,
+      clienteId: c.clienteId,
+      itemComercialId: c.itemComercialId,
+      dataOperacao: c.dataOperacao,
+      quantidade: 5,
+    });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    await pesarSubitem(app, corteCookies, subId);
+    // Associa mas NÃO emite etiqueta
+    await request(srv()).post(`/operacao/corte/subitens/${subId}/associar`).set('Cookie', corteCookies).send({ pedidoVendaItemId: p.pedidoItemId });
+    const res = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({ justificativaDiferenca: 'perda nos aparas' });
+    expect(res.status).toBe(409);
+  });
+# new_string
+  it('concluir com subitem sem etiqueta → 409', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-10-15');
+    // Emenda 7.1: saída CB + alinhar antes do associar — 409 do concluir prova ausência de etiqueta
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const p = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId,
+      clienteId: c.clienteId,
+      itemComercialId: itemSaidaCbId,
+      dataOperacao: c.dataOperacao,
+      quantidade: 5,
+    });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
+    await pesarSubitem(app, corteCookies, subId);
+    await alinharPedidoItemComSaidaCorte(app, p.pedidoItemId, itemSaidaCbId);
+    // Associa mas NÃO emite etiqueta
+    await request(srv()).post(`/operacao/corte/subitens/${subId}/associar`).set('Cookie', corteCookies).send({ pedidoVendaItemId: p.pedidoItemId });
+    const res = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({ justificativaDiferenca: 'perda nos aparas' });
+    expect(res.status).toBe(409);
+  });
+```
+
+Testes que **esperam** 409 em `concluir` (sem destino / sem etiqueta) **não** usam `concluirCorteOnda7` — `concluir` cru + `expect(res.status).toBe(409)`. It sem destino (~L158) herda remap de `adicionarSubitem` (Step A); it sem etiqueta usa o patch Emenda 7.1 acima.
+
+- [ ] **Step C: Patches literais — suítes com `adicionarSubitem` + `associar` manual**
+
+#### `reetiqueta-subitem.e2e-spec.ts`
+
+```ts
+# old_string
+import { iniciarCorte, adicionarSubitem, pesarSubitem } from '../helpers/corte-fixtures';
+# new_string
+import {
+  iniciarCorte,
+  adicionarSubitem,
+  pesarSubitem,
+  itemSaidaCanonicoCb,
+  alinharPedidoItemComSaidaCorte,
+} from '../helpers/corte-fixtures';
+```
+
+```ts
+# old_string
+    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 5 });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    await pesarSubitem(app, corteCookies, subId);
+    await request(srv()).post(`/operacao/corte/subitens/${subId}/associar`).set('Cookie', corteCookies).send({ pedidoVendaItemId: p.pedidoItemId });
+# new_string
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId, dataOperacao: c.dataOperacao, quantidade: 5 });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
+    await pesarSubitem(app, corteCookies, subId);
+    await alinharPedidoItemComSaidaCorte(app, p.pedidoItemId, itemSaidaCbId);
+    await request(srv()).post(`/operacao/corte/subitens/${subId}/associar`).set('Cookie', corteCookies).send({ pedidoVendaItemId: p.pedidoItemId });
+```
+
+#### `corte-concorrencia.e2e-spec.ts`
+
+```ts
+# old_string
+import { iniciarCorte, adicionarSubitem, pesarSubitem } from '../helpers/corte-fixtures';
+# new_string
+import {
+  iniciarCorte,
+  adicionarSubitem,
+  pesarSubitem,
+  itemSaidaCanonicoCb,
+  alinharPedidoItemComSaidaCorte,
+} from '../helpers/corte-fixtures';
+```
+
+```ts
+# old_string
+    const saldo = 3;
+    const total = 6;
+    const { pedidoItemId } = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId,
+      clienteId: c.clienteId,
+      itemComercialId: c.itemComercialId,
+      dataOperacao: c.dataOperacao,
+      quantidade: saldo,
+    });
+
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+
+    const subIds: string[] = [];
+    for (let i = 0; i < total; i++) {
+      const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+      await pesarSubitem(app, corteCookies, subId);
+      subIds.push(subId);
+    }
+# new_string
+    const saldo = 3;
+    const total = 6;
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const { pedidoItemId } = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId,
+      clienteId: c.clienteId,
+      itemComercialId: itemSaidaCbId,
+      dataOperacao: c.dataOperacao,
+      quantidade: saldo,
+    });
+
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    await alinharPedidoItemComSaidaCorte(app, pedidoItemId, itemSaidaCbId);
+
+    const subIds: string[] = [];
+    for (let i = 0; i < total; i++) {
+      const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
+      await pesarSubitem(app, corteCookies, subId);
+      subIds.push(subId);
+    }
+```
+
+#### `subitens.e2e-spec.ts`
+
+```ts
+# old_string
+import { iniciarCorte, adicionarSubitem, pesarSubitem } from '../helpers/corte-fixtures';
+# new_string
+import {
+  iniciarCorte,
+  adicionarSubitem,
+  pesarSubitem,
+  itemSaidaCanonicoCb,
+  alinharPedidoItemComSaidaCorte,
+  prepararTransformacaoComRegraTzA,
+} from '../helpers/corte-fixtures';
+```
+
+Teste pesar (1º it) — após `iniciarCorte`, usar saída CB:
+
+```ts
+# old_string
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+
+    fakes(app).balanca.definirStatus('indisponivel');
+# new_string
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
+
+    fakes(app).balanca.definirStatus('indisponivel');
+```
+
+Teste reclassificação — **PROIBIDO** inventar item fora da regra (DoD 7.7). Usar **JAC** como “item2” (saída TZ_A distinta de CB):
+
+```ts
+# old_string
+  it('associar subitem reclassificado consome unidade do item correto (não o item base da peça)', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-11-02');
+
+    // Segundo item comercial para reclassificação
+    const [item2] = await db()
+      .insert(schema.itensComerciais)
+      .values({ codigo: `ICOM2-${Date.now()}`, descricao: 'Traseiro', unidadeComercial: 'parte' })
+      .returning();
+    if (!item2) throw new Error('falha ao criar item2');
+
+    // Pedido no item2 (alvo da reclassificação)
+    const pedido2 = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId,
+      clienteId: c.clienteId,
+      itemComercialId: item2.id,
+      dataOperacao: c.dataOperacao,
+      quantidade: 2,
+    });
+    // Pedido no item base (não deve ser consumido)
+    const pedidoBase = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId,
+      clienteId: c.clienteId,
+      itemComercialId: c.itemComercialId,
+      dataOperacao: c.dataOperacao,
+      quantidade: 2,
+    });
+
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, item2.id); // reclassifica
+    await pesarSubitem(app, corteCookies, subId);
+
+    // Tentar associar ao item base → incompatível
+    const incompat = await request(srv())
+      .post(`/operacao/corte/subitens/${subId}/associar`)
+      .set('Cookie', corteCookies)
+      .send({ pedidoVendaItemId: pedidoBase.pedidoItemId });
+    expect(incompat.status).toBe(409);
+
+    // Associar ao item2 → ok, consome a unidade de item2
+    const ok = await request(srv())
+      .post(`/operacao/corte/subitens/${subId}/associar`)
+      .set('Cookie', corteCookies)
+      .send({ pedidoVendaItemId: pedido2.pedidoItemId });
+    expect(ok.status).toBe(201);
+
+    const item2Linha = await db()
+      .select()
+      .from(schema.pedidosVendaItens)
+      .where(eq(schema.pedidosVendaItens.id, pedido2.pedidoItemId))
+      .then((r) => r[0]!);
+    expect(item2Linha.quantidadeAtendida).toBe('1.000');
+
+    // Item base não foi tocado
+    const itemBaseLinha = await db()
+      .select()
+      .from(schema.pedidosVendaItens)
+      .where(eq(schema.pedidosVendaItens.id, pedidoBase.pedidoItemId))
+      .then((r) => r[0]!);
+    expect(itemBaseLinha.quantidadeAtendida).toBe('0.000');
+  });
+# new_string
+  it('associar subitem reclassificado consome unidade do item correto (não o item base da peça)', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-11-02');
+
+    // Emenda 7 / DoD 7.7: "item2" = JAC (saída TZ_A), não item inventado fora da regra
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const saidas = await prepararTransformacaoComRegraTzA(app, corteCookies, transfId);
+    const item2Id = saidas.itemSaidaJacId; // reclassifica para JAC
+    const itemBaseId = saidas.itemSaidaCbId; // "base" compatível com regra = CB
+
+    const pedido2 = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId,
+      clienteId: c.clienteId,
+      itemComercialId: item2Id,
+      dataOperacao: c.dataOperacao,
+      quantidade: 2,
+    });
+    const pedidoBase = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId,
+      clienteId: c.clienteId,
+      itemComercialId: itemBaseId,
+      dataOperacao: c.dataOperacao,
+      quantidade: 2,
+    });
+
+    const subId = await adicionarSubitem(app, corteCookies, transfId, item2Id);
+    await pesarSubitem(app, corteCookies, subId);
+
+    const incompat = await request(srv())
+      .post(`/operacao/corte/subitens/${subId}/associar`)
+      .set('Cookie', corteCookies)
+      .send({ pedidoVendaItemId: pedidoBase.pedidoItemId });
+    expect(incompat.status).toBe(409);
+
+    const ok = await request(srv())
+      .post(`/operacao/corte/subitens/${subId}/associar`)
+      .set('Cookie', corteCookies)
+      .send({ pedidoVendaItemId: pedido2.pedidoItemId });
+    expect(ok.status).toBe(201);
+
+    const item2Linha = await db()
+      .select()
+      .from(schema.pedidosVendaItens)
+      .where(eq(schema.pedidosVendaItens.id, pedido2.pedidoItemId))
+      .then((r) => r[0]!);
+    expect(item2Linha.quantidadeAtendida).toBe('1.000');
+
+    const itemBaseLinha = await db()
+      .select()
+      .from(schema.pedidosVendaItens)
+      .where(eq(schema.pedidosVendaItens.id, pedidoBase.pedidoItemId))
+      .then((r) => r[0]!);
+    expect(itemBaseLinha.quantidadeAtendida).toBe('0.000');
+  });
+```
+
+Teste redirecionar:
+
+```ts
+# old_string
+    const pa = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 2 });
+    const pb = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 2 });
+
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    await pesarSubitem(app, corteCookies, subId);
+    await request(srv()).post(`/operacao/corte/subitens/${subId}/associar`).set('Cookie', corteCookies).send({ pedidoVendaItemId: pa.pedidoItemId });
+# new_string
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const pa = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId, dataOperacao: c.dataOperacao, quantidade: 2 });
+    const pb = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: itemSaidaCbId, dataOperacao: c.dataOperacao, quantidade: 2 });
+
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
+    await pesarSubitem(app, corteCookies, subId);
+    await alinharPedidoItemComSaidaCorte(app, pa.pedidoItemId, itemSaidaCbId);
+    await request(srv()).post(`/operacao/corte/subitens/${subId}/associar`).set('Cookie', corteCookies).send({ pedidoVendaItemId: pa.pedidoItemId });
+```
+
+Teste sem-cobertura:
+
+```ts
+# old_string
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    await pesarSubitem(app, corteCookies, subId);
+
+    const semMotivo = await request(srv()).post(`/operacao/corte/subitens/${subId}/sem-cobertura`).set('Cookie', corteCookies).send({ destino: 'sobra' });
+# new_string
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
+    await pesarSubitem(app, corteCookies, subId);
+
+    const semMotivo = await request(srv()).post(`/operacao/corte/subitens/${subId}/sem-cobertura`).set('Cookie', corteCookies).send({ destino: 'sobra' });
+```
+
+e no mesmo teste o 2º subitem:
+
+```ts
+# old_string
+    const sub2 = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+# new_string
+    const sub2 = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
+```
+
+#### `expedicao.e2e-spec.ts` (**Emenda 7.1** — sai da lista de intocáveis)
+
+Import (topo do arquivo tip `6e8cad0` L9):
+
+```ts
+# old_string
+import { iniciarCorte, subitemCompleto } from '../helpers/corte-fixtures';
+# new_string
+import {
+  iniciarCorte,
+  subitemCompleto,
+  itemSaidaCanonicoCb,
+  alinharPedidoItemComSaidaCorte,
+} from '../helpers/corte-fixtures';
+```
+
+It `subitem sem etiqueta nao e elegivel` (~L609–643 tip `6e8cad0`) — padrão reetiqueta: pedido/saída CB + alinhar antes do `associar`; 409 da carga prova ausência de etiqueta (não incompatibilidade de item):
+
+```ts
+# old_string
+  it('subitem sem etiqueta nao e elegivel (409)', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-12-18');
+    const p = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      dataOperacao: c.dataOperacao, quantidade: 5,
+    });
+    const pecaId = await pesarPeca(app, recebimentoCookies, {
+      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+    });
+    await request(srv())
+      .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
+      .set('Cookie', recebimentoCookies)
+      .send({ pedidoVendaItemId: p.pedidoItemId });
+
+    // Cortar e criar subitem SEM etiqueta (pesado + associado mas sem emitir etiqueta)
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    fakes(app).balanca.definirPeso('6.000');
+    const { adicionarSubitem: addSub, pesarSubitem: pesarSub } = await import('../helpers/corte-fixtures');
+    const subId = await addSub(app, corteCookies, transfId, c.itemComercialId);
+    await pesarSub(app, corteCookies, subId);
+    await request(srv())
+      .post(`/operacao/corte/subitens/${subId}/associar`)
+      .set('Cookie', corteCookies)
+      .send({ pedidoVendaItemId: p.pedidoItemId });
+    // subitem esta 'associado' mas SEM etiqueta_atual
+
+    const caminhaoId = await criarCaminhao(app, expedicaoCookies, { dataOperacao: c.dataOperacao });
+    await abrirCarga(app, expedicaoCookies, caminhaoId);
+    const res = await request(srv())
+      .post(`/operacao/expedicao/caminhoes/${caminhaoId}/itens`)
+      .set('Cookie', expedicaoCookies)
+      .send({ tipoOrigem: 'subitem', id: subId });
+    expect(res.status).toBe(409);
+  });
+# new_string
+  it('subitem sem etiqueta nao e elegivel (409)', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-12-18');
+    // Emenda 7.1: saída CB + alinhar — 409 da carga prova ausência de etiqueta
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const p = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId,
+      dataOperacao: c.dataOperacao, quantidade: 5,
+    });
+    const pecaId = await pesarPeca(app, recebimentoCookies, {
+      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+    });
+    await request(srv())
+      .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
+      .set('Cookie', recebimentoCookies)
+      .send({ pedidoVendaItemId: p.pedidoItemId });
+
+    // Cortar e criar subitem SEM etiqueta (pesado + associado mas sem emitir etiqueta)
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    fakes(app).balanca.definirPeso('6.000');
+    const { adicionarSubitem: addSub, pesarSubitem: pesarSub } = await import('../helpers/corte-fixtures');
+    const subId = await addSub(app, corteCookies, transfId, itemSaidaCbId);
+    await pesarSub(app, corteCookies, subId);
+    await alinharPedidoItemComSaidaCorte(app, p.pedidoItemId, itemSaidaCbId);
+    await request(srv())
+      .post(`/operacao/corte/subitens/${subId}/associar`)
+      .set('Cookie', corteCookies)
+      .send({ pedidoVendaItemId: p.pedidoItemId });
+    // subitem esta 'associado' mas SEM etiqueta_atual
+
+    const caminhaoId = await criarCaminhao(app, expedicaoCookies, { dataOperacao: c.dataOperacao });
+    await abrirCarga(app, expedicaoCookies, caminhaoId);
+    const res = await request(srv())
+      .post(`/operacao/expedicao/caminhoes/${caminhaoId}/itens`)
+      .set('Cookie', expedicaoCookies)
+      .send({ tipoOrigem: 'subitem', id: subId });
+    expect(res.status).toBe(409);
+  });
+```
+
+Demais its de `expedicao.e2e-spec.ts` que usam `subitemCompleto` / `subitemElegivel` herdam Step A — **zero** patch adicional.
+
+#### `conferencia.e2e-spec.ts` / `faturamento.e2e-spec.ts` / `rastreabilidade-corte.e2e-spec.ts`
+
+Herdam `subitemCompleto` (Step A) — **zero** patch nestes arquivos nesta emenda. Qualquer FAIL em Step G **nesses três** → parar e reportar. `expedicao.e2e-spec.ts` **não** entra aqui (patch Emenda 7.1 acima).
+
+- [ ] **Step D: `corte-branches.spec.ts` — injetar `ChecklistCorteService`**
+
+Após `function makeAuditoria()` inserir:
+
+```ts
+# old_string
+function makeAuditoria() {
+  return { registrar: jest.fn() };
+}
+# new_string
+function makeAuditoria() {
+  return { registrar: jest.fn() };
+}
+
+/** Emenda 7 — CorteService exige ChecklistCorteService no construtor (DoD 7.9). */
+function makeChecklist(
+  overrides: Partial<{ divergente: boolean; divergenciaAbertaId: string | null }> = {},
+) {
+  return {
+    obterNaTx: jest.fn(async () => ({
+      transformacaoId: 't1',
+      regraTransformacaoId: null,
+      regraNome: null,
+      regraProvisoria: false,
+      slots: [],
+      divergente: false,
+      divergenciaAbertaId: null,
+      ...overrides,
+    })),
+    obter: jest.fn(),
+    abrirDivergencia: jest.fn(),
+  };
+}
+```
+
+Substituir **todas** as construções (21 ocorrências, 3 formas):
+
+```ts
+# old_string
+new CorteService({ db } as never, makeAuditoria() as never, makeEmitter())
+# new_string
+new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never)
+```
+
+```ts
+# old_string
+new CorteService({ db } as never, auditoria as never, makeEmitter())
+# new_string
+new CorteService({ db } as never, auditoria as never, makeEmitter(), makeChecklist() as never)
+```
+
+```ts
+# old_string
+new CorteService({ db } as never, makeAuditoria() as never, emitter)
+# new_string
+new CorteService({ db } as never, makeAuditoria() as never, emitter, makeChecklist() as never)
+```
+
+```bash
+cd app/backend && npx jest test/unit/corte-branches.spec.ts -v
+# Expected: PASS
+```
+
+- [ ] **Step E: `onda6-migrations-meta.spec.ts` — escopo journal O6**
+
+```ts
+# old_string
+  it('encadeia journal e snapshots gerados de 0020 a 0022', () => {
+    const journal = readJson<Journal>(path.join(META_DIR, '_journal.json'));
+    const entries = journal.entries.filter((entry) => entry.idx >= 20);
+
+    expect(journal.version).toBe('7');
+    expect(journal.dialect).toBe('postgresql');
+    expect(entries.map(({ idx, tag }) => ({ idx, tag }))).toEqual([
+      { idx: 20, tag: '0020_onda5_usuarios_representantes' },
+      { idx: 21, tag: '0021_onda6_recebimento_balanca_expand' },
+      { idx: 22, tag: '0022_onda6_etiqueta_estado_backfill' },
+    ]);
+# new_string
+  it('encadeia journal e snapshots gerados de 0020 a 0022', () => {
+    const journal = readJson<Journal>(path.join(META_DIR, '_journal.json'));
+    // Emenda 7: O7 adiciona idx 23 — meta O6 isola 20..22 (não quebrar com 0023)
+    const entries = journal.entries.filter((entry) => entry.idx >= 20 && entry.idx <= 22);
+
+    expect(journal.version).toBe('7');
+    expect(journal.dialect).toBe('postgresql');
+    expect(entries.map(({ idx, tag }) => ({ idx, tag }))).toEqual([
+      { idx: 20, tag: '0020_onda5_usuarios_representantes' },
+      { idx: 21, tag: '0021_onda6_recebimento_balanca_expand' },
+      { idx: 22, tag: '0022_onda6_etiqueta_estado_backfill' },
+    ]);
+```
+
+```bash
+cd app/backend && npx jest test/unit/onda6-migrations-meta.spec.ts -v
+# Expected: PASS (com 0023 presente no journal)
+```
+
+- [ ] **Step F: probe O4 — fixtures pré-O7 + lista de artefatos**
+
+Criar `app/backend/test/helpers/fixtures/transformacoes.schema.pre-onda7.ts` com o conteúdo **byte-a-byte** de `origin/develop` @ `94fb341` (`app/backend/src/database/schema/transformacoes.schema.ts` — **sem** `regra_transformacao_id` / **sem** `idx_transf_regra`).
+
+Criar `app/backend/test/helpers/fixtures/regras-transformacao.schema.pre-onda7.ts` com o conteúdo **byte-a-byte** de `origin/develop` @ `94fb341` (`regras-transformacao.schema.ts` — **sem** `codigo` / **sem** `provisorio` / **sem** `uq_regras_transf_codigo`).
+
+Comando para materializar (Worker executa na worktree impl):
+
+```bash
+cd app/backend
+git show 94fb341:app/backend/src/database/schema/transformacoes.schema.ts \
+  > test/helpers/fixtures/transformacoes.schema.pre-onda7.ts
+git show 94fb341:app/backend/src/database/schema/regras-transformacao.schema.ts \
+  > test/helpers/fixtures/regras-transformacao.schema.pre-onda7.ts
+# Expected: 2 arquivos; rg regra_transformacao_id|provisorio fixtures/*.pre-onda7.ts → zero hits
+```
+
+Patch do probe em `onda4-migrations.e2e-spec.ts`:
+
+```ts
+# old_string
+      for (const postO4Artifact of [
+        'migrations/0019_onda5_gestao.sql',
+        'migrations/0020_onda5_usuarios_representantes.sql',
+        'migrations/0021_onda6_recebimento_balanca_expand.sql',
+        'migrations/0022_onda6_etiqueta_estado_backfill.sql',
+        'migrations/meta/0019_snapshot.json',
+        'migrations/meta/0020_snapshot.json',
+        'migrations/meta/0021_snapshot.json',
+        'migrations/meta/0022_snapshot.json',
+        'schema/relatorios-sif.schema.ts',
+        'schema/aprovacoes-operacionais.schema.ts',
+      ]) {
+        fs.rmSync(path.join(probe, postO4Artifact), { force: true });
+      }
+      // pesagem.schema da O6 (trocas_peca + estado da etiqueta) voltaria a gerar DDL extra —
+      // restaura o snapshot pré-O6 pinado (sem depender de git fetch no CI shallow).
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/pesagem.schema.pre-onda6.ts'),
+        path.join(probe, 'schema/pesagem.schema.ts'),
+      );
+# new_string
+      for (const postO4Artifact of [
+        'migrations/0019_onda5_gestao.sql',
+        'migrations/0020_onda5_usuarios_representantes.sql',
+        'migrations/0021_onda6_recebimento_balanca_expand.sql',
+        'migrations/0022_onda6_etiqueta_estado_backfill.sql',
+        'migrations/0023_onda7_desossa_expand.sql',
+        'migrations/meta/0019_snapshot.json',
+        'migrations/meta/0020_snapshot.json',
+        'migrations/meta/0021_snapshot.json',
+        'migrations/meta/0022_snapshot.json',
+        'migrations/meta/0023_snapshot.json',
+        'schema/relatorios-sif.schema.ts',
+        'schema/aprovacoes-operacionais.schema.ts',
+        // Emenda 7: importa aprovacoes-operacionais — quebra resolve do probe O4
+        'schema/divergencias-transformacao.schema.ts',
+      ]) {
+        fs.rmSync(path.join(probe, postO4Artifact), { force: true });
+      }
+      // pesagem.schema da O6 (trocas_peca + estado da etiqueta) voltaria a gerar DDL extra —
+      // restaura o snapshot pré-O6 pinado (sem depender de git fetch no CI shallow).
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/pesagem.schema.pre-onda6.ts'),
+        path.join(probe, 'schema/pesagem.schema.ts'),
+      );
+      // Emenda 7: colunas O7 em transformacoes/regras gerariam DDL extra no generate O4
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/transformacoes.schema.pre-onda7.ts'),
+        path.join(probe, 'schema/transformacoes.schema.ts'),
+      );
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/regras-transformacao.schema.pre-onda7.ts'),
+        path.join(probe, 'schema/regras-transformacao.schema.ts'),
+      );
+```
+
+```ts
+# old_string
+      const o4SchemaLines = fs.readFileSync(probeSchemaIndex, 'utf8')
+        .split(/\r?\n/)
+        .filter((line) =>
+          !line.includes('relatorios-sif.schema') &&
+          !line.includes('aprovacoes-operacionais.schema') &&
+          !line.includes('usuarios-representantes.schema'),
+        );
+# new_string
+      const o4SchemaLines = fs.readFileSync(probeSchemaIndex, 'utf8')
+        .split(/\r?\n/)
+        .filter((line) =>
+          !line.includes('relatorios-sif.schema') &&
+          !line.includes('aprovacoes-operacionais.schema') &&
+          !line.includes('usuarios-representantes.schema') &&
+          !line.includes('divergencias-transformacao.schema'),
+        );
+```
+
+```bash
+cd app/backend && npx jest test/integration/onda4-migrations.e2e-spec.ts -v --testTimeout=120000
+# Expected: PASS
+```
+
+- [ ] **Step G: Gate `test:cov` (Expected PASS Emenda 7 + Emenda 7.1 — factível)**
+
+Após Steps A–F **e** patches Emenda 7.1 (Step B it sem etiqueta + Step C `expedicao` it sem etiqueta), o Gate é **factível** — `exit 0` sem FAIL. **Proibido** fechar o bloqueante Monitor #1 com “parar e reportar se expedicao falhar”.
+
+```bash
+cd app/backend && npm run test:cov
+# Expected: exit 0 — 0 FAIL
+# Expected: suítes legadas corte/subitens/reetiqueta/concorrencia/expedicao/faturamento/conferencia/rastreabilidade PASS
+# Expected: corte it 'concluir com subitem sem etiqueta' PASS (409 de etiqueta, não incompatibilidade)
+# Expected: expedicao it 'subitem sem etiqueta nao e elegivel' PASS (409 de carga, não incompatibilidade)
+# Expected: corte-branches PASS; onda6-migrations-meta PASS; onda4-migrations PASS
+# Expected: onda7-desossa.spec.ts continua PASS
+# Expected: coverage ≥80% linha e branch
+```
+
+Se FAIL restar **após** A–F + Emenda 7.1 em arquivo **fora** dos patches literais (ex.: `faturamento`/`conferencia`/`rastreabilidade-corte`): **parar e reportar** (não improvisar). Anexar nome do spec + mensagem.
+
+- [ ] **Step H (após G verde; não bloqueia G): evidências Playwright lado a lado**
+
+Os scripts podem existir untracked no worktree (`capture-onda7-app.mjs` / `capture-onda7-prototipo.mjs`). Worker deve:
+
+1. Garantir que estão commitados sob `app/frontend/scripts/` (conteúdo já presente no WIP — **não** reescrever se o arquivo untracked já aponta `docs/evidencias/onda7-desossa`).
+2. Subir app+protótipo conforme Task 14 e rodar:
+
+```bash
+cd app/frontend
+node scripts/capture-onda7-app.mjs
+node scripts/capture-onda7-prototipo.mjs
+# Expected: PNGs em docs/evidencias/onda7-desossa/ (dashboard, TV, pesagem, etiquetas) lado a lado
+ls docs/evidencias/onda7-desossa/*.png | wc -l
+# Expected: ≥ 4
+```
+
+3. Commit: `test(onda7): evidências Playwright desossa lado a lado`
+
+- [ ] **Step I: Commit Emenda 7 (helpers + meta)**
+
+```bash
+git add app/backend/test/helpers/corte-fixtures.ts \
+  app/backend/test/helpers/fixtures/transformacoes.schema.pre-onda7.ts \
+  app/backend/test/helpers/fixtures/regras-transformacao.schema.pre-onda7.ts \
+  app/backend/test/integration/corte.e2e-spec.ts \
+  app/backend/test/integration/subitens.e2e-spec.ts \
+  app/backend/test/integration/reetiqueta-subitem.e2e-spec.ts \
+  app/backend/test/integration/corte-concorrencia.e2e-spec.ts \
+  app/backend/test/integration/expedicao.e2e-spec.ts \
+  app/backend/test/unit/corte-branches.spec.ts \
+  app/backend/test/unit/onda6-migrations-meta.spec.ts \
+  app/backend/test/integration/onda4-migrations.e2e-spec.ts
+git commit -m "$(cat <<'EOF'
+test(onda7): desbloqueia Gate local — suítes legadas e meta O6/O4
+
+### Descrição Detalhada:
+Helpers de corte passam a bindar TZ_A, usar saídas CB/JAC e fechar checklist
+antes de concluir; patches Emenda 7.1 alinham its manuais de corte/expedicao;
+meta O6 isola journal 20..22; probe O4 restaura schemas pré-O7.
+
+### Motivo da Mudança:
+Emenda 7 + 7.1 — Gate test:cov quebrava por DoD 7.6/7.7/7.9 sem literais no plano.
+
+### Impacto:
+Suítes F4c/expedição/faturamento herdam fluxo O7 sem regressão da suíte nova.
+
+EOF
+)"
+```
+
+---
+
 ### Task 15 — Gate local (= CI) + PR de implementação
 
 > Task do **Executor/Worker na implementação**, não deste PR de plano.
 
+> **Pré-requisito Emenda 7 + 7.1:** Task 16 Step G (`npm run test:cov`) **PASS** no tip de `feature/onda7-desossa` (base `34524a4`/`6e8cad0` + patches Task 16 A–F + Emenda 7.1). Sem isso, **não** abrir PR de implementação.
+
 ```bash
 npm ci
 cd app/backend && npm run lint && npm run test:cov && npm run build
+# Expected PASS Emenda 7 + 7.1: exit 0 — 0 FAIL (suítes legadas + meta O6/O4 + onda7-desossa)
 cd app/frontend && npm run lint && npm run test && npm run build
+# Step H (evidências) se ainda sem PNGs em docs/evidencias/onda7-desossa/
 gh pr create --base develop --title "feat(onda7): Desossa e Transformação" --body "..."
 ```
 
@@ -3963,10 +5203,10 @@ Atualizar `EXECUCAO-STATUS.md` para `implementando` / `aguardando_portao2` confo
 ## Ordem de execução
 
 ```
-T1 → T2 → T3 → T4 → T5 → T6 → T7 → T8 → T9 → T10 → T11 → T12 → T13 → T14 → T15
+T1 → T2 → T3 → T4 → T5 → T6 → T7 → T8 → T9 → T10 → T11 → T12 → T13 → T14 → T16 → T15
 ```
 
-Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13.
+Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13. **T16 (Emenda 7) é obrigatória antes do Gate `test:cov` da T15.**
 
 ---
 
@@ -3975,7 +5215,7 @@ Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13.
 1. Princípio I: 3 telas mapeadas a `.tsx` do protótipo com SHA pinado.
 2. Princípio II: zero "parcial/depois"; linhas 17–19 cobertas na reconciliação.
 3. Princípio VIII: P6/P12 → parâmetro + badge; `DECISOES.md` intocado.
-4. Autossuficiência: Goal/Architecture/Tech Stack, decisões D7.x, estrutura, mapa DoD 7.1–7.25, tasks com código literal.
+4. Autossuficiência: Goal/Architecture/Tech Stack, decisões D7.x, estrutura, mapa DoD 7.1–7.26, tasks com código literal (inclui Task 16 Emenda 7).
 5. RA-04 explícito: remoção do poll + eventos nomeados.
 6. Quality-gates O7: exclusividade A↔B, checklist, divergência formal, painel TV por eventos — cada um com DoD→teste.
 7. Grep plano: zero `TBD` / `TODO` / `implementar depois` / `similar à Task`.
@@ -3985,7 +5225,7 @@ Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13.
 
 1. CI 8/8 verde no head.
 2. Diff ⊆ plano; nada de O8/O9/O10.
-3. DoD 7.1–7.25 demonstrados por teste/artefato.
+3. DoD 7.1–7.26 demonstrados por teste/artefato.
 4. Screenshots 3 rotas + Modo TV vs protótipo.
 5. `rg setInterval` limpo em `desossa/dashboard`.
 6. `DECISOES.md` sem AD novo.
@@ -4004,6 +5244,8 @@ Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13.
 7. **Emenda 4 vs veredito `ef862bf`:** (1) `bloqueada` EXISTS `ci.subitem_id = subitens.id` + `STATUS_CAMINHAO_FECHADO`, sem `etiquetaBloqueadaSql` cego + DoD 7.21b; (2) Task 14 cerca literal DoD 7.14b comercial→200 / faturamento→403; (3) Task 11 não engole 403 de TZs (RA-05).
 8. **Emenda 5 vs veredito `04bc197`:** (1) DoD 7.21b + Task 13 leem `res.body.data` / `json.data` (tip `Paginado`/`montarPaginado`; zero `itens` no envelope); (2) fixtures DoD 7.21b literais com `operacaoId`/`subitemId` tipados (HTTP + SQL XOR `subitem`, sem reticências).
 9. **Emenda 6 vs veredito `9608d20`:** (1) ambas fixtures DoD 7.21b, após `iniciarCorte`, buscam `TZ_A`, `POST /operacao/corte/:id/regra`, e usam `itemComercialId` de saída CB (seed Task 2) em `criarPedido`/`subitemCompleto` — Expected PASS factível contra DoD 7.6/7.7; zero `c.itemComercialId` da mãe nesses calls.
+10. **Emenda 7 vs Gate local tip `34524a4`:** (1) `corte-fixtures` O7-aware (bind TZ_A + saída CB/JAC + alinhar pedido + `concluirCorteOnda7`); (2) patches literais corte/subitens/reetiqueta/concorrência; (3) `makeChecklist` no `corte-branches`; (4) meta O6 `idx<=22`; (5) probe O4 remove `0023`+`divergencias-transformacao` e restaura schemas pré-O7; (6) Expected PASS `npm run test:cov`; zero TBD/TODO/similar à Task.
+11. **Emenda 7.1 vs veredito `afe9dc4`:** (1) `expedicao.e2e-spec.ts` it `subitem sem etiqueta nao e elegivel` — patch literal padrão reetiqueta (`itemSaidaCanonicoCb`+`alinhar` antes do `associar`); arquivo fora da lista de intocáveis; (2) `corte.e2e-spec.ts` it `concluir com subitem sem etiqueta` — mesma alinhagem + `concluir` cru + `expect(409)`; (3) cabeçalho Emenda 7 + Step G reafirmam Expected PASS factível após A–F **e** (1)(2) — zero escape “reportar se expedicao falhar”.
 
 ---
 
