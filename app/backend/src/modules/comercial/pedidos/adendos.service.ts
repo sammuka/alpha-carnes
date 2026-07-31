@@ -44,8 +44,17 @@ export class AdendosService {
     pedidoId: string, dto: RegistrarAdendoDto, usuarioId: string, confirmado: boolean,
   ): Promise<AdendoResultado> {
     const resultado = await this.db.transaction(async (tx) => {
-      const pedido = await this.pedidos.carregarAbertoParaAdendo(tx, pedidoId);
-      const item = await this.pedidos.exigirItemDoPedido(tx, pedidoId, dto.itemComercialId);
+      const pedido = await this.pedidos.carregarAbertoParaAdendo(
+        tx,
+        pedidoId,
+        usuarioId,
+      );
+      const item = await this.pedidos.exigirItemDoPedido(
+        tx,
+        pedidoId,
+        dto.itemComercialId,
+        usuarioId,
+      );
 
       // 1) Planejamento read-only. Assinatura real: (tx, operacaoId, itens).
       const [alocacao] = await this.pedidos.planejarSobLock(tx, pedido.operacaoId, [
@@ -127,9 +136,14 @@ export class AdendosService {
   }
 
   /** Linha do tempo do pedido: histórico append-only, mais novo primeiro. */
-  async listar(pedidoId: string) {
-    return this.db.select().from(adendosPedido)
-      .where(eq(adendosPedido.pedidoVendaId, pedidoId))
-      .orderBy(desc(adendosPedido.criadoEm));
+  async listar(pedidoId: string, usuarioId: string) {
+    return this.db.transaction(async (tx) => {
+      await this.pedidos.exigirPedidoNoEscopo(tx, pedidoId, usuarioId, false);
+      return tx
+        .select()
+        .from(adendosPedido)
+        .where(eq(adendosPedido.pedidoVendaId, pedidoId))
+        .orderBy(desc(adendosPedido.criadoEm));
+    });
   }
 }

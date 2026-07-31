@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../database/database.module';
 import * as schema from '../../database/schema';
@@ -121,5 +121,25 @@ export class AuthRepository {
       .update(schema.usuarios)
       .set({ ultimoAcesso: new Date() })
       .where(eq(schema.usuarios.id, usuarioId));
+  }
+
+  async representantesDoUsuario(
+    usuarioId: string,
+  ): Promise<Array<{ id: string; nome: string }>> {
+    return this.db
+      .select({
+        id: schema.representantes.id,
+        nome: schema.representantes.nome,
+      })
+      .from(schema.usuariosRepresentantes)
+      .innerJoin(
+        schema.representantes,
+        eq(
+          schema.representantes.id,
+          schema.usuariosRepresentantes.representanteId,
+        ),
+      )
+      .where(eq(schema.usuariosRepresentantes.usuarioId, usuarioId))
+      .orderBy(asc(schema.representantes.nome), asc(schema.representantes.id));
   }
 }
