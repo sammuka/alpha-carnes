@@ -29,7 +29,11 @@ import {
   type StatusRecebimento,
   type SugestaoScored,
 } from '@/lib/operacao';
-import { TrocaPecaFluxo } from '@/components/ui/troca-peca-modal';
+import {
+  TrocaPecaFluxo,
+  type PecaTrocaOpcao,
+  type PedidoTrocaOpcao,
+} from '@/components/ui/troca-peca-modal';
 import {
   rotuloDestinoPeca,
   statusPecaVariant,
@@ -155,6 +159,8 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
   const [motivoEstorno, setMotivoEstorno] = useState<MotivoEstorno>('pedido_incorreto');
   const [obsEstorno, setObsEstorno] = useState('');
   const [trocaAberta, setTrocaAberta] = useState(false);
+  const [pedidosTroca, setPedidosTroca] = useState<PedidoTrocaOpcao[]>([]);
+  const [pecasDispTroca, setPecasDispTroca] = useState<PecaTrocaOpcao[]>([]);
   const [pesoManual, setPesoManual] = useState('');
   const [motivo, setMotivo] = useState<MotivoCapturaManual>('dispositivo_indisponivel');
   const [motivoSobra, setMotivoSobra] = useState('');
@@ -252,6 +258,67 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
       void carregarAcoes(recebimentoId);
     }
   }, [recebimentoId, carregarDetalhe, carregarAcoes]);
+
+  // Troca de Peça: monta pedidos/peças a partir do lote aberto (não deixa o modal com listas vazias).
+  useEffect(() => {
+    if (!trocaAberta || !recebimentoId) return;
+    let cancelado = false;
+    void (async () => {
+      const res = await fetch(
+        `/api/operacao/pesagem/recebimentos/${recebimentoId}/pecas`,
+        { cache: 'no-store' },
+      );
+      if (!res.ok || cancelado) {
+        if (!cancelado) {
+          setPedidosTroca([]);
+          setPecasDispTroca([]);
+        }
+        return;
+      }
+      const pecasLote = (await res.json()) as Peca[];
+      if (cancelado) return;
+
+      const toOpcao = (p: Peca): PecaTrocaOpcao => ({
+        id: p.id,
+        codigo: p.etiquetaAtual ?? p.id.slice(0, 8),
+        peso: p.pesoOriginal,
+        etiqueta: p.etiquetaAtual,
+      });
+
+      setPecasDispTroca(
+        pecasLote
+          .filter((p) => p.statusPeca === 'pesada' || p.statusPeca === 'em_sobra')
+          .map(toOpcao),
+      );
+
+      const porItem = new Map<string, PedidoTrocaOpcao>();
+      for (const p of pecasLote) {
+        if (p.statusPeca !== 'associada' || !p.pedidoVendaItemId || !p.pedidoVendaId) continue;
+        const key = p.pedidoVendaItemId;
+        let ped = porItem.get(key);
+        if (!ped) {
+          const itemDet = detalhe?.itens.find((i) => i.itemComercialId === p.itemComercialBaseId);
+          const acao = acoes.find((a) => a.etiqueta && a.etiqueta === p.etiquetaAtual);
+          const ic = itemDet?.itemComercial;
+          ped = {
+            pedidoVendaId: p.pedidoVendaId,
+            pedidoVendaItemId: key,
+            clienteNome: acao?.clientePedido ?? 'Cliente do pedido',
+            produtoLabel: ic
+              ? `${ic.codigo} — ${ic.descricao}`
+              : p.itemComercialBaseId.slice(0, 8),
+            pecasAssociadas: [],
+          };
+          porItem.set(key, ped);
+        }
+        ped.pecasAssociadas.push(toOpcao(p));
+      }
+      setPedidosTroca([...porItem.values()]);
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [trocaAberta, recebimentoId, detalhe, acoes]);
 
   useEffect(() => {
     const primeiro = recebimentos[0];
@@ -1015,8 +1082,8 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
           setTrocaAberta(false);
           if (recebimentoId) void refreshLote();
         }}
-        pedidos={[]}
-        pecasDisponiveis={[]}
+        pedidos={pedidosTroca}
+        pecasDisponiveis={pecasDispTroca}
       />
     </div>
   );
