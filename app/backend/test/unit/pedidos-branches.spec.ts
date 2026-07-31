@@ -189,4 +189,67 @@ describe('PedidosService — branches', () => {
       ),
     ).rejects.toThrow('Pedido sem operação não pode gerar overbooking');
   });
+
+  it('detalhar → 404 quando pedido some após escopo; heranca null quando select vazio', async () => {
+    const pedidoEscopo = { id: 'p1', clienteId: 'c1', status: 'em_elaboracao_reserva_ativa', deletedAt: null };
+    const tx = { select: jest.fn(() => chain([pedidoEscopo])) };
+    const db404 = {
+      transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(tx)),
+      query: { pedidosVenda: { findFirst: jest.fn().mockResolvedValue(undefined) } },
+    };
+    await expect(makeService(db404).detalhar('p1', 'u1')).rejects.toBeInstanceOf(NotFoundException);
+
+    const pedido = { id: 'p1', clienteId: 'c1', status: 'em_elaboracao_reserva_ativa', itens: [] };
+    const dbHeranca = {
+      transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(tx)),
+      query: { pedidosVenda: { findFirst: jest.fn().mockResolvedValue(pedido) } },
+      select: jest.fn(() => chain([])),
+    };
+    await expect(makeService(dbHeranca).detalhar('p1', 'u1')).resolves.toMatchObject({
+      id: 'p1',
+      heranca: null,
+    });
+  });
+
+  it('buscarAberto → null quando não há pedido aberto no escopo', async () => {
+    operacoesService.encontrarAtivaPorData.mockResolvedValue({ id: 'op1' });
+    const tx = { select: jest.fn(() => chain([])) };
+    const db = { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(tx)) };
+    const service = makeService(db);
+    await expect(service.buscarAberto({
+      clienteId: 'c1',
+      itemComercialId: 'ic1',
+      dataOperacao: '2026-08-01',
+    }, 'u1')).resolves.toBeNull();
+  });
+
+  it('criar → 404 se cliente fora do escopo (exigirClienteNoEscopo)', async () => {
+    const tx = { select: jest.fn(() => chain([])) };
+    const db = { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(tx)) };
+    await expect(
+      makeService(db).criar({ itens: [], dataOperacao: '2026-06-23', clienteId: 'c-x' } as never, 'u1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('carregarAbertoParaAdendo → 409 se status não é aberto', async () => {
+    const pedidoFechado = { id: 'p1', status: 'finalizado', deletedAt: null, clienteId: 'c1' };
+    const tx = { select: jest.fn(() => chain([pedidoFechado])) };
+    const service = makeService({});
+    await expect(
+      service.carregarAbertoParaAdendo(tx as never, 'p1', 'u1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('exigirItemDoPedido → 404 se item comercial não está no pedido', async () => {
+    const pedido = { id: 'p1', status: 'em_elaboracao_reserva_ativa', deletedAt: null, clienteId: 'c1' };
+    const tx = {
+      select: jest.fn()
+        .mockImplementationOnce(() => chain([pedido]))
+        .mockImplementationOnce(() => chain([])),
+    };
+    const service = makeService({});
+    await expect(
+      service.exigirItemDoPedido(tx as never, 'p1', 'ic-x', 'u1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
 });
