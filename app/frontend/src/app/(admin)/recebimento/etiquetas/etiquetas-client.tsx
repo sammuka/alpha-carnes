@@ -48,8 +48,8 @@ export const reimprimivel = (e: EtiquetaListada) =>
 
 export function rotuloStatusDesossa(statusPeca: string): { texto: string; classe: string } {
   return statusPeca === 'em_transformacao' || statusPeca === 'transformada'
-    ? { texto: 'Consumida por transformação', classe: 'text-[#7C3AED]' }
-    : { texto: 'Aguardando desossa', classe: 'text-[#D97706]' };
+    ? { texto: 'Consumida por transformação', classe: 'text-violet-700' }
+    : { texto: 'Aguardando desossa', classe: 'text-amber-600' };
 }
 
 // EtiquetasRecebimento.tsx:433 — título dinâmico da 3ª seção, NUNCA a string fixa "Destino"

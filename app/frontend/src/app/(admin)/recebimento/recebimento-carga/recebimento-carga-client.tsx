@@ -187,14 +187,6 @@ function qtdApuradaItem(item: RecebimentoItem): number {
   return Number(item.quantidadeApurada ?? item.quantidadeRecebida ?? 0);
 }
 
-function pesoApuradoItem(item: RecebimentoItem): number | null {
-  if (item.statusApuracao === 'entrada_direta' || !item.requerBalanca) return null;
-  const val = item.pesoApurado ?? item.pesoTotalApurado;
-  if (!val) return null;
-  const n = Number(val);
-  return Number.isNaN(n) ? null : n;
-}
-
 function calcDifQtd(item: RecebimentoItem): string {
   if (item.statusApuracao === 'entrada_direta') return '—';
   const esperada = Number(item.quantidadeEsperada);
