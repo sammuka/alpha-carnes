@@ -42,6 +42,25 @@ Fecha **todos** os bloqueantes e menores do Portão 1 da Emenda 1, item a item. 
 
 **Decisão semântica (bloqueante 1 — fechada):** não estender `FaltaDesossaItem` com demanda bruta. Tip `faltas.calc.ts:41` define `quantidadeFaltante = max(0, demanda − estoque)` (líquido). O protótipo (`DesossaDashboard.tsx:56-61`) mostra `faltam` como demanda bruta e `aProduzir = faltam − estoque`. O painel reconstrói `faltam` na projeção UI; `aProduzir` espelha o líquido do tip. Zero contradição teste↔literal↔tipo.
 
+## Emenda 3 — Portão 1 (veredito `ajustar` 2026-07-31T17:58:00-03:00 / tip `b8aff66`)
+
+Fecha **todos** os bloqueantes e menores do Portão 1 da Emenda 2 (`b8aff66`), item a item. Ancestral obrigatório: Emenda 2 `d1be02a` + veredito `b8aff66`. Protótipo revalidado: `F:\Projetos\alpha-carnes-prototipo` @ `feature/completude-v1.1` `8d32aa4c` (`DesossaDashboard.tsx:563` sugestão; `:600-638` TZs disponíveis).
+
+| # | Achado (`b8aff66`) | Fechamento nesta emenda |
+|---|---|---|
+| 1 | DrawerTZ morto — sem tabela «TZs disponíveis» `:600-638` nem `setDrawerTZ` a partir da linha | Task 11: JSX literal da tabela (9 cols Peça/Peso/Lote/Origem/Entrada/Características/Situação/Obs./Eye) + fetch client + `setDrawerTZ(tz)`; tipo de linha com todos os campos |
+| 2 | Fonte TZ × RBAC — `pecas-elegiveis` só `CORTE_GERENCIAR` → 403 no telão | **Decisão Opção A (D7.14):** `@RequireQualquerPermissao('DESOSSA_PAINEL_LER', 'DESOSSA_LER', 'CORTE_GERENCIAR')` no GET (padrão tip `dashboard.controller.ts:21`); DTO estendido com cols da tabela; zero 403 para leitores do painel |
+| 3 | Sugestão incompleta vs `:563` — faltam Prior./Atende/Sobras/Impacto | Tipo `PainelDesossa.regras` + `painel.calc` + JSX thead/tbody + DrawerRegra com as 4 cols; Badge Provisório coexiste (P12), sem substituir Status |
+| 4 | `bloqueada: false` hardcoded | Task 10: `bloqueada` via EXISTS carga fechada na peça mãe (`STATUS_CAMINHAO_FECHADO` / tip `carga-fechada.ts`) |
+| 5 | `vincularRegra` / checklist sem cerca `fetch('/api/...')` | Task 12: literais `vincularRegra` + `carregarChecklist` no padrão do modal finalizar |
+
+**Decisão D7.14 — Fonte de TZs do telão (Opção A — fechada):**
+- Endpoint único: `GET /operacao/corte/pecas-elegiveis?operacaoId=` (já criado em D7.13/Task 12).
+- Permissão OR: `RequireQualquerPermissao('DESOSSA_PAINEL_LER', 'DESOSSA_LER', 'CORTE_GERENCIAR')` — tip já exporta o decorator em `require-qualquer-permissao.decorator.ts`; guard `RbacGuard` honra `PERMISSOES_QUALQUER_KEY`.
+- Dashboard (telão) e Pesagem consomem o **mesmo** endpoint; mutações (`POST .../regra`, checklist write-path, iniciar) permanecem `CORTE_GERENCIAR`.
+- Opção B (`GET /desossa/painel/.../tzs-disponiveis`) **rejeitada** — duplicaria listagem e fragmentaria a fonte de verdade.
+- DTO carrega cols do protótipo `:600-638` (lote←`recebimentos.romaneio`, origem←`fornecedores.razaoSocial`, entrada←ISO `pecas.createdAt`, caracteristicas←flags `capturaMeta`, obs←`capturaMeta.obs`, situacao←map de `statusPeca`).
+
 ---
 
 ## Global Constraints
@@ -107,6 +126,7 @@ Fecha **todos** os bloqueantes e menores do Portão 1 da Emenda 1, item a item. 
 | `GET` | `/desossa/painel` | `DESOSSA_PAINEL_LER` | Query: `modoTv` (bool), `operacaoId?`. Perfis leitores recebem essa permissão junto com `DESOSSA_LER` (D7.8). |
 | `GET` | `/desossa/faltas` | `DESOSSA_LER` | Mantido (compat); painel é a fonte canônica da tela |
 | `GET` | `/desossa/etiquetas` | `DESOSSA_LER` | Query: `operacaoId` obrigatório, `transformacaoId?`, `estado?`, `page`, `pageSize` |
+| `GET` | `/operacao/corte/pecas-elegiveis` | `RequireQualquerPermissao('DESOSSA_PAINEL_LER', 'DESOSSA_LER', 'CORTE_GERENCIAR')` | Query: `operacaoId`. Fonte única TZs do telão + pesagem (D7.14 Opção A). |
 | `POST` | `/operacao/corte/:id/regra` | `CORTE_GERENCIAR` | Body: `{ regraTransformacaoId: uuid }` |
 | `GET` | `/operacao/corte/:id/checklist` | `CORTE_GERENCIAR` | Esperado × registrado |
 | `POST` | `/operacao/corte/:id/divergencia` | `CORTE_GERENCIAR` | Abre `aprovacoes_operacionais.tipo='divergencia_transformacao'` |
@@ -128,7 +148,7 @@ Fecha **todos** os bloqueantes e menores do Portão 1 da Emenda 1, item a item. 
 
 | Tela app | Arquivo protótipo | Blocos obrigatórios (fidelidade) |
 |---|---|---|
-| Dashboard | `src/app/pages/DesossaDashboard.tsx` (722 linhas) | Header; KPIs `:452-467` (KPI #3 = «TZs na desossa» `:457`); tabela itens `:508-510` (Rota/Carga, Representante, Alvo); sugestão `:554-600`; drawers Item/Regra/TZ `:128-276`; TVMode `:280-370` com col **CARGA / HORÁRIO** `:306`; copy `:496` |
+| Dashboard | `src/app/pages/DesossaDashboard.tsx` (722 linhas) | Header; KPIs `:452-467` (KPI #3 = «TZs na desossa» `:457`); tabela itens `:508-510` (Rota/Carga, Representante, Alvo); sugestão `:554-600` thead `:563` (**Prior. / Atende / Sobras previstas / Impacto**); tabela **TZs disponíveis** `:600-638` (abre DrawerTZ); drawers Item/Regra/TZ `:128-276`; TVMode `:280-370` com col **CARGA / HORÁRIO** `:306`; copy `:496` |
 | Pesagem | `src/app/pages/DesossaPesagem.tsx` (943 linhas) | TZ origem; seletor A/B + Badge Provisório `:575-600`; checklist `:701-739`; `ModalSelecionarTz` `:121-157`; `ModalEtiquetaParte` (Peça mãe) `:160-216`; `ModalCancelarAcao` `:220-279`; `ModalFinalizarTransformacao` `:283+` |
 | Etiquetas | `src/app/pages/DesossaEtiquetas.tsx` (742 linhas) | KPIs `:597-610`; filtros Status por rótulo `:623`; tabela 11 cols `:650` (Parte, Origem peso, Cliente/Pedido, Peça mãe); drawer Invalidada por troca `:365-443`; zero mock seed em runtime |
 
@@ -177,7 +197,10 @@ Onda aditiva: coluna FK + `provisorio`/`codigo` em regras + tabela `divergencias
 Nenhum `ITENS_SEED` / `REGRAS_SEED` / `ETQ_SEED` do protótipo como dado de runtime.
 
 **D7.13 — Listagem de peças elegíveis à desossa (criar endpoint — ausente no tip `94fb341`).**
-`corte.controller.ts` hoje não expõe listagem de peças `para_corte`/`em_transformacao` por operação. Task 12 **cria** `GET /operacao/corte/pecas-elegiveis?operacaoId=` com handler+serviço literais: filtra `pecas.status_peca IN ('para_corte','em_transformacao')` da operação (join `recebimentos.operacao_id`), soft-delete nulo, ordenação por `created_at`. Zero contingência.
+`corte.controller.ts` hoje não expõe listagem de peças `para_corte`/`em_transformacao` por operação. Task 12 **cria** `GET /operacao/corte/pecas-elegiveis?operacaoId=` com handler+serviço literais: filtra `pecas.status_peca IN ('para_corte','em_transformacao')` da operação (join `recebimentos.operacao_id`), soft-delete nulo, ordenação por `created_at`. Zero contingência. Permissão do GET: ver D7.14 (Emenda 3).
+
+**D7.14 — Fonte de TZs do telão (Opção A — Emenda 3).**
+Mesmo endpoint D7.13. Decorador: `@RequireQualquerPermissao('DESOSSA_PAINEL_LER', 'DESOSSA_LER', 'CORTE_GERENCIAR')` (OR). DTO inclui cols da tabela «TZs disponíveis» (`:600-638`). Dashboard e Pesagem compartilham a fonte; leitores do telão nunca tomam 403 por falta de `CORTE_GERENCIAR`. Opção B rejeitada (ver Emenda 3).
 
 ---
 
@@ -329,6 +352,7 @@ Onda aditiva. Emergência: `DROP TABLE divergencias_transformacao;` + drop das c
 | 7.12 | `GET /desossa/painel` itens+regras+alertas; `modoTv=true` enxuto | painel + integration |
 | 7.13 | `faltas_desossa_atualizadas` após associar; **não** emitido em rollback | integration spy |
 | 7.14 | Sem `DESOSSA_PAINEL_LER` → 403 painel; sem `CORTE_GERENCIAR` → 403 bind | integration RBAC |
+| 7.14b | `GET /operacao/corte/pecas-elegiveis` com perfil `comercial` (`DESOSSA_PAINEL_LER`, sem `CORTE_GERENCIAR`) → **200** (D7.14 Opção A); sem nenhuma das 3 perms → 403 | integration RBAC |
 | 7.15 | `comercial` tem `DESOSSA_LER` + `DESOSSA_PAINEL_LER` no snapshot | snapshot/seed |
 | 7.16 | `rg setInterval` em `desossa/dashboard/**` = 0 | script/e2e gate |
 | 7.17 | Dashboard usa `conectarRealtime` e refetch no evento | e2e/RTL |
@@ -479,7 +503,7 @@ export async function seedRegrasTransformacaoTz(db: NodePgDatabase<typeof schema
         nome,
         produtoOrigemCodigo: 'TZ',
         status: 'ativo',
-        prioridade: codigo === 'TZ_A' ? 10 : 20,
+        prioridade: codigo === 'TZ_A' ? 1 : 2, // Emenda 3 — 1=Alta/Recomendada, 2=Média/Útil
         provisorio: true,
         observacao: 'Regra provisória v1.1 §6.6 / P12 — validar com cliente',
       }).returning();
@@ -1296,7 +1320,8 @@ describe('montarPainelDesossa', () => {
       nome: 'Alternativa A — TZ → Coxão-bola + Jacaré',
       provisorio: true,
       saidasLabel: '1× CB + 1× JAC',
-      prioridade: 10,
+      prioridade: 1,
+      saidasCodigos: ['CB', 'JAC'],
     },
   ];
 
@@ -1307,8 +1332,10 @@ describe('montarPainelDesossa', () => {
       modoTv: false,
       geradoEm: '2026-07-31T12:00:00.000Z',
       tzsNaDesossa: 24,
+      operacaoId: '11111111-1111-1111-1111-111111111111',
     });
     expect(p.modoTv).toBe(false);
+    expect(p.operacaoId).toBe('11111111-1111-1111-1111-111111111111');
     expect(p.itens).toHaveLength(1);
     expect(p.itens[0]).toMatchObject({
       produtoCodigo: 'CB',
@@ -1321,6 +1348,11 @@ describe('montarPainelDesossa', () => {
       horarioAlvo: '10:45',
     });
     expect(p.regras[0].provisorio).toBe(true);
+    expect(p.regras[0].prioridade).toBe('Alta');
+    expect(p.regras[0].atende).toBe('Carga Centro 11:30');
+    expect(p.regras[0].sobras).toMatch(/estoque/);
+    expect(p.regras[0].impacto).toMatch(/Coxão/);
+    expect(p.regras[0].status).toBe('Recomendada');
     expect(p.totais.itensFaltantes).toBe(1);
     expect(p.totais.tzsNaDesossa).toBe(24);
     expect(p.totais.prontoEstoque).toBe(1);
@@ -1333,6 +1365,7 @@ describe('montarPainelDesossa', () => {
       modoTv: true,
       geradoEm: '2026-07-31T12:00:00.000Z',
       tzsNaDesossa: 24,
+      operacaoId: '11111111-1111-1111-1111-111111111111',
     });
     expect(p.modoTv).toBe(true);
     expect(p.itens).toHaveLength(1);
@@ -1362,12 +1395,14 @@ export type PainelRegraInput = {
   nome: string;
   provisorio: boolean;
   saidasLabel: string;
-  prioridade: number;
+  prioridade: number; // 1=Alta/Recomendada, 2=Média/Útil, ≥3=Baixa/Opcional
+  saidasCodigos: string[]; // códigos item comercial das saídas (ex.: CB, JAC)
 };
 
 export type PainelDesossa = {
   geradoEm: string;
   modoTv: boolean;
+  operacaoId: string; // Emenda 3 — client busca TZs em pecas-elegiveis
   itens: Array<{
     produtoId: string;
     produtoCodigo: string;
@@ -1387,9 +1422,13 @@ export type PainelDesossa = {
     codigo: string | null;
     nome: string;
     provisorio: boolean;
+    prioridade: 'Alta' | 'Média' | 'Baixa';
     tzsEstimados: number;
     saidasEsperadas: string;
-    status: string;
+    atende: string;
+    sobras: string;
+    impacto: string;
+    status: 'Recomendada' | 'Útil' | 'Opcional';
   }>;
   alertas: Array<{ tipo: string; msg: string }>;
   totais: {
@@ -1414,6 +1453,50 @@ function statusDe(aProduzir: number, estoque: number): string {
   return 'Aguardando TZ';
 }
 
+function prioridadeRegraLabel(n: number): 'Alta' | 'Média' | 'Baixa' {
+  if (n <= 1) return 'Alta';
+  if (n === 2) return 'Média';
+  return 'Baixa';
+}
+
+function statusRegraDe(n: number): 'Recomendada' | 'Útil' | 'Opcional' {
+  if (n <= 1) return 'Recomendada';
+  if (n === 2) return 'Útil';
+  return 'Opcional';
+}
+
+function atendeDe(
+  itens: Array<{ produtoCodigo: string; aProduzir: number; rota: string | null }>,
+  saidasCodigos: string[],
+): string {
+  const rotas = itens
+    .filter((i) => saidasCodigos.includes(i.produtoCodigo) && i.aProduzir > 0 && i.rota)
+    .map((i) => i.rota as string);
+  const uniq = [...new Set(rotas)];
+  return uniq[0] ?? '—';
+}
+
+function sobrasDe(
+  itens: Array<{ produtoCodigo: string; produtoNome: string; prontoEstoque: number }>,
+  saidasCodigos: string[],
+): string {
+  const cobertos = itens.filter((i) => saidasCodigos.includes(i.produtoCodigo) && i.prontoEstoque > 0);
+  if (cobertos.length === 0) return 'Sem sobra prevista';
+  const c = cobertos[0];
+  return `${c.prontoEstoque} ${c.produtoNome} p/ estoque`;
+}
+
+function impactoDe(
+  itens: Array<{ produtoCodigo: string; produtoNome: string; aProduzir: number }>,
+  saidasCodigos: string[],
+): string {
+  const nomes = itens
+    .filter((i) => saidasCodigos.includes(i.produtoCodigo) && i.aProduzir > 0)
+    .map((i) => i.produtoNome);
+  if (nomes.length === 0) return 'Sem demanda ativa coberta';
+  return `Cobre ${nomes.join(' e ')}`;
+}
+
 /**
  * Tip: quantidadeFaltante já líquido (faltas.calc.ts:41).
  * UI protótipo: faltam = demanda bruta; aProduzir = líquido.
@@ -1424,6 +1507,7 @@ export function montarPainelDesossa(input: {
   modoTv: boolean;
   geradoEm: string;
   tzsNaDesossa: number;
+  operacaoId: string;
 }): PainelDesossa {
   const itens = input.faltas.map((f) => {
     const aProduzir = Math.max(0, f.quantidadeFaltante);
@@ -1467,14 +1551,19 @@ export function montarPainelDesossa(input: {
         codigo: r.codigo,
         nome: r.nome,
         provisorio: r.provisorio,
+        prioridade: prioridadeRegraLabel(r.prioridade),
         tzsEstimados: Math.ceil(totais.pecasAProduzir / 2) || 0,
         saidasEsperadas: r.saidasLabel,
-        status: r.provisorio ? 'Provisória' : 'Ativa',
+        atende: atendeDe(itens, r.saidasCodigos),
+        sobras: sobrasDe(itens, r.saidasCodigos),
+        impacto: impactoDe(itens, r.saidasCodigos),
+        status: statusRegraDe(r.prioridade),
       }));
 
   return {
     geradoEm: input.geradoEm,
     modoTv: input.modoTv,
+    operacaoId: input.operacaoId,
     itens,
     regras,
     alertas,
@@ -1487,6 +1576,8 @@ export function montarPainelDesossa(input: {
 
 ```ts
 // painel.service.ts
+// imports: NotFoundException; operacoes; desc/inArray/and/eq/isNull/sql (drizzle);
+// schema: produtos, regrasTransformacao(+Saidas), pecas, recebimentos, pedidos*, caminhoes*, clientes, representantes
 @Injectable()
 export class PainelDesossaService {
   constructor(
@@ -1617,16 +1708,42 @@ export class PainelDesossaService {
         codigo: r.codigo,
         nome: r.nome,
         provisorio: r.provisorio,
-        prioridade: r.prioridade,
+        prioridade: r.prioridade, // tip: integer em regras_transformacao
         saidasLabel: saidas.map((s) => `${s.qtd}× ${s.codigo}`).join(' + '),
+        saidasCodigos: saidas.map((s) => s.codigo).filter((c): c is string => !!c),
       });
     }
+
+    // Emenda 3 — operacaoId canônico para o client buscar TZs (D7.14)
+    let operacaoId = q.operacaoId ?? null;
+    if (!operacaoId) {
+      const [op] = await this.db
+        .select({ id: operacoes.id })
+        .from(operacoes)
+        .where(
+          and(
+            isNull(operacoes.deletedAt),
+            inArray(operacoes.status, ['aberta', 'em_andamento']),
+          ),
+        )
+        .orderBy(desc(operacoes.dataOperacao))
+        .limit(1);
+      operacaoId = op?.id ?? null;
+    }
+    if (!operacaoId) {
+      throw new NotFoundException({
+        codigo: 'OPERACAO_NAO_ENCONTRADA',
+        mensagem: 'Nenhuma operação aberta/em_andamento para o painel da desossa',
+      });
+    }
+
     return montarPainelDesossa({
       faltas: faltasPainel,
       regras,
       modoTv: q.modoTv === true,
       geradoEm: new Date().toISOString(),
       tzsNaDesossa,
+      operacaoId,
     });
   }
 }
@@ -1817,6 +1934,18 @@ export class EtiquetasDesossaService {
         createdAt: etiquetasImpressoes.createdAt,
         invalidadaEm: etiquetasImpressoes.invalidadaEm,
         statusImpressao: etiquetasImpressoes.statusImpressao,
+        // Emenda 3 — filtro UI «Bloqueada»: peça mãe em carga fechada (tip carga-fechada.ts)
+        bloqueada: sql<boolean>`(
+          EXISTS (
+            SELECT 1
+              FROM carga_itens ci
+              JOIN caminhoes c ON c.id = ci.caminhao_id
+             WHERE ci.peca_id = ${pecas.id}
+               AND ci.deleted_at IS NULL
+               AND ci.status_carga_item <> 'removido'
+               AND c.status_caminhao IN ('fechado','liberado_faturamento','faturado','liberado_saida','expedido')
+          )
+        )`,
       })
       .from(etiquetasImpressoes)
       .innerJoin(subitens, eq(subitens.id, etiquetasImpressoes.subitemId))
@@ -1860,7 +1989,7 @@ export class EtiquetasDesossaService {
         invalidadaEm: l.invalidadaEm
           ? new Date(l.invalidadaEm as Date).toISOString()
           : null,
-        bloqueada: false, // Task 14: cruzar carga fechada se fixture exigir «Bloqueada»
+        bloqueada: Boolean(l.bloqueada),
         pendenteImpressao: l.statusImpressao === 'pendente',
       };
     });
@@ -1900,7 +2029,8 @@ DoD 7.21: fixture com `estado='invalidada_por_troca'` aparece quando aplicável.
 - TVMode (cols PRIOR./PRODUTO/FALTAM/A PRODUZIR/ORIGEM/**CARGA / HORÁRIO**/STATUS): `:280-370` (thead `:306`)
 - KPIs (rótulo #3 = **TZs na desossa**): `:452-467` (label `:457`)
 - Tabela itens (Rota/Carga, Representante, Alvo): `:492-552` (thead `:508-510`)
-- Sugestão por regra: `:554-600`
+- Sugestão por regra: `:554-600` (thead `:563` Prior./Atende/Sobras/Impacto)
+- **TZs disponíveis para desossa:** `:600-638` (abre DrawerTZ — Emenda 3)
 - Copy "Não representa produção em andamento": `:496`
 
 Client carrega via `fetch('/api/desossa/painel')` — **nunca** `fetchBackend` (server-only).
@@ -1916,13 +2046,40 @@ const EVENTOS_REFETCH = new Set([
   'corte_concluido',
 ]);
 
+const [tzs, setTzs] = useState<PecaElegivelDesossa[]>([]);
+const [drawerTZ, setDrawerTZ] = useState<{
+  peca: string;
+  peso: string | null;
+  lote: string | null;
+  origem: string | null;
+  entrada: string | null;
+  situacao: string;
+  caracteristicas: string | null;
+  obs: string | null;
+} | null>(null);
+
 const carregar = useCallback(async () => {
   const res = await fetch('/api/desossa/painel', { cache: 'no-store' });
   if (!res.ok) {
     setErro((await res.json().catch(() => ({}))).message ?? 'Erro ao carregar painel');
     return;
   }
-  setPainel((await res.json()) as PainelDesossa);
+  const painelJson = (await res.json()) as PainelDesossa & { operacaoId?: string };
+  setPainel(painelJson);
+
+  // Emenda 3 — TZs do telão via pecas-elegiveis (D7.14 Opção A; DESOSSA_PAINEL_LER)
+  const operacaoId = painelJson.operacaoId;
+  if (operacaoId) {
+    const tzRes = await fetch(
+      `/api/operacao/corte/pecas-elegiveis?operacaoId=${encodeURIComponent(operacaoId)}`,
+      { cache: 'no-store' },
+    );
+    if (tzRes.ok) {
+      setTzs((await tzRes.json()) as PecaElegivelDesossa[]);
+    } else if (tzRes.status !== 403) {
+      setErro((await tzRes.json().catch(() => ({}))).message ?? 'Erro ao carregar TZs');
+    }
+  }
 }, []);
 
 useEffect(() => {
@@ -2114,7 +2271,7 @@ function TVMode({
   </table>
 </div>
 
-{/* Sugestão por regra — DesossaDashboard.tsx:554-600 */}
+{/* Sugestão por regra — DesossaDashboard.tsx:554-600 thead :563 */}
 <div className="overflow-hidden rounded-xl border border-border bg-card">
   <div className="border-b border-border px-5 py-3.5">
     <h2 className="text-[13px] font-bold text-foreground">Sugestão por Regra de Transformação</h2>
@@ -2125,10 +2282,20 @@ function TVMode({
   <table className="w-full text-[12px]">
     <thead>
       <tr className="border-b border-border bg-muted/40">
-        {['Regra sugerida', 'TZs estimados', 'Saídas esperadas', 'Status', 'Provisório', ''].map((h) => (
+        {[
+          'Prior.',
+          'Regra sugerida',
+          'TZs estimados',
+          'Saídas esperadas',
+          'Atende',
+          'Sobras previstas',
+          'Impacto',
+          'Status',
+          '',
+        ].map((h) => (
           <th
             key={h || 'acoes-regra'}
-            className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+            className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap"
           >
             {h}
           </th>
@@ -2138,19 +2305,105 @@ function TVMode({
     <tbody>
       {painel.regras.map((r) => (
         <tr key={r.regraId} className="border-b border-border/60">
-          <td className="px-3 py-2.5 font-bold text-violet-700">{r.nome}</td>
-          <td className="px-3 py-2.5 font-mono font-black">{r.tzsEstimados}</td>
-          <td className="px-3 py-2.5">{r.saidasEsperadas}</td>
-          <td className="px-3 py-2.5">{r.status}</td>
-          <td className="px-3 py-2.5">
+          <td className="px-3 py-2.5">{r.prioridade}</td>
+          <td className="px-3 py-2.5 font-bold text-violet-700">
+            {r.nome}
             {r.provisorio ? (
-              <Badge variant="outline" title="P12 / v1.1 §16.15 — validar com cliente">
+              <Badge
+                variant="outline"
+                className="ml-2"
+                title="P12 / v1.1 §16.15 — validar com cliente"
+              >
                 Provisório
               </Badge>
             ) : null}
           </td>
+          <td className="px-3 py-2.5 font-mono font-black">{r.tzsEstimados}</td>
+          <td className="px-3 py-2.5">{r.saidasEsperadas}</td>
+          <td className="px-3 py-2.5 whitespace-nowrap text-[11px] text-muted-foreground">{r.atende}</td>
+          <td className="px-3 py-2.5 text-[11px] text-muted-foreground">{r.sobras}</td>
+          <td className="max-w-[160px] truncate px-3 py-2.5 text-[11px] text-muted-foreground">{r.impacto}</td>
+          <td className="px-3 py-2.5">{r.status}</td>
           <td className="px-3 py-2.5">
             <button type="button" onClick={() => setDrawerRegra(r)}>
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+  <div className="border-t border-border bg-muted/30 px-5 py-3">
+    <p className="text-[11px] italic text-muted-foreground">
+      As regras sugeridas orientam a equipe, mas a execução real será registrada na tela Pesagem e
+      Destinação da Desossa.
+    </p>
+  </div>
+</div>
+
+{/* TZs disponíveis — DesossaDashboard.tsx:600-638 — abre DrawerTZ (Emenda 3) */}
+<div className="overflow-hidden rounded-xl border border-border bg-card">
+  <div className="border-b border-border px-5 py-3.5">
+    <h2 className="text-[13px] font-bold text-foreground">TZs disponíveis para desossa</h2>
+    <p className="mt-0.5 text-[11px] text-muted-foreground">
+      Peças encaminhadas pela balança ou disponíveis para transformação.
+    </p>
+  </div>
+  <table className="w-full text-[12px]">
+    <thead>
+      <tr className="border-b border-border bg-muted/40">
+        {['Peça', 'Peso', 'Lote', 'Origem', 'Entrada', 'Características', 'Situação', 'Obs.', ''].map(
+          (h) => (
+            <th
+              key={h || 'acoes-tz'}
+              className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap"
+            >
+              {h}
+            </th>
+          ),
+        )}
+      </tr>
+    </thead>
+    <tbody>
+      {tzs.map((tz) => (
+        <tr key={tz.pecaId} className="border-b border-border/60 hover:bg-muted/20">
+          <td className="px-3 py-2.5 font-mono text-[11px] font-bold">{tz.etiquetaAtual ?? tz.pecaId}</td>
+          <td className="px-3 py-2.5 font-mono text-muted-foreground">
+            {tz.pesoOriginal
+              ? `${Number(tz.pesoOriginal).toFixed(3).replace('.', ',')} kg`
+              : '—'}
+          </td>
+          <td className="px-3 py-2.5 text-muted-foreground">{tz.lote ?? '—'}</td>
+          <td className="px-3 py-2.5 whitespace-nowrap text-[11px] text-muted-foreground">
+            {(tz.origem ?? '—').replace(/^Frigorífico\s+/i, '')}
+          </td>
+          <td className="px-3 py-2.5 whitespace-nowrap text-[11px] text-muted-foreground">
+            {tz.entrada ?? '—'}
+          </td>
+          <td className="px-3 py-2.5 text-[11px] text-muted-foreground">{tz.caracteristicas || '—'}</td>
+          <td className="px-3 py-2.5">
+            <span className="rounded-full px-2 py-0.5 text-[10px] font-bold">{tz.situacao}</span>
+          </td>
+          <td className="max-w-[140px] truncate px-3 py-2.5 text-[11px] text-muted-foreground">
+            {tz.obs ?? '—'}
+          </td>
+          <td className="px-3 py-2.5">
+            <button
+              type="button"
+              title="Ver detalhes"
+              onClick={() =>
+                setDrawerTZ({
+                  peca: tz.etiquetaAtual ?? tz.pecaId,
+                  peso: tz.pesoOriginal,
+                  lote: tz.lote,
+                  origem: tz.origem,
+                  entrada: tz.entrada,
+                  situacao: tz.situacao,
+                  caracteristicas: tz.caracteristicas,
+                  obs: tz.obs,
+                })
+              }
+            >
               <Eye className="h-3.5 w-3.5" />
             </button>
           </td>
@@ -2258,8 +2511,11 @@ function DrawerRegra({
               [
                 ['Regra', regra.nome],
                 ['Produto origem', 'TZ'],
+                ['Prioridade', regra.prioridade],
                 ['TZs estimados', `${regra.tzsEstimados} peças`],
                 ['Saídas esperadas', regra.saidasEsperadas],
+                ['Atende', regra.atende],
+                ['Sobras previstas', regra.sobras],
                 ['Status', regra.status],
               ] as const
             ).map(([k, v]) => (
@@ -2268,6 +2524,10 @@ function DrawerRegra({
                 <p className="mt-0.5 text-[13px] font-semibold">{v}</p>
               </div>
             ))}
+            <div className="col-span-2">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Impacto</p>
+              <p className="mt-0.5 text-[13px] font-semibold">{regra.impacto}</p>
+            </div>
           </div>
           {regra.provisorio ? (
             <Badge variant="outline" title="P12 / v1.1 §16.15 — validar com cliente">
@@ -2351,13 +2611,15 @@ function DrawerTZ({
 <DrawerTZ tz={drawerTZ} onClose={() => setDrawerTZ(null)} />
 ```
 
-Fonte de TZs do drawer: `GET /api/operacao/corte/pecas-elegiveis?operacaoId=` (Task 12) — mapear `etiquetaAtual`→`peca`, `pesoOriginal`→`peso`, `statusPeca`→`situacao`. Zero `TZS_SEED`/`ITENS_SEED` em runtime.
+Fonte de TZs (Emenda 3 / D7.14 Opção A): `GET /api/operacao/corte/pecas-elegiveis?operacaoId=` com `RequireQualquerPermissao('DESOSSA_PAINEL_LER','DESOSSA_LER','CORTE_GERENCIAR')` — tabela «TZs disponíveis» + `setDrawerTZ` a partir da linha Eye. Campos: `etiquetaAtual`→Peça, `pesoOriginal`→Peso, `lote`/`origem`/`entrada`/`caracteristicas`/`situacao`/`obs` literais do DTO. Zero `TZS_SEED`/`ITENS_SEED` em runtime. DrawerTZ **não** pode existir sem a tabela.
 
 ```bash
 rg -n "setInterval" "app/frontend/src/app/(admin)/desossa/dashboard" && echo FAIL || echo OK
 # Expected: OK
-rg -n "TZs na desossa|CARGA / HORÁRIO|Rota / Carga" "app/frontend/src/app/(admin)/desossa/dashboard/desossa-dashboard-client.tsx"
-# Expected: 3 hits (KPI + TVMode col + thead tabela)
+rg -n "TZs na desossa|CARGA / HORÁRIO|Rota / Carga|TZs disponíveis para desossa|Sobras previstas" "app/frontend/src/app/(admin)/desossa/dashboard/desossa-dashboard-client.tsx"
+# Expected: ≥5 hits (KPI + TVMode + tabela itens + bloco TZs + sugestão)
+rg -n "fetchBackend" "app/frontend/src/app/(admin)/desossa" && echo FAIL || echo OK
+# Expected: OK (zero fetchBackend no client admin/desossa)
 ```
 
 - [ ] Commit: `feat(onda7): dashboard desossa fiel com Modo TV e WebSocket`
@@ -2392,6 +2654,13 @@ export type PecaElegivelDesossa = {
   produtoCodigo: string | null;
   recebimentoId: string;
   transformacaoId: string | null;
+  // cols «TZs disponíveis» — DesossaDashboard.tsx:600-638 (Emenda 3)
+  lote: string | null;
+  origem: string | null;
+  entrada: string | null;
+  caracteristicas: string;
+  situacao: 'Disponível para desossa' | 'Aguardando chegada à desossa' | 'Prioritário';
+  obs: string | null;
 };
 ```
 
@@ -2412,9 +2681,14 @@ export class PecasElegiveisService {
         produtoCodigo: itensComerciais.codigo,
         recebimentoId: pecas.recebimentoId,
         transformacaoId: transformacoes.id,
+        lote: recebimentos.romaneio,
+        origem: fornecedores.razaoSocial,
+        entrada: pecas.createdAt,
+        capturaMeta: pecas.capturaMeta,
       })
       .from(pecas)
       .innerJoin(recebimentos, eq(recebimentos.id, pecas.recebimentoId))
+      .innerJoin(fornecedores, eq(fornecedores.id, recebimentos.fornecedorId))
       .leftJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
       .leftJoin(
         transformacoes,
@@ -2431,24 +2705,46 @@ export class PecasElegiveisService {
       ))
       .orderBy(asc(pecas.createdAt));
 
-    return linhas.map((l) => ({
-      pecaId: l.pecaId,
-      etiquetaAtual: l.etiquetaAtual,
-      statusPeca: l.statusPeca,
-      pesoOriginal: l.pesoOriginal,
-      itemComercialId: l.itemComercialId,
-      produtoCodigo: l.produtoCodigo,
-      recebimentoId: l.recebimentoId,
-      transformacaoId: l.transformacaoId,
-    }));
+    return linhas.map((l) => {
+      const meta = (l.capturaMeta ?? {}) as Record<string, unknown>;
+      const flags: string[] = [];
+      if (meta.maisPesada === true) flags.push('Mais pesada');
+      if (meta.maisGorda === true) flags.push('Mais gorda');
+      if (meta.melhorAcabamento === true) flags.push('Melhor acabamento');
+      const situacao: PecaElegivelDesossa['situacao'] =
+        meta.prioritario === true
+          ? 'Prioritário'
+          : l.statusPeca === 'em_transformacao'
+            ? 'Disponível para desossa'
+            : 'Aguardando chegada à desossa';
+      return {
+        pecaId: l.pecaId,
+        etiquetaAtual: l.etiquetaAtual,
+        statusPeca: l.statusPeca,
+        pesoOriginal: l.pesoOriginal,
+        itemComercialId: l.itemComercialId,
+        produtoCodigo: l.produtoCodigo,
+        recebimentoId: l.recebimentoId,
+        transformacaoId: l.transformacaoId,
+        lote: l.lote,
+        origem: l.origem,
+        entrada: l.entrada ? new Date(l.entrada as Date).toISOString() : null,
+        caracteristicas: flags.length > 0 ? flags.join(', ') : '—',
+        situacao,
+        obs: typeof meta.obs === 'string' ? meta.obs : null,
+      };
+    });
   }
 }
 ```
 
 ```ts
 // corte.controller.ts — ANTES de @Get(':id') para não capturar "pecas-elegiveis" como id
+// Emenda 3 / D7.14 Opção A — OR para telão (DESOSSA_PAINEL_LER) + operadores (CORTE_GERENCIAR)
+import { RequireQualquerPermissao } from '../../../common/rbac/require-qualquer-permissao.decorator';
+
 @Get('pecas-elegiveis')
-@RequirePermissoes('CORTE_GERENCIAR')
+@RequireQualquerPermissao('DESOSSA_PAINEL_LER', 'DESOSSA_LER', 'CORTE_GERENCIAR')
 listarPecasElegiveis(
   @Query(new ZodValidationPipe(pecasElegiveisQuerySchema)) q: PecasElegiveisQuery,
 ) {
@@ -2469,14 +2765,50 @@ export async function GET(req: Request) {
 }
 ```
 
-- [ ] **Step 2: Fluxo API da tela**
+- [ ] **Step 2: Fluxo API da tela + cercas fetch client (Emenda 3)**
 
-1. `GET /api/operacao/corte/pecas-elegiveis?operacaoId=`
+1. `GET /api/operacao/corte/pecas-elegiveis?operacaoId=` (OR perms — D7.14)
 2. `POST /api/operacao/corte/pecas/:id/iniciar`
-3. `POST /api/operacao/corte/:id/regra`
+3. `POST /api/operacao/corte/:id/regra` via `vincularRegra`
 4. Por slot: subitens → pesar → associar
 5. Se divergente: `POST .../divergencia` → `POST .../concluir`
-6. Checklist: `GET .../checklist`
+6. Checklist: `GET .../checklist` via `carregarChecklist`
+
+```tsx
+// desossa-pesagem-client.tsx — NUNCA fetchBackend (server-only)
+async function vincularRegra(regraTransformacaoId: string) {
+  if (!transformacaoId) return;
+  const res = await fetch(`/api/operacao/corte/${transformacaoId}/regra`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ regraTransformacaoId }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    setErro(body.message ?? body.mensagem ?? 'Falha ao vincular regra');
+    return;
+  }
+  setRegraId(regraTransformacaoId);
+  await carregarChecklist();
+}
+
+async function carregarChecklist() {
+  if (!transformacaoId) return;
+  const res = await fetch(`/api/operacao/corte/${transformacaoId}/checklist`, {
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    setErro(body.message ?? body.mensagem ?? 'Falha ao carregar checklist');
+    return;
+  }
+  setChecklist(await res.json());
+}
+
+useEffect(() => {
+  if (transformacaoId) void carregarChecklist();
+}, [transformacaoId]);
+```
 
 - [ ] **Step 3: JSX fiel — Badge, seletor A/B, checklist, modais** (`DesossaPesagem.tsx` @ `8d32aa4c`)
 
@@ -3202,10 +3534,11 @@ Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13.
 ## Self-Review (Planejador)
 
 1. **Spec coverage:** §6.6 exclusividade → T4/T5/7.7; §6.14 fluxo → D7.1/D7.5; telas §8.9 → T11–T13; §16.7/§16.15 → parâmetro+badge; matriz 17–19 → reconciliação; quality-gates O7 → DoD 7.7/7.8/7.10/7.13/7.16.
-2. **Placeholder scan:** nenhum TBD/TODO/a definir/implementar depois/similar à Task/fase 2; zero compromisso de entrega incompleta; D7.13 decidido (criar endpoint).
-3. **Type consistency:** `regraTransformacaoId`, wires `faltas_desossa_atualizadas` / `divergencia_transformacao_aberta`, tipos de divergência alinhados ao CHECK; `PainelDesossa.itens` com `rota`/`representante`/`horarioAlvo`; `aProduzir === quantidadeFaltante` (líquido tip).
+2. **Placeholder scan:** nenhum TBD/TODO/a definir/implementar depois/similar à Task/fase 2; zero compromisso de entrega incompleta; D7.13+D7.14 decididos (criar endpoint + Opção A OR perms).
+3. **Type consistency:** `regraTransformacaoId`, wires `faltas_desossa_atualizadas` / `divergencia_transformacao_aberta`, tipos de divergência alinhados ao CHECK; `PainelDesossa.itens` com `rota`/`representante`/`horarioAlvo`; `PainelDesossa.regras` com `prioridade`/`atende`/`sobras`/`impacto`; `PainelDesossa.operacaoId`; `PecaElegivelDesossa` com cols TZs; `aProduzir === quantidadeFaltante` (líquido tip).
 4. **PR #38:** não reutilizado; branch de plano `feature/onda7-plano-desossa`.
 5. **Emenda 2 vs veredito `25300fa`:** (1) teste+calc alinhados ao tip líquido; (2) client sem `fetchBackend`; (3) TVMode CARGA/HORÁRIO + KPI TZs na desossa + tabela Rota/Representante/Alvo + drawers + etiquetas 11 cols/filtros rótulo; (4) snapshot RBAC com comando; (5) modais pesagem com cercas JSX.
+6. **Emenda 3 vs veredito `b8aff66`:** (1) tabela TZs `:600-638` + `setDrawerTZ` vivo; (2) D7.14 Opção A `RequireQualquerPermissao` — zero 403 telão; (3) sugestão Prior./Atende/Sobras/Impacto + calc; (4) `bloqueada` via EXISTS carga fechada; (5) `vincularRegra`/`carregarChecklist` com `fetch('/api/...')`.
 
 ---
 
