@@ -1,12 +1,18 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, notInArray } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import { etiquetasImpressoes, pecas, subitens } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
-import { IMPRESSORA_GATEWAY, LEITOR_GATEWAY, type ImpressoraGateway, type LeitorGateway } from '../../../hardware/hardware.types';
+import {
+  IMPRESSORA_GATEWAY,
+  LEITOR_GATEWAY,
+  type ImpressoraGateway,
+  type LeitorGateway,
+  type ResultadoImpressao,
+} from '../../../hardware/hardware.types';
 import type { ResolverQrDto } from './dto/etiqueta.dto';
 
 type Tx = NodePgDatabase<typeof schema>;
@@ -17,6 +23,15 @@ type Subitem = typeof subitens.$inferSelect;
 export interface ResultadoEtiqueta {
   peca: Peca;
   etiqueta: Etiqueta;
+}
+
+export interface ParametrosEmissaoNaTx {
+  pecaId: string;
+  codigo: string;
+  payload: Record<string, unknown>;
+  impressao: ResultadoImpressao;
+  reimpressao: boolean;
+  operadorId: string;
 }
 
 @Injectable()
@@ -31,6 +46,117 @@ export class EtiquetaService {
 
   private get db() {
     return this.drizzle.db;
+  }
+
+  /** Impressão física isolada — best-effort, nunca lança (ADR-010). Usada também pela troca. */
+  async imprimirPayload(payload: Record<string, unknown>): Promise<ResultadoImpressao> {
+    return this.impressora.imprimir(payload);
+  }
+
+  /**
+   * Persiste a etiqueta LÓGICA dentro de uma transação existente. Estado inicial conforme
+   * v1.1 §10.4: 'ativa' quando o gateway confirmou a impressão, 'emitida' caso contrário;
+   * reimpressão confirmada nasce 'reimpressa'.
+   */
+  async emitirNaTx(tx: Tx, p: ParametrosEmissaoNaTx): Promise<Etiqueta> {
+    const estado = p.impressao.impresso ? (p.reimpressao ? 'reimpressa' : 'ativa') : 'emitida';
+
+    await tx.update(pecas).set({ etiquetaAtual: p.codigo }).where(eq(pecas.id, p.pecaId));
+
+    const etiqueta = primeiroOuFalha(
+      await tx
+        .insert(etiquetasImpressoes)
+        .values({
+          pecaId: p.pecaId,
+          payload: {
+            ...p.payload,
+            jobId: p.impressao.jobId,
+            erro: p.impressao.erro ?? null,
+            gateway_status: p.impressao.saude,
+          },
+          statusImpressao: p.impressao.impresso ? 'impressa' : 'falha_impressao',
+          reimpressao: p.reimpressao,
+          estado,
+          operadorId: p.operadorId,
+        })
+        .returning(),
+    );
+
+    await this.auditoria.registrar(tx, {
+      tabela: 'etiquetas_impressoes',
+      registroId: etiqueta.id,
+      operacao: 'INSERT',
+      modulo: 'operacao',
+      usuarioId: p.operadorId,
+      dadosAnteriores: {},
+      dadosNovos: etiqueta,
+    });
+
+    return etiqueta;
+  }
+
+  /** Etiqueta vigente da peça: última linha ainda não terminal. */
+  private async buscarVigenteNaTx(tx: Tx, pecaId: string): Promise<Etiqueta | null> {
+    return tx
+      .select()
+      .from(etiquetasImpressoes)
+      .where(
+        and(
+          eq(etiquetasImpressoes.pecaId, pecaId),
+          notInArray(etiquetasImpressoes.estado, ['cancelada', 'invalidada_por_troca']),
+        ),
+      )
+      .orderBy(desc(etiquetasImpressoes.createdAt))
+      .limit(1)
+      .for('update')
+      .then((r) => r[0] ?? null);
+  }
+
+  /** Passo 7 de §6.13: a etiqueta da peça retirada deixa de valer por causa da troca. */
+  async invalidarPorTrocaNaTx(tx: Tx, pecaId: string, operadorId: string): Promise<Etiqueta | null> {
+    const vigente = await this.buscarVigenteNaTx(tx, pecaId);
+    if (!vigente) return null;
+    return this.encerrarNaTx(tx, vigente, 'invalidada_por_troca', 'troca_peca', operadorId);
+  }
+
+  /** Cancelamento vindo do estorno de destinação (D6.3). */
+  async cancelarVigenteNaTx(tx: Tx, pecaId: string, motivo: string, operadorId: string): Promise<Etiqueta | null> {
+    const vigente = await this.buscarVigenteNaTx(tx, pecaId);
+    if (!vigente) return null;
+    return this.encerrarNaTx(tx, vigente, 'cancelada', motivo, operadorId);
+  }
+
+  private async encerrarNaTx(
+    tx: Tx,
+    vigente: Etiqueta,
+    estado: 'cancelada' | 'invalidada_por_troca',
+    motivo: string,
+    operadorId: string,
+  ): Promise<Etiqueta> {
+    const encerrada = primeiroOuFalha(
+      await tx
+        .update(etiquetasImpressoes)
+        .set({
+          estado,
+          motivoCancelamento: motivo,
+          invalidadaEm: new Date(),
+          invalidadaPorId: operadorId,
+        })
+        .where(eq(etiquetasImpressoes.id, vigente.id))
+        .returning(),
+    );
+
+    await this.auditoria.registrar(tx, {
+      tabela: 'etiquetas_impressoes',
+      registroId: vigente.id,
+      operacao: 'UPDATE',
+      modulo: 'operacao',
+      usuarioId: operadorId,
+      dadosAnteriores: vigente,
+      dadosNovos: encerrada,
+    });
+
+    return encerrada;
   }
 
   /**

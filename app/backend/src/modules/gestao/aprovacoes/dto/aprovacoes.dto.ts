@@ -14,6 +14,7 @@ export const abrirAprovacaoSchema = z.object({
   tipo: z.enum([
     'divergencia_transformacao', 'estorno_fora_regra',
     'reabertura_carga_pedido', 'ajuste_estoque_relevante',
+    'pendencia_fisica_etiqueta',
   ]),
   origem: z.string().trim().min(3).max(120),
   descricao: z.string().trim().min(10).max(1000),

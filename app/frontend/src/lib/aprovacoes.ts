@@ -4,13 +4,15 @@ export type TipoAprovacao =
   | 'divergencia_transformacao'
   | 'estorno_fora_regra'
   | 'reabertura_carga_pedido'
-  | 'ajuste_estoque_relevante';
+  | 'ajuste_estoque_relevante'
+  | 'pendencia_fisica_etiqueta';
 
 export const ROTULO_TIPO_APROVACAO: Record<TipoAprovacao, string> = {
   divergencia_transformacao: 'Divergência de transformação',
   estorno_fora_regra: 'Estorno fora da regra',
   reabertura_carga_pedido: 'Reabertura de carga/pedido',
   ajuste_estoque_relevante: 'Ajuste de estoque relevante',
+  pendencia_fisica_etiqueta: 'Pendência física de etiqueta',
 };
 
 export const ROTULO_STATUS_APROVACAO: Record<string, string> = {

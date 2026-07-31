@@ -1,6 +1,7 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PesagemService } from '../../src/modules/operacao/pesagem/pesagem.service';
 import { AssociacaoService } from '../../src/modules/operacao/pesagem/associacao.service';
+import { TrocaPecaService } from '../../src/modules/operacao/pesagem/troca-peca.service';
 import { EVENTOS } from '../../src/realtime/events/eventos';
 import type { CurrentUserPayload } from '../../src/common/decorators/current-user.decorator';
 
@@ -148,5 +149,99 @@ describe('AssociacaoService — emissão pós-commit', () => {
 
     expect(emitSpy).toHaveBeenCalledWith(EVENTOS.PECA_REDIRECIONADA, expect.objectContaining({ pecaId: 'pc1', pedidoDestinoId: 'pv2' }));
     expect(ordem.indexOf('commit')).toBeLessThan(ordem.indexOf(`emit:${EVENTOS.PECA_REDIRECIONADA}`));
+  });
+});
+
+// ── TrocaPecaService: ordem commit→emit (6.7 / 6.42) ─────────────────────────
+describe('TrocaPecaService — emissão pós-commit', () => {
+  function montar(transactionImpl: () => Promise<unknown>) {
+    const ordem: string[] = [];
+    const emitter = new EventEmitter2();
+    const emitSpy = jest.spyOn(emitter, 'emit').mockImplementation(((event: unknown) => {
+      ordem.push(`emit:${String(event)}`);
+      return true;
+    }) as never);
+    const db = {
+      transaction: jest.fn(async () => {
+        const r = await transactionImpl();
+        ordem.push('commit');
+        return r;
+      }),
+    };
+    const service = new TrocaPecaService(
+      { db } as never,
+      { registrar: jest.fn() } as never,
+      emitter,
+      {} as never,
+      {} as never,
+    );
+    jest.spyOn(service as never, 'validarTroca').mockResolvedValue({
+      pedidoVendaId: 'pv1',
+      dataOperacao: '2026-09-01',
+      operacaoId: 'op1',
+      codigoNovaEtiqueta: 'QR-nova',
+      payloadEtiqueta: {},
+    } as never);
+    return { service, emitSpy, ordem };
+  }
+
+  it('PECA_TROCADA publicado após o commit', async () => {
+    const { service, emitSpy, ordem } = montar(async () => ({
+      troca: { id: 'tr1' },
+      pecaRetirada: { id: 'pr1' },
+      pecaInserida: { id: 'pi1' },
+      etiquetaInvalidada: { id: 'ei1' },
+      etiquetaEmitida: { id: 'ee1' },
+      pendenciaFisicaId: null,
+    }));
+
+    await service.executar(
+      {
+        pecaRetiradaId: 'pr1',
+        pecaInseridaId: 'pi1',
+        pedidoVendaItemId: 'pvi1',
+        destinoRetirada: 'estoque',
+        motivo: 'qualidade',
+      } as never,
+      'user-1',
+    );
+
+    expect(emitSpy).toHaveBeenCalledWith(
+      EVENTOS.PECA_TROCADA,
+      expect.objectContaining({ trocaId: 'tr1', pecaRetiradaId: 'pr1', pecaInseridaId: 'pi1' }),
+    );
+    expect(ordem.indexOf('commit')).toBeLessThan(ordem.indexOf(`emit:${EVENTOS.PECA_TROCADA}`));
+  });
+
+  it('APROVACAO_REGISTRADA publicado após o commit quando a troca cria pendência física', async () => {
+    const { service, emitSpy, ordem } = montar(async () => ({
+      troca: { id: 'tr2' },
+      pecaRetirada: { id: 'pr2' },
+      pecaInserida: { id: 'pi2' },
+      etiquetaInvalidada: null,
+      etiquetaEmitida: { id: 'ee2' },
+      pendenciaFisicaId: 'ap1',
+    }));
+
+    await service.executar(
+      {
+        pecaRetiradaId: 'pr2',
+        pecaInseridaId: 'pi2',
+        pedidoVendaItemId: 'pvi1',
+        destinoRetirada: 'estoque',
+        motivo: 'qualidade',
+      } as never,
+      'user-1',
+    );
+
+    expect(emitSpy).toHaveBeenCalledWith(
+      EVENTOS.APROVACAO_REGISTRADA,
+      expect.objectContaining({
+        aprovacaoId: 'ap1',
+        tipo: 'pendencia_fisica_etiqueta',
+        status: 'pendente',
+      }),
+    );
+    expect(ordem.indexOf('commit')).toBeLessThan(ordem.indexOf(`emit:${EVENTOS.APROVACAO_REGISTRADA}`));
   });
 });
