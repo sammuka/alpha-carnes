@@ -3,6 +3,7 @@ import { AuthModule } from '../../auth/auth.module';
 import { AprovacoesModule } from '../../gestao/aprovacoes/aprovacoes.module';
 import { RecebimentoModule } from '../recebimento/recebimento.module';
 import { PesagemController } from './pesagem.controller';
+import { EtiquetaController } from './etiqueta.controller';
 import { PesagemService } from './pesagem.service';
 import { AssociacaoService } from './associacao.service';
 import { EtiquetaService } from './etiqueta.service';
@@ -13,7 +14,7 @@ import { TrocaPecaService } from './troca-peca.service';
 // divergência em peça sem cobertura.
 @Module({
   imports: [AuthModule, RecebimentoModule, AprovacoesModule],
-  controllers: [PesagemController],
+  controllers: [PesagemController, EtiquetaController],
   providers: [PesagemService, AssociacaoService, EtiquetaService, TrocaPecaService],
   exports: [PesagemService, AssociacaoService, EtiquetaService, TrocaPecaService],
 })

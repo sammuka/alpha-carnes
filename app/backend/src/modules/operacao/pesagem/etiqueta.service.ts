@@ -1,11 +1,24 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, isNull, notInArray } from 'drizzle-orm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { and, desc, eq, isNotNull, isNull, notInArray, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { etiquetasImpressoes, pecas, subitens } from '../../../database/schema';
+import {
+  clientes,
+  etiquetasImpressoes,
+  fornecedores,
+  itensComerciais,
+  operacoes,
+  pecas,
+  pedidosVenda,
+  recebimentos,
+  representantes,
+  subitens,
+  usuarios,
+} from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
-import { primeiroOuFalha } from '../../../common/crud/paginacao';
+import { montarPaginado, primeiroOuFalha, type Paginado } from '../../../common/crud/paginacao';
 import {
   IMPRESSORA_GATEWAY,
   LEITOR_GATEWAY,
@@ -13,7 +26,15 @@ import {
   type LeitorGateway,
   type ResultadoImpressao,
 } from '../../../hardware/hardware.types';
-import type { ResolverQrDto } from './dto/etiqueta.dto';
+import { EVENTOS } from '../../../realtime/events/eventos';
+import { buscarNfAtivaDoRecebimento } from '../recebimento/nota-fiscal-fornecedor.persistence';
+import { etiquetaBloqueadaSql, pecaEmCargaFechada } from './carga-fechada';
+import type {
+  CancelarEtiquetaDto,
+  EstadoEtiqueta,
+  ListarEtiquetasDto,
+  ResolverQrDto,
+} from './dto/etiqueta.dto';
 
 type Tx = NodePgDatabase<typeof schema>;
 type Peca = typeof pecas.$inferSelect;
@@ -34,12 +55,90 @@ export interface ParametrosEmissaoNaTx {
   operadorId: string;
 }
 
+export interface EtiquetaListada {
+  id: string;
+  pecaId: string;
+  codigo: string | null;
+  estado: EstadoEtiqueta;
+  statusImpressao: string;
+  reimpressao: boolean;
+  motivoCancelamento: string | null;
+  invalidadaEm: string | null;
+  bloqueada: boolean;
+  pesoOriginal: string;
+  statusPeca: string;
+  recebimentoId: string;
+  pedidoVendaId: string | null;
+  operadorId: string;
+  operadorNome: string;
+  createdAt: string;
+  produtoCodigo: string;
+  produtoDescricao: string;
+  caracteristicas: string[];
+  nfNumero: string | null;
+  frigorifico: string;
+  romaneio: string | null;
+  placaVeiculo: string | null;
+  motorista: string | null;
+  clienteNome: string | null;
+  representanteNome: string | null;
+  rotaPrevista: string | null;
+  localEstoquePrevisto: { valor: string | null; provisorio: true } | null;
+  historico: Array<{
+    id: string;
+    estado: string;
+    statusImpressao: string;
+    reimpressao: boolean;
+    motivoCancelamento: string | null;
+    operadorId: string;
+    createdAt: string;
+  }>;
+}
+
+/** Linha bruta da consulta — mesmo shape de `EtiquetaListada`, sem o array de histórico. */
+type LinhaEtiqueta = Omit<EtiquetaListada, 'historico'>;
+
+/**
+ * Agrupa linhas (peça × etiqueta) por peça. `linhas` já vem ordenada por `createdAt DESC` pela
+ * consulta de `listar()`, então a primeira ocorrência de cada `pecaId` é a etiqueta vigente
+ * (D6.2) e as demais compõem o histórico completo.
+ */
+export function agruparPorPeca(linhas: LinhaEtiqueta[]): EtiquetaListada[] {
+  const porPeca = new Map<string, EtiquetaListada>();
+  for (const linha of linhas) {
+    const vigente = porPeca.get(linha.pecaId);
+    if (!vigente) {
+      porPeca.set(linha.pecaId, { ...linha, historico: [] });
+      continue;
+    }
+    vigente.historico.push({
+      id: linha.id,
+      estado: linha.estado,
+      statusImpressao: linha.statusImpressao,
+      reimpressao: linha.reimpressao,
+      motivoCancelamento: linha.motivoCancelamento,
+      operadorId: linha.operadorId,
+      createdAt: linha.createdAt,
+    });
+  }
+  return [...porPeca.values()];
+}
+
+/**
+ * Pagina um array já pronto em memória. `recebimentoId` é obrigatório em `listarEtiquetasSchema`.
+ */
+export function paginarEmMemoria<T>(itens: T[], page: number, pageSize: number): Paginado<T> {
+  const inicio = (page - 1) * pageSize;
+  return montarPaginado(itens.slice(inicio, inicio + pageSize), itens.length, { page, pageSize });
+}
+
 @Injectable()
 export class EtiquetaService {
   constructor(
     @Inject(DRIZZLE)
     private readonly drizzle: { db: NodePgDatabase<typeof schema> },
     private readonly auditoria: AuditoriaService,
+    private readonly eventEmitter: EventEmitter2,
     @Inject(IMPRESSORA_GATEWAY) private readonly impressora: ImpressoraGateway,
     @Inject(LEITOR_GATEWAY) private readonly leitor: LeitorGateway,
   ) {}
@@ -175,42 +274,24 @@ export class EtiquetaService {
 
     const codigoEtiqueta = peca.etiquetaAtual ?? `QR-${peca.id}`;
     const payloadBase = this.montarPayload(peca, codigoEtiqueta);
-
-    // Impressão física FORA da transação (best-effort; nunca lança — adapter/fake).
-    const impressao = await this.impressora.imprimir(payloadBase);
-    const statusImpressao = impressao.impresso ? 'impressa' : 'falha_impressao';
+    const impressao = await this.imprimirPayload(payloadBase);
 
     return this.db.transaction(async (tx) => {
-      const atualizada = primeiroOuFalha(
-        await tx.update(pecas).set({ etiquetaAtual: codigoEtiqueta }).where(eq(pecas.id, pecaId)).returning(),
-      );
-
-      const etiqueta = primeiroOuFalha(
-        await tx
-          .insert(etiquetasImpressoes)
-          .values({
-            pecaId,
-            payload: { ...payloadBase, jobId: impressao.jobId, erro: impressao.erro ?? null, gateway_status: impressao.saude },
-            statusImpressao,
-            reimpressao: false,
-            operadorId,
-          })
-          .returning(),
-      );
-
-      await this.auditoria.registrar(tx, {
-        tabela: 'etiquetas_impressoes',
-        registroId: etiqueta.id,
-        operacao: 'INSERT',
-        modulo: 'operacao',
-        usuarioId: operadorId,
-        dadosAnteriores: {},
-        dadosNovos: etiqueta,
+      const etiqueta = await this.emitirNaTx(tx, {
+        pecaId,
+        codigo: codigoEtiqueta,
+        payload: payloadBase,
+        impressao,
+        reimpressao: false,
+        operadorId,
       });
-
+      const atualizada = primeiroOuFalha(
+        await tx.select().from(pecas).where(eq(pecas.id, pecaId)),
+      );
       return { peca: atualizada, etiqueta };
     });
   }
+
 
   /**
    * Reimpressão auditada (RF-PS-24). Reaproveita a etiqueta lógica já atribuída —
@@ -224,36 +305,21 @@ export class EtiquetaService {
     }
 
     const payloadBase = this.montarPayload(peca, peca.etiquetaAtual);
-    const impressao = await this.impressora.imprimir(payloadBase);
-    const statusImpressao = impressao.impresso ? 'impressa' : 'falha_impressao';
+    const impressao = await this.imprimirPayload(payloadBase);
 
     return this.db.transaction(async (tx) => {
-      const etiqueta = primeiroOuFalha(
-        await tx
-          .insert(etiquetasImpressoes)
-          .values({
-            pecaId,
-            payload: { ...payloadBase, jobId: impressao.jobId, erro: impressao.erro ?? null, gateway_status: impressao.saude },
-            statusImpressao,
-            reimpressao: true,
-            operadorId,
-          })
-          .returning(),
-      );
-
-      await this.auditoria.registrar(tx, {
-        tabela: 'etiquetas_impressoes',
-        registroId: etiqueta.id,
-        operacao: 'INSERT',
-        modulo: 'operacao',
-        usuarioId: operadorId,
-        dadosAnteriores: {},
-        dadosNovos: etiqueta,
+      const etiqueta = await this.emitirNaTx(tx, {
+        pecaId,
+        codigo: peca.etiquetaAtual!,
+        payload: payloadBase,
+        impressao,
+        reimpressao: true,
+        operadorId,
       });
-
       return { peca, etiqueta };
     });
   }
+
 
   /** Emite etiqueta de subitem (RF-CT-15/16, RF-RT-04). Payload referencia a peça original. */
   async emitirSubitem(subitemId: string, operadorId: string): Promise<{ subitem: Subitem; etiqueta: Etiqueta }> {
@@ -378,8 +444,23 @@ export class EtiquetaService {
     }
     const peca = await this.resolverPorCodigo(codigo);
     if (!peca) throw new NotFoundException('Código não corresponde a nenhuma peça');
+    const vigente = await this.db
+      .select({ estado: etiquetasImpressoes.estado })
+      .from(etiquetasImpressoes)
+      .where(eq(etiquetasImpressoes.pecaId, peca.id))
+      .orderBy(desc(etiquetasImpressoes.createdAt))
+      .limit(1)
+      .then((r) => r[0] ?? null);
+    if (vigente && (vigente.estado === 'invalidada_por_troca' || vigente.estado === 'cancelada')) {
+      throw new ConflictException(
+        vigente.estado === 'invalidada_por_troca'
+          ? 'Etiqueta invalidada por troca de peça — use a etiqueta vigente'
+          : 'Etiqueta cancelada — não deve ser usada na operação',
+      );
+    }
     return peca;
   }
+
 
   private async resolverPorCodigo(codigo: string): Promise<Peca | null> {
     const limpo = codigo.trim();
@@ -399,6 +480,140 @@ export class EtiquetaService {
       .from(pecas)
       .where(and(eq(pecas.id, id), isNull(pecas.deletedAt)))
       .then((r) => r[0] ?? null);
+  }
+
+  /** POST /operacao/etiquetas/:id/cancelar. Bloqueado depois que a carga fecha (D6.18). */
+  async cancelar(etiquetaId: string, dto: CancelarEtiquetaDto, operadorId: string): Promise<Etiqueta> {
+    const resultado = await this.db.transaction(async (tx) => {
+      const alvo = await tx
+        .select()
+        .from(etiquetasImpressoes)
+        .where(eq(etiquetasImpressoes.id, etiquetaId))
+        .for('update')
+        .then((r) => r[0] ?? null);
+      if (!alvo) throw new NotFoundException('Etiqueta não encontrada');
+      if (alvo.estado === 'cancelada' || alvo.estado === 'invalidada_por_troca') {
+        throw new ConflictException('Etiqueta já está em estado terminal');
+      }
+      if (alvo.pecaId && (await pecaEmCargaFechada(tx, alvo.pecaId))) {
+        throw new ConflictException('Peça já está em carga fechada — cancelamento bloqueado');
+      }
+      const encerrada = await this.encerrarNaTx(tx, alvo, 'cancelada', dto.motivo, operadorId);
+      return { encerrada, dataOperacao: await this.dataOperacaoDaEtiqueta(tx, alvo) };
+    });
+
+    this.eventEmitter.emit(EVENTOS.ETIQUETA_INVALIDADA, {
+      etiquetaId,
+      pecaId: resultado.encerrada.pecaId!,
+      dataOperacao: resultado.dataOperacao,
+      estado: 'cancelada',
+      motivo: dto.motivo,
+    });
+
+    return resultado.encerrada;
+  }
+
+  /**
+   * `estado` NÃO entra no `WHERE` desta consulta: filtrar aqui truncaria o histórico e faria uma
+   * linha antiga `ativa` aparecer como vigente de uma peça cuja etiqueta atual já é terminal.
+   */
+  async listar(filtros: ListarEtiquetasDto): Promise<Paginado<EtiquetaListada>> {
+    const condicoes = [
+      isNull(pecas.deletedAt),
+      isNotNull(etiquetasImpressoes.pecaId),
+      eq(pecas.recebimentoId, filtros.recebimentoId),
+    ];
+    if (filtros.busca) {
+      const q = `%${filtros.busca.toLowerCase()}%`;
+      condicoes.push(sql`(lower(coalesce(${pecas.etiquetaAtual}, '')) LIKE ${q}
+                          OR lower(${pecas.id}::text) LIKE ${q})`);
+    }
+
+    const nfAtiva = await buscarNfAtivaDoRecebimento(this.db, filtros.recebimentoId);
+
+    const linhasBrutas = await this.db
+      .select({
+        id: etiquetasImpressoes.id,
+        pecaId: pecas.id,
+        codigo: sql<string | null>`${etiquetasImpressoes.payload}->>'qr'`,
+        estado: etiquetasImpressoes.estado,
+        statusImpressao: etiquetasImpressoes.statusImpressao,
+        reimpressao: etiquetasImpressoes.reimpressao,
+        motivoCancelamento: etiquetasImpressoes.motivoCancelamento,
+        invalidadaEm: etiquetasImpressoes.invalidadaEm,
+        bloqueada: etiquetaBloqueadaSql,
+        pesoOriginal: pecas.pesoOriginal,
+        statusPeca: pecas.statusPeca,
+        recebimentoId: pecas.recebimentoId,
+        pedidoVendaId: pecas.pedidoVendaId,
+        operadorId: etiquetasImpressoes.operadorId,
+        operadorNome: sql<string>`coalesce(${usuarios.nome}, '—')`,
+        createdAt: etiquetasImpressoes.createdAt,
+        produtoCodigo: itensComerciais.codigo,
+        produtoDescricao: itensComerciais.descricao,
+        caracteristicas: sql<string[]>`array_remove(ARRAY[
+          CASE WHEN (${pecas.capturaMeta}->>'maisPesada')::boolean THEN 'Mais pesada' END,
+          CASE WHEN (${pecas.capturaMeta}->>'maisGorda')::boolean THEN 'Mais gorda' END,
+          CASE WHEN (${pecas.capturaMeta}->>'melhorAcabamento')::boolean THEN 'Melhor acabamento' END
+        ], NULL)`,
+        notaFiscalFornecedor: recebimentos.notaFiscalFornecedor,
+        frigorifico: fornecedores.razaoSocial,
+        romaneio: recebimentos.romaneio,
+        placaVeiculo: recebimentos.placaVeiculo,
+        motorista: recebimentos.motorista,
+        clienteNome: sql<string | null>`coalesce(${clientes.nomeFantasia}, ${clientes.razaoSocial})`,
+        representanteNome: representantes.nome,
+        rotaPrevista: pedidosVenda.rotaPrevista,
+        localEstoquePrevisto: sql<{ valor: string | null; provisorio: true } | null>`
+          CASE WHEN ${pecas.statusPeca} = 'em_sobra'
+               THEN jsonb_build_object('valor', NULL, 'provisorio', true)
+               ELSE NULL END`,
+      })
+      .from(etiquetasImpressoes)
+      .innerJoin(pecas, eq(pecas.id, etiquetasImpressoes.pecaId))
+      .leftJoin(usuarios, eq(usuarios.id, etiquetasImpressoes.operadorId))
+      .innerJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
+      .innerJoin(recebimentos, eq(recebimentos.id, pecas.recebimentoId))
+      .innerJoin(fornecedores, eq(fornecedores.id, recebimentos.fornecedorId))
+      .leftJoin(pedidosVenda, eq(pedidosVenda.id, pecas.pedidoVendaId))
+      .leftJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
+      .leftJoin(representantes, eq(representantes.id, clientes.representanteId))
+      .where(and(...condicoes))
+      .orderBy(desc(etiquetasImpressoes.createdAt));
+
+    const iso = (v: Date | string | null): string | null => {
+      if (v == null) return null;
+      return v instanceof Date ? v.toISOString() : String(v);
+    };
+
+    const linhas: LinhaEtiqueta[] = linhasBrutas.map(({ notaFiscalFornecedor, ...linha }) => ({
+      ...linha,
+      estado: linha.estado as EstadoEtiqueta,
+      bloqueada: Boolean(linha.bloqueada),
+      invalidadaEm: iso(linha.invalidadaEm as Date | string | null),
+      createdAt: iso(linha.createdAt as Date | string)!,
+      caracteristicas: (linha.caracteristicas ?? []) as string[],
+      localEstoquePrevisto: linha.localEstoquePrevisto as EtiquetaListada['localEstoquePrevisto'],
+      nfNumero: nfAtiva?.numero ?? notaFiscalFornecedor,
+    }));
+
+    const agrupadas = agruparPorPeca(linhas);
+    const filtradas = filtros.estado
+      ? agrupadas.filter((e) => e.estado === filtros.estado)
+      : agrupadas;
+    return paginarEmMemoria(filtradas, filtros.page, filtros.pageSize);
+  }
+
+  private async dataOperacaoDaEtiqueta(tx: Tx, etiqueta: Etiqueta): Promise<string> {
+    if (!etiqueta.pecaId) return '';
+    const r = await tx
+      .select({ dataOperacao: operacoes.data })
+      .from(pecas)
+      .innerJoin(recebimentos, eq(recebimentos.id, pecas.recebimentoId))
+      .innerJoin(operacoes, eq(operacoes.id, recebimentos.operacaoId))
+      .where(eq(pecas.id, etiqueta.pecaId))
+      .then((rows) => rows[0] ?? null);
+    return r?.dataOperacao ?? '';
   }
 
   private montarPayload(peca: Peca, codigo: string): Record<string, unknown> {

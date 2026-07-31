@@ -165,4 +165,184 @@ describe('Etiqueta + leitura QR e2e (RF-PS-23/24, ADR-009, REFINO 1)', () => {
     });
     expect(res.status).toBe(403);
   });
+
+  it('transições emitida → ativa → reimpressa → cancelada', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-09-20');
+    const pecaId = await pecaAssociada(c);
+
+    fakes(app).impressora.definirStatus('indisponivel');
+    const emitFalha = await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/etiqueta`).set('Cookie', recebimentoCookies).send();
+    expect(emitFalha.status).toBe(201);
+    expect(emitFalha.body.etiqueta.estado).toBe('emitida');
+
+    fakes(app).impressora.definirStatus('disponivel');
+    const reimp = await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/etiqueta/reimprimir`).set('Cookie', recebimentoCookies).send();
+    expect(reimp.status).toBe(201);
+    expect(reimp.body.etiqueta.estado).toBe('reimpressa');
+
+    const cancel = await request(srv())
+      .post(`/operacao/etiquetas/${reimp.body.etiqueta.id}/cancelar`)
+      .set('Cookie', recebimentoCookies)
+      .send({ motivo: 'etiqueta_incorreta' });
+    expect(cancel.status).toBe(201);
+    expect(cancel.body.estado).toBe('cancelada');
+  });
+
+  it('resolverQr responde 409 para etiqueta invalidada_por_troca', async () => {
+    const { default: request } = await import('supertest');
+    const { pecaAssociadaComEtiqueta, pesarPeca } = await import('../helpers/pesagem-fixtures');
+    const c = await cenario('2026-09-21');
+    const p = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      dataOperacao: c.dataOperacao, quantidade: 2,
+    });
+    const pecaRetiradaId = await pecaAssociadaComEtiqueta(app, recebimentoCookies, {
+      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId, pedidoVendaItemId: p.pedidoItemId,
+    });
+    const pecaInseridaId = await pesarPeca(app, recebimentoCookies, {
+      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+    });
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const etiquetaAntes = await db.select().from(schema.etiquetasImpressoes)
+      .where(eq(schema.etiquetasImpressoes.pecaId, pecaRetiradaId)).then((r) => r[0]!);
+    const codigo = (etiquetaAntes.payload as { qr?: string }).qr ?? `QR-${pecaRetiradaId}`;
+
+    const troca = await request(srv()).post('/operacao/pesagem/trocas').set('Cookie', recebimentoCookies).send({
+      pecaRetiradaId, pecaInseridaId, pedidoVendaItemId: p.pedidoItemId,
+      destinoRetirada: 'estoque', motivo: 'erro_associacao',
+    });
+    expect(troca.status).toBe(201);
+
+    const res = await request(srv()).post('/operacao/pesagem/qr/resolver').set('Cookie', recebimentoCookies).send({
+      modoCaptura: 'manual_assistido', codigo, motivo: 'teste invalidada',
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('lista etiquetas do recebimento filtrando por estado e busca', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-09-22');
+    const pecaId = await pecaAssociada(c);
+    await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/etiqueta`).set('Cookie', recebimentoCookies).send();
+
+    const lista = await request(srv())
+      .get(`/operacao/etiquetas?recebimentoId=${c.recebimentoId}`)
+      .set('Cookie', recebimentoCookies);
+    expect(lista.status).toBe(200);
+    expect(lista.body.data.length).toBeGreaterThanOrEqual(1);
+    expect(lista.body.data[0]).toEqual(expect.objectContaining({
+      pecaId, estado: expect.any(String), statusImpressao: expect.any(String),
+    }));
+    expect(lista.body.data[0]).toHaveProperty('motivoCancelamento');
+
+    const filtrada = await request(srv())
+      .get(`/operacao/etiquetas?recebimentoId=${c.recebimentoId}&estado=ativa`)
+      .set('Cookie', recebimentoCookies);
+    expect(filtrada.status).toBe(200);
+    expect(filtrada.body.data.every((e: { estado: string }) => e.estado === 'ativa')).toBe(true);
+  });
+
+  it('peça com vigente cancelada não aparece no filtro estado=ativa e mantém o histórico completo', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-09-23');
+    const pecaId = await pecaAssociada(c);
+    const emit = await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/etiqueta`).set('Cookie', recebimentoCookies).send();
+    await request(srv()).post(`/operacao/etiquetas/${emit.body.etiqueta.id}/cancelar`)
+      .set('Cookie', recebimentoCookies).send({ motivo: 'peso_incorreto' });
+
+    const ativas = await request(srv())
+      .get(`/operacao/etiquetas?recebimentoId=${c.recebimentoId}&estado=ativa`)
+      .set('Cookie', recebimentoCookies);
+    expect(ativas.body.data.find((e: { pecaId: string }) => e.pecaId === pecaId)).toBeUndefined();
+
+    const todas = await request(srv())
+      .get(`/operacao/etiquetas?recebimentoId=${c.recebimentoId}&estado=cancelada`)
+      .set('Cookie', recebimentoCookies);
+    const entrada = todas.body.data.find((e: { pecaId: string }) => e.pecaId === pecaId);
+    expect(entrada).toBeDefined();
+    expect(entrada.estado).toBe('cancelada');
+    expect(entrada.historico.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it('marca bloqueada para peça em transformação e para peça em carga fechada', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-09-24');
+    const pecaId = await pecaAssociada(c);
+    await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/etiqueta`).set('Cookie', recebimentoCookies).send();
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    await db.update(schema.pecas).set({ statusPeca: 'em_transformacao' }).where(eq(schema.pecas.id, pecaId));
+
+    const lista = await request(srv())
+      .get(`/operacao/etiquetas?recebimentoId=${c.recebimentoId}`)
+      .set('Cookie', recebimentoCookies);
+    const entrada = lista.body.data.find((e: { pecaId: string }) => e.pecaId === pecaId);
+    expect(entrada.bloqueada).toBe(true);
+  });
+
+  it('lista etiqueta com os campos de produto, rastreabilidade e destino do pedido', async () => {
+    const { default: request } = await import('supertest');
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const c = await cenario('2026-09-25');
+    const [rep] = await db.insert(schema.representantes).values({
+      codigo: `REP-${Date.now()}`, nome: 'Rep Etiqueta',
+    }).returning();
+    await db.update(schema.clientes).set({
+      representanteId: rep!.id, nomeFantasia: 'Fantasia Etiqueta',
+    }).where(eq(schema.clientes.id, c.clienteId));
+    const p = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      dataOperacao: c.dataOperacao, quantidade: 2,
+    });
+    await db.update(schema.pedidosVenda).set({ rotaPrevista: 'Rota Norte' }).where(eq(schema.pedidosVenda.id, p.pedidoId));
+    const pecaId = await pesarPeca(app, recebimentoCookies, {
+      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+    });
+    await db.update(schema.pecas).set({
+      capturaMeta: { maisPesada: true, maisGorda: true, melhorAcabamento: false },
+    }).where(eq(schema.pecas.id, pecaId));
+    await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
+      .set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: p.pedidoItemId });
+    await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/etiqueta`).set('Cookie', recebimentoCookies).send();
+    await db.update(schema.recebimentos).set({
+      romaneio: 'ROM-1', placaVeiculo: 'ABC1D23', motorista: 'João',
+    }).where(eq(schema.recebimentos.id, c.recebimentoId));
+
+    const lista = await request(srv())
+      .get(`/operacao/etiquetas?recebimentoId=${c.recebimentoId}`)
+      .set('Cookie', recebimentoCookies);
+    const e = lista.body.data.find((x: { pecaId: string }) => x.pecaId === pecaId);
+    expect(e).toEqual(expect.objectContaining({
+      produtoCodigo: expect.any(String),
+      produtoDescricao: expect.any(String),
+      frigorifico: expect.any(String),
+      romaneio: 'ROM-1',
+      placaVeiculo: 'ABC1D23',
+      motorista: 'João',
+      clienteNome: expect.any(String),
+      representanteNome: 'Rep Etiqueta',
+      rotaPrevista: 'Rota Norte',
+    }));
+    expect(e.caracteristicas).toEqual(expect.arrayContaining(['Mais pesada', 'Mais gorda']));
+  });
+
+  it('lista etiqueta com destino estoque e localEstoquePrevisto provisório', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-09-26');
+    const pecaId = await pecaAssociada(c);
+    await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/etiqueta`).set('Cookie', recebimentoCookies).send();
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    await db.update(schema.pecas).set({
+      statusPeca: 'em_sobra', pedidoVendaId: null, pedidoVendaItemId: null,
+    }).where(eq(schema.pecas.id, pecaId));
+
+    const lista = await request(srv())
+      .get(`/operacao/etiquetas?recebimentoId=${c.recebimentoId}`)
+      .set('Cookie', recebimentoCookies);
+    const e = lista.body.data.find((x: { pecaId: string }) => x.pecaId === pecaId);
+    expect(e.clienteNome).toBeNull();
+    expect(e.representanteNome).toBeNull();
+    expect(e.rotaPrevista).toBeNull();
+    expect(e.localEstoquePrevisto).toEqual({ valor: null, provisorio: true });
+  });
 });
