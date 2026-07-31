@@ -299,7 +299,9 @@ describe('Onda 7 — desossa', () => {
       .set('Cookie', cookiesCorte)
       .send({ itemComercialId: cb!.id });
     expect(res.status).toBe(409);
-    expect(res.body.codigo).toBe('REGRA_TRANSFORMACAO_OBRIGATORIA');
+    // AllExceptionsFilter envelopa HttpException.getResponse() em `message`
+    const payload = typeof res.body.message === 'object' ? res.body.message : res.body;
+    expect(payload.codigo).toBe('REGRA_TRANSFORMACAO_OBRIGATORIA');
   });
 
   it('DoD 7.21b: bloqueada=true quando subitem está em carga fechada (não peca_id da mãe)', async () => {
@@ -392,6 +394,7 @@ describe('Onda 7 — desossa', () => {
       .set('Cookie', cookiesCorte)
       .send({ itemComercialId: fc!.id });
     expect(res.status).toBe(409);
-    expect(res.body.codigo).toBe('SAIDA_FORA_DA_REGRA');
+    const payload = typeof res.body.message === 'object' ? res.body.message : res.body;
+    expect(payload.codigo).toBe('SAIDA_FORA_DA_REGRA');
   });
 });
