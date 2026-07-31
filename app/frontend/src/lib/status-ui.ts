@@ -3,10 +3,17 @@ import type { StatusPillVariant } from '@/components/ui/status-pill';
 /** Mapeia status de recebimento para StatusPill. */
 export function statusRecebimentoVariant(status: string): StatusPillVariant {
   switch (status) {
-    case 'em_conferencia':
+    case 'pesagem_em_andamento':
+    case 'aguardando_conclusao_pesagem':
       return 'recebido';
-    case 'finalizado':
+    case 'aguardando_conferencia_final':
+      return 'pendente';
+    case 'conferido_sem_divergencia':
+    case 'tratativa_administrativa_concluida':
       return 'expedido';
+    case 'conferido_com_divergencia':
+    case 'ocorrencia_administrativa_aberta':
+      return 'divergencia';
     case 'cancelado':
       return 'bloqueado';
     default:

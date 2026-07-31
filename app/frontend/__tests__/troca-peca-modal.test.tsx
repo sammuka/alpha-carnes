@@ -1,6 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { TrocaPecaModal, PASSOS_TROCA_PECA } from '../src/components/ui/troca-peca-modal';
+import {
+  TrocaPecaModal,
+  TrocaPecaFluxo,
+  PASSOS_TROCA_PECA,
+} from '../src/components/ui/troca-peca-modal';
+import { ROTULOS_MOTIVO_TROCA_PECA } from '../src/lib/operacao';
 
 describe('TrocaPecaModal (base visual)', () => {
   it('lista os 6 passos do prototipo', () => {
@@ -77,5 +82,70 @@ describe('TrocaPecaModal (base visual)', () => {
   it('nao renderiza nada quando fechado', () => {
     render(<TrocaPecaModal open={false} passo={1} podeAvancar={false} onFechar={jest.fn()} onVoltar={jest.fn()} onAvancar={jest.fn()} onConfirmar={jest.fn()} />);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
+describe('TrocaPecaFluxo (6.28)', () => {
+  const pedidos = [{
+    pedidoVendaId: 'pv1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    pedidoVendaItemId: 'pvi1aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    clienteNome: 'Restaurante Grill',
+    produtoLabel: 'TZ — Traseiro',
+    pecasAssociadas: [{ id: 'pr1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', codigo: 'TZ-000341', peso: '48.750' }],
+  }];
+  const pecasDisponiveis = [
+    { id: 'pi1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', codigo: 'TZ-000362', peso: '47.980' },
+  ];
+
+  it('conclui os 6 passos e exibe o resultado do backend', async () => {
+    const user = userEvent.setup();
+    const onTrocaConcluida = jest.fn();
+    const pecaRet = pedidos[0]!.pecasAssociadas[0]!;
+    const pecaIns = pecasDisponiveis[0]!;
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        troca: { id: 't1', createdAt: '2026-07-31T12:00:00.000Z' },
+        pecaRetirada: { id: pecaRet.id, statusPeca: 'em_sobra' },
+        pecaInserida: { id: pecaIns.id, statusPeca: 'associada' },
+        etiquetaInvalidada: { id: 'ei1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', motivoCancelamento: 'troca' },
+        etiquetaEmitida: { id: 'ee1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', statusImpressao: 'impressa' },
+      }),
+    })) as unknown as typeof fetch;
+
+    render(
+      <TrocaPecaFluxo
+        open
+        onFechar={jest.fn()}
+        onTrocaConcluida={onTrocaConcluida}
+        pedidos={pedidos}
+        pecasDisponiveis={pecasDisponiveis}
+      />,
+    );
+
+    await user.click(screen.getByText('Restaurante Grill'));
+    await user.click(screen.getByRole('button', { name: /Avançar/ }));
+    await user.click(screen.getByText(/TZ-000341/));
+    await user.click(screen.getByRole('button', { name: /Avançar/ }));
+    await user.click(screen.getByText(/TZ-000362/));
+    await user.click(screen.getByRole('button', { name: /Avançar/ }));
+    await user.click(screen.getByRole('button', { name: 'estoque' }));
+    await user.click(screen.getByRole('button', { name: /Avançar/ }));
+    await user.selectOptions(
+      screen.getByLabelText('Motivo da troca'),
+      'peca_mais_adequada',
+    );
+    expect(screen.getByText(ROTULOS_MOTIVO_TROCA_PECA.peca_mais_adequada)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Avançar/ }));
+    await user.click(screen.getByRole('button', { name: 'Confirmar Troca' }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+      '/api/operacao/pesagem/trocas',
+      expect.objectContaining({ method: 'POST' }),
+    ));
+    await waitFor(() => expect(screen.getByText('Troca concluída')).toBeInTheDocument());
+    expect(screen.getByText('ei1aaaaa')).toBeInTheDocument();
+    expect(screen.getByText('ee1aaaaa')).toBeInTheDocument();
+    expect(onTrocaConcluida).toHaveBeenCalled();
   });
 });

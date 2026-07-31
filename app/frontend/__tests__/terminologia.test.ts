@@ -45,6 +45,14 @@ describe('terminologia', () => {
     expect(hitsTermoBanido(ALVOS_GESTAO)).toEqual([]);
   });
 
+  it('rotas de recebimento sem termo banido', () => {
+    const alvos = globSync('src/app/(admin)/recebimento/**/*.{ts,tsx}', {
+      cwd: process.cwd(),
+      windowsPathsNoEscape: true,
+    });
+    expect(hitsTermoBanido(alvos)).toEqual([]);
+  });
+
   it('telas de gestão com busca ou rótulo de nome usam terminologia v1.1', () => {
     const infratores: string[] = [];
     for (const arquivo of ALVOS_GESTAO) {

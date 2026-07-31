@@ -13,9 +13,11 @@ import {
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import {
   MOTIVOS_CAPTURA_MANUAL,
+  ROTULOS_MOTIVO_ESTORNO,
   type AcaoLote,
   type FaltaDesossa,
   type MotivoCapturaManual,
+  type MotivoEstorno,
   type PaginadoRecebimento,
   type Peca,
   type RecebimentoDetalhe,
@@ -27,6 +29,7 @@ import {
   type StatusRecebimento,
   type SugestaoScored,
 } from '@/lib/operacao';
+import { TrocaPecaFluxo } from '@/components/ui/troca-peca-modal';
 import {
   rotuloDestinoPeca,
   statusPecaVariant,
@@ -56,9 +59,13 @@ import {
 import { cn } from '@/lib/cn';
 
 const STATUS_RECEB_LABEL: Record<StatusRecebimento, string> = {
-  aguardando_conferencia: 'Aguardando conferência',
-  em_conferencia: 'Em conferência',
-  finalizado: 'Finalizado',
+  pesagem_em_andamento: 'Pesagem em andamento',
+  aguardando_conclusao_pesagem: 'Pesagem em andamento',
+  aguardando_conferencia_final: 'Aguardando conferência final',
+  conferido_sem_divergencia: 'Conferido sem divergência',
+  conferido_com_divergencia: 'Conferido com divergência',
+  ocorrencia_administrativa_aberta: 'Ocorrência administrativa aberta',
+  tratativa_administrativa_concluida: 'Tratativa concluída',
   cancelado: 'Cancelado',
 };
 
@@ -124,6 +131,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
   const podePesar = permissoes.includes('PESAGEM_GERENCIAR');
   const podeAssociar = permissoes.includes('ASSOCIACAO_GERENCIAR');
+  const podeEstornar = permissoes.includes('ASSOCIACAO_ESTORNAR');
   const podeManual = permissoes.includes('PESO_MANUAL');
   const podeEtiqueta = permissoes.includes('ETIQUETA_GERENCIAR');
 
@@ -143,6 +151,10 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
   const [statusRt, setStatusRt] = useState<'conectado' | 'desconectado'>('desconectado');
   const [submitting, setSubmitting] = useState(false);
   const [manualAberto, setManualAberto] = useState(false);
+  const [estornoAberto, setEstornoAberto] = useState(false);
+  const [motivoEstorno, setMotivoEstorno] = useState<MotivoEstorno>('pedido_incorreto');
+  const [obsEstorno, setObsEstorno] = useState('');
+  const [trocaAberta, setTrocaAberta] = useState(false);
   const [pesoManual, setPesoManual] = useState('');
   const [motivo, setMotivo] = useState<MotivoCapturaManual>('dispositivo_indisponivel');
   const [motivoSobra, setMotivoSobra] = useState('');
@@ -158,7 +170,9 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     const res = await fetch('/api/operacao/recebimentos?pageSize=30', { cache: 'no-store' });
     if (!res.ok) return;
     const pag = (await res.json()) as PaginadoRecebimento;
-    const ativos = pag.data.filter((r) => r.status !== 'finalizado' && r.status !== 'cancelado');
+    const ativos = pag.data.filter((r) =>
+      !['cancelado', 'conferido_sem_divergencia', 'conferido_com_divergencia', 'tratativa_administrativa_concluida']
+        .includes(r.status));
     setRecebimentos(ativos);
   }, []);
 
@@ -401,6 +415,31 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
   const toggleCaracteristica = (key: keyof typeof caracteristicas) => {
     setCaracteristicas((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const estornarAssociacao = async () => {
+    if (!peca || !podeEstornar) return;
+    setSubmitting(true);
+    setErro(null);
+    const res = await fetch(`/api/operacao/pesagem/pecas/${peca.id}/estornar`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        motivo: motivoEstorno,
+        ...(motivoEstorno === 'outro' && obsEstorno.trim()
+          ? { observacoes: obsEstorno.trim() }
+          : {}),
+      }),
+    });
+    setSubmitting(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setErro((body as { message?: string }).message ?? 'Não foi possível estornar');
+      return;
+    }
+    setPeca((await res.json()) as Peca);
+    setSugestao(null);
+    setEstornoAberto(false);
   };
 
   const pecaAguardandoDestino = peca?.statusPeca === 'pesada';
@@ -677,6 +716,50 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                   </div>
                 )}
 
+                {peca.statusPeca === 'associada' && podeEstornar && (
+                  <div className="mt-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEstornoAberto(true)}
+                      disabled={submitting}
+                    >
+                      Cancelar ação realizada
+                    </Button>
+                  </div>
+                )}
+
+                {estornoAberto && (
+                  <div className="mt-3 space-y-2 rounded-lg border border-border p-3" role="dialog" aria-label="Cancelar ação realizada">
+                    <p className="text-xs font-semibold">Cancelar ação realizada</p>
+                    <select
+                      aria-label="Motivo do estorno"
+                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      value={motivoEstorno}
+                      onChange={(e) => setMotivoEstorno(e.target.value as MotivoEstorno)}
+                    >
+                      {(Object.entries(ROTULOS_MOTIVO_ESTORNO) as [MotivoEstorno, string][]).map(
+                        ([slug, rotulo]) => (
+                          <option key={slug} value={slug}>{rotulo}</option>
+                        ),
+                      )}
+                    </select>
+                    {motivoEstorno === 'outro' && (
+                      <Input
+                        placeholder="Observações"
+                        value={obsEstorno}
+                        onChange={(e) => setObsEstorno(e.target.value)}
+                      />
+                    )}
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setEstornoAberto(false)}>Voltar</Button>
+                      <Button size="sm" onClick={() => void estornarAssociacao()} disabled={submitting}>
+                        Confirmar estorno
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {pecaAguardandoDestino && podeAssociar && (
                   <Input
                     className="mt-2"
@@ -745,11 +828,18 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        {principal && (
-                          <span className="mb-1 inline-block text-xs font-semibold text-[var(--color-primary)]">
-                            Sugestão principal
-                          </span>
-                        )}
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          {principal && (
+                            <span className="inline-block text-xs font-semibold text-[var(--color-primary)]">
+                              Sugestão principal
+                            </span>
+                          )}
+                          {s.prefCompativel && (
+                            <span className="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                              pref. compatível
+                            </span>
+                          )}
+                        </div>
                         <p className="font-medium truncate">
                           Pedido {s.pedidoVendaId.slice(0, 8)}…
                         </p>
@@ -908,6 +998,26 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
           </CardContent>
         </Card>
       </div>
+
+      {podeAssociar && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => setTrocaAberta(true)}>
+            <ArrowLeftRight className="mr-1.5 h-4 w-4" />
+            Trocar Peça
+          </Button>
+        </div>
+      )}
+
+      <TrocaPecaFluxo
+        open={trocaAberta}
+        onFechar={() => setTrocaAberta(false)}
+        onTrocaConcluida={() => {
+          setTrocaAberta(false);
+          if (recebimentoId) void refreshLote();
+        }}
+        pedidos={[]}
+        pecasDisponiveis={[]}
+      />
     </div>
   );
 }

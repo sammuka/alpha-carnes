@@ -23,6 +23,7 @@ import {
   type PedidoFornecedorResumoRecebivel,
   type PaginadoRecebimento,
   type PrevisaoRecebimento,
+  type QuadroConferenciaItem,
   type RecebimentoDetalhe,
   type RecebimentoItem,
   type RecebimentoResumoEnriquecido,
@@ -31,6 +32,7 @@ import {
 } from '@/lib/operacao';
 import { statusApuracaoVariant, statusRecebimentoVariant } from '@/lib/status-ui';
 import { ProgressoBalancaBar } from '@/components/recebimento/progresso-balanca-bar';
+import { QuadroComparativo } from '@/components/gestao/quadro-comparativo';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -71,12 +73,30 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/cn';
 import type { Paginado } from '@/lib/comercial';
 
-const STATUS_RECEB_LABEL: Record<StatusRecebimento, string> = {
-  aguardando_conferencia: 'Aguardando conferência',
-  em_conferencia: 'Em conferência',
-  finalizado: 'Finalizado',
+/** 7 rótulos do protótipo (RecebimentoCarga.tsx StatusLote) + aguardando_conclusao_pesagem. */
+export const STATUS_RECEB_LABEL: Record<StatusRecebimento, string> = {
+  pesagem_em_andamento: 'Pesagem em andamento',
+  aguardando_conclusao_pesagem: 'Pesagem em andamento',
+  aguardando_conferencia_final: 'Aguardando conferência final',
+  conferido_sem_divergencia: 'Conferido sem divergência',
+  conferido_com_divergencia: 'Conferido com divergência',
+  ocorrencia_administrativa_aberta: 'Ocorrência administrativa aberta',
+  tratativa_administrativa_concluida: 'Tratativa concluída',
   cancelado: 'Cancelado',
 };
+
+const STATUS_ABERTOS: StatusRecebimento[] = [
+  'pesagem_em_andamento',
+  'aguardando_conclusao_pesagem',
+  'aguardando_conferencia_final',
+];
+
+const STATUS_ENCERRADOS: StatusRecebimento[] = [
+  'conferido_sem_divergencia',
+  'conferido_com_divergencia',
+  'tratativa_administrativa_concluida',
+  'cancelado',
+];
 
 const STATUS_ITEM_LABEL: Record<string, string> = {
   aguardando: 'Aguardando',
@@ -219,8 +239,10 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   const [detalhe, setDetalhe] = useState<RecebimentoDetalhe | null>(null);
   const [itemSelecionadoId, setItemSelecionadoId] = useState<string | null>(null);
   const [dialogDivergenciaAberto, setDialogDivergenciaAberto] = useState(false);
-  const [dialogFinalizarAberto, setDialogFinalizarAberto] = useState(false);
+  const [dialogConferenciaAberto, setDialogConferenciaAberto] = useState(false);
   const [formDivergencia, setFormDivergencia] = useState<FormDivergencia>(formDivergenciaVazio);
+  const [quadro, setQuadro] = useState<QuadroConferenciaItem[]>([]);
+  const [obsConferencia, setObsConferencia] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [status, setStatus] = useState<'conectado' | 'desconectado'>('desconectado');
 
@@ -278,6 +300,15 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     setPrevisao(body as PrevisaoRecebimento);
   }, []);
 
+  const carregarQuadro = useCallback(async (id: string) => {
+    const res = await fetch(`/api/operacao/recebimentos/${id}/conferencia`, { cache: 'no-store' });
+    if (!res.ok) {
+      setQuadro([]);
+      return;
+    }
+    setQuadro((await res.json()) as QuadroConferenciaItem[]);
+  }, []);
+
   const carregarDetalhe = useCallback(async (id: string) => {
     setErro(null);
     const res = await fetch(`/api/operacao/recebimentos/${id}`, { cache: 'no-store' });
@@ -310,7 +341,8 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
       doca: d.doca ?? '',
       observacoes: d.observacoes ?? '',
     });
-  }, []);
+    void carregarQuadro(id);
+  }, [carregarQuadro]);
 
   useEffect(() => {
     void carregarLista();
@@ -505,29 +537,71 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     await carregarLista();
   };
 
-  const executarConcluir = async () => {
-    if (!recebimentoId || !podeGerenciar) return;
+  const capturarItensNf = async () => {
+    if (!detalhe?.pedidoFornecedorId || !podeGerenciar) return;
+    if (!detalhe.nfeNumero) {
+      setErro('Informe o número da NF-e antes de capturar os itens.');
+      return;
+    }
     setSalvando(true);
     setErro(null);
-    const res = await fetch(`/api/operacao/recebimentos/${recebimentoId}/concluir`, { method: 'POST' });
+    const itens = detalhe.itens.map((item) => ({
+      itemComercialId: item.itemComercialId,
+      quantidadeDeclarada: Number(item.quantidadeEsperada),
+      ...(item.pesoTotalApurado ? { pesoDeclarado: Number(item.pesoTotalApurado) } : {}),
+    }));
+    const res = await fetch(`/api/operacao/pedidos-fornecedor/${detalhe.pedidoFornecedorId}/nf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        numero: detalhe.nfeNumero,
+        serie: detalhe.nfeSerie ?? undefined,
+        chave: detalhe.nfeChave ?? undefined,
+        dataEmissao: detalhe.nfeDataEmissao ?? undefined,
+        pesoTotalDeclarado: detalhe.nfePesoBruto ? Number(detalhe.nfePesoBruto) : undefined,
+        recebimentoId: detalhe.id,
+        confirmarSubstituicaoCabecalho: true,
+        itens,
+      }),
+    });
     const body = await res.json().catch(() => ({}));
     setSalvando(false);
     if (!res.ok) {
-      setErro((body as { message?: string }).message ?? 'Erro ao finalizar recebimento');
+      setErro((body as { message?: string }).message ?? 'Erro ao capturar itens da NF');
       return;
     }
-    setDialogFinalizarAberto(false);
+    await carregarDetalhe(detalhe.id);
+    await carregarLista();
+  };
+
+  const executarConcluirConferencia = async () => {
+    if (!recebimentoId || !podeGerenciar) return;
+    setSalvando(true);
+    setErro(null);
+    const temDivergencia = quadro.some((q) => q.situacao === 'divergente');
+    const res = await fetch(`/api/operacao/recebimentos/${recebimentoId}/conferencia/concluir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        resultado: temDivergencia ? 'com_divergencia' : 'sem_divergencia',
+        ...(obsConferencia.trim() ? { observacao: obsConferencia.trim() } : {}),
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setSalvando(false);
+    if (!res.ok) {
+      setErro((body as { message?: string }).message ?? 'Erro ao concluir a conferência');
+      return;
+    }
+    setDialogConferenciaAberto(false);
     await carregarDetalhe(recebimentoId);
     await carregarLista();
   };
 
   const solicitarFinalizar = () => {
     if (!podeGerenciar || !detalhe) return;
-    if (resumoFinalizarDivergencias.length > 0) {
-      setDialogFinalizarAberto(true);
-      return;
-    }
-    void executarConcluir();
+    setObsConferencia('');
+    void carregarQuadro(detalhe.id).then(() => setDialogConferenciaAberto(true));
   };
 
   const suspenderRecebimento = async () => {
@@ -583,19 +657,24 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
 
   const podeCancelar =
     detalhe &&
-    ['aguardando_conferencia', 'em_conferencia'].includes(detalhe.status) &&
+    STATUS_ABERTOS.includes(detalhe.status) &&
     detalhe.progressoBalanca === 0;
 
   const podeFinalizar =
-    detalhe && podeGerenciar && ['aguardando_conferencia', 'em_conferencia'].includes(detalhe.status);
+    detalhe && podeGerenciar && detalhe.status === 'aguardando_conferencia_final';
 
-  const podeSuspender = detalhe && podeGerenciar && detalhe.status === 'em_conferencia';
+  const podeSuspender =
+    detalhe && podeGerenciar && detalhe.status === 'aguardando_conferencia_final';
+
+  const podeCapturarItensNf =
+    podeGerenciar &&
+    detalhe &&
+    STATUS_ABERTOS.includes(detalhe.status);
 
   const podeRegistrarDivergencia =
     podeGerenciar &&
     detalhe &&
-    detalhe.status !== 'finalizado' &&
-    detalhe.status !== 'cancelado' &&
+    !STATUS_ENCERRADOS.includes(detalhe.status) &&
     Boolean(itemSelecionado);
 
   return (
@@ -687,7 +766,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                           <Button variant="ghost" size="sm" onClick={() => void carregarDetalhe(r.id)}>
                             Abrir
                           </Button>
-                          {r.status !== 'cancelado' && r.status !== 'finalizado' && (
+                          {!STATUS_ENCERRADOS.includes(r.status) && (
                             <Button variant="ghost" size="sm" onClick={() => irParaBalanca(r.id)}>
                               <Scale className="mr-1 h-3 w-3" />
                               Ir para Balança
@@ -714,9 +793,21 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                 Ver Pedido de Compra
               </a>
             </Button>
-            {podeGerenciar && detalhe.status !== 'finalizado' && detalhe.status !== 'cancelado' && (
+            {podeGerenciar && !STATUS_ENCERRADOS.includes(detalhe.status) && (
               <Button variant="outline" size="sm" onClick={() => setSheetNfeAberto(true)}>
                 Editar dados da NF
+              </Button>
+            )}
+            {podeCapturarItensNf && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void capturarItensNf()}
+                disabled={salvando}
+                data-testid="btn-capturar-itens-nf"
+              >
+                <Package className="mr-1 h-4 w-4" />
+                Capturar itens da NF
               </Button>
             )}
             {podeGerenciar && podeCancelar && (
@@ -732,7 +823,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
               <h2 className="text-sm font-semibold">Ações do recebimento</h2>
             </div>
             <CardContent className="flex flex-wrap gap-2 p-4">
-              {detalhe.status !== 'cancelado' && detalhe.status !== 'finalizado' && (
+              {!STATUS_ENCERRADOS.includes(detalhe.status) && (
                 <Button variant="outline" size="sm" onClick={() => irParaBalanca(detalhe.id)}>
                   <Scale className="mr-1 h-4 w-4" />
                   Ir para pesagem
@@ -747,7 +838,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
               {podeFinalizar && (
                 <Button size="sm" onClick={solicitarFinalizar} disabled={salvando} data-testid="btn-concluir">
                   <CheckCircle2 className="mr-1 h-4 w-4" />
-                  Finalizar recebimento
+                  Concluir conferência
                 </Button>
               )}
               {podeSuspender && (
@@ -817,7 +908,28 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
             </CardContent>
           </Card>
 
-          {podeGerenciar && detalhe.status !== 'finalizado' && detalhe.status !== 'cancelado' && (
+          {quadro.length > 0 && (
+            <QuadroComparativo
+              itens={quadro.map((q) => ({
+                itemComercialId: q.itemComercialId,
+                codigo: null,
+                descricao: q.itemComercialId.slice(0, 8),
+                qtdPedido: q.qtdPedido ?? '—',
+                qtdNf: q.qtdNf,
+                qtdApurada: q.qtdApurada,
+                pesoNf: q.pesoNf,
+                pesoApurado: q.pesoApurado,
+                difQtd: String(Number(q.qtdApurada) - Number(q.qtdNf)),
+                difPeso:
+                  q.pesoNf != null && q.pesoApurado != null
+                    ? String(Number(q.pesoApurado) - Number(q.pesoNf))
+                    : null,
+                situacao: q.situacao,
+              }))}
+            />
+          )}
+
+          {podeGerenciar && !STATUS_ENCERRADOS.includes(detalhe.status) && (
             <Card>
               <div className="border-b p-4">
                 <h2 className="text-sm font-semibold">Metadados operacionais</h2>
@@ -869,7 +981,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
             </Card>
           )}
 
-          {detalhe.observacoes && detalhe.status === 'finalizado' && (
+          {detalhe.observacoes && STATUS_ENCERRADOS.includes(detalhe.status) && detalhe.status !== 'cancelado' && (
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">Observações</p>
@@ -1221,40 +1333,55 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
         </DialogContent>
       </Dialog>
 
-      <Dialog open={dialogFinalizarAberto} onOpenChange={setDialogFinalizarAberto}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog open={dialogConferenciaAberto} onOpenChange={setDialogConferenciaAberto}>
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Finalizar com divergências abertas</DialogTitle>
+            <DialogTitle>Conclusão da Conferência — Pedido × NF × Pesagem</DialogTitle>
             <DialogDescription>
-              Este lote possui itens divergentes com ocorrências ainda em aberto. Confirme que deseja prosseguir com a finalização.
+              Revise o quadro comparativo e confirme o resultado da conferência.
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-64 space-y-3 overflow-y-auto text-sm">
-            {resumoFinalizarDivergencias.map(({ item, divergencias }) => (
-              <div key={item.id} className="rounded-md border p-3">
-                <p className="font-medium">{labelProdutoItem(item)}</p>
-                <p className="text-muted-foreground">
-                  Previsto: {item.quantidadeEsperada} · Apurado: {qtdApuradaItem(item)}
-                  {pesoApuradoItem(item) !== null ? ` · Peso: ${pesoApuradoItem(item)?.toLocaleString('pt-BR', { minimumFractionDigits: 3 })} kg` : ''}
-                </p>
-                <ul className="mt-2 space-y-1 text-xs">
-                  {divergencias.map((d) => (
-                    <li key={d.id}>
-                      <StatusPill variant="divergencia" label={LABEL_TIPO_DIVERGENCIA[d.tipo]} />
-                      {' — '}
-                      {d.descricao}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+          {quadro.length > 0 && (
+            <QuadroComparativo
+              itens={quadro.map((q) => ({
+                itemComercialId: q.itemComercialId,
+                codigo: null,
+                descricao: q.itemComercialId.slice(0, 8),
+                qtdPedido: q.qtdPedido ?? '—',
+                qtdNf: q.qtdNf,
+                qtdApurada: q.qtdApurada,
+                pesoNf: q.pesoNf,
+                pesoApurado: q.pesoApurado,
+                difQtd: String(Number(q.qtdApurada) - Number(q.qtdNf)),
+                difPeso:
+                  q.pesoNf != null && q.pesoApurado != null
+                    ? String(Number(q.pesoApurado) - Number(q.pesoNf))
+                    : null,
+                situacao: q.situacao,
+              }))}
+            />
+          )}
+          <div>
+            <Label htmlFor="obs-conferencia">Observação da conferência</Label>
+            <Textarea
+              id="obs-conferencia"
+              className="mt-1"
+              rows={2}
+              value={obsConferencia}
+              onChange={(e) => setObsConferencia(e.target.value)}
+            />
           </div>
+          {resumoFinalizarDivergencias.length > 0 && (
+            <p className="text-sm text-amber-700">
+              Há {resumoFinalizarDivergencias.length} item(ns) com divergência em aberto.
+            </p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogFinalizarAberto(false)}>
+            <Button variant="outline" onClick={() => setDialogConferenciaAberto(false)}>
               Cancelar
             </Button>
-            <Button disabled={salvando} onClick={() => void executarConcluir()}>
-              Confirmar finalização
+            <Button disabled={salvando} onClick={() => void executarConcluirConferencia()} data-testid="btn-confirmar-conferencia">
+              Confirmar conclusão
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -6,6 +6,7 @@ import { consumirSaldo, devolverSaldo } from '../../src/modules/operacao/pesagem
 
 jest.mock('../../src/modules/operacao/pesagem/compatibilidade', () => ({
   calcularCompativeisItem: jest.fn(),
+  caracteristicasDeCapturaMeta: jest.fn(() => []),
 }));
 
 jest.mock('../../src/modules/operacao/pesagem/saldo', () => ({
