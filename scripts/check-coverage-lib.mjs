@@ -18,6 +18,7 @@ export const listChangedServices = (
     `${baseRef}...HEAD`,
     '--',
     ':(glob)app/backend/src/**/*.service.ts',
+    ':(glob)app/backend/src/**/*.persistence.ts',
   ],
   { encoding: 'utf8' },
 ).trim().split(/\r?\n/).filter(Boolean);

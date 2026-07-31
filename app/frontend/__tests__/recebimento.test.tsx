@@ -37,7 +37,7 @@ const recebimentoLista = {
   fornecedorId: 'f1',
   fornecedorNome: 'Frigorífico Boi Forte',
   dataOperacao: '2026-06-07',
-  status: 'em_conferencia',
+  status: 'pesagem_em_andamento',
   nfeNumero: '128934',
   romaneio: 'ROM-7781',
   tipoCarga: 'Boi',
@@ -48,9 +48,10 @@ const recebimentoDetalhe = {
   id: 'r1',
   codigoLote: 'R1ABCDEF',
   compraProgramadaId: 'c1',
+  pedidoFornecedorId: 'pf1',
   fornecedorId: 'f1',
   dataOperacao: '2026-06-07',
-  status: 'em_conferencia',
+  status: 'aguardando_conferencia_final' as const,
   tipoCarga: 'Boi',
   progressoBalanca: 58,
   nfeNumero: '128934',
@@ -60,8 +61,12 @@ const recebimentoDetalhe = {
   romaneio: 'ROM-7781',
   nfePesoBruto: null,
   nfePesoLiquido: null,
-  nfeVolumes: null,
+  nfeVolumes: null as number | null,
   notaFiscalFornecedor: '128934',
+  placaVeiculo: null,
+  motorista: null,
+  doca: null,
+  dataHoraChegada: null,
   observacoes: null,
   fornecedor: { id: 'f1', razaoSocial: 'Frigorífico Boi Forte' },
   compra: { id: 'c1', numeroInterno: 'PC-2091' },
@@ -77,21 +82,64 @@ const recebimentoDetalhe = {
       requerBalanca: true,
       pesoTotalApurado: '586.400',
       pesoApurado: '586.400',
-      statusApuracao: 'em_conferencia',
+      statusApuracao: 'em_conferencia' as const,
       observacoes: null,
       itemComercial: { id: 'item-1', codigo: 'TZ', descricao: 'Traseiro' },
+    },
+    {
+      id: 'it2',
+      itemComercialId: 'item-2',
+      origemDescricao: 'Caixa de Rabo',
+      quantidadeEsperada: '12.000',
+      quantidadeRecebida: '12.000',
+      quantidadeApurada: '12',
+      unidadeEsperada: 'caixas',
+      requerBalanca: false,
+      pesoTotalApurado: null,
+      pesoApurado: null,
+      statusApuracao: 'entrada_direta' as const,
+      observacoes: null,
+      itemComercial: { id: 'item-2', codigo: 'CR', descricao: 'Caixa de Rabo' },
     },
   ],
   divergencias: [],
 };
 
-function mockFetchRecebimento() {
+const quadroMock = [{
+  recebimentoItemId: 'it1',
+  itemComercialId: 'item-1',
+  previstoNoPedido: true,
+  qtdPedido: '20',
+  qtdNf: '20',
+  qtdApurada: '12',
+  pesoNf: '990',
+  pesoApurado: '586.4',
+  situacao: 'divergente' as const,
+}];
+
+function mockFetchRecebimento(overrides?: { nfeVolumes?: number | null; status?: string }) {
+  const detalhe = {
+    ...recebimentoDetalhe,
+    ...(overrides?.nfeVolumes !== undefined ? { nfeVolumes: overrides.nfeVolumes } : {}),
+    ...(overrides?.status ? { status: overrides.status } : {}),
+  };
   global.fetch = jest.fn(async (url: string) => {
     if (typeof url === 'string' && url.includes('/api/operacao/recebimentos?pageSize')) {
-      return { ok: true, json: async () => ({ data: [recebimentoLista], page: 1, pageSize: 50, total: 1 }) };
+      return {
+        ok: true,
+        json: async () => ({
+          data: [{ ...recebimentoLista, status: detalhe.status }],
+          page: 1,
+          pageSize: 50,
+          total: 1,
+        }),
+      };
+    }
+    if (typeof url === 'string' && url.includes('/conferencia') && !url.includes('concluir')) {
+      return { ok: true, json: async () => quadroMock };
     }
     if (typeof url === 'string' && url.includes('/api/operacao/recebimentos/r1')) {
-      return { ok: true, json: async () => recebimentoDetalhe };
+      return { ok: true, json: async () => detalhe };
     }
     if (typeof url === 'string' && url.includes('/api/comercial/compras-programadas')) {
       return { ok: true, json: async () => ({ data: [] }) };
@@ -128,19 +176,19 @@ describe('RecebimentoCargaClient', () => {
     await waitFor(() => expect(screen.getByText('Abrir')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Abrir'));
 
-    await waitFor(() => expect(screen.getByTestId('receb-status')).toHaveTextContent('Em conferência'));
+    await waitFor(() => expect(screen.getByTestId('receb-status')).toHaveTextContent('Aguardando conferência final'));
     expect(screen.getByTestId('item-item-1')).toBeInTheDocument();
     expect(screen.getByTestId('btn-concluir')).toBeInTheDocument();
     expect(screen.getByText('Itens previstos importados')).toBeInTheDocument();
   });
 
-  it('exibe status Aguardando conferência na lista', async () => {
+  it('exibe status Aguardando conferência final na lista', async () => {
     global.fetch = jest.fn(async (url: string) => {
       if (typeof url === 'string' && url.includes('/api/operacao/recebimentos?pageSize')) {
         return {
           ok: true,
           json: async () => ({
-            data: [{ ...recebimentoLista, status: 'aguardando_conferencia' }],
+            data: [{ ...recebimentoLista, status: 'aguardando_conferencia_final' }],
             page: 1,
             pageSize: 50,
             total: 1,
@@ -151,7 +199,7 @@ describe('RecebimentoCargaClient', () => {
     }) as unknown as typeof fetch;
 
     render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
-    await waitFor(() => expect(screen.getByText('Aguardando conferência')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Aguardando conferência final')).toBeInTheDocument());
   });
 
   it('recarrega ao receber evento recebimento_registrado via WS', async () => {
@@ -306,5 +354,73 @@ describe('RecebimentoCargaClient', () => {
     fireEvent.click(within(segundoDrawer).getByRole('button', { name: 'Criar Lote' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('sentinela D34'));
     expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it('Recebimento de Carga renderiza os blocos do protótipo', async () => {
+    const { STATUS_RECEB_LABEL } = await import(
+      '../src/app/(admin)/recebimento/recebimento-carga/recebimento-carga-client'
+    );
+    const seteStatus = new Set(Object.values(STATUS_RECEB_LABEL));
+    expect(seteStatus.size).toBe(7);
+    expect([...seteStatus]).toEqual(expect.arrayContaining([
+      'Pesagem em andamento',
+      'Aguardando conferência final',
+      'Conferido sem divergência',
+      'Conferido com divergência',
+      'Ocorrência administrativa aberta',
+      'Tratativa concluída',
+      'Cancelado',
+    ]));
+
+    mockFetchRecebimento();
+    // progresso 0 libera Cancelar lote (DoD 6.26)
+    (global.fetch as jest.Mock).mockImplementation(async (url: string) => {
+      if (typeof url === 'string' && url.includes('/api/operacao/recebimentos?pageSize')) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: [{ ...recebimentoLista, status: 'aguardando_conferencia_final', progressoBalanca: 0 }],
+            page: 1, pageSize: 50, total: 1,
+          }),
+        };
+      }
+      if (typeof url === 'string' && url.includes('/conferencia') && !url.includes('concluir')) {
+        return { ok: true, json: async () => quadroMock };
+      }
+      if (typeof url === 'string' && url.includes('/api/operacao/recebimentos/r1')) {
+        return {
+          ok: true,
+          json: async () => ({ ...recebimentoDetalhe, progressoBalanca: 0 }),
+        };
+      }
+      return { ok: true, json: async () => ({ data: [] }) };
+    });
+
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    await waitFor(() => expect(screen.getByText('Abrir')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Abrir'));
+    await waitFor(() => expect(screen.getByText('Quadro comparativo — Pedido × NF × Pesagem')).toBeInTheDocument());
+    expect(screen.getByTestId('btn-concluir')).toBeInTheDocument();
+    expect(screen.getByTestId('btn-capturar-itens-nf')).toBeInTheDocument();
+    expect(screen.getByText('Cancelar lote')).toBeInTheDocument();
+    expect(screen.getByText('Entrada direta')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Novo recebimento' }));
+    expect(screen.getByRole('dialog', { name: 'Novo Recebimento de Carga' })).toBeInTheDocument();
+  });
+
+  it('detalhe do lote renderiza nfeVolumes number e trata null', async () => {
+    mockFetchRecebimento({ nfeVolumes: 12 });
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    await waitFor(() => expect(screen.getByText('Abrir')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Abrir'));
+    await waitFor(() => expect(screen.getByText('Volumes NF')).toBeInTheDocument());
+    const volumesLabel = screen.getByText('Volumes NF');
+    expect(volumesLabel.parentElement).toHaveTextContent('12');
+
+    fireEvent.click(screen.getByText('← Voltar à lista'));
+    mockFetchRecebimento({ nfeVolumes: null });
+    fireEvent.click(await screen.findByText('Abrir'));
+    await waitFor(() => expect(screen.getByText('Volumes NF')).toBeInTheDocument());
+    expect(screen.getByText('Volumes NF').parentElement).toHaveTextContent('—');
   });
 });

@@ -74,7 +74,7 @@ export const associacoesPecaHistorico = pgTable(
   (t) => [
     check(
       'chk_assoc_hist_acao',
-      sql`${t.acao} IN ('confirmar','redirecionar','sobra','analise','corte','divergencia')`,
+      sql`${t.acao} IN ('confirmar','redirecionar','sobra','analise','corte','divergencia','estorno','troca_saida','troca_entrada')`,
     ),
     check(
       'chk_assoc_hist_um_alvo',
@@ -100,16 +100,32 @@ export const etiquetasImpressoes = pgTable(
     statusImpressao: text('status_impressao').notNull().default('pendente'),
     reimpressao:     boolean('reimpressao').notNull().default(false),
     operadorId:      uuid('operador_id').notNull().references(() => usuarios.id),
+    // ── Onda 6 — ciclo de estado da etiqueta (v1.1 §10.4) ──────────────────────
+    estado:             text('estado').notNull().default('emitida'),
+    motivoCancelamento: text('motivo_cancelamento'),
+    invalidadaEm:       timestamp('invalidada_em', { withTimezone: true }),
+    invalidadaPorId:    uuid('invalidada_por_id').references(() => usuarios.id),
     createdAt:       timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     check('chk_etiq_status_impressao', sql`${t.statusImpressao} IN ('impressa','falha_impressao','pendente')`),
+    // v1.1 §10.4 — os cinco estados do domínio. Os rótulos do protótipo são derivados na tela (D6.2).
+    check(
+      'chk_etiq_estado',
+      sql`${t.estado} IN ('emitida','ativa','invalidada_por_troca','reimpressa','cancelada')`,
+    ),
+    // RA-06: estado terminal de cancelamento nunca fica sem motivo registrado.
+    check(
+      'chk_etiq_cancelada_motivo',
+      sql`${t.estado} <> 'cancelada' OR ${t.motivoCancelamento} IS NOT NULL`,
+    ),
     check(
       'chk_etiq_um_alvo',
       sql`(${t.pecaId} IS NOT NULL)::int + (${t.subitemId} IS NOT NULL)::int = 1`,
     ),
     index('idx_etiq_peca').on(t.pecaId),
     index('idx_etiq_subitem').on(t.subitemId),
+    index('idx_etiq_estado').on(t.estado),
     index('idx_etiq_payload_gin').using('gin', t.payload),
   ],
 );
@@ -154,4 +170,52 @@ export const etiquetasImpressoesRelations = relations(etiquetasImpressoes, ({ on
     fields: [etiquetasImpressoes.pecaId],
     references: [pecas.id],
   }),
+}));
+
+// ── trocas_peca ───────────────────────────────────────────────────────────────
+// Registro atômico da Troca de Peça (v1.1 §6.13). Uma linha por troca executada;
+// os pesos das duas peças são copiados aqui como snapshot — peso_original das peças
+// NUNCA é alterado pela troca ("Regra confirmada" de §6.13).
+export const trocasPeca = pgTable(
+  'trocas_peca',
+  {
+    id:                   uuid('id').primaryKey().default(sql`uuidv7()`),
+    recebimentoId:        uuid('recebimento_id').notNull().references(() => recebimentos.id),
+    pedidoVendaId:        uuid('pedido_venda_id').notNull().references(() => pedidosVenda.id),
+    pedidoVendaItemId:    uuid('pedido_venda_item_id').notNull().references(() => pedidosVendaItens.id),
+    pecaRetiradaId:       uuid('peca_retirada_id').notNull().references(() => pecas.id),
+    pecaInseridaId:       uuid('peca_inserida_id').notNull().references(() => pecas.id),
+    pesoRetirada:         numeric('peso_retirada', { precision: 10, scale: 3 }).notNull(),
+    pesoInserida:         numeric('peso_inserida', { precision: 10, scale: 3 }).notNull(),
+    destinoRetirada:      text('destino_retirada').notNull(),
+    motivo:               text('motivo').notNull(),
+    observacoes:          text('observacoes'),
+    etiquetaInvalidadaId: uuid('etiqueta_invalidada_id').references(() => etiquetasImpressoes.id),
+    etiquetaEmitidaId:    uuid('etiqueta_emitida_id').references(() => etiquetasImpressoes.id),
+    operadorId:           uuid('operador_id').notNull().references(() => usuarios.id),
+    createdAt:            timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Destinos da peça retirada — TrocaPeca.tsx:11 (`type DestinoRetirada = "Estoque" | "Desossa"`).
+    check('chk_trocas_peca_destino', sql`${t.destinoRetirada} IN ('estoque','desossa')`),
+    // Motivos — TrocaPeca.tsx:79-86 (const MOTIVOS), em slug.
+    check(
+      'chk_trocas_peca_motivo',
+      sql`${t.motivo} IN ('peca_mais_adequada','peso_fora_preferencia','qualidade','erro_associacao','outro')`,
+    ),
+    check('chk_trocas_peca_pecas_distintas', sql`${t.pecaRetiradaId} <> ${t.pecaInseridaId}`),
+    check('chk_trocas_peca_pesos_positivos', sql`${t.pesoRetirada} > 0 AND ${t.pesoInserida} > 0`),
+    index('idx_trocas_peca_recebimento').on(t.recebimentoId),
+    index('idx_trocas_peca_pedido').on(t.pedidoVendaId),
+    index('idx_trocas_peca_retirada').on(t.pecaRetiradaId),
+    index('idx_trocas_peca_inserida').on(t.pecaInseridaId),
+  ],
+);
+
+export const trocasPecaRelations = relations(trocasPeca, ({ one }) => ({
+  recebimento:  one(recebimentos,  { fields: [trocasPeca.recebimentoId],     references: [recebimentos.id] }),
+  pedido:       one(pedidosVenda,  { fields: [trocasPeca.pedidoVendaId],     references: [pedidosVenda.id] }),
+  pedidoItem:   one(pedidosVendaItens, { fields: [trocasPeca.pedidoVendaItemId], references: [pedidosVendaItens.id] }),
+  pecaRetirada: one(pecas,         { fields: [trocasPeca.pecaRetiradaId],    references: [pecas.id], relationName: 'trocaPecaRetirada' }),
+  pecaInserida: one(pecas,         { fields: [trocasPeca.pecaInseridaId],    references: [pecas.id], relationName: 'trocaPecaInserida' }),
 }));

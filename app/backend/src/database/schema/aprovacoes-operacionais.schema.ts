@@ -30,7 +30,8 @@ export const aprovacoesOperacionais = pgTable(
     check(
       'chk_aprovacao_tipo',
       sql`${t.tipo} IN ('divergencia_transformacao','estorno_fora_regra',
-                        'reabertura_carga_pedido','ajuste_estoque_relevante')`,
+                        'reabertura_carga_pedido','ajuste_estoque_relevante',
+                        'pendencia_fisica_etiqueta')`,
     ),
     check('chk_aprovacao_status', sql`${t.status} IN ('pendente','aprovada','rejeitada')`),
     check(

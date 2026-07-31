@@ -39,7 +39,7 @@ const recebimentoLista = {
   fornecedorId: 'f1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
   fornecedorNome: 'Frigorífico Teste',
   dataOperacao: '2026-06-08',
-  status: 'em_conferencia',
+  status: 'pesagem_em_andamento',
   nfeNumero: '12345',
   romaneio: 'ROM-1',
   tipoCarga: 'Boi',
@@ -50,9 +50,10 @@ const recebimentoDetalhe = {
   id: recebimentoId,
   codigoLote: '001',
   compraProgramadaId: recebimentoLista.compraProgramadaId,
+  pedidoFornecedorId: 'pf1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
   fornecedorId: recebimentoLista.fornecedorId,
   dataOperacao: '2026-06-08',
-  status: 'em_conferencia',
+  status: 'pesagem_em_andamento',
   tipoCarga: 'Boi',
   progressoBalanca: 0,
   nfeNumero: '12345',
@@ -172,5 +173,108 @@ describe('PesagemDestinacaoClient', () => {
     render(<PesagemDestinacaoClient permissoes={['PESAGEM_GERENCIAR', 'PESO_MANUAL']} />);
     await waitFor(() => expect(screen.getByTestId('status-dispositivos')).toBeInTheDocument());
     expect(screen.getByText(/use peso manual assistido/i)).toBeInTheDocument();
+  });
+
+  it('Pesagem & Destinação renderiza os blocos do protótipo', async () => {
+    const pecaAssociada = {
+      id: 'pc1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      recebimentoId,
+      pesoOriginal: '12.500',
+      modoCapturaPeso: 'automatico',
+      statusPeca: 'associada',
+      etiquetaAtual: null,
+      pedidoVendaId: 'pv1',
+      pedidoVendaItemId: 'pvi1',
+    };
+    mockFetch({
+      '/api/operacao/pesagem/pecas': pecaAssociada,
+      '/sugestao': {
+        pecaId: pecaAssociada.id,
+        sugestao: {
+          pedidoVendaId: 'pv1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+          pedidoVendaItemId: 'pvi1aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+          itemComercialId,
+          clienteId: 'c1',
+          saldoPendente: '10',
+          prioridade: 1,
+          rotaPrevista: null,
+          score: 1,
+          justificativa: 'ok',
+          prefCompativel: true,
+        },
+        compativeis: [{
+          pedidoVendaId: 'pv1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+          pedidoVendaItemId: 'pvi1aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+          itemComercialId,
+          clienteId: 'c1',
+          saldoPendente: '10',
+          prioridade: 1,
+          rotaPrevista: null,
+          score: 1,
+          justificativa: 'ok',
+          prefCompativel: true,
+        }],
+      },
+    });
+
+    // Força peça associada no fetch de captura
+    const fetchBase = global.fetch as jest.Mock;
+    global.fetch = jest.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('/api/operacao/pesagem/pecas') && init?.method === 'POST') {
+        return { ok: true, json: async () => pecaAssociada };
+      }
+      if (u.includes('/sugestao')) {
+        return {
+          ok: true,
+          json: async () => ({
+            pecaId: pecaAssociada.id,
+            sugestao: {
+              pedidoVendaId: 'pv1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+              pedidoVendaItemId: 'pvi1aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+              itemComercialId,
+              clienteId: 'c1',
+              saldoPendente: '10',
+              prioridade: 1,
+              rotaPrevista: null,
+              score: 1,
+              justificativa: 'ok',
+              prefCompativel: true,
+            },
+            compativeis: [{
+              pedidoVendaId: 'pv1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+              pedidoVendaItemId: 'pvi1aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+              itemComercialId,
+              clienteId: 'c1',
+              saldoPendente: '10',
+              prioridade: 1,
+              rotaPrevista: null,
+              score: 1,
+              justificativa: 'ok',
+              prefCompativel: true,
+            }],
+          }),
+        };
+      }
+      return fetchBase(url, init);
+    }) as unknown as typeof fetch;
+
+    render(
+      <PesagemDestinacaoClient
+        permissoes={['PESAGEM_GERENCIAR', 'ASSOCIACAO_GERENCIAR', 'ASSOCIACAO_ESTORNAR', 'ETIQUETA_GERENCIAR']}
+      />,
+    );
+
+    expect(await screen.findByText('Mais pesada')).toBeInTheDocument();
+    expect(screen.getByText('Mais gorda')).toBeInTheDocument();
+    expect(screen.getByText('Melhor acabamento')).toBeInTheDocument();
+
+    const btn = await screen.findByRole('button', { name: 'Capturar Peso' });
+    await waitFor(() => expect(btn).not.toBeDisabled());
+    fireEvent.click(btn);
+
+    await waitFor(() => expect(screen.getByText('Cancelar ação realizada')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('pref. compatível')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Trocar Peça' })).toBeInTheDocument();
   });
 });

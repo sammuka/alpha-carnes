@@ -1,9 +1,13 @@
 // Tipos compartilhados do domínio operacional (F4a — Recebimento + Divergências).
 
 export const STATUS_RECEBIMENTO = [
-  'aguardando_conferencia',
-  'em_conferencia',
-  'finalizado',
+  'pesagem_em_andamento',
+  'aguardando_conclusao_pesagem',
+  'aguardando_conferencia_final',
+  'conferido_sem_divergencia',
+  'conferido_com_divergencia',
+  'ocorrencia_administrativa_aberta',
+  'tratativa_administrativa_concluida',
   'cancelado',
 ] as const;
 
@@ -68,6 +72,7 @@ export interface RecebimentoDetalhe {
   id: string;
   codigoLote: string;
   compraProgramadaId: string;
+  pedidoFornecedorId: string;
   fornecedorId: string;
   dataOperacao: string;
   status: StatusRecebimento;
@@ -80,7 +85,7 @@ export interface RecebimentoDetalhe {
   romaneio: string | null;
   nfePesoBruto: string | null;
   nfePesoLiquido: string | null;
-  nfeVolumes: string | null;
+  nfeVolumes: number | null;
   notaFiscalFornecedor: string | null;
   placaVeiculo: string | null;
   motorista: string | null;
@@ -220,6 +225,8 @@ export interface SugestaoScored {
   rotaPrevista: string | null;
   score: number;
   justificativa: string;
+  /** D6.5 — selo; não altera score. */
+  prefCompativel?: boolean;
 }
 
 export interface ResultadoSugestao {
@@ -406,4 +413,106 @@ export interface QuadroConferenciaItem {
 export interface ConcluirConferenciaDto {
   resultado: 'sem_divergencia' | 'com_divergencia';
   observacao?: string;
+}
+
+// ── Onda 6 — troca, estorno e ciclo da etiqueta ───────────────────────────────
+
+export type DestinoRetirada = 'estoque' | 'desossa';
+
+export const MOTIVOS_TROCA_PECA = [
+  'peca_mais_adequada',
+  'peso_fora_preferencia',
+  'qualidade',
+  'erro_associacao',
+  'outro',
+] as const;
+export type MotivoTrocaPeca = (typeof MOTIVOS_TROCA_PECA)[number];
+
+export const ROTULOS_MOTIVO_TROCA_PECA: Record<MotivoTrocaPeca, string> = {
+  peca_mais_adequada: 'Peça mais adequada ao cliente',
+  peso_fora_preferencia: 'Peso fora da preferência',
+  qualidade: 'Qualidade',
+  erro_associacao: 'Erro de associação',
+  outro: 'Outro',
+};
+
+export const MOTIVOS_ESTORNO = [
+  'peso_incorreto',
+  'pedido_incorreto',
+  'destino_incorreto',
+  'etiqueta_incorreta',
+  'outro',
+] as const;
+export type MotivoEstorno = (typeof MOTIVOS_ESTORNO)[number];
+
+export const ROTULOS_MOTIVO_ESTORNO: Record<MotivoEstorno, string> = {
+  peso_incorreto: 'Peso informado incorretamente',
+  pedido_incorreto: 'Pedido selecionado incorretamente',
+  destino_incorreto: 'Destino selecionado incorretamente',
+  etiqueta_incorreta: 'Etiqueta impressa incorretamente',
+  outro: 'Outro',
+};
+
+export interface ExecutarTrocaPayload {
+  pecaRetiradaId: string;
+  pecaInseridaId: string;
+  pedidoVendaItemId: string;
+  destinoRetirada: DestinoRetirada;
+  motivo: MotivoTrocaPeca;
+  observacoes?: string;
+}
+
+export interface ResultadoTroca {
+  troca: { id: string; createdAt: string };
+  pecaRetirada: Peca;
+  pecaInserida: Peca;
+  etiquetaInvalidada: { id: string; motivoCancelamento: string | null } | null;
+  etiquetaEmitida: { id: string; statusImpressao: string };
+}
+
+export type EstadoEtiqueta =
+  | 'emitida'
+  | 'ativa'
+  | 'invalidada_por_troca'
+  | 'reimpressa'
+  | 'cancelada';
+
+export interface EtiquetaListada {
+  id: string;
+  pecaId: string;
+  codigo: string | null;
+  estado: EstadoEtiqueta;
+  statusImpressao: 'impressa' | 'falha_impressao' | 'pendente';
+  reimpressao: boolean;
+  motivoCancelamento: string | null;
+  invalidadaEm: string | null;
+  bloqueada: boolean;
+  pesoOriginal: string;
+  statusPeca: string;
+  recebimentoId: string;
+  pedidoVendaId: string | null;
+  operadorId: string;
+  operadorNome: string;
+  createdAt: string;
+  produtoCodigo: string;
+  produtoDescricao: string;
+  caracteristicas: string[];
+  nfNumero: string | null;
+  frigorifico: string;
+  romaneio: string | null;
+  placaVeiculo: string | null;
+  motorista: string | null;
+  clienteNome: string | null;
+  representanteNome: string | null;
+  rotaPrevista: string | null;
+  localEstoquePrevisto: { valor: string | null; provisorio: true } | null;
+  historico: Array<{
+    id: string;
+    estado: EstadoEtiqueta;
+    statusImpressao: string;
+    reimpressao: boolean;
+    motivoCancelamento: string | null;
+    operadorId: string;
+    createdAt: string;
+  }>;
 }

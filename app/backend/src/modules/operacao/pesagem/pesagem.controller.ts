@@ -18,6 +18,9 @@ import {
   type SemCoberturaDto,
 } from './dto/associacao.dto';
 import { resolverQrSchema, type ResolverQrDto } from './dto/etiqueta.dto';
+import { executarTrocaSchema, type ExecutarTrocaDto } from './dto/troca-peca.dto';
+import { estornarSchema, type EstornarDto } from './dto/estorno.dto';
+import { TrocaPecaService } from './troca-peca.service';
 
 @SkipThrottle()
 @Controller('operacao/pesagem')
@@ -27,6 +30,7 @@ export class PesagemController {
     private readonly pesagem: PesagemService,
     private readonly associacao: AssociacaoService,
     private readonly etiqueta: EtiquetaService,
+    private readonly troca: TrocaPecaService,
   ) {}
 
   // ── Status de dispositivos (RA-05: sempre visível) ────────────────────────
@@ -99,6 +103,26 @@ export class PesagemController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.associacao.semCobertura(id, dto, user.sub);
+  }
+
+  @Post('pecas/:id/estornar')
+  @RequirePermissoes('ASSOCIACAO_ESTORNAR')
+  estornar(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(estornarSchema)) dto: EstornarDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.associacao.estornar(id, dto, user.sub);
+  }
+
+  // ── Troca de Peça (v1.1 §6.13) ─────────────────────────────────────────────
+  @Post('trocas')
+  @RequirePermissoes('ASSOCIACAO_GERENCIAR')
+  trocar(
+    @Body(new ZodValidationPipe(executarTrocaSchema)) dto: ExecutarTrocaDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.troca.executar(dto, user.sub);
   }
 
   // ── Etiqueta ────────────────────────────────────────────────────────────────

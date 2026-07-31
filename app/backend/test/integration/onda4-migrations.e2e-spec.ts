@@ -278,17 +278,29 @@ describe('Onda 4 — migrations geradas D36', () => {
       fs.cpSync(MIGRATIONS_DIR, path.join(probe, 'migrations'), {
         recursive: true,
       });
-      // Probe O4: baseline até 0018 — SQL/snapshots/schemas O5 não entram na receita.
-      for (const o5Artifact of [
+      // Probe O4: baseline até 0018 — SQL/snapshots/schemas O5+O6 não entram na receita.
+      // Sem remover 0021/0022, o drizzle-kit ancora no snapshot 0022 e o generate mistura
+      // DROP de tabelas O5 com o ADD de rota_padrao (quebra a asserção byte-a-byte).
+      for (const postO4Artifact of [
         'migrations/0019_onda5_gestao.sql',
         'migrations/0020_onda5_usuarios_representantes.sql',
+        'migrations/0021_onda6_recebimento_balanca_expand.sql',
+        'migrations/0022_onda6_etiqueta_estado_backfill.sql',
         'migrations/meta/0019_snapshot.json',
         'migrations/meta/0020_snapshot.json',
+        'migrations/meta/0021_snapshot.json',
+        'migrations/meta/0022_snapshot.json',
         'schema/relatorios-sif.schema.ts',
         'schema/aprovacoes-operacionais.schema.ts',
       ]) {
-        fs.rmSync(path.join(probe, o5Artifact), { force: true });
+        fs.rmSync(path.join(probe, postO4Artifact), { force: true });
       }
+      // pesagem.schema da O6 (trocas_peca + estado da etiqueta) voltaria a gerar DDL extra —
+      // restaura o snapshot pré-O6 pinado (sem depender de git fetch no CI shallow).
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/pesagem.schema.pre-onda6.ts'),
+        path.join(probe, 'schema/pesagem.schema.ts'),
+      );
       const probeJournal = JSON.parse(
         fs.readFileSync(path.join(probe, 'migrations/meta/_journal.json'), 'utf8'),
       ) as { version: string; dialect: string; entries: Array<{ idx: number; tag: string }> };

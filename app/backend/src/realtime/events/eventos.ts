@@ -59,6 +59,10 @@ export const EVENTOS = {
   APROVACAO_REGISTRADA: 'aprovacao_operacional_registrada',
   APROVACAO_DECIDIDA: 'aprovacao_operacional_decidida',
   RELATORIO_SIF_GERADO: 'relatorio_sif_gerado',
+  // ── Onda 6 — Recebimento & Balança ────────────────────────────────────────
+  PECA_TROCADA: 'peca_trocada',
+  PESAGEM_ESTORNADA: 'pesagem_estornada',
+  ETIQUETA_INVALIDADA: 'etiqueta_invalidada',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -173,6 +177,35 @@ export interface DispositivoStatusPayload {
   dispositivoId: string;
   status: 'disponivel' | 'instavel' | 'indisponivel';
   heartbeatEm: string;
+}
+
+export interface PecaTrocadaPayload {
+  trocaId: string;
+  dataOperacao: string;
+  pedidoVendaId: string;
+  pedidoVendaItemId: string;
+  pecaRetiradaId: string;
+  pecaInseridaId: string;
+  destinoRetirada: 'estoque' | 'desossa';
+  motivo: string;
+  etiquetaInvalidadaId: string | null;
+  etiquetaEmitidaId: string;
+}
+
+export interface PesagemEstornadaPayload {
+  pecaId: string;
+  dataOperacao: string;
+  pedidoOrigemId: string | null;
+  pedidoItemOrigemId: string;
+  motivo: string;
+}
+
+export interface EtiquetaInvalidadaPayload {
+  etiquetaId: string;
+  pecaId: string;
+  dataOperacao: string;
+  estado: 'invalidada_por_troca' | 'cancelada';
+  motivo: string;
 }
 
 // ── F4c ───────────────────────────────────────────────────────────────────────
@@ -372,4 +405,8 @@ export interface PayloadPorEvento {
   aprovacao_operacional_registrada: AprovacaoOperacionalPayload;
   aprovacao_operacional_decidida: AprovacaoOperacionalPayload;
   relatorio_sif_gerado: RelatorioSifGeradoPayload;
+  // ── Onda 6 — Recebimento & Balança ────────────────────────────────────────
+  peca_trocada: PecaTrocadaPayload;
+  pesagem_estornada: PesagemEstornadaPayload;
+  etiqueta_invalidada: EtiquetaInvalidadaPayload;
 }

@@ -18,8 +18,11 @@ import { EVENTOS } from '../../../realtime/events/eventos';
 import { DivergenciaRecebimentoService } from '../recebimento/divergencia/divergencia-recebimento.service';
 import type { SugestaoScored } from './associacao-score';
 import type { ConfirmarAssociacaoDto, RedirecionarDto, SemCoberturaDto } from './dto/associacao.dto';
+import type { EstornarDto } from './dto/estorno.dto';
+import { EtiquetaService } from './etiqueta.service';
+import { pecaEmCargaFechada } from './carga-fechada';
 import { consumirSaldo, devolverSaldo } from './saldo';
-import { calcularCompativeisItem } from './compatibilidade';
+import { calcularCompativeisItem, caracteristicasDeCapturaMeta } from './compatibilidade';
 
 type Tx = NodePgDatabase<typeof schema>;
 type Peca = typeof pecas.$inferSelect;
@@ -38,6 +41,7 @@ export class AssociacaoService {
     private readonly auditoria: AuditoriaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly divergencias: DivergenciaRecebimentoService,
+    private readonly etiqueta: EtiquetaService,
   ) {}
 
   private get db() {
@@ -51,7 +55,12 @@ export class AssociacaoService {
   async sugerir(pecaId: string): Promise<ResultadoSugestao> {
     const peca = await this.buscarAtiva(this.db, pecaId);
     if (!peca) throw new NotFoundException('Peça não encontrada');
-    const compativeis = await calcularCompativeisItem(this.db, { compraProgramadaId: peca.compraProgramadaId, itemComercialId: peca.itemComercialBaseId, peso: peca.pesoOriginal });
+    const compativeis = await calcularCompativeisItem(this.db, {
+      compraProgramadaId: peca.compraProgramadaId,
+      itemComercialId: peca.itemComercialBaseId,
+      peso: peca.pesoOriginal,
+      caracteristicas: caracteristicasDeCapturaMeta(peca.capturaMeta),
+    });
     return { pecaId, sugestao: compativeis[0] ?? null, compativeis };
   }
 
@@ -59,7 +68,12 @@ export class AssociacaoService {
   async listarCompativeis(pecaId: string): Promise<SugestaoScored[]> {
     const peca = await this.buscarAtiva(this.db, pecaId);
     if (!peca) throw new NotFoundException('Peça não encontrada');
-    return calcularCompativeisItem(this.db, { compraProgramadaId: peca.compraProgramadaId, itemComercialId: peca.itemComercialBaseId, peso: peca.pesoOriginal });
+    return calcularCompativeisItem(this.db, {
+      compraProgramadaId: peca.compraProgramadaId,
+      itemComercialId: peca.itemComercialBaseId,
+      peso: peca.pesoOriginal,
+      caracteristicas: caracteristicasDeCapturaMeta(peca.capturaMeta),
+    });
   }
 
   /**
@@ -77,7 +91,12 @@ export class AssociacaoService {
       const item = await this.buscarItemCompativel(tx, peca, dto.pedidoVendaItemId);
 
       // Snapshot da sugestão no momento da decisão (a sugestão é efêmera).
-      const compativeis = await calcularCompativeisItem(tx, { compraProgramadaId: peca.compraProgramadaId, itemComercialId: peca.itemComercialBaseId, peso: peca.pesoOriginal });
+      const compativeis = await calcularCompativeisItem(tx, {
+        compraProgramadaId: peca.compraProgramadaId,
+        itemComercialId: peca.itemComercialBaseId,
+        peso: peca.pesoOriginal,
+        caracteristicas: caracteristicasDeCapturaMeta(peca.capturaMeta),
+      });
       const sugerido = compativeis.find((c) => c.pedidoVendaItemId === dto.pedidoVendaItemId) ?? null;
 
       const consumido = await consumirSaldo(tx, dto.pedidoVendaItemId);
@@ -260,6 +279,96 @@ export class AssociacaoService {
     return resultado;
   }
 
+  /**
+   * Estorno de destinação já confirmada (D6.3). Devolve a unidade ao item do pedido,
+   * volta a peça para em_sobra, cancela a etiqueta vigente e grava histórico + auditoria.
+   * Bloqueado com 409 depois que a carga fecha (D6.18). Exige ASSOCIACAO_ESTORNAR.
+   */
+  async estornar(pecaId: string, dto: EstornarDto, operadorId: string): Promise<Peca> {
+    const resultado = await this.db.transaction(async (tx) => {
+      const peca = await tx
+        .select()
+        .from(pecas)
+        .where(and(eq(pecas.id, pecaId), isNull(pecas.deletedAt)))
+        .for('update')
+        .then((r) => r[0] ?? null);
+      if (!peca) throw new NotFoundException('Peça não encontrada');
+      if (peca.statusPeca !== 'associada' || !peca.pedidoVendaItemId) {
+        throw new ConflictException('Só é possível estornar peça associada a um pedido');
+      }
+      if (await pecaEmCargaFechada(tx, pecaId)) {
+        throw new ConflictException('Peça já está em carga fechada — estorno bloqueado');
+      }
+
+      const pedidoOrigemId = peca.pedidoVendaId;
+      const pedidoItemOrigemId = peca.pedidoVendaItemId;
+
+      // Devolve a unidade ao item do pedido (RF-PS-17: quantidade_atendida volta a caber).
+      await devolverSaldo(tx, pedidoItemOrigemId);
+
+      const atualizada = primeiroOuFalha(
+        await tx
+          .update(pecas)
+          .set({
+            statusPeca: 'em_sobra',
+            pedidoVendaId: null,
+            pedidoVendaItemId: null,
+            observacoes: dto.observacoes ?? peca.observacoes,
+          })
+          .where(eq(pecas.id, pecaId))
+          .returning(),
+      );
+
+      // "invalida a etiqueta anterior" — texto do protótipo em PesagemDestinacao.tsx:241.
+      const etiquetaCancelada = await this.etiqueta.cancelarVigenteNaTx(tx, pecaId, dto.motivo, operadorId);
+
+      await this.gravarHistorico(tx, {
+        pecaId,
+        acao: 'estorno',
+        pedidoOrigemId,
+        motivo: dto.motivo,
+        operadorId,
+      });
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'pecas',
+        registroId: pecaId,
+        operacao: 'UPDATE',
+        modulo: 'operacao',
+        usuarioId: operadorId,
+        dadosAnteriores: peca,
+        dadosNovos: atualizada,
+      });
+
+      return {
+        peca: atualizada,
+        pedidoOrigemId,
+        pedidoItemOrigemId,
+        etiquetaCancelada,
+        dataOperacao: await this.dataOperacaoDaPeca(tx, peca),
+      };
+    });
+
+    this.eventEmitter.emit(EVENTOS.PESAGEM_ESTORNADA, {
+      pecaId,
+      dataOperacao: resultado.dataOperacao,
+      pedidoOrigemId: resultado.pedidoOrigemId,
+      pedidoItemOrigemId: resultado.pedidoItemOrigemId,
+      motivo: dto.motivo,
+    });
+    if (resultado.etiquetaCancelada) {
+      this.eventEmitter.emit(EVENTOS.ETIQUETA_INVALIDADA, {
+        etiquetaId: resultado.etiquetaCancelada.id,
+        pecaId,
+        dataOperacao: resultado.dataOperacao,
+        estado: 'cancelada',
+        motivo: dto.motivo,
+      });
+    }
+
+    return resultado.peca;
+  }
+
   // ── internos ───────────────────────────────────────────────────────────────
 
   /** Valida que o item existe, é compatível e pertence à compra da peça. */
@@ -309,7 +418,8 @@ export class AssociacaoService {
     tx: Tx,
     h: {
       pecaId: string;
-      acao: 'confirmar' | 'redirecionar' | 'sobra' | 'analise' | 'corte' | 'divergencia';
+      acao: 'confirmar' | 'redirecionar' | 'sobra' | 'analise' | 'corte' | 'divergencia'
+        | 'estorno' | 'troca_saida' | 'troca_entrada';
       pedidoOrigemId?: string | null;
       pedidoDestinoId?: string | null;
       pedidoItemDestinoId?: string | null;

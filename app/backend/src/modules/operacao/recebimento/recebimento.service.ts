@@ -279,10 +279,9 @@ export class RecebimentoService {
       nfeChave: nfAtiva?.chave ?? null,
       nfeDataEmissao: nfAtiva?.dataEmissao ?? null,
       nfePesoBruto: nfAtiva?.pesoTotalDeclarado ?? null,
-      ...(payloadNf?.pesoLiquido !== undefined
-        ? { nfePesoLiquido: formatarQtd(payloadNf.pesoLiquido) }
-        : {}),
-      ...(payloadNf?.volumes !== undefined ? { nfeVolumes: payloadNf.volumes } : {}),
+      nfePesoLiquido:
+        payloadNf?.pesoLiquido !== undefined ? formatarQtd(payloadNf.pesoLiquido) : null,
+      nfeVolumes: payloadNf?.volumes ?? null,
       itens: itensEnriquecidos,
     };
   }
