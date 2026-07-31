@@ -4,7 +4,16 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { operacoes, pecas, recebimentos, recebimentosItens, subitens, transformacoes  } from '../../../database/schema';
+import {
+  operacoes,
+  pecas,
+  produtos,
+  recebimentos,
+  recebimentosItens,
+  regrasTransformacaoSaidas,
+  subitens,
+  transformacoes,
+} from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { EVENTOS } from '../../../realtime/events/eventos';
@@ -37,6 +46,26 @@ export class SubitemService {
   async adicionar(transformacaoId: string, dto: AdicionarSubitemDto, operadorId: string): Promise<Subitem> {
     const resultado = await this.db.transaction(async (tx) => {
       const transf = await this.transformacaoEditavel(tx, transformacaoId);
+      if (!transf.regraTransformacaoId) {
+        throw new ConflictException({
+          codigo: 'REGRA_TRANSFORMACAO_OBRIGATORIA',
+          mensagem: 'Defina a regra de transformação antes de gerar produtos',
+        });
+      }
+      const saidas = await tx
+        .select({
+          legado: produtos.legadoItemComercialId,
+        })
+        .from(regrasTransformacaoSaidas)
+        .innerJoin(produtos, eq(produtos.id, regrasTransformacaoSaidas.produtoId))
+        .where(eq(regrasTransformacaoSaidas.regraId, transf.regraTransformacaoId));
+      const permitido = new Set(saidas.map((s) => s.legado).filter(Boolean) as string[]);
+      if (!permitido.has(dto.itemComercialId)) {
+        throw new ConflictException({
+          codigo: 'SAIDA_FORA_DA_REGRA',
+          mensagem: 'Produto incompatível com a regra escolhida para este TZ',
+        });
+      }
       const criado = primeiroOuFalha(
         await tx
           .insert(subitens)
@@ -172,6 +201,10 @@ export class SubitemService {
     });
 
     this.emitAssociado(resultado.subitem, resultado.dataOperacao);
+    this.eventEmitter.emit(EVENTOS.FALTAS_DESOSSA_ATUALIZADAS, {
+      dataOperacao: resultado.dataOperacao,
+      motivo: 'subitem_associado',
+    });
     return resultado.subitem;
   }
 
