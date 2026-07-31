@@ -28,6 +28,20 @@ Fecha **todos** os bloqueantes e menores do Portão 1, item a item:
 
 **Base tip atualizado:** `origin/develop` @ `94fb341` (Onda 6 merge + dívidas). Próxima migration permanece `0023`.
 
+## Emenda 2 — Portão 1 (veredito `ajustar` 2026-07-31T17:47:30-03:00 / tip `25300fa`)
+
+Fecha **todos** os bloqueantes e menores do Portão 1 da Emenda 1, item a item. Protótipo revalidado: `F:\Projetos\alpha-carnes-prototipo` @ `feature/completude-v1.1` `8d32aa4c`.
+
+| # | Achado | Fechamento nesta emenda |
+|---|---|---|
+| 1 | Task 7 `painel.calc`: spec `aProduzir:4` vs literal `aProduzir=quantidadeFaltante` (5) e vs tip `faltas.calc.ts:41` (líquido) | Semântica fixa: `quantidadeFaltante` já é líquido → `aProduzir = quantidadeFaltante`; `faltam = quantidadeFaltante + quantidadeEstoque` (demanda bruta só para rótulo UI); teste e literal idênticos |
+| 2 | Task 12 modal chama `fetchBackend` no client (`next/headers`) | Client só `fetch('/api/...')` (padrão O6); BFF `divergencia` + `concluir` (concluir já existe) |
+| 3 | Princípio I incompleto vs `DesossaDashboard`/`DesossaPesagem`/`DesossaEtiquetas` `8d32aa4c` | TVMode coluna CARGA/HORÁRIO; KPI «TZs na desossa»; tabela Rota/Carga+Representante+Alvo + joins; drawers Item/Regra/TZ com JSX; Etiquetas 11 cols + filtros por rótulo do protótipo |
+| 4 | Task 3 Step 5 não roda snapshot RBAC | Comando explícito `perfil-permissoes-snapshot.spec.ts` + saída esperada comercial/diretoria |
+| 5 | Modais pesagem só em prosa | Cercas JSX literais: `ModalSelecionarTz`, `ModalEtiquetaParte`, `ModalCancelarAcao` (`DesossaPesagem.tsx:121-279`) |
+
+**Decisão semântica (bloqueante 1 — fechada):** não estender `FaltaDesossaItem` com demanda bruta. Tip `faltas.calc.ts:41` define `quantidadeFaltante = max(0, demanda − estoque)` (líquido). O protótipo (`DesossaDashboard.tsx:56-61`) mostra `faltam` como demanda bruta e `aProduzir = faltam − estoque`. O painel reconstrói `faltam` na projeção UI; `aProduzir` espelha o líquido do tip. Zero contradição teste↔literal↔tipo.
+
 ---
 
 ## Global Constraints
@@ -114,9 +128,9 @@ Fecha **todos** os bloqueantes e menores do Portão 1, item a item:
 
 | Tela app | Arquivo protótipo | Blocos obrigatórios (fidelidade) |
 |---|---|---|
-| Dashboard | `src/app/pages/DesossaDashboard.tsx` (722 linhas) | Header + KPIs; tabela "Itens a produzir"; seção "Sugestão por regra"; alertas; drawers Item/Regra/TZ; **Modo TV** (`TVMode`); copy "Não representa produção em andamento" |
-| Pesagem | `src/app/pages/DesossaPesagem.tsx` (943 linhas) | TZ origem + seletor regra A/B com **Badge Provisório**; exclusividade após 1ª saída; checklist de slots; captura peso; destino pedido/estoque; modal etiqueta (peça mãe); modal finalizar com divergência tipada |
-| Etiquetas | `src/app/pages/DesossaEtiquetas.tsx` (742 linhas) | KPIs; filtros; coluna **Peça mãe (TZ)**; drawer `Invalidada por troca`; zero mock seed do protótipo em runtime |
+| Dashboard | `src/app/pages/DesossaDashboard.tsx` (722 linhas) | Header; KPIs `:452-467` (KPI #3 = «TZs na desossa» `:457`); tabela itens `:508-510` (Rota/Carga, Representante, Alvo); sugestão `:554-600`; drawers Item/Regra/TZ `:128-276`; TVMode `:280-370` com col **CARGA / HORÁRIO** `:306`; copy `:496` |
+| Pesagem | `src/app/pages/DesossaPesagem.tsx` (943 linhas) | TZ origem; seletor A/B + Badge Provisório `:575-600`; checklist `:701-739`; `ModalSelecionarTz` `:121-157`; `ModalEtiquetaParte` (Peça mãe) `:160-216`; `ModalCancelarAcao` `:220-279`; `ModalFinalizarTransformacao` `:283+` |
+| Etiquetas | `src/app/pages/DesossaEtiquetas.tsx` (742 linhas) | KPIs `:597-610`; filtros Status por rótulo `:623`; tabela 11 cols `:650` (Parte, Origem peso, Cliente/Pedido, Peça mãe); drawer Invalidada por troca `:365-443`; zero mock seed em runtime |
 
 Tokens/cores: reutilizar DS Onda 2. Hex do protótipo só via tokens existentes. Grep de hex avulso nas telas novas = falha do DoD de fidelidade.
 
@@ -142,7 +156,7 @@ Tabela nova (mestre §3.5). Tipos CHECK: `subpeca_faltante | subpeca_excedente |
 - Estrutura de regras já genérica (`produto_origem_codigo`); só TZ é seedado (P12).
 
 **D7.6 — Painel vs faltas.**
-`GET /desossa/faltas` permanece. `GET /desossa/painel` agrega itens a produzir, sugestões por regra ativa, alertas derivados; `modoTv=true` devolve payload enxuto (protótipo `TVMode` só lista itens). Cálculo puro em `painel.calc.ts`.
+`GET /desossa/faltas` permanece. `GET /desossa/painel` agrega itens a produzir, sugestões por regra ativa, alertas derivados e contexto de carga (rota/representante/horário alvo); `modoTv=true` omite regras detalhadas e mantém itens+alertas+totais (protótipo `TVMode` lista itens com CARGA/HORÁRIO). Cálculo puro em `painel.calc.ts`. Semântica: tip `quantidadeFaltante` é líquido; projeção UI `faltam = líquido + estoque`, `aProduzir = líquido` (Emenda 2).
 
 **D7.7 — RA-04 no dashboard.**
 Remover `setInterval(..., 60_000)` de `desossa-dashboard-client.tsx`. Usar `conectarRealtime` com rooms `['desossa','dashboard']`. Refetch em `faltas_desossa_atualizadas`, eventos de corte e `onReconnect`.
@@ -673,11 +687,25 @@ export default async function DesossaDashboardPage() {
 }
 ```
 
-- [ ] **Step 5: Testes + commit**
+- [ ] **Step 5: Testes (rooms + snapshot RBAC) + commit**
 
 ```bash
-cd app/backend && npx jest test/unit/rooms-da-data.spec.ts -t "perfil-permissoes|permissoes|roomsDaData" -v
-# Expected: PASS — comercial/diretoria com DESOSSA_LER + DESOSSA_PAINEL_LER no snapshot
+cd app/backend && npx jest test/unit/rooms-da-data.spec.ts -v
+# Expected: PASS — roomsDaData = ['dashboard','desossa','operacao:2026-07-31']
+```
+
+```bash
+cd app/backend && npx jest test/unit/perfil-permissoes-snapshot.spec.ts -v
+# Expected: PASS — 2 testes
+# Expected: snapshot['comercial'] inclui 'DESOSSA_LER' e 'DESOSSA_PAINEL_LER' (ordenados)
+# Expected: snapshot['diretoria'] inclui 'DESOSSA_LER' e 'DESOSSA_PAINEL_LER' (ordenados)
+# Falha típica se esquecer regenerar perfil-permissoes.snapshot.json após pushPermissoes
+```
+
+```bash
+# Prova explícita (opcional, após regenerar snapshot):
+node -e "const s=require('./src/common/rbac/perfil-permissoes.snapshot.json'); for (const p of ['comercial','diretoria']) { if (!s[p].includes('DESOSSA_LER')||!s[p].includes('DESOSSA_PAINEL_LER')) { console.error('FAIL',p); process.exit(1);} } console.log('OK comercial+diretoria DESOSSA_LER+DESOSSA_PAINEL_LER');"
+# Expected: OK comercial+diretoria DESOSSA_LER+DESOSSA_PAINEL_LER
 ```
 
 ```bash
@@ -1242,17 +1270,23 @@ export type PainelQuery = z.infer<typeof painelQuerySchema>;
 
 - [ ] **Step 1: Teste unit de `painel.calc` (falha sem implementação)**
 
+Semântica tip (`faltas.calc.ts:41`): `quantidadeFaltante` **já é líquido** (`demanda − estoque`). Não inventar demanda bruta no tipo `FaltaDesossaItem`. Protótipo (`DesossaDashboard.tsx:56-61`) exibe `faltam` bruto e `aProduzir` líquido — o calc reconstrói o bruto só na projeção.
+
 ```ts
 // test/unit/painel.calc.spec.ts
 import { montarPainelDesossa } from '../../src/modules/operacao/desossa/painel.calc';
 
 describe('montarPainelDesossa', () => {
+  // quantidadeFaltante=5 já líquido (tip); estoque=1 → demanda bruta exibida = 6
   const faltas = [
     {
       produto: { id: 'p1', codigo: 'CB', nome: 'Coxão-bola' },
       quantidadeFaltante: 5,
       quantidadeEstoque: 1,
       origem: 'TZ',
+      rota: 'Carga Centro 11:30',
+      representante: 'Alpha Carnes / Sabrina',
+      horarioAlvo: '10:45',
     },
   ];
   const regras = [
@@ -1266,26 +1300,44 @@ describe('montarPainelDesossa', () => {
     },
   ];
 
-  it('modo normal inclui itens, regras, alertas e totais', () => {
-    const p = montarPainelDesossa({ faltas, regras, modoTv: false, geradoEm: '2026-07-31T12:00:00.000Z' });
+  it('projeta faltam bruto, aProduzir = líquido tip e contexto de carga', () => {
+    const p = montarPainelDesossa({
+      faltas,
+      regras,
+      modoTv: false,
+      geradoEm: '2026-07-31T12:00:00.000Z',
+      tzsNaDesossa: 24,
+    });
     expect(p.modoTv).toBe(false);
     expect(p.itens).toHaveLength(1);
     expect(p.itens[0]).toMatchObject({
       produtoCodigo: 'CB',
-      faltam: 5,
+      faltam: 6, // 5 líquido + 1 estoque
       prontoEstoque: 1,
-      aProduzir: 4,
+      aProduzir: 5, // === quantidadeFaltante (líquido tip)
       origem: 'TZ',
+      rota: 'Carga Centro 11:30',
+      representante: 'Alpha Carnes / Sabrina',
+      horarioAlvo: '10:45',
     });
     expect(p.regras[0].provisorio).toBe(true);
-    expect(p.alertas.length).toBeGreaterThanOrEqual(0);
     expect(p.totais.itensFaltantes).toBe(1);
+    expect(p.totais.tzsNaDesossa).toBe(24);
+    expect(p.totais.prontoEstoque).toBe(1);
   });
 
-  it('modoTv omit regras detalhadas e mantém itens+totais', () => {
-    const p = montarPainelDesossa({ faltas, regras, modoTv: true, geradoEm: '2026-07-31T12:00:00.000Z' });
+  it('modoTv omit regras detalhadas e mantém itens com CARGA/HORÁRIO', () => {
+    const p = montarPainelDesossa({
+      faltas,
+      regras,
+      modoTv: true,
+      geradoEm: '2026-07-31T12:00:00.000Z',
+      tzsNaDesossa: 24,
+    });
     expect(p.modoTv).toBe(true);
     expect(p.itens).toHaveLength(1);
+    expect(p.itens[0].rota).toBe('Carga Centro 11:30');
+    expect(p.itens[0].horarioAlvo).toBe('10:45');
     expect(p.regras).toEqual([]);
   });
 });
@@ -1296,6 +1348,13 @@ describe('montarPainelDesossa', () => {
 ```ts
 // app/backend/src/modules/operacao/desossa/painel.calc.ts
 import type { FaltaDesossaItem } from './faltas.calc';
+
+/** Falta tip + contexto de carga para colunas Rota/Representante/Alvo (protótipo). */
+export type FaltaPainelInput = FaltaDesossaItem & {
+  rota: string | null;
+  representante: string | null;
+  horarioAlvo: string | null;
+};
 
 export type PainelRegraInput = {
   id: string;
@@ -1317,6 +1376,9 @@ export type PainelDesossa = {
     prontoEstoque: number;
     aProduzir: number;
     origem: string;
+    rota: string | null;
+    representante: string | null;
+    horarioAlvo: string | null;
     prioridade: 'Alta' | 'Média' | 'Baixa';
     status: string;
   }>;
@@ -1330,48 +1392,63 @@ export type PainelDesossa = {
     status: string;
   }>;
   alertas: Array<{ tipo: string; msg: string }>;
-  totais: { itensFaltantes: number; pecasFaltantes: number; prontoEstoque: number };
+  totais: {
+    itensFaltantes: number;
+    prontoEstoque: number;
+    tzsNaDesossa: number;
+    pecasAProduzir: number;
+  };
 };
 
-function prioridadeDe(faltam: number): 'Alta' | 'Média' | 'Baixa' {
-  if (faltam >= 5) return 'Alta';
-  if (faltam >= 2) return 'Média';
+function prioridadeDe(aProduzir: number): 'Alta' | 'Média' | 'Baixa' {
+  if (aProduzir >= 5) return 'Alta';
+  if (aProduzir >= 2) return 'Média';
   return 'Baixa';
 }
 
-function statusDe(faltam: number, estoque: number): string {
-  if (faltam <= 0 && estoque > 0) return 'Coberto por estoque';
-  if (faltam >= 5) return 'Crítico';
-  if (faltam >= 2) return 'Atenção';
-  if (faltam > 0) return 'A produzir';
+function statusDe(aProduzir: number, estoque: number): string {
+  if (aProduzir <= 0 && estoque > 0) return 'Coberto por estoque';
+  if (aProduzir >= 5) return 'Crítico';
+  if (aProduzir >= 2) return 'Atenção';
+  if (aProduzir > 0) return 'A produzir';
   return 'Aguardando TZ';
 }
 
+/**
+ * Tip: quantidadeFaltante já líquido (faltas.calc.ts:41).
+ * UI protótipo: faltam = demanda bruta; aProduzir = líquido.
+ */
 export function montarPainelDesossa(input: {
-  faltas: FaltaDesossaItem[];
+  faltas: FaltaPainelInput[];
   regras: PainelRegraInput[];
   modoTv: boolean;
   geradoEm: string;
+  tzsNaDesossa: number;
 }): PainelDesossa {
   const itens = input.faltas.map((f) => {
     const aProduzir = Math.max(0, f.quantidadeFaltante);
+    const faltam = aProduzir + Math.max(0, f.quantidadeEstoque);
     return {
       produtoId: f.produto.id,
       produtoCodigo: f.produto.codigo,
       produtoNome: f.produto.nome,
-      faltam: f.quantidadeFaltante,
+      faltam,
       prontoEstoque: f.quantidadeEstoque,
       aProduzir,
       origem: f.origem,
-      prioridade: prioridadeDe(f.quantidadeFaltante),
-      status: statusDe(f.quantidadeFaltante, f.quantidadeEstoque),
+      rota: f.rota,
+      representante: f.representante,
+      horarioAlvo: f.horarioAlvo,
+      prioridade: prioridadeDe(aProduzir),
+      status: statusDe(aProduzir, f.quantidadeEstoque),
     };
   });
 
   const totais = {
-    itensFaltantes: itens.filter((i) => i.faltam > 0).length,
-    pecasFaltantes: itens.reduce((acc, i) => acc + i.faltam, 0),
+    itensFaltantes: itens.filter((i) => i.aProduzir > 0 || i.faltam > 0).length,
     prontoEstoque: itens.reduce((acc, i) => acc + i.prontoEstoque, 0),
+    tzsNaDesossa: input.tzsNaDesossa,
+    pecasAProduzir: itens.reduce((acc, i) => acc + i.aProduzir, 0),
   };
 
   const alertas: PainelDesossa['alertas'] = [];
@@ -1390,7 +1467,7 @@ export function montarPainelDesossa(input: {
         codigo: r.codigo,
         nome: r.nome,
         provisorio: r.provisorio,
-        tzsEstimados: Math.ceil(totais.pecasFaltantes / 2) || 0,
+        tzsEstimados: Math.ceil(totais.pecasAProduzir / 2) || 0,
         saidasEsperadas: r.saidasLabel,
         status: r.provisorio ? 'Provisória' : 'Ativa',
       }));
@@ -1400,16 +1477,16 @@ export function montarPainelDesossa(input: {
     modoTv: input.modoTv,
     itens,
     regras,
-    alertas: input.modoTv ? alertas : alertas,
+    alertas,
     totais,
   };
 }
 ```
 
-- [ ] **Step 3: Service + controller**
+- [ ] **Step 3: Service + joins de contexto + controller**
 
 ```ts
-// painel.service.ts (esqueleto literal)
+// painel.service.ts
 @Injectable()
 export class PainelDesossaService {
   constructor(
@@ -1417,9 +1494,116 @@ export class PainelDesossaService {
     private readonly faltas: FaltasService,
   ) {}
 
+  /** Próxima carga do item comercial — protótipo cols Rota/Carga, Representante, Alvo. */
+  private async contextoCargaPorItemComercial(
+    itemComercialIds: string[],
+  ): Promise<Map<string, { rota: string | null; representante: string | null; horarioAlvo: string | null }>> {
+    const mapa = new Map<string, { rota: string | null; representante: string | null; horarioAlvo: string | null }>();
+    if (itemComercialIds.length === 0) return mapa;
+
+    const linhas = await this.db
+      .select({
+        itemComercialId: pedidosVendaItens.itemComercialId,
+        rotaCaminhao: caminhoes.rota,
+        rotaPrevista: pedidosVenda.rotaPrevista,
+        horaAbertura: caminhoes.horaAberturaCarga,
+        representanteNome: representantes.nome,
+      })
+      .from(pedidosVendaItens)
+      .innerJoin(pedidosVenda, eq(pedidosVendaItens.pedidoVendaId, pedidosVenda.id))
+      .innerJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
+      .leftJoin(representantes, eq(representantes.id, clientes.representanteId))
+      .leftJoin(
+        caminhoesPedidos,
+        and(eq(caminhoesPedidos.pedidoVendaId, pedidosVenda.id), isNull(caminhoesPedidos.deletedAt)),
+      )
+      .leftJoin(
+        caminhoes,
+        and(eq(caminhoes.id, caminhoesPedidos.caminhaoId), isNull(caminhoes.deletedAt)),
+      )
+      .where(
+        and(
+          isNull(pedidosVenda.deletedAt),
+          isNull(pedidosVendaItens.deletedAt),
+          inArray(pedidosVendaItens.itemComercialId, itemComercialIds),
+          inArray(pedidosVenda.status, [
+            'em_elaboracao_reserva_ativa',
+            'aguardando_confirmacao_overbooking',
+            'finalizado',
+            'parcialmente_atendido',
+          ]),
+        ),
+      )
+      .orderBy(asc(caminhoes.horaAberturaCarga));
+
+    for (const l of linhas) {
+      if (mapa.has(l.itemComercialId)) continue; // primeira = carga mais cedo
+      const hora = l.horaAbertura
+        ? new Date(l.horaAbertura as Date).toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'America/Sao_Paulo',
+          })
+        : null;
+      const rotaBase = l.rotaCaminhao ?? l.rotaPrevista;
+      const rota =
+        rotaBase && hora
+          ? `Carga ${rotaBase} ${hora}`
+          : rotaBase
+            ? `Carga ${rotaBase}`
+            : null;
+      mapa.set(l.itemComercialId, {
+        rota,
+        representante: l.representanteNome,
+        horarioAlvo: hora,
+      });
+    }
+    return mapa;
+  }
+
   async obter(q: PainelQuery) {
     const listaFaltas = await this.faltas.listarFaltas();
-    const regrasDb = await this.db.select().from(regrasTransformacao)
+    // legadoItemComercialId não está em FaltaDesossaItem — resolve via produtos.id
+    const produtosRows =
+      listaFaltas.length === 0
+        ? []
+        : await this.db
+            .select({ id: produtos.id, legado: produtos.legadoItemComercialId })
+            .from(produtos)
+            .where(inArray(produtos.id, listaFaltas.map((f) => f.produto.id)));
+    const produtoParaItem = new Map(produtosRows.map((r) => [r.id, r.legado]));
+    const itemComercialIds = [
+      ...new Set(produtosRows.map((r) => r.legado).filter((x): x is string => !!x)),
+    ];
+    const contextos = await this.contextoCargaPorItemComercial(itemComercialIds);
+
+    const faltasPainel: FaltaPainelInput[] = listaFaltas.map((f) => {
+      const itemId = produtoParaItem.get(f.produto.id) ?? null;
+      const ctx = itemId ? contextos.get(itemId) : undefined;
+      return {
+        ...f,
+        rota: ctx?.rota ?? null,
+        representante: ctx?.representante ?? null,
+        horarioAlvo: ctx?.horarioAlvo ?? null,
+      };
+    });
+
+    const [tzRow] = await this.db
+      .select({ n: sql<string>`count(*)::text` })
+      .from(pecas)
+      .innerJoin(recebimentos, eq(recebimentos.id, pecas.recebimentoId))
+      .where(
+        and(
+          isNull(pecas.deletedAt),
+          inArray(pecas.statusPeca, ['para_corte', 'em_transformacao']),
+          q.operacaoId ? eq(recebimentos.operacaoId, q.operacaoId) : sql`true`,
+        ),
+      );
+    const tzsNaDesossa = Number.parseInt(tzRow?.n ?? '0', 10) || 0;
+
+    const regrasDb = await this.db
+      .select()
+      .from(regrasTransformacao)
       .where(and(eq(regrasTransformacao.status, 'ativo'), isNull(regrasTransformacao.deletedAt)));
     const regras: PainelRegraInput[] = [];
     for (const r of regrasDb) {
@@ -1438,10 +1622,11 @@ export class PainelDesossaService {
       });
     }
     return montarPainelDesossa({
-      faltas: listaFaltas,
+      faltas: faltasPainel,
       regras,
       modoTv: q.modoTv === true,
       geradoEm: new Date().toISOString(),
+      tzsNaDesossa,
     });
   }
 }
@@ -1553,7 +1738,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 }
 ```
 
-Idem checklist (GET) e divergência (POST). Tipos em `lib/desossa.ts`: `PainelDesossa`, `ChecklistResponse`, `EtiquetaDesossaListada`, `PecaElegivelDesossa`.
+Idem checklist (GET). Divergência (POST) em `api/operacao/corte/[id]/divergencia/route.ts` (literal na Task 12 Step 3). Concluir já existe no tip. Tipos em `lib/desossa.ts`: `PainelDesossa` (com `rota`/`representante`/`horarioAlvo`/`totais.tzsNaDesossa`), `ChecklistResponse`, `EtiquetaDesossaListada` (Parte/Origem peso/Cliente), `PecaElegivelDesossa`.
 
 - [ ] Commit: `feat(onda7): BFF painel, etiquetas e bind/checklist/divergência`
 
@@ -1578,17 +1763,21 @@ export const listarEtiquetasDesossaSchema = z.object({
 export type EtiquetaDesossaListada = {
   id: string;
   codigo: string | null;
-  estado: string;
-  peso: string | null;
+  parteCodigo: string | null; // coluna «Parte» — protótipo DesossaEtiquetas.tsx:650
   produtoCodigo: string;
   produtoNome: string;
-  pecaMaeCodigo: string | null;
+  peso: string | null;
+  origemPeso: 'balanca' | 'manual' | string | null; // coluna «Origem peso»
+  destino: 'pedido' | 'estoque' | string;
+  clientePedido: string | null; // coluna «Cliente / Pedido»
+  pecaMaeCodigo: string | null; // coluna «Peça mãe (TZ)»
+  estado: string; // wire: emitida|ativa|reimpressa|cancelada|invalidada_por_troca (+ UI «Pendente de impressão»/«Bloqueada» via derivação)
   transformacaoId: string;
   subitemId: string;
-  destino: 'pedido' | 'estoque' | string;
-  clientePedido: string | null;
   createdAt: string;
   invalidadaEm: string | null;
+  bloqueada: boolean; // true se peça/subitem em carga fechada — rótulo UI «Bloqueada»
+  pendenteImpressao: boolean; // true se emitida e ainda sem impressão confirmada — rótulo «Pendente de impressão»
 };
 
 @Injectable()
@@ -1615,14 +1804,19 @@ export class EtiquetasDesossaService {
         codigo: sql<string | null>`${etiquetasImpressoes.payload}->>'qr'`,
         estado: etiquetasImpressoes.estado,
         peso: subitens.peso,
+        modoCapturaPeso: subitens.modoCapturaPeso,
         produtoCodigo: itensComerciais.codigo,
         produtoNome: itensComerciais.descricao,
+        parteCodigo: subitens.etiquetaAtual,
         pecaMaeCodigo: pecas.etiquetaAtual,
         transformacaoId: transformacoes.id,
         subitemId: subitens.id,
         pedidoVendaId: subitens.pedidoVendaId,
+        clienteNome: clientes.nomeFantasia,
+        pedidoCodigo: pedidosVenda.id,
         createdAt: etiquetasImpressoes.createdAt,
         invalidadaEm: etiquetasImpressoes.invalidadaEm,
+        statusImpressao: etiquetasImpressoes.statusImpressao,
       })
       .from(etiquetasImpressoes)
       .innerJoin(subitens, eq(subitens.id, etiquetasImpressoes.subitemId))
@@ -1630,26 +1824,46 @@ export class EtiquetasDesossaService {
       .innerJoin(pecas, eq(pecas.id, transformacoes.pecaOrigemId))
       .innerJoin(recebimentos, eq(recebimentos.id, pecas.recebimentoId))
       .innerJoin(itensComerciais, eq(itensComerciais.id, subitens.itemComercialId))
+      .leftJoin(pedidosVenda, eq(pedidosVenda.id, subitens.pedidoVendaId))
+      .leftJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
       .where(and(...condicoes))
       .orderBy(desc(etiquetasImpressoes.createdAt));
 
-    const itens: EtiquetaDesossaListada[] = linhas.map((l) => ({
-      id: l.id,
-      codigo: l.codigo,
-      estado: l.estado,
-      peso: l.peso,
-      produtoCodigo: l.produtoCodigo,
-      produtoNome: l.produtoNome,
-      pecaMaeCodigo: l.pecaMaeCodigo,
-      transformacaoId: l.transformacaoId,
-      subitemId: l.subitemId,
-      destino: l.pedidoVendaId ? 'pedido' : 'estoque',
-      clientePedido: null,
-      createdAt: new Date(l.createdAt as Date).toISOString(),
-      invalidadaEm: l.invalidadaEm
-        ? new Date(l.invalidadaEm as Date).toISOString()
-        : null,
-    }));
+    const itens: EtiquetaDesossaListada[] = linhas.map((l) => {
+      const origemPeso =
+        l.modoCapturaPeso === 'automatico'
+          ? 'balanca'
+          : l.modoCapturaPeso === 'manual_assistido'
+            ? 'manual'
+            : l.modoCapturaPeso;
+      const clientePedido =
+        l.pedidoVendaId && l.clienteNome
+          ? `${l.clienteNome} / ${l.pedidoCodigo}`
+          : l.pedidoVendaId
+            ? String(l.pedidoCodigo)
+            : null;
+      return {
+        id: l.id,
+        codigo: l.codigo,
+        parteCodigo: l.parteCodigo,
+        produtoCodigo: l.produtoCodigo,
+        produtoNome: l.produtoNome,
+        peso: l.peso,
+        origemPeso,
+        destino: l.pedidoVendaId ? 'pedido' : 'estoque',
+        clientePedido,
+        pecaMaeCodigo: l.pecaMaeCodigo,
+        estado: l.estado,
+        transformacaoId: l.transformacaoId,
+        subitemId: l.subitemId,
+        createdAt: new Date(l.createdAt as Date).toISOString(),
+        invalidadaEm: l.invalidadaEm
+          ? new Date(l.invalidadaEm as Date).toISOString()
+          : null,
+        bloqueada: false, // Task 14: cruzar carga fechada se fixture exigir «Bloqueada»
+        pendenteImpressao: l.statusImpressao === 'pendente',
+      };
+    });
 
     const inicio = (filtros.page - 1) * filtros.pageSize;
     return montarPaginado(
@@ -1679,9 +1893,17 @@ DoD 7.21: fixture com `estado='invalidada_por_troca'` aparece quando aplicável.
 
 ### Task 11 — UI Dashboard fiel + WS (remove poll)
 
-**Files:** `desossa-dashboard-client.tsx` (+ extrair `TVMode` no mesmo arquivo).
+**Files:** `desossa-dashboard-client.tsx` (+ `TVMode`, drawers no mesmo arquivo).
 
-**Protótipo:** `DesossaDashboard.tsx` @ `8d32aa4c` — TVMode `:280-370`, KPIs `:452-467`, tabela itens `:492-552`, sugestão por regra `:554-600`, copy "Não representa produção em andamento" `:496`.
+**Protótipo pinado (ler ANTES de escrever):** `DesossaDashboard.tsx` @ `8d32aa4c`
+- Drawers Item/Regra/TZ: `:128-276`
+- TVMode (cols PRIOR./PRODUTO/FALTAM/A PRODUZIR/ORIGEM/**CARGA / HORÁRIO**/STATUS): `:280-370` (thead `:306`)
+- KPIs (rótulo #3 = **TZs na desossa**): `:452-467` (label `:457`)
+- Tabela itens (Rota/Carga, Representante, Alvo): `:492-552` (thead `:508-510`)
+- Sugestão por regra: `:554-600`
+- Copy "Não representa produção em andamento": `:496`
+
+Client carrega via `fetch('/api/desossa/painel')` — **nunca** `fetchBackend` (server-only).
 
 - [ ] **Step 1: Remover poll e conectar WS**
 
@@ -1694,8 +1916,17 @@ const EVENTOS_REFETCH = new Set([
   'corte_concluido',
 ]);
 
+const carregar = useCallback(async () => {
+  const res = await fetch('/api/desossa/painel', { cache: 'no-store' });
+  if (!res.ok) {
+    setErro((await res.json().catch(() => ({}))).message ?? 'Erro ao carregar painel');
+    return;
+  }
+  setPainel((await res.json()) as PainelDesossa);
+}, []);
+
 useEffect(() => {
-  void carregar(); // GET /api/desossa/painel
+  void carregar();
   const off = conectarRealtime({
     rooms: ['desossa', 'dashboard'],
     onMessage: (msg) => {
@@ -1709,7 +1940,7 @@ useEffect(() => {
 // PROIBIDO: setInterval / poll HTTP
 ```
 
-- [ ] **Step 2: TVMode fiel (estrutura do protótipo — tokens DS, sem seed)**
+- [ ] **Step 2: TVMode fiel — inclui coluna CARGA / HORÁRIO** (`DesossaDashboard.tsx:306-338`)
 
 ```tsx
 function TVMode({
@@ -1753,14 +1984,16 @@ function TVMode({
         <table className="w-full">
           <thead>
             <tr className="border-b border-white/10">
-              {['PRIOR.', 'PRODUTO', 'FALTAM', 'A PRODUZIR', 'ORIGEM', 'STATUS'].map((h) => (
-                <th
-                  key={h}
-                  className="pb-3 text-left text-[11px] font-black tracking-[0.2em] text-white/40"
-                >
-                  {h}
-                </th>
-              ))}
+              {['PRIOR.', 'PRODUTO', 'FALTAM', 'A PRODUZIR', 'ORIGEM', 'CARGA / HORÁRIO', 'STATUS'].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="pb-3 text-left text-[11px] font-black tracking-[0.2em] text-white/40"
+                  >
+                    {h}
+                  </th>
+                ),
+              )}
             </tr>
           </thead>
           <tbody>
@@ -1773,6 +2006,10 @@ function TVMode({
                   {item.aProduzir} <span className="text-[13px] text-white/40">peças</span>
                 </td>
                 <td className="py-4 pr-6 text-[16px] font-bold text-white/60">{item.origem}</td>
+                <td className="py-4 pr-6">
+                  <p className="text-[15px] font-bold text-white/80">{item.rota ?? '—'}</p>
+                  <p className="mt-0.5 font-mono text-[13px] text-white/40">{item.horarioAlvo ?? ''}</p>
+                </td>
                 <td className="py-4 text-[12px] font-black text-white">{item.status}</td>
               </tr>
             ))}
@@ -1792,15 +2029,15 @@ function TVMode({
 }
 ```
 
-- [ ] **Step 3: KPIs + tabela itens + sugestão por regra**
+- [ ] **Step 3: KPIs (rótulo literal «TZs na desossa») + tabela com Rota/Representante/Alvo + sugestão**
 
 ```tsx
-{/* KPIs — DesossaDashboard.tsx:452-467 */}
+{/* KPIs — DesossaDashboard.tsx:452-467 — KPI #3 NÃO é «Peças faltantes» */}
 <div className="grid grid-cols-5 gap-3">
   {[
     { label: 'Itens faltantes', value: painel.totais.itensFaltantes, color: 'text-destructive' },
     { label: 'Prontos em estoque', value: painel.totais.prontoEstoque, color: 'text-success-strong' },
-    { label: 'Peças faltantes', value: painel.totais.pecasFaltantes, color: 'text-info-ink' },
+    { label: 'TZs na desossa', value: painel.totais.tzsNaDesossa, color: 'text-info-ink' },
     { label: 'Regras sugeridas', value: painel.regras.length, color: 'text-violet-700' },
     {
       label: 'Prioridade alta',
@@ -1815,7 +2052,7 @@ function TVMode({
   ))}
 </div>
 
-{/* Tabela — copy anti-"em produção" literal */}
+{/* Tabela — DesossaDashboard.tsx:508-510 */}
 <div className="overflow-hidden rounded-xl border border-border bg-card">
   <div className="border-b border-border px-5 py-3.5">
     <h2 className="text-[13px] font-bold text-foreground">Painel de Itens a Produzir</h2>
@@ -1827,8 +2064,23 @@ function TVMode({
   <table className="w-full text-[12px]">
     <thead>
       <tr className="border-b border-border bg-muted/40">
-        {['Prior.', 'Produto', 'Faltam', 'Estoque pronto', 'A produzir', 'Origem', 'Status'].map((h) => (
-          <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        {[
+          'Prior.',
+          'Produto',
+          'Faltam',
+          'Estoque pronto',
+          'A produzir',
+          'Origem',
+          'Rota / Carga',
+          'Representante',
+          'Alvo',
+          'Status',
+          '',
+        ].map((h) => (
+          <th
+            key={h || 'acoes'}
+            className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+          >
             {h}
           </th>
         ))}
@@ -1843,14 +2095,26 @@ function TVMode({
           <td className="px-3 py-2.5">{item.prontoEstoque || '—'}</td>
           <td className="px-3 py-2.5 font-mono font-black">{item.aProduzir}</td>
           <td className="px-3 py-2.5 font-semibold text-violet-700">{item.origem}</td>
+          <td className="px-3 py-2.5 whitespace-nowrap text-[11px] text-muted-foreground">
+            {item.rota ?? '—'}
+          </td>
+          <td className="max-w-[120px] truncate px-3 py-2.5 text-[11px] text-muted-foreground">
+            {(item.representante ?? '—').split('/')[0]?.trim()}
+          </td>
+          <td className="px-3 py-2.5 font-mono text-[11px] font-bold">{item.horarioAlvo ?? '—'}</td>
           <td className="px-3 py-2.5">{item.status}</td>
+          <td className="px-3 py-2.5">
+            <button type="button" title="Ver detalhes" onClick={() => setDrawerItem(item)}>
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          </td>
         </tr>
       ))}
     </tbody>
   </table>
 </div>
 
-{/* Sugestão por regra — DesossaDashboard.tsx:554+ */}
+{/* Sugestão por regra — DesossaDashboard.tsx:554-600 */}
 <div className="overflow-hidden rounded-xl border border-border bg-card">
   <div className="border-b border-border px-5 py-3.5">
     <h2 className="text-[13px] font-bold text-foreground">Sugestão por Regra de Transformação</h2>
@@ -1861,8 +2125,11 @@ function TVMode({
   <table className="w-full text-[12px]">
     <thead>
       <tr className="border-b border-border bg-muted/40">
-        {['Regra sugerida', 'TZs estimados', 'Saídas esperadas', 'Status', 'Provisório'].map((h) => (
-          <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        {['Regra sugerida', 'TZs estimados', 'Saídas esperadas', 'Status', 'Provisório', ''].map((h) => (
+          <th
+            key={h || 'acoes-regra'}
+            className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+          >
             {h}
           </th>
         ))}
@@ -1882,13 +2149,18 @@ function TVMode({
               </Badge>
             ) : null}
           </td>
+          <td className="px-3 py-2.5">
+            <button type="button" onClick={() => setDrawerRegra(r)}>
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          </td>
         </tr>
       ))}
     </tbody>
   </table>
 </div>
 
-<button type="button" onClick={() => setModoTV(true)} className="...">
+<button type="button" onClick={() => setModoTV(true)}>
   <Tv className="h-3.5 w-3.5" /> Modo TV
 </button>
 {modoTV && (
@@ -1901,9 +2173,191 @@ function TVMode({
 )}
 ```
 
+- [ ] **Step 4: Drawers Item / Regra / TZ** (`DesossaDashboard.tsx:128-276`)
+
+```tsx
+function DrawerItem({
+  item,
+  onClose,
+}: {
+  item: PainelDesossa['itens'][number] | null;
+  onClose: () => void;
+}) {
+  if (!item) return null;
+  return (
+    <Sheet open={!!item} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <SheetContent side="right" className="flex max-w-full w-[440px] flex-col bg-card p-0">
+        <SheetHeader className="flex flex-shrink-0 flex-row items-center justify-between border-b border-border px-6 py-4">
+          <SheetTitle className="text-[15px] font-bold">{item.produtoNome}</SheetTitle>
+          <button type="button" onClick={onClose}><X className="h-4 w-4 text-muted-foreground" /></button>
+        </SheetHeader>
+        <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-6">
+          <div className="flex items-start gap-2 rounded-lg border border-info-border bg-info-surface p-3">
+            <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-info-ink" />
+            <p className="text-[12px] text-info-ink">
+              Painel somente orientativo. A execução ocorre na Pesagem e Destinação da Desossa.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {(
+              [
+                ['Produto', item.produtoNome],
+                ['Prioridade', item.prioridade],
+                ['Total faltante', `${item.faltam} peças`],
+                ['Pronto em estoque', `${item.prontoEstoque} peças`],
+                ['A produzir', `${item.aProduzir} peças`],
+                ['Origem', item.origem],
+                ['Rota / Carga', item.rota ?? '—'],
+                ['Representante', item.representante ?? '—'],
+                ['Horário alvo', item.horarioAlvo ?? '—'],
+                ['Status', item.status],
+              ] as const
+            ).map(([k, v]) => (
+              <div key={k}>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{k}</p>
+                <p className="mt-0.5 text-[13px] font-semibold text-foreground">{v}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex-shrink-0 border-t border-border px-6 py-4">
+          <button type="button" onClick={onClose} className="h-8 w-full rounded-md border border-border text-[13px] font-medium text-muted-foreground">
+            Fechar
+          </button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function DrawerRegra({
+  regra,
+  onClose,
+}: {
+  regra: PainelDesossa['regras'][number] | null;
+  onClose: () => void;
+}) {
+  if (!regra) return null;
+  return (
+    <Sheet open={!!regra} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <SheetContent side="right" className="flex max-w-full w-[440px] flex-col bg-card p-0">
+        <SheetHeader className="flex flex-shrink-0 flex-row items-center justify-between border-b border-border px-6 py-4">
+          <SheetTitle className="text-[14px] font-bold">{regra.nome}</SheetTitle>
+          <button type="button" onClick={onClose}><X className="h-4 w-4 text-muted-foreground" /></button>
+        </SheetHeader>
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-6">
+          <div className="flex items-start gap-2 rounded-lg border border-info-border bg-info-surface p-3">
+            <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-info-ink" />
+            <p className="text-[12px] text-info-ink">
+              Regra sugerida. A execução real ocorre na Pesagem e Destinação da Desossa. Não há
+              controle de produção aqui.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {(
+              [
+                ['Regra', regra.nome],
+                ['Produto origem', 'TZ'],
+                ['TZs estimados', `${regra.tzsEstimados} peças`],
+                ['Saídas esperadas', regra.saidasEsperadas],
+                ['Status', regra.status],
+              ] as const
+            ).map(([k, v]) => (
+              <div key={k} className={k === 'Regra' || k === 'Saídas esperadas' ? 'col-span-2' : ''}>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{k}</p>
+                <p className="mt-0.5 text-[13px] font-semibold">{v}</p>
+              </div>
+            ))}
+          </div>
+          {regra.provisorio ? (
+            <Badge variant="outline" title="P12 / v1.1 §16.15 — validar com cliente">
+              Provisório
+            </Badge>
+          ) : null}
+        </div>
+        <div className="flex-shrink-0 border-t border-border px-6 py-4">
+          <button type="button" onClick={onClose} className="h-8 w-full rounded-md border border-border text-[13px]">
+            Fechar
+          </button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function DrawerTZ({
+  tz,
+  onClose,
+}: {
+  tz: {
+    peca: string;
+    peso: string | null;
+    lote: string | null;
+    origem: string | null;
+    entrada: string | null;
+    situacao: string;
+    caracteristicas: string | null;
+    obs: string | null;
+  } | null;
+  onClose: () => void;
+}) {
+  if (!tz) return null;
+  return (
+    <Sheet open={!!tz} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <SheetContent side="right" className="flex max-w-full w-[400px] flex-col bg-card p-0">
+        <SheetHeader className="flex flex-shrink-0 flex-row items-center justify-between border-b border-border px-6 py-4">
+          <SheetTitle className="text-[15px] font-bold">{tz.peca}</SheetTitle>
+          <button type="button" onClick={onClose}><X className="h-4 w-4 text-muted-foreground" /></button>
+        </SheetHeader>
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-6">
+          <div className="grid grid-cols-2 gap-4">
+            {(
+              [
+                ['Código da peça', tz.peca],
+                ['Peso', tz.peso ? `${tz.peso} kg` : '—'],
+                ['Lote', tz.lote ?? '—'],
+                ['Frigorífico', tz.origem ?? '—'],
+                ['Pesagem', tz.entrada ?? '—'],
+                ['Situação', tz.situacao],
+                ['Características', tz.caracteristicas || '—'],
+              ] as const
+            ).map(([k, v]) => (
+              <div key={k} className={k === 'Frigorífico' || k === 'Situação' || k === 'Características' ? 'col-span-2' : ''}>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{k}</p>
+                <p className="mt-0.5 text-[13px] font-semibold">{v}</p>
+              </div>
+            ))}
+          </div>
+          {tz.obs ? (
+            <div className="rounded-lg bg-muted/40 p-3">
+              <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Observação</p>
+              <p className="text-[12px] text-muted-foreground">{tz.obs}</p>
+            </div>
+          ) : null}
+        </div>
+        <div className="flex-shrink-0 border-t border-border px-6 py-4">
+          <button type="button" onClick={onClose} className="h-8 w-full rounded-md border border-border text-[13px]">
+            Fechar
+          </button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+{/* Montagem — DesossaDashboard.tsx:716-719 */}
+<DrawerItem item={drawerItem} onClose={() => setDrawerItem(null)} />
+<DrawerRegra regra={drawerRegra} onClose={() => setDrawerRegra(null)} />
+<DrawerTZ tz={drawerTZ} onClose={() => setDrawerTZ(null)} />
+```
+
+Fonte de TZs do drawer: `GET /api/operacao/corte/pecas-elegiveis?operacaoId=` (Task 12) — mapear `etiquetaAtual`→`peca`, `pesoOriginal`→`peso`, `statusPeca`→`situacao`. Zero `TZS_SEED`/`ITENS_SEED` em runtime.
+
 ```bash
 rg -n "setInterval" "app/frontend/src/app/(admin)/desossa/dashboard" && echo FAIL || echo OK
 # Expected: OK
+rg -n "TZs na desossa|CARGA / HORÁRIO|Rota / Carga" "app/frontend/src/app/(admin)/desossa/dashboard/desossa-dashboard-client.tsx"
+# Expected: 3 hits (KPI + TVMode col + thead tabela)
 ```
 
 - [ ] Commit: `feat(onda7): dashboard desossa fiel com Modo TV e WebSocket`
@@ -2101,7 +2555,7 @@ function BadgeProvisorio({ texto }: { texto?: string }) {
 ```
 
 ```tsx
-{/* Modal finalizar com divergência tipada — estrutura DesossaPesagem ModalFinalizarTransformacao :283+ */}
+{/* Modal finalizar — DesossaPesagem.tsx:283+ — client usa fetch('/api/...') NUNCA fetchBackend */}
 {modalFinalizar && (
   <Dialog open onOpenChange={setModalFinalizar}>
     <DialogContent>
@@ -2129,11 +2583,25 @@ function BadgeProvisorio({ texto }: { texto?: string }) {
           />
           <Button
             onClick={async () => {
-              await fetchBackend(`/operacao/corte/${transfId}/divergencia`, {
+              const rDiv = await fetch(`/api/operacao/corte/${transfId}/divergencia`, {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tipo: tipoDiv, detalhe: {}, observacao: obsDiv }),
               });
-              await fetchBackend(`/operacao/corte/${transfId}/concluir`, { method: 'POST' });
+              if (!rDiv.ok) {
+                setErro((await rDiv.json().catch(() => ({}))).message ?? 'Erro na divergência');
+                return;
+              }
+              // BFF concluir já existe: app/frontend/src/app/api/operacao/corte/[id]/concluir/route.ts
+              const rConc = await fetch(`/api/operacao/corte/${transfId}/concluir`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+              });
+              if (!rConc.ok) {
+                setErro((await rConc.json().catch(() => ({}))).message ?? 'Erro ao concluir');
+                return;
+              }
               setModalFinalizar(false);
             }}
           >
@@ -2141,27 +2609,330 @@ function BadgeProvisorio({ texto }: { texto?: string }) {
           </Button>
         </div>
       ) : (
-        <Button onClick={() => void concluir()}>Concluir</Button>
+        <Button
+          onClick={async () => {
+            const r = await fetch(`/api/operacao/corte/${transfId}/concluir`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({}),
+            });
+            if (!r.ok) {
+              setErro((await r.json().catch(() => ({}))).message ?? 'Erro ao concluir');
+              return;
+            }
+            setModalFinalizar(false);
+          }}
+        >
+          Concluir
+        </Button>
       )}
     </DialogContent>
   </Dialog>
 )}
 ```
 
-Modais adicionais fiéis ao protótipo: `ModalSelecionarTz` (lista `pecas-elegiveis`), `ModalEtiquetaParte` (mostra **Peça mãe (TZ)**), `ModalCancelarAcao`. Zero `ITENS_SEED`/`REGRAS_SEED` em runtime.
+BFF divergência (criar — tip não tem rota BFF):
 
-- [ ] **Step 4: Commit** `feat(onda7): tela pesagem desossa fiel e pecas-elegiveis`
+```ts
+// app/frontend/src/app/api/operacao/corte/[id]/divergencia/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { fetchBackend } from '@/lib/api';
+
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const body = await req.json();
+  const { data, error, status } = await fetchBackend(`/operacao/corte/${id}/divergencia`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (error) return NextResponse.json({ message: error }, { status });
+  return NextResponse.json(data, { status });
+}
+```
+
+- [ ] **Step 4: Modais JSX literais** (`DesossaPesagem.tsx:121-279`)
+
+```tsx
+function ModalSelecionarTz({
+  open,
+  onClose,
+  tzs,
+  onSelect,
+}: {
+  open: boolean;
+  onClose: () => void;
+  tzs: PecaElegivelDesossa[];
+  onSelect: (pecaId: string) => void;
+}) {
+  const disponiveis = tzs.filter((t) => t.statusPeca === 'para_corte');
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-md gap-0 bg-card p-0">
+        <DialogHeader className="border-b border-border px-5 py-4">
+          <DialogTitle className="text-[15px] font-bold">Selecionar TZ para desossa</DialogTitle>
+        </DialogHeader>
+        <p className="px-5 pt-3 text-[12px] text-muted-foreground">
+          Peças encaminhadas pela balança principal. Leia a etiqueta (QR) ou selecione manualmente.
+        </p>
+        <div className="flex flex-col divide-y divide-border p-2">
+          {disponiveis.length === 0 ? (
+            <p className="py-8 text-center text-[13px] text-muted-foreground">
+              Nenhum TZ disponível para desossa.
+            </p>
+          ) : (
+            disponiveis.map((t) => (
+              <button
+                key={t.pecaId}
+                type="button"
+                onClick={() => {
+                  onSelect(t.pecaId);
+                  onClose();
+                }}
+                className="flex items-start justify-between rounded-lg px-3 py-3 text-left hover:bg-muted/40"
+              >
+                <div>
+                  <p className="font-mono text-[13px] font-bold">{t.etiquetaAtual ?? t.pecaId}</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {t.produtoCodigo ?? 'TZ'} · status {t.statusPeca}
+                  </p>
+                </div>
+                <span className="mt-0.5 font-mono text-[13px] font-bold">
+                  {t.pesoOriginal ? `${t.pesoOriginal} kg` : '—'}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ModalEtiquetaParte({
+  open,
+  onClose,
+  data,
+}: {
+  open: boolean;
+  onClose: () => void;
+  data: {
+    etiqueta: string;
+    produto: string;
+    peso: string;
+    origemPeso: string;
+    destino: string;
+    pedido: string | null;
+    tzOrigem: string;
+    lote: string | null;
+    nfe: string | null;
+    fornecedor: string | null;
+  } | null;
+}) {
+  if (!data) return null;
+  const tipoEtq = data.destino === 'pedido' ? 'Parte para Pedido' : 'Parte para Estoque';
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-sm gap-0 bg-card p-0">
+        <DialogHeader className="border-b border-border px-5 py-4">
+          <DialogTitle className="text-[15px] font-bold">Etiqueta gerada</DialogTitle>
+        </DialogHeader>
+        <div className="p-5">
+          <div className="rounded-xl border-2 border-violet-600 bg-violet-surface p-4 font-mono">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{tipoEtq}</p>
+            <p className="text-[18px] font-black text-violet-900">{data.produto}</p>
+            <p className="text-[11px] text-violet-700">Origem: desossa</p>
+            <div className="mt-3 grid grid-cols-2 gap-y-1.5 border-t border-dashed border-violet-200 pt-3 text-[11px]">
+              <div>
+                <span className="text-muted-foreground">Peso: </span>
+                <span className="font-bold">{data.peso} kg</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Origem peso: </span>
+                <span>{data.origemPeso}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Destino: </span>
+                <span className="font-bold">{data.destino}</span>
+              </div>
+              {data.pedido ? (
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Pedido: </span>
+                  <span className="font-bold">{data.pedido}</span>
+                </div>
+              ) : null}
+              <div className="col-span-2">
+                <span className="text-muted-foreground">Peça mãe (TZ): </span>
+                <span className="font-bold text-violet-800">{data.tzOrigem}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Lote: </span>
+                <span>{data.lote ?? '—'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">NF-e: </span>
+                <span>{data.nfe ?? '—'}</span>
+              </div>
+              <div className="col-span-2">
+                <span className="text-muted-foreground">Frigorífico: </span>
+                <span>{data.fornecedor ?? '—'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 px-5 pb-5">
+          <button type="button" className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border border-border text-[13px]">
+            <Printer className="h-3.5 w-3.5" /> Reimprimir
+          </button>
+          <button type="button" onClick={onClose} className="h-8 flex-1 rounded-md bg-violet-800 text-[13px] font-semibold text-white">
+            Fechar
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ModalCancelarAcao({
+  open,
+  onClose,
+  acao,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  acao: {
+    produto: string;
+    peso: string;
+    destino: string;
+    hora: string;
+    etiqueta: string;
+    tzOrigem: string;
+  } | null;
+  onConfirm: (motivo: string, obs: string) => void;
+}) {
+  const [motivo, setMotivo] = useState('');
+  const [obs, setObs] = useState('');
+  if (!acao) return null;
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-md gap-0 bg-card p-0">
+        <DialogHeader className="border-b border-border px-5 py-4">
+          <DialogTitle className="text-[15px] font-bold">Cancelar registro de parte</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4 p-5">
+          <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-muted/40 p-3 text-[12px]">
+            <div>
+              <span className="text-muted-foreground">Produto: </span>
+              <span className="font-semibold">{acao.produto}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Peso: </span>
+              <span className="font-semibold">{acao.peso}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Destino: </span>
+              <span className="font-semibold">{acao.destino}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Hora: </span>
+              <span className="font-semibold">{acao.hora}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Etiqueta: </span>
+              <span className="font-semibold">{acao.etiqueta}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Peça mãe: </span>
+              <span className="font-semibold text-violet-800">{acao.tzOrigem}</span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] font-semibold">
+              Motivo do cancelamento <span className="text-destructive">*</span>
+            </label>
+            <select
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              className="h-8 w-full rounded-md border border-border px-2.5 text-[13px]"
+            >
+              <option value="">Selecione o motivo</option>
+              {[
+                'Peso informado incorretamente',
+                'Produto registrado incorretamente',
+                'Pedido selecionado incorretamente',
+                'Destino selecionado incorretamente',
+                'Etiqueta impressa incorretamente',
+                'Outro',
+              ].map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] font-semibold">Observação</label>
+            <textarea
+              value={obs}
+              onChange={(e) => setObs(e.target.value)}
+              rows={2}
+              className="w-full resize-none rounded-md border border-border px-2.5 py-2 text-[13px]"
+            />
+          </div>
+          <div className="flex items-start gap-2 rounded-lg border border-danger-border bg-danger-surface p-3">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
+            <p className="text-[12px] text-danger-rose leading-snug">
+              O cancelamento estorna a associação/destino da parte, invalida a etiqueta anterior e
+              devolve a saída ao checklist da transformação.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2 px-5 pb-5">
+          <button type="button" onClick={onClose} className="h-8 flex-1 rounded-md border border-border text-[13px]">
+            Voltar
+          </button>
+          <button
+            type="button"
+            disabled={!motivo}
+            onClick={() => {
+              onConfirm(motivo, obs);
+              onClose();
+            }}
+            className="h-8 flex-1 rounded-md bg-destructive text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Confirmar Cancelamento
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+Zero `ITENS_SEED`/`REGRAS_SEED`/`TZS_INICIAIS` em runtime. Grep de `fetchBackend` no client da pesagem = falha.
+
+```bash
+rg -n "fetchBackend" "app/frontend/src/app/(admin)/desossa" && echo FAIL || echo OK
+# Expected: OK (fetchBackend só em app/api/** BFF)
+```
+
+- [ ] **Step 5: Commit** `feat(onda7): tela pesagem desossa fiel e pecas-elegiveis`
 
 ---
 
 ### Task 13 — UI Etiquetas desossa fiel
 
-**Files:** `desossa-etiquetas-client.tsx`; page; consome `/api/desossa/etiquetas`.
+**Files:** `desossa-etiquetas-client.tsx`; page; consome `fetch('/api/desossa/etiquetas?operacaoId=')`.
 
-**Protótipo:** `DesossaEtiquetas.tsx` @ `8d32aa4c` — KPIs `:599-603`, filtros `:623`, coluna Peça mãe `:650`, drawer Invalidada por troca `:365-443`.
+**Protótipo pinado (ler ANTES de escrever):** `DesossaEtiquetas.tsx` @ `8d32aa4c`
+- KPIs: `:597-610`
+- Filtros Status com rótulos UI: `:620-623` (`Ativa`, `Reimpressa`, `Cancelada`, `Invalidada por troca`, `Pendente de impressão`, `Bloqueada`)
+- Tabela 11 colunas: `:650` — Código, Parte, Produto, Peso, Origem peso, Destino, Cliente / Pedido, Peça mãe (TZ), Emissão, Status, ''
+- Drawer Invalidada por troca: `:365-443` (alerta + Peça mãe)
 
 ```tsx
-function StatusBadge({ estado }: { estado: string }) {
+/** Wire → rótulo protótipo DesossaEtiquetas.tsx:11 / :623 */
+function rotuloStatusEtiqueta(e: EtiquetaDesossaListada): string {
+  if (e.bloqueada) return 'Bloqueada';
+  if (e.pendenteImpressao) return 'Pendente de impressão';
   const mapa: Record<string, string> = {
     emitida: 'Ativa',
     ativa: 'Ativa',
@@ -2169,66 +2940,142 @@ function StatusBadge({ estado }: { estado: string }) {
     cancelada: 'Cancelada',
     invalidada_por_troca: 'Invalidada por troca',
   };
-  return <Badge variant="outline">{mapa[estado] ?? estado}</Badge>;
+  return mapa[e.estado] ?? e.estado;
 }
 
-{/* KPIs */}
-<div className="grid grid-cols-5 gap-3">
+function StatusBadge({ etq }: { etq: EtiquetaDesossaListada }) {
+  return <Badge variant="outline">{rotuloStatusEtiqueta(etq)}</Badge>;
+}
+
+function OrigemPesoBadge({ origem }: { origem: string | null }) {
+  const label = origem === 'balanca' ? 'Balança' : origem === 'manual' ? 'Manual' : origem ?? '—';
+  return <Badge variant="outline">{label}</Badge>;
+}
+
+{/* KPIs — DesossaEtiquetas.tsx:597-603 */}
+<div className="grid grid-cols-5 gap-4">
   {[
-    { label: 'Emitidas', value: stats.emitidas },
-    { label: 'Reimpressões', value: stats.reimpressoes },
-    { label: 'Canceladas', value: stats.canceladas },
+    { label: 'Emitidas', value: stats.emitidas, color: 'text-violet-800' },
+    { label: 'Reimpressões', value: stats.reimpressoes, color: 'text-info-ink' },
+    { label: 'Canceladas', value: stats.canceladas, color: 'text-muted-foreground' },
     { label: 'Invalidadas por troca', value: stats.invalidadas, color: 'text-destructive' },
-    { label: 'Pendentes de impressão', value: stats.pendentes },
+    { label: 'Pendentes de impressão', value: stats.pendentes, color: 'text-warning-ink' },
   ].map((k) => (
-    <div key={k.label} className="rounded-xl border border-border bg-card px-4 py-3">
-      <p className="text-[11px] text-muted-foreground">{k.label}</p>
-      <p className={`text-[28px] font-black ${k.color ?? ''}`}>{k.value}</p>
+    <div key={k.label} className="rounded-xl border border-border bg-card px-5 py-4">
+      <p className="mb-1 text-[11px] font-medium text-muted-foreground">{k.label}</p>
+      <p className={`text-[28px] font-black leading-none ${k.color}`}>{k.value}</p>
     </div>
   ))}
 </div>
 
-{/* Filtros */}
-<select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="...">
-  {['Todos', 'emitida', 'ativa', 'reimpressa', 'cancelada', 'invalidada_por_troca'].map((o) => (
-    <option key={o} value={o}>{o}</option>
-  ))}
-</select>
+{/* Filtros — rótulos literais do protótipo :623 (NÃO códigos wire no <option>) */}
+<div className="flex flex-wrap items-center gap-2">
+  <input
+    type="text"
+    value={busca}
+    onChange={(e) => setBusca(e.target.value)}
+    placeholder="Buscar por etiqueta, parte, cliente, TZ, lote ou NF"
+    className="h-8 min-w-[220px] flex-1 rounded-md border border-border bg-card px-3 text-[13px]"
+  />
+  <select value={filtroProduto} onChange={(e) => setFiltroProduto(e.target.value)} className="h-8 rounded-md border border-border px-2.5 text-[13px]">
+    {['Todos', 'Coxão-bola', 'Jacaré', 'Coxão-bola com alcatra', 'Filé curto'].map((o) => (
+      <option key={o} value={o}>{o === 'Todos' ? 'Produto: Todos' : o}</option>
+    ))}
+  </select>
+  <select value={filtroDestino} onChange={(e) => setFiltroDestino(e.target.value)} className="h-8 rounded-md border border-border px-2.5 text-[13px]">
+    {['Todos', 'Pedido', 'Estoque'].map((o) => (
+      <option key={o} value={o}>{o === 'Todos' ? 'Destino: Todos' : o}</option>
+    ))}
+  </select>
+  <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="h-8 rounded-md border border-border px-2.5 text-[13px]">
+    {[
+      'Todos',
+      'Ativa',
+      'Reimpressa',
+      'Cancelada',
+      'Invalidada por troca',
+      'Pendente de impressão',
+      'Bloqueada',
+    ].map((o) => (
+      <option key={o} value={o}>{o === 'Todos' ? 'Status: Todos' : o}</option>
+    ))}
+  </select>
+  <select value={filtroPeriodo} onChange={(e) => setFiltroPeriodo(e.target.value)} className="h-8 rounded-md border border-border px-2.5 text-[13px]">
+    {['Todos', 'Hoje', 'Ontem', 'Últimos 7 dias'].map((o) => (
+      <option key={o} value={o}>{o === 'Todos' ? 'Período: Todos' : o}</option>
+    ))}
+  </select>
+</div>
 
-{/* Tabela com coluna Peça mãe (TZ) */}
+{/* Tabela 11 cols — DesossaEtiquetas.tsx:650 */}
 <table className="w-full text-[12px]">
   <thead>
-    <tr>
-      {['Código', 'Produto', 'Peso', 'Destino', 'Peça mãe (TZ)', 'Emissão', 'Status', ''].map((h) => (
-        <th key={h}>{h}</th>
+    <tr className="border-b border-border bg-muted/40">
+      {[
+        'Código',
+        'Parte',
+        'Produto',
+        'Peso',
+        'Origem peso',
+        'Destino',
+        'Cliente / Pedido',
+        'Peça mãe (TZ)',
+        'Emissão',
+        'Status',
+        '',
+      ].map((h) => (
+        <th
+          key={h || 'acoes'}
+          className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+        >
+          {h}
+        </th>
       ))}
     </tr>
   </thead>
   <tbody>
-    {etiquetas.map((e) => (
-      <tr key={e.id} className={e.estado === 'invalidada_por_troca' ? 'opacity-70' : ''}>
-        <td className="font-mono">{e.codigo}</td>
-        <td>{e.produtoNome}</td>
-        <td className="font-mono">{e.peso}</td>
-        <td>{e.destino}</td>
-        <td className="font-mono font-bold text-violet-800">{e.pecaMaeCodigo ?? '—'}</td>
-        <td>{new Date(e.createdAt).toLocaleString('pt-BR')}</td>
-        <td><StatusBadge estado={e.estado} /></td>
-        <td>
-          <button type="button" onClick={() => setDrawer(e)}><Eye /></button>
-        </td>
-      </tr>
-    ))}
+    {filtradas.map((e) => {
+      const inativa = e.estado === 'cancelada' || e.estado === 'invalidada_por_troca';
+      return (
+        <tr
+          key={e.id}
+          onClick={() => setDrawer(e)}
+          className={`cursor-pointer border-b border-border/60 hover:bg-violet-surface/40 ${inativa ? 'opacity-50' : ''}`}
+        >
+          <td className="px-4 py-2.5">
+            <span className={`rounded bg-violet-surface px-1.5 py-0.5 font-mono text-[11px] font-bold text-violet-800 ${inativa ? 'line-through' : ''}`}>
+              {e.codigo}
+            </span>
+          </td>
+          <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground">{e.parteCodigo ?? '—'}</td>
+          <td className="px-4 py-2.5 font-bold text-violet-800">{e.produtoNome}</td>
+          <td className="px-4 py-2.5 font-mono text-muted-foreground">{e.peso ?? '—'}</td>
+          <td className="px-4 py-2.5"><OrigemPesoBadge origem={e.origemPeso} /></td>
+          <td className="px-4 py-2.5">{e.destino === 'pedido' ? 'Pedido' : 'Estoque'}</td>
+          <td className="max-w-[180px] truncate px-4 py-2.5 text-muted-foreground">{e.clientePedido ?? '—'}</td>
+          <td className="px-4 py-2.5 font-mono text-[11px] text-violet-700">{e.pecaMaeCodigo ?? '—'}</td>
+          <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">
+            {new Date(e.createdAt).toLocaleString('pt-BR')}
+          </td>
+          <td className="px-4 py-2.5"><StatusBadge etq={e} /></td>
+          <td className="px-4 py-2.5" onClick={(ev) => ev.stopPropagation()}>
+            <button type="button" title="Visualizar" onClick={() => setDrawer(e)}>
+              <Eye className="h-3.5 w-3.5" />
+            </button>
+          </td>
+        </tr>
+      );
+    })}
   </tbody>
 </table>
 
-{/* Drawer — alerta Invalidada por troca + Peça mãe */}
+{/* Drawer — DesossaEtiquetas.tsx:365-443 */}
 {drawer && (
   <Sheet open onOpenChange={() => setDrawer(null)}>
     <SheetContent side="right" className="w-[560px] max-w-full p-0">
       <SheetHeader className="border-b px-6 py-4">
         <SheetTitle>Etiqueta {drawer.codigo}</SheetTitle>
-        <StatusBadge estado={drawer.estado} />
+        <StatusBadge etq={drawer} />
       </SheetHeader>
       <div className="flex flex-col gap-6 p-6">
         {drawer.estado === 'invalidada_por_troca' && (
@@ -2250,6 +3097,18 @@ function StatusBadge({ estado }: { estado: string }) {
               <span className="font-mono font-bold text-violet-800">{drawer.pecaMaeCodigo}</span>
             </div>
             <div>
+              <span className="text-muted-foreground">Parte: </span>
+              <span className="font-mono">{drawer.parteCodigo ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Origem peso: </span>
+              <span>{drawer.origemPeso === 'balanca' ? 'Balança' : drawer.origemPeso === 'manual' ? 'Manual' : drawer.origemPeso ?? '—'}</span>
+            </div>
+            <div className="col-span-2">
+              <span className="text-muted-foreground">Cliente / Pedido: </span>
+              <span className="font-bold">{drawer.clientePedido ?? '—'}</span>
+            </div>
+            <div>
               <span className="text-muted-foreground">Transformação: </span>
               <span className="font-mono">{drawer.transformacaoId}</span>
             </div>
@@ -2261,7 +3120,12 @@ function StatusBadge({ estado }: { estado: string }) {
 )}
 ```
 
-Zero mock seed do protótipo (`ETQ_SEED`) em runtime. Stats derivados da resposta de `/api/desossa/etiquetas`.
+Filtro client-side por rótulo: `filtradas = etiquetas.filter(e => filtroStatus === 'Todos' || rotuloStatusEtiqueta(e) === filtroStatus)`. Stats derivados da resposta (emitidas = `estado` em emitida/ativa/reimpressa; invalidadas = `invalidada_por_troca`; pendentes = `pendenteImpressao`). Zero `SEED`/`ETQ_SEED` em runtime.
+
+```bash
+rg -n "Peça mãe \(TZ\)|Pendente de impressão|Origem peso|Cliente / Pedido" "app/frontend/src/app/(admin)/desossa/etiquetas"
+# Expected: hits nos rótulos do thead/filtros
+```
 
 - [ ] Commit: `feat(onda7): tela etiquetas da desossa fiel ao protótipo`
 
@@ -2271,10 +3135,10 @@ Zero mock seed do protótipo (`ETQ_SEED`) em runtime. Stats derivados da respost
 
 E2E obrigatório:
 1. Login perfil `corte`
-2. `/desossa/dashboard` — KPIs + copy anti-"em produção"; status WS
-3. Modo TV acionável
-4. `/desossa/pesagem-destinacao` — não placeholder; Badge Provisório
-5. `/desossa/etiquetas` — coluna Peça mãe
+2. `/desossa/dashboard` — KPI «TZs na desossa» + copy anti-"em produção"; status WS; colunas Rota/Carga+Representante+Alvo
+3. Modo TV acionável com coluna «CARGA / HORÁRIO»
+4. `/desossa/pesagem-destinacao` — não placeholder; Badge Provisório; modais TZ/etiqueta/cancelar
+5. `/desossa/etiquetas` — 11 colunas incl. Parte, Origem peso, Cliente/Pedido, Peça mãe; filtros por rótulo UI
 
 ```bash
 cd app/backend && npm run test:cov
@@ -2338,9 +3202,10 @@ Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13.
 ## Self-Review (Planejador)
 
 1. **Spec coverage:** §6.6 exclusividade → T4/T5/7.7; §6.14 fluxo → D7.1/D7.5; telas §8.9 → T11–T13; §16.7/§16.15 → parâmetro+badge; matriz 17–19 → reconciliação; quality-gates O7 → DoD 7.7/7.8/7.10/7.13/7.16.
-2. **Placeholder scan:** nenhum TBD/TODO/a definir/implementar depois/similar à Task/fase 2; zero "mínimo" como compromisso; D7.13 decidido (criar endpoint).
-3. **Type consistency:** `regraTransformacaoId`, wires `faltas_desossa_atualizadas` / `divergencia_transformacao_aberta`, tipos de divergência alinhados ao CHECK.
+2. **Placeholder scan:** nenhum TBD/TODO/a definir/implementar depois/similar à Task/fase 2; zero compromisso de entrega incompleta; D7.13 decidido (criar endpoint).
+3. **Type consistency:** `regraTransformacaoId`, wires `faltas_desossa_atualizadas` / `divergencia_transformacao_aberta`, tipos de divergência alinhados ao CHECK; `PainelDesossa.itens` com `rota`/`representante`/`horarioAlvo`; `aProduzir === quantidadeFaltante` (líquido tip).
 4. **PR #38:** não reutilizado; branch de plano `feature/onda7-plano-desossa`.
+5. **Emenda 2 vs veredito `25300fa`:** (1) teste+calc alinhados ao tip líquido; (2) client sem `fetchBackend`; (3) TVMode CARGA/HORÁRIO + KPI TZs na desossa + tabela Rota/Representante/Alvo + drawers + etiquetas 11 cols/filtros rótulo; (4) snapshot RBAC com comando; (5) modais pesagem com cercas JSX.
 
 ---
 
