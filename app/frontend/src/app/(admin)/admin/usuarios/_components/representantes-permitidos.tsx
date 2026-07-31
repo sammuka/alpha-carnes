@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { mensagemDeErro } from '@/lib/error-message';
 import type { RepresentantePermitido } from '@/lib/usuarios';
 import type { Representante } from '@/lib/representantes';
 
@@ -24,16 +25,29 @@ export function RepresentantesPermitidos({
   const [opcoes, setOpcoes] = useState<Representante[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
   const pageSize = 20;
 
   const carregarPagina = useCallback(async (pagina: number, termo: string, acumular: boolean) => {
-    const params = new URLSearchParams({ page: String(pagina), pageSize: String(pageSize) });
-    if (termo) params.set('search', termo);
-    const res = await fetch(`/api/cadastros/representantes?${params.toString()}`, { cache: 'no-store' });
-    if (!res.ok) return;
-    const corpo = (await res.json()) as { data: Representante[]; total: number };
-    setTotal(corpo.total);
-    setOpcoes((atuais) => (acumular ? [...atuais, ...corpo.data] : corpo.data));
+    setCarregando(true);
+    setErro(null);
+    try {
+      const params = new URLSearchParams({ page: String(pagina), pageSize: String(pageSize) });
+      if (termo) params.set('search', termo);
+      const res = await fetch(`/api/cadastros/representantes?${params.toString()}`, { cache: 'no-store' });
+      if (!res.ok) {
+        setErro(await mensagemDeErro(res, 'Não foi possível carregar os representantes.'));
+        return;
+      }
+      const corpo = (await res.json()) as { data: Representante[]; total: number };
+      setTotal(corpo.total);
+      setOpcoes((atuais) => (acumular ? [...atuais, ...corpo.data] : corpo.data));
+    } catch {
+      setErro('Não foi possível carregar os representantes.');
+    } finally {
+      setCarregando(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -73,6 +87,23 @@ export function RepresentantesPermitidos({
         value={busca}
         onChange={(e) => setBusca(e.target.value)}
       />
+      {erro ? (
+        <div className="flex flex-col items-start gap-2">
+          <p role="alert" className="text-xs text-destructive">{erro}</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void carregarPagina(page, busca, page > 1)}
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      ) : carregando && opcoesVisiveis.length === 0 ? (
+        <p aria-busy="true" className="text-xs text-muted-foreground">Carregando representantes…</p>
+      ) : opcoesVisiveis.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Nenhum representante encontrado.</p>
+      ) : null}
       <div className="max-h-48 space-y-2 overflow-y-auto">
         {opcoesVisiveis.map((rep) => {
           const removido = 'deletedAt' in rep && rep.deletedAt !== null;
