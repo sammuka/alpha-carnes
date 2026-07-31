@@ -71,10 +71,11 @@ export interface DivergenciaRecebimento {
 export interface RecebimentoDetalhe {
   id: string;
   codigoLote: string;
-  compraProgramadaId: string;
+  /** Pode vir no topo ou aninhado em pedidoFornecedor (API Onda 6). */
+  compraProgramadaId?: string;
   pedidoFornecedorId: string;
   fornecedorId: string;
-  dataOperacao: string;
+  dataOperacao?: string;
   status: StatusRecebimento;
   tipoCarga: string | null;
   progressoBalanca: number;
@@ -94,6 +95,8 @@ export interface RecebimentoDetalhe {
   observacoes: string | null;
   fornecedor?: { id: string; razaoSocial: string };
   compra?: { id: string; numeroInterno: string | null };
+  pedidoFornecedor?: { id: string; compraProgramadaId?: string; numero?: string | null };
+  operacao?: { id: string; data?: string };
   itens: RecebimentoItem[];
   divergencias: DivergenciaRecebimento[];
 }
