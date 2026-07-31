@@ -59,6 +59,17 @@ emenda 1 tornou copiável, mais cinco achados menores. Nenhum escopo novo.
 | menor | `agruparPorPeca` e `paginarEmMemoria` eram citadas como "funções puras no mesmo arquivo" sem corpo literal; `paginarEmMemoria` não existe hoje em `common/crud/paginacao.ts` (que só tem `montarPaginado`) | Task 6.3 ganha os dois corpos literais, reusando `montarPaginado`/`Paginado<T>` já existentes |
 | menor | Na tela de Etiquetas, "Preview da etiqueta" (`EtiquetasRecebimento.tsx:185-224`) e "Modal Reimprimir (inclui pendente)" (`:227-296`) estão no bloco a reproduzir, mas não apareciam na Task 11.2 nem em critério algum | Task 11.2 ganha o preview no drawer e o modal Reimprimir, ligado à rota BFF **já existente** `POST /api/operacao/pesagem/pecas/:id/etiqueta/reimprimir` — nenhum endpoint novo. DoD 6.29 alinhada à fórmula "renderiza os blocos do protótipo" de 6.26/6.27 |
 
+## Emenda 3 — resposta ao Portão 1 `ajustar` (veredito `daf9446`)
+
+Os dois bloqueantes da emenda 2 (Task 6.3 filtrando `estado` no `WHERE` errado; `montarPatchCabecalhoUi`/`extrairPayloadNfUi` não exportadas) foram confirmados fechados. Esta rodada abre dois bloqueantes **novos**, revelados pela própria densidade que a emenda 2 trouxe: a auditoria de fidelidade da tela de Etiquetas (agora que preview e drawer entraram na Task 11.2) achou uma tela ainda incompleta, e a Troca de Peça só implementa metade da mitigação registrada de P10. Mais dois menores nomeados pelo Monitor. Nenhum escopo novo fora do que os dois bloqueantes exigem.
+
+| # | Bloqueante do veredito | Onde está fechado nesta emenda |
+|---|---|---|
+| 1 | O drawer do protótipo tem 5 seções; a Task 11.2 cobria 2 (preview parcial + histórico) e escrevia "até uma onda futura estender o contrato" para as 3 que faltam — Princípio I/II, e a saída por Princípio VIII não se sustenta porque os campos omitidos são join sobre tabelas já existentes | `EtiquetaListada`/`listar()` (Task 6.3) ganham 13 campos novos, todos join literal sobre `itens_comerciais`, `pecas.captura_meta`, `recebimentos`, `fornecedores`, `usuarios`, `pedidos_venda`, `clientes` e `representantes` — nenhuma tabela nova, nenhum dado inventado. Task 11.2 reescrita com as 3 seções ("Dados da peça", "Rastreabilidade", "Destino") em tabela de derivação 1:1 (mesmo formato de D6.2/D6.18), o preview completo com produto/lote/NF-e/origem, e a frase que adiava as 3 seções substituída pela tabela — nenhuma seção fica para depois. O único campo do protótipo sem coluna real (`localEstoque`, destino Estoque) vira parâmetro `provisorio` com badge "Provisório" — **AD-09** em `DECISOES.md`, não "onda futura". DoDs novos 6.43–6.46, 1:1 com asserts de rótulo/seção |
+| 2 | A mitigação registrada de P10 (§16.13, mestre `:261`: "Troca de Peça registra pendência física quando carga aberta; bloqueada com carga fechada") só implementa a segunda metade — a Task 4.3 bloqueia com carga fechada mas nada registra com carga aberta, e o plano não citava P10 em linha alguma | Task 4.2 ganha `buscarCargaAbertaDaPeca` (par exato de `pecaEmCargaFechada`, mesma tabela `carga_itens`/`caminhoes`). Task 4.3: quando a peça retirada está em carga **aberta**, a troca registra pendência física em `aprovacoes_operacionais` (tipo novo `pendencia_fisica_etiqueta`, reuso de `AprovacoesService.abrirNaTx` da Onda 5 — nenhuma tabela nova) na **mesma transação**, referenciando a troca; sem carga alguma, nada é criado. `chk_aprovacao_tipo` ganha o quinto valor via `0021` (Task 1). P10 citado explicitamente no texto da Task 4 e em D6.21. DoDs novos 6.40–6.42 |
+| menor | `listar()` sem `recebimentoId` varria a tabela inteira, mas o docstring de `paginarEmMemoria` dizia "a listagem já é filtrada por recebimento" como se fosse sempre verdade | `recebimentoId` deixa de ser `.optional()` em `listarEtiquetasSchema` (Task 6.1) — a tela sempre tem um lote selecionado (`etiquetas-client.tsx` já não busca sem ele). Comentário de `paginarEmMemoria` corrigido para descrever a garantia real, não a intenção |
+| menor | Task 4.3 citava "o mesmo padrão do precedente `etiqueta.service.ts:43-55`" para a impressão, mas esse precedente é **FORA** da transação (`:53`: "Impressão física FORA da transação") enquanto a troca imprime **DENTRO** do lock — precedente citado ao contrário | Comentário reescrito: a troca decide **DENTRO** do lock, **diferente** do precedente (que é fora), porque a checagem de carga fechada depende de travar as duas peças antes de imprimir; custo zero hoje (`fila-impressora.adapter.ts:19-27` é fake, sem I/O), registrado com `ponytail:` para reavaliar quando o driver real (ADR-010) entrar em produção — dois `FOR UPDATE` abertos durante I/O de hardware é um teto explícito, não uma promessa de I/O rápido |
+
 ## Goal
 
 Fechar as três rotas de recebimento/balança com backend transacional, UI idêntica ao protótipo e
@@ -134,7 +145,7 @@ não cabe sob `@Controller('operacao/pesagem')` sem inventar um path que a matri
 | Preview da etiqueta | `src/app/pages/EtiquetasRecebimento.tsx:185-224` |
 | Modal Reimprimir (inclui pendente) | `src/app/pages/EtiquetasRecebimento.tsx:227-296` |
 | Modal Cancelar etiqueta | `src/app/pages/EtiquetasRecebimento.tsx:297-360` |
-| Drawer de detalhe (regras `cancelavel`/`reimprimivel`) | `src/app/pages/EtiquetasRecebimento.tsx:361-400` |
+| Drawer de detalhe — 5 seções (preview, Dados da peça, Rastreabilidade, Destino, Histórico) + rodapé com `cancelavel`/`reimprimivel` | `src/app/pages/EtiquetasRecebimento.tsx:361-500` |
 
 ## Decisões de design
 
@@ -268,10 +279,41 @@ o backend emite a chave com `null`, e a tela renderiza o valor no detalhe do lot
 `GET /operacao/etiquetas?filtros` e `POST /operacao/etiquetas/:id/cancelar` não cabem sob
 `@Controller('operacao/pesagem')`. Nasce
 `app/backend/src/modules/operacao/pesagem/etiqueta.controller.ts` com `@Controller('operacao/etiquetas')`,
-registrado no `PesagemModule` já existente. `EtiquetaService.listar()` devolve, por etiqueta:
+registrado no `PesagemModule` já existente. `recebimentoId` é **obrigatório** no filtro (a tela
+sempre tem um lote selecionado — emenda 3, menor 1); sem ele a consulta varreria todas as
+etiquetas de todos os recebimentos. `EtiquetaService.listar()` devolve, por etiqueta:
 `id`, `pecaId`, `codigo`, `estado`, `statusImpressao`, `reimpressao`, `motivoCancelamento`,
-`invalidadaEm`, `bloqueada`, `pesoOriginal`, `statusPeca`, `recebimentoId`, `operadorId`,
-`createdAt`. Sem esse endpoint os critérios 6.12 e 6.29 são inatingíveis, como o Portão 1 apontou.
+`invalidadaEm`, `bloqueada`, `pesoOriginal`, `statusPeca`, `recebimentoId`, `pedidoVendaId`,
+`operadorId`, `operadorNome`, `createdAt` e, desde a emenda 3 (bloqueante 1 do veredito `daf9446`,
+fidelidade das 3 seções do drawer): `produtoCodigo`, `produtoDescricao`, `caracteristicas`,
+`nfNumero`, `frigorifico`, `romaneio`, `placaVeiculo`, `motorista`, `clienteNome`,
+`representanteNome`, `rotaPrevista`. Sem esse endpoint os critérios 6.12 e 6.29 são inatingíveis,
+como o Portão 1 apontou.
+
+**D6.21 — P10 (§16.13): pendência física reusa `aprovacoes_operacionais` da Onda 5, sem tabela nova.**
+O mestre `:261` registra a mitigação de P10: "Troca de Peça registra pendência física quando carga
+aberta; bloqueada com carga fechada". A Task 4.3 já bloqueava a segunda metade
+(`pecaEmCargaFechada` → 409); a emenda 3 fecha a primeira. `aprovacoes_operacionais`
+(`aprovacoes-operacionais.schema.ts`, Onda 5) já modela exatamente "pendência para o gestor
+resolver" com `tipo`, `origem`, `descricao`, `impacto`, `referenciaTabela`/`referenciaId` e o ciclo
+`pendente → aprovada/rejeitada` com motivo obrigatório na decisão — criar uma tabela paralela
+seria duplicação (ponytail). `chk_aprovacao_tipo` ganha o quinto valor
+`pendencia_fisica_etiqueta` (Task 1, migration `0021`); `TrocaPecaService` chama
+`AprovacoesService.abrirNaTx` (já exportado, usado por `AprovacoesService.abrir()`) na mesma
+transação da troca, só quando a peça retirada está numa carga **aberta** (nem fechada, nem
+inexistente). O gestor resolve pela tela de Gestão › Aprovações já existente — nenhuma tela nova.
+
+**D6.22 — `localEstoque` do protótipo não tem coluna real; vira parâmetro provisório (AD-09), não "onda futura".**
+Das 3 seções do drawer, 12 dos 13 campos novos são join sobre tabela existente. A única exceção é
+"Local previsto" da subseção Estoque (`EtiquetasRecebimento.tsx:442`): não existe, em nenhum
+schema do backend, coluna ou tabela de local físico/câmara de estoque — não é omissão de join, é
+lacuna real de modelagem, fora da lista de campos que P9 (§16.12, mitigado desde a Onda 3 por
+`modelos_etiqueta`) já cobre. Como manda o Princípio VIII, a saída não é "onda futura": é
+parâmetro `provisorio: true` na resposta do campo (`localEstoquePrevisto: { valor: null,
+provisorio: true }`) com badge "Provisório" na tela (mesmo componente `<Badge variant="outline">`
+já usado em `etiquetas-client.tsx:174`) e **AD-09** registrada em `DECISOES.md`. "Tipo: Estoque
+físico" e "Data entrada" (`= etiqueta.createdAt`) continuam reais — só "Local previsto" é
+provisório.
 
 **D6.16 — Nomes da matriz têm precedência sobre a conveniência do plano.**
 Toda divergência de nome entre matriz e plano foi resolvida na tabela “Reconciliação matriz → plano”.
@@ -353,6 +395,10 @@ Conteúdo esperado, derivado exclusivamente do delta de `pesagem.schema.ts` (Tas
 4. `chk_etiq_estado` e `chk_etiq_cancelada_motivo` em `etiquetas_impressoes`; `idx_etiq_estado`.
 5. `DROP CONSTRAINT "chk_assoc_hist_acao"` + `ADD CONSTRAINT "chk_assoc_hist_acao"` com os três
    valores novos — o gerador emite esse par sozinho quando o predicado do `check()` muda no schema.
+6. `DROP CONSTRAINT "chk_aprovacao_tipo"` + `ADD CONSTRAINT "chk_aprovacao_tipo"` em
+   `aprovacoes_operacionais` (Onda 5) com o quinto valor `pendencia_fisica_etiqueta` — mesmo
+   mecanismo do item 5, disparado pelo delta em `aprovacoes-operacionais.schema.ts` (D6.21/P10,
+   emenda 3).
 
 **Nenhum `UPDATE` neste arquivo.** O teste estático de DoD 6.34 rejeita `UPDATE`, `INSERT`,
 `DELETE` e `TRUNCATE` em `0021`.
@@ -458,15 +504,15 @@ app/frontend/src/
 
 | Arquivo | Ação | Critérios |
 |---|---|---|
-| `app/backend/test/integration/troca-peca.e2e-spec.ts` | NOVO | 6.1–6.6 |
+| `app/backend/test/integration/troca-peca.e2e-spec.ts` | NOVO | 6.1–6.6, 6.40, 6.41 |
 | `app/backend/test/integration/estorno-associacao.e2e-spec.ts` | NOVO | 6.8–6.11 |
-| `app/backend/test/integration/etiqueta.e2e-spec.ts` | ESTENDER | 6.12, 6.13, 6.32, 6.33 |
+| `app/backend/test/integration/etiqueta.e2e-spec.ts` | ESTENDER | 6.12, 6.13, 6.32, 6.33, 6.43, 6.44 |
 | `app/backend/test/integration/conferencia-tripla.e2e-spec.ts` | ESTENDER | 6.14, 6.15 |
 | `app/backend/test/integration/recebimento.e2e-spec.ts` | ESTENDER | 6.18, 6.19, 6.38 |
 | `app/backend/test/integration/recebimento-concorrencia.e2e-spec.ts` | ESTENDER | 6.20 |
 | `app/backend/test/integration/onda6-migrations.e2e-spec.ts` | NOVO | 6.35 |
 | `app/backend/test/unit/onda6-migrations-meta.spec.ts` | NOVO | 6.34, 6.36 |
-| `app/backend/test/unit/pesagem-eventos.spec.ts` | ESTENDER | 6.7, 6.37 |
+| `app/backend/test/unit/pesagem-eventos.spec.ts` | ESTENDER | 6.7, 6.37, 6.42 |
 | `app/backend/test/unit/associacao-score.spec.ts` | ESTENDER | 6.16 |
 | `app/backend/test/unit/nota-fiscal-fornecedor.persistence.spec.ts` | ESTENDER | 6.17, 6.22 |
 | `scripts/check-coverage.test.mjs` | ESTENDER | 6.21 |
@@ -474,7 +520,7 @@ app/frontend/src/
 | `app/frontend/__tests__/recebimento.test.tsx` | ESTENDER | 6.26, 6.39 |
 | `app/frontend/__tests__/pesagem.test.tsx` | ESTENDER | 6.27 |
 | `app/frontend/__tests__/troca-peca-modal.test.tsx` | ESTENDER | 6.28 |
-| `app/frontend/__tests__/etiquetas-recebimento.test.tsx` | NOVO | 6.29 |
+| `app/frontend/__tests__/etiquetas-recebimento.test.tsx` | NOVO | 6.29, 6.45, 6.46 |
 | `app/frontend/__tests__/terminologia.test.ts` | ESTENDER | 6.30 |
 | `app/frontend/e2e/onda6-recebimento.spec.ts` | NOVO | 6.23, 6.31 |
 
@@ -523,12 +569,20 @@ Cada linha é um critério de pronto e o teste **único** que o prova. Portão 2
 | 6.37 | `PESAGEM_ESTORNADA` e `ETIQUETA_INVALIDADA` publicados só pós-commit, com motivo no payload | `test/unit/pesagem-eventos.spec.ts` › “PESAGEM_ESTORNADA e ETIQUETA_INVALIDADA publicados após o commit com motivo” |
 | 6.38 | **Dívida (f)** backend sempre emite a chave: `nfeVolumes` é `number` ou `null`, nunca ausente | `test/integration/recebimento.e2e-spec.ts` › “detalhar devolve nfeVolumes null quando a NF não declara volumes” |
 | 6.39 | **Dívida (f)** a tela consome `number \| null` no detalhe do lote | `app/frontend/__tests__/recebimento.test.tsx` › “detalhe do lote renderiza nfeVolumes number e trata null” |
+| 6.40 | **P10 (§16.13)** Troca de Peça com a peça retirada em carga **aberta** conclui (201) e registra pendência física em `aprovacoes_operacionais` na mesma transação, referenciando `trocas_peca.id` | `test/integration/troca-peca.e2e-spec.ts` › “troca com peça em carga aberta registra pendência física referenciando a troca” |
+| 6.41 | **P10** Troca de Peça com a peça retirada **nunca carregada** não registra pendência nenhuma | mesmo arquivo › “troca com peça nunca carregada não cria pendência física” |
+| 6.42 | **P10** `EVENTOS.APROVACAO_REGISTRADA` publicado pós-commit com `tipo: 'pendencia_fisica_etiqueta'` quando a troca cria a pendência | `test/unit/pesagem-eventos.spec.ts` › “APROVACAO_REGISTRADA publicado após o commit quando a troca cria pendência física” |
+| 6.43 | **Drawer completo (Princípio I+II)** `listar()` devolve os 12 campos novos de join (produto, características, NF, frigorífico, romaneio, placa, motorista, cliente, representante, rota) para uma peça associada a pedido | `test/integration/etiqueta.e2e-spec.ts` › “lista etiqueta com os campos de produto, rastreabilidade e destino do pedido” |
+| 6.44 | **Drawer completo** Para destino Estoque (`status_peca = 'em_sobra'`), `clienteNome`/`representanteNome`/`rotaPrevista` vêm `null` e `localEstoquePrevisto` vem `{ valor: null, provisorio: true }` | mesmo arquivo › “lista etiqueta com destino estoque e localEstoquePrevisto provisório” |
+| 6.45 | **Drawer completo** As 3 seções do drawer (Dados da peça, Rastreabilidade, Destino) renderizam os rótulos do protótipo com os campos novos de `EtiquetaListada`, nas 3 variações de destino (Pedido, Estoque, Desossa) | `app/frontend/__tests__/etiquetas-recebimento.test.tsx` › “drawer renderiza Dados da peça, Rastreabilidade e Destino nas 3 variações” |
+| 6.46 | **AD-09** O badge "Provisório" aparece só ao lado de "Local previsto" quando o destino é Estoque, e nunca em nenhum outro campo do drawer | mesmo arquivo › “badge Provisório aparece apenas em Local previsto no destino Estoque” |
 
 ## Tasks
 
 ### Task 1 — Schema declarativo e migration `0021` (expand gerado)
 
 **Files:** `app/backend/src/database/schema/pesagem.schema.ts`,
+`app/backend/src/database/schema/aprovacoes-operacionais.schema.ts`,
 `app/backend/src/database/migrations/0021_onda6_recebimento_balanca_expand.sql` (gerado),
 `meta/0021_snapshot.json` (gerado), `app/backend/test/unit/onda6-migrations-meta.spec.ts`.
 
@@ -633,6 +687,18 @@ emite `DROP CONSTRAINT` + `ADD CONSTRAINT` sozinho a partir deste delta:
     ),
 ```
 
+**1.3b** `aprovacoes-operacionais.schema.ts` (Onda 5) — D6.21/P10 (emenda 3): o quinto valor do
+CHECK, para a pendência física da Troca de Peça com carga aberta:
+
+```ts
+    check(
+      'chk_aprovacao_tipo',
+      sql`${t.tipo} IN ('divergencia_transformacao','estorno_fora_regra',
+                        'reabertura_carga_pedido','ajuste_estoque_relevante',
+                        'pendencia_fisica_etiqueta')`,
+    ),
+```
+
 **1.4** Exportar `trocasPeca` e `trocasPecaRelations` em `database/schema/index.ts`, no mesmo
 formato das demais exportações do arquivo.
 
@@ -648,9 +714,10 @@ O único resultado aceito é `0021_onda6_recebimento_balanca_expand.sql` +
 `meta/0021_snapshot.json` + entrada 21 no journal. Inspecionar **sem editar**: existe
 `CREATE TABLE "trocas_peca"`, existem os quatro `ALTER TABLE "etiquetas_impressoes" ADD COLUMN`,
 existem `chk_etiq_estado`, `chk_etiq_cancelada_motivo`, `idx_etiq_estado`, o par
-`DROP CONSTRAINT/ADD CONSTRAINT "chk_assoc_hist_acao"`, e **não** existe `UPDATE`, `INSERT`,
-`DELETE` nem `TRUNCATE`. Se qualquer DDL não explicado aparecer, descartar `0021`, corrigir o
-schema e regerar.
+`DROP CONSTRAINT/ADD CONSTRAINT "chk_assoc_hist_acao"`, o par
+`DROP CONSTRAINT/ADD CONSTRAINT "chk_aprovacao_tipo"` com o quinto valor
+`pendencia_fisica_etiqueta`, e **não** existe `UPDATE`, `INSERT`, `DELETE` nem `TRUNCATE`. Se
+qualquer DDL não explicado aparecer, descartar `0021`, corrigir o schema e regerar.
 
 **1.6** Escrever `test/unit/onda6-migrations-meta.spec.ts` já com os dois casos de 6.34 e 6.36; o
 segundo fica vermelho até a Task 2 existir.
@@ -689,8 +756,9 @@ nenhuma contagem.
 
 **2.4** `ROLLBACK.md` ganha a seção `0021`/`0022` no formato já usado por `0015`–`0020`, listando
 exatamente os objetos criados (`trocas_peca`, seus 4 índices e 4 CHECKs; as 4 colunas, 2 CHECKs e
-1 índice de `etiquetas_impressoes`; o CHECK reescrito de `associacoes_peca_historico`) e o
-procedimento forward-only descrito em D6.13. Nenhum `ALTER TABLE` manual no documento.
+1 índice de `etiquetas_impressoes`; o CHECK reescrito de `associacoes_peca_historico`; o CHECK
+reescrito de `aprovacoes_operacionais` com o quinto valor `pendencia_fisica_etiqueta` — D6.21/P10)
+e o procedimento forward-only descrito em D6.13. Nenhum `ALTER TABLE` manual no documento.
 
 **2.5** Fechar `onda6-migrations-meta.spec.ts`: `0021.prevId === id` de `meta/0020_snapshot.json`,
 `0022.prevId === id` de `0021`, três ids distintos, journal 20–22 contíguo com as tags exatas,
@@ -801,11 +869,19 @@ Acrescentar as três chaves em `PayloadPorEvento`, na seção Onda 6:
 
 ---
 
-### Task 4 — `TrocaPecaService` e `POST /operacao/pesagem/trocas`
+### Task 4 — `TrocaPecaService`, `POST /operacao/pesagem/trocas` e a pendência física de P10
 
 **Files:** `dto/troca-peca.dto.ts` (novo), `carga-fechada.ts` (novo), `troca-peca.service.ts`
 (novo), `etiqueta.service.ts` (alterar), `pesagem.controller.ts`, `pesagem.module.ts`,
+`modules/gestao/aprovacoes/dto/aprovacoes.dto.ts` (alterar — quinto `tipo`),
+`app/frontend/src/lib/aprovacoes.ts` (alterar — rótulo do quinto `tipo`),
 `test/integration/troca-peca.e2e-spec.ts`, `test/unit/pesagem-eventos.spec.ts`.
+
+**P10 (§16.13, mestre `:261`):** a mitigação registrada tem duas metades — "bloqueada com carga
+fechada" (já na Task 4.3 desde a emenda 1) e "registra pendência física quando carga aberta" (a
+metade que faltava, fechada nesta emenda 3 — D6.21). As duas metades são mutuamente exclusivas: a
+peça retirada só pode estar em **uma** das três situações — nunca carregada (nada a fazer), numa
+carga **aberta** (pendência física) ou numa carga **fechada** (409, já bloqueado).
 
 **4.1** `dto/troca-peca.dto.ts` — os motivos e destinos são os do protótipo
 (`TrocaPeca.tsx:11` e `:79-86`), em slug, com os rótulos exportados para a UI:
@@ -866,7 +942,7 @@ export type ExecutarTrocaDto = z.infer<typeof executarTrocaSchema>;
 de etiquetas. Os literais vêm de `expedicao.schema.ts:32,95` e `pesagem.schema.ts:43`:
 
 ```ts
-import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../../database/schema';
 import { caminhoes, cargaItens, pecas } from '../../../database/schema';
@@ -901,6 +977,32 @@ export async function pecaEmCargaFechada(tx: Tx, pecaId: string): Promise<boolea
     .limit(1)
     .then((r) => r[0] ?? null);
   return linha !== null;
+}
+
+/**
+ * P10 (§16.13, mestre `:261`) — par exato de `pecaEmCargaFechada`, mesmas duas tabelas: a peça
+ * já está num caminhão, mas a carga **ainda não fechou**. `null` quando a peça nunca foi
+ * carregada (nenhuma linha ativa em `carga_itens`) — nesse caso não existe etiqueta física no
+ * caminhão para substituir, então a Troca de Peça não registra pendência nenhuma.
+ */
+export async function buscarCargaAbertaDaPeca(
+  tx: Tx,
+  pecaId: string,
+): Promise<{ caminhaoId: string; placa: string } | null> {
+  return tx
+    .select({ caminhaoId: caminhoes.id, placa: caminhoes.placa })
+    .from(cargaItens)
+    .innerJoin(caminhoes, eq(caminhoes.id, cargaItens.caminhaoId))
+    .where(
+      and(
+        eq(cargaItens.pecaId, pecaId),
+        isNull(cargaItens.deletedAt),
+        ne(cargaItens.statusCargaItem, 'removido'),
+        notInArray(caminhoes.statusCaminhao, [...STATUS_CAMINHAO_FECHADO]),
+      ),
+    )
+    .limit(1)
+    .then((r) => r[0] ?? null);
 }
 
 /** Predicado SQL correlacionado para uso em SELECT de listagem (D6.18). */
@@ -941,8 +1043,9 @@ import {
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { EVENTOS } from '../../../realtime/events/eventos';
+import { AprovacoesService } from '../../gestao/aprovacoes/aprovacoes.service';
 import { EtiquetaService } from './etiqueta.service';
-import { pecaEmCargaFechada } from './carga-fechada';
+import { buscarCargaAbertaDaPeca, pecaEmCargaFechada } from './carga-fechada';
 import type { ExecutarTrocaDto } from './dto/troca-peca.dto';
 
 type Tx = NodePgDatabase<typeof schema>;
@@ -955,6 +1058,7 @@ export interface ResultadoTrocaPeca {
   pecaInserida: Peca;
   etiquetaInvalidada: Etiqueta | null;
   etiquetaEmitida: Etiqueta;
+  pendenciaFisicaId: string | null;
 }
 
 @Injectable()
@@ -965,6 +1069,7 @@ export class TrocaPecaService {
     private readonly auditoria: AuditoriaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly etiqueta: EtiquetaService,
+    private readonly aprovacoes: AprovacoesService,
   ) {}
 
   private get db() {
@@ -996,15 +1101,25 @@ export class TrocaPecaService {
       if (inserida.itemComercialBaseId !== retirada.itemComercialBaseId) {
         throw new ConflictException('Peça de entrada é de outro item comercial');
       }
+      // P10 (§16.13, mestre `:261`) — as duas metades da mitigação, mutuamente exclusivas:
       if (await pecaEmCargaFechada(tx, retirada.id)) {
         throw new ConflictException('Peça retirada já está em carga fechada — troca bloqueada');
       }
+      // metade 2: carga aberta não bloqueia, mas gera pendência física (registrada após o passo 9,
+      // já com o id da troca para referenciar). `null` = peça nunca foi carregada, nada a registrar.
+      const cargaAberta = await buscarCargaAbertaDaPeca(tx, retirada.id);
 
       // Impressão física só DEPOIS de todas as checagens sob lock passarem: um 409 acima nunca
       // deixa etiqueta física impressa sem fato de negócio associado (RA-02). Best-effort — nunca
-      // lança; falha vira status_impressao='falha_impressao', o mesmo padrão do precedente
-      // etiqueta.service.ts:43-55, aplicado aqui dentro do lock porque a checagem depende de
-      // duas peças e não pode ser feita antes de travá-las.
+      // lança; falha vira status_impressao='falha_impressao'. DENTRO da transação — diferente do
+      // precedente etiqueta.service.ts:43-55 (impressão FORA da transação) — porque aqui a decisão
+      // de imprimir depende de travar as DUAS peças e checar carga fechada antes, o que só existe
+      // sob lock; não dá pra imprimir antes de abrir a transação como o precedente faz. Custo hoje
+      // é zero: fila-impressora.adapter.ts:19-27 é fake sem I/O real, então os dois `FOR UPDATE`
+      // ficam abertos por microssegundos, não pelo tempo de um driver de hardware.
+      // ponytail: quando o driver real (ADR-010) substituir o fake, reavaliar se a impressão deve
+      // sair da transação (ex.: emitir side-effect pós-commit com fallback e reimpressão manual)
+      // para não manter dois FOR UPDATE presos durante I/O de hardware.
       const impressao = await this.etiqueta.imprimirPayload(contexto.payloadEtiqueta);
 
       // 3 e 4 — desassocia a antiga e a destina (estoque → em_sobra; desossa → para_corte).
@@ -1099,12 +1214,38 @@ export class TrocaPecaService {
         dadosNovos: { troca, pecaRetirada: retiradaAtualizada, pecaInserida: inseridaAtualizada },
       });
 
+      // P10, metade 2 (D6.21): carga aberta na peça retirada → pendência física, mesma transação
+      // da troca, referenciando trocas_peca.id. Reusa AprovacoesService.abrirNaTx (Onda 5) —
+      // nenhuma tabela nova. O gestor resolve pela tela de Gestão › Aprovações já existente.
+      const pendenciaFisica = cargaAberta
+        ? await this.aprovacoes.abrirNaTx(
+            tx,
+            {
+              operacaoId: contexto.operacaoId,
+              tipo: 'pendencia_fisica_etiqueta',
+              origem: 'Troca de Peça',
+              descricao:
+                `Peça ${retirada.etiquetaAtual ?? retirada.id} foi trocada enquanto já carregada ` +
+                `no caminhão placa ${cargaAberta.placa} (carga aberta). A etiqueta física impressa ` +
+                `em ${retirada.etiquetaAtual ?? '—'} precisa ser substituída manualmente na doca ` +
+                `pela nova etiqueta ${contexto.codigoNovaEtiqueta} antes do fechamento da carga.`,
+              impacto:
+                'Etiqueta física da peça carregada não corresponde mais à peça fisicamente no ' +
+                'caminhão até a substituição manual — risco de expedir com etiqueta trocada.',
+              referenciaTabela: 'trocas_peca',
+              referenciaId: troca.id,
+            },
+            operadorId,
+          )
+        : null;
+
       return {
         troca,
         pecaRetirada: retiradaAtualizada,
         pecaInserida: inseridaAtualizada,
         etiquetaInvalidada,
         etiquetaEmitida,
+        pendenciaFisicaId: pendenciaFisica?.id ?? null,
       };
     });
 
@@ -1128,6 +1269,17 @@ export class TrocaPecaService {
         dataOperacao: contexto.dataOperacao,
         estado: 'invalidada_por_troca',
         motivo: dto.motivo,
+      });
+    }
+    if (resultado.pendenciaFisicaId) {
+      // P10, metade 2: mesmo evento que AprovacoesService.abrir() publicaria — a pendência entra
+      // na fila de Gestão › Aprovações em tempo real, sem endpoint novo nem tela nova.
+      this.eventEmitter.emit(EVENTOS.APROVACAO_REGISTRADA, {
+        aprovacaoId: resultado.pendenciaFisicaId,
+        operacaoId: contexto.operacaoId,
+        dataOperacao: contexto.dataOperacao,
+        tipo: 'pendencia_fisica_etiqueta',
+        status: 'pendente',
       });
     }
 
@@ -1161,12 +1313,13 @@ export class TrocaPecaService {
       throw new ConflictException('Peça de entrada incompatível com o item do pedido');
     }
 
-    const dataOperacao = await this.dataOperacaoDaPeca(this.db, inserida);
+    const { dataOperacao, operacaoId } = await this.dadosOperacaoDaPeca(this.db, inserida);
     const codigoNovaEtiqueta = inserida.etiquetaAtual ?? `QR-${inserida.id}`;
 
     return {
       pedidoVendaId: item.pedidoVendaId,
       dataOperacao,
+      operacaoId,
       codigoNovaEtiqueta,
       payloadEtiqueta: {
         pecaId: inserida.id,
@@ -1200,14 +1353,19 @@ export class TrocaPecaService {
       .then((r) => r[0] ?? null);
   }
 
-  private async dataOperacaoDaPeca(tx: Tx, peca: Peca): Promise<string> {
+  /** Também devolve operacaoId — necessário para abrir a pendência física de P10 (D6.21). */
+  private async dadosOperacaoDaPeca(
+    tx: Tx,
+    peca: Peca,
+  ): Promise<{ dataOperacao: string; operacaoId: string }> {
     const r = await tx
-      .select({ dataOperacao: operacoes.data })
+      .select({ dataOperacao: operacoes.data, operacaoId: operacoes.id })
       .from(recebimentos)
       .innerJoin(operacoes, eq(operacoes.id, recebimentos.operacaoId))
       .where(eq(recebimentos.id, peca.recebimentoId))
       .then((rows) => rows[0] ?? null);
-    return r?.dataOperacao ?? '';
+    if (!r) throw new NotFoundException('Operação da peça de entrada não encontrada');
+    return r;
   }
 }
 ```
@@ -1230,7 +1388,42 @@ export class TrocaPecaService {
 com `private readonly troca: TrocaPecaService` no construtor e o import
 `import { executarTrocaSchema, type ExecutarTrocaDto } from './dto/troca-peca.dto';`.
 
-**4.5** `pesagem.module.ts`: acrescentar `TrocaPecaService` em `providers` e `exports`.
+**4.5** `pesagem.module.ts`: acrescentar `TrocaPecaService` em `providers` e `exports`; importar
+`AprovacoesModule` (`modules/gestao/aprovacoes/aprovacoes.module.ts`, já exporta
+`AprovacoesService`) em `imports` — nenhuma dependência circular, `AprovacoesModule` não importa
+`PesagemModule`.
+
+**4.5b** `dto/aprovacoes.dto.ts` (Onda 5) e `lib/aprovacoes.ts` (frontend) ganham o quinto `tipo`:
+
+```ts
+// aprovacoes.dto.ts — abrirAprovacaoSchema.tipo
+tipo: z.enum([
+  'divergencia_transformacao', 'estorno_fora_regra',
+  'reabertura_carga_pedido', 'ajuste_estoque_relevante',
+  'pendencia_fisica_etiqueta',
+]),
+```
+
+```ts
+// lib/aprovacoes.ts
+export type TipoAprovacao =
+  | 'divergencia_transformacao'
+  | 'estorno_fora_regra'
+  | 'reabertura_carga_pedido'
+  | 'ajuste_estoque_relevante'
+  | 'pendencia_fisica_etiqueta';
+
+export const ROTULO_TIPO_APROVACAO: Record<TipoAprovacao, string> = {
+  divergencia_transformacao: 'Divergência de transformação',
+  estorno_fora_regra: 'Estorno fora da regra',
+  reabertura_carga_pedido: 'Reabertura de carga/pedido',
+  ajuste_estoque_relevante: 'Ajuste de estoque relevante',
+  pendencia_fisica_etiqueta: 'Pendência física de etiqueta',
+};
+```
+
+A tela de Gestão › Aprovações (Onda 5, já existente) passa a listar e decidir este tipo sem
+nenhuma mudança de componente — o `Record` é exaustivo e o TypeScript já obriga a entrada.
 
 **4.6** `test/integration/troca-peca.e2e-spec.ts` cobrindo 6.1–6.6 com banco real. O cenário 6.3 é
 determinístico: um `jest.spyOn(etiquetaService, 'emitirNaTx').mockRejectedValueOnce(new Error('impressao falhou'))`
@@ -1238,6 +1431,17 @@ faz o passo 8 estourar depois de os passos 3–7 já terem escrito; o teste asse
 rejeição, que `SELECT count(*) FROM trocas_peca` é `0`, que a etiqueta anterior continua `ativa`
 (não `invalidada_por_troca`), que as duas peças voltaram ao `status_peca` e ao `pedido_venda_item_id`
 originais e que **nenhum** evento foi publicado. `test/unit/pesagem-eventos.spec.ts` ganha o caso 6.7.
+
+**P10 — cenários novos (6.40–6.41, emenda 3):** o e2e ganha dois casos de carga que o 6.1–6.7 não
+cobria. **6.40**: `pecaRetiradaId` inserida em `carga_itens` com `caminhoes.status_caminhao =
+'em_carregamento'` (aberta) — a troca **conclui com 201** (não bloqueia) e, na mesma transação,
+`SELECT * FROM aprovacoes_operacionais WHERE referencia_tabela = 'trocas_peca' AND referencia_id =
+:trocaId` devolve exatamente 1 linha com `tipo = 'pendencia_fisica_etiqueta'` e `status =
+'pendente'` — o teste falha se a pendência não existir. **6.41**: mesma peça, mas
+`caminhoes.status_caminhao = 'planejado'` (nunca carregada) — a troca conclui e a mesma query
+devolve **0** linhas, confirmando que `buscarCargaAbertaDaPeca` não gera pendência fantasma para
+peça nunca carregada. **6.42** (unit, `pesagem-eventos.spec.ts`): a troca com carga aberta publica
+`EVENTOS.APROVACAO_REGISTRADA` com `tipo: 'pendencia_fisica_etiqueta'`.
 
 **Commit:** `feat(onda6): troca de peça atômica preservando pesos`
 
@@ -1469,9 +1673,15 @@ export const cancelarEtiquetaSchema = z
   });
 export type CancelarEtiquetaDto = z.infer<typeof cancelarEtiquetaSchema>;
 
-/** Filtros da matriz linha 16 (`GET /operacao/etiquetas?filtros`). */
+/**
+ * Filtros da matriz linha 16 (`GET /operacao/etiquetas?filtros`). `recebimentoId` é
+ * **obrigatório** (emenda 3, menor 1 do veredito `daf9446`) — a tela de Etiquetas só existe
+ * dentro de um lote selecionado (`etiquetas-client.tsx` já não navega sem `recebimentoId` na
+ * rota), então tornar o filtro opcional deixaria a consulta varrer todas as etiquetas de todos
+ * os recebimentos sem limite algum no banco.
+ */
 export const listarEtiquetasSchema = z.object({
-  recebimentoId: z.string().uuid().optional(),
+  recebimentoId: z.string().uuid(),
   estado: z.enum(ESTADOS_ETIQUETA).optional(),
   busca: z.string().trim().max(120).optional(),
   page: z.coerce.number().int().positive().default(1),
@@ -1682,7 +1892,34 @@ export interface EtiquetaListada {
   recebimentoId: string;
   pedidoVendaId: string | null;
   operadorId: string;
+  operadorNome: string;
   createdAt: string;
+  // ── emenda 3 (bloqueante 1, veredito `daf9446`) — as 3 seções do drawer que faltavam:
+  // Dados da peça, Rastreabilidade, Destino (D6.15/D6.22). "Lote" (Rastreabilidade) e o código
+  // do pedido em "Cliente/Pedido" (Destino) NÃO viram campo novo: a tela já sabe o
+  // `codigoLote` do recebimento selecionado (contexto da página, mesmo campo que
+  // `recebimento-carga-client.tsx:670` já exibe) e já existe o precedente
+  // `pesagem-destinacao-client.tsx:754` (`Pedido {pedidoVendaId.slice(0, 8)}…`) para formatar
+  // `pedidoVendaId` — reaproveitados em vez de duplicados.
+  produtoCodigo: string;
+  produtoDescricao: string;
+  /** Rótulos literais de `pesagem-destinacao-client.tsx:566,571,576` — nunca texto inventado. */
+  caracteristicas: string[];
+  nfNumero: string | null;
+  frigorifico: string;
+  romaneio: string | null;
+  placaVeiculo: string | null;
+  motorista: string | null;
+  clienteNome: string | null;
+  representanteNome: string | null;
+  rotaPrevista: string | null;
+  /**
+   * P9 (§16.12) cobre os demais campos da etiqueta; só "Local previsto" do destino Estoque
+   * (`EtiquetasRecebimento.tsx:442`) não tem coluna em nenhum schema — lacuna real de
+   * modelagem, não omissão de join. Princípio VIII: parâmetro provisório com badge, não
+   * "onda futura" — AD-09 em `DECISOES.md`. `valor` só é preenchido quando `destino === 'Estoque'`.
+   */
+  localEstoquePrevisto: { valor: string | null; provisorio: true } | null;
   historico: Array<{
     id: string;
     estado: string;
@@ -1725,8 +1962,9 @@ export function agruparPorPeca(linhas: LinhaEtiqueta[]): EtiquetaListada[] {
 }
 
 /**
- * Pagina um array já pronto em memória — a listagem já é filtrada por recebimento (D6.15) e a
- * maior carga observada é de ~200 peças por lote. Reusa o envelope de `montarPaginado`.
+ * Pagina um array já pronto em memória. `recebimentoId` é obrigatório em `listarEtiquetasSchema`
+ * (emenda 3) — a consulta de `listar()` NUNCA varre mais de um lote, e a maior carga observada é
+ * de ~200 peças por lote. Reusa o envelope de `montarPaginado`.
  */
 export function paginarEmMemoria<T>(itens: T[], page: number, pageSize: number): Paginado<T> {
   const inicio = (page - 1) * pageSize;
@@ -1741,8 +1979,11 @@ export function paginarEmMemoria<T>(itens: T[], page: number, pageSize: number):
    * `estado` só é aplicado DEPOIS de `agruparPorPeca` determinar qual linha é a vigente real.
    */
   async listar(filtros: ListarEtiquetasDto): Promise<Paginado<EtiquetaListada>> {
-    const condicoes = [isNull(pecas.deletedAt), isNotNull(etiquetasImpressoes.pecaId)];
-    if (filtros.recebimentoId) condicoes.push(eq(pecas.recebimentoId, filtros.recebimentoId));
+    const condicoes = [
+      isNull(pecas.deletedAt),
+      isNotNull(etiquetasImpressoes.pecaId),
+      eq(pecas.recebimentoId, filtros.recebimentoId),
+    ];
     if (filtros.busca) {
       const q = `%${filtros.busca.toLowerCase()}%`;
       condicoes.push(sql`(lower(coalesce(${pecas.etiquetaAtual}, '')) LIKE ${q}
@@ -1767,10 +2008,42 @@ export function paginarEmMemoria<T>(itens: T[], page: number, pageSize: number):
         recebimentoId: pecas.recebimentoId,
         pedidoVendaId: pecas.pedidoVendaId,
         operadorId: etiquetasImpressoes.operadorId,
+        operadorNome: sql<string>`coalesce(${usuarios.nome}, '—')`,
         createdAt: etiquetasImpressoes.createdAt,
+        // Dados da peça (D6.15/emenda 3) — join literal sobre item_comerciais, sem tabela nova.
+        produtoCodigo: itensComerciais.codigo,
+        produtoDescricao: itensComerciais.descricao,
+        caracteristicas: sql<string[]>`array_remove(ARRAY[
+          CASE WHEN (${pecas.capturaMeta}->>'maisPesada')::boolean THEN 'Mais pesada' END,
+          CASE WHEN (${pecas.capturaMeta}->>'maisGorda')::boolean THEN 'Mais gorda' END,
+          CASE WHEN (${pecas.capturaMeta}->>'melhorAcabamento')::boolean THEN 'Melhor acabamento' END
+        ], NULL)`,
+        // Rastreabilidade — join literal sobre recebimentos/fornecedores, sem tabela nova.
+        nfNumero: recebimentos.nfeNumero,
+        frigorifico: fornecedores.razaoSocial,
+        romaneio: recebimentos.romaneio,
+        placaVeiculo: recebimentos.placaVeiculo,
+        motorista: recebimentos.motorista,
+        // Destino → Pedido — join literal sobre pedidos_venda/clientes/representantes,
+        // NULL quando a peça não está associada a pedido nenhum.
+        clienteNome: sql<string | null>`coalesce(${clientes.nomeFantasia}, ${clientes.razaoSocial})`,
+        representanteNome: representantes.nome,
+        rotaPrevista: pedidosVenda.rotaPrevista,
+        // Destino → Estoque — AD-09, único campo sem coluna real (D6.22).
+        localEstoquePrevisto: sql<{ valor: string | null; provisorio: true } | null>`
+          CASE WHEN ${pecas.statusPeca} = 'em_sobra'
+               THEN jsonb_build_object('valor', NULL, 'provisorio', true)
+               ELSE NULL END`,
       })
       .from(etiquetasImpressoes)
       .innerJoin(pecas, eq(pecas.id, etiquetasImpressoes.pecaId))
+      .leftJoin(usuarios, eq(usuarios.id, etiquetasImpressoes.operadorId))
+      .innerJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
+      .innerJoin(recebimentos, eq(recebimentos.id, pecas.recebimentoId))
+      .innerJoin(fornecedores, eq(fornecedores.id, recebimentos.fornecedorId))
+      .leftJoin(pedidosVenda, eq(pedidosVenda.id, pecas.pedidoVendaId))
+      .leftJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
+      .leftJoin(representantes, eq(representantes.id, clientes.representanteId))
       .where(and(...condicoes))
       .orderBy(desc(etiquetasImpressoes.createdAt));
 
@@ -1788,7 +2061,10 @@ export function paginarEmMemoria<T>(itens: T[], page: number, pageSize: number):
 
 `agruparPorPeca` e `paginarEmMemoria` (acima) são funções puras de módulo, fora da classe, no
 mesmo arquivo — importar `montarPaginado`/`Paginado` de `common/crud/paginacao` ao lado dos
-demais imports do arquivo.
+demais imports do arquivo. As 3 seções novas do drawer (emenda 3) acrescentam a
+`etiqueta.service.ts` os imports de schema `itensComerciais`, `recebimentos`, `fornecedores`,
+`pedidosVenda`, `clientes`, `representantes` e `usuarios` — todos já existentes em
+`database/schema`, nenhum novo.
 
 **6.4** `etiqueta.controller.ts` (novo) — resolve o bloqueante 5 fixando o prefixo:
 
@@ -1837,6 +2113,14 @@ export class EtiquetaController {
 **6.5** `pesagem.module.ts`: `controllers: [PesagemController, EtiquetaController]`.
 
 **6.6** Estender `test/integration/etiqueta.e2e-spec.ts` com 6.12, 6.13, 6.32 e 6.33.
+
+**6.7** (emenda 3, bloqueante 1) Estender o mesmo arquivo com **6.43**: `listar()` devolve os 12
+campos novos de join (produto, características, NF, frigorífico, romaneio, placa, motorista,
+cliente, representante, rota) preenchidos para uma peça associada a pedido, semeando o cenário
+completo (recebimento → fornecedor → peça com `captura_meta` com as 3 flags → pedido → cliente com
+representante); e **6.44**: para uma peça com `status_peca = 'em_sobra'` (destino Estoque),
+`clienteNome`/`representanteNome`/`rotaPrevista` vêm `null` e `localEstoquePrevisto` vem
+`{ valor: null, provisorio: true }` — nunca lança nem omite a chave.
 
 **Commit:** `feat(onda6): ciclo de estado da etiqueta e leitura filtrada conforme v1.1 §10.4`
 
@@ -2397,20 +2681,50 @@ vermelho de motivo quando cancelada (`:384`), e o rodapé ganha o botão **Cance
 operacional vinculada” é literal do protótipo.
 
 O drawer ganha também o **preview da etiqueta** (`LabelPreview` do protótipo,
-`EtiquetasRecebimento.tsx:185-224`) — mesmo layout do cartão, mas só com os campos que
-`GET /operacao/etiquetas` realmente devolve: código (`etiqueta.codigo`), peso
-(`etiqueta.pesoOriginal`), destino (`rotuloDestinoPeca(etiqueta.statusPeca)`, o mesmo helper de
-`@/lib/status-ui` já usado pela tabela atual e por `troca-peca-modal.tsx` na Task 11.1 — sem regra
-nova), operador e emissão (`etiqueta.createdAt`). O protótipo também mostra produto/lote/NF-e/
-origem, que `EtiquetaListada` não modela hoje — nota honesta (Princípio VIII): nenhum desses
-quatro campos é inventado ou mockado; o preview simplesmente não os renderiza até uma onda futura
-estender o contrato. O botão
-**Reimprimir** (habilitado por `reimprimivel`) abre o modal `:227-296`, que distingue "Imprimir
-etiqueta pendente" de "Reimprimir etiqueta" conforme `estado === 'emitida'` e exige motivo só no
-segundo caso. O modal chama a rota BFF **já existente**
+`EtiquetasRecebimento.tsx:185-224`) — agora com produto, lote, NF-e e origem, todos vindos de
+`EtiquetaListada` (D6.15). O botão **Reimprimir** (habilitado por `reimprimivel`) abre o modal
+`:227-296`, que distingue "Imprimir etiqueta pendente" de "Reimprimir etiqueta" conforme
+`estado === 'emitida'` e exige motivo só no segundo caso. O modal chama a rota BFF **já existente**
 `POST /api/operacao/pesagem/pecas/:pecaId/etiqueta/reimprimir` (que repassa a
 `EtiquetaService.reimprimir()` de `etiqueta.service.ts:93`, já implementada) — nenhum endpoint
 novo, backend ou BFF, é criado para isto.
+
+**As 3 seções do drawer que faltavam (emenda 3, bloqueante 1 do veredito `daf9446`, Princípio
+I+II) — tabela de derivação 1:1, mesmo formato de D6.2/D6.18.** O drawer do protótipo
+(`EtiquetasRecebimento.tsx:397-456`) tem 5 seções; até esta emenda a Task 11.2 só cobria preview
+(parcial) e histórico. As 3 que faltavam agora são contrato explícito, sem "onda futura":
+
+| Seção do protótipo | Campo do protótipo | Fonte real (backend) |
+|---|---|---|
+| Dados da peça | Código | `etiqueta.pecaId` (já existia) |
+| Dados da peça | Produto | `etiqueta.produtoCodigo` + `etiqueta.produtoDescricao` (novo) |
+| Dados da peça | Peso | `etiqueta.pesoOriginal` (já existia) |
+| Dados da peça | Status | `rotuloDestinoPeca(etiqueta.statusPeca)` (já existia, `@/lib/status-ui`) |
+| Dados da peça | Destino | mesmo `rotuloDestinoPeca` (já existia) |
+| Dados da peça | Características | `etiqueta.caracteristicas.join(', ')` (novo, só renderiza se não-vazio, igual ao protótipo `:406`) |
+| Rastreabilidade | Lote | **não é campo novo** — a tela já sabe `codigoLote` do lote selecionado (mesmo prop/contexto que `recebimento-carga-client.tsx:670` exibe), passado para `EtiquetasClient` |
+| Rastreabilidade | NF-e | `etiqueta.nfNumero` (novo) |
+| Rastreabilidade | Frigorífico | `etiqueta.frigorifico` (novo) |
+| Rastreabilidade | Romaneio | `etiqueta.romaneio` (novo) |
+| Rastreabilidade | Placa | `etiqueta.placaVeiculo` (novo) |
+| Rastreabilidade | Motorista | `etiqueta.motorista` (novo) |
+| Rastreabilidade | Pesagem | `etiqueta.createdAt` (já existia) |
+| Rastreabilidade | Operador | `etiqueta.operadorNome` (novo) |
+| Destino → Pedido (quando `pedidoVendaId` não é nulo) | Cliente/Pedido | `etiqueta.clienteNome` + **precedente já existente** `pesagem-destinacao-client.tsx:754` (`` `Pedido ${etiqueta.pedidoVendaId.slice(0, 8)}…` ``) — não é campo novo, é reúso do mesmo formato |
+| Destino → Pedido | Representante | `etiqueta.representanteNome` (novo) |
+| Destino → Pedido | Rota | `etiqueta.rotaPrevista` (novo) |
+| Destino → Estoque (`statusPeca === 'em_sobra'`) | Local previsto | `etiqueta.localEstoquePrevisto.valor` — **sempre `null` hoje**, com badge `<Badge variant="outline">Provisório</Badge>` (mesmo componente de `etiquetas-client.tsx:174`) ao lado do rótulo — **AD-09** em `DECISOES.md`, Princípio VIII, não "onda futura" |
+| Destino → Estoque | Tipo | literal `"Estoque físico"` (protótipo `:443` também é literal fixo, não um campo de dado) |
+| Destino → Estoque | Data entrada | `etiqueta.createdAt` (já existia) |
+| Destino → Desossa (`statusPeca === 'para_corte'`) | Status na desossa | `rotuloDestinoPeca(etiqueta.statusPeca)` (já existia — `para_corte` → “Aguardando desossa”) |
+| Destino → Desossa | Peça mãe | `etiqueta.pecaId` (já existia) |
+
+Nenhuma tabela nova: os 12 campos reais vêm de `itens_comerciais`, `pecas.captura_meta`,
+`recebimentos`, `fornecedores`, `usuarios`, `pedidos_venda`, `clientes` e `representantes`
+(D6.15); só `localEstoquePrevisto` é provisório (D6.22/AD-09). Nenhuma seção do drawer fica
+adiada — as únicas ocorrências da expressão "onda futura" que restam neste documento são as que
+citam, para registro, a frase que a Task 11.2 usava **antes** desta emenda e que foi substituída
+pela tabela de derivação acima.
 
 **11.3 `pesagem-destinacao-client.tsx` (956 linhas).** Acrescentar: os chips de característica
 alimentando `captura_meta` (já existem em `:333-335`, agora também enviados na sugestão), o selo
