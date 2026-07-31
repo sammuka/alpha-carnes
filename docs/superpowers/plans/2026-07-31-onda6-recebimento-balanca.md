@@ -65,10 +65,24 @@ Os dois bloqueantes da emenda 2 (Task 6.3 filtrando `estado` no `WHERE` errado; 
 
 | # | Bloqueante do veredito | Onde está fechado nesta emenda |
 |---|---|---|
-| 1 | O drawer do protótipo tem 5 seções; a Task 11.2 cobria 2 (preview parcial + histórico) e escrevia "até uma onda futura estender o contrato" para as 3 que faltam — Princípio I/II, e a saída por Princípio VIII não se sustenta porque os campos omitidos são join sobre tabelas já existentes | `EtiquetaListada`/`listar()` (Task 6.3) ganham 13 campos novos, todos join literal sobre `itens_comerciais`, `pecas.captura_meta`, `recebimentos`, `fornecedores`, `usuarios`, `pedidos_venda`, `clientes` e `representantes` — nenhuma tabela nova, nenhum dado inventado. Task 11.2 reescrita com as 3 seções ("Dados da peça", "Rastreabilidade", "Destino") em tabela de derivação 1:1 (mesmo formato de D6.2/D6.18), o preview completo com produto/lote/NF-e/origem, e a frase que adiava as 3 seções substituída pela tabela — nenhuma seção fica para depois. O único campo do protótipo sem coluna real (`localEstoque`, destino Estoque) vira parâmetro `provisorio` com badge "Provisório" — **AD-09** em `DECISOES.md`, não "onda futura". DoDs novos 6.43–6.46, 1:1 com asserts de rótulo/seção |
+| 1 | O drawer do protótipo tem 5 seções; a Task 11.2 cobria 2 (preview parcial + histórico) e escrevia "até uma onda futura estender o contrato" para as 3 que faltam — Princípio I/II, e a saída por Princípio VIII não se sustenta porque os campos omitidos são join sobre tabelas já existentes | `EtiquetaListada`/`listar()` (Task 6.3) ganham 12 campos novos, todos join literal sobre `itens_comerciais`, `pecas.captura_meta`, `recebimentos`, `fornecedores`, `usuarios`, `pedidos_venda`, `clientes` e `representantes` — nenhuma tabela nova, nenhum dado inventado. Task 11.2 reescrita com as 3 seções ("Dados da peça", "Rastreabilidade", "Destino") em tabela de derivação 1:1 (mesmo formato de D6.2/D6.18), o preview completo com produto/lote/NF-e/origem, e a frase que adiava as 3 seções substituída pela tabela — nenhuma seção fica para depois. O único campo do protótipo sem coluna real (`localEstoque`, destino Estoque) vira parâmetro `provisorio` com badge "Provisório" — **AD-09** em `DECISOES.md`, não "onda futura". DoDs novos 6.43–6.46, 1:1 com asserts de rótulo/seção |
 | 2 | A mitigação registrada de P10 (§16.13, mestre `:261`: "Troca de Peça registra pendência física quando carga aberta; bloqueada com carga fechada") só implementa a segunda metade — a Task 4.3 bloqueia com carga fechada mas nada registra com carga aberta, e o plano não citava P10 em linha alguma | Task 4.2 ganha `buscarCargaAbertaDaPeca` (par exato de `pecaEmCargaFechada`, mesma tabela `carga_itens`/`caminhoes`). Task 4.3: quando a peça retirada está em carga **aberta**, a troca registra pendência física em `aprovacoes_operacionais` (tipo novo `pendencia_fisica_etiqueta`, reuso de `AprovacoesService.abrirNaTx` da Onda 5 — nenhuma tabela nova) na **mesma transação**, referenciando a troca; sem carga alguma, nada é criado. `chk_aprovacao_tipo` ganha o quinto valor via `0021` (Task 1). P10 citado explicitamente no texto da Task 4 e em D6.21. DoDs novos 6.40–6.42 |
 | menor | `listar()` sem `recebimentoId` varria a tabela inteira, mas o docstring de `paginarEmMemoria` dizia "a listagem já é filtrada por recebimento" como se fosse sempre verdade | `recebimentoId` deixa de ser `.optional()` em `listarEtiquetasSchema` (Task 6.1) — a tela sempre tem um lote selecionado (`etiquetas-client.tsx` já não busca sem ele). Comentário de `paginarEmMemoria` corrigido para descrever a garantia real, não a intenção |
 | menor | Task 4.3 citava "o mesmo padrão do precedente `etiqueta.service.ts:43-55`" para a impressão, mas esse precedente é **FORA** da transação (`:53`: "Impressão física FORA da transação") enquanto a troca imprime **DENTRO** do lock — precedente citado ao contrário | Comentário reescrito: a troca decide **DENTRO** do lock, **diferente** do precedente (que é fora), porque a checagem de carga fechada depende de travar as duas peças antes de imprimir; custo zero hoje (`fila-impressora.adapter.ts:19-27` é fake, sem I/O), registrado com `ponytail:` para reavaliar quando o driver real (ADR-010) entrar em produção — dois `FOR UPDATE` abertos durante I/O de hardware é um teto explícito, não uma promessa de I/O rápido |
+
+## Emenda 4 — resposta ao Portão 1 `ajustar` (veredito `9d444e7`)
+
+Os três bloqueantes da emenda 3 foram confirmados fechados na revisão de mérito (13→12 campos, drawer fiel, P10 completo), mas o próprio literal introduzido tinha um defeito de compilação (coluna inexistente) e dois efeitos colaterais (contrato de frontend não sincronizado, fixtures de CHECK inválidas). Esta rodada fecha os três e os quatro menores nomeados. Nenhum escopo novo.
+
+| # | Bloqueante do veredito | Onde está fechado nesta emenda |
+|---|---|---|
+| 1 | Task 6.3 selecionava `recebimentos.nfeNumero`, coluna inexistente (`recebimentos` só tem `nota_fiscal_fornecedor`); o número real vem da NF ativa (`recebimento.service.ts:277`: `nfAtiva?.numero ?? recebimento.notaFiscalFornecedor`), e um join cru contra `notas_fiscais_fornecedor` mudaria a cardinalidade (várias NFs por recebimento) | `listar()` chama `buscarNfAtivaDoRecebimento(this.db, filtros.recebimentoId)` **uma única vez** (função já exportada por `nota-fiscal-fornecedor.persistence.ts:228`, sem fan-out porque `recebimentoId` é obrigatório desde a emenda 3), e a linha bruta carrega só o fallback `recebimentos.notaFiscalFornecedor`; `nfNumero` é computado em memória com a mesma expressão de `:277` antes de `agruparPorPeca` |
+| 2 | O literal de `EtiquetaListada` em `lib/operacao.ts` (Task 10.3) ficou com as 16 chaves antigas — nenhuma das 12 novas da emenda 3 nem `operadorNome` (que já existia no backend desde a emenda 2 mas nunca tinha entrado no tipo do front) — e a Task 11.2 não tem de onde ler os campos que ela mesma consome | Task 10.3 reescrita com as 13 chaves (as 12 de join da emenda 3 + `operadorNome`), tipadas igual ao backend (`caracteristicas: string[]`, `localEstoquePrevisto: { valor: string \| null; provisorio: true } \| null`) |
+| 3 | 6.40 semeava `status_caminhao = 'em_carregamento'`, valor fora de `chk_caminhoes_status`; 6.41 semeava `status_caminhao = 'planejado'` e chamava isso de "nunca carregada", mas `buscarCargaAbertaDaPeca` trata `planejado` como carga aberta (não está em `STATUS_CAMINHAO_FECHADO`), então a pendência seria criada e a asserção de 0 linhas falharia | 6.40 passa a usar `status_caminhao = 'em_carga'` (valor real do CHECK, fora de `STATUS_CAMINHAO_FECHADO`); 6.41 passa a semear a peça **sem nenhuma linha** em `carga_itens` — "nunca carregada" é ausência de linha ativa, não um caminhão `planejado` |
+| menor | Ramo Desossa da tabela de derivação (Task 11.2) só cobria `statusPeca === 'para_corte'`; peças `em_transformacao`/`transformada` (exatamente as que D6.18 marca `bloqueada` no backend) não caíam em nenhum dos 3 ramos de destino e a seção sumia para elas, embora o protótipo tenha rótulo próprio (`EtiquetasRecebimento.tsx:449-451`: "Aguardando desossa" âmbar / "Consumida por transformação" roxo) | Condição do ramo Desossa passa a `['para_corte','em_transformacao','transformada'].includes(statusPeca)` — os mesmos 2 valores extra de `chk_pecas_status` que D6.18 usa para `bloqueada` no backend, repetidos aqui como literal de frontend (front e backend são pacotes separados, sem import cruzado de constante); novo helper puro `rotuloStatusDesossa` (não reutiliza `rotuloDestinoPeca`, que devolve "Desossa" e não os dois rótulos do protótipo) fixa os dois rótulos e as duas cores literais |
+| menor | Cabeçalho da emenda 3 dizia "13 campos novos" e D6.22 dizia "12 dos 13", mas a interface (`:1904-1922`) sempre teve 12 (11 de join + `localEstoquePrevisto`) | Cabeçalho e D6.22 corrigidos para "12 campos novos" / "11 dos 12" — mesma classe do menor "8 FKs" já corrigido na emenda 2 |
+| menor | DoD 6.45 e a tabela de derivação chamam a 3ª seção de "Destino", rótulo que não existe na tela — o cabeçalho é dinâmico ("Pedido vinculado" \| "Estoque" \| "Desossa", `EtiquetasRecebimento.tsx:433`) e a única string "Destino" do drawer é o campo de Dados da peça (`:405`); um assert por texto "Destino" passaria pela linha errada | DoD 6.45 reescrita para nomear os três títulos literais do cabeçalho dinâmico; Task 11.2 explicita que o `<p>` do título da 3ª seção usa a mesma expressão condicional do protótipo (`:433`), não a string fixa "Destino" |
+| menor | Task 11.2 dizia que o drawer do protótipo (`EtiquetasRecebimento.tsx:397-456`) "tem 5 seções", mas `:397-456` cobre só 3 (Dados da peça, Rastreabilidade, Destino); as 5 vão de `:391` (preview) a `:475` (histórico) — a tabela "Bloco a reproduzir" já tinha o intervalo certo (`:361-500`) | Âncora corrigida para `:361-500`, igual à tabela "Bloco a reproduzir" |
 
 ## Goal
 
@@ -304,7 +318,7 @@ transação da troca, só quando a peça retirada está numa carga **aberta** (n
 inexistente). O gestor resolve pela tela de Gestão › Aprovações já existente — nenhuma tela nova.
 
 **D6.22 — `localEstoque` do protótipo não tem coluna real; vira parâmetro provisório (AD-09), não "onda futura".**
-Das 3 seções do drawer, 12 dos 13 campos novos são join sobre tabela existente. A única exceção é
+Das 3 seções do drawer, 11 dos 12 campos novos são join sobre tabela existente. A única exceção é
 "Local previsto" da subseção Estoque (`EtiquetasRecebimento.tsx:442`): não existe, em nenhum
 schema do backend, coluna ou tabela de local físico/câmara de estoque — não é omissão de join, é
 lacuna real de modelagem, fora da lista de campos que P9 (§16.12, mitigado desde a Onda 3 por
@@ -574,7 +588,7 @@ Cada linha é um critério de pronto e o teste **único** que o prova. Portão 2
 | 6.42 | **P10** `EVENTOS.APROVACAO_REGISTRADA` publicado pós-commit com `tipo: 'pendencia_fisica_etiqueta'` quando a troca cria a pendência | `test/unit/pesagem-eventos.spec.ts` › “APROVACAO_REGISTRADA publicado após o commit quando a troca cria pendência física” |
 | 6.43 | **Drawer completo (Princípio I+II)** `listar()` devolve os 12 campos novos de join (produto, características, NF, frigorífico, romaneio, placa, motorista, cliente, representante, rota) para uma peça associada a pedido | `test/integration/etiqueta.e2e-spec.ts` › “lista etiqueta com os campos de produto, rastreabilidade e destino do pedido” |
 | 6.44 | **Drawer completo** Para destino Estoque (`status_peca = 'em_sobra'`), `clienteNome`/`representanteNome`/`rotaPrevista` vêm `null` e `localEstoquePrevisto` vem `{ valor: null, provisorio: true }` | mesmo arquivo › “lista etiqueta com destino estoque e localEstoquePrevisto provisório” |
-| 6.45 | **Drawer completo** As 3 seções do drawer (Dados da peça, Rastreabilidade, Destino) renderizam os rótulos do protótipo com os campos novos de `EtiquetaListada`, nas 3 variações de destino (Pedido, Estoque, Desossa) | `app/frontend/__tests__/etiquetas-recebimento.test.tsx` › “drawer renderiza Dados da peça, Rastreabilidade e Destino nas 3 variações” |
+| 6.45 | **Drawer completo** As 3 seções do drawer (Dados da peça, Rastreabilidade, 3ª seção com título dinâmico) renderizam os rótulos do protótipo com os campos novos de `EtiquetaListada`, nas 3 variações de título ("Pedido vinculado", "Estoque", "Desossa" — nunca a string genérica "Destino", que só existe no campo de Dados da peça) | `app/frontend/__tests__/etiquetas-recebimento.test.tsx` › “drawer renderiza Dados da peça, Rastreabilidade e o título dinâmico ‘Pedido vinculado’/’Estoque’/’Desossa’ nas 3 variações” |
 | 6.46 | **AD-09** O badge "Provisório" aparece só ao lado de "Local previsto" quando o destino é Estoque, e nunca em nenhum outro campo do drawer | mesmo arquivo › “badge Provisório aparece apenas em Local previsto no destino Estoque” |
 
 ## Tasks
@@ -1432,16 +1446,21 @@ rejeição, que `SELECT count(*) FROM trocas_peca` é `0`, que a etiqueta anteri
 (não `invalidada_por_troca`), que as duas peças voltaram ao `status_peca` e ao `pedido_venda_item_id`
 originais e que **nenhum** evento foi publicado. `test/unit/pesagem-eventos.spec.ts` ganha o caso 6.7.
 
-**P10 — cenários novos (6.40–6.41, emenda 3):** o e2e ganha dois casos de carga que o 6.1–6.7 não
-cobria. **6.40**: `pecaRetiradaId` inserida em `carga_itens` com `caminhoes.status_caminhao =
-'em_carregamento'` (aberta) — a troca **conclui com 201** (não bloqueia) e, na mesma transação,
-`SELECT * FROM aprovacoes_operacionais WHERE referencia_tabela = 'trocas_peca' AND referencia_id =
-:trocaId` devolve exatamente 1 linha com `tipo = 'pendencia_fisica_etiqueta'` e `status =
-'pendente'` — o teste falha se a pendência não existir. **6.41**: mesma peça, mas
-`caminhoes.status_caminhao = 'planejado'` (nunca carregada) — a troca conclui e a mesma query
-devolve **0** linhas, confirmando que `buscarCargaAbertaDaPeca` não gera pendência fantasma para
-peça nunca carregada. **6.42** (unit, `pesagem-eventos.spec.ts`): a troca com carga aberta publica
-`EVENTOS.APROVACAO_REGISTRADA` com `tipo: 'pendencia_fisica_etiqueta'`.
+**P10 — cenários novos (6.40–6.41, emenda 3, fixtures corrigidas na emenda 4):** o e2e ganha dois
+casos de carga que o 6.1–6.7 não cobria. **6.40**: `pecaRetiradaId` inserida em `carga_itens`
+(`status_carga_item = 'em_carga'`) com `caminhoes.status_caminhao = 'em_carga'` — valor real de
+`chk_caminhoes_status` (`expedicao.schema.ts:32`), fora de `STATUS_CAMINHAO_FECHADO` e por isso
+"carga aberta" para `buscarCargaAbertaDaPeca` — a troca **conclui com 201** (não bloqueia) e, na
+mesma transação, `SELECT * FROM aprovacoes_operacionais WHERE referencia_tabela = 'trocas_peca' AND
+referencia_id = :trocaId` devolve exatamente 1 linha com `tipo = 'pendencia_fisica_etiqueta'` e
+`status = 'pendente'` — o teste falha se a pendência não existir. **6.41**: mesma peça, mas **sem
+nenhuma linha em `carga_itens`** — "nunca carregada" é ausência de linha ativa, não um caminhão
+`planejado`: `planejado` não está em `STATUS_CAMINHAO_FECHADO`, logo contaria como carga aberta se
+houvesse linha, e a asserção de 0 pendências falharia (era o defeito da fixture antes da emenda 4)
+— a troca conclui e a query de `aprovacoes_operacionais` devolve **0** linhas, confirmando que
+`buscarCargaAbertaDaPeca` devolve `null` (nenhuma linha ativa em `carga_itens`, conforme o próprio
+docstring da função) e não gera pendência fantasma. **6.42** (unit, `pesagem-eventos.spec.ts`): a
+troca com carga aberta publica `EVENTOS.APROVACAO_REGISTRADA` com `tipo: 'pendencia_fisica_etiqueta'`.
 
 **Commit:** `feat(onda6): troca de peça atômica preservando pesos`
 
@@ -1905,6 +1924,7 @@ export interface EtiquetaListada {
   produtoDescricao: string;
   /** Rótulos literais de `pesagem-destinacao-client.tsx:566,571,576` — nunca texto inventado. */
   caracteristicas: string[];
+  /** NF ativa com fallback para `recebimentos.notaFiscalFornecedor` — mesma regra de `recebimento.service.ts:277`. */
   nfNumero: string | null;
   frigorifico: string;
   romaneio: string | null;
@@ -1990,7 +2010,16 @@ export function paginarEmMemoria<T>(itens: T[], page: number, pageSize: number):
                           OR lower(${pecas.id}::text) LIKE ${q})`);
     }
 
-    const linhas: LinhaEtiqueta[] = await this.db
+    // Número da NF: `recebimentos` NÃO tem coluna de número (só `nota_fiscal_fornecedor`,
+    // referência complementar) — o valor exibido pela aplicação é o da NF ativa, com a MESMA
+    // semântica de `recebimento.service.ts:277` (`nfAtiva?.numero ?? recebimento.notaFiscalFornecedor`).
+    // Buscada uma única vez aqui (não por linha): `recebimentoId` é obrigatório neste filtro
+    // (emenda 3, menor 1), logo um único recebimento cobre todas as linhas — juntar
+    // `notas_fiscais_fornecedor` na consulta abaixo mudaria a cardinalidade (um recebimento pode
+    // ter várias NFs históricas).
+    const nfAtiva = await buscarNfAtivaDoRecebimento(this.db, filtros.recebimentoId);
+
+    const linhasBrutas = await this.db
       .select({
         id: etiquetasImpressoes.id,
         pecaId: pecas.id,
@@ -2019,7 +2048,9 @@ export function paginarEmMemoria<T>(itens: T[], page: number, pageSize: number):
           CASE WHEN (${pecas.capturaMeta}->>'melhorAcabamento')::boolean THEN 'Melhor acabamento' END
         ], NULL)`,
         // Rastreabilidade — join literal sobre recebimentos/fornecedores, sem tabela nova.
-        nfNumero: recebimentos.nfeNumero,
+        // `notaFiscalFornecedor` aqui é só o FALLBACK (mesmo campo de `recebimento.service.ts:277`);
+        // o `nfNumero` final é resolvido depois da consulta, com `nfAtiva` já carregada acima.
+        notaFiscalFornecedor: recebimentos.notaFiscalFornecedor,
         frigorifico: fornecedores.razaoSocial,
         romaneio: recebimentos.romaneio,
         placaVeiculo: recebimentos.placaVeiculo,
@@ -2047,6 +2078,14 @@ export function paginarEmMemoria<T>(itens: T[], page: number, pageSize: number):
       .where(and(...condicoes))
       .orderBy(desc(etiquetasImpressoes.createdAt));
 
+    // `nfNumero` final: NF ativa se existir, senão o fallback da linha — mesma regra de
+    // `recebimento.service.ts:277`. Computado em memória (não em SQL) para não repetir a lógica
+    // de fallback em duas linguagens.
+    const linhas: LinhaEtiqueta[] = linhasBrutas.map(({ notaFiscalFornecedor, ...linha }) => ({
+      ...linha,
+      nfNumero: nfAtiva?.numero ?? notaFiscalFornecedor,
+    }));
+
     // Agrupa por peça (histórico completo, nunca truncado): a primeira linha (mais recente) é a
     // vigente; as demais viram histórico. O filtro de estado avalia a vigente JÁ DETERMINADA —
     // nunca uma linha isolada — então uma peça com vigente `cancelada` não some do resultado nem
@@ -2064,7 +2103,11 @@ mesmo arquivo — importar `montarPaginado`/`Paginado` de `common/crud/paginacao
 demais imports do arquivo. As 3 seções novas do drawer (emenda 3) acrescentam a
 `etiqueta.service.ts` os imports de schema `itensComerciais`, `recebimentos`, `fornecedores`,
 `pedidosVenda`, `clientes`, `representantes` e `usuarios` — todos já existentes em
-`database/schema`, nenhum novo.
+`database/schema`, nenhum novo. A emenda 4 acrescenta o import de valor
+`buscarNfAtivaDoRecebimento` de `../recebimento/nota-fiscal-fornecedor.persistence` (já exportada,
+`:228`) — mesmo padrão de import cross-module de `associacao.service.ts:18`
+(`DivergenciaRecebimentoService` de `../recebimento/...`), sem ciclo: `nota-fiscal-fornecedor.persistence.ts`
+não importa nada de `modules/operacao/pesagem`.
 
 **6.4** `etiqueta.controller.ts` (novo) — resolve o bloqueante 5 fixando o prefixo:
 
@@ -2469,6 +2512,10 @@ export type EstadoEtiqueta =
   | 'reimpressa'
   | 'cancelada';
 
+// Espelho 1:1 de `EtiquetaListada` em `etiqueta.service.ts` (Task 6.3) — as 13 chaves que a
+// tabela de derivação da Task 11.2 consome (as 12 de join da emenda 3 + `operadorNome`, que já
+// existia no backend desde a emenda 2 mas nunca tinha entrado neste tipo — bloqueante 2 da
+// emenda 4). Um tipo só, consistente com o payload real de `GET /operacao/etiquetas`.
 export interface EtiquetaListada {
   id: string;
   pecaId: string;
@@ -2484,7 +2531,24 @@ export interface EtiquetaListada {
   recebimentoId: string;
   pedidoVendaId: string | null;
   operadorId: string;
+  operadorNome: string;
   createdAt: string;
+  // Dados da peça (D6.15/emenda 3).
+  produtoCodigo: string;
+  produtoDescricao: string;
+  caracteristicas: string[];
+  // Rastreabilidade (D6.15/emenda 3; `nfNumero` fechado na emenda 4 — ver `etiqueta.service.ts`).
+  nfNumero: string | null;
+  frigorifico: string;
+  romaneio: string | null;
+  placaVeiculo: string | null;
+  motorista: string | null;
+  // Destino → Pedido (D6.15/emenda 3).
+  clienteNome: string | null;
+  representanteNome: string | null;
+  rotaPrevista: string | null;
+  // Destino → Estoque — AD-09, único campo sem coluna real (D6.22).
+  localEstoquePrevisto: { valor: string | null; provisorio: true } | null;
   historico: Array<{
     id: string;
     estado: EstadoEtiqueta;
@@ -2691,8 +2755,35 @@ novo, backend ou BFF, é criado para isto.
 
 **As 3 seções do drawer que faltavam (emenda 3, bloqueante 1 do veredito `daf9446`, Princípio
 I+II) — tabela de derivação 1:1, mesmo formato de D6.2/D6.18.** O drawer do protótipo
-(`EtiquetasRecebimento.tsx:397-456`) tem 5 seções; até esta emenda a Task 11.2 só cobria preview
-(parcial) e histórico. As 3 que faltavam agora são contrato explícito, sem "onda futura":
+(`EtiquetasRecebimento.tsx:361-500`) tem 5 seções; até esta emenda a Task 11.2 só cobria preview
+(parcial) e histórico. As 3 que faltavam agora são contrato explícito, sem "onda futura". O título
+da 3ª seção é **dinâmico** (`:433`): "Pedido vinculado" | "Estoque" | "Desossa" conforme o destino —
+a única string fixa "Destino" do drawer é o campo de Dados da peça (`:405`, linha "Destino" abaixo);
+testes e implementação devem usar o título dinâmico, nunca a string genérica "Destino"
+(emenda 4, menor):
+
+```tsx
+// EtiquetasRecebimento.tsx:433 — título dinâmico da 3ª seção, NUNCA a string fixa "Destino"
+// (essa só existe no campo "Destino" de Dados da peça, `:405`, um valor diferente).
+export function tituloSecaoDestino(e: EtiquetaListada): string {
+  if (e.pedidoVendaId) return 'Pedido vinculado';
+  if (e.statusPeca === 'em_sobra') return 'Estoque';
+  return 'Desossa';
+}
+
+// EtiquetasRecebimento.tsx:449-451 — os 2 rótulos de "Status na desossa", cada um com sua cor.
+// NÃO reusa `rotuloDestinoPeca` (que devolve só "Desossa", o rótulo do campo "Destino" acima —
+// um campo diferente). Mesmo par de estados que D6.18 marca `bloqueada` no backend
+// (`chk_pecas_status`: `em_transformacao`/`transformada`).
+export function rotuloStatusDesossa(statusPeca: string): { texto: string; classe: string } {
+  return statusPeca === 'em_transformacao' || statusPeca === 'transformada'
+    ? { texto: 'Consumida por transformação', classe: 'text-[#7C3AED]' }
+    : { texto: 'Aguardando desossa', classe: 'text-[#D97706]' };
+}
+```
+
+As duas funções acima ficam exportadas no topo do arquivo, ao lado de `rotuloEtiqueta`/`cancelavel`/
+`reimprimivel`, puras, para o teste 6.45 exercitá-las sem render.
 
 | Seção do protótipo | Campo do protótipo | Fonte real (backend) |
 |---|---|---|
@@ -2710,13 +2801,13 @@ I+II) — tabela de derivação 1:1, mesmo formato de D6.2/D6.18.** O drawer do 
 | Rastreabilidade | Motorista | `etiqueta.motorista` (novo) |
 | Rastreabilidade | Pesagem | `etiqueta.createdAt` (já existia) |
 | Rastreabilidade | Operador | `etiqueta.operadorNome` (novo) |
-| Destino → Pedido (quando `pedidoVendaId` não é nulo) | Cliente/Pedido | `etiqueta.clienteNome` + **precedente já existente** `pesagem-destinacao-client.tsx:754` (`` `Pedido ${etiqueta.pedidoVendaId.slice(0, 8)}…` ``) — não é campo novo, é reúso do mesmo formato |
+| Destino (título `tituloSecaoDestino` = "Pedido vinculado", quando `pedidoVendaId` não é nulo) | Cliente/Pedido | `etiqueta.clienteNome` + **precedente já existente** `pesagem-destinacao-client.tsx:754` (`` `Pedido ${etiqueta.pedidoVendaId.slice(0, 8)}…` ``) — não é campo novo, é reúso do mesmo formato |
 | Destino → Pedido | Representante | `etiqueta.representanteNome` (novo) |
 | Destino → Pedido | Rota | `etiqueta.rotaPrevista` (novo) |
-| Destino → Estoque (`statusPeca === 'em_sobra'`) | Local previsto | `etiqueta.localEstoquePrevisto.valor` — **sempre `null` hoje**, com badge `<Badge variant="outline">Provisório</Badge>` (mesmo componente de `etiquetas-client.tsx:174`) ao lado do rótulo — **AD-09** em `DECISOES.md`, Princípio VIII, não "onda futura" |
+| Destino (título "Estoque", `statusPeca === 'em_sobra'`) | Local previsto | `etiqueta.localEstoquePrevisto.valor` — **sempre `null` hoje**, com badge `<Badge variant="outline">Provisório</Badge>` (mesmo componente de `etiquetas-client.tsx:174`) ao lado do rótulo — **AD-09** em `DECISOES.md`, Princípio VIII, não "onda futura" |
 | Destino → Estoque | Tipo | literal `"Estoque físico"` (protótipo `:443` também é literal fixo, não um campo de dado) |
 | Destino → Estoque | Data entrada | `etiqueta.createdAt` (já existia) |
-| Destino → Desossa (`statusPeca === 'para_corte'`) | Status na desossa | `rotuloDestinoPeca(etiqueta.statusPeca)` (já existia — `para_corte` → “Aguardando desossa”) |
+| Destino (título "Desossa", `['para_corte','em_transformacao','transformada'].includes(statusPeca)` — mesmo conjunto de D6.18 quando não é Pedido nem Estoque, emenda 4) | Status na desossa | `rotuloStatusDesossa(etiqueta.statusPeca).texto` (novo helper acima — `para_corte` → "Aguardando desossa" âmbar; `em_transformacao`/`transformada` → "Consumida por transformação" roxo) |
 | Destino → Desossa | Peça mãe | `etiqueta.pecaId` (já existia) |
 
 Nenhuma tabela nova: os 12 campos reais vêm de `itens_comerciais`, `pecas.captura_meta`,
