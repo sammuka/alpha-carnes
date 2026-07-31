@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { DashboardService } from '../../src/modules/gestao/dashboard/dashboard.service';
 
 function chain(result: unknown) {
@@ -46,6 +47,62 @@ function kpiRow() {
 }
 
 describe('DashboardService.resumo', () => {
+  it('usa operacaoId informado via detalhar', async () => {
+    const ops = operacoesMock();
+    const db = {
+      execute: jest.fn()
+        .mockResolvedValueOnce({ rows: [kpiRow()] })
+        .mockResolvedValue({ rows: [{ overbooking: 0, divergencias: 0, tz_aguardando: 0, seguro_pendente: 0 }] }),
+      select: jest.fn(() => chain([])),
+    };
+    const service = new DashboardService({ db } as never, ops as never);
+    jest.spyOn(service as unknown as { listarPedidosEmAndamento: () => Promise<unknown> }, 'listarPedidosEmAndamento').mockResolvedValue([]);
+    jest.spyOn(service as unknown as { listarAtividadesRecentes: () => Promise<unknown> }, 'listarAtividadesRecentes').mockResolvedValue([]);
+
+    await service.resumo('op-custom');
+    expect(ops.detalhar).toHaveBeenCalledWith('op-custom');
+    expect(ops.resolverCorrente).not.toHaveBeenCalled();
+  });
+
+  it('propaga OPERACAO_INEXISTENTE quando não há operação corrente', async () => {
+    const ops = {
+      resolverCorrente: jest.fn().mockRejectedValue(new NotFoundException('não há')),
+      detalhar: jest.fn(),
+    };
+    const service = new DashboardService({ db: { execute: jest.fn(), select: jest.fn() } } as never, ops as never);
+    await expect(service.resumo()).rejects.toMatchObject({ message: 'OPERACAO_INEXISTENTE' });
+  });
+
+  it('relança erro desconhecido de resolverCorrente', async () => {
+    const ops = {
+      resolverCorrente: jest.fn().mockRejectedValue(new Error('db down')),
+      detalhar: jest.fn(),
+    };
+    const service = new DashboardService({ db: { execute: jest.fn(), select: jest.fn() } } as never, ops as never);
+    await expect(service.resumo()).rejects.toThrow('db down');
+  });
+
+  it('falha quando KPIs não retornam linha', async () => {
+    const db = { execute: jest.fn().mockResolvedValueOnce({ rows: [] }), select: jest.fn() };
+    const service = new DashboardService({ db } as never, operacoesMock() as never);
+    await expect(service.resumo('op1')).rejects.toThrow('Falha ao apurar os KPIs');
+  });
+
+  it('usa fallback 0 para KPI ausente no resultado', async () => {
+    const db = {
+      execute: jest.fn()
+        .mockResolvedValueOnce({ rows: [{}] })
+        .mockResolvedValue({ rows: [{ overbooking: 0, divergencias: 0, tz_aguardando: 0, seguro_pendente: 0 }] }),
+      select: jest.fn(() => chain([])),
+    };
+    const service = new DashboardService({ db } as never, operacoesMock() as never);
+    jest.spyOn(service as unknown as { listarPedidosEmAndamento: () => Promise<unknown> }, 'listarPedidosEmAndamento').mockResolvedValue([]);
+    jest.spyOn(service as unknown as { listarAtividadesRecentes: () => Promise<unknown> }, 'listarAtividadesRecentes').mockResolvedValue([]);
+
+    const res = await service.resumo('op1');
+    expect(res.kpis.every((k) => k.valor === '0')).toBe(true);
+  });
+
   it('combina KPIs com pedidos em andamento e atividades', async () => {
     const db = {
       execute: jest.fn()
@@ -142,6 +199,30 @@ describe('DashboardService.listarPedidosEmAndamento', () => {
     expect(pedidos[0]?.pesoTotalKg).toBe('8.000');
   });
 
+  it('peso nulo quando total zero ou ausente', async () => {
+    let selectCall = 0;
+    const db = {
+      select: jest.fn(() => {
+        const idx = selectCall++;
+        if (idx === 0) {
+          return chain([{
+            pedidoId: 'p1',
+            status: 'rascunho',
+            clienteNome: 'Loja',
+            clienteRazao: 'Loja',
+          }]);
+        }
+        if (idx === 1) return chain([{ codigo: 'PA', quantidade: '1' }]);
+        return chain([{ total: '0' }]);
+      }),
+    };
+    const service = new DashboardService({ db } as never, operacoesMock() as never);
+    const pedidos = await (service as unknown as {
+      listarPedidosEmAndamento: (operacaoId: string, dataOperacao: string) => Promise<Array<{ pesoTotalKg: string | null }>>;
+    }).listarPedidosEmAndamento('op1', '2026-06-23');
+    expect(pedidos[0]?.pesoTotalKg).toBeNull();
+  });
+
   it('sem itens no pedido usa traço no resumo', async () => {
     let selectCall = 0;
     const db = {
@@ -166,6 +247,67 @@ describe('DashboardService.listarPedidosEmAndamento', () => {
       listarPedidosEmAndamento: (operacaoId: string, dataOperacao: string) => Promise<Array<{ produtoResumo: string }>>;
     }).listarPedidosEmAndamento('op1', '2026-06-23');
     expect(pedidos[0]?.produtoResumo).toBe('—');
+  });
+});
+
+describe('DashboardService.montarAlertas', () => {
+  it('monta os quatro tipos de alerta operacional', async () => {
+    const db = {
+      execute: jest.fn().mockResolvedValue({
+        rows: [{
+          overbooking: 2,
+          overbooking_deficit: '5.000',
+          overbooking_em: '2026-06-23T10:00:00Z',
+          divergencias: 1,
+          divergencia_lote: 'ROM-1',
+          divergencia_em: '2026-06-23T11:00:00Z',
+          tz_aguardando: 3,
+          tz_em: '2026-06-23T12:00:00Z',
+          seguro_pendente: 1,
+          seguro_placa: 'ABC1D23',
+          seguro_em: '2026-06-23T13:00:00Z',
+        }],
+      }),
+    };
+    const service = new DashboardService({ db } as never, operacoesMock() as never);
+    const alertas = await (service as unknown as { montarAlertas: (id: string) => Promise<Array<{ chave: string }>> }).montarAlertas('op1');
+    expect(alertas.map((a) => a.chave)).toEqual([
+      'overbooking_aberto',
+      'divergencia_recebimento',
+      'tz_aguardando_desossa',
+      'seguro_pendente',
+    ]);
+  });
+
+  it('divergência sem lote omite prefixo no texto', async () => {
+    const db = {
+      execute: jest.fn().mockResolvedValue({
+        rows: [{
+          overbooking: 0,
+          overbooking_deficit: '0',
+          overbooking_em: null,
+          divergencias: 1,
+          divergencia_lote: null,
+          divergencia_em: '2026-06-23T11:00:00Z',
+          tz_aguardando: 0,
+          tz_em: null,
+          seguro_pendente: 0,
+          seguro_placa: null,
+          seguro_em: null,
+        }],
+      }),
+    };
+    const service = new DashboardService({ db } as never, operacoesMock() as never);
+    const alertas = await (service as unknown as { montarAlertas: (id: string) => Promise<Array<{ descricao: string }>> }).montarAlertas('op1');
+    expect(alertas[0]?.descricao).not.toContain('Lote');
+  });
+
+  it('falha quando query de alertas não retorna linha', async () => {
+    const db = { execute: jest.fn().mockResolvedValue({ rows: [] }) };
+    const service = new DashboardService({ db } as never, operacoesMock() as never);
+    await expect(
+      (service as unknown as { montarAlertas: (id: string) => Promise<unknown> }).montarAlertas('op1'),
+    ).rejects.toThrow('Falha ao apurar os alertas');
   });
 });
 
