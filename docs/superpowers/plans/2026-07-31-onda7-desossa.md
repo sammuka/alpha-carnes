@@ -120,7 +120,9 @@ Fecha **todos** os bloqueantes do Gate local `npm run test:cov` após DoD 7.6/7.
 
 **Emenda 7.1 (Portão 1 `afe9dc4` — fecha Expected PASS factível):** patches literais adicionais em `expedicao.e2e-spec.ts` (`subitem sem etiqueta nao e elegivel`) e `corte.e2e-spec.ts` (`concluir com subitem sem etiqueta`) — padrão reetiqueta (`itemSaidaCanonicoCb` + `alinharPedidoItemComSaidaCorte` antes do `associar`). Ver seção **Emenda 7.1** abaixo e Task 16 Steps B/C/G.
 
-**Expected PASS após aplicar Emenda 7 + Emenda 7.1 sobre tip `34524a4` (ou tip atual de `feature/onda7-desossa`, ex. `6e8cad0`):** Steps A–F **e** patches Emenda 7.1 (its citados em Step B/C) → `npm run test:cov` exit 0 é **factível** (zero FAIL; cobertura ≥80% linha e branch). **Proibido** tratar FAIL de `expedicao.e2e-spec.ts` / it sem etiqueta de `corte.e2e-spec.ts` como “parar e reportar” — esses its têm patch literal nesta emenda.
+**Emenda 7.2 (Worker tip `d0c0df3` + WIP A–F — fecha gap literal Step G):** `corte-eventos.spec.ts` TS2554 (4º arg `ChecklistCorteService` — Emenda 7 Step D só cobriu `corte-branches` 21×) + documentar patch já aplicado 1× no WIP em `corte-branches` it `adicionar → quantidade definida no dto é usada` (`regraTransformacaoId` + saída `{ legado: 'ic1' }`). Ver seção **Emenda 7.2** e Task 16 Steps D2/D3/G.
+
+**Expected PASS após aplicar Emenda 7 + Emenda 7.1 + Emenda 7.2 sobre tip `d0c0df3` (WIP Steps A–F):** Steps A–F **e** patches Emenda 7.1 (B/C) **e** Emenda 7.2 (D2 `corte-eventos` + D3 quantidade) → `npm run test:cov` exit 0 é **factível** (zero FAIL; cobertura ≥80% linha e branch). **Proibido** tratar FAIL de `expedicao.e2e-spec.ts` / it sem etiqueta de `corte.e2e-spec.ts` / `corte-eventos.spec.ts` / it quantidade como “parar e reportar” — esses its têm patch literal nesta emenda.
 
 ```bash
 cd app/backend && npm run test:cov
@@ -155,6 +157,28 @@ cd app/backend && npm run test:cov
 # Expected: exit 0 — zero FAIL (inclui expedicao it sem etiqueta + corte it sem etiqueta)
 # Expected: cobertura ≥80% linha e branch
 ```
+
+---
+
+## Emenda 7.2 — Worker tip `d0c0df3` bloqueado no Step G (gap literal)
+
+Fecha **item a item** o bloqueio do Worker após WIP Task 16 Steps A–F no tip commit `d0c0df3` (`feature/onda7-desossa`). Ancestral: Emenda 7 + Emenda 7.1 + PR #49 mergeado (`6bc8140`). **Não** altera produção O7.
+
+| # | Achado Worker (tip `d0c0df3` + WIP A–F) | Fechamento Emenda 7.2 |
+|---|---|---|
+| 1 | `corte-eventos.spec.ts` — `TS2554: Expected 4 arguments, but got 3` em `new CorteService(...)` (falta 4º arg `ChecklistCorteService`). Emenda 7 Step D só cobriu `corte-branches.spec.ts` (21×) | Task 16 Step D2: `makeChecklist()` (mesmo stub Step D) + 4º arg na única construção em `montar` |
+| 2 | Gap já corrigido 1× pelo Worker no WIP (sem literal no plano): `corte-branches` it `adicionar → quantidade definida no dto é usada` — mock precisa `regraTransformacaoId` + saída `{ legado: 'ic1' }` (DoD 7.6/7.7) | Task 16 Step D3: old/new literal deste patch — Worker **commita** o WIP sem inventar |
+| 3 | Reafirmar Expected PASS factível: WIP A–F + Emenda 7.2 → `npm run test:cov` exit 0 | Cabeçalho Emenda 7 + Emenda 7.2 + Step G |
+
+**Expected PASS após Emenda 7 Steps A–F (WIP) + Emenda 7.1 + Emenda 7.2 (D2+D3):**
+
+```bash
+cd app/backend && npm run test:cov
+# Expected: exit 0 — zero FAIL (inclui corte-eventos TS compile + it quantidade + A–F + 7.1)
+# Expected: cobertura ≥80% linha e branch
+```
+
+**Proibido:** improvisar 4º arg sem o stub `makeChecklist` desta emenda; reescrever o it quantidade fora do old/new; rótulo Marca; TBD/TODO/"similar à Task".
 
 ---
 
@@ -460,7 +484,7 @@ Onda aditiva. Emergência: `DROP TABLE divergencias_transformacao;` + drop das c
 | 7.23 | Cobertura ≥80% linha e branch nos services tocados | `npm run test:cov` |
 | 7.24 | Zero rótulo `Marca` nas telas da onda | grep |
 | 7.25 | Nenhum AD novo em `DECISOES.md` | diff vazio |
-| 7.26 | Gate local `test:cov` verde com DoD 7.6/7.7/7.9: helpers O7-aware + suítes legadas (incl. patches Emenda 7.1 em `expedicao`/`corte` its manuais) + `corte-branches` DI + meta O6 idx≤22 + probe O4 sem `divergencias-transformacao` | Task 16 (`npm run test:cov`) |
+| 7.26 | Gate local `test:cov` verde com DoD 7.6/7.7/7.9: helpers O7-aware + suítes legadas (incl. patches Emenda 7.1 em `expedicao`/`corte` its manuais) + `corte-branches` DI + Emenda 7.2 `corte-eventos` DI + it quantidade (regra+saída) + meta O6 idx≤22 + probe O4 sem `divergencias-transformacao` | Task 16 (`npm run test:cov`) |
 
 ---
 
@@ -4011,7 +4035,8 @@ rg -n "\bMarca\b" "app/frontend/src/app/(admin)/desossa" && echo FAIL || echo OK
 - Modify: `app/backend/test/integration/corte-concorrencia.e2e-spec.ts`
 - Modify: `app/backend/test/integration/expedicao.e2e-spec.ts` (**Emenda 7.1** — it `subitem sem etiqueta nao e elegivel`; padrão reetiqueta)
 - **Não** modificar (herdam Step A / `subitemCompleto`): `faturamento.e2e-spec.ts`, `rastreabilidade-corte.e2e-spec.ts`, `conferencia.e2e-spec.ts` — se Step G falhar **nesses três** após A–F + Emenda 7.1, **parar e reportar** (não improvisar patch). `expedicao.e2e-spec.ts` **não** está nesta lista.
-- Modify: `app/backend/test/unit/corte-branches.spec.ts`
+- Modify: `app/backend/test/unit/corte-branches.spec.ts` (**Emenda 7** Step D DI 21×; **Emenda 7.2** Step D3 it quantidade)
+- Modify: `app/backend/test/unit/corte-eventos.spec.ts` (**Emenda 7.2** Step D2 — `makeChecklist` + 4º arg)
 - Modify: `app/backend/test/unit/onda6-migrations-meta.spec.ts`
 - Modify: `app/backend/test/integration/onda4-migrations.e2e-spec.ts`
 - Create: `app/backend/test/helpers/fixtures/transformacoes.schema.pre-onda7.ts`
@@ -4975,6 +5000,137 @@ cd app/backend && npx jest test/unit/corte-branches.spec.ts -v
 # Expected: PASS
 ```
 
+- [ ] **Step D2 (Emenda 7.2): `corte-eventos.spec.ts` — injetar `ChecklistCorteService`**
+
+Emenda 7 Step D cobriu só `corte-branches` (21×). Este arquivo tem **1** construção em `montar` e falha com `TS2554: Expected 4 arguments, but got 3`. Mesmo stub `makeChecklist` do Step D.
+
+```ts
+# old_string
+describe('CorteService — emissão pós-commit', () => {
+  function montar(transactionImpl: () => Promise<unknown>) {
+    const ordem: string[] = [];
+    const emitter = new EventEmitter2();
+    const emitSpy = jest.spyOn(emitter, 'emit').mockImplementation(((event: unknown) => {
+      ordem.push(`emit:${String(event)}`);
+      return true;
+    }) as never);
+    const db = {
+      transaction: jest.fn(async () => {
+        const r = await transactionImpl();
+        ordem.push('commit');
+        return r;
+      }),
+    };
+    const service = new CorteService(
+      { db } as never,
+      { registrar: jest.fn() } as never,
+      emitter,
+    );
+    return { service, emitSpy, ordem };
+  }
+# new_string
+describe('CorteService — emissão pós-commit', () => {
+  /** Emenda 7.2 — CorteService exige ChecklistCorteService no construtor (DoD 7.9). */
+  function makeChecklist(
+    overrides: Partial<{ divergente: boolean; divergenciaAbertaId: string | null }> = {},
+  ) {
+    return {
+      obterNaTx: jest.fn(async () => ({
+        transformacaoId: 't1',
+        regraTransformacaoId: null,
+        regraNome: null,
+        regraProvisoria: false,
+        slots: [],
+        divergente: false,
+        divergenciaAbertaId: null,
+        ...overrides,
+      })),
+      obter: jest.fn(),
+      abrirDivergencia: jest.fn(),
+    };
+  }
+
+  function montar(transactionImpl: () => Promise<unknown>) {
+    const ordem: string[] = [];
+    const emitter = new EventEmitter2();
+    const emitSpy = jest.spyOn(emitter, 'emit').mockImplementation(((event: unknown) => {
+      ordem.push(`emit:${String(event)}`);
+      return true;
+    }) as never);
+    const db = {
+      transaction: jest.fn(async () => {
+        const r = await transactionImpl();
+        ordem.push('commit');
+        return r;
+      }),
+    };
+    const service = new CorteService(
+      { db } as never,
+      { registrar: jest.fn() } as never,
+      emitter,
+      makeChecklist() as never,
+    );
+    return { service, emitSpy, ordem };
+  }
+```
+
+```bash
+cd app/backend && npx jest test/unit/corte-eventos.spec.ts -v
+# Expected: PASS (zero TS2554; 4 its de emissão pós-commit)
+```
+
+- [ ] **Step D3 (Emenda 7.2): `corte-branches` it quantidade — mock regra + saída (DoD 7.6/7.7)**
+
+Gap já corrigido **1×** pelo Worker no WIP da worktree (tip `d0c0df3` + working tree). Literal abaixo = patch exato do WIP — **aplicar se ausente** / **manter se já presente**; commit sem inventar.
+
+Bloco em `describe('SubitemService — branches unitários', ...)`:
+
+```ts
+# old_string
+  it('adicionar → quantidade definida no dto é usada', async () => {
+    const transf = { id: 't1', statusTransformacao: 'aberta', pecaOrigemId: 'pc1', deletedAt: null };
+    const recebimento = { id: 'r1', dataOperacao: '2026-01-01' };
+    const novoSubitem = { id: 'new', transformacaoId: 't1', statusSubitem: 'gerado' };
+    const auditoriaMock = makeAuditoria();
+    const emitter = makeEmitter();
+
+    let selectCall = 0;
+    const customTx = {
+      select: jest.fn(() => {
+        selectCall++;
+        if (selectCall === 1) return makeSelectChain([transf]); // transformacaoEditavel
+        return makeSelectChain([recebimento]);                  // dataOperacao
+      }),
+# new_string
+  it('adicionar → quantidade definida no dto é usada', async () => {
+    // Emenda 7 / DoD 7.6–7.7: mock precisa de regra + saída permitida para atingir branch quantidade
+    const transf = {
+      id: 't1',
+      statusTransformacao: 'aberta',
+      pecaOrigemId: 'pc1',
+      deletedAt: null,
+      regraTransformacaoId: 'regra-1',
+    };
+    const recebimento = { id: 'r1', dataOperacao: '2026-01-01' };
+    const novoSubitem = { id: 'new', transformacaoId: 't1', statusSubitem: 'gerado' };
+    const auditoriaMock = makeAuditoria();
+    const emitter = makeEmitter();
+
+    let selectCall = 0;
+    const customTx = {
+      select: jest.fn(() => {
+        selectCall++;
+        if (selectCall === 1) return makeSelectChain([transf]); // transformacaoEditavel
+        if (selectCall === 2) return makeSelectChain([{ legado: 'ic1' }]); // saídas da regra
+        return makeSelectChain([recebimento]);                  // dataOperacao
+      }),
+```
+
+```bash
+cd app/backend && npx jest test/unit/corte-branches.spec.ts -t "quantidade definida" -v
+# Expected: PASS
+```
+
 - [ ] **Step E: `onda6-migrations-meta.spec.ts` — escopo journal O6**
 
 ```ts
@@ -5112,9 +5268,9 @@ cd app/backend && npx jest test/integration/onda4-migrations.e2e-spec.ts -v --te
 # Expected: PASS
 ```
 
-- [ ] **Step G: Gate `test:cov` (Expected PASS Emenda 7 + Emenda 7.1 — factível)**
+- [ ] **Step G: Gate `test:cov` (Expected PASS Emenda 7 + Emenda 7.1 + Emenda 7.2 — factível)**
 
-Após Steps A–F **e** patches Emenda 7.1 (Step B it sem etiqueta + Step C `expedicao` it sem etiqueta), o Gate é **factível** — `exit 0` sem FAIL. **Proibido** fechar o bloqueante Monitor #1 com “parar e reportar se expedicao falhar”.
+Após Steps A–F (WIP tip `d0c0df3`) **e** patches Emenda 7.1 (B/C) **e** Emenda 7.2 (D2 `corte-eventos` + D3 quantidade), o Gate é **factível** — `exit 0` sem FAIL. **Proibido** fechar com “parar e reportar se expedicao/corte-eventos falhar”.
 
 ```bash
 cd app/backend && npm run test:cov
@@ -5122,12 +5278,13 @@ cd app/backend && npm run test:cov
 # Expected: suítes legadas corte/subitens/reetiqueta/concorrencia/expedicao/faturamento/conferencia/rastreabilidade PASS
 # Expected: corte it 'concluir com subitem sem etiqueta' PASS (409 de etiqueta, não incompatibilidade)
 # Expected: expedicao it 'subitem sem etiqueta nao e elegivel' PASS (409 de carga, não incompatibilidade)
-# Expected: corte-branches PASS; onda6-migrations-meta PASS; onda4-migrations PASS
+# Expected: corte-eventos PASS (zero TS2554; 4º arg ChecklistCorteService)
+# Expected: corte-branches PASS (incl. it quantidade com regra+saída); onda6-migrations-meta PASS; onda4-migrations PASS
 # Expected: onda7-desossa.spec.ts continua PASS
 # Expected: coverage ≥80% linha e branch
 ```
 
-Se FAIL restar **após** A–F + Emenda 7.1 em arquivo **fora** dos patches literais (ex.: `faturamento`/`conferencia`/`rastreabilidade-corte`): **parar e reportar** (não improvisar). Anexar nome do spec + mensagem.
+Se FAIL restar **após** A–F + Emenda 7.1 + Emenda 7.2 em arquivo **fora** dos patches literais (ex.: `faturamento`/`conferencia`/`rastreabilidade-corte`): **parar e reportar** (não improvisar). Anexar nome do spec + mensagem.
 
 - [ ] **Step H (após G verde; não bloqueia G): evidências Playwright lado a lado**
 
@@ -5159,6 +5316,7 @@ git add app/backend/test/helpers/corte-fixtures.ts \
   app/backend/test/integration/corte-concorrencia.e2e-spec.ts \
   app/backend/test/integration/expedicao.e2e-spec.ts \
   app/backend/test/unit/corte-branches.spec.ts \
+  app/backend/test/unit/corte-eventos.spec.ts \
   app/backend/test/unit/onda6-migrations-meta.spec.ts \
   app/backend/test/integration/onda4-migrations.e2e-spec.ts
 git commit -m "$(cat <<'EOF'
@@ -5167,10 +5325,12 @@ test(onda7): desbloqueia Gate local — suítes legadas e meta O6/O4
 ### Descrição Detalhada:
 Helpers de corte passam a bindar TZ_A, usar saídas CB/JAC e fechar checklist
 antes de concluir; patches Emenda 7.1 alinham its manuais de corte/expedicao;
-meta O6 isola journal 20..22; probe O4 restaura schemas pré-O7.
+Emenda 7.2 injeta ChecklistCorteService em corte-eventos e completa mock
+do it quantidade (regra+saída); meta O6 isola journal 20..22; probe O4
+restaura schemas pré-O7.
 
 ### Motivo da Mudança:
-Emenda 7 + 7.1 — Gate test:cov quebrava por DoD 7.6/7.7/7.9 sem literais no plano.
+Emenda 7 + 7.1 + 7.2 — Gate test:cov quebrava por DoD 7.6/7.7/7.9 sem literais no plano.
 
 ### Impacto:
 Suítes F4c/expedição/faturamento herdam fluxo O7 sem regressão da suíte nova.
@@ -5185,12 +5345,12 @@ EOF
 
 > Task do **Executor/Worker na implementação**, não deste PR de plano.
 
-> **Pré-requisito Emenda 7 + 7.1:** Task 16 Step G (`npm run test:cov`) **PASS** no tip de `feature/onda7-desossa` (base `34524a4`/`6e8cad0` + patches Task 16 A–F + Emenda 7.1). Sem isso, **não** abrir PR de implementação.
+> **Pré-requisito Emenda 7 + 7.1 + 7.2:** Task 16 Step G (`npm run test:cov`) **PASS** no tip de `feature/onda7-desossa` (base `d0c0df3` + WIP A–F + patches Emenda 7.1 + Emenda 7.2 D2/D3). Sem isso, **não** abrir PR de implementação.
 
 ```bash
 npm ci
 cd app/backend && npm run lint && npm run test:cov && npm run build
-# Expected PASS Emenda 7 + 7.1: exit 0 — 0 FAIL (suítes legadas + meta O6/O4 + onda7-desossa)
+# Expected PASS Emenda 7 + 7.1 + 7.2: exit 0 — 0 FAIL (suítes legadas + corte-eventos + meta O6/O4 + onda7-desossa)
 cd app/frontend && npm run lint && npm run test && npm run build
 # Step H (evidências) se ainda sem PNGs em docs/evidencias/onda7-desossa/
 gh pr create --base develop --title "feat(onda7): Desossa e Transformação" --body "..."
@@ -5246,6 +5406,7 @@ Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13. **T16 (Emenda 7) é o
 9. **Emenda 6 vs veredito `9608d20`:** (1) ambas fixtures DoD 7.21b, após `iniciarCorte`, buscam `TZ_A`, `POST /operacao/corte/:id/regra`, e usam `itemComercialId` de saída CB (seed Task 2) em `criarPedido`/`subitemCompleto` — Expected PASS factível contra DoD 7.6/7.7; zero `c.itemComercialId` da mãe nesses calls.
 10. **Emenda 7 vs Gate local tip `34524a4`:** (1) `corte-fixtures` O7-aware (bind TZ_A + saída CB/JAC + alinhar pedido + `concluirCorteOnda7`); (2) patches literais corte/subitens/reetiqueta/concorrência; (3) `makeChecklist` no `corte-branches`; (4) meta O6 `idx<=22`; (5) probe O4 remove `0023`+`divergencias-transformacao` e restaura schemas pré-O7; (6) Expected PASS `npm run test:cov`; zero TBD/TODO/similar à Task.
 11. **Emenda 7.1 vs veredito `afe9dc4`:** (1) `expedicao.e2e-spec.ts` it `subitem sem etiqueta nao e elegivel` — patch literal padrão reetiqueta (`itemSaidaCanonicoCb`+`alinhar` antes do `associar`); arquivo fora da lista de intocáveis; (2) `corte.e2e-spec.ts` it `concluir com subitem sem etiqueta` — mesma alinhagem + `concluir` cru + `expect(409)`; (3) cabeçalho Emenda 7 + Step G reafirmam Expected PASS factível após A–F **e** (1)(2) — zero escape “reportar se expedicao falhar”.
+12. **Emenda 7.2 vs Worker tip `d0c0df3`:** (1) `corte-eventos.spec.ts` — `makeChecklist` + 4º arg na construção de `montar` (TS2554; Step D só cobria `corte-branches`); (2) `corte-branches` it `adicionar → quantidade definida no dto é usada` — literal do patch WIP (`regraTransformacaoId: 'regra-1'` + `selectCall === 2` → `{ legado: 'ic1' }`); (3) Expected PASS factível A–F WIP + Emenda 7.2 → `npm run test:cov` exit 0; zero TBD/TODO/similar à Task/Marca.
 
 ---
 
