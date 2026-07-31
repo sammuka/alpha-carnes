@@ -63,12 +63,12 @@ describe('AssociacaoService — branches de erro', () => {
   });
 
   it('sugerir → NotFoundException se peça não existe', async () => {
-    const service = new AssociacaoService({ db: dbComPeca(null) } as never, auditoria as never, emitter, divergencias as never);
+    const service = new AssociacaoService({ db: dbComPeca(null) } as never, auditoria as never, emitter, divergencias as never, {} as never);
     await expect(service.sugerir('pec-x')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('listarCompativeis → NotFoundException se peça não existe', async () => {
-    const service = new AssociacaoService({ db: dbComPeca(null) } as never, auditoria as never, emitter, divergencias as never);
+    const service = new AssociacaoService({ db: dbComPeca(null) } as never, auditoria as never, emitter, divergencias as never, {} as never);
     await expect(service.listarCompativeis('pec-x')).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -78,6 +78,7 @@ describe('AssociacaoService — branches de erro', () => {
       auditoria as never,
       emitter,
       divergencias as never,
+      {} as never,
     );
     await expect(service.confirmar('pec-1', { pedidoVendaItemId: 'pvi-1' } as never, 'op-1')).rejects.toBeInstanceOf(
       ConflictException,
@@ -116,7 +117,7 @@ describe('AssociacaoService — branches de erro', () => {
     consumirMock.mockResolvedValueOnce(false);
     calcularMock.mockResolvedValueOnce([]);
 
-    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never);
+    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never, {} as never);
     await expect(service.confirmar('pec-1', { pedidoVendaItemId: 'pvi-1' } as never, 'op-1')).rejects.toBeInstanceOf(
       ConflictException,
     );
@@ -128,6 +129,7 @@ describe('AssociacaoService — branches de erro', () => {
       auditoria as never,
       emitter,
       divergencias as never,
+      {} as never,
     );
     await expect(
       service.redirecionar('pec-1', { pedidoVendaItemId: 'pvi-2', motivo: 'ajuste' } as never, 'op-1'),
@@ -161,7 +163,7 @@ describe('AssociacaoService — branches de erro', () => {
     };
     consumirMock.mockResolvedValueOnce(false);
 
-    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never);
+    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never, {} as never);
     await expect(
       service.redirecionar('pec-1', { pedidoVendaItemId: 'pvi-2', motivo: 'ajuste' } as never, 'op-1'),
     ).rejects.toBeInstanceOf(ConflictException);
@@ -187,7 +189,7 @@ describe('AssociacaoService — branches de erro', () => {
       ),
     };
 
-    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never);
+    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never, {} as never);
     await expect(service.confirmar('pec-1', { pedidoVendaItemId: 'pvi-x' } as never, 'op-1')).rejects.toBeInstanceOf(
       NotFoundException,
     );
@@ -219,7 +221,7 @@ describe('AssociacaoService — branches de erro', () => {
       ),
     };
 
-    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never);
+    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never, {} as never);
     await expect(service.confirmar('pec-1', { pedidoVendaItemId: 'pvi-1' } as never, 'op-1')).rejects.toBeInstanceOf(
       ConflictException,
     );
@@ -251,7 +253,7 @@ describe('AssociacaoService — branches de erro', () => {
       ),
     };
 
-    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never);
+    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never, {} as never);
     await expect(service.confirmar('pec-1', { pedidoVendaItemId: 'pvi-1' } as never, 'op-1')).rejects.toBeInstanceOf(
       ConflictException,
     );
@@ -283,7 +285,7 @@ describe('AssociacaoService — branches de erro', () => {
       ),
     };
 
-    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never);
+    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never, {} as never);
     await expect(service.confirmar('pec-1', { pedidoVendaItemId: 'pvi-1' } as never, 'op-1')).rejects.toBeInstanceOf(
       ConflictException,
     );
@@ -317,7 +319,7 @@ describe('AssociacaoService — branches de erro', () => {
       transaction: jest.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx)),
     };
 
-    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never);
+    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never, {} as never);
     const res = await service.semCobertura('pec-1', { destino: 'sobra', motivo: 'sem pedido' } as never, 'op-1');
     expect(res.statusPeca).toBe('em_sobra');
     expect(devolverMock).toHaveBeenCalledWith(expect.anything(), 'pvi-1');
@@ -351,7 +353,7 @@ describe('AssociacaoService — branches de erro', () => {
       transaction: jest.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx)),
     };
 
-    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never);
+    const service = new AssociacaoService({ db } as never, auditoria as never, emitter, divergencias as never, {} as never);
     const res = await service.semCobertura('pec-1', { destino: 'corte', motivo: 'desossa' } as never, 'op-1');
     expect(res.statusPeca).toBe('para_corte');
     expect(res.pedidoVendaItemId).toBe('pvi-1');

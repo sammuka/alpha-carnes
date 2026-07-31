@@ -19,6 +19,7 @@ import {
 } from './dto/associacao.dto';
 import { resolverQrSchema, type ResolverQrDto } from './dto/etiqueta.dto';
 import { executarTrocaSchema, type ExecutarTrocaDto } from './dto/troca-peca.dto';
+import { estornarSchema, type EstornarDto } from './dto/estorno.dto';
 import { TrocaPecaService } from './troca-peca.service';
 
 @SkipThrottle()
@@ -102,6 +103,16 @@ export class PesagemController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.associacao.semCobertura(id, dto, user.sub);
+  }
+
+  @Post('pecas/:id/estornar')
+  @RequirePermissoes('ASSOCIACAO_ESTORNAR')
+  estornar(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(estornarSchema)) dto: EstornarDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.associacao.estornar(id, dto, user.sub);
   }
 
   // ── Troca de Peça (v1.1 §6.13) ─────────────────────────────────────────────

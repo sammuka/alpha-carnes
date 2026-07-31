@@ -114,7 +114,13 @@ describe('AssociacaoService — emissão pós-commit', () => {
         return r;
       }),
     };
-    const service = new AssociacaoService({ db } as never, { registrar: jest.fn() } as never, emitter, {} as never);
+    const service = new AssociacaoService(
+      { db } as never,
+      { registrar: jest.fn() } as never,
+      emitter,
+      {} as never,
+      {} as never,
+    );
     return { service, emitSpy, ordem };
   }
 
@@ -243,5 +249,54 @@ describe('TrocaPecaService — emissão pós-commit', () => {
       }),
     );
     expect(ordem.indexOf('commit')).toBeLessThan(ordem.indexOf(`emit:${EVENTOS.APROVACAO_REGISTRADA}`));
+  });
+});
+
+describe('AssociacaoService — estorno pós-commit (6.37)', () => {
+  function montar(transactionImpl: () => Promise<unknown>) {
+    const ordem: string[] = [];
+    const emitter = new EventEmitter2();
+    const emitSpy = jest.spyOn(emitter, 'emit').mockImplementation(((event: unknown) => {
+      ordem.push(`emit:${String(event)}`);
+      return true;
+    }) as never);
+    const db = {
+      transaction: jest.fn(async () => {
+        const r = await transactionImpl();
+        ordem.push('commit');
+        return r;
+      }),
+    };
+    const service = new AssociacaoService(
+      { db } as never,
+      { registrar: jest.fn() } as never,
+      emitter,
+      {} as never,
+      {} as never,
+    );
+    return { service, emitSpy, ordem };
+  }
+
+  it('PESAGEM_ESTORNADA e ETIQUETA_INVALIDADA publicados após o commit com motivo', async () => {
+    const { service, emitSpy, ordem } = montar(async () => ({
+      peca: { id: 'pc-e1', statusPeca: 'em_sobra' },
+      pedidoOrigemId: 'pv1',
+      pedidoItemOrigemId: 'pvi1',
+      etiquetaCancelada: { id: 'et1' },
+      dataOperacao: '2026-09-15',
+    }));
+
+    await service.estornar('pc-e1', { motivo: 'peso_incorreto' } as never, 'user-1');
+
+    expect(emitSpy).toHaveBeenCalledWith(
+      EVENTOS.PESAGEM_ESTORNADA,
+      expect.objectContaining({ pecaId: 'pc-e1', motivo: 'peso_incorreto', pedidoItemOrigemId: 'pvi1' }),
+    );
+    expect(emitSpy).toHaveBeenCalledWith(
+      EVENTOS.ETIQUETA_INVALIDADA,
+      expect.objectContaining({ etiquetaId: 'et1', estado: 'cancelada', motivo: 'peso_incorreto' }),
+    );
+    expect(ordem.indexOf('commit')).toBeLessThan(ordem.indexOf(`emit:${EVENTOS.PESAGEM_ESTORNADA}`));
+    expect(ordem.indexOf('commit')).toBeLessThan(ordem.indexOf(`emit:${EVENTOS.ETIQUETA_INVALIDADA}`));
   });
 });
