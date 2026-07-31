@@ -110,3 +110,38 @@ Todo DDL desse hotfix nasce do delta do schema pelo Drizzle. O arquivo custom
 contém somente DML/PLpgSQL; journal e snapshots não são editados. Essa reversão
 preserva `rota_id`, `adendos_pedido`, `tabelas_preco`,
 `tabelas_preco_itens` e `tabelas_preco_publicacoes`.
+
+## 0021 / 0022 — Onda 6 (Recebimento & Balança)
+
+A onda é puramente aditiva. Restaurar a revisão anterior da aplicação **não**
+exige desfazer `0021`/`0022` em produção: a app antiga ignora colunas/tabelas
+novas. Rollback estrutural (ambiente de desenvolvimento / hotfix) segue o
+precedente da Onda 4 — forward-only via `drizzle-kit generate`, sem `ALTER TABLE`
+manual colado neste documento.
+
+### Objetos introduzidos em `0021` (expand gerado)
+
+- Tabela `trocas_peca` + CHECKs `chk_trocas_peca_destino`, `chk_trocas_peca_motivo`,
+  `chk_trocas_peca_pecas_distintas`, `chk_trocas_peca_pesos_positivos`
+- Índices `idx_trocas_peca_recebimento`, `idx_trocas_peca_pedido`,
+  `idx_trocas_peca_retirada`, `idx_trocas_peca_inserida`
+- Colunas em `etiquetas_impressoes`: `estado`, `motivo_cancelamento`,
+  `invalidada_em`, `invalidada_por_id` + CHECKs `chk_etiq_estado`,
+  `chk_etiq_cancelada_motivo` + índice `idx_etiq_estado`
+- CHECK reescrito `chk_assoc_hist_acao` (ações `estorno`/`troca_saida`/`troca_entrada`)
+- CHECK reescrito `chk_aprovacao_tipo` (valor `pendencia_fisica_etiqueta` — D6.21/P10)
+
+### `0022` (custom — só DML)
+
+Backfill determinístico de `etiquetas_impressoes.estado` a partir de
+`reimpressao`/`status_impressao`. Reaplicar é idempotente. Nenhum DDL neste arquivo.
+
+```sql
+-- Referência do conteúdo versionado em 0022_onda6_etiqueta_estado_backfill.sql
+-- (não executar isolado — aplicar via drizzle migrate).
+UPDATE "etiquetas_impressoes" SET "estado" = 'reimpressa'
+ WHERE "estado" = 'emitida' AND "reimpressao" = true;
+UPDATE "etiquetas_impressoes" SET "estado" = 'ativa'
+ WHERE "estado" = 'emitida' AND "reimpressao" = false
+   AND "status_impressao" = 'impressa';
+```
