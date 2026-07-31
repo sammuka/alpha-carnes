@@ -61,6 +61,22 @@ Fecha **todos** os bloqueantes e menores do Portão 1 da Emenda 2 (`b8aff66`), i
 - Opção B (`GET /desossa/painel/.../tzs-disponiveis`) **rejeitada** — duplicaria listagem e fragmentaria a fonte de verdade.
 - DTO carrega cols do protótipo `:600-638` (lote←`recebimentos.romaneio`, origem←`fornecedores.razaoSocial`, entrada←ISO `pecas.createdAt`, caracteristicas←flags `capturaMeta`, obs←`capturaMeta.obs`, situacao←map de `statusPeca`).
 
+## Emenda 4 — Portão 1 (veredito `ajustar` 2026-07-31T18:10:00-03:00 / tip `ef862bf`)
+
+Fecha **todos** os bloqueantes e menores do Portão 1 da Emenda 3 (`ef862bf`), item a item. Ancestral obrigatório: Emenda 3 `6fb6d04` + veredito `ef862bf`. Tip código (develop): `expedicao.schema.ts` XOR `carga_itens` (`tipo_origem='subitem'` ⇒ `subitem_id` NOT NULL e `peca_id` NULL); `carga-fechada.ts` exporta `STATUS_CAMINHAO_FECHADO` + `etiquetaBloqueadaSql` (este **não** se copia cego — inclui `status_peca IN ('em_transformacao','transformada')` da mãe).
+
+| # | Achado (`ef862bf`) | Fechamento nesta emenda |
+|---|---|---|
+| 1 | `bloqueada` com EXISTS em `ci.peca_id = pecas.id` (TZ mãe) — peças-parte em carga fechada nunca casam (XOR `subitem_id`) | Task 10: EXISTS `ci.subitem_id = ${subitens.id}` + `STATUS_CAMINHAO_FECHADO` (lista tip); **proibido** só `peca_id` da mãe; **proibido** copiar `etiquetaBloqueadaSql` (não marcar mãe `em_transformacao`/`transformada` como bloqueada); DoD 7.21b com fixture que falha se o join voltar ao `peca_id` |
+| 2 | DoD 7.14b só no mapa — Task 14 sem cerca `it`/`expect` | Task 14: literais integration — `comercial` → 200 em `pecas-elegiveis`; perfil sem nenhuma das 3 perms (`faturamento`) → 403 |
+| 3 | Task 11 engole 403 de TZs (`tzRes.status !== 403`) — viola RA-05 com D7.14 | Task 11: qualquer `!tzRes.ok` (incl. 403) → `setErro` + `setTzs([])`; zero silêncio |
+
+**Decisão D7.21b — `bloqueada` por subitem em carga fechada (fechada):**
+- Predicado canônico = `EXISTS` correlacionado em `carga_itens.subitem_id = subitens.id` com caminhão em `STATUS_CAMINHAO_FECHADO` (`fechado`…`expedido`), `ci.deleted_at IS NULL`, `ci.status_carga_item <> 'removido'`.
+- Etiquetas da desossa são de **subitem** (`etiquetas_impressoes.subitem_id`); na expedição entram em `carga_itens` com `tipo_origem='subitem'` (XOR tip `:90-91`) — join por `peca_id` da TZ mãe é semanticamente errado e deixa o filtro UI «Bloqueada» morto.
+- **Não** importar/reusar `etiquetaBloqueadaSql` da Onda 6: aquele predicado OR-a `pecas.status_peca IN ('em_transformacao','transformada')`, o que marcaria quase todas as etiquetas durante a desossa (mãe em transformação). Reusar só a **lista** `STATUS_CAMINHAO_FECHADO`.
+- Teste DoD 7.21b: mãe **fora** de `carga_itens` + parte **dentro** com caminhão fechado → `bloqueada === true`; e mãe `em_transformacao` sem carga do subitem → `bloqueada === false`.
+
 ---
 
 ## Global Constraints
@@ -360,6 +376,7 @@ Onda aditiva. Emergência: `DROP TABLE divergencias_transformacao;` + drop das c
 | 7.19 | UI bloqueia troca de regra após 1ª saída | e2e + integration |
 | 7.20 | Pesagem e etiquetas ≠ PlaceholderPage | e2e |
 | 7.21 | Etiquetas listam `pecaMaeCodigo` e estado `invalidada_por_troca` | integration + e2e |
+| 7.21b | `bloqueada=true` quando `carga_itens.subitem_id` em caminhão `STATUS_CAMINHAO_FECHADO` (mãe fora da carga); `bloqueada=false` se só mãe `em_transformacao` sem subitem na carga — falha se EXISTS usar `ci.peca_id` ou copiar `etiquetaBloqueadaSql` | integration (`onda7-desossa.spec.ts`) |
 | 7.22 | Screenshots 3 rotas + Modo TV em `docs/evidencias/onda7-desossa/` | artefato PR |
 | 7.23 | Cobertura ≥80% linha e branch nos services tocados | `npm run test:cov` |
 | 7.24 | Zero rótulo `Marca` nas telas da onda | grep |
@@ -1893,7 +1910,7 @@ export type EtiquetaDesossaListada = {
   subitemId: string;
   createdAt: string;
   invalidadaEm: string | null;
-  bloqueada: boolean; // true se peça/subitem em carga fechada — rótulo UI «Bloqueada»
+  bloqueada: boolean; // true se subitem em carga fechada (EXISTS subitem_id) — rótulo UI «Bloqueada» (Emenda 4)
   pendenteImpressao: boolean; // true se emitida e ainda sem impressão confirmada — rótulo «Pendente de impressão»
 };
 
@@ -1934,13 +1951,18 @@ export class EtiquetasDesossaService {
         createdAt: etiquetasImpressoes.createdAt,
         invalidadaEm: etiquetasImpressoes.invalidadaEm,
         statusImpressao: etiquetasImpressoes.statusImpressao,
-        // Emenda 3 — filtro UI «Bloqueada»: peça mãe em carga fechada (tip carga-fechada.ts)
+        // Emenda 4 — filtro UI «Bloqueada» por SUBITEM em carga fechada.
+        // tip expedicao.schema.ts: XOR carga_itens (tipo_origem='subitem' ⇒ subitem_id NOT NULL, peca_id NULL).
+        // PROIBIDO: ci.peca_id = pecas.id (TZ mãe) — peças-parte nunca casam.
+        // PROIBIDO: copiar etiquetaBloqueadaSql (Onda 6) — OR-a status_peca IN
+        // ('em_transformacao','transformada') e marcaria quase tudo durante a desossa.
+        // Reusar só a lista STATUS_CAMINHAO_FECHADO de carga-fechada.ts.
         bloqueada: sql<boolean>`(
           EXISTS (
             SELECT 1
-              FROM carga_itens ci
-              JOIN caminhoes c ON c.id = ci.caminhao_id
-             WHERE ci.peca_id = ${pecas.id}
+              FROM ${cargaItens} ci
+              JOIN ${caminhoes} c ON c.id = ci.caminhao_id
+             WHERE ci.subitem_id = ${subitens.id}
                AND ci.deleted_at IS NULL
                AND ci.status_carga_item <> 'removido'
                AND c.status_caminhao IN ('fechado','liberado_faturamento','faturado','liberado_saida','expedido')
@@ -1957,6 +1979,8 @@ export class EtiquetasDesossaService {
       .leftJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
       .where(and(...condicoes))
       .orderBy(desc(etiquetasImpressoes.createdAt));
+// imports obrigatórios no service: cargaItens, caminhoes (expedicao.schema);
+// STATUS_CAMINHAO_FECHADO documenta a lista IN acima (não embutir status_peca).
 
     const itens: EtiquetaDesossaListada[] = linhas.map((l) => {
       const origemPeso =
@@ -2016,6 +2040,61 @@ listarEtiquetas(
 
 DoD 7.21: fixture com `estado='invalidada_por_troca'` aparece quando aplicável.
 
+- [ ] **Step DoD 7.21b: testes que falham se o EXISTS voltar a `peca_id` ou copiar `etiquetaBloqueadaSql`**
+
+```ts
+// test/integration/onda7-desossa.spec.ts
+import { STATUS_CAMINHAO_FECHADO } from '../../src/modules/operacao/pesagem/carga-fechada';
+
+it('DoD 7.21b: bloqueada=true quando subitem está em carga fechada (não peca_id da mãe)', async () => {
+  // Fixture mínima (worker monta via helpers O6/O7):
+  // 1) peca mãe status_peca='em_transformacao', SEM linha em carga_itens.peca_id
+  // 2) subitem (parte) com etiquetas_impressoes.subitem_id = subitem.id
+  // 3) carga_itens: tipo_origem='subitem', subitem_id=subitem.id, peca_id=NULL (XOR tip)
+  // 4) caminhao.status_caminhao = 'fechado' (∈ STATUS_CAMINHAO_FECHADO)
+  expect(STATUS_CAMINHAO_FECHADO).toContain('fechado');
+
+  const corte = await createTestUser(app, { perfil: 'corte' });
+  const cookies = await loginCookies(app, corte.adminEmail, corte.adminPassword);
+  // ... seedFixtureEtiquetaSubitemEmCargaFechada({ operacaoId, pecaMaeId, subitemId }) ...
+
+  const res = await request(app.getHttpServer())
+    .get(`/desossa/etiquetas?operacaoId=${operacaoId}`)
+    .set('Cookie', cookies);
+  expect(res.status).toBe(200);
+  const etq = (res.body.itens as Array<{ subitemId: string; bloqueada: boolean }>).find(
+    (e) => e.subitemId === subitemId,
+  );
+  expect(etq).toBeDefined();
+  expect(etq!.bloqueada).toBe(true);
+  // Regressão Emenda 3/ef862bf: EXISTS com ci.peca_id = pecas.id ⇒ bloqueada=false
+  // (mãe fora da carga) e o filtro UI «Bloqueada» morre.
+});
+
+it('DoD 7.21b: mãe em_transformacao sem subitem na carga ⇒ bloqueada=false (não copiar etiquetaBloqueadaSql)', async () => {
+  // Fixture: peca.status_peca='em_transformacao'; subitem com etiqueta; ZERO carga_itens do subitem
+  const corte = await createTestUser(app, { perfil: 'corte' });
+  const cookies = await loginCookies(app, corte.adminEmail, corte.adminPassword);
+  // ... seedFixtureEtiquetaSubitemSemCarga({ operacaoId, subitemIdSemCarga }) ...
+
+  const res = await request(app.getHttpServer())
+    .get(`/desossa/etiquetas?operacaoId=${operacaoId}`)
+    .set('Cookie', cookies);
+  expect(res.status).toBe(200);
+  const etq = (res.body.itens as Array<{ subitemId: string; bloqueada: boolean }>).find(
+    (e) => e.subitemId === subitemIdSemCarga,
+  );
+  expect(etq).toBeDefined();
+  expect(etq!.bloqueada).toBe(false);
+  // Se alguém colar etiquetaBloqueadaSql, este caso falha (mãe em_transformacao ⇒ true).
+});
+```
+
+```bash
+cd app/backend && npx jest test/integration/onda7-desossa.spec.ts -t "DoD 7.21b"
+# Expected: PASS (2 testes)
+```
+
 - [ ] Commit: `feat(onda7): listagem de etiquetas da desossa com peça mãe`
 
 ---
@@ -2067,7 +2146,7 @@ const carregar = useCallback(async () => {
   const painelJson = (await res.json()) as PainelDesossa & { operacaoId?: string };
   setPainel(painelJson);
 
-  // Emenda 3 — TZs do telão via pecas-elegiveis (D7.14 Opção A; DESOSSA_PAINEL_LER)
+  // Emenda 3/4 — TZs do telão via pecas-elegiveis (D7.14 Opção A; DESOSSA_PAINEL_LER)
   const operacaoId = painelJson.operacaoId;
   if (operacaoId) {
     const tzRes = await fetch(
@@ -2076,8 +2155,14 @@ const carregar = useCallback(async () => {
     );
     if (tzRes.ok) {
       setTzs((await tzRes.json()) as PecaElegivelDesossa[]);
-    } else if (tzRes.status !== 403) {
-      setErro((await tzRes.json().catch(() => ({}))).message ?? 'Erro ao carregar TZs');
+    } else {
+      // Emenda 4 / RA-05 — com D7.14, 403 é erro real (bug de RBAC ou regressão).
+      // PROIBIDO engolir 403 (`tzRes.status !== 403`): mascara falha e deixa tabela vazia sem alerta.
+      setTzs([]);
+      setErro(
+        (await tzRes.json().catch(() => ({}))).message ??
+          `Erro ao carregar TZs (${tzRes.status})`,
+      );
     }
   }
 }, []);
@@ -3472,6 +3557,50 @@ E2E obrigatório:
 4. `/desossa/pesagem-destinacao` — não placeholder; Badge Provisório; modais TZ/etiqueta/cancelar
 5. `/desossa/etiquetas` — 11 colunas incl. Parte, Origem peso, Cliente/Pedido, Peça mãe; filtros por rótulo UI
 
+- [ ] **Step DoD 7.14b: cerca literal RBAC `pecas-elegiveis` / `@RequireQualquerPermissao`**
+
+```ts
+// test/integration/onda7-desossa.spec.ts
+import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
+
+describe('DoD 7.14b — pecas-elegiveis RequireQualquerPermissao', () => {
+  it('comercial (DESOSSA_PAINEL_LER, sem CORTE_GERENCIAR) → 200', async () => {
+    // MAPA: comercial recebe DESOSSA_PAINEL_LER + DESOSSA_LER; NÃO recebe CORTE_GERENCIAR
+    const comercial = await createTestUser(app, { perfil: 'comercial' });
+    const cookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
+    const res = await request(app.getHttpServer())
+      .get(`/operacao/corte/pecas-elegiveis?operacaoId=${operacaoId}`)
+      .set('Cookie', cookies);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('perfil sem nenhuma das 3 perms (faturamento) → 403', async () => {
+    // faturamento: zero DESOSSA_PAINEL_LER / DESOSSA_LER / CORTE_GERENCIAR no MAPA Onda 7
+    const fat = await createTestUser(app, { perfil: 'faturamento' });
+    const cookies = await loginCookies(app, fat.adminEmail, fat.adminPassword);
+    const res = await request(app.getHttpServer())
+      .get(`/operacao/corte/pecas-elegiveis?operacaoId=${operacaoId}`)
+      .set('Cookie', cookies);
+    expect(res.status).toBe(403);
+  });
+});
+```
+
+```bash
+cd app/backend && npx jest test/integration/onda7-desossa.spec.ts -t "DoD 7.14b"
+# Expected: PASS (comercial 200; faturamento 403)
+```
+
+Gate regressão Task 11 (RA-05 — não engolir 403):
+
+```bash
+rg -n "tzRes\.status !== 403" "app/frontend/src/app/(admin)/desossa" && echo FAIL || echo OK
+# Expected: OK (zero hits — Emenda 4)
+rg -n "ci\.peca_id = \$\{pecas\.id\}|etiquetaBloqueadaSql" "app/backend/src/modules/operacao/desossa" && echo FAIL || echo OK
+# Expected: OK (bloqueada só via subitem_id; sem cópia cega O6)
+```
+
 ```bash
 cd app/backend && npm run test:cov
 cd app/frontend && npm run test && npx playwright test e2e/onda7-desossa.spec.ts
@@ -3538,7 +3667,8 @@ Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13.
 3. **Type consistency:** `regraTransformacaoId`, wires `faltas_desossa_atualizadas` / `divergencia_transformacao_aberta`, tipos de divergência alinhados ao CHECK; `PainelDesossa.itens` com `rota`/`representante`/`horarioAlvo`; `PainelDesossa.regras` com `prioridade`/`atende`/`sobras`/`impacto`; `PainelDesossa.operacaoId`; `PecaElegivelDesossa` com cols TZs; `aProduzir === quantidadeFaltante` (líquido tip).
 4. **PR #38:** não reutilizado; branch de plano `feature/onda7-plano-desossa`.
 5. **Emenda 2 vs veredito `25300fa`:** (1) teste+calc alinhados ao tip líquido; (2) client sem `fetchBackend`; (3) TVMode CARGA/HORÁRIO + KPI TZs na desossa + tabela Rota/Representante/Alvo + drawers + etiquetas 11 cols/filtros rótulo; (4) snapshot RBAC com comando; (5) modais pesagem com cercas JSX.
-6. **Emenda 3 vs veredito `b8aff66`:** (1) tabela TZs `:600-638` + `setDrawerTZ` vivo; (2) D7.14 Opção A `RequireQualquerPermissao` — zero 403 telão; (3) sugestão Prior./Atende/Sobras/Impacto + calc; (4) `bloqueada` via EXISTS carga fechada; (5) `vincularRegra`/`carregarChecklist` com `fetch('/api/...')`.
+6. **Emenda 3 vs veredito `b8aff66`:** (1) tabela TZs `:600-638` + `setDrawerTZ` vivo; (2) D7.14 Opção A `RequireQualquerPermissao` — zero 403 telão; (3) sugestão Prior./Atende/Sobras/Impacto + calc; (4) `bloqueada` via EXISTS carga fechada (**corrigido na Emenda 4** — join era `peca_id` da mãe); (5) `vincularRegra`/`carregarChecklist` com `fetch('/api/...')`.
+7. **Emenda 4 vs veredito `ef862bf`:** (1) `bloqueada` EXISTS `ci.subitem_id = subitens.id` + `STATUS_CAMINHAO_FECHADO`, sem `etiquetaBloqueadaSql` cego + DoD 7.21b; (2) Task 14 cerca literal DoD 7.14b comercial→200 / faturamento→403; (3) Task 11 não engole 403 de TZs (RA-05).
 
 ---
 
