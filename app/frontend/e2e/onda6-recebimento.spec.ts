@@ -1,17 +1,17 @@
 import { test, expect } from '@playwright/test';
+import {
+  autenticarPagina,
+  seedLoteParaConferencia,
+} from './helpers/onda6-seed';
 
 /**
  * Onda 6 — jornada das 3 rotas de recebimento (DoD 6.23 / 6.31).
- * Depende de app + seed; em CI com HARDWARE_FAKE=1 / NFSE_FAKE=1.
+ * 6.23 semeia o lote via API HTTP (sem E2E_ONDA6_SEED externo).
  */
 test.describe('Onda 6 — recebimento', () => {
-  test('percorre as 3 rotas de recebimento pelo menu', async ({ page }) => {
+  test('percorre as 3 rotas de recebimento pelo menu', async ({ page, request }) => {
     await page.goto('/login');
-    await page.getByLabel(/e-mail|email/i).fill(process.env.E2E_USER_EMAIL ?? 'admin@alphacarnes.local');
-    await page.getByLabel(/senha/i).fill(process.env.E2E_USER_PASSWORD ?? 'Admin@123');
-    await page.getByRole('button', { name: /entrar|login/i }).click();
-    await page.waitForURL(/\/(dashboard|operacao|recebimento)/);
-
+    await autenticarPagina(page, request);
     await page.goto('/recebimento/recebimento-carga');
     await expect(page.getByRole('heading', { name: /Recebimento de carga/i })).toBeVisible();
 
@@ -30,20 +30,19 @@ test.describe('Onda 6 — recebimento', () => {
     expect(erros.filter((e) => !/favicon|websocket/i.test(e))).toEqual([]);
   });
 
-  test('captura itens da NF e conclui a conferência pela tela', async ({ page }) => {
-    test.skip(!process.env.E2E_ONDA6_SEED, 'Requer seed E2E_ONDA6_SEED com lote em aguardando_conferencia_final');
+  test('captura itens da NF e conclui a conferência pela tela', async ({ page, request }) => {
+    test.setTimeout(180_000);
+    const { recebimentoId } = await seedLoteParaConferencia(request);
 
     await page.goto('/login');
-    await page.getByLabel(/e-mail|email/i).fill(process.env.E2E_USER_EMAIL ?? 'admin@alphacarnes.local');
-    await page.getByLabel(/senha/i).fill(process.env.E2E_USER_PASSWORD ?? 'Admin@123');
-    await page.getByRole('button', { name: /entrar|login/i }).click();
-    await page.waitForURL(/\/(dashboard|operacao|recebimento)/);
+    await autenticarPagina(page, request);
 
-    await page.goto('/recebimento/recebimento-carga');
-    await page.getByRole('button', { name: 'Abrir' }).first().click();
+    await page.goto(`/recebimento/recebimento-carga?recebimentoId=${recebimentoId}`);
+    await expect(page.getByTestId('receb-codigo')).toBeVisible({ timeout: 20_000 });
+
     await page.getByTestId('btn-capturar-itens-nf').click();
     await page.getByTestId('btn-concluir').click();
     await page.getByTestId('btn-confirmar-conferencia').click();
-    await expect(page.getByText(/Conferido/i).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/Conferido/i).first()).toBeVisible({ timeout: 20_000 });
   });
 });

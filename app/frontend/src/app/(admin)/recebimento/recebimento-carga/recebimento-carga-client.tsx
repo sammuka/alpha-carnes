@@ -341,6 +341,12 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     void carregarPedidosRecebiveis();
   }, [carregarLista, carregarPedidosRecebiveis]);
 
+  // Deep-link E2E / atalhos: ?recebimentoId=<uuid> abre o detalhe direto.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('recebimentoId');
+    if (id) void carregarDetalhe(id);
+  }, [carregarDetalhe]);
+
   useEffect(() => {
     if (pedidoFornecedorId) void carregarPrevisao(pedidoFornecedorId);
     else setPrevisao(null);
@@ -359,8 +365,11 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
         void carregarLista();
       }
     };
+    const dataOperacao = detalhe.dataOperacao ?? detalhe.operacao?.data;
     const desconectar = conectarRealtime({
-      rooms: ['dashboard', `operacao:${detalhe.dataOperacao}`],
+      rooms: dataOperacao
+        ? ['dashboard', `operacao:${dataOperacao}`]
+        : ['dashboard'],
       onMessage,
       onReconnect: () => {
         if (recebimentoId) void carregarDetalhe(recebimentoId);
@@ -780,7 +789,13 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
               ← Voltar à lista
             </Button>
             <Button variant="outline" size="sm" asChild>
-              <a href={`/gestao/compras?compraId=${detalhe.compraProgramadaId}`}>
+              <a
+                href={`/gestao/compras?compraId=${
+                  detalhe.compraProgramadaId
+                  ?? detalhe.pedidoFornecedor?.compraProgramadaId
+                  ?? ''
+                }`}
+              >
                 <ExternalLink className="mr-1 h-4 w-4" />
                 Ver Pedido de Compra
               </a>
@@ -850,7 +865,13 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Pedido de Compra</p>
-                <p className="font-semibold">{detalhe.compra?.numeroInterno ?? detalhe.compraProgramadaId.slice(0, 8)}</p>
+                <p className="font-semibold">
+                  {detalhe.compra?.numeroInterno
+                    ?? (detalhe.compraProgramadaId
+                      ?? detalhe.pedidoFornecedor?.compraProgramadaId
+                      ?? '—'
+                    ).toString().slice(0, 8)}
+                </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Fornecedor</p>
