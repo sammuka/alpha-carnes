@@ -242,7 +242,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Compra Programada</h1>
+          <h1 className="text-2xl font-bold">Compra Programada (Pedido de Compra)</h1>
           <p className="text-sm text-muted-foreground">Planejamento de compra e geração de disponibilidade virtual</p>
         </div>
         {podeGerenciar && editavel && (
