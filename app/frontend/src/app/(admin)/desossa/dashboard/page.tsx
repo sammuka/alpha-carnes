@@ -7,12 +7,16 @@ export default async function DesossaDashboardPage() {
   if (!user) redirect('/login');
 
   const podeVer =
+    user.permissoes.includes('DESOSSA_PAINEL_LER') ||
     user.permissoes.includes('DESOSSA_LER') ||
-    user.permissoes.includes('CORTE_GERENCIAR') ||
-    user.permissoes.includes('DISPONIBILIDADE_LER');
+    user.permissoes.includes('CORTE_GERENCIAR');
 
   if (!podeVer) {
-    return <p className="text-sm text-destructive">Você não tem permissão para visualizar o dashboard da desossa.</p>;
+    return (
+      <p className="text-sm text-destructive">
+        Você não tem permissão para visualizar o dashboard da desossa.
+      </p>
+    );
   }
 
   return <DesossaDashboardClient />;
