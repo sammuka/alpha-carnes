@@ -28,8 +28,30 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
     const admin = await createTestUser(app, { perfil: 'administrador' });
     adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
 
+    // Concede CLIENTES_GERENCIAR ao perfil comercial para exercer mutações no escopo
+    // (o bootstrap padrão só dá CLIENTES_LER — 403 mascararia o 404 de fora do escopo).
+    const permsRes = await request(app.getHttpServer())
+      .put('/perfis/comercial/permissoes')
+      .set('Cookie', adminCookies)
+      .send({
+        // Bootstrap do perfil comercial + CLIENTES_GERENCIAR para testar mutações no escopo.
+        permissoes: [
+          'CLIENTES_LER', 'CLIENTES_GERENCIAR',
+          'FORNECEDORES_LER', 'ITENS_COMPRA_LER', 'ITENS_COMERCIAIS_LER',
+          'PRODUTOS_LER', 'REPRESENTANTES_LER', 'ROTAS_LER',
+          'REGRAS_DESDOBRAMENTO_LER', 'PARAMETROS_LER',
+          'COMPRAS_PROGRAMADAS_LER', 'DISPONIBILIDADE_LER',
+          'PEDIDOS_LER', 'PEDIDOS_GERENCIAR',
+          'RECEBIMENTO_LER', 'PESAGEM_LER',
+        ],
+      });
+    if (permsRes.status !== 200) {
+      throw new Error(`Falha ao conceder CLIENTES_GERENCIAR: ${permsRes.status}`);
+    }
+
     const userA = await createTestUser(app, { perfil: 'comercial' });
     const userB = await createTestUser(app, { perfil: 'comercial' });
+    // Login DEPOIS da concessão — permissões viajam no JWT.
     comercialA = await loginCookies(app, userA.adminEmail, userA.adminPassword);
     comercialB = await loginCookies(app, userB.adminEmail, userB.adminPassword);
 
@@ -44,10 +66,14 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
     const [cA] = await db.insert(schema.clientes).values({
       codigo: uid('CA'), razaoSocial: 'Cliente A', documentoFiscal: uid('DA'), representanteId: repA,
     }).returning();
+    // Segundo cliente do Rep A → totais distintos (2 vs 1) entre usuários A e B.
+    const [cA2] = await db.insert(schema.clientes).values({
+      codigo: uid('CA2'), razaoSocial: 'Cliente A2', documentoFiscal: uid('DA2'), representanteId: repA,
+    }).returning();
     const [cB] = await db.insert(schema.clientes).values({
       codigo: uid('CB'), razaoSocial: 'Cliente B', documentoFiscal: uid('DB'), representanteId: repB,
     }).returning();
-    if (!cA || !cB) throw new Error('clientes');
+    if (!cA || !cA2 || !cB) throw new Error('clientes');
     clienteA = cA.id;
     clienteB = cB.id;
 
@@ -110,7 +136,8 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
       .send({
         codigo: uid('NEW'),
         razaoSocial: 'Novo',
-        documentoFiscal: uid('DN'),
+        // CNPJ válido (dígito verificador) — senão o Zod responde 400 antes do escopo.
+        documentoFiscal: '11222333000181',
         representanteId: repB,
       })
       .expect(404);

@@ -32,7 +32,10 @@ describe('PedidosService — branches', () => {
   it('listar → incluirRemovidos=true e sem total usa 0', async () => {
     const db = { select: jest.fn(() => chain([])) };
     const service = makeService(db);
-    const result = await service.listar({ page: 1, pageSize: 20, incluirRemovidos: true } as never);
+    const result = await service.listar(
+      { page: 1, pageSize: 20, incluirRemovidos: true } as never,
+      'user-1',
+    );
     expect(result.total).toBe(0);
     expect(result.data).toEqual([]);
   });
@@ -149,8 +152,9 @@ describe('PedidosService — branches', () => {
     const pedidoInserido = { id: 'p1', operacaoId: 'op-existente', clienteId: 'c1', status: 'em_elaboracao_reserva_ativa' };
     const tx = {
       execute: jest.fn().mockResolvedValue({ rows: [] }),
-      // 1ª chamada: exigirUnicidadeAd03 (sem conflitos); 2ª: rotaHerdadaDoCliente (cliente sem rota).
+      // 1ª: exigirClienteNoEscopo; 2ª: exigirUnicidadeAd03; 3ª: rotaHerdadaDoCliente.
       select: jest.fn()
+        .mockImplementationOnce(() => chain([{ id: 'c1', representanteId: null, rotaId: null }]))
         .mockImplementationOnce(() => chain([]))
         .mockImplementationOnce(() => chain([{ nomeRota: null }])),
       insert: jest.fn(() => ({ values: () => ({ returning: jest.fn(async () => [pedidoInserido]) }) })),

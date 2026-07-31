@@ -109,7 +109,7 @@ describe('AdendosService — ordem commit→emit (RA-04)', () => {
 
 describe('AdendosService — branches', () => {
   it('listar devolve histórico do pedido', async () => {
-    const db = {
+    const tx = {
       select: jest.fn(() => ({
         from: () => ({
           where: () => ({
@@ -118,9 +118,21 @@ describe('AdendosService — branches', () => {
         }),
       })),
     };
-    const service = new AdendosService({ db } as never, { registrar: jest.fn() } as never, new EventEmitter2(), {} as never);
-    const historico = await service.listar('p1');
+    const db = {
+      transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(tx)),
+    };
+    const pedidos = {
+      exigirPedidoNoEscopo: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new AdendosService(
+      { db } as never,
+      { registrar: jest.fn() } as never,
+      new EventEmitter2(),
+      pedidos as never,
+    );
+    const historico = await service.listar('p1', 'user-1');
     expect(historico).toEqual([{ id: 'a1', motivo: 'ajuste' }]);
+    expect(pedidos.exigirPedidoNoEscopo).toHaveBeenCalledWith(tx, 'p1', 'user-1', false);
   });
 
   it('registrar sem confirmacao lança challenge quando há deficit', async () => {

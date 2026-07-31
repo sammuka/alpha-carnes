@@ -52,7 +52,7 @@ describe('adendos (adendo com histórico append-only)', () => {
       salvarComoRascunho: false,
       itens: [{ itemComercialId: base.itemComercialId, quantidadePedida }],
     }, usuarioId);
-    const detalhe = await pedidos.detalhar(pedido.id);
+    const detalhe = await pedidos.detalhar(pedido.id, usuarioId);
     const item = detalhe.itens[0]!;
     return { pedidoId: pedido.id, itemId: item.id };
   }

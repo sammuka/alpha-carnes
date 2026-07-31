@@ -1,4 +1,7 @@
 import { INestApplication } from '@nestjs/common';
+import { createHash } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import { sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
@@ -49,11 +52,33 @@ describe('usuarios-representantes e2e (E5.1 Tasks 19–20)', () => {
   });
 
   it('migração 0020 integra a journal sem drift', async () => {
-    const journal = await db.execute<{ tag: string }>(sql`
-      SELECT tag FROM drizzle.__drizzle_migrations ORDER BY created_at
+    const tag = '0020_onda5_usuarios_representantes';
+    const journalPath = path.resolve(
+      __dirname,
+      '../../src/database/migrations/meta/_journal.json',
+    );
+    const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8')) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+    expect(journal.entries.some((e) => e.tag === tag)).toBe(true);
+
+    const sqlPath = path.resolve(
+      __dirname,
+      `../../src/database/migrations/${tag}.sql`,
+    );
+    const hash = createHash('sha256').update(fs.readFileSync(sqlPath)).digest('hex');
+    const aplicadas = await db.execute<{ hash: string }>(sql`
+      SELECT hash FROM drizzle.__drizzle_migrations ORDER BY created_at
     `);
-    const tags = journal.rows.map((r) => r.tag);
-    expect(tags).toContain('0020_onda5_usuarios_representantes');
+    expect(aplicadas.rows.map((r) => r.hash)).toContain(hash);
+
+    const tabela = await db.execute<{ exists: boolean }>(sql`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'usuarios_representantes'
+      ) AS exists
+    `);
+    expect(tabela.rows[0]?.exists).toBe(true);
   });
 
   it('nega anônimo e gestor e permite administrador', async () => {
