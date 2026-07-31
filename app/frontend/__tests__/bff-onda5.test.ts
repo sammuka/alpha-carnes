@@ -1,25 +1,66 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { ReadableStream } from 'node:stream/web';
 
 const mockApiFetch = jest.fn();
 
 jest.mock('next/server', () => ({
   NextRequest: class {
     nextUrl: URL;
-    constructor(url: string) {
+    headers: Headers;
+    constructor(url: string, init?: RequestInit) {
       this.nextUrl = new URL(url);
+      this.headers = new Headers(init?.headers);
+      this._body = init?.body ?? null;
     }
+    private _body: BodyInit | null;
     text = async () => JSON.stringify({ test: true });
+    arrayBuffer = async () => {
+      if (this._body instanceof ArrayBuffer) return this._body;
+      if (ArrayBuffer.isView(this._body)) {
+        const view = this._body as ArrayBufferView;
+        return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
+      }
+      return new ArrayBuffer(0);
+    };
   },
   NextResponse: class {
     status: number;
-    private body: string | null;
-    constructor(body: string | null, init?: { status?: number }) {
-      this.body = body;
+    headers: Headers;
+    private stream: ReadableStream | null;
+    private textBody: string | null;
+    constructor(body: ReadableStream | string | null, init?: { status?: number; headers?: HeadersInit }) {
+      if (typeof body === 'string') {
+        this.textBody = body;
+        this.stream = null;
+      } else {
+        this.stream = body;
+        this.textBody = null;
+      }
       this.status = init?.status ?? 200;
+      this.headers = new Headers(init?.headers);
     }
-    text = async () => this.body ?? '';
-    json = async () => (this.body ? JSON.parse(this.body) : null);
+    text = async () => this.textBody ?? '';
+    json = async () => (this.textBody ? JSON.parse(this.textBody) : null);
+    arrayBuffer = async () => {
+      if (!this.stream) return new ArrayBuffer(0);
+      const reader = this.stream.getReader();
+      const chunks: Uint8Array[] = [];
+      let done = false;
+      while (!done) {
+        const result = await reader.read();
+        done = result.done;
+        if (result.value) chunks.push(result.value);
+      }
+      const total = chunks.reduce((n, c) => n + c.length, 0);
+      const out = new Uint8Array(total);
+      let offset = 0;
+      for (const c of chunks) {
+        out.set(c, offset);
+        offset += c.length;
+      }
+      return out.buffer;
+    };
   },
 }));
 
@@ -153,3 +194,55 @@ it('GET impacto repassa simulacao na query', async () => {
     { method: 'GET' },
   );
 });
+
+it.each([400, 403] as const)(
+  'repassa representantes permitidos sem mascarar erro HTTP %s',
+  async (statusBackend) => {
+    const requestBytes = Buffer.from(
+      '{"representantes":["00000000-0000-4000-8000-000000000001"]}',
+    );
+    const responseBytes = Buffer.from(
+      '{"code":"REPRESENTANTES_INVALIDOS","detalhe":"á"}',
+    );
+    mockApiFetch.mockResolvedValueOnce({
+      status: statusBackend,
+      headers: new Headers({ 'Content-Type': 'application/problem+json; charset=utf-8' }),
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(responseBytes));
+          controller.close();
+        },
+      }),
+    });
+
+    const { PUT: putRepresentantes } = await import(
+      '../src/app/api/admin/usuarios/[id]/representantes/route'
+    );
+    const request = new NextRequest(
+      'http://localhost/api/admin/usuarios/u-1/representantes',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: requestBytes,
+      },
+    );
+    const response = await putRepresentantes(request, {
+      params: Promise.resolve({ id: 'u-1' }),
+    });
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      '/usuarios/u-1/representantes',
+      expect.objectContaining({
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const [, init] = mockApiFetch.mock.calls[0]!;
+    expect(Buffer.from(init!.body as ArrayBuffer)).toEqual(requestBytes);
+    expect(response.status).toBe(statusBackend);
+    expect(response.headers.get('content-type')).toBe(
+      'application/problem+json; charset=utf-8',
+    );
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(responseBytes);
+  },
+);

@@ -5,6 +5,7 @@ import { Info } from 'lucide-react';
 import { CadastroTabelaDrawer } from '@/components/cadastros/cadastro-tabela-drawer';
 import type { Representante } from '@/lib/representantes';
 import { ClientesVinculados } from './clientes-vinculados';
+import { UsuariosVinculados } from './usuarios-vinculados';
 
 const BANNER = (
   <div className="flex items-start gap-2 rounded-lg border border-info-border bg-info-surface p-3">
@@ -105,6 +106,15 @@ export function RepresentantesClient({ podeGerenciar }: { podeGerenciar: boolean
             </span>
           ),
         },
+        {
+          chave: 'usuariosVinculadosCount',
+          titulo: 'Usuários vinculados',
+          render: (representante) => (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-text-slate">
+              {representante.usuariosVinculadosCount}
+            </span>
+          ),
+        },
       ]}
       campos={[
         { nome: 'codigo', rotulo: 'Código', tipo: 'texto', obrigatorio: true, placeholder: 'REP-01', monoespacado: true },
@@ -130,7 +140,14 @@ export function RepresentantesClient({ podeGerenciar }: { podeGerenciar: boolean
         observacao: (f.observacao ?? '').trim() || undefined,
         status: f.status,
       })}
-      blocosDrawer={(r) => (r ? <ClientesVinculados representanteId={r.id} /> : null)}
+      blocosDrawer={(representante) => (
+        representante ? (
+          <>
+            <ClientesVinculados representanteId={representante.id} />
+            <UsuariosVinculados representanteId={representante.id} />
+          </>
+        ) : null
+      )}
     />
   );
 }

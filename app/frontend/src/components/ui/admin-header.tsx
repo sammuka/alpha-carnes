@@ -9,6 +9,10 @@ export interface AdminHeaderUser {
   nome: string;
   perfil: string;
   inicial: string;
+  escopoRepresentantes?: {
+    tipo: 'todos' | 'restrito';
+    representantes: Array<{ id: string; nome: string }>;
+  };
 }
 
 interface AdminHeaderProps {
@@ -25,18 +29,34 @@ function formatDate(): string {
   });
 }
 
-function MetaInline({ label, value }: { label: string; value: string }) {
+function MetaInline({ label, value, title }: { label: string; value: string; title?: string }) {
   return (
-    <span className="whitespace-nowrap">
+    <span className="whitespace-nowrap" title={title}>
       <span className="text-muted-foreground">{label}:</span>{' '}
       <span className="font-medium text-foreground">{value}</span>
     </span>
   );
 }
 
+function formatarEscopo(
+  escopo: AdminHeaderUser['escopoRepresentantes'],
+): { valor: string; title?: string } {
+  if (!escopo || escopo.tipo === 'todos') return { valor: 'Todos' };
+  if (escopo.representantes.length === 1) {
+    return { valor: escopo.representantes[0]!.nome };
+  }
+  const nomes = escopo.representantes.map((r) => r.nome);
+  const truncado = nomes.join(', ');
+  return {
+    valor: truncado.length > 40 ? `${truncado.slice(0, 37)}…` : truncado,
+    title: nomes.join(', '),
+  };
+}
+
 export function AdminHeader({ user, className }: AdminHeaderProps) {
   const pathname = usePathname();
   const breadcrumb = resolveBreadcrumb(pathname);
+  const escopo = formatarEscopo(user.escopoRepresentantes);
 
   return (
     <header
@@ -66,6 +86,10 @@ export function AdminHeader({ user, className }: AdminHeaderProps) {
             ·
           </span>
           <MetaInline label="Perfil" value={user.perfil} />
+          <span className="text-muted-foreground/40" aria-hidden="true">
+            ·
+          </span>
+          <MetaInline label="Escopo" value={escopo.valor} title={escopo.title} />
         </div>
 
         <span className="hidden text-xs text-muted-foreground lg:inline">{formatDate()}</span>
