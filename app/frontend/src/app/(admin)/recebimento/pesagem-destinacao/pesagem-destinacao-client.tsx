@@ -194,7 +194,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     }
     const d = (await res.json()) as RecebimentoDetalhe;
     setDetalhe(d);
-    setDataOperacao(d.dataOperacao);
+    setDataOperacao(d.dataOperacao ?? d.operacao?.data ?? '');
   }, []);
 
   const carregarAcoes = useCallback(async (id: string) => {
