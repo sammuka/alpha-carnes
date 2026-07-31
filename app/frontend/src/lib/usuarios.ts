@@ -3,6 +3,7 @@ export interface RepresentantePermitido {
   nome: string;
   status: string;
   deletedAt: string | null;
+  tipoCanal?: string | null;
 }
 
 export interface Usuario {

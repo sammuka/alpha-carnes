@@ -47,6 +47,7 @@ describe('rota de entrada /', () => {
       perfis: ['administrador'],
       permissoes: permissoesDe('administrador'),
       menusVisiveis: menusDe('administrador'),
+      escopoRepresentantes: { tipo: 'todos', representantes: [] },
     });
     await expect(EntradaPage()).rejects.toThrow('REDIRECT:/gestao/dashboard');
   });
@@ -58,6 +59,7 @@ describe('rota de entrada /', () => {
       perfis: ['expedicao'],
       permissoes: permissoesDe('expedicao'),
       menusVisiveis: menusDe('expedicao'),
+      escopoRepresentantes: { tipo: 'todos', representantes: [] },
     });
     await expect(EntradaPage()).rejects.toThrow('REDIRECT:/carga/planejamento');
   });
@@ -70,6 +72,7 @@ describe('rota de entrada /', () => {
       perfis: ['faturamento'],
       permissoes: permissoesDe('faturamento'),
       menusVisiveis: menusDe('faturamento'),
+      escopoRepresentantes: { tipo: 'todos', representantes: [] },
     });
     await expect(EntradaPage()).rejects.toThrow('REDIRECT:/faturamento/pre-faturamento');
   });
@@ -81,6 +84,7 @@ describe('rota de entrada /', () => {
       perfis: ['conferente'],
       permissoes: permissoesDe('conferente'),
       menusVisiveis: [],
+      escopoRepresentantes: { tipo: 'todos', representantes: [] },
     });
     render(await EntradaPage());
     expect(screen.getByRole('heading', { name: 'Nenhum módulo liberado' })).toBeInTheDocument();
