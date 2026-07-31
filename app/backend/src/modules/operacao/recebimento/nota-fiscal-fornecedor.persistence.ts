@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { formatarQtd } from '../../../common/crud/decimal';
@@ -38,7 +38,7 @@ export function temCamposNfEstruturados(dto: Partial<NfCamposUi>): boolean {
   );
 }
 
-function extrairPayloadNfUi(
+export function extrairPayloadNfUi(
   dto: Partial<NfCamposUi>,
   extras?: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -93,6 +93,7 @@ export function mapearCamposNfParaRegistrar(
     payload: Object.keys(payload).length > 0 ? payload : undefined,
     itens,
     recebimentoId,
+    confirmarSubstituicaoCabecalho: false,
   };
 }
 
@@ -150,7 +151,8 @@ async function buscarNfCabecalhoAtivaPorNumero(
       eq(notasFiscaisFornecedor.numero, numero),
       isNull(notasFiscaisFornecedor.deletedAt),
     ))
-    .orderBy(desc(notasFiscaisFornecedor.createdAt));
+    .orderBy(desc(notasFiscaisFornecedor.createdAt))
+    .for('update'); // D6.10 — serializa concorrentes sobre o mesmo cabeçalho
 
   for (const nf of candidatas) {
     if (await contarItensNfAtivos(tx, nf.id) === 0) return nf;
@@ -169,7 +171,8 @@ async function buscarNfCabecalhoAtivaPorRecebimento(
       eq(notasFiscaisFornecedor.recebimentoId, recebimentoId),
       isNull(notasFiscaisFornecedor.deletedAt),
     ))
-    .orderBy(desc(notasFiscaisFornecedor.createdAt));
+    .orderBy(desc(notasFiscaisFornecedor.createdAt))
+    .for('update'); // D6.10 — serializa concorrentes sobre o mesmo cabeçalho
 
   for (const nf of candidatas) {
     if (await contarItensNfAtivos(tx, nf.id) === 0) return nf;
@@ -199,17 +202,25 @@ async function buscarNfParaAtualizarCabecalhoUi(
   return orfao;
 }
 
+export interface CabecalhoOrfaoEncontrado {
+  nf: typeof notasFiscaisFornecedor.$inferSelect;
+  /** true quando o órfão foi achado pelo recebimento, com numero diferente do informado. */
+  numeroDivergente: boolean;
+}
+
 async function buscarCabecalhoParaCompletar(
   tx: Tx,
   recebimentoId: string,
   numero: string,
-) {
+): Promise<CabecalhoOrfaoEncontrado | null> {
   const porNumero = await buscarNfCabecalhoAtivaPorNumero(tx, recebimentoId, numero);
-  if (porNumero) return porNumero;
-  return buscarNfCabecalhoAtivaPorRecebimento(tx, recebimentoId);
+  if (porNumero) return { nf: porNumero, numeroDivergente: false };
+  const porRecebimento = await buscarNfCabecalhoAtivaPorRecebimento(tx, recebimentoId);
+  if (!porRecebimento) return null;
+  return { nf: porRecebimento, numeroDivergente: porRecebimento.numero !== numero };
 }
 
-function montarPatchCabecalhoUi(
+export function montarPatchCabecalhoUi(
   campos: Partial<NfCamposUi>,
   existente?: typeof notasFiscaisFornecedor.$inferSelect,
 ): Partial<typeof notasFiscaisFornecedor.$inferInsert> {
@@ -310,8 +321,29 @@ export async function persistirNfEstruturadaNaTx(
 
   const cabecalhoOrfao = await buscarCabecalhoParaCompletar(tx, recebimentoId, dto.numero);
   if (cabecalhoOrfao) {
+    if (cabecalhoOrfao.numeroDivergente && !dto.confirmarSubstituicaoCabecalho) {
+      throw new ConflictException({
+        codigo: 'CABECALHO_ORFAO_DIVERGENTE',
+        message:
+          `A NF ${dto.numero} não corresponde ao cabeçalho ${cabecalhoOrfao.nf.numero} já aberto `
+          + 'neste recebimento. Confirme a substituição para renumerar.',
+        numeroInformado: dto.numero,
+        numeroCabecalhoExistente: cabecalhoOrfao.nf.numero,
+      });
+    }
+    if (cabecalhoOrfao.numeroDivergente) {
+      await auditoria.registrar(tx, {
+        tabela: 'notas_fiscais_fornecedor',
+        registroId: cabecalhoOrfao.nf.id,
+        operacao: 'UPDATE',
+        modulo: 'operacao',
+        usuarioId,
+        dadosAnteriores: { evento: 'NF_CABECALHO_RENUMERADO', numero: cabecalhoOrfao.nf.numero },
+        dadosNovos: { evento: 'NF_CABECALHO_RENUMERADO', numero: dto.numero },
+      });
+    }
     return completarCabecalhoComItensNaTx(tx, auditoria, {
-      existente: cabecalhoOrfao,
+      existente: cabecalhoOrfao.nf,
       dto,
       usuarioId,
     });
@@ -373,10 +405,11 @@ async function persistirNfCabecalhoUiNaTx(
   if (existente) {
     const patch = montarPatchCabecalhoUi(campos, existente);
     patch.numero = numero;
+    const itensAtivos = await contarItensNfAtivos(tx, existente.id);
     patch.payloadJson = mesclarPayloadNfCabecalho(
       existente.payloadJson as Record<string, unknown> | null,
       campos,
-      true,
+      itensAtivos === 0,
     );
 
     const atualizada = primeiroOuFalha(await tx.update(notasFiscaisFornecedor)
@@ -397,7 +430,8 @@ async function persistirNfCabecalhoUiNaTx(
     return atualizada;
   }
 
-  const payloadJson = mesclarPayloadNfCabecalho(null, campos, true);
+  // Cabeçalho recém-criado nasce sem item; a contagem é zero por construção.
+  const payloadJson = mesclarPayloadNfCabecalho(null, campos, /* itensAtivos === 0 */ true);
   const valores: typeof notasFiscaisFornecedor.$inferInsert = {
     pedidoFornecedorId: pedido.id,
     recebimentoId,

@@ -42,6 +42,8 @@ export const registrarNfSchema = z.object({
   })).min(1),
   /** Quando omitido, usa o recebimento mais recente do pedido. */
   recebimentoId: z.string().uuid().optional(),
+  /** D6.9 — sem isto, renumerar cabeçalho órfão responde 409 CABECALHO_ORFAO_DIVERGENTE. */
+  confirmarSubstituicaoCabecalho: z.boolean().optional().default(false),
 });
 
 export type CriarPedidoFornecedorDto =

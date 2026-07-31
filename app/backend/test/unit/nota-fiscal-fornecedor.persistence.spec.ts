@@ -1,7 +1,9 @@
 import {
+  extrairPayloadNfUi,
   mapearCamposNfParaRegistrar,
   mesclarPayloadNfCabecalho,
   mesclarPayloadNfCompleta,
+  montarPatchCabecalhoUi,
   temCamposNfEstruturados,
 } from '../../src/modules/operacao/recebimento/nota-fiscal-fornecedor.persistence';
 
@@ -74,5 +76,50 @@ describe('nota-fiscal-fornecedor.persistence', () => {
     expect(merged).toEqual({ pesoLiquido: 900, volumes: 12 });
     expect(merged).not.toHaveProperty('cabecalho_sem_itens');
     expect(merged).not.toHaveProperty('migracao');
+  });
+
+  it('cabecalho_sem_itens é true apenas com itensAtivos === 0', () => {
+    expect(mesclarPayloadNfCabecalho(null, { nfeVolumes: 1 }, true)).toHaveProperty('cabecalho_sem_itens', true);
+    expect(mesclarPayloadNfCabecalho({ cabecalho_sem_itens: true }, { nfeVolumes: 1 }, false))
+      .not.toHaveProperty('cabecalho_sem_itens');
+  });
+
+  it('montarPatchCabecalhoUi mantém peso do existente quando o patch não traz peso', () => {
+    const patch = montarPatchCabecalhoUi(
+      { nfeSerie: '9' },
+      { pesoTotalDeclarado: '123.456' } as never,
+    );
+    expect(patch.serie).toBe('9');
+    expect(patch.pesoTotalDeclarado).toBe('123.456');
+  });
+
+  it('mapearCamposNfParaRegistrar exige nfeNumero e lança BadRequest sem ele', () => {
+    expect(() => mapearCamposNfParaRegistrar(
+      { nfeSerie: '1' },
+      'rec-1',
+      [{ itemComercialId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
+    )).toThrow(/nfeNumero/i);
+  });
+
+  it('extrairPayloadNfUi omite chaves não enviadas e preserva extras', () => {
+    expect(extrairPayloadNfUi({ nfeVolumes: 3 }, { origem: 'ui' })).toEqual({ origem: 'ui', volumes: 3 });
+    expect(extrairPayloadNfUi({})).toEqual({});
+  });
+
+  it('mesclarPayloadNfCompleta remove cabecalho_sem_itens ao completar com itens', () => {
+    const merged = mesclarPayloadNfCompleta({ cabecalho_sem_itens: true, volumes: 1 }, { pesoLiquido: 10 });
+    expect(merged).not.toHaveProperty('cabecalho_sem_itens');
+    expect(merged).toEqual({ volumes: 1, pesoLiquido: 10 });
+  });
+
+  it('temCamposNfEstruturados cobre cada um dos sete campos isoladamente', () => {
+    const campos = [
+      'nfeNumero', 'nfeSerie', 'nfeChave', 'nfeDataEmissao',
+      'nfePesoBruto', 'nfePesoLiquido', 'nfeVolumes',
+    ] as const;
+    for (const c of campos) {
+      expect(temCamposNfEstruturados({ [c]: c === 'nfeNumero' ? '1' : 1 })).toBe(true);
+    }
+    expect(temCamposNfEstruturados({})).toBe(false);
   });
 });
