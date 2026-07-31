@@ -80,7 +80,7 @@ export interface RecebimentoDetalhe {
   romaneio: string | null;
   nfePesoBruto: string | null;
   nfePesoLiquido: string | null;
-  nfeVolumes: string | null;
+  nfeVolumes: number | null;
   notaFiscalFornecedor: string | null;
   placaVeiculo: string | null;
   motorista: string | null;
@@ -406,4 +406,72 @@ export interface QuadroConferenciaItem {
 export interface ConcluirConferenciaDto {
   resultado: 'sem_divergencia' | 'com_divergencia';
   observacao?: string;
+}
+
+// ── Onda 6 — troca, estorno e ciclo da etiqueta ───────────────────────────────
+
+export type DestinoRetirada = 'estoque' | 'desossa';
+
+export interface ExecutarTrocaPayload {
+  pecaRetiradaId: string;
+  pecaInseridaId: string;
+  pedidoVendaItemId: string;
+  destinoRetirada: DestinoRetirada;
+  motivo: string;
+  observacoes?: string;
+}
+
+export interface ResultadoTroca {
+  troca: { id: string; createdAt: string };
+  pecaRetirada: Peca;
+  pecaInserida: Peca;
+  etiquetaInvalidada: { id: string; motivoCancelamento: string | null } | null;
+  etiquetaEmitida: { id: string; statusImpressao: string };
+}
+
+export type EstadoEtiqueta =
+  | 'emitida'
+  | 'ativa'
+  | 'invalidada_por_troca'
+  | 'reimpressa'
+  | 'cancelada';
+
+export interface EtiquetaListada {
+  id: string;
+  pecaId: string;
+  codigo: string | null;
+  estado: EstadoEtiqueta;
+  statusImpressao: 'impressa' | 'falha_impressao' | 'pendente';
+  reimpressao: boolean;
+  motivoCancelamento: string | null;
+  invalidadaEm: string | null;
+  bloqueada: boolean;
+  pesoOriginal: string;
+  statusPeca: string;
+  recebimentoId: string;
+  pedidoVendaId: string | null;
+  operadorId: string;
+  operadorNome: string;
+  createdAt: string;
+  produtoCodigo: string;
+  produtoDescricao: string;
+  caracteristicas: string[];
+  nfNumero: string | null;
+  frigorifico: string;
+  romaneio: string | null;
+  placaVeiculo: string | null;
+  motorista: string | null;
+  clienteNome: string | null;
+  representanteNome: string | null;
+  rotaPrevista: string | null;
+  localEstoquePrevisto: { valor: string | null; provisorio: true } | null;
+  historico: Array<{
+    id: string;
+    estado: EstadoEtiqueta;
+    statusImpressao: string;
+    reimpressao: boolean;
+    motivoCancelamento: string | null;
+    operadorId: string;
+    createdAt: string;
+  }>;
 }

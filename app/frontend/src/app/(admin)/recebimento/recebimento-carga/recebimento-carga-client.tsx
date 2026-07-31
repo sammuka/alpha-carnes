@@ -298,7 +298,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
       romaneio: d.romaneio ?? '',
       nfePesoBruto: d.nfePesoBruto ?? '',
       nfePesoLiquido: d.nfePesoLiquido ?? '',
-      nfeVolumes: d.nfeVolumes ?? '',
+      nfeVolumes: String(d.nfeVolumes ?? ''),
       observacoes: d.observacoes ?? '',
       placaVeiculo: d.placaVeiculo ?? '',
       motorista: d.motorista ?? '',
