@@ -162,6 +162,13 @@
       "when": 1785514188508,
       "tag": "0022_onda6_etiqueta_estado_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1785534986534,
+      "tag": "0023_onda7_desossa_expand",
+      "breakpoints": true
     }
   ]
 }
