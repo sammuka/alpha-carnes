@@ -22,7 +22,7 @@ import type { EstornarDto } from './dto/estorno.dto';
 import { EtiquetaService } from './etiqueta.service';
 import { pecaEmCargaFechada } from './carga-fechada';
 import { consumirSaldo, devolverSaldo } from './saldo';
-import { calcularCompativeisItem } from './compatibilidade';
+import { calcularCompativeisItem, caracteristicasDeCapturaMeta } from './compatibilidade';
 
 type Tx = NodePgDatabase<typeof schema>;
 type Peca = typeof pecas.$inferSelect;
@@ -55,7 +55,12 @@ export class AssociacaoService {
   async sugerir(pecaId: string): Promise<ResultadoSugestao> {
     const peca = await this.buscarAtiva(this.db, pecaId);
     if (!peca) throw new NotFoundException('Peça não encontrada');
-    const compativeis = await calcularCompativeisItem(this.db, { compraProgramadaId: peca.compraProgramadaId, itemComercialId: peca.itemComercialBaseId, peso: peca.pesoOriginal });
+    const compativeis = await calcularCompativeisItem(this.db, {
+      compraProgramadaId: peca.compraProgramadaId,
+      itemComercialId: peca.itemComercialBaseId,
+      peso: peca.pesoOriginal,
+      caracteristicas: caracteristicasDeCapturaMeta(peca.capturaMeta),
+    });
     return { pecaId, sugestao: compativeis[0] ?? null, compativeis };
   }
 
@@ -63,7 +68,12 @@ export class AssociacaoService {
   async listarCompativeis(pecaId: string): Promise<SugestaoScored[]> {
     const peca = await this.buscarAtiva(this.db, pecaId);
     if (!peca) throw new NotFoundException('Peça não encontrada');
-    return calcularCompativeisItem(this.db, { compraProgramadaId: peca.compraProgramadaId, itemComercialId: peca.itemComercialBaseId, peso: peca.pesoOriginal });
+    return calcularCompativeisItem(this.db, {
+      compraProgramadaId: peca.compraProgramadaId,
+      itemComercialId: peca.itemComercialBaseId,
+      peso: peca.pesoOriginal,
+      caracteristicas: caracteristicasDeCapturaMeta(peca.capturaMeta),
+    });
   }
 
   /**
@@ -81,7 +91,12 @@ export class AssociacaoService {
       const item = await this.buscarItemCompativel(tx, peca, dto.pedidoVendaItemId);
 
       // Snapshot da sugestão no momento da decisão (a sugestão é efêmera).
-      const compativeis = await calcularCompativeisItem(tx, { compraProgramadaId: peca.compraProgramadaId, itemComercialId: peca.itemComercialBaseId, peso: peca.pesoOriginal });
+      const compativeis = await calcularCompativeisItem(tx, {
+        compraProgramadaId: peca.compraProgramadaId,
+        itemComercialId: peca.itemComercialBaseId,
+        peso: peca.pesoOriginal,
+        caracteristicas: caracteristicasDeCapturaMeta(peca.capturaMeta),
+      });
       const sugerido = compativeis.find((c) => c.pedidoVendaItemId === dto.pedidoVendaItemId) ?? null;
 
       const consumido = await consumirSaldo(tx, dto.pedidoVendaItemId);

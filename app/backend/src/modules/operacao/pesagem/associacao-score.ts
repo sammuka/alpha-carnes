@@ -8,12 +8,16 @@ export interface PecaParaScore {
   itemComercialBaseId: string;
   /** Peso da peça como string NUMERIC(.,3). */
   pesoOriginal: string;
+  /** Flags de pecas.captura_meta (D6.4): mais_pesada, mais_gorda, melhor_acabamento. */
+  caracteristicas?: string[];
 }
 
 export interface PreferenciasCliente {
   faixaPesoMin?: number;
   faixaPesoMax?: number;
   perfilGordura?: string;
+  /** Características preferidas do cliente, mesmos slugs de captura_meta. */
+  caracteristicasPreferidas?: string[];
 }
 
 export interface CandidatoPedido {
@@ -32,6 +36,12 @@ export interface CandidatoPedido {
 export interface SugestaoScored extends CandidatoPedido {
   score: number;
   justificativa: string;
+  /**
+   * D6.5 — SELO, não peso: interseção entre as características da peça e as preferências do
+   * cliente. Não entra no score nem no desempate; o protótipo o usa como badge
+   * (PesagemDestinacao.tsx:672). Nenhuma fonte define peso numérico para característica.
+   */
+  prefCompativel: boolean;
 }
 
 // Pesos dos critérios (RF-PS-08/10). Score determinístico e explicável.
@@ -84,7 +94,11 @@ export function calcularScores(peca: PecaParaScore, candidatos: CandidatoPedido[
       motivos.push(`saldo pendente ${c.saldoPendente}`);
     }
 
-    scored.push({ ...c, score, justificativa: motivos.join('; ') });
+    const preferidas = c.preferencias.caracteristicasPreferidas ?? [];
+    const daPeca = peca.caracteristicas ?? [];
+    const prefCompativel = preferidas.length > 0 && preferidas.some((p) => daPeca.includes(p));
+
+    scored.push({ ...c, score, justificativa: motivos.join('; '), prefCompativel });
   }
 
   // Ordena por score desc; desempate por prioridade asc e pedidoVendaItemId estável.

@@ -54,4 +54,28 @@ describe('associacao-score (motor de sugestão — função pura)', () => {
     const r = calcularScores(peca, [candidato({ itemComercialId: 'item-X' })]);
     expect(r).toEqual([]);
   });
+
+  it('marca prefCompativel sem alterar score nem ordenação', () => {
+    const candidatos = [
+      candidato({
+        pedidoVendaItemId: 'pvi-match',
+        prioridade: 2,
+        preferencias: { caracteristicasPreferidas: ['maisPesada'] },
+      }),
+      candidato({
+        pedidoVendaItemId: 'pvi-prio',
+        prioridade: 1,
+        preferencias: { caracteristicasPreferidas: ['maisGorda'] },
+      }),
+    ];
+    const sem = calcularScores(peca, candidatos);
+    const com = calcularScores(
+      { ...peca, caracteristicas: ['maisPesada'] },
+      candidatos,
+    );
+    expect(com.map((s) => s.pedidoVendaItemId)).toEqual(sem.map((s) => s.pedidoVendaItemId));
+    expect(com.map((s) => s.score)).toEqual(sem.map((s) => s.score));
+    expect(com.find((s) => s.pedidoVendaItemId === 'pvi-match')!.prefCompativel).toBe(true);
+    expect(com.find((s) => s.pedidoVendaItemId === 'pvi-prio')!.prefCompativel).toBe(false);
+  });
 });
