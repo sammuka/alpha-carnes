@@ -77,6 +77,17 @@ Fecha **todos** os bloqueantes e menores do Portão 1 da Emenda 3 (`ef862bf`), i
 - **Não** importar/reusar `etiquetaBloqueadaSql` da Onda 6: aquele predicado OR-a `pecas.status_peca IN ('em_transformacao','transformada')`, o que marcaria quase todas as etiquetas durante a desossa (mãe em transformação). Reusar só a **lista** `STATUS_CAMINHAO_FECHADO`.
 - Teste DoD 7.21b: mãe **fora** de `carga_itens` + parte **dentro** com caminhão fechado → `bloqueada === true`; e mãe `em_transformacao` sem carga do subitem → `bloqueada === false`.
 
+## Emenda 5 — Portão 1 (veredito `ajustar` 2026-07-31T18:17:13-03:00 / tip `04bc197`)
+
+Fecha **todos** os bloqueantes e menores do Portão 1 da Emenda 4 (`04bc197`), item a item. Ancestral obrigatório: Emenda 4 `98b3a3b` + veredito `04bc197`. Tip código: `paginacao.ts` `Paginado`/`montarPaginado` → `{ data, total, page, pageSize }` (NÃO `itens`); e2e O6 `etiqueta.e2e-spec.ts` lê `body.data`.
+
+| # | Achado (`04bc197`) | Fechamento nesta emenda |
+|---|---|---|
+| 1 | DoD 7.21b lê `res.body.itens` — tip `Paginado`/`montarPaginado` e O6 usam `data`; asserts nunca passam | Task 10 DoD 7.21b: `res.body.data`; Task 13: `setEtiquetas(json.data)`; **proibido** `body.itens`/`json.itens` na listagem de etiquetas/desossa |
+| 2 | Fixtures DoD 7.21b com `// ... seedFixture...` — `operacaoId`/`subitemId` inventáveis | Literais completos `seedFixtureEtiquetaSubitemEmCargaFechada` / `…SemCarga` (HTTP O4/O6/O7 + SQL `carga_itens` XOR `subitem`) devolvendo ids tipados |
+
+**Envelope listagem (fechado):** `GET /desossa/etiquetas` retorna `montarPaginado(...)` → `{ data: EtiquetaDesossaListada[], total, page, pageSize }`. Integration e client leem **só** `.data`.
+
 ---
 
 ## Global Constraints
@@ -2042,27 +2053,185 @@ DoD 7.21: fixture com `estado='invalidada_por_troca'` aparece quando aplicável.
 
 - [ ] **Step DoD 7.21b: testes que falham se o EXISTS voltar a `peca_id` ou copiar `etiquetaBloqueadaSql`**
 
+Envelope tip (`paginacao.ts`): `montarPaginado` → `{ data, total, page, pageSize }`. **PROIBIDO** ler `res.body.itens` / `json.itens` nesta listagem (Emenda 5 / veredito `04bc197`).
+
 ```ts
 // test/integration/onda7-desossa.spec.ts
+import type { INestApplication } from '@nestjs/common';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { eq } from 'drizzle-orm';
+import { DRIZZLE } from '../../src/database/database.module';
+import * as schema from '../../src/database/schema';
 import { STATUS_CAMINHAO_FECHADO } from '../../src/modules/operacao/pesagem/carga-fechada';
+import { createTestUser, loginCookies } from '../helpers/test-app';
+import { seedComercialBase } from '../helpers/comercial-fixtures';
+import {
+  montarCenarioPesagem,
+  criarPedido,
+  pesarPeca,
+  fakes,
+} from '../helpers/pesagem-fixtures';
+import { iniciarCorte, subitemCompleto } from '../helpers/corte-fixtures';
+
+type Db = NodePgDatabase<typeof schema>;
+
+/** Emenda 5 — fixture completa (zero reticências). Mãe fora da carga; subitem em caminhão fechado. */
+async function seedFixtureEtiquetaSubitemEmCargaFechada(
+  app: INestApplication,
+): Promise<{ operacaoId: string; pecaMaeId: string; subitemId: string; cookiesCorte: string }> {
+  const { db } = app.get<{ db: Db }>(DRIZZLE);
+  const receb = await createTestUser(app, { perfil: 'recebimento_pesagem' });
+  const compras = await createTestUser(app, { perfil: 'compras' });
+  const comercial = await createTestUser(app, { perfil: 'comercial' });
+  const corte = await createTestUser(app, { perfil: 'corte' });
+  const cookiesReceb = await loginCookies(app, receb.adminEmail, receb.adminPassword);
+  const cookiesCompras = await loginCookies(app, compras.adminEmail, compras.adminPassword);
+  const cookiesComercial = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
+  const cookiesCorte = await loginCookies(app, corte.adminEmail, corte.adminPassword);
+
+  const base = await seedComercialBase(app, { fator: 1 });
+  const c = await montarCenarioPesagem(
+    app,
+    { compras: cookiesCompras, recebimento: cookiesReceb },
+    base,
+    { dataOperacao: '2026-07-31', quantidade: 10 },
+  );
+  const [rec] = await db
+    .select({ operacaoId: schema.recebimentos.operacaoId })
+    .from(schema.recebimentos)
+    .where(eq(schema.recebimentos.id, c.recebimentoId));
+  if (!rec?.operacaoId) throw new Error('operacaoId ausente no recebimento da fixture 7.21b');
+  const operacaoId = rec.operacaoId;
+
+  fakes(app).balanca.definirStatus('disponivel');
+  fakes(app).balanca.definirPeso('12.000');
+  fakes(app).impressora.definirStatus('disponivel');
+
+  const pecaMaeId = await pesarPeca(app, cookiesReceb, {
+    recebimentoId: c.recebimentoId,
+    itemComercialBaseId: c.itemComercialId,
+  });
+  // iniciarCorte → status_peca='em_transformacao'; mãe SEM linha em carga_itens.peca_id
+  const transformacaoId = await iniciarCorte(app, cookiesCorte, pecaMaeId);
+  const pedido = await criarPedido(app, cookiesComercial, {
+    compraId: c.compraId,
+    clienteId: c.clienteId,
+    itemComercialId: c.itemComercialId,
+    dataOperacao: c.dataOperacao,
+    quantidade: 5,
+  });
+  const subitemId = await subitemCompleto(
+    app,
+    cookiesCorte,
+    transformacaoId,
+    c.itemComercialId,
+    pedido.pedidoItemId,
+  );
+
+  // XOR tip expedicao.schema: tipo_origem='subitem' ⇒ subitem_id NOT NULL, peca_id NULL.
+  // PROIBIDO semear carga_itens.peca_id = pecaMaeId (mascararia regressão do EXISTS Emenda 3).
+  const [caminhao] = await db
+    .insert(schema.caminhoes)
+    .values({
+      placa: `O721B-${Date.now().toString(36).slice(-5)}`,
+      motorista: 'Motorista Fixture DoD 7.21b',
+      operacaoId,
+      statusCaminhao: 'fechado',
+    })
+    .returning();
+  if (!caminhao) throw new Error('Falha ao semear caminhão fechado DoD 7.21b');
+
+  await db.insert(schema.cargaItens).values({
+    caminhaoId: caminhao.id,
+    tipoOrigem: 'subitem',
+    subitemId,
+    pecaId: null,
+    pedidoVendaId: pedido.pedidoId,
+    pedidoVendaItemId: pedido.pedidoItemId,
+    statusCargaItem: 'em_carga',
+    conferido: false,
+  });
+
+  return { operacaoId, pecaMaeId, subitemId, cookiesCorte };
+}
+
+/** Emenda 5 — mãe em_transformacao + etiqueta; ZERO carga_itens do subitem. */
+async function seedFixtureEtiquetaSubitemSemCarga(
+  app: INestApplication,
+): Promise<{ operacaoId: string; subitemIdSemCarga: string; cookiesCorte: string }> {
+  const { db } = app.get<{ db: Db }>(DRIZZLE);
+  const receb = await createTestUser(app, { perfil: 'recebimento_pesagem' });
+  const compras = await createTestUser(app, { perfil: 'compras' });
+  const comercial = await createTestUser(app, { perfil: 'comercial' });
+  const corte = await createTestUser(app, { perfil: 'corte' });
+  const cookiesReceb = await loginCookies(app, receb.adminEmail, receb.adminPassword);
+  const cookiesCompras = await loginCookies(app, compras.adminEmail, compras.adminPassword);
+  const cookiesComercial = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
+  const cookiesCorte = await loginCookies(app, corte.adminEmail, corte.adminPassword);
+
+  const base = await seedComercialBase(app, { fator: 1 });
+  const c = await montarCenarioPesagem(
+    app,
+    { compras: cookiesCompras, recebimento: cookiesReceb },
+    base,
+    { dataOperacao: '2026-08-01', quantidade: 10 },
+  );
+  const [rec] = await db
+    .select({ operacaoId: schema.recebimentos.operacaoId })
+    .from(schema.recebimentos)
+    .where(eq(schema.recebimentos.id, c.recebimentoId));
+  if (!rec?.operacaoId) throw new Error('operacaoId ausente no recebimento da fixture 7.21b-sem-carga');
+  const operacaoId = rec.operacaoId;
+
+  fakes(app).balanca.definirStatus('disponivel');
+  fakes(app).balanca.definirPeso('11.000');
+  fakes(app).impressora.definirStatus('disponivel');
+
+  const pecaMaeId = await pesarPeca(app, cookiesReceb, {
+    recebimentoId: c.recebimentoId,
+    itemComercialBaseId: c.itemComercialId,
+  });
+  const transformacaoId = await iniciarCorte(app, cookiesCorte, pecaMaeId);
+  const pedido = await criarPedido(app, cookiesComercial, {
+    compraId: c.compraId,
+    clienteId: c.clienteId,
+    itemComercialId: c.itemComercialId,
+    dataOperacao: c.dataOperacao,
+    quantidade: 5,
+  });
+  const subitemIdSemCarga = await subitemCompleto(
+    app,
+    cookiesCorte,
+    transformacaoId,
+    c.itemComercialId,
+    pedido.pedidoItemId,
+  );
+  // Intencional: NÃO inserir caminhoes/carga_itens — prova que em_transformacao sozinho ≠ bloqueada.
+
+  return { operacaoId, subitemIdSemCarga, cookiesCorte };
+}
 
 it('DoD 7.21b: bloqueada=true quando subitem está em carga fechada (não peca_id da mãe)', async () => {
-  // Fixture mínima (worker monta via helpers O6/O7):
-  // 1) peca mãe status_peca='em_transformacao', SEM linha em carga_itens.peca_id
-  // 2) subitem (parte) com etiquetas_impressoes.subitem_id = subitem.id
-  // 3) carga_itens: tipo_origem='subitem', subitem_id=subitem.id, peca_id=NULL (XOR tip)
-  // 4) caminhao.status_caminhao = 'fechado' (∈ STATUS_CAMINHAO_FECHADO)
   expect(STATUS_CAMINHAO_FECHADO).toContain('fechado');
 
-  const corte = await createTestUser(app, { perfil: 'corte' });
-  const cookies = await loginCookies(app, corte.adminEmail, corte.adminPassword);
-  // ... seedFixtureEtiquetaSubitemEmCargaFechada({ operacaoId, pecaMaeId, subitemId }) ...
+  const { operacaoId, subitemId, cookiesCorte } =
+    await seedFixtureEtiquetaSubitemEmCargaFechada(app);
 
   const res = await request(app.getHttpServer())
     .get(`/desossa/etiquetas?operacaoId=${operacaoId}`)
-    .set('Cookie', cookies);
+    .set('Cookie', cookiesCorte);
   expect(res.status).toBe(200);
-  const etq = (res.body.itens as Array<{ subitemId: string; bloqueada: boolean }>).find(
+  // Emenda 5 — tip Paginado/montarPaginado + e2e O6: envelope é `data`, NÃO `itens`.
+  expect(Array.isArray(res.body.data)).toBe(true);
+  expect(res.body).toEqual(
+    expect.objectContaining({
+      data: expect.any(Array),
+      total: expect.any(Number),
+      page: expect.any(Number),
+      pageSize: expect.any(Number),
+    }),
+  );
+  const etq = (res.body.data as Array<{ subitemId: string; bloqueada: boolean }>).find(
     (e) => e.subitemId === subitemId,
   );
   expect(etq).toBeDefined();
@@ -2072,16 +2241,14 @@ it('DoD 7.21b: bloqueada=true quando subitem está em carga fechada (não peca_i
 });
 
 it('DoD 7.21b: mãe em_transformacao sem subitem na carga ⇒ bloqueada=false (não copiar etiquetaBloqueadaSql)', async () => {
-  // Fixture: peca.status_peca='em_transformacao'; subitem com etiqueta; ZERO carga_itens do subitem
-  const corte = await createTestUser(app, { perfil: 'corte' });
-  const cookies = await loginCookies(app, corte.adminEmail, corte.adminPassword);
-  // ... seedFixtureEtiquetaSubitemSemCarga({ operacaoId, subitemIdSemCarga }) ...
+  const { operacaoId, subitemIdSemCarga, cookiesCorte } =
+    await seedFixtureEtiquetaSubitemSemCarga(app);
 
   const res = await request(app.getHttpServer())
     .get(`/desossa/etiquetas?operacaoId=${operacaoId}`)
-    .set('Cookie', cookies);
+    .set('Cookie', cookiesCorte);
   expect(res.status).toBe(200);
-  const etq = (res.body.itens as Array<{ subitemId: string; bloqueada: boolean }>).find(
+  const etq = (res.body.data as Array<{ subitemId: string; bloqueada: boolean }>).find(
     (e) => e.subitemId === subitemIdSemCarga,
   );
   expect(etq).toBeDefined();
@@ -2093,6 +2260,12 @@ it('DoD 7.21b: mãe em_transformacao sem subitem na carga ⇒ bloqueada=false (n
 ```bash
 cd app/backend && npx jest test/integration/onda7-desossa.spec.ts -t "DoD 7.21b"
 # Expected: PASS (2 testes)
+
+# Gate envelope (implementação): asserts/client leem `.data` — zero envelope `itens`
+rg -n "res\.body\.itens|json\.itens" \
+  "app/backend/test/integration/onda7-desossa.spec.ts" \
+  "app/frontend/src/app/(admin)/desossa/etiquetas" && echo FAIL || echo OK
+# Expected: OK
 ```
 
 - [ ] Commit: `feat(onda7): listagem de etiquetas da desossa com peça mãe`
@@ -3345,6 +3518,54 @@ rg -n "fetchBackend" "app/frontend/src/app/(admin)/desossa" && echo FAIL || echo
 - Tabela 11 colunas: `:650` — Código, Parte, Produto, Peso, Origem peso, Destino, Cliente / Pedido, Peça mãe (TZ), Emissão, Status, ''
 - Drawer Invalidada por troca: `:365-443` (alerta + Peça mãe)
 
+- [ ] **Step 0 (Emenda 5): carregar listagem pelo envelope `Paginado.data`**
+
+```tsx
+// desossa-etiquetas-client.tsx — tip backend paginacao.ts / montarPaginado
+// Espelhar em lib/desossa.ts (mesmo shape de lib/comercial.ts Paginado):
+export type PaginadoEtiquetasDesossa = {
+  data: EtiquetaDesossaListada[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+const [etiquetas, setEtiquetas] = useState<EtiquetaDesossaListada[]>([]);
+const [erro, setErro] = useState<string | null>(null);
+
+const carregar = useCallback(async () => {
+  if (!operacaoId) {
+    setEtiquetas([]);
+    return;
+  }
+  const res = await fetch(
+    `/api/desossa/etiquetas?operacaoId=${encodeURIComponent(operacaoId)}`,
+  );
+  if (!res.ok) {
+    setEtiquetas([]);
+    setErro(
+      (await res.json().catch(() => ({}))).message ??
+        `Erro ao carregar etiquetas (${res.status})`,
+    );
+    return;
+  }
+  const json = (await res.json()) as PaginadoEtiquetasDesossa;
+  // Emenda 5 / tip: montarPaginado → { data, total, page, pageSize }.
+  // PROIBIDO: json.itens (undefined no tip; lista vazia silenciosa — RA-05).
+  setEtiquetas(json.data);
+  setErro(null);
+}, [operacaoId]);
+
+useEffect(() => {
+  void carregar();
+}, [carregar]);
+```
+
+```bash
+rg -n "json\.itens|body\.itens|\.itens\b" "app/frontend/src/app/(admin)/desossa/etiquetas" && echo FAIL || echo OK
+# Expected: OK (só json.data / setEtiquetas(json.data))
+```
+
 ```tsx
 /** Wire → rótulo protótipo DesossaEtiquetas.tsx:11 / :623 */
 function rotuloStatusEtiqueta(e: EtiquetaDesossaListada): string {
@@ -3537,7 +3758,7 @@ function OrigemPesoBadge({ origem }: { origem: string | null }) {
 )}
 ```
 
-Filtro client-side por rótulo: `filtradas = etiquetas.filter(e => filtroStatus === 'Todos' || rotuloStatusEtiqueta(e) === filtroStatus)`. Stats derivados da resposta (emitidas = `estado` em emitida/ativa/reimpressa; invalidadas = `invalidada_por_troca`; pendentes = `pendenteImpressao`). Zero `SEED`/`ETQ_SEED` em runtime.
+Filtro client-side por rótulo: `filtradas = etiquetas.filter(e => filtroStatus === 'Todos' || rotuloStatusEtiqueta(e) === filtroStatus)`. Stats derivados de `etiquetas` (= `json.data` do Step 0 — emitidas = `estado` em emitida/ativa/reimpressa; invalidadas = `invalidada_por_troca`; pendentes = `pendenteImpressao`). Zero `SEED`/`ETQ_SEED` em runtime.
 
 ```bash
 rg -n "Peça mãe \(TZ\)|Pendente de impressão|Origem peso|Cliente / Pedido" "app/frontend/src/app/(admin)/desossa/etiquetas"
@@ -3669,6 +3890,7 @@ Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13.
 5. **Emenda 2 vs veredito `25300fa`:** (1) teste+calc alinhados ao tip líquido; (2) client sem `fetchBackend`; (3) TVMode CARGA/HORÁRIO + KPI TZs na desossa + tabela Rota/Representante/Alvo + drawers + etiquetas 11 cols/filtros rótulo; (4) snapshot RBAC com comando; (5) modais pesagem com cercas JSX.
 6. **Emenda 3 vs veredito `b8aff66`:** (1) tabela TZs `:600-638` + `setDrawerTZ` vivo; (2) D7.14 Opção A `RequireQualquerPermissao` — zero 403 telão; (3) sugestão Prior./Atende/Sobras/Impacto + calc; (4) `bloqueada` via EXISTS carga fechada (**corrigido na Emenda 4** — join era `peca_id` da mãe); (5) `vincularRegra`/`carregarChecklist` com `fetch('/api/...')`.
 7. **Emenda 4 vs veredito `ef862bf`:** (1) `bloqueada` EXISTS `ci.subitem_id = subitens.id` + `STATUS_CAMINHAO_FECHADO`, sem `etiquetaBloqueadaSql` cego + DoD 7.21b; (2) Task 14 cerca literal DoD 7.14b comercial→200 / faturamento→403; (3) Task 11 não engole 403 de TZs (RA-05).
+8. **Emenda 5 vs veredito `04bc197`:** (1) DoD 7.21b + Task 13 leem `res.body.data` / `json.data` (tip `Paginado`/`montarPaginado`; zero `itens` no envelope); (2) fixtures DoD 7.21b literais com `operacaoId`/`subitemId` tipados (HTTP + SQL XOR `subitem`, sem reticências).
 
 ---
 
