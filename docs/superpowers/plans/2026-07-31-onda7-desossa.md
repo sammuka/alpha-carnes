@@ -88,6 +88,22 @@ Fecha **todos** os bloqueantes e menores do Portão 1 da Emenda 4 (`04bc197`), i
 
 **Envelope listagem (fechado):** `GET /desossa/etiquetas` retorna `montarPaginado(...)` → `{ data: EtiquetaDesossaListada[], total, page, pageSize }`. Integration e client leem **só** `.data`.
 
+## Emenda 6 — Portão 1 (veredito `ajustar` 2026-07-31T18:28:50-03:00 / tip `9608d20`)
+
+Fecha **todos** os bloqueantes e menores do Portão 1 da Emenda 5 (`9608d20`), item a item. Ancestral obrigatório: Emenda 5 `99a639b` + veredito `9608d20`. Tip gate O7: após Tasks 2/4/5, `iniciarCorte` → `subitemCompleto` **sem** `POST /operacao/corte/:id/regra` ⇒ 409 `REGRA_TRANSFORMACAO_OBRIGATORIA` (DoD 7.6); saída fora das saídas da regra ⇒ 409 `SAIDA_FORA_DA_REGRA` (DoD 7.7).
+
+| # | Achado (`9608d20`) | Fechamento nesta emenda |
+|---|---|---|
+| 1 | Fixtures DoD 7.21b literais, mas `iniciarCorte` → `subitemCompleto` sem bind de regra e com `c.itemComercialId` do recebimento — Expected PASS impossível no tip O7 | Nas **duas** fixtures: `seedCatalogoMvp` + `seedRegrasTransformacaoTz`; após `iniciarCorte`, buscar id `TZ_A`, `POST .../regra`, e `subitemCompleto`/`criarPedido` com `itemComercialId` de **saída** da regra (CB seed Task 2). **Proibido** passar o item da mãe/recebimento sem reconciliar com a regra |
+
+**Ordem canônica (fechada) — ambas as fixtures DoD 7.21b:**
+1. `seedCatalogoMvp(db)` + `seedRegrasTransformacaoTz(db)` (Task 2 — garante `TZ_A` e produtos CB/JAC com `legadoItemComercialId`).
+2. Cenário pesagem + `iniciarCorte` → `transformacaoId`.
+3. SELECT `regras_transformacao.id` WHERE `codigo='TZ_A'` AND `deleted_at IS NULL`.
+4. `POST /operacao/corte/:transformacaoId/regra` body `{ regraTransformacaoId }` (cookies `corte` / `CORTE_GERENCIAR`).
+5. SELECT `produtos.legado_item_comercial_id` WHERE `codigo='CB'` (saída da Alternativa A).
+6. `criarPedido` + `subitemCompleto` com **esse** `itemComercialId` (overbooking de `criarPedido` cobre ausência de saldo virtual do derivado).
+
 ---
 
 ## Global Constraints
@@ -2055,13 +2071,18 @@ DoD 7.21: fixture com `estado='invalidada_por_troca'` aparece quando aplicável.
 
 Envelope tip (`paginacao.ts`): `montarPaginado` → `{ data, total, page, pageSize }`. **PROIBIDO** ler `res.body.itens` / `json.itens` nesta listagem (Emenda 5 / veredito `04bc197`).
 
+Gate O7 (Emenda 6 / veredito `9608d20`): **PROIBIDO** `subitemCompleto` sem `POST /operacao/corte/:id/regra` (409 `REGRA_TRANSFORMACAO_OBRIGATORIA`, DoD 7.6) ou com `itemComercialId` da mãe/recebimento fora das saídas (409 `SAIDA_FORA_DA_REGRA`, DoD 7.7).
+
 ```ts
 // test/integration/onda7-desossa.spec.ts
 import type { INestApplication } from '@nestjs/common';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
+import request from 'supertest';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
+import { seedCatalogoMvp } from '../../src/database/seed-catalogo-mvp';
+import { seedRegrasTransformacaoTz } from '../../src/database/seed-regras-transformacao-tz';
 import { STATUS_CAMINHAO_FECHADO } from '../../src/modules/operacao/pesagem/carga-fechada';
 import { createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase } from '../helpers/comercial-fixtures';
@@ -2075,7 +2096,7 @@ import { iniciarCorte, subitemCompleto } from '../helpers/corte-fixtures';
 
 type Db = NodePgDatabase<typeof schema>;
 
-/** Emenda 5 — fixture completa (zero reticências). Mãe fora da carga; subitem em caminhão fechado. */
+/** Emenda 5+6 — fixture completa (zero reticências). Mãe fora da carga; subitem em caminhão fechado. */
 async function seedFixtureEtiquetaSubitemEmCargaFechada(
   app: INestApplication,
 ): Promise<{ operacaoId: string; pecaMaeId: string; subitemId: string; cookiesCorte: string }> {
@@ -2088,6 +2109,10 @@ async function seedFixtureEtiquetaSubitemEmCargaFechada(
   const cookiesCompras = await loginCookies(app, compras.adminEmail, compras.adminPassword);
   const cookiesComercial = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
   const cookiesCorte = await loginCookies(app, corte.adminEmail, corte.adminPassword);
+
+  // Emenda 6 — seed Task 2 antes do bind (TZ_A + CB/JAC com legadoItemComercialId)
+  await seedCatalogoMvp(db);
+  await seedRegrasTransformacaoTz(db);
 
   const base = await seedComercialBase(app, { fator: 1 });
   const c = await montarCenarioPesagem(
@@ -2113,10 +2138,46 @@ async function seedFixtureEtiquetaSubitemEmCargaFechada(
   });
   // iniciarCorte → status_peca='em_transformacao'; mãe SEM linha em carga_itens.peca_id
   const transformacaoId = await iniciarCorte(app, cookiesCorte, pecaMaeId);
+
+  // Emenda 6 — DoD 7.6: POST /regra antes de subitemCompleto
+  const [regraA] = await db
+    .select({ id: schema.regrasTransformacao.id })
+    .from(schema.regrasTransformacao)
+    .where(
+      and(
+        eq(schema.regrasTransformacao.codigo, 'TZ_A'),
+        isNull(schema.regrasTransformacao.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!regraA) {
+    throw new Error('Regra seed TZ_A ausente — rode seedRegrasTransformacaoTz (Task 2)');
+  }
+  const bind = await request(app.getHttpServer())
+    .post(`/operacao/corte/${transformacaoId}/regra`)
+    .set('Cookie', cookiesCorte)
+    .send({ regraTransformacaoId: regraA.id });
+  if (bind.status !== 200 && bind.status !== 201) {
+    throw new Error(
+      `Falha ao vincular TZ_A na transformação: ${bind.status} ${JSON.stringify(bind.body)}`,
+    );
+  }
+
+  // Emenda 6 — DoD 7.7: saída da regra (CB), NÃO c.itemComercialId do recebimento/TZ mãe
+  const [saidaCb] = await db
+    .select({ itemComercialId: schema.produtos.legadoItemComercialId })
+    .from(schema.produtos)
+    .where(and(eq(schema.produtos.codigo, 'CB'), isNull(schema.produtos.deletedAt)))
+    .limit(1);
+  if (!saidaCb?.itemComercialId) {
+    throw new Error('Produto CB seed sem legadoItemComercialId (catálogo MVP / Task 2)');
+  }
+  const itemSaidaRegraId = saidaCb.itemComercialId;
+
   const pedido = await criarPedido(app, cookiesComercial, {
     compraId: c.compraId,
     clienteId: c.clienteId,
-    itemComercialId: c.itemComercialId,
+    itemComercialId: itemSaidaRegraId,
     dataOperacao: c.dataOperacao,
     quantidade: 5,
   });
@@ -2124,7 +2185,7 @@ async function seedFixtureEtiquetaSubitemEmCargaFechada(
     app,
     cookiesCorte,
     transformacaoId,
-    c.itemComercialId,
+    itemSaidaRegraId,
     pedido.pedidoItemId,
   );
 
@@ -2155,7 +2216,7 @@ async function seedFixtureEtiquetaSubitemEmCargaFechada(
   return { operacaoId, pecaMaeId, subitemId, cookiesCorte };
 }
 
-/** Emenda 5 — mãe em_transformacao + etiqueta; ZERO carga_itens do subitem. */
+/** Emenda 5+6 — mãe em_transformacao + etiqueta; ZERO carga_itens do subitem. */
 async function seedFixtureEtiquetaSubitemSemCarga(
   app: INestApplication,
 ): Promise<{ operacaoId: string; subitemIdSemCarga: string; cookiesCorte: string }> {
@@ -2168,6 +2229,10 @@ async function seedFixtureEtiquetaSubitemSemCarga(
   const cookiesCompras = await loginCookies(app, compras.adminEmail, compras.adminPassword);
   const cookiesComercial = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
   const cookiesCorte = await loginCookies(app, corte.adminEmail, corte.adminPassword);
+
+  // Emenda 6 — seed Task 2 antes do bind (TZ_A + CB/JAC com legadoItemComercialId)
+  await seedCatalogoMvp(db);
+  await seedRegrasTransformacaoTz(db);
 
   const base = await seedComercialBase(app, { fator: 1 });
   const c = await montarCenarioPesagem(
@@ -2192,10 +2257,46 @@ async function seedFixtureEtiquetaSubitemSemCarga(
     itemComercialBaseId: c.itemComercialId,
   });
   const transformacaoId = await iniciarCorte(app, cookiesCorte, pecaMaeId);
+
+  // Emenda 6 — DoD 7.6: POST /regra antes de subitemCompleto
+  const [regraA] = await db
+    .select({ id: schema.regrasTransformacao.id })
+    .from(schema.regrasTransformacao)
+    .where(
+      and(
+        eq(schema.regrasTransformacao.codigo, 'TZ_A'),
+        isNull(schema.regrasTransformacao.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (!regraA) {
+    throw new Error('Regra seed TZ_A ausente — rode seedRegrasTransformacaoTz (Task 2)');
+  }
+  const bind = await request(app.getHttpServer())
+    .post(`/operacao/corte/${transformacaoId}/regra`)
+    .set('Cookie', cookiesCorte)
+    .send({ regraTransformacaoId: regraA.id });
+  if (bind.status !== 200 && bind.status !== 201) {
+    throw new Error(
+      `Falha ao vincular TZ_A na transformação: ${bind.status} ${JSON.stringify(bind.body)}`,
+    );
+  }
+
+  // Emenda 6 — DoD 7.7: saída da regra (CB), NÃO c.itemComercialId do recebimento/TZ mãe
+  const [saidaCb] = await db
+    .select({ itemComercialId: schema.produtos.legadoItemComercialId })
+    .from(schema.produtos)
+    .where(and(eq(schema.produtos.codigo, 'CB'), isNull(schema.produtos.deletedAt)))
+    .limit(1);
+  if (!saidaCb?.itemComercialId) {
+    throw new Error('Produto CB seed sem legadoItemComercialId (catálogo MVP / Task 2)');
+  }
+  const itemSaidaRegraId = saidaCb.itemComercialId;
+
   const pedido = await criarPedido(app, cookiesComercial, {
     compraId: c.compraId,
     clienteId: c.clienteId,
-    itemComercialId: c.itemComercialId,
+    itemComercialId: itemSaidaRegraId,
     dataOperacao: c.dataOperacao,
     quantidade: 5,
   });
@@ -2203,7 +2304,7 @@ async function seedFixtureEtiquetaSubitemSemCarga(
     app,
     cookiesCorte,
     transformacaoId,
-    c.itemComercialId,
+    itemSaidaRegraId,
     pedido.pedidoItemId,
   );
   // Intencional: NÃO inserir caminhoes/carga_itens — prova que em_transformacao sozinho ≠ bloqueada.
@@ -2266,6 +2367,17 @@ rg -n "res\.body\.itens|json\.itens" \
   "app/backend/test/integration/onda7-desossa.spec.ts" \
   "app/frontend/src/app/(admin)/desossa/etiquetas" && echo FAIL || echo OK
 # Expected: OK
+
+# Gate Emenda 6 / DoD 7.6+7.7: ambas fixtures bindam TZ_A + usam itemSaidaRegraId (CB)
+rg -n "regrasTransformacao\.codigo, 'TZ_A'" \
+  "docs/superpowers/plans/2026-07-31-onda7-desossa.md"
+# Expected: 2 hits (uma por fixture)
+rg -n "operacao/corte/\$\{transformacaoId\}/regra" \
+  "docs/superpowers/plans/2026-07-31-onda7-desossa.md"
+# Expected: 2 hits (uma por fixture DoD 7.21b)
+rg -n "itemSaidaRegraId" \
+  "docs/superpowers/plans/2026-07-31-onda7-desossa.md"
+# Expected: ≥6 hits (decl + criarPedido + subitemCompleto × 2 fixtures)
 ```
 
 - [ ] Commit: `feat(onda7): listagem de etiquetas da desossa com peça mãe`
@@ -3891,6 +4003,7 @@ Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13.
 6. **Emenda 3 vs veredito `b8aff66`:** (1) tabela TZs `:600-638` + `setDrawerTZ` vivo; (2) D7.14 Opção A `RequireQualquerPermissao` — zero 403 telão; (3) sugestão Prior./Atende/Sobras/Impacto + calc; (4) `bloqueada` via EXISTS carga fechada (**corrigido na Emenda 4** — join era `peca_id` da mãe); (5) `vincularRegra`/`carregarChecklist` com `fetch('/api/...')`.
 7. **Emenda 4 vs veredito `ef862bf`:** (1) `bloqueada` EXISTS `ci.subitem_id = subitens.id` + `STATUS_CAMINHAO_FECHADO`, sem `etiquetaBloqueadaSql` cego + DoD 7.21b; (2) Task 14 cerca literal DoD 7.14b comercial→200 / faturamento→403; (3) Task 11 não engole 403 de TZs (RA-05).
 8. **Emenda 5 vs veredito `04bc197`:** (1) DoD 7.21b + Task 13 leem `res.body.data` / `json.data` (tip `Paginado`/`montarPaginado`; zero `itens` no envelope); (2) fixtures DoD 7.21b literais com `operacaoId`/`subitemId` tipados (HTTP + SQL XOR `subitem`, sem reticências).
+9. **Emenda 6 vs veredito `9608d20`:** (1) ambas fixtures DoD 7.21b, após `iniciarCorte`, buscam `TZ_A`, `POST /operacao/corte/:id/regra`, e usam `itemComercialId` de saída CB (seed Task 2) em `criarPedido`/`subitemCompleto` — Expected PASS factível contra DoD 7.6/7.7; zero `c.itemComercialId` da mãe nesses calls.
 
 ---
 
