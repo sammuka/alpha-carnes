@@ -2,5 +2,8 @@
 useDefault = true
 
 [allowlist]
-description = "Somente placeholder literal conhecido; nenhum caminho versionado é excluído"
+description = "Placeholder literal conhecido; cache do graphify contém apenas hashes SHA-256 de conteúdo (sem segredos)"
 stopwords = ['''change-me''']
+paths = [
+  '''graphify-out/cache/.*''',
+]

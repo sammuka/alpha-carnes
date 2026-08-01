@@ -49,3 +49,5 @@ app/frontend/e2e/test-results/
 
 # Workflows autonomos (estado efemero de execucao)
 .claude/workflows/.locks/
+graphify-out/.graphify_python
+graphify-out/.graphify_root
