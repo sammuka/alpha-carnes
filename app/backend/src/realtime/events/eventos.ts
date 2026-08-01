@@ -63,13 +63,29 @@ export const EVENTOS = {
   PECA_TROCADA: 'peca_trocada',
   PESAGEM_ESTORNADA: 'pesagem_estornada',
   ETIQUETA_INVALIDADA: 'etiqueta_invalidada',
+  // ── Onda 7 — Desossa / Transformação ──────────────────────────────────────
+  FALTAS_DESOSSA_ATUALIZADAS: 'faltas_desossa_atualizadas',
+  DIVERGENCIA_TRANSFORMACAO_ABERTA: 'divergencia_transformacao_aberta',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
 
 /** Rooms que recebem broadcast de um evento de uma data operacional. */
 export function roomsDaData(dataOperacao: string): string[] {
-  return ['dashboard', `operacao:${dataOperacao}`];
+  return ['dashboard', 'desossa', `operacao:${dataOperacao}`];
+}
+
+export interface FaltasDesossaAtualizadasPayload {
+  dataOperacao: string;
+  motivo: string;
+}
+
+export interface DivergenciaTransformacaoAbertaPayload {
+  dataOperacao: string;
+  transformacaoId: string;
+  divergenciaId: string;
+  aprovacaoId: string;
+  tipo: string;
 }
 
 export interface CompraConfirmadaPayload {
@@ -409,4 +425,7 @@ export interface PayloadPorEvento {
   peca_trocada: PecaTrocadaPayload;
   pesagem_estornada: PesagemEstornadaPayload;
   etiqueta_invalidada: EtiquetaInvalidadaPayload;
+  // ── Onda 7 — Desossa / Transformação ──────────────────────────────────────
+  faltas_desossa_atualizadas: FaltasDesossaAtualizadasPayload;
+  divergencia_transformacao_aberta: DivergenciaTransformacaoAbertaPayload;
 }

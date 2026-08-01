@@ -69,7 +69,8 @@ describe('Onda 6 — proveniência das migrations D6.13', () => {
 
   it('encadeia journal e snapshots gerados de 0020 a 0022', () => {
     const journal = readJson<Journal>(path.join(META_DIR, '_journal.json'));
-    const entries = journal.entries.filter((entry) => entry.idx >= 20);
+    // Emenda 7: O7 adiciona idx 23 — meta O6 isola 20..22 (não quebrar com 0023)
+    const entries = journal.entries.filter((entry) => entry.idx >= 20 && entry.idx <= 22);
 
     expect(journal.version).toBe('7');
     expect(journal.dialect).toBe('postgresql');

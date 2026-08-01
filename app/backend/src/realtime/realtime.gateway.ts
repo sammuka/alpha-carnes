@@ -47,6 +47,8 @@ import {
   type AprovacaoOperacionalPayload,
   type RelatorioSifGeradoPayload,
   type PendenciaOverbookingPayload,
+  type FaltasDesossaAtualizadasPayload,
+  type DivergenciaTransformacaoAbertaPayload,
 } from './events/eventos';
 
 /** Socket autenticado: carrega o payload do usuário validado no handshake. */
@@ -334,6 +336,18 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.PENDENCIA_OVERBOOKING_RESOLVIDA)
   handlePendenciaResolvida(payload: PendenciaOverbookingPayload): void {
     this.broadcast(EVENTOS.PENDENCIA_OVERBOOKING_RESOLVIDA, payload, payload.dataOperacao);
+  }
+
+  // ── Onda 7 — Desossa / Transformação ──────────────────────────────────────
+
+  @OnEvent(EVENTOS.FALTAS_DESOSSA_ATUALIZADAS)
+  handleFaltasDesossaAtualizadas(payload: FaltasDesossaAtualizadasPayload): void {
+    this.broadcast(EVENTOS.FALTAS_DESOSSA_ATUALIZADAS, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.DIVERGENCIA_TRANSFORMACAO_ABERTA)
+  handleDivergenciaTransformacaoAberta(payload: DivergenciaTransformacaoAbertaPayload): void {
+    this.broadcast(EVENTOS.DIVERGENCIA_TRANSFORMACAO_ABERTA, payload, payload.dataOperacao);
   }
 
   private broadcast(evento: string, payload: unknown, dataOperacao: string): void {

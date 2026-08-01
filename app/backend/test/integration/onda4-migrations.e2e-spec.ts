@@ -286,12 +286,16 @@ describe('Onda 4 — migrations geradas D36', () => {
         'migrations/0020_onda5_usuarios_representantes.sql',
         'migrations/0021_onda6_recebimento_balanca_expand.sql',
         'migrations/0022_onda6_etiqueta_estado_backfill.sql',
+        'migrations/0023_onda7_desossa_expand.sql',
         'migrations/meta/0019_snapshot.json',
         'migrations/meta/0020_snapshot.json',
         'migrations/meta/0021_snapshot.json',
         'migrations/meta/0022_snapshot.json',
+        'migrations/meta/0023_snapshot.json',
         'schema/relatorios-sif.schema.ts',
         'schema/aprovacoes-operacionais.schema.ts',
+        // Emenda 7: importa aprovacoes-operacionais — quebra resolve do probe O4
+        'schema/divergencias-transformacao.schema.ts',
       ]) {
         fs.rmSync(path.join(probe, postO4Artifact), { force: true });
       }
@@ -300,6 +304,15 @@ describe('Onda 4 — migrations geradas D36', () => {
       fs.copyFileSync(
         path.resolve(__dirname, '../helpers/fixtures/pesagem.schema.pre-onda6.ts'),
         path.join(probe, 'schema/pesagem.schema.ts'),
+      );
+      // Emenda 7: colunas O7 em transformacoes/regras gerariam DDL extra no generate O4
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/transformacoes.schema.pre-onda7.ts'),
+        path.join(probe, 'schema/transformacoes.schema.ts'),
+      );
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/regras-transformacao.schema.pre-onda7.ts'),
+        path.join(probe, 'schema/regras-transformacao.schema.ts'),
       );
       const probeJournal = JSON.parse(
         fs.readFileSync(path.join(probe, 'migrations/meta/_journal.json'), 'utf8'),
@@ -316,7 +329,8 @@ describe('Onda 4 — migrations geradas D36', () => {
         .filter((line) =>
           !line.includes('relatorios-sif.schema') &&
           !line.includes('aprovacoes-operacionais.schema') &&
-          !line.includes('usuarios-representantes.schema'),
+          !line.includes('usuarios-representantes.schema') &&
+          !line.includes('divergencias-transformacao.schema'),
         );
       fs.writeFileSync(probeSchemaIndex, `${o4SchemaLines.join('\n')}\n`, 'utf8');
 

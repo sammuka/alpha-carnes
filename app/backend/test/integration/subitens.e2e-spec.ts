@@ -2,7 +2,14 @@ import type { INestApplication } from '@nestjs/common';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase } from '../helpers/comercial-fixtures';
 import { montarCenarioPesagem, criarPedido, criarOutroCliente, pesarPeca, fakes, type CenarioPesagem } from '../helpers/pesagem-fixtures';
-import { iniciarCorte, adicionarSubitem, pesarSubitem } from '../helpers/corte-fixtures';
+import {
+  iniciarCorte,
+  adicionarSubitem,
+  pesarSubitem,
+  itemSaidaCanonicoCb,
+  alinharPedidoItemComSaidaCorte,
+  prepararTransformacaoComRegraTzA,
+} from '../helpers/corte-fixtures';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { eq } from 'drizzle-orm';
@@ -56,7 +63,8 @@ describe('Subitens e2e (F4c — pesar/associar/redirecionar/sem-cobertura)', () 
     const c = await cenario('2026-11-01');
     const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
-    const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
 
     fakes(app).balanca.definirStatus('indisponivel');
     const auto = await pesarSubitem(app, corteCookies, subId, { modoCaptura: 'automatico' });
@@ -77,43 +85,37 @@ describe('Subitens e2e (F4c — pesar/associar/redirecionar/sem-cobertura)', () 
     const { default: request } = await import('supertest');
     const c = await cenario('2026-11-02');
 
-    // Segundo item comercial para reclassificação
-    const [item2] = await db()
-      .insert(schema.itensComerciais)
-      .values({ codigo: `ICOM2-${Date.now()}`, descricao: 'Traseiro', unidadeComercial: 'parte' })
-      .returning();
-    if (!item2) throw new Error('falha ao criar item2');
+    // Emenda 7 / DoD 7.7: "item2" = JAC (saída TZ_A), não item inventado fora da regra
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    const saidas = await prepararTransformacaoComRegraTzA(app, corteCookies, transfId);
+    const item2Id = saidas.itemSaidaJacId; // reclassifica para JAC
+    const itemBaseId = saidas.itemSaidaCbId; // "base" compatível com regra = CB
 
-    // Pedido no item2 (alvo da reclassificação)
     const pedido2 = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: item2.id,
+      itemComercialId: item2Id,
       dataOperacao: c.dataOperacao,
       quantidade: 2,
     });
-    // Pedido no item base (não deve ser consumido)
     const pedidoBase = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      itemComercialId: itemBaseId,
       dataOperacao: c.dataOperacao,
       quantidade: 2,
     });
 
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
-    const transfId = await iniciarCorte(app, corteCookies, pecaId);
-    const subId = await adicionarSubitem(app, corteCookies, transfId, item2.id); // reclassifica
+    const subId = await adicionarSubitem(app, corteCookies, transfId, item2Id);
     await pesarSubitem(app, corteCookies, subId);
 
-    // Tentar associar ao item base → incompatível
     const incompat = await request(srv())
       .post(`/operacao/corte/subitens/${subId}/associar`)
       .set('Cookie', corteCookies)
       .send({ pedidoVendaItemId: pedidoBase.pedidoItemId });
     expect(incompat.status).toBe(409);
 
-    // Associar ao item2 → ok, consome a unidade de item2
     const ok = await request(srv())
       .post(`/operacao/corte/subitens/${subId}/associar`)
       .set('Cookie', corteCookies)
@@ -127,7 +129,6 @@ describe('Subitens e2e (F4c — pesar/associar/redirecionar/sem-cobertura)', () 
       .then((r) => r[0]!);
     expect(item2Linha.quantidadeAtendida).toBe('1.000');
 
-    // Item base não foi tocado
     const itemBaseLinha = await db()
       .select()
       .from(schema.pedidosVendaItens)
@@ -139,13 +140,15 @@ describe('Subitens e2e (F4c — pesar/associar/redirecionar/sem-cobertura)', () 
   it('redirecionar subitem: devolve saldo origem e consome destino', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-11-03');
-    const pa = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 2 });
-    const pb = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 2 });
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const pa = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId, dataOperacao: c.dataOperacao, quantidade: 2 });
+    const pb = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: itemSaidaCbId, dataOperacao: c.dataOperacao, quantidade: 2 });
 
     const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
-    const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
     await pesarSubitem(app, corteCookies, subId);
+    await alinharPedidoItemComSaidaCorte(app, pa.pedidoItemId, itemSaidaCbId);
     await request(srv()).post(`/operacao/corte/subitens/${subId}/associar`).set('Cookie', corteCookies).send({ pedidoVendaItemId: pa.pedidoItemId });
 
     const redir = await request(srv())
@@ -165,7 +168,8 @@ describe('Subitens e2e (F4c — pesar/associar/redirecionar/sem-cobertura)', () 
     const c = await cenario('2026-11-04');
     const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
-    const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
     await pesarSubitem(app, corteCookies, subId);
 
     const semMotivo = await request(srv()).post(`/operacao/corte/subitens/${subId}/sem-cobertura`).set('Cookie', corteCookies).send({ destino: 'sobra' });
@@ -176,7 +180,7 @@ describe('Subitens e2e (F4c — pesar/associar/redirecionar/sem-cobertura)', () 
     expect(comMotivo.body.statusSubitem).toBe('em_sobra');
 
     // Divergência cria uma ocorrência formal
-    const sub2 = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    const sub2 = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
     await pesarSubitem(app, corteCookies, sub2);
     const div = await request(srv()).post(`/operacao/corte/subitens/${sub2}/sem-cobertura`).set('Cookie', corteCookies).send({
       destino: 'divergencia',

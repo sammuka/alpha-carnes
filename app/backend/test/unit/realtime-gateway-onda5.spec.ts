@@ -14,7 +14,7 @@ describe('RealtimeGateway — Onda 5', () => {
   );
 
   const dataOperacao = '2026-08-03';
-  const rooms = ['dashboard', `operacao:${dataOperacao}`];
+  const rooms = ['dashboard', 'desossa', `operacao:${dataOperacao}`];
 
   beforeEach(() => {
     broadcastSpy.mockClear();

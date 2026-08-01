@@ -18,6 +18,7 @@ import { somarQtd, subtrairQtd, ehZero } from '../../../common/crud/decimal';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { devolverSaldo, consumirSaldo } from '../pesagem/saldo';
 import type { IniciarCorteDto, ConcluirCorteDto } from './dto/corte.dto';
+import { ChecklistCorteService } from './checklist-corte.service';
 
 type Tx = NodePgDatabase<typeof schema>;
 type Transformacao = typeof transformacoes.$inferSelect;
@@ -31,6 +32,7 @@ export class CorteService {
     @Inject(DRIZZLE) private readonly drizzle: { db: NodePgDatabase<typeof schema> },
     private readonly auditoria: AuditoriaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly checklist: ChecklistCorteService,
   ) {}
 
   private get db() {
@@ -122,6 +124,14 @@ export class CorteService {
         throw new ConflictException('Transformação cancelada não pode ser concluída');
       }
 
+      const checklist = await this.checklist.obterNaTx(tx, transformacaoId);
+      if (checklist.divergente && !checklist.divergenciaAbertaId) {
+        throw new ConflictException({
+          codigo: 'CHECKLIST_DIVERGENTE',
+          mensagem: 'Registre a divergência de transformação antes de concluir',
+        });
+      }
+
       const lista = await tx
         .select()
         .from(subitens)
@@ -194,6 +204,10 @@ export class CorteService {
         pesoOriginal: resultado.transf.pesoOriginal,
         pesoSubitensTotal: resultado.transf.pesoSubitensTotal ?? '0.000',
         diferencaPeso: resultado.transf.diferencaPeso ?? '0.000',
+      });
+      this.eventEmitter.emit(EVENTOS.FALTAS_DESOSSA_ATUALIZADAS, {
+        dataOperacao: resultado.dataOperacao,
+        motivo: 'corte_concluido',
       });
     }
     return resultado.transf;

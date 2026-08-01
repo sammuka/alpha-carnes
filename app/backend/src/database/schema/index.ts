@@ -24,6 +24,7 @@ export * from './ocorrencias-fornecedor.schema';
 export * from './pesagem.schema';
 export * from './regras-transformacao.schema';
 export * from './transformacoes.schema';
+export * from './divergencias-transformacao.schema';
 export * from './expedicao.schema';
 export * from './faturamento.schema';
 export * from './adendos-pedido.schema';

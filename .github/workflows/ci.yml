@@ -72,6 +72,8 @@ jobs:
         working-directory: app/backend
       - run: npm run test:cov
         working-directory: app/backend
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
       - uses: actions/upload-artifact@v4
         with:
           name: backend-coverage

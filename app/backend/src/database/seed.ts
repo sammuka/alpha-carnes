@@ -8,6 +8,7 @@ import { DESCRICOES_PERMISSOES, MAPA_PERFIL_PERMISSOES } from '../common/rbac/pe
 import { MENUS_VISIVEIS_POR_PERFIL } from '../common/rbac/menus-canonicos';
 import { modelosEtiqueta, parametros, perfis } from './schema';
 import { seedCatalogoMvp } from './seed-catalogo-mvp';
+import { seedRegrasTransformacaoTz } from './seed-regras-transformacao-tz';
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -107,6 +108,19 @@ const PARAMETROS_SEED = [
       valor: '',
       provisorio: true,
       pendencia: 'P12',
+    },
+  },
+  {
+    chave: 'desossa.momento_escolha_regra',
+    descricao: 'Momento da escolha da regra de transformação na desossa',
+    valorJson: {
+      valor: 'ambos',
+      opcoes: ['entrada', 'saida', 'ambos'],
+      provisorio: true,
+      pendencia: 'P6',
+      titulo: 'Momento da escolha da regra (P6)',
+      detalhe:
+        'v1.1 §16.7 — escolha na entrada ou confirmação na saída; obrigatória antes de gerar produtos.',
     },
   },
   {
@@ -280,6 +294,9 @@ export async function seed() {
 
     await seedCatalogoMvp(db);
     console.log('✅ Catálogo MVP (11 pares) semeado — Provisório P11');
+
+    await seedRegrasTransformacaoTz(db);
+    console.log('✅ Regras TZ A/B provisórias semeadas — P12');
 
     // 4. Inserir usuário admin
     const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@alphacarnes.local';

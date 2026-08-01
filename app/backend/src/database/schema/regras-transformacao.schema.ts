@@ -1,5 +1,16 @@
 import { relations, sql } from 'drizzle-orm';
-import { check, index, integer, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { produtos } from './produtos.schema';
 
 // ── regras_transformacao ──────────────────────────────────────────────────────
@@ -9,9 +20,11 @@ export const regrasTransformacao = pgTable(
   {
     id: uuid('id').primaryKey().default(sql`uuidv7()`),
     nome: text('nome').notNull(),
+    codigo: text('codigo'),
     produtoOrigemCodigo: text('produto_origem_codigo').notNull().default('TZ'),
     status: text('status').notNull().default('ativo'),
     prioridade: integer('prioridade').notNull().default(0),
+    provisorio: boolean('provisorio').notNull().default(false),
     observacao: text('observacao'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -20,6 +33,9 @@ export const regrasTransformacao = pgTable(
   (t) => [
     check('chk_regras_transf_status', sql`${t.status} IN ('ativo','inativo')`),
     index('idx_regras_transf_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
+    uniqueIndex('uq_regras_transf_codigo')
+      .on(t.codigo)
+      .where(sql`${t.deletedAt} IS NULL AND ${t.codigo} IS NOT NULL`),
   ],
 );
 

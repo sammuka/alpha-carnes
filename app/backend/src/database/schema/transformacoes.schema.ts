@@ -4,6 +4,7 @@ import { pecas } from './pesagem.schema';
 import { itensComerciais } from './itens-comerciais.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
 import { usuarios } from './auth.schema';
+import { regrasTransformacao } from './regras-transformacao.schema';
 
 // ── transformacoes ─────────────────────────────────────────────────────────
 export const transformacoes = pgTable(
@@ -23,6 +24,7 @@ export const transformacoes = pgTable(
     diferencaPeso:          numeric('diferenca_peso', { precision: 10, scale: 3 }),
     justificativaDiferenca: text('justificativa_diferenca'),
     observacoes:            text('observacoes'),
+    regraTransformacaoId:   uuid('regra_transformacao_id').references(() => regrasTransformacao.id),
     createdAt:              timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt:              timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt:              timestamp('deleted_at', { withTimezone: true }),
@@ -42,6 +44,7 @@ export const transformacoes = pgTable(
     ),
     index('idx_transf_peca_origem').on(t.pecaOrigemId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_transf_status').on(t.statusTransformacao).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_transf_regra').on(t.regraTransformacaoId).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 

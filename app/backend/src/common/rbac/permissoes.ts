@@ -60,6 +60,7 @@ export const PERMISSOES = {
   // ── F4d — Desossa ─────────────────────────────────────────────────────────
   DESOSSA_LER: 'DESOSSA_LER',
   DESOSSA_GERENCIAR: 'DESOSSA_GERENCIAR',
+  DESOSSA_PAINEL_LER: 'DESOSSA_PAINEL_LER',
 
   // ── F4e — Estoque ─────────────────────────────────────────────────────────
   ESTOQUE_LER: 'ESTOQUE_LER',
@@ -375,6 +376,14 @@ pushPermissoes('expedicao',     'APROVACOES_SOLICITAR');
 pushPermissoes('administrador', 'ASSOCIACAO_ESTORNAR');
 pushPermissoes('gestor',        'ASSOCIACAO_ESTORNAR');
 
+// Onda 7 — painel aeroporto / Modo TV (D7.8).
+pushPermissoes('administrador', 'DESOSSA_PAINEL_LER');
+pushPermissoes('gestor', 'DESOSSA_PAINEL_LER');
+pushPermissoes('corte', 'DESOSSA_PAINEL_LER');
+// comercial e diretoria NÃO têm DESOSSA_LER hoje — conceder ambos:
+pushPermissoes('comercial', 'DESOSSA_LER', 'DESOSSA_PAINEL_LER');
+pushPermissoes('diretoria', 'DESOSSA_LER', 'DESOSSA_PAINEL_LER');
+
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   USUARIOS_GERENCIAR: 'Criar e editar usuários',
@@ -425,6 +434,7 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   CORTE_GERENCIAR: 'Iniciar, executar e concluir cortes/transformações de peças',
   DESOSSA_LER: 'Consultar dashboard de faltas e regras de transformação da desossa',
   DESOSSA_GERENCIAR: 'Gerenciar regras de transformação da desossa',
+  DESOSSA_PAINEL_LER: 'Consultar painel aeroporto/Modo TV da desossa (telão)',
   ESTOQUE_LER: 'Consultar peças e subitens em estoque',
   ESTOQUE_GERENCIAR: 'Gerenciar movimentações e ajustes de estoque',
   EXPEDICAO_GERENCIAR: 'Gerenciar expedição: carga, transferências, conferência e fechamento',

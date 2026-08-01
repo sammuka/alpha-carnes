@@ -9,6 +9,13 @@ import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators
 import { listarQuerySchema, type ListarQuery } from '../../../common/crud/paginacao';
 import { FaltasService } from './faltas.service';
 import { RegrasTransformacaoService } from './regras-transformacao.service';
+import { PainelDesossaService } from './painel.service';
+import {
+  EtiquetasDesossaService,
+  listarEtiquetasDesossaSchema,
+  type ListarEtiquetasDesossaDto,
+} from './etiquetas-desossa.service';
+import { painelQuerySchema, type PainelQuery } from './dto/painel.dto';
 import {
   createRegraTransformacaoSchema,
   updateRegraTransformacaoSchema,
@@ -29,7 +36,23 @@ export class DesossaController {
   constructor(
     private readonly regras: RegrasTransformacaoService,
     private readonly faltas: FaltasService,
+    private readonly painel: PainelDesossaService,
+    private readonly etiquetasDesossa: EtiquetasDesossaService,
   ) {}
+
+  @Get('painel')
+  @RequirePermissoes('DESOSSA_PAINEL_LER')
+  async painelEndpoint(@Query(new ZodValidationPipe(painelQuerySchema)) q: PainelQuery) {
+    return this.painel.obter(q);
+  }
+
+  @Get('etiquetas')
+  @RequirePermissoes('DESOSSA_LER')
+  listarEtiquetas(
+    @Query(new ZodValidationPipe(listarEtiquetasDesossaSchema)) q: ListarEtiquetasDesossaDto,
+  ) {
+    return this.etiquetasDesossa.listar(q);
+  }
 
   @Get('faltas')
   @RequirePermissoes('DESOSSA_LER')
