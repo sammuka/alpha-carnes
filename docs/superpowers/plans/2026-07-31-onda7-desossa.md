@@ -122,7 +122,9 @@ Fecha **todos** os bloqueantes do Gate local `npm run test:cov` após DoD 7.6/7.
 
 **Emenda 7.2 (Worker tip `d0c0df3` + WIP A–F — fecha gap literal Step G):** `corte-eventos.spec.ts` TS2554 (4º arg `ChecklistCorteService` — Emenda 7 Step D só cobriu `corte-branches` 21×) + documentar patch já aplicado 1× no WIP em `corte-branches` it `adicionar → quantidade definida no dto é usada` (`regraTransformacaoId` + saída `{ legado: 'ic1' }`). Ver seção **Emenda 7.2** e Task 16 Steps D2/D3/G.
 
-**Expected PASS após aplicar Emenda 7 + Emenda 7.1 + Emenda 7.2 sobre tip `d0c0df3` (WIP Steps A–F):** Steps A–F **e** patches Emenda 7.1 (B/C) **e** Emenda 7.2 (D2 `corte-eventos` + D3 quantidade) → `npm run test:cov` exit 0 é **factível** (zero FAIL; cobertura ≥80% linha e branch). **Proibido** tratar FAIL de `expedicao.e2e-spec.ts` / it sem etiqueta de `corte.e2e-spec.ts` / `corte-eventos.spec.ts` / it quantidade como “parar e reportar” — esses its têm patch literal nesta emenda.
+**Emenda 7.3 (Worker tip `d3f98f0` — fecha 1 FAIL Step G sem literal):** `expedicao.e2e-spec.ts` it `transferencia de subitem entre pedidos funciona` — `subitemElegivel`/`subitemCompleto` alinha só **p1** à saída CB; **p2** destino permanece `c.itemComercialId` (TZ mãe) → `POST .../transferir` 409. Patch literal alinha **p1 e p2** com `itemSaidaCanonicoCb` + `alinharPedidoItemComSaidaCorte` (padrão Emenda 7.1). Ver seção **Emenda 7.3** e Task 16 Step C2/G.
+
+**Expected PASS após aplicar Emenda 7 + Emenda 7.1 + Emenda 7.2 + Emenda 7.3 sobre tip `d3f98f0`:** Steps A–F **e** patches Emenda 7.1 (B/C) **e** Emenda 7.2 (D2/D3) **e** Emenda 7.3 (C2 transferência p1+p2) → `npm run test:cov` exit 0 é **factível** (zero FAIL; cobertura ≥80% linha e branch). **Proibido** tratar FAIL de `expedicao.e2e-spec.ts` (its sem etiqueta **e** transferência) / it sem etiqueta de `corte.e2e-spec.ts` / `corte-eventos.spec.ts` / it quantidade como “parar e reportar” — esses its têm patch literal nesta emenda.
 
 ```bash
 cd app/backend && npm run test:cov
@@ -179,6 +181,27 @@ cd app/backend && npm run test:cov
 ```
 
 **Proibido:** improvisar 4º arg sem o stub `makeChecklist` desta emenda; reescrever o it quantidade fora do old/new; rótulo Marca; TBD/TODO/"similar à Task".
+
+---
+
+## Emenda 7.3 — Worker tip `d3f98f0` bloqueado no Step G (transferência p2)
+
+Fecha **item a item** o bloqueio do Worker após Emenda 7 + 7.1 + 7.2 commitadas no tip `d3f98f0` (`feature/onda7-desossa`). Ancestral: Emenda 7 + Emenda 7.1 + Emenda 7.2 + PR #50 mergeado (`98d7964`). **Não** altera produção O7.
+
+| # | Achado Worker (tip `d3f98f0` + Step G) | Fechamento Emenda 7.3 |
+|---|---|---|
+| 1 | `expedicao.e2e-spec.ts` it `transferencia de subitem entre pedidos funciona` — Expected 201, Received 409 em `POST .../transferir` → `p2.pedidoItemId`. `subitemElegivel`/`subitemCompleto` alinha só **p1** à saída CB; **p2** fica com `c.itemComercialId` (TZ mãe). Emenda 7.1 disse demais its herdam Step A com zero patch — insuficiente para este it | Task 16 Step C2: old/new literal — `itemSaidaCanonicoCb` + `criarPedido` p1/p2 com `itemSaidaCbId` + `alinharPedidoItemComSaidaCorte` em **p1 e p2** (padrão Emenda 7.1); atualizar texto que proibia patch adicional |
+| 2 | Reafirmar Expected PASS factível: tip `d3f98f0` + Emenda 7.3 → `npm run test:cov` exit 0 | Cabeçalho Emenda 7 + Emenda 7.3 + Step G |
+
+**Expected PASS após Emenda 7 Steps A–F + Emenda 7.1 + Emenda 7.2 + Emenda 7.3 (C2) sobre tip `d3f98f0`:**
+
+```bash
+cd app/backend && npm run test:cov
+# Expected: exit 0 — zero FAIL (inclui expedicao it transferencia 201 + A–F + 7.1 + 7.2)
+# Expected: cobertura ≥80% linha e branch
+```
+
+**Proibido:** patch só em p1 (p2 é o destino do 409); improvisar fora do old/new; rótulo Marca; TBD/TODO/"similar à Task".
 
 ---
 
@@ -484,7 +507,7 @@ Onda aditiva. Emergência: `DROP TABLE divergencias_transformacao;` + drop das c
 | 7.23 | Cobertura ≥80% linha e branch nos services tocados | `npm run test:cov` |
 | 7.24 | Zero rótulo `Marca` nas telas da onda | grep |
 | 7.25 | Nenhum AD novo em `DECISOES.md` | diff vazio |
-| 7.26 | Gate local `test:cov` verde com DoD 7.6/7.7/7.9: helpers O7-aware + suítes legadas (incl. patches Emenda 7.1 em `expedicao`/`corte` its manuais) + `corte-branches` DI + Emenda 7.2 `corte-eventos` DI + it quantidade (regra+saída) + meta O6 idx≤22 + probe O4 sem `divergencias-transformacao` | Task 16 (`npm run test:cov`) |
+| 7.26 | Gate local `test:cov` verde com DoD 7.6/7.7/7.9: helpers O7-aware + suítes legadas (incl. patches Emenda 7.1 em `expedicao`/`corte` its manuais + Emenda 7.3 transferência p1+p2) + `corte-branches` DI + Emenda 7.2 `corte-eventos` DI + it quantidade (regra+saída) + meta O6 idx≤22 + probe O4 sem `divergencias-transformacao` | Task 16 (`npm run test:cov`) |
 
 ---
 
@@ -4033,7 +4056,7 @@ rg -n "\bMarca\b" "app/frontend/src/app/(admin)/desossa" && echo FAIL || echo OK
 - Modify: `app/backend/test/integration/subitens.e2e-spec.ts`
 - Modify: `app/backend/test/integration/reetiqueta-subitem.e2e-spec.ts`
 - Modify: `app/backend/test/integration/corte-concorrencia.e2e-spec.ts`
-- Modify: `app/backend/test/integration/expedicao.e2e-spec.ts` (**Emenda 7.1** — it `subitem sem etiqueta nao e elegivel`; padrão reetiqueta)
+- Modify: `app/backend/test/integration/expedicao.e2e-spec.ts` (**Emenda 7.1** — it `subitem sem etiqueta nao e elegivel`; **Emenda 7.3** — it `transferencia de subitem entre pedidos funciona`; padrão reetiqueta / alinhar p1+p2)
 - **Não** modificar (herdam Step A / `subitemCompleto`): `faturamento.e2e-spec.ts`, `rastreabilidade-corte.e2e-spec.ts`, `conferencia.e2e-spec.ts` — se Step G falhar **nesses três** após A–F + Emenda 7.1, **parar e reportar** (não improvisar patch). `expedicao.e2e-spec.ts` **não** está nesta lista.
 - Modify: `app/backend/test/unit/corte-branches.spec.ts` (**Emenda 7** Step D DI 21×; **Emenda 7.2** Step D3 it quantidade)
 - Modify: `app/backend/test/unit/corte-eventos.spec.ts` (**Emenda 7.2** Step D2 — `makeChecklist` + 4º arg)
@@ -4931,11 +4954,115 @@ It `subitem sem etiqueta nao e elegivel` (~L609–643 tip `6e8cad0`) — padrão
   });
 ```
 
-Demais its de `expedicao.e2e-spec.ts` que usam `subitemCompleto` / `subitemElegivel` herdam Step A — **zero** patch adicional.
+Demais its de `expedicao.e2e-spec.ts` que usam `subitemCompleto` / `subitemElegivel` **com um único pedido** herdam Step A — **zero** patch adicional **exceto** o it `transferencia de subitem entre pedidos funciona` (dois pedidos; destino p2 não herda alinhamento de p1) — ver **Step C2 (Emenda 7.3)** abaixo.
+
+- [x] **Step C2 (Emenda 7.3): `expedicao.e2e-spec.ts` — it `transferencia de subitem entre pedidos funciona`**
+
+Spot-check tip `d3f98f0`: old_string abaixo casa **1×**. Imports `itemSaidaCanonicoCb` / `alinharPedidoItemComSaidaCorte` já presentes (Emenda 7.1). Alinha **p1 e p2** à saída CB antes do fluxo — `POST .../transferir` 201 prova redistribuição (não incompatibilidade de item no destino).
+
+```ts
+# old_string
+  it('transferencia de subitem entre pedidos funciona', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-12-23');
+    const p1 = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      dataOperacao: c.dataOperacao, quantidade: 5,
+    });
+    const p2 = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
+      dataOperacao: c.dataOperacao, quantidade: 5,
+    });
+    const pecaId = await pesarPeca(app, recebimentoCookies, {
+      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+    });
+    await request(srv())
+      .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
+      .set('Cookie', recebimentoCookies)
+      .send({ pedidoVendaItemId: p1.pedidoItemId });
+
+    const subId = await subitemElegivel(c, pecaId, p1.pedidoItemId);
+
+    const caminhaoId = await criarCaminhao(app, expedicaoCookies, { dataOperacao: c.dataOperacao });
+    await vincularPedido(app, expedicaoCookies, caminhaoId, p1.pedidoId);
+    await vincularPedido(app, expedicaoCookies, caminhaoId, p2.pedidoId);
+    await abrirCarga(app, expedicaoCookies, caminhaoId);
+    const cargaItemId = await adicionarSubitemNaCarga(app, expedicaoCookies, caminhaoId, subId);
+
+    const res = await request(srv())
+      .post(`/operacao/expedicao/itens/${cargaItemId}/transferir`)
+      .set('Cookie', expedicaoCookies)
+      .send({ pedidoVendaItemDestinoId: p2.pedidoItemId, motivo: 'Redistribuicao' });
+    expect(res.status).toBe(201);
+    expect(res.body.pedidoVendaItemId).toBe(p2.pedidoItemId);
+  });
+# new_string
+  it('transferencia de subitem entre pedidos funciona', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-12-23');
+    // Emenda 7.3: p1 e p2 na saída CB — transfer 201 prova redistribuição (não incompatibilidade de item)
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const p1 = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId,
+      dataOperacao: c.dataOperacao, quantidade: 5,
+    });
+    const p2 = await criarPedido(app, comercialCookies, {
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: itemSaidaCbId,
+      dataOperacao: c.dataOperacao, quantidade: 5,
+    });
+    await alinharPedidoItemComSaidaCorte(app, p1.pedidoItemId, itemSaidaCbId);
+    await alinharPedidoItemComSaidaCorte(app, p2.pedidoItemId, itemSaidaCbId);
+    const pecaId = await pesarPeca(app, recebimentoCookies, {
+      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+    });
+    await request(srv())
+      .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
+      .set('Cookie', recebimentoCookies)
+      .send({ pedidoVendaItemId: p1.pedidoItemId });
+
+    const subId = await subitemElegivel(c, pecaId, p1.pedidoItemId);
+
+    const caminhaoId = await criarCaminhao(app, expedicaoCookies, { dataOperacao: c.dataOperacao });
+    await vincularPedido(app, expedicaoCookies, caminhaoId, p1.pedidoId);
+    await vincularPedido(app, expedicaoCookies, caminhaoId, p2.pedidoId);
+    await abrirCarga(app, expedicaoCookies, caminhaoId);
+    const cargaItemId = await adicionarSubitemNaCarga(app, expedicaoCookies, caminhaoId, subId);
+
+    const res = await request(srv())
+      .post(`/operacao/expedicao/itens/${cargaItemId}/transferir`)
+      .set('Cookie', expedicaoCookies)
+      .send({ pedidoVendaItemDestinoId: p2.pedidoItemId, motivo: 'Redistribuicao' });
+    expect(res.status).toBe(201);
+    expect(res.body.pedidoVendaItemId).toBe(p2.pedidoItemId);
+  });
+```
+
+```bash
+cd app/backend && npx jest test/integration/expedicao.e2e-spec.ts -t "transferencia de subitem entre pedidos funciona" -v --testTimeout=120000
+# Expected: PASS (status 201)
+```
+
+Commit do patch (tip base `d3f98f0` já tem A–F + 7.1 + 7.2; este commit é só C2):
+
+```bash
+git add app/backend/test/integration/expedicao.e2e-spec.ts
+git commit -m "$(cat <<'EOF'
+test(onda7): alinha p1+p2 CB na transferência de subitem
+
+### Descrição Detalhada:
+It de transferência em expedicao cria e alinha p1 e p2 à saída
+canônica CB antes do POST transferir (Emenda 7.3 Step C2).
+
+### Motivo da Mudança:
+subitemCompleto alinhava só p1; p2 destino com item da mãe → 409.
+
+EOF
+)"
+```
 
 #### `conferencia.e2e-spec.ts` / `faturamento.e2e-spec.ts` / `rastreabilidade-corte.e2e-spec.ts`
 
-Herdam `subitemCompleto` (Step A) — **zero** patch nestes arquivos nesta emenda. Qualquer FAIL em Step G **nesses três** → parar e reportar. `expedicao.e2e-spec.ts` **não** entra aqui (patch Emenda 7.1 acima).
+Herdam `subitemCompleto` (Step A) — **zero** patch nestes arquivos nesta emenda. Qualquer FAIL em Step G **nesses três** → parar e reportar. `expedicao.e2e-spec.ts` **não** entra aqui (patches Emenda 7.1 + Emenda 7.3 acima).
 
 - [ ] **Step D: `corte-branches.spec.ts` — injetar `ChecklistCorteService`**
 
@@ -5268,9 +5395,9 @@ cd app/backend && npx jest test/integration/onda4-migrations.e2e-spec.ts -v --te
 # Expected: PASS
 ```
 
-- [ ] **Step G: Gate `test:cov` (Expected PASS Emenda 7 + Emenda 7.1 + Emenda 7.2 — factível)**
+- [ ] **Step G: Gate `test:cov` (Expected PASS Emenda 7 + Emenda 7.1 + Emenda 7.2 + Emenda 7.3 — factível)**
 
-Após Steps A–F (WIP tip `d0c0df3`) **e** patches Emenda 7.1 (B/C) **e** Emenda 7.2 (D2 `corte-eventos` + D3 quantidade), o Gate é **factível** — `exit 0` sem FAIL. **Proibido** fechar com “parar e reportar se expedicao/corte-eventos falhar”.
+Após tip `d3f98f0` (A–F + 7.1 + 7.2 commitados) **e** patch Emenda 7.3 Step C2 (transferência p1+p2), o Gate é **factível** — `exit 0` sem FAIL. **Proibido** fechar com “parar e reportar se expedicao/corte-eventos/transferencia falhar”.
 
 ```bash
 cd app/backend && npm run test:cov
@@ -5278,13 +5405,14 @@ cd app/backend && npm run test:cov
 # Expected: suítes legadas corte/subitens/reetiqueta/concorrencia/expedicao/faturamento/conferencia/rastreabilidade PASS
 # Expected: corte it 'concluir com subitem sem etiqueta' PASS (409 de etiqueta, não incompatibilidade)
 # Expected: expedicao it 'subitem sem etiqueta nao e elegivel' PASS (409 de carga, não incompatibilidade)
+# Expected: expedicao it 'transferencia de subitem entre pedidos funciona' PASS (201; p1 e p2 alinhados CB)
 # Expected: corte-eventos PASS (zero TS2554; 4º arg ChecklistCorteService)
 # Expected: corte-branches PASS (incl. it quantidade com regra+saída); onda6-migrations-meta PASS; onda4-migrations PASS
 # Expected: onda7-desossa.spec.ts continua PASS
 # Expected: coverage ≥80% linha e branch
 ```
 
-Se FAIL restar **após** A–F + Emenda 7.1 + Emenda 7.2 em arquivo **fora** dos patches literais (ex.: `faturamento`/`conferencia`/`rastreabilidade-corte`): **parar e reportar** (não improvisar). Anexar nome do spec + mensagem.
+Se FAIL restar **após** A–F + Emenda 7.1 + Emenda 7.2 + Emenda 7.3 em arquivo **fora** dos patches literais (ex.: `faturamento`/`conferencia`/`rastreabilidade-corte`): **parar e reportar** (não improvisar). Anexar nome do spec + mensagem.
 
 - [ ] **Step H (após G verde; não bloqueia G): evidências Playwright lado a lado**
 
@@ -5345,12 +5473,12 @@ EOF
 
 > Task do **Executor/Worker na implementação**, não deste PR de plano.
 
-> **Pré-requisito Emenda 7 + 7.1 + 7.2:** Task 16 Step G (`npm run test:cov`) **PASS** no tip de `feature/onda7-desossa` (base `d0c0df3` + WIP A–F + patches Emenda 7.1 + Emenda 7.2 D2/D3). Sem isso, **não** abrir PR de implementação.
+> **Pré-requisito Emenda 7 + 7.1 + 7.2 + 7.3:** Task 16 Step G (`npm run test:cov`) **PASS** no tip de `feature/onda7-desossa` (base `d3f98f0` + patch Emenda 7.3 Step C2). Sem isso, **não** abrir PR de implementação.
 
 ```bash
 npm ci
 cd app/backend && npm run lint && npm run test:cov && npm run build
-# Expected PASS Emenda 7 + 7.1 + 7.2: exit 0 — 0 FAIL (suítes legadas + corte-eventos + meta O6/O4 + onda7-desossa)
+# Expected PASS Emenda 7 + 7.1 + 7.2 + 7.3: exit 0 — 0 FAIL (suítes legadas + transferencia + corte-eventos + meta O6/O4 + onda7-desossa)
 cd app/frontend && npm run lint && npm run test && npm run build
 # Step H (evidências) se ainda sem PNGs em docs/evidencias/onda7-desossa/
 gh pr create --base develop --title "feat(onda7): Desossa e Transformação" --body "..."
@@ -5407,6 +5535,7 @@ Paralelismo seguro após deps de API: T11 ∥ T12 ∥ T13. **T16 (Emenda 7) é o
 10. **Emenda 7 vs Gate local tip `34524a4`:** (1) `corte-fixtures` O7-aware (bind TZ_A + saída CB/JAC + alinhar pedido + `concluirCorteOnda7`); (2) patches literais corte/subitens/reetiqueta/concorrência; (3) `makeChecklist` no `corte-branches`; (4) meta O6 `idx<=22`; (5) probe O4 remove `0023`+`divergencias-transformacao` e restaura schemas pré-O7; (6) Expected PASS `npm run test:cov`; zero TBD/TODO/similar à Task.
 11. **Emenda 7.1 vs veredito `afe9dc4`:** (1) `expedicao.e2e-spec.ts` it `subitem sem etiqueta nao e elegivel` — patch literal padrão reetiqueta (`itemSaidaCanonicoCb`+`alinhar` antes do `associar`); arquivo fora da lista de intocáveis; (2) `corte.e2e-spec.ts` it `concluir com subitem sem etiqueta` — mesma alinhagem + `concluir` cru + `expect(409)`; (3) cabeçalho Emenda 7 + Step G reafirmam Expected PASS factível após A–F **e** (1)(2) — zero escape “reportar se expedicao falhar”.
 12. **Emenda 7.2 vs Worker tip `d0c0df3`:** (1) `corte-eventos.spec.ts` — `makeChecklist` + 4º arg na construção de `montar` (TS2554; Step D só cobria `corte-branches`); (2) `corte-branches` it `adicionar → quantidade definida no dto é usada` — literal do patch WIP (`regraTransformacaoId: 'regra-1'` + `selectCall === 2` → `{ legado: 'ic1' }`); (3) Expected PASS factível A–F WIP + Emenda 7.2 → `npm run test:cov` exit 0; zero TBD/TODO/similar à Task/Marca.
+13. **Emenda 7.3 vs Worker tip `d3f98f0`:** (1) `expedicao.e2e-spec.ts` it `transferencia de subitem entre pedidos funciona` — patch literal `itemSaidaCanonicoCb` + `alinharPedidoItemComSaidaCorte` em **p1 e p2** (padrão Emenda 7.1; old_string casa 1× no tip); (2) texto “zero patch adicional” nos demais its de `expedicao` atualizado — este it agora tem literal (Step C2); (3) Expected PASS factível tip `d3f98f0` + Emenda 7.3 → `npm run test:cov` exit 0; zero TBD/TODO/similar à Task/Marca.
 
 ---
 
