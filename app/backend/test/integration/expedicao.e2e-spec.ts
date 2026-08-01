@@ -793,14 +793,18 @@ describe('Expedicao e2e (F5)', () => {
   it('transferencia de subitem entre pedidos funciona', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-23');
+    // Emenda 7.3: p1 e p2 na saída CB — transfer 201 prova redistribuição (não incompatibilidade de item)
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
     const p1 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const p2 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: itemSaidaCbId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
+    await alinharPedidoItemComSaidaCorte(app, p1.pedidoItemId, itemSaidaCbId);
+    await alinharPedidoItemComSaidaCorte(app, p2.pedidoItemId, itemSaidaCbId);
     const pecaId = await pesarPeca(app, recebimentoCookies, {
       recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
     });
