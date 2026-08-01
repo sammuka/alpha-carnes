@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, Printer } from 'lucide-react';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
 import {
@@ -104,51 +104,67 @@ function ModalEtiquetaParte({
     tzOrigem: string;
     lote: string | null;
     nfe: string | null;
+    fornecedor: string | null;
   } | null;
 }) {
   if (!data) return null;
+  const tipoEtq = data.destino === 'pedido' ? 'Parte para Pedido' : 'Parte para Estoque';
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        if (!v) onClose();
-      }}
-    >
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="max-w-sm gap-0 bg-card p-0">
-        <DialogHeader className="flex flex-row items-center justify-between border-b border-border px-5 py-4">
-          <DialogTitle className="text-[15px] font-bold">Etiqueta da parte</DialogTitle>
-          <button type="button" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </button>
+        <DialogHeader className="border-b border-border px-5 py-4">
+          <DialogTitle className="text-[15px] font-bold">Etiqueta gerada</DialogTitle>
         </DialogHeader>
-        <div className="space-y-2 p-5 text-[12px]">
-          <p>
-            <span className="text-muted-foreground">Código:</span> {data.etiqueta}
-          </p>
-          <p>
-            <span className="text-muted-foreground">Produto:</span> {data.produto}
-          </p>
-          <p>
-            <span className="text-muted-foreground">Peso:</span> {data.peso}
-          </p>
-          <p>
-            <span className="text-muted-foreground">Origem peso:</span> {data.origemPeso}
-          </p>
-          <p>
-            <span className="text-muted-foreground">Destino:</span> {data.destino}
-          </p>
-          <p>
-            <span className="text-muted-foreground">Cliente / Pedido:</span> {data.pedido ?? '—'}
-          </p>
-          <p>
-            <span className="text-muted-foreground">Peça mãe (TZ):</span> {data.tzOrigem}
-          </p>
-          <p>
-            <span className="text-muted-foreground">Lote:</span> {data.lote ?? '—'}
-          </p>
-          <p>
-            <span className="text-muted-foreground">NF:</span> {data.nfe ?? '—'}
-          </p>
+        <div className="p-5">
+          <div className="rounded-xl border-2 border-violet-600 bg-violet-surface p-4 font-mono">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{tipoEtq}</p>
+            <p className="text-[18px] font-black text-violet-900">{data.produto}</p>
+            <p className="text-[11px] text-violet-700">Origem: desossa</p>
+            <div className="mt-3 grid grid-cols-2 gap-y-1.5 border-t border-dashed border-violet-200 pt-3 text-[11px]">
+              <div>
+                <span className="text-muted-foreground">Peso: </span>
+                <span className="font-bold">{data.peso} kg</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Origem peso: </span>
+                <span>{data.origemPeso}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Destino: </span>
+                <span className="font-bold">{data.destino}</span>
+              </div>
+              {data.pedido ? (
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Pedido: </span>
+                  <span className="font-bold">{data.pedido}</span>
+                </div>
+              ) : null}
+              <div className="col-span-2">
+                <span className="text-muted-foreground">Peça mãe (TZ): </span>
+                <span className="font-bold text-violet-800">{data.tzOrigem}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Lote: </span>
+                <span>{data.lote ?? '—'}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">NF-e: </span>
+                <span>{data.nfe ?? '—'}</span>
+              </div>
+              <div className="col-span-2">
+                <span className="text-muted-foreground">Frigorífico: </span>
+                <span>{data.fornecedor ?? '—'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 px-5 pb-5">
+          <button type="button" className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border border-border text-[13px]">
+            <Printer className="h-3.5 w-3.5" /> Reimprimir
+          </button>
+          <button type="button" onClick={onClose} className="h-8 flex-1 rounded-md bg-violet-800 text-[13px] font-semibold text-white">
+            Fechar
+          </button>
         </div>
       </DialogContent>
     </Dialog>
@@ -158,43 +174,111 @@ function ModalEtiquetaParte({
 function ModalCancelarAcao({
   open,
   onClose,
+  acao,
   onConfirm,
-  titulo,
 }: {
   open: boolean;
   onClose: () => void;
-  onConfirm: () => void;
-  titulo: string;
+  acao: {
+    produto: string;
+    peso: string;
+    destino: string;
+    hora: string;
+    etiqueta: string;
+    tzOrigem: string;
+  } | null;
+  onConfirm: (motivo: string, obs: string) => void;
 }) {
+  const [motivo, setMotivo] = useState('');
+  const [obs, setObs] = useState('');
+  if (!acao) return null;
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        if (!v) onClose();
-      }}
-    >
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{titulo}</DialogTitle>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-md gap-0 bg-card p-0">
+        <DialogHeader className="border-b border-border px-5 py-4">
+          <DialogTitle className="text-[15px] font-bold">Cancelar registro de parte</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          Confirma o cancelamento desta ação? Registros já gravados não são apagados
-          automaticamente.
-        </p>
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" type="button" onClick={onClose}>
+        <div className="flex flex-col gap-4 p-5">
+          <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-muted/40 p-3 text-[12px]">
+            <div>
+              <span className="text-muted-foreground">Produto: </span>
+              <span className="font-semibold">{acao.produto}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Peso: </span>
+              <span className="font-semibold">{acao.peso}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Destino: </span>
+              <span className="font-semibold">{acao.destino}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Hora: </span>
+              <span className="font-semibold">{acao.hora}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Etiqueta: </span>
+              <span className="font-semibold">{acao.etiqueta}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Peça mãe: </span>
+              <span className="font-semibold text-violet-800">{acao.tzOrigem}</span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] font-semibold">
+              Motivo do cancelamento <span className="text-destructive">*</span>
+            </label>
+            <select
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              className="h-8 w-full rounded-md border border-border px-2.5 text-[13px]"
+            >
+              <option value="">Selecione o motivo</option>
+              {[
+                'Peso informado incorretamente',
+                'Produto registrado incorretamente',
+                'Pedido selecionado incorretamente',
+                'Destino selecionado incorretamente',
+                'Etiqueta impressa incorretamente',
+                'Outro',
+              ].map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] font-semibold">Observação</label>
+            <textarea
+              value={obs}
+              onChange={(e) => setObs(e.target.value)}
+              rows={2}
+              className="w-full resize-none rounded-md border border-border px-2.5 py-2 text-[13px]"
+            />
+          </div>
+          <div className="flex items-start gap-2 rounded-lg border border-danger-border bg-danger-surface p-3">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
+            <p className="text-[12px] text-danger-rose leading-snug">
+              O cancelamento estorna a associação/destino da parte, invalida a etiqueta anterior e
+              devolve a saída ao checklist da transformação.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2 px-5 pb-5">
+          <button type="button" onClick={onClose} className="h-8 flex-1 rounded-md border border-border text-[13px]">
             Voltar
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            variant="destructive"
+            disabled={!motivo}
             onClick={() => {
-              onConfirm();
+              onConfirm(motivo, obs);
               onClose();
             }}
+            className="h-8 flex-1 rounded-md bg-destructive text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Confirmar cancelamento
-          </Button>
+            Confirmar Cancelamento
+          </button>
         </div>
       </DialogContent>
     </Dialog>
@@ -212,6 +296,14 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
   const [modalTz, setModalTz] = useState(false);
   const [modalFinalizar, setModalFinalizar] = useState(false);
   const [modalCancelar, setModalCancelar] = useState(false);
+  const [acaoCancelando, setAcaoCancelando] = useState<{
+    produto: string;
+    peso: string;
+    destino: string;
+    hora: string;
+    etiqueta: string;
+    tzOrigem: string;
+  } | null>(null);
   const [tipoDiv, setTipoDiv] = useState('subpeca_faltante');
   const [obsDiv, setObsDiv] = useState('Divergência registrada na desossa');
   const [etiquetaPreview, setEtiquetaPreview] = useState<{
@@ -224,6 +316,7 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
     tzOrigem: string;
     lote: string | null;
     nfe: string | null;
+    fornecedor: string | null;
   } | null>(null);
 
   const regraBloqueada =
@@ -379,7 +472,26 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={() => setModalCancelar(true)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const slot = checklist.slots.find((s) => s.registrado > 0) ?? checklist.slots[0];
+                  if (!slot) return;
+                  setAcaoCancelando({
+                    produto: slot.produtoNome,
+                    peso: '—',
+                    destino: 'pedido',
+                    hora: new Date().toLocaleTimeString('pt-BR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }),
+                    etiqueta: `${slot.produtoCodigo}-PEND`,
+                    tzOrigem: tz?.etiquetaAtual ?? '—',
+                  });
+                  setModalCancelar(true);
+                }}
+              >
                 Cancelar ação
               </Button>
               <Button type="button" onClick={() => setModalFinalizar(true)}>
@@ -404,6 +516,7 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
                     tzOrigem: tz?.etiquetaAtual ?? '—',
                     lote: tz?.lote ?? null,
                     nfe: null,
+                    fornecedor: tz?.origem ?? null,
                   })
                 }
                 className="rounded-lg border border-border px-3 py-2 text-left hover:bg-muted/30 disabled:opacity-50"
@@ -431,9 +544,12 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
       />
       <ModalCancelarAcao
         open={modalCancelar}
-        onClose={() => setModalCancelar(false)}
+        onClose={() => {
+          setModalCancelar(false);
+          setAcaoCancelando(null);
+        }}
+        acao={acaoCancelando}
         onConfirm={() => setErro(null)}
-        titulo="Cancelar ação da desossa"
       />
 
       {modalFinalizar && transformacaoId ? (

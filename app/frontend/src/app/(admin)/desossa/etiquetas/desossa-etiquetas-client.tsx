@@ -1,8 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye } from 'lucide-react';
+import {
+  AlertTriangle,
+  Ban,
+  Eye,
+  Info,
+  Printer,
+  RefreshCcw,
+  X,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { EtiquetaDesossaListada } from '@/lib/desossa';
 
@@ -12,6 +26,23 @@ export type PaginadoEtiquetasDesossa = {
   page: number;
   pageSize: number;
 };
+
+const MOTIVOS_CANCEL = [
+  { value: 'peso_incorreto', label: 'Peso informado incorretamente' },
+  { value: 'pedido_incorreto', label: 'Pedido selecionado incorretamente' },
+  { value: 'destino_incorreto', label: 'Destino selecionado incorretamente' },
+  { value: 'etiqueta_incorreta', label: 'Etiqueta impressa incorretamente' },
+  { value: 'peca_incorreta', label: 'Parte identificada incorretamente' },
+  { value: 'outro', label: 'Outro' },
+] as const;
+
+const MOTIVOS_REIMPRESSAO = [
+  'Etiqueta rasgada',
+  'Etiqueta molhada/danificada',
+  'Falha de impressão',
+  'Perda da etiqueta',
+  'Outro',
+] as const;
 
 /** Wire → rótulo protótipo DesossaEtiquetas.tsx:11 / :623 */
 function rotuloStatusEtiqueta(e: EtiquetaDesossaListada): string {
@@ -32,8 +63,413 @@ function StatusBadge({ etq }: { etq: EtiquetaDesossaListada }) {
 }
 
 function OrigemPesoBadge({ origem }: { origem: string | null }) {
-  const label = origem === 'balanca' ? 'Balança' : origem === 'manual' ? 'Manual' : (origem ?? '—');
+  const label =
+    origem === 'balanca' ? 'Balança' : origem === 'manual' ? 'Manual' : (origem ?? '—');
   return <Badge variant="outline">{label}</Badge>;
+}
+
+function cancelavel(etq: EtiquetaDesossaListada): boolean {
+  const r = rotuloStatusEtiqueta(etq);
+  return r === 'Ativa' || r === 'Reimpressa' || r === 'Pendente de impressão';
+}
+
+function reimprimivel(etq: EtiquetaDesossaListada): boolean {
+  const r = rotuloStatusEtiqueta(etq);
+  return r !== 'Cancelada' && r !== 'Invalidada por troca';
+}
+
+function ModalReimprimir({
+  open,
+  onClose,
+  etq,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  etq: EtiquetaDesossaListada | null;
+  onConfirm: (motivo: string, obs: string) => void;
+}) {
+  const [motivo, setMotivo] = useState('');
+  const [obs, setObs] = useState('');
+  if (!etq) return null;
+  const isPendente = rotuloStatusEtiqueta(etq) === 'Pendente de impressão';
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+    >
+      <DialogContent className="max-w-md gap-0 bg-card p-0">
+        <DialogHeader className="border-b border-border px-5 py-4">
+          <DialogTitle className="text-[15px] font-bold">
+            {isPendente ? 'Imprimir etiqueta pendente' : 'Reimprimir etiqueta'}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4 p-5">
+          <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-muted/40 p-3 text-[12px]">
+            <div>
+              <span className="text-muted-foreground">Código: </span>
+              <span className="font-bold">{etq.codigo ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Produto: </span>
+              <span className="font-semibold">{etq.produtoNome}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Peso: </span>
+              <span className="font-semibold">{etq.peso ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Destino: </span>
+              <span className="font-semibold">
+                {etq.destino === 'pedido' ? 'Pedido' : 'Estoque'}
+              </span>
+            </div>
+            <div className="col-span-2">
+              <span className="text-muted-foreground">Peça mãe (TZ): </span>
+              <span className="font-semibold text-violet-800">{etq.pecaMaeCodigo ?? '—'}</span>
+            </div>
+            {etq.clientePedido ? (
+              <div className="col-span-2">
+                <span className="text-muted-foreground">Pedido: </span>
+                <span className="font-semibold">{etq.clientePedido}</span>
+              </div>
+            ) : null}
+            <div className="col-span-2">
+              <span className="text-muted-foreground">Impressora: </span>
+              <span>Balança Desossa — Zebra ZD421</span>
+            </div>
+          </div>
+
+          {!isPendente ? (
+            <div className="flex flex-col gap-1">
+              <label className="text-[12px] font-semibold">
+                Motivo da reimpressão <span className="text-destructive">*</span>
+              </label>
+              <select
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                className="h-8 w-full rounded-md border border-border px-2.5 text-[13px]"
+              >
+                <option value="">Selecionar...</option>
+                {MOTIVOS_REIMPRESSAO.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] font-semibold">
+              Observação <span className="text-[11px] font-normal text-muted-foreground">(opcional)</span>
+            </label>
+            <textarea
+              value={obs}
+              onChange={(e) => setObs(e.target.value)}
+              rows={2}
+              className="w-full resize-none rounded-md border border-border px-2.5 py-2 text-[13px]"
+            />
+          </div>
+
+          <div className="flex items-start gap-2 rounded-lg border border-violet-200 bg-violet-surface p-3">
+            <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-violet-700" />
+            <p className="text-[12px] text-violet-900">
+              A reimpressão não altera pedido, estoque, peso, destino ou disponibilidade.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2 px-5 pb-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 flex-1 rounded-md border border-border text-[13px]"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={!isPendente && !motivo}
+            onClick={() => {
+              onConfirm(motivo, obs);
+              onClose();
+            }}
+            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-violet-800 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Printer className="h-3.5 w-3.5" /> {isPendente ? 'Imprimir' : 'Reimprimir'}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ModalCancelar({
+  open,
+  onClose,
+  etq,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  etq: EtiquetaDesossaListada | null;
+  onConfirm: (motivo: string, obs: string) => void;
+}) {
+  const [motivo, setMotivo] = useState('');
+  const [obs, setObs] = useState('');
+  if (!etq) return null;
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+    >
+      <DialogContent className="max-w-md gap-0 bg-card p-0">
+        <DialogHeader className="border-b border-border px-5 py-4">
+          <DialogTitle className="text-[15px] font-bold">
+            Cancelar etiqueta e estornar ação
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4 p-5">
+          <div className="flex items-start gap-2 rounded-lg border border-danger-border bg-danger-surface p-3">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
+            <p className="text-[12px] text-danger-rose leading-snug">
+              Cancelar esta etiqueta irá invalidá-la e estornar a ação operacional vinculada. O
+              pedido, estoque ou destino da parte será recalculado e a saída retorna ao checklist da
+              transformação.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-muted/40 p-3 text-[12px]">
+            <div>
+              <span className="text-muted-foreground">Código: </span>
+              <span className="font-bold">{etq.codigo ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Parte: </span>
+              <span className="font-semibold">{etq.parteCodigo ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Produto: </span>
+              <span className="font-semibold">{etq.produtoNome}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Peso: </span>
+              <span className="font-semibold">{etq.peso ?? '—'}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Destino: </span>
+              <span className="font-semibold">
+                {etq.destino === 'pedido' ? 'Pedido' : 'Estoque'}
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Peça mãe (TZ): </span>
+              <span className="font-semibold text-violet-800">{etq.pecaMaeCodigo ?? '—'}</span>
+            </div>
+            {etq.clientePedido ? (
+              <div className="col-span-2">
+                <span className="text-muted-foreground">Pedido: </span>
+                <span className="font-semibold">{etq.clientePedido}</span>
+              </div>
+            ) : null}
+            <div>
+              <span className="text-muted-foreground">Emissão: </span>
+              <span>{new Date(etq.createdAt).toLocaleString('pt-BR')}</span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] font-semibold">
+              Motivo do cancelamento <span className="text-destructive">*</span>
+            </label>
+            <select
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              className="h-8 w-full rounded-md border border-border px-2.5 text-[13px]"
+            >
+              <option value="">Selecionar...</option>
+              {MOTIVOS_CANCEL.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[12px] font-semibold">Observação</label>
+            <textarea
+              value={obs}
+              onChange={(e) => setObs(e.target.value)}
+              rows={2}
+              className="w-full resize-none rounded-md border border-border px-2.5 py-2 text-[13px]"
+            />
+          </div>
+        </div>
+        <div className="flex gap-2 px-5 pb-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 flex-1 rounded-md border border-border text-[13px]"
+          >
+            Voltar
+          </button>
+          <button
+            type="button"
+            disabled={!motivo || (motivo === 'outro' && !obs.trim())}
+            onClick={() => {
+              onConfirm(motivo, obs);
+              onClose();
+            }}
+            className="h-8 flex-1 rounded-md bg-destructive text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Confirmar cancelamento
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DrawerDetalhe({
+  open,
+  onClose,
+  etq,
+  onReimprimir,
+  onCancelar,
+}: {
+  open: boolean;
+  onClose: () => void;
+  etq: EtiquetaDesossaListada | null;
+  onReimprimir: () => void;
+  onCancelar: () => void;
+}) {
+  if (!etq) return null;
+  const status = rotuloStatusEtiqueta(etq);
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+    >
+      <SheetContent side="right" className="flex w-[560px] max-w-full flex-col border-l border-border bg-card p-0">
+        <SheetHeader className="flex flex-shrink-0 flex-row items-center justify-between border-b border-border px-6 py-4">
+          <SheetTitle className="text-[15px] font-bold">Etiqueta {etq.codigo}</SheetTitle>
+          <div className="flex items-center gap-2">
+            <StatusBadge etq={etq} />
+            <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </SheetHeader>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="flex flex-col gap-6 p-6">
+            {status === 'Cancelada' ? (
+              <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3">
+                <Ban className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                <p className="text-[12px] text-muted-foreground">
+                  Esta etiqueta foi cancelada e não deve ser usada na operação.
+                </p>
+              </div>
+            ) : null}
+            {status === 'Invalidada por troca' ? (
+              <div className="flex items-start gap-2 rounded-lg border border-danger-border bg-danger-surface p-3">
+                <RefreshCcw className="mt-0.5 h-4 w-4 text-destructive" />
+                <p className="text-[12px] text-danger-rose">
+                  Esta etiqueta foi invalidada em razão de uma troca de peça (v1.1 §10.4). Uma nova
+                  etiqueta foi emitida para a peça correta — consulte o histórico.
+                </p>
+              </div>
+            ) : null}
+            {status === 'Bloqueada' ? (
+              <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3">
+                <Ban className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                <p className="text-[12px]">
+                  <strong>Cancelamento bloqueado: </strong>
+                  etiqueta vinculada a carga fechada ou estado que impede estorno.
+                </p>
+              </div>
+            ) : null}
+
+            <div>
+              <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                Rastreabilidade
+              </p>
+              <div className="grid grid-cols-2 gap-y-2 rounded-lg border border-violet-200 bg-violet-surface p-4 text-[12px]">
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Peça mãe (TZ): </span>
+                  <span className="font-mono font-bold text-violet-800">{etq.pecaMaeCodigo ?? '—'}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Parte: </span>
+                  <span className="font-mono">{etq.parteCodigo ?? '—'}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Origem peso: </span>
+                  <span>
+                    {etq.origemPeso === 'balanca'
+                      ? 'Balança'
+                      : etq.origemPeso === 'manual'
+                        ? 'Manual'
+                        : (etq.origemPeso ?? '—')}
+                  </span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Cliente / Pedido: </span>
+                  <span className="font-bold">{etq.clientePedido ?? '—'}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Transformação: </span>
+                  <span className="font-mono">{etq.transformacaoId}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-shrink-0 items-center gap-2 border-t border-border bg-card px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 rounded-md border border-border px-4 text-[13px] font-medium text-muted-foreground"
+          >
+            Fechar
+          </button>
+          <div className="flex-1" />
+          {reimprimivel(etq) ? (
+            <button
+              type="button"
+              onClick={onReimprimir}
+              className="flex h-8 items-center gap-1.5 rounded-md border border-border px-4 text-[13px] font-medium"
+            >
+              <Printer className="h-3.5 w-3.5" />{' '}
+              {status === 'Pendente de impressão' ? 'Imprimir' : 'Reimprimir'}
+            </button>
+          ) : null}
+          {cancelavel(etq) ? (
+            <button
+              type="button"
+              onClick={onCancelar}
+              className="flex h-8 items-center gap-1.5 rounded-md bg-destructive px-4 text-[13px] font-semibold text-white"
+            >
+              <X className="h-3.5 w-3.5" /> Cancelar etiqueta
+            </button>
+          ) : null}
+          {status === 'Bloqueada' ? (
+            <span className="flex h-8 cursor-help items-center gap-1.5 rounded-md bg-muted px-4 text-[13px] font-semibold text-muted-foreground">
+              <Ban className="h-3.5 w-3.5" /> Bloqueada
+            </span>
+          ) : null}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
 }
 
 export function DesossaEtiquetasClient({ operacaoId }: { operacaoId?: string }) {
@@ -45,6 +481,8 @@ export function DesossaEtiquetasClient({ operacaoId }: { operacaoId?: string }) 
   const [filtroStatus, setFiltroStatus] = useState('Todos');
   const [filtroPeriodo, setFiltroPeriodo] = useState('Todos');
   const [drawer, setDrawer] = useState<EtiquetaDesossaListada | null>(null);
+  const [modalReimprimir, setModalReimprimir] = useState<EtiquetaDesossaListada | null>(null);
+  const [modalCancelar, setModalCancelar] = useState<EtiquetaDesossaListada | null>(null);
 
   const carregar = useCallback(async () => {
     if (!operacaoId) {
@@ -70,6 +508,39 @@ export function DesossaEtiquetasClient({ operacaoId }: { operacaoId?: string }) 
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  const handleReimprimir = async (etq: EtiquetaDesossaListada) => {
+    setErro(null);
+    const res = await fetch(
+      `/api/operacao/corte/subitens/${etq.subitemId}/etiqueta/reimprimir`,
+      { method: 'POST' },
+    );
+    if (!res.ok) {
+      setErro((await res.json().catch(() => ({}))).message ?? 'Erro ao reimprimir');
+      return;
+    }
+    setModalReimprimir(null);
+    await carregar();
+  };
+
+  const handleCancelar = async (etq: EtiquetaDesossaListada, motivo: string, obs: string) => {
+    setErro(null);
+    const res = await fetch(`/api/operacao/etiquetas/${etq.id}/cancelar`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        motivo,
+        ...(motivo === 'outro' && obs.trim() ? { observacoes: obs.trim() } : {}),
+      }),
+    });
+    if (!res.ok) {
+      setErro((await res.json().catch(() => ({}))).message ?? 'Erro ao cancelar etiqueta');
+      return;
+    }
+    setModalCancelar(null);
+    setDrawer(null);
+    await carregar();
+  };
 
   const stats = useMemo(() => {
     return {
@@ -242,6 +713,7 @@ export function DesossaEtiquetasClient({ operacaoId }: { operacaoId?: string }) 
           <tbody>
             {filtradas.map((e) => {
               const inativa = e.estado === 'cancelada' || e.estado === 'invalidada_por_troca';
+              const isPendente = rotuloStatusEtiqueta(e) === 'Pendente de impressão';
               return (
                 <tr
                   key={e.id}
@@ -277,9 +749,44 @@ export function DesossaEtiquetasClient({ operacaoId }: { operacaoId?: string }) 
                     <StatusBadge etq={e} />
                   </td>
                   <td className="px-4 py-2.5" onClick={(ev) => ev.stopPropagation()}>
-                    <button type="button" title="Visualizar" onClick={() => setDrawer(e)}>
-                      <Eye className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        title="Visualizar"
+                        onClick={() => setDrawer(e)}
+                        className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                      {reimprimivel(e) ? (
+                        <button
+                          type="button"
+                          title={isPendente ? 'Imprimir' : 'Reimprimir'}
+                          onClick={() => setModalReimprimir(e)}
+                          className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted"
+                        >
+                          <Printer className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                      {cancelavel(e) ? (
+                        <button
+                          type="button"
+                          title="Cancelar"
+                          onClick={() => setModalCancelar(e)}
+                          className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-danger-surface hover:text-destructive"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                      {rotuloStatusEtiqueta(e) === 'Bloqueada' ? (
+                        <span
+                          title="Cancelamento bloqueado"
+                          className="flex h-7 w-7 cursor-help items-center justify-center text-muted-foreground"
+                        >
+                          <Ban className="h-3.5 w-3.5" />
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               );
@@ -288,53 +795,41 @@ export function DesossaEtiquetasClient({ operacaoId }: { operacaoId?: string }) 
         </table>
       </div>
 
-      <Sheet
+      <DrawerDetalhe
         open={!!drawer}
-        onOpenChange={(v) => {
-          if (!v) setDrawer(null);
+        onClose={() => setDrawer(null)}
+        etq={drawer}
+        onReimprimir={() => {
+          if (drawer) {
+            setModalReimprimir(drawer);
+            setDrawer(null);
+          }
         }}
-      >
-        <SheetContent side="right" className="w-[420px] max-w-full">
-          <SheetHeader>
-            <SheetTitle>Detalhe da etiqueta</SheetTitle>
-          </SheetHeader>
-          {drawer ? (
-            <div className="mt-4 space-y-3 text-sm">
-              {drawer.estado === 'invalidada_por_troca' ? (
-                <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-destructive">
-                  Invalidada por troca — a peça mãe vinculada permanece rastreável.
-                </div>
-              ) : null}
-              <p>
-                <span className="text-muted-foreground">Código:</span> {drawer.codigo}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Parte:</span> {drawer.parteCodigo ?? '—'}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Produto:</span> {drawer.produtoNome}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Peça mãe (TZ):</span>{' '}
-                {drawer.pecaMaeCodigo ?? '—'}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Cliente / Pedido:</span>{' '}
-                {drawer.clientePedido ?? '—'}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Status:</span> {rotuloStatusEtiqueta(drawer)}
-              </p>
-              {drawer.invalidadaEm ? (
-                <p>
-                  <span className="text-muted-foreground">Invalidada em:</span>{' '}
-                  {new Date(drawer.invalidadaEm).toLocaleString('pt-BR')}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-        </SheetContent>
-      </Sheet>
+        onCancelar={() => {
+          if (drawer) {
+            setModalCancelar(drawer);
+            setDrawer(null);
+          }
+        }}
+      />
+
+      <ModalReimprimir
+        open={!!modalReimprimir}
+        onClose={() => setModalReimprimir(null)}
+        etq={modalReimprimir}
+        onConfirm={() => {
+          if (modalReimprimir) void handleReimprimir(modalReimprimir);
+        }}
+      />
+
+      <ModalCancelar
+        open={!!modalCancelar}
+        onClose={() => setModalCancelar(null)}
+        etq={modalCancelar}
+        onConfirm={(motivo, obs) => {
+          if (modalCancelar) void handleCancelar(modalCancelar, motivo, obs);
+        }}
+      />
     </div>
   );
 }
