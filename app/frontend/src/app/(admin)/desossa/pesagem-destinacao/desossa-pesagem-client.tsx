@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Printer } from 'lucide-react';
+import { AlertTriangle, Beef, ClipboardList, Printer } from 'lucide-react';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
 import {
@@ -462,7 +462,37 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
         ) : null}
       </div>
 
-      {checklist ? (
+      {/* Empty states — DesossaPesagem.tsx:604-624 (protótipo feature/completude-v1.1) */}
+      {!tz ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card py-16">
+          <Beef className="h-10 w-10 text-violet-200" aria-hidden="true" />
+          <p className="text-[15px] font-semibold text-slate-600">
+            Selecione ou leia a etiqueta de um TZ encaminhado à desossa
+          </p>
+          <p className="text-[13px] text-muted-foreground">
+            As peças enviadas pela balança principal aparecem na lista de seleção.
+          </p>
+          <button
+            type="button"
+            onClick={() => setModalTz(true)}
+            className="mt-2 h-9 rounded-lg bg-violet-800 px-5 text-[13px] font-semibold text-white hover:bg-violet-700"
+          >
+            Selecionar TZ
+          </button>
+        </div>
+      ) : !regraId || !checklist ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card py-16">
+          <ClipboardList className="h-10 w-10 text-violet-200" aria-hidden="true" />
+          <p className="text-[15px] font-semibold text-slate-600">
+            Escolha a regra de transformação para o{' '}
+            {tz.etiquetaAtual ?? tz.pecaId}
+          </p>
+          <p className="max-w-md text-center text-[13px] text-muted-foreground">
+            A regra define as saídas esperadas (quantidade fixa; peso variável capturado aqui). A
+            definição é obrigatória antes de registrar as partes.
+          </p>
+        </div>
+      ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div>
@@ -529,7 +559,7 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
             ))}
           </div>
         </div>
-      ) : null}
+      )}
 
       <ModalSelecionarTz
         open={modalTz}

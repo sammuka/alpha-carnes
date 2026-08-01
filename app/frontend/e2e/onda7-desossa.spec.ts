@@ -29,8 +29,13 @@ test.describe('Onda 7 — desossa E2E', () => {
 
     await page.goto(`${BASE}/desossa/pesagem-destinacao`);
     await expect(page.getByText('Pesagem e Destinação')).toBeVisible();
-    await expect(page.getByText(/Provisório/i).first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('button', { name: /Selecionar TZ/i })).toBeVisible();
+    await expect(
+      page.getByText(/Selecione ou leia a etiqueta de um TZ encaminhado à desossa/i),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByText(/As peças enviadas pela balança principal aparecem na lista/i),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: /Selecionar TZ/i }).first()).toBeVisible();
 
     await page.goto(`${BASE}/desossa/etiquetas`);
     await expect(page.getByText('Etiquetas — Desossa')).toBeVisible();
