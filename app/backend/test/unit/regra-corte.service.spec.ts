@@ -164,4 +164,101 @@ describe('RegraCorteService', () => {
       ConflictException,
     );
   });
+
+  it('NotFound quando transformação não existe', async () => {
+    const svc = makeSvc({ transf: null });
+    await expect(svc.vincular(id, { regraTransformacaoId: regraA }, op)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('ConflictException quando transformação está fechada', async () => {
+    const svc = makeSvc({
+      transf: {
+        id,
+        statusTransformacao: 'cancelada',
+        regraTransformacaoId: null,
+        pecaOrigemId: 'p1',
+        deletedAt: null,
+      },
+    });
+    await expect(svc.vincular(id, { regraTransformacaoId: regraA }, op)).rejects.toMatchObject({
+      response: { codigo: 'TRANSFORMACAO_FECHADA' },
+    });
+  });
+
+  it('permite reafirmar a mesma regra após subitem ativo', async () => {
+    const svc = makeSvc({
+      transf: {
+        id,
+        statusTransformacao: 'em_andamento',
+        regraTransformacaoId: regraA,
+        pecaOrigemId: 'p1',
+        deletedAt: null,
+      },
+      regra: {
+        id: regraA,
+        status: 'ativo',
+        produtoOrigemCodigo: 'TZ',
+        deletedAt: null,
+      },
+      subitemCount: 2,
+    });
+    const out = await svc.vincular(id, { regraTransformacaoId: regraA }, op);
+    expect(out?.regraTransformacaoId).toBe(regraA);
+  });
+
+  it('dataOperacao vazia quando peça sem operação', async () => {
+    const upd = {
+      id,
+      regraTransformacaoId: regraA,
+      statusTransformacao: 'em_andamento',
+    };
+    let selectIdx = 0;
+    const responses: unknown[][] = [
+      [
+        {
+          id,
+          statusTransformacao: 'em_andamento',
+          regraTransformacaoId: null,
+          pecaOrigemId: 'p1',
+          deletedAt: null,
+        },
+      ],
+      [
+        {
+          id: regraA,
+          status: 'ativo',
+          produtoOrigemCodigo: 'TZ',
+          deletedAt: null,
+        },
+      ],
+      [], // count vazio → ?? 0
+      [], // dataOperacaoPorPeca sem row
+    ];
+    const tx = {
+      select: jest.fn(() => selectChain(responses[selectIdx++] ?? [])),
+      update: jest.fn(() => ({
+        set: () => ({
+          where: () => ({
+            returning: jest.fn(async () => [upd]),
+          }),
+        }),
+      })),
+    };
+    const db = {
+      transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx)),
+    };
+    const emitter = makeEmitter();
+    const svc = new RegraCorteService(
+      { db } as never,
+      makeAuditoria() as never,
+      emitter,
+    );
+    await svc.vincular(id, { regraTransformacaoId: regraA }, op);
+    expect(emitter.emit).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ dataOperacao: '', motivo: 'regra_vinculada' }),
+    );
+  });
 });
