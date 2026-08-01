@@ -19,6 +19,26 @@ function makeAuditoria() {
   return { registrar: jest.fn() };
 }
 
+/** Emenda 7 — CorteService exige ChecklistCorteService no construtor (DoD 7.9). */
+function makeChecklist(
+  overrides: Partial<{ divergente: boolean; divergenciaAbertaId: string | null }> = {},
+) {
+  return {
+    obterNaTx: jest.fn(async () => ({
+      transformacaoId: 't1',
+      regraTransformacaoId: null,
+      regraNome: null,
+      regraProvisoria: false,
+      slots: [],
+      divergente: false,
+      divergenciaAbertaId: null,
+      ...overrides,
+    })),
+    obter: jest.fn(),
+    abrirDivergencia: jest.fn(),
+  };
+}
+
 /**
  * Cria um select-chain mock que retorna `rows` ao final da cadeia.
  * Suporta encadeamentos arbitrários de .where(), .orderBy(), .innerJoin().
@@ -86,7 +106,7 @@ describe('CorteService — branches unitários', () => {
 
     function makeServiceWithCanceled() {
       const { db } = makeDb([[transfCancelada]]);
-      return new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+      return new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     }
 
     await expect(makeServiceWithCanceled().concluir('t1', {} as never, 'u1')).rejects.toThrow(ConflictException);
@@ -97,7 +117,7 @@ describe('CorteService — branches unitários', () => {
   it('cancelar → lança 404 se transformação não encontrada', async () => {
     function make() {
       const { db } = makeDb([[]]);
-      return new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+      return new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     }
     await expect(make().cancelar('t-inexistente', 'u1')).rejects.toThrow(NotFoundException);
   });
@@ -108,7 +128,7 @@ describe('CorteService — branches unitários', () => {
 
     function make() {
       const { db } = makeDb([[transfConcluida]]);
-      return new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+      return new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     }
 
     await expect(make().cancelar('t1', 'u1')).rejects.toThrow(ConflictException);
@@ -119,7 +139,7 @@ describe('CorteService — branches unitários', () => {
   it('cancelar → retorna sem alterar se já cancelada', async () => {
     const transfJaCancelada = { id: 't1', statusTransformacao: 'cancelada', pecaOrigemId: 'pc1', deletedAt: null };
     const { db } = makeDb([[transfJaCancelada]]);
-    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     const result = await service.cancelar('t1', 'u1');
     expect(result).toEqual(transfJaCancelada);
   });
@@ -132,7 +152,7 @@ describe('CorteService — branches unitários', () => {
 
     // Sequence: [transf], [subitens vazia], [historico vazio]
     const { db, tx } = makeDb([[transf], [], []], [], atualizada);
-    const service = new CorteService({ db } as never, auditoria as never, makeEmitter());
+    const service = new CorteService({ db } as never, auditoria as never, makeEmitter(), makeChecklist() as never);
     const result = await service.cancelar('t1', 'u1');
     expect(result).toEqual(atualizada);
     // update: pecas(statusPeca=pesada) + transformacoes(cancelada)
@@ -147,7 +167,7 @@ describe('CorteService — branches unitários', () => {
 
     // Sequence: [transf], [subitem], [historico vazio]
     const { db } = makeDb([[transf], [subitemSemPedido], []], [], atualizada);
-    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     const result = await service.cancelar('t1', 'u1');
     expect(result).toEqual(atualizada);
   });
@@ -190,7 +210,7 @@ describe('CorteService — branches unitários', () => {
       transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(customTx)),
     };
 
-    const service = new CorteService({ db } as never, auditoria as never, makeEmitter());
+    const service = new CorteService({ db } as never, auditoria as never, makeEmitter(), makeChecklist() as never);
     const result = await service.cancelar('t1', 'u1');
     expect(result).toEqual(atualizada);
     // consumirSaldo (update pedidosVendaItens) + pecas(associada) + transformacoes(cancelada) = 3 updates
@@ -236,7 +256,7 @@ describe('CorteService — branches unitários', () => {
       transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(customTx)),
     };
 
-    const service = new CorteService({ db } as never, auditoria as never, makeEmitter());
+    const service = new CorteService({ db } as never, auditoria as never, makeEmitter(), makeChecklist() as never);
     const result = await service.cancelar('t1', 'u1');
     expect(result).toEqual(atualizada);
     // consumirSaldo + pecas(pesada) + transformacoes = 3 updates
@@ -247,7 +267,7 @@ describe('CorteService — branches unitários', () => {
   it('detalhar → lança 404 se transformação não encontrada', async () => {
     // detalhar usa this.db diretamente
     const { db } = makeDb([], [[]]);
-    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     await expect(service.detalhar('t-inexistente')).rejects.toThrow(NotFoundException);
   });
 
@@ -258,7 +278,7 @@ describe('CorteService — branches unitários', () => {
 
     // detalhar usa this.db (direct): 1ª=transf, 2ª=subitens
     const { db } = makeDb([], [[transf], [subitem]]);
-    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     const result = await service.detalhar('t1');
     expect(result.transformacao).toEqual(transf);
     expect(result.subitens).toEqual([subitem]);
@@ -267,7 +287,7 @@ describe('CorteService — branches unitários', () => {
   // ─── rastrear: sem pecaId e sem subitemId ────────────────────────────────────
   it('rastrear → lança 404 se nem pecaId nem subitemId informados', async () => {
     const { db } = makeDb([], []);
-    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     await expect(service.rastrear({})).rejects.toThrow(NotFoundException);
     await expect(service.rastrear({})).rejects.toThrow('Informe pecaId ou subitemId');
   });
@@ -277,7 +297,7 @@ describe('CorteService — branches unitários', () => {
     // rastrear usa this.db (direct)
     function make() {
       const { db } = makeDb([], [[]]);
-      return new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+      return new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     }
     await expect(make().rastrear({ subitemId: 's-inexistente' })).rejects.toThrow(NotFoundException);
     await expect(make().rastrear({ subitemId: 's-inexistente' })).rejects.toThrow('Subitem não encontrado');
@@ -287,7 +307,7 @@ describe('CorteService — branches unitários', () => {
   it('rastrear → lança 404 se pecaId não encontrado', async () => {
     function make() {
       const { db } = makeDb([], [[]]);
-      return new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+      return new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     }
     await expect(make().rastrear({ pecaId: 'pc-inexistente' })).rejects.toThrow(NotFoundException);
     await expect(make().rastrear({ pecaId: 'pc-inexistente' })).rejects.toThrow('Peça não encontrada');
@@ -297,7 +317,7 @@ describe('CorteService — branches unitários', () => {
   it('rastrear → subIds vazio não consulta etiquetas de subitens', async () => {
     const peca = { id: 'pc1', deletedAt: null };
     const { db } = makeDb([], [[peca], [], [], [], []]);
-    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     const result = await service.rastrear({ pecaId: 'pc1' });
     expect(result.etiquetasSubitens).toEqual([]);
   });
@@ -305,7 +325,7 @@ describe('CorteService — branches unitários', () => {
   // ─── iniciar: peça não encontrada ────────────────────────────────────────────
   it('iniciar → lança 404 se peça não encontrada', async () => {
     const { db } = makeDb([[]]);
-    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     await expect(
       service.iniciar('pc-x', { tipoTransformacao: 'desossa' } as never, 'u1'),
     ).rejects.toThrow(NotFoundException);
@@ -325,7 +345,7 @@ describe('CorteService — branches unitários', () => {
     const emitSpy = jest.spyOn(emitter, 'emit');
     // txSelect: 1ª = pecaAtiva, 2ª = dataOperacaoPorRecebimento (vazio)
     const { db } = makeDb([[pecaElegivel], []]);
-    const service = new CorteService({ db } as never, makeAuditoria() as never, emitter);
+    const service = new CorteService({ db } as never, makeAuditoria() as never, emitter, makeChecklist() as never);
     await service.iniciar('pc1', { tipoTransformacao: 'desossa' } as never, 'u1');
     expect(emitSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ dataOperacao: '' }));
   });
@@ -333,7 +353,7 @@ describe('CorteService — branches unitários', () => {
   // ─── concluir: transformação não encontrada ──────────────────────────────────
   it('concluir → lança 404 se transformação não encontrada', async () => {
     const { db } = makeDb([[]]);
-    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     await expect(service.concluir('t-x', {} as never, 'u1')).rejects.toThrow(NotFoundException);
   });
 
@@ -341,7 +361,7 @@ describe('CorteService — branches unitários', () => {
   it('concluir → lança 409 se não há subitens', async () => {
     const transf = { id: 't1', statusTransformacao: 'aberta', pecaOrigemId: 'pc1', pesoOriginal: '10.000', deletedAt: null };
     const { db } = makeDb([[transf], []]);
-    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     await expect(service.concluir('t1', {} as never, 'u1')).rejects.toThrow('Não há subitens');
   });
 
@@ -350,7 +370,7 @@ describe('CorteService — branches unitários', () => {
     const transf = { id: 't1', statusTransformacao: 'aberta', pecaOrigemId: 'pc1', pesoOriginal: '10.000', deletedAt: null };
     const subitemSemPeso = { id: 's1', peso: null, statusSubitem: 'associado', etiquetaAtual: 'QR1' };
     const { db } = makeDb([[transf], [subitemSemPeso]]);
-    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     await expect(service.concluir('t1', {} as never, 'u1')).rejects.toThrow('sem peso');
   });
 
@@ -370,7 +390,7 @@ describe('CorteService — branches unitários', () => {
     const emitSpy = jest.spyOn(emitter, 'emit');
     // txSelect: 1ª = transformacaoAtiva, 2ª = lista de subitens, 3ª = pecaAtiva final (vazia)
     const { db } = makeDb([[transf], [subitem], []], [], atualizada);
-    const service = new CorteService({ db } as never, makeAuditoria() as never, emitter);
+    const service = new CorteService({ db } as never, makeAuditoria() as never, emitter, makeChecklist() as never);
     const result = await service.concluir('t1', {} as never, 'u1');
     expect(result).toEqual(atualizada);
     expect(emitSpy).toHaveBeenCalledWith(
@@ -414,7 +434,7 @@ describe('CorteService — branches unitários', () => {
       insert: jest.fn(),
     };
     const db = { transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(customTx)) };
-    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter());
+    const service = new CorteService({ db } as never, makeAuditoria() as never, makeEmitter(), makeChecklist() as never);
     const result = await service.cancelar('t1', 'u1');
     expect(result).toEqual(atualizada);
     // devolverSaldo + soft-delete subitem + pecas(pesada) + transformacoes(cancelada) = 4 updates
@@ -1034,7 +1054,14 @@ describe('SubitemService — branches unitários', () => {
 
   // ─── adicionar: dto.quantidade definido (branch true) ────────────────────────
   it('adicionar → quantidade definida no dto é usada', async () => {
-    const transf = { id: 't1', statusTransformacao: 'aberta', pecaOrigemId: 'pc1', deletedAt: null };
+    // Emenda 7 / DoD 7.6–7.7: mock precisa de regra + saída permitida para atingir branch quantidade
+    const transf = {
+      id: 't1',
+      statusTransformacao: 'aberta',
+      pecaOrigemId: 'pc1',
+      deletedAt: null,
+      regraTransformacaoId: 'regra-1',
+    };
     const recebimento = { id: 'r1', dataOperacao: '2026-01-01' };
     const novoSubitem = { id: 'new', transformacaoId: 't1', statusSubitem: 'gerado' };
     const auditoriaMock = makeAuditoria();
@@ -1045,6 +1072,7 @@ describe('SubitemService — branches unitários', () => {
       select: jest.fn(() => {
         selectCall++;
         if (selectCall === 1) return makeSelectChain([transf]); // transformacaoEditavel
+        if (selectCall === 2) return makeSelectChain([{ legado: 'ic1' }]); // saídas da regra
         return makeSelectChain([recebimento]);                  // dataOperacao
       }),
       update: jest.fn(),

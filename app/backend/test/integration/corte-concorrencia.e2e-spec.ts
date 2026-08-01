@@ -2,7 +2,13 @@ import type { INestApplication } from '@nestjs/common';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase } from '../helpers/comercial-fixtures';
 import { montarCenarioPesagem, criarPedido, pesarPeca, fakes } from '../helpers/pesagem-fixtures';
-import { iniciarCorte, adicionarSubitem, pesarSubitem } from '../helpers/corte-fixtures';
+import {
+  iniciarCorte,
+  adicionarSubitem,
+  pesarSubitem,
+  itemSaidaCanonicoCb,
+  alinharPedidoItemComSaidaCorte,
+} from '../helpers/corte-fixtures';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { eq } from 'drizzle-orm';
@@ -49,20 +55,22 @@ describe('Corte — concorrência de associação de subitens (F4c)', () => {
 
     const saldo = 3;
     const total = 6;
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
     const { pedidoItemId } = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      itemComercialId: itemSaidaCbId,
       dataOperacao: c.dataOperacao,
       quantidade: saldo,
     });
 
     const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
+    await alinharPedidoItemComSaidaCorte(app, pedidoItemId, itemSaidaCbId);
 
     const subIds: string[] = [];
     for (let i = 0; i < total; i++) {
-      const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+      const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
       await pesarSubitem(app, corteCookies, subId);
       subIds.push(subId);
     }

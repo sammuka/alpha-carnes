@@ -3,6 +3,26 @@ import { CorteService } from '../../src/modules/operacao/corte/corte.service';
 import { EVENTOS } from '../../src/realtime/events/eventos';
 
 describe('CorteService — emissão pós-commit', () => {
+  /** Emenda 7.2 — CorteService exige ChecklistCorteService no construtor (DoD 7.9). */
+  function makeChecklist(
+    overrides: Partial<{ divergente: boolean; divergenciaAbertaId: string | null }> = {},
+  ) {
+    return {
+      obterNaTx: jest.fn(async () => ({
+        transformacaoId: 't1',
+        regraTransformacaoId: null,
+        regraNome: null,
+        regraProvisoria: false,
+        slots: [],
+        divergente: false,
+        divergenciaAbertaId: null,
+        ...overrides,
+      })),
+      obter: jest.fn(),
+      abrirDivergencia: jest.fn(),
+    };
+  }
+
   function montar(transactionImpl: () => Promise<unknown>) {
     const ordem: string[] = [];
     const emitter = new EventEmitter2();
@@ -21,6 +41,7 @@ describe('CorteService — emissão pós-commit', () => {
       { db } as never,
       { registrar: jest.fn() } as never,
       emitter,
+      makeChecklist() as never,
     );
     return { service, emitSpy, ordem };
   }

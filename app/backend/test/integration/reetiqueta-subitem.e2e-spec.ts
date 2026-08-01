@@ -2,7 +2,13 @@ import type { INestApplication } from '@nestjs/common';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase } from '../helpers/comercial-fixtures';
 import { montarCenarioPesagem, criarPedido, pesarPeca, fakes, type CenarioPesagem } from '../helpers/pesagem-fixtures';
-import { iniciarCorte, adicionarSubitem, pesarSubitem } from '../helpers/corte-fixtures';
+import {
+  iniciarCorte,
+  adicionarSubitem,
+  pesarSubitem,
+  itemSaidaCanonicoCb,
+  alinharPedidoItemComSaidaCorte,
+} from '../helpers/corte-fixtures';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { eq } from 'drizzle-orm';
@@ -42,11 +48,13 @@ describe('Reetiqueta de subitem e2e (F4c — RF-RT-04, best-effort)', () => {
     fakes(app).balanca.definirStatus('disponivel');
     fakes(app).balanca.definirPeso('6.000');
     fakes(app).impressora.definirStatus('disponivel');
-    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 5 });
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
+    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId, dataOperacao: c.dataOperacao, quantidade: 5 });
     const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
-    const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
     await pesarSubitem(app, corteCookies, subId);
+    await alinharPedidoItemComSaidaCorte(app, p.pedidoItemId, itemSaidaCbId);
     await request(srv()).post(`/operacao/corte/subitens/${subId}/associar`).set('Cookie', corteCookies).send({ pedidoVendaItemId: p.pedidoItemId });
     return { subId, pecaId, c };
   }

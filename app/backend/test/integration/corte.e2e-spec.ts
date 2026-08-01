@@ -2,7 +2,16 @@ import type { INestApplication } from '@nestjs/common';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase } from '../helpers/comercial-fixtures';
 import { montarCenarioPesagem, criarPedido, pesarPeca, fakes, type CenarioPesagem } from '../helpers/pesagem-fixtures';
-import { iniciarCorte, adicionarSubitem, pesarSubitem, subitemCompleto } from '../helpers/corte-fixtures';
+import {
+  iniciarCorte,
+  adicionarSubitem,
+  pesarSubitem,
+  subitemCompleto,
+  concluirCorteOnda7,
+  fecharChecklistSeDivergente,
+  itemSaidaCanonicoCb,
+  alinharPedidoItemComSaidaCorte,
+} from '../helpers/corte-fixtures';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { eq } from 'drizzle-orm';
@@ -117,13 +126,15 @@ describe('Corte/Transformação e2e (F4c)', () => {
     fakes(app).balanca.definirPeso('13.000');
     await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
 
+    // Emenda 7: fechar checklist (DoD 7.9) antes de exercitar justificativa de peso
+    await fecharChecklistSeDivergente(app, corteCookies, transfId);
+
     const semJust = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({});
     expect(semJust.status).toBe(409);
 
-    const comJust = await request(srv())
-      .post(`/operacao/corte/${transfId}/concluir`)
-      .set('Cookie', corteCookies)
-      .send({ justificativaDiferenca: 'ganho por hidratação medido' });
+    const comJust = await concluirCorteOnda7(app, corteCookies, transfId, {
+      justificativaDiferenca: 'ganho por hidratação medido',
+    });
     expect(comJust.status).toBe(201);
     expect(comJust.body.statusTransformacao).toBe('concluida');
   });
@@ -145,13 +156,14 @@ describe('Corte/Transformação e2e (F4c)', () => {
     fakes(app).balanca.definirPeso('10.000'); // perda de 2.500
     await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
 
+    await fecharChecklistSeDivergente(app, corteCookies, transfId);
+
     const semJust = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({});
     expect(semJust.status).toBe(409);
 
-    const comJust = await request(srv())
-      .post(`/operacao/corte/${transfId}/concluir`)
-      .set('Cookie', corteCookies)
-      .send({ justificativaDiferenca: 'apara removida conforme padrão' });
+    const comJust = await concluirCorteOnda7(app, corteCookies, transfId, {
+      justificativaDiferenca: 'apara removida conforme padrão',
+    });
     expect(comJust.status).toBe(201);
   });
 
@@ -169,17 +181,20 @@ describe('Corte/Transformação e2e (F4c)', () => {
   it('concluir com subitem sem etiqueta → 409', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-10-15');
+    // Emenda 7.1: saída CB + alinhar antes do associar — 409 do concluir prova ausência de etiqueta
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
     const p = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      itemComercialId: itemSaidaCbId,
       dataOperacao: c.dataOperacao,
       quantidade: 5,
     });
     const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
-    const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
     await pesarSubitem(app, corteCookies, subId);
+    await alinharPedidoItemComSaidaCorte(app, p.pedidoItemId, itemSaidaCbId);
     // Associa mas NÃO emite etiqueta
     await request(srv()).post(`/operacao/corte/subitens/${subId}/associar`).set('Cookie', corteCookies).send({ pedidoVendaItemId: p.pedidoItemId });
     const res = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({ justificativaDiferenca: 'perda nos aparas' });
@@ -209,7 +224,8 @@ describe('Corte/Transformação e2e (F4c)', () => {
     await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
     await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
 
-    const ok = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({});
+    // Emenda 7 / DoD 7.9: 2× CB deixa JAC pendente → concluirCorteOnda7 abre divergência
+    const ok = await concluirCorteOnda7(app, corteCookies, transfId, {});
     expect(ok.status).toBe(201);
 
     // Peça original consultável, transformada, etiqueta original preservada
@@ -266,8 +282,8 @@ describe('Corte/Transformação e2e (F4c)', () => {
     expect(etiqSobra.status).toBe(201);
     expect(etiqSobra.body.etiqueta.statusImpressao).toBe('impressa');
 
-    // Concluir com Σ = peso_original (6.250 × 2 = 12.500 → sem justificativa)
-    const ok = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({});
+    // Emenda 7: DoD 7.9 — fechar checklist antes do 201
+    const ok = await concluirCorteOnda7(app, corteCookies, transfId, {});
     expect(ok.status).toBe(201);
     expect(ok.body.statusTransformacao).toBe('concluida');
     expect(ok.body.diferencaPeso).toBe('0.000');

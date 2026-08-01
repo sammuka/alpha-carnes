@@ -6,7 +6,12 @@ import {
   criarCaminhao, abrirCarga, vincularPedido, adicionarPecaNaCarga,
   adicionarSubitemNaCarga, iniciarConferencia, concluirConferencia, fecharCaminhao,
 } from '../helpers/expedicao-fixtures';
-import { iniciarCorte, subitemCompleto } from '../helpers/corte-fixtures';
+import {
+  iniciarCorte,
+  subitemCompleto,
+  itemSaidaCanonicoCb,
+  alinharPedidoItemComSaidaCorte,
+} from '../helpers/corte-fixtures';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { eq } from 'drizzle-orm';
@@ -609,8 +614,10 @@ describe('Expedicao e2e (F5)', () => {
   it('subitem sem etiqueta nao e elegivel (409)', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-18');
+    // Emenda 7.1: saída CB + alinhar — 409 da carga prova ausência de etiqueta
+    const itemSaidaCbId = await itemSaidaCanonicoCb(app);
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pesarPeca(app, recebimentoCookies, {
@@ -625,8 +632,9 @@ describe('Expedicao e2e (F5)', () => {
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
     fakes(app).balanca.definirPeso('6.000');
     const { adicionarSubitem: addSub, pesarSubitem: pesarSub } = await import('../helpers/corte-fixtures');
-    const subId = await addSub(app, corteCookies, transfId, c.itemComercialId);
+    const subId = await addSub(app, corteCookies, transfId, itemSaidaCbId);
     await pesarSub(app, corteCookies, subId);
+    await alinharPedidoItemComSaidaCorte(app, p.pedidoItemId, itemSaidaCbId);
     await request(srv())
       .post(`/operacao/corte/subitens/${subId}/associar`)
       .set('Cookie', corteCookies)
