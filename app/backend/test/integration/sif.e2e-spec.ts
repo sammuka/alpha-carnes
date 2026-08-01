@@ -12,13 +12,19 @@ describe('sif (catálogo, pendências, geração e retificação)', () => {
   let app: INestApplication;
   let gestorCookies: string;
   let comprasCookies: string;
+  let expedicaoCookies: string;
+  let diretoriaCookies: string;
 
   beforeAll(async () => {
     app = await createTestApp();
     const gestor = await createTestUser(app, { perfil: 'gestor' });
     const compras = await createTestUser(app, { perfil: 'compras' });
+    const expedicao = await createTestUser(app, { perfil: 'expedicao' });
+    const diretoria = await createTestUser(app, { perfil: 'diretoria' });
     gestorCookies = await loginCookies(app, gestor.adminEmail, gestor.adminPassword);
     comprasCookies = await loginCookies(app, compras.adminEmail, compras.adminPassword);
+    expedicaoCookies = await loginCookies(app, expedicao.adminEmail, expedicao.adminPassword);
+    diretoriaCookies = await loginCookies(app, diretoria.adminEmail, diretoria.adminPassword);
   }, 60000);
 
   afterAll(async () => {
@@ -105,5 +111,27 @@ describe('sif (catálogo, pendências, geração e retificação)', () => {
       .expect(200);
     const desossaB = listaB.body.find((r: { tipo: string }) => r.tipo === 'producao_desossa');
     expect(desossaB.status).toBe('pronto_para_gerar');
+  });
+
+  it('DoD 7.5.1a expedicao sem SIF_LER recebe 403 na listagem', async () => {
+    const { operacaoId } = await criarOperacao('2026-09-22');
+    await request(app.getHttpServer())
+      .get(`/sif/relatorios?operacaoId=${operacaoId}`)
+      .set('Cookie', expedicaoCookies)
+      .expect(403);
+  });
+
+  it('DoD 7.5.1b diretoria sem SIF_GERAR recebe 403 ao gerar', async () => {
+    const { operacaoId } = await criarOperacao('2026-09-23');
+    const lista = await request(app.getHttpServer())
+      .get(`/sif/relatorios?operacaoId=${operacaoId}`)
+      .set('Cookie', gestorCookies)
+      .expect(200);
+    if (!lista.body[0]?.id && !lista.body.data?.[0]?.id) throw new Error('catálogo SIF vazio — fixture inválida');
+    const relatorioId = (lista.body[0] ?? lista.body.data[0]).id as string;
+    await request(app.getHttpServer())
+      .post(`/sif/relatorios/${relatorioId}/gerar`)
+      .set('Cookie', diretoriaCookies)
+      .expect(403);
   });
 });
