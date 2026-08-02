@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { AlertTriangle, Clock, Eye, History, Info } from 'lucide-react';
+import { AlertTriangle, Clock, Eye, FileText, History } from 'lucide-react';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { SeletorOperacao } from '@/components/gestao/seletor-operacao';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,7 @@ function RelatoriosConteudo({ permissoes }: { permissoes: string[] }) {
   const [modalHistorico, setModalHistorico] = useState<RelatorioSif | null>(null);
   const [versoes, setVersoes] = useState<VersaoSif[]>([]);
   const [motivo, setMotivo] = useState('');
+  const [modalPreview, setModalPreview] = useState<{ relatorio: RelatorioSif; versao: VersaoSif | null } | null>(null);
 
   const carregar = useCallback(async () => {
     if (!operacaoId) return;
@@ -151,7 +152,13 @@ function RelatoriosConteudo({ permissoes }: { permissoes: string[] }) {
               >
                 Gerar
               </Button>
-              <Button size="sm" variant="outline" onClick={() => void previewRelatorio(r.id).catch((e: Error) => setErro(e.message))}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void previewRelatorio(r.id)
+                  .then((v) => setModalPreview({ relatorio: r, versao: v }))
+                  .catch((e: Error) => setErro(e.message))}
+              >
                 <Eye className="mr-1 h-3 w-3" /> Pré-visualizar
               </Button>
               <Button size="sm" variant="outline" onClick={() => setModalRetificar(r)} disabled={!podeGerar || r.versaoAtual < 1}>
@@ -163,12 +170,6 @@ function RelatoriosConteudo({ permissoes }: { permissoes: string[] }) {
             </div>
           </div>
         ))}
-        <div className="flex items-start gap-2 border-t border-border bg-muted/30 px-5 py-3">
-          <Info className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-          <p className="text-[11px] italic text-muted-foreground">
-            A ação Exportar é apenas decorativa nesta demonstração. Os relatórios oficiais serão implementados após o recebimento dos modelos definitivos do SIF.
-          </p>
-        </div>
       </div>
 
       <Dialog open={modalRetificar !== null} onOpenChange={() => setModalRetificar(null)}>
@@ -211,6 +212,38 @@ function RelatoriosConteudo({ permissoes }: { permissoes: string[] }) {
               ))}
             </ul>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modalPreview !== null} onOpenChange={() => setModalPreview(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <DialogTitle>Pré-visualização — {modalPreview?.relatorio.nome}</DialogTitle>
+              <BadgeProvisorio pendencia="P8" />
+            </div>
+          </DialogHeader>
+          {modalPreview?.versao === null ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+              <FileText className="h-10 w-10 text-muted-foreground" />
+              <p className="text-sm font-semibold text-muted-foreground">Pré-visualização disponível após definição do modelo oficial</p>
+              <p className="max-w-sm text-xs text-muted-foreground">
+                Este relatório está sendo demonstrado com nome e campos provisórios. A pré-visualização real do layout depende dos modelos oficiais do SIF fornecidos pelo cliente.
+              </p>
+            </div>
+          ) : modalPreview?.versao ? (
+            <div className="flex flex-col gap-3">
+              <p className="max-w-sm text-xs text-muted-foreground">
+                Este relatório está sendo demonstrado com nome e campos provisórios. A pré-visualização real do layout depende dos modelos oficiais do SIF fornecidos pelo cliente.
+              </p>
+              <pre className="max-h-64 overflow-auto rounded bg-muted p-3 text-xs">
+                {JSON.stringify(modalPreview.versao.conteudoJson ?? modalPreview.versao, null, 2)}
+              </pre>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalPreview(null)}>Fechar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
