@@ -173,6 +173,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
   it('2.4 compra complementar rejeita compra passada', async () => {
     const { base, compraId } = await cenarioComSaldo('2026-12-06', 5);
     const { pendenciaId } = await criarPedidoOverbooking(compraId, base, '2026-12-06', 8);
+    const antes = await lerPendencia(app, pendenciaId);
 
     const passada = await request(app.getHttpServer())
       .post('/comercial/compras-programadas')
@@ -193,6 +194,10 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         quantidade: '2.000',
       })
       .expect(409);
+
+    const pos = await lerPendencia(app, pendenciaId);
+    expect(pos.status).toBe(antes.status);
+    expect(pos.quantidadeDeficit).toBe(antes.quantidadeDeficit);
   });
 
   it('2.5 redistribuição preserva o agregado de disponibilidade', async () => {
@@ -258,6 +263,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
       .get(`/comercial/overbooking/${pendenciaId}/cobertura`)
       .set('Cookie', gestorCookies)
       .expect(200);
+    const antes = await lerPendencia(app, pendenciaId);
 
     await request(app.getHttpServer())
       .post(`/comercial/overbooking/${pendenciaId}/decisao`)
@@ -268,6 +274,10 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         quantidade: '99.000',
       })
       .expect(409);
+
+    const pos = await lerPendencia(app, pendenciaId);
+    expect(pos.status).toBe(antes.status);
+    expect(pos.quantidadeDeficit).toBe(antes.quantidadeDeficit);
   });
 
   it('2.7 postergação parcial gera novo pedido e abate o déficit uma única vez', async () => {
@@ -387,6 +397,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
   it('2.9 decisão rejeita quantidade acima do déficit', async () => {
     const { base, compraId } = await cenarioComSaldo('2026-12-13', 5);
     const { pendenciaId } = await criarPedidoOverbooking(compraId, base, '2026-12-13', 8);
+    const antes = await lerPendencia(app, pendenciaId);
 
     await request(app.getHttpServer())
       .post(`/comercial/overbooking/${pendenciaId}/decisao`)
@@ -397,6 +408,10 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         quantidade: '99.000',
       })
       .expect(409);
+
+    const pos = await lerPendencia(app, pendenciaId);
+    expect(pos.status).toBe(antes.status);
+    expect(pos.quantidadeDeficit).toBe(antes.quantidadeDeficit);
   });
 
   it('2.10 novo pedido rejeita operação destino anterior ou igual', async () => {
@@ -405,6 +420,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
     const { db } = app.get(DRIZZLE);
     const [op] = await db.select().from(schema.operacoes)
       .where(eq(schema.operacoes.data, '2026-12-14'));
+    const antes = await lerPendencia(app, pendenciaId);
 
     await request(app.getHttpServer())
       .post(`/comercial/overbooking/${pendenciaId}/decisao`)
@@ -416,6 +432,10 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
       })
       .expect(409);
+
+    const pos = await lerPendencia(app, pendenciaId);
+    expect(pos.status).toBe(antes.status);
+    expect(pos.quantidadeDeficit).toBe(antes.quantidadeDeficit);
   });
 
   it('2.11 transição inválida retorna 409', async () => {
@@ -432,6 +452,8 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
       })
       .expect(201);
 
+    const antes = await lerPendencia(app, pendenciaId);
+
     await request(app.getHttpServer())
       .post(`/comercial/overbooking/${pendenciaId}/decisao`)
       .set('Cookie', gestorCookies)
@@ -441,6 +463,10 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         quantidade: '1.000',
       })
       .expect(409);
+
+    const pos = await lerPendencia(app, pendenciaId);
+    expect(pos.status).toBe(antes.status);
+    expect(pos.quantidadeDeficit).toBe(antes.quantidadeDeficit);
   });
 
   it('2.12 cobertura 404 para pendência inexistente', async () => {
@@ -453,6 +479,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
   it('2.13 comercial sem OVERBOOKING_RESOLVER recebe 403 na decisão', async () => {
     const { base, compraId } = await cenarioComSaldo('2026-12-16', 5);
     const { pendenciaId } = await criarPedidoOverbooking(compraId, base, '2026-12-16', 8);
+    const antes = await lerPendencia(app, pendenciaId);
 
     await request(app.getHttpServer())
       .post(`/comercial/overbooking/${pendenciaId}/decisao`)
@@ -463,6 +490,10 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         quantidade: '1.000',
       })
       .expect(403);
+
+    const pos = await lerPendencia(app, pendenciaId);
+    expect(pos.status).toBe(antes.status);
+    expect(pos.quantidadeDeficit).toBe(antes.quantidadeDeficit);
   });
 
   it('2.14 redistribuição zera déficit e resolve pendência', async () => {
@@ -497,5 +528,39 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
       .expect(201);
 
     expect(body.status).toBe('resolvida');
+  });
+
+  it('7.5.6 marcar como resolvido manualmente grava histórico', async () => {
+    const { base, compraId } = await cenarioComSaldo('2026-12-18', 5);
+    const { pendenciaId } = await criarPedidoOverbooking(compraId, base, '2026-12-18', 8);
+    await request(app.getHttpServer())
+      .patch(`/comercial/overbooking/${pendenciaId}/status`)
+      .set('Cookie', gestorCookies)
+      .send({ status: 'resolvida', detalhe: { origem: 'manual' } })
+      .expect(200);
+    const pendencia = await lerPendencia(app, pendenciaId);
+    expect(pendencia.status).toBe('resolvida');
+    const hist = await request(app.getHttpServer())
+      .get(`/comercial/overbooking/${pendenciaId}/historico`)
+      .set('Cookie', gestorCookies)
+      .expect(200);
+    expect(hist.body.some((h: { acao: string }) => h.acao === 'resolvida')).toBe(true);
+  });
+
+  it('7.5.7 cancelamento exige motivo', async () => {
+    const { base, compraId } = await cenarioComSaldo('2026-12-19', 5);
+    const { pendenciaId } = await criarPedidoOverbooking(compraId, base, '2026-12-19', 8);
+    await request(app.getHttpServer())
+      .patch(`/comercial/overbooking/${pendenciaId}/status`)
+      .set('Cookie', gestorCookies)
+      .send({ status: 'cancelada', detalhe: {} })
+      .expect(400);
+    const inalterada = await lerPendencia(app, pendenciaId);
+    expect(inalterada.status).toBe('aberta');
+    await request(app.getHttpServer())
+      .patch(`/comercial/overbooking/${pendenciaId}/status`)
+      .set('Cookie', gestorCookies)
+      .send({ status: 'cancelada', detalhe: { motivo: 'Cliente desistiu do pedido' } })
+      .expect(200);
   });
 });

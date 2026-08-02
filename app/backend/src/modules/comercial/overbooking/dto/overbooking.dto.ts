@@ -36,10 +36,19 @@ export const decidirPendenciaSchema = z.discriminatedUnion('caminho', [
   }),
 ]);
 
-export const alterarPendenciaSchema = z.object({
-  status: statusPendenciaSchema,
-  detalhe: z.record(z.string(), z.unknown()).default({}),
-});
+export const alterarPendenciaSchema = z
+  .object({
+    status: statusPendenciaSchema,
+    detalhe: z.record(z.string(), z.unknown()).default({}),
+  })
+  .superRefine((v, ctx) => {
+    if (v.status === 'cancelada') {
+      const motivo = (v.detalhe as { motivo?: unknown }).motivo;
+      if (typeof motivo !== 'string' || motivo.trim().length < 5) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['detalhe', 'motivo'], message: 'motivo (mín. 5 caracteres) é obrigatório ao cancelar' });
+      }
+    }
+  });
 
 export type ListarPendenciasDto = z.infer<typeof listarPendenciasSchema>;
 export type DecidirPendenciaDto = z.infer<typeof decidirPendenciaSchema>;
@@ -63,12 +72,14 @@ export const TRANSICOES_PENDENCIA: Record<StatusPendencia, readonly StatusPenden
     'compra_complementar_programada',
     'redistribuicao_decidida',
     'novo_pedido_criado',
+    'resolvida',
     'cancelada',
   ],
   em_analise: [
     'compra_complementar_programada',
     'redistribuicao_decidida',
     'novo_pedido_criado',
+    'resolvida',
     'cancelada',
   ],
   compra_complementar_programada: ['resolvida'],
