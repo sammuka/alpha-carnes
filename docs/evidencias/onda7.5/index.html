@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AlphaCarnes - Onda 7.5 Correção/Hardening E2E</title>
+  <style>
+    :root { color-scheme: dark; --bg:#09090b; --panel:#18181b; --muted:#a1a1aa; --text:#f4f4f5; --line:#27272a; --blue:#60a5fa; --green:#86efac; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Segoe UI, system-ui, sans-serif; background:var(--bg); color:var(--text); line-height:1.55; }
+    header { padding:48px; border-bottom:1px solid var(--line); background:linear-gradient(135deg,#0f172a,#111827); }
+    h1 { margin:0 0 12px; font-size:32px; }
+    h2 { margin:0; font-size:22px; }
+    p { margin:6px 0 0; color:#d4d4d8; }
+    code { color:#bfdbfe; font-size:12px; }
+    .badges { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
+    .badge { border:1px solid #1d4ed8; color:#bfdbfe; border-radius:999px; padding:5px 12px; font-size:12px; background:rgba(37,99,235,.15); }
+    .wrap { max-width:1180px; margin:0 auto; padding:36px; }
+    .context { border:1px solid var(--line); background:var(--panel); border-radius:10px; padding:18px; margin-bottom:24px; }
+    .context-grid, .meta-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+    .context-grid div, .meta-grid div { border:1px solid var(--line); border-radius:8px; padding:12px; background:#111113; }
+    .context-grid strong, .meta-grid strong { display:block; color:var(--green); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+    .step { margin:0 0 56px; padding-bottom:48px; border-bottom:1px solid var(--line); }
+    .step-head { display:flex; align-items:flex-start; gap:14px; margin-bottom:16px; }
+    .step-head span { width:38px; height:38px; display:grid; place-items:center; border-radius:8px; background:#2563eb; font-weight:700; }
+    img { display:block; width:100%; margin-top:18px; border:1px solid var(--line); border-radius:10px; box-shadow:0 18px 50px rgba(0,0,0,.45); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AlphaCarnes — Onda 7.5 Correção/Hardening E2E</h1>
+    <p>Evidências Playwright: overbooking (cancelar/postergar), aprovações (timeline) e SIF (pré-visualização).</p>
+    <div class="badges">
+      <span class="badge">5 capturas</span>
+      <span class="badge">Run 20260802004359</span>
+      <span class="badge">Data 2026-11-05</span>
+    </div>
+  </header>
+  <main class="wrap">
+    <section class="context">
+      <h2>Rastreabilidade dos Dados</h2>
+      <div class="context-grid"><div><strong>Run ID</strong><p><code>20260802004359</code></p></div><div><strong>Operação</strong><p><code>019fbfed-8486-72f2-92f9-cfe5de15b21f</code></p></div><div><strong>Data operacional</strong><p><code>2026-11-05</code></p></div><div><strong>Compra programada</strong><p><code>019fbfed-8552-70c6-b700-fd2447b07753</code></p></div><div><strong>Fornecedor</strong><p><code>019fbfed-7cb9-7d05-a210-8800e3c006c6</code></p></div><div><strong>Cliente</strong><p><code>019fbfed-7e82-7080-938c-5bb4203d40e6</code></p></div></div>
+    </section>
+
+        <section class="step" id="01-overbooking-cancelar-motivo-obrigatorio">
+          <div class="step-head">
+            <span>01</span>
+            <div>
+              <h2>Overbooking — cancelamento exige motivo</h2>
+              <code>http://localhost:3100/gestao/overbooking?operacaoId=019fbfed-8486-72f2-92f9-cfe5de15b21f</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Evidenciar que o botão de confirmação fica desabilitado sem motivo selecionado.</p></div>
+            <div><strong>Ação</strong><p>Abrir pendência → clicar &quot;Cancelar pendência&quot;.</p></div>
+            <div><strong>Resultado</strong><p>Modal exibido com botão &quot;Confirmar Cancelamento&quot; desabilitado.</p></div>
+          </div>
+          <img src="01-overbooking-cancelar-motivo-obrigatorio.png" alt="Overbooking — cancelamento exige motivo" loading="lazy" />
+        </section>
+
+        <section class="step" id="02-overbooking-cancelado">
+          <div class="step-head">
+            <span>02</span>
+            <div>
+              <h2>Overbooking — pendência cancelada</h2>
+              <code>http://localhost:3100/gestao/overbooking?operacaoId=019fbfed-8486-72f2-92f9-cfe5de15b21f</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Evidenciar status Cancelado após confirmação com motivo.</p></div>
+            <div><strong>Ação</strong><p>Selecionar motivo e confirmar cancelamento.</p></div>
+            <div><strong>Resultado</strong><p>Status da pendência muda para Cancelado.</p></div>
+          </div>
+          <img src="02-overbooking-cancelado.png" alt="Overbooking — pendência cancelada" loading="lazy" />
+        </section>
+
+        <section class="step" id="03-overbooking-postergar-max-deficit">
+          <div class="step-head">
+            <span>03</span>
+            <div>
+              <h2>Overbooking — bloco de postergação (sem operação destino elegível)</h2>
+              <code>http://localhost:3100/gestao/overbooking?operacaoId=019fbfed-8486-72f2-92f9-cfe5de15b21f</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Evidenciar o bloco de postergação quando não há operação destino elegível.</p></div>
+            <div><strong>Ação</strong><p>Selecionar pendência aberta.</p></div>
+            <div><strong>Resultado</strong><p>Bloco &quot;3. Postergar para próxima operação&quot; exibido com mensagem de indisponibilidade.</p></div>
+          </div>
+          <img src="03-overbooking-postergar-max-deficit.png" alt="Overbooking — bloco de postergação (sem operação destino elegível)" loading="lazy" />
+        </section>
+
+        <section class="step" id="04-aprovacoes-timeline">
+          <div class="step-head">
+            <span>04</span>
+            <div>
+              <h2>Aprovações — timeline de andamentos</h2>
+              <code>http://localhost:3100/gestao/aprovacoes?operacaoId=019fbfed-8486-72f2-92f9-cfe5de15b21f</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Evidenciar que o andamento registrado aparece na timeline.</p></div>
+            <div><strong>Ação</strong><p>Selecionar ocorrência → registrar andamento pelo formulário.</p></div>
+            <div><strong>Resultado</strong><p>Timeline exibe o andamento recém-registrado.</p></div>
+          </div>
+          <img src="04-aprovacoes-timeline.png" alt="Aprovações — timeline de andamentos" loading="lazy" />
+        </section>
+
+        <section class="step" id="05-sif-preview">
+          <div class="step-head">
+            <span>05</span>
+            <div>
+              <h2>SIF — modal de pré-visualização</h2>
+              <code>http://localhost:3100/gestao/relatorios?operacaoId=019fbfed-8486-72f2-92f9-cfe5de15b21f</code>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <div><strong>Objetivo</strong><p>Evidenciar o Dialog de pré-visualização com o título esperado.</p></div>
+            <div><strong>Ação</strong><p>Clicar &quot;Pré-visualizar&quot; no primeiro relatório da operação.</p></div>
+            <div><strong>Resultado</strong><p>Dialog aberto com título &quot;Pré-visualização — {nome}&quot;.</p></div>
+          </div>
+          <img src="05-sif-preview.png" alt="SIF — modal de pré-visualização" loading="lazy" />
+        </section>
+  </main>
+</body>
+</html>
