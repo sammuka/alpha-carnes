@@ -23,11 +23,12 @@ import { mensagemDeErro } from '@/lib/error-message';
 interface Props {
   open: boolean;
   compra: CompraProgramadaDetalhe | null;
+  itensCompra: Array<{ id: string; nome?: string | null; codigo?: string | null }>;
   onClose: () => void;
   onSalvo: () => void;
 }
 
-export function ComprasEditModal({ open, compra, onClose, onSalvo }: Props) {
+export function ComprasEditModal({ open, compra, itensCompra, onClose, onSalvo }: Props) {
   const [qtds, setQtds] = useState<Record<string, string>>({});
   const [impacto, setImpacto] = useState<ImpactoCompra | null>(null);
   const [historico, setHistorico] = useState<HistoricoCompraItem[]>([]);
@@ -126,7 +127,9 @@ export function ComprasEditModal({ open, compra, onClose, onSalvo }: Props) {
         <div className="space-y-4">
           {compra.itens.map((it) => (
             <div key={it.id} className="flex items-center gap-3">
-              <span className="flex-1 text-sm font-medium">{it.itemCompraId.slice(0, 8)}</span>
+              <span className="flex-1 text-sm font-medium">
+                {itensCompra.find((c) => c.id === it.itemCompraId)?.nome ?? it.itemCompraId.slice(0, 8)}
+              </span>
               <Input
                 type="number"
                 step="0.001"

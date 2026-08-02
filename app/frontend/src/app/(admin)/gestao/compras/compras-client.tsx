@@ -36,6 +36,11 @@ interface LinhaItem {
   observacoes: string;
 }
 
+interface SimulacaoDesdobramento {
+  itens: Array<{ itemComercialId: string; descricao: string; fator: string; total: number }>;
+  totalPartes: number;
+}
+
 function hojeISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -79,8 +84,10 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [modalEditar, setModalEditar] = useState(false);
+  const [simulacoes, setSimulacoes] = useState<Map<string, SimulacaoDesdobramento>>(new Map());
 
   const editavel = compra ? ['rascunho', 'em_negociacao'].includes(compra.status) : true;
+  const podeSimular = !compra || compra.status === 'rascunho';
 
   const carregarCadastros = useCallback(async () => {
     const [fRes, iRes] = await Promise.all([
@@ -138,6 +145,36 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
     void carregarCompraDia();
     void carregarDisponibilidade();
   }, [carregarCompraDia, carregarDisponibilidade]);
+
+  useEffect(() => {
+    if (!podeSimular) return;
+    const candidatas = linhas.filter((l) => l.itemCompraId && Number(l.quantidadeComprada) > 0);
+    if (candidatas.length === 0) {
+      setSimulacoes(new Map());
+      return;
+    }
+    const timer = setTimeout(() => {
+      void Promise.all(
+        candidatas.map((l) =>
+          fetch('/api/cadastros/regras-desdobramento/simular', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              itemCompraId: l.itemCompraId,
+              quantidade: Math.round(Number(l.quantidadeComprada)),
+            }),
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((s: SimulacaoDesdobramento | null) => [l.itemCompraId, s] as const),
+        ),
+      ).then((resultados) => {
+        const proximo = new Map<string, SimulacaoDesdobramento>();
+        for (const [id, s] of resultados) if (s) proximo.set(id, s);
+        setSimulacoes(proximo);
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [linhas, podeSimular]);
 
   const salvar = async () => {
     if (!podeGerenciar) return;
@@ -351,11 +388,18 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                     <th className="pb-2 font-medium">Item de compra</th>
                     <th className="pb-2 font-medium">Quantidade</th>
                     <th className="pb-2 font-medium">Observações</th>
+                    <th className="pb-2 font-medium">Regra de Desdobramento</th>
+                    <th className="pb-2 text-right font-medium">Previsão (kg)</th>
                     {editavel && <th className="pb-2 w-10" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {linhas.map((linha, idx) => (
+                  {linhas.map((linha, idx) => {
+                    const simulacao = simulacoes.get(linha.itemCompraId);
+                    const regraDesdobramento = simulacao
+                      ? simulacao.itens.map((i) => `${i.fator}× ${i.descricao}`).join(' + ')
+                      : '—';
+                    return (
                     <tr key={idx}>
                       <td className="py-3 pr-2">
                         <Select
@@ -397,6 +441,13 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                           disabled={!editavel}
                         />
                       </td>
+                      <td className="py-3 pr-2 text-xs">{regraDesdobramento}</td>
+                      <td
+                        className="py-3 text-right text-xs text-muted-foreground"
+                        title="Previsão de peso depende de cadastro de peso médio por item — pendente"
+                      >
+                        —
+                      </td>
                       {editavel && (
                         <td className="py-3">
                           <Button
@@ -410,7 +461,8 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                         </td>
                       )}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -424,7 +476,54 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                 <Truck className="h-5 w-5 text-primary" />
                 <h2 className="font-semibold">Disponibilidade gerada</h2>
               </div>
-              {disponibilidade.length === 0 ? (
+              {podeSimular ? (
+                simulacoes.size === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    A disponibilidade estimada aparecerá conforme itens e quantidades forem informados.
+                  </p>
+                ) : (
+                  (() => {
+                    const agregado = new Map<string, { descricao: string; total: number }>();
+                    let totalEstimado = 0;
+                    for (const sim of simulacoes.values()) {
+                      totalEstimado += sim.totalPartes;
+                      for (const item of sim.itens) {
+                        const atual = agregado.get(item.itemComercialId);
+                        agregado.set(item.itemComercialId, {
+                          descricao: item.descricao,
+                          total: (atual?.total ?? 0) + item.total,
+                        });
+                      }
+                    }
+                    const linhasAgregadas = [...agregado.values()];
+                    return (
+                      <>
+                        <p className="-mt-2 text-xs text-muted-foreground">
+                          A confirmação deste pedido irá gerar saldo para vendas nas seguintes proporções estimadas:
+                        </p>
+                        <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-4">
+                          {linhasAgregadas.map((l, i) => (
+                            <div key={l.descricao}>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="font-medium">{l.descricao}</span>
+                                <span className="font-bold text-primary">{l.total.toLocaleString('pt-BR')} peças</span>
+                              </div>
+                              {i < linhasAgregadas.length - 1 && <div className="mt-3 h-px w-full bg-border" />}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between pt-2">
+                          <span className="text-sm text-muted-foreground">Total Estimado</span>
+                          <span className="text-2xl font-bold">{totalEstimado.toLocaleString('pt-BR')} partes</span>
+                        </div>
+                        <div className="mt-2 flex items-start gap-2 rounded-md bg-primary/10 p-3 text-xs text-primary">
+                          <span>Os itens comerciais ficarão disponíveis para a equipe de vendas imediatamente após a confirmação da compra.</span>
+                        </div>
+                      </>
+                    );
+                  })()
+                )
+              ) : disponibilidade.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   A disponibilidade aparecerá após confirmar a compra programada.
                 </p>
@@ -446,6 +545,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
       <ComprasEditModal
         open={modalEditar}
         compra={compra?.status === 'confirmada' ? compra : null}
+        itensCompra={itensCompra}
         onClose={() => setModalEditar(false)}
         onSalvo={() => {
           void carregarCompraDia();
