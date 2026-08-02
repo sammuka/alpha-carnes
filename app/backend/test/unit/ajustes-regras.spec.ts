@@ -3,7 +3,7 @@
  * limiar de aprovação, segregação criador≠aprovador, aplicação física (D8.10) e
  * DoD 8.15 — rollback na transação de destinar não emite evento.
  */
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AjustesEstoqueService } from '../../src/modules/operacao/estoque/ajustes.service';
 import { DestinarEstoqueService } from '../../src/modules/operacao/estoque/destinar.service';
@@ -205,6 +205,158 @@ describe('AjustesEstoqueService — limiar, segregação e aplicação (D8.8/8.9
     await expect(service.aprovar('a1', 'gestor1')).rejects.toMatchObject({
       response: expect.objectContaining({ codigo: 'AJUSTE_INVALIDO_PARA_PECA' }),
     });
+  });
+
+  it('capturarAlvo tipo=subitem não encontrado → 404 (nunca abre transação de aplicação)', async () => {
+    const tx = { select: jest.fn(() => makeChain([])) };
+    const db = { transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx)) };
+    const service = new AjustesEstoqueService(
+      { db } as never, makeAuditoria() as never, makeEmitter(), makeAprovacoesMock() as never,
+    );
+
+    await expect(
+      service.criar({ tipo: 'subitem', id: 's1', quantidadeDelta: -1, motivo: 'quebra' }, 'user1'),
+    ).rejects.toThrow(NotFoundException);
+  });
+
+  it('criar tipo=subitem dentro do limiar → captura código via itemComercialId e aplica (delete lógico)', async () => {
+    let selectCall = 0;
+    const subitem = { id: 's1', itemComercialId: 'ic1' };
+    const selectResponses = [
+      [subitem], // capturarAlvo: SELECT subitem FOR UPDATE
+      [{ codigo: 'CB' }], // codigoDoItemComercial
+      [{ valorJson: { valor: 5 } }], // lerLimiar
+    ];
+    const insertReturning = [{
+      id: 'a3', tipoAlvo: 'subitem', entradaId: null, pecaId: null, subitemId: 's1',
+      quantidadeDelta: -1, quantidadeAnterior: 1, status: 'aplicado', aprovacaoOperacionalId: null,
+    }];
+    const tx = {
+      select: jest.fn(() => makeChain(selectResponses[selectCall++] ?? [])),
+      insert: jest.fn(() => makeInsertChain(insertReturning)),
+      update: jest.fn(() => makeUpdateChain([{ id: 's1' }])),
+    };
+    const db = { transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx)) };
+    const service = new AjustesEstoqueService(
+      { db } as never, makeAuditoria() as never, makeEmitter(), makeAprovacoesMock() as never,
+    );
+
+    const resultado = await service.criar(
+      { tipo: 'subitem', id: 's1', quantidadeDelta: -1, motivo: 'quebra' },
+      'user1',
+    );
+    expect(resultado.status).toBe('aplicado');
+    expect(tx.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('listar → aplica filtro de status quando informado e monta paginado', async () => {
+    const linhas = [{ id: 'a1', produtoCodigo: 'CXMIU', quantidadeDelta: -3, quantidadeAnterior: 10, motivo: 'quebra', status: 'aplicado', criadoPor: 'user1', responsavelNome: 'User', createdAt: new Date() }];
+    let selectCall = 0;
+    const responses = [linhas, [{ total: 1 }]];
+    const db = { select: jest.fn(() => makeChain(responses[selectCall++] ?? [])) };
+    const service = new AjustesEstoqueService(
+      { db } as never, makeAuditoria() as never, makeEmitter(), makeAprovacoesMock() as never,
+    );
+
+    const resultado = await service.listar({ page: 1, pageSize: 20, status: 'aplicado' } as never);
+    expect(resultado.total).toBe(1);
+    expect(resultado.data).toEqual(linhas);
+  });
+
+  it('decidir → ajuste não encontrado → 404', async () => {
+    const tx = { select: jest.fn(() => makeChain([])) };
+    const db = { transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx)) };
+    const service = new AjustesEstoqueService(
+      { db } as never, makeAuditoria() as never, makeEmitter(), makeAprovacoesMock() as never,
+    );
+
+    await expect(service.aprovar('a-inexistente', 'gestor1')).rejects.toThrow(NotFoundException);
+  });
+
+  it('decidir → ajuste já decidido (não pendente) → 409 AJUSTE_NAO_PENDENTE', async () => {
+    const ajusteAplicado = { id: 'a1', status: 'aplicado', criadoPor: 'user1', tipoAlvo: 'entrada', entradaId: 'e1' };
+    const tx = { select: jest.fn(() => makeChain([ajusteAplicado])) };
+    const db = { transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx)) };
+    const service = new AjustesEstoqueService(
+      { db } as never, makeAuditoria() as never, makeEmitter(), makeAprovacoesMock() as never,
+    );
+
+    await expect(service.aprovar('a1', 'gestor1')).rejects.toMatchObject({
+      response: expect.objectContaining({ codigo: 'AJUSTE_NAO_PENDENTE' }),
+    });
+  });
+
+  it('rejeitar → decide rejeitado, fecha aprovação operacional vinculada e registra motivo', async () => {
+    const ajustePendente = {
+      id: 'a1', status: 'aguardando_aprovacao', criadoPor: 'user1',
+      tipoAlvo: 'entrada', entradaId: 'e1', aprovacaoOperacionalId: 'aprov1',
+    };
+    const decidido = { ...ajustePendente, status: 'rejeitado', decididoPor: 'gestor1', decisaoMotivo: 'motivo teste' };
+    const tx = {
+      select: jest.fn(() => makeChain([ajustePendente])),
+      update: jest.fn(() => makeUpdateChain([decidido])),
+    };
+    const db = { transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx)) };
+    const emitter = makeEmitter();
+    const service = new AjustesEstoqueService(
+      { db } as never, makeAuditoria() as never, emitter, makeAprovacoesMock() as never,
+    );
+
+    const resultado = await service.rejeitar('a1', { motivo: 'motivo teste' }, 'gestor1');
+    expect(resultado.status).toBe('rejeitado');
+    expect(tx.update).toHaveBeenCalledTimes(2); // ajustesEstoque + aprovacoesOperacionais
+    expect(emitter.emit).toHaveBeenCalledWith('ajuste_estoque_decidido', expect.objectContaining({ ajusteId: 'a1', decisao: 'rejeitado' }));
+  });
+
+  it('operacaoAtualId: sem operação aberta/em_andamento cai no fallback da mais recente', async () => {
+    let selectCall = 0;
+    const entrada = { id: 'e1', quantidade: 20, quantidadeDestinada: 0, produtoId: 'p1', deletedAt: null };
+    const selectResponses = [
+      [entrada],
+      [{ codigo: 'CXMIU' }],
+      [{ valorJson: { valor: 5 } }], // limiar
+      [], // operacaoAtualId: nenhuma aberta/em_andamento
+      [{ id: 'op-antiga' }], // fallback: mais recente qualquer status
+    ];
+    const insertReturning = [{
+      id: 'a4', tipoAlvo: 'entrada', entradaId: 'e1', pecaId: null, subitemId: null,
+      quantidadeDelta: -8, quantidadeAnterior: 20, status: 'aguardando_aprovacao', aprovacaoOperacionalId: 'aprov1',
+    }];
+    const tx = {
+      select: jest.fn(() => makeChain(selectResponses[selectCall++] ?? [])),
+      insert: jest.fn(() => makeInsertChain(insertReturning)),
+    };
+    const db = { transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx)) };
+    const aprovacoes = makeAprovacoesMock();
+    const service = new AjustesEstoqueService(
+      { db } as never, makeAuditoria() as never, makeEmitter(), aprovacoes as never,
+    );
+
+    await service.criar({ tipo: 'entrada', id: 'e1', quantidadeDelta: -8, motivo: 'erro_contagem' }, 'user1');
+    expect(aprovacoes.abrirNaTx).toHaveBeenCalledWith(
+      tx, expect.objectContaining({ operacaoId: 'op-antiga' }), 'user1',
+    );
+  });
+
+  it('operacaoAtualId: nenhuma operação cadastrada → 404 explícito (não abre aprovação silenciosa)', async () => {
+    let selectCall = 0;
+    const entrada = { id: 'e1', quantidade: 20, quantidadeDestinada: 0, produtoId: 'p1', deletedAt: null };
+    const selectResponses = [
+      [entrada],
+      [{ codigo: 'CXMIU' }],
+      [{ valorJson: { valor: 5 } }],
+      [], // operacaoAtualId: nenhuma aberta/em_andamento
+      [], // fallback também vazio
+    ];
+    const tx = { select: jest.fn(() => makeChain(selectResponses[selectCall++] ?? [])) };
+    const db = { transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx)) };
+    const service = new AjustesEstoqueService(
+      { db } as never, makeAuditoria() as never, makeEmitter(), makeAprovacoesMock() as never,
+    );
+
+    await expect(
+      service.criar({ tipo: 'entrada', id: 'e1', quantidadeDelta: -8, motivo: 'erro_contagem' }, 'user1'),
+    ).rejects.toThrow(NotFoundException);
   });
 });
 
