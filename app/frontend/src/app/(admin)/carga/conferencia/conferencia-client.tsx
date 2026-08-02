@@ -1,34 +1,53 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, FileText, Search, Truck } from 'lucide-react';
-import type { Caminhao, CaminhaoDetalhe, StatusCaminhao } from '@/lib/operacao';
-import { statusCaminhaoVariant } from '@/lib/status-ui';
-import { Badge } from '@/components/ui/badge';
+import { useRouter } from 'next/navigation';
+import {
+  CheckCircle2, ChevronDown, ChevronRight, Clock, Lock, PackageCheck, ScanLine, Search, Truck, User, XCircle,
+} from 'lucide-react';
+import type { Caminhao, RomaneioItem, Romaneio } from '@/lib/operacao';
+import { ROTULO_STATUS_CARGA } from '@/lib/expedicao-ui';
+import { conectarRealtime } from '@/lib/realtime';
+import { PipelineBar } from '@/components/ui/pipeline-bar';
 import { Button } from '@/components/ui/button';
-import { StatusPill } from '@/components/ui/status-pill';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { ModalDivergencia } from './modal-divergencia';
 
-const FILTROS = [
-  { id: 'todos', label: 'Todas' },
-  { id: 'em_carga', label: 'Carregando' },
-  { id: 'em_conferencia', label: 'Conferência' },
-  { id: 'fechado', label: 'Fechadas' },
-] as const;
+const EVENTOS_REFETCH = new Set([
+  'carga_item_adicionado',
+  'carga_item_transferido',
+  'carga_item_removido',
+  'carga_item_divergente',
+  'conferencia_concluida',
+  'expedicao_fechada',
+  'expedicao_reaberta',
+]);
 
-function rotuloStatusCaminhao(status: StatusCaminhao): string {
-  return status.replace(/_/g, ' ');
+function fmtKg(peso: string | number | null): string {
+  return peso == null ? '—' : `${Number(peso).toFixed(3).replace('.', ',')} kg`;
+}
+
+function rotuloStatusItem(status: RomaneioItem['statusCargaItem']): string {
+  switch (status) {
+    case 'conferido': return 'Conferida';
+    case 'divergente': return 'Divergente';
+    case 'removido': return 'Removida';
+    default: return 'Pendente';
+  }
 }
 
 export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[] }) {
   const pode = (p: string) => permissoes.includes(p);
+  const router = useRouter();
   const [dataOperacao] = useState(() => new Date().toISOString().slice(0, 10));
   const [caminhoes, setCaminhoes] = useState<Caminhao[]>([]);
-  const [selecionado, setSelecionado] = useState<CaminhaoDetalhe | null>(null);
-  const [filtro, setFiltro] = useState<(typeof FILTROS)[number]['id']>('todos');
+  const [romaneio, setRomaneioState] = useState<Romaneio | null>(null);
+  const [cargaAtivaId, setCargaAtivaId] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
-  const [codigo, setCodigo] = useState('');
+  const [bipInput, setBipInput] = useState('');
+  const [bipMensagem, setBipMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
+  const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
+  const [modalDivergenciaItem, setModalDivergenciaItem] = useState<RomaneioItem | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -42,7 +61,9 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
         setErro('Falha ao carregar cargas');
         return;
       }
-      setCaminhoes((await res.json()) as Caminhao[]);
+      const lista = (await res.json()) as Caminhao[];
+      setCaminhoes(lista);
+      setCargaAtivaId((atual) => atual ?? (lista.length > 0 ? lista[0]!.id : null));
     } catch {
       setErro('Erro de conexão');
     } finally {
@@ -50,15 +71,17 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
     }
   }, [dataOperacao]);
 
-  const carregarDetalhe = useCallback(async (id: string) => {
+  const carregarRomaneio = useCallback(async (id: string) => {
     setErro(null);
     try {
-      const res = await fetch(`/api/operacao/expedicao/caminhoes/${id}`);
+      const res = await fetch(`/api/operacao/expedicao/caminhoes/${id}/romaneio`);
       if (!res.ok) {
         setErro('Falha ao carregar detalhe da carga');
         return;
       }
-      setSelecionado((await res.json()) as CaminhaoDetalhe);
+      const dados = (await res.json()) as Romaneio;
+      setRomaneioState(dados);
+      setExpandidos(new Set(dados.pedidos.map((p) => p.pedidoVendaId)));
     } catch {
       setErro('Erro de conexão');
     }
@@ -68,33 +91,131 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
     void carregarLista();
   }, [carregarLista]);
 
-  const listaFiltrada = useMemo(() => {
-    return caminhoes.filter((c) => {
-      if (filtro !== 'todos' && c.statusCaminhao !== filtro) return false;
-      if (busca && !c.placa.toLowerCase().includes(busca.toLowerCase()) && !c.motorista.toLowerCase().includes(busca.toLowerCase())) {
-        return false;
-      }
-      return true;
-    });
-  }, [caminhoes, filtro, busca]);
+  useEffect(() => {
+    if (cargaAtivaId) void carregarRomaneio(cargaAtivaId);
+  }, [cargaAtivaId, carregarRomaneio]);
 
-  async function acao(url: string, body?: object) {
-    if (!selecionado) return;
-    setErro(null);
+  useEffect(() => {
+    const off = conectarRealtime({
+      rooms: ['dashboard'],
+      onMessage: (msg) => {
+        if (EVENTOS_REFETCH.has(msg.type)) {
+          void carregarLista();
+          if (cargaAtivaId) void carregarRomaneio(cargaAtivaId);
+        }
+      },
+      onReconnect: () => {
+        void carregarLista();
+        if (cargaAtivaId) void carregarRomaneio(cargaAtivaId);
+      },
+    });
+    return off;
+  }, [carregarLista, carregarRomaneio, cargaAtivaId]);
+
+  const cargasFiltradas = useMemo(() => {
+    if (!busca) return caminhoes;
+    const q = busca.toLowerCase();
+    return caminhoes.filter(
+      (c) => c.placa.toLowerCase().includes(q) || c.motorista.toLowerCase().includes(q),
+    );
+  }, [caminhoes, busca]);
+
+  const todosItens = useMemo(
+    () => romaneio?.pedidos.flatMap((p) => p.itens) ?? [],
+    [romaneio],
+  );
+
+  const stats = useMemo(() => {
+    const conferidas = todosItens.filter((i) => i.statusCargaItem === 'conferido').length;
+    const divergentes = todosItens.filter((i) => i.statusCargaItem === 'divergente').length;
+    const pendentes = todosItens.filter((i) => i.statusCargaItem === 'em_carga').length;
+    const pesoConferido = todosItens
+      .filter((i) => i.statusCargaItem === 'conferido' && i.peso != null)
+      .reduce((acc, i) => acc + Number(i.peso), 0);
+    const pesoTotal = todosItens
+      .filter((i) => i.peso != null)
+      .reduce((acc, i) => acc + Number(i.peso), 0);
+    return { total: todosItens.length, conferidas, divergentes, pendentes, pesoConferido, pesoTotal };
+  }, [todosItens]);
+
+  const cam = romaneio?.caminhao;
+  const rotuloStatus = cam ? ROTULO_STATUS_CARGA[cam.statusCaminhao] : '';
+  const cargaConferida = rotuloStatus === 'Conferida' || rotuloStatus === 'Enviada para Faturamento' || rotuloStatus === 'Faturada';
+  const podeFinalizar = stats.pendentes === 0 && !cargaConferida;
+
+  const cargasAtivas = caminhoes.filter(
+    (c) => c.statusCaminhao === 'em_carga' || c.statusCaminhao === 'em_conferencia',
+  ).length;
+
+  async function bipar() {
+    if (!cam) return;
+    setBipMensagem(null);
+    const codigo = bipInput.trim();
     setSubmitting(true);
     try {
-      const res = await fetch(url, {
+      if (codigo === '') {
+        const res = await fetch(`/api/operacao/expedicao/caminhoes/${cam.id}/conferencia/registrar-item`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipoOrigem: 'peca', modoCaptura: 'automatico' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setBipMensagem({ tipo: 'erro', texto: (data as { message?: string }).message ?? 'Falha na bipagem automática' });
+          return;
+        }
+        setBipMensagem({ tipo: 'ok', texto: 'Peça conferida.' });
+        await carregarRomaneio(cam.id);
+        return;
+      }
+
+      // Conferência manual assistida: exige motivo (LEITURA_MANUAL) — modal simplificado inline.
+      const motivo = window.prompt('Leitura manual — informe o motivo:') ?? '';
+      if (!motivo.trim()) {
+        setBipMensagem({ tipo: 'erro', texto: 'Motivo é obrigatório na conferência manual.' });
+        return;
+      }
+      let ultimoErro: string | null = null;
+      for (const tipoOrigem of ['peca', 'subitem'] as const) {
+        const res = await fetch(`/api/operacao/expedicao/caminhoes/${cam.id}/conferencia/registrar-item`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipoOrigem, modoCaptura: 'manual_assistido', codigo, motivo: motivo.trim() }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setBipMensagem({ tipo: 'ok', texto: `${codigo} conferida.` });
+          setBipInput('');
+          await carregarRomaneio(cam.id);
+          return;
+        }
+        ultimoErro = (data as { message?: string }).message ?? 'Falha na conferência manual';
+      }
+      setBipMensagem({ tipo: 'erro', texto: ultimoErro ?? 'Etiqueta não encontrada nesta carga.' });
+    } catch {
+      setBipMensagem({ tipo: 'erro', texto: 'Erro de conexão' });
+    } finally {
+      setSubmitting(false);
+      setBipInput('');
+    }
+  }
+
+  async function confirmarDivergencia(motivo: string, observacao: string) {
+    if (!cam || !modalDivergenciaItem) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/operacao/expedicao/caminhoes/${cam.id}/conferencia/divergencia`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body ?? {}),
+        body: JSON.stringify({ cargaItemId: modalDivergenciaItem.cargaItemId, motivo, observacao: observacao || undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErro((data as { message?: string }).message ?? 'Operação falhou');
+        setErro((data as { message?: string }).message ?? 'Falha ao registrar divergência');
         return;
       }
-      await carregarLista();
-      await carregarDetalhe(selecionado.caminhao.id);
+      setModalDivergenciaItem(null);
+      await carregarRomaneio(cam.id);
     } catch {
       setErro('Erro de conexão');
     } finally {
@@ -102,15 +223,61 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
     }
   }
 
-  const cam = selecionado?.caminhao;
-  const totalPrevisto = selecionado?.pedidos.reduce((s, p) => s + p.previsto, 0) ?? 0;
-  const totalCarregado = selecionado?.pedidos.reduce((s, p) => s + p.carregado, 0) ?? 0;
+  async function finalizarConferencia() {
+    if (!cam) return;
+    setErro(null);
+    setSubmitting(true);
+    try {
+      const resConcluir = await fetch(`/api/operacao/expedicao/caminhoes/${cam.id}/conferencia/concluir`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      const dataConcluir = await resConcluir.json().catch(() => ({}));
+      if (!resConcluir.ok) {
+        setErro((dataConcluir as { message?: string }).message ?? 'Falha ao concluir conferência');
+        return;
+      }
+      const resFechar = await fetch(`/api/operacao/expedicao/caminhoes/${cam.id}/fechar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const dataFechar = await resFechar.json().catch(() => ({}));
+      if (!resFechar.ok) {
+        setErro((dataFechar as { message?: string }).message ?? 'Conferência concluída, mas o fechamento falhou');
+        return;
+      }
+      await carregarLista();
+      await carregarRomaneio(cam.id);
+    } catch {
+      setErro('Erro de conexão');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function toggleExpandido(pedidoVendaId: string) {
+    setExpandidos((prev) => {
+      const next = new Set(prev);
+      if (next.has(pedidoVendaId)) next.delete(pedidoVendaId);
+      else next.add(pedidoVendaId);
+      return next;
+    });
+  }
 
   return (
     <div className="flex h-full flex-col gap-6">
+      <PipelineBar
+        etapaAtual="Carga"
+        contadores={{ carga: `${cargasAtivas} Carga${cargasAtivas !== 1 ? 's' : ''} em Conferência` }}
+      />
+
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Expedição de Cargas</h1>
-        <p className="text-sm text-muted-foreground">Gerenciamento de docas e conferência</p>
+        <h1 className="text-xl font-bold text-foreground">Conferência de Carga</h1>
+        <p className="text-sm text-muted-foreground">
+          Bipagem de peças etiquetadas antes do envio ao faturamento
+        </p>
       </div>
 
       {erro && (
@@ -120,162 +287,275 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
       )}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="flex flex-col overflow-hidden rounded-lg border bg-card lg:col-span-4">
-          <div className="space-y-3 border-b p-4">
+        {/* Master: lista de cargas */}
+        <div className="flex flex-col overflow-hidden rounded-xl border bg-card lg:col-span-4">
+          <div className="border-b p-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="pl-9" placeholder="Buscar placa ou motorista…" value={busca} onChange={(e) => setBusca(e.target.value)} />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {FILTROS.map((f) => (
-                <Badge
-                  key={f.id}
-                  variant={filtro === f.id ? 'default' : 'outline'}
-                  className="cursor-pointer"
-                  onClick={() => setFiltro(f.id)}
-                >
-                  {f.label}
-                </Badge>
-              ))}
+              <Input
+                className="pl-9"
+                placeholder="Buscar por placa, cliente ou carga..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
             </div>
           </div>
           <div className="flex-1 space-y-2 overflow-auto p-2">
             {loading && <p className="p-2 text-sm text-muted-foreground">Carregando…</p>}
             {!loading &&
-              listaFiltrada.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => void carregarDetalhe(c.id)}
-                  className={`w-full rounded-md border p-3 text-left transition-colors ${
-                    selecionado?.caminhao.id === c.id ? 'border-primary bg-primary/5' : 'hover:border-primary/30'
-                  }`}
-                >
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm font-semibold">{c.placa}</span>
-                    <StatusPill
-                      variant={statusCaminhaoVariant(c.statusCaminhao)}
-                      label={rotuloStatusCaminhao(c.statusCaminhao)}
-                    />
-                  </div>
-                  <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Truck className="h-3 w-3" />
-                    {c.motorista}
-                  </p>
-                </button>
-              ))}
+              cargasFiltradas.map((c) => {
+                const selecionada = c.id === cargaAtivaId;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setCargaAtivaId(c.id)}
+                    className={`relative w-full rounded-md border p-3 text-left transition-colors ${
+                      selecionada ? 'border-primary/40 bg-primary/5' : 'hover:border-primary/30'
+                    }`}
+                  >
+                    <div className="mb-2 flex items-start justify-between">
+                      <span className="text-sm font-bold text-foreground">Carga #{c.id.slice(0, 8)}</span>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+                        {ROTULO_STATUS_CARGA[c.statusCaminhao]}
+                      </span>
+                    </div>
+                    <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <Truck className="h-3 w-3" />
+                      {c.placa} · {c.rota ?? '—'}
+                    </div>
+                  </button>
+                );
+              })}
           </div>
         </div>
 
-        <div className="flex flex-col overflow-hidden rounded-lg border bg-card lg:col-span-8">
+        {/* Detail */}
+        <div className="flex flex-col overflow-hidden rounded-xl border bg-card lg:col-span-8">
           {!cam ? (
             <p className="p-8 text-sm text-muted-foreground">Selecione uma carga para ver os detalhes.</p>
           ) : (
             <>
-              <div className="space-y-4 border-b p-6">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="border-b p-6">
+                <div className="mb-4 flex items-start justify-between">
                   <div>
-                    <div className="mb-1 flex items-center gap-2">
-                      <h2 className="text-xl font-bold">{cam.placa}</h2>
-                      <StatusPill
-                        variant={statusCaminhaoVariant(cam.statusCaminhao)}
-                        label={rotuloStatusCaminhao(cam.statusCaminhao)}
-                      />
+                    <div className="mb-1 flex items-center gap-3">
+                      <h2 className="text-lg font-bold text-foreground">Carga #{cam.id.slice(0, 8)}</h2>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+                        {rotuloStatus}
+                      </span>
                     </div>
-                    <p className="text-sm text-muted-foreground">Motorista: {cam.motorista}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {pode('EXPEDICAO_GERENCIAR') && (
-                      <Button variant="outline" size="sm" asChild>
-                        <a href={`/api/operacao/expedicao/caminhoes/${cam.id}/romaneio`} target="_blank" rel="noreferrer">
-                          <FileText className="mr-2 h-4 w-4" />
-                          Romaneio
-                        </a>
-                      </Button>
-                    )}
-                    {pode('EXPEDICAO_GERENCIAR') && cam.statusCaminhao === 'em_carga' && (
-                      <Button size="sm" disabled={submitting} onClick={() => void acao(`/api/operacao/expedicao/caminhoes/${cam.id}/conferencia/iniciar`)}>
-                        Iniciar Conferência
-                      </Button>
-                    )}
-                    {pode('EXPEDICAO_GERENCIAR') && cam.statusCaminhao === 'em_conferencia' && (
-                      <Button size="sm" disabled={submitting} onClick={() => void acao(`/api/operacao/expedicao/caminhoes/${cam.id}/conferencia/concluir`)}>
-                        Concluir Conferência
-                      </Button>
-                    )}
-                    {pode('EXPEDICAO_GERENCIAR') && cam.statusCaminhao === 'em_conferencia' && (
-                      <Button size="sm" variant="default" disabled={submitting} onClick={() => void acao(`/api/operacao/expedicao/caminhoes/${cam.id}/fechar`, { forcado: false })}>
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                        Fechar Expedição
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1.5"><Truck className="h-4 w-4" /> Placa: {cam.placa}</span>
+                      <span className="flex items-center gap-1.5"><User className="h-4 w-4" /> Motorista: {cam.motorista}</span>
+                      <span className="flex items-center gap-1.5"><Clock className="h-4 w-4" /> {cam.rota ?? '—'}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/30 p-4 md:grid-cols-4">
+
+                <div className="grid grid-cols-4 gap-4 rounded-lg border bg-muted/30 p-4">
                   <div>
-                    <p className="text-xs text-muted-foreground">Pedidos</p>
-                    <p className="text-lg font-bold">{selecionado?.pedidos.length ?? 0}</p>
+                    <p className="mb-1 text-xs text-muted-foreground">Total de Pedidos</p>
+                    <p className="text-lg font-bold text-foreground">{romaneio?.pedidos.length ?? 0}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Previsto</p>
-                    <p className="text-lg font-bold">{totalPrevisto}</p>
+                    <p className="mb-1 text-xs text-muted-foreground">Peças Conferidas</p>
+                    <p className="text-lg font-bold text-primary">{stats.conferidas} / {stats.total}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Carregado</p>
-                    <p className="text-lg font-bold text-primary">{totalCarregado}</p>
+                    <p className="mb-1 text-xs text-muted-foreground">Divergências</p>
+                    <p className={`text-lg font-bold ${stats.divergentes > 0 ? 'text-destructive' : 'text-foreground'}`}>
+                      {stats.divergentes}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Progresso</p>
-                    <p className="text-lg font-bold">
-                      {totalPrevisto > 0 ? Math.round((totalCarregado / totalPrevisto) * 100) : 0}%
+                    <p className="mb-1 text-xs text-muted-foreground">Peso Conferido</p>
+                    <p className="text-lg font-bold text-foreground">
+                      {fmtKg(stats.pesoConferido)}{' '}
+                      <span className="text-xs text-muted-foreground">/ {fmtKg(stats.pesoTotal)}</span>
                     </p>
                   </div>
                 </div>
               </div>
 
-              {pode('EXPEDICAO_GERENCIAR') && cam.statusCaminhao === 'em_conferencia' && (
-                <div className="border-b p-4">
-                  <Label htmlFor="codigo-bip">Código QR (conferência manual)</Label>
-                  <div className="mt-2 flex gap-2">
-                    <Input
-                      id="codigo-bip"
-                      value={codigo}
-                      onChange={(e) => setCodigo(e.target.value)}
-                      placeholder="Código da peça/subitem"
-                    />
+              {cargaConferida ? (
+                <div className="mx-6 mt-4 flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                  <Lock className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+                  <p className="flex-1 text-sm font-bold text-emerald-900">
+                    Carga conferida. Estornos simples bloqueados — alterações exigem reabertura autorizada pela gestão.
+                  </p>
+                  {rotuloStatus === 'Conferida' && (
                     <Button
-                      disabled={submitting || !codigo.trim()}
-                      onClick={() =>
-                        void acao(`/api/operacao/expedicao/caminhoes/${cam.id}/conferencia/registrar-item`, {
-                          tipoOrigem: 'peca',
-                          modoCaptura: 'manual_assistido',
-                          codigo: codigo.trim(),
-                        }).then(() => setCodigo(''))
-                      }
+                      size="sm"
+                      className="shrink-0 bg-emerald-700 hover:bg-emerald-800"
+                      onClick={() => router.push('/carga/enviar-faturamento')}
                     >
-                      Registrar
+                      <PackageCheck className="mr-1.5 h-3.5 w-3.5" />
+                      Enviar para Faturamento
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="mx-6 mt-4 flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        className="pl-9 font-mono"
+                        value={bipInput}
+                        onChange={(e) => setBipInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') void bipar(); }}
+                        placeholder="Bipar etiqueta (ETQ-XXXXX) ou deixe em branco para bipar a próxima pendente..."
+                        disabled={submitting}
+                      />
+                    </div>
+                    <Button onClick={() => void bipar()} disabled={submitting}>
+                      <ScanLine className="mr-1.5 h-4 w-4" />
+                      Bipar
                     </Button>
                   </div>
+                  {bipMensagem && (
+                    <div
+                      className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs ${
+                        bipMensagem.tipo === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-destructive/10 text-destructive'
+                      }`}
+                    >
+                      {bipMensagem.tipo === 'ok' ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <XCircle className="h-3.5 w-3.5 shrink-0" />}
+                      {bipMensagem.texto}
+                    </div>
+                  )}
                 </div>
               )}
 
-              <div className="flex-1 overflow-auto p-6">
-                <h3 className="mb-4 text-sm font-semibold">Pedidos Roteirizados</h3>
-                <div className="space-y-3">
-                  {selecionado?.pedidos.map((p) => (
-                    <div key={p.pedidoVendaId} className="rounded-lg border p-4">
-                      <p className="font-medium">{p.pedidoVendaId.slice(0, 8)}…</p>
-                      <p className="text-xs text-muted-foreground">
-                        Carregado {p.carregado} / {p.previsto} itens
-                      </p>
-                    </div>
-                  ))}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-foreground">Pedidos da Carga</h3>
+                  {!cargaConferida && pode('EXPEDICAO_GERENCIAR') && (
+                    <Button
+                      size="sm"
+                      className="bg-emerald-700 hover:bg-emerald-800"
+                      disabled={!podeFinalizar || submitting}
+                      onClick={() => void finalizarConferencia()}
+                    >
+                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                      Finalizar Conferência
+                    </Button>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {romaneio?.pedidos.map((pedido) => {
+                    const expandido = expandidos.has(pedido.pedidoVendaId);
+                    const conferidas = pedido.itens.filter((i) => i.statusCargaItem === 'conferido').length;
+                    const divergentes = pedido.itens.filter((i) => i.statusCargaItem === 'divergente').length;
+                    const total = pedido.itens.length;
+                    const completo = conferidas + divergentes === total;
+
+                    return (
+                      <div key={pedido.pedidoVendaId} className="overflow-hidden rounded-lg border">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandido(pedido.pedidoVendaId)}
+                          className="flex w-full items-center justify-between bg-muted/30 p-4 transition-colors hover:bg-muted/50"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className={`rounded border p-2 shadow-sm ${completo ? 'border-emerald-200 bg-emerald-50' : 'border-border bg-card'}`}>
+                              {completo ? (
+                                <CheckCircle2 className="h-5 w-5 text-emerald-700" />
+                              ) : (
+                                <PackageCheck className="h-5 w-5 text-primary" />
+                              )}
+                            </div>
+                            <div className="text-left">
+                              <p className="text-sm font-semibold text-foreground">
+                                Pedido {pedido.pedidoVendaId.slice(0, 8)}…
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-6">
+                            <div className="text-right">
+                              <p className="text-sm font-medium text-foreground">{conferidas} / {total} peças</p>
+                              {divergentes > 0 && (
+                                <p className="text-xs text-destructive">
+                                  {divergentes} divergente{divergentes !== 1 ? 's' : ''}
+                                </p>
+                              )}
+                            </div>
+                            {expandido ? <ChevronDown className="h-5 w-5 text-muted-foreground" /> : <ChevronRight className="h-5 w-5 text-muted-foreground" />}
+                          </div>
+                        </button>
+
+                        {expandido && (
+                          <div className="border-t bg-card p-4">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b bg-muted/30 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                                  <th className="px-3 py-2">Etiqueta</th>
+                                  <th className="px-3 py-2">Produto</th>
+                                  <th className="px-3 py-2 text-right">Peso</th>
+                                  <th className="px-3 py-2 text-center">Status</th>
+                                  <th className="px-3 py-2 text-right">Ação</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y">
+                                {pedido.itens.map((item) => (
+                                  <tr key={item.cargaItemId}>
+                                    <td className="px-3 py-2.5 font-mono text-xs font-bold text-primary">{item.etiqueta ?? '—'}</td>
+                                    <td className="px-3 py-2.5">
+                                      <p className="font-medium text-foreground">{item.produtoNome}</p>
+                                      {item.statusCargaItem === 'divergente' && item.divergenciaMotivo && (
+                                        <p className="mt-0.5 text-xs text-destructive">{item.divergenciaMotivo}</p>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{fmtKg(item.peso)}</td>
+                                    <td className="px-3 py-2.5 text-center">
+                                      <span
+                                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                                          item.statusCargaItem === 'conferido'
+                                            ? 'bg-emerald-50 text-emerald-700'
+                                            : item.statusCargaItem === 'divergente'
+                                              ? 'bg-destructive/10 text-destructive'
+                                              : 'bg-muted text-muted-foreground'
+                                        }`}
+                                      >
+                                        {rotuloStatusItem(item.statusCargaItem)}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-right">
+                                      {item.statusCargaItem === 'em_carga' && !cargaConferida && pode('EXPEDICAO_GERENCIAR') ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => setModalDivergenciaItem(item)}
+                                          className="rounded border border-destructive/30 px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+                                        >
+                                          Marcar divergência
+                                        </button>
+                                      ) : (
+                                        <span className="text-xs text-muted-foreground/50">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </>
           )}
         </div>
       </div>
+
+      <ModalDivergencia
+        item={modalDivergenciaItem}
+        onClose={() => setModalDivergenciaItem(null)}
+        onConfirmar={(motivo, obs) => void confirmarDivergencia(motivo, obs)}
+        pending={submitting}
+      />
     </div>
   );
 }
