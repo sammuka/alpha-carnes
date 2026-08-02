@@ -138,6 +138,20 @@ async function contarItensNfAtivos(tx: Tx, nfId: string): Promise<number> {
   return itens.length;
 }
 
+async function existeOrfaoNoRecebimento(tx: Tx, recebimentoId: string): Promise<boolean> {
+  const candidatas = await tx
+    .select({ id: notasFiscaisFornecedor.id })
+    .from(notasFiscaisFornecedor)
+    .where(and(
+      eq(notasFiscaisFornecedor.recebimentoId, recebimentoId),
+      isNull(notasFiscaisFornecedor.deletedAt),
+    ));
+  for (const nf of candidatas) {
+    if (await contarItensNfAtivos(tx, nf.id) === 0) return true;
+  }
+  return false;
+}
+
 async function buscarNfCabecalhoAtivaPorNumero(
   tx: Tx,
   recebimentoId: string,
@@ -319,6 +333,14 @@ export async function persistirNfEstruturadaNaTx(
 
   const { pedido } = await validarPedidoRecebimento(tx, pedidoFornecedorId, recebimentoId);
 
+  // D6.10 — snapshot sem lock, tirado ANTES de competir pelo FOR UPDATE abaixo: se
+  // havia órfão visível aqui mas a busca com lock não encontra mais nenhum, uma
+  // transação concorrente venceu a corrida e já o consumiu (ver guard após o if).
+  // Sem essa distinção, cairíamos no INSERT e criaríamos uma 2ª NF ativa para o
+  // mesmo recebimento; mas se nunca houve órfão, múltiplas NFs completas no mesmo
+  // recebimento são um fluxo legítimo (não é corrida) e devem seguir para o INSERT.
+  const orfaoExistiaAntesDoLock = await existeOrfaoNoRecebimento(tx, recebimentoId);
+
   const cabecalhoOrfao = await buscarCabecalhoParaCompletar(tx, recebimentoId, dto.numero);
   if (cabecalhoOrfao) {
     if (cabecalhoOrfao.numeroDivergente && !dto.confirmarSubstituicaoCabecalho) {
@@ -349,21 +371,21 @@ export async function persistirNfEstruturadaNaTx(
     });
   }
 
-  // D6.10 — o FOR UPDATE acima serializa o acesso, mas não impede que uma transação
-  // concorrente já tenha consumido o cabeçalho órfão entre a checagem e este ponto:
-  // sem este guard, cairíamos direto no INSERT abaixo e criaríamos uma 2ª NF ativa
-  // para o mesmo recebimento (violando a invariante de NF única).
-  const nfAtivaExistente = await buscarNfAtivaDoRecebimento(tx, recebimentoId);
-  if (nfAtivaExistente && nfAtivaExistente.numero !== dto.numero
-    && !dto.confirmarSubstituicaoCabecalho) {
-    throw new ConflictException({
-      codigo: 'CABECALHO_ORFAO_DIVERGENTE',
-      message:
-        `A NF ${dto.numero} não corresponde ao cabeçalho ${nfAtivaExistente.numero} já aberto `
-        + 'neste recebimento. Confirme a substituição para renumerar.',
-      numeroInformado: dto.numero,
-      numeroCabecalhoExistente: nfAtivaExistente.numero,
-    });
+  // Corrida perdida: havia órfão antes do lock, mas já não há nenhum agora — uma
+  // transação concorrente venceu e o consumiu. Trata como o mesmo conflito que
+  // trataria se esta transação tivesse vencido a corrida pelo lock.
+  if (orfaoExistiaAntesDoLock && !dto.confirmarSubstituicaoCabecalho) {
+    const nfAtivaAgora = await buscarNfAtivaDoRecebimento(tx, recebimentoId);
+    if (nfAtivaAgora && nfAtivaAgora.numero !== dto.numero) {
+      throw new ConflictException({
+        codigo: 'CABECALHO_ORFAO_DIVERGENTE',
+        message:
+          `A NF ${dto.numero} não corresponde ao cabeçalho ${nfAtivaAgora.numero} já aberto `
+          + 'neste recebimento. Confirme a substituição para renumerar.',
+        numeroInformado: dto.numero,
+        numeroCabecalhoExistente: nfAtivaAgora.numero,
+      });
+    }
   }
 
   const nf = primeiroOuFalha(await tx.insert(notasFiscaisFornecedor).values({
