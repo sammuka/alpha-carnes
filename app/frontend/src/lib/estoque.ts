@@ -47,6 +47,7 @@ export interface EntradaItem {
 
 export interface AjusteEstoque {
   id: string;
+  itemCodigo: string;
   produtoCodigo: string;
   quantidadeDelta: number;
   quantidadeAnterior: number;

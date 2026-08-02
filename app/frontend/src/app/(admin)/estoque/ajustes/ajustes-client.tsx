@@ -74,7 +74,7 @@ function ModalDecisao({
         </DialogHeader>
         <div className="flex flex-col gap-4 p-5">
           <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-muted/40 p-3 text-[12px]">
-            <div><span className="text-muted-foreground">Código: </span><span className="font-bold">{ajuste.produtoCodigo}</span></div>
+            <div><span className="text-muted-foreground">Código: </span><span className="font-bold">{ajuste.itemCodigo}</span></div>
             <div><span className="text-muted-foreground">Ajuste: </span><span className={`font-semibold ${ajuste.quantidadeDelta >= 0 ? 'text-success-strong' : 'text-destructive'}`}>{ajuste.quantidadeDelta >= 0 ? '+' : ''}{ajuste.quantidadeDelta}</span></div>
             <div><span className="text-muted-foreground">Motivo: </span><span className="font-semibold">{MOTIVOS.find((m) => m.value === ajuste.motivo)?.label ?? ajuste.motivo}</span></div>
             <div><span className="text-muted-foreground">Responsável: </span><span className="font-semibold">{ajuste.responsavelNome ?? '—'}</span></div>
@@ -411,7 +411,7 @@ export function AjustesEstoqueClient({
                     const qtdAjustadaLinha = a.quantidadeAnterior + a.quantidadeDelta;
                     return (
                       <tr key={a.id} className={`border-b border-border/60 hover:bg-table-row-hover ${i % 2 !== 0 ? 'bg-table-zebra' : ''}`}>
-                        <td className="whitespace-nowrap px-4 py-2.5 font-mono text-[11px] font-bold text-brand-navy-deep">{a.produtoCodigo}</td>
+                        <td className="whitespace-nowrap px-4 py-2.5 font-mono text-[11px] font-bold text-brand-navy-deep">{a.itemCodigo}</td>
                         <td className="whitespace-nowrap px-4 py-2.5 font-semibold">{a.produtoCodigo}</td>
                         <td className={`whitespace-nowrap px-4 py-2.5 font-bold ${a.quantidadeDelta >= 0 ? 'text-success-strong' : 'text-destructive'}`}>
                           {a.quantidadeDelta >= 0 ? '+' : ''}{a.quantidadeDelta}

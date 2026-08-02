@@ -112,6 +112,13 @@ export class AjustesEstoqueService {
       this.db
         .select({
           id: ajustesEstoque.id,
+          // Código do item físico (peça/subitem: etiqueta vigente; entrada: id) — distinto do produtoCodigo
+          // (código do produto/item comercial), mesmo padrão de fallback de estoque-consulta.service.ts.
+          itemCodigo: sql<string>`CASE
+            WHEN ${ajustesEstoque.tipoAlvo} = 'peca' THEN COALESCE((SELECT etiqueta_atual FROM pecas WHERE id = ${ajustesEstoque.pecaId}), UPPER(LEFT(${ajustesEstoque.pecaId}::text, 8)))
+            WHEN ${ajustesEstoque.tipoAlvo} = 'subitem' THEN COALESCE((SELECT etiqueta_atual FROM subitens WHERE id = ${ajustesEstoque.subitemId}), UPPER(LEFT(${ajustesEstoque.subitemId}::text, 8)))
+            ELSE UPPER(LEFT(${ajustesEstoque.entradaId}::text, 8))
+          END`,
           produtoCodigo: ajustesEstoque.produtoCodigo,
           quantidadeDelta: ajustesEstoque.quantidadeDelta,
           quantidadeAnterior: ajustesEstoque.quantidadeAnterior,

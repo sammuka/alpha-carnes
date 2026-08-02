@@ -296,7 +296,9 @@ function AbaConsultaEstoque({
 
   const produtos = useMemo(() => ['Todos', ...Array.from(new Set(itens.map((i) => i.produto.nome)))], [itens]);
   const locais = useMemo(() => ['Todos', ...Array.from(new Set(itens.map((i) => i.local.valor).filter((v): v is string => v !== null)))], [itens]);
-  const statusList: (StatusRotuloEstoque | 'Todos')[] = ['Todos', 'Disponível', 'Destinado a pedido', 'Em desossa', 'Bloqueado por ocorrência'];
+  // 'Reservado' não tem fonte no modelo (reserva é de disponibilidade virtual, não de peça física):
+  // opção mantida por fidelidade ao protótipo (D8.2) — sempre retorna lista vazia.
+  const statusList: (StatusRotuloEstoque | 'Todos' | 'Reservado')[] = ['Todos', 'Disponível', 'Reservado', 'Destinado a pedido', 'Em desossa', 'Bloqueado por ocorrência'];
 
   const limpar = () => { setBusca(''); setFiltroProduto('Todos'); setFiltroStatus('Todos'); setFiltroLocal('Todos'); };
 

@@ -23,6 +23,7 @@ const itemDisponivel: ItemEstoqueConsulta = {
 
 const ajustePendente: AjusteEstoque = {
   id: 'a1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+  itemCodigo: 'CXR-0009',
   produtoCodigo: 'CXR',
   quantidadeDelta: -8,
   quantidadeAnterior: 20,
