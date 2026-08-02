@@ -349,6 +349,23 @@ export async function persistirNfEstruturadaNaTx(
     });
   }
 
+  // D6.10 — o FOR UPDATE acima serializa o acesso, mas não impede que uma transação
+  // concorrente já tenha consumido o cabeçalho órfão entre a checagem e este ponto:
+  // sem este guard, cairíamos direto no INSERT abaixo e criaríamos uma 2ª NF ativa
+  // para o mesmo recebimento (violando a invariante de NF única).
+  const nfAtivaExistente = await buscarNfAtivaDoRecebimento(tx, recebimentoId);
+  if (nfAtivaExistente && nfAtivaExistente.numero !== dto.numero
+    && !dto.confirmarSubstituicaoCabecalho) {
+    throw new ConflictException({
+      codigo: 'CABECALHO_ORFAO_DIVERGENTE',
+      message:
+        `A NF ${dto.numero} não corresponde ao cabeçalho ${nfAtivaExistente.numero} já aberto `
+        + 'neste recebimento. Confirme a substituição para renumerar.',
+      numeroInformado: dto.numero,
+      numeroCabecalhoExistente: nfAtivaExistente.numero,
+    });
+  }
+
   const nf = primeiroOuFalha(await tx.insert(notasFiscaisFornecedor).values({
     pedidoFornecedorId: pedido.id,
     recebimentoId,
