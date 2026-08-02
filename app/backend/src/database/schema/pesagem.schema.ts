@@ -74,7 +74,7 @@ export const associacoesPecaHistorico = pgTable(
   (t) => [
     check(
       'chk_assoc_hist_acao',
-      sql`${t.acao} IN ('confirmar','redirecionar','sobra','analise','corte','divergencia','estorno','troca_saida','troca_entrada')`,
+      sql`${t.acao} IN ('confirmar','redirecionar','sobra','analise','corte','divergencia','estorno','troca_saida','troca_entrada','destinar_estoque')`,
     ),
     check(
       'chk_assoc_hist_um_alvo',

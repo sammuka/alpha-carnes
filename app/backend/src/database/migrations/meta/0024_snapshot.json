@@ -1,5 +1,5 @@
 {
-  "id": "da2bedbb-2346-4984-b755-93d0db489056",
+  "id": "ea40add2-f147-436f-b765-abfba9e1da0b",
   "prevId": "f0022fb7-79b5-4119-9b52-497488796c93",
   "version": "7",
   "dialect": "postgresql",
@@ -6283,7 +6283,7 @@
       "checkConstraints": {
         "chk_assoc_hist_acao": {
           "name": "chk_assoc_hist_acao",
-          "value": "\"associacoes_peca_historico\".\"acao\" IN ('confirmar','redirecionar','sobra','analise','corte','divergencia','estorno','troca_saida','troca_entrada')"
+          "value": "\"associacoes_peca_historico\".\"acao\" IN ('confirmar','redirecionar','sobra','analise','corte','divergencia','estorno','troca_saida','troca_entrada','destinar_estoque')"
         },
         "chk_assoc_hist_um_alvo": {
           "name": "chk_assoc_hist_um_alvo",
@@ -7987,12 +7987,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "frota_caminhao_id": {
-          "name": "frota_caminhao_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "status_caminhao": {
           "name": "status_caminhao",
           "type": "text",
@@ -8077,22 +8071,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "idx_caminhoes_frota": {
-          "name": "idx_caminhoes_frota",
-          "columns": [
-            {
-              "expression": "frota_caminhao_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"caminhoes\".\"deleted_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -8102,19 +8080,6 @@
           "tableTo": "operacoes",
           "columnsFrom": [
             "operacao_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "caminhoes_frota_caminhao_id_frota_caminhoes_id_fk": {
-          "name": "caminhoes_frota_caminhao_id_frota_caminhoes_id_fk",
-          "tableFrom": "caminhoes",
-          "tableTo": "frota_caminhoes",
-          "columnsFrom": [
-            "frota_caminhao_id"
           ],
           "columnsTo": [
             "id"
@@ -8328,18 +8293,6 @@
           "notNull": true,
           "default": false
         },
-        "divergencia_motivo": {
-          "name": "divergencia_motivo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "divergencia_observacao": {
-          "name": "divergencia_observacao",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "observacoes": {
           "name": "observacoes",
           "type": "text",
@@ -8494,11 +8447,7 @@
         },
         "chk_carga_itens_status": {
           "name": "chk_carga_itens_status",
-          "value": "\"carga_itens\".\"status_carga_item\" IN ('em_carga','conferido','divergente','removido')"
-        },
-        "chk_carga_itens_divergencia_motivo": {
-          "name": "chk_carga_itens_divergencia_motivo",
-          "value": "\"carga_itens\".\"divergencia_motivo\" IS NULL OR \"carga_itens\".\"divergencia_motivo\" IN ('peca_ausente','peca_errada','peso_divergente','etiqueta_ilegivel','avaria','outro')"
+          "value": "\"carga_itens\".\"status_carga_item\" IN ('em_carga','conferido','removido')"
         }
       },
       "isRLSEnabled": false
@@ -10197,6 +10146,487 @@
         "chk_aprovacao_decisao": {
           "name": "chk_aprovacao_decisao",
           "value": "(\n        (\"aprovacoes_operacionais\".\"status\" = 'pendente'\n          AND \"aprovacoes_operacionais\".\"decisao_motivo\" IS NULL AND \"aprovacoes_operacionais\".\"decidido_por_id\" IS NULL AND \"aprovacoes_operacionais\".\"decidido_em\" IS NULL)\n        OR\n        (\"aprovacoes_operacionais\".\"status\" IN ('aprovada','rejeitada')\n          AND \"aprovacoes_operacionais\".\"decisao_motivo\" IS NOT NULL AND length(btrim(\"aprovacoes_operacionais\".\"decisao_motivo\")) >= 10\n          AND \"aprovacoes_operacionais\".\"decidido_por_id\" IS NOT NULL AND \"aprovacoes_operacionais\".\"decidido_em\" IS NOT NULL)\n      )"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.ajustes_estoque": {
+      "name": "ajustes_estoque",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "tipo_alvo": {
+          "name": "tipo_alvo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "peca_id": {
+          "name": "peca_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subitem_id": {
+          "name": "subitem_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entrada_id": {
+          "name": "entrada_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "produto_codigo": {
+          "name": "produto_codigo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantidade_delta": {
+          "name": "quantidade_delta",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantidade_anterior": {
+          "name": "quantidade_anterior",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "motivo": {
+          "name": "motivo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "descricao": {
+          "name": "descricao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'aplicado'"
+        },
+        "criado_por": {
+          "name": "criado_por",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decidido_por": {
+          "name": "decidido_por",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decidido_em": {
+          "name": "decidido_em",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decisao_motivo": {
+          "name": "decisao_motivo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aprovacao_operacional_id": {
+          "name": "aprovacao_operacional_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_ajustes_status": {
+          "name": "idx_ajustes_status",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"ajustes_estoque\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_ajustes_created": {
+          "name": "idx_ajustes_created",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"ajustes_estoque\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ajustes_estoque_peca_id_pecas_id_fk": {
+          "name": "ajustes_estoque_peca_id_pecas_id_fk",
+          "tableFrom": "ajustes_estoque",
+          "tableTo": "pecas",
+          "columnsFrom": [
+            "peca_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ajustes_estoque_subitem_id_subitens_id_fk": {
+          "name": "ajustes_estoque_subitem_id_subitens_id_fk",
+          "tableFrom": "ajustes_estoque",
+          "tableTo": "subitens",
+          "columnsFrom": [
+            "subitem_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ajustes_estoque_entrada_id_entradas_itens_id_fk": {
+          "name": "ajustes_estoque_entrada_id_entradas_itens_id_fk",
+          "tableFrom": "ajustes_estoque",
+          "tableTo": "entradas_itens",
+          "columnsFrom": [
+            "entrada_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ajustes_estoque_criado_por_usuarios_id_fk": {
+          "name": "ajustes_estoque_criado_por_usuarios_id_fk",
+          "tableFrom": "ajustes_estoque",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "criado_por"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ajustes_estoque_decidido_por_usuarios_id_fk": {
+          "name": "ajustes_estoque_decidido_por_usuarios_id_fk",
+          "tableFrom": "ajustes_estoque",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "decidido_por"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ajustes_estoque_aprovacao_operacional_id_aprovacoes_operacionais_id_fk": {
+          "name": "ajustes_estoque_aprovacao_operacional_id_aprovacoes_operacionais_id_fk",
+          "tableFrom": "ajustes_estoque",
+          "tableTo": "aprovacoes_operacionais",
+          "columnsFrom": [
+            "aprovacao_operacional_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "chk_ajustes_tipo_alvo": {
+          "name": "chk_ajustes_tipo_alvo",
+          "value": "\"ajustes_estoque\".\"tipo_alvo\" IN ('peca','subitem','entrada')"
+        },
+        "chk_ajustes_um_alvo": {
+          "name": "chk_ajustes_um_alvo",
+          "value": "(\"ajustes_estoque\".\"peca_id\" IS NOT NULL)::int + (\"ajustes_estoque\".\"subitem_id\" IS NOT NULL)::int + (\"ajustes_estoque\".\"entrada_id\" IS NOT NULL)::int = 1"
+        },
+        "chk_ajustes_delta": {
+          "name": "chk_ajustes_delta",
+          "value": "\"ajustes_estoque\".\"quantidade_delta\" <> 0"
+        },
+        "chk_ajustes_motivo": {
+          "name": "chk_ajustes_motivo",
+          "value": "\"ajustes_estoque\".\"motivo\" IN ('quebra','perda','erro_contagem','vencimento','outro')"
+        },
+        "chk_ajustes_status": {
+          "name": "chk_ajustes_status",
+          "value": "\"ajustes_estoque\".\"status\" IN ('aplicado','aguardando_aprovacao','rejeitado')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.entradas_itens": {
+      "name": "entradas_itens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "produto_id": {
+          "name": "produto_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantidade": {
+          "name": "quantidade",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantidade_destinada": {
+          "name": "quantidade_destinada",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "unidade": {
+          "name": "unidade",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'caixa'"
+        },
+        "fornecedor_nome": {
+          "name": "fornecedor_nome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lote_nf": {
+          "name": "lote_nf",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "local": {
+          "name": "local",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "destino": {
+          "name": "destino",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pedido_id": {
+          "name": "pedido_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pedido_venda_item_id": {
+          "name": "pedido_venda_item_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "observacao": {
+          "name": "observacao",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "registrado_por": {
+          "name": "registrado_por",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_entradas_itens_produto": {
+          "name": "idx_entradas_itens_produto",
+          "columns": [
+            {
+              "expression": "produto_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"entradas_itens\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_entradas_itens_created": {
+          "name": "idx_entradas_itens_created",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"entradas_itens\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "entradas_itens_produto_id_produtos_id_fk": {
+          "name": "entradas_itens_produto_id_produtos_id_fk",
+          "tableFrom": "entradas_itens",
+          "tableTo": "produtos",
+          "columnsFrom": [
+            "produto_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "entradas_itens_pedido_id_pedidos_venda_id_fk": {
+          "name": "entradas_itens_pedido_id_pedidos_venda_id_fk",
+          "tableFrom": "entradas_itens",
+          "tableTo": "pedidos_venda",
+          "columnsFrom": [
+            "pedido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "entradas_itens_pedido_venda_item_id_pedidos_venda_itens_id_fk": {
+          "name": "entradas_itens_pedido_venda_item_id_pedidos_venda_itens_id_fk",
+          "tableFrom": "entradas_itens",
+          "tableTo": "pedidos_venda_itens",
+          "columnsFrom": [
+            "pedido_venda_item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "entradas_itens_registrado_por_usuarios_id_fk": {
+          "name": "entradas_itens_registrado_por_usuarios_id_fk",
+          "tableFrom": "entradas_itens",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "registrado_por"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "chk_entradas_itens_qtd": {
+          "name": "chk_entradas_itens_qtd",
+          "value": "\"entradas_itens\".\"quantidade\" > 0"
+        },
+        "chk_entradas_itens_destinada": {
+          "name": "chk_entradas_itens_destinada",
+          "value": "\"entradas_itens\".\"quantidade_destinada\" >= 0 AND \"entradas_itens\".\"quantidade_destinada\" <= \"entradas_itens\".\"quantidade\""
+        },
+        "chk_entradas_itens_unidade": {
+          "name": "chk_entradas_itens_unidade",
+          "value": "\"entradas_itens\".\"unidade\" IN ('caixa','unidade')"
+        },
+        "chk_entradas_itens_destino": {
+          "name": "chk_entradas_itens_destino",
+          "value": "\"entradas_itens\".\"destino\" IN ('estoque','pedido')"
         }
       },
       "isRLSEnabled": false

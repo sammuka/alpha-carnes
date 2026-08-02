@@ -31,3 +31,4 @@ export * from './adendos-pedido.schema';
 export * from './tabelas-preco.schema';
 export * from './relatorios-sif.schema';
 export * from './aprovacoes-operacionais.schema';
+export * from './estoque.schema';

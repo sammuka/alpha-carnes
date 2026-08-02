@@ -287,18 +287,22 @@ describe('Onda 4 — migrations geradas D36', () => {
         'migrations/0021_onda6_recebimento_balanca_expand.sql',
         'migrations/0022_onda6_etiqueta_estado_backfill.sql',
         'migrations/0023_onda7_desossa_expand.sql',
+        'migrations/0024_onda8_estoque_expand.sql',
         // Onda 9: frota no caminhão + divergência de item de carga (expedicao.schema.ts)
-        'migrations/0024_onda9_carga_expand.sql',
+        'migrations/0025_onda9_carga_expand.sql',
         'migrations/meta/0019_snapshot.json',
         'migrations/meta/0020_snapshot.json',
         'migrations/meta/0021_snapshot.json',
         'migrations/meta/0022_snapshot.json',
         'migrations/meta/0023_snapshot.json',
         'migrations/meta/0024_snapshot.json',
+        'migrations/meta/0025_snapshot.json',
         'schema/relatorios-sif.schema.ts',
         'schema/aprovacoes-operacionais.schema.ts',
         // Emenda 7: importa aprovacoes-operacionais — quebra resolve do probe O4
         'schema/divergencias-transformacao.schema.ts',
+        // Onda 8: estoque.schema importa aprovacoes-operacionais — mesmo motivo acima.
+        'schema/estoque.schema.ts',
       ]) {
         fs.rmSync(path.join(probe, postO4Artifact), { force: true });
       }
@@ -339,7 +343,8 @@ describe('Onda 4 — migrations geradas D36', () => {
           !line.includes('relatorios-sif.schema') &&
           !line.includes('aprovacoes-operacionais.schema') &&
           !line.includes('usuarios-representantes.schema') &&
-          !line.includes('divergencias-transformacao.schema'),
+          !line.includes('divergencias-transformacao.schema') &&
+          !line.includes('estoque.schema'),
         );
       fs.writeFileSync(probeSchemaIndex, `${o4SchemaLines.join('\n')}\n`, 'utf8');
 

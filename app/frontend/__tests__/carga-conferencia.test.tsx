@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ConferenciaExpedicaoClient } from '../src/app/(admin)/carga/conferencia/conferencia-client';
 import { ROTULO_STATUS_CARGA } from '../src/lib/expedicao-ui';
 import type { StatusCaminhao } from '../src/lib/operacao';
@@ -176,6 +176,46 @@ describe('ConferenciaExpedicaoClient', () => {
     botaoDivergencia.click();
     const botaoConfirmar = await screen.findByText('Confirmar Divergência');
     expect(botaoConfirmar.closest('button')).toBeDisabled();
+  });
+
+  it('DoD 9.6 leitura manual usa modal do DS (nao window.prompt) e exige motivo', async () => {
+    mockFetch({
+      '/caminhoes/c1aaaaaabbbbccccddddeeeeffff0001/romaneio': {
+        caminhao: caminhaoBase,
+        pedidos: [
+          {
+            pedidoVendaId: 'ped-1',
+            clienteId: 'cli-1',
+            ordemNaCarga: 1,
+            previsto: 1,
+            carregado: 0,
+            itens: [
+              {
+                cargaItemId: 'item-1',
+                pedidoVendaId: 'ped-1',
+                statusCargaItem: 'em_carga',
+                divergenciaMotivo: null,
+                etiqueta: 'ETQ-001',
+                produtoNome: 'TZ',
+                peso: '49.5',
+              },
+            ],
+          },
+        ],
+      },
+      '/caminhoes?dataOperacao': [caminhaoBase],
+    });
+    const promptSpy = jest.spyOn(window, 'prompt');
+    render(<ConferenciaExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
+    await waitFor(() => expect(screen.getByPlaceholderText(/Bipar etiqueta/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText(/Bipar etiqueta/i), { target: { value: 'ETQ-001' } });
+    fireEvent.click(screen.getByText('Bipar'));
+
+    const botaoConfirmar = await screen.findByText('Confirmar', { selector: 'button' });
+    expect(promptSpy).not.toHaveBeenCalled();
+    expect(screen.getByText('Leitura manual — informe o motivo')).toBeInTheDocument();
+    expect(botaoConfirmar).toBeDisabled();
+    promptSpy.mockRestore();
   });
 
   it('card da lista-master mostra contador conferidas/total peças', async () => {

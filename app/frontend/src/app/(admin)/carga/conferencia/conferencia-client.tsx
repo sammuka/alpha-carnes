@@ -12,6 +12,7 @@ import { PipelineBar } from '@/components/ui/pipeline-bar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ModalDivergencia } from './modal-divergencia';
+import { ModalLeituraManual } from './modal-leitura-manual';
 
 const EVENTOS_REFETCH = new Set([
   'carga_item_adicionado',
@@ -49,6 +50,7 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
   const [bipMensagem, setBipMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [modalDivergenciaItem, setModalDivergenciaItem] = useState<RomaneioItem | null>(null);
+  const [modalLeituraManualCodigo, setModalLeituraManualCodigo] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -194,34 +196,44 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
         return;
       }
 
-      // Conferência manual assistida: exige motivo (LEITURA_MANUAL) — modal simplificado inline.
-      const motivo = window.prompt('Leitura manual — informe o motivo:') ?? '';
-      if (!motivo.trim()) {
-        setBipMensagem({ tipo: 'erro', texto: 'Motivo é obrigatório na conferência manual.' });
-        return;
-      }
+      // Conferência manual assistida: exige motivo (LEITURA_MANUAL) — modal do DS.
+      setModalLeituraManualCodigo(codigo);
+    } catch {
+      setBipMensagem({ tipo: 'erro', texto: 'Erro de conexão' });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function confirmarLeituraManual(motivo: string) {
+    if (!cam || !modalLeituraManualCodigo) return;
+    const codigo = modalLeituraManualCodigo;
+    setSubmitting(true);
+    try {
       let ultimoErro: string | null = null;
       for (const tipoOrigem of ['peca', 'subitem'] as const) {
         const res = await fetch(`/api/operacao/expedicao/caminhoes/${cam.id}/conferencia/registrar-item`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tipoOrigem, modoCaptura: 'manual_assistido', codigo, motivo: motivo.trim() }),
+          body: JSON.stringify({ tipoOrigem, modoCaptura: 'manual_assistido', codigo, motivo }),
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
           setBipMensagem({ tipo: 'ok', texto: `${codigo} conferida.` });
+          setModalLeituraManualCodigo(null);
           setBipInput('');
           await carregarRomaneio(cam.id);
           return;
         }
         ultimoErro = (data as { message?: string }).message ?? 'Falha na conferência manual';
       }
+      setModalLeituraManualCodigo(null);
+      setBipInput('');
       setBipMensagem({ tipo: 'erro', texto: ultimoErro ?? 'Etiqueta não encontrada nesta carga.' });
     } catch {
       setBipMensagem({ tipo: 'erro', texto: 'Erro de conexão' });
     } finally {
       setSubmitting(false);
-      setBipInput('');
     }
   }
 
@@ -591,6 +603,14 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
         item={modalDivergenciaItem}
         onClose={() => setModalDivergenciaItem(null)}
         onConfirmar={(motivo, obs) => void confirmarDivergencia(motivo, obs)}
+        pending={submitting}
+      />
+
+      <ModalLeituraManual
+        open={!!modalLeituraManualCodigo}
+        codigo={modalLeituraManualCodigo ?? ''}
+        onClose={() => setModalLeituraManualCodigo(null)}
+        onConfirmar={(motivo) => void confirmarLeituraManual(motivo)}
         pending={submitting}
       />
     </div>

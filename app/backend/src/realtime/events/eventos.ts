@@ -66,6 +66,11 @@ export const EVENTOS = {
   // ── Onda 7 — Desossa / Transformação ──────────────────────────────────────
   FALTAS_DESOSSA_ATUALIZADAS: 'faltas_desossa_atualizadas',
   DIVERGENCIA_TRANSFORMACAO_ABERTA: 'divergencia_transformacao_aberta',
+  // ── Onda 8 — Estoque ──────────────────────────────────────────────────────
+  ESTOQUE_ITEM_DESTINADO: 'estoque_item_destinado',
+  ENTRADA_ITENS_REGISTRADA: 'entrada_itens_registrada',
+  AJUSTE_ESTOQUE_CRIADO: 'ajuste_estoque_criado',
+  AJUSTE_ESTOQUE_DECIDIDO: 'ajuste_estoque_decidido',
   // ── Onda 9 — Carga (conferência) ──────────────────────────────────────────
   CARGA_ITEM_DIVERGENTE: 'carga_item_divergente',
 } as const;
@@ -88,6 +93,34 @@ export interface DivergenciaTransformacaoAbertaPayload {
   divergenciaId: string;
   aprovacaoId: string;
   tipo: string;
+}
+
+// ── Onda 8 — Estoque ──────────────────────────────────────────────────────
+
+export interface EstoqueItemDestinadoPayload {
+  tipo: 'peca' | 'subitem' | 'entrada';
+  id: string;
+  pedidoVendaItemId: string;
+  dataOperacao: string;
+}
+
+export interface EntradaItensRegistradaPayload {
+  entradaId: string;
+  produtoId: string;
+  quantidade: number;
+  destino: 'estoque' | 'pedido';
+  dataOperacao: string;
+}
+
+export interface AjusteEstoqueCriadoPayload {
+  ajusteId: string;
+  dataOperacao: string;
+}
+
+export interface AjusteEstoqueDecididoPayload {
+  ajusteId: string;
+  decisao: 'aplicado' | 'rejeitado';
+  dataOperacao: string;
 }
 
 export interface CompraConfirmadaPayload {
@@ -437,6 +470,11 @@ export interface PayloadPorEvento {
   // ── Onda 7 — Desossa / Transformação ──────────────────────────────────────
   faltas_desossa_atualizadas: FaltasDesossaAtualizadasPayload;
   divergencia_transformacao_aberta: DivergenciaTransformacaoAbertaPayload;
+  // ── Onda 8 — Estoque ────────────────────────────────────────────────────
+  estoque_item_destinado: EstoqueItemDestinadoPayload;
+  entrada_itens_registrada: EntradaItensRegistradaPayload;
+  ajuste_estoque_criado: AjusteEstoqueCriadoPayload;
+  ajuste_estoque_decidido: AjusteEstoqueDecididoPayload;
   // ── Onda 9 — Carga (conferência) ──────────────────────────────────────────
   carga_item_divergente: CargaItemDivergentePayload;
 }

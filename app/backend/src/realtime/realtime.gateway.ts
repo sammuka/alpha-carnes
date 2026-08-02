@@ -49,6 +49,10 @@ import {
   type PendenciaOverbookingPayload,
   type FaltasDesossaAtualizadasPayload,
   type DivergenciaTransformacaoAbertaPayload,
+  type EstoqueItemDestinadoPayload,
+  type EntradaItensRegistradaPayload,
+  type AjusteEstoqueCriadoPayload,
+  type AjusteEstoqueDecididoPayload,
   type CargaItemDivergentePayload,
 } from './events/eventos';
 
@@ -354,6 +358,28 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.DIVERGENCIA_TRANSFORMACAO_ABERTA)
   handleDivergenciaTransformacaoAberta(payload: DivergenciaTransformacaoAbertaPayload): void {
     this.broadcast(EVENTOS.DIVERGENCIA_TRANSFORMACAO_ABERTA, payload, payload.dataOperacao);
+  }
+
+  // ── Onda 8 — Estoque ───────────────────────────────────────────────────────
+
+  @OnEvent(EVENTOS.ESTOQUE_ITEM_DESTINADO)
+  handleEstoqueItemDestinado(payload: EstoqueItemDestinadoPayload): void {
+    this.broadcast(EVENTOS.ESTOQUE_ITEM_DESTINADO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.ENTRADA_ITENS_REGISTRADA)
+  handleEntradaItensRegistrada(payload: EntradaItensRegistradaPayload): void {
+    this.broadcast(EVENTOS.ENTRADA_ITENS_REGISTRADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.AJUSTE_ESTOQUE_CRIADO)
+  handleAjusteEstoqueCriado(payload: AjusteEstoqueCriadoPayload): void {
+    this.broadcast(EVENTOS.AJUSTE_ESTOQUE_CRIADO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.AJUSTE_ESTOQUE_DECIDIDO)
+  handleAjusteEstoqueDecidido(payload: AjusteEstoqueDecididoPayload): void {
+    this.broadcast(EVENTOS.AJUSTE_ESTOQUE_DECIDIDO, payload, payload.dataOperacao);
   }
 
   private broadcast(evento: string, payload: unknown, dataOperacao: string): void {
