@@ -112,6 +112,106 @@ describe('LiberacaoService — branches', () => {
     expect(emitSpy).not.toHaveBeenCalled();
   });
 
+  it('liberarSaida transiciona faturado → liberado_saida quando faturamento concluído', async () => {
+    const caminhaoService = {
+      caminhaoAtivo: jest.fn().mockResolvedValue(caminhao('faturado')),
+      dataOperacaoDoCaminhao: jest.fn().mockResolvedValue('2026-06-23'),
+    };
+    const tx = {
+      select: jest.fn(() => ({
+        from: jest.fn(() => ({
+          where: jest.fn(() => Promise.resolve([{ statusFaturamento: 'concluido' }])),
+        })),
+      })),
+      update: jest.fn(() => ({
+        set: jest.fn(() => ({
+          where: jest.fn(() => ({
+            returning: jest.fn(() => Promise.resolve([caminhao('liberado_saida')])),
+          })),
+        })),
+      })),
+    };
+    const db = {
+      transaction: jest.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx)),
+    };
+    const service = new LiberacaoService(
+      { db } as never,
+      auditoria as never,
+      emitter,
+      caminhaoService as never,
+    );
+
+    const res = await service.liberarSaida('cam-1', 'op-1');
+    expect(res.statusCaminhao).toBe('liberado_saida');
+    expect(auditoria.registrar).toHaveBeenCalledTimes(1);
+    expect(emitSpy).toHaveBeenCalledWith(EVENTOS.EXPEDICAO_LIBERADA_SAIDA, {
+      caminhaoId: 'cam-1',
+      dataOperacao: '2026-06-23',
+    });
+  });
+
+  it('listarParaEnvio agrega responsável da liberação quando há caminhões liberados', async () => {
+    const caminhaoService = { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn() };
+    const horaLiberacao = new Date('2026-06-23T10:00:00Z');
+    const respostas: unknown[][] = [
+      [{ id: 'cam-1', placa: 'ABC1234', motorista: 'M1', rota: 'R1', statusCaminhao: 'liberado_faturamento', horaLiberacao }],
+      [{ caminhaoId: 'cam-1', pedidoVendaId: 'pv1', etiqueta: 'ET1', produtoNome: 'Traseiro', peso: '10.000' }],
+      [],
+      [{ id: 'pv1', nomeFantasia: 'Cliente Fantasia', razaoSocial: 'Cliente SA' }],
+      [{ registroId: 'cam-1', responsavelNome: 'Operador Expedição' }],
+    ];
+    let call = 0;
+    const db = {
+      select: jest.fn(() => {
+        const rows = respostas[call++] ?? [];
+        const chain = {
+          from: () => chain,
+          innerJoin: () => chain,
+          leftJoin: () => chain,
+          where: () => chain,
+          orderBy: () => Promise.resolve(rows),
+          then: (resolve: (r: unknown[]) => unknown) => Promise.resolve(resolve(rows)),
+        };
+        return chain;
+      }),
+    };
+    const service = new LiberacaoService(
+      { db } as never,
+      auditoria as never,
+      emitter,
+      caminhaoService as never,
+    );
+
+    const resultado = await service.listarParaEnvio('2026-06-23');
+    expect(resultado).toHaveLength(1);
+    const item = resultado[0]!;
+    expect(item.totalPecas).toBe(1);
+    expect(item.pedidos[0]!.clienteNome).toBe('Cliente Fantasia');
+    expect(item.envio).toEqual({ dataHora: horaLiberacao, responsavelNome: 'Operador Expedição' });
+  });
+
+  it('listarParaLiberacao retorna caminhões elegíveis com status de faturamento', async () => {
+    const linhas = [{ id: 'cam-1', placa: 'ABC1234', motorista: 'M1', rota: 'R1', statusCaminhao: 'faturado', dataOperacao: '2026-06-23', statusFaturamento: 'concluido' }];
+    const chain = {
+      from: () => chain,
+      innerJoin: () => chain,
+      leftJoin: () => chain,
+      where: () => chain,
+      orderBy: () => Promise.resolve(linhas),
+    };
+    const db = { select: jest.fn(() => chain) };
+    const caminhaoService = { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn() };
+    const service = new LiberacaoService(
+      { db } as never,
+      auditoria as never,
+      emitter,
+      caminhaoService as never,
+    );
+
+    const resultado = await service.listarParaLiberacao('2026-06-23');
+    expect(resultado).toEqual(linhas);
+  });
+
   it('sincronizarPosEmissao retorna null sem faturamento', async () => {
     const db = {
       select: jest.fn(() => ({

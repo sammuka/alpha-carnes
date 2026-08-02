@@ -174,6 +174,13 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
     const item2Id = await adicionarPecaNaCarga(app, expedicaoCookies, caminhaoId, peca2);
     await iniciarConferencia(app, expedicaoCookies, caminhaoId);
 
+    // RBAC: perfil sem EXPEDICAO_GERENCIAR não pode marcar divergência.
+    const divergenciaNegada = await request(srv())
+      .post(`/operacao/expedicao/caminhoes/${caminhaoId}/conferencia/divergencia`)
+      .set('Cookie', comercialPerfilCookies)
+      .send({ cargaItemId: item1Id, motivo: 'peca_ausente' });
+    expect(divergenciaNegada.status).toBe(403);
+
     // Marca item1 como divergente (ainda em_carga)
     const divergenciaRes = await request(srv())
       .post(`/operacao/expedicao/caminhoes/${caminhaoId}/conferencia/divergencia`)
@@ -411,6 +418,14 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
       .set('Cookie', expedicaoCookies)
       .send({ tipoOrigem: 'subitem', id: subId });
     await iniciarConferencia(app, expedicaoCookies, caminhaoId);
+
+    // RBAC: perfil sem EXPEDICAO_LER/EXPEDICAO_GERENCIAR/FATURAMENTO_LER não pode consultar.
+    const conferente = await createTestUser(app, { perfil: 'corte' });
+    const conferenteCookies = await loginCookies(app, conferente.adminEmail, conferente.adminPassword);
+    const negado = await request(srv())
+      .get(`/operacao/expedicao/envio-faturamento?dataOperacao=${c.dataOperacao}`)
+      .set('Cookie', conferenteCookies);
+    expect(negado.status).toBe(403);
 
     const listagem = await request(srv())
       .get(`/operacao/expedicao/envio-faturamento?dataOperacao=${c.dataOperacao}`)
