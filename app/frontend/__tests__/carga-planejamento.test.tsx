@@ -24,6 +24,8 @@ const caminhaoBase = {
   motorista: 'João Silva',
   rota: 'Rota Norte',
   dataOperacao: '2026-06-08',
+  frotaCaminhaoId: null,
+  capacidadeKg: null,
   statusCaminhao: 'planejado' as const,
   horaAberturaCarga: null,
   horaFechamentoCarga: null,
@@ -42,6 +44,12 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
       return { ok: true, json: async () => [] };
     }
     if (urlStr.includes('/pedidos')) {
+      return { ok: true, json: async () => ({ data: [] }) };
+    }
+    if (urlStr.includes('/clientes')) {
+      return { ok: true, json: async () => ({ data: [] }) };
+    }
+    if (urlStr.includes('/frota-caminhoes')) {
       return { ok: true, json: async () => ({ data: [] }) };
     }
     return { ok: true, json: async () => ({}) };
@@ -80,10 +88,53 @@ describe('PlanejamentoExpedicaoClient', () => {
 
   it('carrega caminhões do dia quando API responde', async () => {
     mockFetch({
+      '/caminhoes/c1aaaaaabbbbccccddddeeeeffff0001': { caminhao: { ...caminhaoBase, pesoCarregadoKg: '0.000' }, pedidos: [] },
       '/caminhoes': [caminhaoBase],
-      [`/caminhoes/${caminhaoBase.id}`]: { caminhao: caminhaoBase, pedidos: [] },
     });
     render(<PlanejamentoExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
     await waitFor(() => expect(screen.getByText('ABC-1234')).toBeInTheDocument());
+  });
+
+  it('agrupa pedidos sem caminhão por rota', async () => {
+    mockFetch({
+      '/pedidos': {
+        data: [
+          { id: 'ped-1', compraProgramadaId: 'c1', clienteId: 'cli-1', dataEntrega: null, rotaPrevista: 'Rota Norte', prioridade: null, status: 'em_elaboracao_reserva_ativa', observacoesGerais: null, createdAt: '2026-06-08T08:00:00.000Z' },
+          { id: 'ped-2', compraProgramadaId: 'c1', clienteId: 'cli-2', dataEntrega: null, rotaPrevista: 'Rota Sul', prioridade: null, status: 'em_elaboracao_reserva_ativa', observacoesGerais: null, createdAt: '2026-06-08T08:00:00.000Z' },
+        ],
+      },
+    });
+    render(<PlanejamentoExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
+    await waitFor(() => expect(screen.getByText('Rota Norte')).toBeInTheDocument());
+    expect(screen.getByText('Rota Sul')).toBeInTheDocument();
+  });
+
+  it('badge de prioridade renderiza ALTA/BAIXA e nada quando prioridade é null', async () => {
+    mockFetch({
+      '/pedidos': {
+        data: [
+          { id: 'ped-alta', compraProgramadaId: 'c1', clienteId: 'cli-1', dataEntrega: null, rotaPrevista: 'Rota Norte', prioridade: 3, status: 'em_elaboracao_reserva_ativa', observacoesGerais: null, createdAt: '2026-06-08T08:00:00.000Z' },
+          { id: 'ped-baixa', compraProgramadaId: 'c1', clienteId: 'cli-2', dataEntrega: null, rotaPrevista: 'Rota Norte', prioridade: 1, status: 'em_elaboracao_reserva_ativa', observacoesGerais: null, createdAt: '2026-06-08T08:00:00.000Z' },
+          { id: 'ped-nula', compraProgramadaId: 'c1', clienteId: 'cli-3', dataEntrega: null, rotaPrevista: 'Rota Norte', prioridade: null, status: 'em_elaboracao_reserva_ativa', observacoesGerais: null, createdAt: '2026-06-08T08:00:00.000Z' },
+        ],
+      },
+    });
+    render(<PlanejamentoExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
+    await waitFor(() => expect(screen.getByText('Prioridade ALTA')).toBeInTheDocument());
+    expect(screen.getByText('Prioridade BAIXA')).toBeInTheDocument();
+    expect(screen.queryByText(/Prioridade MÉDIA/)).not.toBeInTheDocument();
+  });
+
+  it('barra de ocupação ausente quando capacidade é null', async () => {
+    mockFetch({
+      '/caminhoes/c1aaaaaabbbbccccddddeeeeffff0001': {
+        caminhao: { ...caminhaoBase, capacidadeKg: null, pesoCarregadoKg: '0.000' },
+        pedidos: [],
+      },
+      '/caminhoes': [caminhaoBase],
+    });
+    render(<PlanejamentoExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
+    await waitFor(() => expect(screen.getByText('ABC-1234')).toBeInTheDocument());
+    expect(screen.getByText(/— kg/)).toBeInTheDocument();
   });
 });
