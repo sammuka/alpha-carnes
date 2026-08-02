@@ -66,6 +66,7 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
       pendencias_overbooking_historico, pendencias_overbooking,
       pedidos_fornecedor_itens, pedidos_fornecedor,
       conferencias_carga, carga_itens, caminhoes_pedidos, caminhoes,
+      ajustes_estoque, entradas_itens,
       aprovacoes_operacionais, trocas_peca,
       etiquetas_impressoes, subitens, transformacoes, associacoes_peca_historico, pecas,
       ocorrencias_fornecedor_historico, ocorrencias_fornecedor,
