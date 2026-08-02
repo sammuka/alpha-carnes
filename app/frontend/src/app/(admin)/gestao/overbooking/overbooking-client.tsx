@@ -2,10 +2,25 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { RefreshCw, Search } from 'lucide-react';
+import { Ban, CheckCircle2, Clock, Info, RefreshCw, Search, X } from 'lucide-react';
 import { SeletorOperacao } from '@/components/gestao/seletor-operacao';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { StatusPill } from '@/components/ui/status-pill';
 import { conectarRealtime } from '@/lib/realtime';
 import {
@@ -19,6 +34,13 @@ import {
 } from '@/lib/overbooking';
 import type { StatusPendenciaOverbooking } from '@/lib/comercial';
 import { mensagemDeErro } from '@/lib/error-message';
+
+const MOTIVOS_CANCELAMENTO = [
+  'Cliente desistiu do pedido',
+  'Pedido duplicado',
+  'Erro de lançamento',
+  'Outro',
+];
 
 function formatDataHora(iso: string): string {
   const d = new Date(iso);
@@ -38,6 +60,11 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
   const [busca, setBusca] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
+  const [modalCancelar, setModalCancelar] = useState(false);
+  const [motivoCancelamento, setMotivoCancelamento] = useState('');
+  const [obsCancelamento, setObsCancelamento] = useState('');
+  const [modalPostergar, setModalPostergar] = useState(false);
+  const [qtdPostergar, setQtdPostergar] = useState('');
 
   const carregar = useCallback(async () => {
     if (!operacaoId) return;
@@ -123,20 +150,29 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
     }
   };
 
-  const alterarStatus = async (status: StatusPendenciaOverbooking) => {
+  const alterarStatus = async (status: StatusPendenciaOverbooking, detalhe: Record<string, unknown>) => {
     if (!selecionada || !podeResolver) return;
     setErro(null);
     try {
       const res = await fetch(`/api/comercial/overbooking/${selecionada.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, detalhe: {} }),
+        body: JSON.stringify({ status, detalhe }),
       });
       if (!res.ok) throw new Error(await mensagemDeErro(res));
       await carregar();
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao alterar status');
     }
+  };
+
+  const cancelarPendencia = async () => {
+    if (!motivoCancelamento) return;
+    const motivo = obsCancelamento ? `${motivoCancelamento} — ${obsCancelamento}` : motivoCancelamento;
+    await alterarStatus('cancelada', { motivo });
+    setModalCancelar(false);
+    setMotivoCancelamento('');
+    setObsCancelamento('');
   };
 
   return (
@@ -226,12 +262,28 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
                   <div><dt className="text-muted-foreground">Cliente</dt><dd>{selecionada.clienteId.slice(0, 8)}</dd></div>
                   <div><dt className="text-muted-foreground">Confirmação do overbooking</dt><dd>{formatDataHora(selecionada.createdAt)}</dd></div>
                 </dl>
-                {podeResolver && ['aberta', 'em_analise'].includes(selecionada.status) && (
-                  <div className="mt-4 flex gap-2">
+                {podeResolver && !['resolvida', 'cancelada'].includes(selecionada.status) && (
+                  <div className="mt-4 flex flex-wrap gap-2">
                     {selecionada.status === 'aberta' && (
-                      <Button size="sm" variant="outline" onClick={() => void alterarStatus('em_analise')}>Iniciar análise</Button>
+                      <Button size="sm" variant="outline" onClick={() => void alterarStatus('em_analise', {})}>
+                        <Clock className="mr-1 h-3 w-3" /> Iniciar análise
+                      </Button>
                     )}
-                    <Button size="sm" variant="outline" onClick={() => void alterarStatus('cancelada')}>Cancelar</Button>
+                    <Button
+                      size="sm"
+                      className="bg-success-strong text-white hover:bg-success-strong/90"
+                      onClick={() => void alterarStatus('resolvida', { origem: 'manual' })}
+                    >
+                      <CheckCircle2 className="mr-1 h-3 w-3" /> Marcar como resolvido
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                      onClick={() => setModalCancelar(true)}
+                    >
+                      <X className="mr-1 h-3 w-3" /> Cancelar pendência
+                    </Button>
                   </div>
                 )}
               </div>
@@ -285,12 +337,9 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
                     </p>
                     <p className="text-xs font-medium">{cobertura.proximaOperacao.rotulo}</p>
                     {podeResolver && (
-                      <Button size="sm" onClick={() => void decidir({
-                        caminho: 'novo_pedido',
-                        operacaoDestinoId: cobertura.proximaOperacao!.id,
-                        compraProgramadaId: cobertura.comprasComplementares[0]!.compraProgramadaId,
-                        quantidade: selecionada.quantidadeDeficit,
-                      })}>Postergar</Button>
+                      <Button size="sm" onClick={() => { setQtdPostergar(selecionada.quantidadeDeficit); setModalPostergar(true); }}>
+                        Postergar
+                      </Button>
                     )}
                   </>
                 ) : (
@@ -318,6 +367,105 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
           )}
         </div>
       </div>
+
+      <Dialog open={modalCancelar} onOpenChange={(open) => { if (!open) setModalCancelar(false); }}>
+        <DialogContent className="max-w-sm gap-0 p-0">
+          <DialogHeader className="border-b px-5 py-4">
+            <DialogTitle className="text-sm font-bold">Cancelar Pendência</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 p-5">
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+              <Ban className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+              <p className="text-xs leading-snug text-destructive">
+                O cancelamento não resolve o déficit no pedido de origem. Use apenas quando a pendência não fizer mais sentido (ex.: pedido cancelado).
+              </p>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold">Motivo <span className="text-destructive">*</span></label>
+              <Select value={motivoCancelamento} onValueChange={setMotivoCancelamento}>
+                <SelectTrigger size="sm" aria-label="Motivo do cancelamento">
+                  <SelectValue placeholder="Selecionar…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MOTIVOS_CANCELAMENTO.map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold">Observação</label>
+              <Textarea rows={2} value={obsCancelamento} onChange={(e) => setObsCancelamento(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2 px-5 pb-5">
+            <Button variant="outline" className="flex-1" onClick={() => setModalCancelar(false)}>Voltar</Button>
+            <Button
+              variant="destructive"
+              className="flex-1"
+              disabled={!motivoCancelamento}
+              onClick={() => void cancelarPendencia()}
+            >
+              Confirmar Cancelamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modalPostergar} onOpenChange={(open) => { if (!open) setModalPostergar(false); }}>
+        <DialogContent className="max-w-sm gap-0 p-0">
+          <DialogHeader className="border-b px-5 py-4">
+            <DialogTitle className="text-sm font-bold">Postergar para Próxima Operação</DialogTitle>
+          </DialogHeader>
+          {selecionada && cobertura?.proximaOperacao && cobertura.comprasComplementares[0] && (
+            <div className="flex flex-col gap-3 p-5">
+              <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                <p className="text-xs leading-snug text-primary">
+                  A quantidade postergada gera um novo pedido de venda para o mesmo cliente, a ser atendido em uma próxima operação.
+                </p>
+              </div>
+              <dl className="grid grid-cols-2 gap-3 text-xs">
+                <div><dt className="text-muted-foreground">Cliente</dt><dd className="font-medium">{selecionada.clienteId.slice(0, 8)}</dd></div>
+                <div><dt className="text-muted-foreground">Produto</dt><dd className="font-medium">{selecionada.itemComercialId.slice(0, 8)}</dd></div>
+              </dl>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold">Quantidade a postergar <span className="text-destructive">*</span></label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={Number(selecionada.quantidadeDeficit)}
+                  value={qtdPostergar}
+                  onChange={(e) => {
+                    const max = Number(selecionada.quantidadeDeficit);
+                    const v = Math.max(1, Math.min(max, Number(e.target.value) || 1));
+                    setQtdPostergar(String(v));
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">Déficit total desta pendência: {selecionada.quantidadeDeficit}.</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex gap-2 px-5 pb-5">
+            <Button variant="outline" className="flex-1" onClick={() => setModalPostergar(false)}>Cancelar</Button>
+            <Button
+              className="flex-1"
+              onClick={() => {
+                if (!selecionada || !cobertura?.proximaOperacao || !cobertura.comprasComplementares[0]) return;
+                void decidir({
+                  caminho: 'novo_pedido',
+                  operacaoDestinoId: cobertura.proximaOperacao.id,
+                  compraProgramadaId: cobertura.comprasComplementares[0].compraProgramadaId,
+                  quantidade: Number(qtdPostergar).toFixed(3),
+                });
+                setModalPostergar(false);
+              }}
+            >
+              Gerar novo pedido
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
