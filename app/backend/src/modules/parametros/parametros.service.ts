@@ -20,6 +20,8 @@ const ORDEM_CANONICA_CHAVES: readonly string[] = [
   'comercial.overbooking_permitido',
   'comercial.prioridade_consumo',
   'operacao.fifo_estoque',
+  'estoque.limiar_aprovacao_ajuste',
+  'estoque.tunel_congelamento',
   'operacao.cadencia_dias_semana',
   'operacao.composicao_boi_casado',
   'operacao.regras_transformacao_tz',

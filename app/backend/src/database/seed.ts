@@ -67,6 +67,32 @@ const PARAMETROS_SEED = [
     },
   },
   {
+    chave: 'estoque.limiar_aprovacao_ajuste',
+    descricao: 'Limiar de aprovação de ajustes de estoque',
+    valorJson: {
+      grupo: 'Operação',
+      tipo: 'numero',
+      titulo: 'Limiar de aprovação de ajustes',
+      texto: 'Ajustes com |delta| acima deste valor exigem aprovação da gestão.',
+      valor: 5,
+      provisorio: true,
+      pendencia: 'doc 04 §5.3 — valor de demonstração',
+    },
+  },
+  {
+    chave: 'estoque.tunel_congelamento',
+    descricao: 'Túnel de congelamento (capacidade informativa)',
+    valorJson: {
+      grupo: 'Operação',
+      tipo: 'info',
+      titulo: 'Túnel de congelamento',
+      texto: 'Capacidade nominal informativa; ocupação real pendente de modelagem.',
+      capacidadeKg: 10000,
+      provisorio: true,
+      pendencia: 'P3',
+    },
+  },
+  {
     chave: 'operacao.cadencia_dias_semana',
     descricao: 'Cadência de geração de Operações',
     valorJson: {
