@@ -41,6 +41,7 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
   const router = useRouter();
   const [dataOperacao] = useState(() => new Date().toISOString().slice(0, 10));
   const [caminhoes, setCaminhoes] = useState<Caminhao[]>([]);
+  const [contadores, setContadores] = useState<Map<string, { conferidas: number; total: number }>>(new Map());
   const [romaneio, setRomaneioState] = useState<Romaneio | null>(null);
   const [cargaAtivaId, setCargaAtivaId] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
@@ -64,6 +65,20 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
       const lista = (await res.json()) as Caminhao[];
       setCaminhoes(lista);
       setCargaAtivaId((atual) => atual ?? (lista.length > 0 ? lista[0]!.id : null));
+
+      const pares = await Promise.all(
+        lista.map(async (c) => {
+          const r = await fetch(`/api/operacao/expedicao/caminhoes/${c.id}/romaneio`);
+          if (!r.ok) return [c.id, { conferidas: 0, total: 0 }] as const;
+          const dados = (await r.json()) as Romaneio;
+          const itens = dados.pedidos.flatMap((p) => p.itens);
+          return [c.id, {
+            conferidas: itens.filter((i) => i.statusCargaItem === 'conferido').length,
+            total: itens.length,
+          }] as const;
+        }),
+      );
+      setContadores(new Map(pares));
     } catch {
       setErro('Erro de conexão');
     } finally {
@@ -137,6 +152,16 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
       .reduce((acc, i) => acc + Number(i.peso), 0);
     return { total: todosItens.length, conferidas, divergentes, pendentes, pesoConferido, pesoTotal };
   }, [todosItens]);
+
+  // Mantém o contador do card ativo na lista-master em sincronia com o detail (bipagem/divergência/finalização).
+  useEffect(() => {
+    if (!cargaAtivaId || !romaneio) return;
+    setContadores((prev) => {
+      const next = new Map(prev);
+      next.set(cargaAtivaId, { conferidas: stats.conferidas, total: stats.total });
+      return next;
+    });
+  }, [cargaAtivaId, romaneio, stats.conferidas, stats.total]);
 
   const cam = romaneio?.caminhao;
   const rotuloStatus = cam ? ROTULO_STATUS_CARGA[cam.statusCaminhao] : '';
@@ -305,6 +330,8 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
             {!loading &&
               cargasFiltradas.map((c) => {
                 const selecionada = c.id === cargaAtivaId;
+                const cont = contadores.get(c.id) ?? { conferidas: 0, total: 0 };
+                const pct = cont.total === 0 ? 0 : Math.round((cont.conferidas / cont.total) * 100);
                 return (
                   <button
                     key={c.id}
@@ -323,6 +350,16 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
                     <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                       <Truck className="h-3 w-3" />
                       {c.placa} · {c.rota ?? '—'}
+                    </div>
+                    <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span />
+                      <span>{cont.conferidas} / {cont.total} peças</span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={`h-full rounded-full ${pct === 100 ? 'bg-emerald-500' : 'bg-primary'}`}
+                        style={{ width: `${pct}%` }}
+                      />
                     </div>
                   </button>
                 );

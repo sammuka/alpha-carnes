@@ -177,4 +177,44 @@ describe('ConferenciaExpedicaoClient', () => {
     const botaoConfirmar = await screen.findByText('Confirmar Divergência');
     expect(botaoConfirmar.closest('button')).toBeDisabled();
   });
+
+  it('card da lista-master mostra contador conferidas/total peças', async () => {
+    mockFetch({
+      '/caminhoes/c1aaaaaabbbbccccddddeeeeffff0001/romaneio': {
+        caminhao: caminhaoBase,
+        pedidos: [
+          {
+            pedidoVendaId: 'ped-1',
+            clienteId: 'cli-1',
+            ordemNaCarga: 1,
+            previsto: 2,
+            carregado: 1,
+            itens: [
+              {
+                cargaItemId: 'item-1',
+                pedidoVendaId: 'ped-1',
+                statusCargaItem: 'conferido',
+                divergenciaMotivo: null,
+                etiqueta: 'ETQ-001',
+                produtoNome: 'TZ',
+                peso: '49.5',
+              },
+              {
+                cargaItemId: 'item-2',
+                pedidoVendaId: 'ped-1',
+                statusCargaItem: 'em_carga',
+                divergenciaMotivo: null,
+                etiqueta: 'ETQ-002',
+                produtoNome: 'DT',
+                peso: '20.0',
+              },
+            ],
+          },
+        ],
+      },
+      '/caminhoes?dataOperacao': [caminhaoBase],
+    });
+    render(<ConferenciaExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
+    await waitFor(() => expect(screen.getByText('1 / 2 peças')).toBeInTheDocument());
+  });
 });
