@@ -1,13 +1,24 @@
 import { z } from 'zod';
 
-export const criarCaminhaoSchema = z.object({
-  placa: z.string().min(1).max(20),
-  motorista: z.string().min(1).max(200),
-  rota: z.string().max(500).optional(),
-  itinerario: z.string().max(1000).optional(),
-  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD'),
-  observacoes: z.string().max(1000).optional(),
-});
+export const criarCaminhaoSchema = z
+  .object({
+    frotaCaminhaoId: z.string().uuid().optional(),
+    placa: z.string().min(1).max(20).optional(),
+    motorista: z.string().min(1).max(200),
+    rota: z.string().max(500).optional(),
+    itinerario: z.string().max(1000).optional(),
+    dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD'),
+    observacoes: z.string().max(1000).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (!v.frotaCaminhaoId && !v.placa) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['placa'],
+        message: 'placa é obrigatória quando não há caminhão da frota vinculado',
+      });
+    }
+  });
 export type CriarCaminhaoDto = z.infer<typeof criarCaminhaoSchema>;
 
 export const vincularPedidoSchema = z.object({
@@ -80,3 +91,10 @@ export const reabrirSchema = z.object({
   justificativa: z.string().min(1).max(500),
 });
 export type ReabrirDto = z.infer<typeof reabrirSchema>;
+
+export const divergenciaConferenciaSchema = z.object({
+  cargaItemId: z.string().uuid(),
+  motivo: z.enum(['peca_ausente', 'peca_errada', 'peso_divergente', 'etiqueta_ilegivel', 'avaria', 'outro']),
+  observacao: z.string().trim().max(1000).optional(),
+});
+export type DivergenciaConferenciaDto = z.infer<typeof divergenciaConferenciaSchema>;
