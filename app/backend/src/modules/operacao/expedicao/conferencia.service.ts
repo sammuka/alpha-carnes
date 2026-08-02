@@ -23,7 +23,7 @@ import { assertTransicao, type StatusCaminhao } from './transicoes';
 import { CaminhaoService } from './caminhao.service';
 import { EtiquetaService } from '../pesagem/etiqueta.service';
 import type { CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
-import type { RegistrarItemConferenciaDto } from './dto/expedicao.dto';
+import type { RegistrarItemConferenciaDto, DivergenciaConferenciaDto } from './dto/expedicao.dto';
 
 @Injectable()
 export class ConferenciaService {
@@ -192,6 +192,82 @@ export class ConferenciaService {
   }
 
   /**
+   * Marca um item da carga como divergente (peça ausente/errada, peso divergente,
+   * etiqueta ilegível, avaria, outro) — D9.4. Espelho estrutural do registrarItem.
+   */
+  async divergencia(caminhaoId: string, dto: DivergenciaConferenciaDto, user: CurrentUserPayload) {
+    const resultado = await this.db.transaction(async (tx) => {
+      const caminhao = await this.caminhaoService.caminhaoAtivo(tx, caminhaoId);
+      if (caminhao.statusCaminhao !== 'em_conferencia') {
+        throw new ConflictException('Caminhão não está em conferência');
+      }
+
+      const conferencia = await tx
+        .select()
+        .from(conferenciasCarga)
+        .where(
+          and(
+            eq(conferenciasCarga.caminhaoId, caminhaoId),
+            eq(conferenciasCarga.statusConferencia, 'aberta'),
+            isNull(conferenciasCarga.deletedAt),
+          ),
+        )
+        .then((r) => r[0] ?? null);
+      if (!conferencia) throw new ConflictException('Nenhuma conferência ativa para este caminhão');
+
+      const itemCarga = await tx
+        .select()
+        .from(cargaItens)
+        .where(
+          and(
+            eq(cargaItens.id, dto.cargaItemId),
+            eq(cargaItens.caminhaoId, caminhaoId),
+            isNull(cargaItens.deletedAt),
+          ),
+        )
+        .then((r) => r[0] ?? null);
+      if (!itemCarga) throw new ConflictException('Item não está vinculado a esta carga');
+
+      if (itemCarga.statusCargaItem !== 'em_carga') {
+        throw new ConflictException({ codigo: 'ITEM_NAO_PENDENTE', message: 'Item já foi conferido ou tratado' });
+      }
+
+      const atualizado = primeiroOuFalha(
+        await tx
+          .update(cargaItens)
+          .set({
+            statusCargaItem: 'divergente',
+            divergenciaMotivo: dto.motivo,
+            divergenciaObservacao: dto.observacao ?? null,
+          })
+          .where(eq(cargaItens.id, itemCarga.id))
+          .returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'carga_itens',
+        registroId: itemCarga.id,
+        operacao: 'UPDATE',
+        modulo: 'operacao',
+        usuarioId: user.sub,
+        dadosAnteriores: itemCarga,
+        dadosNovos: atualizado,
+      });
+
+      return { item: atualizado, dataOperacao: await this.caminhaoService.dataOperacaoDoCaminhao(tx, caminhao) };
+    });
+
+    this.eventEmitter.emit(EVENTOS.CARGA_ITEM_DIVERGENTE, {
+      caminhaoId,
+      cargaItemId: resultado.item.id,
+      motivo: dto.motivo,
+      dataOperacao: resultado.dataOperacao,
+    });
+
+    return resultado.item;
+  }
+
+  /**
    * Conclui a conferência. Calcula faltas/excedentes e grava em pendencias.
    * pendencias.faltas = carga_itens ainda em_carga (não conferidos)
    */
@@ -230,7 +306,22 @@ export class ConferenciaService {
           subitemId: i.subitemId,
         }));
 
-      const pendencias = { faltas, totalFaltas: faltas.length };
+      const divergentes = todosItens
+        .filter((i) => i.statusCargaItem === 'divergente')
+        .map((i) => ({
+          cargaItemId: i.id,
+          tipoOrigem: i.tipoOrigem,
+          pecaId: i.pecaId,
+          subitemId: i.subitemId,
+          motivo: i.divergenciaMotivo,
+        }));
+
+      const pendencias = {
+        faltas,
+        totalFaltas: faltas.length,
+        divergentes,
+        totalDivergentes: divergentes.length,
+      };
 
       const atualizada = primeiroOuFalha(
         await tx

@@ -66,6 +66,8 @@ export const EVENTOS = {
   // ── Onda 7 — Desossa / Transformação ──────────────────────────────────────
   FALTAS_DESOSSA_ATUALIZADAS: 'faltas_desossa_atualizadas',
   DIVERGENCIA_TRANSFORMACAO_ABERTA: 'divergencia_transformacao_aberta',
+  // ── Onda 9 — Carga (conferência) ──────────────────────────────────────────
+  CARGA_ITEM_DIVERGENTE: 'carga_item_divergente',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -309,6 +311,13 @@ export interface ExpedicaoReabertaPayload {
   dataOperacao: string;
 }
 
+export interface CargaItemDivergentePayload {
+  caminhaoId: string;
+  cargaItemId: string;
+  motivo: string;
+  dataOperacao: string;
+}
+
 // ── F6a — Faturamento / NFS-e ─────────────────────────────────────────────
 
 export interface NfseEmitidaPayload {
@@ -428,4 +437,6 @@ export interface PayloadPorEvento {
   // ── Onda 7 — Desossa / Transformação ──────────────────────────────────────
   faltas_desossa_atualizadas: FaltasDesossaAtualizadasPayload;
   divergencia_transformacao_aberta: DivergenciaTransformacaoAbertaPayload;
+  // ── Onda 9 — Carga (conferência) ──────────────────────────────────────────
+  carga_item_divergente: CargaItemDivergentePayload;
 }

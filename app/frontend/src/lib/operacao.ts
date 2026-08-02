@@ -320,6 +320,8 @@ export interface Caminhao {
   motorista: string;
   rota: string | null;
   dataOperacao: string;
+  frotaCaminhaoId: string | null;
+  capacidadeKg: number | null;
   statusCaminhao: StatusCaminhao;
   horaAberturaCarga: string | null;
   horaFechamentoCarga: string | null;
@@ -328,7 +330,7 @@ export interface Caminhao {
 }
 
 export interface CaminhaoDetalhe {
-  caminhao: Caminhao;
+  caminhao: Caminhao & { pesoCarregadoKg: string };
   pedidos: Array<{
     pedidoVendaId: string;
     ordemNaCarga: number | null;
@@ -336,6 +338,9 @@ export interface CaminhaoDetalhe {
     carregado: number;
   }>;
 }
+
+export type MotivoDivergenciaCarga =
+  | 'peca_ausente' | 'peca_errada' | 'peso_divergente' | 'etiqueta_ilegivel' | 'avaria' | 'outro';
 
 export interface CargaItem {
   id: string;
@@ -345,9 +350,37 @@ export interface CargaItem {
   subitemId: string | null;
   pedidoVendaId: string;
   pedidoVendaItemId: string;
-  statusCargaItem: 'em_carga' | 'conferido' | 'removido';
+  statusCargaItem: 'em_carga' | 'conferido' | 'divergente' | 'removido';
+  divergenciaMotivo: MotivoDivergenciaCarga | null;
+  divergenciaObservacao: string | null;
   conferido: boolean;
   dataHoraEntradaCarga: string;
+}
+
+// ── Romaneio (F5 + D9.6: itens por pedido com etiqueta/produto/peso/status) ───
+
+export interface RomaneioItem {
+  cargaItemId: string;
+  pedidoVendaId: string;
+  statusCargaItem: 'em_carga' | 'conferido' | 'divergente' | 'removido';
+  divergenciaMotivo: MotivoDivergenciaCarga | null;
+  etiqueta: string | null;
+  produtoNome: string;
+  peso: string | null;
+}
+
+export interface RomaneioPedido {
+  pedidoVendaId: string;
+  clienteId: string | null;
+  ordemNaCarga: number | null;
+  previsto: number;
+  carregado: number;
+  itens: RomaneioItem[];
+}
+
+export interface Romaneio {
+  caminhao: Caminhao;
+  pedidos: RomaneioPedido[];
 }
 
 // ── Pedido ao Fornecedor (onda1) ──────────────────────────────────────────────
