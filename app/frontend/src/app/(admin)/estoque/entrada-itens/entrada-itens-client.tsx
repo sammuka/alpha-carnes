@@ -208,7 +208,7 @@ export function EntradaItensClient({ podeRegistrar }: { podeRegistrar: boolean }
                 type="text"
                 value={loteNf}
                 onChange={(e) => setLoteNf(e.target.value)}
-                placeholder="Ex.: NF 129110 / Lote #404"
+                placeholder="Ex.: NF 129110 / Lote 404"
                 className="h-9 w-full rounded-md border border-border px-2.5 text-[13px] placeholder:text-placeholder focus:border-primary focus:outline-none"
               />
             </div>
