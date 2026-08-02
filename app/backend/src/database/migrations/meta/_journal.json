@@ -169,6 +169,13 @@
       "when": 1785534986534,
       "tag": "0023_onda7_desossa_expand",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785649012322,
+      "tag": "0024_onda9_carga_expand",
+      "breakpoints": true
     }
   ]
 }
