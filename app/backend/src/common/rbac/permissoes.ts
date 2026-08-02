@@ -65,6 +65,9 @@ export const PERMISSOES = {
   // ── F4e — Estoque ─────────────────────────────────────────────────────────
   ESTOQUE_LER: 'ESTOQUE_LER',
   ESTOQUE_GERENCIAR: 'ESTOQUE_GERENCIAR',
+  ESTOQUE_ENTRADA: 'ESTOQUE_ENTRADA',
+  ESTOQUE_AJUSTAR: 'ESTOQUE_AJUSTAR',
+  ESTOQUE_AJUSTE_APROVAR: 'ESTOQUE_AJUSTE_APROVAR',
 
   // ── F5 — Expedição ───────────────────────────────────────────────────────
   EXPEDICAO_GERENCIAR: 'EXPEDICAO_GERENCIAR', // gerenciar carga, itens, transferências, conferência
@@ -384,6 +387,12 @@ pushPermissoes('corte', 'DESOSSA_PAINEL_LER');
 pushPermissoes('comercial', 'DESOSSA_LER', 'DESOSSA_PAINEL_LER');
 pushPermissoes('diretoria', 'DESOSSA_LER', 'DESOSSA_PAINEL_LER');
 
+// Onda 8 — AD-04: recorte ESTOQUE_* para expedicao e recebimento_pesagem (sem 12º perfil)
+pushPermissoes('expedicao', 'ESTOQUE_LER', 'ESTOQUE_GERENCIAR', 'ESTOQUE_ENTRADA', 'ESTOQUE_AJUSTAR');
+pushPermissoes('recebimento_pesagem', 'ESTOQUE_LER', 'ESTOQUE_GERENCIAR', 'ESTOQUE_ENTRADA', 'ESTOQUE_AJUSTAR');
+pushPermissoes('gestor', 'ESTOQUE_ENTRADA', 'ESTOQUE_AJUSTAR', 'ESTOQUE_AJUSTE_APROVAR');
+pushPermissoes('administrador', 'ESTOQUE_ENTRADA', 'ESTOQUE_AJUSTAR', 'ESTOQUE_AJUSTE_APROVAR');
+
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   USUARIOS_GERENCIAR: 'Criar e editar usuários',
@@ -437,6 +446,9 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   DESOSSA_PAINEL_LER: 'Consultar painel aeroporto/Modo TV da desossa (telão)',
   ESTOQUE_LER: 'Consultar peças e subitens em estoque',
   ESTOQUE_GERENCIAR: 'Gerenciar movimentações e ajustes de estoque',
+  ESTOQUE_ENTRADA: 'Registrar entrada de itens por unidade (caixarias)',
+  ESTOQUE_AJUSTAR: 'Criar ajustes de estoque',
+  ESTOQUE_AJUSTE_APROVAR: 'Aprovar/rejeitar ajustes de estoque (gestão)',
   EXPEDICAO_GERENCIAR: 'Gerenciar expedição: carga, transferências, conferência e fechamento',
   EXPEDICAO_REABRIR: 'Reabrir expedição fechada (excepcional, auditado)',
   FATURAMENTO_LER: 'Visualizar faturamentos e consolidação da carga',
