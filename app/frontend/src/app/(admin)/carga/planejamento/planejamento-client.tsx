@@ -395,7 +395,7 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
                 Caminhões Montados
               </h3>
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                {caminhoes.length} {caminhoes.length === 1 ? 'Caminhão' : 'Caminhões'}
+                {caminhoes.length} Caminhão{caminhoes.length !== 1 ? 'ões' : ''}
               </span>
             </div>
             <div className="flex-1 space-y-4 overflow-auto pr-2">
