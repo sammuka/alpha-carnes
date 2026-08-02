@@ -257,8 +257,10 @@ describe('persistirNfEstruturadaNaTx — branches', () => {
         call += 1;
         if (call === 1) return chainRows([{ id: 'pf-1' }]);
         if (call === 2) return chainRows([{ id: 'rec-1', pedidoFornecedorId: 'pf-1' }]);
+        // D6.10 — existeOrfaoNoRecebimento: snapshot pré-lock (sem candidatas, não influi neste caso)
         if (call === 3) return chainRows([]);
-        if (call === 4) return chainRows([nfBase({ numero: '50' })]);
+        if (call === 4) return chainRows([]);
+        if (call === 5) return chainRows([nfBase({ numero: '50' })]);
         return chainRows([]);
       }),
     };
@@ -285,8 +287,10 @@ describe('persistirNfEstruturadaNaTx — branches', () => {
         call += 1;
         if (call === 1) return chainRows([{ id: 'pf-1' }]);
         if (call === 2) return chainRows([{ id: 'rec-1', pedidoFornecedorId: 'pf-1' }]);
+        // D6.10 — existeOrfaoNoRecebimento: snapshot pré-lock (irrelevante, confirmarSubstituicaoCabecalho=true bypassa o guard novo)
         if (call === 3) return chainRows([]);
-        if (call === 4) return chainRows([orfao]);
+        if (call === 4) return chainRows([]);
+        if (call === 5) return chainRows([orfao]);
         return chainRows([]);
       }),
       update: jest.fn(() => ({
@@ -324,7 +328,13 @@ describe('persistirNfEstruturadaNaTx — branches', () => {
         call += 1;
         if (call === 1) return chainRows([{ id: 'pf-1' }]);
         if (call === 2) return chainRows([{ id: 'rec-1', pedidoFornecedorId: 'pf-1' }]);
+        // D6.10 — existeOrfaoNoRecebimento: snapshot pré-lock (candidatas + contagem de itens);
+        // irrelevante para este teste — numero===dto.numero nunca aciona o guard novo
         if (call === 3) return chainRows([orfao]);
+        if (call === 4) return chainRows([]);
+        // buscarNfCabecalhoAtivaPorNumero: candidatas + contagem de itens
+        if (call === 5) return chainRows([orfao]);
+        if (call === 6) return chainRows([]);
         return chainRows([]);
       }),
       update: jest.fn(() => ({

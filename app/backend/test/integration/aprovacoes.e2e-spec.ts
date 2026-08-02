@@ -12,16 +12,20 @@ describe('aprovacoes (fila unificada + comparativo)', () => {
   let app: INestApplication;
   let gestorCookies: string;
   let comprasCookies: string;
+  let corteCookies: string;
   let operacaoId: string;
+  let base: Awaited<ReturnType<typeof seedComercialBase>>;
 
   beforeAll(async () => {
     app = await createTestApp();
     const gestor = await createTestUser(app, { perfil: 'gestor' });
     const compras = await createTestUser(app, { perfil: 'compras' });
+    const corte = await createTestUser(app, { perfil: 'corte' });
     gestorCookies = await loginCookies(app, gestor.adminEmail, gestor.adminPassword);
     comprasCookies = await loginCookies(app, compras.adminEmail, compras.adminPassword);
+    corteCookies = await loginCookies(app, corte.adminEmail, corte.adminPassword);
 
-    const base = await seedComercialBase(app);
+    base = await seedComercialBase(app);
     const compra = await request(app.getHttpServer())
       .post('/comercial/compras-programadas')
       .set('Cookie', comprasCookies)
@@ -95,15 +99,38 @@ describe('aprovacoes (fila unificada + comparativo)', () => {
     expect(res.status).toBe(409);
   });
 
-  it('3.7 comparativo retorna CONCLUSAO_INEXISTENTE sem conferência', async () => {
-    const ocorrencias = await request(app.getHttpServer())
-      .get(`/gestao/aprovacoes?operacaoId=${operacaoId}&aba=ocorrencias`)
+  it('DoD 7.5.3 comparativo de ocorrência sem conclusão retorna 404 CONCLUSAO_INEXISTENTE', async () => {
+    const ocorrencia = await request(app.getHttpServer())
+      .post('/operacao/ocorrencias-fornecedor')
       .set('Cookie', gestorCookies)
-      .expect(200);
-    if (ocorrencias.body.data.length === 0) return;
+      .send({ fornecedorId: base.fornecedorId, descricao: 'Ocorrência de teste sem conferência tripla vinculada' })
+      .expect(201);
     const res = await request(app.getHttpServer())
-      .get(`/gestao/aprovacoes/ocorrencias/${ocorrencias.body.data[0].id}/comparativo`)
-      .set('Cookie', gestorCookies);
-    expect([404, 200]).toContain(res.status);
+      .get(`/gestao/aprovacoes/ocorrencias/${ocorrencia.body.id}/comparativo`)
+      .set('Cookie', gestorCookies)
+      .expect(404);
+    // AllExceptionsFilter envelopa HttpException.getResponse() em `message`
+    const payload = typeof res.body.message === 'object' ? res.body.message : res.body;
+    expect(payload.codigo).toBe('CONCLUSAO_INEXISTENTE');
+  });
+
+  it('DoD 7.5.2a corte sem APROVACOES_LER recebe 403 na fila', async () => {
+    await request(app.getHttpServer())
+      .get(`/gestao/aprovacoes?operacaoId=${operacaoId}&aba=operacionais`)
+      .set('Cookie', corteCookies)
+      .expect(403);
+  });
+
+  it('DoD 7.5.2b compras sem APROVACOES_DECIDIR recebe 403 ao decidir', async () => {
+    const criada = await request(app.getHttpServer())
+      .post('/gestao/aprovacoes/operacionais')
+      .set('Cookie', gestorCookies)
+      .send({ operacaoId, tipo: 'ajuste_estoque_relevante', origem: 'RBAC 7.5.2b', descricao: 'Solicitação para teste de 403 na decisão', impacto: 'nenhum' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/gestao/aprovacoes/operacionais/${criada.body.id}/decidir`)
+      .set('Cookie', comprasCookies)
+      .send({ decisao: 'aprovada', motivo: 'motivo com dez+ caracteres' })
+      .expect(403);
   });
 });

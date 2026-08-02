@@ -851,6 +851,28 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     expect(nfs[0]?.payloadJson).toMatchObject({ pesoLiquido: 3000, volumes: 45 });
   });
 
+  it('DoD 7.5.5 detalhar devolve nfeVolumes null quando a NF não declara volumes', async () => {
+    const base = await seedComercialBase(app, { fator: 1 });
+    const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-12-07', quantidade: 10 });
+    const ini = await iniciarViaCompra(compraId);
+    const recId = ini.body.recebimento.id as string;
+
+    await request(srv())
+      .patch(`/operacao/recebimentos/${recId}/nfe`)
+      .set('Cookie', recebimentoCookies)
+      .send({
+        nfeNumero: '800200',
+        nfeSerie: '1',
+        nfePesoBruto: 3200,
+        nfePesoLiquido: 3000,
+      })
+      .expect(200);
+
+    const detalhe = await request(srv()).get(`/operacao/recebimentos/${recId}`).set('Cookie', recebimentoCookies);
+    expect('nfeVolumes' in detalhe.body).toBe(true);
+    expect(detalhe.body.nfeVolumes).toBeNull();
+  });
+
   it('conferência com NF só-cabeçalho → 409 NF_ITENS_OBRIGATORIOS', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-12-02', quantidade: 10 });

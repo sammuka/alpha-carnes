@@ -114,4 +114,59 @@ describe('EtiquetasRecebimentoClient', () => {
       expect.objectContaining({ method: 'POST' }),
     ));
   });
+
+  function mockFetchEtiquetas(etiqueta: EtiquetaListada) {
+    global.fetch = jest.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/api/operacao/recebimentos?')) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: [{ id: base.recebimentoId, dataOperacao: '2026-07-31', codigoLote: 'R1ABCDEF' }],
+            page: 1,
+            pageSize: 30,
+            total: 1,
+          }),
+        };
+      }
+      if (u.includes('/api/operacao/etiquetas') && !u.includes('cancelar')) {
+        return { ok: true, json: async () => ({ data: [etiqueta], total: 1, page: 1, pageSize: 100 }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    }) as unknown as typeof fetch;
+  }
+
+  it('DoD 7.5.9 badge Provisório presente quando localEstoquePrevisto.provisorio', async () => {
+    mockFetchEtiquetas({
+      ...base,
+      pedidoVendaId: null,
+      statusPeca: 'em_sobra',
+      localEstoquePrevisto: { valor: 'Câmara 2', provisorio: true },
+    });
+
+    render(
+      <EtiquetasRecebimentoClient permissoes={['ETIQUETA_GERENCIAR', 'PESAGEM_LER']} />,
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ver etiqueta' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Ver etiqueta' }));
+    await waitFor(() => expect(screen.getByText('Câmara 2')).toBeInTheDocument());
+    expect(screen.getByText('Provisório')).toBeInTheDocument();
+  });
+
+  it('DoD 7.5.9 badge Provisório ausente quando localEstoquePrevisto é null', async () => {
+    mockFetchEtiquetas({
+      ...base,
+      pedidoVendaId: null,
+      statusPeca: 'em_sobra',
+      localEstoquePrevisto: null,
+    });
+
+    render(
+      <EtiquetasRecebimentoClient permissoes={['ETIQUETA_GERENCIAR', 'PESAGEM_LER']} />,
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ver etiqueta' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Ver etiqueta' }));
+    await waitFor(() => expect(screen.getByText('Estoque físico')).toBeInTheDocument());
+    expect(screen.queryByText('Provisório')).not.toBeInTheDocument();
+  });
 });

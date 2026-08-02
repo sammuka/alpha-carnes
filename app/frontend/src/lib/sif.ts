@@ -25,6 +25,7 @@ export interface VersaoSif {
   motivoRetificacao: string | null;
   geradoEm: string;
   geradoPorNome: string | null;
+  conteudoJson?: unknown;
 }
 
 export interface RelatorioSif {
@@ -68,7 +69,7 @@ export async function retificarRelatorio(id: string, motivo: string) {
   return res.json();
 }
 
-export async function previewRelatorio(id: string) {
+export async function previewRelatorio(id: string): Promise<VersaoSif | null> {
   const res = await fetch(`/api/sif/relatorios/${id}/preview`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -81,5 +82,5 @@ export async function previewRelatorio(id: string) {
     }
     throw new Error(msg);
   }
-  return res.json();
+  return res.json() as Promise<VersaoSif>;
 }

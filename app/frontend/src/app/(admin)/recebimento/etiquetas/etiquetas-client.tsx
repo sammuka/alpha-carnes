@@ -349,7 +349,7 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
                     <dl className="space-y-2">
                       <div className="flex items-center gap-2">
                         <dt className="text-muted-foreground">Local previsto</dt>
-                        <Badge variant="outline">Provisório</Badge>
+                        {selecionada.localEstoquePrevisto?.provisorio && <Badge variant="outline">Provisório</Badge>}
                         <dd>{selecionada.localEstoquePrevisto?.valor ?? '—'}</dd>
                       </div>
                       <div><dt className="text-muted-foreground">Tipo</dt><dd>Estoque físico</dd></div>

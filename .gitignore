@@ -45,6 +45,7 @@ Thumbs.db
 
 # Playwright (artefatos locais)
 app/frontend/e2e/screenshots/
+app/frontend/e2e/screenshots-onda*/
 app/frontend/e2e/test-results/
 
 # Workflows autonomos (estado efemero de execucao)

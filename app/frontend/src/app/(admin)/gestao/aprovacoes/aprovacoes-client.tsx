@@ -27,6 +27,18 @@ import {
   type AprovacaoOperacional,
   type OcorrenciaLista,
 } from '@/lib/aprovacoes';
+import { mensagemDeErro } from '@/lib/error-message';
+
+interface DetalheOcorrencia {
+  status: string;
+  desfecho: string | null;
+  dataHoraEncerramento: string | null;
+  historico: Array<{ id: string; acao: string; situacao: string | null; createdAt: string }>;
+}
+
+function formatDataHora(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR');
+}
 
 function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
   const searchParams = useSearchParams();
@@ -40,6 +52,7 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
   const [aprovacaoSel, setAprovacaoSel] = useState<AprovacaoOperacional | null>(null);
   const [comparativo, setComparativo] = useState<{ itens: Parameters<typeof QuadroComparativo>[0]['itens'] } | null>(null);
   const [semComparativo, setSemComparativo] = useState(false);
+  const [detalheOcorrencia, setDetalheOcorrencia] = useState<DetalheOcorrencia | null>(null);
   const [andamento, setAndamento] = useState('');
   const [motivo, setMotivo] = useState('');
   const [modalDecisao, setModalDecisao] = useState<'aprovada' | 'rejeitada' | null>(null);
@@ -66,10 +79,21 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
     void carregar();
   }, [carregar]);
 
+  const carregarDetalheOcorrencia = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/operacao/ocorrencias-fornecedor/${id}`);
+      if (!res.ok) throw new Error(await mensagemDeErro(res));
+      setDetalheOcorrencia(await res.json() as DetalheOcorrencia);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao carregar detalhe da ocorrência');
+    }
+  }, []);
+
   useEffect(() => {
     if (!ocorrenciaSel) {
       setComparativo(null);
       setSemComparativo(false);
+      setDetalheOcorrencia(null);
       return;
     }
     void buscarComparativo(ocorrenciaSel.id).then((c) => {
@@ -81,7 +105,8 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
         setComparativo(c as { itens: Parameters<typeof QuadroComparativo>[0]['itens'] });
       }
     });
-  }, [ocorrenciaSel]);
+    void carregarDetalheOcorrencia(ocorrenciaSel.id);
+  }, [ocorrenciaSel, carregarDetalheOcorrencia]);
 
   const enviarAndamento = async () => {
     if (!ocorrenciaSel || !andamento.trim()) return;
@@ -89,6 +114,7 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
       await registrarAndamento(ocorrenciaSel.id, andamento.trim());
       setAndamento('');
       await carregar();
+      await carregarDetalheOcorrencia(ocorrenciaSel.id);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao registrar andamento');
     }
@@ -100,6 +126,7 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
       await encerrarOcorrencia(ocorrenciaSel.id, motivo.trim());
       setMotivo('');
       await carregar();
+      await carregarDetalheOcorrencia(ocorrenciaSel.id);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao encerrar');
     }
@@ -161,17 +188,59 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
                   <p><strong>Fornecedor:</strong> {ocorrenciaSel.fornecedorNome}</p>
                   <p><strong>NF:</strong> {ocorrenciaSel.nfChave ?? '—'}</p>
                   <p><strong>Pedido/lote:</strong> {ocorrenciaSel.pedidoLote ?? '—'}</p>
-                  <div className="mt-3 space-y-2">
-                    <Label htmlFor="andamento">Registrar andamento</Label>
-                    <Textarea id="andamento" value={andamento} onChange={(e) => setAndamento(e.target.value)} rows={2} />
-                    <Button size="sm" onClick={() => void enviarAndamento()} disabled={!andamento.trim()}>Registrar andamento</Button>
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    <Label htmlFor="desfecho">Concluir tratativa</Label>
-                    <Textarea id="desfecho" value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} />
-                    <Button size="sm" variant="outline" onClick={() => void concluir()} disabled={!motivo.trim()}>Concluir tratativa</Button>
-                  </div>
+
+                  {detalheOcorrencia?.status === 'resolvida' ? (
+                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-success-strong/30 bg-success-surface p-3">
+                      <div>
+                        <p className="text-sm font-bold text-success-strong">Resultado</p>
+                        <p className="mt-0.5 text-sm text-success-strong">{detalheOcorrencia.desfecho}</p>
+                        {detalheOcorrencia.dataHoraEncerramento && (
+                          <p className="mt-1 text-xs text-success-strong/80">
+                            Concluída em {formatDataHora(detalheOcorrencia.dataHoraEncerramento)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mt-3 space-y-2">
+                        <Label htmlFor="andamento">Registrar andamento</Label>
+                        <Textarea id="andamento" value={andamento} onChange={(e) => setAndamento(e.target.value)} rows={2} />
+                        <Button size="sm" onClick={() => void enviarAndamento()} disabled={!andamento.trim()}>Registrar andamento</Button>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        <Label htmlFor="desfecho">Concluir tratativa</Label>
+                        <Textarea id="desfecho" value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} />
+                        <Button size="sm" variant="outline" onClick={() => void concluir()} disabled={!motivo.trim()}>Concluir tratativa</Button>
+                      </div>
+                    </>
+                  )}
                 </div>
+
+                {detalheOcorrencia?.historico && detalheOcorrencia.historico.length > 0 && (
+                  <div className="rounded-xl border border-border p-4">
+                    <h3 className="text-sm font-semibold">Timeline de andamentos</h3>
+                    <div className="mt-3 flex flex-col gap-0">
+                      {[...detalheOcorrencia.historico]
+                        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                        .map((h, i, arr) => (
+                          <div key={h.id} className="flex items-start gap-3 pb-4 last:pb-0">
+                            <div className="flex flex-col items-center">
+                              <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${i === arr.length - 1 ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
+                              {i < arr.length - 1 && <div className="mt-1 min-h-[16px] w-px flex-1 bg-border" />}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex flex-wrap items-center gap-3">
+                                <span className="text-sm font-medium">{h.acao}</span>
+                                <span className="font-mono text-xs text-muted-foreground">{formatDataHora(h.createdAt)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
                 {semComparativo ? (
                   <p className="text-sm text-muted-foreground">Sem conferência tripla concluída para esta ocorrência</p>
                 ) : comparativo ? (
