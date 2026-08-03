@@ -1,16 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, FileText, Search, Truck } from 'lucide-react';
+import Link from 'next/link';
+import { CheckCircle2, FileText, Search, Truck, XCircle, AlertTriangle } from 'lucide-react';
 import type { StatusCaminhao } from '@/lib/operacao';
 import { statusCaminhaoVariant } from '@/lib/status-ui';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
+import type { ChecklistLiberacao, RequisitoChecklist } from '@/lib/faturamento';
+import { extrairMensagemErro } from '@/lib/error-message';
 
 interface CaminhaoLiberacao {
   id: string;
@@ -22,14 +24,32 @@ interface CaminhaoLiberacao {
   statusFaturamento: string | null;
 }
 
+const LINK_RESOLUCAO: Record<RequisitoChecklist['chave'], { texto: string; href: string }> = {
+  cargaConferida: { texto: 'Resolver em Carga → Conferência', href: '/carga/conferencia' },
+  notasAutorizadas: { texto: 'Resolver em Notas / XML', href: '/faturamento/notas-xml' },
+  seguroConfirmado: { texto: 'Resolver em Seguro Manual', href: '/faturamento/seguro-manual' },
+  caminhaoMotorista: { texto: 'Resolver em Cadastros → Caminhões', href: '/cadastros/caminhoes' },
+};
+
+function RequisitoLinha({ ok, label, detalhe }: { ok: boolean; label: string; detalhe?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2 border-b border-[#F1F5F9] last:border-0">
+      <div className="flex items-center gap-2">
+        {ok ? <CheckCircle2 className="w-4 h-4 text-[#15803D] flex-shrink-0" /> : <XCircle className="w-4 h-4 text-[#E11D48] flex-shrink-0" />}
+        <span className={`text-[13px] font-medium ${ok ? 'text-[#1E293B]' : 'text-[#9F1239]'}`}>{label}</span>
+      </div>
+      {detalhe && <span className={`text-[11px] font-semibold ${ok ? 'text-[#64748B]' : 'text-[#E11D48]'}`}>{detalhe}</span>}
+    </div>
+  );
+}
+
 export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }) {
   const pode = (p: string) => permissoes.includes(p);
   const [dataOperacao] = useState(() => new Date().toISOString().slice(0, 10));
   const [lista, setLista] = useState<CaminhaoLiberacao[]>([]);
   const [selecionado, setSelecionado] = useState<CaminhaoLiberacao | null>(null);
   const [busca, setBusca] = useState('');
-  const [checklist, setChecklist] = useState({ danfe: false, canhoto: false, seguro: false, temperatura: false });
-  const [lacre, setLacre] = useState('');
+  const [checklist, setChecklist] = useState<ChecklistLiberacao | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -57,6 +77,27 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
     void carregar();
   }, [carregar]);
 
+  const carregarChecklist = useCallback(async (caminhaoId: string) => {
+    const res = await fetch(`/api/operacao/faturamento/liberacao/${caminhaoId}/checklist`, { cache: 'no-store' });
+    if (res.ok) setChecklist(await res.json()); else setChecklist(null);
+  }, []);
+
+  useEffect(() => {
+    if (selecionado) void carregarChecklist(selecionado.id);
+    else setChecklist(null);
+  }, [selecionado, carregarChecklist]);
+
+  useEffect(() => {
+    const EVENTOS_RELEVANTES = new Set(['nfse_emitida', 'nfse_cancelada', 'nfse_erro_emissao', 'seguro_atualizado', 'caminhao_liberado']);
+    const onMessage = (msg: RealtimeMensagem) => {
+      if (!EVENTOS_RELEVANTES.has(msg.type)) return;
+      void carregar();
+      if (selecionado) void carregarChecklist(selecionado.id);
+    };
+    const desconectar = conectarRealtime({ rooms: ['dashboard'], onMessage, onReconnect: () => void carregar() });
+    return desconectar;
+  }, [carregar, carregarChecklist, selecionado]);
+
   const filtrados = useMemo(() => {
     return lista.filter(
       (c) =>
@@ -66,15 +107,8 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
     );
   }, [lista, busca]);
 
-  const pronto =
-    checklist.danfe &&
-    checklist.canhoto &&
-    checklist.seguro &&
-    checklist.temperatura &&
-    lacre.trim().length > 0;
-
   async function liberarSaida() {
-    if (!selecionado || !pronto) return;
+    if (!selecionado || !checklist?.liberavel) return;
     setErro(null);
     setSubmitting(true);
     try {
@@ -84,10 +118,11 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErro((data as { message?: string }).message ?? 'Falha ao liberar saída');
+        setErro(extrairMensagemErro(data, 'Falha ao liberar saída'));
         return;
       }
       await carregar();
+      await carregarChecklist(selecionado.id);
     } catch {
       setErro('Erro de conexão');
     } finally {
@@ -113,12 +148,16 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
     return <StatusPill variant={variant} label={label} />;
   }
 
+  const liberado = selecionado?.statusCaminhao === 'liberado_saida';
+
   return (
     <div className="flex h-full flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Liberação de Caminhão (Portaria)</h1>
-          <p className="text-sm text-muted-foreground">Conferência final de documentos e liberação de saída</p>
+          <h1 className="text-2xl font-bold text-foreground">Liberação do Caminhão</h1>
+          <p className="text-sm text-muted-foreground">
+            Checklist calculado a partir do estado real da carga, notas fiscais e seguro. Libera apenas quando todos os requisitos estiverem OK.
+          </p>
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -137,7 +176,7 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
           <CardContent className="flex h-full flex-col gap-4 p-5">
             <h2 className="flex items-center gap-2 font-bold">
               <Truck className="h-5 w-5 text-primary" />
-              Veículos no Pátio
+              Caminhões no Pátio
             </h2>
             <div className="flex-1 space-y-3 overflow-auto">
               {loading && <p className="text-sm text-muted-foreground">Carregando…</p>}
@@ -179,66 +218,54 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
                     {selecionado.statusFaturamento?.replace(/_/g, ' ') ?? '—'}
                   </p>
                 </div>
-                {statusBadge(selecionado)}
+                {(pode('LIBERACAO_GERENCIAR') || pode('FATURAMENTO_GERENCIAR') || pode('EXPEDICAO_GERENCIAR')) ? (
+                  <Button
+                    className="gap-2"
+                    disabled={submitting || !checklist?.liberavel || liberado}
+                    onClick={() => void liberarSaida()}
+                  >
+                    <CheckCircle2 className="h-5 w-5" />
+                    {liberado ? 'Já liberado' : submitting ? 'Liberando…' : 'Liberar Caminhão'}
+                  </Button>
+                ) : (
+                  statusBadge(selecionado)
+                )}
               </div>
-              <CardContent className="flex flex-1 flex-col gap-6 overflow-auto p-6">
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-4 rounded-lg border p-5">
-                    <h3 className="flex items-center gap-2 text-sm font-bold uppercase">
+              <CardContent className="flex flex-1 flex-col gap-4 overflow-auto p-6">
+                {/* Checklist calculado (D10.6) */}
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="px-5 py-3.5 border-b flex items-center gap-2">
                       <FileText className="h-4 w-4 text-primary" />
-                      Checklist de Documentos
-                    </h3>
-                    {(
-                      [
-                        ['danfe', 'DANFEs entregues ao motorista'],
-                        ['canhoto', 'Canhoto assinado da transportadora'],
-                        ['seguro', 'Averbação de seguro validada'],
-                      ] as const
-                    ).map(([key, label]) => (
-                      <label key={key} className="flex items-center gap-3 text-sm">
-                        <Checkbox
-                          checked={checklist[key]}
-                          onCheckedChange={(v) => setChecklist((s) => ({ ...s, [key]: v === true }))}
-                        />
-                        {label}
-                      </label>
-                    ))}
-                  </div>
-                  <div className="space-y-4 rounded-lg border p-5">
-                    <h3 className="flex items-center gap-2 text-sm font-bold uppercase">
-                      <AlertCircle className="h-4 w-4 text-amber-500" />
-                      Lacre e Segurança
-                    </h3>
-                    <div>
-                      <Label htmlFor="lacre">Número do lacre</Label>
-                      <Input id="lacre" value={lacre} onChange={(e) => setLacre(e.target.value)} className="mt-1" />
+                      <h3 className="text-[13px] font-bold">Requisitos para liberação</h3>
                     </div>
-                    <label className="flex items-center gap-3 text-sm">
-                      <Checkbox
-                        checked={checklist.temperatura}
-                        onCheckedChange={(v) => setChecklist((s) => ({ ...s, temperatura: v === true }))}
-                      />
-                      Temperatura aferida na saída
-                    </label>
+                    <div className="px-5 py-1">
+                      {checklist?.requisitos.map((r) => (
+                        <RequisitoLinha key={r.chave} ok={r.ok} label={r.rotulo} detalhe={r.detalhe} />
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Pendências impeditivas */}
+                {checklist && !checklist.liberavel && !liberado && (
+                  <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-xl overflow-hidden">
+                    <div className="px-5 py-3 border-b border-[#FDE68A] flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-[#D97706]" />
+                      <h3 className="text-[13px] font-bold text-[#92400E]">Pendências impeditivas</h3>
+                    </div>
+                    <div className="flex flex-col divide-y divide-[#FDE68A]/60">
+                      {checklist.requisitos.filter((r) => !r.ok).map((r) => (
+                        <div key={r.chave} className="px-5 py-3 flex items-center justify-between gap-3">
+                          <p className="text-[12px] text-[#92400E]">{r.rotulo} — {r.detalhe}</p>
+                          <Link href={LINK_RESOLUCAO[r.chave].href} className="text-[12px] font-semibold text-[#1D4ED8] hover:underline whitespace-nowrap">
+                            {LINK_RESOLUCAO[r.chave].texto}
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                {pode('FATURAMENTO_GERENCIAR') || pode('EXPEDICAO_GERENCIAR') ? (
-                  <div className="mt-auto flex justify-end border-t pt-6">
-                    <Button
-                      className="gap-2"
-                      disabled={
-                        submitting ||
-                        !pronto ||
-                        selecionado.statusCaminhao !== 'faturado' ||
-                        selecionado.statusFaturamento !== 'concluido'
-                      }
-                      onClick={() => void liberarSaida()}
-                    >
-                      <CheckCircle2 className="h-5 w-5" />
-                      {submitting ? 'Liberando…' : 'Confirmar Liberação na Cancelas'}
-                    </Button>
-                  </div>
-                ) : null}
+                )}
               </CardContent>
             </>
           )}
