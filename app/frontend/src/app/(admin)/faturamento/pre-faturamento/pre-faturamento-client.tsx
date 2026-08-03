@@ -16,8 +16,8 @@ function BadgeAmbiente({ homologacao }: { homologacao: boolean }) {
     <span
       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border ${
         homologacao
-          ? 'bg-[#FFFBEB] text-[#D97706] border-[#FDE68A]'
-          : 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
+          ? 'bg-[var(--color-warning-surface)] text-[var(--color-warning-ink)] border-[var(--color-provisorio-border)]'
+          : 'bg-[var(--color-success-surface)] text-[var(--color-success-strong)] border-[var(--color-success-strong-border)]'
       }`}
     >
       <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -548,19 +548,19 @@ export function FaturamentoClient({
             const erros = notas.filter((n) => n.statusNfse === 'erro_emissao').length;
             const valorTotal = notas.reduce((acc, n) => acc + Number(n.valor), 0);
             const kpis = [
-              { label: 'Pedidos na carga', value: `${consolidacao.pedidos.length}`, sub: 'para faturamento', color: 'text-[#1E3A5F]', bg: 'bg-[#F8FAFC]' },
-              { label: 'Preparados', value: `${preparados}`, sub: 'aguardando envio', color: 'text-[#64748B]', bg: 'bg-[#F1F5F9]' },
-              { label: 'Autorizados', value: `${autorizados}`, sub: 'nota emitida', color: 'text-[#15803D]', bg: 'bg-[#F0FDF4]' },
-              { label: 'Com erro', value: `${erros}`, sub: 'aguardando reprocessamento', color: 'text-[#E11D48]', bg: 'bg-[#FFF1F2]' },
-              { label: 'Valor total da carga', value: valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), sub: 'notas emitidas', color: 'text-[#1E3A5F]', bg: 'bg-[#F8FAFC]' },
+              { label: 'Pedidos na carga', value: `${consolidacao.pedidos.length}`, sub: 'para faturamento', color: 'text-[var(--color-brand-navy-deep)]', bg: 'bg-[var(--color-surface-subtle)]' },
+              { label: 'Preparados', value: `${preparados}`, sub: 'aguardando envio', color: 'text-[var(--color-text-secondary)]', bg: 'bg-[var(--color-muted)]' },
+              { label: 'Autorizados', value: `${autorizados}`, sub: 'nota emitida', color: 'text-[var(--color-success-strong)]', bg: 'bg-[var(--color-success-surface)]' },
+              { label: 'Com erro', value: `${erros}`, sub: 'aguardando reprocessamento', color: 'text-[var(--color-danger-rose)]', bg: 'bg-[var(--color-danger-surface)]' },
+              { label: 'Valor total da carga', value: valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), sub: 'notas emitidas', color: 'text-[var(--color-brand-navy-deep)]', bg: 'bg-[var(--color-surface-subtle)]' },
             ];
             return (
               <div className="grid grid-cols-5 gap-3">
                 {kpis.map(({ label, value, sub, color, bg }) => (
-                  <div key={label} className={`border border-[#E2E8F0] rounded-xl px-4 py-3.5 ${bg}`}>
-                    <p className="text-[11px] text-[#64748B] font-medium mb-1">{label}</p>
+                  <div key={label} className={`border border-[var(--color-border)] rounded-xl px-4 py-3.5 ${bg}`}>
+                    <p className="text-[11px] text-[var(--color-text-secondary)] font-medium mb-1">{label}</p>
                     <p className={`text-[22px] font-black leading-none ${color}`}>{value}</p>
-                    <p className="text-[10px] text-[#94A3B8] mt-1.5">{sub}</p>
+                    <p className="text-[10px] text-[var(--color-text-muted)] mt-1.5">{sub}</p>
                   </div>
                 ))}
               </div>

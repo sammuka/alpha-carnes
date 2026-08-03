@@ -33,12 +33,12 @@ const LINK_RESOLUCAO: Record<RequisitoChecklist['chave'], { texto: string; href:
 
 function RequisitoLinha({ ok, label, detalhe }: { ok: boolean; label: string; detalhe?: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-2 border-b border-[#F1F5F9] last:border-0">
+    <div className="flex items-center justify-between gap-3 py-2 border-b border-[var(--color-muted)] last:border-0">
       <div className="flex items-center gap-2">
-        {ok ? <CheckCircle2 className="w-4 h-4 text-[#15803D] flex-shrink-0" /> : <XCircle className="w-4 h-4 text-[#E11D48] flex-shrink-0" />}
-        <span className={`text-[13px] font-medium ${ok ? 'text-[#1E293B]' : 'text-[#9F1239]'}`}>{label}</span>
+        {ok ? <CheckCircle2 className="w-4 h-4 text-[var(--color-success-strong)] flex-shrink-0" /> : <XCircle className="w-4 h-4 text-[var(--color-danger-rose)] flex-shrink-0" />}
+        <span className={`text-[13px] font-medium ${ok ? 'text-[var(--color-text-strong)]' : 'text-[var(--color-danger-strong-text)]'}`}>{label}</span>
       </div>
-      {detalhe && <span className={`text-[11px] font-semibold ${ok ? 'text-[#64748B]' : 'text-[#E11D48]'}`}>{detalhe}</span>}
+      {detalhe && <span className={`text-[11px] font-semibold ${ok ? 'text-[var(--color-text-secondary)]' : 'text-[var(--color-danger-rose)]'}`}>{detalhe}</span>}
     </div>
   );
 }
@@ -249,16 +249,16 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
 
                 {/* Pendências impeditivas */}
                 {checklist && !checklist.liberavel && !liberado && (
-                  <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-xl overflow-hidden">
-                    <div className="px-5 py-3 border-b border-[#FDE68A] flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-[#D97706]" />
-                      <h3 className="text-[13px] font-bold text-[#92400E]">Pendências impeditivas</h3>
+                  <div className="bg-[var(--color-warning-surface)] border border-[var(--color-provisorio-border)] rounded-xl overflow-hidden">
+                    <div className="px-5 py-3 border-b border-[var(--color-provisorio-border)] flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-[var(--color-warning-ink)]" />
+                      <h3 className="text-[13px] font-bold text-[var(--color-provisorio-text)]">Pendências impeditivas</h3>
                     </div>
-                    <div className="flex flex-col divide-y divide-[#FDE68A]/60">
+                    <div className="flex flex-col divide-y divide-[var(--color-provisorio-border)]/60">
                       {checklist.requisitos.filter((r) => !r.ok).map((r) => (
                         <div key={r.chave} className="px-5 py-3 flex items-center justify-between gap-3">
-                          <p className="text-[12px] text-[#92400E]">{r.rotulo} — {r.detalhe}</p>
-                          <Link href={LINK_RESOLUCAO[r.chave].href} className="text-[12px] font-semibold text-[#1D4ED8] hover:underline whitespace-nowrap">
+                          <p className="text-[12px] text-[var(--color-provisorio-text)]">{r.rotulo} — {r.detalhe}</p>
+                          <Link href={LINK_RESOLUCAO[r.chave].href} className="text-[12px] font-semibold text-[var(--color-action-blue-hover)] hover:underline whitespace-nowrap">
                             {LINK_RESOLUCAO[r.chave].texto}
                           </Link>
                         </div>

@@ -142,6 +142,18 @@
   --color-action-blue-ring: #93C5FD;
   --color-code-surface: #0F172A;
 
+  /* Onda 10 — Faturamento (NotasXml/SeguroManual/LiberacaoCaminhao): tons de
+     ênfase que não existiam ainda no inventário — danger/success "strong"
+     variantes escuras para texto sobre superfície clara, e dots de status. */
+  --color-danger-strong-text: #9F1239;
+  --color-danger-strong-border: #FECDD3;
+  --color-danger-strong-hover: #BE123C;
+  --color-success-strong-hover: #166534;
+  --color-success-strong-border: #BBF7D0;
+  --color-status-dot-info: #60A5FA;
+  --color-status-dot-warning: #F59E0B;
+  --color-required-mark: #EF4444;
+
   /* Raios */
   --radius: 0.75rem;
   --radius-lg: 0.75rem;
