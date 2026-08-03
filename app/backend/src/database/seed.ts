@@ -204,6 +204,95 @@ const PARAMETROS_SEED = [
       pendencia: null,
     },
   },
+  {
+    chave: 'faturamento.codigo_servico_atividade',
+    descricao: 'Código de serviço (Atividade) na emissão EISS',
+    valorJson: {
+      pergunta: 'Qual o código de Atividade (LC 404/2022) usado na emissão de NFS-e?',
+      texto: 'Enviado como <Atividade> no request EISS (formato "00.00"). Valor provisório até o contador confirmar.',
+      valor: '14.01',
+      provisorio: true,
+      pendencia: 'Confirmação do contador do cliente — D10.1',
+    },
+  },
+  {
+    chave: 'faturamento.simples_nacional',
+    descricao: 'Enquadramento Simples Nacional (EISS SimplesNacional)',
+    valorJson: {
+      pergunta: 'A AlphaCarnes é optante do Simples Nacional?',
+      texto: 'Enviado como <SimplesNacional> no request EISS. Valor provisório até confirmação contábil.',
+      valor: false,
+      provisorio: true,
+      pendencia: 'Confirmação do contador do cliente — D10.1',
+    },
+  },
+  {
+    chave: 'faturamento.modelo_fiscal',
+    descricao: 'Modelo fiscal da emissão EISS (padrão ou RTC)',
+    valorJson: {
+      pergunta: 'A emissão deve usar o modelo padrão (Emitir) ou o modelo RTC (RTC_EmitirNFE)?',
+      texto: 'Lido no momento do envio e gravado na nota emitida (notas_fiscais.modelo_fiscal).',
+      valor: 'padrao',
+      opcoes: ['padrao', 'rtc'],
+      provisorio: true,
+      pendencia: 'D10.2',
+    },
+  },
+  {
+    chave: 'faturamento.seguro_obrigatorio',
+    descricao: 'Seguro confirmado é requisito obrigatório para liberação do caminhão',
+    valorJson: {
+      pergunta: 'A liberação do caminhão deve exigir seguro confirmado?',
+      texto: 'Quando false, o requisito de seguro do checklist de liberação reporta ok=true (dispensado por parâmetro).',
+      valor: true,
+      provisorio: true,
+      pendencia: 'D10.6',
+    },
+  },
+  {
+    chave: 'faturamento.rtc_class_trib',
+    descricao: 'RTC — ClassTrib (6 dígitos)',
+    valorJson: {
+      pergunta: 'Qual o ClassTrib (6 dígitos) para emissão no modelo RTC?',
+      texto: 'Obrigatório apenas quando faturamento.modelo_fiscal="rtc". Vazio → RTC_PARAMETROS_INCOMPLETOS.',
+      valor: '',
+      provisorio: true,
+      pendencia: 'Obter via GET /faturamento/rtc/pesquisar-nbs — D10.2',
+    },
+  },
+  {
+    chave: 'faturamento.rtc_codigo_nbs',
+    descricao: 'RTC — Código NBS (12 dígitos pontuado)',
+    valorJson: {
+      pergunta: 'Qual o Código NBS para emissão no modelo RTC?',
+      texto: 'Obrigatório apenas quando faturamento.modelo_fiscal="rtc". Vazio → RTC_PARAMETROS_INCOMPLETOS.',
+      valor: '',
+      provisorio: true,
+      pendencia: 'Obter via GET /faturamento/rtc/pesquisar-nbs — D10.2',
+    },
+  },
+  {
+    chave: 'faturamento.rtc_ind_operacao',
+    descricao: 'RTC — IndOperacao (6 dígitos)',
+    valorJson: {
+      pergunta: 'Qual o IndOperacao para emissão no modelo RTC?',
+      texto: 'Obrigatório apenas quando faturamento.modelo_fiscal="rtc". Vazio → RTC_PARAMETROS_INCOMPLETOS.',
+      valor: '',
+      provisorio: true,
+      pendencia: 'D10.2',
+    },
+  },
+  {
+    chave: 'faturamento.rtc_id_local_incidencia',
+    descricao: 'RTC — IdLocalIncidencia (1 dígito)',
+    valorJson: {
+      pergunta: 'Qual o IdLocalIncidencia para emissão no modelo RTC?',
+      texto: 'Obrigatório apenas quando faturamento.modelo_fiscal="rtc". Vazio → RTC_PARAMETROS_INCOMPLETOS.',
+      valor: '',
+      provisorio: true,
+      pendencia: 'D10.2',
+    },
+  },
 ] as const;
 
 export async function seedParametros(db: Db): Promise<void> {

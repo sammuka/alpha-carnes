@@ -78,6 +78,9 @@ export const notasFiscais = pgTable(
     serieRps:             text('serie_rps').default('A'),
     // request + response EISS; token REDACTADO antes de persistir
     payloadEiss:          jsonb('payload_eiss').notNull().default(sql`'{}'::jsonb`),
+    // D10.2 — modelo fiscal usado na emissão (lido do parâmetro faturamento.modelo_fiscal
+    // no momento do envio; gravado na nota para auditoria/consulta).
+    modeloFiscal:         text('modelo_fiscal').notNull().default('padrao'),
     createdAt:            timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt:            timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt:            timestamp('deleted_at', { withTimezone: true }),
@@ -95,6 +98,10 @@ export const notasFiscais = pgTable(
       'chk_notas_fiscais_aliquota_valida',
       sql`${t.aliquota} > 0 AND ${t.aliquota} <= 1`,
     ),
+    check(
+      'chk_notas_fiscais_modelo_fiscal',
+      sql`${t.modeloFiscal} IN ('padrao','rtc')`,
+    ),
     // CRÍTICO: impede dupla emissão para o mesmo pedido enquanto nota estiver viva
     uniqueIndex('uq_notas_fiscais_pedido_viva')
       .on(t.pedidoVendaId)
@@ -106,6 +113,49 @@ export const notasFiscais = pgTable(
     index('idx_notas_fiscais_payload_gin').using('gin', t.payloadEiss),
   ],
 );
+
+// ── seguros_carga ─────────────────────────────────────────────────────────────
+// F6b — controle manual do seguro por caminhão. Máximo 1 registro vivo por
+// caminhão (unicidade parcial). Transições: pendente→enviado→confirmado,
+// com regressão enviado→pendente permitida (auditada). confirmado é terminal.
+export const segurosCarga = pgTable(
+  'seguros_carga',
+  {
+    id:                   uuid('id').primaryKey().default(sql`uuidv7()`),
+    caminhaoId:           uuid('caminhao_id').notNull().references(() => caminhoes.id),
+    valorCarga:           numeric('valor_carga', { precision: 15, scale: 2 }),
+    status:               text('status').notNull().default('pendente'),
+    responsavelId:        uuid('responsavel_id').references(() => usuarios.id),
+    enviadoEm:            timestamp('enviado_em', { withTimezone: true }),
+    confirmadoEm:         timestamp('confirmado_em', { withTimezone: true }),
+    observacao:           text('observacao'),
+    // Lista de {nome, descricao, registradoEm, registradoPor} — referências nominais,
+    // sem upload físico (P-Onda10.1).
+    anexosJson:           jsonb('anexos_json').notNull().default(sql`'[]'::jsonb`),
+    createdAt:            timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:            timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt:            timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    check('chk_seguros_carga_status', sql`${t.status} IN ('pendente','enviado','confirmado')`),
+    // Máximo 1 seguro vivo por caminhão
+    uniqueIndex('uq_seguros_carga_caminhao')
+      .on(t.caminhaoId)
+      .where(sql`${t.deletedAt} IS NULL`),
+    index('idx_seguros_carga_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
+  ],
+);
+
+export const segurosCargaRelations = relations(segurosCarga, ({ one }) => ({
+  caminhao: one(caminhoes, {
+    fields: [segurosCarga.caminhaoId],
+    references: [caminhoes.id],
+  }),
+  responsavel: one(usuarios, {
+    fields: [segurosCarga.responsavelId],
+    references: [usuarios.id],
+  }),
+}));
 
 // ── Relations ─────────────────────────────────────────────────────────────────
 
