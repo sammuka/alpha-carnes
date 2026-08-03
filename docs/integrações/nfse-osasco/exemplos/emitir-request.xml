@@ -1,67 +1,52 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Estrutura real conforme manual oficial V10.6 (modelo padrão).
+     Namespaces e envelope <tem:request><eis:NotaFiscal> conferidos no manual.
+     Para o modelo RTC (referência >= 2026, não-Simples) usar <tem:RTC_EmitirNFE> +
+     <eis:NotaFiscal_RTC> + campos ClassTrib/CodigoNBS/IdLocalIncidencia/IndOperacao. -->
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:tem="http://tempuri.org/"
-                  xmlns:eis="http://schemas.datacontract.org/2004/07/Eiss.NfeWebServices.Contracts">
+                  xmlns:eis="http://schemas.datacontract.org/2004/07/Eissnfe.Negocio.WebServices.Mensagem"
+                  xmlns:eis1="http://schemas.datacontract.org/2004/07/Eissnfe.Dominio.DataTransferObject.Prestador"
+                  xmlns:eis2="http://schemas.datacontract.org/2004/07/Eissnfe.Dominio.DataTransferObject.Contribuinte">
   <soapenv:Header/>
   <soapenv:Body>
     <tem:Emitir>
-      <tem:nota>
-        <eis:ChaveAutenticacao>TOKEN_HOMOLOGACAO_AQUI</eis:ChaveAutenticacao>
-        <eis:Homologacao>true</eis:Homologacao>
-        <eis:Aliquota>0.0500</eis:Aliquota>
-        <eis:Valor>15000.00</eis:Valor>
-        <eis:ValorDeducao>0.00</eis:ValorDeducao>
-        <eis:ValorPis>0.00</eis:ValorPis>
-        <eis:ValorCofins>0.00</eis:ValorCofins>
-        <eis:ValorInss>0.00</eis:ValorInss>
-        <eis:ValorIr>0.00</eis:ValorIr>
-        <eis:ValorCsll>0.00</eis:ValorCsll>
-        <eis:DescricaoServico>Distribuição de carnes bovinas - Pedido PED-000984 - Lote 20250523-001 - Contrafilé 1.256,30 kg</eis:DescricaoServico>
-        <eis:CodigoServico>14.05</eis:CodigoServico>
-        <eis:NotificarTomadorPorEmail>true</eis:NotificarTomadorPorEmail>
-        <eis:SubstituicaoTributaria>false</eis:SubstituicaoTributaria>
-        <eis:NumeroRps>984</eis:NumeroRps>
-        <eis:SerieRps>A</eis:SerieRps>
-        <eis:DataRps>2025-05-23T08:15:00</eis:DataRps>
-        <eis:Prestador>
-          <eis:CNPJ>12345678000190</eis:CNPJ>
-          <eis:InscricaoMunicipal>123456</eis:InscricaoMunicipal>
-          <eis:Nome>AlphaCarnes Distribuição de Carnes Ltda</eis:Nome>
-          <eis:Email>faturamento@alphacarnes.com.br</eis:Email>
-          <eis:DDD>11</eis:DDD>
-          <eis:Telefone>999998888</eis:Telefone>
-          <eis:Endereco>
-            <eis:Logradouro>Rua das Carnes</eis:Logradouro>
-            <eis:TipoLogradouro>Rua</eis:TipoLogradouro>
-            <eis:Numero>100</eis:Numero>
-            <eis:Complemento>Galpão A</eis:Complemento>
-            <eis:Bairro>Presidente Altino</eis:Bairro>
-            <eis:Cidade>Osasco</eis:Cidade>
-            <eis:CodigoCidadeIBGE>3534401</eis:CodigoCidadeIBGE>
-            <eis:Estado>SP</eis:Estado>
-            <eis:CEP>06213000</eis:CEP>
-            <eis:Pais>Brasil</eis:Pais>
-          </eis:Endereco>
-        </eis:Prestador>
-        <eis:Tomador>
-          <eis:CNPJ>98765432000111</eis:CNPJ>
-          <eis:Nome>Frigorífico Bom Corte Ltda</eis:Nome>
-          <eis:Email>compras@bomcorte.com.br</eis:Email>
-          <eis:DDD>11</eis:DDD>
-          <eis:Telefone>988887777</eis:Telefone>
-          <eis:Endereco>
-            <eis:Logradouro>Avenida dos Açougues</eis:Logradouro>
-            <eis:TipoLogradouro>Avenida</eis:TipoLogradouro>
-            <eis:Numero>500</eis:Numero>
-            <eis:Bairro>Centro</eis:Bairro>
-            <eis:Cidade>São Paulo</eis:Cidade>
-            <eis:CodigoCidadeIBGE>3550308</eis:CodigoCidadeIBGE>
-            <eis:Estado>SP</eis:Estado>
-            <eis:CEP>01310100</eis:CEP>
-            <eis:Pais>Brasil</eis:Pais>
-          </eis:Endereco>
-        </eis:Tomador>
-      </tem:nota>
+      <tem:request>
+        <eis:NotaFiscal>
+          <eis1:ChaveAutenticacao>TOKEN_HOMOLOGACAO_AQUI</eis1:ChaveAutenticacao>
+          <eis1:Homologacao>true</eis1:Homologacao>
+          <eis1:Identificador>PED-000984</eis1:Identificador>
+          <eis1:nrExercicioReferencia>2026</eis1:nrExercicioReferencia>
+          <eis1:nrMesReferencia>8</eis1:nrMesReferencia>
+          <eis1:Atividade>14.01</eis1:Atividade>
+          <eis1:Aliquota>0.00</eis1:Aliquota>
+          <eis1:SubstituicaoTributaria>false</eis1:SubstituicaoTributaria>
+          <eis1:SemIncidenciaISS>false</eis1:SemIncidenciaISS>
+          <eis1:SimplesNacional>false</eis1:SimplesNacional>
+          <eis1:TomadorEstrangeiro>false</eis1:TomadorEstrangeiro>
+          <eis1:Tomador>
+            <eis2:CNPJ>98765432000111</eis2:CNPJ>
+            <eis2:Nome>Frigorífico Bom Corte Ltda</eis2:Nome>
+            <eis2:Email>compras@bomcorte.com.br</eis2:Email>
+            <eis2:DDD>11</eis2:DDD>
+            <eis2:Telefone>988887777</eis2:Telefone>
+            <eis2:Endereco>
+              <eis2:TipoLogradouro>Avenida</eis2:TipoLogradouro>
+              <eis2:Logradouro>dos Açougues</eis2:Logradouro>
+              <eis2:Numero>500</eis2:Numero>
+              <eis2:Bairro>Centro</eis2:Bairro>
+              <eis2:CEP>01310100</eis2:CEP>
+              <eis2:Cidade>São Paulo</eis2:Cidade>
+              <eis2:CodigoCidadeIBGE>3550308</eis2:CodigoCidadeIBGE>
+              <eis2:Estado>SP</eis2:Estado>
+            </eis2:Endereco>
+          </eis1:Tomador>
+          <eis1:NotificarTomadorPorEmail>true</eis1:NotificarTomadorPorEmail>
+          <eis1:InformacoesAdicionais>Distribuição de carnes bovinas - Pedido PED-000984|Lote 20260802-001 - Contrafilé 1.256,30 kg</eis1:InformacoesAdicionais>
+          <eis1:Valor>15000.00</eis1:Valor>
+          <eis1:DeduzirRepasse>false</eis1:DeduzirRepasse>
+        </eis:NotaFiscal>
+      </tem:request>
     </tem:Emitir>
   </soapenv:Body>
 </soapenv:Envelope>

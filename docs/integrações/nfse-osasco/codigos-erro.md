@@ -13,16 +13,21 @@ retry e mapeamento para os status internos do sistema AlphaCarnes.
 
 ## Estrutura de ResponseBase
 
-Todo método do EISS retorna um objeto com os seguintes campos raiz:
+Todo método do EISS retorna um objeto com `Erro` + `MensagemErro`; a emissão agrupa os dados da
+nota em `NotaFiscalGerada` (estrutura real do manual V10.6):
 
 ```
 Erro: boolean           — true se houve erro na operação
 MensagemErro: string    — descrição legível do erro (preenchido quando Erro = true)
-NumeroNota: string      — número da NFS-e emitida (preenchido apenas em sucesso de emissão)
-CodigoVerificacao: string — código de autenticidade da nota (preenchido apenas em sucesso)
+NotaFiscalGerada:       — presente apenas em sucesso de emissão
+  Numero: int           — número sequencial da NFS-e emitida
+  Autenticador: string  — código de autenticidade da nota (validação pública)
+  Link: string          — link direto à nota (o mesmo enviado ao tomador)
+  Identificador: string — eco do identificador interno (nº do pedido) enviado no request
 ```
 
-Regra: verificar **sempre** o campo `Erro` antes de ler `NumeroNota`/`CodigoVerificacao`.
+O EISS **não usa códigos de erro numéricos** — a identificação é pela `MensagemErro` textual
+(tabela abaixo). Regra: verificar **sempre** o campo `Erro` antes de ler `NotaFiscalGerada`.
 Um HTTP 200 não garante sucesso — o EISS retorna HTTP 200 com `Erro: true` para erros de negócio.
 
 ---

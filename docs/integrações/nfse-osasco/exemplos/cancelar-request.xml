@@ -1,16 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Estrutura real conforme manual oficial V10.6: corpo em <tem:request>,
+     namespace Eissnfe.Negocio.WebServices.Mensagem, NumeroNota é Int. -->
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:tem="http://tempuri.org/"
-                  xmlns:eis="http://schemas.datacontract.org/2004/07/Eiss.NfeWebServices.Contracts">
+                  xmlns:eis="http://schemas.datacontract.org/2004/07/Eissnfe.Negocio.WebServices.Mensagem">
   <soapenv:Header/>
   <soapenv:Body>
     <tem:Cancelar>
-      <tem:cancelamento>
+      <tem:request>
         <eis:ChaveAutenticacao>TOKEN_HOMOLOGACAO_AQUI</eis:ChaveAutenticacao>
         <eis:Homologacao>true</eis:Homologacao>
-        <eis:NumeroNota>20250001234</eis:NumeroNota>
+        <eis:NumeroNota>12345</eis:NumeroNota>
         <eis:Motivo>Cancelamento solicitado pelo cliente - divergência de valor no pedido PED-000984</eis:Motivo>
-      </tem:cancelamento>
+      </tem:request>
     </tem:Cancelar>
   </soapenv:Body>
 </soapenv:Envelope>

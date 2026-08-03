@@ -1,20 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Estrutura real conforme manual oficial V10.6: o retorno agrupa os dados da
+     nota em <NotaFiscalGerada> (Autenticador/Identificador/Link/Numero). -->
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
   <s:Header/>
   <s:Body>
     <EmitirResponse xmlns="http://tempuri.org/">
-      <EmitirResult xmlns:a="http://schemas.datacontract.org/2004/07/Eiss.NfeWebServices.Contracts"
+      <EmitirResult xmlns:a="http://schemas.datacontract.org/2004/07/Eissnfe.Negocio.WebServices.Mensagem"
+                    xmlns:b="http://schemas.datacontract.org/2004/07/Eissnfe.Dominio.DataTransferObject.Prestador"
                     xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
         <a:Erro>false</a:Erro>
         <a:MensagemErro i:nil="true"/>
-        <a:NumeroNota>20250001234</a:NumeroNota>
-        <a:CodigoVerificacao>ABC12345</a:CodigoVerificacao>
-        <a:DataEmissao>2025-05-23T08:15:30</a:DataEmissao>
-        <a:LinkNota>https://nfe.osasco.sp.gov.br/EissnfeWebApp/Nota/Visualizar?numero=20250001234&amp;codigo=ABC12345</a:LinkNota>
-        <a:NumeroRps>984</a:NumeroRps>
-        <a:SerieRps>A</a:SerieRps>
-        <a:ValorIss>750.00</a:ValorIss>
-        <a:ValorLiquido>14250.00</a:ValorLiquido>
+        <a:NotaFiscalGerada>
+          <b:Autenticador>ABC12345</b:Autenticador>
+          <b:Identificador>PED-000984</b:Identificador>
+          <b:Link>https://nfe.osasco.sp.gov.br/EissnfeWebApp/Nota/Visualizar?numero=12345&amp;codigo=ABC12345</b:Link>
+          <b:Numero>12345</b:Numero>
+        </a:NotaFiscalGerada>
       </EmitirResult>
     </EmitirResponse>
   </s:Body>
