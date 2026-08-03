@@ -245,6 +245,11 @@ export class FaturamentoService {
       });
     }
 
+    // Validar parâmetros fiscais (RTC_PARAMETROS_INCOMPLETOS) ANTES do claim atômico —
+    // se lançado depois, a NF fica travada em 'pendente' (viva) sem poder ser reemitida
+    // (reprocessar só opera a partir de 'erro_emissao').
+    const dadosFiscais = await this.buscarDadosFiscaisEmissao();
+
     const numeroRps = `RPS-${Date.now()}`;
     const serieRps = 'A';
 
@@ -289,7 +294,6 @@ export class FaturamentoService {
       ? (process.env['EISS_CHAVE_AUTENTICACAO_HML'] ?? '')
       : (process.env['EISS_CHAVE_AUTENTICACAO_PRD'] ?? '');
 
-    const dadosFiscais = await this.buscarDadosFiscaisEmissao();
     const payloadBase = montarPayloadEiss(
       {
         pedidoId: dto.pedidoVendaId.slice(0, 8),
