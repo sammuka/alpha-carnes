@@ -62,7 +62,7 @@ describe('Onda 8 — proveniência da migration 0024 (D8.13)', () => {
     expect(expand).not.toMatch(/^\s*UPDATE\s/im);
   });
 
-  it('journal contíguo até idx 24 e snapshot 0024 encadeia com 0023', () => {
+  it('journal contíguo até idx 24 (0024_onda8_estoque_expand) e snapshot 0024 encadeia com 0023', () => {
     const journal = readJson<Journal>(path.join(META_DIR, '_journal.json'));
 
     expect(journal.version).toBe('7');
@@ -71,12 +71,14 @@ describe('Onda 8 — proveniência da migration 0024 (D8.13)', () => {
       Array.from({ length: journal.entries.length }, (_, i) => i),
     );
 
-    const last = journal.entries[journal.entries.length - 1]!;
-    expect(last).toEqual({
+    // Onda 8 não é necessariamente a última onda mergeada (pode ser seguida pela
+    // Onda 9, idx 25) — o que este teste garante é a proveniência da entrada 24.
+    const entry24 = journal.entries.find((e) => e.idx === 24)!;
+    expect(entry24).toEqual({
       idx: 24,
       version: '7',
       tag: '0024_onda8_estoque_expand',
-      when: last.when,
+      when: entry24.when,
       breakpoints: true,
     });
 
