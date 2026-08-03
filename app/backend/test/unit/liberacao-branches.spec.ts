@@ -11,9 +11,13 @@ describe('LiberacaoService — branches', () => {
   const auditoria = { registrar: jest.fn().mockResolvedValue(undefined) };
   const emitter = new EventEmitter2();
   const emitSpy = jest.spyOn(emitter, 'emit');
+  // D10.6 — checklist liberável por padrão nestes testes de branch pré-existentes
+  // (o guard em si é coberto por liberacao-checklist.spec.ts e pelos e2e de onda10).
+  const checklistService = { calcular: jest.fn().mockResolvedValue({ liberavel: true, requisitos: [] }) };
 
   beforeEach(() => {
     jest.clearAllMocks();
+    checklistService.calcular.mockResolvedValue({ liberavel: true, requisitos: [] });
   });
 
   it('liberarFaturamento idempotente quando já liberado', async () => {
@@ -29,6 +33,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const res = await service.liberarFaturamento('cam-1', 'op-1');
@@ -58,6 +63,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     await service.liberarFaturamento('cam-1', 'op-1');
@@ -87,6 +93,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     await expect(service.liberarSaida('cam-1', 'op-1')).rejects.toBeInstanceOf(ConflictException);
@@ -105,6 +112,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const res = await service.liberarSaida('cam-1', 'op-1');
@@ -139,6 +147,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const res = await service.liberarSaida('cam-1', 'op-1');
@@ -180,6 +189,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const resultado = await service.listarParaEnvio('2026-06-23');
@@ -206,6 +216,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const resultado = await service.listarParaLiberacao('2026-06-23');
@@ -225,6 +236,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn().mockResolvedValue('2026-06-23') } as never,
+      checklistService as never,
     );
 
     await expect(service.sincronizarPosEmissao('cam-1', 'op-1')).resolves.toBeNull();
@@ -260,6 +272,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     await expect(service.sincronizarPosEmissao('cam-1', 'u1')).resolves.toBeNull();
@@ -282,6 +295,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const resultado = await service.sincronizarPosEmissao('cam-1', 'u1');
@@ -304,6 +318,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const resultado = await service.sincronizarPosEmissao('cam-1', 'u1', exec as never);
@@ -327,6 +342,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const resultado = await service.sincronizarPosEmissao('cam-1', 'u1');
@@ -350,6 +366,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const resultado = await service.sincronizarPosEmissao('cam-1', 'u1', exec as never);

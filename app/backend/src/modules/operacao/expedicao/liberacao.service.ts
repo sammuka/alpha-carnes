@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { ConflictException, forwardRef, Inject, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -22,6 +22,7 @@ import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { assertTransicao, type StatusCaminhao } from './transicoes';
 import { CaminhaoService } from './caminhao.service';
+import { LiberacaoChecklistService } from '../faturamento/liberacao-checklist.service';
 
 type Tx = NodePgDatabase<typeof schema>;
 type StatusFaturamento = 'em_consolidacao' | 'pronto_para_emitir' | 'parcialmente_emitido' | 'concluido';
@@ -33,6 +34,8 @@ export class LiberacaoService {
     private readonly auditoria: AuditoriaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly caminhaoService: CaminhaoService,
+    @Inject(forwardRef(() => LiberacaoChecklistService))
+    private readonly checklistService: LiberacaoChecklistService,
   ) {}
 
   private get db() {
@@ -84,8 +87,17 @@ export class LiberacaoService {
     return resultado.caminhao;
   }
 
-  /** faturado → liberado_saida. Exige faturamento concluído (todas NFs emitidas). */
+  /** faturado → liberado_saida. Exige checklist D10.6 liberável (guard RA-01) + faturamento concluído. */
   async liberarSaida(caminhaoId: string, operadorId: string) {
+    const checklist = await this.checklistService.calcular(caminhaoId);
+    if (!checklist.liberavel) {
+      throw new ConflictException({
+        codigo: 'CHECKLIST_INCOMPLETO',
+        message: 'Liberação bloqueada — checklist incompleto',
+        requisitos: checklist.requisitos.filter((r) => !r.ok),
+      });
+    }
+
     const resultado = await this.db.transaction(async (tx) => {
       const caminhao = await this.caminhaoService.caminhaoAtivo(tx, caminhaoId);
       const status = caminhao.statusCaminhao as StatusCaminhao;
@@ -131,10 +143,9 @@ export class LiberacaoService {
     });
 
     if (!resultado.jaLiberado) {
-      this.eventEmitter.emit(EVENTOS.EXPEDICAO_LIBERADA_SAIDA, {
-        caminhaoId,
-        dataOperacao: await this.caminhaoService.dataOperacaoDoCaminhao(this.db, resultado.caminhao),
-      });
+      const dataOperacao = await this.caminhaoService.dataOperacaoDoCaminhao(this.db, resultado.caminhao);
+      this.eventEmitter.emit(EVENTOS.EXPEDICAO_LIBERADA_SAIDA, { caminhaoId, dataOperacao });
+      this.eventEmitter.emit(EVENTOS.CAMINHAO_LIBERADO, { caminhaoId, dataOperacao });
     }
 
     return resultado.caminhao;

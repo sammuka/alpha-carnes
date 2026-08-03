@@ -9,6 +9,7 @@ import { ConsolidacaoService } from './consolidacao.service';
 import { FaturamentoService } from './faturamento.service';
 import { NotasConsultaService } from './notas-consulta.service';
 import { SegurosService } from './seguros.service';
+import { LiberacaoChecklistService } from './liberacao-checklist.service';
 import {
   emitirNfseSchema,
   type EmitirNfseDto,
@@ -36,7 +37,14 @@ export class FaturamentoController {
     private readonly faturamento: FaturamentoService,
     private readonly notasConsulta: NotasConsultaService,
     private readonly seguros: SegurosService,
+    private readonly checklist: LiberacaoChecklistService,
   ) {}
+
+  @Get('liberacao/:caminhaoId/checklist')
+  @RequireQualquerPermissao('FATURAMENTO_LER', 'LIBERACAO_GERENCIAR')
+  checklistLiberacao(@Param('caminhaoId') caminhaoId: string) {
+    return this.checklist.calcular(caminhaoId);
+  }
 
   @Get('seguros')
   @RequireQualquerPermissao('FATURAMENTO_LER', 'SEGURO_GERENCIAR')
