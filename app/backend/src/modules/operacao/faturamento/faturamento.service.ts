@@ -476,4 +476,13 @@ export class FaturamentoService {
       .then((r) => r[0] ?? null);
     return linha?.data ?? '';
   }
+
+  /** Repasse fino ao gateway RTC — pesquisa NBS/ClassTrib por atividade (D10.2). */
+  async rtcPesquisarNbs(atividade: string) {
+    const homologacao = process.env['EISS_HOMOLOGACAO'] !== 'false';
+    const chaveAutenticacao = homologacao
+      ? (process.env['EISS_CHAVE_AUTENTICACAO_HML'] ?? '')
+      : (process.env['EISS_CHAVE_AUTENTICACAO_PRD'] ?? '');
+    return this.gateway.rtcPesquisarNbsClassTrib(chaveAutenticacao, homologacao, atividade);
+  }
 }

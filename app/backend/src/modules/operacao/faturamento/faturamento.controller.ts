@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RbacGuard } from '../../../common/guards/rbac.guard';
 import { RequirePermissoes } from '../../../common/rbac/require-permissoes.decorator';
@@ -6,11 +6,14 @@ import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { ConsolidacaoService } from './consolidacao.service';
 import { FaturamentoService } from './faturamento.service';
+import { NotasConsultaService } from './notas-consulta.service';
 import {
   emitirNfseSchema,
   type EmitirNfseDto,
   cancelarNfseSchema,
   type CancelarNfseDto,
+  listarNotasQuerySchema,
+  type ListarNotasQuery,
 } from './dto/faturamento.dto';
 
 @Controller('operacao/faturamento')
@@ -19,7 +22,26 @@ export class FaturamentoController {
   constructor(
     private readonly consolidacao: ConsolidacaoService,
     private readonly faturamento: FaturamentoService,
+    private readonly notasConsulta: NotasConsultaService,
   ) {}
+
+  @Get('notas')
+  @RequirePermissoes('FATURAMENTO_LER')
+  listarNotas(@Query(new ZodValidationPipe(listarNotasQuerySchema)) query: ListarNotasQuery) {
+    return this.notasConsulta.listar(query);
+  }
+
+  @Get('notas/:id/rastreabilidade')
+  @RequirePermissoes('FATURAMENTO_LER')
+  rastreabilidade(@Param('id') id: string) {
+    return this.notasConsulta.rastreabilidade(id);
+  }
+
+  @Get('rtc/pesquisar-nbs')
+  @RequirePermissoes('FATURAMENTO_GERENCIAR')
+  rtcPesquisarNbs(@Query('atividade') atividade: string) {
+    return this.faturamento.rtcPesquisarNbs(atividade);
+  }
 
   @Get('caminhoes/:caminhaoId/consolidacao')
   @RequirePermissoes('FATURAMENTO_LER')

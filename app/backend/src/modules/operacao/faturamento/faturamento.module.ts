@@ -6,11 +6,12 @@ import { ExpedicaoModule } from '../expedicao/expedicao.module';
 import { FaturamentoController } from './faturamento.controller';
 import { ConsolidacaoService } from './consolidacao.service';
 import { FaturamentoService } from './faturamento.service';
+import { NotasConsultaService } from './notas-consulta.service';
 
 @Module({
   imports: [AuthModule, NfseModule, ExpedicaoModule, OperacoesModule],
   controllers: [FaturamentoController],
-  providers: [ConsolidacaoService, FaturamentoService],
-  exports: [ConsolidacaoService, FaturamentoService],
+  providers: [ConsolidacaoService, FaturamentoService, NotasConsultaService],
+  exports: [ConsolidacaoService, FaturamentoService, NotasConsultaService],
 })
 export class FaturamentoModule {}
