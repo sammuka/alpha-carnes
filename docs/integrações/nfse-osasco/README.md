@@ -2,10 +2,17 @@
 
 Documentação completa da integração com o sistema EISS de emissão de NFS-e do município de Osasco/SP.
 
+> **Revisado em 2026-08-02** contra os manuais oficiais do portal: *Geração de NF-E via Web
+> Service V10.6* (Set/2024, modelo padrão) e *Geração de NFS-e Via Web Service 2.0* (Jan/2026,
+> modelo RTC). Correções aplicadas: namespaces reais do envelope, campo `Atividade` (não
+> `CodigoServico`), request sem objeto `Prestador`, retorno com `NotaFiscalGerada`, campos RTC
+> obrigatórios, e obtenção de credenciais por auto-atendimento (sem depender da prefeitura).
+
 ## Sistema
 - **Fornecedor:** EISS (plataforma municipal)
-- **Versão:** 6.0.15.0
 - **Protocolo:** SOAP/HTTPS (WCF, document/literal)
+- **Regra de corte RTC:** notas com referência fiscal ≥ 2026 de emissor não-Simples usam
+  obrigatoriamente os métodos `RTC_*`; Simples Nacional e referências < 2026 usam os legados.
 
 ## URLs
 | Ambiente | Portal | WebService |
@@ -20,8 +27,14 @@ Documentação completa da integração com o sistema EISS de emissão de NFS-e 
 - Faixa superior **roxa** = homologação
 - Campo `Homologacao: boolean` em todas as requisições
 
+## Credenciais (auto-atendimento)
+A `ChaveAutenticacao` é gerada **pelo próprio contribuinte** no portal (menu Notas Fiscais →
+"Web Service – Gerar Chave Autenticação"), pelo usuário indicado na Autorização de Emissão de
+NFS-e — não há solicitação à prefeitura. Homologação usa o mesmo usuário/senha da produção.
+Ver `ambiente-homologacao.md`.
+
 ## Contato Técnico
-- E-mail: nf-e@osasco.sp.gov.br
+- E-mail: nf-e@osasco.sp.gov.br (suporte; não é necessário para obter credenciais)
 
 ## Arquivos desta pasta
 | Arquivo | Conteúdo |

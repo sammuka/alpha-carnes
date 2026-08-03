@@ -1,127 +1,148 @@
 # Estrutura XML — Tipos EISS
 
-## NotaFiscalDTO
+> **Fonte:** manuais oficiais *V10.6* (Set/2024, modelo padrão) e *2.0* (Jan/2026, RTC).
+> A tabela abaixo reflete o XML real dos manuais. Atenções que diferem de suposições comuns:
+> o campo de código de serviço chama-se **`Atividade`** (não `CodigoServico`); **não existe um
+> objeto `Prestador` no request** — o prestador é identificado pela `ChaveAutenticacao`; a
+> descrição em texto livre vai em **`InformacoesAdicionais`**; a `Aliquota` é percentual
+> (`2.00`–`5.00`), não fração.
 
-Tipo principal enviado nos métodos `Emitir`, `EmitirR1`, `EmitirR2` e equivalentes RTC.
+## NotaFiscal (request do `Emitir` — modelo padrão)
 
-| Campo | Tipo XSD | Obrig. | Descrição |
-|-------|---------|--------|-----------|
-| `ChaveAutenticacao` | string | Sim | Token do usuário/sistema (ver autenticação) |
-| `Homologacao` | boolean | Sim | `true` = ambiente de teste; `false` = produção |
-| `Aliquota` | decimal | Sim | Alíquota ISS em decimal (ex: `0.05` = 5%) |
-| `Valor` | decimal | Sim | Valor bruto do serviço prestado |
-| `ValorDeducao` | decimal | Sim | Valor das deduções (`0` se não houver) |
-| `ValorPis` | decimal | Não | PIS retido na fonte |
-| `ValorCofins` | decimal | Não | COFINS retido na fonte |
-| `ValorInss` | decimal | Não | INSS retido na fonte |
-| `ValorIr` | decimal | Não | IR retido na fonte |
-| `ValorCsll` | decimal | Não | CSLL retido na fonte |
-| `ValorOutrasRetencoes` | decimal | Não | Outras retenções federais |
-| `DescricaoServico` | string | Sim | Descrição do serviço prestado (texto livre, até 2000 chars) |
-| `CodigoServico` | string | Sim | Código do serviço municipal de Osasco (ex: `"04014"`) |
-| `CodigoCnae` | string | Não | CNAE da atividade principal (ex: `"4712100"`) |
-| `NotificarTomadorPorEmail` | boolean | Sim | Envia e-mail com DANFE ao tomador |
-| `SubstituicaoTributaria` | boolean | Sim | Indica substituição tributária do ISS |
-| `Tomador` | PessoaDTO | Sim | Dados do tomador (cliente que recebe o serviço) |
-| `Prestador` | PessoaDTO | Sim | Dados do prestador (AlphaCarnes) |
-| `NumeroRps` | string | Não | Número do RPS (Recibo Provisório de Serviços) |
-| `SerieRps` | string | Não | Série do RPS (geralmente `"A"` ou `"1"`) |
-| `DataRps` | dateTime | Não | Data de emissão do RPS (ISO 8601) |
-
-### Cálculo do Valor do ISS
-
-```
-ValorISS = (Valor - ValorDeducao) * Aliquota
-ValorLiquido = Valor - ValorISS - ValorPis - ValorCofins - ValorInss - ValorIr - ValorCsll - ValorOutrasRetencoes
-```
-
-## PessoaDTO
-
-Usado tanto para `Tomador` quanto para `Prestador` dentro de `NotaFiscalDTO`.
+Namespace dos campos: `eis1` (nota) e `eis2` (tomador/endereço) — ver `eiss-webservice.md`.
 
 | Campo | Tipo | Obrig. | Descrição |
-|-------|------|--------|-----------|
-| `Nome` | string | Sim | Razão social (PJ) ou nome completo (PF) |
-| `CNPJ` | string | Cond. | CNPJ com 14 dígitos numéricos, sem máscara (PJ obrigatório) |
-| `CPF` | string | Cond. | CPF com 11 dígitos numéricos, sem máscara (PF obrigatório) |
-| `InscricaoMunicipal` | string | Não | Inscrição Municipal do prestador (obrigatório para o `Prestador`) |
-| `Email` | string | Não | E-mail para envio de notificações e DANFE |
-| `DDD` | string | Não | Código de área (2 dígitos numéricos) |
-| `Telefone` | string | Não | Número de telefone sem DDD e sem formatação |
-| `Endereco` | EnderecoDTO | Não | Endereço completo (recomendado para o tomador) |
+|-------|------|:------:|-----------|
+| `ChaveAutenticacao` | string | Sim | Token da Inscrição Municipal (identifica o prestador) |
+| `Homologacao` | boolean | Sim | `true` = nota de teste, sem valor fiscal |
+| `Identificador` | string | Não | Nº de controle interno do ERP (ecoado no response) — usar o id/número do pedido AlphaCarnes |
+| `NumeroRecibo` / `DataRecibo` / `EqptoRecibo` | — | Não | Conversão de recibo — não usado |
+| `NotaSubstituida` | int | Não | Nº da nota cancelada substituída por esta |
+| `nrExercicioReferencia` | int | Sim | Ano de referência (= ano da emissão) |
+| `nrMesReferencia` | int | Sim | Mês de referência (= mês da emissão) |
+| `Atividade` | string | Sim | Código de serviço (Anexo I da LC 404/2022; ex. `1.01`, `14.01`, `17.19`) |
+| `Aliquota` | decimal | Sim | `0.00` para não-Simples (sistema aplica a vigente); `2.00`–`5.00` para Simples (LC 155/2016) |
+| `SubstituicaoTributaria` | boolean | Sim | `true` = tomador recolhe o ISS (CNPJ ou CPF do tomador vira obrigatório) |
+| `SemIncidenciaISS` | boolean | Sim | Só `true` para tomador estrangeiro com resultado do serviço no exterior (LC 404/2022 Art. 65) |
+| `SimplesNacional` | boolean | Sim | `true` só se o emissor é Simples na data de referência |
+| `TomadorEstrangeiro` | boolean | Sim | `true` desliga validação de CNPJ/CPF do tomador |
+| `Tomador` | objeto | Sim | Ver tabela Tomador abaixo |
+| `NotificarTomadorPorEmail` | boolean | Sim | Envia o link da nota ao e-mail do tomador |
+| `InformacoesAdicionais` | string | Sim | Corpo da nota — máx. 2300 chars; `\|` = novo parágrafo. Aqui vai a descrição do serviço/pedido/lote |
+| `EnderecoPrestacaoServico` + `CEPPrestacaoServico` + `CidadePrestacaoServico` + `EstadoPrestacaoServico` | string | Cond. | Obrigatórios quando `Atividade` ∈ {7.02, 7.05} OU `SubstituicaoTributaria=true` |
+| `CodObra` / `NumeroCDC` / `NumeroCEI` | — | Cond. | Só construção civil (7.02/7.05) — fora de escopo |
+| `Valor` | decimal | Sim | Valor total do serviço (`0.00`) |
+| `ValorDeducao` / `ValorRepasse` | decimal | Não | Só cartórios com regime especial — omitir/`0.00` |
+| `ValorCSLL` / `ValorCofins` / `ValorINSS` / `ValorIR` / `ValorPisPasep` / `ValorOutrosImpostos` | decimal | Não | Destaque informativo (Lei 12.741/2012) calculado pelo contribuinte |
+| `DeduzirRepasse` | boolean | Sim | **Sempre `false`** (repasse exige Regime Especial) |
 
-**Regra:** informar `CNPJ` **ou** `CPF`, nunca ambos. Pessoa jurídica sempre usa `CNPJ`.
+## Campos adicionais RTC (`NotaFiscal_RTC` — obrigatórios p/ referência ≥ 2026, não-Simples)
 
-## EnderecoDTO
+| Campo | Formato | Como obter |
+|-------|---------|-----------|
+| `ClassTrib` | 6 díg. `000000` | `RTC_PesquisarNbsClassTrib(CodigoAtividade)` |
+| `CodigoNBS` | 12 díg. `0.0000.00.00` | idem |
+| `IndOperacao` | 6 díg. `000000` | idem |
+| `IdLocalIncidencia` | int 1 díg. | `RTC_PesquisarLocalIncidencia()` |
 
-Embedded em `PessoaDTO` como campo `Endereco`.
+O `NotaFiscal_RTC` também aceita campos de endereço de prestação estendidos
+(`BairroPrestacaoServico`, `CodigoCidadeIBGEPrestacaoServico`, `ComplementoPrestacaoServico`,
+`NumeroPrestacaoServico`, `PaisPrestacaoServico`) e `NumeroContrato`, `ValorCofinsProprio`,
+`ValorPisProprio`.
 
-| Campo | Tipo | Obrig. | Descrição |
-|-------|------|--------|-----------|
-| `Logradouro` | string | Não | Nome da rua/avenida/etc. (sem número) |
-| `Numero` | string | Não | Número do imóvel (`"S/N"` quando sem número) |
-| `Complemento` | string | Não | Complemento (sala, andar, bloco, etc.) |
-| `Bairro` | string | Não | Nome do bairro |
-| `Cidade` | string | Não | Nome do município |
-| `CodigoCidadeIBGE` | string | Não | Código IBGE do município (7 dígitos; Osasco = `"3534401"`) |
-| `Estado` | string | Não | Sigla da UF com 2 caracteres (ex: `"SP"`) |
-| `CEP` | string | Não | CEP com 8 dígitos numéricos, sem máscara |
-| `Pais` | string | Não | Nome do país (default `"BRASIL"` para endereços nacionais) |
-
-## CancelamentoNotaFiscalRequest
-
-Tipo enviado no método `Cancelar`.
-
-| Campo | Tipo | Obrig. | Descrição |
-|-------|------|--------|-----------|
-| `ChaveAutenticacao` | string | Sim | Token do usuário/sistema |
-| `Homologacao` | boolean | Sim | `true` = ambiente de teste |
-| `NumeroNota` | string | Sim | Número da NFS-e a cancelar |
-| `MotivoCancelamento` | string | Sim | Descrição do motivo do cancelamento |
-| `Prestador` | PessoaDTO | Sim | Dados do prestador (deve corresponder ao emitente) |
-
-## ConsultaNotaFiscalRequest
-
-Tipo enviado nos métodos `ConsultarNota` e `ConsultarNotaCompleta`.
+## Tomador (namespace `eis2`)
 
 | Campo | Tipo | Obrig. | Descrição |
-|-------|------|--------|-----------|
-| `ChaveAutenticacao` | string | Sim | Token do usuário/sistema |
-| `Homologacao` | boolean | Sim | `true` = ambiente de teste |
-| `NumeroNota` | string | Sim | Número da NFS-e a consultar |
-| `Prestador` | PessoaDTO | Sim | Dados do prestador emitente |
+|-------|------|:------:|-----------|
+| `CNPJ` | string | Cond. | 14 dígitos sem máscara; obrigatório se `SubstituicaoTributaria=true` e sem CPF |
+| `CPF` | string | Cond. | 11 dígitos sem máscara; obrigatório se ST e sem CNPJ |
+| `InscricaoMunicipal` | string | Não | Somente IM de Osasco |
+| `Nome` | string | Não | Nome/razão social |
+| `Email` | string | Não | Destino do link quando `NotificarTomadorPorEmail=true` |
+| `DDD` | string | Não | 2 dígitos |
+| `Telefone` | string | Não | Sem DDD |
+| `Endereco` | objeto | Não | Ver abaixo |
+
+**Regra:** informar `CNPJ` **ou** `CPF`, nunca ambos.
+
+## Endereco (namespace `eis2`)
+
+| Campo | Tipo | Obrig. | Descrição |
+|-------|------|:------:|-----------|
+| `TipoLogradouro` | string | Não | Av., Rua, Rod., Al., etc. |
+| `Logradouro` | string | Não | Nome sem número |
+| `Numero` | string | Não | `"S/N"` quando sem número |
+| `Complemento` | string | Não | Sala, andar, bloco |
+| `Bairro` | string | Não | |
+| `CEP` | string | Não | 8 dígitos sem traço |
+| `Cidade` | string | Não | |
+| `CodigoCidadeIBGE` | string | Não (RTC: usado) | 7 dígitos; Osasco = `3534401` |
+| `Estado` | string | Não | UF 2 caracteres |
+| `Pais` | string | Não | Só tomador estrangeiro |
+
+## Cancelar (request)
+
+| Campo | Tipo | Obrig. | Descrição |
+|-------|------|:------:|-----------|
+| `ChaveAutenticacao` | string | Sim | |
+| `Homologacao` | boolean | Sim | `true` cancela nota de teste (na prática, notas de teste não são canceláveis — ver `ambiente-homologacao.md`) |
+| `NumeroNota` | int | Sim | Número da nota a cancelar |
+| `Motivo` | string | Não | Motivo do cancelamento |
+
+## Consultar / ConsultarNotaCompleta (request)
+
+Sem objeto `Prestador` — o escopo é o da `ChaveAutenticacao`. Parâmetros combináveis:
+
+| Campo | Tipo | Obrig. | Descrição |
+|-------|------|:------:|-----------|
+| `ChaveAutenticacao` | string | Sim | |
+| `DataInicial` / `DataFinal` | date | Par | Período de emissão (ambos ou nenhum) |
+| `NumeroNotaInicial` / `NumeroNotaFinal` | int | Par | Intervalo numérico de notas |
+| `NumeroReciboInicial` / `NumeroReciboFinal` | int | Par | Intervalo de recibos |
+| `NumeroReciboUnico` | int | Não | Recibo individual |
+| `CNPJTomador` / `CPFTomador` | string | Não | Refinamento por tomador |
+
+## Retorno (`EmitirResult` / `RTC_EmitirNFEResult`)
+
+| Campo | Descrição |
+|-------|-----------|
+| `Erro` | `true`/`false` — HTTP 200 com `Erro=true` é falha de negócio |
+| `MensagemErro` | Texto do erro (o EISS não usa códigos numéricos — ver `codigos-erro.md` para o catálogo de mensagens conhecidas) |
+| `NotaFiscalGerada.Numero` | Número sequencial da NFS-e |
+| `NotaFiscalGerada.Autenticador` | Código de autenticação (validação pública) |
+| `NotaFiscalGerada.Link` | Link direto à nota (o mesmo do e-mail ao tomador) |
+| `NotaFiscalGerada.Identificador` | Eco do identificador interno enviado |
 
 ## Notas de Implementação
 
-### Formatação de Campos
+### Formatação de campos
 
-- **CNPJ/CPF:** apenas dígitos numéricos, sem pontos, traços ou barras
-  - CNPJ: `"12345678000195"` (14 dígitos)
-  - CPF: `"12345678901"` (11 dígitos)
-- **CEP:** apenas dígitos, sem traço — `"06220170"` (8 dígitos)
-- **Decimais:** separador de ponto `.` conforme XSD — `1500.00`, não `1500,00`
-- **Datas:** ISO 8601 com timezone — `"2026-06-05T14:30:00-03:00"`
-- **Alíquota:** decimal entre 0 e 1 — ISS de 5% = `0.05`
+- **CNPJ/CPF:** apenas dígitos (`12345678000195` / `12345678901`)
+- **CEP:** apenas dígitos (`06220170`)
+- **Decimais:** ponto como separador — `1500.00`
+- **Alíquota:** percentual — ISS de 5% = `5.00` (Simples); não-Simples envia `0.00`
+- **Datas:** `Date`/`DateTime` XSD
 
-### Validações do Servidor EISS
-
-O servidor EISS realiza as seguintes validações e retorna `Erro: true` com mensagem descritiva:
+### Validações do servidor EISS (retornam `Erro=true` + mensagem)
 
 1. CNPJ/CPF inválido (dígitos verificadores)
-2. Código de serviço inexistente no município
-3. Alíquota fora da faixa permitida
+2. `Atividade` não autorizada para o emissor
+3. `Aliquota` fora da faixa (Simples) ou ≠ `0.00` (não-Simples)
 4. `ChaveAutenticacao` inválida ou revogada
-5. `Valor` menor ou igual a zero
-6. `DescricaoServico` vazia
-7. Prestador sem Inscrição Municipal ativa
+5. `Valor` ausente/inválido
+6. Campos condicionais ausentes (endereço de prestação com ST, campos RTC etc.)
+7. Prestador sem Autorização de Emissão ativa
 
-### Mapeamento para o Domínio AlphaCarnes
+### Mapeamento para o domínio AlphaCarnes
 
 | Campo AlphaCarnes | Campo EISS | Observação |
 |-------------------|-----------|-----------|
-| `pedido.valor_total` | `Valor` | Valor bruto da nota |
-| `pedido.codigo_servico` | `CodigoServico` | Configurável por tipo de operação |
-| `cliente.cnpj` | `Tomador.CNPJ` | Remover formatação antes de enviar |
-| `empresa.cnpj` | `Prestador.CNPJ` | CNPJ da AlphaCarnes |
-| `empresa.inscricao_municipal` | `Prestador.InscricaoMunicipal` | Obrigatório |
-| `cliente.email` | `Tomador.Email` | Quando `NotificarTomadorPorEmail: true` |
+| `notas_fiscais.id`/nº do pedido | `Identificador` | Rastreio ERP↔EISS; ecoado no response |
+| valor consolidado da carga/pedido | `Valor` | |
+| código de serviço (parâmetro) | `Atividade` | Configurável; formato `00.00` da LC 404/2022 |
+| descrição consolidada (pedido/lote/peças) | `InformacoesAdicionais` | Máx. 2300 chars, `\|` p/ parágrafos |
+| `clientes.cnpj` | `Tomador.CNPJ` | Sem máscara |
+| `clientes.email` | `Tomador.Email` | Com `NotificarTomadorPorEmail=true` |
+| `notas_fiscais.numero` | ← `NotaFiscalGerada.Numero` | Persistido do retorno |
+| `notas_fiscais.payload_eiss` | ← response bruto | Com `ChaveAutenticacao` redigida |
+| `modelo_fiscal` (`padrao`/`rtc`) | família de método | `rtc` → `RTC_EmitirNFE` + 4 campos RTC |

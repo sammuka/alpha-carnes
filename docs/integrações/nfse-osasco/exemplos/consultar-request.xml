@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Estrutura real conforme manual oficial V10.6: parâmetros combináveis
+     (período, intervalo de notas/recibos, tomador) — não há "NumeroNota" único;
+     consulta por número usa NumeroNotaInicial == NumeroNotaFinal. -->
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:tem="http://tempuri.org/"
-                  xmlns:eis="http://schemas.datacontract.org/2004/07/Eiss.NfeWebServices.Contracts">
+                  xmlns:eis="http://schemas.datacontract.org/2004/07/Eissnfe.Negocio.WebServices.Mensagem">
   <soapenv:Header/>
   <soapenv:Body>
     <tem:ConsultarNotaCompleta>
-      <tem:consulta>
+      <tem:request>
         <eis:ChaveAutenticacao>TOKEN_HOMOLOGACAO_AQUI</eis:ChaveAutenticacao>
-        <eis:Homologacao>true</eis:Homologacao>
-        <eis:NumeroNota>20250001234</eis:NumeroNota>
-      </tem:consulta>
+        <eis:NumeroNotaInicial>12345</eis:NumeroNotaInicial>
+        <eis:NumeroNotaFinal>12345</eis:NumeroNotaFinal>
+      </tem:request>
     </tem:ConsultarNotaCompleta>
   </soapenv:Body>
 </soapenv:Envelope>
