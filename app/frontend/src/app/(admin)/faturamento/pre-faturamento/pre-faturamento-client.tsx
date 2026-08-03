@@ -1,12 +1,30 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { statusCaminhaoVariant, statusNfseVariant } from '@/lib/status-ui';
 import { Button } from '@/components/ui/button';
 import { StatusPill } from '@/components/ui/status-pill';
-import type { ConsolidacaoResposta, NotaFiscal, StatusNfse } from '@/lib/faturamento';
+import type { AmbienteFiscal, ConsolidacaoResposta, NotaFiscal, StatusNfse } from '@/lib/faturamento';
 import type { Caminhao } from '@/lib/operacao';
+
+// ── Badge de ambiente EISS (AD-02 — substitui o aviso "pendente de definição") ──
+
+function BadgeAmbiente({ homologacao }: { homologacao: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border ${
+        homologacao
+          ? 'bg-[#FFFBEB] text-[#D97706] border-[#FDE68A]'
+          : 'bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0]'
+      }`}
+    >
+      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+      {homologacao ? 'Homologação EISS' : 'Produção EISS'}
+    </span>
+  );
+}
 
 // ── Pipeline de caminhão ──────────────────────────────────────────────────────
 
@@ -187,6 +205,14 @@ export function FaturamentoClient({
   const [caminhoesDia, setCaminhoesDia] = useState<Caminhao[]>([]);
   const [carregandoCaminhoes, setCarregandoCaminhoes] = useState(mostrarListaCaminhoes);
   const [liberando, setLiberando] = useState(false);
+  const [ambiente, setAmbiente] = useState<AmbienteFiscal | null>(null);
+
+  useEffect(() => {
+    fetch('/api/operacao/faturamento/ambiente', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: AmbienteFiscal | null) => setAmbiente(data))
+      .catch(() => setAmbiente(null));
+  }, []);
 
   const caminhoesElegiveis = caminhoesDia.filter((c) =>
     ['fechado', 'liberado_faturamento', 'faturado'].includes(c.statusCaminhao),
@@ -371,20 +397,23 @@ export function FaturamentoClient({
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <h1 className="text-2xl font-bold text-foreground">{titulo}</h1>
-        {caminhaoAtivo && (
-          <span
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
-              realtimeStatus === 'conectado'
-                ? 'bg-green-100 text-green-800'
-                : 'bg-muted text-muted-foreground'
-            }`}
-            aria-label={`Tempo real ${realtimeStatus}`}
-          >
-            {realtimeStatus === 'conectado' ? '● tempo real' : '○ reconectando'}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {caminhaoAtivo && (
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                realtimeStatus === 'conectado'
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-muted text-muted-foreground'
+              }`}
+              aria-label={`Tempo real ${realtimeStatus}`}
+            >
+              {realtimeStatus === 'conectado' ? '● tempo real' : '○ reconectando'}
+            </span>
+          )}
+          {ambiente && <BadgeAmbiente homologacao={ambiente.homologacao} />}
+        </div>
       </div>
 
       {/* Lista de caminhões do dia (pré-faturamento) */}
@@ -511,6 +540,33 @@ export function FaturamentoClient({
             </p>
           </div>
 
+          {/* KPIs */}
+          {(() => {
+            const notas = consolidacao.notasFiscais;
+            const preparados = consolidacao.pedidos.filter((p) => !notaPorPedido(p.pedidoVendaId)).length;
+            const autorizados = notas.filter((n) => n.statusNfse === 'emitida').length;
+            const erros = notas.filter((n) => n.statusNfse === 'erro_emissao').length;
+            const valorTotal = notas.reduce((acc, n) => acc + Number(n.valor), 0);
+            const kpis = [
+              { label: 'Pedidos na carga', value: `${consolidacao.pedidos.length}`, sub: 'para faturamento', color: 'text-[#1E3A5F]', bg: 'bg-[#F8FAFC]' },
+              { label: 'Preparados', value: `${preparados}`, sub: 'aguardando envio', color: 'text-[#64748B]', bg: 'bg-[#F1F5F9]' },
+              { label: 'Autorizados', value: `${autorizados}`, sub: 'nota emitida', color: 'text-[#15803D]', bg: 'bg-[#F0FDF4]' },
+              { label: 'Com erro', value: `${erros}`, sub: 'aguardando reprocessamento', color: 'text-[#E11D48]', bg: 'bg-[#FFF1F2]' },
+              { label: 'Valor total da carga', value: valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), sub: 'notas emitidas', color: 'text-[#1E3A5F]', bg: 'bg-[#F8FAFC]' },
+            ];
+            return (
+              <div className="grid grid-cols-5 gap-3">
+                {kpis.map(({ label, value, sub, color, bg }) => (
+                  <div key={label} className={`border border-[#E2E8F0] rounded-xl px-4 py-3.5 ${bg}`}>
+                    <p className="text-[11px] text-[#64748B] font-medium mb-1">{label}</p>
+                    <p className={`text-[22px] font-black leading-none ${color}`}>{value}</p>
+                    <p className="text-[10px] text-[#94A3B8] mt-1.5">{sub}</p>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
           {/* Painel de bloqueios */}
           {consolidacao.bloqueios.length > 0 && (
             <div
@@ -519,7 +575,7 @@ export function FaturamentoClient({
               data-testid="painel-bloqueios"
             >
               <h2 className="font-semibold text-red-800">
-                Bloqueios ({consolidacao.bloqueios.length})
+                Bloqueios ativos — dados fiscais incompletos ({consolidacao.bloqueios.length})
               </h2>
               <ul className="space-y-3">
                 {consolidacao.bloqueios.map((b) => (

@@ -94,6 +94,12 @@ export class FaturamentoController {
     return this.faturamento.rtcPesquisarNbs(atividade);
   }
 
+  @Get('ambiente')
+  @RequirePermissoes('FATURAMENTO_LER')
+  ambiente() {
+    return { homologacao: process.env['EISS_HOMOLOGACAO'] !== 'false' };
+  }
+
   @Get('caminhoes/:caminhaoId/consolidacao')
   @RequirePermissoes('FATURAMENTO_LER')
   consolidar(
