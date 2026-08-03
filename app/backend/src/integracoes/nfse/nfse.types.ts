@@ -28,6 +28,8 @@ export interface NfseResultado {
   numeroNota?: string;
   codigoVerificacao?: string;
   linkNota?: string;
+  /** Eco do EmitirNfseRequest.identificador — usado na reconciliação por Identificador+período. */
+  identificadorEco?: string;
   /** Resposta bruta do EISS — ChaveAutenticacao já redactada por redigirSegredos(). */
   raw: unknown;
 }
@@ -40,15 +42,31 @@ export interface EmitirNfseRequest {
   /** Token EISS — NUNCA logar, persistir ou serializar este campo! */
   chaveAutenticacao: string;
   homologacao: boolean;
-  aliquota: string; // decimal string, ex: "0.0500"
+  /** Rastreio ERP↔EISS — id do pedido de venda, ecoado no response (NotaFiscalGerada.Identificador). */
+  identificador: string;
+  nrExercicioReferencia: number;
+  nrMesReferencia: number;
+  /** Tag <Atividade> — código LC 404/2022, formato "00.00". Substitui codigoServico. */
+  atividade: string;
+  aliquota: string; // decimal string, ex: "0.00" para não-Simples
   valor: string; // decimal string, ex: "1500.00"
   valorDeducao: string;
-  descricaoServico: string;
-  codigoServico: string;
+  /** Tag <InformacoesAdicionais> — máx. 2300 chars; "|" separa parágrafos. Substitui descricaoServico. */
+  informacoesAdicionais: string;
   notificarTomadorPorEmail: boolean;
   substituicaoTributaria: boolean;
+  semIncidenciaISS: boolean;
+  simplesNacional: boolean;
+  tomadorEstrangeiro: boolean;
+  deduzirRepasse: boolean;
   tomador: PessoaDto;
-  prestador: PessoaDto;
+  /** Modelo fiscal usado — 'rtc' aciona RTC_EmitirNFE + campos rtc*. */
+  modeloFiscal: 'padrao' | 'rtc';
+  /** Obrigatórios apenas quando modeloFiscal='rtc' (D10.2). */
+  rtcClassTrib?: string;
+  rtcCodigoNbs?: string;
+  rtcIndOperacao?: string;
+  rtcIdLocalIncidencia?: string;
   numeroRps?: string;
   serieRps?: string;
   dataRps?: string;
@@ -60,17 +78,17 @@ export interface CancelarNfseRequest {
   homologacao: boolean;
   numeroNota: string;
   motivoCancelamento: string;
-  prestador: PessoaDto;
 }
 
 export interface ConsultarNfseRequest {
   /** Token EISS — NUNCA logar, persistir ou serializar este campo! */
   chaveAutenticacao: string;
   homologacao: boolean;
-  numeroNota?: string;
-  numeroRps?: string;
-  serieRps?: string;
-  prestador: PessoaDto;
+  /** Consulta por intervalo — número único usa numeroNotaInicial === numeroNotaFinal. */
+  numeroNotaInicial?: string;
+  numeroNotaFinal?: string;
+  /** Fallback de reconciliação em timeout de emissão (D10.1). */
+  identificador?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +118,12 @@ export interface EnderecoDto {
   pais?: string;
 }
 
+export interface RtcPesquisaNbsClassTrib {
+  codigoNbs: string;
+  classTrib: string;
+  descricao: string;
+}
+
 // ---------------------------------------------------------------------------
 // Porta (interface)
 // ---------------------------------------------------------------------------
@@ -109,4 +133,6 @@ export interface NfseGateway {
   emitir(req: EmitirNfseRequest): Promise<NfseResultado>;
   cancelar(req: CancelarNfseRequest): Promise<NfseResultado>;
   consultarNotaCompleta(req: ConsultarNfseRequest): Promise<NfseResultado>;
+  /** D10.2 — utilitário de configuração (endpoint admin, sem tela nesta onda). */
+  rtcPesquisarNbsClassTrib(chaveAutenticacao: string, homologacao: boolean, atividade: string): Promise<RtcPesquisaNbsClassTrib[]>;
 }

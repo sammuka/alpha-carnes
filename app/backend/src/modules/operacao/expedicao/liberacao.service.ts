@@ -1,6 +1,6 @@
-import { ConflictException, Inject, Injectable } from '@nestjs/common';
+import { ConflictException, forwardRef, Inject, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -22,6 +22,7 @@ import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { assertTransicao, type StatusCaminhao } from './transicoes';
 import { CaminhaoService } from './caminhao.service';
+import { LiberacaoChecklistService } from '../faturamento/liberacao-checklist.service';
 
 type Tx = NodePgDatabase<typeof schema>;
 type StatusFaturamento = 'em_consolidacao' | 'pronto_para_emitir' | 'parcialmente_emitido' | 'concluido';
@@ -33,6 +34,8 @@ export class LiberacaoService {
     private readonly auditoria: AuditoriaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly caminhaoService: CaminhaoService,
+    @Inject(forwardRef(() => LiberacaoChecklistService))
+    private readonly checklistService: LiberacaoChecklistService,
   ) {}
 
   private get db() {
@@ -84,8 +87,17 @@ export class LiberacaoService {
     return resultado.caminhao;
   }
 
-  /** faturado → liberado_saida. Exige faturamento concluído (todas NFs emitidas). */
+  /** faturado → liberado_saida. Exige checklist D10.6 liberável (guard RA-01) + faturamento concluído. */
   async liberarSaida(caminhaoId: string, operadorId: string) {
+    const checklist = await this.checklistService.calcular(caminhaoId);
+    if (!checklist.liberavel) {
+      throw new ConflictException({
+        codigo: 'CHECKLIST_INCOMPLETO',
+        message: 'Liberação bloqueada — checklist incompleto',
+        requisitos: checklist.requisitos.filter((r) => !r.ok),
+      });
+    }
+
     const resultado = await this.db.transaction(async (tx) => {
       const caminhao = await this.caminhaoService.caminhaoAtivo(tx, caminhaoId);
       const status = caminhao.statusCaminhao as StatusCaminhao;
@@ -131,10 +143,9 @@ export class LiberacaoService {
     });
 
     if (!resultado.jaLiberado) {
-      this.eventEmitter.emit(EVENTOS.EXPEDICAO_LIBERADA_SAIDA, {
-        caminhaoId,
-        dataOperacao: await this.caminhaoService.dataOperacaoDoCaminhao(this.db, resultado.caminhao),
-      });
+      const dataOperacao = await this.caminhaoService.dataOperacaoDoCaminhao(this.db, resultado.caminhao);
+      this.eventEmitter.emit(EVENTOS.EXPEDICAO_LIBERADA_SAIDA, { caminhaoId, dataOperacao });
+      this.eventEmitter.emit(EVENTOS.CAMINHAO_LIBERADO, { caminhaoId, dataOperacao });
     }
 
     return resultado.caminhao;
@@ -413,9 +424,14 @@ export class LiberacaoService {
     });
   }
 
-  /** Lista caminhões elegíveis para liberação de saída (faturado). */
+  /**
+   * Lista caminhões elegíveis para liberação de saída (faturado), com dados de
+   * quem/quando liberou (LiberacaoCaminhao.tsx:207 — banner "liberado por X em Y").
+   * Liberação de saída não tem coluna própria — deriva de auditoria, mesmo padrão
+   * já usado em `listarParaEnvio` para "Liberação para faturamento".
+   */
   async listarParaLiberacao(dataOperacao: string) {
-    return this.db
+    const linhas = await this.db
       .select({
         id: caminhoes.id,
         placa: caminhoes.placa,
@@ -439,5 +455,29 @@ export class LiberacaoService {
         ),
       )
       .orderBy(asc(caminhoes.createdAt));
+
+    const caminhoesLiberados = linhas.filter((l) => l.statusCaminhao === 'liberado_saida').map((l) => l.id);
+    const registros = caminhoesLiberados.length
+      ? await this.db
+          .select({ registroId: auditoria.registroId, responsavelNome: usuarios.nome, dataHora: auditoria.createdAt })
+          .from(auditoria)
+          .innerJoin(usuarios, eq(usuarios.id, auditoria.usuarioId))
+          .where(
+            and(
+              eq(auditoria.tabela, 'caminhoes'),
+              inArray(auditoria.registroId, caminhoesLiberados),
+              eq(auditoria.justificativa, 'Liberação de saída na portaria'),
+            ),
+          )
+          .orderBy(desc(auditoria.createdAt))
+      : [];
+    const liberacaoPorCaminhao = new Map(
+      registros.map((r) => [r.registroId, { dataHora: r.dataHora, responsavelNome: r.responsavelNome }]),
+    );
+
+    return linhas.map((linha) => ({
+      ...linha,
+      liberacaoSaida: liberacaoPorCaminhao.get(linha.id) ?? null,
+    }));
   }
 }

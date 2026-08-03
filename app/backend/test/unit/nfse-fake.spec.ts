@@ -5,15 +5,22 @@ import { NfseTransporteError } from '../../src/integracoes/nfse/nfse.types';
 const reqBase = {
   chaveAutenticacao: 'fake-chave',
   homologacao: true,
-  aliquota: '0.0500',
+  identificador: 'PED-001',
+  nrExercicioReferencia: 2026,
+  nrMesReferencia: 8,
+  atividade: '14.01',
+  aliquota: '0.00',
   valor: '1500.00',
   valorDeducao: '0',
-  descricaoServico: 'Distribuição de carnes',
-  codigoServico: '04014',
+  informacoesAdicionais: 'Distribuição de carnes',
   notificarTomadorPorEmail: true,
   substituicaoTributaria: false,
+  semIncidenciaISS: false,
+  simplesNacional: false,
+  tomadorEstrangeiro: false,
+  deduzirRepasse: false,
   tomador: { nome: 'Cliente Teste', cnpj: '12345678000190' },
-  prestador: { nome: 'AlphaCarnes', cnpj: '98765432000100' },
+  modeloFiscal: 'padrao' as const,
 };
 
 const cancelarReqBase = {
@@ -21,15 +28,13 @@ const cancelarReqBase = {
   homologacao: true,
   numeroNota: 'FAKE-001',
   motivoCancelamento: 'Erro operacional',
-  prestador: { nome: 'AlphaCarnes', cnpj: '98765432000100' },
 };
 
 const consultarReqBase = {
   chaveAutenticacao: 'fake-chave',
   homologacao: true,
-  numeroRps: 'RPS-001',
-  serieRps: 'A',
-  prestador: { nome: 'AlphaCarnes', cnpj: '98765432000100' },
+  numeroNotaInicial: 'FAKE-001',
+  numeroNotaFinal: 'FAKE-001',
 };
 
 describe('FakeNfseGateway', () => {

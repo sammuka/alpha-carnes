@@ -73,6 +73,9 @@ export const EVENTOS = {
   AJUSTE_ESTOQUE_DECIDIDO: 'ajuste_estoque_decidido',
   // ── Onda 9 — Carga (conferência) ──────────────────────────────────────────
   CARGA_ITEM_DIVERGENTE: 'carga_item_divergente',
+  // ── Onda 10 — Faturamento / Seguro / Liberação ─────────────────────────────
+  SEGURO_ATUALIZADO: 'seguro_atualizado',
+  CAMINHAO_LIBERADO: 'caminhao_liberado',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -409,6 +412,20 @@ export interface PendenciaOverbookingPayload {
   status: string;
 }
 
+// ── Onda 10 — Faturamento / Seguro / Liberação ─────────────────────────────
+
+export interface SeguroAtualizadoPayload {
+  caminhaoId: string;
+  seguroId: string;
+  status: string;
+  dataOperacao: string;
+}
+
+export interface CaminhaoLiberadoPayload {
+  caminhaoId: string;
+  dataOperacao: string;
+}
+
 /** Contratos tipados dos eventos Onda 1 (PayloadPorEvento). */
 export interface PayloadPorEvento {
   reserva_disponibilidade_atualizada: ReservaAtualizadaPayload;
@@ -477,4 +494,7 @@ export interface PayloadPorEvento {
   ajuste_estoque_decidido: AjusteEstoqueDecididoPayload;
   // ── Onda 9 — Carga (conferência) ──────────────────────────────────────────
   carga_item_divergente: CargaItemDivergentePayload;
+  // ── Onda 10 — Faturamento / Seguro / Liberação ─────────────────────────────
+  seguro_atualizado: SeguroAtualizadoPayload;
+  caminhao_liberado: CaminhaoLiberadoPayload;
 }

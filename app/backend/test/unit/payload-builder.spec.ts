@@ -1,25 +1,26 @@
-import { montarPayloadEiss, redigirSegredos, type DadosPedidoParaNfse, type DadosPrestador } from '../../src/integracoes/nfse/payload-builder';
+import { montarPayloadEiss, redigirSegredos, type DadosFiscaisEmissao, type DadosPedidoParaNfse } from '../../src/integracoes/nfse/payload-builder';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures reutilizáveis
 // ─────────────────────────────────────────────────────────────────────────────
 
-const prestadorBase: DadosPrestador = {
-  razaoSocial: 'AlphaCarnes Ltda',
-  cnpj: '12.345.678/0001-90',
-  inscricaoMunicipal: '123456',
-  email: 'fiscal@alphacarnes.local',
+const CLIENTE_FAKE = {
+  razaoSocial: 'Cliente Teste',
+  documentoFiscal: '12.345.678/0001-90',
+  dadosFiscaisJson: { inscricao_municipal: '999999', logradouro: 'Rua A', numero: '1', bairro: 'Centro', cidade: 'Osasco', uf: 'SP', cep: '06010-000' },
+  dadosContatoJson: { email: 'cliente@teste.local' },
+};
+
+const FISCAL_PADRAO: DadosFiscaisEmissao = {
+  atividade: '14.01',
+  simplesNacional: false,
+  modeloFiscal: 'padrao',
 };
 
 function makePedido(overrides: Partial<DadosPedidoParaNfse> = {}): DadosPedidoParaNfse {
   return {
     pedidoId: 'abc12345',
-    cliente: {
-      razaoSocial: 'Cliente Teste',
-      documentoFiscal: '12.345.678/0001-90',
-      dadosFiscaisJson: { inscricao_municipal: '999999', logradouro: 'Rua A', numero: '1', bairro: 'Centro', cidade: 'Osasco', uf: 'SP', cep: '06010-000' },
-      dadosContatoJson: { email: 'cliente@teste.local' },
-    },
+    cliente: CLIENTE_FAKE,
     itensDescricao: 'Dianteiro 2un',
     pesoTotalKg: '30.000',
     valor: '1500.00',
@@ -32,11 +33,19 @@ function makePedido(overrides: Partial<DadosPedidoParaNfse> = {}): DadosPedidoPa
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('montarPayloadEiss', () => {
-  it('formata CNPJ removendo pontuação (só dígitos)', () => {
-    const payload = montarPayloadEiss(makePedido(), prestadorBase, true, 'RPS-001');
-    // Prestador com CNPJ com pontuação deve ter apenas dígitos no payload
-    expect(payload.prestador.cnpj).toMatch(/^\d+$/);
-    expect(payload.prestador.cnpj).toBe('12345678000190');
+  it('DoD 10.1 payload padrao segue estrutura do manual V10.6', () => {
+    const payload = montarPayloadEiss(
+      { pedidoId: 'PED-000984', cliente: CLIENTE_FAKE, itensDescricao: 'Contrafilé', pesoTotalKg: '1256.300', valor: '15000.00' },
+      { atividade: '14.01', simplesNacional: false, modeloFiscal: 'padrao' },
+      true, 'RPS-1',
+    );
+    expect(payload.atividade).toBe('14.01');
+    expect(payload.semIncidenciaISS).toBe(false);
+    expect(payload.simplesNacional).toBe(false);
+    expect(payload.tomadorEstrangeiro).toBe(false);
+    expect(payload.deduzirRepasse).toBe(false);
+    expect(payload.aliquota).toBe('0.00');
+    expect(payload).not.toHaveProperty('prestador');
   });
 
   it('formata CPF removendo pontuação (só dígitos)', () => {
@@ -48,15 +57,14 @@ describe('montarPayloadEiss', () => {
         dadosContatoJson: {},
       },
     });
-    const payload = montarPayloadEiss(pedido, prestadorBase, true, 'RPS-002');
+    const payload = montarPayloadEiss(pedido, FISCAL_PADRAO, true, 'RPS-002');
     const docDigits = '12345678909';
     expect(payload.tomador.cpf).toBe(docDigits);
     expect(payload.tomador.cnpj).toBeUndefined();
   });
 
   it('usa CNPJ (cnpj) se 14 dígitos', () => {
-    const payload = montarPayloadEiss(makePedido(), prestadorBase, true, 'RPS-003');
-    // Cliente com 14 dígitos → campo cnpj
+    const payload = montarPayloadEiss(makePedido(), FISCAL_PADRAO, true, 'RPS-003');
     expect(payload.tomador.cnpj).toBe('12345678000190');
     expect(payload.tomador.cpf).toBeUndefined();
   });
@@ -70,55 +78,56 @@ describe('montarPayloadEiss', () => {
         dadosContatoJson: {},
       },
     });
-    const payload = montarPayloadEiss(pedido, prestadorBase, true, 'RPS-004');
+    const payload = montarPayloadEiss(pedido, FISCAL_PADRAO, true, 'RPS-004');
     expect(payload.tomador.cpf).toBe('12345678909');
     expect(payload.tomador.cnpj).toBeUndefined();
   });
 
-  it('limita descricaoServico a 2000 chars', () => {
+  it('limita informacoesAdicionais a 2300 chars', () => {
     const itensDescricao = 'X'.repeat(3000);
     const pedido = makePedido({ itensDescricao });
-    const payload = montarPayloadEiss(pedido, prestadorBase, true, 'RPS-005');
-    expect(payload.descricaoServico.length).toBeLessThanOrEqual(2000);
+    const payload = montarPayloadEiss(pedido, FISCAL_PADRAO, true, 'RPS-005');
+    expect(payload.informacoesAdicionais.length).toBeLessThanOrEqual(2300);
   });
 
   it('NÃO inclui chaveAutenticacao no retorno (segurança)', () => {
-    const payload = montarPayloadEiss(makePedido(), prestadorBase, true, 'RPS-006');
+    const payload = montarPayloadEiss(makePedido(), FISCAL_PADRAO, true, 'RPS-006');
     expect('chaveAutenticacao' in payload).toBe(false);
   });
 
-  it('default de aliquota é 0.0500 quando não informada', () => {
-    const pedido = makePedido({ aliquota: undefined });
-    const payload = montarPayloadEiss(pedido, prestadorBase, true, 'RPS-007');
-    expect(payload.aliquota).toBe('0.0500');
+  it('inclui identificador = pedidoId', () => {
+    const payload = montarPayloadEiss(makePedido({ pedidoId: 'PED-XYZ' }), FISCAL_PADRAO, true, 'RPS-007');
+    expect(payload.identificador).toBe('PED-XYZ');
   });
 
-  it('usa aliquota informada quando presente', () => {
-    const pedido = makePedido({ aliquota: '0.0300' });
-    const payload = montarPayloadEiss(pedido, prestadorBase, true, 'RPS-008');
-    expect(payload.aliquota).toBe('0.0300');
+  it('inclui campos rtc quando modeloFiscal=rtc', () => {
+    const fiscalRtc: DadosFiscaisEmissao = {
+      atividade: '14.01',
+      simplesNacional: false,
+      modeloFiscal: 'rtc',
+      rtc: { classTrib: '000001', codigoNbs: '111041000', indOperacao: '000001', idLocalIncidencia: '1' },
+    };
+    const payload = montarPayloadEiss(makePedido(), fiscalRtc, true, 'RPS-008');
+    expect(payload.modeloFiscal).toBe('rtc');
+    expect(payload.rtcClassTrib).toBe('000001');
+    expect(payload.rtcCodigoNbs).toBe('111041000');
+    expect(payload.rtcIndOperacao).toBe('000001');
+    expect(payload.rtcIdLocalIncidencia).toBe('1');
   });
 
-  it('default de codigoServico é 04014 quando não informado', () => {
-    const pedido = makePedido({ codigoServico: undefined });
-    const payload = montarPayloadEiss(pedido, prestadorBase, true, 'RPS-009');
-    expect(payload.codigoServico).toBe('04014');
-  });
-
-  it('usa codigoServico informado quando presente', () => {
-    const pedido = makePedido({ codigoServico: '14101' });
-    const payload = montarPayloadEiss(pedido, prestadorBase, true, 'RPS-010');
-    expect(payload.codigoServico).toBe('14101');
+  it('NÃO inclui campos rtc quando modeloFiscal=padrao', () => {
+    const payload = montarPayloadEiss(makePedido(), FISCAL_PADRAO, true, 'RPS-009');
+    expect(payload.rtcClassTrib).toBeUndefined();
   });
 
   it('inclui numeroRps e serieRps no payload', () => {
-    const payload = montarPayloadEiss(makePedido(), prestadorBase, true, 'RPS-999', 'B');
+    const payload = montarPayloadEiss(makePedido(), FISCAL_PADRAO, true, 'RPS-999', 'B');
     expect(payload.numeroRps).toBe('RPS-999');
     expect(payload.serieRps).toBe('B');
   });
 
   it('série padrão é "A" quando não informada', () => {
-    const payload = montarPayloadEiss(makePedido(), prestadorBase, true, 'RPS-001');
+    const payload = montarPayloadEiss(makePedido(), FISCAL_PADRAO, true, 'RPS-001');
     expect(payload.serieRps).toBe('A');
   });
 
@@ -131,14 +140,19 @@ describe('montarPayloadEiss', () => {
         dadosContatoJson: {},
       },
     });
-    const payload = montarPayloadEiss(pedido, prestadorBase, true, 'RPS-011');
+    const payload = montarPayloadEiss(pedido, FISCAL_PADRAO, true, 'RPS-011');
     expect(payload.tomador.endereco?.cep).toBe('06010000');
   });
 
   it('inclui substituicaoTributaria=false e notificarTomadorPorEmail=true por padrão', () => {
-    const payload = montarPayloadEiss(makePedido(), prestadorBase, true, 'RPS-012');
+    const payload = montarPayloadEiss(makePedido(), FISCAL_PADRAO, true, 'RPS-012');
     expect(payload.substituicaoTributaria).toBe(false);
     expect(payload.notificarTomadorPorEmail).toBe(true);
+  });
+
+  it('simplesNacional reflete o parâmetro fiscal', () => {
+    const payload = montarPayloadEiss(makePedido(), { ...FISCAL_PADRAO, simplesNacional: true }, true, 'RPS-013');
+    expect(payload.simplesNacional).toBe(true);
   });
 });
 

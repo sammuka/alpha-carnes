@@ -23,10 +23,17 @@ export interface DadosPedidoParaNfse {
   pesoTotalKg: string;
   /** Valor do serviço NUMERIC(15,2) como string, ex: "1500.00". */
   valor: string;
-  /** Alíquota ISS decimal string; padrão "0.0500" (5% — Osasco/SP). */
-  aliquota?: string;
-  /** Código CNAE/EISS do serviço; padrão "04014". */
-  codigoServico?: string;
+}
+
+export interface DadosFiscaisEmissao {
+  /** faturamento.codigo_servico_atividade — tag <Atividade>, ex: "14.01". */
+  atividade: string;
+  /** faturamento.simples_nacional. */
+  simplesNacional: boolean;
+  /** faturamento.modelo_fiscal. */
+  modeloFiscal: 'padrao' | 'rtc';
+  /** Obrigatórios apenas quando modeloFiscal='rtc'. */
+  rtc?: { classTrib: string; codigoNbs: string; indOperacao: string; idLocalIncidencia: string };
 }
 
 export interface DadosPrestador {
@@ -43,58 +50,68 @@ export interface DadosPrestador {
  */
 export function montarPayloadEiss(
   pedido: DadosPedidoParaNfse,
-  prestador: DadosPrestador,
+  fiscal: DadosFiscaisEmissao,
   homologacao: boolean,
   numeroRps: string,
   serieRps = 'A',
 ): Omit<EmitirNfseRequest, 'chaveAutenticacao'> {
   const docCliente = pedido.cliente.documentoFiscal.replace(/\D/g, '');
-  const fiscal = pedido.cliente.dadosFiscaisJson as Record<string, string | undefined>;
+  const fiscalCliente = pedido.cliente.dadosFiscaisJson as Record<string, string | undefined>;
   const contato = pedido.cliente.dadosContatoJson as Record<string, string | undefined>;
 
   const tomador: PessoaDto = {
     nome: pedido.cliente.razaoSocial,
     ...(docCliente.length === 14 ? { cnpj: docCliente } : { cpf: docCliente }),
-    inscricaoMunicipal: fiscal['inscricao_municipal'],
+    inscricaoMunicipal: fiscalCliente['inscricao_municipal'],
     email: contato['email'] as string | undefined,
     endereco: {
-      logradouro: fiscal['logradouro'] as string | undefined,
-      numero: fiscal['numero'] as string | undefined,
-      complemento: fiscal['complemento'] as string | undefined,
-      bairro: fiscal['bairro'] as string | undefined,
-      cidade: fiscal['cidade'] as string | undefined,
-      codigoCidadeIBGE: fiscal['codigo_ibge'] as string | undefined,
-      estado: fiscal['uf'] as string | undefined,
-      cep: (fiscal['cep'] as string | undefined)?.replace(/\D/g, ''),
+      logradouro: fiscalCliente['logradouro'] as string | undefined,
+      numero: fiscalCliente['numero'] as string | undefined,
+      complemento: fiscalCliente['complemento'] as string | undefined,
+      bairro: fiscalCliente['bairro'] as string | undefined,
+      cidade: fiscalCliente['cidade'] as string | undefined,
+      codigoCidadeIBGE: fiscalCliente['codigo_ibge'] as string | undefined,
+      estado: fiscalCliente['uf'] as string | undefined,
+      cep: (fiscalCliente['cep'] as string | undefined)?.replace(/\D/g, ''),
       pais: 'BRASIL',
     },
   };
 
-  const prestadorDto: PessoaDto = {
-    nome: prestador.razaoSocial,
-    cnpj: prestador.cnpj.replace(/\D/g, ''),
-    inscricaoMunicipal: prestador.inscricaoMunicipal,
-    email: prestador.email,
-  };
-
-  const descricaoServico =
+  const informacoesAdicionais =
     `Distribuição de carnes — Pedido ${pedido.pedidoId} — ` +
     `${pedido.itensDescricao} — ${pedido.pesoTotalKg}kg`;
 
+  const agora = new Date();
+
   return {
     homologacao,
-    aliquota: pedido.aliquota ?? '0.0500',
+    identificador: pedido.pedidoId,
+    nrExercicioReferencia: agora.getFullYear(),
+    nrMesReferencia: agora.getMonth() + 1,
+    atividade: fiscal.atividade,
+    aliquota: '0.00',
     valor: pedido.valor,
     valorDeducao: '0',
-    descricaoServico: descricaoServico.slice(0, 2000),
-    codigoServico: pedido.codigoServico ?? '04014',
+    informacoesAdicionais: informacoesAdicionais.slice(0, 2300),
     notificarTomadorPorEmail: true,
     substituicaoTributaria: false,
+    semIncidenciaISS: false,
+    simplesNacional: fiscal.simplesNacional,
+    tomadorEstrangeiro: false,
+    deduzirRepasse: false,
     tomador,
-    prestador: prestadorDto,
+    modeloFiscal: fiscal.modeloFiscal,
+    ...(fiscal.modeloFiscal === 'rtc' && fiscal.rtc
+      ? {
+          rtcClassTrib: fiscal.rtc.classTrib,
+          rtcCodigoNbs: fiscal.rtc.codigoNbs,
+          rtcIndOperacao: fiscal.rtc.indOperacao,
+          rtcIdLocalIncidencia: fiscal.rtc.idLocalIncidencia,
+        }
+      : {}),
     numeroRps,
     serieRps,
-    dataRps: new Date().toISOString(),
+    dataRps: agora.toISOString(),
   };
 }
 

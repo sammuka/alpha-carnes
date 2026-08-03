@@ -11,9 +11,13 @@ describe('LiberacaoService — branches', () => {
   const auditoria = { registrar: jest.fn().mockResolvedValue(undefined) };
   const emitter = new EventEmitter2();
   const emitSpy = jest.spyOn(emitter, 'emit');
+  // D10.6 — checklist liberável por padrão nestes testes de branch pré-existentes
+  // (o guard em si é coberto por liberacao-checklist.spec.ts e pelos e2e de onda10).
+  const checklistService = { calcular: jest.fn().mockResolvedValue({ liberavel: true, requisitos: [] }) };
 
   beforeEach(() => {
     jest.clearAllMocks();
+    checklistService.calcular.mockResolvedValue({ liberavel: true, requisitos: [] });
   });
 
   it('liberarFaturamento idempotente quando já liberado', async () => {
@@ -29,6 +33,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const res = await service.liberarFaturamento('cam-1', 'op-1');
@@ -58,6 +63,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     await service.liberarFaturamento('cam-1', 'op-1');
@@ -87,9 +93,33 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     await expect(service.liberarSaida('cam-1', 'op-1')).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('liberarSaida → checklist incompleto lança 409 CHECKLIST_INCOMPLETO com requisitos reprovados', async () => {
+    const checklistIncompleto = {
+      calcular: jest.fn().mockResolvedValue({
+        liberavel: false,
+        requisitos: [{ chave: 'seguroConfirmado', rotulo: 'Seguro confirmado', ok: false, detalhe: 'pendente' }],
+      }),
+    };
+    const caminhaoService = { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn() };
+    const db = { transaction: jest.fn() };
+    const service = new LiberacaoService(
+      { db } as never,
+      auditoria as never,
+      emitter,
+      caminhaoService as never,
+      checklistIncompleto as never,
+    );
+
+    await expect(service.liberarSaida('cam-1', 'op-1')).rejects.toMatchObject({
+      response: { codigo: 'CHECKLIST_INCOMPLETO', requisitos: [{ chave: 'seguroConfirmado' }] },
+    });
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 
   it('liberarSaida idempotente quando já liberado_saida', async () => {
@@ -105,6 +135,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const res = await service.liberarSaida('cam-1', 'op-1');
@@ -139,6 +170,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const res = await service.liberarSaida('cam-1', 'op-1');
@@ -180,6 +212,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const resultado = await service.listarParaEnvio('2026-06-23');
@@ -206,10 +239,34 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const resultado = await service.listarParaLiberacao('2026-06-23');
-    expect(resultado).toEqual(linhas);
+    expect(resultado).toEqual(linhas.map((l) => ({ ...l, liberacaoSaida: null })));
+  });
+
+  it('listarParaLiberacao inclui responsável/data de quem liberou a saída (banner LiberacaoCaminhao.tsx:207)', async () => {
+    const linhas = [{ id: 'cam-1', placa: 'ABC1234', motorista: 'M1', rota: 'R1', statusCaminhao: 'liberado_saida', dataOperacao: '2026-06-23', statusFaturamento: 'concluido' }];
+    const dataHora = new Date('2026-06-23T15:00:00Z');
+    const registros = [{ registroId: 'cam-1', responsavelNome: 'Operador Portaria', dataHora }];
+    let call = 0;
+    const chains = [
+      { from: () => chains[0], innerJoin: () => chains[0], leftJoin: () => chains[0], where: () => chains[0], orderBy: () => Promise.resolve(linhas) },
+      { from: () => chains[1], innerJoin: () => chains[1], where: () => ({ orderBy: () => Promise.resolve(registros) }) },
+    ];
+    const db = { select: jest.fn(() => chains[call++]) };
+    const caminhaoService = { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn() };
+    const service = new LiberacaoService(
+      { db } as never,
+      auditoria as never,
+      emitter,
+      caminhaoService as never,
+      checklistService as never,
+    );
+
+    const resultado = await service.listarParaLiberacao('2026-06-23');
+    expect(resultado[0]!.liberacaoSaida).toEqual({ dataHora, responsavelNome: 'Operador Portaria' });
   });
 
   it('sincronizarPosEmissao retorna null sem faturamento', async () => {
@@ -225,6 +282,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn().mockResolvedValue('2026-06-23') } as never,
+      checklistService as never,
     );
 
     await expect(service.sincronizarPosEmissao('cam-1', 'op-1')).resolves.toBeNull();
@@ -260,6 +318,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     await expect(service.sincronizarPosEmissao('cam-1', 'u1')).resolves.toBeNull();
@@ -282,6 +341,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const resultado = await service.sincronizarPosEmissao('cam-1', 'u1');
@@ -304,6 +364,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const resultado = await service.sincronizarPosEmissao('cam-1', 'u1', exec as never);
@@ -327,6 +388,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const resultado = await service.sincronizarPosEmissao('cam-1', 'u1');
@@ -350,6 +412,7 @@ describe('LiberacaoService — branches', () => {
       auditoria as never,
       emitter,
       caminhaoService as never,
+      checklistService as never,
     );
 
     const resultado = await service.sincronizarPosEmissao('cam-1', 'u1', exec as never);

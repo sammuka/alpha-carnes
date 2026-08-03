@@ -43,6 +43,8 @@ import {
   type NfseEmitidaPayload,
   type NfseCanceladaPayload,
   type NfseErroEmissaoPayload,
+  type SeguroAtualizadoPayload,
+  type CaminhaoLiberadoPayload,
   type CompraAlteradaImpactoPayload,
   type AprovacaoOperacionalPayload,
   type RelatorioSifGeradoPayload,
@@ -309,6 +311,18 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.NFSE_ERRO_EMISSAO)
   handleNfseErroEmissao(payload: NfseErroEmissaoPayload): void {
     this.broadcast(EVENTOS.NFSE_ERRO_EMISSAO, payload, payload.dataOperacao);
+  }
+
+  // ── Onda 10 — Seguro / Liberação ──────────────────────────────────────────
+
+  @OnEvent(EVENTOS.SEGURO_ATUALIZADO)
+  handleSeguroAtualizado(payload: SeguroAtualizadoPayload): void {
+    this.broadcast(EVENTOS.SEGURO_ATUALIZADO, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.CAMINHAO_LIBERADO)
+  handleCaminhaoLiberado(payload: CaminhaoLiberadoPayload): void {
+    this.broadcast(EVENTOS.CAMINHAO_LIBERADO, payload, payload.dataOperacao);
   }
 
   // ── Onda 5 — Gestão ───────────────────────────────────────────────────────

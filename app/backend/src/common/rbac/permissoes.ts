@@ -79,6 +79,9 @@ export const PERMISSOES = {
   FATURAMENTO_GERENCIAR: 'FATURAMENTO_GERENCIAR',
   NFSE_EMITIR: 'NFSE_EMITIR',
   NFSE_CANCELAR: 'NFSE_CANCELAR',
+  // ── Onda 10 — Seguro manual (F6b) + Liberação por checklist ─────────────
+  SEGURO_GERENCIAR: 'SEGURO_GERENCIAR',
+  LIBERACAO_GERENCIAR: 'LIBERACAO_GERENCIAR',
 
   // Onda 1 — Operação-pivô, overbooking v1.1, Pedido ao Fornecedor e conferência tripla.
   OPERACOES_GERENCIAR: 'OPERACOES_GERENCIAR',
@@ -402,6 +405,13 @@ pushPermissoes('gestor', 'EXPEDICAO_LER');
 pushPermissoes('administrador', 'EXPEDICAO_LER');
 pushPermissoes('expedicao', 'EXPEDICAO_LER');
 
+// Onda 10 — Faturamento: EISS real, seguro manual (F6b), liberação por checklist
+pushPermissoes('faturamento', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR');
+pushPermissoes('gestor', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR');
+pushPermissoes('administrador', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR');
+pushPermissoes('logistica', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR'); // D10.9 — doc 04 §7.3/§7.4
+pushPermissoes('diretoria', 'FATURAMENTO_LER');
+
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   USUARIOS_GERENCIAR: 'Criar e editar usuários',
@@ -465,6 +475,8 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   FATURAMENTO_GERENCIAR: 'Gerenciar faturamentos (consolidar e reprocessar)',
   NFSE_EMITIR: 'Emitir NFS-e para pedidos faturados',
   NFSE_CANCELAR: 'Cancelar NFS-e emitidas',
+  SEGURO_GERENCIAR: 'Registrar envio e confirmação do seguro de carga',
+  LIBERACAO_GERENCIAR: 'Liberar caminhão por checklist',
   OPERACOES_GERENCIAR: 'Criar, iniciar e fechar operações',
   PEDIDO_OVERBOOKING_CONFIRMAR: 'Confirmar inclusão com overbooking',
   OVERBOOKING_RESOLVER: 'Tratar pendências de overbooking',
