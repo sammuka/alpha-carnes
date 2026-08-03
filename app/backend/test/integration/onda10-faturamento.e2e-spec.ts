@@ -188,6 +188,17 @@ describe('Onda 10 — Faturamento (EISS real + RTC, Notas/XML, Seguro F6b, Liber
     const nota = await emitirNota(caminhaoId, pedidoVendaId);
     expect(nota.statusNfse).toBe('emitida');
 
+    // Checklist de liberação exige seguro confirmado (D10.11/D10.12) — sem isso
+    // liberar-saida reprova com CHECKLIST_INCOMPLETO e o cenário 201 nunca é
+    // exercitado. Confirma o seguro antes, como em DoD 10.11.
+    const seguroRes = await request(srv())
+      .post('/operacao/faturamento/seguros')
+      .set('Cookie', faturamentoCookies)
+      .send({ caminhaoId });
+    const seguroId = seguroRes.body.id as string;
+    await request(srv()).patch(`/operacao/faturamento/seguros/${seguroId}/status`).set('Cookie', faturamentoCookies).send({ status: 'enviado' });
+    await request(srv()).patch(`/operacao/faturamento/seguros/${seguroId}/status`).set('Cookie', faturamentoCookies).send({ status: 'confirmado' });
+
     // Faturamento concluído automaticamente após única NF emitida → liberar-faturamento → liberar-saida
     await request(srv()).post(`/operacao/expedicao/caminhoes/${caminhaoId}/liberar-faturamento`).set('Cookie', expedicaoCookies).send();
 
@@ -196,21 +207,18 @@ describe('Onda 10 — Faturamento (EISS real + RTC, Notas/XML, Seguro F6b, Liber
       .post(`/operacao/expedicao/caminhoes/${caminhaoId}/liberar-saida`)
       .set('Cookie', expedicaoCookies)
       .send();
-    // Se o checklist não estiver completo (ex.: seguro obrigatório), o cancelamento
-    // ainda deve estar travado somente APÓS liberado_saida/expedido; testamos a trava
-    // isoladamente simulando o guard direto se liberar-saida ainda reprovar.
-    if (liberarRes.status === 201) {
-      const cancelarRes = await request(srv())
-        .post(`/operacao/faturamento/notas/${nota.id}/cancelar`)
-        .set('Cookie', faturamentoCookies)
-        .send({ motivo: 'Teste trava pós-liberação' });
-      expect(cancelarRes.status).toBe(409);
-      expect(JSON.stringify(cancelarRes.body)).toContain('NOTA_TRAVADA_CAMINHAO_LIBERADO');
-      expect(emitirSpy).not.toHaveBeenCalled();
+    expect(liberarRes.status).toBe(201);
 
-      const [nfRow] = await db().select().from(schema.notasFiscais).where(eq(schema.notasFiscais.id, nota.id));
-      expect(nfRow?.statusNfse).toBe('emitida');
-    }
+    const cancelarRes = await request(srv())
+      .post(`/operacao/faturamento/notas/${nota.id}/cancelar`)
+      .set('Cookie', faturamentoCookies)
+      .send({ motivo: 'Teste trava pós-liberação' });
+    expect(cancelarRes.status).toBe(409);
+    expect(JSON.stringify(cancelarRes.body)).toContain('NOTA_TRAVADA_CAMINHAO_LIBERADO');
+    expect(emitirSpy).not.toHaveBeenCalled();
+
+    const [nfRow] = await db().select().from(schema.notasFiscais).where(eq(schema.notasFiscais.id, nota.id));
+    expect(nfRow?.statusNfse).toBe('emitida');
     emitirSpy.mockRestore();
   });
 
