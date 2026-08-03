@@ -5,6 +5,7 @@ import type {
   EmitirNfseRequest,
   CancelarNfseRequest,
   ConsultarNfseRequest,
+  RtcPesquisaNbsClassTrib,
 } from './nfse.types';
 import { NfseTransporteError } from './nfse.types';
 
@@ -38,8 +39,14 @@ export class FakeNfseGateway implements NfseGateway {
     this.consultarAchaNota = v;
   }
 
-  async emitir(_req: EmitirNfseRequest): Promise<NfseResultado> {
-    return this.resolverCenario();
+  async rtcPesquisarNbsClassTrib(): Promise<RtcPesquisaNbsClassTrib[]> {
+    return [{ codigoNbs: '111041000', classTrib: '000001', descricao: 'Fake — pesquisa determinística' }];
+  }
+
+  async emitir(req: EmitirNfseRequest): Promise<NfseResultado> {
+    if (req.valor === '999.99') return { erro: true, mensagemErro: 'Atividade não autorizada', raw: {} };
+    if (req.valor === '888.88') throw new NfseTransporteError('Timeout simulado (valor gatilho 888.88)');
+    return { ...this.resolverCenario(), identificadorEco: req.identificador };
   }
 
   async cancelar(_req: CancelarNfseRequest): Promise<NfseResultado> {
