@@ -290,6 +290,8 @@ describe('Onda 4 — migrations geradas D36', () => {
         'migrations/0024_onda8_estoque_expand.sql',
         // Onda 9: frota no caminhão + divergência de item de carga (expedicao.schema.ts)
         'migrations/0025_onda9_carga_expand.sql',
+        // Onda 10: seguros_carga + notas_fiscais.modelo_fiscal (faturamento.schema.ts)
+        'migrations/0026_onda10_faturamento_expand.sql',
         'migrations/meta/0019_snapshot.json',
         'migrations/meta/0020_snapshot.json',
         'migrations/meta/0021_snapshot.json',
@@ -297,6 +299,7 @@ describe('Onda 4 — migrations geradas D36', () => {
         'migrations/meta/0023_snapshot.json',
         'migrations/meta/0024_snapshot.json',
         'migrations/meta/0025_snapshot.json',
+        'migrations/meta/0026_snapshot.json',
         'schema/relatorios-sif.schema.ts',
         'schema/aprovacoes-operacionais.schema.ts',
         // Emenda 7: importa aprovacoes-operacionais — quebra resolve do probe O4
@@ -317,6 +320,12 @@ describe('Onda 4 — migrations geradas D36', () => {
       fs.copyFileSync(
         path.resolve(__dirname, '../helpers/fixtures/expedicao.schema.pre-onda9.ts'),
         path.join(probe, 'schema/expedicao.schema.ts'),
+      );
+      // Onda 10: segurosCarga/modeloFiscal em faturamento.schema.ts gerariam DDL extra —
+      // restaura o snapshot pré-O10 pinado.
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/faturamento.schema.pre-onda10.ts'),
+        path.join(probe, 'schema/faturamento.schema.ts'),
       );
       // Emenda 7: colunas O7 em transformacoes/regras gerariam DDL extra no generate O4
       fs.copyFileSync(
