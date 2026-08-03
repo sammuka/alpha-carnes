@@ -1,6 +1,6 @@
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -12,6 +12,9 @@ import {
   notasFiscais,
   pedidosVenda,
   pedidosVendaItens,
+  pecas,
+  subitens,
+  itensComerciais,
 } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
@@ -240,6 +243,53 @@ export class FechamentoService {
       .from(cargaItens)
       .where(and(eq(cargaItens.caminhaoId, caminhaoId), isNull(cargaItens.deletedAt)));
 
+    // Detalhe por item — etiqueta/produto/peso/status/motivo — p/ tabela de peças da conferência (D9.6).
+    const [itensDetalhePeca, itensDetalheSubitem] = await Promise.all([
+      this.db
+        .select({
+          cargaItemId: cargaItens.id,
+          pedidoVendaId: cargaItens.pedidoVendaId,
+          statusCargaItem: cargaItens.statusCargaItem,
+          divergenciaMotivo: cargaItens.divergenciaMotivo,
+          etiqueta: pecas.etiquetaAtual,
+          produtoNome: itensComerciais.descricao,
+          peso: pecas.pesoOriginal,
+        })
+        .from(cargaItens)
+        .innerJoin(pecas, eq(pecas.id, cargaItens.pecaId))
+        .innerJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
+        .where(
+          and(
+            eq(cargaItens.caminhaoId, caminhaoId),
+            eq(cargaItens.tipoOrigem, 'peca'),
+            ne(cargaItens.statusCargaItem, 'removido'),
+            isNull(cargaItens.deletedAt),
+          ),
+        ),
+      this.db
+        .select({
+          cargaItemId: cargaItens.id,
+          pedidoVendaId: cargaItens.pedidoVendaId,
+          statusCargaItem: cargaItens.statusCargaItem,
+          divergenciaMotivo: cargaItens.divergenciaMotivo,
+          etiqueta: subitens.etiquetaAtual,
+          produtoNome: itensComerciais.descricao,
+          peso: subitens.peso,
+        })
+        .from(cargaItens)
+        .innerJoin(subitens, eq(subitens.id, cargaItens.subitemId))
+        .innerJoin(itensComerciais, eq(itensComerciais.id, subitens.itemComercialId))
+        .where(
+          and(
+            eq(cargaItens.caminhaoId, caminhaoId),
+            eq(cargaItens.tipoOrigem, 'subitem'),
+            ne(cargaItens.statusCargaItem, 'removido'),
+            isNull(cargaItens.deletedAt),
+          ),
+        ),
+    ]);
+    const itensDetalhe = [...itensDetalhePeca, ...itensDetalheSubitem];
+
     const previstoPorPedido = new Map<string, number>();
     for (const i of itensPedido) {
       previstoPorPedido.set(
@@ -255,6 +305,13 @@ export class FechamentoService {
       }
     }
 
+    const itensPorPedido = new Map<string, typeof itensDetalhe>();
+    for (const item of itensDetalhe) {
+      const arr = itensPorPedido.get(item.pedidoVendaId) ?? [];
+      arr.push(item);
+      itensPorPedido.set(item.pedidoVendaId, arr);
+    }
+
     const pedidosMap = new Map(pedidosData.map((p) => [p.id, p]));
 
     const pedidos = vinculos.map((v) => {
@@ -265,6 +322,7 @@ export class FechamentoService {
         ordemNaCarga: v.ordemNaCarga,
         previsto: previstoPorPedido.get(v.pedidoVendaId) ?? 0,
         carregado: realPorPedido.get(v.pedidoVendaId) ?? 0,
+        itens: itensPorPedido.get(v.pedidoVendaId) ?? [],
       };
     });
 

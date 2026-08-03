@@ -71,6 +71,8 @@ export const EVENTOS = {
   ENTRADA_ITENS_REGISTRADA: 'entrada_itens_registrada',
   AJUSTE_ESTOQUE_CRIADO: 'ajuste_estoque_criado',
   AJUSTE_ESTOQUE_DECIDIDO: 'ajuste_estoque_decidido',
+  // ── Onda 9 — Carga (conferência) ──────────────────────────────────────────
+  CARGA_ITEM_DIVERGENTE: 'carga_item_divergente',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -342,6 +344,13 @@ export interface ExpedicaoReabertaPayload {
   dataOperacao: string;
 }
 
+export interface CargaItemDivergentePayload {
+  caminhaoId: string;
+  cargaItemId: string;
+  motivo: string;
+  dataOperacao: string;
+}
+
 // ── F6a — Faturamento / NFS-e ─────────────────────────────────────────────
 
 export interface NfseEmitidaPayload {
@@ -466,4 +475,6 @@ export interface PayloadPorEvento {
   entrada_itens_registrada: EntradaItensRegistradaPayload;
   ajuste_estoque_criado: AjusteEstoqueCriadoPayload;
   ajuste_estoque_decidido: AjusteEstoqueDecididoPayload;
+  // ── Onda 9 — Carga (conferência) ──────────────────────────────────────────
+  carga_item_divergente: CargaItemDivergentePayload;
 }

@@ -5,7 +5,6 @@ import { subitens } from './transformacoes.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
 import { operacoes } from './operacoes.schema';
 import { usuarios } from './auth.schema';
-import { frotaCaminhoes } from './frota.schema';
 
 // ── caminhoes ─────────────────────────────────────────────────────────────────
 // Representa um caminhão alocado para uma operação de expedição em uma data.
@@ -18,7 +17,6 @@ export const caminhoes = pgTable(
     rota:                 text('rota'),
     itinerario:           text('itinerario'),
     operacaoId:           uuid('operacao_id').notNull().references(() => operacoes.id),
-    frotaCaminhaoId:      uuid('frota_caminhao_id').references(() => frotaCaminhoes.id),
     statusCaminhao:       text('status_caminhao').notNull().default('planejado'),
     horaAberturaCarga:    timestamp('hora_abertura_carga', { withTimezone: true }),
     horaFechamentoCarga:  timestamp('hora_fechamento_carga', { withTimezone: true }),
@@ -35,7 +33,6 @@ export const caminhoes = pgTable(
     ),
     index('idx_caminhoes_operacao').on(t.operacaoId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_caminhoes_status').on(t.statusCaminhao).where(sql`${t.deletedAt} IS NULL`),
-    index('idx_caminhoes_frota').on(t.frotaCaminhaoId).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 
@@ -82,8 +79,6 @@ export const cargaItens = pgTable(
     dataHoraEntradaCarga: timestamp('data_hora_entrada_carga', { withTimezone: true }).notNull().defaultNow(),
     statusCargaItem:      text('status_carga_item').notNull().default('em_carga'),
     conferido:            boolean('conferido').notNull().default(false),
-    divergenciaMotivo:     text('divergencia_motivo'),
-    divergenciaObservacao: text('divergencia_observacao'),
     observacoes:          text('observacoes'),
     createdAt:            timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt:            timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -97,11 +92,7 @@ export const cargaItens = pgTable(
     ),
     check(
       'chk_carga_itens_status',
-      sql`${t.statusCargaItem} IN ('em_carga','conferido','divergente','removido')`,
-    ),
-    check(
-      'chk_carga_itens_divergencia_motivo',
-      sql`${t.divergenciaMotivo} IS NULL OR ${t.divergenciaMotivo} IN ('peca_ausente','peca_errada','peso_divergente','etiqueta_ilegivel','avaria','outro')`,
+      sql`${t.statusCargaItem} IN ('em_carga','conferido','removido')`,
     ),
     uniqueIndex('uq_carga_itens_peca')
       .on(t.pecaId)
@@ -144,14 +135,10 @@ export const conferenciasCarga = pgTable(
 
 // ── Relations ─────────────────────────────────────────────────────────────────
 
-export const caminhoesRelations = relations(caminhoes, ({ many, one }) => ({
+export const caminhoesRelations = relations(caminhoes, ({ many }) => ({
   pedidos: many(caminhoesPedidos),
   cargaItens: many(cargaItens),
   conferencias: many(conferenciasCarga),
-  frotaCaminhao: one(frotaCaminhoes, {
-    fields: [caminhoes.frotaCaminhaoId],
-    references: [frotaCaminhoes.id],
-  }),
 }));
 
 export const caminhoesPedidosRelations = relations(caminhoesPedidos, ({ one }) => ({

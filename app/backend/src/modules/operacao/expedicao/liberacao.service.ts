@@ -9,6 +9,13 @@ import { operacoes,
   cargaItens,
   faturamentos,
   notasFiscais,
+  pecas,
+  subitens,
+  itensComerciais,
+  pedidosVenda,
+  clientes,
+  auditoria,
+  usuarios,
  } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
@@ -47,7 +54,7 @@ export class LiberacaoService {
       const atualizado = primeiroOuFalha(
         await tx
           .update(caminhoes)
-          .set({ statusCaminhao: 'liberado_faturamento' })
+          .set({ statusCaminhao: 'liberado_faturamento', horaLiberacao: new Date() })
           .where(eq(caminhoes.id, caminhaoId))
           .returning(),
       );
@@ -248,6 +255,162 @@ export class LiberacaoService {
     }
 
     return this.db.transaction(aplicar);
+  }
+
+  /**
+   * Lista cargas em conferência/fechadas/liberadas/faturadas da data, com
+   * agregados de clientes/peças/peso — D9.5 (tela "Enviar para Faturamento").
+   */
+  async listarParaEnvio(dataOperacao: string) {
+    const caminhoesData = await this.db
+      .select({
+        id: caminhoes.id,
+        placa: caminhoes.placa,
+        motorista: caminhoes.motorista,
+        rota: caminhoes.rota,
+        statusCaminhao: caminhoes.statusCaminhao,
+        horaLiberacao: caminhoes.horaLiberacao,
+      })
+      .from(caminhoes)
+      .innerJoin(operacoes, eq(operacoes.id, caminhoes.operacaoId))
+      .where(
+        and(
+          eq(operacoes.data, dataOperacao),
+          isNull(caminhoes.deletedAt),
+          sql`${caminhoes.statusCaminhao} IN ('em_conferencia', 'fechado', 'liberado_faturamento', 'faturado')`,
+        ),
+      )
+      .orderBy(asc(caminhoes.createdAt));
+
+    if (caminhoesData.length === 0) return [];
+
+    const caminhaoIds = caminhoesData.map((c) => c.id);
+
+    // Itens ativos das cargas, origem 'peca' — join peso/etiqueta/produto.
+    const itensPeca = await this.db
+      .select({
+        caminhaoId: cargaItens.caminhaoId,
+        pedidoVendaId: cargaItens.pedidoVendaId,
+        etiqueta: pecas.etiquetaAtual,
+        produtoNome: itensComerciais.descricao,
+        peso: pecas.pesoOriginal,
+      })
+      .from(cargaItens)
+      .innerJoin(pecas, eq(pecas.id, cargaItens.pecaId))
+      .innerJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
+      .where(
+        and(
+          inArray(cargaItens.caminhaoId, caminhaoIds),
+          eq(cargaItens.tipoOrigem, 'peca'),
+          ne(cargaItens.statusCargaItem, 'removido'),
+          isNull(cargaItens.deletedAt),
+        ),
+      );
+
+    // Itens ativos das cargas, origem 'subitem' — join peso/etiqueta/produto.
+    const itensSubitem = await this.db
+      .select({
+        caminhaoId: cargaItens.caminhaoId,
+        pedidoVendaId: cargaItens.pedidoVendaId,
+        etiqueta: subitens.etiquetaAtual,
+        produtoNome: itensComerciais.descricao,
+        peso: subitens.peso,
+      })
+      .from(cargaItens)
+      .innerJoin(subitens, eq(subitens.id, cargaItens.subitemId))
+      .innerJoin(itensComerciais, eq(itensComerciais.id, subitens.itemComercialId))
+      .where(
+        and(
+          inArray(cargaItens.caminhaoId, caminhaoIds),
+          eq(cargaItens.tipoOrigem, 'subitem'),
+          ne(cargaItens.statusCargaItem, 'removido'),
+          isNull(cargaItens.deletedAt),
+        ),
+      );
+
+    const todosItens = [...itensPeca, ...itensSubitem];
+
+    const pedidoIds = [...new Set(todosItens.map((i) => i.pedidoVendaId))];
+    const pedidosData = pedidoIds.length
+      ? await this.db
+          .select({
+            id: pedidosVenda.id,
+            nomeFantasia: clientes.nomeFantasia,
+            razaoSocial: clientes.razaoSocial,
+          })
+          .from(pedidosVenda)
+          .innerJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
+          .where(inArray(pedidosVenda.id, pedidoIds))
+      : [];
+    const clienteNomePorPedido = new Map(
+      pedidosData.map((p) => [p.id, p.nomeFantasia ?? p.razaoSocial]),
+    );
+
+    // Responsável pela liberação — auditoria da tabela caminhoes, justificativa fixa.
+    const responsaveis = caminhaoIds.length
+      ? await this.db
+          .select({
+            registroId: auditoria.registroId,
+            responsavelNome: usuarios.nome,
+          })
+          .from(auditoria)
+          .innerJoin(usuarios, eq(usuarios.id, auditoria.usuarioId))
+          .where(
+            and(
+              eq(auditoria.tabela, 'caminhoes'),
+              inArray(auditoria.registroId, caminhaoIds),
+              eq(auditoria.justificativa, 'Liberação para faturamento'),
+            ),
+          )
+      : [];
+    const responsavelPorCaminhao = new Map(
+      responsaveis.map((r) => [r.registroId, r.responsavelNome]),
+    );
+
+    return caminhoesData.map((caminhao) => {
+      const itensDoCaminhao = todosItens.filter((i) => i.caminhaoId === caminhao.id);
+
+      const pedidosMap = new Map<
+        string,
+        { pedidoVendaId: string; clienteNome: string | null; pecas: Array<{ etiqueta: string | null; produtoNome: string; peso: string }> }
+      >();
+      for (const item of itensDoCaminhao) {
+        const existente = pedidosMap.get(item.pedidoVendaId) ?? {
+          pedidoVendaId: item.pedidoVendaId,
+          clienteNome: clienteNomePorPedido.get(item.pedidoVendaId) ?? null,
+          pecas: [],
+        };
+        existente.pecas.push({
+          etiqueta: item.etiqueta,
+          produtoNome: item.produtoNome,
+          peso: item.peso ?? '0',
+        });
+        pedidosMap.set(item.pedidoVendaId, existente);
+      }
+
+      const pedidosArr = [...pedidosMap.values()];
+      const pesoTotal = itensDoCaminhao
+        .reduce((acc, i) => acc + Number(i.peso ?? 0), 0)
+        .toFixed(3);
+
+      return {
+        id: caminhao.id,
+        placa: caminhao.placa,
+        motorista: caminhao.motorista,
+        rota: caminhao.rota,
+        statusCaminhao: caminhao.statusCaminhao,
+        pedidos: pedidosArr,
+        totalClientes: pedidosArr.length,
+        totalPecas: itensDoCaminhao.length,
+        pesoTotal,
+        envio: caminhao.horaLiberacao
+          ? {
+              dataHora: caminhao.horaLiberacao,
+              responsavelNome: responsavelPorCaminhao.get(caminhao.id) ?? null,
+            }
+          : null,
+      };
+    });
   }
 
   /** Lista caminhões elegíveis para liberação de saída (faturado). */

@@ -16,8 +16,6 @@ describe('Conferencia de carga e2e (F5)', () => {
   let comprasCookies: string;
   let comercialCookies: string;
   let expedicaoCookies: string;
-  /** Perfil sem LEITURA_MANUAL (conferente puro, sem permissao de leitura manual). */
-  let conferenteCookies: string;
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -25,12 +23,10 @@ describe('Conferencia de carga e2e (F5)', () => {
     const compras = await createTestUser(app, { perfil: 'compras' });
     const comercial = await createTestUser(app, { perfil: 'comercial' });
     const expedicao = await createTestUser(app, { perfil: 'expedicao' });
-    const conferente = await createTestUser(app, { perfil: 'conferente' });
     recebimentoCookies = await loginCookies(app, receb.adminEmail, receb.adminPassword);
     comprasCookies = await loginCookies(app, compras.adminEmail, compras.adminPassword);
     comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
     expedicaoCookies = await loginCookies(app, expedicao.adminEmail, expedicao.adminPassword);
-    conferenteCookies = await loginCookies(app, conferente.adminEmail, conferente.adminPassword);
   }, 60000);
 
   afterAll(async () => {
@@ -120,13 +116,15 @@ describe('Conferencia de carga e2e (F5)', () => {
     await adicionarPecaNaCarga(app, expedicaoCookies, caminhaoId, pecaId);
     await iniciarConferencia(app, expedicaoCookies, caminhaoId);
 
-    // O perfil 'conferente' nao tem EXPEDICAO_GERENCIAR, portanto o RBAC guard
-    // barra a requisicao antes de chegar ao service. O retorno esperado e 403.
+    // Onda 9 (D9.2): 'conferente' passou a ter EXPEDICAO_GERENCIAR (papel operador
+    // da bipagem), então deixou de servir para provar o bloqueio deste guard.
+    // 'comercial' não tem EXPEDICAO_GERENCIAR, portanto o RBAC guard barra a
+    // requisicao antes de chegar ao service. O retorno esperado e 403.
     // A validacao de LEITURA_MANUAL no service-layer e testada em unit tests
     // (expedicao-branches.spec.ts).
     const res = await request(srv())
       .post(`/operacao/expedicao/caminhoes/${caminhaoId}/conferencia/registrar-item`)
-      .set('Cookie', conferenteCookies)
+      .set('Cookie', comercialCookies)
       .send({ tipoOrigem: 'peca', modoCaptura: 'manual_assistido', codigo: `QR-${pecaId}`, motivo: 'leitor quebrado' });
     expect(res.status).toBe(403);
   });

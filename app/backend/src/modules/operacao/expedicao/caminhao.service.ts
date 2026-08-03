@@ -1,5 +1,5 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -9,6 +9,9 @@ import { operacoes,
   cargaItens,
   pedidosVenda,
   pedidosVendaItens,
+  frotaCaminhoes,
+  pecas,
+  subitens,
  } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
@@ -35,11 +38,32 @@ export class CaminhaoService {
   async criar(dto: CriarCaminhaoDto, operadorId: string): Promise<Caminhao> {
     return this.db.transaction(async (tx) => {
       const { operacao } = await this.operacoes.garantirOperacao(tx, dto.dataOperacao, operadorId);
+
+      let placa = dto.placa;
+      if (dto.frotaCaminhaoId) {
+        const frota = await tx
+          .select()
+          .from(frotaCaminhoes)
+          .where(
+            and(
+              eq(frotaCaminhoes.id, dto.frotaCaminhaoId),
+              eq(frotaCaminhoes.status, 'ativo'),
+              isNull(frotaCaminhoes.deletedAt),
+            ),
+          )
+          .then((r) => r[0] ?? null);
+        if (!frota) {
+          throw new NotFoundException({ codigo: 'FROTA_NAO_ENCONTRADA', message: 'Caminhão da frota não encontrado ou inativo' });
+        }
+        placa = frota.placa;
+      }
+
       const caminhao = primeiroOuFalha(
         await tx
           .insert(caminhoes)
           .values({
-            placa: dto.placa,
+            frotaCaminhaoId: dto.frotaCaminhaoId,
+            placa: placa!,
             motorista: dto.motorista,
             rota: dto.rota,
             itinerario: dto.itinerario,
@@ -146,7 +170,45 @@ export class CaminhaoService {
 
   /** Detalha o caminhão com pedidos e resumo previsto×carregado. */
   async detalhar(caminhaoId: string) {
-    const caminhao = await this.caminhaoAtivo(this.db, caminhaoId);
+    const caminhaoBase = await this.caminhaoAtivo(this.db, caminhaoId);
+    const capacidadeKg = caminhaoBase.frotaCaminhaoId
+      ? await this.db
+          .select({ capacidadeKg: frotaCaminhoes.capacidadeKg })
+          .from(frotaCaminhoes)
+          .where(eq(frotaCaminhoes.id, caminhaoBase.frotaCaminhaoId))
+          .then((r) => r[0]?.capacidadeKg ?? null)
+      : null;
+    const [pesoPecas, pesoSubitens] = await Promise.all([
+      this.db
+        .select({ peso: sql<string>`coalesce(sum(${pecas.pesoOriginal}), 0)` })
+        .from(cargaItens)
+        .innerJoin(pecas, eq(pecas.id, cargaItens.pecaId))
+        .where(
+          and(
+            eq(cargaItens.caminhaoId, caminhaoId),
+            eq(cargaItens.tipoOrigem, 'peca'),
+            ne(cargaItens.statusCargaItem, 'removido'),
+            isNull(cargaItens.deletedAt),
+          ),
+        )
+        .then((r) => r[0]?.peso ?? '0'),
+      this.db
+        .select({ peso: sql<string>`coalesce(sum(${subitens.peso}), 0)` })
+        .from(cargaItens)
+        .innerJoin(subitens, eq(subitens.id, cargaItens.subitemId))
+        .where(
+          and(
+            eq(cargaItens.caminhaoId, caminhaoId),
+            eq(cargaItens.tipoOrigem, 'subitem'),
+            ne(cargaItens.statusCargaItem, 'removido'),
+            isNull(cargaItens.deletedAt),
+          ),
+        )
+        .then((r) => r[0]?.peso ?? '0'),
+    ]);
+    const pesoCarregadoKg = (Number(pesoPecas) + Number(pesoSubitens)).toFixed(3);
+
+    const caminhao = { ...caminhaoBase, capacidadeKg, pesoCarregadoKg };
     const vinculos = await this.db.select()
       .from(caminhoesPedidos)
       .where(and(eq(caminhoesPedidos.caminhaoId, caminhaoId), isNull(caminhoesPedidos.deletedAt)))
@@ -213,6 +275,8 @@ export class CaminhaoService {
         rota: caminhoes.rota,
         itinerario: caminhoes.itinerario,
         operacaoId: caminhoes.operacaoId,
+        frotaCaminhaoId: caminhoes.frotaCaminhaoId,
+        capacidadeKg: frotaCaminhoes.capacidadeKg,
         statusCaminhao: caminhoes.statusCaminhao,
         horaAberturaCarga: caminhoes.horaAberturaCarga,
         horaFechamentoCarga: caminhoes.horaFechamentoCarga,
@@ -225,6 +289,7 @@ export class CaminhaoService {
       })
       .from(caminhoes)
       .innerJoin(operacoes, eq(operacoes.id, caminhoes.operacaoId))
+      .leftJoin(frotaCaminhoes, eq(frotaCaminhoes.id, caminhoes.frotaCaminhaoId))
       .where(and(eq(operacoes.data, dataOperacao), isNull(caminhoes.deletedAt)))
       .orderBy(asc(caminhoes.createdAt));
   }

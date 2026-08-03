@@ -71,6 +71,7 @@ export const PERMISSOES = {
 
   // ── F5 — Expedição ───────────────────────────────────────────────────────
   EXPEDICAO_GERENCIAR: 'EXPEDICAO_GERENCIAR', // gerenciar carga, itens, transferências, conferência
+  EXPEDICAO_LER: 'EXPEDICAO_LER',             // consultar cargas, conferências e romaneios (Onda 9)
   EXPEDICAO_REABRIR: 'EXPEDICAO_REABRIR',     // reabertura excepcional de expedição fechada
 
   // ── F6a — Faturamento + NFS-e ────────────────────────────────────────────
@@ -393,6 +394,14 @@ pushPermissoes('recebimento_pesagem', 'ESTOQUE_LER', 'ESTOQUE_GERENCIAR', 'ESTOQ
 pushPermissoes('gestor', 'ESTOQUE_ENTRADA', 'ESTOQUE_AJUSTAR', 'ESTOQUE_AJUSTE_APROVAR');
 pushPermissoes('administrador', 'ESTOQUE_ENTRADA', 'ESTOQUE_AJUSTAR', 'ESTOQUE_AJUSTE_APROVAR');
 
+// Onda 9 — leitura das telas de carga (matriz linhas 23–25)
+pushPermissoes('conferente', 'EXPEDICAO_LER', 'EXPEDICAO_GERENCIAR', 'LEITURA_MANUAL'); // D9.2 — conferente opera a bipagem (doc 04 §6.2)
+pushPermissoes('logistica', 'EXPEDICAO_LER');
+pushPermissoes('faturamento', 'EXPEDICAO_LER');
+pushPermissoes('gestor', 'EXPEDICAO_LER');
+pushPermissoes('administrador', 'EXPEDICAO_LER');
+pushPermissoes('expedicao', 'EXPEDICAO_LER');
+
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   USUARIOS_GERENCIAR: 'Criar e editar usuários',
@@ -450,6 +459,7 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   ESTOQUE_AJUSTAR: 'Criar ajustes de estoque',
   ESTOQUE_AJUSTE_APROVAR: 'Aprovar/rejeitar ajustes de estoque (gestão)',
   EXPEDICAO_GERENCIAR: 'Gerenciar expedição: carga, transferências, conferência e fechamento',
+  EXPEDICAO_LER: 'Consultar cargas, conferências e romaneios',
   EXPEDICAO_REABRIR: 'Reabrir expedição fechada (excepcional, auditado)',
   FATURAMENTO_LER: 'Visualizar faturamentos e consolidação da carga',
   FATURAMENTO_GERENCIAR: 'Gerenciar faturamentos (consolidar e reprocessar)',

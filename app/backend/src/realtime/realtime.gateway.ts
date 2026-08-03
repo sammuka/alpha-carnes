@@ -53,6 +53,7 @@ import {
   type EntradaItensRegistradaPayload,
   type AjusteEstoqueCriadoPayload,
   type AjusteEstoqueDecididoPayload,
+  type CargaItemDivergentePayload,
 } from './events/eventos';
 
 /** Socket autenticado: carrega o payload do usuário validado no handshake. */
@@ -286,6 +287,11 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.EXPEDICAO_REABERTA)
   handleExpedicaoReaberta(payload: ExpedicaoReabertaPayload): void {
     this.broadcast(EVENTOS.EXPEDICAO_REABERTA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.CARGA_ITEM_DIVERGENTE)
+  handleCargaItemDivergente(payload: CargaItemDivergentePayload): void {
+    this.broadcast(EVENTOS.CARGA_ITEM_DIVERGENTE, payload, payload.dataOperacao);
   }
 
   // ── F6a — Faturamento / NFS-e ─────────────────────────────────────────────

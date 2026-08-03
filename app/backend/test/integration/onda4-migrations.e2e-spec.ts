@@ -288,12 +288,15 @@ describe('Onda 4 — migrations geradas D36', () => {
         'migrations/0022_onda6_etiqueta_estado_backfill.sql',
         'migrations/0023_onda7_desossa_expand.sql',
         'migrations/0024_onda8_estoque_expand.sql',
+        // Onda 9: frota no caminhão + divergência de item de carga (expedicao.schema.ts)
+        'migrations/0025_onda9_carga_expand.sql',
         'migrations/meta/0019_snapshot.json',
         'migrations/meta/0020_snapshot.json',
         'migrations/meta/0021_snapshot.json',
         'migrations/meta/0022_snapshot.json',
         'migrations/meta/0023_snapshot.json',
         'migrations/meta/0024_snapshot.json',
+        'migrations/meta/0025_snapshot.json',
         'schema/relatorios-sif.schema.ts',
         'schema/aprovacoes-operacionais.schema.ts',
         // Emenda 7: importa aprovacoes-operacionais — quebra resolve do probe O4
@@ -308,6 +311,12 @@ describe('Onda 4 — migrations geradas D36', () => {
       fs.copyFileSync(
         path.resolve(__dirname, '../helpers/fixtures/pesagem.schema.pre-onda6.ts'),
         path.join(probe, 'schema/pesagem.schema.ts'),
+      );
+      // Onda 9: frotaCaminhaoId/divergencia_* em expedicao.schema.ts gerariam DDL extra —
+      // restaura o snapshot pré-O9 pinado.
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/expedicao.schema.pre-onda9.ts'),
+        path.join(probe, 'schema/expedicao.schema.ts'),
       );
       // Emenda 7: colunas O7 em transformacoes/regras gerariam DDL extra no generate O4
       fs.copyFileSync(

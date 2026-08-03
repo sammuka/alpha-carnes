@@ -15,10 +15,10 @@ import { LiberacaoService } from './liberacao.service';
 import {
   criarCaminhaoSchema, vincularPedidoSchema, adicionarItemSchema,
   transferirItemSchema, removerItemSchema, registrarItemConferenciaSchema,
-  fecharSchema, reabrirSchema,
+  fecharSchema, reabrirSchema, divergenciaConferenciaSchema,
   type CriarCaminhaoDto, type VincularPedidoDto, type AdicionarItemDto,
   type TransferirItemDto, type RemoverItemDto, type RegistrarItemConferenciaDto,
-  type FecharDto, type ReabrirDto,
+  type FecharDto, type ReabrirDto, type DivergenciaConferenciaDto,
 } from './dto/expedicao.dto';
 
 @SkipThrottle()
@@ -41,13 +41,22 @@ export class ExpedicaoController {
   }
 
   @Get('caminhoes')
-  @RequirePermissoes('EXPEDICAO_GERENCIAR')
+  @RequireQualquerPermissao('EXPEDICAO_LER', 'EXPEDICAO_GERENCIAR')
   listar(@Query('dataOperacao', new ZodValidationPipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD'))) dataOperacao: string) {
     return this.caminhao.listar(dataOperacao);
   }
 
+  // Declarada ANTES de `caminhoes/:id` para evitar captura de rota.
+  @Get('envio-faturamento')
+  @RequireQualquerPermissao('EXPEDICAO_LER', 'EXPEDICAO_GERENCIAR', 'FATURAMENTO_LER')
+  listarEnvioFaturamento(
+    @Query('dataOperacao', new ZodValidationPipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD'))) dataOperacao: string,
+  ) {
+    return this.liberacao.listarParaEnvio(dataOperacao);
+  }
+
   @Get('caminhoes/:id')
-  @RequirePermissoes('EXPEDICAO_GERENCIAR')
+  @RequireQualquerPermissao('EXPEDICAO_LER', 'EXPEDICAO_GERENCIAR')
   detalhar(@Param('id') id: string) {
     return this.caminhao.detalhar(id);
   }
@@ -102,6 +111,16 @@ export class ExpedicaoController {
     return this.conferencia.concluir(id, user.sub);
   }
 
+  @Post('caminhoes/:id/conferencia/divergencia')
+  @RequirePermissoes('EXPEDICAO_GERENCIAR')
+  divergenciaConferencia(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(divergenciaConferenciaSchema)) dto: DivergenciaConferenciaDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.conferencia.divergencia(id, dto, user);
+  }
+
   // ── Fechamento ────────────────────────────────────────────────────────────
   @Post('caminhoes/:id/fechar')
   @RequirePermissoes('EXPEDICAO_GERENCIAR')
@@ -116,14 +135,14 @@ export class ExpedicaoController {
   }
 
   @Get('caminhoes/:id/romaneio')
-  @RequirePermissoes('EXPEDICAO_GERENCIAR')
+  @RequireQualquerPermissao('EXPEDICAO_LER', 'EXPEDICAO_GERENCIAR')
   romaneio(@Param('id') id: string) {
     return this.fechamento.romaneio(id);
   }
 
   // ── Liberação (F6) ────────────────────────────────────────────────────────
   @Get('liberacao')
-  @RequireQualquerPermissao('FATURAMENTO_LER', 'EXPEDICAO_GERENCIAR')
+  @RequireQualquerPermissao('FATURAMENTO_LER', 'EXPEDICAO_LER', 'EXPEDICAO_GERENCIAR')
   listarLiberacao(
     @Query('dataOperacao', new ZodValidationPipe(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD'))) dataOperacao: string,
   ) {
@@ -131,7 +150,7 @@ export class ExpedicaoController {
   }
 
   @Post('caminhoes/:id/liberar-faturamento')
-  @RequirePermissoes('FATURAMENTO_GERENCIAR')
+  @RequireQualquerPermissao('FATURAMENTO_GERENCIAR', 'EXPEDICAO_GERENCIAR')
   liberarFaturamento(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
     return this.liberacao.liberarFaturamento(id, user.sub);
   }
