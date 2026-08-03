@@ -9,6 +9,8 @@ export interface CaminhaoLiberacao {
   statusCaminhao: string;
   dataOperacao: string;
   statusFaturamento: string | null;
+  /** Quem/quando liberou a saída — LiberacaoCaminhao.tsx:207 (banner de confirmação). */
+  liberacaoSaida: { dataHora: string; responsavelNome: string | null } | null;
 }
 
 export async function GET(req: NextRequest) {

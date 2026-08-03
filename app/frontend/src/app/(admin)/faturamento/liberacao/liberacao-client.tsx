@@ -2,16 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, FileText, Search, Truck, XCircle, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, FileText, Lock, Search, ShieldCheck, Truck, XCircle, AlertTriangle } from 'lucide-react';
 import type { StatusCaminhao } from '@/lib/operacao';
-import { statusCaminhaoVariant } from '@/lib/status-ui';
+import { statusCaminhaoVariant, statusNfseVariant } from '@/lib/status-ui';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
 import { Input } from '@/components/ui/input';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
-import type { ChecklistLiberacao, RequisitoChecklist } from '@/lib/faturamento';
+import type { ChecklistLiberacao, NotaFiscalListagem, Paginado, RequisitoChecklist, StatusNfse } from '@/lib/faturamento';
 import { extrairMensagemErro } from '@/lib/error-message';
 
 interface CaminhaoLiberacao {
@@ -22,6 +22,25 @@ interface CaminhaoLiberacao {
   statusCaminhao: StatusCaminhao;
   dataOperacao: string;
   statusFaturamento: string | null;
+  /** Quem/quando liberou a saída — LiberacaoCaminhao.tsx:207 (banner de confirmação). */
+  liberacaoSaida: { dataHora: string; responsavelNome: string | null } | null;
+}
+
+function rotuloNota(status: StatusNfse): string {
+  const rotulos: Record<StatusNfse, string> = {
+    pendente: 'Processando',
+    emitida: 'Autorizada',
+    erro_emissao: 'Erro',
+    cancelada: 'Cancelada',
+    erro_cancelamento: 'Erro no cancelamento',
+  };
+  return rotulos[status];
+}
+
+function fmtDataHoraLiberacao(iso: string): string {
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
 }
 
 const LINK_RESOLUCAO: Record<RequisitoChecklist['chave'], { texto: string; href: string }> = {
@@ -50,6 +69,8 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
   const [selecionado, setSelecionado] = useState<CaminhaoLiberacao | null>(null);
   const [busca, setBusca] = useState('');
   const [checklist, setChecklist] = useState<ChecklistLiberacao | null>(null);
+  const [checklistsPorCaminhao, setChecklistsPorCaminhao] = useState<Record<string, ChecklistLiberacao>>({});
+  const [notasCarga, setNotasCarga] = useState<NotaFiscalListagem[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -66,6 +87,21 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
       const data = (await res.json()) as CaminhaoLiberacao[];
       setLista(data);
       setSelecionado((atual) => (atual ? data.find((c) => c.id === atual.id) ?? null : null));
+
+      // KPIs "Liberáveis agora"/"Com pendência" (LiberacaoCaminhao.tsx:145-148) exigem o
+      // checklist de cada caminhão ainda não liberado — buscados em paralelo.
+      const pendentes = data.filter((c) => c.statusCaminhao !== 'liberado_saida');
+      const resultados = await Promise.all(
+        pendentes.map(async (c) => {
+          const r = await fetch(`/api/operacao/faturamento/liberacao/${c.id}/checklist`, { cache: 'no-store' });
+          return r.ok ? [c.id, (await r.json()) as ChecklistLiberacao] as const : null;
+        }),
+      );
+      setChecklistsPorCaminhao((prev) => {
+        const proximo = { ...prev };
+        for (const item of resultados) if (item) proximo[item[0]] = item[1];
+        return proximo;
+      });
     } catch {
       setErro('Erro de conexão');
     } finally {
@@ -79,24 +115,57 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
 
   const carregarChecklist = useCallback(async (caminhaoId: string) => {
     const res = await fetch(`/api/operacao/faturamento/liberacao/${caminhaoId}/checklist`, { cache: 'no-store' });
-    if (res.ok) setChecklist(await res.json()); else setChecklist(null);
+    if (res.ok) {
+      const data = (await res.json()) as ChecklistLiberacao;
+      setChecklist(data);
+      setChecklistsPorCaminhao((prev) => ({ ...prev, [caminhaoId]: data }));
+    } else {
+      setChecklist(null);
+    }
+  }, []);
+
+  const carregarNotasCarga = useCallback(async (caminhaoId: string) => {
+    const res = await fetch(`/api/operacao/faturamento/notas?caminhaoId=${encodeURIComponent(caminhaoId)}&pageSize=100`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = (await res.json()) as Paginado<NotaFiscalListagem>;
+      setNotasCarga(data.data);
+    } else {
+      setNotasCarga([]);
+    }
   }, []);
 
   useEffect(() => {
-    if (selecionado) void carregarChecklist(selecionado.id);
-    else setChecklist(null);
-  }, [selecionado, carregarChecklist]);
+    if (selecionado) {
+      void carregarChecklist(selecionado.id);
+      void carregarNotasCarga(selecionado.id);
+    } else {
+      setChecklist(null);
+      setNotasCarga([]);
+    }
+  }, [selecionado, carregarChecklist, carregarNotasCarga]);
 
   useEffect(() => {
     const EVENTOS_RELEVANTES = new Set(['nfse_emitida', 'nfse_cancelada', 'nfse_erro_emissao', 'seguro_atualizado', 'caminhao_liberado']);
     const onMessage = (msg: RealtimeMensagem) => {
       if (!EVENTOS_RELEVANTES.has(msg.type)) return;
       void carregar();
-      if (selecionado) void carregarChecklist(selecionado.id);
+      if (selecionado) {
+        void carregarChecklist(selecionado.id);
+        void carregarNotasCarga(selecionado.id);
+      }
     };
     const desconectar = conectarRealtime({ rooms: ['dashboard'], onMessage, onReconnect: () => void carregar() });
     return desconectar;
-  }, [carregar, carregarChecklist, selecionado]);
+  }, [carregar, carregarChecklist, carregarNotasCarga, selecionado]);
+
+  // KPIs "Cargas no pátio"/"Liberáveis agora"/"Com pendência"/"Liberadas" (LiberacaoCaminhao.tsx:143-156).
+  const kpis = useMemo(() => {
+    const liberadas = lista.filter((c) => c.statusCaminhao === 'liberado_saida').length;
+    const naoLiberadas = lista.filter((c) => c.statusCaminhao !== 'liberado_saida');
+    const liberaveis = naoLiberadas.filter((c) => checklistsPorCaminhao[c.id]?.liberavel === true).length;
+    const pendentes = naoLiberadas.length - liberaveis;
+    return { total: lista.length, liberaveis, pendentes, liberadas };
+  }, [lista, checklistsPorCaminhao]);
 
   const filtrados = useMemo(() => {
     return lista.filter(
@@ -131,11 +200,11 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
   }
 
   function statusLiberacao(c: CaminhaoLiberacao): { variant: StatusPillVariant; label: string } {
-    if (c.statusCaminhao === 'faturado' && c.statusFaturamento === 'concluido') {
-      return { variant: 'expedido', label: 'Pronto' };
-    }
     if (c.statusCaminhao === 'liberado_saida') {
       return { variant: 'expedido', label: 'Liberado' };
+    }
+    if (checklistsPorCaminhao[c.id]?.liberavel) {
+      return { variant: 'expedido', label: 'Liberável' };
     }
     return {
       variant: statusCaminhaoVariant(c.statusCaminhao),
@@ -170,6 +239,22 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
           {erro}
         </div>
       )}
+
+      {/* KPIs — LiberacaoCaminhao.tsx:143-156 */}
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          { label: 'Cargas no pátio', value: `${kpis.total}`, sub: 'aguardando liberação', color: 'text-[var(--color-brand-navy-deep)]', bg: 'bg-[var(--color-surface-subtle)]' },
+          { label: 'Liberáveis agora', value: `${kpis.liberaveis}`, sub: 'todos os requisitos OK', color: 'text-[var(--color-success-strong)]', bg: 'bg-[var(--color-success-surface)]' },
+          { label: 'Com pendência', value: `${kpis.pendentes}`, sub: 'requisitos incompletos', color: 'text-[var(--color-warning-ink)]', bg: 'bg-[var(--color-warning-surface)]' },
+          { label: 'Liberadas', value: `${kpis.liberadas}`, sub: 'alterações bloqueadas', color: 'text-[var(--color-text-secondary)]', bg: 'bg-[var(--color-muted)]' },
+        ].map(({ label, value, sub, color, bg }) => (
+          <div key={label} className={`border border-[var(--color-border)] rounded-xl px-4 py-3.5 ${bg}`}>
+            <p className="text-[11px] text-[var(--color-text-secondary)] font-medium mb-1">{label}</p>
+            <p className={`text-[26px] font-black leading-none ${color}`}>{value}</p>
+            <p className="text-[10px] text-[var(--color-text-muted)] mt-1.5">{sub}</p>
+          </div>
+        ))}
+      </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-12">
         <Card className="lg:col-span-4">
@@ -232,6 +317,24 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
                 )}
               </div>
               <CardContent className="flex flex-1 flex-col gap-4 overflow-auto p-6">
+                {/* Banner de confirmação de liberação — LiberacaoCaminhao.tsx:201-215 */}
+                {liberado && selecionado.liberacaoSaida && (
+                  <div className="bg-[var(--color-success-surface)] border border-[var(--color-success-strong-border)] rounded-xl px-5 py-3.5 flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-5 h-5 text-[var(--color-success-strong)] flex-shrink-0" />
+                      <div>
+                        <p className="text-[13px] font-bold text-[var(--color-success-strong)]">
+                          Caminhão liberado por {selecionado.liberacaoSaida.responsavelNome ?? '—'} em {fmtDataHoraLiberacao(selecionado.liberacaoSaida.dataHora)}
+                        </p>
+                        <p className="text-[11px] text-[var(--color-success-strong-hover)]">Alterações operacionais bloqueadas para esta carga.</p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-[var(--color-brand-navy-deep)] text-white">
+                      <Lock className="w-3 h-3" /> Liberado — alterações bloqueadas
+                    </span>
+                  </div>
+                )}
+
                 {/* Checklist calculado (D10.6) */}
                 <Card>
                   <CardContent className="p-0">
@@ -266,6 +369,39 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
                     </div>
                   </div>
                 )}
+
+                {/* Notas fiscais desta carga — LiberacaoCaminhao.tsx:298-325 */}
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="px-5 py-3.5 border-b flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-primary" />
+                      <h3 className="text-[13px] font-bold">Notas fiscais desta carga</h3>
+                    </div>
+                    <table className="w-full text-[12px]">
+                      <thead>
+                        <tr className="bg-[var(--color-surface-subtle)] border-b border-[var(--color-muted)]">
+                          <th className="px-4 py-2 text-left text-[10px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Nº nota</th>
+                          <th className="px-4 py-2 text-left text-[10px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {notasCarga.length === 0 && (
+                          <tr>
+                            <td colSpan={2} className="px-4 py-3 text-[12px] text-muted-foreground">Nenhuma nota vinculada a esta carga.</td>
+                          </tr>
+                        )}
+                        {notasCarga.map((n) => (
+                          <tr key={n.id} className="border-b border-[var(--color-surface-subtle)] last:border-0">
+                            <td className="px-4 py-2 font-mono font-bold text-[var(--color-brand-navy-deep)]">{n.numeroNfse ?? '—'}</td>
+                            <td className="px-4 py-2">
+                              <StatusPill variant={statusNfseVariant(n.statusNfse)} label={rotuloNota(n.statusNfse)} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </CardContent>
+                </Card>
               </CardContent>
             </>
           )}

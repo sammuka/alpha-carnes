@@ -99,6 +99,29 @@ describe('LiberacaoService — branches', () => {
     await expect(service.liberarSaida('cam-1', 'op-1')).rejects.toBeInstanceOf(ConflictException);
   });
 
+  it('liberarSaida → checklist incompleto lança 409 CHECKLIST_INCOMPLETO com requisitos reprovados', async () => {
+    const checklistIncompleto = {
+      calcular: jest.fn().mockResolvedValue({
+        liberavel: false,
+        requisitos: [{ chave: 'seguroConfirmado', rotulo: 'Seguro confirmado', ok: false, detalhe: 'pendente' }],
+      }),
+    };
+    const caminhaoService = { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn() };
+    const db = { transaction: jest.fn() };
+    const service = new LiberacaoService(
+      { db } as never,
+      auditoria as never,
+      emitter,
+      caminhaoService as never,
+      checklistIncompleto as never,
+    );
+
+    await expect(service.liberarSaida('cam-1', 'op-1')).rejects.toMatchObject({
+      response: { codigo: 'CHECKLIST_INCOMPLETO', requisitos: [{ chave: 'seguroConfirmado' }] },
+    });
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
   it('liberarSaida idempotente quando já liberado_saida', async () => {
     const caminhaoService = {
       caminhaoAtivo: jest.fn().mockResolvedValue(caminhao('liberado_saida')),
@@ -220,7 +243,30 @@ describe('LiberacaoService — branches', () => {
     );
 
     const resultado = await service.listarParaLiberacao('2026-06-23');
-    expect(resultado).toEqual(linhas);
+    expect(resultado).toEqual(linhas.map((l) => ({ ...l, liberacaoSaida: null })));
+  });
+
+  it('listarParaLiberacao inclui responsável/data de quem liberou a saída (banner LiberacaoCaminhao.tsx:207)', async () => {
+    const linhas = [{ id: 'cam-1', placa: 'ABC1234', motorista: 'M1', rota: 'R1', statusCaminhao: 'liberado_saida', dataOperacao: '2026-06-23', statusFaturamento: 'concluido' }];
+    const dataHora = new Date('2026-06-23T15:00:00Z');
+    const registros = [{ registroId: 'cam-1', responsavelNome: 'Operador Portaria', dataHora }];
+    let call = 0;
+    const chains = [
+      { from: () => chains[0], innerJoin: () => chains[0], leftJoin: () => chains[0], where: () => chains[0], orderBy: () => Promise.resolve(linhas) },
+      { from: () => chains[1], innerJoin: () => chains[1], where: () => ({ orderBy: () => Promise.resolve(registros) }) },
+    ];
+    const db = { select: jest.fn(() => chains[call++]) };
+    const caminhaoService = { caminhaoAtivo: jest.fn(), dataOperacaoDoCaminhao: jest.fn() };
+    const service = new LiberacaoService(
+      { db } as never,
+      auditoria as never,
+      emitter,
+      caminhaoService as never,
+      checklistService as never,
+    );
+
+    const resultado = await service.listarParaLiberacao('2026-06-23');
+    expect(resultado[0]!.liberacaoSaida).toEqual({ dataHora, responsavelNome: 'Operador Portaria' });
   });
 
   it('sincronizarPosEmissao retorna null sem faturamento', async () => {

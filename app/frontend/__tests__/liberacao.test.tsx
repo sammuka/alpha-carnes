@@ -15,6 +15,7 @@ const caminhao = {
   statusCaminhao: 'faturado' as const,
   dataOperacao: '2026-08-01',
   statusFaturamento: 'concluido' as const,
+  liberacaoSaida: null,
 };
 
 const checklistIncompleto: ChecklistLiberacao = {
@@ -35,6 +36,9 @@ function mockFetch() {
     if (String(url).includes('/checklist')) {
       return { ok: true, json: async () => checklistIncompleto };
     }
+    if (String(url).includes('/faturamento/notas')) {
+      return { ok: true, json: async () => ({ data: [], total: 0, page: 1, pageSize: 100 }) };
+    }
     return { ok: true, json: async () => ({}) };
   }) as unknown as typeof fetch;
 }
@@ -54,5 +58,47 @@ describe('LiberacaoCaminhaoClient', () => {
     const caminhaoBtn = await screen.findByText('ABC-1234');
     await userEvent.click(caminhaoBtn);
     expect(await screen.findByText('Resolver em Seguro Manual')).toBeInTheDocument();
+  });
+
+  it('exibe KPIs Cargas no pátio/Liberáveis agora/Com pendência/Liberadas', async () => {
+    mockFetch();
+    render(<LiberacaoCaminhaoClient permissoes={['LIBERACAO_GERENCIAR']} />);
+    await screen.findByText('ABC-1234');
+    expect(await screen.findByText('Cargas no pátio')).toBeInTheDocument();
+    expect(screen.getByText('Liberáveis agora')).toBeInTheDocument();
+    expect(screen.getByText('Com pendência')).toBeInTheDocument();
+    expect(screen.getByText('Liberadas')).toBeInTheDocument();
+  });
+
+  it('exibe tabela "Notas fiscais desta carga" no painel de detalhe', async () => {
+    mockFetch();
+    render(<LiberacaoCaminhaoClient permissoes={['LIBERACAO_GERENCIAR']} />);
+    const caminhaoBtn = await screen.findByText('ABC-1234');
+    await userEvent.click(caminhaoBtn);
+    expect(await screen.findByText('Notas fiscais desta carga')).toBeInTheDocument();
+  });
+
+  it('caminhão já liberado exibe banner "Caminhão liberado por X em Y"', async () => {
+    const caminhaoLiberado = {
+      ...caminhao,
+      statusCaminhao: 'liberado_saida' as const,
+      liberacaoSaida: { dataHora: '2026-08-01T14:00:00Z', responsavelNome: 'Ana Souza' },
+    };
+    global.fetch = jest.fn(async (url: string) => {
+      if (String(url).includes('/liberacao?dataOperacao')) {
+        return { ok: true, json: async () => [caminhaoLiberado] };
+      }
+      if (String(url).includes('/checklist')) {
+        return { ok: true, json: async () => ({ liberavel: true, requisitos: [] }) };
+      }
+      if (String(url).includes('/faturamento/notas')) {
+        return { ok: true, json: async () => ({ data: [], total: 0, page: 1, pageSize: 100 }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    }) as unknown as typeof fetch;
+    render(<LiberacaoCaminhaoClient permissoes={['LIBERACAO_GERENCIAR']} />);
+    const caminhaoBtn = await screen.findByText('ABC-1234');
+    await userEvent.click(caminhaoBtn);
+    expect(await screen.findByText(/Caminhão liberado por Ana Souza em/)).toBeInTheDocument();
   });
 });
