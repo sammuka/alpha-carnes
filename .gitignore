@@ -52,3 +52,6 @@ app/frontend/e2e/test-results/
 .claude/workflows/.locks/
 graphify-out/.graphify_python
 graphify-out/.graphify_root
+
+# Seed de demonstração local (não faz parte da aplicação)
+scripts/seed-demo/
