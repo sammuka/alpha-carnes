@@ -53,20 +53,22 @@ export class FaltasService {
       const linhasDemanda = await this.db
         .select({
           itemComercialId: pedidosVendaItens.itemComercialId,
-          total: sql<string>`coalesce(sum(${pedidosVendaItens.quantidadePendente}), 0)::text`,
+          total: sql<string>`coalesce(sum(${pedidosVendaItens.quantidadePedida} - ${pedidosVendaItens.quantidadeAtendida}), 0)::text`,
         })
         .from(pedidosVendaItens)
         .innerJoin(pedidosVenda, eq(pedidosVendaItens.pedidoVendaId, pedidosVenda.id))
         .where(
           and(
             isNull(pedidosVenda.deletedAt),
-            inArray(pedidosVenda.status, ['reservado', 'parcialmente_reservado']),
-            inArray(pedidosVendaItens.itemComercialId, itemComercialIds),
-            inArray(pedidosVendaItens.status, [
-              'totalmente_reservado',
-              'parcialmente_reservado',
-              'sem_cobertura',
+            inArray(pedidosVenda.status, [
+              'em_elaboracao_reserva_ativa',
+              'aguardando_confirmacao_overbooking',
+              'finalizado',
+              'parcialmente_atendido',
             ]),
+            inArray(pedidosVendaItens.itemComercialId, itemComercialIds),
+            sql`${pedidosVendaItens.status} <> 'cancelado'`,
+            sql`${pedidosVendaItens.quantidadePedida} - ${pedidosVendaItens.quantidadeAtendida} > 0`,
           ),
         )
         .groupBy(pedidosVendaItens.itemComercialId);
