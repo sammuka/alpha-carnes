@@ -45,7 +45,8 @@ describe('OperacoesClient', () => {
     await waitFor(() => expect(screen.getByText('Operação de terça-feira')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /Nova Operação Extraordinária/i }));
     expect(screen.getByText('Nova Operação extraordinária')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Data da operação'), { target: { value: '2026-08-01' } });
+    await userEvent.click(screen.getByLabelText('Data da operação'));
+    await userEvent.click(screen.getByRole('button', { name: 'Hoje' }));
     fireEvent.change(screen.getByLabelText('Rótulo'), { target: { value: 'Op extra teste' } });
     await userEvent.click(screen.getByRole('button', { name: 'Criar Operação' }));
     await waitFor(() => {
