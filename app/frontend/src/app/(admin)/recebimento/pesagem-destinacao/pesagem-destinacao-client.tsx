@@ -915,7 +915,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                       {podeAssociar && pecaAguardandoDestino && (
                         <Button
                           size="sm"
-                          variant={principal ? 'default' : 'outline'}
+                          variant={principal ? 'default' : 'secondary'}
                           onClick={() => confirmarPedido(s)}
                           disabled={submitting}
                         >
@@ -1080,7 +1080,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
       {podeAssociar && (
         <div className="flex justify-end">
-          <Button variant="outline" size="sm" onClick={() => setTrocaAberta(true)}>
+          <Button variant="secondary" size="sm" onClick={() => setTrocaAberta(true)}>
             <ArrowLeftRight />
             Trocar Peça
           </Button>

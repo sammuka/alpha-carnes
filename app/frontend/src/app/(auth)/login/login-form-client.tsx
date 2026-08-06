@@ -86,7 +86,7 @@ export function LoginFormClient() {
           </div>
         )}
 
-        <Button type="submit" variant="acao" className="h-9 w-full" loading={isSubmitting}>
+        <Button type="submit" variant="default" className="h-9 w-full" loading={isSubmitting}>
           Acessar Sistema
         </Button>
       </form>

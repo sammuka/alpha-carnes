@@ -12,11 +12,7 @@ const buttonVariants = cva(
       variant: {
         default:
           "bg-primary text-primary-foreground shadow-1 hover:bg-primary-hover active:bg-primary-active",
-        acao:
-          "bg-primary text-primary-foreground shadow-1 hover:bg-primary-hover active:bg-primary-active",
         secondary:
-          "border-border-strong bg-card text-foreground shadow-1 hover:bg-surface-2 hover:border-fg-faint active:bg-surface-3",
-        outline:
           "border-border-strong bg-card text-foreground shadow-1 hover:bg-surface-2 hover:border-fg-faint active:bg-surface-3",
         ghost:
           "text-fg-secondary hover:bg-surface-3 hover:text-foreground",

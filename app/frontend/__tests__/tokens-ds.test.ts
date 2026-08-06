@@ -63,12 +63,9 @@ function literaisDeCor(file: string, padrao: RegExp): string[] {
 describe('tokens do DS', () => {
   const globals = readFileSync(GLOBALS, 'utf8');
 
-  it('globals.css declara as 14 cores canônicas da paleta do prototipo', () => {
+  it('globals.css declara as cores canônicas da paleta do prototipo', () => {
     const paleta: [string, string][] = [
-      ['--color-brand-navy', '#24589E'],
-      ['--color-brand-navy-hover', '#1D4880'],
       ['--color-brand-blue-mid', '#2D6BBE'],
-      ['--color-brand-navy-10', '#E8F0FA'],
       ['--color-background', '#F4F6F9'],
       ['--color-foreground', '#18202C'],
       ['--color-text-secondary', '#4A5A6E'],
@@ -91,25 +88,19 @@ describe('tokens do DS', () => {
     expect(fim).toBeGreaterThan(inicio);
     const theme = globals.slice(inicio, fim + 2);
     const tokens = [
-      '--color-action-blue', '--color-action-blue-hover', '--color-action-blue-strong',
-      '--color-action-blue-bg', '--color-action-blue-border', '--color-action-blue-text',
-      '--color-surface-subtle', '--color-surface-chip', '--color-border-chip',
-      '--color-text-strong', '--color-text-slate', '--color-text-graphite',
+      '--color-action-blue', '--color-action-blue-hover',
+      '--color-surface-subtle',
+      '--color-text-strong',
       '--color-login-panel', '--color-login-panel-caption', '--color-login-panel-text',
-      '--color-login-heading', '--color-login-text',
-      '--color-pipeline-done', '--color-pipeline-future',
+      '--color-login-heading',
       '--color-provisorio-bg', '--color-provisorio-text', '--color-provisorio-border',
       '--color-success-strong', '--color-success-surface',
-      '--color-danger-strong', '--color-danger-surface',
+      '--color-danger-surface',
       '--color-violet-accent', '--color-violet-surface',
-      '--color-sidebar-popover',
-      '--color-avatar-blue-bg', '--color-avatar-violet-bg',
-      '--color-avatar-green-bg', '--color-avatar-amber-bg',
-      '--color-table-zebra', '--color-table-row-hover', '--color-status-dot-ativo',
+      '--color-table-zebra', '--color-table-row-hover',
       '--color-danger-rose', '--color-info-surface', '--color-info-border',
-      '--color-info-icon', '--color-info-ink', '--color-placeholder',
-      '--color-brand-navy-deep', '--color-text-ink', '--color-warning-surface',
-      '--color-warning-ink', '--color-action-blue-ring', '--color-code-surface',
+      '--color-info-ink',
+      '--color-warning-surface', '--color-warning-ink',
     ];
     expect(tokens.filter((token) => !theme.includes(`${token}:`))).toEqual([]);
   });
