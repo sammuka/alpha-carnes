@@ -1,4 +1,5 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { EntradaItensClient } from '../src/app/(admin)/estoque/entrada-itens/entrada-itens-client';
 
 const produtoCaixaria = {
@@ -55,7 +56,8 @@ describe('EntradaItensClient', () => {
     render(<EntradaItensClient podeRegistrar />);
     await waitFor(() => expect(screen.getByText('Nova entrada')).toBeInTheDocument());
 
-    fireEvent.change(screen.getAllByRole('combobox')[0]!, { target: { value: produtoCaixaria.id } });
+    await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
+    await userEvent.click(await screen.findByRole('option', { name: new RegExp(produtoCaixaria.nome) }));
     fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '5' } });
     fireEvent.change(screen.getByPlaceholderText('Ex.: Frigorífico Boi Forte'), { target: { value: 'Frigorífico Central' } });
     fireEvent.click(screen.getByRole('button', { name: 'Pedido' }));
