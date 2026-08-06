@@ -132,9 +132,9 @@ describe('UsuariosAdminClient — criação de usuário (6.23)', () => {
     render(<UsuariosAdminClient permissoes={PERMISSOES_COMPLETAS} />);
 
     await user.click(await screen.findByRole('button', { name: /Novo Usuário/i }));
-    await user.type(screen.getByLabelText('Nome'), 'Carlos Vendedor');
-    await user.type(screen.getByLabelText('E-mail'), 'carlos@alphacarnes.local');
-    await user.type(screen.getByLabelText('Senha'), 'SenhaForte@123');
+    await user.type(screen.getByLabelText(/^Nome/), 'Carlos Vendedor');
+    await user.type(screen.getByLabelText(/^E-mail/), 'carlos@alphacarnes.local');
+    await user.type(screen.getByLabelText(/^Senha/), 'SenhaForte@123');
     await user.click(screen.getByRole('checkbox', { name: 'Comercial' }));
     await screen.findByText('Representante Norte');
     await user.click(screen.getByRole('checkbox', { name: /Representante Norte/i }));

@@ -143,7 +143,7 @@ it('nove cartoes aparecem na ordem canonica exata dos titulos (v1.1 §16 / decis
   const { container } = render(<ParametrosClient podeGerenciar />);
   await screen.findByText('Permitir overbooking');
   const titulos = Array.from(
-    container.querySelectorAll('p.leading-tight.font-bold.text-text-strong'),
+    container.querySelectorAll('p.text-\\[13px\\].font-semibold.leading-tight.text-foreground'),
   ).map((el) => el.textContent);
   expect(titulos).toEqual(TITULOS_ORDEM_CANONICA);
 });
