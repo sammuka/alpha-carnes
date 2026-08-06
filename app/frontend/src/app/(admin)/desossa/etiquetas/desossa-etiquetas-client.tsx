@@ -358,7 +358,7 @@ function DrawerDetalhe({
         if (!v) onClose();
       }}
     >
-      <SheetContent side="right" className="flex w-[560px] max-w-full flex-col border-l border-border bg-card p-0">
+      <SheetContent side="right" className="flex sm:max-w-[520px] max-w-full flex-col border-l border-border bg-card p-0">
         <SheetHeader className="flex flex-shrink-0 flex-row items-center justify-between border-b border-border px-6 py-4">
           <SheetTitle className="text-[15px] font-bold">Etiqueta {etq.codigo}</SheetTitle>
           <div className="flex items-center gap-2">

@@ -141,7 +141,7 @@ function DrawerItem({
         if (!v) onClose();
       }}
     >
-      <SheetContent side="right" className="flex w-[440px] max-w-full flex-col bg-card p-0">
+      <SheetContent side="right" className="flex sm:max-w-[520px] max-w-full flex-col bg-card p-0">
         <SheetHeader className="flex flex-shrink-0 flex-row items-center justify-between border-b border-border px-6 py-4">
           <SheetTitle className="text-[15px] font-bold">{item.produtoNome}</SheetTitle>
           <button type="button" onClick={onClose}>
@@ -208,7 +208,7 @@ function DrawerRegra({
         if (!v) onClose();
       }}
     >
-      <SheetContent side="right" className="flex w-[440px] max-w-full flex-col bg-card p-0">
+      <SheetContent side="right" className="flex sm:max-w-[520px] max-w-full flex-col bg-card p-0">
         <SheetHeader className="flex flex-shrink-0 flex-row items-center justify-between border-b border-border px-6 py-4">
           <SheetTitle className="text-[14px] font-bold">{regra.nome}</SheetTitle>
           <button type="button" onClick={onClose}>
@@ -283,7 +283,7 @@ function DrawerTZ({
         if (!v) onClose();
       }}
     >
-      <SheetContent side="right" className="flex w-[400px] max-w-full flex-col bg-card p-0">
+      <SheetContent side="right" className="flex sm:max-w-[520px] max-w-full flex-col bg-card p-0">
         <SheetHeader className="flex flex-shrink-0 flex-row items-center justify-between border-b border-border px-6 py-4">
           <SheetTitle className="text-[15px] font-bold">{tz.peca}</SheetTitle>
           <button type="button" onClick={onClose}>
