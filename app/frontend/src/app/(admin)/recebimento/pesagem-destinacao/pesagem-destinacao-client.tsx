@@ -2,14 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import {
-  ArrowLeftRight,
-  Package,
-  Scale,
-  Search,
-  Wifi,
-  WifiOff,
-} from 'lucide-react';
+import { ArrowLeftRight, Scale, Search } from 'lucide-react';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import {
   MOTIVOS_CAPTURA_MANUAL,
@@ -24,7 +17,6 @@ import {
   type RecebimentoItem,
   type RecebimentoResumoEnriquecido,
   type ResultadoSugestao,
-  type StatusDispositivo,
   type StatusDispositivos,
   type StatusRecebimento,
   type SugestaoScored,
@@ -40,22 +32,25 @@ import {
   statusRecebimentoVariant,
 } from '@/lib/status-ui';
 import { ProgressoBalancaBar } from '@/components/recebimento/progresso-balanca-bar';
-import { StatusPill } from '@/components/ui/status-pill';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DeviceBadge } from '@/components/ui/device-badge';
+import { EmptyState } from '@/components/ui/empty-state';
+import { FilterChip } from '@/components/ui/filter-chip';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
+import { StatusPill } from '@/components/ui/status-pill';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
   TableCell,
+  TableCellCode,
+  TableCellNum,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -72,27 +67,6 @@ const STATUS_RECEB_LABEL: Record<StatusRecebimento, string> = {
   tratativa_administrativa_concluida: 'Tratativa concluída',
   cancelado: 'Cancelado',
 };
-
-const COR_DISPOSITIVO: Record<StatusDispositivo, string> = {
-  disponivel: 'border-[var(--color-status-expedido)]/30 bg-[var(--color-status-expedido-bg)] text-[var(--color-status-expedido)]',
-  instavel: 'border-[var(--color-status-divergencia)]/30 bg-[var(--color-status-divergencia-bg)] text-[var(--color-status-divergencia)]',
-  indisponivel: 'border-[var(--color-status-bloqueado)]/30 bg-[var(--color-status-bloqueado-bg)] text-[var(--color-status-bloqueado)]',
-};
-
-function BadgeDispositivo({ rotulo, status }: { rotulo: string; status?: StatusDispositivo }) {
-  const cls = status ? COR_DISPOSITIVO[status] : 'border-border bg-muted text-muted-foreground';
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium',
-        cls,
-      )}
-    >
-      {status === 'disponivel' ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-      {rotulo}: {status ?? '—'}
-    </span>
-  );
-}
 
 function formatPeso(val: string | null | undefined): string {
   if (!val) return '0,000';
@@ -517,30 +491,18 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
       peca.statusPeca === 'para_corte');
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-[22px] font-bold text-foreground">Pesagem &amp; Destinação</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Captura de peso e destino da peça recebida
-            {statusRt === 'conectado' && (
-              <span className="ml-2 inline-flex items-center gap-1 text-xs font-semibold text-[var(--color-status-expedido)]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-status-expedido)]" aria-hidden />
-                tempo real
-              </span>
-            )}
-            {statusRt === 'desconectado' && (
-              <span className="ml-2 text-xs text-muted-foreground">· reconectando…</span>
-            )}
-          </p>
-        </div>
+    <div className="space-y-3">
+      <PageHeader
+        title="Pesagem & Destinação"
+        subtitle="Captura de peso e destino da peça recebida"
+        live={statusRt === 'conectado'}
+      >
         <div className="flex flex-wrap gap-2" data-testid="status-dispositivos">
-          <BadgeDispositivo rotulo="Balança" status={dispositivos?.balanca.status} />
-          <BadgeDispositivo rotulo="Impressora" status={dispositivos?.impressora.status} />
-          <BadgeDispositivo rotulo="Leitor" status={dispositivos?.leitor.status} />
+          <DeviceBadge label="Balança" online={dispositivos?.balanca.status === 'disponivel'} />
+          <DeviceBadge label="Impressora" online={dispositivos?.impressora.status === 'disponivel'} />
+          <DeviceBadge label="Leitor" online={dispositivos?.leitor.status === 'disponivel'} />
         </div>
-      </div>
+      </PageHeader>
 
       {erro && (
         <div
@@ -553,34 +515,52 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
       {/* Lote bar */}
       <Card>
-        <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-3 p-4">
+        <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2">
           {detalhe ? (
             <>
-              <div className="flex items-center gap-2">
-                <Package className="h-4 w-4 text-muted-foreground" />
-                <span className="font-semibold">{detalhe.codigoLote}</span>
-                <StatusPill
-                  variant={statusRecebimentoVariant(detalhe.status)}
-                  label={STATUS_RECEB_LABEL[detalhe.status]}
-                />
-              </div>
-              <MetaLote label="Fornecedor" value={detalhe.fornecedor?.razaoSocial} />
-              <MetaLote
-                label="NF"
-                value={
-                  detalhe.nfeNumero
-                    ? `${detalhe.nfeNumero}${detalhe.nfeSerie ? `/${detalhe.nfeSerie}` : ''}`
-                    : null
-                }
+              <span className="font-data text-sm font-bold">{detalhe.codigoLote}</span>
+              <StatusPill
+                variant={statusRecebimentoVariant(detalhe.status)}
+                label={STATUS_RECEB_LABEL[detalhe.status]}
               />
-              <MetaLote label="Romaneio" value={detalhe.romaneio} />
-              <MetaLote label="Placa" value={detalhe.placaVeiculo} />
-              <MetaLote label="Motorista" value={detalhe.motorista} />
-              {detalhe.doca && <MetaLote label="Doca" value={detalhe.doca} />}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Balança</span>
+              {detalhe.fornecedor?.razaoSocial && (
+                <span className="text-xs text-muted-foreground">
+                  Fornecedor <b className="font-medium text-foreground">{detalhe.fornecedor.razaoSocial}</b>
+                </span>
+              )}
+              {detalhe.nfeNumero && (
+                <span className="text-xs text-muted-foreground">
+                  NF{' '}
+                  <b className="font-data font-medium text-foreground">
+                    {detalhe.nfeNumero}
+                    {detalhe.nfeSerie ? `/${detalhe.nfeSerie}` : ''}
+                  </b>
+                </span>
+              )}
+              {detalhe.romaneio && (
+                <span className="text-xs text-muted-foreground">
+                  Romaneio <b className="font-data font-medium text-foreground">{detalhe.romaneio}</b>
+                </span>
+              )}
+              {detalhe.placaVeiculo && (
+                <span className="text-xs text-muted-foreground">
+                  Placa <b className="font-data font-medium text-foreground">{detalhe.placaVeiculo}</b>
+                </span>
+              )}
+              {detalhe.motorista && (
+                <span className="text-xs text-muted-foreground">
+                  Motorista <b className="font-medium text-foreground">{detalhe.motorista}</b>
+                </span>
+              )}
+              {detalhe.doca && (
+                <span className="text-xs text-muted-foreground">
+                  Doca <b className="font-medium text-foreground">{detalhe.doca}</b>
+                </span>
+              )}
+              <span className="flex items-center gap-1.5">
+                <span className="text-[11px] text-muted-foreground">Balança</span>
                 <ProgressoBalancaBar valor={detalhe.progressoBalanca} />
-              </div>
+              </span>
             </>
           ) : (
             <p className="text-sm text-muted-foreground">Nenhum lote selecionado.</p>
@@ -588,26 +568,30 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
           <div className="ml-auto">
             {trocarLoteAberto ? (
               <div className="flex items-center gap-2">
-                <Select value={recebimentoId} onValueChange={trocarLote}>
-                  <SelectTrigger className="w-[280px]">
-                    <SelectValue placeholder="Selecione o lote" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {recebimentos.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        {r.codigoLote} — {r.fornecedorNome} ({STATUS_RECEB_LABEL[r.status as StatusRecebimento] ?? r.status})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SelectNative
+                  aria-label="Selecione o lote"
+                  selectSize="sm"
+                  className="w-[280px]"
+                  value={recebimentoId}
+                  onChange={(e) => trocarLote(e.target.value)}
+                >
+                  <option value="" disabled>
+                    Selecione o lote
+                  </option>
+                  {recebimentos.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.codigoLote} — {r.fornecedorNome} ({STATUS_RECEB_LABEL[r.status as StatusRecebimento] ?? r.status})
+                    </option>
+                  ))}
+                </SelectNative>
                 <Button variant="ghost" size="sm" onClick={() => setTrocarLoteAberto(false)}>
                   Cancelar
                 </Button>
               </div>
             ) : (
-              <Button variant="outline" size="sm" onClick={() => setTrocarLoteAberto(true)}>
-                <ArrowLeftRight className="mr-1.5 h-4 w-4" />
-                Trocar Lote
+              <Button variant="secondary" size="sm" onClick={() => setTrocarLoteAberto(true)}>
+                <ArrowLeftRight />
+                Trocar lote
               </Button>
             )}
           </div>
@@ -616,73 +600,70 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
       {/* Product tabs */}
       {detalhe && detalhe.itens.length > 0 && (
-        <div className="flex flex-wrap gap-2 border-b border-border pb-1">
-          {detalhe.itens.map((item) => {
-            const ativo = item.itemComercialId === itemComercialBaseId;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setItemComercialBaseId(item.itemComercialId)}
-                className={cn(
-                  'rounded-t-lg px-4 py-2 text-sm font-medium transition-colors',
-                  ativo
-                    ? 'border border-b-0 border-border bg-card text-foreground'
-                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-                )}
-              >
+        <Tabs value={itemComercialBaseId} onValueChange={setItemComercialBaseId}>
+          <TabsList>
+            {detalhe.itens.map((item) => (
+              <TabsTrigger key={item.id} value={item.itemComercialId}>
                 {labelProduto(item)}
-              </button>
-            );
-          })}
-        </div>
+                <BadgeCount>
+                  {acoes.filter((a) => a.produtoCodigo === item.itemComercial?.codigo).length}
+                </BadgeCount>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       )}
 
       {/* 3-column grid */}
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid items-start gap-2.5 xl:grid-cols-[340px_1fr_320px]">
         {/* a) Scale panel */}
-        <Card className="xl:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Scale className="h-4 w-4" />
-              Balança
-            </CardTitle>
+        <Card>
+          <CardHeader>
+            <CardTitle>Balança</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-xl border border-border bg-muted/30 px-4 py-8 text-center">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Peso atual</p>
-              <p className="mt-1 text-5xl font-bold tabular-nums tracking-tight">
-                {formatPeso(pesoExibido)}
+          <CardContent className="space-y-2.5">
+            <div className="rounded-lg border border-border bg-surface-2 px-4 pb-3 pt-3.5 text-center">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                Peso atual
               </p>
-              <p className="mt-1 text-sm text-muted-foreground">kg</p>
+              <p className="font-data text-[44px] font-bold leading-[1.1] tracking-[-0.03em]">
+                {formatPeso(pesoExibido)}
+                <span className="ml-1 text-sm font-semibold text-muted-foreground">kg</span>
+              </p>
             </div>
 
-            {itemAtivo && (
-              <p className="text-xs text-muted-foreground">
-                Produto: <span className="font-medium text-foreground">{labelProduto(itemAtivo)}</span>
-              </p>
-            )}
+            <FormField label="Produto" htmlFor="produto-atual">
+              <Input id="produto-atual" readOnly value={itemAtivo ? labelProduto(itemAtivo) : ''} />
+            </FormField>
 
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Características (opcional)</Label>
-              <div className="flex flex-wrap gap-2">
-                <ToggleChip
+            <FormField
+              label={
+                <>
+                  Características <span className="font-normal normal-case text-fg-faint">(opcional)</span>
+                </>
+              }
+            >
+              <div className="flex flex-wrap gap-1.5">
+                <FilterChip
                   active={caracteristicas.maisPesada}
                   onClick={() => toggleCaracteristica('maisPesada')}
-                  label="Mais pesada"
-                />
-                <ToggleChip
+                >
+                  Mais pesada
+                </FilterChip>
+                <FilterChip
                   active={caracteristicas.maisGorda}
                   onClick={() => toggleCaracteristica('maisGorda')}
-                  label="Mais gorda"
-                />
-                <ToggleChip
+                >
+                  Mais gorda
+                </FilterChip>
+                <FilterChip
                   active={caracteristicas.melhorAcabamento}
                   onClick={() => toggleCaracteristica('melhorAcabamento')}
-                  label="Melhor acabamento"
-                />
+                >
+                  Melhor acabamento
+                </FilterChip>
               </div>
-            </div>
+            </FormField>
 
             {podePesar && (
               <div className="flex flex-wrap gap-2">
@@ -691,11 +672,12 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                   onClick={() => pesar('automatico')}
                   disabled={!recebimentoId || !itemComercialBaseId || submitting}
                 >
+                  <Scale />
                   Capturar Peso
                 </Button>
                 {podeManual && (
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     onClick={() => setManualAberto((v) => !v)}
                     disabled={submitting}
                   >
@@ -707,27 +689,27 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
             {manualAberto && podeManual && (
               <div className="space-y-2 rounded-lg border border-border p-3">
-                <Label htmlFor="peso-manual">Peso manual (kg)</Label>
-                <Input
-                  id="peso-manual"
-                  type="number"
-                  step="0.001"
-                  placeholder="0,000"
-                  value={pesoManual}
-                  onChange={(e) => setPesoManual(e.target.value)}
-                />
-                <select
+                <FormField label="Peso manual" htmlFor="peso-manual">
+                  <Input
+                    id="peso-manual"
+                    inputMode="decimal"
+                    placeholder="0,000"
+                    adornRight="kg"
+                    value={pesoManual}
+                    onChange={(e) => setPesoManual(e.target.value)}
+                  />
+                </FormField>
+                <SelectNative
                   aria-label="Motivo da captura manual"
                   value={motivo}
                   onChange={(e) => setMotivo(e.target.value as MotivoCapturaManual)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                 >
                   {MOTIVOS_CAPTURA_MANUAL.map((m) => (
                     <option key={m} value={m}>
                       {m.replace(/_/g, ' ')}
                     </option>
                   ))}
-                </select>
+                </SelectNative>
                 <Button
                   className="w-full"
                   onClick={() => pesar('manual_assistido')}
@@ -750,7 +732,12 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                 data-testid="peca-atual"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">Peça {peca.id.slice(0, 8)}…</span>
+                  <span className="text-[13px] font-semibold text-foreground">
+                    Peça{' '}
+                    <span className="font-data text-[11px] text-fg-secondary">
+                      {peca.id.slice(0, 8)}…
+                    </span>
+                  </span>
                   <StatusPill
                     variant={statusPecaVariant(peca.statusPeca)}
                     label={rotuloDestinoPeca(peca.statusPeca)}
@@ -765,20 +752,20 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                 {pecaAguardandoDestino && podeAssociar && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => destinarSemCobertura('sobra')}
                       disabled={submitting}
                     >
-                      Estoque
+                      → Estoque
                     </Button>
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => destinarSemCobertura('corte')}
                       disabled={submitting}
                     >
-                      Desossa
+                      → Desossa
                     </Button>
                   </div>
                 )}
@@ -786,7 +773,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                 {peca.statusPeca === 'associada' && podeEstornar && (
                   <div className="mt-3">
                     <Button
-                      variant="outline"
+                      variant="destructiveOutline"
                       size="sm"
                       onClick={() => setEstornoAberto(true)}
                       disabled={submitting}
@@ -799,9 +786,8 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                 {estornoAberto && (
                   <div className="mt-3 space-y-2 rounded-lg border border-border p-3" role="dialog" aria-label="Cancelar ação realizada">
                     <p className="text-xs font-semibold">Cancelar ação realizada</p>
-                    <select
+                    <SelectNative
                       aria-label="Motivo do estorno"
-                      className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
                       value={motivoEstorno}
                       onChange={(e) => setMotivoEstorno(e.target.value as MotivoEstorno)}
                     >
@@ -810,7 +796,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                           <option key={slug} value={slug}>{rotulo}</option>
                         ),
                       )}
-                    </select>
+                    </SelectNative>
                     {motivoEstorno === 'outro' && (
                       <Input
                         placeholder="Observações"
@@ -819,7 +805,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                       />
                     )}
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setEstornoAberto(false)}>Voltar</Button>
+                      <Button variant="ghost" size="sm" onClick={() => setEstornoAberto(false)}>Voltar</Button>
                       <Button size="sm" onClick={() => void estornarAssociacao()} disabled={submitting}>
                         Confirmar estorno
                       </Button>
@@ -852,32 +838,38 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
         </Card>
 
         {/* b) Compatible orders */}
-        <Card className="xl:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Pedidos compatíveis</CardTitle>
+        <Card>
+          <CardHeader>
+            <CardTitle>Pedidos compatíveis</CardTitle>
+            <CardAction>
+              <div className="w-[220px]">
+                <Input
+                  adornLeft={<Search />}
+                  placeholder="Buscar cliente"
+                  value={buscaPedido}
+                  onChange={(event) => setBuscaPedido(event.target.value)}
+                  disabled={!peca || !sugestao}
+                  className="h-7 text-xs"
+                />
+              </div>
+            </CardAction>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-9"
-                placeholder="Buscar cliente"
-                value={buscaPedido}
-                onChange={(event) => setBuscaPedido(event.target.value)}
-                disabled={!peca || !sugestao}
-              />
-            </div>
-
+          <CardContent className="space-y-2.5">
             {!peca && (
-              <EmptyState message="Capture o peso para ver pedidos compatíveis." />
+              <EmptyState
+                icon={<Scale />}
+                title="Capture o peso para ver pedidos compatíveis"
+                description="A lista considera produto, faixa de peso e prioridade do cliente."
+                className="py-10"
+              />
             )}
 
             {peca && !sugestao && (
-              <EmptyState message="Carregando sugestões…" />
+              <EmptyState title="Carregando sugestões…" />
             )}
 
             {peca && sugestao && compativeisFiltrados.length === 0 && (
-              <EmptyState message="Nenhum pedido compatível encontrado." />
+              <EmptyState title="Nenhum pedido compatível encontrado." />
             )}
 
             <ul className="max-h-[420px] space-y-2 overflow-y-auto">
@@ -889,7 +881,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                     className={cn(
                       'rounded-lg border p-3 text-sm',
                       principal
-                        ? 'border-[var(--color-primary)]/40 bg-[var(--color-primary)]/5'
+                        ? 'border-primary-soft-border bg-primary-soft'
                         : 'border-border',
                     )}
                   >
@@ -897,9 +889,9 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                       <div className="min-w-0">
                         <div className="mb-1 flex flex-wrap items-center gap-2">
                           {principal && (
-                            <span className="inline-block text-xs font-semibold text-[var(--color-primary)]">
+                            <BadgeCount className="bg-primary-soft text-primary-fg">
                               Sugestão principal
-                            </span>
+                            </BadgeCount>
                           )}
                           {s.prefCompativel && (
                             <span className="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
@@ -939,45 +931,55 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
         </Card>
 
         {/* c) Demandas desossa */}
-        <Card className="xl:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Demandas desossa</CardTitle>
+        <Card>
+          <CardHeader>
+            <CardTitle>Demandas desossa</CardTitle>
+            <BadgeCount>{faltas.length}</BadgeCount>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-1.5">
             {faltas.length === 0 ? (
-              <EmptyState message="Nenhuma demanda de desossa pendente." />
+              <EmptyState title="Nenhuma demanda de desossa pendente." />
             ) : (
-              <ul className="max-h-[480px] space-y-2 overflow-y-auto">
-                {faltas.map((f) => (
-                  <li key={f.produto.id} className="rounded-lg border border-border p-3 text-sm">
-                    <p className="font-medium">
-                      {f.produto.codigo} — {f.produto.nome}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Faltante: {f.quantidadeFaltante} · Estoque: {f.quantidadeEstoque}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Origem: {f.origem}</p>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="max-h-[420px] space-y-1.5 overflow-y-auto">
+                  {faltas.map((f) => (
+                    <li
+                      key={f.produto.id}
+                      className="flex items-center gap-2.5 rounded-md border border-border px-2.5 py-2 text-xs"
+                    >
+                      <span className="w-9 shrink-0 font-data text-[13px] font-bold">
+                        {f.produto.codigo}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate font-semibold">{f.produto.nome}</span>
+                      <span className="whitespace-nowrap font-data text-[11px] text-muted-foreground">
+                        falt. {f.quantidadeFaltante} · est. {f.quantidadeEstoque}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="pt-0.5 text-[11px] text-fg-faint">
+                  Origem: {faltas[0]?.origem} · regras provisórias por unidade
+                </p>
+              </>
             )}
           </CardContent>
         </Card>
       </div>
 
       {/* Bottom 2-col */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-2.5 lg:grid-cols-2">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Acumulado do lote</CardTitle>
+          <CardHeader>
+            <CardTitle>Acumulado do lote</CardTitle>
+            <BadgeCount>{detalhe?.itens.length ?? 0}</BadgeCount>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {!detalhe?.itens.length ? (
-              <EmptyState message="Sem itens no lote." />
+              <EmptyState title="Sem itens no lote." className="border-none" />
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="hover:bg-transparent">
                     <TableHead>Produto</TableHead>
                     <TableHead className="text-right">Previsto</TableHead>
                     <TableHead className="text-right">Pesado</TableHead>
@@ -988,39 +990,50 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                   {detalhe.itens.map((item) => {
                     const apurado = pesadoItem(item);
                     return (
-                      <TableRow key={item.id}>
-                        <TableCell className="max-w-[180px] truncate">{labelProduto(item)}</TableCell>
-                        <TableCell className="text-right tabular-nums">
+                      <TableRow key={item.id} className="group">
+                        <TableCell className="max-w-[180px] truncate text-[13px] font-semibold text-foreground">
+                          {labelProduto(item)}
+                        </TableCell>
+                        <TableCellNum>
                           {item.quantidadeEsperada}
                           {item.unidadeEsperada ? ` ${item.unidadeEsperada}` : ''}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
+                        </TableCellNum>
+                        <TableCellNum>
                           {apurado}
                           {item.requerBalanca ? ' kg' : item.unidadeEsperada ? ` ${item.unidadeEsperada}` : ''}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
+                        </TableCellNum>
+                        <TableCellNum>
                           {calcRestante(item.quantidadeEsperada, apurado)}
-                        </TableCell>
+                        </TableCellNum>
                       </TableRow>
                     );
                   })}
                 </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell>
+                      {detalhe.itens.length} produto{detalhe.itens.length !== 1 ? 's' : ''}
+                    </TableCell>
+                    <TableCell colSpan={3} />
+                  </TableRow>
+                </TableFooter>
               </Table>
             )}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Ações realizadas</CardTitle>
+          <CardHeader>
+            <CardTitle>Ações realizadas</CardTitle>
+            <BadgeCount>{acoes.length}</BadgeCount>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {acoes.length === 0 ? (
-              <EmptyState message="Nenhuma ação registrada neste lote." />
+              <EmptyState title="Nenhuma ação registrada neste lote." className="border-none" />
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="hover:bg-transparent">
                     <TableHead>Hora</TableHead>
                     <TableHead>Produto</TableHead>
                     <TableHead className="text-right">Peso</TableHead>
@@ -1031,32 +1044,31 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                 </TableHeader>
                 <TableBody>
                   {acoes.map((a) => (
-                    <TableRow key={a.id}>
-                      <TableCell className="whitespace-nowrap text-xs">{formatHora(a.hora)}</TableCell>
-                      <TableCell className="max-w-[120px] truncate text-xs">
+                    <TableRow key={a.id} className="group">
+                      <TableCellCode>{formatHora(a.hora)}</TableCellCode>
+                      <TableCell className="max-w-[120px] truncate">
                         {a.produtoCodigo ?? '—'}
                         {a.produtoDescricao ? ` · ${a.produtoDescricao}` : ''}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-xs">
+                      <TableCellNum>
                         {a.peso ? `${formatPeso(a.peso)} kg` : '—'}
-                      </TableCell>
-                      <TableCell className="text-xs">
+                      </TableCellNum>
+                      <TableCell>
                         {a.statusPeca ? (
                           <StatusPill
                             variant={statusPecaVariant(a.statusPeca)}
                             label={a.destino}
-                            className="text-[10px]"
                           />
                         ) : (
                           a.destino
                         )}
                       </TableCell>
-                      <TableCell className="max-w-[100px] truncate text-xs">
+                      <TableCell className="max-w-[100px] truncate">
                         {a.clientePedido ?? '—'}
                       </TableCell>
-                      <TableCell className="max-w-[80px] truncate text-xs">
+                      <TableCellCode className="max-w-[80px] truncate">
                         {a.etiqueta ?? '—'}
-                      </TableCell>
+                      </TableCellCode>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1069,7 +1081,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
       {podeAssociar && (
         <div className="flex justify-end">
           <Button variant="outline" size="sm" onClick={() => setTrocaAberta(true)}>
-            <ArrowLeftRight className="mr-1.5 h-4 w-4" />
+            <ArrowLeftRight />
             Trocar Peça
           </Button>
         </div>
@@ -1086,48 +1098,5 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
         pecasDisponiveis={pecasDispTroca}
       />
     </div>
-  );
-}
-
-function MetaLote({ label, value }: { label: string; value: string | null | undefined }) {
-  if (!value) return null;
-  return (
-    <span className="text-sm">
-      <span className="text-muted-foreground">{label}:</span>{' '}
-      <span className="font-medium">{value}</span>
-    </span>
-  );
-}
-
-function ToggleChip({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-        active
-          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]'
-          : 'border-border text-muted-foreground hover:bg-muted',
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-      {message}
-    </p>
   );
 }
