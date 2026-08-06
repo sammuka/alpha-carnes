@@ -14,12 +14,12 @@ it('chips mostram a contagem devolvida pelo backend', async () => {
   const ativos = screen.getByText('Ativos (2)');
   const inativos = screen.getByText('Inativos (1)');
 
-  // Fidelidade a Fornecedores.tsx:74-76: ativo preenchido escuro, os outros em outline cinza.
-  expect(todos.className).toContain('bg-login-panel');
-  expect(todos.className).toContain('text-white');
+  // R6 — FilterChip: "Todos" ativo por padrão (bg-primary-soft/text-primary-fg), os demais inativos (bg-card/text-foreground).
+  expect(todos.className).toContain('bg-primary-soft');
+  expect(todos.className).toContain('text-primary-fg');
   for (const chip of [ativos, inativos]) {
-    expect(chip.className).toContain('text-login-text');
-    expect(chip.className).not.toContain('bg-login-panel');
+    expect(chip.className).toContain('text-foreground');
+    expect(chip.className).not.toContain('bg-primary-soft');
   }
 });
 
