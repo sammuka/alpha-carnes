@@ -1,12 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, Plus, Save, Search, Settings } from 'lucide-react';
+import { Building2, Info, Plus, Save, Search } from 'lucide-react';
 import { AlertItem } from '@/components/ui/alert-item';
-import { Badge } from '@/components/ui/badge';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PageHeader } from '@/components/ui/page-header';
 import {
   Select,
   SelectContent,
@@ -14,8 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SelectNative } from '@/components/ui/select-native';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { cn } from '@/lib/cn';
 import type { Representante } from '@/lib/representantes';
 import type { Rota } from '@/lib/rotas';
 
@@ -108,34 +114,10 @@ async function mensagemDaFalha(response: Response, fallback: string): Promise<st
   return body.message ?? fallback;
 }
 
-function CampoTexto({
-  id,
-  label,
-  value,
-  onChange,
-  readOnly,
-  type = 'text',
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  readOnly?: boolean;
-  type?: 'text' | 'email' | 'number';
-}) {
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
-      <Input
-        id={id}
-        type={type}
-        value={value}
-        readOnly={readOnly}
-        className={readOnly ? 'bg-muted' : undefined}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </div>
-  );
+function iniciaisDe(nome: string): string {
+  const limpo = nome.trim();
+  if (!limpo) return '—';
+  return limpo.slice(0, 2).toUpperCase();
 }
 
 export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
@@ -304,18 +286,19 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
   }
 
   return (
-    <div className="flex h-full min-h-[calc(100vh-8rem)] flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Cadastro de Clientes</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Gerenciamento de clientes e preferências operacionais
-          </p>
-        </div>
-        <Badge variant="outline" className="border-border bg-muted text-foreground">
-          Total: {totalAtivos} ativos
-        </Badge>
-      </div>
+    <div className="space-y-3">
+      <PageHeader
+        title="Cadastro de Clientes"
+        subtitle="Gerenciamento de clientes e preferências operacionais"
+      >
+        <BadgeCount className="h-[22px] px-2 text-[11px]">{totalAtivos} ativos</BadgeCount>
+        {podeGerenciar && (
+          <Button type="button" onClick={iniciarNovo}>
+            <Plus />
+            Novo cliente
+          </Button>
+        )}
+      </PageHeader>
 
       {erro && (
         <div role="alert" className="rounded-xl border border-destructive/30 px-4">
@@ -333,185 +316,171 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
-        <aside className="flex w-full shrink-0 flex-col rounded-xl border border-border bg-card shadow-sm lg:w-[400px]">
-          <div className="space-y-4 border-b border-border p-4">
-            <form onSubmit={buscar} className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={busca}
-                  onChange={(event) => setBusca(event.target.value)}
-                  className="h-9 pl-9"
-                  placeholder="Buscar cliente..."
-                />
-              </div>
-              {podeGerenciar && (
-                <Button
-                  type="button"
-                  size="icon"
-                  className="h-9 w-9 shrink-0"
-                  onClick={iniciarNovo}
-                  aria-label="Novo cliente"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              )}
+      <div className="grid items-start gap-2.5 lg:grid-cols-[320px_1fr]">
+        {/* MASTER */}
+        <Card>
+          <CardContent className="flex gap-1.5 p-2.5 pb-1.5">
+            <form onSubmit={buscar} className="flex-1">
+              <Input
+                value={busca}
+                onChange={(event) => setBusca(event.target.value)}
+                adornLeft={<Search />}
+                placeholder="Buscar cliente..."
+                className="h-7 text-xs"
+              />
             </form>
-            <Select value={filtroStatus} onValueChange={(valor) => setFiltroStatus(valor as typeof filtroStatus)}>
-              <SelectTrigger aria-label="Filtrar clientes por status" size="sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os status</SelectItem>
-                <SelectItem value="ativo">Somente Ativos</SelectItem>
-                <SelectItem value="inativo">Somente Inativos</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex-1 overflow-auto p-2">
+            <SelectNative
+              aria-label="Filtrar clientes por status"
+              selectSize="sm"
+              className="w-[110px]"
+              value={filtroStatus}
+              onChange={(event) => setFiltroStatus(event.target.value as typeof filtroStatus)}
+            >
+              <option value="ativo">Ativos</option>
+              <option value="todos">Todos</option>
+              <option value="inativo">Inativos</option>
+            </SelectNative>
+          </CardContent>
+          <div className="max-h-[560px] overflow-y-auto overflow-x-hidden">
             {carregando ? (
-              <p className="p-4 text-center text-sm text-muted-foreground">Carregando…</p>
+              <p className="p-4 text-center text-xs text-muted-foreground">Carregando…</p>
             ) : clientesVisiveis.length === 0 ? (
-              <p className="p-4 text-center text-sm text-muted-foreground">Nenhum cliente encontrado.</p>
+              <p className="p-4 text-center text-xs text-muted-foreground">Nenhum cliente encontrado.</p>
             ) : (
-              <div className="space-y-1">
-                {clientesVisiveis.map((cliente) => (
-                  <button
-                    key={cliente.id}
-                    type="button"
-                    onClick={() => {
-                      setNovo(false);
-                      setSelecionadoId(cliente.id);
-                    }}
-                    className={`w-full rounded-lg border p-3 text-left transition-colors ${
-                      selecionadoId === cliente.id
-                        ? 'border-primary bg-accent shadow-sm'
-                        : 'border-transparent hover:bg-muted/50'
-                    }`}
-                  >
-                    <div className="mb-1 flex items-start justify-between gap-2">
-                      <span className="truncate text-sm font-bold text-foreground">
-                        {cliente.nomeFantasia || cliente.razaoSocial}
-                      </span>
-                      <Badge
-                        variant="outline"
-                        className={cliente.status === 'ativo'
-                          ? 'border-none bg-[var(--color-status-expedido-bg)] text-[10px] uppercase text-[var(--color-status-expedido)]'
-                          : 'border-none bg-muted text-[10px] uppercase text-muted-foreground'}
-                      >
-                        {cliente.status}
-                      </Badge>
-                    </div>
-                    <p className="truncate text-xs text-muted-foreground">{cliente.razaoSocial}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatarDocumento(cliente.documentoFiscal)}
-                    </p>
-                  </button>
-                ))}
-              </div>
+              clientesVisiveis.map((cliente) => (
+                <button
+                  key={cliente.id}
+                  type="button"
+                  onClick={() => {
+                    setNovo(false);
+                    setSelecionadoId(cliente.id);
+                  }}
+                  className={cn(
+                    'block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2',
+                    selecionadoId === cliente.id && 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]',
+                  )}
+                >
+                  <span className="flex items-center gap-2">
+                    <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">
+                      {cliente.nomeFantasia || cliente.razaoSocial}
+                    </b>
+                    <StatusPill
+                      variant={cliente.status === 'ativo' ? 'expedido' : 'pendente'}
+                      label={cliente.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                      className="h-[17px] text-[10px]"
+                    />
+                  </span>
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {cliente.razaoSocial} · <span className="font-data">{formatarDocumento(cliente.documentoFiscal)}</span>
+                  </span>
+                </button>
+              ))
             )}
           </div>
-        </aside>
+        </Card>
 
-        <section className="flex min-w-0 flex-1 flex-col rounded-xl border border-border bg-card shadow-sm">
+        {/* DETAIL */}
+        <Card>
           {!form ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-muted-foreground">
+            <CardContent className="flex flex-col items-center justify-center gap-4 p-8 text-muted-foreground">
               <Building2 className="h-12 w-12 opacity-20" />
               <p>Selecione um cliente para visualizar ou editar os detalhes.</p>
-            </div>
+            </CardContent>
           ) : (
             <>
-              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border p-6">
-                <div className="flex gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                    <Building2 className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-foreground">
-                      {form.nomeFantasia || form.razaoSocial || 'Novo cliente'}
-                    </h2>
-                    <p className="text-sm text-muted-foreground">{form.razaoSocial}</p>
-                  </div>
+              <CardContent className="flex items-center gap-3 border-b border-border p-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-[13px] font-bold text-primary-fg">
+                  {iniciaisDe(form.nomeFantasia || form.razaoSocial || 'Novo cliente')}
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id="cliente-ativo"
-                      checked={form.status === 'ativo'}
-                      disabled={!podeGerenciar}
-                      onCheckedChange={(ativo) => atualizar('status', ativo ? 'ativo' : 'inativo')}
-                    />
-                    <Label htmlFor="cliente-ativo">Cliente Ativo</Label>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[16px] font-bold text-foreground">
+                    {form.nomeFantasia || form.razaoSocial || 'Novo cliente'}
                   </div>
-                  {podeGerenciar && (
-                    <Button type="submit" form="cliente-form" disabled={salvando} className="gap-2">
-                      <Save className="h-4 w-4" />
-                      Salvar
-                    </Button>
-                  )}
+                  <p className="truncate text-xs text-muted-foreground">
+                    {form.razaoSocial}
+                    {!novo && form.codigo && (
+                      <> · <span className="font-data">{form.codigo}</span></>
+                    )}
+                  </p>
                 </div>
-              </div>
+                <label className="flex items-center gap-2 text-[13px] font-semibold">
+                  <Switch
+                    id="cliente-ativo"
+                    checked={form.status === 'ativo'}
+                    disabled={!podeGerenciar}
+                    onCheckedChange={(ativo) => atualizar('status', ativo ? 'ativo' : 'inativo')}
+                  />
+                  Cliente ativo
+                </label>
+                {podeGerenciar && (
+                  <Button type="submit" form="cliente-form" disabled={salvando}>
+                    <Save />
+                    Salvar
+                  </Button>
+                )}
+              </CardContent>
 
-              <form id="cliente-form" onSubmit={salvar} className="flex-1 overflow-auto">
-                <Tabs defaultValue="gerais" className="h-full gap-0">
-                  <div className="border-b border-border px-6">
-                    <TabsList className="h-12 w-full justify-start gap-6 rounded-none bg-transparent p-0">
+              <form id="cliente-form" onSubmit={salvar}>
+                <Tabs defaultValue="gerais">
+                  <div className="px-3">
+                    <TabsList>
                       {([
                         ['gerais', 'Dados Gerais'],
                         ['fiscais', 'Dados Fiscais & Endereço'],
                         ['contatos', 'Contatos'],
                         ['preferencias', 'Preferências Operacionais'],
                       ] as const).map(([valor, rotulo]) => (
-                        <TabsTrigger
-                          key={valor}
-                          value={valor}
-                          className="h-full rounded-none bg-transparent px-0 font-medium text-muted-foreground data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none"
-                        >
+                        <TabsTrigger key={valor} value={valor}>
                           {rotulo}
                         </TabsTrigger>
                       ))}
                     </TabsList>
                   </div>
 
-                  <div className="p-6">
-                    <TabsContent value="gerais" className="mt-0 space-y-6">
-                      <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-accent p-4 text-sm text-primary">
-                        <Settings className="mt-0.5 h-5 w-5 shrink-0" />
-                        <p>
-                          Representante e Rota são herdados <strong>automaticamente</strong> pelo pedido
-                          de venda ao selecionar este cliente — não precisam ser escolhidos novamente na venda.
-                        </p>
+                  <CardContent>
+                    <TabsContent value="gerais" className="space-y-3">
+                      <div className="flex gap-2 rounded-md border border-primary-soft-border bg-info-soft px-3 py-2 text-xs text-info-fg">
+                        <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                        <span>
+                          <b>Representante e Rota são herdados automaticamente</b> pelo pedido de venda ao
+                          selecionar este cliente — não precisam ser escolhidos novamente na venda.
+                        </span>
                       </div>
-                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                        <CampoTexto
-                          id="nome-fantasia"
-                          label="Nome Fantasia"
-                          value={form.nomeFantasia ?? ''}
-                          onChange={(valor) => atualizar('nomeFantasia', valor)}
-                        />
-                        <CampoTexto
-                          id="razao-social"
-                          label="Razão Social"
-                          value={form.razaoSocial}
-                          onChange={(valor) => atualizar('razaoSocial', valor)}
-                        />
-                        <CampoTexto
-                          id="documento-fiscal"
-                          label="CNPJ/CPF"
-                          value={form.documentoFiscal}
-                          onChange={(valor) => atualizar('documentoFiscal', valor)}
-                        />
-                        <CampoTexto
-                          id="codigo-interno"
+                      <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                        <FormField label="Nome Fantasia" htmlFor="nome-fantasia">
+                          <Input
+                            id="nome-fantasia"
+                            value={form.nomeFantasia ?? ''}
+                            onChange={(event) => atualizar('nomeFantasia', event.target.value)}
+                          />
+                        </FormField>
+                        <FormField label="Razão Social" htmlFor="razao-social">
+                          <Input
+                            id="razao-social"
+                            value={form.razaoSocial}
+                            onChange={(event) => atualizar('razaoSocial', event.target.value)}
+                          />
+                        </FormField>
+                        <FormField label="CNPJ/CPF" htmlFor="documento-fiscal">
+                          <Input
+                            id="documento-fiscal"
+                            value={form.documentoFiscal}
+                            onChange={(event) => atualizar('documentoFiscal', event.target.value)}
+                          />
+                        </FormField>
+                        <FormField
                           label="Código Interno"
-                          value={form.codigo}
-                          readOnly={!novo}
-                          onChange={(valor) => atualizar('codigo', valor)}
-                        />
-                        <div className="space-y-2">
-                          <Label>Representante</Label>
+                          htmlFor="codigo-interno"
+                          help={!novo ? 'Gerado automaticamente.' : undefined}
+                        >
+                          <Input
+                            id="codigo-interno"
+                            value={form.codigo}
+                            readOnly={!novo}
+                            onChange={(event) => atualizar('codigo', event.target.value)}
+                          />
+                        </FormField>
+                        <FormField label="Representante" htmlFor="representante">
                           <Select
                             value={form.representanteId ?? 'sem-vinculo'}
                             disabled={!podeGerenciar}
@@ -520,7 +489,7 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                               valor === 'sem-vinculo' ? null : valor,
                             )}
                           >
-                            <SelectTrigger aria-label="Representante">
+                            <SelectTrigger id="representante" aria-label="Representante">
                               <SelectValue placeholder="—" />
                             </SelectTrigger>
                             <SelectContent>
@@ -532,15 +501,14 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                               ))}
                             </SelectContent>
                           </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Itinerário / Rota</Label>
+                        </FormField>
+                        <FormField label="Itinerário / Rota" htmlFor="itinerario-rota">
                           <Select
                             value={form.rotaId ?? 'sem-rota'}
                             disabled={!podeGerenciar}
                             onValueChange={(valor) => atualizar('rotaId', valor === 'sem-rota' ? null : valor)}
                           >
-                            <SelectTrigger aria-label="Itinerário / Rota">
+                            <SelectTrigger id="itinerario-rota" aria-label="Itinerário / Rota">
                               <SelectValue placeholder="—" />
                             </SelectTrigger>
                             <SelectContent>
@@ -550,15 +518,14 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                               ))}
                             </SelectContent>
                           </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Prioridade Padrão</Label>
+                        </FormField>
+                        <FormField label="Prioridade Padrão" htmlFor="prioridade-padrao">
                           <Select
                             value={form.prioridade ?? 'normal'}
                             disabled={!podeGerenciar}
                             onValueChange={(valor) => atualizar('prioridade', valor as 'normal' | 'alta')}
                           >
-                            <SelectTrigger aria-label="Prioridade Padrão">
+                            <SelectTrigger id="prioridade-padrao" aria-label="Prioridade Padrão">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -566,12 +533,12 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                               <SelectItem value="alta">Alta</SelectItem>
                             </SelectContent>
                           </Select>
-                        </div>
+                        </FormField>
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="fiscais" className="mt-0">
-                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    <TabsContent value="fiscais">
+                      <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
                         {([
                           ['logradouro', 'Logradouro', 'text'],
                           ['numero', 'Número', 'text'],
@@ -585,33 +552,33 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                           ['emailFiscal', 'E-mail Fiscal', 'email'],
                           ['telefoneFiscal', 'Telefone Fiscal', 'text'],
                         ] as const).map(([chave, rotulo, tipo]) => (
-                          <CampoTexto
-                            key={chave}
-                            id={`fiscal-${chave}`}
-                            label={rotulo}
-                            type={tipo}
-                            value={form.dadosFiscaisJson[chave] ?? ''}
-                            onChange={(valor) => atualizarJson('dadosFiscaisJson', chave, valor)}
-                          />
+                          <FormField key={chave} label={rotulo} htmlFor={`fiscal-${chave}`}>
+                            <Input
+                              id={`fiscal-${chave}`}
+                              type={tipo}
+                              value={form.dadosFiscaisJson[chave] ?? ''}
+                              onChange={(event) => atualizarJson('dadosFiscaisJson', chave, event.target.value)}
+                            />
+                          </FormField>
                         ))}
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="contatos" className="mt-0">
-                      <div className="rounded-lg border border-border p-4">
-                        <div className="mb-4 flex items-center justify-between">
-                          <h3 className="font-semibold text-foreground">Contato principal</h3>
-                          <div className="flex items-center gap-2">
+                    <TabsContent value="contatos">
+                      <div className="rounded-lg border border-border p-3">
+                        <div className="mb-2.5 flex items-center justify-between">
+                          <h3 className="text-[13px] font-semibold text-foreground">Contato principal</h3>
+                          <label className="flex items-center gap-2 text-[13px] font-semibold">
                             <Switch
                               id="contato-principal"
                               checked={form.dadosContatoJson.principal === true}
                               disabled={!podeGerenciar}
                               onCheckedChange={(valor) => atualizarJson('dadosContatoJson', 'principal', valor)}
                             />
-                            <Label htmlFor="contato-principal">Principal</Label>
-                          </div>
+                            Principal
+                          </label>
                         </div>
-                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
                           {([
                             ['nome', 'Nome', 'text'],
                             ['cargo', 'Cargo', 'text'],
@@ -619,23 +586,22 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                             ['whatsapp', 'WhatsApp', 'text'],
                             ['email', 'E-mail', 'email'],
                           ] as const).map(([chave, rotulo, tipo]) => (
-                            <CampoTexto
-                              key={chave}
-                              id={`contato-${chave}`}
-                              label={rotulo}
-                              type={tipo}
-                              value={form.dadosContatoJson[chave] ?? ''}
-                              onChange={(valor) => atualizarJson('dadosContatoJson', chave, valor)}
-                            />
+                            <FormField key={chave} label={rotulo} htmlFor={`contato-${chave}`}>
+                              <Input
+                                id={`contato-${chave}`}
+                                type={tipo}
+                                value={form.dadosContatoJson[chave] ?? ''}
+                                onChange={(event) => atualizarJson('dadosContatoJson', chave, event.target.value)}
+                              />
+                            </FormField>
                           ))}
-                          <div className="space-y-2">
-                            <Label>Tipo</Label>
+                          <FormField label="Tipo" htmlFor="contato-tipo">
                             <Select
                               value={form.dadosContatoJson.tipo ?? 'compra'}
                               disabled={!podeGerenciar}
                               onValueChange={(valor) => atualizarJson('dadosContatoJson', 'tipo', valor)}
                             >
-                              <SelectTrigger aria-label="Tipo do contato">
+                              <SelectTrigger id="contato-tipo" aria-label="Tipo do contato">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -645,50 +611,53 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                                 <SelectItem value="fiscal">Fiscal</SelectItem>
                               </SelectContent>
                             </Select>
-                          </div>
+                          </FormField>
                         </div>
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="preferencias" className="mt-0 space-y-6">
-                      <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-accent p-4 text-sm text-primary">
-                        <Settings className="mt-0.5 h-5 w-5 shrink-0" />
-                        <p>
-                          Estas regras serão aplicadas <strong>automaticamente</strong> na sugestão de
-                          associação de peças e na expedição deste cliente.
-                        </p>
+                    <TabsContent value="preferencias" className="space-y-3">
+                      <div className="flex gap-2 rounded-md border border-primary-soft-border bg-info-soft px-3 py-2 text-xs text-info-fg">
+                        <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                        <span>
+                          Estas regras serão aplicadas <b>automaticamente</b> na sugestão de associação de
+                          peças e na expedição deste cliente.
+                        </span>
                       </div>
-                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                        <CampoTexto
-                          id="peso-minimo"
-                          label="Faixa de Peso Mínima (kg)"
-                          type="number"
-                          value={form.preferenciasJson.faixaPesoMin?.toString() ?? ''}
-                          onChange={(valor) => atualizarJson(
-                            'preferenciasJson',
-                            'faixaPesoMin',
-                            valor === '' ? undefined : Number(valor),
-                          )}
-                        />
-                        <CampoTexto
-                          id="peso-maximo"
-                          label="Faixa de Peso Máxima (kg)"
-                          type="number"
-                          value={form.preferenciasJson.faixaPesoMax?.toString() ?? ''}
-                          onChange={(valor) => atualizarJson(
-                            'preferenciasJson',
-                            'faixaPesoMax',
-                            valor === '' ? undefined : Number(valor),
-                          )}
-                        />
-                        <div className="space-y-2">
-                          <Label>Perfil de Gordura Aceito</Label>
+                      <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                        <FormField label="Faixa de Peso Mínima (kg)" htmlFor="peso-minimo">
+                          <Input
+                            id="peso-minimo"
+                            type="number"
+                            adornRight="kg"
+                            value={form.preferenciasJson.faixaPesoMin?.toString() ?? ''}
+                            onChange={(event) => atualizarJson(
+                              'preferenciasJson',
+                              'faixaPesoMin',
+                              event.target.value === '' ? undefined : Number(event.target.value),
+                            )}
+                          />
+                        </FormField>
+                        <FormField label="Faixa de Peso Máxima (kg)" htmlFor="peso-maximo">
+                          <Input
+                            id="peso-maximo"
+                            type="number"
+                            adornRight="kg"
+                            value={form.preferenciasJson.faixaPesoMax?.toString() ?? ''}
+                            onChange={(event) => atualizarJson(
+                              'preferenciasJson',
+                              'faixaPesoMax',
+                              event.target.value === '' ? undefined : Number(event.target.value),
+                            )}
+                          />
+                        </FormField>
+                        <FormField label="Perfil de Gordura Aceito" htmlFor="perfil-gordura">
                           <Select
                             value={form.preferenciasJson.perfilGordura ?? 'qualquer'}
                             disabled={!podeGerenciar}
                             onValueChange={(valor) => atualizarJson('preferenciasJson', 'perfilGordura', valor)}
                           >
-                            <SelectTrigger aria-label="Perfil de Gordura Aceito">
+                            <SelectTrigger id="perfil-gordura" aria-label="Perfil de Gordura Aceito">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -697,10 +666,9 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                               <SelectItem value="alta">Alta</SelectItem>
                             </SelectContent>
                           </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Necessita Corte de Acerto?</Label>
-                          <div className="flex h-10 items-center gap-2">
+                        </FormField>
+                        <FormField label="Necessita Corte de Acerto?" htmlFor="necessita-corte">
+                          <div className="flex h-8 items-center gap-2">
                             <Switch
                               id="necessita-corte"
                               checked={form.preferenciasJson.necessitaCorteAcerto === true}
@@ -711,19 +679,19 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                                 valor,
                               )}
                             />
-                            <Label htmlFor="necessita-corte" className="font-normal text-muted-foreground">
+                            <Label htmlFor="necessita-corte" className="font-normal normal-case text-muted-foreground">
                               Sim, enviar para mesa de corte
                             </Label>
                           </div>
-                        </div>
+                        </FormField>
                       </div>
                     </TabsContent>
-                  </div>
+                  </CardContent>
                 </Tabs>
               </form>
             </>
           )}
-        </section>
+        </Card>
       </div>
     </div>
   );
