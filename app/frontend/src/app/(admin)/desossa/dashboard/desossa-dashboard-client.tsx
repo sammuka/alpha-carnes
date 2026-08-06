@@ -3,10 +3,25 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Eye, Info, RefreshCw, Scissors, Tv, X } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
+import { PageHeader } from '@/components/ui/page-header';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableCellCode,
+  TableCellNum,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { conectarRealtime } from '@/lib/realtime';
 import type { PainelDesossa, PecaElegivelDesossa } from '@/lib/desossa';
 
@@ -17,6 +32,12 @@ const EVENTOS_REFETCH = new Set([
   'subitem_associado',
   'corte_concluido',
 ]);
+
+function prioridadeVariant(prioridade: string): StatusPillVariant {
+  if (prioridade === 'Alta') return 'bloqueado';
+  if (prioridade === 'Média') return 'pendente';
+  return 'recebido';
+}
 
 function TVMode({
   itens,
@@ -222,7 +243,7 @@ function DrawerRegra({
               <p className="mt-0.5 text-[13px] font-semibold">{regra.impacto}</p>
             </div>
           </div>
-          {regra.provisorio ? <BadgeProvisorio pendencia="P12" /> : null}
+          {regra.provisorio ? <BadgeProvisorio codigo="P12" /> : null}
         </div>
         <div className="flex-shrink-0 border-t border-border px-6 py-4">
           <button
@@ -392,7 +413,7 @@ export function DesossaDashboardClient() {
 
   if (!painel) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         {erro ? <p className="text-sm text-destructive">{erro}</p> : null}
         <p className="text-sm text-muted-foreground">
           {carregando ? 'Carregando painel…' : 'Sem dados'}
@@ -402,271 +423,257 @@ export function DesossaDashboardClient() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Desossa
-          </p>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Painel de Necessidade</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            O que falta produzir para completar os pedidos do dia.
-          </p>
-          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${wsStatus === 'conectado' ? 'bg-[var(--color-status-expedido)]' : 'animate-pulse bg-primary'}`}
-              aria-hidden="true"
-            />
-            <span>Atualização por eventos em tempo real ({wsStatus})</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => void carregar()} disabled={carregando}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${carregando ? 'animate-spin' : ''}`} />
-            Atualizar
-          </Button>
-          <Button variant="outline" size="sm" type="button" onClick={() => setModoTV(true)}>
-            <Tv className="mr-2 h-3.5 w-3.5" /> Modo TV
-          </Button>
-          <Button asChild size="sm">
-            <Link href="/desossa/pesagem-destinacao">
-              <Scissors className="mr-2 h-4 w-4" />
-              Pesagem e Destinação
-            </Link>
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-3">
+      <PageHeader
+        title="Painel de Necessidade"
+        subtitle="O que falta produzir para completar os pedidos do dia."
+        live={wsStatus === 'conectado'}
+      >
+        <Button variant="secondary" size="sm" onClick={() => void carregar()} disabled={carregando}>
+          <RefreshCw className={carregando ? 'animate-spin' : ''} />
+          Atualizar
+        </Button>
+        <Button variant="secondary" size="sm" type="button" onClick={() => setModoTV(true)}>
+          <Tv /> Modo TV
+        </Button>
+        <Button asChild size="sm">
+          <Link href="/desossa/pesagem-destinacao">
+            <Scissors />
+            Pesagem e Destinação
+          </Link>
+        </Button>
+      </PageHeader>
 
       {erro ? <p className="text-sm text-destructive">{erro}</p> : null}
 
-      <div className="grid grid-cols-5 gap-3">
-        {[
-          { label: 'Itens faltantes', value: painel.totais.itensFaltantes, color: 'text-destructive' },
-          {
-            label: 'Prontos em estoque',
-            value: painel.totais.prontoEstoque,
-            color: 'text-success-strong',
-          },
-          { label: 'TZs na desossa', value: painel.totais.tzsNaDesossa, color: 'text-info-ink' },
-          { label: 'Regras sugeridas', value: painel.regras.length, color: 'text-violet-700' },
-          {
-            label: 'Prioridade alta',
-            value: painel.itens.filter((i) => i.prioridade === 'Alta').length,
-            color: 'text-warning-ink',
-          },
-        ].map((k) => (
-          <div key={k.label} className="rounded-xl border border-border bg-card px-4 py-3.5">
-            <p className="mb-1 text-[11px] font-medium text-muted-foreground">{k.label}</p>
-            <p className={`text-[32px] font-black leading-none ${k.color}`}>{k.value}</p>
-          </div>
-        ))}
-      </div>
+      <KpiStrip>
+        <Kpi label="Itens faltantes" value={painel.totais.itensFaltantes} tone="alert" />
+        <Kpi label="Prontos em estoque" value={painel.totais.prontoEstoque} tone="ok" />
+        <Kpi label="TZs na desossa" value={painel.totais.tzsNaDesossa} tone="default" />
+        <Kpi label="Regras sugeridas" value={painel.regras.length} tone="default" />
+        <Kpi
+          label="Prioridade alta"
+          value={painel.itens.filter((i) => i.prioridade === 'Alta').length}
+          tone="danger"
+        />
+      </KpiStrip>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="border-b border-border px-5 py-3.5">
-          <h2 className="text-[13px] font-bold text-foreground">Painel de Itens a Produzir</h2>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+      <Card>
+        <CardHeader className="h-auto flex-col items-start gap-0.5 py-2.5">
+          <div className="flex w-full items-center gap-2">
+            <CardTitle>Painel de Itens a Produzir</CardTitle>
+            <BadgeCount>{painel.itens.length}</BadgeCount>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
             Lista orientativa dos produtos que faltam para pedidos e cargas. Não representa produção
             em andamento.
           </p>
-        </div>
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              {[
-                'Prior.',
-                'Produto',
-                'Faltam',
-                'Estoque pronto',
-                'A produzir',
-                'Origem',
-                'Rota / Carga',
-                'Representante',
-                'Alvo',
-                'Status',
-                '',
-              ].map((h) => (
-                <th
-                  key={h || 'acoes'}
-                  className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {painel.itens.map((item) => (
-              <tr key={item.produtoId} className="border-b border-border/60">
-                <td className="px-3 py-2.5">{item.prioridade}</td>
-                <td className="px-3 py-2.5 font-bold">{item.produtoNome}</td>
-                <td className="px-3 py-2.5 font-mono font-black">{item.faltam}</td>
-                <td className="px-3 py-2.5">{item.prontoEstoque || '—'}</td>
-                <td className="px-3 py-2.5 font-mono font-black">{item.aProduzir}</td>
-                <td className="px-3 py-2.5 font-semibold text-violet-700">{item.origem}</td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-muted-foreground">
-                  {item.rota ?? '—'}
-                </td>
-                <td className="max-w-[120px] truncate px-3 py-2.5 text-[11px] text-muted-foreground">
-                  {(item.representante ?? '—').split('/')[0]?.trim()}
-                </td>
-                <td className="px-3 py-2.5 font-mono text-[11px] font-bold">
-                  {item.horarioAlvo ?? '—'}
-                </td>
-                <td className="px-3 py-2.5">{item.status}</td>
-                <td className="px-3 py-2.5">
-                  <button type="button" title="Ver detalhes" onClick={() => setDrawerItem(item)}>
-                    <Eye className="h-3.5 w-3.5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {painel.itens.length === 0 ? (
+            <EmptyState title="Nenhum item faltante." className="border-none" />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Prior.</TableHead>
+                  <TableHead>Produto</TableHead>
+                  <TableHead className="text-right">Faltam</TableHead>
+                  <TableHead className="text-right">Estoque pronto</TableHead>
+                  <TableHead className="text-right">A produzir</TableHead>
+                  <TableHead>Origem</TableHead>
+                  <TableHead>Rota / Carga</TableHead>
+                  <TableHead>Representante</TableHead>
+                  <TableHead>Alvo</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {painel.itens.map((item) => (
+                  <TableRow key={item.produtoId} className="group">
+                    <TableCell>
+                      <StatusPill variant={prioridadeVariant(item.prioridade)} label={item.prioridade} />
+                    </TableCell>
+                    <TableCell className="text-[13px] font-semibold text-foreground">
+                      {item.produtoNome}
+                    </TableCell>
+                    <TableCellNum>{item.faltam}</TableCellNum>
+                    <TableCellNum>{item.prontoEstoque || '—'}</TableCellNum>
+                    <TableCellNum>{item.aProduzir}</TableCellNum>
+                    <TableCell className="text-violet-700">{item.origem}</TableCell>
+                    <TableCell className="text-muted-foreground">{item.rota ?? '—'}</TableCell>
+                    <TableCell className="max-w-[120px] truncate text-muted-foreground">
+                      {(item.representante ?? '—').split('/')[0]?.trim()}
+                    </TableCell>
+                    <TableCellCode>{item.horarioAlvo ?? '—'}</TableCellCode>
+                    <TableCell>{item.status}</TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Button
+                          variant="ghost"
+                          size="iconSm"
+                          aria-label="Ver detalhes"
+                          onClick={() => setDrawerItem(item)}
+                        >
+                          <Eye />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="border-b border-border px-5 py-3.5">
-          <h2 className="text-[13px] font-bold text-foreground">Sugestão por Regra de Transformação</h2>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+      <Card>
+        <CardHeader className="h-auto flex-col items-start gap-0.5 py-2.5">
+          <div className="flex w-full items-center gap-2">
+            <CardTitle>Sugestão por Regra de Transformação</CardTitle>
+            <BadgeCount>{painel.regras.length}</BadgeCount>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
             Agrupamento orientativo para evitar leitura duplicada de produtos que compartilham o
             mesmo TZ.
           </p>
-        </div>
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              {[
-                'Prior.',
-                'Regra sugerida',
-                'TZs estimados',
-                'Saídas esperadas',
-                'Atende',
-                'Sobras previstas',
-                'Impacto',
-                'Status',
-                '',
-              ].map((h) => (
-                <th
-                  key={h || 'acoes-regra'}
-                  className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {painel.regras.map((r) => (
-              <tr key={r.regraId} className="border-b border-border/60">
-                <td className="px-3 py-2.5">{r.prioridade}</td>
-                <td className="px-3 py-2.5 font-bold text-violet-700">
-                  {r.nome}
-                  {r.provisorio ? (
-                    <Badge
-                      variant="outline"
-                      className="ml-2"
-                      title="P12 / v1.1 §16.15 — validar com cliente"
-                    >
-                      Provisório
-                    </Badge>
-                  ) : null}
-                </td>
-                <td className="px-3 py-2.5 font-mono font-black">{r.tzsEstimados}</td>
-                <td className="px-3 py-2.5">{r.saidasEsperadas}</td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-muted-foreground">
-                  {r.atende}
-                </td>
-                <td className="px-3 py-2.5 text-[11px] text-muted-foreground">{r.sobras}</td>
-                <td className="max-w-[160px] truncate px-3 py-2.5 text-[11px] text-muted-foreground">
-                  {r.impacto}
-                </td>
-                <td className="px-3 py-2.5">{r.status}</td>
-                <td className="px-3 py-2.5">
-                  <button type="button" onClick={() => setDrawerRegra(r)}>
-                    <Eye className="h-3.5 w-3.5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {painel.regras.length === 0 ? (
+            <EmptyState title="Nenhuma regra sugerida." className="border-none" />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Prior.</TableHead>
+                  <TableHead>Regra sugerida</TableHead>
+                  <TableHead className="text-right">TZs estimados</TableHead>
+                  <TableHead>Saídas esperadas</TableHead>
+                  <TableHead>Atende</TableHead>
+                  <TableHead>Sobras previstas</TableHead>
+                  <TableHead>Impacto</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {painel.regras.map((r) => (
+                  <TableRow key={r.regraId} className="group">
+                    <TableCell>
+                      <StatusPill variant={prioridadeVariant(r.prioridade)} label={r.prioridade} />
+                    </TableCell>
+                    <TableCell className="font-bold text-violet-700">
+                      <span className="inline-flex items-center gap-2">
+                        {r.nome}
+                        {r.provisorio ? <BadgeProvisorio codigo="P12" /> : null}
+                      </span>
+                    </TableCell>
+                    <TableCellNum>{r.tzsEstimados}</TableCellNum>
+                    <TableCell>{r.saidasEsperadas}</TableCell>
+                    <TableCell className="text-muted-foreground">{r.atende}</TableCell>
+                    <TableCell className="text-muted-foreground">{r.sobras}</TableCell>
+                    <TableCell className="max-w-[160px] truncate text-muted-foreground">
+                      {r.impacto}
+                    </TableCell>
+                    <TableCell>{r.status}</TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Button
+                          variant="ghost"
+                          size="iconSm"
+                          aria-label="Ver detalhes"
+                          onClick={() => setDrawerRegra(r)}
+                        >
+                          <Eye />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="border-b border-border px-5 py-3.5">
-          <h2 className="text-[13px] font-bold text-foreground">TZs disponíveis para desossa</h2>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+      <Card>
+        <CardHeader className="h-auto flex-col items-start gap-0.5 py-2.5">
+          <div className="flex w-full items-center gap-2">
+            <CardTitle>TZs disponíveis para desossa</CardTitle>
+            <BadgeCount>{tzs.length}</BadgeCount>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
             Peças encaminhadas pela balança ou disponíveis para transformação.
           </p>
-        </div>
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              {['Peça', 'Peso', 'Lote', 'Origem', 'Entrada', 'Características', 'Situação', 'Obs.', ''].map(
-                (h) => (
-                  <th
-                    key={h || 'acoes-tz'}
-                    className="whitespace-nowrap px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
-                  >
-                    {h}
-                  </th>
-                ),
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {tzs.map((tz) => (
-              <tr key={tz.pecaId} className="border-b border-border/60 hover:bg-muted/20">
-                <td className="px-3 py-2.5 font-mono text-[11px] font-bold">
-                  {tz.etiquetaAtual ?? tz.pecaId}
-                </td>
-                <td className="px-3 py-2.5 font-mono text-muted-foreground">
-                  {tz.pesoOriginal
-                    ? `${Number(tz.pesoOriginal).toFixed(3).replace('.', ',')} kg`
-                    : '—'}
-                </td>
-                <td className="px-3 py-2.5 text-muted-foreground">{tz.lote ?? '—'}</td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-muted-foreground">
-                  {(tz.origem ?? '—').replace(/^Frigorífico\s+/i, '')}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-[11px] text-muted-foreground">
-                  {tz.entrada ?? '—'}
-                </td>
-                <td className="px-3 py-2.5 text-[11px] text-muted-foreground">
-                  {tz.caracteristicas || '—'}
-                </td>
-                <td className="px-3 py-2.5">
-                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold">{tz.situacao}</span>
-                </td>
-                <td className="max-w-[140px] truncate px-3 py-2.5 text-[11px] text-muted-foreground">
-                  {tz.obs ?? '—'}
-                </td>
-                <td className="px-3 py-2.5">
-                  <button
-                    type="button"
-                    title="Ver detalhes"
-                    onClick={() =>
-                      setDrawerTZ({
-                        peca: tz.etiquetaAtual ?? tz.pecaId,
-                        peso: tz.pesoOriginal,
-                        lote: tz.lote,
-                        origem: tz.origem,
-                        entrada: tz.entrada,
-                        situacao: tz.situacao,
-                        caracteristicas: tz.caracteristicas,
-                        obs: tz.obs,
-                      })
-                    }
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {tzs.length === 0 ? (
+            <EmptyState title="Nenhum TZ disponível para desossa." className="border-none" />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Peça</TableHead>
+                  <TableHead className="text-right">Peso</TableHead>
+                  <TableHead>Lote</TableHead>
+                  <TableHead>Origem</TableHead>
+                  <TableHead>Entrada</TableHead>
+                  <TableHead>Características</TableHead>
+                  <TableHead>Situação</TableHead>
+                  <TableHead>Obs.</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tzs.map((tz) => (
+                  <TableRow key={tz.pecaId} className="group">
+                    <TableCellCode>{tz.etiquetaAtual ?? tz.pecaId}</TableCellCode>
+                    <TableCellNum>
+                      {tz.pesoOriginal
+                        ? `${Number(tz.pesoOriginal).toFixed(3).replace('.', ',')} kg`
+                        : '—'}
+                    </TableCellNum>
+                    <TableCell className="text-muted-foreground">{tz.lote ?? '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {(tz.origem ?? '—').replace(/^Frigorífico\s+/i, '')}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{tz.entrada ?? '—'}</TableCell>
+                    <TableCell className="text-muted-foreground">{tz.caracteristicas || '—'}</TableCell>
+                    <TableCell>{tz.situacao}</TableCell>
+                    <TableCell className="max-w-[140px] truncate text-muted-foreground">
+                      {tz.obs ?? '—'}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Button
+                          variant="ghost"
+                          size="iconSm"
+                          aria-label="Ver detalhes"
+                          onClick={() =>
+                            setDrawerTZ({
+                              peca: tz.etiquetaAtual ?? tz.pecaId,
+                              peso: tz.pesoOriginal,
+                              lote: tz.lote,
+                              origem: tz.origem,
+                              entrada: tz.entrada,
+                              situacao: tz.situacao,
+                              caracteristicas: tz.caracteristicas,
+                              obs: tz.obs,
+                            })
+                          }
+                        >
+                          <Eye />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       {modoTV ? (
         <TVMode

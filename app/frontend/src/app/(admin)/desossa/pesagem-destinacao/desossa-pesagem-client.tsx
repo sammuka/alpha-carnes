@@ -1,31 +1,31 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Beef, ClipboardList, Printer } from 'lucide-react';
+import { Beef, ClipboardList, Printer } from 'lucide-react';
+import { SeletorOperacao } from '@/components/gestao/seletor-operacao';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
+import { FilterChip } from '@/components/ui/filter-chip';
+import { FormField } from '@/components/ui/form-field';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/cn';
 import type {
   ChecklistResponse,
   PecaElegivelDesossa,
   RegraTransformacao,
 } from '@/lib/desossa';
-
-function BadgeProvisorioLocal({ texto }: { texto?: string }) {
-  return (
-    <span
-      className="inline-flex items-center gap-1 rounded-full border border-warning-border bg-warning-surface px-2 py-0.5 text-[10px] font-bold text-warning-ink"
-      title="P12 / v1.1 §16.15 — validar com cliente"
-    >
-      <AlertTriangle className="h-2.5 w-2.5" /> {texto ?? 'Provisório'}
-    </span>
-  );
-}
 
 function ModalSelecionarTz({
   open,
@@ -46,20 +46,18 @@ function ModalSelecionarTz({
         if (!v) onClose();
       }}
     >
-      <DialogContent className="max-w-md gap-0 bg-card p-0">
-        <DialogHeader className="border-b border-border px-5 py-4">
-          <DialogTitle className="text-[15px] font-bold">Selecionar TZ para desossa</DialogTitle>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Selecionar TZ para desossa</DialogTitle>
         </DialogHeader>
-        <p className="px-5 pt-3 text-[12px] text-muted-foreground">
+        <p className="text-[12px] text-muted-foreground">
           Peças encaminhadas pela balança principal. Leia a etiqueta (QR) ou selecione manualmente.
         </p>
-        <div className="flex flex-col divide-y divide-border p-2">
-          {disponiveis.length === 0 ? (
-            <p className="py-8 text-center text-[13px] text-muted-foreground">
-              Nenhum TZ disponível para desossa.
-            </p>
-          ) : (
-            disponiveis.map((t) => (
+        {disponiveis.length === 0 ? (
+          <EmptyState title="Nenhum TZ disponível para desossa." />
+        ) : (
+          <div className="flex flex-col divide-y divide-border">
+            {disponiveis.map((t) => (
               <button
                 key={t.pecaId}
                 type="button"
@@ -70,18 +68,18 @@ function ModalSelecionarTz({
                 className="flex items-start justify-between rounded-lg px-3 py-3 text-left hover:bg-muted/40"
               >
                 <div>
-                  <p className="font-mono text-[13px] font-bold">{t.etiquetaAtual ?? t.pecaId}</p>
+                  <p className="font-data text-[13px] font-bold">{t.etiquetaAtual ?? t.pecaId}</p>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
                     {t.produtoCodigo ?? 'TZ'} · status {t.statusPeca}
                   </p>
                 </div>
-                <span className="mt-0.5 font-mono text-[13px] font-bold">
+                <span className="mt-0.5 font-data text-[13px] font-bold">
                   {t.pesoOriginal ? `${t.pesoOriginal} kg` : '—'}
                 </span>
               </button>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -111,61 +109,59 @@ function ModalEtiquetaParte({
   const tipoEtq = data.destino === 'pedido' ? 'Parte para Pedido' : 'Parte para Estoque';
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-sm gap-0 bg-card p-0">
-        <DialogHeader className="border-b border-border px-5 py-4">
-          <DialogTitle className="text-[15px] font-bold">Etiqueta gerada</DialogTitle>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Etiqueta gerada</DialogTitle>
         </DialogHeader>
-        <div className="p-5">
-          <div className="rounded-xl border-2 border-violet-600 bg-violet-surface p-4 font-mono">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{tipoEtq}</p>
-            <p className="text-[18px] font-black text-violet-900">{data.produto}</p>
-            <p className="text-[11px] text-violet-700">Origem: desossa</p>
-            <div className="mt-3 grid grid-cols-2 gap-y-1.5 border-t border-dashed border-violet-200 pt-3 text-[11px]">
-              <div>
-                <span className="text-muted-foreground">Peso: </span>
-                <span className="font-bold">{data.peso} kg</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Origem peso: </span>
-                <span>{data.origemPeso}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Destino: </span>
-                <span className="font-bold">{data.destino}</span>
-              </div>
-              {data.pedido ? (
-                <div className="col-span-2">
-                  <span className="text-muted-foreground">Pedido: </span>
-                  <span className="font-bold">{data.pedido}</span>
-                </div>
-              ) : null}
-              <div className="col-span-2">
-                <span className="text-muted-foreground">Peça mãe (TZ): </span>
-                <span className="font-bold text-violet-800">{data.tzOrigem}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Lote: </span>
-                <span>{data.lote ?? '—'}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">NF-e: </span>
-                <span>{data.nfe ?? '—'}</span>
-              </div>
-              <div className="col-span-2">
-                <span className="text-muted-foreground">Frigorífico: </span>
-                <span>{data.fornecedor ?? '—'}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-2 px-5 pb-5">
-          <button type="button" className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border border-border text-[13px]">
-            <Printer className="h-3.5 w-3.5" /> Reimprimir
-          </button>
-          <button type="button" onClick={onClose} className="h-8 flex-1 rounded-md bg-violet-800 text-[13px] font-semibold text-white">
-            Fechar
-          </button>
-        </div>
+        <pre className="rounded-md bg-surface-2 p-4 font-data text-[11px] leading-relaxed">
+          <span className="block text-[10px] uppercase tracking-widest text-muted-foreground">
+            {tipoEtq}
+          </span>
+          <span className="mt-1 block text-[18px] font-black text-violet-900">{data.produto}</span>
+          <span className="block text-violet-700">Origem: desossa</span>
+          <span className="mt-3 grid grid-cols-2 gap-y-1.5 border-t border-dashed border-violet-200 pt-3">
+            <span className="block">
+              <span className="text-muted-foreground">Peso: </span>
+              <span className="font-bold">{data.peso} kg</span>
+            </span>
+            <span className="block">
+              <span className="text-muted-foreground">Origem peso: </span>
+              <span>{data.origemPeso}</span>
+            </span>
+            <span className="block">
+              <span className="text-muted-foreground">Destino: </span>
+              <span className="font-bold">{data.destino}</span>
+            </span>
+            {data.pedido ? (
+              <span className="col-span-2 block">
+                <span className="text-muted-foreground">Pedido: </span>
+                <span className="font-bold">{data.pedido}</span>
+              </span>
+            ) : null}
+            <span className="col-span-2 block">
+              <span className="text-muted-foreground">Peça mãe (TZ): </span>
+              <span className="font-bold text-violet-800">{data.tzOrigem}</span>
+            </span>
+            <span className="block">
+              <span className="text-muted-foreground">Lote: </span>
+              <span>{data.lote ?? '—'}</span>
+            </span>
+            <span className="block">
+              <span className="text-muted-foreground">NF-e: </span>
+              <span>{data.nfe ?? '—'}</span>
+            </span>
+            <span className="col-span-2 block">
+              <span className="text-muted-foreground">Frigorífico: </span>
+              <span>{data.fornecedor ?? '—'}</span>
+            </span>
+          </span>
+        </pre>
+        <DialogFooter>
+          <Button variant="secondary">
+            <Printer /> Reimprimir
+          </Button>
+          <Button onClick={onClose}>Fechar</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -194,92 +190,82 @@ function ModalCancelarAcao({
   if (!acao) return null;
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-md gap-0 bg-card p-0">
-        <DialogHeader className="border-b border-border px-5 py-4">
-          <DialogTitle className="text-[15px] font-bold">Cancelar registro de parte</DialogTitle>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cancelar registro de parte</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4 p-5">
-          <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-muted/40 p-3 text-[12px]">
-            <div>
-              <span className="text-muted-foreground">Produto: </span>
-              <span className="font-semibold">{acao.produto}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Peso: </span>
-              <span className="font-semibold">{acao.peso}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Destino: </span>
-              <span className="font-semibold">{acao.destino}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Hora: </span>
-              <span className="font-semibold">{acao.hora}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Etiqueta: </span>
-              <span className="font-semibold">{acao.etiqueta}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Peça mãe: </span>
-              <span className="font-semibold text-violet-800">{acao.tzOrigem}</span>
-            </div>
+        <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-muted/40 p-3 text-[12px]">
+          <div>
+            <span className="text-muted-foreground">Produto: </span>
+            <span className="font-semibold">{acao.produto}</span>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[12px] font-semibold">
-              Motivo do cancelamento <span className="text-destructive">*</span>
-            </label>
-            <select
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              className="h-8 w-full rounded-md border border-border px-2.5 text-[13px]"
-            >
-              <option value="">Selecione o motivo</option>
-              {[
-                'Peso informado incorretamente',
-                'Produto registrado incorretamente',
-                'Pedido selecionado incorretamente',
-                'Destino selecionado incorretamente',
-                'Etiqueta impressa incorretamente',
-                'Outro',
-              ].map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
+          <div>
+            <span className="text-muted-foreground">Peso: </span>
+            <span className="font-semibold">{acao.peso}</span>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[12px] font-semibold">Observação</label>
-            <textarea
-              value={obs}
-              onChange={(e) => setObs(e.target.value)}
-              rows={2}
-              className="w-full resize-none rounded-md border border-border px-2.5 py-2 text-[13px]"
-            />
+          <div>
+            <span className="text-muted-foreground">Destino: </span>
+            <span className="font-semibold">{acao.destino}</span>
           </div>
-          <div className="flex items-start gap-2 rounded-lg border border-danger-border bg-danger-surface p-3">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
-            <p className="text-[12px] text-danger-rose leading-snug">
-              O cancelamento estorna a associação/destino da parte, invalida a etiqueta anterior e
-              devolve a saída ao checklist da transformação.
-            </p>
+          <div>
+            <span className="text-muted-foreground">Hora: </span>
+            <span className="font-semibold">{acao.hora}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Etiqueta: </span>
+            <span className="font-semibold">{acao.etiqueta}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Peça mãe: </span>
+            <span className="font-semibold text-violet-800">{acao.tzOrigem}</span>
           </div>
         </div>
-        <div className="flex gap-2 px-5 pb-5">
-          <button type="button" onClick={onClose} className="h-8 flex-1 rounded-md border border-border text-[13px]">
+        <FormField label="Motivo do cancelamento" required htmlFor="motivo-cancelar-acao-desossa">
+          <SelectNative
+            id="motivo-cancelar-acao-desossa"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+          >
+            <option value="">Selecione o motivo</option>
+            {[
+              'Peso informado incorretamente',
+              'Produto registrado incorretamente',
+              'Pedido selecionado incorretamente',
+              'Destino selecionado incorretamente',
+              'Etiqueta impressa incorretamente',
+              'Outro',
+            ].map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </SelectNative>
+        </FormField>
+        <FormField label="Observação" htmlFor="obs-cancelar-acao-desossa">
+          <Textarea
+            id="obs-cancelar-acao-desossa"
+            value={obs}
+            onChange={(e) => setObs(e.target.value)}
+            rows={2}
+          />
+        </FormField>
+        <p className="text-[12px] text-danger-fg">
+          O cancelamento estorna a associação/destino da parte, invalida a etiqueta anterior e
+          devolve a saída ao checklist da transformação.
+        </p>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
             Voltar
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="destructive"
             disabled={!motivo}
             onClick={() => {
               onConfirm(motivo, obs);
               onClose();
             }}
-            className="h-8 flex-1 rounded-md bg-destructive text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             Confirmar Cancelamento
-          </button>
-        </div>
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -403,108 +389,90 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
   const registradas = checklist?.slots.filter((s) => s.registrado > 0).length ?? 0;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          Desossa
-        </p>
-        <h1 className="text-3xl font-bold tracking-tight">Pesagem e Destinação</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Escolha o TZ, vincule a regra A/B e registre as saídas da transformação.
-        </p>
-      </div>
+    <div className="space-y-3">
+      <PageHeader
+        title="Pesagem e Destinação"
+        subtitle="Escolha o TZ, vincule a regra A/B e registre as saídas da transformação."
+      >
+        <SeletorOperacao />
+      </PageHeader>
 
       {erro ? <p className="text-sm text-destructive">{erro}</p> : null}
 
-      <div className="rounded-xl border border-border bg-card p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              TZ origem
-            </p>
-            <p className="mt-1 font-mono text-[15px] font-bold">
-              {tz?.etiquetaAtual ?? 'Nenhum TZ selecionado'}
-            </p>
+      <Card>
+        <CardContent className="space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                TZ origem
+              </p>
+              <p className="mt-1 font-data text-[15px] font-bold">
+                {tz?.etiquetaAtual ?? 'Nenhum TZ selecionado'}
+              </p>
+            </div>
+            <Button type="button" onClick={() => setModalTz(true)}>
+              Selecionar TZ
+            </Button>
           </div>
-          <Button type="button" onClick={() => setModalTz(true)}>
-            Selecionar TZ
-          </Button>
-        </div>
 
-        {tz ? (
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-2.5">
-            <span className="mr-1 whitespace-nowrap text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              Regra de transformação:
-            </span>
-            {regras.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                disabled={regraBloqueada && regraId !== r.id}
-                onClick={() => void vincularRegra(r.id)}
-                title={
-                  regraBloqueada && regraId !== r.id
-                    ? 'A regra não pode ser alterada após registrar a primeira saída. Cancele os registros para trocar.'
-                    : undefined
-                }
-                className={`h-7 whitespace-nowrap rounded-md border px-3 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${
-                  regraId === r.id
-                    ? 'border-violet-800 bg-violet-800 text-white'
-                    : 'border-border bg-card text-muted-foreground'
-                }`}
-              >
-                {r.nome}
-              </button>
-            ))}
-            <BadgeProvisorioLocal texto="Regras provisórias — validar com cliente" />
-            <BadgeProvisorio pendencia="P12" />
-          </div>
-        ) : null}
-      </div>
+          {tz ? (
+            <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2.5">
+              <span className="mr-1 whitespace-nowrap text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                Regra de transformação:
+              </span>
+              {regras.map((r) => (
+                <FilterChip
+                  key={r.id}
+                  active={regraId === r.id}
+                  disabled={regraBloqueada && regraId !== r.id}
+                  onClick={() => void vincularRegra(r.id)}
+                  title={
+                    regraBloqueada && regraId !== r.id
+                      ? 'A regra não pode ser alterada após registrar a primeira saída. Cancele os registros para trocar.'
+                      : undefined
+                  }
+                >
+                  {r.nome}
+                </FilterChip>
+              ))}
+              <BadgeProvisorio codigo="P12" texto="Regras provisórias — validar com cliente" />
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {/* Empty states — DesossaPesagem.tsx:604-624 (protótipo feature/completude-v1.1) */}
       {!tz ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card py-16">
-          <Beef className="h-10 w-10 text-violet-200" aria-hidden="true" />
-          <p className="text-[15px] font-semibold text-slate-600">
-            Selecione ou leia a etiqueta de um TZ encaminhado à desossa
-          </p>
-          <p className="text-[13px] text-muted-foreground">
-            As peças enviadas pela balança principal aparecem na lista de seleção.
-          </p>
-          <button
-            type="button"
-            onClick={() => setModalTz(true)}
-            className="mt-2 h-9 rounded-lg bg-violet-800 px-5 text-[13px] font-semibold text-white hover:bg-violet-700"
-          >
-            Selecionar TZ
-          </button>
-        </div>
+        <EmptyState
+          icon={<Beef />}
+          title="Selecione ou leia a etiqueta de um TZ encaminhado à desossa"
+          description="As peças enviadas pela balança principal aparecem na lista de seleção."
+          action={
+            <Button type="button" onClick={() => setModalTz(true)}>
+              Selecionar TZ
+            </Button>
+          }
+          className="py-16"
+        />
       ) : !regraId || !checklist ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card py-16">
-          <ClipboardList className="h-10 w-10 text-violet-200" aria-hidden="true" />
-          <p className="text-[15px] font-semibold text-slate-600">
-            Escolha a regra de transformação para o{' '}
-            {tz.etiquetaAtual ?? tz.pecaId}
-          </p>
-          <p className="max-w-md text-center text-[13px] text-muted-foreground">
-            A regra define as saídas esperadas (quantidade fixa; peso variável capturado aqui). A
-            definição é obrigatória antes de registrar as partes.
-          </p>
-        </div>
+        <EmptyState
+          icon={<ClipboardList />}
+          title={`Escolha a regra de transformação para o ${tz.etiquetaAtual ?? tz.pecaId}`}
+          description="A regra define as saídas esperadas (quantidade fixa; peso variável capturado aqui). A definição é obrigatória antes de registrar as partes."
+          className="py-16"
+        />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <div>
-              <p className="text-[12px] font-bold">Saídas da regra</p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                {registradas} de {checklist.slots.length} registradas
-              </p>
-            </div>
-            <div className="flex gap-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Saídas da regra</CardTitle>
+            <BadgeCount>
+              {registradas}/{checklist.slots.length}
+            </BadgeCount>
+            <div className="ml-auto flex gap-2">
               <Button
                 type="button"
-                variant="outline"
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   const slot = checklist.slots.find((s) => s.registrado > 0) ?? checklist.slots[0];
                   if (!slot) return;
@@ -524,12 +492,12 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
               >
                 Cancelar ação
               </Button>
-              <Button type="button" onClick={() => setModalFinalizar(true)}>
+              <Button type="button" size="sm" onClick={() => setModalFinalizar(true)}>
                 Finalizar
               </Button>
             </div>
-          </div>
-          <div className="flex flex-col gap-2 p-3">
+          </CardHeader>
+          <CardContent className="flex flex-col gap-1.5">
             {checklist.slots.map((s) => (
               <button
                 key={s.produtoId}
@@ -549,7 +517,12 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
                     fornecedor: tz?.origem ?? null,
                   })
                 }
-                className="rounded-lg border border-border px-3 py-2 text-left hover:bg-muted/30 disabled:opacity-50"
+                className={cn(
+                  'rounded-md border px-3 py-2 text-left transition-colors duration-100 disabled:cursor-not-allowed disabled:opacity-60',
+                  s.registrado > 0
+                    ? 'border-success-soft-border bg-success-soft'
+                    : 'border-border hover:bg-surface-2',
+                )}
               >
                 <p className="text-[12px] font-bold">{s.produtoNome}</p>
                 <p className="text-[10px] text-muted-foreground">
@@ -557,8 +530,8 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
                 </p>
               </button>
             ))}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       <ModalSelecionarTz
@@ -593,21 +566,20 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
                 <p className="text-sm text-muted-foreground">
                   Checklist divergente — registre o tipo antes de concluir.
                 </p>
-                <select
+                <SelectNative
                   value={tipoDiv}
                   onChange={(e) => setTipoDiv(e.target.value)}
-                  className="h-9 w-full rounded-md border border-border px-2 text-sm"
                 >
                   <option value="subpeca_faltante">Subpeça faltante</option>
                   <option value="subpeca_excedente">Subpeça excedente</option>
                   <option value="produto_diferente">Produto diferente</option>
                   <option value="perda_informada">Perda informada</option>
-                </select>
-                <textarea
+                </SelectNative>
+                <Textarea
                   value={obsDiv}
                   onChange={(e) => setObsDiv(e.target.value)}
                   placeholder="Observação (ao menos 3 caracteres)"
-                  className="min-h-20 w-full rounded-md border border-border p-2 text-sm"
+                  className="min-h-20"
                 />
                 <Button
                   onClick={async () => {
