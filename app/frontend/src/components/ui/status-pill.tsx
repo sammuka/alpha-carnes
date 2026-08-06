@@ -8,40 +8,14 @@ export type StatusPillVariant =
   | 'bloqueado'
   | 'pendente';
 
-const VARIANT_STYLES: Record<
-  StatusPillVariant,
-  { text: string; bg: string; dot: string }
-> = {
-  recebido: {
-    text: 'var(--color-status-recebido)',
-    bg: 'var(--color-status-recebido-bg)',
-    dot: 'var(--color-status-recebido)',
-  },
-  pesado: {
-    text: 'var(--color-status-pesado)',
-    bg: 'var(--color-status-pesado-bg)',
-    dot: 'var(--color-status-pesado)',
-  },
-  expedido: {
-    text: 'var(--color-status-expedido)',
-    bg: 'var(--color-status-expedido-bg)',
-    dot: 'var(--color-status-expedido)',
-  },
-  divergencia: {
-    text: 'var(--color-status-divergencia)',
-    bg: 'var(--color-status-divergencia-bg)',
-    dot: 'var(--color-status-divergencia)',
-  },
-  bloqueado: {
-    text: 'var(--color-status-bloqueado)',
-    bg: 'var(--color-status-bloqueado-bg)',
-    dot: 'var(--color-status-bloqueado)',
-  },
-  pendente: {
-    text: 'var(--color-status-pendente)',
-    bg: 'var(--color-status-pendente-bg)',
-    dot: 'var(--color-status-pendente)',
-  },
+const VARIANT_CLASSES: Record<StatusPillVariant, string> = {
+  recebido: 'text-status-recebido bg-status-recebido-bg [--pill-dot:var(--color-status-recebido-dot)]',
+  pesado: 'text-status-pesado bg-status-pesado-bg [--pill-dot:var(--color-status-pesado-dot)]',
+  expedido: 'text-status-expedido bg-status-expedido-bg [--pill-dot:var(--color-status-expedido-dot)]',
+  divergencia:
+    'text-status-divergencia bg-status-divergencia-bg [--pill-dot:var(--color-status-divergencia-dot)]',
+  bloqueado: 'text-status-bloqueado bg-status-bloqueado-bg [--pill-dot:var(--color-status-bloqueado-dot)]',
+  pendente: 'text-status-pendente bg-status-pendente-bg [--pill-dot:var(--color-status-pendente-dot)]',
 };
 
 const VARIANT_LABELS: Record<StatusPillVariant, string> = {
@@ -60,19 +34,16 @@ interface StatusPillProps {
 }
 
 export function StatusPill({ variant, label, className }: StatusPillProps) {
-  const styles = VARIANT_STYLES[variant];
-
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold',
+        'inline-flex h-5 items-center gap-[5px] whitespace-nowrap rounded-full px-2 text-[11px] font-semibold',
+        VARIANT_CLASSES[variant],
         className,
       )}
-      style={{ color: styles.text, backgroundColor: styles.bg }}
     >
       <span
-        className="h-1.5 w-1.5 shrink-0 rounded-full"
-        style={{ backgroundColor: styles.dot }}
+        className="size-[5px] shrink-0 rounded-full bg-[var(--pill-dot)]"
         aria-hidden="true"
       />
       {label ?? VARIANT_LABELS[variant]}
