@@ -195,7 +195,7 @@ export default function DisponibilidadePage() {
       <Card>
         <CardContent className="flex items-center gap-2 px-3 py-2">
           <span className="text-xs font-semibold">Data operacional</span>
-          <DatePickerField value={dataOperacao} onChange={setDataOperacao} />
+          <DatePickerField id="data" value={dataOperacao} onChange={setDataOperacao} />
           <Button type="button" variant="secondary" size="sm" onClick={() => setBusca('')}>
             <Filter />
             Limpar filtros
