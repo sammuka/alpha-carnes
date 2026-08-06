@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { FormField } from '@/components/ui/form-field';
 import { Textarea } from '@/components/ui/textarea';
 
 interface ModalLiberarReservaProps {
@@ -43,17 +43,16 @@ export function ModalLiberarReserva({
             A ação cancela o rascunho {pedidoId}, libera suas reservas e fica registrada na auditoria.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="justificativa-reserva">Justificativa</Label>
+        <FormField label="Justificativa" required htmlFor="justificativa-reserva" help="Mínimo de 10 caracteres.">
           <Textarea
             id="justificativa-reserva"
             value={justificativa}
             onChange={(event) => setJustificativa(event.target.value)}
             placeholder="Mínimo de 10 caracteres"
           />
-        </div>
+        </FormField>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>
+          <Button type="button" variant="ghost" onClick={onCancel}>Cancelar</Button>
           <Button
             type="button"
             variant="destructive"

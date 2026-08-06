@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { FormField } from '@/components/ui/form-field';
 import { Textarea } from '@/components/ui/textarea';
 
 interface ModalAdendoProps {
@@ -48,27 +48,23 @@ export function ModalAdendo({
         <DialogHeader>
           <div className="flex items-center gap-2">
             <DialogTitle>Registrar adendo</DialogTitle>
-            <BadgeProvisorio pendencia="P5" texto="Provisório · P5" />
+            <BadgeProvisorio codigo="P5" />
           </div>
           <DialogDescription>
             Pedido {pedido.pedidoId} já aberto. Quantidade atual: {pedido.quantidadeAtual}.
             Adição solicitada: {quantidadeAdicionar}.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="motivo-adendo">Motivo do adendo</Label>
+        <FormField label="Motivo" required htmlFor="motivo-adendo" help="A política de preço em adendos permanece provisória até a decisão P5.">
           <Textarea
             id="motivo-adendo"
             value={motivo}
             onChange={(event) => setMotivo(event.target.value)}
             placeholder="Descreva a solicitação do cliente"
           />
-          <p className="text-xs text-muted-foreground">
-            A política de preço em adendos permanece provisória até a decisão P5.
-          </p>
-        </div>
+        </FormField>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>
+          <Button type="button" variant="ghost" onClick={onCancel}>Cancelar</Button>
           <Button
             type="button"
             disabled={pending || motivo.trim().length < 3}

@@ -11,8 +11,20 @@ import type {
 } from '@/lib/comercial';
 import { AlertItem } from '@/components/ui/alert-item';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { ComboboxField } from '@/components/ui/combobox-field';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { ModalAdendo } from './modal-adendo';
 import { ModalOverbooking } from './modal-overbooking';
@@ -132,6 +144,12 @@ export function PedidoEditor({
     ]);
     return produtos.filter((produto) => !ids.has(produto.id));
   }, [itensNovos, pedido, produtos]);
+
+  const itensCombobox = useMemo(() => clientes.map((cliente) => ({
+    id: cliente.id,
+    label: cliente.nomeFantasia || cliente.razaoSocial,
+    sublabel: cliente.codigo,
+  })), [clientes]);
 
   async function selecionarCliente(id: string) {
     setClienteId(id);
@@ -432,19 +450,16 @@ export function PedidoEditor({
   const itensRenderizados = pedido?.itens ?? [];
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label="Voltar para pedidos">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">{pedido ? 'Editar Pedido' : 'Novo Pedido'}</h1>
-            <p className="text-sm text-muted-foreground">
-              {pedido ? `Pedido ${pedido.id}` : 'Monte o pedido e confira as reservas antes de finalizar.'}
-            </p>
-          </div>
-        </div>
+    <div className="space-y-3">
+      <div className="mb-3 flex items-center gap-2">
+        <Button type="button" variant="ghost" size="icon" onClick={onBack} aria-label="Voltar para pedidos">
+          <ArrowLeft />
+        </Button>
+        <PageHeader
+          className="mb-0 flex-1"
+          title={pedido ? 'Editar Pedido' : 'Novo Pedido'}
+          subtitle={pedido ? `Pedido ${pedido.id}` : 'Monte o pedido e confira as reservas antes de finalizar.'}
+        />
       </div>
 
       {erro && (
@@ -456,117 +471,106 @@ export function PedidoEditor({
         />
       )}
 
-      <section className="grid gap-4 rounded-xl border bg-card p-5 md:grid-cols-2 lg:grid-cols-4">
-        <div className="space-y-2">
-          <Label htmlFor="pedido-cliente">Buscar cliente</Label>
-          <select
-            id="pedido-cliente"
-            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-            value={clienteId}
-            disabled={Boolean(pedido) || !podeGerenciar}
-            onChange={(event) => void selecionarCliente(event.target.value)}
-          >
-            <option value="">Selecione</option>
-            {clientes.map((cliente) => (
-              <option key={cliente.id} value={cliente.id}>
-                {cliente.nomeFantasia || cliente.razaoSocial}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="pedido-operacao">Operação</Label>
-          <select
-            id="pedido-operacao"
-            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-            value={compraProgramadaId}
-            disabled={Boolean(pedido) || !podeGerenciar}
-            onChange={(event) => setCompraProgramadaId(event.target.value)}
-          >
-            <option value="">Selecione</option>
-            {compras.map((compra) => (
-              <option key={compra.id} value={compra.id}>{compra.dataOperacao}</option>
-            ))}
-          </select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="pedido-representante">Representante</Label>
-          <Input
-            id="pedido-representante"
-            value={representante}
-            readOnly
-            placeholder="—"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="pedido-rota">Rota</Label>
-          <Input
-            id="pedido-rota"
-            value={rota}
-            onChange={(event) => setRota(event.target.value)}
-            readOnly={Boolean(pedido) || !podeGerenciar}
-            placeholder="—"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="pedido-prioridade">Prioridade</Label>
-          <Input
-            id="pedido-prioridade"
-            type="number"
-            min={0}
-            max={100}
-            value={prioridade}
-            readOnly={Boolean(pedido) || !podeGerenciar}
-            onChange={(event) => setPrioridade(event.target.value)}
-          />
-        </div>
-        <div className="space-y-2 md:col-span-2 lg:col-span-3">
-          <Label htmlFor="pedido-observacoes">Observações</Label>
-          <Textarea
-            id="pedido-observacoes"
-            value={observacoes}
-            readOnly={Boolean(pedido) || !podeGerenciar}
-            onChange={(event) => setObservacoes(event.target.value)}
-          />
-        </div>
-      </section>
+      <Card>
+        <CardContent className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 p-3 sm:grid-cols-2 xl:grid-cols-4">
+          <FormField label="Buscar cliente" htmlFor="pedido-cliente">
+            <ComboboxField
+              id="pedido-cliente"
+              items={itensCombobox}
+              value={clienteId}
+              onChange={(id) => void selecionarCliente(id)}
+              placeholder="Selecione"
+              searchPlaceholder="Buscar cliente..."
+              emptyText="Nenhum cliente encontrado."
+              disabled={Boolean(pedido) || !podeGerenciar}
+            />
+          </FormField>
+          <FormField label="Operação" htmlFor="pedido-operacao">
+            <SelectNative
+              id="pedido-operacao"
+              value={compraProgramadaId}
+              disabled={Boolean(pedido) || !podeGerenciar}
+              onChange={(event) => setCompraProgramadaId(event.target.value)}
+            >
+              <option value="">Selecione</option>
+              {compras.map((compra) => (
+                <option key={compra.id} value={compra.id}>{compra.dataOperacao}</option>
+              ))}
+            </SelectNative>
+          </FormField>
+          <FormField label="Representante" htmlFor="pedido-representante">
+            <Input
+              id="pedido-representante"
+              value={representante}
+              readOnly
+              placeholder="—"
+            />
+          </FormField>
+          <FormField label="Rota" htmlFor="pedido-rota">
+            <Input
+              id="pedido-rota"
+              value={rota}
+              onChange={(event) => setRota(event.target.value)}
+              readOnly={Boolean(pedido) || !podeGerenciar}
+              placeholder="—"
+            />
+          </FormField>
+          <FormField label="Prioridade" htmlFor="pedido-prioridade">
+            <Input
+              id="pedido-prioridade"
+              type="number"
+              min={0}
+              max={100}
+              className="w-full"
+              value={prioridade}
+              readOnly={Boolean(pedido) || !podeGerenciar}
+              onChange={(event) => setPrioridade(event.target.value)}
+            />
+          </FormField>
+          <FormField label="Observações" htmlFor="pedido-observacoes" className="xl:col-span-3">
+            <Textarea
+              id="pedido-observacoes"
+              value={observacoes}
+              readOnly={Boolean(pedido) || !podeGerenciar}
+              onChange={(event) => setObservacoes(event.target.value)}
+            />
+          </FormField>
+        </CardContent>
+      </Card>
 
-      <section className="space-y-4 rounded-xl border bg-card p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold">Itens do pedido</h2>
-            <p className="text-xs text-muted-foreground">A reserva é atualizada a cada ação da grade.</p>
-          </div>
-        </div>
-
+      <Card>
+        <CardHeader>
+          <CardTitle>Itens do pedido</CardTitle>
+          <CardDescription>A reserva é atualizada a cada ação da grade.</CardDescription>
+        </CardHeader>
         {itensRenderizados.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
-                  <th className="py-2">Produto</th>
-                  <th className="py-2">Origem</th>
-                  <th className="py-2">Quantidade</th>
-                  <th className="py-2 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Produto</TableHead>
+                  <TableHead>Origem</TableHead>
+                  <TableHead>Quantidade</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {itensRenderizados.map((item) => {
                   const produto = produtos.find((entry) => entry.id === item.itemComercialId);
                   const nome = item.itemComercial?.nome
                     ?? item.itemComercial?.descricao
                     ?? nomeProduto(produto);
                   return (
-                    <tr key={item.id} data-testid={`linha-${item.id}`} className="border-b last:border-0">
-                      <td className="py-3 font-medium">{nome}</td>
-                      <td className="py-3">{origemItem(item)}</td>
-                      <td className="py-3">
+                    <TableRow key={item.id} data-testid={`linha-${item.id}`} className="group">
+                      <TableCell className="text-[13px] font-semibold text-foreground">{nome}</TableCell>
+                      <TableCell className="text-muted-foreground">{origemItem(item)}</TableCell>
+                      <TableCell>
                         <Input
                           aria-label="Quantidade"
                           type="number"
                           min={0}
                           step="0.001"
-                          className="w-28"
+                          className="h-7 w-24 text-right font-data"
                           value={quantidades[item.id] ?? ''}
                           disabled={!podeGerenciar}
                           onChange={(event) => setQuantidades((atuais) => ({
@@ -574,12 +578,12 @@ export function PedidoEditor({
                             [item.id]: event.target.value,
                           }))}
                         />
-                      </td>
-                      <td className="py-3">
-                        <div className="flex justify-end gap-2">
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-0.5">
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="secondary"
                             size="sm"
                             disabled={!podeGerenciar || pendente}
                             onClick={() => void aplicarQuantidade(item)}
@@ -589,40 +593,40 @@ export function PedidoEditor({
                           <Button
                             type="button"
                             variant="ghost"
-                            size="icon"
+                            size="iconSm"
                             disabled={!podeGerenciar || pendente}
                             aria-label={`Remover ${nome}`}
                             onClick={() => void removerItem(item)}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 />
                           </Button>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </CardContent>
         )}
 
         {itensNovos.length > 0 && (
-          <ul className="divide-y rounded-lg border">
-            {itensNovos.map((item) => (
-              <li key={item.itemComercialId} className="flex items-center justify-between px-3 py-2 text-sm">
-                <span>{nomeProduto(produtos.find((produto) => produto.id === item.itemComercialId))}</span>
-                <span>{item.quantidadePedida}</span>
-              </li>
-            ))}
-          </ul>
+          <CardContent className="pt-0">
+            <ul className="divide-y divide-border rounded-lg border border-border">
+              {itensNovos.map((item) => (
+                <li key={item.itemComercialId} className="flex items-center justify-between px-3 py-2 text-sm">
+                  <span>{nomeProduto(produtos.find((produto) => produto.id === item.itemComercialId))}</span>
+                  <span className="font-data">{item.quantidadePedida}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
         )}
 
-        <div className="grid items-end gap-3 md:grid-cols-[1fr_180px_auto]">
-          <div className="space-y-2">
-            <Label htmlFor="produto-novo">Produto</Label>
-            <select
+        <CardFooter className="flex-wrap items-end gap-2">
+          <FormField label="Produto" htmlFor="produto-novo" className="flex-1">
+            <SelectNative
               id="produto-novo"
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
               value={produtoNovo}
               disabled={!podeGerenciar}
               onChange={(event) => setProdutoNovo(event.target.value)}
@@ -631,43 +635,43 @@ export function PedidoEditor({
               {produtosAusentes.map((produto) => (
                 <option key={produto.id} value={produto.id}>{nomeProduto(produto)}</option>
               ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="quantidade-produto-novo">Quantidade do novo produto</Label>
+            </SelectNative>
+          </FormField>
+          <FormField label="Quantidade do novo produto" htmlFor="quantidade-produto-novo">
             <Input
               id="quantidade-produto-novo"
               type="number"
               min={0.001}
               step="0.001"
+              className="w-28 text-right font-data"
               value={quantidadeNova}
               disabled={!podeGerenciar}
               onChange={(event) => setQuantidadeNova(event.target.value)}
             />
-          </div>
-          <Button type="button" variant="outline" disabled={!podeGerenciar || pendente} onClick={() => void adicionarProduto()}>
-            <Plus className="mr-2 h-4 w-4" />
+          </FormField>
+          <Button type="button" variant="secondary" disabled={!podeGerenciar || pendente} onClick={() => void adicionarProduto()}>
+            <Plus />
             Adicionar produto
           </Button>
-        </div>
-      </section>
+        </CardFooter>
+      </Card>
 
-      <div className="flex flex-wrap justify-end gap-3">
-        <Button type="button" variant="outline" onClick={onBack}>Cancelar</Button>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={onBack}>Cancelar</Button>
         {!pedido && (
           <Button type="button" variant="secondary" disabled={!podeGerenciar || pendente} onClick={() => void salvarNovo(true)}>
-            <Save className="mr-2 h-4 w-4" />
+            <Save />
             Salvar Rascunho
           </Button>
         )}
         {pedido?.status === 'rascunho' && (
           <Button type="button" variant="secondary" disabled={!podeGerenciar || pendente} onClick={onBack}>
-            <Save className="mr-2 h-4 w-4" />
+            <Save />
             Salvar Rascunho
           </Button>
         )}
         <Button type="button" disabled={!podeFinalizar || pendente} onClick={() => void finalizar()}>
-          <Send className="mr-2 h-4 w-4" />
+          <Send />
           Finalizar Pedido
         </Button>
       </div>
