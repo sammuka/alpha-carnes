@@ -13,7 +13,6 @@ import {
   RefreshCw,
   Scale,
   Search,
-  Truck,
   XCircle,
 } from 'lucide-react';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
@@ -34,8 +33,10 @@ import { statusApuracaoVariant, statusRecebimentoVariant } from '@/lib/status-ui
 import { ProgressoBalancaBar } from '@/components/recebimento/progresso-balanca-bar';
 import { QuadroComparativo } from '@/components/gestao/quadro-comparativo';
 import { Badge } from '@/components/ui/badge';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ComboboxField } from '@/components/ui/combobox-field';
 import {
   Dialog,
   DialogContent,
@@ -44,15 +45,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
 import {
   Sheet,
   SheetContent,
@@ -65,12 +61,13 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableCellCode,
+  TableCellNum,
   TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/cn';
 import type { Paginado } from '@/lib/comercial';
 
 /** 7 rótulos do protótipo (RecebimentoCarga.tsx StatusLote) + aguardando_conclusao_pesagem. */
@@ -680,29 +677,22 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Recebimento de carga</h1>
-          <p className="text-sm text-muted-foreground">
-            Abertura de lotes a partir do Pedido ao Fornecedor — conferência na balança
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className={status === 'conectado' ? 'border-green-200 bg-green-50 text-green-700' : ''}>
-            {status === 'conectado' ? '● tempo real' : '○ reconectando'}
-          </Badge>
-          <Button variant="outline" size="sm" onClick={() => void carregarLista()}>
-            <RefreshCw className="mr-1 h-4 w-4" />
-            Atualizar
+      <PageHeader
+        title="Recebimento de carga"
+        subtitle="Abertura de lotes a partir do Pedido ao Fornecedor — conferência na balança"
+        live={status === 'conectado'}
+      >
+        <Button variant="secondary" size="sm" onClick={() => void carregarLista()}>
+          <RefreshCw />
+          Atualizar
+        </Button>
+        {podeGerenciar && (
+          <Button size="sm" onClick={abrirNovo} data-testid="btn-novo-recebimento">
+            <Plus />
+            Novo recebimento
           </Button>
-          {podeGerenciar && (
-            <Button size="sm" onClick={abrirNovo} data-testid="btn-novo-recebimento">
-              <Plus className="mr-1 h-4 w-4" />
-              Novo recebimento
-            </Button>
-          )}
-        </div>
-      </div>
+        )}
+      </PageHeader>
 
       {erro && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -712,20 +702,25 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
 
       {!detalhe ? (
         <Card>
-          <div className="flex items-center gap-2 border-b p-4">
-            <Truck className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold">Lotes de recebimento</h2>
-          </div>
-          <div className="border-b p-3">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="pl-9" placeholder="Buscar lote, PC, fornecedor, NF…" value={busca} onChange={(e) => setBusca(e.target.value)} />
-            </div>
-          </div>
-          <div className="overflow-x-auto">
+          <CardHeader>
+            <CardTitle>Lotes de recebimento</CardTitle>
+            <BadgeCount>{listaFiltrada.length}</BadgeCount>
+            <CardAction>
+              <div className="w-[240px]">
+                <Input
+                  adornLeft={<Search />}
+                  placeholder="Buscar lote, PC, fornecedor, NF…"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  className="h-7 text-xs"
+                />
+              </div>
+            </CardAction>
+          </CardHeader>
+          <CardContent className="p-0">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="hover:bg-transparent">
                   <TableHead>Lote</TableHead>
                   <TableHead>Pedido de Compra</TableHead>
                   <TableHead>Fornecedor</TableHead>
@@ -733,43 +728,43 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                   <TableHead>Romaneio</TableHead>
                   <TableHead>Tipo de carga</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Progresso balança</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                  <TableHead>Progresso</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {listaFiltrada.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="h-24 text-center text-xs text-muted-foreground">
                       Nenhum recebimento registrado.
                     </TableCell>
                   </TableRow>
                 ) : (
                   listaFiltrada.map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-mono text-sm">#{r.codigoLote}</TableCell>
-                      <TableCell>{r.numeroInternoCompra ?? '—'}</TableCell>
-                      <TableCell>{r.fornecedorNome}</TableCell>
-                      <TableCell>{r.nfeNumero ?? '—'}</TableCell>
-                      <TableCell>{r.romaneio ?? '—'}</TableCell>
-                      <TableCell>{r.tipoCarga ?? '—'}</TableCell>
+                    <TableRow key={r.id} className="group">
+                      <TableCellCode>#{r.codigoLote}</TableCellCode>
+                      <TableCellCode>{r.numeroInternoCompra ?? '—'}</TableCellCode>
+                      <TableCell className="text-[13px] font-semibold text-foreground">{r.fornecedorNome}</TableCell>
+                      <TableCellCode>{r.nfeNumero ?? '—'}</TableCellCode>
+                      <TableCellCode>{r.romaneio ?? '—'}</TableCellCode>
+                      <TableCell className="text-muted-foreground">{r.tipoCarga ?? '—'}</TableCell>
                       <TableCell>
                         <StatusPill
                           variant={statusRecebimentoVariant(r.status)}
                           label={STATUS_RECEB_LABEL[r.status as StatusRecebimento] ?? r.status}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="w-[120px]">
                         <ProgressoBalancaBar valor={r.progressoBalanca} />
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
+                      <TableCell>
+                        <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                           <Button variant="ghost" size="sm" onClick={() => void carregarDetalhe(r.id)}>
                             Abrir
                           </Button>
                           {!STATUS_ENCERRADOS.includes(r.status) && (
                             <Button variant="ghost" size="sm" onClick={() => irParaBalanca(r.id)}>
-                              <Scale className="mr-1 h-3 w-3" />
+                              <Scale />
                               Ir para Balança
                             </Button>
                           )}
@@ -780,15 +775,15 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                 )}
               </TableBody>
             </Table>
-          </div>
+          </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setDetalhe(null); setRecebimentoId(null); }}>
+            <Button variant="ghost" size="sm" onClick={() => { setDetalhe(null); setRecebimentoId(null); }}>
               ← Voltar à lista
             </Button>
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="secondary" size="sm" asChild>
               <a
                 href={`/gestao/compras?compraId=${
                   detalhe.compraProgramadaId
@@ -796,61 +791,65 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                   ?? ''
                 }`}
               >
-                <ExternalLink className="mr-1 h-4 w-4" />
+                <ExternalLink />
                 Ver Pedido de Compra
               </a>
             </Button>
             {podeGerenciar && !STATUS_ENCERRADOS.includes(detalhe.status) && (
-              <Button variant="outline" size="sm" onClick={() => setSheetNfeAberto(true)}>
+              <Button variant="secondary" size="sm" onClick={() => setSheetNfeAberto(true)}>
                 Editar dados da NF
               </Button>
             )}
             {podeCapturarItensNf && (
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={() => void capturarItensNf()}
                 disabled={salvando}
                 data-testid="btn-capturar-itens-nf"
               >
-                <Package className="mr-1 h-4 w-4" />
+                <Package />
                 Capturar itens da NF
               </Button>
             )}
             {podeGerenciar && podeCancelar && (
               <Button variant="destructive" size="sm" onClick={() => void cancelarLote()}>
-                <XCircle className="mr-1 h-4 w-4" />
+                <XCircle />
                 Cancelar lote
               </Button>
             )}
           </div>
 
           <Card>
-            <div className="border-b p-4">
-              <h2 className="text-sm font-semibold">Ações do recebimento</h2>
-            </div>
-            <CardContent className="flex flex-wrap gap-2 p-4">
+            <CardHeader>
+              <CardTitle>Ações do recebimento</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2 p-3">
               {!STATUS_ENCERRADOS.includes(detalhe.status) && (
-                <Button variant="outline" size="sm" onClick={() => irParaBalanca(detalhe.id)}>
-                  <Scale className="mr-1 h-4 w-4" />
+                <Button onClick={() => irParaBalanca(detalhe.id)}>
+                  <Scale />
                   Ir para pesagem
                 </Button>
               )}
               {podeRegistrarDivergencia && (
-                <Button variant="outline" size="sm" onClick={abrirDialogDivergencia} data-testid="btn-registrar-divergencia">
-                  <AlertTriangle className="mr-1 h-4 w-4" />
+                <Button variant="secondary" onClick={abrirDialogDivergencia} data-testid="btn-registrar-divergencia">
+                  <AlertTriangle />
                   Registrar divergência
                 </Button>
               )}
               {podeFinalizar && (
-                <Button size="sm" onClick={solicitarFinalizar} disabled={salvando} data-testid="btn-concluir">
-                  <CheckCircle2 className="mr-1 h-4 w-4" />
+                <Button onClick={solicitarFinalizar} disabled={salvando} data-testid="btn-concluir">
+                  <CheckCircle2 />
                   Concluir conferência
                 </Button>
               )}
               {podeSuspender && (
-                <Button variant="secondary" size="sm" onClick={() => void suspenderRecebimento()} disabled={salvando}>
-                  <PauseCircle className="mr-1 h-4 w-4" />
+                <Button
+                  variant="destructiveOutline"
+                  onClick={() => void suspenderRecebimento()}
+                  disabled={salvando}
+                >
+                  <PauseCircle />
                   Suspender
                 </Button>
               )}
@@ -858,14 +857,14 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
           </Card>
 
           <Card>
-            <CardContent className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
+            <CardContent className="grid grid-cols-2 gap-x-6 gap-y-1.5 p-3 text-xs sm:grid-cols-3">
               <div>
-                <p className="text-xs text-muted-foreground">Lote</p>
-                <p className="font-semibold" data-testid="receb-codigo">#{detalhe.codigoLote}</p>
+                <p className="text-muted-foreground">Lote</p>
+                <p className="font-medium" data-testid="receb-codigo">#{detalhe.codigoLote}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Pedido de Compra</p>
-                <p className="font-semibold">
+                <p className="text-muted-foreground">Pedido de Compra</p>
+                <p className="font-medium">
                   {detalhe.compra?.numeroInterno
                     ?? (detalhe.compraProgramadaId
                       ?? detalhe.pedidoFornecedor?.compraProgramadaId
@@ -874,39 +873,39 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Fornecedor</p>
-                <p className="font-semibold">{detalhe.fornecedor?.razaoSocial ?? '—'}</p>
+                <p className="text-muted-foreground">Fornecedor</p>
+                <p className="font-medium">{detalhe.fornecedor?.razaoSocial ?? '—'}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Tipo de carga</p>
-                <p>{detalhe.tipoCarga ?? '—'}</p>
+                <p className="text-muted-foreground">Tipo de carga</p>
+                <p className="font-medium">{detalhe.tipoCarga ?? '—'}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">NF-e</p>
-                <p>{detalhe.nfeNumero ?? '—'}</p>
+                <p className="text-muted-foreground">NF-e</p>
+                <p className="font-medium font-data">{detalhe.nfeNumero ?? '—'}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Romaneio</p>
-                <p>{detalhe.romaneio ?? '—'}</p>
+                <p className="text-muted-foreground">Romaneio</p>
+                <p className="font-medium font-data">{detalhe.romaneio ?? '—'}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Peso bruto NF</p>
-                <p>{detalhe.nfePesoBruto ? `${detalhe.nfePesoBruto} kg` : '—'}</p>
+                <p className="text-muted-foreground">Peso bruto NF</p>
+                <p className="font-medium">{detalhe.nfePesoBruto ? `${detalhe.nfePesoBruto} kg` : '—'}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Peso líquido NF</p>
-                <p>{detalhe.nfePesoLiquido ? `${detalhe.nfePesoLiquido} kg` : '—'}</p>
+                <p className="text-muted-foreground">Peso líquido NF</p>
+                <p className="font-medium">{detalhe.nfePesoLiquido ? `${detalhe.nfePesoLiquido} kg` : '—'}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Volumes NF</p>
-                <p>{detalhe.nfeVolumes ?? '—'}</p>
+                <p className="text-muted-foreground">Volumes NF</p>
+                <p className="font-medium">{detalhe.nfeVolumes ?? '—'}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Data/hora chegada</p>
-                <p>{formatDataHora(detalhe.dataHoraChegada)}</p>
+                <p className="text-muted-foreground">Data/hora chegada</p>
+                <p className="font-medium">{formatDataHora(detalhe.dataHoraChegada)}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Status</p>
+                <p className="text-muted-foreground">Status</p>
                 <span data-testid="receb-status">
                   <StatusPill
                     variant={statusRecebimentoVariant(detalhe.status)}
@@ -915,7 +914,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                 </span>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Progresso balança</p>
+                <p className="text-muted-foreground">Progresso balança</p>
                 <ProgressoBalancaBar valor={detalhe.progressoBalanca} />
               </div>
             </CardContent>
@@ -944,47 +943,39 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
 
           {podeGerenciar && !STATUS_ENCERRADOS.includes(detalhe.status) && (
             <Card>
-              <div className="border-b p-4">
-                <h2 className="text-sm font-semibold">Metadados operacionais</h2>
-              </div>
-              <CardContent className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <Label htmlFor="meta-placa">Placa</Label>
+              <CardHeader>
+                <CardTitle>Metadados operacionais</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                <FormField label="Placa" htmlFor="meta-placa">
                   <Input
                     id="meta-placa"
-                    className="mt-1"
                     value={formMetadados.placaVeiculo}
                     onChange={(e) => setFormMetadados((p) => ({ ...p, placaVeiculo: e.target.value }))}
                   />
-                </div>
-                <div>
-                  <Label htmlFor="meta-motorista">Motorista</Label>
+                </FormField>
+                <FormField label="Motorista" htmlFor="meta-motorista">
                   <Input
                     id="meta-motorista"
-                    className="mt-1"
                     value={formMetadados.motorista}
                     onChange={(e) => setFormMetadados((p) => ({ ...p, motorista: e.target.value }))}
                   />
-                </div>
-                <div>
-                  <Label htmlFor="meta-doca">Doca</Label>
+                </FormField>
+                <FormField label="Doca" htmlFor="meta-doca">
                   <Input
                     id="meta-doca"
-                    className="mt-1"
                     value={formMetadados.doca}
                     onChange={(e) => setFormMetadados((p) => ({ ...p, doca: e.target.value }))}
                   />
-                </div>
-                <div className="sm:col-span-2 lg:col-span-4">
-                  <Label htmlFor="meta-obs">Observações</Label>
+                </FormField>
+                <FormField label="Observações" htmlFor="meta-obs" className="sm:col-span-2 lg:col-span-4">
                   <Textarea
                     id="meta-obs"
-                    className="mt-1"
                     rows={2}
                     value={formMetadados.observacoes}
                     onChange={(e) => setFormMetadados((p) => ({ ...p, observacoes: e.target.value }))}
                   />
-                </div>
+                </FormField>
                 <div>
                   <Button disabled={salvando} onClick={() => void salvarMetadados()} data-testid="btn-salvar-metadados">
                     Salvar metadados
@@ -996,7 +987,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
 
           {detalhe.observacoes && STATUS_ENCERRADOS.includes(detalhe.status) && detalhe.status !== 'cancelado' && (
             <Card>
-              <CardContent className="p-4">
+              <CardContent className="p-3">
                 <p className="text-xs text-muted-foreground">Observações</p>
                 <p className="mt-1 text-sm">{detalhe.observacoes}</p>
               </CardContent>
@@ -1004,71 +995,71 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
           )}
 
           <Card>
-            <div className="border-b p-4">
-              <h2 className="flex items-center gap-2 font-semibold">
-                <Package className="h-5 w-5" />
-                Itens previstos importados
-              </h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Os dados previstos vêm do Pedido de Compra. Apuração real é feita na balança. Selecione um item para registrar divergência.
-              </p>
-            </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Produto operacional</TableHead>
-                  <TableHead>Origem</TableHead>
-                  <TableHead className="text-right">Previsto</TableHead>
-                  <TableHead>Unidade</TableHead>
-                  <TableHead>Passa balança?</TableHead>
-                  <TableHead className="text-right">Apurado</TableHead>
-                  <TableHead className="text-right">Peso apurado</TableHead>
-                  <TableHead className="text-right">Dif. qtd</TableHead>
-                  <TableHead className="text-right">Dif. peso</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {detalhe.itens.map((item) => (
-                  <TableRow
-                    key={item.id}
-                    data-testid={`item-${item.itemComercialId}`}
-                    className={cn(
-                      'cursor-pointer',
-                      itemSelecionadoId === item.id && 'bg-muted/60',
-                    )}
-                    onClick={() => setItemSelecionadoId(item.id)}
-                  >
-                    <TableCell>
-                      {item.itemComercial?.codigo ?? item.itemComercialId.slice(0, 8)}
-                      {item.itemComercial?.descricao ? ` — ${item.itemComercial.descricao}` : ''}
-                    </TableCell>
-                    <TableCell className="max-w-[200px] truncate text-xs">{item.origemDescricao ?? '—'}</TableCell>
-                    <TableCell className="text-right">{item.quantidadeEsperada}</TableCell>
-                    <TableCell>{item.unidadeEsperada ?? '—'}</TableCell>
-                    <TableCell>{item.requerBalanca ? 'Sim' : 'Não'}</TableCell>
-                    <TableCell className="text-right">
-                      {item.statusApuracao === 'entrada_direta'
-                        ? 'Não se aplica'
-                        : (item.quantidadeApurada ?? item.quantidadeRecebida)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {item.statusApuracao === 'entrada_direta'
-                        ? 'Não se aplica'
-                        : (item.pesoApurado ?? item.pesoTotalApurado ?? '—')}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-xs">{calcDifQtd(item)}</TableCell>
-                    <TableCell className="text-right font-mono text-xs">{calcDifPeso(item)}</TableCell>
-                    <TableCell>
-                      <StatusPill
-                        variant={statusApuracaoVariant(item.statusApuracao)}
-                        label={STATUS_ITEM_LABEL[item.statusApuracao] ?? item.statusApuracao}
-                      />
-                    </TableCell>
+            <CardHeader>
+              <CardTitle>Itens previstos importados</CardTitle>
+              <BadgeCount>{detalhe.itens.length}</BadgeCount>
+              <CardAction>
+                <p className="text-xs text-muted-foreground">
+                  Os dados previstos vêm do Pedido de Compra. Selecione um item para registrar divergência.
+                </p>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Produto operacional</TableHead>
+                    <TableHead>Origem</TableHead>
+                    <TableHead className="text-right">Previsto</TableHead>
+                    <TableHead>Unidade</TableHead>
+                    <TableHead>Passa balança?</TableHead>
+                    <TableHead className="text-right">Apurado</TableHead>
+                    <TableHead className="text-right">Peso apurado</TableHead>
+                    <TableHead className="text-right">Dif. qtd</TableHead>
+                    <TableHead className="text-right">Dif. peso</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {detalhe.itens.map((item) => (
+                    <TableRow
+                      key={item.id}
+                      data-testid={`item-${item.itemComercialId}`}
+                      className="group cursor-pointer"
+                      data-state={itemSelecionadoId === item.id ? 'selected' : undefined}
+                      onClick={() => setItemSelecionadoId(item.id)}
+                    >
+                      <TableCell className="text-[13px] font-semibold text-foreground">
+                        {item.itemComercial?.codigo ?? item.itemComercialId.slice(0, 8)}
+                        {item.itemComercial?.descricao ? ` — ${item.itemComercial.descricao}` : ''}
+                      </TableCell>
+                      <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">{item.origemDescricao ?? '—'}</TableCell>
+                      <TableCellNum>{item.quantidadeEsperada}</TableCellNum>
+                      <TableCell>{item.unidadeEsperada ?? '—'}</TableCell>
+                      <TableCell>{item.requerBalanca ? 'Sim' : 'Não'}</TableCell>
+                      <TableCellNum>
+                        {item.statusApuracao === 'entrada_direta'
+                          ? 'Não se aplica'
+                          : (item.quantidadeApurada ?? item.quantidadeRecebida)}
+                      </TableCellNum>
+                      <TableCellNum>
+                        {item.statusApuracao === 'entrada_direta'
+                          ? 'Não se aplica'
+                          : (item.pesoApurado ?? item.pesoTotalApurado ?? '—')}
+                      </TableCellNum>
+                      <TableCellNum>{calcDifQtd(item)}</TableCellNum>
+                      <TableCellNum>{calcDifPeso(item)}</TableCellNum>
+                      <TableCell>
+                        <StatusPill
+                          variant={statusApuracaoVariant(item.statusApuracao)}
+                          label={STATUS_ITEM_LABEL[item.statusApuracao] ?? item.statusApuracao}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
           </Card>
         </div>
       )}
@@ -1087,34 +1078,35 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
             </div>
           )}
 
-          <div className="flex-1 space-y-8 overflow-y-auto px-6 py-5">
-            <section className="space-y-3" aria-labelledby="bloco-pedido-fornecedor">
-              <h3 id="bloco-pedido-fornecedor" className="text-sm font-semibold">
+          <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+            <section className="space-y-2.5" aria-labelledby="bloco-pedido-fornecedor">
+              <p id="bloco-pedido-fornecedor" className="text-[11px] font-bold uppercase tracking-[0.05em] text-muted-foreground">
                 A — Pedido ao Fornecedor
-              </h3>
-              <div>
-                <Label htmlFor="pedido-fornecedor">Pedido ao fornecedor</Label>
-                <Select value={pedidoFornecedorId} onValueChange={setPedidoFornecedorId}>
-                  <SelectTrigger id="pedido-fornecedor" className="mt-1">
-                    <SelectValue placeholder="Selecione o pedido ao fornecedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pedidosRecebiveis.map((pedido) => (
-                      <SelectItem key={pedido.id} value={pedido.id}>
-                        {pedido.numero} — {pedido.fornecedorNome} — {pedido.dataOperacao}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {!carregandoPedidos && pedidosRecebiveis.length === 0 && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Nenhum Pedido ao Fornecedor aguardando recebimento.
-                  </p>
-                )}
-              </div>
+              </p>
+              <FormField
+                label="Pedido ao fornecedor"
+                htmlFor="pedido-fornecedor"
+                help={!carregandoPedidos && pedidosRecebiveis.length === 0
+                  ? 'Nenhum Pedido ao Fornecedor aguardando recebimento.'
+                  : undefined}
+              >
+                <ComboboxField
+                  id="pedido-fornecedor"
+                  items={pedidosRecebiveis.map((pedido) => ({
+                    id: pedido.id,
+                    label: `${pedido.numero} — ${pedido.fornecedorNome}`,
+                    sublabel: pedido.dataOperacao,
+                  }))}
+                  value={pedidoFornecedorId}
+                  onChange={setPedidoFornecedorId}
+                  placeholder="Selecione o pedido ao fornecedor"
+                  searchPlaceholder="Buscar pedido..."
+                  emptyText="Nenhum pedido encontrado."
+                />
+              </FormField>
 
               {previsao && (
-                <div className="space-y-3 rounded-md border bg-muted/30 p-3 text-sm">
+                <div className="space-y-2.5 rounded-md border border-border bg-surface-2 p-3 text-sm">
                   <Badge variant="secondary">Itens carregados automaticamente</Badge>
                   <p>
                     <span className="text-muted-foreground">Pedido:</span> {previsao.numeroPedidoFornecedor}
@@ -1136,7 +1128,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                   <div>
                     <Table>
                       <TableHeader>
-                        <TableRow>
+                        <TableRow className="hover:bg-transparent">
                           <TableHead>Produto</TableHead>
                           <TableHead>Qtd prevista</TableHead>
                           <TableHead>Unidade</TableHead>
@@ -1147,7 +1139,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                         {previsao.itensOperacionais.map((item) => (
                           <TableRow key={item.itemComercialId}>
                             <TableCell>{item.produtoCodigo} — {item.produtoDescricao}</TableCell>
-                            <TableCell>{item.quantidadePrevista}</TableCell>
+                            <TableCellNum>{item.quantidadePrevista}</TableCellNum>
                             <TableCell>{item.unidade}</TableCell>
                             <TableCell>{item.passaBalanca ? 'Sim' : 'Não — Entrada direta'}</TableCell>
                           </TableRow>
@@ -1160,89 +1152,76 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                   </p>
                 </div>
               )}
-              <div>
-                <Label htmlFor="doca">Doca / área</Label>
+              <FormField label="Doca / área" htmlFor="doca">
                 <Input id="doca" value={formNfe.doca} onChange={(e) => setFormNfe((p) => ({ ...p, doca: e.target.value }))} />
-              </div>
+              </FormField>
             </section>
 
-            <section className="space-y-3" aria-labelledby="bloco-nota-fiscal">
-              <h3 id="bloco-nota-fiscal" className="text-sm font-semibold">
+            <section className="space-y-2.5" aria-labelledby="bloco-nota-fiscal">
+              <p id="bloco-nota-fiscal" className="text-[11px] font-bold uppercase tracking-[0.05em] text-muted-foreground">
                 B — Nota Fiscal recebida
-              </h3>
+              </p>
               <p className="text-xs text-muted-foreground">
                 Informe apenas os dados complementares da NF/romaneio. A conferência real de peças, pesos e quantidades
                 será feita na balança.
               </p>
-              <div className="grid gap-3">
-                <div>
-                  <Label htmlFor="nfeNumero">Número da NF-e *</Label>
+              <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                <FormField label="Número da NF-e" required htmlFor="nfeNumero" className="sm:col-span-2">
                   <Input id="nfeNumero" value={formNfe.nfeNumero} onChange={(e) => setFormNfe((p) => ({ ...p, nfeNumero: e.target.value }))} />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor="nfeSerie">Série</Label>
-                    <Input id="nfeSerie" value={formNfe.nfeSerie} onChange={(e) => setFormNfe((p) => ({ ...p, nfeSerie: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label htmlFor="nfeDataEmissao">Data emissão</Label>
-                    <Input id="nfeDataEmissao" type="date" value={formNfe.nfeDataEmissao} onChange={(e) => setFormNfe((p) => ({ ...p, nfeDataEmissao: e.target.value }))} />
-                  </div>
-                </div>
-                <div>
-                  <Label htmlFor="nfeChave">Chave NF-e</Label>
+                </FormField>
+                <FormField label="Série" htmlFor="nfeSerie">
+                  <Input id="nfeSerie" value={formNfe.nfeSerie} onChange={(e) => setFormNfe((p) => ({ ...p, nfeSerie: e.target.value }))} />
+                </FormField>
+                <FormField label="Data emissão" htmlFor="nfeDataEmissao">
+                  <Input id="nfeDataEmissao" type="date" value={formNfe.nfeDataEmissao} onChange={(e) => setFormNfe((p) => ({ ...p, nfeDataEmissao: e.target.value }))} />
+                </FormField>
+                <FormField label="Chave NF-e" htmlFor="nfeChave" className="sm:col-span-2">
                   <Input id="nfeChave" value={formNfe.nfeChave} onChange={(e) => setFormNfe((p) => ({ ...p, nfeChave: e.target.value }))} placeholder="44 dígitos" />
-                </div>
-                <div>
-                  <Label htmlFor="romaneio">Romaneio</Label>
+                </FormField>
+                <FormField label="Romaneio" htmlFor="romaneio" className="sm:col-span-2">
                   <Input id="romaneio" value={formNfe.romaneio} onChange={(e) => setFormNfe((p) => ({ ...p, romaneio: e.target.value }))} />
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <Label htmlFor="nfePesoBruto">Peso bruto NF (kg)</Label>
-                    <Input id="nfePesoBruto" type="number" step="0.001" value={formNfe.nfePesoBruto} onChange={(e) => setFormNfe((p) => ({ ...p, nfePesoBruto: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label htmlFor="nfePesoLiquido">Peso líquido NF (kg)</Label>
-                    <Input id="nfePesoLiquido" type="number" step="0.001" value={formNfe.nfePesoLiquido} onChange={(e) => setFormNfe((p) => ({ ...p, nfePesoLiquido: e.target.value }))} />
-                  </div>
-                  <div>
-                    <Label htmlFor="nfeVolumes">Volumes NF</Label>
-                    <Input id="nfeVolumes" type="number" step="1" value={formNfe.nfeVolumes} onChange={(e) => setFormNfe((p) => ({ ...p, nfeVolumes: e.target.value }))} />
-                  </div>
-                </div>
+                </FormField>
+                <FormField label="Peso bruto NF" htmlFor="nfePesoBruto">
+                  <Input id="nfePesoBruto" type="number" step="0.001" adornRight="kg" value={formNfe.nfePesoBruto} onChange={(e) => setFormNfe((p) => ({ ...p, nfePesoBruto: e.target.value }))} />
+                </FormField>
+                <FormField label="Peso líquido NF" htmlFor="nfePesoLiquido">
+                  <Input id="nfePesoLiquido" type="number" step="0.001" adornRight="kg" value={formNfe.nfePesoLiquido} onChange={(e) => setFormNfe((p) => ({ ...p, nfePesoLiquido: e.target.value }))} />
+                </FormField>
+                <FormField label="Volumes NF" htmlFor="nfeVolumes">
+                  <Input id="nfeVolumes" type="number" step="1" value={formNfe.nfeVolumes} onChange={(e) => setFormNfe((p) => ({ ...p, nfeVolumes: e.target.value }))} />
+                </FormField>
               </div>
             </section>
 
-            <section className="space-y-3" aria-labelledby="bloco-transporte">
-              <h3 id="bloco-transporte" className="text-sm font-semibold">
+            <section className="space-y-2.5" aria-labelledby="bloco-transporte">
+              <p id="bloco-transporte" className="text-[11px] font-bold uppercase tracking-[0.05em] text-muted-foreground">
                 C — Transporte
-              </h3>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <Label htmlFor="placa">Placa</Label>
+              </p>
+              <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                <FormField label="Placa" htmlFor="placa">
                   <Input id="placa" value={formNfe.placaVeiculo} onChange={(e) => setFormNfe((p) => ({ ...p, placaVeiculo: e.target.value }))} />
-                </div>
-                <div>
-                  <Label htmlFor="motorista">Motorista</Label>
+                </FormField>
+                <FormField label="Motorista" htmlFor="motorista">
                   <Input id="motorista" value={formNfe.motorista} onChange={(e) => setFormNfe((p) => ({ ...p, motorista: e.target.value }))} />
-                </div>
+                </FormField>
               </div>
             </section>
 
-            <section className="space-y-3" aria-labelledby="bloco-observacoes">
-              <h3 id="bloco-observacoes" className="text-sm font-semibold">
+            <section className="space-y-2.5" aria-labelledby="bloco-observacoes">
+              <p id="bloco-observacoes" className="text-[11px] font-bold uppercase tracking-[0.05em] text-muted-foreground">
                 D — Observações internas
-              </h3>
-              <Label htmlFor="obs">Observações internas</Label>
-              <Textarea id="obs" rows={3} value={formNfe.observacoes} onChange={(e) => setFormNfe((p) => ({ ...p, observacoes: e.target.value }))} />
+              </p>
+              <FormField label="Observações internas" htmlFor="obs">
+                <Textarea id="obs" rows={3} value={formNfe.observacoes} onChange={(e) => setFormNfe((p) => ({ ...p, observacoes: e.target.value }))} />
+              </FormField>
             </section>
           </div>
-          <div className="flex flex-col gap-2 border-t bg-background px-6 py-4">
-            <Button variant="outline" onClick={() => setSheetAberto(false)}>
+          <div className="flex flex-col gap-2 border-t border-border bg-background px-6 py-4">
+            <Button variant="ghost" onClick={() => setSheetAberto(false)}>
               Cancelar
             </Button>
             <Button
+              variant="secondary"
               disabled={salvando || carregandoPedidos || !pedidoFornecedorId || !formNfe.nfeNumero || !previsao?.itensOperacionais.length}
               onClick={() => void criarLote(false)}
               data-testid="btn-criar-lote"
@@ -1254,7 +1233,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
               onClick={() => void criarLote(true)}
               data-testid="btn-criar-ir-balanca"
             >
-              <ArrowRight className="mr-1 h-4 w-4" />
+              <ArrowRight />
               Criar Lote e Ir para Balança
             </Button>
           </div>
@@ -1262,19 +1241,19 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
       </Sheet>
 
       <Sheet open={sheetNfeAberto} onOpenChange={setSheetNfeAberto}>
-        <SheetContent className="overflow-y-auto sm:max-w-md">
+        <SheetContent className="sm:max-w-[520px]">
           <SheetHeader>
             <SheetTitle>Editar dados da NF</SheetTitle>
           </SheetHeader>
-          <div className="mt-6 grid gap-3">
-            <div>
-              <Label>Número da NF-e</Label>
-              <Input value={formNfe.nfeNumero} onChange={(e) => setFormNfe((p) => ({ ...p, nfeNumero: e.target.value }))} />
-            </div>
-            <div>
-              <Label>Romaneio</Label>
-              <Input value={formNfe.romaneio} onChange={(e) => setFormNfe((p) => ({ ...p, romaneio: e.target.value }))} />
-            </div>
+          <div className="space-y-3 p-4">
+            <FormField label="Número da NF-e" htmlFor="nfe-editar-numero">
+              <Input id="nfe-editar-numero" value={formNfe.nfeNumero} onChange={(e) => setFormNfe((p) => ({ ...p, nfeNumero: e.target.value }))} />
+            </FormField>
+            <FormField label="Romaneio" htmlFor="nfe-editar-romaneio">
+              <Input id="nfe-editar-romaneio" value={formNfe.romaneio} onChange={(e) => setFormNfe((p) => ({ ...p, romaneio: e.target.value }))} />
+            </FormField>
+          </div>
+          <div className="flex gap-2 border-t border-border p-4">
             <Button disabled={salvando || !formNfe.nfeNumero} onClick={() => void salvarNfe()}>
               Salvar
             </Button>
@@ -1292,48 +1271,40 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                 : 'Selecione um item na tabela.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-3">
-            <div>
-              <Label>Tipo de divergência *</Label>
-              <Select
+          <div className="grid gap-3 text-[13px] text-fg-secondary">
+            <FormField label="Tipo de divergência" required htmlFor="div-tipo">
+              <SelectNative
+                id="div-tipo"
                 value={formDivergencia.tipo}
-                onValueChange={(v) => setFormDivergencia((p) => ({ ...p, tipo: v as TipoDivergencia }))}
+                onChange={(e) => setFormDivergencia((p) => ({ ...p, tipo: e.target.value as TipoDivergencia }))}
               >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIPOS_DIVERGENCIA.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {LABEL_TIPO_DIVERGENCIA[t]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="div-desc">Descrição *</Label>
+                <option value="" disabled>Selecione o tipo</option>
+                {TIPOS_DIVERGENCIA.map((t) => (
+                  <option key={t} value={t}>
+                    {LABEL_TIPO_DIVERGENCIA[t]}
+                  </option>
+                ))}
+              </SelectNative>
+            </FormField>
+            <FormField label="Descrição" required htmlFor="div-desc">
               <Textarea
                 id="div-desc"
                 rows={3}
-                className="mt-1"
                 value={formDivergencia.descricao}
                 onChange={(e) => setFormDivergencia((p) => ({ ...p, descricao: e.target.value }))}
               />
-            </div>
-            <div>
-              <Label htmlFor="div-acao">Ação imediata *</Label>
+            </FormField>
+            <FormField label="Ação imediata" required htmlFor="div-acao">
               <Textarea
                 id="div-acao"
                 rows={2}
-                className="mt-1"
                 value={formDivergencia.acaoImediata}
                 onChange={(e) => setFormDivergencia((p) => ({ ...p, acaoImediata: e.target.value }))}
               />
-            </div>
+            </FormField>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogDivergenciaAberto(false)}>
+            <Button variant="ghost" onClick={() => setDialogDivergenciaAberto(false)}>
               Cancelar
             </Button>
             <Button
@@ -1374,23 +1345,21 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
               }))}
             />
           )}
-          <div>
-            <Label htmlFor="obs-conferencia">Observação da conferência</Label>
+          <FormField label="Observação da conferência" htmlFor="obs-conferencia">
             <Textarea
               id="obs-conferencia"
-              className="mt-1"
               rows={2}
               value={obsConferencia}
               onChange={(e) => setObsConferencia(e.target.value)}
             />
-          </div>
+          </FormField>
           {resumoFinalizarDivergencias.length > 0 && (
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-[var(--color-status-divergencia)]">
               Há {resumoFinalizarDivergencias.length} item(ns) com divergência em aberto.
             </p>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogConferenciaAberto(false)}>
+            <Button variant="ghost" onClick={() => setDialogConferenciaAberto(false)}>
               Cancelar
             </Button>
             <Button disabled={salvando} onClick={() => void executarConcluirConferencia()} data-testid="btn-confirmar-conferencia">
