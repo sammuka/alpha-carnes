@@ -61,49 +61,43 @@ export function AdminHeader({ user, className }: AdminHeaderProps) {
   return (
     <header
       className={cn(
-        'sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-4',
+        'sticky top-0 z-40 flex h-11 shrink-0 items-center justify-between border-b border-border bg-card px-5',
         className,
       )}
     >
       <nav aria-label="Breadcrumb" className="min-w-0">
         {breadcrumb ? (
-          <p className="truncate text-sm">
-            <span className="font-medium text-muted-foreground">
-              {formatMenuGroupTitle(breadcrumb.group)}
-            </span>
-            <span className="mx-2 text-muted-foreground/60">/</span>
+          <p className="truncate text-xs">
+            <span className="text-muted-foreground">{formatMenuGroupTitle(breadcrumb.group)}</span>
+            <span className="mx-1.5 text-fg-faint">/</span>
             <span className="font-semibold text-foreground">{breadcrumb.item}</span>
           </p>
         ) : (
-          <span className="text-sm font-semibold text-foreground">AlphaCarnes</span>
+          <span className="text-xs font-semibold text-foreground">AlphaCarnes</span>
         )}
       </nav>
 
-      <div className="flex shrink-0 items-center gap-3">
-        <div className="hidden items-center gap-2 text-xs sm:flex">
+      <div className="flex shrink-0 items-center gap-3.5">
+        <div className="hidden items-center gap-3.5 text-xs text-muted-foreground sm:flex">
           <MetaInline label="Usuário" value={user.nome} />
-          <span className="text-muted-foreground/40" aria-hidden="true">
-            ·
-          </span>
           <MetaInline label="Perfil" value={user.perfil} />
-          <span className="text-muted-foreground/40" aria-hidden="true">
-            ·
-          </span>
           <MetaInline label="Escopo" value={escopo.valor} title={escopo.title} />
         </div>
 
-        <span className="hidden text-xs text-muted-foreground lg:inline">{formatDate()}</span>
+        <span className="hidden font-data text-[11px] text-muted-foreground lg:inline">
+          {formatDate()}
+        </span>
 
         <button
           type="button"
-          className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-3 hover:text-foreground"
           aria-label="Notificações"
         >
-          <Bell size={18} strokeWidth={1.75} />
+          <Bell size={15} strokeWidth={1.75} />
         </button>
 
         <div
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-white"
+          className="flex size-7 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white"
           aria-hidden="true"
         >
           {user.inicial}
