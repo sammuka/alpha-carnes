@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { StatusPill } from '@/components/ui/status-pill';
+import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
@@ -44,6 +44,15 @@ export function rotuloEtiqueta(e: EtiquetaListada): string {
   if (e.estado === 'emitida') return 'Pendente de impressão';
   if (e.bloqueada) return 'Bloqueada';
   return e.estado === 'reimpressa' ? 'Reimpressa' : 'Ativa';
+}
+
+/** Variant StatusPill por estado real da etiqueta (mesma precedência de rotuloEtiqueta). */
+export function statusEtiquetaVariant(e: EtiquetaListada): StatusPillVariant {
+  if (e.estado === 'cancelada') return 'bloqueado';
+  if (e.estado === 'invalidada_por_troca') return 'divergencia';
+  if (e.estado === 'emitida') return 'pendente';
+  if (e.bloqueada) return 'bloqueado';
+  return e.estado === 'reimpressa' ? 'recebido' : 'expedido';
 }
 
 export const cancelavel = (e: EtiquetaListada) =>
@@ -261,7 +270,7 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
                         {e.codigo ?? e.pecaId.slice(0, 8)}
                       </span>
                     </TableCellCode>
-                    <TableCell><Badge variant="outline">{rotuloEtiqueta(e)}</Badge></TableCell>
+                    <TableCell><StatusPill variant={statusEtiquetaVariant(e)} label={rotuloEtiqueta(e)} /></TableCell>
                     <TableCell className="text-muted-foreground">{e.produtoCodigo} — {e.produtoDescricao}</TableCell>
                     <TableCellNum>{e.pesoOriginal} kg</TableCellNum>
                     <TableCell>

@@ -676,7 +676,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     Boolean(itemSelecionado);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <PageHeader
         title="Recebimento de carga"
         subtitle="Abertura de lotes a partir do Pedido ao Fornecedor — conferência na balança"
@@ -1095,7 +1095,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                   items={pedidosRecebiveis.map((pedido) => ({
                     id: pedido.id,
                     label: `${pedido.numero} — ${pedido.fornecedorNome}`,
-                    sublabel: pedido.dataOperacao,
+                    sublabel: pedido.numeroInternoCompra ?? undefined,
                   }))}
                   value={pedidoFornecedorId}
                   onChange={setPedidoFornecedorId}
