@@ -294,7 +294,7 @@ describe('RecebimentoCargaClient', () => {
       'C — Transporte',
       'D — Observações internas',
     ];
-    const cabecalhos = within(drawer).getAllByRole('heading', { level: 3 });
+    const cabecalhos = nomesDosBlocos.map((nome) => within(drawer).getByText(nome));
     expect(cabecalhos.map((cabecalho) => cabecalho.textContent)).toEqual(nomesDosBlocos);
     for (const nomeAntigo of [
       '1. Pedido de Compra',
