@@ -159,21 +159,19 @@ function ModalDestinar({
           {pedidos.length === 0 ? (
             <EmptyState title="Não há pedidos pendentes compatíveis com este produto." />
           ) : (
-            <div className="flex flex-col gap-1.5">
+            <div className="flex max-h-[220px] flex-col overflow-y-auto overflow-x-hidden rounded-md border border-border">
               {pedidos.map((p) => (
                 <button
                   key={p.pedidoVendaItemId}
                   type="button"
                   onClick={() => setSelecionado((s) => (s === p.pedidoVendaItemId ? null : p.pedidoVendaItemId))}
                   className={cn(
-                    'w-full rounded-md border px-3 py-2 text-left transition-colors duration-100',
-                    selecionado === p.pedidoVendaItemId
-                      ? 'border-primary bg-primary-soft'
-                      : 'border-border bg-card hover:bg-surface-2',
+                    'block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 last:border-b-0 hover:bg-surface-2',
+                    selecionado === p.pedidoVendaItemId && 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]',
                   )}
                 >
-                  <p className="text-[12px] font-bold">{p.clienteNome}</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">{p.pendencia}</p>
+                  <span className="block truncate text-[13px] font-semibold">{p.clienteNome}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">{p.pendencia}</span>
                 </button>
               ))}
             </div>
