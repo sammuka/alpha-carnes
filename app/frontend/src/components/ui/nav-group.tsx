@@ -31,15 +31,15 @@ export function NavGroup({ title, items, defaultOpen = false }: NavGroupProps) {
     if (hasActive) setOpen(true);
   }, [hasActive]);
 
-  // item de 34px + 2px de gap, conforme Layout.tsx do protótipo
-  const alturaItens = items.length * 36 + 4;
+  // item de 30px + 2px de gap, conforme Layout.tsx do protótipo
+  const alturaItens = items.length * 32 + 4;
 
   return (
     <div className="mb-1">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="group/hdr mb-1.5 flex w-full items-center justify-between px-1 text-[10px] font-bold uppercase tracking-widest text-sidebar-text-muted transition-colors hover:text-white"
+        className="group/hdr mb-1 mt-2.5 flex w-full items-center justify-between rounded-[5px] px-2.5 py-[5px] text-[10px] font-bold uppercase tracking-[0.12em] text-sidebar-text-dim transition-colors hover:text-white"
         aria-expanded={open}
         aria-controls={idPainel}
       >
@@ -56,7 +56,7 @@ export function NavGroup({ title, items, defaultOpen = false }: NavGroupProps) {
         className="overflow-hidden transition-[max-height] duration-[220ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
         style={{ maxHeight: open ? `${alturaItens}px` : '0px' }}
       >
-        <div className="flex w-full flex-col gap-0.5 pb-1">
+        <div className="flex w-full flex-col gap-[2px] pb-0.5">
           {items.map((item) => (
             <NavItem key={item.href} href={item.href} label={item.label} Icon={item.Icon} />
           ))}

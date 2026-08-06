@@ -20,13 +20,13 @@ export function NavItem({ href, label, Icon }: NavItemProps) {
       href={href}
       aria-current={isActive ? 'page' : undefined}
       className={cn(
-        'flex h-[34px] w-full items-center gap-3 rounded-lg px-2.5 text-[13px] font-medium transition-colors',
+        'flex h-[30px] w-full items-center gap-2 rounded-[5px] px-2.5 text-[13px] font-medium transition-colors duration-100',
         isActive
-          ? 'bg-sidebar-item-active text-white'
-          : 'text-sidebar-text hover:bg-sidebar-item-hover hover:text-white',
+          ? 'bg-sidebar-item-active font-semibold text-white'
+          : 'text-sidebar-text-dim hover:bg-sidebar-item-hover hover:text-white',
       )}
     >
-      <Icon size={18} strokeWidth={1.5} className="shrink-0" />
+      <Icon size={15} strokeWidth={1.75} className="shrink-0 opacity-85" />
       <span className="flex-1 truncate">{label}</span>
     </Link>
   );
