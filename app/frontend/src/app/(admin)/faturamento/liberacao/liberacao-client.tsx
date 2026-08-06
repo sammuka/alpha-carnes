@@ -314,6 +314,7 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
                 </div>
                 {(pode('LIBERACAO_GERENCIAR') || pode('FATURAMENTO_GERENCIAR') || pode('EXPEDICAO_GERENCIAR')) ? (
                   <Button
+                    variant={liberado ? 'secondary' : 'default'}
                     disabled={submitting || !checklist?.liberavel || liberado}
                     onClick={() => void liberarSaida()}
                   >
