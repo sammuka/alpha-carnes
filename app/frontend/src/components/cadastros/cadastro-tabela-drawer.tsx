@@ -54,8 +54,6 @@ export interface FiltroCadastro {
 }
 
 export interface CadastroTabelaDrawerProps<T extends { id: string }> {
-  /** Linha de trilha do cabeçalho, como em `produtos-client.tsx:249` ("Cadastros & Regras / Produtos"). */
-  caminho: string;
   titulo: string;
   subtitulo: string;
   rotuloNovo: string;
@@ -91,7 +89,6 @@ interface Paginado<T> {
 const PAGE_SIZE = 20;
 
 export function CadastroTabelaDrawer<T extends { id: string }>({
-  caminho,
   titulo,
   subtitulo,
   rotuloNovo,
@@ -269,7 +266,6 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
           </Button>
         )}
       </PageHeader>
-      <p className="-mt-2 text-[11px] font-medium text-muted-foreground">{caminho}</p>
 
       {bannerTopo}
 

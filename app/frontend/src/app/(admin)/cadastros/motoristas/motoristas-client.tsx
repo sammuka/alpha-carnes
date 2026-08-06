@@ -24,7 +24,6 @@ export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) 
 
   return (
     <CadastroTabelaDrawer<Motorista>
-      caminho="Cadastros & Regras / Motoristas"
       titulo="Motoristas"
       subtitulo="Motoristas vinculados às cargas e caminhões de expedição."
       rotuloNovo="Novo Motorista"

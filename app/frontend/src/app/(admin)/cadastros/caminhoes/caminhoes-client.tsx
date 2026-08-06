@@ -29,7 +29,6 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
 
   return (
     <CadastroTabelaDrawer<Caminhao>
-      caminho="Cadastros & Regras / Caminhões"
       titulo="Caminhões"
       subtitulo="Frota utilizada nas cargas e rotas de expedição."
       rotuloNovo="Novo Caminhão"

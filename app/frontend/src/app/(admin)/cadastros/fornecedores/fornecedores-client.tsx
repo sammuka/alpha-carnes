@@ -118,19 +118,19 @@ function BlocoHistorico({ fornecedorId }: { fornecedorId: string }) {
       ) : !historico ? (
         <p className="text-sm text-muted-foreground">Carregando histórico…</p>
       ) : (
-        <div className="space-y-2.5 rounded-md border border-border p-3">
-          <div className="flex items-center justify-between border-b border-border pb-2 text-sm">
-            <span className="text-muted-foreground">Total de Ocorrências (Ano)</span>
-            <span className="font-bold text-destructive">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-md border border-border p-3 text-xs">
+          <div>
+            <p className="text-muted-foreground">Total de Ocorrências (Ano)</p>
+            <p className="font-medium text-destructive">
               {historico.ocorrenciasAno} {historico.ocorrenciasAno === 1 ? 'registro' : 'registros'}
-            </span>
+            </p>
           </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Última Divergência</span>
+          <div>
+            <p className="text-muted-foreground">Última Divergência</p>
             {historico.ultimaDivergencia ? (
               <UltimaDivergenciaLinha item={historico.ultimaDivergencia} />
             ) : (
-              <span className="font-medium text-foreground">—</span>
+              <p className="font-medium text-foreground">—</p>
             )}
           </div>
         </div>

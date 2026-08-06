@@ -28,7 +28,6 @@ export function RepresentantesClient({ podeGerenciar }: { podeGerenciar: boolean
 
   return (
     <CadastroTabelaDrawer<Representante>
-      caminho="Cadastros & Regras / Representantes"
       titulo="Representantes"
       subtitulo="Vendedores e representantes que atendem clientes e pedidos."
       rotuloNovo="Novo Representante"
