@@ -4,10 +4,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Info, Send, CheckCircle2, Paperclip, Clock, ShieldAlert, ShieldCheck, Search,
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { FormField } from '@/components/ui/form-field';
+import { Textarea } from '@/components/ui/textarea';
+import { PageHeader } from '@/components/ui/page-header';
+import { BadgeCount } from '@/components/ui/badge-count';
+import { KpiStrip, Kpi } from '@/components/ui/kpi-strip';
+import { Card, CardContent } from '@/components/ui/card';
+import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
+import { SelectNative } from '@/components/ui/select-native';
+import { EmptyState } from '@/components/ui/empty-state';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import type { Paginado, SeguroCargaComCaminhao, StatusSeguro } from '@/lib/faturamento';
 
@@ -15,21 +23,12 @@ function fmtBRL(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-const STATUS_STYLE: Record<StatusSeguro, { bg: string; text: string; dot: string; icon: typeof ShieldAlert; label: string }> = {
-  pendente:   { bg: 'bg-[var(--color-warning-surface)]', text: 'text-[var(--color-warning-ink)]', dot: 'bg-[var(--color-status-dot-warning)]', icon: ShieldAlert, label: 'Pendente' },
-  enviado:    { bg: 'bg-[var(--color-action-blue-bg)]', text: 'text-[var(--color-action-blue-hover)]', dot: 'bg-[var(--color-status-dot-info)]', icon: Send, label: 'Enviado' },
-  confirmado: { bg: 'bg-[var(--color-success-surface)]', text: 'text-[var(--color-success-strong)]', dot: 'bg-[var(--color-status-dot-ativo)]', icon: ShieldCheck, label: 'Confirmado' },
+/** Mapeamento StatusPill exigido pela Tarefa 28 — pendente→divergencia, enviado→recebido, confirmado→expedido. */
+const STATUS_PILL: Record<StatusSeguro, { variant: StatusPillVariant; label: string }> = {
+  pendente: { variant: 'divergencia', label: 'Pendente' },
+  enviado: { variant: 'recebido', label: 'Enviado' },
+  confirmado: { variant: 'expedido', label: 'Confirmado' },
 };
-
-function StatusBadge({ status }: { status: StatusSeguro }) {
-  const s = STATUS_STYLE[status];
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${s.bg} ${s.text}`}>
-      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.dot}`} />
-      {s.label}
-    </span>
-  );
-}
 
 export function SeguroManualClient({ permissoes }: { permissoes: string[] }) {
   const pode = (p: string) => permissoes.includes(p);
@@ -133,15 +132,8 @@ export function SeguroManualClient({ permissoes }: { permissoes: string[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-4 h-full">
-      {/* Page header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-[11px] text-[var(--color-text-muted)] font-medium mb-0.5">Faturamento / Seguro Manual</p>
-          <h1 className="text-[20px] font-bold text-[var(--color-text-strong)]">Seguro Manual</h1>
-          <p className="text-[12px] text-[var(--color-text-secondary)] mt-0.5">Controle manual do envio e confirmação do seguro por carga.</p>
-        </div>
-      </div>
+    <div className="space-y-3">
+      <PageHeader title="Seguro Manual" subtitle="Controle manual do envio e confirmação do seguro por carga." />
 
       {erro && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -150,136 +142,122 @@ export function SeguroManualClient({ permissoes }: { permissoes: string[] }) {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'Cargas com seguro', value: `${kpis.total}`, sub: 'no total', color: 'text-[var(--color-brand-navy-deep)]', bg: 'bg-[var(--color-surface-subtle)]' },
-          { label: 'Pendentes', value: `${kpis.pendentes}`, sub: 'ainda não enviados', color: 'text-[var(--color-warning-ink)]', bg: 'bg-[var(--color-warning-surface)]' },
-          { label: 'Enviados', value: `${kpis.enviados}`, sub: 'aguardando confirmação', color: 'text-[var(--color-action-blue-hover)]', bg: 'bg-[var(--color-action-blue-bg)]' },
-          { label: 'Confirmados', value: `${kpis.confirmados}`, sub: 'seguro tratado', color: 'text-[var(--color-success-strong)]', bg: 'bg-[var(--color-success-surface)]' },
-        ].map(({ label, value, sub, color, bg }) => (
-          <div key={label} className={`border border-[var(--color-border)] rounded-xl px-4 py-3.5 ${bg}`}>
-            <p className="text-[11px] text-[var(--color-text-secondary)] font-medium mb-1">{label}</p>
-            <p className={`text-[26px] font-black leading-none ${color}`}>{value}</p>
-            <p className="text-[10px] text-[var(--color-text-muted)] mt-1.5">{sub}</p>
-          </div>
-        ))}
-      </div>
+      <KpiStrip>
+        <Kpi label="Cargas com seguro" value={kpis.total} hint="no total" tone="default" />
+        <Kpi label="Pendentes" value={kpis.pendentes} hint="ainda não enviados" tone="alert" />
+        <Kpi label="Enviados" value={kpis.enviados} hint="aguardando confirmação" tone="default" />
+        <Kpi label="Confirmados" value={kpis.confirmados} hint="seguro tratado" tone="ok" />
+      </KpiStrip>
 
       {/* Nota informativa */}
-      <div className="flex items-start gap-2 bg-[var(--color-info-surface)] border border-[var(--color-info-border)] rounded-xl px-4 py-3">
-        <Info className="w-3.5 h-3.5 text-[var(--color-info-icon)] flex-shrink-0 mt-0.5" />
-        <p className="text-[12px] text-[var(--color-info-ink)]">O seguro é tratado manualmente — o sistema apenas registra o status.</p>
+      <div className="flex gap-2 rounded-md border border-primary-soft-border bg-info-soft px-3 py-2 text-xs text-info-fg">
+        <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        <span>O seguro é tratado manualmente — o sistema apenas registra o status.</span>
       </div>
 
       {/* Filtros */}
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--color-text-muted)]" />
-          <input
+        <div className="w-[240px]">
+          <Input
+            adornLeft={<Search />}
+            placeholder="Buscar placa, motorista..."
+            className="h-7 text-xs"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar placa, motorista..."
-            className="h-8 w-[280px] rounded-md border border-[var(--color-border)] bg-white pl-8 pr-3 text-[12px] placeholder:text-[var(--color-placeholder)] focus:border-[var(--color-action-blue)] focus:outline-none"
           />
         </div>
-        <select
+        <SelectNative
+          selectSize="sm"
+          className="w-[150px]"
           value={filtroStatus}
           onChange={(e) => setFiltroStatus(e.target.value as StatusSeguro | 'Todos')}
-          className="h-8 rounded-md border border-[var(--color-border)] bg-white px-2.5 text-[12px] text-[var(--color-text-slate)] focus:border-[var(--color-action-blue)] focus:outline-none"
         >
           <option value="Todos">Status: Todos</option>
           <option value="pendente">Pendente</option>
           <option value="enviado">Enviado</option>
           <option value="confirmado">Confirmado</option>
-        </select>
-        <span className="ml-auto text-[11px] text-[var(--color-text-muted)]">{total} carga(s)</span>
+        </SelectNative>
+        <span className="ml-auto text-[11px] text-muted-foreground">{total} carga(s)</span>
       </div>
 
       {/* Lista de cargas */}
-      <div className="bg-white border border-[var(--color-border)] rounded-xl flex-1 overflow-y-auto">
-        {loading ? (
-          <p className="text-sm text-muted-foreground p-6" data-testid="loading">Carregando seguros…</p>
-        ) : seguros.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-14 gap-2">
-            <ShieldAlert className="w-8 h-8 text-[var(--color-placeholder)]" />
-            <p className="text-[13px] text-[var(--color-text-muted)]">Nenhuma carga encontrada para os filtros atuais.</p>
-          </div>
-        ) : (
-          <div className="flex flex-col divide-y divide-[var(--color-muted)]">
-            {seguros.map((s) => {
-              const emOperacao = submittingId === s.id;
-              return (
-                <div key={s.id} className="px-5 py-4 flex flex-col gap-3">
+      {loading ? (
+        <p className="text-xs text-muted-foreground" data-testid="loading">Carregando seguros…</p>
+      ) : seguros.length === 0 ? (
+        <EmptyState icon={<ShieldAlert />} title="Nenhuma carga encontrada para os filtros atuais." className="py-12" />
+      ) : (
+        <div className="space-y-2.5">
+          {seguros.map((s) => {
+            const emOperacao = submittingId === s.id;
+            const pill = STATUS_PILL[s.status];
+            return (
+              <Card key={s.id}>
+                <CardContent className="space-y-3 p-3">
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-[13px] font-bold text-[var(--color-text-strong)]">{s.caminhao.placa}</h3>
-                        <StatusBadge status={s.status} />
+                        <h3 className="font-data text-[13px] font-bold text-foreground">{s.caminhao.placa}</h3>
+                        <StatusPill variant={pill.variant} label={pill.label} />
                       </div>
-                      <p className="text-[11px] text-[var(--color-text-secondary)] mt-0.5">
-                        Motorista <span className="font-semibold text-[var(--color-text-ink)]">{s.caminhao.motorista}</span>
+                      <p className="mt-0.5 text-[12px] text-muted-foreground">
+                        Motorista <span className="font-semibold text-foreground">{s.caminhao.motorista}</span>
                       </p>
                     </div>
 
                     {s.valorCarga && (
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider font-medium">Valor da carga</p>
-                        <p className="text-[16px] font-black text-[var(--color-brand-navy-deep)]">{fmtBRL(Number(s.valorCarga))}</p>
+                      <div className="flex-shrink-0 text-right">
+                        <p className="text-[10px] font-medium uppercase tracking-[0.04em] text-fg-faint">Valor da carga</p>
+                        <p className="font-data text-[16px] font-black text-foreground">{fmtBRL(Number(s.valorCarga))}</p>
                       </div>
                     )}
                   </div>
 
                   {/* Linha de responsável/data */}
-                  <div className="flex items-center gap-4 text-[11px] text-[var(--color-text-secondary)] flex-wrap">
+                  <div className="flex flex-wrap items-center gap-4 text-[12px] text-muted-foreground">
                     {s.enviadoEm && (
-                      <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-[var(--color-text-muted)]" /> Enviado: {s.enviadoEm}</span>
+                      <span className="flex items-center gap-1"><Clock className="size-3 text-fg-faint" /> Enviado: {s.enviadoEm}</span>
                     )}
                     {s.confirmadoEm && (
-                      <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-[var(--color-success-strong)]" /> Confirmado: {s.confirmadoEm}</span>
+                      <span className="flex items-center gap-1"><CheckCircle2 className="size-3 text-success-fg" /> Confirmado: {s.confirmadoEm}</span>
                     )}
                     {s.anexosJson.map((a) => (
-                      <span key={a.nome} className="flex items-center gap-1 text-[var(--color-action-blue-hover)]"><Paperclip className="w-3 h-3" /> {a.nome}</span>
+                      <span key={a.nome} className="flex items-center gap-1 text-primary-fg"><Paperclip className="size-3" /> {a.nome}</span>
                     ))}
                   </div>
 
                   {/* Observação */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-semibold text-[var(--color-text-graphite)]">Observação</label>
-                    <textarea
+                  <FormField label="Observação" htmlFor={`obs-seguro-${s.id}`}>
+                    <Textarea
+                      id={`obs-seguro-${s.id}`}
                       value={obsEdit[s.id] ?? s.observacao ?? ''}
                       onChange={(e) => setObsEdit((prev) => ({ ...prev, [s.id]: e.target.value }))}
                       onBlur={() => void salvarObservacao(s.id, obsEdit[s.id] ?? s.observacao ?? '')}
                       rows={2}
                       placeholder="Observações sobre o seguro desta carga..."
-                      className="w-full rounded-md border border-[var(--color-border)] px-2.5 py-2 text-[12px] text-[var(--color-text-strong)] resize-none focus:border-[var(--color-action-blue)] focus:outline-none"
                     />
-                  </div>
+                  </FormField>
 
                   {/* Ações */}
                   {pode('SEGURO_GERENCIAR') && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        onClick={() => setDialogAnexoAbertoPara(s.id)}
-                        className="h-7 px-3 rounded-md border border-[var(--color-border)] text-[var(--color-text-secondary)] text-[11px] font-medium hover:bg-[var(--color-surface-subtle)] flex items-center gap-1.5 transition-colors">
-                        <Paperclip className="w-3 h-3" /> Anexar comprovante
-                      </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button variant="secondary" size="sm" onClick={() => setDialogAnexoAbertoPara(s.id)}>
+                        <Paperclip /> Anexar comprovante
+                      </Button>
 
                       {s.status === 'pendente' && (
-                        <button disabled={emOperacao} onClick={() => void alterarStatus(s.id, 'enviado')}
-                          className="h-7 px-3 rounded-md bg-[var(--color-action-blue)] text-white text-[11px] font-bold hover:bg-[var(--color-action-blue-hover)] flex items-center gap-1.5 transition-colors disabled:opacity-40">
-                          <Send className="w-3 h-3" /> Marcar como enviado
-                        </button>
+                        <Button variant="secondary" size="sm" disabled={emOperacao} onClick={() => void alterarStatus(s.id, 'enviado')}>
+                          <Send /> Marcar como enviado
+                        </Button>
                       )}
                       {s.status === 'enviado' && (
-                        <button disabled={emOperacao} onClick={() => void alterarStatus(s.id, 'confirmado')}
-                          className="h-7 px-3 rounded-md bg-[var(--color-success-strong)] text-white text-[11px] font-bold hover:bg-[var(--color-success-strong-hover)] flex items-center gap-1.5 transition-colors disabled:opacity-40">
-                          <CheckCircle2 className="w-3 h-3" /> Marcar como confirmado
-                        </button>
+                        <Button size="sm" disabled={emOperacao} onClick={() => void alterarStatus(s.id, 'confirmado')}>
+                          <CheckCircle2 /> Marcar como confirmado
+                        </Button>
                       )}
                       {s.status === 'confirmado' && (
-                        <span className="h-7 px-3 rounded-md bg-[var(--color-success-surface)] text-[var(--color-success-strong)] text-[11px] font-bold flex items-center gap-1.5">
-                          <ShieldCheck className="w-3 h-3" /> Seguro tratado
-                        </span>
+                        <BadgeCount className="h-7 gap-1.5 bg-success-soft px-3 text-[11px] text-success-fg">
+                          <ShieldCheck className="size-3" /> Seguro tratado
+                        </BadgeCount>
                       )}
                     </div>
                   )}
@@ -287,33 +265,29 @@ export function SeguroManualClient({ permissoes }: { permissoes: string[] }) {
                   <Dialog open={dialogAnexoAbertoPara === s.id} onOpenChange={(v) => !v && setDialogAnexoAbertoPara(null)}>
                     <DialogContent>
                       <DialogHeader><DialogTitle>Anexar comprovante</DialogTitle></DialogHeader>
-                      <div className="space-y-3 p-1">
-                        <div>
-                          <Label htmlFor={`anexo-nome-${s.id}`}>Nome do arquivo</Label>
-                          <Input id={`anexo-nome-${s.id}`} value={anexoNome} onChange={(e) => setAnexoNome(e.target.value)} placeholder="averbacao-centro-1130.pdf" />
-                        </div>
-                        <div>
-                          <Label htmlFor={`anexo-descricao-${s.id}`}>Descrição (opcional)</Label>
-                          <Input id={`anexo-descricao-${s.id}`} value={anexoDescricao} onChange={(e) => setAnexoDescricao(e.target.value)} />
-                        </div>
+                      <FormField label="Nome do arquivo" htmlFor={`anexo-nome-${s.id}`}>
+                        <Input id={`anexo-nome-${s.id}`} value={anexoNome} onChange={(e) => setAnexoNome(e.target.value)} placeholder="averbacao-centro-1130.pdf" />
+                      </FormField>
+                      <FormField label="Descrição (opcional)" htmlFor={`anexo-descricao-${s.id}`}>
+                        <Input id={`anexo-descricao-${s.id}`} value={anexoDescricao} onChange={(e) => setAnexoDescricao(e.target.value)} />
+                      </FormField>
+                      <DialogFooter>
                         <Button disabled={!anexoNome.trim() || emOperacao} onClick={() => void confirmarAnexo(s.id)}>Anexar</Button>
-                      </div>
+                      </DialogFooter>
                     </DialogContent>
                   </Dialog>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {/* Rodapé informativo */}
-      <div className="bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl px-5 py-3.5 flex items-start gap-2">
-        <Info className="w-3.5 h-3.5 text-[var(--color-text-muted)] flex-shrink-0 mt-0.5" />
-        <p className="text-[11px] text-[var(--color-text-muted)] leading-snug">
-          O status do seguro é um dos requisitos para a liberação do caminhão. Cargas com seguro pendente bloqueiam a liberação em &quot;Liberação do Caminhão&quot;.
-        </p>
-      </div>
+      <p className="text-[11px] text-fg-faint">
+        <Info className="mr-1 inline size-3.5 shrink-0 -translate-y-px" aria-hidden="true" />
+        O status do seguro é um dos requisitos para a liberação do caminhão. Cargas com seguro pendente bloqueiam a liberação em &quot;Liberação do Caminhão&quot;.
+      </p>
     </div>
   );
 }

@@ -1,11 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Truck } from 'lucide-react';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { statusCaminhaoVariant, statusNfseVariant } from '@/lib/status-ui';
+import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { StatusPill } from '@/components/ui/status-pill';
+import { PageHeader } from '@/components/ui/page-header';
+import { BadgeCount } from '@/components/ui/badge-count';
+import { KpiStrip, Kpi } from '@/components/ui/kpi-strip';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FormField } from '@/components/ui/form-field';
+import { EmptyState } from '@/components/ui/empty-state';
 import type { AmbienteFiscal, ConsolidacaoResposta, NotaFiscal, StatusNfse } from '@/lib/faturamento';
 import type { Caminhao } from '@/lib/operacao';
 
@@ -13,16 +21,15 @@ import type { Caminhao } from '@/lib/operacao';
 
 function BadgeAmbiente({ homologacao }: { homologacao: boolean }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border ${
-        homologacao
-          ? 'bg-[var(--color-warning-surface)] text-[var(--color-warning-ink)] border-[var(--color-provisorio-border)]'
-          : 'bg-[var(--color-success-surface)] text-[var(--color-success-strong)] border-[var(--color-success-strong-border)]'
-      }`}
+    <BadgeCount
+      className={cn(
+        'h-[22px] gap-1.5 px-2.5 text-[11px]',
+        homologacao ? 'bg-warning-soft text-warning-fg' : 'bg-success-soft text-success-fg',
+      )}
     >
-      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+      <AlertTriangle className="size-3.5 shrink-0" />
       {homologacao ? 'Homologação EISS' : 'Produção EISS'}
-    </span>
+    </BadgeCount>
   );
 }
 
@@ -44,27 +51,35 @@ function CaminhaoPipelineBar({ status }: { status: string }) {
   const atual = indiceEtapaCaminhao(status);
 
   return (
-    <div className="flex items-center gap-1" aria-label="Progresso do caminhão">
+    <div className="flex items-center" aria-label="Progresso do caminhão">
       {ETAPAS_CAMINHAO.map((etapa, i) => {
         const concluido = i < atual;
         const ativo = i === atual;
         return (
-          <div key={etapa.key} className="flex flex-1 items-center gap-1">
-            <div
-              className={`flex h-7 flex-1 items-center justify-center rounded-md text-xs font-semibold ${
-                ativo
-                  ? 'bg-primary/10 text-primary'
-                  : concluido
-                    ? 'bg-[var(--color-status-expedido-bg)] text-[var(--color-status-expedido)]'
-                    : 'bg-muted text-muted-foreground'
-              }`}
+          <div key={etapa.key} className="flex items-center">
+            <span
+              className={cn(
+                'flex items-center gap-1.5 text-[11px] font-semibold text-fg-faint',
+                concluido && 'text-success-fg',
+                ativo && 'text-primary-fg',
+              )}
             >
-              {etapa.label}
-            </div>
-            {i < ETAPAS_CAMINHAO.length - 1 && (
-              <div
-                className={`h-0.5 w-2 shrink-0 ${concluido ? 'bg-[var(--color-status-expedido)]' : 'bg-border'}`}
+              <span
+                className={cn(
+                  'flex size-[18px] shrink-0 items-center justify-center rounded-full bg-surface-3 font-data text-[10px] text-fg-faint',
+                  concluido && 'bg-success text-white',
+                  ativo && 'bg-primary text-white shadow-[0_0_0_3px_var(--color-primary-soft)]',
+                )}
                 aria-hidden="true"
+              >
+                {concluido ? '✓' : i + 1}
+              </span>
+              {etapa.label}
+            </span>
+            {i < ETAPAS_CAMINHAO.length - 1 && (
+              <span
+                aria-hidden="true"
+                className={cn('mx-1.5 h-px w-6 bg-border-strong', concluido && 'bg-success')}
               />
             )}
           </div>
@@ -140,34 +155,30 @@ function FormEmissao({ caminhaoId, pedidoVendaId, onSuccess }: FormEmissaoProps)
   return (
     <div className="mt-2 space-y-2">
       <form onSubmit={(e) => void emitir(e)} className="flex flex-wrap items-end gap-2">
-        <div>
-          <label className="mb-1 block text-xs text-muted-foreground" htmlFor={`valor-${pedidoVendaId}`}>
-            Valor (R$)
-          </label>
-          <input
+        <FormField label="Valor (R$)" htmlFor={`valor-${pedidoVendaId}`} className="w-32">
+          <Input
             id={`valor-${pedidoVendaId}`}
-            type="number"
-            min="0.01"
-            step="0.01"
+            inputMode="decimal"
             value={valor}
             onChange={(e) => setValor(e.target.value)}
-            className="w-32 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            adornLeft={<span className="text-xs">R$</span>}
+            className="text-right font-data"
             placeholder="0,00"
             disabled={submitting}
           />
-        </div>
+        </FormField>
         <Button type="submit" size="sm" disabled={submitting || !valor}>
           {submitting ? 'Emitindo…' : 'Emitir NFS-e'}
         </Button>
         {erroLocal && (
-          <p className="w-full text-xs text-destructive">{erroLocal}</p>
+          <p className="w-full text-[11px] font-medium text-danger-fg">{erroLocal}</p>
         )}
       </form>
       {bloqueiosLocais.length > 0 && (
         <ul className="space-y-2" data-testid="bloqueios-emissao">
           {bloqueiosLocais.map((b) => (
-            <li key={b.codigo} className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
-              <p className="font-medium">[{b.codigo}]</p>
+            <li key={b.codigo} className="rounded-md border border-warning-soft-border bg-warning-soft p-2.5 text-xs text-warning-fg">
+              <p className="font-semibold">[{b.codigo}]</p>
               <p><span className="font-medium">Causa:</span> {b.causa}</p>
               <p><span className="font-medium">Impacto:</span> {b.impacto}</p>
               <p><span className="font-medium">Ação:</span> {b.acao}</p>
@@ -395,56 +406,43 @@ export function FaturamentoClient({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold text-foreground">{titulo}</h1>
-        <div className="flex items-center gap-2">
-          {caminhaoAtivo && (
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                realtimeStatus === 'conectado'
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-muted text-muted-foreground'
-              }`}
-              aria-label={`Tempo real ${realtimeStatus}`}
-            >
-              {realtimeStatus === 'conectado' ? '● tempo real' : '○ reconectando'}
-            </span>
-          )}
-          {ambiente && <BadgeAmbiente homologacao={ambiente.homologacao} />}
-        </div>
-      </div>
+    <div className="space-y-3">
+      <PageHeader title={titulo} live={!!caminhaoAtivo && realtimeStatus === 'conectado'}>
+        {ambiente && <BadgeAmbiente homologacao={ambiente.homologacao} />}
+      </PageHeader>
 
       {/* Lista de caminhões do dia (pré-faturamento) */}
       {mostrarListaCaminhoes && carregandoCaminhoes && (
-        <p className="text-sm text-muted-foreground" data-testid="carregando-caminhoes">
+        <p className="text-xs text-muted-foreground" data-testid="carregando-caminhoes">
           Carregando caminhões do dia…
         </p>
       )}
 
       {mostrarListaCaminhoes && !carregandoCaminhoes && caminhoesElegiveis.length > 0 && (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {caminhoesElegiveis.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => selecionarCaminhao(c.id)}
-                className={`rounded-lg border p-3 text-left transition-colors ${
-                  caminhaoAtivo === c.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
-                }`}
+                className={cn(
+                  'rounded-lg border p-3 text-left transition-colors duration-100',
+                  caminhaoAtivo === c.id
+                    ? 'border-primary bg-primary-soft'
+                    : 'border-border hover:border-fg-faint hover:bg-surface-2',
+                )}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-semibold text-foreground">{c.placa}</p>
-                    <p className="text-xs text-muted-foreground">{c.motorista}</p>
+                    <p className="font-data text-[13px] font-bold text-foreground">{c.placa}</p>
+                    <p className="text-[11px] text-muted-foreground">{c.motorista}</p>
                   </div>
                   <StatusPill
                     variant={statusCaminhaoVariant(c.statusCaminhao)}
                     label={c.statusCaminhao.replace(/_/g, ' ')}
                   />
                 </div>
-                <div className="mt-3">
+                <div className="mt-2.5">
                   <CaminhaoPipelineBar status={c.statusCaminhao} />
                 </div>
               </button>
@@ -453,38 +451,31 @@ export function FaturamentoClient({
       )}
 
       {mostrarListaCaminhoes && !carregandoCaminhoes && caminhoesElegiveis.length === 0 && (
-        <div
-          className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground"
-          data-testid="sem-caminhoes-dia"
-        >
-          <p className="font-medium text-foreground">Nenhum caminhão elegível para faturamento hoje</p>
-          <p className="mt-1">
-            Caminhões aparecem aqui após fechamento da expedição. Use o ID abaixo para consolidar
-            manualmente, se necessário.
-          </p>
+        <div data-testid="sem-caminhoes-dia">
+          <EmptyState
+            icon={<Truck />}
+            title="Nenhum caminhão elegível para faturamento hoje"
+            description="Caminhões aparecem aqui após fechamento da expedição. Use o ID abaixo para consolidar manualmente, se necessário."
+          />
         </div>
       )}
 
       {/* Formulário de seleção de caminhão */}
       {exibirFormManual && (
-      <form onSubmit={consolidar} className="flex flex-wrap items-end gap-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="caminhao-id">
-            ID do Caminhão
-          </label>
-          <input
-            id="caminhao-id"
-            type="text"
-            value={caminhaoId}
-            onChange={(e) => setCaminhaoId(e.target.value)}
-            className="rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            placeholder="UUID do caminhão"
-          />
-        </div>
-        <Button type="submit" disabled={loading || !caminhaoId.trim()}>
-          {loading ? 'Consolidando…' : 'Consolidar'}
-        </Button>
-      </form>
+        <form onSubmit={consolidar} className="flex flex-wrap items-end gap-3">
+          <FormField label="ID do Caminhão" htmlFor="caminhao-id" className="w-64">
+            <Input
+              id="caminhao-id"
+              type="text"
+              value={caminhaoId}
+              onChange={(e) => setCaminhaoId(e.target.value)}
+              placeholder="UUID do caminhão"
+            />
+          </FormField>
+          <Button type="submit" disabled={loading || !caminhaoId.trim()}>
+            {loading ? 'Consolidando…' : 'Consolidar'}
+          </Button>
+        </form>
       )}
 
       {mostrarListaCaminhoes && caminhaoAtivo && consolidacao?.caminhao.statusCaminhao === 'fechado' &&
@@ -506,39 +497,41 @@ export function FaturamentoClient({
 
       {/* Loading */}
       {loading && (
-        <p className="text-sm text-muted-foreground" data-testid="loading">
+        <p className="text-xs text-muted-foreground" data-testid="loading">
           Consolidando faturamento…
         </p>
       )}
 
       {/* Resultado da consolidação */}
       {!loading && consolidacao && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Cabeçalho do caminhão */}
-          <div className="rounded-md border border-border bg-card p-4 space-y-3">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="font-medium text-foreground">
-                  {consolidacao.caminhao.placa} — {consolidacao.caminhao.motorista}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Data: {consolidacao.caminhao.dataOperacao}
-                </p>
+          <Card>
+            <CardContent className="space-y-2.5">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-[13px] font-semibold text-foreground">
+                    {consolidacao.caminhao.placa} — {consolidacao.caminhao.motorista}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Data: {consolidacao.caminhao.dataOperacao}
+                  </p>
+                </div>
+                <StatusPill
+                  variant={statusCaminhaoVariant(consolidacao.caminhao.statusCaminhao)}
+                  label={consolidacao.caminhao.statusCaminhao.replace(/_/g, ' ')}
+                />
               </div>
-              <StatusPill
-                variant={statusCaminhaoVariant(consolidacao.caminhao.statusCaminhao)}
-                label={consolidacao.caminhao.statusCaminhao.replace(/_/g, ' ')}
-              />
-            </div>
-            <CaminhaoPipelineBar status={consolidacao.caminhao.statusCaminhao} />
-            <p className="text-xs text-muted-foreground">
-              Faturamento:{' '}
-              <span className="font-medium">
-                {consolidacao.faturamento.statusFaturamento.replace(/_/g, ' ')}
-              </span>{' '}
-              · {consolidacao.totalItens} itens no total
-            </p>
-          </div>
+              <CaminhaoPipelineBar status={consolidacao.caminhao.statusCaminhao} />
+              <p className="text-xs text-muted-foreground">
+                Faturamento:{' '}
+                <span className="font-medium text-foreground">
+                  {consolidacao.faturamento.statusFaturamento.replace(/_/g, ' ')}
+                </span>{' '}
+                · {consolidacao.totalItens} itens no total
+              </p>
+            </CardContent>
+          </Card>
 
           {/* KPIs */}
           {(() => {
@@ -547,23 +540,19 @@ export function FaturamentoClient({
             const autorizados = notas.filter((n) => n.statusNfse === 'emitida').length;
             const erros = notas.filter((n) => n.statusNfse === 'erro_emissao').length;
             const valorTotal = notas.reduce((acc, n) => acc + Number(n.valor), 0);
-            const kpis = [
-              { label: 'Pedidos na carga', value: `${consolidacao.pedidos.length}`, sub: 'para faturamento', color: 'text-[var(--color-brand-navy-deep)]', bg: 'bg-[var(--color-surface-subtle)]' },
-              { label: 'Preparados', value: `${preparados}`, sub: 'aguardando envio', color: 'text-[var(--color-text-secondary)]', bg: 'bg-[var(--color-muted)]' },
-              { label: 'Autorizados', value: `${autorizados}`, sub: 'nota emitida', color: 'text-[var(--color-success-strong)]', bg: 'bg-[var(--color-success-surface)]' },
-              { label: 'Com erro', value: `${erros}`, sub: 'aguardando reprocessamento', color: 'text-[var(--color-danger-rose)]', bg: 'bg-[var(--color-danger-surface)]' },
-              { label: 'Valor total da carga', value: valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), sub: 'notas emitidas', color: 'text-[var(--color-brand-navy-deep)]', bg: 'bg-[var(--color-surface-subtle)]' },
-            ];
             return (
-              <div className="grid grid-cols-5 gap-3">
-                {kpis.map(({ label, value, sub, color, bg }) => (
-                  <div key={label} className={`border border-[var(--color-border)] rounded-xl px-4 py-3.5 ${bg}`}>
-                    <p className="text-[11px] text-[var(--color-text-secondary)] font-medium mb-1">{label}</p>
-                    <p className={`text-[22px] font-black leading-none ${color}`}>{value}</p>
-                    <p className="text-[10px] text-[var(--color-text-muted)] mt-1.5">{sub}</p>
-                  </div>
-                ))}
-              </div>
+              <KpiStrip>
+                <Kpi label="Pedidos na carga" value={consolidacao.pedidos.length} hint="para faturamento" tone="default" />
+                <Kpi label="Preparados" value={preparados} hint="aguardando envio" tone="default" />
+                <Kpi label="Autorizados" value={autorizados} hint="nota emitida" tone="ok" />
+                <Kpi label="Com erro" value={erros} hint="aguardando reprocessamento" tone="danger" />
+                <Kpi
+                  label="Valor total da carga"
+                  value={valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  hint="notas emitidas"
+                  tone="default"
+                />
+              </KpiStrip>
             );
           })()}
 
@@ -571,25 +560,20 @@ export function FaturamentoClient({
           {consolidacao.bloqueios.length > 0 && (
             <div
               role="alert"
-              className="rounded-md border border-red-300 bg-red-50 p-4 space-y-3"
+              className="space-y-2.5 rounded-md border border-warning-soft-border bg-warning-soft p-3"
               data-testid="painel-bloqueios"
             >
-              <h2 className="font-semibold text-red-800">
+              <h2 className="flex items-center gap-1.5 text-[13px] font-bold text-warning-fg">
+                <AlertTriangle className="size-3.5 shrink-0" />
                 Bloqueios ativos — dados fiscais incompletos ({consolidacao.bloqueios.length})
               </h2>
-              <ul className="space-y-3">
+              <ul className="space-y-2">
                 {consolidacao.bloqueios.map((b) => (
-                  <li key={b.codigo} className="rounded border border-red-200 bg-white p-3 text-sm">
-                    <p className="font-medium text-red-700">[{b.codigo}]</p>
-                    <p className="text-red-700">
-                      <span className="font-medium">Causa:</span> {b.causa}
-                    </p>
-                    <p className="text-red-700">
-                      <span className="font-medium">Impacto:</span> {b.impacto}
-                    </p>
-                    <p className="text-red-700">
-                      <span className="font-medium">Ação:</span> {b.acao}
-                    </p>
+                  <li key={b.codigo} className="rounded-md border border-warning-soft-border bg-card p-2.5 text-xs">
+                    <p className="font-semibold text-warning-fg">[{b.codigo}]</p>
+                    <p className="text-fg-secondary"><span className="font-medium text-foreground">Causa:</span> {b.causa}</p>
+                    <p className="text-fg-secondary"><span className="font-medium text-foreground">Impacto:</span> {b.impacto}</p>
+                    <p className="text-fg-secondary"><span className="font-medium text-foreground">Ação:</span> {b.acao}</p>
                   </li>
                 ))}
               </ul>
@@ -598,27 +582,28 @@ export function FaturamentoClient({
 
           {/* Lista de pedidos (apenas sem bloqueios ou sempre visível para acompanhamento) */}
           {consolidacao.pedidos.length > 0 && (
-            <div className="space-y-3" data-testid="lista-pedidos">
-              <h2 className="text-lg font-semibold text-foreground">
-                Pedidos consolidados ({consolidacao.pedidos.length})
-              </h2>
-              <ul className="space-y-4">
+            <Card data-testid="lista-pedidos">
+              <CardHeader>
+                <CardTitle>Pedidos consolidados</CardTitle>
+                <BadgeCount>{consolidacao.pedidos.length}</BadgeCount>
+              </CardHeader>
+              <CardContent className="space-y-2.5">
                 {consolidacao.pedidos.map((pedido) => {
                   const nota = notaPorPedido(pedido.pedidoVendaId);
                   const emOperacao = submittingNota === nota?.id;
                   return (
-                    <li
+                    <div
                       key={pedido.pedidoVendaId}
-                      className="rounded-md border border-border bg-card p-4 space-y-3"
+                      className="rounded-md border border-border p-3 space-y-2"
                       data-testid="pedido-item"
                     >
                       {/* Dados do pedido */}
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
-                          <p className="font-medium text-foreground">
+                          <p className="text-[13px] font-semibold text-foreground">
                             {pedido.clienteRazaoSocial}
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-[11px] text-muted-foreground">
                             {pedido.clienteDocumentoFiscal} · {pedido.itensCount} iten(s) ·{' '}
                             {pedido.pesoTotalKg.toFixed(3)} kg
                           </p>
@@ -630,13 +615,13 @@ export function FaturamentoClient({
 
                       {/* NF já existe */}
                       {nota && (
-                        <div className="space-y-2 text-sm">
+                        <div className="space-y-2 text-xs">
                           {nota.numeroNfse && (
                             <p className="text-muted-foreground">
                               NFS-e nº{' '}
-                              <span className="font-medium text-foreground">{nota.numeroNfse}</span>
+                              <span className="font-data font-semibold text-foreground">{nota.numeroNfse}</span>
                               {nota.codigoVerificacao && (
-                                <> · Cód. verificação: <span className="font-medium text-foreground">{nota.codigoVerificacao}</span></>
+                                <> · Cód. verificação: <span className="font-data font-semibold text-foreground">{nota.codigoVerificacao}</span></>
                               )}
                             </p>
                           )}
@@ -645,17 +630,17 @@ export function FaturamentoClient({
                               href={nota.linkNfse}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-blue-600 underline"
+                              className="text-[11px] font-medium text-primary-fg underline"
                             >
                               Ver NFS-e
                             </a>
                           )}
                           {nota.ultimoErroNfse && (
-                            <p className="rounded bg-red-50 px-2 py-1 text-xs text-red-700">
+                            <p className="rounded-md bg-danger-soft px-2 py-1 text-[11px] text-danger-fg">
                               Erro: {nota.ultimoErroNfse}
                             </p>
                           )}
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-muted-foreground">
                             Valor: R$ {nota.valor} · Alíquota: {nota.aliquota}% ·{' '}
                             {nota.tentativasEmissao} tentativa(s)
                           </p>
@@ -664,11 +649,8 @@ export function FaturamentoClient({
                           <div className="flex flex-wrap gap-2">
                             {nota.statusNfse === 'emitida' && pode('NFSE_CANCELAR') && (
                               <div className="flex w-full flex-wrap items-end gap-2">
-                                <div>
-                                  <label className="mb-1 block text-xs text-muted-foreground" htmlFor={`motivo-cancelar-${nota.id}`}>
-                                    Motivo do cancelamento
-                                  </label>
-                                  <input
+                                <FormField label="Motivo do cancelamento" htmlFor={`motivo-cancelar-${nota.id}`} className="w-64">
+                                  <Input
                                     id={`motivo-cancelar-${nota.id}`}
                                     type="text"
                                     value={motivosCancelamento[nota.id] ?? ''}
@@ -678,14 +660,13 @@ export function FaturamentoClient({
                                         [nota.id]: e.target.value,
                                       }))
                                     }
-                                    className="w-64 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                                     placeholder="Motivo auditável"
                                     disabled={emOperacao}
                                   />
-                                </div>
+                                </FormField>
                                 <Button
                                   size="sm"
-                                  variant="destructive"
+                                  variant="destructiveOutline"
                                   onClick={() => void cancelarNota(nota.id)}
                                   disabled={emOperacao || !motivosCancelamento[nota.id]?.trim()}
                                   data-testid="btn-cancelar"
@@ -717,15 +698,15 @@ export function FaturamentoClient({
                           onSuccess={carregar}
                         />
                       )}
-                    </li>
+                    </div>
                   );
                 })}
-              </ul>
-            </div>
+              </CardContent>
+            </Card>
           )}
 
           {consolidacao.pedidos.length === 0 && (
-            <p className="text-sm text-muted-foreground" data-testid="sem-pedidos">
+            <p className="text-xs text-muted-foreground" data-testid="sem-pedidos">
               Nenhum pedido consolidado para este caminhão.
             </p>
           )}
