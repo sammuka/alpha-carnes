@@ -3,21 +3,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowRightLeft, CheckCircle2, ClipboardCheck, Layers, MapPin, PackageCheck, Plus, Search, Truck,
+  ArrowRightLeft, CheckCircle2, ClipboardCheck, MapPin, PackageCheck, Plus, Search, Truck,
 } from 'lucide-react';
 import type { PedidoVenda } from '@/lib/comercial';
 import type { Caminhao, CaminhaoDetalhe } from '@/lib/operacao';
 import { ROTULO_STATUS_CARGA, rotuloPrioridade } from '@/lib/expedicao-ui';
 import { conectarRealtime } from '@/lib/realtime';
+import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { PageHeader } from '@/components/ui/page-header';
+import { Card, CardContent } from '@/components/ui/card';
+import { FormField } from '@/components/ui/form-field';
+import { SelectNative } from '@/components/ui/select-native';
+import { StatusPill } from '@/components/ui/status-pill';
+import { BadgeCount } from '@/components/ui/badge-count';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 
 interface Cliente {
   id: string;
@@ -243,162 +247,139 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
   }
 
   return (
-    <div className="flex h-full flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-foreground">Planejamento de Expedição</h2>
-          <p className="text-sm text-muted-foreground">
-            Montagem de carga e vínculo Pedido → Caminhão antes da operação
-          </p>
-        </div>
-        <Button variant="outline" size="sm" asChild>
+    <div className="space-y-3">
+      <PageHeader title="Planejamento de Expedição" subtitle="Montagem de carga e vínculo Pedido → Caminhão antes da operação">
+        <Button variant="secondary" size="sm" asChild>
           <Link href="/cadastros/rotas">
-            <MapPin className="mr-2 h-4 w-4" />
+            <MapPin />
             Itinerários
           </Link>
         </Button>
-      </div>
+      </PageHeader>
 
       {erro && (
-        <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+        <div role="alert" className="rounded-md border border-danger-soft-border bg-danger-soft p-3 text-xs text-danger-fg">
           {erro}
         </div>
       )}
 
       {pode('EXPEDICAO_GERENCIAR') && (
-        <form onSubmit={(e) => void criarCaminhao(e)} className="flex flex-wrap items-end gap-2 rounded-lg border bg-card p-4">
-          <div>
-            <Label htmlFor="frota-caminhao">Caminhão da frota</Label>
-            <Select
-              value={novoCaminhao.frotaCaminhaoId || 'avulso'}
-              onValueChange={(v) => setNovoCaminhao((s) => ({ ...s, frotaCaminhaoId: v === 'avulso' ? '' : v }))}
-            >
-              <SelectTrigger id="frota-caminhao" className="w-52">
-                <SelectValue placeholder="Selecionar…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="avulso">Avulso (placa manual)</SelectItem>
+        <Card>
+          <CardContent className="flex flex-wrap items-end gap-2.5">
+            <FormField label="Caminhão da frota" htmlFor="frota-caminhao" className="w-52">
+              <SelectNative
+                id="frota-caminhao"
+                value={novoCaminhao.frotaCaminhaoId}
+                onChange={(e) => setNovoCaminhao((s) => ({ ...s, frotaCaminhaoId: e.target.value }))}
+              >
+                <option value="">Avulso (placa manual)</option>
                 {frotaOpcoes.map((f) => (
-                  <SelectItem key={f.id} value={f.id}>
+                  <option key={f.id} value={f.id}>
                     {f.placa} · {f.capacidadeKg.toLocaleString('pt-BR')} kg
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {!novoCaminhao.frotaCaminhaoId && (
-            <div>
-              <Label htmlFor="placa">Placa</Label>
-              <Input id="placa" value={novoCaminhao.placa} onChange={(e) => setNovoCaminhao((s) => ({ ...s, placa: e.target.value }))} />
-            </div>
-          )}
-          <div>
-            <Label htmlFor="motorista">Motorista</Label>
-            <Input id="motorista" value={novoCaminhao.motorista} onChange={(e) => setNovoCaminhao((s) => ({ ...s, motorista: e.target.value }))} />
-          </div>
-          <div>
-            <Label htmlFor="rota">Rota</Label>
-            <Input id="rota" value={novoCaminhao.rota} onChange={(e) => setNovoCaminhao((s) => ({ ...s, rota: e.target.value }))} />
-          </div>
-          <Button type="submit" disabled={submitting}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Caminhão
-          </Button>
-        </form>
+              </SelectNative>
+            </FormField>
+            {!novoCaminhao.frotaCaminhaoId && (
+              <FormField label="Placa" htmlFor="placa">
+                <Input id="placa" value={novoCaminhao.placa} onChange={(e) => setNovoCaminhao((s) => ({ ...s, placa: e.target.value }))} />
+              </FormField>
+            )}
+            <FormField label="Motorista" htmlFor="motorista">
+              <Input id="motorista" value={novoCaminhao.motorista} onChange={(e) => setNovoCaminhao((s) => ({ ...s, motorista: e.target.value }))} />
+            </FormField>
+            <FormField label="Rota" htmlFor="rota">
+              <Input id="rota" value={novoCaminhao.rota} onChange={(e) => setNovoCaminhao((s) => ({ ...s, rota: e.target.value }))} />
+            </FormField>
+            <Button type="button" disabled={submitting} onClick={(e) => void criarCaminhao(e)}>
+              <Plus />
+              Novo Caminhão
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Carregando…</p>
+        <p className="text-xs text-muted-foreground">Carregando…</p>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
           {/* Coluna Esquerda: Pedidos do Dia (Sem Caminhão) */}
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
-                <Layers className="h-4 w-4 text-muted-foreground" />
-                Pedidos do Dia (Sem Caminhão)
-              </h3>
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Buscar pedido…" className="pl-9" value={busca} onChange={(e) => setBusca(e.target.value)} />
-              </div>
-            </div>
-            <div className="flex-1 space-y-6 overflow-auto pr-2">
+          <Card>
+            <CardContent className="flex flex-col gap-1.5 p-2.5 pb-1.5">
+              <Input adornLeft={<Search />} placeholder="Buscar pedido…" className="h-7 text-xs" value={busca} onChange={(e) => setBusca(e.target.value)} />
+            </CardContent>
+            <div className="max-h-[560px] overflow-y-auto overflow-x-hidden p-2.5 pt-0">
               {rotasAgrupadas.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2 rounded-xl border bg-card py-16">
-                  <CheckCircle2 className="h-8 w-8 text-emerald-300" />
-                  <p className="text-sm text-muted-foreground">
-                    Todos os pedidos do dia já foram alocados a um caminhão.
-                  </p>
-                </div>
+                <EmptyState
+                  icon={<CheckCircle2 />}
+                  title="Todos os pedidos do dia já foram alocados a um caminhão."
+                  className="py-12"
+                />
               ) : (
-                rotasAgrupadas.map(([rota, itens]) => (
-                  <div key={rota} className="space-y-3">
-                    <h4 className="flex items-center gap-2 border-b pb-2 text-sm font-bold text-primary">
-                      <MapPin className="h-4 w-4" />
-                      {rota}
-                    </h4>
-                    <div className="space-y-2">
-                      {itens.map((pedido) => {
-                        const prioridade = rotuloPrioridade(pedido.prioridade);
-                        return (
-                          <div
-                            key={pedido.id}
-                            className="flex items-center justify-between rounded-xl border bg-card p-3 transition-colors hover:border-primary/40"
-                          >
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-bold text-foreground">{nomeCliente(pedido.clienteId)}</span>
-                                <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-600">
-                                  S/ Caminhão
-                                </span>
+                <div className="space-y-3">
+                  {rotasAgrupadas.map(([rota, itens]) => (
+                    <div key={rota} className="space-y-1.5">
+                      <h4 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">
+                        <MapPin className="size-3.5" />
+                        {rota}
+                      </h4>
+                      <div className="space-y-1.5">
+                        {itens.map((pedido) => {
+                          const prioridade = rotuloPrioridade(pedido.prioridade);
+                          return (
+                            <div
+                              key={pedido.id}
+                              className="flex items-center justify-between gap-2 rounded-md border border-border p-2.5 text-xs"
+                            >
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[13px] font-semibold text-foreground">{nomeCliente(pedido.clienteId)}</span>
+                                  <BadgeCount className="bg-warning-soft text-warning-fg">S/ Caminhão</BadgeCount>
+                                </div>
+                                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                                  <span className="font-data">{pedido.id.slice(0, 8)}…</span>
+                                  <span title="Peso real apurado na pesagem">— kg</span>
+                                  {prioridade && (
+                                    <span
+                                      className={cn(
+                                        'font-bold uppercase',
+                                        prioridade === 'ALTA' && 'text-destructive',
+                                        prioridade === 'MÉDIA' && 'text-warning-fg',
+                                        prioridade === 'BAIXA' && 'text-success-fg',
+                                      )}
+                                    >
+                                      Prioridade {prioridade}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                <span>{pedido.id.slice(0, 8)}…</span>
-                                <span title="Peso real apurado na pesagem">— kg</span>
-                                {prioridade && (
-                                  <span
-                                    className={
-                                      prioridade === 'ALTA'
-                                        ? 'font-bold uppercase text-destructive'
-                                        : prioridade === 'MÉDIA'
-                                          ? 'font-bold uppercase text-amber-600'
-                                          : 'font-bold uppercase text-emerald-600'
-                                    }
-                                  >
-                                    Prioridade {prioridade}
-                                  </span>
-                                )}
-                              </div>
+                              {pode('EXPEDICAO_GERENCIAR') && caminhoes.length > 0 && (
+                                <Button size="sm" disabled={submitting} onClick={() => setModalPedido(pedido)}>
+                                  <ArrowRightLeft />
+                                  Alocar
+                                </Button>
+                              )}
                             </div>
-                            {pode('EXPEDICAO_GERENCIAR') && caminhoes.length > 0 && (
-                              <Button size="sm" disabled={submitting} onClick={() => setModalPedido(pedido)}>
-                                <ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" />
-                                Alocar
-                              </Button>
-                            )}
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
-          </div>
+          </Card>
 
           {/* Coluna Direita: Caminhões Montados */}
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
-                <Truck className="h-4 w-4 text-muted-foreground" />
+          <Card>
+            <CardContent className="flex items-center justify-between p-2.5">
+              <h3 className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">
+                <Truck className="size-3.5" />
                 Caminhões Montados
               </h3>
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                {caminhoes.length} Caminhão{caminhoes.length !== 1 ? 'ões' : ''}
-              </span>
-            </div>
-            <div className="flex-1 space-y-4 overflow-auto pr-2">
+              <BadgeCount>{caminhoes.length} Caminhão{caminhoes.length !== 1 ? 'ões' : ''}</BadgeCount>
+            </CardContent>
+            <div className="max-h-[560px] space-y-2.5 overflow-y-auto overflow-x-hidden p-2.5 pt-0">
               {detalhes.map(({ caminhao, pedidos: peds }) => {
                 const pronto = caminhao.statusCaminhao === 'em_conferencia';
                 const capacidade = caminhao.capacidadeKg;
@@ -406,31 +387,22 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
                 const ocupacao = capacidade ? Math.min(100, Math.round((pesoCarregado / capacidade) * 100)) : null;
 
                 return (
-                  <div key={caminhao.id} className="overflow-hidden rounded-xl border bg-card">
-                    <div className="border-b bg-muted/30 p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                            <Truck className="h-5 w-5 text-primary" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-foreground">{caminhao.placa}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {caminhao.motorista} · {caminhao.rota ?? '—'}
-                            </p>
-                          </div>
+                  <div key={caminhao.id} className="overflow-hidden rounded-md border border-border">
+                    <div className="border-b border-border bg-surface-2 p-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-data text-[13px] font-bold text-foreground">{caminhao.placa}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {caminhao.motorista} · {caminhao.rota ?? '—'}
+                          </p>
                         </div>
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            pronto ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                          }`}
-                        >
-                          <span className={`h-1.5 w-1.5 rounded-full ${pronto ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                          {ROTULO_STATUS_CARGA[caminhao.statusCaminhao]}
-                        </span>
+                        <StatusPill
+                          variant={pronto ? 'expedido' : 'pendente'}
+                          label={ROTULO_STATUS_CARGA[caminhao.statusCaminhao]}
+                        />
                       </div>
-                      <div className="mt-3 flex items-center gap-2">
-                        <span className="shrink-0 text-xs text-muted-foreground">
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
                           {peds.length} pedido{peds.length !== 1 ? 's' : ''}
                           {capacidade
                             ? ` · ${pesoCarregado.toFixed(1)} / ${capacidade.toLocaleString('pt-BR')} kg`
@@ -438,37 +410,41 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
                         </span>
                         {capacidade && (
                           <>
-                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3">
                               <div
-                                className={`h-full rounded-full ${(ocupacao ?? 0) >= 100 ? 'bg-destructive' : 'bg-primary'}`}
+                                className={cn(
+                                  'h-full rounded-full bg-primary',
+                                  (ocupacao ?? 0) > 90 && 'bg-warning',
+                                  (ocupacao ?? 0) >= 100 && 'bg-destructive',
+                                )}
                                 style={{ width: `${ocupacao}%` }}
                               />
                             </div>
-                            <span className="shrink-0 text-xs font-bold text-foreground">{ocupacao}%</span>
+                            <span className="shrink-0 text-[11px] font-bold text-foreground">{ocupacao}%</span>
                           </>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-2 p-3">
+                    <div className="flex flex-col gap-1.5 p-2">
                       {peds.length === 0 ? (
-                        <div className="flex items-center justify-center rounded-lg border-2 border-dashed p-4 text-xs text-muted-foreground">
+                        <div className="flex items-center justify-center rounded-md border border-dashed border-border-strong p-3 text-[11px] text-muted-foreground">
                           Nenhum pedido alocado. Use &quot;Alocar&quot; na lista à esquerda.
                         </div>
                       ) : (
                         peds.map((p, idx) => {
                           const pedidoOriginal = pedidoPorId.get(p.pedidoVendaId);
                           return (
-                            <div key={p.pedidoVendaId} className="flex items-center gap-3 rounded-lg border bg-muted/30 p-2.5 text-xs">
-                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
+                            <div key={p.pedidoVendaId} className="flex items-center gap-2.5 rounded-md border border-border bg-surface-2 p-2 text-xs">
+                              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-surface-3 font-data text-[10px] font-bold text-muted-foreground">
                                 {idx + 1}
                               </span>
                               <div>
-                                <p className="font-bold text-foreground">
+                                <p className="font-semibold text-foreground">
                                   {pedidoOriginal ? nomeCliente(pedidoOriginal.clienteId) : p.pedidoVendaId.slice(0, 8)}
                                 </p>
                                 <p className="text-[10px] text-muted-foreground">
-                                  {p.pedidoVendaId.slice(0, 8)}… · previsto {p.previsto} · carregado {p.carregado}
+                                  <span className="font-data">{p.pedidoVendaId.slice(0, 8)}…</span> · previsto {p.previsto} · carregado {p.carregado}
                                 </p>
                               </div>
                             </div>
@@ -478,11 +454,11 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
                     </div>
 
                     {peds.length > 0 && (
-                      <div className="px-3 pb-3">
+                      <div className="px-2 pb-2">
                         {pronto ? (
-                          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-700" />
-                            <p className="text-xs text-emerald-900">
+                          <div className="flex items-center gap-2 rounded-md border border-success-soft-border bg-success-soft px-3 py-2">
+                            <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-success-fg" />
+                            <p className="text-xs text-success-fg">
                               Pronto para conferência. Aguardando início da carga.
                             </p>
                           </div>
@@ -497,12 +473,12 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
                           </Button>
                         ) : (
                           <Button
-                            className="w-full bg-emerald-700 hover:bg-emerald-800"
+                            className="w-full"
                             size="sm"
                             disabled={submitting}
                             onClick={() => void enviarParaConferencia(caminhao.id)}
                           >
-                            <PackageCheck className="mr-1.5 h-3.5 w-3.5" />
+                            <PackageCheck />
                             Enviar para conferência
                           </Button>
                         )}
@@ -513,13 +489,10 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
               })}
 
               {caminhoes.length === 0 && (
-                <div className="flex flex-col items-center justify-center gap-2 rounded-xl border bg-card py-16">
-                  <ClipboardCheck className="h-8 w-8 text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground">Nenhum caminhão montado ainda.</p>
-                </div>
+                <EmptyState icon={<ClipboardCheck />} title="Nenhum caminhão montado ainda." className="py-12" />
               )}
             </div>
-          </div>
+          </Card>
         </div>
       )}
 
@@ -531,13 +504,13 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
           </DialogHeader>
           {modalPedido && (
             <>
-              <div className="rounded-lg bg-muted/30 p-3 text-xs">
+              <div className="rounded-lg bg-surface-2 p-3 text-xs">
                 <p className="font-bold text-foreground">{nomeCliente(modalPedido.clienteId)}</p>
                 <p className="mt-0.5 text-muted-foreground">
-                  {modalPedido.id.slice(0, 8)}… · {modalPedido.rotaPrevista ?? 'Sem rota'}
+                  <span className="font-data">{modalPedido.id.slice(0, 8)}…</span> · {modalPedido.rotaPrevista ?? 'Sem rota'}
                 </p>
               </div>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5">
                 {caminhoes.length === 0 ? (
                   <p className="py-6 text-center text-sm text-muted-foreground">
                     Nenhum caminhão disponível. Crie um novo caminhão primeiro.
@@ -555,16 +528,11 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
                         type="button"
                         disabled={submitting}
                         onClick={() => void vincularPedido(c.id, modalPedido.id)}
-                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-colors hover:border-primary hover:bg-primary/5"
+                        className="flex items-center justify-between rounded-md border border-border px-3 py-2.5 text-left transition-colors duration-100 hover:border-primary hover:bg-primary-soft"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                            <Truck className="h-4 w-4 text-primary" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-foreground">{c.placa}</p>
-                            <p className="text-xs text-muted-foreground">{c.motorista}</p>
-                          </div>
+                        <div>
+                          <p className="font-data text-[13px] font-bold text-foreground">{c.placa}</p>
+                          <p className="text-xs text-muted-foreground">{c.motorista}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-xs font-semibold text-foreground">

@@ -3,14 +3,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  CheckCircle2, ChevronDown, ChevronRight, Clock, Lock, PackageCheck, ScanLine, Search, Truck, User, XCircle,
+  CheckCircle2, Clock, Lock, PackageCheck, ScanLine, Search, Truck, User, XCircle,
 } from 'lucide-react';
 import type { Caminhao, RomaneioItem, Romaneio } from '@/lib/operacao';
-import { ROTULO_STATUS_CARGA } from '@/lib/expedicao-ui';
+import { ROTULO_STATUS_CARGA, variantStatusCarga } from '@/lib/expedicao-ui';
 import { conectarRealtime } from '@/lib/realtime';
+import { cn } from '@/lib/cn';
 import { PipelineBar } from '@/components/ui/pipeline-bar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PageHeader } from '@/components/ui/page-header';
+import { Card, CardContent } from '@/components/ui/card';
+import { KpiStrip, Kpi } from '@/components/ui/kpi-strip';
+import { StatusPill } from '@/components/ui/status-pill';
+import {
+  Table, TableBody, TableCell, TableCellCode, TableCellNum, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import {
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from '@/components/ui/accordion';
 import { ModalDivergencia } from './modal-divergencia';
 import { ModalLeituraManual } from './modal-leitura-manual';
 
@@ -48,7 +59,7 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
   const [busca, setBusca] = useState('');
   const [bipInput, setBipInput] = useState('');
   const [bipMensagem, setBipMensagem] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null);
-  const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
+  const [expandidos, setExpandidos] = useState<string[]>([]);
   const [modalDivergenciaItem, setModalDivergenciaItem] = useState<RomaneioItem | null>(null);
   const [modalLeituraManualCodigo, setModalLeituraManualCodigo] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -98,7 +109,7 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
       }
       const dados = (await res.json()) as Romaneio;
       setRomaneioState(dados);
-      setExpandidos(new Set(dados.pedidos.map((p) => p.pedidoVendaId)));
+      setExpandidos(dados.pedidos.map((p) => p.pedidoVendaId));
     } catch {
       setErro('Erro de conexão');
     }
@@ -294,54 +305,36 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
     }
   }
 
-  function toggleExpandido(pedidoVendaId: string) {
-    setExpandidos((prev) => {
-      const next = new Set(prev);
-      if (next.has(pedidoVendaId)) next.delete(pedidoVendaId);
-      else next.add(pedidoVendaId);
-      return next;
-    });
-  }
-
   return (
-    <div className="flex h-full flex-col gap-6">
-      <PipelineBar
-        etapaAtual="Carga"
-        contadores={{ carga: `${cargasAtivas} Carga${cargasAtivas !== 1 ? 's' : ''} em Conferência` }}
-      />
+    <div className="space-y-3">
+      <Card>
+        <CardContent className="px-3 py-2">
+          <PipelineBar
+            etapaAtual="Carga"
+            contadores={{ carga: `${cargasAtivas} Carga${cargasAtivas !== 1 ? 's' : ''} em Conferência` }}
+          />
+        </CardContent>
+      </Card>
 
-      <div>
-        <h1 className="text-xl font-bold text-foreground">Conferência de Carga</h1>
-        <p className="text-sm text-muted-foreground">
-          Bipagem de peças etiquetadas antes do envio ao faturamento
-        </p>
-      </div>
+      <PageHeader title="Conferência de Carga" subtitle="Bipagem de peças etiquetadas antes do envio ao faturamento" />
 
       {erro && (
-        <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+        <div role="alert" className="rounded-md border border-danger-soft-border bg-danger-soft p-3 text-xs text-danger-fg">
           {erro}
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid items-start gap-2.5 lg:grid-cols-[320px_1fr]">
         {/* Master: lista de cargas */}
-        <div className="flex flex-col overflow-hidden rounded-xl border bg-card lg:col-span-4">
-          <div className="border-b p-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="pl-9"
-                placeholder="Buscar por placa, cliente ou carga..."
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex-1 space-y-2 overflow-auto p-2">
-            {loading && <p className="p-2 text-sm text-muted-foreground">Carregando…</p>}
+        <Card>
+          <CardContent className="flex gap-1.5 p-2.5 pb-1.5">
+            <Input adornLeft={<Search />} placeholder="Buscar por placa, cliente ou carga..." className="h-7 text-xs" value={busca} onChange={(e) => setBusca(e.target.value)} />
+          </CardContent>
+          <div className="max-h-[560px] overflow-y-auto overflow-x-hidden">
+            {loading && <p className="p-3 text-xs text-muted-foreground">Carregando…</p>}
             {!loading &&
               cargasFiltradas.map((c) => {
-                const selecionada = c.id === cargaAtivaId;
+                const selecionado = c.id === cargaAtivaId;
                 const cont = contadores.get(c.id) ?? { conferidas: 0, total: 0 };
                 const pct = cont.total === 0 ? 0 : Math.round((cont.conferidas / cont.total) * 100);
                 return (
@@ -349,254 +342,205 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
                     key={c.id}
                     type="button"
                     onClick={() => setCargaAtivaId(c.id)}
-                    className={`relative w-full rounded-md border p-3 text-left transition-colors ${
-                      selecionada ? 'border-primary/40 bg-primary/5' : 'hover:border-primary/30'
-                    }`}
+                    className={cn(
+                      'block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2',
+                      selecionado && 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]',
+                    )}
                   >
-                    <div className="mb-2 flex items-start justify-between">
-                      <span className="text-sm font-bold text-foreground">Carga #{c.id.slice(0, 8)}</span>
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
-                        {ROTULO_STATUS_CARGA[c.statusCaminhao]}
-                      </span>
-                    </div>
-                    <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-                      <Truck className="h-3 w-3" />
-                      {c.placa} · {c.rota ?? '—'}
-                    </div>
-                    <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-2">
+                      <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">Carga #{c.id.slice(0, 8)}</b>
+                      <StatusPill variant={variantStatusCarga(c.statusCaminhao)} className="h-[17px] text-[10px]" label={ROTULO_STATUS_CARGA[c.statusCaminhao]} />
+                    </span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      <span className="font-data">{c.placa}</span> · {c.rota ?? '—'}
+                    </span>
+                    <span className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
                       <span />
                       <span>{cont.conferidas} / {cont.total} peças</span>
-                    </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={`h-full rounded-full ${pct === 100 ? 'bg-emerald-500' : 'bg-primary'}`}
+                    </span>
+                    <span className="mt-1 block h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
+                      <span
+                        className={cn('block h-full rounded-full bg-primary', pct === 100 && 'bg-success')}
                         style={{ width: `${pct}%` }}
                       />
-                    </div>
+                    </span>
                   </button>
                 );
               })}
           </div>
-        </div>
+        </Card>
 
         {/* Detail */}
-        <div className="flex flex-col overflow-hidden rounded-xl border bg-card lg:col-span-8">
+        <Card>
           {!cam ? (
-            <p className="p-8 text-sm text-muted-foreground">Selecione uma carga para ver os detalhes.</p>
+            <CardContent className="p-8">
+              <p className="text-sm text-muted-foreground">Selecione uma carga para ver os detalhes.</p>
+            </CardContent>
           ) : (
-            <>
-              <div className="border-b p-6">
-                <div className="mb-4 flex items-start justify-between">
-                  <div>
-                    <div className="mb-1 flex items-center gap-3">
-                      <h2 className="text-lg font-bold text-foreground">Carga #{cam.id.slice(0, 8)}</h2>
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
-                        {rotuloStatus}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1.5"><Truck className="h-4 w-4" /> Placa: {cam.placa}</span>
-                      <span className="flex items-center gap-1.5"><User className="h-4 w-4" /> Motorista: {cam.motorista}</span>
-                      <span className="flex items-center gap-1.5"><Clock className="h-4 w-4" /> {cam.rota ?? '—'}</span>
-                    </div>
+            <CardContent className="flex flex-col gap-3 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="mb-1 flex items-center gap-2">
+                    <h2 className="text-[15px] font-bold text-foreground">Carga #{cam.id.slice(0, 8)}</h2>
+                    <StatusPill variant={variantStatusCarga(cam.statusCaminhao)} label={rotuloStatus} />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-4 gap-4 rounded-lg border bg-muted/30 p-4">
-                  <div>
-                    <p className="mb-1 text-xs text-muted-foreground">Total de Pedidos</p>
-                    <p className="text-lg font-bold text-foreground">{romaneio?.pedidos.length ?? 0}</p>
-                  </div>
-                  <div>
-                    <p className="mb-1 text-xs text-muted-foreground">Peças Conferidas</p>
-                    <p className="text-lg font-bold text-primary">{stats.conferidas} / {stats.total}</p>
-                  </div>
-                  <div>
-                    <p className="mb-1 text-xs text-muted-foreground">Divergências</p>
-                    <p className={`text-lg font-bold ${stats.divergentes > 0 ? 'text-destructive' : 'text-foreground'}`}>
-                      {stats.divergentes}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="mb-1 text-xs text-muted-foreground">Peso Conferido</p>
-                    <p className="text-lg font-bold text-foreground">
-                      {fmtKg(stats.pesoConferido)}{' '}
-                      <span className="text-xs text-muted-foreground">/ {fmtKg(stats.pesoTotal)}</span>
-                    </p>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1"><Truck className="size-3.5" /> Placa: <span className="font-data">{cam.placa}</span></span>
+                    <span className="flex items-center gap-1"><User className="size-3.5" /> Motorista: {cam.motorista}</span>
+                    <span className="flex items-center gap-1"><Clock className="size-3.5" /> {cam.rota ?? '—'}</span>
                   </div>
                 </div>
               </div>
 
+              <KpiStrip>
+                <Kpi label="Total de Pedidos" value={romaneio?.pedidos.length ?? 0} />
+                <Kpi label="Peças Conferidas" value={`${stats.conferidas} / ${stats.total}`} />
+                <Kpi label="Divergências" value={stats.divergentes} tone={stats.divergentes > 0 ? 'alert' : 'default'} />
+                <Kpi label="Peso Conferido" value={fmtKg(stats.pesoConferido)} hint={`/ ${fmtKg(stats.pesoTotal)}`} />
+              </KpiStrip>
+
               {cargaConferida ? (
-                <div className="mx-6 mt-4 flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <Lock className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
-                  <p className="flex-1 text-sm font-bold text-emerald-900">
+                <div className="flex items-start gap-2 rounded-md border border-success-soft-border bg-success-soft px-3 py-2">
+                  <Lock className="mt-0.5 size-3.5 shrink-0 text-success-fg" />
+                  <p className="flex-1 text-xs font-semibold text-success-fg">
                     Carga conferida. Estornos simples bloqueados — alterações exigem reabertura autorizada pela gestão.
                   </p>
                   {rotuloStatus === 'Conferida' && (
-                    <Button
-                      size="sm"
-                      className="shrink-0 bg-emerald-700 hover:bg-emerald-800"
-                      onClick={() => router.push('/carga/enviar-faturamento')}
-                    >
-                      <PackageCheck className="mr-1.5 h-3.5 w-3.5" />
+                    <Button size="sm" className="shrink-0" onClick={() => router.push('/carga/enviar-faturamento')}>
+                      <PackageCheck />
                       Enviar para Faturamento
                     </Button>
                   )}
                 </div>
               ) : (
-                <div className="mx-6 mt-4 flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5">
                   <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <ScanLine className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        className="pl-9 font-mono"
-                        value={bipInput}
-                        onChange={(e) => setBipInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') void bipar(); }}
-                        placeholder="Bipar etiqueta (ETQ-XXXXX) ou deixe em branco para bipar a próxima pendente..."
-                        disabled={submitting}
-                      />
-                    </div>
+                    <Input
+                      className="flex-1 font-data"
+                      adornLeft={<ScanLine />}
+                      value={bipInput}
+                      onChange={(e) => setBipInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') void bipar(); }}
+                      placeholder="Bipar etiqueta (ETQ-XXXXX)..."
+                      disabled={submitting}
+                    />
                     <Button onClick={() => void bipar()} disabled={submitting}>
-                      <ScanLine className="mr-1.5 h-4 w-4" />
+                      <ScanLine />
                       Bipar
                     </Button>
                   </div>
                   {bipMensagem && (
                     <div
-                      className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs ${
-                        bipMensagem.tipo === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-destructive/10 text-destructive'
-                      }`}
+                      className={cn(
+                        'flex items-center gap-2 rounded-md px-3 py-1.5 text-xs',
+                        bipMensagem.tipo === 'ok' ? 'bg-success-soft text-success-fg' : 'bg-danger-soft text-danger-fg',
+                      )}
                     >
-                      {bipMensagem.tipo === 'ok' ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <XCircle className="h-3.5 w-3.5 shrink-0" />}
+                      {bipMensagem.tipo === 'ok' ? <CheckCircle2 className="size-3.5 shrink-0" /> : <XCircle className="size-3.5 shrink-0" />}
                       {bipMensagem.texto}
                     </div>
                   )}
                 </div>
               )}
 
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-foreground">Pedidos da Carga</h3>
-                  {!cargaConferida && pode('EXPEDICAO_GERENCIAR') && (
-                    <Button
-                      size="sm"
-                      className="bg-emerald-700 hover:bg-emerald-800"
-                      disabled={!podeFinalizar || submitting}
-                      onClick={() => void finalizarConferencia()}
-                    >
-                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                      Finalizar Conferência
-                    </Button>
-                  )}
-                </div>
-
-                <div className="space-y-4">
-                  {romaneio?.pedidos.map((pedido) => {
-                    const expandido = expandidos.has(pedido.pedidoVendaId);
-                    const conferidas = pedido.itens.filter((i) => i.statusCargaItem === 'conferido').length;
-                    const divergentes = pedido.itens.filter((i) => i.statusCargaItem === 'divergente').length;
-                    const total = pedido.itens.length;
-                    const completo = conferidas + divergentes === total;
-
-                    return (
-                      <div key={pedido.pedidoVendaId} className="overflow-hidden rounded-lg border">
-                        <button
-                          type="button"
-                          onClick={() => toggleExpandido(pedido.pedidoVendaId)}
-                          className="flex w-full items-center justify-between bg-muted/30 p-4 transition-colors hover:bg-muted/50"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className={`rounded border p-2 shadow-sm ${completo ? 'border-emerald-200 bg-emerald-50' : 'border-border bg-card'}`}>
-                              {completo ? (
-                                <CheckCircle2 className="h-5 w-5 text-emerald-700" />
-                              ) : (
-                                <PackageCheck className="h-5 w-5 text-primary" />
-                              )}
-                            </div>
-                            <div className="text-left">
-                              <p className="text-sm font-semibold text-foreground">
-                                Pedido {pedido.pedidoVendaId.slice(0, 8)}…
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-6">
-                            <div className="text-right">
-                              <p className="text-sm font-medium text-foreground">{conferidas} / {total} peças</p>
-                              {divergentes > 0 && (
-                                <p className="text-xs text-destructive">
-                                  {divergentes} divergente{divergentes !== 1 ? 's' : ''}
-                                </p>
-                              )}
-                            </div>
-                            {expandido ? <ChevronDown className="h-5 w-5 text-muted-foreground" /> : <ChevronRight className="h-5 w-5 text-muted-foreground" />}
-                          </div>
-                        </button>
-
-                        {expandido && (
-                          <div className="border-t bg-card p-4">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b bg-muted/30 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                                  <th className="px-3 py-2">Etiqueta</th>
-                                  <th className="px-3 py-2">Produto</th>
-                                  <th className="px-3 py-2 text-right">Peso</th>
-                                  <th className="px-3 py-2 text-center">Status</th>
-                                  <th className="px-3 py-2 text-right">Ação</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y">
-                                {pedido.itens.map((item) => (
-                                  <tr key={item.cargaItemId}>
-                                    <td className="px-3 py-2.5 font-mono text-xs font-bold text-primary">{item.etiqueta ?? '—'}</td>
-                                    <td className="px-3 py-2.5">
-                                      <p className="font-medium text-foreground">{item.produtoNome}</p>
-                                      {item.statusCargaItem === 'divergente' && item.divergenciaMotivo && (
-                                        <p className="mt-0.5 text-xs text-destructive">{item.divergenciaMotivo}</p>
-                                      )}
-                                    </td>
-                                    <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{fmtKg(item.peso)}</td>
-                                    <td className="px-3 py-2.5 text-center">
-                                      <span
-                                        className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                                          item.statusCargaItem === 'conferido'
-                                            ? 'bg-emerald-50 text-emerald-700'
-                                            : item.statusCargaItem === 'divergente'
-                                              ? 'bg-destructive/10 text-destructive'
-                                              : 'bg-muted text-muted-foreground'
-                                        }`}
-                                      >
-                                        {rotuloStatusItem(item.statusCargaItem)}
-                                      </span>
-                                    </td>
-                                    <td className="px-3 py-2.5 text-right">
-                                      {item.statusCargaItem === 'em_carga' && !cargaConferida && pode('EXPEDICAO_GERENCIAR') ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => setModalDivergenciaItem(item)}
-                                          className="rounded border border-destructive/30 px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
-                                        >
-                                          Marcar divergência
-                                        </button>
-                                      ) : (
-                                        <span className="text-xs text-muted-foreground/50">—</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="flex items-center justify-between">
+                <h3 className="text-[13px] font-bold text-foreground">Pedidos da Carga</h3>
+                {!cargaConferida && pode('EXPEDICAO_GERENCIAR') && (
+                  <Button
+                    size="sm"
+                    disabled={!podeFinalizar || submitting}
+                    onClick={() => void finalizarConferencia()}
+                  >
+                    <CheckCircle2 />
+                    Finalizar Conferência
+                  </Button>
+                )}
               </div>
-            </>
+
+              <Accordion type="multiple" value={expandidos} onValueChange={setExpandidos}>
+                {romaneio?.pedidos.map((pedido) => {
+                  const conferidas = pedido.itens.filter((i) => i.statusCargaItem === 'conferido').length;
+                  const divergentes = pedido.itens.filter((i) => i.statusCargaItem === 'divergente').length;
+                  const total = pedido.itens.length;
+
+                  return (
+                    <AccordionItem key={pedido.pedidoVendaId} value={pedido.pedidoVendaId}>
+                      <AccordionTrigger className="py-2.5 text-xs hover:no-underline">
+                        <span className="flex flex-1 items-center justify-between gap-3">
+                          <span className="text-[13px] font-semibold text-foreground">
+                            Pedido {pedido.pedidoVendaId.slice(0, 8)}…
+                          </span>
+                          <span className="flex items-center gap-3">
+                            <span className="text-xs font-medium text-foreground">{conferidas} / {total} peças</span>
+                            {divergentes > 0 && (
+                              <span className="text-[11px] text-destructive">
+                                {divergentes} divergente{divergentes !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-2">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="hover:bg-transparent">
+                              <TableHead>Etiqueta</TableHead>
+                              <TableHead>Produto</TableHead>
+                              <TableHead className="text-right">Peso</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead />
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {pedido.itens.map((item) => (
+                              <TableRow key={item.cargaItemId} className="group">
+                                <TableCellCode>{item.etiqueta ?? '—'}</TableCellCode>
+                                <TableCell>
+                                  <p className="text-[13px] font-semibold text-foreground">{item.produtoNome}</p>
+                                  {item.statusCargaItem === 'divergente' && item.divergenciaMotivo && (
+                                    <p className="text-[11px] text-destructive">{item.divergenciaMotivo}</p>
+                                  )}
+                                </TableCell>
+                                <TableCellNum>{fmtKg(item.peso)}</TableCellNum>
+                                <TableCell>
+                                  <StatusPill
+                                    variant={
+                                      item.statusCargaItem === 'conferido'
+                                        ? 'expedido'
+                                        : item.statusCargaItem === 'divergente'
+                                          ? 'divergencia'
+                                          : 'pendente'
+                                    }
+                                    label={rotuloStatusItem(item.statusCargaItem)}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {item.statusCargaItem === 'em_carga' && !cargaConferida && pode('EXPEDICAO_GERENCIAR') ? (
+                                    <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
+                                      <Button
+                                        variant="destructiveOutline"
+                                        size="sm"
+                                        onClick={() => setModalDivergenciaItem(item)}
+                                      >
+                                        Marcar divergência
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <span className="block text-right text-[11px] text-fg-faint">—</span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
+            </CardContent>
           )}
-        </div>
+        </Card>
       </div>
 
       <ModalDivergencia

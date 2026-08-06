@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { FormField } from '@/components/ui/form-field';
+import { SelectNative } from '@/components/ui/select-native';
 import { Textarea } from '@/components/ui/textarea';
 import type { MotivoDivergenciaCarga, RomaneioItem } from '@/lib/operacao';
 
@@ -50,10 +50,10 @@ export function ModalDivergencia({
         </DialogHeader>
         {item && (
           <>
-            <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-muted/30 p-3 text-xs">
+            <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-surface-2 p-3 text-xs">
               <div>
                 <span className="text-muted-foreground">Etiqueta: </span>
-                <span className="font-bold text-foreground">{item.etiqueta ?? '—'}</span>
+                <span className="font-data font-bold text-foreground">{item.etiqueta ?? '—'}</span>
               </div>
               <div>
                 <span className="text-muted-foreground">Produto: </span>
@@ -61,36 +61,32 @@ export function ModalDivergencia({
               </div>
               <div className="col-span-2">
                 <span className="text-muted-foreground">Peso previsto: </span>
-                <span className="font-semibold text-foreground">
+                <span className="font-data font-semibold text-foreground">
                   {item.peso == null ? '—' : `${Number(item.peso).toFixed(3).replace('.', ',')} kg`}
                 </span>
               </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="motivo-divergencia">
-                Motivo <span className="text-destructive">*</span>
-              </Label>
-              <Select value={motivo} onValueChange={(v) => setMotivo(v as MotivoDivergenciaCarga)}>
-                <SelectTrigger id="motivo-divergencia">
-                  <SelectValue placeholder="Selecionar..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {MOTIVOS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="obs-divergencia">Observação</Label>
+            <FormField label="Motivo" required htmlFor="motivo-divergencia">
+              <SelectNative
+                id="motivo-divergencia"
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value as MotivoDivergenciaCarga)}
+              >
+                <option value="">Selecionar...</option>
+                {MOTIVOS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </SelectNative>
+            </FormField>
+            <FormField label="Observação" htmlFor="obs-divergencia">
               <Textarea id="obs-divergencia" rows={2} value={obs} onChange={(e) => setObs(e.target.value)} />
-            </div>
+            </FormField>
           </>
         )}
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="ghost" onClick={onClose}>
             Voltar
           </Button>
           <Button
