@@ -1,18 +1,29 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Edit2, Filter, Plus, Trash2, UserCircle } from 'lucide-react';
+import { Edit2, Filter, Plus, Trash2 } from 'lucide-react';
 import type { CriarUsuarioDto, PerfilComPermissoes, Usuario } from '@/lib/usuarios';
-import { Badge } from '@/components/ui/badge';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PageHeader } from '@/components/ui/page-header';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { SelectNative } from '@/components/ui/select-native';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { FormField } from '@/components/ui/form-field';
 import { extrairMensagemErro } from '@/lib/error-message';
 import { RepresentantesPermitidos } from './_components/representantes-permitidos';
 import { ResumoPerfis } from './resumo-perfis';
@@ -199,70 +210,63 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Gestão de Usuários & Perfis</h1>
-          <p className="text-sm text-muted-foreground">Controle de acesso (RBAC) e permissões no sistema</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" aria-label="Filtros">
-                <Filter className="mr-2 h-4 w-4" />
-                Filtros
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-72 space-y-3">
-              <label className="block text-sm font-medium" htmlFor="filtro-perfil">
-                Perfil de acesso
-              </label>
-              <select
-                id="filtro-perfil"
-                value={perfilFiltro}
-                onChange={(event) => setPerfilFiltro(event.target.value)}
-                className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
-              >
-                <option value="todos">Todos</option>
-                {perfis.map((perfil) => (
-                  <option key={perfil.slug} value={perfil.slug}>{perfil.nome}</option>
-                ))}
-              </select>
-              <label className="block text-sm font-medium" htmlFor="filtro-status">
-                Status
-              </label>
-              <select
-                id="filtro-status"
-                value={statusFiltro}
-                onChange={(event) =>
-                  setStatusFiltro(event.target.value as 'todos' | 'ativo' | 'inativo')
-                }
-                className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm"
-              >
-                <option value="todos">Todos</option>
-                <option value="ativo">Ativo</option>
-                <option value="inativo">Inativo</option>
-              </select>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setPerfilFiltro('todos');
-                  setStatusFiltro('todos');
-                }}
-              >
-                Limpar filtros
-              </Button>
-            </PopoverContent>
-          </Popover>
-          {pode('USUARIOS_GERENCIAR') && (
-            <Button onClick={abrirNovo}>
-              <Plus className="mr-2 h-4 w-4" />
-              Novo Usuário
+    <div className="space-y-3">
+      <PageHeader title="Gestão de Usuários & Perfis" subtitle="Controle de acesso (RBAC) e permissões no sistema">
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="secondary" aria-label="Filtros">
+              <Filter />
+              Filtros
             </Button>
-          )}
-        </div>
-      </div>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72 space-y-3">
+            <label className="block text-sm font-medium" htmlFor="filtro-perfil">
+              Perfil de acesso
+            </label>
+            <SelectNative
+              id="filtro-perfil"
+              value={perfilFiltro}
+              onChange={(event) => setPerfilFiltro(event.target.value)}
+            >
+              <option value="todos">Todos</option>
+              {perfis.map((perfil) => (
+                <option key={perfil.slug} value={perfil.slug}>{perfil.nome}</option>
+              ))}
+            </SelectNative>
+            <label className="block text-sm font-medium" htmlFor="filtro-status">
+              Status
+            </label>
+            <SelectNative
+              id="filtro-status"
+              value={statusFiltro}
+              onChange={(event) =>
+                setStatusFiltro(event.target.value as 'todos' | 'ativo' | 'inativo')
+              }
+            >
+              <option value="todos">Todos</option>
+              <option value="ativo">Ativo</option>
+              <option value="inativo">Inativo</option>
+            </SelectNative>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setPerfilFiltro('todos');
+                setStatusFiltro('todos');
+              }}
+            >
+              Limpar filtros
+            </Button>
+          </PopoverContent>
+        </Popover>
+        {pode('USUARIOS_GERENCIAR') && (
+          <Button onClick={abrirNovo}>
+            <Plus />
+            Novo Usuário
+          </Button>
+        )}
+      </PageHeader>
 
       {erro && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -270,73 +274,71 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-12">
+      <div className="grid gap-2.5 lg:grid-cols-12">
         <Card className="lg:col-span-8">
-          <div className="flex items-center gap-2 border-b p-5">
-            <UserCircle className="h-5 w-5 text-primary" />
-            <h2 className="font-bold">Lista de Usuários</h2>
-          </div>
-          <div className="overflow-auto p-5">
+          <CardHeader>
+            <CardTitle>Lista de Usuários</CardTitle>
+            <BadgeCount>{usuariosFiltrados.length}</BadgeCount>
+          </CardHeader>
+          <CardContent className="p-0">
             {loading ? (
-              <p className="text-sm text-muted-foreground">Carregando…</p>
+              <p className="p-5 text-sm text-muted-foreground">Carregando…</p>
             ) : usuariosFiltrados.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="p-5 text-sm text-muted-foreground">
                 Nenhum usuário encontrado para os filtros aplicados.
               </p>
             ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-3 font-medium">Nome / E-mail</th>
-                    <th className="pb-3 font-medium">Perfis</th>
-                    <th className="pb-3 text-center font-medium">Status</th>
-                    <th className="pb-3 font-medium">Último Acesso</th>
-                    <th className="pb-3 text-right font-medium">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Nome / E-mail</TableHead>
+                    <TableHead>Perfis</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-right">Último Acesso</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {usuariosFiltrados.map((u) => (
-                    <tr key={u.id} className="hover:bg-muted/40">
-                      <td className="py-4">
-                        <p className="font-semibold">{u.nome}</p>
-                        <p className="text-xs text-muted-foreground">{u.email}</p>
-                      </td>
-                      <td className="py-4">
+                    <TableRow key={u.id} className="group">
+                      <TableCell>
+                        <p className="text-[13px] font-semibold text-foreground">{u.nome}</p>
+                        <p className="font-data text-[11px] text-muted-foreground">{u.email}</p>
+                      </TableCell>
+                      <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {u.perfis.map((p) => (
-                            <Badge key={p} variant="outline">
-                              {p}
-                            </Badge>
+                            <BadgeCount key={p}>{p}</BadgeCount>
                           ))}
                         </div>
-                      </td>
-                      <td className="py-4 text-center">
+                      </TableCell>
+                      <TableCell className="text-center">
                         <StatusPill
-                          variant={u.ativo ? 'expedido' : 'bloqueado'}
+                          variant={u.ativo ? 'expedido' : 'pendente'}
                           label={u.ativo ? 'Ativo' : 'Inativo'}
                         />
-                      </td>
-                      <td className="py-4 text-muted-foreground">
+                      </TableCell>
+                      <TableCell className="text-right font-data text-muted-foreground">
                         {formatarUltimoAcesso(u.ultimoAcesso)}
-                      </td>
-                      <td className="py-4 text-right">
+                      </TableCell>
+                      <TableCell>
                         {pode('USUARIOS_GERENCIAR') && (
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => abrirEditar(u)}>
-                              <Edit2 className="h-4 w-4" />
+                          <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                            <Button variant="ghost" size="iconSm" onClick={() => abrirEditar(u)}>
+                              <Edit2 />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => void remover(u.id)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
+                            <Button variant="ghost" size="iconSm" onClick={() => void remover(u.id)}>
+                              <Trash2 className="text-destructive" />
                             </Button>
                           </div>
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
-          </div>
+          </CardContent>
         </Card>
 
         <div className="lg:col-span-4">
@@ -345,90 +347,95 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
       </div>
 
       <Sheet open={sheetAberto} onOpenChange={setSheetAberto}>
-        <SheetContent className="w-[520px] sm:max-w-[520px] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{editando ? 'Editar Usuário' : 'Novo Usuário'}</SheetTitle>
+        <SheetContent className="gap-0 p-0 sm:max-w-[520px]">
+          <SheetHeader className="border-b border-border p-4">
+            <SheetTitle className="text-[16px] font-bold">
+              {editando ? 'Editar Usuário' : 'Novo Usuário'}
+            </SheetTitle>
           </SheetHeader>
 
-          <form onSubmit={(e) => void salvar(e)} className="mt-6 space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="nome">Nome</Label>
-              <Input
-                id="nome"
-                value={form.nome}
-                onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))}
-                required
-              />
-            </div>
+          <form onSubmit={(e) => void salvar(e)} className="flex flex-1 flex-col overflow-y-auto">
+            <div className="flex-1 space-y-3 p-4">
+              <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                <FormField label="Nome" required htmlFor="nome">
+                  <Input
+                    id="nome"
+                    value={form.nome}
+                    onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))}
+                    required
+                  />
+                </FormField>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                value={form.email}
-                disabled={editando !== null}
-                onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
-                required
-              />
-            </div>
+                <FormField label="E-mail" required htmlFor="email">
+                  <Input
+                    id="email"
+                    type="email"
+                    value={form.email}
+                    disabled={editando !== null}
+                    onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
+                    required
+                  />
+                </FormField>
 
-            {!editando && (
-              <div className="space-y-1.5">
-                <Label htmlFor="senha">Senha</Label>
-                <Input
-                  id="senha"
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))}
-                  required
-                  minLength={8}
-                />
-              </div>
-            )}
-
-            <div className="flex items-center justify-between rounded-md border border-border p-3">
-              <Label htmlFor="ativo">Ativo</Label>
-              <Switch id="ativo" checked={ativo} onCheckedChange={setAtivo} />
-            </div>
-
-            {pode('PERFIS_GERENCIAR') && (
-              <div className="space-y-2">
-                <Label>Perfis</Label>
-                {perfis.map((p) => (
-                  <div key={p.slug} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`perfil-${p.slug}`}
-                      checked={form.perfis?.includes(p.slug) ?? false}
-                      onCheckedChange={(marcado) => {
-                        const atuais = form.perfis ?? [];
-                        setForm((s) => ({
-                          ...s,
-                          perfis: marcado === true ? [...atuais, p.slug] : atuais.filter((x) => x !== p.slug),
-                        }));
-                      }}
+                {!editando && (
+                  <FormField label="Senha" required htmlFor="senha" className="sm:col-span-2">
+                    <Input
+                      id="senha"
+                      type="password"
+                      value={form.password}
+                      onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))}
+                      required
+                      minLength={8}
                     />
-                    <Label htmlFor={`perfil-${p.slug}`} className="text-sm font-normal">
-                      {p.nome}
-                    </Label>
-                  </div>
-                ))}
+                  </FormField>
+                )}
               </div>
-            )}
 
-            {pode('USUARIOS_GERENCIAR') && (
-              <RepresentantesPermitidos
-                selecionados={representantesSelecionados}
-                vinculadosIniciais={editando?.representantesPermitidos ?? []}
-                onChange={setRepresentantesSelecionados}
-              />
-            )}
+              <div className="flex items-center justify-between rounded-md border border-border p-3">
+                <Label htmlFor="ativo">Ativo</Label>
+                <Switch id="ativo" checked={ativo} onCheckedChange={setAtivo} />
+              </div>
 
-            <SheetFooter className="flex-row justify-between gap-2">
+              {pode('PERFIS_GERENCIAR') && (
+                <div className="space-y-1.5">
+                  <Label>Perfis</Label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {perfis.map((p) => (
+                      <div key={p.slug} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`perfil-${p.slug}`}
+                          checked={form.perfis?.includes(p.slug) ?? false}
+                          onCheckedChange={(marcado) => {
+                            const atuais = form.perfis ?? [];
+                            setForm((s) => ({
+                              ...s,
+                              perfis: marcado === true ? [...atuais, p.slug] : atuais.filter((x) => x !== p.slug),
+                            }));
+                          }}
+                        />
+                        <Label htmlFor={`perfil-${p.slug}`} className="text-[13px] font-normal normal-case">
+                          {p.nome}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {pode('USUARIOS_GERENCIAR') && (
+                <RepresentantesPermitidos
+                  selecionados={representantesSelecionados}
+                  vinculadosIniciais={editando?.representantesPermitidos ?? []}
+                  onChange={setRepresentantesSelecionados}
+                />
+              )}
+            </div>
+
+            <SheetFooter className="flex-row justify-between gap-2 border-t border-border p-4">
               {editando && pode('USUARIOS_APROVAR') && (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   disabled={aprovando}
                   onClick={() => void aprovar(editando.id)}
                 >

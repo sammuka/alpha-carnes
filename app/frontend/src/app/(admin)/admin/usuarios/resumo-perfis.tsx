@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { mensagemDeErro } from '@/lib/error-message';
 
 interface LinhaResumo {
@@ -39,43 +39,45 @@ export function ResumoPerfis() {
   const maior = linhas?.reduce((max, l) => Math.max(max, l.total), 0) ?? 0;
 
   return (
-    <Card className="space-y-4 p-5">
-      <div className="flex items-center gap-2">
-        <Shield className="size-5 text-primary" />
-        <h2 className="font-bold">Resumo de Perfis</h2>
-      </div>
+    <Card>
+      <CardHeader>
+        <Shield className="size-4 text-primary" />
+        <CardTitle>Resumo de Perfis</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {erro && (
+          <p role="alert" className="text-sm text-destructive">
+            {erro}
+          </p>
+        )}
 
-      {erro && (
-        <p role="alert" className="text-sm text-destructive">
-          {erro}
-        </p>
-      )}
+        {!erro && !linhas && <p className="text-sm text-muted-foreground">Carregando…</p>}
 
-      {!erro && !linhas && <p className="text-sm text-muted-foreground">Carregando…</p>}
-
-      {linhas?.map((linha, indice) => (
-        <div key={linha.slug} className="space-y-1">
-          <div className="flex justify-between text-sm">
-            <span className="font-medium">{linha.nome}</span>
-            <span className="text-muted-foreground">
-              {linha.total} {linha.total === 1 ? 'usuário' : 'usuários'}
-            </span>
+        {linhas?.map((linha, indice) => (
+          <div key={linha.slug} className="space-y-1">
+            <div className="flex justify-between text-[11px]">
+              <span className="font-medium text-foreground">{linha.nome}</span>
+              <span className="text-muted-foreground">
+                {linha.total} {linha.total === 1 ? 'usuário' : 'usuários'}
+              </span>
+            </div>
+            <div className="h-1 w-full rounded-full bg-surface-3">
+              <div
+                className="h-1 rounded-full bg-primary"
+                style={{
+                  width: maior > 0 ? `${(linha.total / maior) * 100}%` : '0%',
+                  backgroundColor: CORES[indice % CORES.length],
+                }}
+              />
+            </div>
           </div>
-          <div className="h-2 w-full rounded-full bg-muted">
-            <div
-              className="h-2 rounded-full"
-              style={{
-                width: maior > 0 ? `${(linha.total / maior) * 100}%` : '0%',
-                backgroundColor: CORES[indice % CORES.length],
-              }}
-            />
-          </div>
-        </div>
-      ))}
-
-      <Button asChild variant="outline" className="w-full">
-        <Link href="/admin/perfis">Gerenciar Permissões (RBAC)</Link>
-      </Button>
+        ))}
+      </CardContent>
+      <CardFooter>
+        <Button asChild variant="secondary" className="w-full">
+          <Link href="/admin/perfis">Gerenciar Permissões (RBAC)</Link>
+        </Button>
+      </CardFooter>
     </Card>
   );
 }

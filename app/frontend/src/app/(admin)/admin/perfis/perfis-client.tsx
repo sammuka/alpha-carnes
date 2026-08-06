@@ -3,8 +3,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Info, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
+import { FilterChip } from '@/components/ui/filter-chip';
+import { PageHeader } from '@/components/ui/page-header';
 import { Switch } from '@/components/ui/switch';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { cn } from '@/lib/cn';
 import { mensagemDeErro } from '@/lib/error-message';
 import { MENU_V2 } from '@/lib/menu-v2';
 
@@ -106,15 +117,8 @@ export function PerfisClient() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-5">
-      {/* Cabeçalho — PerfisAcesso.tsx:139-143, literal */}
-      <div>
-        <p className="mb-0.5 text-[11px] font-medium text-text-muted">Administração / Perfis de Acesso</p>
-        <h1 className="text-[20px] font-bold text-text-strong">Perfis de Acesso</h1>
-        <p className="mt-0.5 text-[12px] text-text-secondary">
-          Matriz de permissões por perfil e menus visíveis para cada perfil.
-        </p>
-      </div>
+    <div className="space-y-3">
+      <PageHeader title="Perfis de Acesso" subtitle="Matriz de permissões por perfil e menus visíveis para cada perfil." />
 
       {erro && (
         <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -123,137 +127,127 @@ export function PerfisClient() {
       )}
 
       {/* Matriz de permissões — PerfisAcesso.tsx:146-188: uma LINHA por perfil, uma COLUNA por permissão */}
-      <Card className="overflow-hidden rounded-xl py-0">
-        <div className="flex items-center gap-2 border-b border-muted px-4 py-3">
-          <ShieldCheck className="size-4 text-action-blue" />
-          <p className="text-[12px] font-bold text-text-strong">Matriz de permissões</p>
-        </div>
+      <Card>
+        <CardHeader>
+          <ShieldCheck className="size-4 text-primary" />
+          <CardTitle>Matriz de permissões</CardTitle>
+        </CardHeader>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-muted bg-surface-subtle">
-                <th
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead
                   rowSpan={2}
-                  className="sticky left-0 bg-surface-subtle px-4 py-2.5 text-left text-[10px] font-bold tracking-wider text-text-secondary uppercase whitespace-nowrap"
+                  className="sticky left-0 z-20 bg-surface-2"
                 >
                   Perfil
-                </th>
+                </TableHead>
                 {(catalogo?.grupos ?? []).map((grupo) => (
-                  <th
+                  <TableHead
                     key={grupo.modulo}
                     colSpan={grupo.permissoes.length}
-                    className="border-l border-muted px-3 py-2 text-center text-[10px] font-bold tracking-wider text-text-secondary uppercase whitespace-nowrap"
+                    className="border-l border-border bg-surface-3 text-center text-[10px] font-bold uppercase tracking-[0.05em]"
                   >
                     {grupo.modulo}
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
-              <tr className="border-b border-muted bg-surface-subtle">
+              </TableRow>
+              <TableRow className="hover:bg-transparent">
                 {colunas.map((permissao) => (
-                  <th
+                  <TableHead
                     key={permissao.codigo}
                     title={permissao.descricao}
-                    className="px-3 py-2.5 text-center text-[10px] font-bold tracking-wider text-text-secondary uppercase whitespace-nowrap"
+                    className="text-center"
                   >
                     {permissao.codigo}
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {perfis.map((perfil, indice) => {
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {perfis.map((perfil) => {
                 const ativo = perfil.slug === slugSelecionado;
                 return (
-                  <tr
+                  <TableRow
                     key={perfil.slug}
                     onClick={() => setSlugSelecionado(perfil.slug)}
-                    className={`cursor-pointer border-b border-surface-subtle transition-colors ${
-                      ativo
-                        ? 'bg-action-blue-bg'
-                        : indice % 2 !== 0
-                          ? 'bg-table-zebra hover:bg-surface-subtle'
-                          : 'hover:bg-surface-subtle'
-                    }`}
+                    data-state={ativo ? 'selected' : undefined}
+                    className="cursor-pointer"
                   >
-                    <td
-                      className={`sticky left-0 px-4 py-2.5 font-semibold whitespace-nowrap ${
-                        ativo ? 'bg-action-blue-bg text-action-blue-hover' : 'bg-card text-text-strong'
-                      }`}
+                    <TableCell
+                      className={cn(
+                        'sticky left-0 z-10 h-9 text-center font-semibold whitespace-nowrap',
+                        ativo ? 'bg-primary-soft text-primary-fg' : 'bg-card text-foreground',
+                      )}
                     >
                       {perfil.nome}
-                    </td>
+                    </TableCell>
                     {colunas.map((permissao) => (
-                      <td
+                      <TableCell
                         key={permissao.codigo}
-                        className="px-3 py-2.5 text-center"
+                        className="h-9 text-center"
                         onClick={(ev) => ev.stopPropagation()}
                       >
                         <div className="flex justify-center">
                           <Switch
-                            className="h-5 w-9"
                             aria-label={`${permissao.codigo} para ${perfil.nome}`}
                             checked={perfil.permissoes.includes(permissao.codigo)}
                             disabled={salvando}
                             onCheckedChange={() => void alternarPermissao(perfil, permissao.codigo)}
                           />
                         </div>
-                      </td>
+                      </TableCell>
                     ))}
-                  </tr>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </CardContent>
       </Card>
 
       {/* Menus visíveis do perfil selecionado — PerfisAcesso.tsx:190-209, com D22.a */}
-      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl py-0">
-        <div className="flex items-center justify-between border-b border-muted px-4 py-3">
-          <p className="text-[12px] font-bold text-text-strong">
+      <Card>
+        <CardHeader>
+          <CardTitle>
             Menus visíveis — {selecionado?.nome ?? 'selecione um perfil'}
-          </p>
-          <span className="text-[11px] text-text-muted">
+          </CardTitle>
+          <span className="ml-auto text-[11px] text-muted-foreground">
             {selecionado
               ? `${selecionado.menusVisiveis.length} menu${selecionado.menusVisiveis.length !== 1 ? 's' : ''}`
               : '—'}
           </span>
-        </div>
+        </CardHeader>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <CardContent>
           {!selecionado ? (
-            <p className="text-[13px] text-text-muted">Selecione um perfil na matriz.</p>
+            <p className="text-[13px] text-muted-foreground">Selecione um perfil na matriz.</p>
           ) : (
             <div className="grid grid-cols-3 gap-2">
               {(catalogo?.menus ?? []).map((href) => {
                 const marcado = selecionado.menusVisiveis.includes(href);
                 return (
-                  <button
+                  <FilterChip
                     key={href}
-                    type="button"
-                    aria-pressed={marcado}
+                    active={marcado}
                     disabled={salvando}
                     onClick={() => void alternarMenu(selecionado, href)}
-                    className={`rounded-md border px-3 py-2 text-left text-[12px] transition-colors ${
-                      marcado
-                        ? 'border-action-blue bg-action-blue-bg text-action-blue-hover'
-                        : 'border-muted bg-surface-subtle text-text-ink hover:border-action-blue'
-                    }`}
+                    className="h-auto justify-start rounded-md px-3 py-2 text-left text-[12px]"
                   >
                     {ROTULO_MENU.get(href) ?? href}
-                  </button>
+                  </FilterChip>
                 );
               })}
             </div>
           )}
-        </div>
+        </CardContent>
 
-        <p className="flex items-start gap-2 border-t border-muted px-4 py-3 text-[11px] text-text-secondary">
-          <Info className="mt-0.5 size-3.5 flex-shrink-0" />
+        <CardFooter className="items-start gap-2 text-[11px] text-muted-foreground">
+          <Info className="mt-0.5 size-3.5 shrink-0" />
           Alterar menus visíveis vale na próxima navegação do usuário. Alterar permissões de API vale no
           próximo login ou renovação de sessão.
-        </p>
+        </CardFooter>
       </Card>
     </div>
   );
