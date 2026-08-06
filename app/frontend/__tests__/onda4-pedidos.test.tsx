@@ -206,7 +206,7 @@ it('modal de adendo mostra pedido aberto existente e envia motivo', async () => 
   );
   expect(screen.getByText(/pedido-existente/)).toBeInTheDocument();
   expect(screen.getByText(/12/)).toBeInTheDocument();
-  await userEvent.type(screen.getByLabelText('Motivo do adendo'), 'Complemento do cliente');
+  await userEvent.type(screen.getByLabelText(/^Motivo/), 'Complemento do cliente');
   await userEvent.click(screen.getByRole('button', { name: 'Registrar adendo' }));
   expect(onConfirm).toHaveBeenCalledWith('Complemento do cliente');
 });
@@ -228,12 +228,14 @@ it('selecionar cliente herda representante e rota do cadastro no editor de pedid
   render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
   await userEvent.click(await screen.findByRole('button', { name: 'Novo pedido' }));
 
-  fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'cliente-1' } });
+  await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
+  await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
   await waitFor(() => expect(screen.getByLabelText('Representante')).toHaveValue('Helena Prado'));
   expect(screen.getByLabelText('Representante')).toHaveAttribute('readonly');
   expect(screen.getByLabelText('Rota')).toHaveValue('Rota Oeste');
 
-  fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'cliente-2' } });
+  await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
+  await userEvent.click(await screen.findByRole('option', { name: /Mercado Sem Rota/i }));
   await waitFor(() => expect(screen.getByLabelText('Rota')).toHaveValue(''));
   expect(screen.getByLabelText('Rota')).toHaveAttribute('placeholder', '—');
 });
@@ -242,7 +244,8 @@ it('novo pedido usa dataOperacao recebida da compra sem fallback', async () => {
   render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
   await userEvent.click(await screen.findByRole('button', { name: 'Novo pedido' }));
   await screen.findByRole('option', { name: compraDaApi.dataOperacao });
-  fireEvent.change(screen.getByLabelText('Buscar cliente'), { target: { value: 'cliente-1' } });
+  await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
+  await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
   fireEvent.change(screen.getByLabelText('Operação'), { target: { value: compraDaApi.id } });
   fireEvent.change(screen.getByLabelText('Produto'), { target: { value: 'item-comercial-novo' } });
   fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
@@ -281,7 +284,7 @@ it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente par
   const aumentado = await screen.findByTestId('linha-item-aumentado');
   fireEvent.change(within(aumentado).getByLabelText('Quantidade'), { target: { value: '11' } });
   await userEvent.click(within(aumentado).getByRole('button', { name: 'Aplicar quantidade' }));
-  await userEvent.type(await screen.findByLabelText('Motivo do adendo'), 'Complemento solicitado pelo cliente');
+  await userEvent.type(await screen.findByLabelText(/^Motivo/), 'Complemento solicitado pelo cliente');
   await userEvent.click(screen.getByRole('button', { name: 'Registrar adendo' }));
 
   fireEvent.change(screen.getByLabelText('Produto'), { target: { value: 'item-comercial-novo' } });

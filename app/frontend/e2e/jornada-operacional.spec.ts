@@ -564,7 +564,8 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     await page.goto(`${BASE_URL}/comercial/pedidos`);
     await page.getByRole('button', { name: 'Novo pedido' }).click();
     await page.locator('#pedido-operacao').selectOption(compra.compraProgramadaId);
-    await page.locator('#pedido-cliente').selectOption(clienteId);
+    await page.locator('#pedido-cliente').click();
+    await page.getByRole('option', { name: `Cliente ${runId}` }).click();
     await page.locator('#produto-novo').selectOption(itemComercialId);
     await page.locator('#quantidade-produto-novo').fill('2');
     await page.getByRole('button', { name: 'Adicionar produto' }).click();
