@@ -3,77 +3,96 @@
 import { AlertTriangle } from 'lucide-react';
 import type { EstadoMapa, MapaProduto } from '@/lib/mapa-disponibilidade';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
+import { cn } from '@/lib/cn';
 
-const ESTADOS: Array<{
-  estado: EstadoMapa;
-  label: string;
-  classe: string;
-}> = [
-  { estado: 'F', label: 'Físico disponível', classe: 'border-status-expedido bg-status-expedido text-white' },
-  { estado: 'V', label: 'Virtual disponível', classe: 'border-2 border-dashed border-primary bg-background text-primary' },
-  { estado: 'R', label: 'Reservado', classe: 'border-status-divergencia bg-status-divergencia text-white' },
-  { estado: 'C', label: 'Confirmado', classe: 'border-primary bg-primary text-primary-foreground' },
-  { estado: 'D', label: 'Em desossa', classe: 'border-status-pesado bg-status-pesado text-white' },
-  { estado: 'O', label: 'Overbooking', classe: 'border-destructive bg-destructive text-destructive-foreground' },
-  { estado: 'E', label: 'Expedido', classe: 'border-muted-foreground bg-muted-foreground text-background' },
-  { estado: '!', label: 'Em ocorrência', classe: 'border-status-divergencia bg-status-divergencia text-white' },
+const ESTADOS: Array<{ estado: EstadoMapa; label: string }> = [
+  { estado: 'F', label: 'Físico disponível' },
+  { estado: 'V', label: 'Virtual disponível' },
+  { estado: 'R', label: 'Reservado' },
+  { estado: 'C', label: 'Confirmado' },
+  { estado: 'D', label: 'Em desossa' },
+  { estado: 'O', label: 'Overbooking' },
+  { estado: 'E', label: 'Expedido' },
+  { estado: '!', label: 'Em ocorrência' },
 ];
+
+const COR_ESTADO: Record<EstadoMapa, string> = {
+  F: 'var(--color-status-expedido-dot)',
+  V: 'var(--color-status-recebido-dot)',
+  R: 'var(--color-status-divergencia-dot)',
+  C: 'var(--color-status-recebido-dot)',
+  D: 'var(--color-status-pesado-dot)',
+  O: 'var(--color-status-bloqueado-dot)',
+  E: 'var(--color-status-pendente-dot)',
+  '!': 'var(--color-status-divergencia-dot)',
+};
 
 interface MapaTeatroProps {
   produtos: MapaProduto[];
+  selecionado?: { itemComercialId: string; estado: EstadoMapa } | null;
   onSelecionar: (produto: MapaProduto, estado: EstadoMapa) => void;
 }
 
-export function MapaTeatro({ produtos, onSelecionar }: MapaTeatroProps) {
+export function MapaTeatro({ produtos, selecionado, onSelecionar }: MapaTeatroProps) {
   if (produtos.length === 0) {
     return <p className="p-6 text-sm text-muted-foreground">Nenhum produto no catálogo para esta operação.</p>;
   }
 
   return (
-    <div className="space-y-4">
-      <div className="overflow-x-auto rounded-xl border bg-card">
+    <div className="space-y-2.5">
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <div className="min-w-[980px]">
-          <div className="grid grid-cols-[260px_repeat(8,minmax(78px,1fr))] gap-2 border-b bg-muted/40 px-4 py-3">
-            <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Produto</span>
+          <div className="grid grid-cols-[260px_repeat(8,minmax(78px,1fr))] gap-2 border-b border-border bg-surface-2 px-3 py-2">
+            <span className="text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">Produto</span>
             {ESTADOS.map(({ estado }) => (
-              <span key={estado} className="text-center text-xs font-black text-muted-foreground">{estado}</span>
+              <span key={estado} className="text-center text-[11px] font-bold text-muted-foreground">{estado}</span>
             ))}
           </div>
-          <div className="divide-y">
+          <div className="divide-y divide-border">
             {produtos.map((produto) => (
               <div
                 key={produto.itemComercialId}
-                className="grid grid-cols-[260px_repeat(8,minmax(78px,1fr))] items-center gap-2 px-4 py-3"
+                className="grid grid-cols-[260px_repeat(8,minmax(78px,1fr))] items-center gap-2 px-3 py-2"
               >
                 <div className="min-w-0">
-                  <p className="font-semibold">{produto.descricao}</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-mono text-muted-foreground">{produto.codigo}</span>
-                    {produto.provisorio && (
-                      <BadgeProvisorio pendencia="P11" texto="Provisório · P11" />
-                    )}
+                  <p className="text-[13px] font-semibold text-foreground">{produto.descricao}</p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                    <span className="font-data text-[11px] text-fg-secondary">{produto.codigo}</span>
+                    {produto.provisorio && <BadgeProvisorio codigo="P11" />}
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
                     Saldo comercial: <strong className="text-foreground">{produto.saldoComercial}</strong>
                   </p>
                 </div>
-                {ESTADOS.map(({ estado, label, classe }) => {
-                  const quantidade = produto.estados[estado];
+                {ESTADOS.map(({ estado, label }) => {
+                  const valor = produto.estados[estado];
                   const unidades = produto.unidades[estado];
+                  const ativo = selecionado?.itemComercialId === produto.itemComercialId
+                    && selecionado.estado === estado;
                   return (
                     <button
                       key={estado}
                       type="button"
-                      title={`${label} · ${quantidade} · ${unidades} unidade(s)`}
+                      title={`${label} · ${valor} · ${unidades} unidade(s)`}
                       aria-label={`${produto.codigo} ${label}`}
-                      className={`flex min-h-16 flex-col items-center justify-center rounded-lg border p-2 transition-transform hover:scale-105 ${classe}`}
+                      aria-pressed={ativo}
+                      className={cn(
+                        'min-w-[72px] rounded-md border border-border bg-card px-2 py-1.5 text-center transition-colors hover:border-fg-faint',
+                        estado === 'V' && 'border-dashed',
+                        ativo && 'border-primary ring-[3px] ring-ring/25',
+                      )}
                       onClick={() => onSelecionar(produto, estado)}
                     >
-                      <span className="text-xs font-black">
-                        {estado === '!' ? <AlertTriangle className="h-4 w-4" /> : estado}
-                      </span>
-                      <span className="mt-1 text-sm font-black">{quantidade}</span>
-                      <span className="text-[10px] opacity-80">{unidades} un.</span>
+                      <p className="text-[10px] font-bold text-muted-foreground">
+                        {estado === '!' ? <AlertTriangle className="mx-auto h-3 w-3" /> : estado}
+                      </p>
+                      <p className="font-data text-base font-bold">{valor}</p>
+                      <span
+                        aria-hidden="true"
+                        className="mx-auto mt-1 block h-[3px] w-8 rounded-full"
+                        style={{ background: COR_ESTADO[estado] }}
+                      />
+                      <p className="text-[10px] text-fg-faint">{unidades} un.</p>
                     </button>
                   );
                 })}
@@ -83,15 +102,18 @@ export function MapaTeatro({ produtos, onSelecionar }: MapaTeatroProps) {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 rounded-xl border bg-muted/30 px-4 py-3">
-        {ESTADOS.map(({ estado, label, classe }) => (
-          <div key={estado} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className={`flex h-6 w-6 items-center justify-center rounded border text-[10px] font-black ${classe}`}>
-              {estado === '!' ? <AlertTriangle className="h-3 w-3" /> : estado}
-            </span>
-            {label}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-2 px-3 py-2">
+        {ESTADOS.map(({ estado, label }) => (
+          <div key={estado} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span
+              aria-hidden="true"
+              className="inline-block h-[3px] w-5 rounded-full"
+              style={{ background: COR_ESTADO[estado] }}
+            />
+            {estado === '!' ? <AlertTriangle className="h-3 w-3" /> : estado} — {label}
           </div>
         ))}
+        <BadgeProvisorio codigo="P11" />
       </div>
     </div>
   );

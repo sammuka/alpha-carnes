@@ -1,32 +1,25 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  AlertCircle,
-  AlertTriangle,
-  Filter,
-  LayoutGrid,
-  PackageCheck,
-  PackageSearch,
-  Scale,
-  Table2,
-  TrendingUp,
-} from 'lucide-react';
+import { AlertCircle, Filter, Search } from 'lucide-react';
 import type { DisponibilidadeDia } from '@/lib/comercial';
 import type { DetalheMapa, EstadoMapa, MapaProduto } from '@/lib/mapa-disponibilidade';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { AlertItem } from '@/components/ui/alert-item';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DatePickerField } from '@/components/ui/date-picker-field';
+import { FilterChip } from '@/components/ui/filter-chip';
 import { Input } from '@/components/ui/input';
-import { KpiCard } from '@/components/ui/kpi-card';
-import { Label } from '@/components/ui/label';
+import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
+import { PageHeader } from '@/components/ui/page-header';
 import { Progress } from '@/components/ui/progress';
 import { StatusPill } from '@/components/ui/status-pill';
 import {
   Table,
   TableBody,
   TableCell,
+  TableCellNum,
   TableHead,
   TableHeader,
   TableRow,
@@ -183,65 +176,32 @@ export default function DisponibilidadePage() {
     disponivel: soma(linhas, 'quantidadeDisponivel'),
     recebido: soma(linhas, 'quantidadeRecebida'),
   };
-  const cards = [
-    { label: 'Total gerado', value: resumo.total.toFixed(0), sub: 'Previsto do dia', variant: 'primary' as const, Icon: PackageCheck },
-    { label: 'Reservado', value: resumo.reservado.toFixed(0), sub: 'Pedidos confirmados', variant: 'violet' as const, Icon: Scale },
-    { label: 'Disponível (livre)', value: resumo.disponivel.toFixed(0), sub: 'Pronto para venda', variant: 'success' as const, Icon: TrendingUp },
-    { label: 'Recebido', value: resumo.recebido.toFixed(0), sub: 'Em planta', variant: 'warning' as const, Icon: PackageSearch },
-    { label: 'Esgotados', value: `${esgotados.length} itens`, sub: 'Sem cobertura', variant: 'warning' as const, Icon: AlertTriangle },
-  ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Disponibilidade</h1>
-          <p className="text-sm text-muted-foreground">
-            Leitura do saldo físico, virtual e comprometido por produto.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusPill
-            variant={status === 'conectado' ? 'expedido' : 'pendente'}
-            label={status === 'conectado' ? 'tempo real' : 'reconectando'}
-          />
-          <div className="inline-flex rounded-lg bg-muted p-1">
-            <Button
-              type="button"
-              size="sm"
-              variant={abaAtiva === 'mapa' ? 'default' : 'ghost'}
-              onClick={() => setAbaAtiva('mapa')}
-            >
-              <LayoutGrid className="mr-2 h-4 w-4" />
-              Mapa de Disponibilidade
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={abaAtiva === 'grade' ? 'default' : 'ghost'}
-              onClick={() => setAbaAtiva('grade')}
-            >
-              <Table2 className="mr-2 h-4 w-4" />
-              Grade
-            </Button>
-          </div>
-        </div>
-      </div>
+    <div className="space-y-3">
+      <PageHeader
+        title="Disponibilidade"
+        subtitle="Leitura do saldo físico, virtual e comprometido por produto."
+        live={status === 'conectado'}
+      >
+        <FilterChip active={abaAtiva === 'mapa'} onClick={() => setAbaAtiva('mapa')}>
+          Mapa de Disponibilidade
+        </FilterChip>
+        <FilterChip active={abaAtiva === 'grade'} onClick={() => setAbaAtiva('grade')}>
+          Grade
+        </FilterChip>
+      </PageHeader>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
-        <Label htmlFor="data">Data operacional</Label>
-        <Input
-          id="data"
-          type="date"
-          value={dataOperacao}
-          onChange={(event) => setDataOperacao(event.target.value)}
-          className="w-auto"
-        />
-        <Button type="button" variant="outline" size="sm" onClick={() => setBusca('')}>
-          <Filter className="mr-1 h-4 w-4" />
-          Limpar filtros
-        </Button>
-      </div>
+      <Card>
+        <CardContent className="flex items-center gap-2 px-3 py-2">
+          <span className="text-xs font-semibold">Data operacional</span>
+          <DatePickerField value={dataOperacao} onChange={setDataOperacao} />
+          <Button type="button" variant="secondary" size="sm" onClick={() => setBusca('')}>
+            <Filter />
+            Limpar filtros
+          </Button>
+        </CardContent>
+      </Card>
 
       {erro && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -250,12 +210,18 @@ export default function DisponibilidadePage() {
       )}
 
       {abaAtiva === 'mapa' ? (
-        <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+        <div className="grid gap-2.5 xl:grid-cols-[1fr_320px]">
           <div>
             {carregando ? (
-              <p className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">Carregando mapa...</p>
+              <p className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">Carregando mapa...</p>
             ) : (
-              <MapaTeatro produtos={mapa} onSelecionar={(produto, estado) => void selecionarEstado(produto, estado)} />
+              <MapaTeatro
+                produtos={mapa}
+                selecionado={produtoDetalhe && estadoDetalhe
+                  ? { itemComercialId: produtoDetalhe.itemComercialId, estado: estadoDetalhe }
+                  : null}
+                onSelecionar={(produto, estado) => void selecionarEstado(produto, estado)}
+              />
             )}
           </div>
           <DetalheUnidade
@@ -267,42 +233,37 @@ export default function DisponibilidadePage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-            {cards.map((card) => (
-              <KpiCard
-                key={card.label}
-                label={card.label}
-                value={carregando ? '…' : card.value}
-                sub={card.sub}
-                variant={card.variant}
-                Icon={card.Icon}
-              />
-            ))}
-          </div>
+          <KpiStrip>
+            <Kpi label="Total gerado" value={carregando ? '…' : resumo.total.toFixed(0)} hint="Previsto do dia" />
+            <Kpi label="Reservado" value={carregando ? '…' : resumo.reservado.toFixed(0)} hint="Pedidos confirmados" />
+            <Kpi label="Disponível (livre)" value={carregando ? '…' : resumo.disponivel.toFixed(0)} hint="Pronto para venda" />
+            <Kpi label="Recebido" value={carregando ? '…' : resumo.recebido.toFixed(0)} hint="Em planta" />
+            <Kpi label="Esgotados" value={carregando ? '…' : `${esgotados.length} itens`} hint="Sem cobertura" tone="alert" />
+          </KpiStrip>
 
-          <div className="grid gap-6 lg:grid-cols-12">
+          <div className="grid gap-2.5 lg:grid-cols-12">
             <Card className="lg:col-span-8">
-              <div className="flex items-center justify-between border-b p-4">
-                <div className="flex items-center gap-2">
-                  <PackageSearch className="h-5 w-5 text-primary" />
-                  <h2 className="font-semibold">Grade de produtos</h2>
-                </div>
-                <Input
-                  placeholder="Buscar item..."
-                  className="max-w-xs"
-                  value={busca}
-                  onChange={(event) => setBusca(event.target.value)}
-                />
-              </div>
-              {carregando ? (
-                <p className="p-6 text-sm text-muted-foreground">Carregando...</p>
-              ) : filtradas.length === 0 ? (
-                <p className="p-6 text-sm text-muted-foreground">Nenhuma disponibilidade para esta data.</p>
-              ) : (
-                <div className="overflow-x-auto p-4">
+              <CardHeader>
+                <CardTitle>Grade de produtos</CardTitle>
+                <CardAction>
+                  <Input
+                    adornLeft={<Search />}
+                    placeholder="Buscar item..."
+                    className="h-7 w-[220px] text-xs"
+                    value={busca}
+                    onChange={(event) => setBusca(event.target.value)}
+                  />
+                </CardAction>
+              </CardHeader>
+              <CardContent className="p-0">
+                {carregando ? (
+                  <p className="p-6 text-sm text-muted-foreground">Carregando...</p>
+                ) : filtradas.length === 0 ? (
+                  <p className="p-6 text-sm text-muted-foreground">Nenhuma disponibilidade para esta data.</p>
+                ) : (
                   <Table>
                     <TableHeader>
-                      <TableRow>
+                      <TableRow className="hover:bg-transparent">
                         <TableHead>Item comercial</TableHead>
                         <TableHead className="text-right">Gerado</TableHead>
                         <TableHead className="text-right">Reservado</TableHead>
@@ -324,27 +285,27 @@ export default function DisponibilidadePage() {
                         return (
                           <TableRow key={linha.id} data-testid={`disp-${linha.id}`}>
                             <TableCell>
-                              <p className="font-medium">{produto?.descricao ?? linha.itemComercialId}</p>
-                              {produto && <p className="text-xs font-mono text-muted-foreground">{produto.codigo}</p>}
+                              <p className="text-[13px] font-semibold text-foreground">{produto?.descricao ?? linha.itemComercialId}</p>
+                              {produto && <p className="font-data text-[11px] text-fg-secondary">{produto.codigo}</p>}
                             </TableCell>
-                            <TableCell className="text-right">{linha.quantidadeTotalGerada}</TableCell>
-                            <TableCell className="text-right">{linha.quantidadeReservada}</TableCell>
-                            <TableCell
-                              className={`text-right font-semibold ${disponivel <= 0 ? 'text-destructive' : 'text-status-expedido'}`}
+                            <TableCellNum>{linha.quantidadeTotalGerada}</TableCellNum>
+                            <TableCellNum>{linha.quantidadeReservada}</TableCellNum>
+                            <TableCellNum
+                              className={disponivel <= 0 ? 'text-danger-fg' : 'text-success-fg'}
                               data-testid={`disp-${linha.id}-disponivel`}
                             >
                               {linha.quantidadeDisponivel}
-                            </TableCell>
-                            <TableCell className="text-right" data-testid={`disp-${linha.id}-recebido`}>
+                            </TableCellNum>
+                            <TableCellNum data-testid={`disp-${linha.id}-recebido`}>
                               {linha.quantidadeRecebida}
-                            </TableCell>
+                            </TableCellNum>
                             <TableCell className="min-w-36">
                               <div className="space-y-1">
-                                <div className="flex justify-between text-xs text-muted-foreground">
+                                <div className="flex justify-between text-[11px] text-muted-foreground">
                                   <span>{percentual}% reservado</span>
                                   {disponivel <= 0 && <StatusPill variant="divergencia" label="ESGOTADO" />}
                                 </div>
-                                <Progress value={percentual} className="h-2" />
+                                <Progress value={percentual} className="h-1.5" />
                               </div>
                             </TableCell>
                             <TableCell>{linha.status}</TableCell>
@@ -353,18 +314,18 @@ export default function DisponibilidadePage() {
                       })}
                     </TableBody>
                   </Table>
-                </div>
-              )}
+                )}
+              </CardContent>
             </Card>
 
             <Card className="border-t-4 border-t-status-divergencia lg:col-span-4">
-              <div className="flex items-center gap-2 border-b p-4">
-                <AlertCircle className="h-5 w-5 text-status-divergencia" />
-                <h2 className="font-semibold">Alertas & impactos</h2>
-              </div>
-              <div className="space-y-3 p-4">
+              <CardHeader>
+                <AlertCircle className="size-4 text-status-divergencia" />
+                <CardTitle>Alertas & impactos</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
                 {esgotados.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nenhum item esgotado no momento.</p>
+                  <p className="p-3 text-sm text-muted-foreground">Nenhum item esgotado no momento.</p>
                 ) : (
                   esgotados.map((linha) => (
                     <AlertItem
@@ -373,19 +334,18 @@ export default function DisponibilidadePage() {
                       description={`Reservado: ${linha.quantidadeReservada} / Gerado: ${linha.quantidadeTotalGerada}`}
                       time=""
                       variant="divergencia"
-                      Icon={AlertTriangle}
                     />
                   ))
                 )}
                 {linhas.some((linha) => Number(linha.quantidadeComDivergencia) > 0) && (
-                  <div className="rounded-md border bg-muted/50 p-3 text-sm">
+                  <div className="border-t border-border p-3 text-sm">
                     <p className="font-semibold">Divergências no recebimento</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {linhas.filter((linha) => Number(linha.quantidadeComDivergencia) > 0).length} item(ns) com quantidade divergente registrada.
                     </p>
                   </div>
                 )}
-              </div>
+              </CardContent>
             </Card>
           </div>
         </>
