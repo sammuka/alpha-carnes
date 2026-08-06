@@ -120,20 +120,20 @@ export function ComprasEditModal({ open, compra, itensCompra, onClose, onSalvo }
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar compra confirmada</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="flex flex-col gap-3 px-4">
           {compra.itens.map((it) => (
             <div key={it.id} className="flex items-center gap-3">
-              <span className="flex-1 text-sm font-medium">
+              <span className="flex-1 text-[13px] font-medium">
                 {itensCompra.find((c) => c.id === it.itemCompraId)?.nome ?? it.itemCompraId.slice(0, 8)}
               </span>
               <Input
                 type="number"
                 step="0.001"
-                className="w-28"
+                className="h-7 w-28 text-right font-data"
                 value={qtds[it.id] ?? ''}
                 onChange={(e) => setQtds((p) => ({ ...p, [it.id]: e.target.value }))}
               />
@@ -143,12 +143,12 @@ export function ComprasEditModal({ open, compra, itensCompra, onClose, onSalvo }
           <div>
             <div className="mb-2 flex items-center gap-1.5">
               <History className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs font-bold uppercase text-muted-foreground">Histórico de alterações desta compra</span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">Histórico de alterações desta compra</span>
             </div>
             {historico.length === 0 ? (
               <p className="text-xs text-muted-foreground">Nenhuma alteração registrada ainda.</p>
             ) : (
-              <ul className="max-h-40 divide-y overflow-y-auto rounded-lg border text-xs">
+              <ul className="max-h-40 divide-y divide-border overflow-y-auto rounded-lg border border-border text-xs">
                 {historico.map((h) => (
                   <li key={h.id} className="px-3 py-2">
                     <div className="flex justify-between">
@@ -163,8 +163,8 @@ export function ComprasEditModal({ open, compra, itensCompra, onClose, onSalvo }
           </div>
           {erro && <p className="text-sm text-destructive">{erro}</p>}
         </div>
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           {confirmarDeficit ? (
             <Button onClick={() => void salvar(true)} disabled={salvando}>Salvar mesmo assim</Button>
           ) : (

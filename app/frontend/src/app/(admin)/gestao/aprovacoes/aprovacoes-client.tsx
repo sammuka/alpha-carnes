@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { SeletorOperacao } from '@/components/gestao/seletor-operacao';
 import { QuadroComparativo } from '@/components/gestao/quadro-comparativo';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -12,9 +13,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { FormField } from '@/components/ui/form-field';
 import { Textarea } from '@/components/ui/textarea';
+import { PageHeader } from '@/components/ui/page-header';
 import { StatusPill } from '@/components/ui/status-pill';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { cn } from '@/lib/cn';
 import {
   buscarComparativo,
   decidirAprovacao,
@@ -145,144 +149,157 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
   };
 
   return (
-    <div className="flex h-full flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold">Aprovações</h1>
-          <p className="text-sm text-muted-foreground">Fila administrativa e aprovações operacionais</p>
-        </div>
+    <div className="space-y-3">
+      <PageHeader title="Aprovações" subtitle="Fila administrativa e aprovações operacionais">
         <SeletorOperacao />
-      </div>
+      </PageHeader>
 
       {erro && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{erro}</div>
       )}
 
-      <div className="flex gap-2 border-b border-border">
-        {(['ocorrencias', 'operacionais'] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setAba(t)}
-            className={`px-4 py-2 text-sm font-medium ${aba === t ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground'}`}
-          >
-            {t === 'ocorrencias' ? 'Fila Administrativa de Ocorrências' : 'Aprovações Operacionais'}
-          </button>
-        ))}
-      </div>
+      <Tabs value={aba} onValueChange={(v) => setAba(v as 'ocorrencias' | 'operacionais')}>
+        <TabsList>
+          <TabsTrigger value="ocorrencias">Fila Administrativa de Ocorrências</TabsTrigger>
+          <TabsTrigger value="operacionais">Aprovações Operacionais</TabsTrigger>
+        </TabsList>
 
-      {aba === 'ocorrencias' ? (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12">
-          <div className="overflow-y-auto rounded-xl border border-border lg:col-span-4">
-            {ocorrencias.map((o) => (
-              <button key={o.id} type="button" onClick={() => setOcorrenciaSel(o)} className={`w-full border-b px-4 py-3 text-left text-sm last:border-0 hover:bg-muted/30 ${ocorrenciaSel?.id === o.id ? 'bg-muted/40' : ''}`}>
-                <p className="font-semibold">{o.fornecedorNome}</p>
-                <StatusPill variant="pendente" label={ROTULO_STATUS_OCORRENCIA[o.status] ?? o.status} />
-              </button>
-            ))}
-          </div>
-          <div className="space-y-4 lg:col-span-8">
-            {ocorrenciaSel && (
-              <>
-                <div className="rounded-xl border border-border p-4 text-sm">
-                  <p><strong>Fornecedor:</strong> {ocorrenciaSel.fornecedorNome}</p>
-                  <p><strong>NF:</strong> {ocorrenciaSel.nfChave ?? '—'}</p>
-                  <p><strong>Pedido/lote:</strong> {ocorrenciaSel.pedidoLote ?? '—'}</p>
-
-                  {detalheOcorrencia?.status === 'resolvida' ? (
-                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-success-strong/30 bg-success-surface p-3">
-                      <div>
-                        <p className="text-sm font-bold text-success-strong">Resultado</p>
-                        <p className="mt-0.5 text-sm text-success-strong">{detalheOcorrencia.desfecho}</p>
-                        {detalheOcorrencia.dataHoraEncerramento && (
-                          <p className="mt-1 text-xs text-success-strong/80">
-                            Concluída em {formatDataHora(detalheOcorrencia.dataHoraEncerramento)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="mt-3 space-y-2">
-                        <Label htmlFor="andamento">Registrar andamento</Label>
-                        <Textarea id="andamento" value={andamento} onChange={(e) => setAndamento(e.target.value)} rows={2} />
-                        <Button size="sm" onClick={() => void enviarAndamento()} disabled={!andamento.trim()}>Registrar andamento</Button>
-                      </div>
-                      <div className="mt-3 space-y-2">
-                        <Label htmlFor="desfecho">Concluir tratativa</Label>
-                        <Textarea id="desfecho" value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} />
-                        <Button size="sm" variant="outline" onClick={() => void concluir()} disabled={!motivo.trim()}>Concluir tratativa</Button>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {detalheOcorrencia?.historico && detalheOcorrencia.historico.length > 0 && (
-                  <div className="rounded-xl border border-border p-4">
-                    <h3 className="text-sm font-semibold">Timeline de andamentos</h3>
-                    <div className="mt-3 flex flex-col gap-0">
-                      {[...detalheOcorrencia.historico]
-                        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-                        .map((h, i, arr) => (
-                          <div key={h.id} className="flex items-start gap-3 pb-4 last:pb-0">
-                            <div className="flex flex-col items-center">
-                              <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${i === arr.length - 1 ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
-                              {i < arr.length - 1 && <div className="mt-1 min-h-[16px] w-px flex-1 bg-border" />}
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex flex-wrap items-center gap-3">
-                                <span className="text-sm font-medium">{h.acao}</span>
-                                <span className="font-mono text-xs text-muted-foreground">{formatDataHora(h.createdAt)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
-                {semComparativo ? (
-                  <p className="text-sm text-muted-foreground">Sem conferência tripla concluída para esta ocorrência</p>
-                ) : comparativo ? (
-                  <QuadroComparativo itens={comparativo.itens} />
-                ) : null}
-              </>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {operacionais.map((a) => (
-            <div key={a.id} className="rounded-xl border border-border p-4 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-semibold">{ROTULO_TIPO_APROVACAO[a.tipo]}</span>
-                <StatusPill variant="pendente" label={ROTULO_STATUS_APROVACAO[a.status] ?? a.status} />
+        <TabsContent value="ocorrencias">
+          <div className="grid items-start gap-2.5 lg:grid-cols-[320px_1fr]">
+            <Card>
+              <div className="max-h-[560px] overflow-y-auto overflow-x-hidden">
+                {ocorrencias.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() => setOcorrenciaSel(o)}
+                    className={cn(
+                      'block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2',
+                      ocorrenciaSel?.id === o.id && 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]',
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">{o.fornecedorNome}</b>
+                      <StatusPill variant="pendente" label={ROTULO_STATUS_OCORRENCIA[o.status] ?? o.status} className="h-[17px] text-[10px]" />
+                    </span>
+                  </button>
+                ))}
               </div>
-              <p className="mt-2 text-muted-foreground">{a.descricao}</p>
-              <p className="mt-1 text-xs"><strong>Impacto:</strong> {a.impacto}</p>
-              {a.status === 'pendente' && podeDecidir && (
-                <div className="mt-3 flex gap-2">
-                  <Button size="sm" onClick={() => { setAprovacaoSel(a); setModalDecisao('aprovada'); }}>Aprovar solicitação</Button>
-                  <Button size="sm" variant="outline" onClick={() => { setAprovacaoSel(a); setModalDecisao('rejeitada'); }}>Rejeitar solicitação</Button>
-                </div>
-              )}
-              {a.decisaoMotivo && (
-                <p className="mt-2 text-xs text-muted-foreground">Decisão: {a.decisaoMotivo}</p>
+            </Card>
+
+            <div className="space-y-2.5">
+              {ocorrenciaSel && (
+                <>
+                  <Card>
+                    <CardContent className="space-y-3">
+                      <p className="text-[13px]"><strong>Fornecedor:</strong> {ocorrenciaSel.fornecedorNome}</p>
+                      <p className="text-[13px]"><strong>NF:</strong> {ocorrenciaSel.nfChave ?? '—'}</p>
+                      <p className="text-[13px]"><strong>Pedido/lote:</strong> {ocorrenciaSel.pedidoLote ?? '—'}</p>
+
+                      {detalheOcorrencia?.status === 'resolvida' ? (
+                        <div className="flex items-start gap-2 rounded-lg border border-success-soft-border bg-success-soft p-3">
+                          <div>
+                            <p className="text-[13px] font-bold text-success-fg">Resultado</p>
+                            <p className="mt-0.5 text-[13px] text-success-fg">{detalheOcorrencia.desfecho}</p>
+                            {detalheOcorrencia.dataHoraEncerramento && (
+                              <p className="mt-1 text-xs text-success-fg/80">
+                                Concluída em {formatDataHora(detalheOcorrencia.dataHoraEncerramento)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <FormField label="Registrar andamento" htmlFor="andamento">
+                            <Textarea id="andamento" value={andamento} onChange={(e) => setAndamento(e.target.value)} rows={2} />
+                          </FormField>
+                          <Button size="sm" onClick={() => void enviarAndamento()} disabled={!andamento.trim()}>Registrar andamento</Button>
+
+                          <FormField label="Concluir tratativa" htmlFor="desfecho">
+                            <Textarea id="desfecho" value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} />
+                          </FormField>
+                          <Button size="sm" variant="secondary" onClick={() => void concluir()} disabled={!motivo.trim()}>Concluir tratativa</Button>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {detalheOcorrencia?.historico && detalheOcorrencia.historico.length > 0 && (
+                    <Card>
+                      <CardContent>
+                        <h3 className="text-[13px] font-semibold">Timeline de andamentos</h3>
+                        <div className="mt-3 flex flex-col gap-0">
+                          {[...detalheOcorrencia.historico]
+                            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                            .map((h, i, arr) => (
+                              <div key={h.id} className="flex items-start gap-3 pb-4 last:pb-0">
+                                <div className="flex flex-col items-center">
+                                  <div className={cn('mt-1 h-2 w-2 shrink-0 rounded-full', i === arr.length - 1 ? 'bg-primary' : 'bg-fg-faint')} />
+                                  {i < arr.length - 1 && <div className="mt-1 min-h-[16px] w-px flex-1 bg-border" />}
+                                </div>
+                                <div className="flex-1">
+                                  <div className="flex flex-wrap items-center gap-3">
+                                    <span className="text-[13px] font-medium">{h.acao}</span>
+                                    <span className="font-data text-[10px] text-fg-faint">{formatDataHora(h.createdAt)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {semComparativo ? (
+                    <p className="text-sm text-muted-foreground">Sem conferência tripla concluída para esta ocorrência</p>
+                  ) : comparativo ? (
+                    <QuadroComparativo itens={comparativo.itens} />
+                  ) : null}
+                </>
               )}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="operacionais">
+          <div className="space-y-2.5">
+            {operacionais.map((a) => (
+              <Card key={a.id}>
+                <CardContent className="p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[13px] font-semibold">{ROTULO_TIPO_APROVACAO[a.tipo]}</span>
+                    <StatusPill variant="pendente" label={ROTULO_STATUS_APROVACAO[a.status] ?? a.status} />
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{a.descricao}</p>
+                  <p className="mt-1 text-xs text-muted-foreground"><strong className="text-foreground">Impacto:</strong> {a.impacto}</p>
+                  {a.status === 'pendente' && podeDecidir && (
+                    <div className="mt-3 flex gap-2">
+                      <Button size="sm" onClick={() => { setAprovacaoSel(a); setModalDecisao('aprovada'); }}>Aprovar solicitação</Button>
+                      <Button size="sm" variant="destructiveOutline" onClick={() => { setAprovacaoSel(a); setModalDecisao('rejeitada'); }}>Rejeitar solicitação</Button>
+                    </div>
+                  )}
+                  {a.decisaoMotivo && (
+                    <p className="mt-2 text-xs text-muted-foreground">Decisão: {a.decisaoMotivo}</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={modalDecisao !== null} onOpenChange={() => setModalDecisao(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{modalDecisao === 'aprovada' ? 'Aprovar solicitação' : 'Rejeitar solicitação'}</DialogTitle>
           </DialogHeader>
-          <Label htmlFor="motivo-decisao">Motivo (mín. 10 caracteres)</Label>
-          <Textarea id="motivo-decisao" value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} className="mt-1" />
+          <div className="px-4">
+            <FormField label="Motivo" required help="Mín. 10 caracteres" htmlFor="motivo-decisao">
+              <Textarea id="motivo-decisao" value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} />
+            </FormField>
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalDecisao(null)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setModalDecisao(null)}>Cancelar</Button>
             <Button onClick={() => void confirmarDecisao()} disabled={motivo.trim().length < 10}>Confirmar</Button>
           </DialogFooter>
         </DialogContent>
