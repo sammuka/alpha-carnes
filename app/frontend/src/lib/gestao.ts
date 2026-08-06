@@ -12,6 +12,7 @@ import {
   ShoppingCart,
   Truck,
 } from 'lucide-react';
+import type { KpiTone } from '@/components/ui/kpi-strip';
 
 type KpiCardVariant = 'primary' | 'violet' | 'success' | 'warning' | 'muted';
 
@@ -68,18 +69,18 @@ export const ROTULOS_KPI: Record<string, string> = {
 
 export const MAPA_KPI_UI: Record<
   string,
-  { Icon: LucideIcon; variant: KpiCardVariant; destacado?: boolean }
+  { Icon: LucideIcon; variant: KpiCardVariant; destacado?: boolean; tone: KpiTone }
 > = {
-  compras_programadas: { Icon: ShoppingCart, variant: 'primary' },
-  disponibilidade_total: { Icon: Scale, variant: 'primary' },
-  reservas_em_elaboracao: { Icon: ClipboardList, variant: 'violet' },
-  pedidos_finalizados: { Icon: CheckCircle2, variant: 'success' },
-  overbookings_abertos: { Icon: AlertTriangle, variant: 'warning', destacado: true },
-  recebimentos_aguardados: { Icon: Truck, variant: 'primary' },
-  divergencias_abertas: { Icon: AlertTriangle, variant: 'warning' },
-  pecas_em_desossa: { Icon: Scissors, variant: 'violet' },
-  relatorios_sif_pendentes: { Icon: FileText, variant: 'warning' },
-  faturamentos_pendentes: { Icon: Receipt, variant: 'muted' },
+  compras_programadas: { Icon: ShoppingCart, variant: 'primary', tone: 'default' },
+  disponibilidade_total: { Icon: Scale, variant: 'primary', tone: 'default' },
+  reservas_em_elaboracao: { Icon: ClipboardList, variant: 'violet', tone: 'default' },
+  pedidos_finalizados: { Icon: CheckCircle2, variant: 'success', tone: 'ok' },
+  overbookings_abertos: { Icon: AlertTriangle, variant: 'warning', destacado: true, tone: 'alert' },
+  recebimentos_aguardados: { Icon: Truck, variant: 'primary', tone: 'default' },
+  divergencias_abertas: { Icon: AlertTriangle, variant: 'warning', tone: 'alert' },
+  pecas_em_desossa: { Icon: Scissors, variant: 'violet', tone: 'default' },
+  relatorios_sif_pendentes: { Icon: FileText, variant: 'warning', tone: 'alert' },
+  faturamentos_pendentes: { Icon: Receipt, variant: 'muted', tone: 'danger' },
 };
 
 export const ORDEM_KPIS = [
