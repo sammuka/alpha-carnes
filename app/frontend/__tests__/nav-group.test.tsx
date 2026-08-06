@@ -39,8 +39,8 @@ describe('NavGroup', () => {
     const painel = painelDe(cabecalho);
     expect(cabecalho).toHaveAttribute('aria-expanded', 'true');
     expect(painel).toHaveAttribute('data-state', 'aberto');
-    // 2 itens × 36px + 4px, conforme alturaItens do componente
-    expect(painel.style.maxHeight).toBe('76px');
+    // 2 itens × 32px + 4px, conforme alturaItens do componente
+    expect(painel.style.maxHeight).toBe('68px');
 
     await userEvent.click(cabecalho);
     expect(cabecalho).toHaveAttribute('aria-expanded', 'false');
@@ -50,7 +50,7 @@ describe('NavGroup', () => {
     await userEvent.click(cabecalho);
     expect(cabecalho).toHaveAttribute('aria-expanded', 'true');
     expect(painel).toHaveAttribute('data-state', 'aberto');
-    expect(painel.style.maxHeight).toBe('76px');
+    expect(painel.style.maxHeight).toBe('68px');
   });
 
   it('o painel de itens declara o mecanismo de colapso do prototipo', () => {
