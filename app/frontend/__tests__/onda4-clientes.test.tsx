@@ -131,5 +131,5 @@ it('selects de representante e rota sao populados pela API de cadastros', async 
 
 it('badge do cabecalho mostra a contagem real de clientes ativos', async () => {
   render(<ClientesClient podeGerenciar={false} />);
-  expect(await screen.findByText('Total: 37 ativos')).toBeInTheDocument();
+  expect(await screen.findByText('37 ativos')).toBeInTheDocument();
 });
