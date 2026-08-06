@@ -4,9 +4,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
+import { PageHeader } from '@/components/ui/page-header';
 import { mensagemDeErro } from '@/lib/error-message';
+import { cn } from '@/lib/cn';
 import { CAMPOS_ETIQUETA, type CampoEtiqueta, type ModeloEtiqueta } from '@/lib/modelos-etiqueta';
 
 export function ModelosEtiquetaClient({ podeGerenciar }: { podeGerenciar: boolean }) {
@@ -65,14 +68,8 @@ export function ModelosEtiquetaClient({ podeGerenciar }: { podeGerenciar: boolea
   const marcados = campos ? CAMPOS_ETIQUETA.filter((c) => campos[c.chave]) : [];
 
   return (
-    <div className="flex h-full flex-col gap-5">
-      <div>
-        <p className="mb-0.5 text-[11px] font-medium text-text-muted">Cadastros &amp; Regras / Modelos de Etiqueta</p>
-        <h1 className="text-[20px] font-bold text-text-strong">Modelos de Etiqueta</h1>
-        <p className="mt-0.5 text-[12px] text-text-secondary">
-          Configure os campos exibidos em cada modelo de etiqueta usado na operação.
-        </p>
-      </div>
+    <div className="space-y-3">
+      <PageHeader title="Modelos de Etiqueta" subtitle="Configure os campos exibidos em cada modelo de etiqueta usado na operação." />
 
       {/* Banner P9 — ModelosEtiqueta.tsx:158-161 */}
       <div className="flex items-start gap-2 rounded-lg border border-provisorio-border bg-warning-surface p-3">
@@ -89,15 +86,15 @@ export function ModelosEtiquetaClient({ podeGerenciar }: { podeGerenciar: boolea
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1 gap-5">
+      <div className="grid gap-2.5 xl:grid-cols-[280px_1fr_320px]">
         {/* Lista de modelos — :165-187 */}
-        <div className="flex w-[260px] flex-shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
-          <div className="border-b border-muted px-4 py-3">
-            <p className="text-[12px] font-bold text-text-strong">Modelos</p>
-          </div>
-          <div className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Modelos</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-1 p-2">
             {modelos.length === 0 && (
-              <p className="px-3 py-2 text-[13px] text-text-muted">Nenhum modelo cadastrado.</p>
+              <p className="px-3 py-2 text-[13px] text-muted-foreground">Nenhum modelo cadastrado.</p>
             )}
             {modelos.map((modelo) => {
               const ativo = selecionado?.id === modelo.id;
@@ -107,86 +104,80 @@ export function ModelosEtiquetaClient({ podeGerenciar }: { podeGerenciar: boolea
                   key={modelo.id}
                   type="button"
                   onClick={() => setSelecionado(modelo)}
-                  className={`rounded-lg px-3 py-2.5 text-left transition-colors ${
-                    ativo
-                      ? 'border border-action-blue-ring bg-action-blue-bg'
-                      : 'border border-transparent hover:bg-surface-subtle'
-                  }`}
+                  className={cn(
+                    'rounded-md px-3 py-2 text-left transition-colors duration-100',
+                    ativo ? 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]' : 'hover:bg-surface-2',
+                  )}
                 >
-                  <p className={`text-[13px] font-semibold ${ativo ? 'text-action-blue-hover' : 'text-text-strong'}`}>
+                  <p className={cn('text-[13px] font-semibold', ativo ? 'text-primary-fg' : 'text-foreground')}>
                     {modelo.nome}
                   </p>
-                  <p className="mt-0.5 text-[11px] text-text-muted">
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
                     {ativos} de {CAMPOS_ETIQUETA.length} campos ativos
                   </p>
                 </button>
               );
             })}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Campos configuráveis — :190-207 */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
-          <div className="flex items-center justify-between border-b border-muted px-4 py-3">
-            <p className="text-[12px] font-bold text-text-strong">
+        <Card>
+          <CardHeader>
+            <CardTitle>
               Campos configuráveis{selecionado ? ` — ${selecionado.nome}` : ''}
-            </p>
+            </CardTitle>
             {podeGerenciar && selecionado && (
-              <button
-                type="button"
-                onClick={() => void salvar()}
-                disabled={salvando}
-                className="h-8 rounded-md bg-brand-navy-deep px-4 text-[13px] font-semibold text-white transition-colors hover:bg-action-blue disabled:opacity-60"
-              >
-                {salvando ? 'Salvando…' : 'Salvar Modelo'}
-              </button>
+              <div className="ml-auto">
+                <Button size="sm" onClick={() => void salvar()} disabled={salvando}>
+                  {salvando ? 'Salvando…' : 'Salvar Modelo'}
+                </Button>
+              </div>
             )}
-          </div>
-          {!selecionado || !campos ? (
-            <p className="p-4 text-[13px] text-text-muted">Selecione um modelo.</p>
-          ) : (
-            <div className="grid flex-1 grid-cols-2 gap-2 overflow-y-auto p-4">
-              {CAMPOS_ETIQUETA.map((campo) => (
-                <Label
-                  key={campo.chave}
-                  htmlFor={`campo-${campo.chave}`}
-                  className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-[13px] font-normal text-text-ink transition-colors hover:bg-surface-subtle"
-                >
-                  <Checkbox
-                    id={`campo-${campo.chave}`}
-                    checked={campos[campo.chave]}
-                    disabled={!podeGerenciar}
-                    onCheckedChange={(v) => setCampos((c) => (c ? { ...c, [campo.chave]: v === true } : c))}
-                  />
-                  {campo.rotulo}
-                </Label>
-              ))}
-            </div>
-          )}
-        </div>
+          </CardHeader>
+          <CardContent>
+            {!selecionado || !campos ? (
+              <p className="text-[13px] text-muted-foreground">Selecione um modelo.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-1.5">
+                {CAMPOS_ETIQUETA.map((campo) => (
+                  <label
+                    key={campo.chave}
+                    htmlFor={`campo-${campo.chave}`}
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-[13px] transition-colors duration-100 hover:bg-surface-2"
+                  >
+                    <Checkbox
+                      id={`campo-${campo.chave}`}
+                      checked={campos[campo.chave]}
+                      disabled={!podeGerenciar}
+                      onCheckedChange={(v) => setCampos((c) => (c ? { ...c, [campo.chave]: v === true } : c))}
+                    />
+                    {campo.rotulo}
+                  </label>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Preview ao vivo — :210-217, com D18.a */}
-        <div className="flex w-[380px] flex-shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
-          <div className="border-b border-muted px-4 py-3">
-            <p className="text-[12px] font-bold text-text-strong">Preview ao vivo</p>
-          </div>
-          <div className="flex flex-1 items-start justify-center overflow-y-auto p-4">
-            <div className="w-full rounded-xl border-2 border-action-blue bg-surface-subtle p-4 font-mono text-[12px] text-text-ink">
-              <p className="mb-3 text-[9px] font-black tracking-[0.2em] text-text-muted uppercase">
+        <Card>
+          <CardHeader>
+            <CardTitle>Preview ao vivo</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className="w-full rounded-md border-2 border-primary bg-surface-2 p-3 font-data text-[12px] text-foreground">
+              <span className="mb-2.5 block text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground">
                 ALFA CARNES
-              </p>
+              </span>
               {marcados.length === 0 ? (
-                <p className="text-text-muted">Nenhum campo selecionado.</p>
+                <span className="block text-muted-foreground">Nenhum campo selecionado.</span>
               ) : (
-                <ul className="flex flex-col gap-1">
-                  {marcados.map((campo) => (
-                    <li key={campo.chave}>{campo.rotulo}</li>
-                  ))}
-                </ul>
+                marcados.map((campo) => <span key={campo.chave} className="block">{campo.rotulo}</span>)
               )}
-            </div>
-          </div>
-        </div>
+            </pre>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

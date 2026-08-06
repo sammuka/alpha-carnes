@@ -3,8 +3,25 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pencil, Plus, Power, PowerOff, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { FormField } from '@/components/ui/form-field';
+import { Input } from '@/components/ui/input';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Switch } from '@/components/ui/switch';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableCellCode,
+  TableCellNum,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import { mensagemDeErro } from '@/lib/error-message';
 
 export type StatusCadastro = 'ativo' | 'inativo';
@@ -13,6 +30,8 @@ export interface ColunaCadastro<T> {
   chave: string;
   titulo: string;
   alinhamento?: 'esquerda' | 'direita';
+  /** Célula tipo `mono`/`numero`/`pill` aplica a formatação R2/R10 correspondente. */
+  tipo?: 'mono' | 'numero' | 'pill';
   render: (registro: T) => React.ReactNode;
 }
 
@@ -70,18 +89,6 @@ interface Paginado<T> {
 }
 
 const PAGE_SIZE = 20;
-
-function StatusPillCadastro({ status }: { status: StatusCadastro }) {
-  return status === 'ativo' ? (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-success-surface px-2 py-0.5 text-[11px] font-semibold text-success-strong">
-      <span className="size-1.5 rounded-full bg-status-dot-ativo" /> Ativo
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-      <span className="size-1.5 rounded-full bg-text-muted" /> Inativo
-    </span>
-  );
-}
 
 export function CadastroTabelaDrawer<T extends { id: string }>({
   caminho,
@@ -239,68 +246,32 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
 
   const total = resultado?.total ?? 0;
   const linhas = resultado?.data ?? [];
-  const colunasTotal = colunas.length + 1 + (podeGerenciar ? 1 : 0);
-  const classeDrawer = larguraDrawer === 520 ? 'w-[520px]' : 'w-[460px]';
+  const classeDrawer = larguraDrawer === 520 ? 'sm:max-w-[520px]' : 'sm:max-w-[460px]';
+
+  function celula(coluna: ColunaCadastro<T>, registro: T) {
+    const conteudo = coluna.render(registro);
+    if (coluna.tipo === 'mono') return <TableCellCode key={coluna.chave}>{conteudo}</TableCellCode>;
+    if (coluna.tipo === 'numero') return <TableCellNum key={coluna.chave}>{conteudo}</TableCellNum>;
+    return (
+      <TableCell key={coluna.chave} className={coluna.alinhamento === 'direita' ? 'text-right' : undefined}>
+        {conteudo}
+      </TableCell>
+    );
+  }
 
   return (
-    <div className="flex h-full flex-col gap-5">
+    <div className="space-y-3">
       {/* Cabeçalho — Caminhoes.tsx:159-171 */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="mb-0.5 text-[11px] font-medium text-text-muted">{caminho}</p>
-          <h1 className="text-[20px] font-bold text-text-strong">{titulo}</h1>
-          <p className="mt-0.5 text-[12px] text-text-secondary">{subtitulo}</p>
-        </div>
+      <PageHeader title={titulo} subtitle={subtitulo}>
         {podeGerenciar && (
-          <button
-            type="button"
-            onClick={abrirNovo}
-            className="flex h-8 flex-shrink-0 items-center gap-1.5 rounded-md bg-brand-navy-deep px-4 text-[13px] font-semibold text-white transition-colors hover:bg-action-blue"
-          >
-            <Plus className="size-3.5" /> {rotuloNovo}
-          </button>
+          <Button type="button" onClick={abrirNovo}>
+            <Plus /> {rotuloNovo}
+          </Button>
         )}
-      </div>
+      </PageHeader>
+      <p className="-mt-2 text-[11px] font-medium text-muted-foreground">{caminho}</p>
 
       {bannerTopo}
-
-      {/* Barra de filtros — Caminhoes.tsx:174-190 / Representantes.tsx:264-284 */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[220px] flex-1">
-          <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text"
-            aria-label={placeholderBusca}
-            placeholder={placeholderBusca}
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="h-8 w-full rounded-md border border-border bg-card pr-3 pl-8 text-[13px] text-text-strong placeholder:text-placeholder focus:border-action-blue focus:outline-none"
-          />
-        </div>
-        {filtros.map((filtro) => (
-          <select
-            key={filtro.nome}
-            aria-label={filtro.rotuloTodos}
-            value={selecao[filtro.nome] ?? ''}
-            onChange={(e) => {
-              const valor = e.target.value;
-              setSelecao((s) => ({ ...s, [filtro.nome]: valor }));
-              setPagina(1);
-            }}
-            className="h-8 rounded-md border border-border bg-card px-2.5 text-[13px] text-text-slate focus:border-action-blue focus:outline-none"
-          >
-            <option value="">{filtro.rotuloTodos}</option>
-            {filtro.opcoes.map((opcao) => (
-              <option key={opcao.valor} value={opcao.valor}>
-                {opcao.rotulo}
-              </option>
-            ))}
-          </select>
-        ))}
-        <span className="ml-auto text-[12px] text-text-muted">
-          {total} {total === 1 ? substantivoSingular : substantivoPlural}
-        </span>
-      </div>
 
       {erro && (
         <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
@@ -308,195 +279,203 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
         </p>
       )}
 
-      {/* Tabela — Caminhoes.tsx:193-242 */}
-      <div className="flex-1 overflow-hidden rounded-xl border border-border bg-card">
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-muted bg-surface-subtle">
+      <div className="flex flex-col rounded-lg border border-border bg-card text-card-foreground shadow-1">
+        <div className="flex h-[38px] shrink-0 items-center gap-2 border-b border-border px-3">
+          {/* Barra de filtros — R6 */}
+          <div className="w-[240px]">
+            <Input
+              adornLeft={<Search />}
+              aria-label={placeholderBusca}
+              placeholder={placeholderBusca}
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="h-7 text-xs"
+            />
+          </div>
+          {filtros.map((filtro) => (
+            <SelectNative
+              key={filtro.nome}
+              selectSize="sm"
+              className="w-[150px]"
+              aria-label={filtro.rotuloTodos}
+              value={selecao[filtro.nome] ?? ''}
+              onChange={(e) => {
+                const valor = e.target.value;
+                setSelecao((s) => ({ ...s, [filtro.nome]: valor }));
+                setPagina(1);
+              }}
+            >
+              <option value="">{filtro.rotuloTodos}</option>
+              {filtro.opcoes.map((opcao) => (
+                <option key={opcao.valor} value={opcao.valor}>
+                  {opcao.rotulo}
+                </option>
+              ))}
+            </SelectNative>
+          ))}
+          <span className="ml-auto text-xs text-muted-foreground">
+            {total} {total === 1 ? substantivoSingular : substantivoPlural}
+          </span>
+        </div>
+
+        {/* Tabela — Caminhoes.tsx:193-242 */}
+        <div className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
                 {colunas.map((coluna) => (
-                  <th
+                  <TableHead
                     key={coluna.chave}
-                    className={`px-4 py-2.5 text-[10px] font-bold tracking-wider whitespace-nowrap text-text-secondary uppercase ${
-                      coluna.alinhamento === 'direita' ? 'text-right' : 'text-left'
-                    }`}
+                    className={coluna.alinhamento === 'direita' ? 'text-right' : undefined}
                   >
                     {coluna.titulo}
-                  </th>
+                  </TableHead>
                 ))}
-                <th className="px-4 py-2.5 text-left text-[10px] font-bold tracking-wider whitespace-nowrap text-text-secondary uppercase">
-                  Status
-                </th>
-                {podeGerenciar && (
-                  <th className="px-4 py-2.5 text-left text-[10px] font-bold tracking-wider whitespace-nowrap text-text-secondary uppercase">
-                    Ações
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
+                <TableHead>Status</TableHead>
+                {podeGerenciar && <TableHead className="text-right">Ações</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {carregando && (
-                <tr>
-                  <td colSpan={colunasTotal} className="px-4 py-12 text-center text-[13px] text-text-muted">
+                <TableRow>
+                  <TableCell colSpan={colunas.length + 1 + (podeGerenciar ? 1 : 0)} className="h-24 text-center text-muted-foreground">
                     Carregando…
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
               {!carregando && linhas.length === 0 && (
-                <tr>
-                  <td colSpan={colunasTotal} className="px-4 py-12 text-center text-[13px] text-text-muted">
+                <TableRow>
+                  <TableCell colSpan={colunas.length + 1 + (podeGerenciar ? 1 : 0)} className="h-24 text-center text-muted-foreground">
                     {mensagemVazia}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
               {!carregando &&
-                linhas.map((registro, i) => (
-                  <tr
-                    key={registro.id}
-                    onClick={() => abrirEdicao(registro)}
-                    className={`cursor-pointer border-b border-surface-subtle transition-colors hover:bg-table-row-hover ${
-                      i % 2 !== 0 ? 'bg-table-zebra' : ''
-                    }`}
-                  >
-                    {colunas.map((coluna) => (
-                      <td
-                        key={coluna.chave}
-                        className={`px-4 py-2.5 ${coluna.alinhamento === 'direita' ? 'text-right' : ''}`}
-                      >
-                        {coluna.render(registro)}
-                      </td>
-                    ))}
-                    <td className="px-4 py-2.5">
-                      <StatusPillCadastro status={statusDe(registro)} />
-                    </td>
+                linhas.map((registro) => (
+                  <TableRow key={registro.id} className="group cursor-pointer" onClick={() => abrirEdicao(registro)}>
+                    {colunas.map((coluna) => celula(coluna, registro))}
+                    <TableCell>
+                      <StatusPill
+                        variant={statusDe(registro) === 'ativo' ? 'expedido' : 'pendente'}
+                        label={statusDe(registro) === 'ativo' ? 'Ativo' : 'Inativo'}
+                      />
+                    </TableCell>
                     {podeGerenciar && (
-                      <td className="px-4 py-2.5" onClick={(ev) => ev.stopPropagation()}>
-                        <div className="flex items-center gap-1">
-                          <button
+                      <TableCell onClick={(ev) => ev.stopPropagation()}>
+                        <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="iconSm"
                             title="Editar"
                             aria-label="Editar"
                             onClick={() => abrirEdicao(registro)}
-                            className="flex size-7 items-center justify-center rounded text-text-muted transition-colors hover:bg-muted hover:text-text-slate"
                           >
-                            <Pencil className="size-3.5" />
-                          </button>
-                          <button
+                            <Pencil />
+                          </Button>
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="iconSm"
                             title={statusDe(registro) === 'ativo' ? 'Inativar' : 'Ativar'}
                             aria-label={statusDe(registro) === 'ativo' ? 'Inativar' : 'Ativar'}
                             onClick={() => void alternarStatus(registro)}
-                            className={`flex size-7 items-center justify-center rounded text-text-muted transition-colors ${
-                              statusDe(registro) === 'ativo'
-                                ? 'hover:bg-danger-surface hover:text-danger-rose'
-                                : 'hover:bg-success-surface hover:text-success-strong'
-                            }`}
                           >
-                            {statusDe(registro) === 'ativo' ? (
-                              <PowerOff className="size-3.5" />
-                            ) : (
-                              <Power className="size-3.5" />
-                            )}
-                          </button>
+                            {statusDe(registro) === 'ativo' ? <PowerOff /> : <Power />}
+                          </Button>
                         </div>
-                      </td>
+                      </TableCell>
                     )}
-                  </tr>
+                  </TableRow>
                 ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
+
+        {/* D41.a — só aparece quando a paginação do backend passa a existir de fato */}
+        {total > PAGE_SIZE && (
+          <div className="flex items-center justify-end gap-2 border-t border-border px-3 py-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={pagina <= 1}
+              onClick={() => setPagina((p) => p - 1)}
+            >
+              Anterior
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={pagina * PAGE_SIZE >= total}
+              onClick={() => setPagina((p) => p + 1)}
+            >
+              Próxima
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* D41.a — só aparece quando a paginação do backend passa a existir de fato */}
-      {total > PAGE_SIZE && (
-        <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            disabled={pagina <= 1}
-            onClick={() => setPagina((p) => p - 1)}
-            className="h-8 rounded-md border border-border px-3 text-[13px] font-medium text-text-secondary transition-colors hover:bg-surface-subtle disabled:opacity-50"
-          >
-            Anterior
-          </button>
-          <button
-            type="button"
-            disabled={pagina * PAGE_SIZE >= total}
-            onClick={() => setPagina((p) => p + 1)}
-            className="h-8 rounded-md border border-border px-3 text-[13px] font-medium text-text-secondary transition-colors hover:bg-surface-subtle disabled:opacity-50"
-          >
-            Próxima
-          </button>
-        </div>
-      )}
-
-      {/* Drawer — Caminhoes.tsx:55-126 / Representantes.tsx:90-207 */}
+      {/* Drawer — Caminhoes.tsx:55-126 / Representantes.tsx:90-207 — R8 */}
       <Sheet open={drawerAberto} onOpenChange={(aberto) => { if (!aberto) fechar(); }}>
-        <SheetContent
-          side="right"
-          className={`${classeDrawer} flex max-w-full flex-col border-l border-border bg-card p-0 sm:max-w-full`}
-        >
-          <SheetHeader className="flex-shrink-0 border-b border-border px-6 py-4">
-            <SheetTitle className="text-[16px] font-bold text-text-strong">
+        <SheetContent side="right" className={`flex max-w-full flex-col gap-0 p-0 ${classeDrawer}`}>
+          <SheetHeader className="border-b border-border p-4">
+            <SheetTitle className="text-[16px] font-bold">
               {editando ? tituloDrawerEdicao(editando) : tituloDrawerNovo}
             </SheetTitle>
           </SheetHeader>
 
-          <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-6">
+          <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
             {bannerDrawer}
 
-            {campos.map((campo) => (
-              <div key={campo.nome} className="flex flex-col gap-1">
-                <label htmlFor={campo.nome} className="text-[12px] font-semibold text-text-graphite">
-                  {campo.rotulo}
-                  {campo.obrigatorio && <span className="ml-1 text-destructive">*</span>}
-                </label>
-
-                {campo.tipo === 'textarea' && (
-                  <textarea
-                    id={campo.nome}
-                    rows={3}
-                    value={form[campo.nome] ?? ''}
-                    placeholder={campo.placeholder}
-                    onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
-                    className="w-full resize-none rounded-md border border-border bg-card px-2.5 py-2 text-[13px] text-text-strong placeholder:text-placeholder focus:border-action-blue focus:outline-none"
-                  />
-                )}
-
-                {campo.tipo === 'select' && (
-                  <select
-                    id={campo.nome}
-                    value={form[campo.nome] ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
-                    className="h-8 w-full rounded-md border border-border bg-card px-2.5 text-[13px] text-text-strong focus:border-action-blue focus:outline-none"
-                  >
-                    {campo.placeholder && <option value="">{campo.placeholder}</option>}
-                    {(campo.opcoes ?? []).map((opcao) => (
-                      <option key={opcao.valor} value={opcao.valor}>
-                        {opcao.rotulo}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {(campo.tipo === 'texto' || campo.tipo === 'numero') && (
-                  <input
-                    id={campo.nome}
-                    type={campo.tipo === 'numero' ? 'number' : 'text'}
-                    value={form[campo.nome] ?? ''}
-                    placeholder={campo.placeholder}
-                    onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
-                    className={`h-8 w-full rounded-md border border-border bg-card px-2.5 text-[13px] text-text-strong placeholder:text-placeholder focus:border-action-blue focus:outline-none ${
-                      campo.monoespacado ? 'font-mono' : ''
-                    }`}
-                  />
-                )}
-              </div>
-            ))}
+            <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+              {campos.map((campo) => (
+                <FormField
+                  key={campo.nome}
+                  label={campo.rotulo}
+                  required={campo.obrigatorio}
+                  htmlFor={campo.nome}
+                  className={campo.tipo === 'textarea' || campo.colSpan === 2 ? 'sm:col-span-2' : undefined}
+                >
+                  {campo.tipo === 'textarea' ? (
+                    <Textarea
+                      id={campo.nome}
+                      rows={3}
+                      value={form[campo.nome] ?? ''}
+                      placeholder={campo.placeholder}
+                      onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
+                    />
+                  ) : campo.tipo === 'select' ? (
+                    <SelectNative
+                      id={campo.nome}
+                      value={form[campo.nome] ?? ''}
+                      onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
+                    >
+                      {campo.placeholder && <option value="">{campo.placeholder}</option>}
+                      {(campo.opcoes ?? []).map((opcao) => (
+                        <option key={opcao.valor} value={opcao.valor}>
+                          {opcao.rotulo}
+                        </option>
+                      ))}
+                    </SelectNative>
+                  ) : (
+                    <Input
+                      id={campo.nome}
+                      type={campo.tipo === 'numero' ? 'number' : 'text'}
+                      value={form[campo.nome] ?? ''}
+                      placeholder={campo.placeholder}
+                      onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
+                      className={campo.monoespacado ? 'font-data' : undefined}
+                    />
+                  )}
+                </FormField>
+              ))}
+            </div>
 
             {/* Status é do componente, não da grade de campos — Representantes.tsx:142-155 */}
             <div className="flex items-center justify-between border-t border-b border-muted py-2.5">
-              <span className="text-[13px] font-medium text-text-strong">Status</span>
+              <span className="text-[13px] font-medium text-foreground">Status</span>
               <Switch
                 aria-label="Status"
                 checked={form.status === 'ativo'}
@@ -507,23 +486,14 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
             {blocosDrawer?.(editando)}
           </div>
 
-          <div className="flex flex-shrink-0 items-center justify-end gap-3 border-t border-border bg-card px-6 py-4">
-            <button
-              type="button"
-              onClick={fechar}
-              className="h-8 rounded-md border border-border px-4 text-[13px] font-medium text-text-secondary transition-colors hover:bg-surface-subtle"
-            >
+          <SheetFooter className="flex-row justify-end gap-2 border-t border-border p-4">
+            <Button type="button" variant="ghost" onClick={fechar}>
               Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => void salvar()}
-              disabled={salvando}
-              className="h-8 rounded-md bg-brand-navy-deep px-5 text-[13px] font-semibold text-white transition-colors hover:bg-action-blue disabled:opacity-60"
-            >
+            </Button>
+            <Button type="button" onClick={() => void salvar()} disabled={salvando}>
               {salvando ? 'Salvando…' : rotuloSalvar}
-            </button>
-          </div>
+            </Button>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
     </div>

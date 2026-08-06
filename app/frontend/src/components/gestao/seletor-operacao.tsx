@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
+import { SelectNative } from '@/components/ui/select-native';
 import { listarOperacoes, type Operacao } from '@/lib/gestao-operacoes';
 
 interface SeletorOperacaoProps {
@@ -85,10 +86,10 @@ export function SeletorOperacao({ className, onOperacaoChange }: SeletorOperacao
   }
 
   return (
-    <select
+    <SelectNative
       value={operacaoId}
       onChange={(e) => selecionar(e.target.value)}
-      className={`h-10 rounded-lg border border-border bg-card px-4 text-sm font-medium text-foreground outline-none focus:border-primary ${className ?? ''}`}
+      className={`w-[190px] ${className ?? ''}`}
       aria-label="Selecionar operação"
     >
       {operacoes.map((o) => (
@@ -96,6 +97,6 @@ export function SeletorOperacao({ className, onOperacaoChange }: SeletorOperacao
           {o.rotulo}
         </option>
       ))}
-    </select>
+    </SelectNative>
   );
 }

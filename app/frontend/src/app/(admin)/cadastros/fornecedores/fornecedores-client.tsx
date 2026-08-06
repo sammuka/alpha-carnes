@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { CadastroMasterDetail } from '@/components/cadastro-master-detail';
-import { Badge } from '@/components/ui/badge';
+import { FilterChip } from '@/components/ui/filter-chip';
 import { fornecedoresConfig } from '@/lib/cadastros-config';
 import { mensagemDeErro } from '@/lib/error-message';
 import {
@@ -74,16 +74,10 @@ function Chips() {
   if (!contagens) return <p className="text-xs text-muted-foreground">Carregando contagens…</p>;
 
   return (
-    <div className="flex gap-2 overflow-x-auto">
-      <Badge className="bg-login-panel text-white hover:bg-login-panel">
-        Todos ({contagens.total})
-      </Badge>
-      <Badge variant="outline" className="text-login-text">
-        Ativos ({contagens.ativos})
-      </Badge>
-      <Badge variant="outline" className="text-login-text">
-        Inativos ({contagens.inativos})
-      </Badge>
+    <div className="flex gap-1.5 overflow-x-auto">
+      <FilterChip active>Todos ({contagens.total})</FilterChip>
+      <FilterChip>Ativos ({contagens.ativos})</FilterChip>
+      <FilterChip>Inativos ({contagens.inativos})</FilterChip>
     </div>
   );
 }
@@ -111,8 +105,8 @@ function BlocoHistorico({ fornecedorId }: { fornecedorId: string }) {
 
   return (
     /* Quarta seção do detalhe — Fornecedores.tsx:201-221 */
-    <section className="space-y-4">
-      <h3 className="flex items-center gap-2 border-b border-border pb-2 text-sm font-bold text-foreground">
+    <section className="space-y-3">
+      <h3 className="flex items-center gap-2 border-b border-border pb-2 text-[13px] font-bold text-foreground">
         <AlertTriangle className="size-4 text-muted-foreground" />
         Histórico &amp; Ocorrências
       </h3>
@@ -124,7 +118,7 @@ function BlocoHistorico({ fornecedorId }: { fornecedorId: string }) {
       ) : !historico ? (
         <p className="text-sm text-muted-foreground">Carregando histórico…</p>
       ) : (
-        <div className="space-y-3 rounded-lg border border-border p-4">
+        <div className="space-y-2.5 rounded-md border border-border p-3">
           <div className="flex items-center justify-between border-b border-border pb-2 text-sm">
             <span className="text-muted-foreground">Total de Ocorrências (Ano)</span>
             <span className="font-bold text-destructive">

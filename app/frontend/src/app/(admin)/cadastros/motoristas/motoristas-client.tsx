@@ -54,31 +54,32 @@ export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) 
           chave: 'nome',
           titulo: 'Nome',
           render: (m) => (
-            <span className="flex items-center gap-1.5 font-bold text-text-strong">
-              <User className="size-3.5 text-text-muted" /> {m.nome}
+            <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
+              <User className="size-3.5 text-muted-foreground" /> {m.nome}
             </span>
           ),
         },
         {
           chave: 'documento',
           titulo: 'Documento',
-          render: (m) => <span className="font-mono text-text-slate">{m.documento}</span>,
+          tipo: 'mono',
+          render: (m) => m.documento,
         },
         {
           chave: 'telefone',
           titulo: 'Telefone',
-          render: (m) => <span className="text-text-slate">{m.telefone ?? '—'}</span>,
+          render: (m) => <span className="text-muted-foreground">{m.telefone ?? '—'}</span>,
         },
         {
           chave: 'caminhaoPadrao',
           titulo: 'Caminhão padrão',
           render: (m) =>
             m.caminhaoPadraoPlaca ? (
-              <span className="rounded bg-action-blue-bg px-1.5 py-0.5 font-mono text-[12px] font-semibold text-brand-navy-deep">
+              <span className="font-data text-[11px] text-fg-secondary">
                 {m.caminhaoPadraoAtivo === false ? `${m.caminhaoPadraoPlaca} (inativo)` : m.caminhaoPadraoPlaca}
               </span>
             ) : (
-              <span className="text-text-muted">—</span>
+              <span className="text-muted-foreground">—</span>
             ),
         },
       ]}

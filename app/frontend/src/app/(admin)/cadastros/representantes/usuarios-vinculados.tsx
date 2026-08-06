@@ -42,7 +42,7 @@ export function UsuariosVinculados({
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[12px] font-semibold text-text-graphite">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.02em] text-fg-secondary">
         Usuários vinculados{usuarios !== null ? ` (${usuarios.length})` : ''}
       </p>
       {erro ? (
@@ -50,7 +50,7 @@ export function UsuariosVinculados({
           <p role="alert" className="text-[12px] text-destructive">{erro}</p>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={() => void carregar()}
           >
@@ -58,17 +58,17 @@ export function UsuariosVinculados({
           </Button>
         </div>
       ) : usuarios === null ? (
-        <p aria-busy="true" className="text-[12px] text-text-muted">
+        <p aria-busy="true" className="text-[12px] text-muted-foreground">
           Carregando usuários vinculados…
         </p>
       ) : usuarios.length === 0 ? (
-        <p className="text-[12px] text-text-muted">Nenhum usuário vinculado.</p>
+        <p className="text-[12px] text-muted-foreground">Nenhum usuário vinculado.</p>
       ) : (
-        <div className="flex flex-col gap-1.5 rounded-lg bg-surface-subtle p-3">
+        <div className="flex flex-col gap-1.5 rounded-md bg-surface-2 p-2.5">
           {usuarios.map((usuario) => (
-            <div key={usuario.id} className="text-[12px] text-text-ink">
+            <div key={usuario.id} className="text-[12px] text-foreground">
               <span className="font-medium">{usuario.nome}</span>
-              <span className="ml-1 text-text-muted">{usuario.email}</span>
+              <span className="ml-1 text-muted-foreground">{usuario.email}</span>
               {!usuario.ativo && <span className="ml-1">(Inativo)</span>}
             </div>
           ))}

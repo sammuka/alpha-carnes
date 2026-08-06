@@ -58,8 +58,9 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         {
           chave: 'placa',
           titulo: 'Placa',
+          tipo: 'mono',
           render: (c) => (
-            <span className="flex w-fit items-center gap-1.5 rounded bg-action-blue-bg px-1.5 py-0.5 font-mono text-[12px] font-bold text-brand-navy-deep">
+            <span className="inline-flex items-center gap-1.5">
               <Truck className="size-3" /> {c.placa}
             </span>
           ),
@@ -67,19 +68,18 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         {
           chave: 'descricao',
           titulo: 'Descrição',
-          render: (c) => <span className="whitespace-nowrap text-text-strong">{c.descricao ?? '—'}</span>,
+          render: (c) => <span className="text-foreground">{c.descricao ?? '—'}</span>,
         },
         {
           chave: 'capacidadeKg',
           titulo: 'Capacidade (kg)',
-          render: (c) => (
-            <span className="font-mono text-text-slate">{c.capacidadeKg.toLocaleString('pt-BR')} kg</span>
-          ),
+          tipo: 'numero',
+          render: (c) => <>{c.capacidadeKg.toLocaleString('pt-BR')} kg</>,
         },
         {
           chave: 'rotaPadrao',
           titulo: 'Rota padrão',
-          render: (c) => <span className="text-text-slate">{c.rotaPadraoNome ?? '—'}</span>,
+          render: (c) => <span className="text-muted-foreground">{c.rotaPadraoNome ?? '—'}</span>,
         },
       ]}
       campos={[
