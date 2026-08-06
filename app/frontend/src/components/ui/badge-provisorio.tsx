@@ -22,25 +22,33 @@ export const PENDENCIAS_ABERTAS = {
 export type PendenciaAberta = keyof typeof PENDENCIAS_ABERTAS;
 
 interface BadgeProvisorioProps {
-  pendencia: PendenciaAberta;
+  /** API nova (DS v3): código de pendência solto no rótulo, ex.: "P11". */
+  codigo?: string;
+  /** @deprecated API antiga — mantida até a migração das telas (Tarefas 20/23/24/25/26/29). */
+  pendencia?: PendenciaAberta;
+  /** @deprecated API antiga — mantida até a migração das telas. */
   texto?: string;
   className?: string;
 }
 
-export function BadgeProvisorio({ pendencia, texto, className }: BadgeProvisorioProps) {
-  const { ref, descricao } = PENDENCIAS_ABERTAS[pendencia];
-  const title = `Provisório — pendência ${pendencia} (${ref}): ${descricao}. Valor parametrizável até decisão registrada em DECISOES.md.`;
+/** Badge "Provisório" — pendências v1.1 §16. Remoção exige AD-xx (Princípio VIII). */
+export function BadgeProvisorio({ codigo, pendencia, texto, className }: BadgeProvisorioProps) {
+  const rotulo = texto ?? (codigo ? `Provisório · ${codigo}` : 'Provisório');
+  const title = pendencia
+    ? `Provisório — pendência ${pendencia} (${PENDENCIAS_ABERTAS[pendencia].ref}): ${PENDENCIAS_ABERTAS[pendencia].descricao}. Valor parametrizável até decisão registrada em DECISOES.md.`
+    : undefined;
 
   return (
     <span
       title={title}
       className={cn(
-        'inline-flex cursor-help items-center gap-1 whitespace-nowrap rounded-full border border-provisorio-border bg-provisorio-bg px-2 py-0.5 text-[10px] font-bold text-provisorio-text',
+        'inline-flex h-[18px] items-center gap-1 whitespace-nowrap rounded px-1.5 text-[10px] font-bold tracking-[0.03em]',
+        'border border-provisorio-border bg-provisorio-bg text-provisorio-text',
         className,
       )}
     >
-      <AlertTriangle size={10} strokeWidth={2} aria-hidden="true" />
-      {texto ?? 'Provisório'}
+      <AlertTriangle className="size-2.5" aria-hidden="true" />
+      {rotulo}
     </span>
   );
 }
