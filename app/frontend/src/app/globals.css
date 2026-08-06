@@ -1,165 +1,183 @@
 @import "tailwindcss";
 
 @theme {
-  /* Fonte — Inter only (sem JetBrains Mono) */
+  /* ============ DS v3 — Direção A (aprovada 2026-08-05) ============ */
+
+  /* Fontes */
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-data: var(--font-jbmono), ui-monospace, 'Cascadia Mono', monospace;
 
-  /* Protótipo v2 — cores base */
-  --color-background: #F5F7FA;
-  --color-foreground: #1A2332;
+  /* Neutros */
+  --color-background: #F4F6F9;
+  --color-foreground: #18202C;
   --color-card: #FFFFFF;
-  --color-card-foreground: #1A2332;
+  --color-card-foreground: #18202C;
   --color-popover: #FFFFFF;
-  --color-popover-foreground: #1A2332;
-  --color-primary: #3B7FD4;
+  --color-popover-foreground: #18202C;
+  --color-surface-2: #F8FAFC;
+  --color-surface-3: #EEF2F7;
+  --color-border: #DDE4EC;
+  --color-border-strong: #C3CEDB;
+  --color-input: #C3CEDB;
+  --color-fg-secondary: #4A5A6E;
+  --color-muted: #EEF2F7;
+  --color-muted-foreground: #6E7E92;
+  --color-fg-faint: #93A1B3;
+
+  /* Marca / ação */
+  --color-primary: #2D6BBE;
   --color-primary-foreground: #FFFFFF;
+  --color-primary-hover: #24589E;
+  --color-primary-active: #1D4880;
+  --color-primary-soft: #E8F0FA;
+  --color-primary-soft-border: #C4D8F0;
+  --color-primary-fg: #1D5FAE;
+  --color-ring: #2D6BBE;
   --color-secondary: #F1F5F9;
-  --color-secondary-foreground: #1A2332;
-  --color-muted: #F1F5F9;
-  --color-muted-foreground: #64748B;
-  --color-accent: #E8EEF5;
-  --color-accent-foreground: #1A2332;
-  --color-destructive: #FC5241;
+  --color-secondary-foreground: #18202C;
+  --color-accent: #E8F0FA;
+  --color-accent-foreground: #18202C;
+
+  /* Semânticos */
+  --color-destructive: #C23325;
   --color-destructive-foreground: #FFFFFF;
-  --color-border: #E2E8F0;
-  --color-input: #E2E8F0;
-  --color-ring: #3B7FD4;
-  --color-chart-1: #3B7FD4;
-  --color-chart-2: #18A84A;
-  --color-chart-3: #F5B019;
-  --color-chart-4: #FC5241;
-  --color-chart-5: #64748B;
+  --color-danger-hover: #A32A1E;
+  --color-danger-soft: #FCEAE7;
+  --color-danger-soft-border: #EAB4AC;
+  --color-danger-fg: #B3362A;
+  --color-success: #1B8449;
+  --color-success-soft: #E4F4EB;
+  --color-success-soft-border: #BEE5CD;
+  --color-success-fg: #177A43;
+  --color-warning: #B87D0E;
+  --color-warning-soft: #FCF3DC;
+  --color-warning-soft-border: #F0DCAE;
+  --color-warning-fg: #91620B;
+  --color-info-soft: #E7F0FB;
+  --color-info-fg: #1D5FAE;
 
-  /* Texto auxiliar */
-  --color-text-secondary: #64748B;
-  --color-text-muted: #94A3B8;
+  /* Status operacionais — StatusPill (croma harmonizado) */
+  --color-status-recebido: #1D5FAE;
+  --color-status-recebido-bg: #E7F0FB;
+  --color-status-recebido-dot: #2F6FC4;
+  --color-status-pesado: #6636B8;
+  --color-status-pesado-bg: #F1EAFB;
+  --color-status-pesado-dot: #7C4FD0;
+  --color-status-expedido: #177A43;
+  --color-status-expedido-bg: #E3F5EA;
+  --color-status-expedido-dot: #1E9A56;
+  --color-status-divergencia: #91620B;
+  --color-status-divergencia-bg: #FCF3DC;
+  --color-status-divergencia-dot: #C98A12;
+  --color-status-bloqueado: #B3362A;
+  --color-status-bloqueado-bg: #FCE9E6;
+  --color-status-bloqueado-dot: #D4453A;
+  --color-status-pendente: #55657A;
+  --color-status-pendente-bg: #EDF1F6;
+  --color-status-pendente-dot: #7A8AA0;
 
-  /* Primário hover */
-  --color-primary-hover: #265389;
-
-  /* Estados operacionais — StatusPill */
-  --color-status-recebido: #3B7FD4;
-  --color-status-recebido-bg: #E8EEF5;
-  --color-status-pesado: #7C3AED;
-  --color-status-pesado-bg: #F3E8FF;
-  --color-status-expedido: #18A84A;
-  --color-status-expedido-bg: #DCFCE7;
-  --color-status-divergencia: #F5B019;
-  --color-status-divergencia-bg: #FEF3C7;
-  --color-status-bloqueado: #FC5241;
-  --color-status-bloqueado-bg: #FEE2E2;
-  --color-status-pendente: #64748B;
-  --color-status-pendente-bg: #F1F5F9;
-
-  /* Sidebar gradiente */
+  /* Sidebar (gradiente preservado da identidade) */
   --color-sidebar-gradient-start: #1E3A5F;
   --color-sidebar-gradient-end: #1B4E9B;
   --color-sidebar-text: rgba(255, 255, 255, 0.92);
-  --color-sidebar-text-muted: rgba(255, 255, 255, 0.55);
-  --color-sidebar-item-hover: rgba(255, 255, 255, 0.1);
+  --color-sidebar-text-dim: rgba(255, 255, 255, 0.60);
+  --color-sidebar-text-muted: rgba(255, 255, 255, 0.42);
+  --color-sidebar-item-hover: rgba(255, 255, 255, 0.08);
   --color-sidebar-item-active: rgba(255, 255, 255, 0.16);
-  --color-sidebar-border: rgba(255, 255, 255, 0.1);
+  --color-sidebar-border: rgba(255, 255, 255, 0.12);
 
-  /* Compat legado */
-  --color-primary-dark: #265389;
-  --color-destructive-bg: #FEE2E2;
-  --color-success: #18A84A;
-  --color-success-bg: #DCFCE7;
-  --color-warning: #F5B019;
-  --color-warning-bg: #FEF3C7;
-  --color-info: #3B7FD4;
-  --color-info-bg: #E8EEF5;
+  /* Charts (recharts) */
+  --color-chart-1: #2D6BBE;
+  --color-chart-2: #1B8449;
+  --color-chart-3: #B87D0E;
+  --color-chart-4: #C23325;
+  --color-chart-5: #6E7E92;
 
-  /* Paleta canônica do protótipo — src/imports/──PaletaDeCores──/index.tsx */
-  --color-brand-navy: #265389;
-  --color-brand-navy-hover: #1E4070;
-  --color-brand-navy-10: #E8EEF5;
-  --color-brand-blue-mid: #3B7FD4;
+  /* Tabela */
+  --color-table-zebra: #FBFCFE;
+  --color-table-row-hover: #F8FAFC;
 
-  /* Ações — Login.tsx / PipelineBar.tsx / TrocaPeca.tsx */
-  --color-action-blue: #2563EB;
-  --color-action-blue-hover: #1D4ED8;
-  --color-action-blue-strong: #1844B8;
-  --color-action-blue-bg: #EFF6FF;
-  --color-action-blue-border: #BFDBFE;
-  --color-action-blue-text: #1E3A8A;
+  /* Badge Provisório */
+  --color-provisorio-bg: #FCF3DC;
+  --color-provisorio-text: #91620B;
+  --color-provisorio-border: #F0DCAE;
 
-  /* Superfícies, bordas e textos densos do protótipo */
-  --color-surface-subtle: #F8FAFC;
-  --color-surface-chip: #F0EFF5;
-  --color-border-chip: #E5E3ED;
-  --color-text-strong: #1E293B;
-  --color-text-slate: #475569;
-  --color-text-graphite: #374151;
+  /* Raios — densidade */
+  --radius: 0.5rem;        /* 8px — card */
+  --radius-lg: 0.5rem;
+  --radius-md: 0.375rem;   /* 6px — controle */
+  --radius-sm: 0.25rem;
+  --radius-xl: 0.625rem;   /* 10px — modal */
 
-  /* Login — painel institucional (Login.tsx) */
-  --color-login-panel: #1F2633;
-  --color-login-panel-caption: #70748C;
-  --color-login-panel-text: #B0B4BD;
-  --color-login-heading: #1F1D2D;
-  --color-login-text: #6B7081;
+  /* Elevação */
+  --shadow-1: 0 1px 2px rgba(24, 32, 44, 0.06);
+  --shadow-2: 0 2px 6px rgba(24, 32, 44, 0.08), 0 1px 2px rgba(24, 32, 44, 0.05);
+  --shadow-3: 0 8px 24px rgba(24, 32, 44, 0.14), 0 2px 6px rgba(24, 32, 44, 0.08);
 
-  /* PipelineBar */
-  --color-pipeline-done: #10B981;
-  --color-pipeline-future: #A1A5B3;
-
-  /* Badge "Provisório" (RegraDesdobramento.tsx) */
-  --color-provisorio-bg: #FEF3C7;
-  --color-provisorio-text: #92400E;
-  --color-provisorio-border: #FDE68A;
-
-  /* Sinalizações densas (TrocaPeca.tsx, LiberacaoCaminhao.tsx, Disponibilidade.tsx) */
-  --color-success-strong: #15803D;
-  --color-success-surface: #F0FDF4;
-  --color-danger-strong: #DC2626;
-  --color-danger-surface: #FFF1F2;
-  --color-violet-accent: #8B5CF6;
-  --color-violet-surface: #F5F3FF;
-
-  /* Popover da sidebar (Layout.tsx) */
-  --color-sidebar-popover: #0F2645;
-
-  /* Avatares de atividade — 14% sobre a paleta de status */
-  --color-avatar-blue-bg: rgba(59, 127, 212, 0.14);
-  --color-avatar-violet-bg: rgba(124, 58, 237, 0.14);
-  --color-avatar-green-bg: rgba(24, 168, 74, 0.14);
-  --color-avatar-amber-bg: rgba(245, 176, 25, 0.14);
-
-  /* Onda 3 — cadastros lista+drawer, modelos de etiqueta e perfis (protótipo v1.1) */
-  --color-table-zebra: #FAFAFA;
-  --color-table-row-hover: #FAFBFF;
-  --color-status-dot-ativo: #22C55E;
-  --color-danger-rose: #E11D48;
-  --color-info-surface: #F0F9FF;
-  --color-info-border: #BAE6FD;
-  --color-info-icon: #0284C7;
-  --color-info-ink: #0C4A6E;
-  --color-placeholder: #CBD5E1;
+  /* ============ Compat DS v2 (remover ao fim da onda; NÃO usar em código novo) ============ */
+  --color-text-secondary: #4A5A6E;
+  --color-text-muted: #93A1B3;
+  --color-primary-dark: #24589E;
+  --color-destructive-bg: #FCEAE7;
+  --color-success-bg: #E4F4EB;
+  --color-warning-bg: #FCF3DC;
+  --color-info: #1D5FAE;
+  --color-info-bg: #E7F0FB;
+  --color-brand-navy: #24589E;
+  --color-brand-navy-hover: #1D4880;
+  --color-brand-navy-10: #E8F0FA;
   --color-brand-navy-deep: #1E3A5F;
-  --color-text-ink: #334155;
-  --color-warning-surface: #FFFBEB;
-  --color-warning-ink: #D97706;
-  --color-action-blue-ring: #93C5FD;
-  --color-code-surface: #0F172A;
-
-  /* Onda 10 — Faturamento (NotasXml/SeguroManual/LiberacaoCaminhao): tons de
-     ênfase que não existiam ainda no inventário — danger/success "strong"
-     variantes escuras para texto sobre superfície clara, e dots de status. */
-  --color-danger-strong-text: #9F1239;
-  --color-danger-strong-border: #FECDD3;
-  --color-danger-strong-hover: #BE123C;
-  --color-success-strong-hover: #166534;
-  --color-success-strong-border: #BBF7D0;
-  --color-status-dot-info: #60A5FA;
-  --color-status-dot-warning: #F59E0B;
-  --color-required-mark: #EF4444;
-
-  /* Raios */
-  --radius: 0.75rem;
-  --radius-lg: 0.75rem;
-  --radius-sm: 0.5rem;
-  --radius-md: 0.625rem;
-  --radius-xl: 1rem;
+  --color-brand-blue-mid: #2D6BBE;
+  --color-action-blue: #2D6BBE;
+  --color-action-blue-hover: #24589E;
+  --color-action-blue-strong: #1D4880;
+  --color-action-blue-bg: #E8F0FA;
+  --color-action-blue-border: #C4D8F0;
+  --color-action-blue-text: #1D5FAE;
+  --color-action-blue-ring: #C4D8F0;
+  --color-surface-subtle: #F8FAFC;
+  --color-surface-chip: #EEF2F7;
+  --color-border-chip: #DDE4EC;
+  --color-text-strong: #18202C;
+  --color-text-slate: #4A5A6E;
+  --color-text-graphite: #4A5A6E;
+  --color-text-ink: #4A5A6E;
+  --color-login-panel: #1E3A5F;
+  --color-login-panel-caption: rgba(255, 255, 255, 0.42);
+  --color-login-panel-text: rgba(255, 255, 255, 0.60);
+  --color-login-heading: #18202C;
+  --color-login-text: #6E7E92;
+  --color-pipeline-done: #1B8449;
+  --color-pipeline-future: #93A1B3;
+  --color-success-strong: #177A43;
+  --color-success-surface: #E4F4EB;
+  --color-success-strong-hover: #14603A;
+  --color-success-strong-border: #BEE5CD;
+  --color-danger-strong: #B3362A;
+  --color-danger-surface: #FCEAE7;
+  --color-danger-strong-text: #B3362A;
+  --color-danger-strong-border: #EAB4AC;
+  --color-danger-strong-hover: #A32A1E;
+  --color-danger-rose: #C23325;
+  --color-violet-accent: #6636B8;
+  --color-violet-surface: #F1EAFB;
+  --color-sidebar-popover: #1E3A5F;
+  --color-avatar-blue-bg: rgba(45, 107, 190, 0.14);
+  --color-avatar-violet-bg: rgba(102, 54, 184, 0.14);
+  --color-avatar-green-bg: rgba(27, 132, 73, 0.14);
+  --color-avatar-amber-bg: rgba(184, 125, 14, 0.14);
+  --color-status-dot-ativo: #1E9A56;
+  --color-status-dot-info: #2F6FC4;
+  --color-status-dot-warning: #C98A12;
+  --color-info-surface: #E7F0FB;
+  --color-info-border: #C4D8F0;
+  --color-info-icon: #1D5FAE;
+  --color-info-ink: #1D5FAE;
+  --color-placeholder: #93A1B3;
+  --color-warning-surface: #FCF3DC;
+  --color-warning-ink: #91620B;
+  --color-code-surface: #18202C;
+  --color-required-mark: #B3362A;
 }
 
 @layer base {
@@ -171,5 +189,16 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
+    font-size: 0.8125rem; /* 13px — base densa da UI */
+    line-height: 1.45;
+  }
+}
+
+@layer utilities {
+  /* Dados: números, códigos, moeda, pesos, datas em coluna */
+  .font-data {
+    font-family: var(--font-data);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
 }
