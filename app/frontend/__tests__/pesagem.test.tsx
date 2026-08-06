@@ -134,7 +134,7 @@ describe('PesagemDestinacaoClient', () => {
 
   it('mostra o status dos dispositivos sempre visível (RA-05)', async () => {
     render(<PesagemDestinacaoClient permissoes={['PESAGEM_LER', 'PESAGEM_GERENCIAR']} />);
-    await waitFor(() => expect(screen.getByText(/Balança: indisponivel/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Balança: offline/i)).toBeInTheDocument());
   });
 
   it('mostra botão Digitar apenas com permissão PESO_MANUAL', async () => {
