@@ -6,6 +6,7 @@ import { AlertItem } from '@/components/ui/alert-item';
 import { BadgeCount } from '@/components/ui/badge-count';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -382,9 +383,11 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         {/* DETAIL */}
         <Card>
           {!form ? (
-            <CardContent className="flex flex-col items-center justify-center gap-4 p-8 text-muted-foreground">
-              <Building2 className="h-12 w-12 opacity-20" />
-              <p>Selecione um cliente para visualizar ou editar os detalhes.</p>
+            <CardContent>
+              <EmptyState
+                icon={<Building2 />}
+                title="Selecione um cliente para visualizar ou editar os detalhes."
+              />
             </CardContent>
           ) : (
             <>
