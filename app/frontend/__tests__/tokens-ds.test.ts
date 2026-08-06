@@ -65,20 +65,20 @@ describe('tokens do DS', () => {
 
   it('globals.css declara as 14 cores canônicas da paleta do prototipo', () => {
     const paleta: [string, string][] = [
-      ['--color-brand-navy', '#265389'],
-      ['--color-brand-navy-hover', '#1E4070'],
-      ['--color-brand-blue-mid', '#3B7FD4'],
-      ['--color-brand-navy-10', '#E8EEF5'],
-      ['--color-background', '#F5F7FA'],
-      ['--color-foreground', '#1A2332'],
-      ['--color-text-secondary', '#64748B'],
-      ['--color-text-muted', '#94A3B8'],
-      ['--color-status-expedido', '#18A84A'],
-      ['--color-status-divergencia', '#F5B019'],
-      ['--color-status-bloqueado', '#FC5241'],
-      ['--color-status-recebido', '#3B7FD4'],
-      ['--color-status-pesado', '#7C3AED'],
-      ['--color-border', '#E2E8F0'],
+      ['--color-brand-navy', '#24589E'],
+      ['--color-brand-navy-hover', '#1D4880'],
+      ['--color-brand-blue-mid', '#2D6BBE'],
+      ['--color-brand-navy-10', '#E8F0FA'],
+      ['--color-background', '#F4F6F9'],
+      ['--color-foreground', '#18202C'],
+      ['--color-text-secondary', '#4A5A6E'],
+      ['--color-text-muted', '#93A1B3'],
+      ['--color-status-expedido', '#177A43'],
+      ['--color-status-divergencia', '#91620B'],
+      ['--color-status-bloqueado', '#B3362A'],
+      ['--color-status-recebido', '#1D5FAE'],
+      ['--color-status-pesado', '#6636B8'],
+      ['--color-border', '#DDE4EC'],
     ];
     const ausentes = paleta.filter(([token, hex]) => !globals.includes(`${token}: ${hex};`));
     expect(ausentes).toEqual([]);
