@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { StatusPill, type StatusPillVariant } from './status-pill';
+import type { StatusPillVariant } from './status-pill';
 
 interface AlertItemProps {
   title: string;
@@ -11,51 +11,37 @@ interface AlertItemProps {
   className?: string;
 }
 
-const ICON_BG: Record<StatusPillVariant, string> = {
-  recebido: 'var(--color-status-recebido-bg)',
-  pesado: 'var(--color-status-pesado-bg)',
-  expedido: 'var(--color-status-expedido-bg)',
-  divergencia: 'var(--color-status-divergencia-bg)',
-  bloqueado: 'var(--color-status-bloqueado-bg)',
-  pendente: 'var(--color-status-pendente-bg)',
+const DOT_COLOR: Record<StatusPillVariant, string> = {
+  recebido: 'bg-status-recebido-dot',
+  pesado: 'bg-status-pesado-dot',
+  expedido: 'bg-status-expedido-dot',
+  divergencia: 'bg-status-divergencia-dot',
+  bloqueado: 'bg-status-bloqueado-dot',
+  pendente: 'bg-status-pendente-dot',
 };
 
-const ICON_COLOR: Record<StatusPillVariant, string> = {
-  recebido: 'var(--color-status-recebido)',
-  pesado: 'var(--color-status-pesado)',
-  expedido: 'var(--color-status-expedido)',
-  divergencia: 'var(--color-status-divergencia)',
-  bloqueado: 'var(--color-status-bloqueado)',
-  pendente: 'var(--color-status-pendente)',
-};
-
+// Icon deixa de ser renderizado (dot colorido assume a semântica); mantido na
+// assinatura para não quebrar call-sites até a migração das telas que o usam.
 export function AlertItem({
   title,
   description,
   time,
   variant = 'pendente',
-  Icon,
+  Icon: _Icon,
   className,
 }: AlertItemProps) {
   return (
-    <div className={cn('flex gap-3 py-3', className)}>
-      {Icon && (
-        <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
-          style={{ backgroundColor: ICON_BG[variant] }}
-        >
-          <Icon size={20} strokeWidth={1.75} style={{ color: ICON_COLOR[variant] }} />
-        </div>
-      )}
+    <div className={cn('flex gap-2 border-b border-border px-3 py-2 last:border-b-0', className)}>
+      <span
+        aria-hidden="true"
+        className={cn('mt-[5px] size-[7px] shrink-0 rounded-full', DOT_COLOR[variant])}
+      />
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-semibold text-foreground">{title}</p>
-          <span className="shrink-0 text-xs text-muted-foreground">{time}</span>
+        <div className="flex items-baseline gap-2">
+          <p className="text-xs font-semibold text-foreground">{title}</p>
+          <time className="ml-auto font-data text-[10px] text-fg-faint">{time}</time>
         </div>
-        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</p>
-        <div className="mt-2">
-          <StatusPill variant={variant} />
-        </div>
+        <p className="text-[11px] leading-[1.4] text-muted-foreground">{description}</p>
       </div>
     </div>
   );
