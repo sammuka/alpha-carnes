@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { FormField } from '@/components/ui/form-field';
 import { extrairMensagemErro } from '@/lib/error-message';
 
 const loginSchema = z.object({
@@ -49,40 +49,32 @@ export function LoginFormClient() {
   return (
     <div className="w-full max-w-[400px]">
       <div className="mb-10 text-center lg:text-left">
-        <h2 className="mb-2 text-2xl font-bold text-foreground">Bem-vindo de volta</h2>
-        <p className="text-muted-foreground">Insira suas credenciais para acessar a operação.</p>
+        <h2 className="mb-2 text-xl font-bold tracking-[-0.015em] text-foreground">Bem-vindo de volta</h2>
+        <p className="text-[13px] text-muted-foreground">Insira suas credenciais para acessar a operação.</p>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">E-mail</Label>
+          <FormField label="E-mail" htmlFor="email" error={errors.email?.message}>
             <Input
               id="email"
               type="email"
               autoComplete="email"
               placeholder="nome@alphacarnes.com.br"
-              className="h-12"
+              className="h-9"
               {...register('email')}
             />
-            {errors.email && (
-              <p className="text-xs text-destructive">{errors.email.message}</p>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Senha</Label>
+          </FormField>
+          <FormField label="Senha" htmlFor="password" error={errors.password?.message}>
             <Input
               id="password"
               type="password"
               autoComplete="current-password"
               placeholder="••••••••"
-              className="h-12"
+              className="h-9"
               {...register('password')}
             />
-            {errors.password && (
-              <p className="text-xs text-destructive">{errors.password.message}</p>
-            )}
-          </div>
+          </FormField>
         </div>
 
         {error && (
@@ -94,7 +86,7 @@ export function LoginFormClient() {
           </div>
         )}
 
-        <Button type="submit" variant="acao" className="h-12 w-full" loading={isSubmitting}>
+        <Button type="submit" variant="acao" className="h-9 w-full" loading={isSubmitting}>
           Acessar Sistema
         </Button>
       </form>
