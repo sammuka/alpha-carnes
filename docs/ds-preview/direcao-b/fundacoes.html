@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Direção B · Fundações — AlphaCarnes DS v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { padding: 28px 36px 80px; max-width: 1240px; margin: 0 auto; }
+  .doc-head { margin-bottom: 28px; }
+  .doc-head .kicker { font-size: var(--fs-11); font-weight: 700; letter-spacing: 0.12em; color: var(--accent-fg); text-transform: uppercase; }
+  .doc-head h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin-top: 4px; }
+  .doc-head p { color: var(--fg-muted); margin-top: 6px; max-width: 68ch; }
+  section.spec { margin-top: 36px; }
+  section.spec > h2 { font-size: var(--fs-15); font-weight: 700; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .sw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .sw { border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; background: var(--surface); }
+  .sw .color { height: 52px; }
+  .sw .meta { padding: 7px 10px; }
+  .sw .meta b { display: block; font-size: var(--fs-12); }
+  .sw .meta code { font-family: var(--font-data); font-size: var(--fs-11); color: var(--fg-muted); }
+  .type-row { display: grid; grid-template-columns: 200px 1fr; gap: 16px; align-items: baseline; padding: 8px 0; border-bottom: 1px dashed var(--border); }
+  .type-row .spec-label { font-family: var(--font-data); font-size: var(--fs-11); color: var(--fg-muted); }
+  .sp-row { display: flex; align-items: center; gap: 12px; padding: 5px 0; }
+  .sp-row .bar-sp { background: var(--accent-soft); border: 1px solid var(--accent-soft-border); height: 18px; border-radius: 3px; }
+  .sp-row code { font-family: var(--font-data); font-size: var(--fs-11); color: var(--fg-muted); width: 130px; }
+  .elev-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .elev { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); padding: 20px 16px; text-align: center; font-size: var(--fs-12); color: var(--fg-secondary); }
+  .backlink { font-size: var(--fs-12); }
+  .pair-note { font-size: var(--fs-12); color: var(--fg-muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="doc-head">
+  <a class="backlink" href="../index.html">← Voltar ao hub</a>
+  <div class="kicker">Direção B · Ousada</div>
+  <h1>Fundações</h1>
+  <p>Mundo visual novo para operação intensiva: neutros frios quase-monocromáticos, sidebar grafite plana, um único accent índigo, borda 1px como divisor primário e cor reservada quase exclusivamente para status semântico. Base 13px, tabelas a 12px, linhas de 32px.</p>
+</div>
+
+<section class="spec">
+  <h2>Cores — neutros e accent</h2>
+  <div class="sw-grid">
+    <div class="sw"><div class="color" style="background:#16181D"></div><div class="meta"><b>Sidebar</b><code>#16181D</code></div></div>
+    <div class="sw"><div class="color" style="background:#101418"></div><div class="meta"><b>Foreground / primária</b><code>#101418</code></div></div>
+    <div class="sw"><div class="color" style="background:#434A54"></div><div class="meta"><b>Fg secondary</b><code>#434A54</code></div></div>
+    <div class="sw"><div class="color" style="background:#667080"></div><div class="meta"><b>Fg muted</b><code>#667080</code></div></div>
+    <div class="sw"><div class="color" style="background:#F7F8FA"></div><div class="meta"><b>Background</b><code>#F7F8FA</code></div></div>
+    <div class="sw"><div class="color" style="background:#FFFFFF; border-bottom:1px solid var(--border)"></div><div class="meta"><b>Surface</b><code>#FFFFFF</code></div></div>
+    <div class="sw"><div class="color" style="background:#E3E6EB"></div><div class="meta"><b>Border</b><code>#E3E6EB</code></div></div>
+    <div class="sw"><div class="color" style="background:#4F46E5"></div><div class="meta"><b>Accent (único)</b><code>#4F46E5</code></div></div>
+    <div class="sw"><div class="color" style="background:#EEF0FD"></div><div class="meta"><b>Accent soft</b><code>#EEF0FD</code></div></div>
+    <div class="sw"><div class="color" style="background:#D92D20"></div><div class="meta"><b>Danger</b><code>#D92D20</code></div></div>
+    <div class="sw"><div class="color" style="background:#16794C"></div><div class="meta"><b>Success</b><code>#16794C</code></div></div>
+    <div class="sw"><div class="color" style="background:#B54708"></div><div class="meta"><b>Warning</b><code>#B54708</code></div></div>
+  </div>
+  <p class="pair-note">A ação primária é <b>grafite</b> (foreground), não colorida — o accent índigo marca seleção, foco e navegação ativa. Cor plena aparece somente quando carrega semântica.</p>
+</section>
+
+<section class="spec">
+  <h2>Cores — status operacional (tags com borda)</h2>
+  <div class="sw-grid">
+    <div class="sw"><div class="color" style="background:var(--st-recebido-bg); display:grid; place-items:center;"><span class="pill recebido">Recebido</span></div><div class="meta"><b>recebido</b><code>#175CD3 / #EDF4FE</code></div></div>
+    <div class="sw"><div class="color" style="background:var(--st-pesado-bg); display:grid; place-items:center;"><span class="pill pesado">Pesado</span></div><div class="meta"><b>pesado</b><code>#6941C6 / #F3F0FC</code></div></div>
+    <div class="sw"><div class="color" style="background:var(--st-expedido-bg); display:grid; place-items:center;"><span class="pill expedido">Expedido</span></div><div class="meta"><b>expedido</b><code>#106A41 / #EBF6F0</code></div></div>
+    <div class="sw"><div class="color" style="background:var(--st-divergencia-bg); display:grid; place-items:center;"><span class="pill divergencia">Divergência</span></div><div class="meta"><b>divergência</b><code>#97400A / #FDF4E7</code></div></div>
+    <div class="sw"><div class="color" style="background:var(--st-bloqueado-bg); display:grid; place-items:center;"><span class="pill bloqueado">Bloqueado</span></div><div class="meta"><b>bloqueado</b><code>#B42318 / #FEF0EE</code></div></div>
+    <div class="sw"><div class="color" style="background:var(--st-pendente-bg); display:grid; place-items:center;"><span class="pill pendente">Pendente</span></div><div class="meta"><b>pendente</b><code>#4A5464 / #F1F3F6</code></div></div>
+  </div>
+  <p class="pair-note">Tags retangulares (raio 4px) com borda 1px — a linguagem "Linear/Attio". Pares texto/fundo ≥ 4,5:1.</p>
+</section>
+
+<section class="spec">
+  <h2>Tipografia</h2>
+  <div class="type-row"><span class="spec-label">display · mono 26/700</span><span class="num" style="font-size:var(--fs-26); font-weight:700;">28,450 kg</span></div>
+  <div class="type-row"><span class="spec-label">kpi · mono 20/700</span><span class="num" style="font-size:var(--fs-20); font-weight:700;">49.000</span></div>
+  <div class="type-row"><span class="spec-label">h1 página · 17/700</span><span style="font-size:var(--fs-17); font-weight:700; letter-spacing:-0.02em;">Painel Geral da Operação</span></div>
+  <div class="type-row"><span class="spec-label">título card · 12/700</span><span style="font-size:var(--fs-12); font-weight:700;">Lotes de recebimento</span></div>
+  <div class="type-row"><span class="spec-label">base UI · 13/400</span><span style="font-size:var(--fs-13);">Acompanhe reservas, overbooking e atendimento comercial.</span></div>
+  <div class="type-row"><span class="spec-label">célula tabela · 12/400</span><span style="font-size:var(--fs-12); color:var(--fg-secondary);">Fazenda Recanto das Águas Ltda · ROM-2005</span></div>
+  <div class="type-row"><span class="spec-label">label · 12/500</span><span style="font-size:var(--fs-12); font-weight:500; color:var(--fg-secondary);">Nome fantasia</span></div>
+  <div class="type-row"><span class="spec-label">coluna · 11/600</span><span style="font-size:var(--fs-11); font-weight:600; color:var(--fg-muted);">Fornecedor</span></div>
+  <div class="type-row"><span class="spec-label">dados · mono 12</span><span class="num" style="font-size:var(--fs-12);">ROM-2006 · CP-20260805-10 · R$ 41,00 · 3.482,120 kg</span></div>
+  <p class="pair-note">Sem uppercase em labels de formulário (sentence case, peso 500). Headers de coluna em 11px, sem uppercase — apenas cor rebaixada distingue.</p>
+</section>
+
+<section class="spec">
+  <h2>Espaçamento e densidade</h2>
+  <div class="sp-row"><code>controle 30px</code><div class="bar-sp" style="width:30px; height:30px;"></div><span style="font-size:var(--fs-12); color:var(--fg-muted);">inputs, selects, botões</span></div>
+  <div class="sp-row"><code>controle sm 26px</code><div class="bar-sp" style="width:26px; height:26px;"></div><span style="font-size:var(--fs-12); color:var(--fg-muted);">filtros, ações de linha</span></div>
+  <div class="sp-row"><code>linha tabela 32px</code><div class="bar-sp" style="width:32px; height:32px;"></div><span style="font-size:var(--fs-12); color:var(--fg-muted);">era ~56–64px no DS atual</span></div>
+  <div class="sp-row"><code>gap cards 8px</code><div class="bar-sp" style="width:8px;"></div></div>
+  <div class="sp-row"><code>padding card 10px</code><div class="bar-sp" style="width:10px;"></div></div>
+  <div class="sp-row"><code>padding página 16px</code><div class="bar-sp" style="width:16px;"></div></div>
+  <p class="pair-note">Densidade máxima das duas direções: ~15% mais linhas visíveis que a Direção A no mesmo viewport.</p>
+</section>
+
+<section class="spec">
+  <h2>Elevação e raio</h2>
+  <div class="elev-grid">
+    <div class="elev" style="box-shadow:var(--sh-1)">sh-1 · controles<br><code style="font-family:var(--font-data); font-size:10px;">0 1px 2px 4%</code></div>
+    <div class="elev" style="box-shadow:var(--sh-2)">sh-2 · dropdown<br><code style="font-family:var(--font-data); font-size:10px;">0 2px 8px 7%</code></div>
+    <div class="elev" style="box-shadow:var(--sh-3)">sh-3 · modal, popover<br><code style="font-family:var(--font-data); font-size:10px;">0 12px 32px 16%</code></div>
+  </div>
+  <p class="pair-note">Cards <b>não têm sombra</b> — a borda 1px é o divisor primário. Sombra aparece apenas em camadas flutuantes. Raio 6px card / 5px controle / 4px tag.</p>
+</section>
+
+<script src="../shared/preview.js"></script>
+</body>
+</html>

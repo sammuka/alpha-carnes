@@ -5,18 +5,21 @@ import { Eye, Printer, QrCode, Search, XCircle } from 'lucide-react';
 import type { EtiquetaListada, EstadoEtiqueta, PaginadoRecebimento, RecebimentoResumo } from '@/lib/operacao';
 import { rotuloDestinoPeca, statusPecaVariant } from '@/lib/status-ui';
 import { Badge } from '@/components/ui/badge';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { StatusPill } from '@/components/ui/status-pill';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
+import { FormField } from '@/components/ui/form-field';
+import { Input } from '@/components/ui/input';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
 import {
   Sheet,
   SheetContent,
@@ -27,6 +30,8 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableCellCode,
+  TableCellNum,
   TableHead,
   TableHeader,
   TableRow,
@@ -39,6 +44,15 @@ export function rotuloEtiqueta(e: EtiquetaListada): string {
   if (e.estado === 'emitida') return 'Pendente de impressão';
   if (e.bloqueada) return 'Bloqueada';
   return e.estado === 'reimpressa' ? 'Reimpressa' : 'Ativa';
+}
+
+/** Variant StatusPill por estado real da etiqueta (mesma precedência de rotuloEtiqueta). */
+export function statusEtiquetaVariant(e: EtiquetaListada): StatusPillVariant {
+  if (e.estado === 'cancelada') return 'bloqueado';
+  if (e.estado === 'invalidada_por_troca') return 'divergencia';
+  if (e.estado === 'emitida') return 'pendente';
+  if (e.bloqueada) return 'bloqueado';
+  return e.estado === 'reimpressa' ? 'recebido' : 'expedido';
 }
 
 export const cancelavel = (e: EtiquetaListada) =>
@@ -177,11 +191,11 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
     : null;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Etiquetas — recebimento</h1>
-        <p className="text-sm text-muted-foreground">Consulta, reimpressão e cancelamento conforme v1.1 §10.4</p>
-      </div>
+    <div className="space-y-3">
+      <PageHeader
+        title="Etiquetas — recebimento"
+        subtitle="Consulta, reimpressão e cancelamento conforme v1.1 §10.4"
+      />
 
       {erro && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -190,83 +204,86 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
       )}
 
       <Card>
-        <CardContent className="flex flex-wrap items-end gap-4 p-4">
-          <div className="min-w-[240px] flex-1">
-            <Label>Recebimento</Label>
-            <Select value={recebimentoId} onValueChange={setRecebimentoId}>
-              <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione" /></SelectTrigger>
-              <SelectContent>
-                {recebimentos.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.dataOperacao} — {r.codigoLote ?? r.id.slice(0, 8)}…
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="min-w-[160px]">
-            <Label>Estado</Label>
-            <Select value={estadoFiltro || 'todos'} onValueChange={(v) => setEstadoFiltro(v === 'todos' ? '' : v)}>
-              <SelectTrigger className="mt-1"><SelectValue placeholder="Todos" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
-                {ESTADOS.map((e) => (
-                  <SelectItem key={e} value={e}>{e}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="min-w-[200px] flex-1">
-            <Label>Buscar</Label>
-            <div className="relative mt-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input className="pl-9" placeholder="Código, peça…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        <CardHeader>
+          <CardTitle>Etiquetas</CardTitle>
+          <BadgeCount>{etiquetas.length}</BadgeCount>
+          <CardAction>
+            <SelectNative
+              aria-label="Recebimento"
+              selectSize="sm"
+              className="w-[220px]"
+              value={recebimentoId}
+              onChange={(e) => setRecebimentoId(e.target.value)}
+            >
+              {recebimentos.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.dataOperacao} — {r.codigoLote ?? r.id.slice(0, 8)}…
+                </option>
+              ))}
+            </SelectNative>
+            <SelectNative
+              aria-label="Estado"
+              selectSize="sm"
+              className="w-[150px]"
+              value={estadoFiltro || 'todos'}
+              onChange={(e) => setEstadoFiltro(e.target.value === 'todos' ? '' : e.target.value)}
+            >
+              <option value="todos">Todos os estados</option>
+              {ESTADOS.map((e) => (
+                <option key={e} value={e}>{e}</option>
+              ))}
+            </SelectNative>
+            <div className="w-[200px]">
+              <Input
+                adornLeft={<Search />}
+                placeholder="Código, peça…"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                className="h-7 text-xs"
+              />
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        {carregando ? (
-          <p className="p-6 text-sm text-muted-foreground">Carregando etiquetas…</p>
-        ) : etiquetas.length === 0 ? (
-          <p className="p-6 text-sm text-muted-foreground">Nenhuma etiqueta neste recebimento.</p>
-        ) : (
-          <div className="overflow-x-auto">
+          </CardAction>
+        </CardHeader>
+        <CardContent className="p-0">
+          {carregando ? (
+            <p className="p-6 text-sm text-muted-foreground">Carregando etiquetas…</p>
+          ) : etiquetas.length === 0 ? (
+            <p className="p-6 text-sm text-muted-foreground">Nenhuma etiqueta neste recebimento.</p>
+          ) : (
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="hover:bg-transparent">
                   <TableHead>Etiqueta</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Produto</TableHead>
-                  <TableHead>Peso</TableHead>
+                  <TableHead className="text-right">Peso</TableHead>
                   <TableHead>Destino</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                  <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {etiquetas.map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-1 font-mono text-xs">
-                        <QrCode className="h-3 w-3" />
+                  <TableRow key={e.id} className="group">
+                    <TableCellCode>
+                      <span className="inline-flex items-center gap-1">
+                        <QrCode size={13} />
                         {e.codigo ?? e.pecaId.slice(0, 8)}
                       </span>
-                    </TableCell>
-                    <TableCell><Badge variant="outline">{rotuloEtiqueta(e)}</Badge></TableCell>
-                    <TableCell className="text-xs">{e.produtoCodigo} — {e.produtoDescricao}</TableCell>
-                    <TableCell>{e.pesoOriginal} kg</TableCell>
+                    </TableCellCode>
+                    <TableCell><StatusPill variant={statusEtiquetaVariant(e)} label={rotuloEtiqueta(e)} /></TableCell>
+                    <TableCell className="text-muted-foreground">{e.produtoCodigo} — {e.produtoDescricao}</TableCell>
+                    <TableCellNum>{e.pesoOriginal} kg</TableCellNum>
                     <TableCell>
                       <StatusPill variant={statusPecaVariant(e.statusPeca)} label={rotuloDestinoPeca(e.statusPeca)} />
                     </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => setSelecionada(e)} aria-label="Ver etiqueta">
-                          <Eye className="h-4 w-4" />
+                    <TableCell>
+                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Button variant="ghost" size="iconSm" onClick={() => setSelecionada(e)} aria-label="Ver etiqueta">
+                          <Eye />
                         </Button>
                         {podeGerenciar && reimprimivel(e) && (
-                          <Button variant="ghost" size="icon" onClick={() => { setSelecionada(e); setModalReimprimir(true); }} aria-label="Reimprimir">
-                            <Printer className="h-4 w-4" />
+                          <Button variant="ghost" size="iconSm" onClick={() => { setSelecionada(e); setModalReimprimir(true); }} aria-label="Reimprimir">
+                            <Printer />
                           </Button>
                         )}
                       </div>
@@ -275,25 +292,25 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
                 ))}
               </TableBody>
             </Table>
-          </div>
-        )}
+          )}
+        </CardContent>
       </Card>
 
       <Sheet open={Boolean(selecionada)} onOpenChange={(o) => !o && setSelecionada(null)}>
-        <SheetContent className="overflow-y-auto sm:max-w-md">
+        <SheetContent className="overflow-y-auto sm:max-w-[520px]">
           <SheetHeader>
             <SheetTitle>Detalhe da etiqueta</SheetTitle>
           </SheetHeader>
           {selecionada && (
-            <div className="mt-4 space-y-5 text-sm">
+            <div className="space-y-3 p-4 text-sm">
               {/* Preview */}
-              <div className="rounded-lg border border-border bg-surface-subtle p-3 font-mono text-[12px]">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Preview da etiqueta</p>
-                <p className="mt-1 text-[18px] font-black">{selecionada.codigo ?? '—'}</p>
-                <p>{selecionada.produtoCodigo} · {selecionada.produtoDescricao}</p>
-                <p>{selecionada.pesoOriginal} kg · NF-e {selecionada.nfNumero ?? '—'}</p>
-                <p>Lote {codigoLote} · {selecionada.frigorifico}</p>
-              </div>
+              <pre className="rounded-md bg-surface-2 p-3 font-data text-[11px] leading-relaxed">
+                <span className="block uppercase tracking-widest text-muted-foreground">Preview da etiqueta</span>
+                <span className="mt-1 block text-[18px] font-black">{selecionada.codigo ?? '—'}</span>
+                <span className="block">{selecionada.produtoCodigo} · {selecionada.produtoDescricao}</span>
+                <span className="block">{selecionada.pesoOriginal} kg · NF-e {selecionada.nfNumero ?? '—'}</span>
+                <span className="block">Lote {codigoLote} · {selecionada.frigorifico}</span>
+              </pre>
 
               {(selecionada.estado === 'cancelada' || selecionada.estado === 'invalidada_por_troca') && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive">
@@ -389,12 +406,12 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
               <div className="flex flex-col gap-2 pt-2">
                 {podeGerenciar && reimprimivel(selecionada) && (
                   <Button onClick={() => setModalReimprimir(true)}>
-                    <Printer className="mr-2 h-4 w-4" /> Reimprimir
+                    <Printer /> Reimprimir
                   </Button>
                 )}
                 {podeGerenciar && cancelavel(selecionada) && (
                   <Button variant="destructive" onClick={() => setModalCancelar(true)}>
-                    <XCircle className="mr-2 h-4 w-4" /> Cancelar etiqueta
+                    <XCircle /> Cancelar etiqueta
                   </Button>
                 )}
               </div>
@@ -403,47 +420,51 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
         </SheetContent>
       </Sheet>
 
-      {modalReimprimir && selecionada && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-label="Reimprimir etiqueta">
-          <div className="w-full max-w-sm rounded-lg bg-card p-5 shadow-lg">
-            <p className="text-[15px] font-bold">Reimprimir etiqueta</p>
-            <p className="mt-2 text-[13px] text-muted-foreground">
+      <Dialog open={modalReimprimir && Boolean(selecionada)} onOpenChange={setModalReimprimir}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reimprimir etiqueta</DialogTitle>
+          </DialogHeader>
+          {selecionada && (
+            <p className="text-[13px] text-fg-secondary">
               Inclui etiquetas pendentes de impressão. Confirma reimpressão de {selecionada.codigo ?? selecionada.pecaId.slice(0, 8)}?
             </p>
-            <div className="mt-4 flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setModalReimprimir(false)}>Cancelar</Button>
-              <Button className="flex-1" onClick={() => void reimprimir(selecionada.pecaId)}>Confirmar</Button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setModalReimprimir(false)}>Cancelar</Button>
+            <Button onClick={() => selecionada && void reimprimir(selecionada.pecaId)}>Confirmar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {modalCancelar && selecionada && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-label="Cancelar etiqueta">
-          <div className="w-full max-w-sm rounded-lg bg-card p-5 shadow-lg">
-            <p className="text-[15px] font-bold">Cancelar etiqueta e estornar ação</p>
-            <p className="mt-2 text-[12px] text-amber-700">
-              Esta ação irá invalidá-la e estornar a ação operacional vinculada.
-            </p>
-            <Label className="mt-3 block">Motivo</Label>
-            <Select value={motivoCancel} onValueChange={setMotivoCancel}>
-              <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {MOTIVOS_CANCEL.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {motivoCancel === 'outro' && (
-              <Input className="mt-2" placeholder="Observações" value={obsCancel} onChange={(e) => setObsCancel(e.target.value)} />
-            )}
-            <div className="mt-4 flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setModalCancelar(false)}>Voltar</Button>
-              <Button variant="destructive" className="flex-1" onClick={() => void cancelar()}>Confirmar cancelamento</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog open={modalCancelar && Boolean(selecionada)} onOpenChange={setModalCancelar}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar etiqueta e estornar ação</DialogTitle>
+          </DialogHeader>
+          <p className="text-[13px] text-[var(--color-status-divergencia)]">
+            Esta ação irá invalidá-la e estornar a ação operacional vinculada.
+          </p>
+          <FormField label="Motivo" required htmlFor="motivo-cancelar-etiqueta">
+            <SelectNative
+              id="motivo-cancelar-etiqueta"
+              value={motivoCancel}
+              onChange={(e) => setMotivoCancel(e.target.value)}
+            >
+              {MOTIVOS_CANCEL.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </SelectNative>
+          </FormField>
+          {motivoCancel === 'outro' && (
+            <Input placeholder="Observações" value={obsCancel} onChange={(e) => setObsCancel(e.target.value)} />
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setModalCancelar(false)}>Voltar</Button>
+            <Button variant="destructive" onClick={() => void cancelar()}>Confirmar cancelamento</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

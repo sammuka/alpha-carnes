@@ -10,17 +10,14 @@ import {
   Search,
 } from 'lucide-react';
 import { StatusPill } from '@/components/ui/status-pill';
-import { Badge } from '@/components/ui/badge';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { Button } from '@/components/ui/button';
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
 import {
   Sheet,
   SheetContent,
@@ -30,6 +27,15 @@ import {
 } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableCellCode,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import {
   fluxoOperacional,
@@ -149,25 +155,14 @@ function formParaPayload(form: FormProduto): CriarProdutoDto {
   };
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const ativo = status === 'ativo';
-  return (
-    <StatusPill variant={ativo ? 'expedido' : 'bloqueado'} label={ativo ? 'Ativo' : 'Inativo'} />
-  );
-}
-
 function TipoBadge({ tipo }: { tipo: TipoOperacional }) {
   const cores: Record<TipoOperacional, string> = {
-    peca_inteira_pesavel: 'border-blue-200 bg-blue-50 text-blue-700',
-    derivado_desossa: 'border-violet-200 bg-violet-50 text-violet-700',
-    entrada_unidade: 'border-orange-200 bg-orange-50 text-orange-700',
-    compra_base: 'border-green-200 bg-green-50 text-green-700',
+    peca_inteira_pesavel: 'bg-surface-3 text-fg-secondary',
+    derivado_desossa: 'bg-status-pesado-bg text-status-pesado',
+    entrada_unidade: 'bg-warning-soft text-warning-fg',
+    compra_base: 'bg-success-soft text-success-fg',
   };
-  return (
-    <Badge variant="outline" className={cores[tipo]}>
-      {rotuloTipoOperacional(tipo)}
-    </Badge>
-  );
+  return <BadgeCount className={cores[tipo]}>{rotuloTipoOperacional(tipo)}</BadgeCount>;
 }
 
 export function ProdutosClient({ permissoes }: { permissoes: string[] }) {
@@ -285,266 +280,297 @@ export function ProdutosClient({ permissoes }: { permissoes: string[] }) {
     setForm((f) => ({ ...f, [key]: val }));
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="mb-1 text-xs font-medium text-muted-foreground">Cadastros & Regras / Produtos</p>
-          <h1 className="text-2xl font-bold tracking-tight">Produtos</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Cadastro dos itens comercializáveis e operacionais usados em pedidos, disponibilidade, balança, desossa,
-            estoque e faturamento.
-          </p>
-        </div>
+    <div className="space-y-3">
+      <PageHeader title="Produtos" subtitle="Cadastro dos itens comercializáveis e operacionais">
         {podeGerenciar && (
           <Button onClick={abrirNovo}>
-            <Plus className="mr-1.5 size-4" />
+            <Plus />
             Novo Produto
           </Button>
         )}
-      </div>
+      </PageHeader>
 
       {erro && (
-        <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {erro}
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[240px] flex-1">
-          <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome, código ou nome operacional"
-            className="pl-8"
-          />
-        </div>
-        <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-          <SelectTrigger className="w-[220px]">
-            <SelectValue placeholder="Tipo operacional" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Tipo: Todos</SelectItem>
-            {TIPOS_OPERACIONAIS.map((t) => (
-              <SelectItem key={t.valor} value={t.valor}>
-                {t.rotulo}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Status: Todos</SelectItem>
-            <SelectItem value="ativo">Ativo</SelectItem>
-            <SelectItem value="inativo">Inativo</SelectItem>
-          </SelectContent>
-        </Select>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {produtos.length} produto{produtos.length !== 1 ? 's' : ''}
-        </span>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border bg-card">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/40">
-                {['Código', 'Produto', 'Nome oper.', 'Tipo', 'Un. pedido', 'Un. preço', 'Peso', 'Fluxo', 'Tab. preço', 'Status', 'Ações'].map(
-                  (h) => (
-                    <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold tracking-wide whitespace-nowrap text-muted-foreground uppercase">
-                      {h}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
+      <Card>
+        <CardHeader>
+          <CardTitle>Produtos</CardTitle>
+          <BadgeCount>{produtos.length}</BadgeCount>
+          <CardAction>
+            <div className="w-[240px]">
+              <Input
+                adornLeft={<Search />}
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar por nome, código ou nome operacional"
+                className="h-7 text-xs"
+              />
+            </div>
+            <SelectNative
+              selectSize="sm"
+              className="w-[190px]"
+              value={filtroTipo}
+              onChange={(e) => setFiltroTipo(e.target.value)}
+            >
+              <option value="todos">Tipo: Todos</option>
+              {TIPOS_OPERACIONAIS.map((t) => (
+                <option key={t.valor} value={t.valor}>
+                  {t.rotulo}
+                </option>
+              ))}
+            </SelectNative>
+            <SelectNative
+              selectSize="sm"
+              className="w-[130px]"
+              value={filtroStatus}
+              onChange={(e) => setFiltroStatus(e.target.value)}
+            >
+              <option value="todos">Status: Todos</option>
+              <option value="ativo">Ativo</option>
+              <option value="inativo">Inativo</option>
+            </SelectNative>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Código</TableHead>
+                <TableHead>Produto</TableHead>
+                <TableHead>Nome oper.</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Un. pedido</TableHead>
+                <TableHead>Un. preço</TableHead>
+                <TableHead>Peso</TableHead>
+                <TableHead>Fluxo</TableHead>
+                <TableHead>Tab. preço</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {loading ? (
-                <tr>
-                  <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">
+                <TableRow>
+                  <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
                     Carregando...
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : produtos.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">
+                <TableRow>
+                  <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
                     Nenhum produto encontrado.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 produtos.map((p) => (
-                  <tr key={p.id} className="border-b last:border-0 hover:bg-muted/20">
-                    <td className="px-4 py-2.5">
-                      <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-bold text-primary">
-                        {p.codigo}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 font-medium whitespace-nowrap">{p.nome}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{p.nomeOperacional ?? '—'}</td>
-                    <td className="px-4 py-2.5">
+                  <TableRow key={p.id} className="group">
+                    <TableCellCode>{p.codigo}</TableCellCode>
+                    <TableCell className="text-[13px] font-semibold text-foreground">{p.nome}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.nomeOperacional ?? '—'}</TableCell>
+                    <TableCell>
                       <TipoBadge tipo={p.tipoOperacional} />
-                    </td>
-                    <td className="px-4 py-2.5">{p.unidadePedido}</td>
-                    <td className="px-4 py-2.5">{p.unidadePreco}</td>
-                    <td className="px-4 py-2.5">
+                    </TableCell>
+                    <TableCell>{p.unidadePedido}</TableCell>
+                    <TableCell>{p.unidadePreco}</TableCell>
+                    <TableCell>
                       {p.exigePeso ? (
-                        <span className="text-xs font-semibold text-blue-600">Sim</span>
+                        <span className="text-xs font-semibold text-primary-fg">Sim</span>
                       ) : (
                         <span className="text-xs text-muted-foreground">Não</span>
                       )}
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap text-muted-foreground">{fluxoOperacional(p)}</td>
-                    <td className="px-4 py-2.5">
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{fluxoOperacional(p)}</TableCell>
+                    <TableCell>
                       {p.ativoVenda ? (
-                        <span className="text-xs font-semibold text-green-600">Sim</span>
+                        <span className="text-xs font-semibold text-success-fg">Sim</span>
                       ) : (
                         <span className="text-xs text-muted-foreground">Não</span>
                       )}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <StatusBadge status={p.status} />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" className="size-7" title="Visualizar" onClick={() => abrirProduto(p, true)}>
-                          <Eye className="size-3.5" />
+                    </TableCell>
+                    <TableCell>
+                      <StatusPill
+                        variant={p.status === 'ativo' ? 'expedido' : 'bloqueado'}
+                        label={p.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Button variant="ghost" size="iconSm" title="Visualizar" onClick={() => abrirProduto(p, true)}>
+                          <Eye />
                         </Button>
                         {podeGerenciar && (
                           <>
-                            <Button variant="ghost" size="icon" className="size-7" title="Editar" onClick={() => abrirProduto(p)}>
-                              <Pencil className="size-3.5" />
+                            <Button variant="ghost" size="iconSm" title="Editar" onClick={() => abrirProduto(p)}>
+                              <Pencil />
                             </Button>
                             <Button
                               variant="ghost"
-                              size="icon"
-                              className="size-7"
+                              size="iconSm"
                               title={p.status === 'ativo' ? 'Inativar' : 'Ativar'}
                               onClick={() => void alternarStatus(p)}
                             >
-                              {p.status === 'ativo' ? <PowerOff className="size-3.5" /> : <Power className="size-3.5" />}
+                              {p.status === 'ativo' ? <PowerOff /> : <Power />}
                             </Button>
                           </>
                         )}
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <Sheet open={drawerAberto} onOpenChange={setDrawerAberto}>
-        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-lg">
-          <SheetHeader className="border-b px-6 py-4">
-            <SheetTitle>{form.id ? `Produto — ${form.codigo}` : 'Novo Produto'}</SheetTitle>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-[520px]">
+          <SheetHeader className="border-b border-border p-4">
+            <SheetTitle className="text-[16px] font-bold">
+              {form.id ? `Produto — ${form.codigo}` : 'Novo Produto'}
+            </SheetTitle>
           </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto px-6 py-4">
-              <Tabs defaultValue="gerais" className="gap-4">
-                <TabsList className="grid w-full grid-cols-5">
-                  <TabsTrigger value="gerais">Gerais</TabsTrigger>
-                  <TabsTrigger value="comercial">Comercial</TabsTrigger>
-                  <TabsTrigger value="operacional">Operacional</TabsTrigger>
-                  <TabsTrigger value="estoque">Estoque</TabsTrigger>
-                  <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
-                </TabsList>
+          <div className="flex-1 overflow-y-auto p-4">
+            <Tabs defaultValue="gerais">
+              <TabsList>
+                <TabsTrigger value="gerais">Gerais</TabsTrigger>
+                <TabsTrigger value="comercial">Comercial</TabsTrigger>
+                <TabsTrigger value="operacional">Operacional</TabsTrigger>
+                <TabsTrigger value="estoque">Estoque</TabsTrigger>
+                <TabsTrigger value="fiscal">Fiscal</TabsTrigger>
+              </TabsList>
 
-                <TabsContent value="gerais" forceMount className="space-y-4 data-[state=inactive]:hidden">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="codigo">Código interno</Label>
-                      <Input
-                        id="codigo"
-                        value={form.codigo}
-                        disabled={somenteLeitura || !!form.id}
-                        onChange={(e) => setCampo('codigo', e.target.value)}
-                        placeholder="Ex: TZ, PA"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="categoria">Categoria</Label>
-                      <Input
-                        id="categoria"
-                        value={form.categoria ?? ''}
-                        disabled={somenteLeitura}
-                        onChange={(e) => setCampo('categoria', e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="nome">Nome do produto</Label>
+              <TabsContent value="gerais" forceMount className="space-y-3 data-[state=inactive]:hidden">
+                <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                  <FormField label="Código interno" htmlFor="codigo">
+                    <Input
+                      id="codigo"
+                      value={form.codigo}
+                      disabled={somenteLeitura || !!form.id}
+                      onChange={(e) => setCampo('codigo', e.target.value)}
+                      placeholder="Ex: TZ, PA"
+                    />
+                  </FormField>
+                  <FormField label="Categoria" htmlFor="categoria">
+                    <Input
+                      id="categoria"
+                      value={form.categoria ?? ''}
+                      disabled={somenteLeitura}
+                      onChange={(e) => setCampo('categoria', e.target.value)}
+                    />
+                  </FormField>
+                  <FormField label="Nome do produto" htmlFor="nome" className="sm:col-span-2">
                     <Input
                       id="nome"
                       value={form.nome}
                       disabled={somenteLeitura}
                       onChange={(e) => setCampo('nome', e.target.value)}
                     />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="nomeOperacional">Nome operacional / etiqueta</Label>
+                  </FormField>
+                  <FormField label="Nome operacional / etiqueta" htmlFor="nomeOperacional" className="sm:col-span-2">
                     <Input
                       id="nomeOperacional"
                       value={form.nomeOperacional ?? ''}
                       disabled={somenteLeitura}
                       onChange={(e) => setCampo('nomeOperacional', e.target.value)}
                     />
-                  </div>
+                  </FormField>
+                </div>
 
-                  <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-                    <Label htmlFor="status">Status</Label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">{form.status === 'ativo' ? 'Ativo' : 'Inativo'}</span>
-                      <Switch
-                        id="status"
-                        checked={form.status === 'ativo'}
-                        disabled={somenteLeitura}
-                        onCheckedChange={(v) => setCampo('status', v ? 'ativo' : 'inativo')}
-                      />
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="comercial" forceMount className="space-y-4 data-[state=inactive]:hidden">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="precoPorKg">Preço por kg (R$)</Label>
-                    <Input id="precoPorKg" value="" placeholder="—" disabled readOnly />
-                    <p className="text-xs text-muted-foreground">
-                      Lacuna backend — tabela de preços por kg ainda não exposta pela API.
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Unidade de preço</Label>
-                    <Select
-                      value={form.unidadePreco}
+                <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                  <Label htmlFor="status">Status</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{form.status === 'ativo' ? 'Ativo' : 'Inativo'}</span>
+                    <Switch
+                      id="status"
+                      checked={form.status === 'ativo'}
                       disabled={somenteLeitura}
-                      onValueChange={(v) => setCampo('unidadePreco', v as 'kg' | 'unidade')}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="kg">kg</SelectItem>
-                        <SelectItem value="unidade">Unidade</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      onCheckedChange={(v) => setCampo('status', v ? 'ativo' : 'inativo')}
+                    />
                   </div>
+                </div>
+              </TabsContent>
 
+              <TabsContent value="comercial" forceMount className="space-y-3 data-[state=inactive]:hidden">
+                <FormField label="Preço por kg (R$)" htmlFor="precoPorKg" help="Lacuna backend — tabela de preços por kg ainda não exposta pela API.">
+                  <Input id="precoPorKg" value="" placeholder="—" disabled readOnly />
+                </FormField>
+
+                <FormField label="Unidade de preço" htmlFor="unidadePreco">
+                  <SelectNative
+                    id="unidadePreco"
+                    value={form.unidadePreco}
+                    disabled={somenteLeitura}
+                    onChange={(e) => setCampo('unidadePreco', e.target.value as 'kg' | 'unidade')}
+                  >
+                    <option value="kg">kg</option>
+                    <option value="unidade">Unidade</option>
+                  </SelectNative>
+                </FormField>
+
+                {(
+                  [
+                    ['ativoVenda', 'Ativo para venda / tabela de preços'],
+                    ['ativoCompra', 'Ativo para compra'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key} className="flex items-center justify-between gap-4">
+                    <Label htmlFor={key} className="font-normal normal-case">
+                      {label}
+                    </Label>
+                    <Switch
+                      id={key}
+                      checked={form[key]}
+                      disabled={somenteLeitura}
+                      onCheckedChange={(v) => setCampo(key, v)}
+                    />
+                  </div>
+                ))}
+              </TabsContent>
+
+              <TabsContent value="operacional" forceMount className="space-y-3 data-[state=inactive]:hidden">
+                <FormField label="Tipo operacional" htmlFor="tipoOperacional">
+                  <SelectNative
+                    id="tipoOperacional"
+                    value={form.tipoOperacional}
+                    disabled={somenteLeitura}
+                    onChange={(e) => setCampo('tipoOperacional', e.target.value as TipoOperacional)}
+                  >
+                    {TIPOS_OPERACIONAIS.map((t) => (
+                      <option key={t.valor} value={t.valor}>
+                        {t.rotulo}
+                      </option>
+                    ))}
+                  </SelectNative>
+                </FormField>
+
+                <FormField label="Unidade do pedido" htmlFor="unidadePedido">
+                  <Input
+                    id="unidadePedido"
+                    value={form.unidadePedido}
+                    disabled={somenteLeitura}
+                    onChange={(e) => setCampo('unidadePedido', e.target.value)}
+                  />
+                </FormField>
+
+                <div className="space-y-2.5 rounded-md border border-border p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.02em] text-fg-secondary">Flags operacionais</p>
                   {(
                     [
-                      ['ativoVenda', 'Ativo para venda / tabela de preços'],
-                      ['ativoCompra', 'Ativo para compra'],
+                      ['exigePeso', 'Exige peso final para faturamento'],
+                      ['passaBalanca', 'Passa pela balança principal'],
+                      ['passaDesossa', 'Passa pela desossa'],
+                      ['origemTransformacao', 'É origem de transformação'],
+                      ['saidaTransformacao', 'É derivado de transformação'],
                     ] as const
                   ).map(([key, label]) => (
                     <div key={key} className="flex items-center justify-between gap-4">
-                      <Label htmlFor={key} className="font-normal">
+                      <Label htmlFor={key} className="font-normal normal-case">
                         {label}
                       </Label>
                       <Switch
@@ -555,138 +581,77 @@ export function ProdutosClient({ permissoes }: { permissoes: string[] }) {
                       />
                     </div>
                   ))}
-                </TabsContent>
+                </div>
 
-                <TabsContent value="operacional" forceMount className="space-y-4 data-[state=inactive]:hidden">
-                  <div className="space-y-1.5">
-                    <Label>Tipo operacional</Label>
-                    <Select
-                      value={form.tipoOperacional}
-                      disabled={somenteLeitura}
-                      onValueChange={(v) => setCampo('tipoOperacional', v as TipoOperacional)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TIPOS_OPERACIONAIS.map((t) => (
-                          <SelectItem key={t.valor} value={t.valor}>
-                            {t.rotulo}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <FormField label="Observações operacionais" htmlFor="observacoes">
+                  <Textarea
+                    id="observacoes"
+                    value={form.observacoesOperacionais ?? ''}
+                    disabled={somenteLeitura}
+                    onChange={(e) => setCampo('observacoesOperacionais', e.target.value)}
+                    rows={3}
+                  />
+                </FormField>
+              </TabsContent>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="unidadePedido">Unidade do pedido</Label>
+              <TabsContent value="estoque" forceMount className="space-y-3 data-[state=inactive]:hidden">
+                <div className="flex items-center justify-between gap-4">
+                  <Label htmlFor="podeEstoque" className="font-normal normal-case">
+                    Permite estoque
+                  </Label>
+                  <Switch
+                    id="podeEstoque"
+                    checked={form.podeEstoque}
+                    disabled={somenteLeitura}
+                    onCheckedChange={(v) => setCampo('podeEstoque', v)}
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="fiscal" forceMount className="space-y-3 data-[state=inactive]:hidden">
+                <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                  <FormField label="NCM" htmlFor="ncm">
                     <Input
-                      id="unidadePedido"
-                      value={form.unidadePedido}
-                      disabled={somenteLeitura}
-                      onChange={(e) => setCampo('unidadePedido', e.target.value)}
+                      id="ncm"
+                      value={form.ncm ?? ''}
+                      disabled={!podeGerenciar}
+                      placeholder="0201.30.00"
+                      onChange={(e) => setCampo('ncm', e.target.value)}
                     />
-                  </div>
-
-                  <div className="space-y-3 rounded-lg border p-3">
-                    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Flags operacionais</p>
-                    {(
-                      [
-                        ['exigePeso', 'Exige peso final para faturamento'],
-                        ['passaBalanca', 'Passa pela balança principal'],
-                        ['passaDesossa', 'Passa pela desossa'],
-                        ['origemTransformacao', 'É origem de transformação'],
-                        ['saidaTransformacao', 'É derivado de transformação'],
-                      ] as const
-                    ).map(([key, label]) => (
-                      <div key={key} className="flex items-center justify-between gap-4">
-                        <Label htmlFor={key} className="font-normal">
-                          {label}
-                        </Label>
-                        <Switch
-                          id={key}
-                          checked={form[key]}
-                          disabled={somenteLeitura}
-                          onCheckedChange={(v) => setCampo(key, v)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="observacoes">Observações operacionais</Label>
-                    <Textarea
-                      id="observacoes"
-                      value={form.observacoesOperacionais ?? ''}
-                      disabled={somenteLeitura}
-                      onChange={(e) => setCampo('observacoesOperacionais', e.target.value)}
-                      rows={3}
+                  </FormField>
+                  <FormField label="CFOP" htmlFor="cfop">
+                    <Input
+                      id="cfop"
+                      value={form.cfop ?? ''}
+                      disabled={!podeGerenciar}
+                      placeholder="5102"
+                      onChange={(e) => setCampo('cfop', e.target.value)}
                     />
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="estoque" forceMount className="space-y-4 data-[state=inactive]:hidden">
-                  <div className="flex items-center justify-between gap-4">
-                    <Label htmlFor="podeEstoque" className="font-normal">
-                      Permite estoque
-                    </Label>
-                    <Switch
-                      id="podeEstoque"
-                      checked={form.podeEstoque}
-                      disabled={somenteLeitura}
-                      onCheckedChange={(v) => setCampo('podeEstoque', v)}
+                  </FormField>
+                  <FormField label="Origem fiscal" htmlFor="origemFiscal">
+                    <Input
+                      id="origemFiscal"
+                      value={form.origemFiscal ?? ''}
+                      disabled={!podeGerenciar}
+                      onChange={(e) => setCampo('origemFiscal', e.target.value)}
                     />
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="fiscal" forceMount className="space-y-4 data-[state=inactive]:hidden">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="ncm">NCM</Label>
-                      <Input
-                        id="ncm"
-                        value={form.ncm ?? ''}
-                        disabled={!podeGerenciar}
-                        placeholder="0201.30.00"
-                        onChange={(e) => setCampo('ncm', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="cfop">CFOP</Label>
-                      <Input
-                        id="cfop"
-                        value={form.cfop ?? ''}
-                        disabled={!podeGerenciar}
-                        placeholder="5102"
-                        onChange={(e) => setCampo('cfop', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="origemFiscal">Origem fiscal</Label>
-                      <Input
-                        id="origemFiscal"
-                        value={form.origemFiscal ?? ''}
-                        disabled={!podeGerenciar}
-                        onChange={(e) => setCampo('origemFiscal', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="cestOpcional">CEST (opcional)</Label>
-                      <Input
-                        id="cestOpcional"
-                        value={form.cestOpcional ?? ''}
-                        disabled={!podeGerenciar}
-                        onChange={(e) => setCampo('cestOpcional', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
+                  </FormField>
+                  <FormField label="CEST (opcional)" htmlFor="cestOpcional">
+                    <Input
+                      id="cestOpcional"
+                      value={form.cestOpcional ?? ''}
+                      disabled={!podeGerenciar}
+                      onChange={(e) => setCampo('cestOpcional', e.target.value)}
+                    />
+                  </FormField>
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
 
           {!somenteLeitura && podeGerenciar && (
-            <SheetFooter className="border-t px-6 py-4">
-              <Button variant="outline" onClick={() => setDrawerAberto(false)}>
+            <SheetFooter className="flex-row justify-end gap-2 border-t border-border p-4">
+              <Button variant="ghost" onClick={() => setDrawerAberto(false)}>
                 Cancelar
               </Button>
               <Button onClick={() => void salvar()} disabled={salvando}>

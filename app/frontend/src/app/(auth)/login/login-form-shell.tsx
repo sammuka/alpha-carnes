@@ -11,10 +11,10 @@ function LoginFormSkeleton() {
         <div className="h-4 w-full rounded bg-muted" />
       </div>
       <div className="space-y-4">
-        <div className="h-12 rounded bg-muted" />
-        <div className="h-12 rounded bg-muted" />
+        <div className="h-9 rounded bg-muted" />
+        <div className="h-9 rounded bg-muted" />
       </div>
-      <div className="h-12 rounded bg-muted" />
+      <div className="h-9 rounded bg-muted" />
     </div>
   );
 }

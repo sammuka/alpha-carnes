@@ -34,18 +34,18 @@ export function ClientesVinculados({ representanteId }: { representanteId: strin
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="flex items-center gap-1.5 text-[12px] font-semibold text-text-graphite">
-        <Users className="size-3.5 text-text-muted" /> Clientes vinculados
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.02em] text-fg-secondary">
+        <Users className="size-3.5 text-muted-foreground" /> Clientes vinculados
         {clientes !== null && ` (${clientes.length})`}
       </p>
       {clientes === null ? (
-        <p className="text-[12px] text-text-muted">Carregando…</p>
+        <p className="text-[12px] text-muted-foreground">Carregando…</p>
       ) : clientes.length === 0 ? (
-        <p className="text-[12px] text-text-muted">Nenhum cliente vinculado.</p>
+        <p className="text-[12px] text-muted-foreground">Nenhum cliente vinculado.</p>
       ) : (
-        <div className="flex flex-col gap-1.5 rounded-lg bg-surface-subtle p-3">
+        <div className="flex flex-col gap-1.5 rounded-md bg-surface-2 p-2.5">
           {clientes.map((c) => (
-            <div key={c.id} className="text-[12px] text-text-ink">
+            <div key={c.id} className="text-[12px] text-foreground">
               {c.nomeFantasia ?? c.razaoSocial}
             </div>
           ))}

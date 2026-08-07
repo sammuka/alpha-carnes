@@ -1,9 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Calendar, Info, Plus, RefreshCw } from 'lucide-react';
+import { Info, Plus, RefreshCw } from 'lucide-react';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DatePickerField } from '@/components/ui/date-picker-field';
 import {
   Dialog,
   DialogContent,
@@ -11,9 +14,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
 import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableCellNum,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import {
   listarOperacoes,
   ROTULO_STATUS_OPERACAO,
@@ -28,7 +42,7 @@ type FiltroStatus = 'todos' | Operacao['status'];
 function statusVariant(status: Operacao['status']): StatusPillVariant {
   switch (status) {
     case 'aberta':
-      return 'expedido';
+      return 'pendente';
     case 'em_andamento':
       return 'recebido';
     case 'fechada':
@@ -161,28 +175,24 @@ export function OperacoesClient({ permissoes }: { permissoes: string[] }) {
   const filtradas = operacoes;
 
   return (
-    <div className="flex h-full flex-col gap-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="mb-0.5 text-[11px] font-medium text-muted-foreground">Gestão / Operações</p>
-          <h1 className="text-xl font-bold text-foreground">Operações</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Cada operação representa um dia de compra/venda. Compra Programada e Pedido de Venda sempre se vinculam a uma operação desta lista.
-          </p>
-        </div>
+    <div className="space-y-3">
+      <PageHeader
+        title="Operações"
+        subtitle="Cada operação representa um dia de compra/venda. Compra Programada e Pedido de Venda sempre se vinculam a uma operação desta lista."
+      >
         {podeGerenciar && (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={gerarCadencia} disabled={processando}>
-              <RefreshCw className="mr-1.5 h-4 w-4" />
+          <>
+            <Button variant="secondary" onClick={gerarCadencia} disabled={processando}>
+              <RefreshCw />
               Gerar cadência
             </Button>
             <Button onClick={() => setModalExtra(true)} disabled={processando}>
-              <Plus className="mr-1.5 h-4 w-4" />
+              <Plus />
               Nova Operação Extraordinária
             </Button>
-          </div>
+          </>
         )}
-      </div>
+      </PageHeader>
 
       <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-600" />
@@ -198,114 +208,124 @@ export function OperacoesClient({ permissoes }: { permissoes: string[] }) {
         </div>
       )}
 
-      <div className="flex items-center gap-3">
-        <select
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value as FiltroStatus)}
-          className="h-8 rounded-md border border-border bg-card px-2.5 text-xs text-foreground"
-        >
-          <option value="todos">Status: Todas</option>
-          <option value="aberta">Aberta</option>
-          <option value="em_andamento">Em andamento</option>
-          <option value="fechada">Fechada</option>
-        </select>
-        <span className="ml-auto text-xs text-muted-foreground">{filtradas.length} operação(ões)</span>
-      </div>
-
-      <div className="flex-1 overflow-y-auto rounded-xl border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="sticky top-0 border-b border-border bg-muted/30">
-              {['Operação', 'Data', 'Dia da semana', 'Origem', 'Contadores', 'Status', 'Ações'].map((h) => (
-                <th key={h} className="whitespace-nowrap px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {carregando ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
-                  Carregando operações…
-                </td>
-              </tr>
-            ) : filtradas.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
-                  Nenhuma operação encontrada para o filtro aplicado.
-                </td>
-              </tr>
-            ) : (
-              filtradas.map((o) => {
-                const proximo = proximoStatus(o.status);
-                return (
-                  <tr key={o.id} className="border-b border-border last:border-0 hover:bg-muted/20">
-                    <td className="px-4 py-2.5">
-                      <p className="font-semibold text-primary">{o.rotulo}</p>
-                      <p className="font-mono text-[10px] text-muted-foreground">{o.id.slice(0, 8)}</p>
-                    </td>
-                    <td className="px-4 py-2.5">{formatDataBR(o.data)}</td>
-                    <td className="px-4 py-2.5 capitalize">{DIAS_SEMANA[o.diaSemana] ?? o.diaSemana}</td>
-                    <td className="px-4 py-2.5">
-                      {o.extraordinaria ? (
-                        <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700">
-                          Extraordinária
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground">Cadência automática</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                      {o.comprasProgramadas} compras · {o.pedidosVenda} pedidos · {o.pendenciasOverbookingAbertas} OB
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <StatusPill variant={statusVariant(o.status)} label={ROTULO_STATUS_OPERACAO[o.status]} />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {podeGerenciar && proximo && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={processando}
-                          onClick={() => void alterarStatus(o.id, proximo)}
-                        >
-                          {rotuloAcaoStatus(proximo)}
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Operações</CardTitle>
+          <BadgeCount>{filtradas.length}</BadgeCount>
+          <CardAction>
+            <SelectNative
+              aria-label="Filtrar operações por status"
+              selectSize="sm"
+              className="w-[150px]"
+              value={filtro}
+              onChange={(e) => setFiltro(e.target.value as FiltroStatus)}
+            >
+              <option value="todos">Status: Todas</option>
+              <option value="aberta">Aberta</option>
+              <option value="em_andamento">Em andamento</option>
+              <option value="fechada">Fechada</option>
+            </SelectNative>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Operação</TableHead>
+                <TableHead className="text-right">Data</TableHead>
+                <TableHead>Dia da semana</TableHead>
+                <TableHead>Origem</TableHead>
+                <TableHead className="text-right">Contadores</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {carregando ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground">
+                    Carregando operações…
+                  </TableCell>
+                </TableRow>
+              ) : filtradas.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground">
+                    Nenhuma operação encontrada para o filtro aplicado.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filtradas.map((o) => {
+                  const proximo = proximoStatus(o.status);
+                  return (
+                    <TableRow key={o.id} className="group">
+                      <TableCell className="whitespace-normal">
+                        <p className="text-[13px] font-semibold text-foreground">{o.rotulo}</p>
+                        <p className="font-data text-[10px] text-fg-faint">{o.id.slice(0, 8).toUpperCase()}</p>
+                      </TableCell>
+                      <TableCellNum>{formatDataBR(o.data)}</TableCellNum>
+                      <TableCell className="capitalize text-muted-foreground">
+                        {DIAS_SEMANA[o.diaSemana] ?? o.diaSemana}
+                      </TableCell>
+                      <TableCell>
+                        {o.extraordinaria ? (
+                          <BadgeCount className="bg-status-pesado-bg text-status-pesado">Extraordinária</BadgeCount>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">Cadência automática</span>
+                        )}
+                      </TableCell>
+                      <TableCellNum>
+                        {o.comprasProgramadas} compras · {o.pedidosVenda} pedidos · {o.pendenciasOverbookingAbertas} OB
+                      </TableCellNum>
+                      <TableCell>
+                        <StatusPill variant={statusVariant(o.status)} label={ROTULO_STATUS_OPERACAO[o.status]} />
+                      </TableCell>
+                      <TableCell>
+                        {podeGerenciar && proximo && (
+                          <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={processando}
+                              onClick={() => void alterarStatus(o.id, proximo)}
+                            >
+                              {rotuloAcaoStatus(proximo)}
+                            </Button>
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <Dialog open={modalExtra} onOpenChange={setModalExtra}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Nova Operação extraordinária</DialogTitle>
           </DialogHeader>
-          <p className="text-xs text-muted-foreground">
+          <p className="px-4 text-xs text-fg-secondary">
             Use esta opção quando precisar de uma Operação fora da cadência fixa (ex.: recebimento em outro dia da semana).
           </p>
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="data-extra">Data da operação</Label>
-              <div className="relative mt-1">
-                <Calendar className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="data-extra" type="date" className="pl-9" value={dataExtra} onChange={(e) => setDataExtra(e.target.value)} />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="rotulo-extra">Rótulo</Label>
-              <Input id="rotulo-extra" className="mt-1" value={rotuloExtra} onChange={(e) => setRotuloExtra(e.target.value)} placeholder="Operação extraordinária — …" />
-            </div>
+          <div className="flex flex-col gap-3 px-4">
+            <FormField label="Data da operação" htmlFor="data-extra">
+              <DatePickerField id="data-extra" value={dataExtra} onChange={setDataExtra} />
+            </FormField>
+            <FormField label="Rótulo" htmlFor="rotulo-extra">
+              <Input
+                id="rotulo-extra"
+                value={rotuloExtra}
+                onChange={(e) => setRotuloExtra(e.target.value)}
+                placeholder="Operação extraordinária — …"
+              />
+            </FormField>
             {erroExtra && <p className="text-xs text-destructive">{erroExtra}</p>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalExtra(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={() => setModalExtra(false)}>Cancelar</Button>
             <Button onClick={() => void criarExtraordinaria()} disabled={processando}>Criar Operação</Button>
           </DialogFooter>
         </DialogContent>

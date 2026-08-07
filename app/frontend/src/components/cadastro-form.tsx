@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useForm, type FieldValues } from 'react-hook-form';
+import { Controller, useForm, type FieldValues } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { DatePickerField } from '@/components/ui/date-picker-field';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { SelectNative } from '@/components/ui/select-native';
 import { CADASTROS, type CadastroConfig } from '@/lib/cadastros-config';
 
 export type CadastroFormConfig = Omit<CadastroConfig, 'schema'>;
@@ -24,6 +27,7 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FieldValues>({
@@ -61,40 +65,67 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="max-w-2xl space-y-4" noValidate>
-      {config.campos.map((campo) => {
-        const erroCampo = errors[campo.nome]?.message as string | undefined;
-        return (
-          <div key={campo.nome} className="space-y-1">
-            <Label htmlFor={campo.nome}>{campo.rotulo}</Label>
-            {campo.tipo === 'select' ? (
-              <select
-                id={campo.nome}
-                aria-label={campo.rotulo}
-                className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
-                {...register(campo.nome)}
-              >
-                {campo.opcoes?.map((op) => (
-                  <option key={op.valor} value={op.valor}>
-                    {op.rotulo}
-                  </option>
-                ))}
-              </select>
-            ) : campo.tipo === 'checkbox' ? (
-              <input id={campo.nome} type="checkbox" aria-label={campo.rotulo} {...register(campo.nome)} />
-            ) : (
-              <Input
-                id={campo.nome}
-                type={campo.tipo === 'number' ? 'number' : campo.tipo === 'date' ? 'date' : 'text'}
-                aria-label={campo.rotulo}
-                placeholder={campo.placeholder}
-                {...register(campo.nome)}
-              />
-            )}
-            {erroCampo && <p className="text-sm text-destructive">{erroCampo}</p>}
-          </div>
-        );
-      })}
+    <form onSubmit={handleSubmit(onSubmit)} className="max-w-2xl space-y-3" noValidate>
+      <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+        {config.campos.map((campo) => {
+          const erroCampo = errors[campo.nome]?.message as string | undefined;
+          return (
+            <FormField
+              key={campo.nome}
+              label={campo.rotulo}
+              htmlFor={campo.nome}
+              error={erroCampo}
+              className={campo.tipo === 'checkbox' ? 'sm:col-span-2' : undefined}
+            >
+              {campo.tipo === 'select' ? (
+                <SelectNative id={campo.nome} aria-label={campo.rotulo} {...register(campo.nome)}>
+                  {campo.opcoes?.map((op) => (
+                    <option key={op.valor} value={op.valor}>
+                      {op.rotulo}
+                    </option>
+                  ))}
+                </SelectNative>
+              ) : campo.tipo === 'checkbox' ? (
+                <Controller
+                  name={campo.nome}
+                  control={control}
+                  render={({ field }) => (
+                    <label className="flex items-center gap-2 text-[13px]">
+                      <Checkbox
+                        id={campo.nome}
+                        checked={field.value === true}
+                        onCheckedChange={(v) => field.onChange(v === true)}
+                      />
+                      {campo.rotulo}
+                    </label>
+                  )}
+                />
+              ) : campo.tipo === 'date' ? (
+                <Controller
+                  name={campo.nome}
+                  control={control}
+                  render={({ field }) => (
+                    <DatePickerField
+                      id={campo.nome}
+                      aria-label={campo.rotulo}
+                      value={typeof field.value === 'string' ? field.value : ''}
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
+              ) : (
+                <Input
+                  id={campo.nome}
+                  type={campo.tipo === 'number' ? 'number' : 'text'}
+                  aria-label={campo.rotulo}
+                  placeholder={campo.placeholder}
+                  {...register(campo.nome)}
+                />
+              )}
+            </FormField>
+          );
+        })}
+      </div>
 
       {erro && <p className="text-sm text-destructive">{erro}</p>}
 
@@ -102,7 +133,7 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
         <Button type="submit" loading={isSubmitting}>
           {registro ? 'Salvar' : 'Criar'}
         </Button>
-        <Button type="button" variant="outline" onClick={() => router.push(`/cadastros/${config.recurso}`)}>
+        <Button type="button" variant="ghost" onClick={() => router.push(`/cadastros/${config.recurso}`)}>
           Cancelar
         </Button>
       </div>

@@ -58,12 +58,12 @@ describe('EstoqueConsultaClient', () => {
 
     await waitFor(() => expect(screen.getByText('TZ-000347')).toBeInTheDocument());
 
-    const cabecalhos = ['Código', 'Produto', 'Tipo', 'Qtd', 'Peso', 'Origem/Frigorífico', 'NF/Lote', 'Entrada', 'Local', 'Status', 'Características', 'Pedido reservado'];
+    const cabecalhos = ['Código', 'Produto', 'Tipo', 'Qtd', 'Peso (kg)', 'Origem/Frigorífico', 'NF/Lote', 'Entrada', 'Local', 'Status', 'Características', 'Pedido reservado'];
     for (const h of cabecalhos) {
       expect(screen.getByText(h)).toBeInTheDocument();
     }
-    expect(screen.getByText('Consulta de Estoque')).toBeInTheDocument();
-    expect(screen.getByText('Sobras & Congelamento')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Consulta de Estoque' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Sobras & Congelamento' })).toBeInTheDocument();
   });
 
   it('badge "Estoque anterior" só aparece quando estoqueAnterior é true', async () => {
@@ -80,6 +80,6 @@ describe('EstoqueConsultaClient', () => {
     render(<EstoqueConsultaClient permissoes={['ESTOQUE_LER', 'ESTOQUE_GERENCIAR']} />);
 
     await waitFor(() => expect(screen.getByText('PA-000119')).toBeInTheDocument());
-    expect(screen.getAllByTitle('Destinar a pedido')).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Destinar' })).toHaveLength(1);
   });
 });

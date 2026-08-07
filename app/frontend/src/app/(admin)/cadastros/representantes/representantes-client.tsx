@@ -3,16 +3,15 @@
 import { useEffect, useState } from 'react';
 import { Info } from 'lucide-react';
 import { CadastroTabelaDrawer } from '@/components/cadastros/cadastro-tabela-drawer';
+import { BadgeCount } from '@/components/ui/badge-count';
 import type { Representante } from '@/lib/representantes';
 import { ClientesVinculados } from './clientes-vinculados';
 import { UsuariosVinculados } from './usuarios-vinculados';
 
 const BANNER = (
-  <div className="flex items-start gap-2 rounded-lg border border-info-border bg-info-surface p-3">
-    <Info className="mt-0.5 size-3.5 flex-shrink-0 text-info-icon" />
-    <p className="text-[12px] text-info-ink">
-      Todo cliente tem um vendedor/representante associado; o pedido herda do cliente.
-    </p>
+  <div className="flex gap-2 rounded-md border border-primary-soft-border bg-info-soft px-3 py-2 text-xs text-info-fg">
+    <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+    <p>Todo cliente tem um vendedor/representante associado; o pedido herda do cliente.</p>
   </div>
 );
 
@@ -29,7 +28,6 @@ export function RepresentantesClient({ podeGerenciar }: { podeGerenciar: boolean
 
   return (
     <CadastroTabelaDrawer<Representante>
-      caminho="Cadastros & Regras / Representantes"
       titulo="Representantes"
       subtitulo="Vendedores e representantes que atendem clientes e pedidos."
       rotuloNovo="Novo Representante"
@@ -78,42 +76,34 @@ export function RepresentantesClient({ podeGerenciar }: { podeGerenciar: boolean
         {
           chave: 'nome',
           titulo: 'Nome',
-          render: (r) => <span className="font-bold whitespace-nowrap text-text-strong">{r.nome}</span>,
+          render: (r) => <span className="font-semibold text-foreground">{r.nome}</span>,
         },
         {
           chave: 'tipoCanal',
           titulo: 'Tipo/canal',
           render: (r) =>
             r.tipoCanal ? (
-              <span className="inline-flex items-center rounded bg-action-blue-bg px-2 py-0.5 text-[11px] font-medium text-action-blue-hover">
-                {r.tipoCanal}
-              </span>
+              <BadgeCount>{r.tipoCanal}</BadgeCount>
             ) : (
-              <span className="text-text-muted">—</span>
+              <span className="text-muted-foreground">—</span>
             ),
         },
         {
           chave: 'contato',
           titulo: 'Contato',
-          render: (r) => <span className="whitespace-nowrap text-text-slate">{r.contato ?? '—'}</span>,
+          render: (r) => <span className="text-muted-foreground">{r.contato ?? '—'}</span>,
         },
         {
           chave: 'clientesVinculados',
           titulo: 'Clientes vinculados',
           render: (r) => (
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-text-slate">
-              {typeof r.clientesVinculados === 'number' ? r.clientesVinculados : 0}
-            </span>
+            <BadgeCount>{typeof r.clientesVinculados === 'number' ? r.clientesVinculados : 0}</BadgeCount>
           ),
         },
         {
           chave: 'usuariosVinculadosCount',
           titulo: 'Usuários vinculados',
-          render: (representante) => (
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-text-slate">
-              {representante.usuariosVinculadosCount}
-            </span>
-          ),
+          render: (representante) => <BadgeCount>{representante.usuariosVinculadosCount}</BadgeCount>,
         },
       ]}
       campos={[

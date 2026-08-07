@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Direção B · Pesagem &amp; Destinação — AlphaCarnes DS v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .peso-display {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 14px 16px 12px;
+    text-align: center;
+  }
+  .peso-display .lbl { font-size: var(--fs-10); font-weight: 700; letter-spacing: 0.14em; color: var(--fg-muted); text-transform: uppercase; }
+  .peso-display .val {
+    font-family: var(--font-data); font-variant-numeric: tabular-nums;
+    font-size: 44px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1;
+    color: var(--fg);
+  }
+  .peso-display .val small { font-size: var(--fs-14); font-weight: 600; color: var(--fg-muted); margin-left: 4px; }
+  .demanda {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-ctl);
+    background: var(--surface);
+    transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+    cursor: pointer;
+  }
+  .demanda:hover { border-color: var(--primary-soft-border); background: var(--primary-soft); }
+  .demanda .sigla { font-family: var(--font-data); font-weight: 700; font-size: var(--fs-13); width: 38px; flex:none; }
+  .demanda .nome { font-size: var(--fs-12); font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .demanda .nums { font-family: var(--font-data); font-size: var(--fs-11); color: var(--fg-muted); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="logo">A</div>
+      <div><div class="name">AlphaCarnes</div><div class="tag">DISTRIBUIÇÃO DE CARNES</div></div>
+    </div>
+    <nav class="sb-nav">
+      <div class="sb-group"><button class="sb-group-label">Comercial <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Gestão <span>›</span></button></div>
+      <div class="sb-group">
+        <button class="sb-group-label">Recebimento &amp; Balança <span>⌄</span></button>
+        <a class="sb-item" href="#"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 9.4 7.55 4.24M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/></svg>Recebimento de Carga</a>
+        <a class="sb-item active" href="pesagem.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>Pesagem e Destinação</a>
+        <a class="sb-item" href="#"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>Etiquetas</a>
+      </div>
+      <div class="sb-group"><button class="sb-group-label">Desossa <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Estoque <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Carga <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Faturamento <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Cadastros &amp; Regras <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Administração <span>›</span></button></div>
+    </nav>
+    <div class="sb-user">
+      <div class="avatar">A</div>
+      <div class="who"><b>Administrador</b><span>Administrador</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <nav class="crumbs">Recebimento &amp; Balança <span class="sep">/</span> <b>Pesagem e Destinação</b></nav>
+      <div class="meta">
+        <span>Usuário: <b>Administrador</b></span>
+        <span class="mono" style="font-size:var(--fs-11);">qua., 05 ago 2026</span>
+        <div class="avatar">A</div>
+      </div>
+    </header>
+
+    <main class="page">
+      <div class="page-head">
+        <h1>Pesagem &amp; Destinação</h1>
+        <span class="sub">Captura de peso e destino da peça recebida</span>
+        <span class="live-dot">tempo real</span>
+        <div class="actions">
+          <span class="dev">Balança</span>
+          <span class="dev">Impressora</span>
+          <span class="dev">Leitor</span>
+        </div>
+      </div>
+
+      <!-- Contexto do lote -->
+      <div class="card" style="margin-bottom:10px;">
+        <div class="card-body" style="display:flex; align-items:center; gap:18px; padding:9px 12px; flex-wrap:wrap;">
+          <span class="mono" style="font-weight:700; font-size:var(--fs-14);">019FD0BC</span>
+          <span class="pill pendente">Aguardando conferência final</span>
+          <span style="font-size:var(--fs-12); color:var(--fg-muted);">Fornecedor <b style="color:var(--fg);">Central de Abate Novo Horizonte S.A.</b></span>
+          <span style="font-size:var(--fs-12); color:var(--fg-muted);">NF <b class="mono" style="color:var(--fg);">NF-100006</b></span>
+          <span style="font-size:var(--fs-12); color:var(--fg-muted);">Romaneio <b class="mono" style="color:var(--fg);">ROM-2006</b></span>
+          <span style="font-size:var(--fs-12); color:var(--fg-muted);">Placa <b class="mono" style="color:var(--fg);">ABC1006</b></span>
+          <span style="font-size:var(--fs-12); color:var(--fg-muted);">Doca <b style="color:var(--fg);">Doca 1</b></span>
+          <span class="row" style="gap:6px;"><span style="font-size:var(--fs-11); color:var(--fg-muted);">Balança</span><span class="bar ok" style="width:70px;"><i style="width:100%"></i></span><span class="mono" style="font-size:var(--fs-11);">100%</span></span>
+          <button class="btn btn-secondary btn-sm ml-auto"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg>Trocar lote</button>
+        </div>
+      </div>
+
+      <!-- Abas de produto -->
+      <div class="tabs" style="margin-bottom:10px;" data-tab-group="prod">
+        <button class="tab active" data-tab="tz">TZ — Traseiro Bovino <span class="badge badge-count" style="margin-left:4px;">42</span></button>
+        <button class="tab" data-tab="dt">DT — Dianteiro <span class="badge badge-count" style="margin-left:4px;">38</span></button>
+        <button class="tab" data-tab="pa">PA — Ponta de Agulha <span class="badge badge-count" style="margin-left:4px;">44</span></button>
+      </div>
+
+      <div class="grid" style="grid-template-columns: 340px 1fr 320px; align-items:start;">
+        <!-- Balança -->
+        <div class="card">
+          <div class="card-head"><h2>Balança</h2></div>
+          <div class="card-body stack" style="gap:10px;">
+            <div class="peso-display">
+              <div class="lbl">Peso atual</div>
+              <div class="val">0,000<small>kg</small></div>
+            </div>
+            <div class="field">
+              <label>Produto</label>
+              <input class="input" value="TZ — Traseiro Bovino" readonly>
+            </div>
+            <div class="field">
+              <label>Características <span style="text-transform:none; font-weight:400; color:var(--fg-faint);">(opcional)</span></label>
+              <div class="row" style="flex-wrap:wrap; gap:6px;">
+                <button class="chip" data-toggle>Mais pesada</button>
+                <button class="chip" data-toggle>Mais gorda</button>
+                <button class="chip" data-toggle>Melhor acabamento</button>
+              </div>
+            </div>
+            <div class="row" style="gap:8px;">
+              <button class="btn btn-primary" style="flex:1;"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM7 21h10M12 3v18"/></svg>Capturar peso</button>
+              <button class="btn btn-secondary">Digitar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pedidos compatíveis -->
+        <div class="card">
+          <div class="card-head">
+            <h2>Pedidos compatíveis</h2>
+            <span class="spacer"></span>
+            <div class="input-wrap" style="width:220px;">
+              <span class="adorn left"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+              <input class="input input-sm" placeholder="Buscar cliente" style="padding-left:28px;">
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="empty" style="padding:44px 16px;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--fg-faint)"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM7 21h10M12 3v18"/></svg>
+              <b>Capture o peso para ver pedidos compatíveis</b>
+              <span>A lista considera produto, faixa de peso e prioridade do cliente.</span>
+            </div>
+            <div style="margin-top:10px;">
+              <div style="font-size:var(--fs-11); font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--fg-muted); margin-bottom:6px;">Destinos diretos</div>
+              <div class="row" style="gap:8px;">
+                <button class="btn btn-secondary btn-sm" disabled>→ Estoque</button>
+                <button class="btn btn-secondary btn-sm" disabled>→ Desossa</button>
+                <span style="font-size:var(--fs-11); color:var(--fg-faint);">Disponíveis após a captura</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Demandas desossa -->
+        <div class="card">
+          <div class="card-head">
+            <h2>Demandas desossa</h2>
+            <span class="badge badge-count">6</span>
+          </div>
+          <div class="card-body stack" style="gap:6px;">
+            <div class="demanda">
+              <span class="sigla">CB</span>
+              <span class="nome">Coxão-bola</span>
+              <span class="nums">falt. 6 · est. 0</span>
+            </div>
+            <div class="demanda">
+              <span class="sigla">JAC</span>
+              <span class="nome">Jacaré</span>
+              <span class="nums">falt. 6 · est. 0</span>
+            </div>
+            <div class="demanda">
+              <span class="sigla">CBA</span>
+              <span class="nome">Coxão-bola c/ alcatra</span>
+              <span class="nums">falt. 6 · est. 0</span>
+            </div>
+            <div class="demanda">
+              <span class="sigla">FC</span>
+              <span class="nome">Filé curto</span>
+              <span class="nums">falt. 6 · est. 0</span>
+            </div>
+            <div class="demanda">
+              <span class="sigla">CF</span>
+              <span class="nome">Contrafilé</span>
+              <span class="nums">falt. 4 · est. 0</span>
+            </div>
+            <div class="demanda">
+              <span class="sigla">PIC</span>
+              <span class="nome">Picanha</span>
+              <span class="nums">falt. 2 · est. 0</span>
+            </div>
+            <div style="font-size:var(--fs-11); color:var(--fg-faint); padding-top:2px;">Origem: TZ · regras provisórias por unidade</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Últimas pesagens -->
+      <div class="card" style="margin-top:10px;">
+        <div class="card-head">
+          <h2>Últimas pesagens do lote</h2>
+          <span class="badge badge-count">5</span>
+          <span class="spacer"></span>
+          <a href="#" style="font-size:var(--fs-12); font-weight:600;">Ver todas →</a>
+        </div>
+        <div class="table-wrap">
+          <table class="dt">
+            <thead>
+              <tr><th>Etiqueta</th><th>Produto</th><th class="num-cell">Peso (kg)</th><th>Destino</th><th>Características</th><th>Status</th><th class="num-cell">Hora</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr data-selectable><td class="code">ETQ-01842</td><td class="main-cell">TZ — Traseiro Bovino</td><td class="num-cell">28,450</td><td>Pedido · Carnes Premium</td><td class="sub-cell">Mais pesada</td><td><span class="pill pesado">Pesado</span></td><td class="num-cell code">14:32</td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Trocar peça</button><button class="btn btn-ghost btn-icon btn-sm" aria-label="Reimprimir"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3h12v6M6 14h12v8H6z"/></svg></button></div></td></tr>
+              <tr data-selectable><td class="code">ETQ-01841</td><td class="main-cell">TZ — Traseiro Bovino</td><td class="num-cell">27,980</td><td>Desossa · regra TZ-01</td><td class="sub-cell">—</td><td><span class="pill pesado">Pesado</span></td><td class="num-cell code">14:29</td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Trocar peça</button><button class="btn btn-ghost btn-icon btn-sm" aria-label="Reimprimir"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3h12v6M6 14h12v8H6z"/></svg></button></div></td></tr>
+              <tr data-selectable><td class="code">ETQ-01840</td><td class="main-cell">DT — Dianteiro</td><td class="num-cell">24,120</td><td>Pedido · Trigo Dourado</td><td class="sub-cell">—</td><td><span class="pill expedido">Expedido</span></td><td class="num-cell code">14:25</td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Trocar peça</button></div></td></tr>
+              <tr data-selectable><td class="code">ETQ-01839</td><td class="main-cell">TZ — Traseiro Bovino</td><td class="num-cell">29,310</td><td>Estoque · Câmara 2</td><td class="sub-cell">Melhor acabamento</td><td><span class="pill recebido">Recebido</span></td><td class="num-cell code">14:21</td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Trocar peça</button></div></td></tr>
+              <tr data-selectable><td class="code">ETQ-01838</td><td class="main-cell">PA — Ponta de Agulha</td><td class="num-cell">18,740</td><td>Pedido · Açougue do Zé</td><td class="sub-cell">—</td><td><span class="pill divergencia">Divergência</span></td><td class="num-cell code">14:16</td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Trocar peça</button></div></td></tr>
+            </tbody>
+            <tfoot>
+              <tr><td colspan="2">5 peças</td><td class="num-cell">128,600</td><td colspan="5"></td></tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="../shared/preview.js"></script>
+</body>
+</html>

@@ -1,6 +1,9 @@
 'use client';
 
+import { PackageSearch } from 'lucide-react';
 import type { DetalheMapa, EstadoMapa, MapaProduto } from '@/lib/mapa-disponibilidade';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const ROTULOS: Record<string, string> = {
   id: 'Identificador',
@@ -38,24 +41,24 @@ export function DetalheUnidade({
   carregando,
 }: DetalheUnidadeProps) {
   return (
-    <aside className="rounded-xl border bg-card">
-      <div className="border-b px-4 py-3">
-        <h2 className="font-semibold">Unidades do grupo</h2>
+    <Card>
+      <CardHeader>
+        <CardTitle>Unidades do grupo</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2.5">
         <p className="text-xs text-muted-foreground">
           {produto && estado ? `${produto.descricao} · estado ${estado}` : 'Selecione um bloco do mapa.'}
         </p>
-      </div>
-      <div className="space-y-3 p-4">
         {carregando && <p className="text-sm text-muted-foreground">Carregando unidades...</p>}
         {!carregando && produto && estado && unidades.length === 0 && (
-          <p className="text-sm text-muted-foreground">Nenhuma unidade real neste estado.</p>
+          <EmptyState icon={<PackageSearch />} title="Nenhuma unidade real neste estado." />
         )}
         {unidades.map((unidade, index) => (
-          <article key={`${String(Object.values(unidade)[0])}-${index}`} className="rounded-lg border p-3">
+          <article key={`${String(Object.values(unidade)[0])}-${index}`} className="rounded-md border border-border p-2.5">
             <dl className="grid gap-2">
               {Object.entries(unidade).map(([campo, valor]) => (
                 <div key={campo}>
-                  <dt className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  <dt className="text-[10px] font-medium uppercase tracking-[0.03em] text-muted-foreground">
                     {ROTULOS[campo] ?? campo}
                   </dt>
                   <dd className="break-words text-xs font-semibold">
@@ -66,7 +69,7 @@ export function DetalheUnidade({
             </dl>
           </article>
         ))}
-      </div>
-    </aside>
+      </CardContent>
+    </Card>
   );
 }

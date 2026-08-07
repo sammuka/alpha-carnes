@@ -1,4 +1,5 @@
 import { AlphaLogo } from '@/components/ui/alpha-logo';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { LoginFormShell } from './login-form-shell';
 
 const ambiente = process.env.NEXT_PUBLIC_AMBIENTE;
@@ -6,7 +7,7 @@ const ambiente = process.env.NEXT_PUBLIC_AMBIENTE;
 export default function LoginPage() {
   return (
     <main className="flex min-h-screen w-full bg-card font-sans">
-      <div className="relative hidden w-[45%] flex-col justify-between overflow-hidden bg-login-panel p-12 lg:flex">
+      <div className="relative hidden w-[45%] flex-col justify-between overflow-hidden bg-gradient-to-b from-sidebar-gradient-start to-sidebar-gradient-end p-12 lg:flex">
         <div
           className="absolute inset-0 z-0 bg-gradient-to-t from-login-panel via-login-panel/80 to-transparent"
           aria-hidden="true"
@@ -38,9 +39,7 @@ export default function LoginPage() {
 
         {ambiente && (
           <div className="absolute right-8 top-8">
-            <span className="rounded-full border border-border-chip bg-surface-chip px-3 py-1 text-xs font-medium text-login-text">
-              Ambiente: {ambiente}
-            </span>
+            <BadgeCount className="bg-warning-soft text-warning-fg">Ambiente: {ambiente}</BadgeCount>
           </div>
         )}
 

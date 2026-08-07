@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { Calculator } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { mensagemDeErro } from '@/lib/error-message';
 
 interface Resultado {
@@ -51,51 +51,51 @@ export function SimuladorDesdobramento({ itemCompraId }: { itemCompraId: string 
   };
 
   return (
-    <Card className="space-y-4 p-6">
-      <div className="flex items-center gap-2">
-        <Calculator className="size-5 text-primary" />
-        <h3 className="font-bold">Simulador</h3>
-      </div>
-
-      <div className="flex items-end gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="qtd-simulacao">Se eu comprar (Boi Casado):</Label>
-          <Input
-            id="qtd-simulacao"
-            type="number"
-            min={1}
-            className="w-40"
-            value={quantidade}
-            onChange={(e) => setQuantidade(e.target.value)}
-          />
+    <Card>
+      <CardHeader>
+        <Calculator className="size-4 text-primary" />
+        <CardTitle>Simulador</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-end gap-3">
+          <FormField label="Se eu comprar (Boi Casado):" htmlFor="qtd-simulacao">
+            <Input
+              id="qtd-simulacao"
+              type="number"
+              min={1}
+              className="w-40"
+              value={quantidade}
+              onChange={(e) => setQuantidade(e.target.value)}
+            />
+          </FormField>
+          <Button onClick={() => void simular()} disabled={calculando}>
+            {calculando ? 'Calculando…' : 'Simular'}
+          </Button>
         </div>
-        <Button onClick={() => void simular()} disabled={calculando}>
-          {calculando ? 'Calculando…' : 'Simular'}
-        </Button>
-      </div>
 
-      {erro && (
-        <p role="alert" className="text-sm text-destructive">
-          {erro}
-        </p>
-      )}
+        {erro && (
+          <p role="alert" className="text-sm text-destructive">
+            {erro}
+          </p>
+        )}
 
-      {resultado && (
-        <div className="space-y-2">
-          {resultado.itens.length === 0 && (
-            <p className="text-sm text-muted-foreground">Nenhuma regra de desdobramento ativa para este item.</p>
-          )}
-          {resultado.itens.map((item) => (
-            <div key={item.itemComercialId} className="flex justify-between rounded-md border px-4 py-2 text-sm">
-              <span>{item.descricao}</span>
-              <span className="font-mono">
-                {resultado.quantidade} × {item.fator} = <strong>{item.total}</strong>
-              </span>
-            </div>
-          ))}
-          <p className="text-sm font-medium">Total de partes geradas: {resultado.totalPartes}</p>
-        </div>
-      )}
+        {resultado && (
+          <div className="space-y-2">
+            {resultado.itens.length === 0 && (
+              <p className="text-sm text-muted-foreground">Nenhuma regra de desdobramento ativa para este item.</p>
+            )}
+            {resultado.itens.map((item) => (
+              <div key={item.itemComercialId} className="flex justify-between rounded-md border border-border px-3 py-2 text-sm">
+                <span>{item.descricao}</span>
+                <span className="font-data">
+                  {resultado.quantidade} × {item.fator} = <strong>{item.total}</strong>
+                </span>
+              </div>
+            ))}
+            <p className="text-sm font-medium">Total de partes geradas: {resultado.totalPartes}</p>
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 }

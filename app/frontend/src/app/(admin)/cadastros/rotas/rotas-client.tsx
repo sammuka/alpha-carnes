@@ -1,14 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, Map, MapPin, MoveVertical, Plus, Search, Trash2 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { ArrowDown, ArrowUp, Map, MapPin, Plus, Search, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { FilterChip } from '@/components/ui/filter-chip';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PageHeader } from '@/components/ui/page-header';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/cn';
 import type { CriarRotaDto, Paginado, ParadaRota, Rota } from '@/lib/rotas';
 import { DIAS_SEMANA } from '@/lib/rotas';
 
@@ -219,104 +224,94 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
   const painelAtivo = modoNovo || !!selecionada;
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] flex-col gap-4">
-      <div>
-        <p className="mb-1 text-xs font-medium text-muted-foreground">Cadastros & Regras / Rotas</p>
-        <h1 className="text-2xl font-bold tracking-tight">Rotas / Itinerários</h1>
-      </div>
+    <div className="space-y-3">
+      <PageHeader title="Rotas / Itinerários">
+        {podeGerenciar && (
+          <Button size="sm" onClick={iniciarNova}>
+            <Plus />
+            Novo
+          </Button>
+        )}
+      </PageHeader>
 
       {erro && (
-        <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {erro}
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1 gap-6">
-        <Card className="flex w-1/3 min-w-[280px] flex-col overflow-hidden py-0">
-          <div className="flex flex-col gap-4 border-b p-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold">Itinerários / Rotas</h2>
-              {podeGerenciar && (
-                <Button size="sm" onClick={iniciarNova}>
-                  <Plus className="mr-1 size-4" />
-                  Novo
-                </Button>
-              )}
-            </div>
-            <div className="relative">
-              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar rota..."
-                className="pl-9"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="flex-1 space-y-2 overflow-auto bg-muted/30 p-2">
+      <div className="grid items-start gap-2.5 lg:grid-cols-[320px_1fr]">
+        {/* MASTER */}
+        <Card>
+          <CardContent className="flex gap-1.5 p-2.5 pb-1.5">
+            <Input
+              adornLeft={<Search />}
+              placeholder="Buscar rota..."
+              className="h-7 text-xs"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </CardContent>
+          <div className="max-h-[560px] overflow-y-auto overflow-x-hidden">
             {loading ? (
-              <p className="p-4 text-center text-sm text-muted-foreground">Carregando...</p>
+              <p className="p-4 text-center text-xs text-muted-foreground">Carregando...</p>
             ) : rotas.length === 0 ? (
-              <p className="p-4 text-center text-sm text-muted-foreground">Nenhuma rota cadastrada.</p>
+              <p className="p-4 text-center text-xs text-muted-foreground">Nenhuma rota cadastrada.</p>
             ) : (
               rotas.map((rota) => (
                 <button
                   key={rota.id}
                   type="button"
                   onClick={() => selecionar(rota)}
-                  className={`w-full rounded-md border p-4 text-left transition-colors ${
-                    selecionada?.id === rota.id
-                      ? 'border-primary bg-background shadow-sm'
-                      : 'border-transparent bg-background hover:border-border'
-                  }`}
+                  className={cn(
+                    'block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2',
+                    selecionada?.id === rota.id && 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]',
+                  )}
                 >
-                  <div className="mb-2 flex items-start justify-between gap-2">
-                    <span className="text-sm font-bold">{rota.nome}</span>
-                    <Badge
-                      variant="outline"
-                      className={
-                        rota.status === 'ativo'
-                          ? 'border-green-200 bg-green-50 text-green-700'
-                          : 'border-muted bg-muted/50 text-muted-foreground'
-                      }
-                    >
-                      {rota.status === 'ativo' ? 'Ativo' : 'Inativo'}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="size-3" />
+                  <span className="flex items-center gap-2">
+                    <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">{rota.nome}</b>
+                    <StatusPill
+                      variant={rota.status === 'ativo' ? 'expedido' : 'pendente'}
+                      label={rota.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                      className="h-[17px] text-[10px]"
+                    />
+                  </span>
+                  <span className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-1 truncate">
+                      <MapPin className="size-3 shrink-0" />
                       {rota.regiao ?? rota.codigo}
                     </span>
-                    <span>{rota.codigo}</span>
-                  </div>
+                    <span className="font-data">{rota.codigo}</span>
+                  </span>
                 </button>
               ))
             )}
           </div>
         </Card>
 
-        <Card className="flex flex-1 flex-col overflow-hidden py-0">
-          {painelAtivo ? (
+        {/* DETAIL */}
+        <Card>
+          {!painelAtivo ? (
+            <CardContent>
+              <EmptyState icon={<Map />} title="Selecione uma rota para visualizar ou editar" />
+            </CardContent>
+          ) : (
             <>
-              <div className="flex items-center justify-between border-b bg-muted/30 p-6">
-                <div className="flex items-center gap-4">
-                  <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
-                    <Map className="size-6 text-primary" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold">{modoNovo ? 'Nova Rota' : form.nome}</h2>
-                    {!modoNovo && form.id && (
-                      <p className="text-sm text-muted-foreground">
-                        Código: {form.codigo} · {form.id.slice(0, 8)}
-                      </p>
-                    )}
-                  </div>
+              <CardContent className="flex items-center gap-3 border-b border-border p-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-fg">
+                  <Map className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[16px] font-bold text-foreground">{modoNovo ? 'Nova Rota' : form.nome}</div>
+                  {!modoNovo && form.id && (
+                    <p className="truncate text-xs text-muted-foreground">
+                      Código: {form.codigo} · <span className="font-data">{form.id.slice(0, 8)}</span>
+                    </p>
+                  )}
                 </div>
                 {podeGerenciar && (
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={cancelar}>
+                    <Button variant="ghost" onClick={cancelar}>
                       Cancelar
                     </Button>
                     {form.id && (
@@ -329,73 +324,61 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
                     </Button>
                   </div>
                 )}
-              </div>
+              </CardContent>
 
-              <div className="flex-1 space-y-6 overflow-auto p-6">
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="nome">Nome da Rota</Label>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                  <FormField label="Nome da Rota" htmlFor="nome">
                     <Input
                       id="nome"
                       value={form.nome}
                       disabled={!podeGerenciar}
                       onChange={(e) => setCampo('nome', e.target.value)}
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="codigo">Código Rápido</Label>
+                  </FormField>
+                  <FormField label="Código Rápido" htmlFor="codigo">
                     <Input
                       id="codigo"
                       value={form.codigo}
                       disabled={!podeGerenciar || (!modoNovo && !!form.id)}
                       onChange={(e) => setCampo('codigo', e.target.value)}
                     />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="regiao">Região</Label>
+                  </FormField>
+                  <FormField label="Região" htmlFor="regiao">
                     <Input
                       id="regiao"
                       value={form.regiao ?? ''}
                       disabled={!podeGerenciar}
                       onChange={(e) => setCampo('regiao', e.target.value)}
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="representante">Representante padrão</Label>
+                  </FormField>
+                  <FormField label="Representante padrão" htmlFor="representante">
                     <Input
                       id="representante"
                       value={form.representantePadrao ?? ''}
                       disabled={!podeGerenciar}
                       onChange={(e) => setCampo('representantePadrao', e.target.value)}
                     />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="caminhao">Caminhão padrão</Label>
+                  </FormField>
+                  <FormField label="Caminhão padrão" htmlFor="caminhao">
                     <Input
                       id="caminhao"
                       value={form.caminhaoPadrao ?? ''}
                       disabled={!podeGerenciar}
                       onChange={(e) => setCampo('caminhaoPadrao', e.target.value)}
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="motorista">Motorista padrão</Label>
+                  </FormField>
+                  <FormField label="Motorista padrão" htmlFor="motorista">
                     <Input
                       id="motorista"
                       value={form.motoristaPadrao ?? ''}
                       disabled={!podeGerenciar}
                       onChange={(e) => setCampo('motoristaPadrao', e.target.value)}
                     />
-                  </div>
+                  </FormField>
                 </div>
 
-                <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+                <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
                   <Label htmlFor="status">Status</Label>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">{form.status === 'ativo' ? 'Ativo' : 'Inativo'}</span>
@@ -408,8 +391,7 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="observacoes">Observações</Label>
+                <FormField label="Observações" htmlFor="observacoes">
                   <Textarea
                     id="observacoes"
                     value={form.observacoes ?? ''}
@@ -417,11 +399,11 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
                     onChange={(e) => setCampo('observacoes', e.target.value)}
                     rows={4}
                   />
-                </div>
+                </FormField>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between border-b border-border pb-2">
-                    <h3 className="text-sm font-bold tracking-wider text-foreground uppercase">
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">
                       Sequência de Paradas / Bairros
                     </h3>
                     <span className="text-xs text-muted-foreground">
@@ -430,97 +412,81 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
                   </div>
 
                   {form.paradas.length === 0 && (
-                    <p className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-                      Nenhuma parada cadastrada nesta rota.
-                    </p>
+                    <EmptyState title="Nenhuma parada cadastrada nesta rota." />
                   )}
 
                   {form.paradas.map((parada, indice) => (
-                    <div key={parada.ordem} className="flex items-center gap-3 rounded-md border border-border bg-muted/30 p-3">
-                      <MoveVertical className="size-4 cursor-grab text-muted-foreground" />
-                      <span className="flex size-6 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                    <div key={parada.ordem} className="flex items-center gap-2 rounded-md border border-border bg-surface-2 p-2">
+                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-3 text-[11px] font-bold text-fg-secondary">
                         {indice + 1}
                       </span>
                       <Input
                         aria-label={`Parada ${indice + 1}`}
-                        className="flex-1 bg-card"
+                        className="flex-1"
                         value={parada.descricao}
                         disabled={!podeGerenciar}
                         onChange={(e) => atualizarParada(indice, e.target.value)}
                       />
                       <Button
                         variant="ghost"
-                        size="icon"
+                        size="iconSm"
                         aria-label="Subir parada"
                         disabled={!podeGerenciar || indice === 0}
                         onClick={() => moverParada(indice, -1)}
                       >
-                        <ArrowUp className="size-4" />
+                        <ArrowUp />
                       </Button>
                       <Button
                         variant="ghost"
-                        size="icon"
+                        size="iconSm"
                         aria-label="Descer parada"
                         disabled={!podeGerenciar || indice === form.paradas.length - 1}
                         onClick={() => moverParada(indice, 1)}
                       >
-                        <ArrowDown className="size-4" />
+                        <ArrowDown />
                       </Button>
                       <Button
                         variant="ghost"
-                        size="icon"
+                        size="iconSm"
                         aria-label="Remover parada"
                         disabled={!podeGerenciar}
                         onClick={() => removerParada(indice)}
                       >
-                        <Trash2 className="size-4 text-destructive" />
+                        <Trash2 className="text-destructive" />
                       </Button>
                     </div>
                   ))}
 
                   {podeGerenciar && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="mt-2 w-full border-dashed text-muted-foreground"
-                      onClick={adicionarParada}
-                    >
-                      <Plus className="mr-2 size-4" />
+                    <Button type="button" variant="secondary" size="sm" className="w-full" onClick={adicionarParada}>
+                      <Plus />
                       Adicionar Parada
                     </Button>
                   )}
                 </div>
 
-                <div className="space-y-3">
-                  <h3 className="border-b border-border pb-2 text-sm font-bold tracking-wider text-foreground uppercase">
+                <div className="space-y-2">
+                  <h3 className="border-b border-border pb-2 text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">
                     Dias de Atendimento
                   </h3>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {DIAS_SEMANA.map((dia) => {
                       const marcado = form.diasAtendimento.includes(dia.valor);
                       return (
-                        <Button
+                        <FilterChip
                           key={dia.valor}
-                          type="button"
-                          variant={marcado ? 'default' : 'outline'}
-                          size="sm"
-                          aria-pressed={marcado}
+                          active={marcado}
                           disabled={!podeGerenciar}
                           onClick={() => alternarDia(dia.valor)}
                         >
                           {dia.rotulo}
-                        </Button>
+                        </FilterChip>
                       );
                     })}
                   </div>
                 </div>
-              </div>
+              </CardContent>
             </>
-          ) : (
-            <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
-              <Map className="mb-4 size-16 opacity-20" />
-              <p>Selecione uma rota para visualizar ou editar</p>
-            </div>
           )}
         </Card>
       </div>

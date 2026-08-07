@@ -92,7 +92,7 @@ export function RepresentantesPermitidos({
           <p role="alert" className="text-xs text-destructive">{erro}</p>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={() => void carregarPagina(page, busca, page > 1)}
           >
@@ -140,7 +140,7 @@ export function RepresentantesPermitidos({
       {opcoes.length < total && (
         <Button
           type="button"
-          variant="outline"
+          variant="secondary"
           size="sm"
           onClick={() => {
             const proxima = page + 1;

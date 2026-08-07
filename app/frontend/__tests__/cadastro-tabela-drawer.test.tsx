@@ -12,7 +12,6 @@ const LINHAS: Linha[] = [
 ];
 
 const props = {
-  caminho: 'Cadastros & Regras / Representantes',
   titulo: 'Representantes',
   subtitulo: 'Gestão da equipe comercial',
   rotuloNovo: 'Novo Representante',

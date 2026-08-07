@@ -23,12 +23,11 @@ describe('LoginFormClient', () => {
     expect(screen.getByRole('button', { name: 'Acessar Sistema' })).toBeInTheDocument();
   });
 
-  it('botao Acessar Sistema usa a variante de acao do DS', () => {
+  it('botao Acessar Sistema usa a variante de acao do DS (alias de default no DS v3)', () => {
     render(<LoginFormClient />);
     const botao = screen.getByRole('button', { name: 'Acessar Sistema' });
-    expect(botao.className).toContain('bg-action-blue');
-    expect(botao.className).toContain('hover:bg-action-blue-strong');
-    expect(botao.className).not.toContain('bg-primary');
+    expect(botao.className).toContain('bg-primary');
+    expect(botao.className).toContain('hover:bg-primary-hover');
   });
 
   it('nao pre-preenche credenciais', () => {

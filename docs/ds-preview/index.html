@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlphaCarnes DS v3 — Protótipo de decisão</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F6F8; --surface: #fff; --border: #E2E5EA; --fg: #14181E;
+    --muted: #626D7C; --a: #2D6BBE; --b: #4F46E5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.5; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 44px 32px 96px; }
+  .kicker { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.025em; margin: 6px 0 0; }
+  .lead { color: var(--muted); margin-top: 10px; max-width: 72ch; }
+  .lead b { color: var(--fg); }
+  h2 { font-size: 17px; font-weight: 700; margin: 44px 0 6px; letter-spacing: -0.01em; }
+  .h2-sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .dir {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; box-shadow: 0 1px 2px rgba(20,24,30,0.05);
+  }
+  .dir .tagline { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+  .dir .tagline::before { content: ''; width: 10px; height: 10px; border-radius: 3px; }
+  .dir.a .tagline { color: var(--a); } .dir.a .tagline::before { background: var(--a); }
+  .dir.b .tagline { color: var(--b); } .dir.b .tagline::before { background: var(--b); }
+  .dir h3 { font-size: 19px; font-weight: 800; margin: 8px 0 6px; letter-spacing: -0.02em; }
+  .dir p { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+  .links { display: flex; flex-direction: column; gap: 4px; }
+  .links a {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 7px;
+    color: var(--fg); text-decoration: none; font-weight: 600; font-size: 13px;
+    border: 1px solid transparent;
+  }
+  .links a:hover { background: var(--bg); border-color: var(--border); }
+  .links a small { font-weight: 400; color: var(--muted); margin-left: auto; font-size: 12px; }
+  .links a .n { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); width: 16px; }
+  .ref { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .ref figure { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .ref img { display: block; width: 100%; height: auto; }
+  .ref figcaption { font-size: 11px; color: var(--muted); padding: 7px 10px; }
+  table.cmp { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 13px; }
+  .cmp th, .cmp td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--border); }
+  .cmp th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); background: #FAFBFC; }
+  .cmp tr:last-child td { border-bottom: 0; }
+  .cmp td:first-child { color: var(--muted); }
+  .cmp b.a { color: var(--a); } .cmp b.b { color: var(--b); }
+  .note { margin-top: 28px; padding: 12px 16px; background: #FDF6E4; border: 1px solid #EFDFAE; border-radius: 8px; font-size: 13px; color: #7A6210; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">AlphaCarnes · Design System v3 · protótipo de decisão</div>
+  <h1>Duas direções para o novo DS</h1>
+  <p class="lead" style="margin-top:12px; padding:10px 14px; background:#EAF3EA; border:1px solid #BFDCC1; border-radius:8px; color:#1F5426;"><b>Decisão (05/08/2026): Direção A escolhida</b>, incorporando o KPI strip da Direção B (faixa plana, sem sombra, valor 20px). Já aplicado nas páginas da Direção A abaixo.</p>
+  <p class="lead">Protótipo navegável (HTML puro, nada do app foi alterado) para escolher a direção do redesign do design system. As duas direções compartilham as mesmas fundações de densidade — controles compactos, dados em <b>JetBrains Mono tabular</b>, vocabulário completo de estados, datepicker e combobox próprios — e divergem no mundo visual. Compare as mesmas 4 telas em cada direção.</p>
+
+  <h2>Direções</h2>
+  <div class="h2-sub">Abra as galerias para os detalhes de componentes; abra as telas para sentir a densidade com dados reais.</div>
+  <div class="duo">
+    <div class="dir a">
+      <span class="tagline">Direção A</span>
+      <h3>Evolução</h3>
+      <p>A identidade atual — sidebar azul em gradiente, primária azul — refinada: paleta de status re-harmonizada, contraste AA, elevação tokenizada, radii firmes, linhas de 36px.</p>
+      <div class="links">
+        <a href="direcao-a/fundacoes.html"><span class="n">1</span>Fundações <small>cores · tipo · espaçamento</small></a>
+        <a href="direcao-a/componentes.html"><span class="n">2</span>Galeria de componentes <small>todos os estados</small></a>
+        <a href="direcao-a/dashboard.html"><span class="n">3</span>Painel Geral da Operação <small>tela densa</small></a>
+        <a href="direcao-a/pesagem.html"><span class="n">4</span>Pesagem &amp; Destinação <small>tela operacional</small></a>
+        <a href="direcao-a/clientes.html"><span class="n">5</span>Cadastro de Clientes <small>master-detail</small></a>
+        <a href="direcao-a/pedidos.html"><span class="n">6</span>Pedidos de Venda <small>lista → tabela</small></a>
+      </div>
+    </div>
+    <div class="dir b">
+      <span class="tagline">Direção B</span>
+      <h3>Ousada</h3>
+      <p>ERP moderno tipo Linear/Attio: sidebar grafite plana, ação primária grafite, accent índigo só para seleção/foco, borda 1px como divisor, tags retangulares, linhas de 32px.</p>
+      <div class="links">
+        <a href="direcao-b/fundacoes.html"><span class="n">1</span>Fundações <small>cores · tipo · espaçamento</small></a>
+        <a href="direcao-b/componentes.html"><span class="n">2</span>Galeria de componentes <small>todos os estados</small></a>
+        <a href="direcao-b/dashboard.html"><span class="n">3</span>Painel Geral da Operação <small>tela densa</small></a>
+        <a href="direcao-b/pesagem.html"><span class="n">4</span>Pesagem &amp; Destinação <small>tela operacional</small></a>
+        <a href="direcao-b/clientes.html"><span class="n">5</span>Cadastro de Clientes <small>master-detail</small></a>
+        <a href="direcao-b/pedidos.html"><span class="n">6</span>Pedidos de Venda <small>lista → tabela</small></a>
+      </div>
+    </div>
+  </div>
+
+  <h2>O que muda em relação ao DS atual</h2>
+  <div class="h2-sub">Comum às duas direções.</div>
+  <table class="cmp">
+    <thead><tr><th>Aspecto</th><th>Hoje</th><th>Proposta</th></tr></thead>
+    <tbody>
+      <tr><td>KPIs do dashboard</td><td>10 cards de ~170px em 2 linhas (metade do viewport)</td><td>2 faixas de ~64px — dashboard inteiro cabe em 1 viewport HD</td></tr>
+      <tr><td>Linhas de tabela</td><td>~56–64px, 6–8 linhas visíveis</td><td><b class="a">36px (A)</b> / <b class="b">32px (B)</b> — 14–16 linhas visíveis</td></tr>
+      <tr><td>Números, códigos, moeda</td><td>Inter proporcional, desalinhado em colunas</td><td>JetBrains Mono tabular — colunas numéricas alinham verticalmente</td></tr>
+      <tr><td>Datepicker</td><td>Nativo do browser, destoante</td><td>Datepicker do DS com atalhos Hoje/Ontem, dd/mm/aaaa</td></tr>
+      <tr><td>Busca de cliente / produto</td><td>&lt;select&gt; nativo ou lista fixa</td><td>Combobox com busca e código do registro</td></tr>
+      <tr><td>Status</td><td>Texto cru sem acento + pill cinza; 19+ reimplementações ad-hoc</td><td>StatusPill único, 6 estados harmonizados + mapa de status de pedido</td></tr>
+      <tr><td>Alturas de controle</td><td>Mistura h-9 / h-10 / nativo</td><td>Grade única: <b class="a">32/28px (A)</b> / <b class="b">30/26px (B)</b></td></tr>
+      <tr><td>Pedidos de venda</td><td>Lista de cards de ~77px por pedido</td><td>Tabela densa com representante, rota, itens e ação por linha</td></tr>
+      <tr><td>Estados de componente</td><td>Parciais (sem loading/error/readonly padronizados)</td><td>default · hover · focus · active · disabled · error · loading · readonly</td></tr>
+      <tr><td>Sombras</td><td>Sem tokens, uso disperso</td><td>3 níveis tokenizados (<b class="b">B usa borda como divisor primário</b>)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Referência — telas atuais</h2>
+  <div class="h2-sub">Capturas do app em 05/08/2026, 1366×768, para comparação lado a lado.</div>
+  <div class="ref">
+    <figure><img src="atual/02-dashboard.jpeg" alt="Dashboard atual"><figcaption>Painel Geral — atual</figcaption></figure>
+    <figure><img src="atual/03-pesagem.jpeg" alt="Pesagem atual"><figcaption>Pesagem &amp; Destinação — atual</figcaption></figure>
+    <figure><img src="atual/04-clientes.jpeg" alt="Clientes atual"><figcaption>Clientes — atual</figcaption></figure>
+    <figure><img src="atual/05-pedidos.jpeg" alt="Pedidos atual"><figcaption>Pedidos de Venda — atual</figcaption></figure>
+  </div>
+
+  <div class="note"><b>Nota de governança:</b> aplicar qualquer direção no app real altera o Princípio I (fidelidade ao protótipo validado) e exigirá registro de decisão AD-xx em <code>docs/execucao/DECISOES.md</code> antes da implementação.</div>
+</div>
+</body>
+</html>

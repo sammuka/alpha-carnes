@@ -3,11 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2, Plus, Save, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
+import { SelectNative } from '@/components/ui/select-native';
+import { StatusPill } from '@/components/ui/status-pill';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { PageHeader } from '@/components/ui/page-header';
+import { cn } from '@/lib/cn';
 import type { AbaCadastro, CampoConfig, CadastroConfig } from '@/lib/cadastros-config';
 import { ABA_LABELS, ABA_ORDEM, CADASTROS } from '@/lib/cadastros-config';
 import type { Paginado } from '@/lib/cadastros';
@@ -30,6 +35,12 @@ function formatDocumento(doc: unknown): string {
   if (s.length === 11) return s.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
   if (s.length === 14) return s.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
   return s;
+}
+
+function iniciaisDe(nome: string): string {
+  const limpo = nome.trim();
+  if (!limpo) return '—';
+  return limpo.slice(0, 2).toUpperCase();
 }
 
 function chaveFormulario(campo: CampoConfig): string {
@@ -105,30 +116,26 @@ function CampoFormulario({
 
   if (campo.tipo === 'checkbox') {
     return (
-      <div className="flex items-center gap-2 sm:col-span-2">
+      <label className="flex items-center gap-2 text-[13px] sm:col-span-2">
         <input
           id={chave}
           type="checkbox"
           disabled={desabilitado}
           checked={valor === true}
           onChange={(e) => onChange(chave, e.target.checked)}
-          className="h-4 w-4 rounded border-input"
+          className="size-4 rounded border-input"
         />
-        <Label htmlFor={chave} className="cursor-pointer font-normal">
-          {campo.rotulo}
-        </Label>
-      </div>
+        {campo.rotulo}
+      </label>
     );
   }
 
   return (
-    <div className={`space-y-1.5 ${campo.tipo === 'textarea' ? 'sm:col-span-2' : ''}`}>
-      <Label htmlFor={chave}>{campo.rotulo}</Label>
+    <FormField label={campo.rotulo} htmlFor={chave} className={campo.tipo === 'textarea' ? 'sm:col-span-2' : undefined}>
       {campo.tipo === 'select' ? (
-        <select
+        <SelectNative
           id={chave}
           disabled={desabilitado}
-          className="flex h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
           value={typeof valor === 'string' ? valor : ''}
           onChange={(e) => onChange(chave, e.target.value)}
         >
@@ -137,7 +144,7 @@ function CampoFormulario({
               {op.rotulo}
             </option>
           ))}
-        </select>
+        </SelectNative>
       ) : campo.tipo === 'textarea' ? (
         <Textarea
           id={chave}
@@ -157,7 +164,7 @@ function CampoFormulario({
           onChange={(e) => onChange(chave, e.target.value)}
         />
       )}
-    </div>
+    </FormField>
   );
 }
 
@@ -307,7 +314,7 @@ export function CadastroMasterDetail({
 
   function renderCampos(campos: CampoConfig[]) {
     return (
-      <div className="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
         {campos.map((campo) => (
           <CampoFormulario
             key={chaveFormulario(campo)}
@@ -324,182 +331,159 @@ export function CadastroMasterDetail({
   const ativos = lista.filter((r) => r.status === 'ativo').length;
 
   return (
-    <div className="flex h-full min-h-[calc(100vh-8rem)] flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">{tituloPagina}</h1>
-          {subtitulo && <p className="mt-1 text-sm text-muted-foreground">{subtitulo}</p>}
-        </div>
-        <Badge variant="outline" className="border-border bg-card text-foreground">
+    <div className="space-y-3">
+      <PageHeader title={tituloPagina} subtitle={subtitulo}>
+        <span className="text-xs text-muted-foreground">
           Total: {total} {total === 1 ? 'registro' : 'registros'}
           {lista.length > 0 && ` · ${ativos} ativo(s)`}
-        </Badge>
-      </div>
+        </span>
+      </PageHeader>
 
       {erro && (
-        <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+        <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           {erro}
         </div>
       )}
       {mensagem && (
-        <div className="rounded-xl border border-[var(--color-status-expedido)]/30 bg-[var(--color-status-expedido-bg)] p-3 text-sm text-[var(--color-status-expedido)]">
+        <p className="rounded-lg border border-primary/20 bg-accent p-3 text-sm text-primary">
           {mensagem}
-        </div>
+        </p>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
-        <div className="flex w-full shrink-0 flex-col rounded-xl border border-border bg-card shadow-sm lg:w-[400px]">
-          <div className="space-y-3 border-b border-border p-4">
-            <form onSubmit={handleBusca} className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  className="h-9 pl-9"
-                  placeholder="Buscar..."
-                />
-              </div>
+      <div className="grid items-start gap-2.5 lg:grid-cols-[320px_1fr]">
+        {/* MASTER */}
+        <Card>
+          <CardContent className="flex flex-col gap-1.5 p-2.5 pb-1.5">
+            <form onSubmit={handleBusca} className="flex gap-1.5">
+              <Input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                adornLeft={<Search />}
+                placeholder="Buscar..."
+                className="h-7 text-xs"
+              />
               {podeGerenciar && (
-                <Button type="button" size="icon" className="h-9 w-9 shrink-0" asChild>
+                <Button type="button" size="iconSm" variant="secondary" asChild>
                   <a href={`/cadastros/${config.recurso}/novo`} aria-label="Novo">
-                    <Plus className="h-4 w-4" />
+                    <Plus />
                   </a>
                 </Button>
               )}
             </form>
             {filtrosExtras}
-          </div>
-          <div className="flex-1 overflow-auto p-2">
+          </CardContent>
+          <div className="max-h-[560px] overflow-y-auto overflow-x-hidden">
             {carregando ? (
-              <p className="p-4 text-center text-sm text-muted-foreground">Carregando…</p>
+              <p className="p-4 text-center text-xs text-muted-foreground">Carregando…</p>
             ) : lista.length === 0 ? (
-              <p className="p-4 text-center text-sm text-muted-foreground">Nenhum registro encontrado.</p>
+              <p className="p-4 text-center text-xs text-muted-foreground">Nenhum registro encontrado.</p>
             ) : (
-              <div className="space-y-1">
-                {lista.map((item) => {
-                  const ativo = item.status === 'ativo';
-                  const label =
-                    String(item.nomeFantasia ?? item.razaoSocial ?? item.codigo ?? item.id);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setSelecionadoId(item.id)}
-                      className={`w-full rounded-lg border p-3 text-left transition-colors ${
-                        selecionadoId === item.id
-                          ? 'border-primary bg-accent shadow-sm'
-                          : 'border-transparent hover:bg-muted/50'
-                      }`}
-                    >
-                      <div className="mb-1 flex items-start justify-between gap-2">
-                        <span
-                          className={`truncate text-sm font-bold ${
-                            selecionadoId === item.id ? 'text-primary' : 'text-foreground'
-                          }`}
-                        >
-                          {label}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={`shrink-0 border-none text-[10px] uppercase ${
-                            ativo
-                              ? 'bg-[var(--color-status-expedido-bg)] text-[var(--color-status-expedido)]'
-                              : 'bg-muted text-muted-foreground'
-                          }`}
-                        >
-                          {String(item.status ?? '—')}
-                        </Badge>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {formatDocumento(item.documentoFiscal)}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              lista.map((item) => {
+                const ativo = item.status === 'ativo';
+                const label = String(item.nomeFantasia ?? item.razaoSocial ?? item.codigo ?? item.id);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelecionadoId(item.id)}
+                    className={cn(
+                      'block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2',
+                      selecionadoId === item.id && 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]',
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">{label}</b>
+                      <StatusPill
+                        variant={ativo ? 'expedido' : 'pendente'}
+                        label={String(item.status ?? '—')}
+                        className="h-[17px] text-[10px]"
+                      />
+                    </span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      <span className="font-data">{formatDocumento(item.documentoFiscal)}</span>
+                    </span>
+                  </button>
+                );
+              })
             )}
           </div>
-        </div>
+        </Card>
 
-        <div className="flex min-w-0 flex-1 flex-col rounded-xl border border-border bg-card shadow-sm">
+        {/* DETAIL */}
+        <Card>
           {!detalhe ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-muted-foreground">
-              <Building2 className="h-12 w-12 opacity-20" />
-              <p className="text-sm">Selecione um registro para visualizar ou editar.</p>
-            </div>
+            <CardContent>
+              <EmptyState
+                icon={<Building2 />}
+                title="Selecione um registro para visualizar ou editar."
+              />
+            </CardContent>
           ) : (
             <>
-              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border p-6">
-                <div className="flex gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                    <Building2 className="h-6 w-6" />
+              <CardContent className="flex items-center gap-3 border-b border-border p-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-[13px] font-bold text-primary-fg">
+                  {iniciaisDe(String(detalhe.nomeFantasia ?? detalhe.razaoSocial ?? detalhe.codigo ?? ''))}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[16px] font-bold text-foreground">
+                    {String(detalhe.nomeFantasia ?? detalhe.razaoSocial ?? detalhe.codigo)}
                   </div>
-                  <div>
-                    <h2 className="text-lg font-bold text-foreground">
-                      {String(detalhe.nomeFantasia ?? detalhe.razaoSocial ?? detalhe.codigo)}
-                    </h2>
-                    <p className="text-sm text-muted-foreground">{String(detalhe.razaoSocial ?? '')}</p>
-                  </div>
+                  <p className="truncate text-xs text-muted-foreground">{String(detalhe.razaoSocial ?? '')}</p>
                 </div>
                 {podeGerenciar && (
-                  <Button
-                    type="submit"
-                    form="cadastro-md-form"
-                    disabled={salvando}
-                    className="gap-2"
-                    style={{ background: 'var(--color-primary)' }}
-                  >
-                    <Save className="h-4 w-4" />
+                  <Button type="submit" form="cadastro-md-form" disabled={salvando}>
+                    <Save />
                     Salvar
                   </Button>
                 )}
-              </div>
-              <form id="cadastro-md-form" onSubmit={handleSalvar} className="flex-1 overflow-auto p-6">
-                {config.secoes ? (
-                  <div className="grid grid-cols-2 gap-8">
-                    {([1, 2] as const).map((coluna) => (
-                      <div key={coluna} className="space-y-8">
-                        {config.secoes
-                          ?.filter((secao) => secao.coluna === coluna)
-                          .map((secao) => {
-                            const Icone = secao.icone;
-                            return (
-                              <section key={secao.chave} className="space-y-4">
-                                <h3 className="flex items-center gap-2 border-b border-border pb-2 text-sm font-bold text-foreground">
-                                  <Icone className="size-4 text-muted-foreground" />
-                                  {secao.titulo}
-                                </h3>
-                                {renderCampos(config.campos.filter((campo) => campo.secao === secao.chave))}
-                              </section>
-                            );
-                          })}
-                        {coluna === 2 && selecionadoId && blocoDetalheExtra?.(selecionadoId)}
-                      </div>
-                    ))}
-                  </div>
-                ) : usaAbas ? (
-                  <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="gap-4">
-                    <TabsList>
-                      {abasPresentes.map((aba) => (
-                        <TabsTrigger key={aba} value={aba}>
-                          {ABA_LABELS[aba]}
-                        </TabsTrigger>
+              </CardContent>
+              <form id="cadastro-md-form" onSubmit={handleSalvar}>
+                <CardContent>
+                  {config.secoes ? (
+                    <div className="grid grid-cols-2 gap-6">
+                      {([1, 2] as const).map((coluna) => (
+                        <div key={coluna} className="space-y-4">
+                          {config.secoes
+                            ?.filter((secao) => secao.coluna === coluna)
+                            .map((secao) => {
+                              const Icone = secao.icone;
+                              return (
+                                <section key={secao.chave} className="space-y-3">
+                                  <h3 className="flex items-center gap-2 border-b border-border pb-2 text-[13px] font-bold text-foreground">
+                                    <Icone className="size-4 text-muted-foreground" />
+                                    {secao.titulo}
+                                  </h3>
+                                  {renderCampos(config.campos.filter((campo) => campo.secao === secao.chave))}
+                                </section>
+                              );
+                            })}
+                          {coluna === 2 && selecionadoId && blocoDetalheExtra?.(selecionadoId)}
+                        </div>
                       ))}
-                    </TabsList>
-                    {abasPresentes.map((aba) => (
-                      <TabsContent key={aba} value={aba} className="mt-4">
-                        {renderCampos(camposPorAba.get(aba) ?? [])}
-                      </TabsContent>
-                    ))}
-                  </Tabs>
-                ) : (
-                  renderCampos(camposPorAba.get('default') ?? config.campos)
-                )}
+                    </div>
+                  ) : usaAbas ? (
+                    <Tabs value={abaAtiva} onValueChange={setAbaAtiva}>
+                      <TabsList>
+                        {abasPresentes.map((aba) => (
+                          <TabsTrigger key={aba} value={aba}>
+                            {ABA_LABELS[aba]}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                      {abasPresentes.map((aba) => (
+                        <TabsContent key={aba} value={aba}>
+                          {renderCampos(camposPorAba.get(aba) ?? [])}
+                        </TabsContent>
+                      ))}
+                    </Tabs>
+                  ) : (
+                    renderCampos(camposPorAba.get('default') ?? config.campos)
+                  )}
+                </CardContent>
               </form>
             </>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );

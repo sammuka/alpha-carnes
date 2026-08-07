@@ -11,24 +11,31 @@ import type {
   RegistroAuditoria,
 } from '@/lib/auditoria';
 import { mensagemDeErro } from '@/lib/error-message';
-import { Badge } from '@/components/ui/badge';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
+import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Table,
+  TableBody,
+  TableCell,
+  TableCellCode,
+  TableCellNum,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
-const COR_OPERACAO: Record<OperacaoAuditoria, string> = {
-  INSERT: 'bg-green-100 text-green-800',
-  UPDATE: 'bg-amber-100 text-amber-800',
-  DELETE: 'bg-red-100 text-red-800',
-  ACAO_MANUAL: 'bg-violet-100 text-violet-800',
+/** StatusPill exigido pela Tarefa 29 — INSERT→expedido, UPDATE→recebido, DELETE→bloqueado, ACAO_MANUAL→divergencia. */
+const VARIANT_OPERACAO: Record<OperacaoAuditoria, StatusPillVariant> = {
+  INSERT: 'expedido',
+  UPDATE: 'recebido',
+  DELETE: 'bloqueado',
+  ACAO_MANUAL: 'divergencia',
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -121,123 +128,103 @@ export function AuditoriaAdminClient() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Auditoria Filtrável</h1>
-          <p className="text-sm text-muted-foreground">
-            Rastreabilidade completa de alterações no sistema e segregação de funções
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={aplicarFiltros}>
-            <Filter className="mr-2 h-4 w-4" />
-            Aplicar Filtros
-          </Button>
-          <Button variant="outline" onClick={() => void exportarCsv()} disabled={exportando}>
-            <Download className="mr-2 size-4" />
-            {exportando ? 'Exportando…' : 'Exportar CSV'}
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-3">
+      <PageHeader title="Auditoria Filtrável" subtitle="Rastreabilidade completa de alterações no sistema e segregação de funções">
+        <Button variant="secondary" onClick={() => void exportarCsv()} disabled={exportando}>
+          <Download />
+          {exportando ? 'Exportando…' : 'Exportar CSV'}
+        </Button>
+      </PageHeader>
 
       <Card>
-        <CardContent className="grid gap-4 p-5 md:grid-cols-6">
-          <div className="md:col-span-2">
-            <Label htmlFor="periodo-inicio">Período</Label>
+        <CardContent className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-3 xl:grid-cols-6">
+          <FormField label="Período" htmlFor="periodo-inicio" className="sm:col-span-2">
             <div className="flex gap-2">
               <Input
                 id="periodo-inicio"
                 type="datetime-local"
+                className="font-data"
                 value={filtros.dataInicio ?? ''}
                 onChange={(e) => setFiltros((s) => ({ ...s, dataInicio: e.target.value || undefined, page: 1 }))}
               />
               <Input
                 aria-label="Período — fim"
                 type="datetime-local"
+                className="font-data"
                 value={filtros.dataFim ?? ''}
                 onChange={(e) => setFiltros((s) => ({ ...s, dataFim: e.target.value || undefined, page: 1 }))}
               />
             </div>
-          </div>
+          </FormField>
 
-          <div>
-            <Label>Usuário</Label>
-            <Select
+          <FormField label="Usuário">
+            <SelectNative
+              aria-label="Usuário"
               value={filtros.usuarioId ?? 'todos'}
-              onValueChange={(v) =>
-                setFiltros((s) => ({ ...s, usuarioId: v === 'todos' ? undefined : v, page: 1 }))
+              onChange={(e) =>
+                setFiltros((s) => ({ ...s, usuarioId: e.target.value === 'todos' ? undefined : e.target.value, page: 1 }))
               }
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Todos os usuários" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os usuários</SelectItem>
-                {(facetas?.usuarios ?? []).map((usuario) => (
-                  <SelectItem key={usuario.id} value={usuario.id}>
-                    {usuario.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              <option value="todos">Todos os usuários</option>
+              {(facetas?.usuarios ?? []).map((usuario) => (
+                <option key={usuario.id} value={usuario.id}>
+                  {usuario.nome}
+                </option>
+              ))}
+            </SelectNative>
+          </FormField>
 
-          <div>
-            <Label>Módulo</Label>
-            <Select
+          <FormField label="Módulo">
+            <SelectNative
+              aria-label="Módulo"
               value={filtros.modulo ?? 'todos'}
-              onValueChange={(v) =>
-                setFiltros((s) => ({ ...s, modulo: v === 'todos' ? undefined : v, page: 1 }))
+              onChange={(e) =>
+                setFiltros((s) => ({ ...s, modulo: e.target.value === 'todos' ? undefined : e.target.value, page: 1 }))
               }
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Todos" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
-                {(facetas?.modulos ?? []).map((modulo) => (
-                  <SelectItem key={modulo} value={modulo}>
-                    {modulo}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              <option value="todos">Todos</option>
+              {(facetas?.modulos ?? []).map((modulo) => (
+                <option key={modulo} value={modulo}>
+                  {modulo}
+                </option>
+              ))}
+            </SelectNative>
+          </FormField>
 
-          <div>
-            <Label>Operação</Label>
-            <Select
+          <FormField label="Operação">
+            <SelectNative
+              aria-label="Operação"
               value={filtros.operacao ?? 'todas'}
-              onValueChange={(v) =>
+              onChange={(e) =>
                 setFiltros((s) => ({
                   ...s,
-                  operacao: v === 'todas' ? undefined : (v as OperacaoAuditoria),
+                  operacao: e.target.value === 'todas' ? undefined : (e.target.value as OperacaoAuditoria),
                   page: 1,
                 }))
               }
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas</SelectItem>
-                <SelectItem value="INSERT">INSERT</SelectItem>
-                <SelectItem value="UPDATE">UPDATE</SelectItem>
-                <SelectItem value="DELETE">DELETE</SelectItem>
-                <SelectItem value="ACAO_MANUAL">ACAO_MANUAL</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+              <option value="todas">Todas</option>
+              <option value="INSERT">INSERT</option>
+              <option value="UPDATE">UPDATE</option>
+              <option value="DELETE">DELETE</option>
+              <option value="ACAO_MANUAL">ACAO_MANUAL</option>
+            </SelectNative>
+          </FormField>
 
-          <div>
-            <Label htmlFor="registro">Registro (ID)</Label>
+          <FormField label="Registro (ID)" htmlFor="registro">
             <Input
               id="registro"
               placeholder="UUID completo ou parte dele"
               value={registro}
               onChange={(e) => setRegistro(e.target.value)}
             />
+          </FormField>
+
+          <div className="flex items-end">
+            <Button onClick={aplicarFiltros}>
+              <Filter />
+              Aplicar Filtros
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -248,104 +235,107 @@ export function AuditoriaAdminClient() {
         </div>
       )}
 
-      <div className="grid min-h-[420px] grid-cols-1 gap-6 lg:grid-cols-12">
-        <Card className="overflow-hidden lg:col-span-8">
-          <div className="max-h-[520px] overflow-auto p-5">
-            {loading && <p className="text-sm text-muted-foreground">Carregando…</p>}
+      <div className="grid min-h-[420px] grid-cols-1 gap-2.5 lg:grid-cols-12">
+        <Card className="lg:col-span-8">
+          <CardContent className="max-h-[520px] overflow-auto p-0">
+            {loading && <p className="p-5 text-sm text-muted-foreground">Carregando…</p>}
             {!loading && resultado && (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-3 font-medium">Data / Hora</th>
-                    <th className="pb-3 font-medium">Usuário</th>
-                    <th className="pb-3 font-medium">Módulo</th>
-                    <th className="pb-3 font-medium">Operação</th>
-                    <th className="pb-3 font-medium">Tabela / Registro</th>
-                    <th className="pb-3 text-right font-medium">Ação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Data / Hora</TableHead>
+                    <TableHead>Usuário</TableHead>
+                    <TableHead>Módulo</TableHead>
+                    <TableHead>Operação</TableHead>
+                    <TableHead>Tabela / Registro</TableHead>
+                    <TableHead className="text-right">Ação</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {resultado.data.map((ev) => (
-                    <tr
+                    <TableRow
                       key={ev.id}
-                      className={`cursor-pointer ${selecionado?.id === ev.id ? 'bg-muted/60' : 'hover:bg-muted/40'}`}
+                      data-state={selecionado?.id === ev.id ? 'selected' : undefined}
+                      className="group cursor-pointer"
                       onClick={() => setSelecionado(ev)}
                     >
-                      <td className="py-3 whitespace-nowrap">
+                      <TableCellNum>
                         {new Date(ev.createdAt).toLocaleString('pt-BR')}
-                      </td>
-                      <td className="py-3 text-muted-foreground">{ev.usuarioNome ?? 'Sistema'}</td>
-                      <td className="py-3 text-muted-foreground">{ev.modulo ?? '—'}</td>
-                      <td className="py-3">
-                        <Badge className={COR_OPERACAO[ev.operacao]}>{ev.operacao}</Badge>
-                      </td>
-                      <td className="py-3">
-                        <p className="text-xs text-muted-foreground">{ev.tabela}</p>
-                        <p className="font-medium">{ev.registroId.slice(0, 8)}…</p>
-                      </td>
-                      <td className="py-3 text-right">
-                        <Button variant="ghost" size="icon" onClick={() => setSelecionado(ev)}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </td>
-                    </tr>
+                      </TableCellNum>
+                      <TableCell className="text-[13px] font-semibold text-foreground">{ev.usuarioNome ?? 'Sistema'}</TableCell>
+                      <TableCell className="text-muted-foreground">{ev.modulo ?? '—'}</TableCell>
+                      <TableCell>
+                        <StatusPill variant={VARIANT_OPERACAO[ev.operacao]} label={ev.operacao} />
+                      </TableCell>
+                      <TableCellCode>
+                        {ev.tabela} · {ev.registroId.slice(0, 8)}…
+                      </TableCellCode>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
+                          <Button variant="ghost" size="iconSm" onClick={() => setSelecionado(ev)}>
+                            <Eye />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
-            {resultado && resultado.total > resultado.pageSize && (
-              <div className="mt-4 flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={(filtros.page ?? 1) <= 1}
-                  onClick={() => setFiltros((s) => ({ ...s, page: (s.page ?? 1) - 1 }))}
-                >
-                  Anterior
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={(filtros.page ?? 1) * (filtros.pageSize ?? 20) >= resultado.total}
-                  onClick={() => setFiltros((s) => ({ ...s, page: (s.page ?? 1) + 1 }))}
-                >
-                  Próxima
-                </Button>
-              </div>
-            )}
-          </div>
+          </CardContent>
+          {resultado && resultado.total > resultado.pageSize && (
+            <CardFooter className="justify-between">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={(filtros.page ?? 1) <= 1}
+                onClick={() => setFiltros((s) => ({ ...s, page: (s.page ?? 1) - 1 }))}
+              >
+                Anterior
+              </Button>
+              <BadgeCount>Página {filtros.page ?? 1}</BadgeCount>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={(filtros.page ?? 1) * (filtros.pageSize ?? 20) >= resultado.total}
+                onClick={() => setFiltros((s) => ({ ...s, page: (s.page ?? 1) + 1 }))}
+              >
+                Próxima
+              </Button>
+            </CardFooter>
+          )}
         </Card>
 
-        <Card className="flex flex-col overflow-hidden lg:col-span-4">
-          <div className="border-b p-5">
-            <div className="mb-2 flex items-center gap-2">
-              <FileJson className="h-5 w-5 text-primary" />
-              <h2 className="font-bold">Detalhe da Alteração</h2>
-            </div>
+        <Card className="lg:col-span-4">
+          <CardHeader>
+            <FileJson className="size-4 text-primary" />
+            <CardTitle>Detalhe da Alteração</CardTitle>
+          </CardHeader>
+          <CardContent>
             {selecionado?.justificativa && (
-              <p className="text-sm text-muted-foreground">
+              <p className="mb-2 text-xs text-muted-foreground">
                 Justificativa: <span className="font-medium text-foreground">{selecionado.justificativa}</span>
               </p>
             )}
-          </div>
-          {selecionado ? (
-            <div className="flex-1 overflow-auto bg-text-strong p-5 font-mono text-[12px] leading-relaxed text-border">
-              <div className="mb-4">
-                <p className="mb-1 text-text-muted">// Dados Anteriores</p>
-                <pre className="overflow-x-auto rounded-[6px] border border-text-ink bg-code-surface p-3 text-destructive">
-                  {JSON.stringify(selecionado.dadosAnteriores, null, 2)}
-                </pre>
+            {selecionado ? (
+              <div className="space-y-3">
+                <div>
+                  <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">Dados Anteriores</p>
+                  <pre className="max-h-96 overflow-auto rounded-md bg-surface-2 p-3 font-data text-[11px]">
+                    {JSON.stringify(selecionado.dadosAnteriores, null, 2)}
+                  </pre>
+                </div>
+                <div>
+                  <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">Dados Novos</p>
+                  <pre className="max-h-96 overflow-auto rounded-md bg-surface-2 p-3 font-data text-[11px]">
+                    {JSON.stringify(selecionado.dadosNovos, null, 2)}
+                  </pre>
+                </div>
               </div>
-              <div>
-                <p className="mb-1 text-text-muted">// Dados Novos</p>
-                <pre className="overflow-x-auto rounded-[6px] border border-text-ink bg-code-surface p-3 text-success">
-                  {JSON.stringify(selecionado.dadosNovos, null, 2)}
-                </pre>
-              </div>
-            </div>
-          ) : (
-            <p className="p-5 text-sm text-muted-foreground">Selecione um evento.</p>
-          )}
+            ) : (
+              <p className="text-sm text-muted-foreground">Selecione um evento.</p>
+            )}
+          </CardContent>
         </Card>
       </div>
     </div>

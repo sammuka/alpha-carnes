@@ -65,15 +65,39 @@ export function statusCaminhaoVariant(status: string): StatusPillVariant {
 /** Mapeia status de pedido para StatusPill. */
 export function statusPedidoVariant(status: string): StatusPillVariant {
   switch (status) {
-    case 'reservado':
-      return 'recebido';
-    case 'parcialmente_reservado':
-      return 'divergencia';
     case 'cancelado':
       return 'bloqueado';
+    case 'aguardando_confirmacao_overbooking':
+      return 'divergencia';
+    case 'finalizado':
+    case 'atendido':
+    case 'faturado':
+      return 'expedido';
+    case 'parcialmente_atendido':
+      return 'divergencia';
+    case 'rascunho':
+      return 'pendente';
+    case 'em_elaboracao_reserva_ativa':
+      return 'recebido';
     default:
       return 'pendente';
   }
+}
+
+/** Rótulos acentuados para os status de pedido usados por `statusPedidoVariant`. */
+export const ROTULO_STATUS_PEDIDO: Record<string, string> = {
+  rascunho: 'Rascunho',
+  em_elaboracao_reserva_ativa: 'Em elaboração · reserva ativa',
+  aguardando_confirmacao_overbooking: 'Aguardando confirmação de overbooking',
+  finalizado: 'Finalizado',
+  parcialmente_atendido: 'Parcialmente atendido',
+  atendido: 'Atendido',
+  faturado: 'Faturado',
+  cancelado: 'Cancelado',
+};
+
+export function rotuloStatusPedido(status: string): string {
+  return ROTULO_STATUS_PEDIDO[status] ?? status.replace(/_/g, ' ');
 }
 
 /** Mapeia status NFS-e para StatusPill. */

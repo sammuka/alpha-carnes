@@ -72,7 +72,7 @@ describe('AprovacoesClient', () => {
     await waitFor(() => {
       expect(screen.getByText(/imutáveis e servem apenas de referência/)).toBeInTheDocument();
     });
-    await userEvent.click(screen.getByRole('button', { name: 'Aprovações Operacionais' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'Aprovações Operacionais' }));
     await waitFor(() => expect(screen.getByText('Ajuste de estoque relevante')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: 'Rejeitar solicitação' }));
     expect(screen.getByLabelText(/Motivo/)).toBeInTheDocument();

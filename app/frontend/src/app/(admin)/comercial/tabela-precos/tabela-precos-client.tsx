@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Copy, History, Info, Save, X } from 'lucide-react';
+import { AlertTriangle, Copy, History, Info, Save, Upload, X } from 'lucide-react';
 import type { Paginado } from '@/lib/comercial';
 import type {
   PrecosIncompletosErro,
@@ -13,7 +13,11 @@ import type {
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DatePickerField } from '@/components/ui/date-picker-field';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
+import { PageHeader } from '@/components/ui/page-header';
 import {
   Sheet,
   SheetContent,
@@ -22,6 +26,14 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { StatusPill } from '@/components/ui/status-pill';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 interface TabelaPrecosClientProps {
   podeGerenciar: boolean;
@@ -81,6 +93,13 @@ function formatarData(data: string): string {
   const [ano, mes, dia] = data.split('-');
   return ano && mes && dia ? `${dia}/${mes}/${ano}` : data;
 }
+
+const RÓTULO_PRECO: Record<CampoPreco, string> = {
+  precoA: 'Preço A',
+  precoB: 'Preço B',
+  precoC: 'Preço C',
+  precoD: 'Preço D',
+};
 
 export function TabelaPrecosClient({
   podeGerenciar,
@@ -239,49 +258,37 @@ export function TabelaPrecosClient({
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="mb-0.5 text-xs font-medium text-muted-foreground">Comercial / Tabela de Preços</p>
-          <h1 className="text-2xl font-bold">Tabela de Preços</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Tabela diária de preços por produto, com faixas A, B, C e D.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Input
-            aria-label="Data da tabela"
-            type="date"
-            value={data}
-            onChange={(event) => setData(event.target.value)}
-            className="w-40"
+    <div className="space-y-3">
+      <PageHeader
+        title="Tabela de Preços"
+        subtitle="Tabela diária de preços por produto, com faixas A, B, C e D."
+      >
+        <DatePickerField aria-label="Data da tabela" value={data} onChange={setData} />
+        {tabela && (
+          <StatusPill
+            variant={tabela.status === 'publicada' ? 'expedido' : 'pendente'}
+            label={tabela.status === 'publicada' ? 'Publicada' : 'Rascunho'}
           />
-          {tabela && (
-            <StatusPill
-              variant={tabela.status === 'publicada' ? 'expedido' : 'pendente'}
-              label={tabela.status === 'publicada' ? 'Publicada' : 'Rascunho'}
-            />
-          )}
-          {tabela?.publicadaEm && (
-            <span className="text-xs text-muted-foreground">
-              Publicada em {new Date(tabela.publicadaEm).toLocaleString('pt-BR')}
-            </span>
-          )}
-        </div>
-      </div>
+        )}
+        {tabela?.publicadaEm && (
+          <span className="font-data text-[11px] text-muted-foreground">
+            Publicada em {new Date(tabela.publicadaEm).toLocaleString('pt-BR')}
+          </span>
+        )}
+      </PageHeader>
 
       {confirmacao && (
-        <div className="flex items-center gap-3 rounded-lg border border-status-recebido/30 bg-status-recebido-bg px-4 py-2.5">
-          <Info className="h-4 w-4 shrink-0 text-status-recebido" />
-          <p className="flex-1 text-sm">{confirmacao}</p>
-          <Button type="button" variant="ghost" size="icon" aria-label="Fechar confirmação" onClick={() => setConfirmacao('')}>
-            <X className="h-4 w-4" />
+        <div className="flex items-center gap-2 rounded-md border border-success-soft-border bg-success-soft px-3 py-2 text-xs text-success-fg">
+          <Info className="size-3.5 shrink-0" aria-hidden="true" />
+          <p className="flex-1">{confirmacao}</p>
+          <Button type="button" variant="ghost" size="iconSm" aria-label="Fechar confirmação" onClick={() => setConfirmacao('')}>
+            <X />
           </Button>
         </div>
       )}
 
       {erro && (
-        <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+        <div role="alert" className="rounded-md border border-danger-soft-border bg-danger-soft p-3 text-xs text-danger-fg">
           <p>{erro}</p>
           {produtosIncompletos.length > 0 && (
             <ul className="mt-2 list-disc pl-5">
@@ -296,38 +303,39 @@ export function TabelaPrecosClient({
       {carregando && <p className="text-sm text-muted-foreground">Carregando tabela...</p>}
 
       {!carregando && !tabela && (
-        <section className="rounded-xl border bg-card p-8 text-center">
-          <p className="text-sm text-muted-foreground">Nenhuma tabela de preços para {formatarData(data)}.</p>
-          {podeGerenciar && (
-            <Button type="button" className="mt-4" disabled={pendente} onClick={() => void criarTabela()}>
+        <EmptyState
+          icon={<Info />}
+          title={`Nenhuma tabela de preços para ${formatarData(data)}.`}
+          action={podeGerenciar && (
+            <Button type="button" disabled={pendente} onClick={() => void criarTabela()}>
               Criar tabela do dia
             </Button>
           )}
-        </section>
+        />
       )}
 
       {tabela && (
         <>
           <div className="flex flex-wrap items-center gap-2">
             {podeGerenciar && (
-              <Button type="button" variant="outline" disabled={pendente} onClick={() => void copiarAnterior()}>
-                <Copy className="mr-2 h-4 w-4" />
+              <Button type="button" variant="secondary" disabled={pendente} onClick={() => void copiarAnterior()}>
+                <Copy />
                 Copiar tabela anterior
               </Button>
             )}
-            <Button type="button" variant="outline" onClick={() => void abrirHistorico()}>
-              <History className="mr-2 h-4 w-4" />
+            <Button type="button" variant="secondary" onClick={() => void abrirHistorico()}>
+              <History />
               Histórico
             </Button>
             <div className="flex-1" />
             {podeGerenciar && (
               <>
-                <Button type="button" variant="outline" disabled={pendente} onClick={() => void salvar()}>
-                  <Save className="mr-2 h-4 w-4" />
+                <Button type="button" variant="secondary" disabled={pendente} onClick={() => void salvar()}>
+                  <Save />
                   Salvar
                 </Button>
                 <Button type="button" disabled={pendente || tabela.status === 'publicada'} onClick={() => void publicar()}>
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  <Upload />
                   Publicar
                 </Button>
               </>
@@ -335,85 +343,82 @@ export function TabelaPrecosClient({
           </div>
 
           {(editadaAposPublicacao || (tabela.status === 'rascunho' && tabela.publicadaEm)) && (
-            <div className="flex items-start gap-2 rounded-lg border border-status-divergencia/30 bg-status-divergencia-bg p-3">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-status-divergencia" />
-              <p className="text-sm">
+            <div className="flex items-start gap-2 rounded-md border border-warning-soft-border bg-warning-soft p-3 text-xs text-warning-fg">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <p>
                 Esta tabela já foi publicada anteriormente e sofreu alteração. Publique novamente para que os novos preços entrem em vigor.
               </p>
             </div>
           )}
 
-          <div className="overflow-hidden rounded-xl border bg-card">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                    <th className="px-4 py-3">Produto</th>
-                    <th className="px-4 py-3">Unidade</th>
-                    <th className="px-4 py-3">Preço A</th>
-                    <th className="px-4 py-3">Preço B</th>
-                    <th className="px-4 py-3">Preço C</th>
-                    <th className="px-4 py-3">Preço D</th>
-                  </tr>
-                </thead>
-                <tbody>
+          <Card>
+            <CardHeader>
+              <CardTitle>Faixas de preço</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Unidade</TableHead>
+                    <TableHead>Preço A</TableHead>
+                    <TableHead>Preço B</TableHead>
+                    <TableHead>Preço C</TableHead>
+                    <TableHead>Preço D</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {tabela.itens.map((item) => (
-                    <tr key={item.produtoId} className="border-b last:border-0">
-                      <td className="px-4 py-3 font-medium">
+                    <TableRow key={item.produtoId}>
+                      <TableCell className="text-[13px] font-semibold text-foreground">
                         <span>{item.codigo} — {item.nome}</span>
                         {item.provisorio && (
-                          <BadgeProvisorio pendencia="P11" texto="Provisório · P11" className="ml-2" />
+                          <BadgeProvisorio codigo="P11" className="ml-2" />
                         )}
-                      </td>
-                      <td className="px-4 py-3">{item.unidadePreco}</td>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{item.unidadePreco}</TableCell>
                       {(['precoA', 'precoB', 'precoC', 'precoD'] as const).map((campo) => (
-                        <td key={campo} className="w-36 px-4 py-3">
-                          <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">R$</span>
-                            <Input
-                              aria-label={`${{
-                                precoA: 'Preço A',
-                                precoB: 'Preço B',
-                                precoC: 'Preço C',
-                                precoD: 'Preço D',
-                              }[campo]} de ${item.codigo}`}
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              value={valores[item.produtoId]?.[campo] ?? ''}
-                              placeholder="—"
-                              disabled={!podeGerenciar}
-                              className="pl-7 text-right font-mono"
-                              onChange={(event) => editar(item, campo, event.target.value)}
-                            />
-                          </div>
-                        </td>
+                        <TableCell key={campo} className="w-32">
+                          <Input
+                            aria-label={`${RÓTULO_PRECO[campo]} de ${item.codigo}`}
+                            adornLeft={<span className="text-[11px]">R$</span>}
+                            inputMode="decimal"
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={valores[item.produtoId]?.[campo] ?? ''}
+                            placeholder="—"
+                            disabled={!podeGerenciar}
+                            className="h-7 w-28 text-right font-data"
+                            onChange={(event) => editar(item, campo, event.target.value)}
+                          />
+                        </TableCell>
                       ))}
-                    </tr>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
 
           <p className="text-xs text-muted-foreground">{tabela.itens.length} produtos na tabela.</p>
         </>
       )}
 
       <Sheet open={historicoAberto} onOpenChange={setHistoricoAberto}>
-        <SheetContent>
+        <SheetContent className="sm:max-w-[520px]">
           <SheetHeader>
             <SheetTitle>Histórico de publicações</SheetTitle>
             <SheetDescription>Eventos append-only da tabela selecionada.</SheetDescription>
           </SheetHeader>
-          <div className="mt-6 space-y-4">
+          <div className="space-y-3 p-4">
             {historico.length === 0 && (
               <p className="text-sm text-muted-foreground">Nenhuma publicação registrada ainda.</p>
             )}
             {historico.map((entry) => (
-              <article key={entry.id} className="border-l-2 border-primary/30 pl-3">
+              <article key={entry.id} className="border-l-2 border-primary-soft-border pl-3">
                 <p className="text-sm font-semibold">{entry.acao}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="font-data text-[11px] text-muted-foreground">
                   {new Date(entry.criadoEm).toLocaleString('pt-BR')} · {entry.autorId}
                 </p>
                 {entry.observacao && <p className="mt-1 text-xs">{entry.observacao}</p>}

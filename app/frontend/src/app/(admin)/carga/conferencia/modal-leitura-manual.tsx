@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { FormField } from '@/components/ui/form-field';
 import { Textarea } from '@/components/ui/textarea';
 
 export function ModalLeituraManual({
@@ -37,16 +37,13 @@ export function ModalLeituraManual({
         <DialogHeader>
           <DialogTitle>Leitura manual — informe o motivo</DialogTitle>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-muted/30 p-3 text-xs">
+        <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-surface-2 p-3 text-xs">
           <div className="col-span-2">
             <span className="text-muted-foreground">Código digitado: </span>
-            <span className="font-bold text-foreground">{codigo}</span>
+            <span className="font-data font-bold text-foreground">{codigo}</span>
           </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="motivo-leitura-manual">
-            Motivo <span className="text-destructive">*</span>
-          </Label>
+        <FormField label="Motivo" required htmlFor="motivo-leitura-manual">
           <Textarea
             id="motivo-leitura-manual"
             rows={2}
@@ -54,9 +51,9 @@ export function ModalLeituraManual({
             onChange={(e) => setMotivo(e.target.value)}
             placeholder="Ex.: leitor indisponível, etiqueta danificada..."
           />
-        </div>
+        </FormField>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="ghost" onClick={onClose}>
             Voltar
           </Button>
           <Button

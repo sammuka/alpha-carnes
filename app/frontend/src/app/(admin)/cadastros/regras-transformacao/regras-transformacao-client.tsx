@@ -4,9 +4,20 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GitBranch, Plus, Trash2 } from 'lucide-react';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageHeader } from '@/components/ui/page-header';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableCellNum,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import type { Paginado } from '@/lib/cadastros';
 import { SimuladorDesdobramento } from './simulador-desdobramento';
 import { SimuladorDesossa } from './simulador-desossa';
@@ -88,130 +99,126 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
   const itemCompraSelecionadoId = regras[0]?.itemCompraId ?? null;
 
   return (
-    <div className="flex max-w-[1664px] flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Regras de Transformação</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Configuração de conversão de item de compra para itens comerciais
-          </p>
-        </div>
+    <div className="space-y-3">
+      <PageHeader title="Regras de Transformação" subtitle="Configuração de conversão de item de compra para itens comerciais">
         {podeGerenciar && (
-          <Button variant="outline" disabled className="border-primary text-primary">
+          <Button variant="secondary" disabled>
             Nova regra (em breve)
           </Button>
         )}
-      </div>
+      </PageHeader>
 
       {erro && (
-        <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+        <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           {erro}
         </div>
       )}
 
-      <Tabs defaultValue="desdobramento" className="gap-4">
+      <Tabs defaultValue="desdobramento">
         <TabsList>
           <TabsTrigger value="desdobramento">Desdobramento de Compra</TabsTrigger>
           <TabsTrigger value="desossa">Transformação de Desossa (TZ)</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="desdobramento" className="space-y-6">
-          <Card className="rounded-xl border-border shadow-sm">
-            <CardContent className="p-5">
-              <p className="text-xs font-medium text-muted-foreground">
+        <TabsContent value="desdobramento" className="space-y-3">
+          <Card>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">
                 Regras cadastradas no backend (identificadores de item de compra e comercial).
               </p>
             </CardContent>
           </Card>
 
-          <Card className="rounded-xl border-border shadow-sm">
-            <div className="flex items-center justify-between border-b border-border p-5">
-              <div className="flex items-center gap-2">
-                <GitBranch className="h-5 w-5 text-primary" />
-                <h2 className="text-base font-bold text-foreground">Itens comerciais (destino)</h2>
-              </div>
-              <Button variant="outline" size="sm" disabled={!podeGerenciar} className="gap-1 border-primary text-primary">
-                <Plus className="h-4 w-4" /> Adicionar linha
-              </Button>
-            </div>
-            <div className="overflow-x-auto p-5">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
-                    <th className="pb-3">Item comercial</th>
-                    <th className="pb-3">Item compra (origem)</th>
-                    <th className="pb-3 text-center">Fator</th>
-                    <th className="pb-3">Vigência</th>
-                    <th className="pb-3">Status</th>
-                    <th className="pb-3">Observações</th>
-                    <th className="pb-3 text-right">Ação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
+          <Card>
+            <CardHeader>
+              <GitBranch className="size-4 text-primary" />
+              <CardTitle>Itens comerciais (destino)</CardTitle>
+              <CardAction>
+                <Button variant="secondary" size="sm" disabled={!podeGerenciar}>
+                  <Plus /> Adicionar linha
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Item comercial</TableHead>
+                    <TableHead>Item compra (origem)</TableHead>
+                    <TableHead className="text-right">Fator</TableHead>
+                    <TableHead>Vigência</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Observações</TableHead>
+                    <TableHead className="text-right">Ação</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {carregando ? (
-                    <tr>
-                      <td colSpan={7} className="py-10 text-center text-muted-foreground">
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                         Carregando regras…
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ) : regras.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-10 text-center text-muted-foreground">
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                         Nenhuma regra cadastrada.
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ) : (
                     regras.map((regra) => (
-                      <tr key={regra.id}>
-                        <td className="py-4">
-                          <p className="text-sm font-medium text-foreground">{rotuloItemComercial(regra)}</p>
-                          <p className="font-mono text-xs text-muted-foreground">{regra.itemComercialId.slice(0, 8)}…</p>
-                        </td>
-                        <td className="py-4">
-                          <p className="text-sm text-foreground">{rotuloItemCompra(regra)}</p>
-                          <p className="font-mono text-xs text-muted-foreground">{regra.itemCompraId.slice(0, 8)}…</p>
-                        </td>
-                        <td className="py-4 text-center font-bold text-foreground">{regra.fatorQuantidade}</td>
-                        <td className="py-4 text-muted-foreground">
+                      <TableRow key={regra.id} className="group">
+                        <TableCell>
+                          <p className="text-[13px] font-semibold text-foreground">{rotuloItemComercial(regra)}</p>
+                          <p className="font-data text-[11px] text-muted-foreground">{regra.itemComercialId.slice(0, 8)}…</p>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-foreground">{rotuloItemCompra(regra)}</p>
+                          <p className="font-data text-[11px] text-muted-foreground">{regra.itemCompraId.slice(0, 8)}…</p>
+                        </TableCell>
+                        <TableCellNum>{regra.fatorQuantidade}</TableCellNum>
+                        <TableCell className="text-muted-foreground">
                           {formatData(regra.vigenciaInicio)} — {formatData(regra.vigenciaFim)}
-                        </td>
-                        <td className="py-4">
+                        </TableCell>
+                        <TableCell>
                           <StatusPill
                             variant={regra.status === 'ativo' ? 'expedido' : 'bloqueado'}
                             label={regra.status === 'ativo' ? 'Ativo' : 'Inativo'}
                           />
-                        </td>
-                        <td className="py-4 text-muted-foreground">{regra.observacoes ?? '—'}</td>
-                        <td className="py-4 text-right">
-                          <Button variant="ghost" size="icon" disabled={!podeGerenciar} className="h-8 w-8">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{regra.observacoes ?? '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
+                            <Button variant="ghost" size="iconSm" disabled={!podeGerenciar}>
+                              <Trash2 />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
                     ))
                   )}
-                  {!carregando && regras.length > 0 && (
-                    <tr>
-                      <td colSpan={7} className="pt-4">
-                        <div className="flex justify-end gap-4 text-sm font-medium">
-                          <span className="text-muted-foreground">Soma dos fatores:</span>
-                          <span className="font-bold text-[var(--color-status-expedido)]">
-                            {somaFatores.toFixed(2)}
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+                {!carregando && regras.length > 0 && (
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-right text-muted-foreground">
+                        Soma dos fatores:
+                      </TableCell>
+                      <TableCellNum className="text-[var(--color-status-expedido)]">
+                        {somaFatores.toFixed(2)}
+                      </TableCellNum>
+                    </TableRow>
+                  </TableFooter>
+                )}
+              </Table>
+            </CardContent>
           </Card>
 
           <SimuladorDesdobramento itemCompraId={itemCompraSelecionadoId} />
         </TabsContent>
 
-        <TabsContent value="desossa" className="space-y-6">
-          <div className="flex items-start gap-3 rounded-lg border border-provisorio-border bg-warning-surface p-4">
+        <TabsContent value="desossa" className="space-y-3">
+          <div className="flex items-start gap-3 rounded-lg border border-provisorio-border bg-warning-surface p-3">
             <BadgeProvisorio pendencia="P12" />
             <p className="text-sm text-provisorio-text">
               Cada unidade de TZ atende exatamente uma das alternativas abaixo.

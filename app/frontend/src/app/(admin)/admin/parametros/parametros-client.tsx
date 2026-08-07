@@ -5,7 +5,9 @@ import { Briefcase, Receipt, Settings, type LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { BadgeProvisorio, type PendenciaAberta, PENDENCIAS_ABERTAS } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { PageHeader } from '@/components/ui/page-header';
 import { Switch } from '@/components/ui/switch';
 import { mensagemDeErro } from '@/lib/error-message';
 
@@ -91,9 +93,7 @@ export function ParametrosClient({ podeGerenciar }: { podeGerenciar: boolean }) 
   const botaoSalvar = (parametro: Parametro) =>
     podeGerenciar ? (
       <Button
-        variant="outline"
         size="sm"
-        className="h-8 text-[12px]"
         disabled={salvandoChave === parametro.chave}
         onClick={() => void salvar(parametro)}
       >
@@ -102,15 +102,8 @@ export function ParametrosClient({ podeGerenciar }: { podeGerenciar: boolean }) 
     ) : null;
 
   return (
-    <div className="flex h-full flex-col gap-5 overflow-y-auto">
-      {/* Cabeçalho — Parametros.tsx:151-155, literal */}
-      <div>
-        <p className="mb-0.5 text-[11px] font-medium text-text-muted">Administração / Parâmetros</p>
-        <h1 className="text-[20px] font-bold text-text-strong">Parâmetros do Sistema</h1>
-        <p className="mt-0.5 text-[12px] text-text-secondary">
-          Regras gerais de negócio, agrupadas por Comercial, Operação e Fiscal.
-        </p>
-      </div>
+    <div className="space-y-3">
+      <PageHeader title="Parâmetros do Sistema" subtitle="Regras gerais de negócio, agrupadas por Comercial, Operação e Fiscal." />
 
       {erro && (
         <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -123,66 +116,61 @@ export function ParametrosClient({ podeGerenciar }: { podeGerenciar: boolean }) 
         if (doGrupo.length === 0) return null;
 
         return (
-          <section key={grupo} className="flex flex-col gap-3">
+          <section key={grupo}>
             {/* Cabeçalho do grupo — Parametros.tsx:161-164 */}
-            <div className="flex items-center gap-2">
-              <Icone className="size-4 text-action-blue" />
-              <p className="text-[13px] font-bold tracking-wide text-text-strong uppercase">{grupo}</p>
-            </div>
+            <p className="mb-1.5 mt-4 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.05em] text-muted-foreground first:mt-0">
+              <Icone className="size-[13px]" />
+              {grupo}
+            </p>
 
-            {/* Cartões — Parametros.tsx:165, grid de 2 colunas */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Cartões — Parametros.tsx:165 */}
+            <div className="grid gap-2.5 sm:grid-cols-2">
               {doGrupo.map((parametro) => (
-                <div
-                  key={parametro.id}
-                  className="flex flex-col gap-2 rounded-xl border border-border bg-card p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-[13px] leading-tight font-bold text-text-strong">
-                      {parametro.valorJson.titulo}
-                    </p>
-                    {parametro.valorJson.provisorio &&
-                      parametro.valorJson.pendencia &&
-                      parametro.valorJson.pendencia in PENDENCIAS_ABERTAS && (
-                        <BadgeProvisorio pendencia={parametro.valorJson.pendencia as PendenciaAberta} />
-                      )}
-                  </div>
-                  <p className="text-[12px] leading-relaxed text-text-secondary">
-                    {parametro.valorJson.texto}
-                  </p>
+                <Card key={parametro.id}>
+                  <CardContent className="flex items-center gap-3 p-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-[13px] font-semibold leading-tight text-foreground">
+                          {parametro.valorJson.titulo}
+                        </p>
+                        {parametro.valorJson.provisorio &&
+                          parametro.valorJson.pendencia &&
+                          parametro.valorJson.pendencia in PENDENCIAS_ABERTAS && (
+                            <BadgeProvisorio pendencia={parametro.valorJson.pendencia as PendenciaAberta} />
+                          )}
+                      </div>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                        {parametro.valorJson.texto}
+                      </p>
+                    </div>
 
-                  {parametro.valorJson.tipo === 'toggle' && (
-                    <div className="mt-1 flex items-center justify-between gap-3 border-t border-muted pt-2">
-                      <span className="text-[12px] font-medium text-text-ink">
-                        {rascunho[parametro.chave] === true ? 'Ativado' : 'Desativado'}
-                      </span>
+                    {parametro.valorJson.tipo === 'toggle' && (
                       <div className="flex items-center gap-2">
                         {botaoSalvar(parametro)}
                         <Switch
-                          className="h-5 w-9"
                           aria-label={parametro.valorJson.titulo}
                           checked={rascunho[parametro.chave] === true}
                           disabled={!podeGerenciar}
                           onCheckedChange={(v) => setRascunho((r) => ({ ...r, [parametro.chave]: v }))}
                         />
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {parametro.valorJson.tipo === 'texto' && (
-                    <div className="mt-1 flex items-center gap-2 border-t border-muted pt-2">
-                      <Input
-                        aria-label={parametro.valorJson.titulo}
-                        className="h-8 flex-1 text-[13px]"
-                        placeholder="Observação / valor definido..."
-                        value={String(rascunho[parametro.chave] ?? '')}
-                        disabled={!podeGerenciar}
-                        onChange={(e) => setRascunho((r) => ({ ...r, [parametro.chave]: e.target.value }))}
-                      />
-                      {botaoSalvar(parametro)}
-                    </div>
-                  )}
-                </div>
+                    {parametro.valorJson.tipo === 'texto' && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          aria-label={parametro.valorJson.titulo}
+                          className="w-56"
+                          placeholder="Observação / valor definido..."
+                          value={String(rascunho[parametro.chave] ?? '')}
+                          disabled={!podeGerenciar}
+                          onChange={(e) => setRascunho((r) => ({ ...r, [parametro.chave]: e.target.value }))}
+                        />
+                        {botaoSalvar(parametro)}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               ))}
             </div>
           </section>

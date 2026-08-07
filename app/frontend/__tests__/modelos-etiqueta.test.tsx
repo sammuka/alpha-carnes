@@ -41,10 +41,10 @@ it('marcar campo atualiza o preview ao vivo', async () => {
   render(<ModelosEtiquetaClient podeGerenciar />);
   await screen.findByText('Modelo padrão');
   await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(12));
-  expect(screen.queryByText('Código', { selector: 'li' })).not.toBeInTheDocument();
+  expect(screen.queryByText('Código', { selector: 'pre span' })).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByLabelText('Código'));
-  expect(await screen.findByText('Código', { selector: 'li' })).toBeInTheDocument();
+  expect(await screen.findByText('Código', { selector: 'pre span' })).toBeInTheDocument();
 });
 
 it('badge P9 esta presente e sem gerenciar nao ha Salvar Modelo', async () => {

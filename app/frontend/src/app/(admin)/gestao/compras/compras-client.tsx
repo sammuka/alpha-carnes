@@ -1,19 +1,25 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Calendar, CheckCircle, Plus, Save, Trash2, Truck } from 'lucide-react';
+import { CheckCircle, Plus, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { ComboboxField } from '@/components/ui/combobox-field';
+import { DatePickerField } from '@/components/ui/date-picker-field';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
+import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Table,
+  TableBody,
+  TableCell,
+  TableCellNum,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import type {
   CompraProgramadaDetalhe,
@@ -276,27 +282,26 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Compra Programada (Pedido de Compra)</h1>
-          <p className="text-sm text-muted-foreground">Planejamento de compra e geração de disponibilidade virtual</p>
-        </div>
+    <div className="space-y-3">
+      <PageHeader
+        title="Compra Programada (Pedido de Compra)"
+        subtitle="Planejamento de compra e geração de disponibilidade virtual"
+      >
         {podeGerenciar && editavel && (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={salvar} disabled={salvando}>
-              <Save className="mr-2 h-4 w-4" />
+          <>
+            <Button variant="secondary" onClick={salvar} disabled={salvando}>
+              <Save />
               Salvar rascunho
             </Button>
             {compra && (
-              <Button onClick={confirmar} disabled={salvando} className="bg-green-600 hover:bg-green-700">
-                <CheckCircle className="mr-2 h-4 w-4" />
+              <Button onClick={confirmar} disabled={salvando}>
+                <CheckCircle />
                 Confirmar compra
               </Button>
             )}
-          </div>
+          </>
         )}
-      </div>
+      </PageHeader>
 
       {erro && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -304,189 +309,182 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
         </div>
       )}
 
-      <p className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+      <p className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-muted-foreground">
         Alterar uma compra confirmada recalcula imediatamente a disponibilidade virtual impactada.
       </p>
 
       {compra?.status === 'confirmada' && podeGerenciar && (
         <div className="flex justify-end">
-          <Button variant="outline" onClick={() => setModalEditar(true)}>Editar compra confirmada</Button>
+          <Button variant="secondary" onClick={() => setModalEditar(true)}>Editar compra confirmada</Button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="space-y-6 lg:col-span-8">
+      <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-12">
+        <div className="space-y-2.5 xl:col-span-8">
           <Card>
-            <CardContent className="grid gap-4 p-6 sm:grid-cols-3">
-              <div>
-                <Label htmlFor="data">Data operacional</Label>
-                <div className="relative mt-1">
-                  <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="data"
-                    type="date"
-                    className="pl-9"
-                    value={dataOperacao}
-                    onChange={(e) => setDataOperacao(e.target.value)}
-                    disabled={Boolean(compra)}
-                  />
-                </div>
-              </div>
-              <div className="sm:col-span-2">
-                <Label>Fornecedor</Label>
-                <Select value={fornecedorId} onValueChange={setFornecedorId} disabled={!editavel}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecione o fornecedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {fornecedores.map((f) => (
-                      <SelectItem key={f.id} value={f.id}>
-                        {f.razaoSocial ?? f.codigo ?? f.id.slice(0, 8)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="ref">Referência externa</Label>
-                <Input id="ref" className="mt-1" value={referenciaExterna} onChange={(e) => setReferenciaExterna(e.target.value)} disabled={!editavel} />
-              </div>
-              <div>
-                <Label>Status</Label>
-                <div className="mt-2">
+            <CardContent className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2 xl:grid-cols-4">
+              <FormField label="Data operacional" required htmlFor="data">
+                <DatePickerField
+                  id="data"
+                  value={dataOperacao}
+                  onChange={setDataOperacao}
+                  disabled={Boolean(compra)}
+                />
+              </FormField>
+              <FormField label="Fornecedor" required className="sm:col-span-2" htmlFor="fornecedor">
+                <ComboboxField
+                  id="fornecedor"
+                  items={fornecedores.map((f) => ({ id: f.id, label: f.razaoSocial ?? f.codigo ?? f.id.slice(0, 8), sublabel: f.codigo }))}
+                  value={fornecedorId}
+                  onChange={setFornecedorId}
+                  placeholder="Selecione o fornecedor"
+                  searchPlaceholder="Buscar fornecedor…"
+                  emptyText="Nenhum fornecedor encontrado."
+                  disabled={!editavel}
+                />
+              </FormField>
+              <FormField label="Referência externa" htmlFor="ref">
+                <Input
+                  id="ref"
+                  value={referenciaExterna}
+                  onChange={(e) => setReferenciaExterna(e.target.value)}
+                  disabled={!editavel}
+                />
+              </FormField>
+              <FormField label="Status">
+                <div className="flex h-8 items-center">
                   <StatusPill
                     variant={statusCompraVariant(compra?.status ?? 'rascunho')}
                     label={ROTULO_COMPRA[compra?.status ?? 'rascunho'] ?? compra?.status ?? 'Rascunho'}
                   />
                 </div>
-              </div>
-              <div className="sm:col-span-3">
-                <Label htmlFor="obs">Observações</Label>
-                <Textarea id="obs" className="mt-1" value={observacoes} onChange={(e) => setObservacoes(e.target.value)} disabled={!editavel} />
-              </div>
+              </FormField>
+              <FormField label="Observações" className="sm:col-span-2 xl:col-span-4" htmlFor="obs">
+                <Textarea id="obs" value={observacoes} onChange={(e) => setObservacoes(e.target.value)} disabled={!editavel} />
+              </FormField>
             </CardContent>
           </Card>
 
           <Card>
-            <div className="flex items-center justify-between border-b p-4">
-              <h2 className="font-semibold">Itens da compra</h2>
-              {editavel && podeGerenciar && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setLinhas((p) => [...p, { itemCompraId: '', quantidadeComprada: '', observacoes: '' }])}
-                >
-                  <Plus className="mr-1 h-4 w-4" />
-                  Adicionar item
-                </Button>
-              )}
-            </div>
-            <div className="overflow-x-auto p-4">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 font-medium">Item de compra</th>
-                    <th className="pb-2 font-medium">Quantidade</th>
-                    <th className="pb-2 font-medium">Observações</th>
-                    <th className="pb-2 font-medium">Regra de Desdobramento</th>
-                    <th className="pb-2 text-right font-medium">Previsão (kg)</th>
-                    {editavel && <th className="pb-2 w-10" />}
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
+            <CardHeader>
+              <CardTitle>Itens da compra</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Item de compra</TableHead>
+                    <TableHead className="text-right">Quantidade</TableHead>
+                    <TableHead>Observações</TableHead>
+                    <TableHead>Regra de Desdobramento</TableHead>
+                    <TableHead className="text-right">Previsão (kg)</TableHead>
+                    {editavel && <TableHead />}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {linhas.map((linha, idx) => {
                     const simulacao = simulacoes.get(linha.itemCompraId);
                     const regraDesdobramento = simulacao
                       ? simulacao.itens.map((i) => `${i.fator}× ${i.descricao}`).join(' + ')
                       : '—';
                     return (
-                    <tr key={idx}>
-                      <td className="py-3 pr-2">
-                        <Select
-                          value={linha.itemCompraId}
-                          onValueChange={(v) =>
-                            setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, itemCompraId: v } : l)))
-                          }
-                          disabled={!editavel}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Item" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {itensCompra.map((it) => (
-                              <SelectItem key={it.id} value={it.id}>
-                                {it.nome ?? it.codigo ?? it.id.slice(0, 8)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-3 pr-2">
-                        <Input
-                          type="number"
-                          step="0.001"
-                          value={linha.quantidadeComprada}
-                          onChange={(e) =>
-                            setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, quantidadeComprada: e.target.value } : l)))
-                          }
-                          disabled={!editavel}
-                        />
-                      </td>
-                      <td className="py-3 pr-2">
-                        <Input
-                          value={linha.observacoes}
-                          onChange={(e) =>
-                            setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, observacoes: e.target.value } : l)))
-                          }
-                          disabled={!editavel}
-                        />
-                      </td>
-                      <td className="py-3 pr-2 text-xs">{regraDesdobramento}</td>
-                      <td
-                        className="py-3 text-right text-xs text-muted-foreground"
-                        title="Previsão de peso depende de cadastro de peso médio por item — pendente"
-                      >
-                        —
-                      </td>
-                      {editavel && (
-                        <td className="py-3">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setLinhas((p) => p.filter((_, i) => i !== idx))}
-                            disabled={linhas.length <= 1}
+                      <TableRow key={idx} className="group">
+                        <TableCell>
+                          <SelectNative
+                            selectSize="sm"
+                            value={linha.itemCompraId}
+                            onChange={(e) =>
+                              setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, itemCompraId: e.target.value } : l)))
+                            }
+                            disabled={!editavel}
                           >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </td>
-                      )}
-                    </tr>
+                            <option value="">Item</option>
+                            {itensCompra.map((it) => (
+                              <option key={it.id} value={it.id}>
+                                {it.nome ?? it.codigo ?? it.id.slice(0, 8)}
+                              </option>
+                            ))}
+                          </SelectNative>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            step="0.001"
+                            value={linha.quantidadeComprada}
+                            onChange={(e) =>
+                              setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, quantidadeComprada: e.target.value } : l)))
+                            }
+                            disabled={!editavel}
+                            className="h-7 w-24 text-right font-data"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={linha.observacoes}
+                            onChange={(e) =>
+                              setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, observacoes: e.target.value } : l)))
+                            }
+                            disabled={!editavel}
+                            className="h-7"
+                          />
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{regraDesdobramento}</TableCell>
+                        <TableCellNum
+                          className="text-muted-foreground"
+                          title="Previsão de peso depende de cadastro de peso médio por item — pendente"
+                        >
+                          —
+                        </TableCellNum>
+                        {editavel && (
+                          <TableCell>
+                            <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
+                              <Button
+                                variant="ghost"
+                                size="iconSm"
+                                onClick={() => setLinhas((p) => p.filter((_, i) => i !== idx))}
+                                disabled={linhas.length <= 1}
+                              >
+                                <Trash2 className="text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        )}
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </CardContent>
+            {editavel && podeGerenciar && (
+              <CardFooter>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setLinhas((p) => [...p, { itemCompraId: '', quantidadeComprada: '', observacoes: '' }])}
+                >
+                  <Plus />
+                  Adicionar item
+                </Button>
+              </CardFooter>
+            )}
           </Card>
         </div>
 
-        <div className="lg:col-span-4">
-          <Card className="border-t-4 border-t-primary">
-            <CardContent className="space-y-4 p-6">
-              <div className="flex items-center gap-2">
-                <Truck className="h-5 w-5 text-primary" />
-                <h2 className="font-semibold">Disponibilidade gerada</h2>
-              </div>
+        <div className="xl:col-span-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Disponibilidade gerada</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
               {podeSimular ? (
                 simulacoes.size === 0 ? (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     A disponibilidade estimada aparecerá conforme itens e quantidades forem informados.
                   </p>
                 ) : (
                   (() => {
                     const agregado = new Map<string, { descricao: string; total: number }>();
-                    let totalEstimado = 0;
                     for (const sim of simulacoes.values()) {
-                      totalEstimado += sim.totalPartes;
                       for (const item of sim.itens) {
                         const atual = agregado.get(item.itemComercialId);
                         agregado.set(item.itemComercialId, {
@@ -498,25 +496,18 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                     const linhasAgregadas = [...agregado.values()];
                     return (
                       <>
-                        <p className="-mt-2 text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           A confirmação deste pedido irá gerar saldo para vendas nas seguintes proporções estimadas:
                         </p>
-                        <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-4">
-                          {linhasAgregadas.map((l, i) => (
-                            <div key={l.descricao}>
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="font-medium">{l.descricao}</span>
-                                <span className="font-bold text-primary">{l.total.toLocaleString('pt-BR')} peças</span>
-                              </div>
-                              {i < linhasAgregadas.length - 1 && <div className="mt-3 h-px w-full bg-border" />}
+                        <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
+                          {linhasAgregadas.map((l) => (
+                            <div key={l.descricao} className="flex justify-between text-xs">
+                              <span className="font-medium">{l.descricao}</span>
+                              <span className="font-data font-bold text-primary">{l.total.toLocaleString('pt-BR')} peças</span>
                             </div>
                           ))}
                         </div>
-                        <div className="flex items-center justify-between pt-2">
-                          <span className="text-sm text-muted-foreground">Total Estimado</span>
-                          <span className="text-2xl font-bold">{totalEstimado.toLocaleString('pt-BR')} partes</span>
-                        </div>
-                        <div className="mt-2 flex items-start gap-2 rounded-md bg-primary/10 p-3 text-xs text-primary">
+                        <div className="flex items-start gap-2 rounded-md bg-primary-soft p-3 text-xs text-primary-fg">
                           <span>Os itens comerciais ficarão disponíveis para a equipe de vendas imediatamente após a confirmação da compra.</span>
                         </div>
                       </>
@@ -524,20 +515,28 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                   })()
                 )
               ) : disponibilidade.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   A disponibilidade aparecerá após confirmar a compra programada.
                 </p>
               ) : (
-                <ul className="space-y-2 rounded-md border bg-muted/30 p-3 text-sm">
+                <ul className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
                   {disponibilidade.map((d) => (
-                    <li key={d.id} className="flex justify-between">
-                      <span className="font-mono text-xs">{d.itemComercialId.slice(0, 8)}…</span>
-                      <span className="font-semibold text-primary">{d.quantidadeDisponivel} disp.</span>
+                    <li key={d.id} className="flex justify-between text-xs">
+                      <span className="font-data text-[11px]">{d.itemComercialId.slice(0, 8)}…</span>
+                      <span className="font-data font-semibold text-primary">{d.quantidadeDisponivel} disp.</span>
                     </li>
                   ))}
                 </ul>
               )}
             </CardContent>
+            {podeSimular && simulacoes.size > 0 && (
+              <CardFooter className="justify-between">
+                <span className="text-xs text-muted-foreground">Total Estimado</span>
+                <span className="font-data text-sm font-bold">
+                  {[...simulacoes.values()].reduce((acc, s) => acc + s.totalPartes, 0).toLocaleString('pt-BR')} partes
+                </span>
+              </CardFooter>
+            )}
           </Card>
         </div>
       </div>

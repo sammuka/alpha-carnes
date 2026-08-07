@@ -2,8 +2,28 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ClipboardList, Info, Search, ShieldAlert, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
+import { FormField } from '@/components/ui/form-field';
+import { Input } from '@/components/ui/input';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
+import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableCellCode,
+  TableCellNum,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/cn';
 import {
   aprovarAjuste,
   consultarEstoque,
@@ -22,20 +42,11 @@ const MOTIVOS: Array<{ value: AjusteEstoque['motivo']; label: string }> = [
   { value: 'outro', label: 'Outro' },
 ];
 
-const STATUS_STYLE: Record<AjusteEstoque['status'], { bg: string; text: string; label: string }> = {
-  aplicado: { bg: 'bg-success-surface', text: 'text-success-strong', label: 'Aplicado' },
-  aguardando_aprovacao: { bg: 'bg-warning-surface', text: 'text-warning-ink', label: 'Aguardando aprovação' },
-  rejeitado: { bg: 'bg-danger-surface', text: 'text-danger-rose', label: 'Rejeitado' },
+const STATUS_MAP: Record<AjusteEstoque['status'], { variant: StatusPillVariant; label: string }> = {
+  aplicado: { variant: 'expedido', label: 'Aplicado' },
+  aguardando_aprovacao: { variant: 'divergencia', label: 'Aguardando aprovação' },
+  rejeitado: { variant: 'bloqueado', label: 'Rejeitado' },
 };
-
-function StatusBadge({ status }: { status: AjusteEstoque['status'] }) {
-  const s = STATUS_STYLE[status];
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${s.bg} ${s.text}`}>
-      {s.label}
-    </span>
-  );
-}
 
 // ── Modal: Aprovar/Rejeitar ────────────────────────────────────────────────────
 
@@ -66,59 +77,61 @@ function ModalDecisao({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-md gap-0 bg-card p-0">
-        <DialogHeader className="border-b border-border px-5 py-4">
-          <DialogTitle className="text-[15px] font-bold">
-            {aprovar ? 'Aprovar ajuste de estoque' : 'Rejeitar ajuste de estoque'}
-          </DialogTitle>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{aprovar ? 'Aprovar ajuste de estoque' : 'Rejeitar ajuste de estoque'}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4 p-5">
-          <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-muted/40 p-3 text-[12px]">
-            <div><span className="text-muted-foreground">Código: </span><span className="font-bold">{ajuste.itemCodigo}</span></div>
-            <div><span className="text-muted-foreground">Ajuste: </span><span className={`font-semibold ${ajuste.quantidadeDelta >= 0 ? 'text-success-strong' : 'text-destructive'}`}>{ajuste.quantidadeDelta >= 0 ? '+' : ''}{ajuste.quantidadeDelta}</span></div>
-            <div><span className="text-muted-foreground">Motivo: </span><span className="font-semibold">{MOTIVOS.find((m) => m.value === ajuste.motivo)?.label ?? ajuste.motivo}</span></div>
-            <div><span className="text-muted-foreground">Responsável: </span><span className="font-semibold">{ajuste.responsavelNome ?? '—'}</span></div>
+
+        <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-surface-2 p-3 text-[12px]">
+          <div><span className="text-muted-foreground">Código: </span><span className="font-data font-bold">{ajuste.itemCodigo}</span></div>
+          <div>
+            <span className="text-muted-foreground">Ajuste: </span>
+            <span className={cn('font-semibold', ajuste.quantidadeDelta >= 0 ? 'text-success-fg' : 'text-destructive')}>
+              {ajuste.quantidadeDelta >= 0 ? '+' : ''}{ajuste.quantidadeDelta}
+            </span>
           </div>
-
-          {!aprovar && (
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-semibold">Motivo da rejeição (mín. 5 caracteres) <span className="text-destructive">*</span></label>
-              <Textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} />
-            </div>
-          )}
-
-          <div className={`flex items-start gap-2 rounded-lg p-3 ${aprovar ? 'border border-success-strong/30 bg-success-surface' : 'border border-danger-border bg-danger-surface'}`}>
-            {aprovar ? (
-              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-success-strong" />
-            ) : (
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-destructive" />
-            )}
-            <p className={`text-[12px] leading-snug ${aprovar ? 'text-success-strong' : 'text-danger-rose'}`}>
-              {aprovar
-                ? 'Ao aprovar, o ajuste será aplicado ao saldo físico do item.'
-                : 'Ao rejeitar, o ajuste não será aplicado e o saldo físico permanece inalterado.'}
-            </p>
-          </div>
-
-          {erro && <p className="text-[12px] text-destructive">{erro}</p>}
+          <div><span className="text-muted-foreground">Motivo: </span><span className="font-semibold">{MOTIVOS.find((m) => m.value === ajuste.motivo)?.label ?? ajuste.motivo}</span></div>
+          <div><span className="text-muted-foreground">Responsável: </span><span className="font-semibold">{ajuste.responsavelNome ?? '—'}</span></div>
         </div>
-        <div className="flex gap-2 px-5 pb-5">
-          <button type="button" onClick={onClose} className="h-8 flex-1 rounded-md border border-border text-[13px] font-medium text-muted-foreground hover:bg-muted/40">
+
+        {!aprovar && (
+          <FormField label="Motivo da rejeição" required help="Mín. 5 caracteres" htmlFor="motivo-rejeicao">
+            <Textarea id="motivo-rejeicao" value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={3} />
+          </FormField>
+        )}
+
+        <div
+          className={cn(
+            'flex items-start gap-2 rounded-md border p-3 text-[12px]',
+            aprovar ? 'border-success-soft-border bg-success-soft text-success-fg' : 'border-danger-soft-border bg-danger-soft text-danger-fg',
+          )}
+        >
+          {aprovar ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" /> : <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />}
+          <p className="leading-snug">
+            {aprovar
+              ? 'Ao aprovar, o ajuste será aplicado ao saldo físico do item.'
+              : 'Ao rejeitar, o ajuste não será aplicado e o saldo físico permanece inalterado.'}
+          </p>
+        </div>
+
+        {erro && <p className="text-[12px] text-destructive">{erro}</p>}
+
+        <div className="flex gap-2 pt-1">
+          <Button type="button" variant="ghost" className="flex-1" onClick={onClose}>
             Voltar
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant={aprovar ? 'default' : 'destructive'}
+            className="flex-1"
             disabled={!podeConfirmar}
             onClick={() => {
               setErro(null);
               onConfirm(motivo.trim());
             }}
-            className={`h-8 flex-1 rounded-md text-[13px] font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-              aprovar ? 'bg-success-strong hover:bg-success-strong/90' : 'bg-destructive hover:bg-destructive/90'
-            }`}
           >
             {aprovar ? 'Confirmar aprovação' : 'Confirmar rejeição'}
-          </button>
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -234,40 +247,35 @@ export function AjustesEstoqueClient({
   };
 
   return (
-    <div className="flex h-full max-w-[1664px] flex-col gap-5">
-      <div>
-        <p className="mb-0.5 text-[11px] font-medium text-muted-foreground">Estoque / Ajustes</p>
-        <h2 className="text-2xl font-bold leading-tight text-brand-navy-deep">Ajustes de Estoque</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Ajuste controlado de saldo físico, com aprovação quando necessário</p>
-      </div>
+    <div className="space-y-3">
+      <PageHeader title="Ajustes de Estoque" subtitle="Ajuste controlado de saldo físico, com aprovação quando necessário" />
 
       {feedback && (
-        <div className="flex items-center gap-2 rounded-lg border border-success-strong/30 bg-success-surface px-4 py-2.5">
-          <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-success-strong" />
-          <p className="text-[13px] text-success-strong">Ajuste registrado com sucesso.</p>
+        <div className="flex items-center gap-2 rounded-md border border-success-soft-border bg-success-soft px-3 py-2 text-xs text-success-fg">
+          <CheckCircle2 className="size-3.5 shrink-0" aria-hidden="true" />
+          Ajuste registrado com sucesso.
         </div>
       )}
       {erro && <p className="text-sm text-destructive">{erro}</p>}
 
-      <div className="grid min-h-0 flex-1 grid-cols-12 gap-5">
+      <div className="grid gap-2.5 lg:grid-cols-[420px_1fr]">
         {podeAjustar && (
-          <div className="col-span-5 flex h-fit flex-col gap-4 rounded-xl border border-border bg-card p-5">
-            <h3 className="text-[14px] font-bold">Novo ajuste</h3>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-semibold">Produto/item <span className="text-destructive">*</span></label>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  type="text"
+          <Card>
+            <CardHeader>
+              <CardTitle>Novo ajuste</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-x-3.5 gap-y-2.5">
+              <FormField label="Produto/item" required htmlFor="busca-item-ajuste">
+                <Input
+                  id="busca-item-ajuste"
+                  adornLeft={<Search />}
                   value={buscaItem}
                   onChange={(e) => { setBuscaItem(e.target.value); setItemSelecionado(null); }}
                   placeholder="Buscar por código ou produto"
-                  className="h-9 w-full rounded-md border border-border bg-card pl-8 pr-3 text-[13px] placeholder:text-placeholder focus:border-primary focus:outline-none"
                 />
-              </div>
+              </FormField>
               {buscaItem !== '' && !itemSelecionado && (
-                <div className="mt-1 flex max-h-[160px] flex-col gap-1 overflow-y-auto rounded-lg border border-border bg-muted/40 p-1.5">
+                <div className="max-h-[160px] overflow-y-auto overflow-x-hidden rounded-md border border-border">
                   {itensFiltrados.length === 0 ? (
                     <p className="py-2 text-center text-[12px] text-muted-foreground">Nenhum item encontrado.</p>
                   ) : (
@@ -276,181 +284,181 @@ export function AjustesEstoqueClient({
                         key={`${i.tipo}-${i.id}`}
                         type="button"
                         onClick={() => { setItemSelecionado(i); setBuscaItem(`${i.codigo} — ${i.produto.nome}`); }}
-                        className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-card"
+                        className="block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 last:border-b-0 hover:bg-surface-2"
                       >
-                        <span className="text-[12px] font-semibold">{i.codigo} — {i.produto.nome}</span>
-                        <span className="text-[11px] text-muted-foreground">{i.quantidade} {i.unidade}</span>
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="truncate text-[13px] font-semibold">{i.codigo} — {i.produto.nome}</span>
+                          <span className="shrink-0 font-data text-[11px] text-muted-foreground">{i.quantidade} {i.unidade}</span>
+                        </span>
                       </button>
                     ))
                   )}
                 </div>
               )}
-            </div>
 
-            {itemSelecionado && (
-              <div className="flex items-center justify-between rounded-lg border border-action-blue-border bg-action-blue-bg px-3 py-2 text-[12px] font-medium text-action-blue-text">
-                <span>{itemSelecionado.codigo} — {itemSelecionado.produto.nome}{itemSelecionado.local.valor ? ` • ${itemSelecionado.local.valor}` : ''}</span>
-                <button type="button" onClick={() => { setItemSelecionado(null); setBuscaItem(''); }} className="hover:opacity-70">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
+              {itemSelecionado && (
+                <div className="flex items-center justify-between rounded-md border border-primary-soft-border bg-primary-soft px-2.5 py-1.5 text-[12px] font-medium text-primary-fg">
+                  <span>{itemSelecionado.codigo} — {itemSelecionado.produto.nome}{itemSelecionado.local.valor ? ` • ${itemSelecionado.local.valor}` : ''}</span>
+                  <button type="button" onClick={() => { setItemSelecionado(null); setBuscaItem(''); }} className="hover:opacity-70">
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              )}
 
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-semibold">Quantidade/peso atual</label>
-              <input
-                readOnly
-                value={itemSelecionado ? `${itemSelecionado.quantidade} ${itemSelecionado.unidade}` : '—'}
-                className="h-9 w-full rounded-md border border-border bg-muted/40 px-2.5 text-[13px] text-muted-foreground"
-              />
-            </div>
+              <FormField label="Quantidade/peso atual" htmlFor="qtd-atual-ajuste">
+                <Input
+                  id="qtd-atual-ajuste"
+                  readOnly
+                  value={itemSelecionado ? `${itemSelecionado.quantidade} ${itemSelecionado.unidade}` : '—'}
+                />
+              </FormField>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-semibold">Ajuste (+/-) <span className="text-destructive">*</span></label>
-              <input
-                type="number"
-                value={ajusteValor}
-                onChange={(e) => setAjusteValor(e.target.value)}
-                placeholder="Ex.: -2 ou +3"
-                className="h-9 w-full rounded-md border border-border px-2.5 text-[13px] placeholder:text-placeholder focus:border-primary focus:outline-none"
-              />
-            </div>
+              <FormField label="Ajuste (+/-)" required htmlFor="valor-ajuste">
+                <Input
+                  id="valor-ajuste"
+                  type="number"
+                  inputMode="numeric"
+                  value={ajusteValor}
+                  onChange={(e) => setAjusteValor(e.target.value)}
+                  placeholder="Ex.: -2 ou +3"
+                  className="text-right font-data"
+                />
+              </FormField>
 
-            {itemSelecionado && ajusteValido && (
-              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2 text-[12px]">
-                <span className="text-muted-foreground">Quantidade ajustada:</span>
-                <span className={`font-bold ${(qtdAjustada ?? 0) < 0 ? 'text-destructive' : ''}`}>
-                  {qtdAjustada} {itemSelecionado.unidade}
+              {itemSelecionado && ajusteValido && (
+                <div className="flex items-center justify-between rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-[12px]">
+                  <span className="text-muted-foreground">Quantidade ajustada:</span>
+                  <span className={cn('font-data font-bold', (qtdAjustada ?? 0) < 0 && 'text-destructive')}>
+                    {qtdAjustada} {itemSelecionado.unidade}
+                  </span>
+                </div>
+              )}
+
+              <FormField label="Motivo" required htmlFor="motivo-ajuste">
+                <SelectNative
+                  id="motivo-ajuste"
+                  value={motivo}
+                  onChange={(e) => setMotivo(e.target.value as AjusteEstoque['motivo'])}
+                >
+                  <option value="">Selecionar...</option>
+                  {MOTIVOS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </SelectNative>
+              </FormField>
+
+              <FormField label="Descrição" htmlFor="descricao-ajuste">
+                <Textarea
+                  id="descricao-ajuste"
+                  value={descricao}
+                  onChange={(e) => setDescricao(e.target.value)}
+                  rows={2}
+                  placeholder="Detalhe o motivo do ajuste"
+                />
+              </FormField>
+
+              <FormField label="Responsável" htmlFor="responsavel-ajuste">
+                <Input id="responsavel-ajuste" readOnly value={nomeUsuario} />
+              </FormField>
+
+              <label
+                className={cn(
+                  'flex items-center gap-2 rounded-md border px-2.5 py-2 transition-colors duration-100',
+                  requerAprovacao ? 'border-provisorio-border bg-warning-soft' : 'border-border bg-surface-2',
+                )}
+              >
+                <input type="checkbox" checked={requerAprovacao} readOnly className="size-3.5 accent-warning-ink" />
+                <span className="flex items-center gap-1.5 text-[12px] font-medium">
+                  <ShieldAlert className="size-3.5 text-warning-ink" />
+                  Requer aprovação da gestão
                 </span>
+              </label>
+              {requerAprovacao && (
+                <div className="flex items-start gap-2 rounded-md border border-warning-soft-border bg-warning-soft p-3 text-xs text-warning-fg">
+                  <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                  <p>
+                    Ajustes acima de {limiar} unidades exigem aprovação da gestão antes de serem aplicados (parâmetro estoque.limiar_aprovacao_ajuste).
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-1 flex gap-2">
+                <Button type="button" variant="ghost" className="flex-1" onClick={limparForm}>
+                  Limpar
+                </Button>
+                <Button
+                  type="button"
+                  className="flex-[2]"
+                  disabled={!podeConfirmar || enviando}
+                  onClick={() => void handleConfirmar()}
+                >
+                  <ClipboardList /> Criar ajuste
+                </Button>
               </div>
-            )}
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-semibold">Motivo <span className="text-destructive">*</span></label>
-              <select
-                value={motivo}
-                onChange={(e) => setMotivo(e.target.value as AjusteEstoque['motivo'])}
-                className="h-9 w-full rounded-md border border-border px-2.5 text-[13px] focus:border-primary focus:outline-none"
-              >
-                <option value="">Selecionar...</option>
-                {MOTIVOS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-semibold">Descrição</label>
-              <textarea
-                value={descricao}
-                onChange={(e) => setDescricao(e.target.value)}
-                rows={2}
-                placeholder="Detalhe o motivo do ajuste"
-                className="w-full resize-none rounded-md border border-border px-2.5 py-2 text-[13px] placeholder:text-placeholder focus:border-primary focus:outline-none"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-semibold">Responsável</label>
-              <input readOnly value={nomeUsuario} className="h-9 w-full rounded-md border border-border bg-muted/40 px-2.5 text-[13px] text-muted-foreground" />
-            </div>
-
-            <label className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 transition-colors ${requerAprovacao ? 'border-provisorio-border bg-warning-surface' : 'border-border bg-muted/40'}`}>
-              <input type="checkbox" checked={requerAprovacao} readOnly className="h-3.5 w-3.5 accent-warning-ink" />
-              <span className="flex items-center gap-1.5 text-[12px] font-medium">
-                <ShieldAlert className="h-3.5 w-3.5 text-warning-ink" />
-                Requer aprovação da gestão
-              </span>
-            </label>
-            {requerAprovacao && (
-              <div className="flex items-start gap-2 rounded-lg border border-provisorio-border bg-warning-surface px-3 py-2">
-                <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-warning-ink" />
-                <p className="text-[11px] leading-snug text-warning-ink">
-                  Ajustes acima de {limiar} unidades exigem aprovação da gestão antes de serem aplicados (parâmetro estoque.limiar_aprovacao_ajuste).
-                </p>
-              </div>
-            )}
-
-            <div className="mt-2 flex gap-2">
-              <button type="button" onClick={limparForm} className="h-9 flex-1 rounded-md border border-border text-[13px] font-medium text-muted-foreground hover:bg-muted/40">
-                Limpar
-              </button>
-              <button
-                type="button"
-                disabled={!podeConfirmar || enviando}
-                onClick={() => void handleConfirmar()}
-                className="flex h-9 flex-[2] items-center justify-center gap-1.5 rounded-md bg-action-blue text-[13px] font-semibold text-white transition-colors hover:bg-action-blue-hover disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ClipboardList className="h-4 w-4" /> Criar ajuste
-              </button>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         )}
 
-        <div className={`${podeAjustar ? 'col-span-7' : 'col-span-12'} flex flex-col overflow-hidden rounded-xl border border-border bg-card`}>
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <p className="text-[13px] font-bold">Ajustes recentes</p>
-            <span className="text-[12px] text-muted-foreground">{ajustes.length} registro{ajustes.length !== 1 ? 's' : ''}</span>
-          </div>
-          <div className="flex-1 overflow-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>Ajustes recentes</CardTitle>
+            <BadgeCount>{ajustes.length}</BadgeCount>
+          </CardHeader>
+          <CardContent className="p-0">
             {ajustes.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-3 py-16">
-                <ClipboardList className="h-8 w-8 text-placeholder" />
-                <p className="text-[13px] text-muted-foreground">Nenhum ajuste registrado.</p>
-              </div>
+              <EmptyState icon={<ClipboardList />} title="Nenhum ajuste registrado." className="py-12" />
             ) : (
-              <table className="w-full text-[12px]">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    {['Código', 'Produto', 'Ajuste', 'Qtd ajustada', 'Motivo', 'Responsável', 'Data/hora', 'Status', ''].map((h) => (
-                      <th key={h || 'acoes'} className="whitespace-nowrap px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {ajustes.map((a, i) => {
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>Código</TableHead>
+                    <TableHead>Produto</TableHead>
+                    <TableHead className="text-right">Ajuste</TableHead>
+                    <TableHead className="text-right">Qtd ajustada</TableHead>
+                    <TableHead>Motivo</TableHead>
+                    <TableHead>Responsável</TableHead>
+                    <TableHead>Data/hora</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ajustes.map((a) => {
                     const pendente = a.status === 'aguardando_aprovacao';
                     const qtdAjustadaLinha = a.quantidadeAnterior + a.quantidadeDelta;
+                    const status = STATUS_MAP[a.status];
                     return (
-                      <tr key={a.id} className={`border-b border-border/60 hover:bg-table-row-hover ${i % 2 !== 0 ? 'bg-table-zebra' : ''}`}>
-                        <td className="whitespace-nowrap px-4 py-2.5 font-mono text-[11px] font-bold text-brand-navy-deep">{a.itemCodigo}</td>
-                        <td className="whitespace-nowrap px-4 py-2.5 font-semibold">{a.produtoCodigo}</td>
-                        <td className={`whitespace-nowrap px-4 py-2.5 font-bold ${a.quantidadeDelta >= 0 ? 'text-success-strong' : 'text-destructive'}`}>
+                      <TableRow key={a.id}>
+                        <TableCellCode>{a.itemCodigo}</TableCellCode>
+                        <TableCell className="text-[13px] font-semibold text-foreground">{a.produtoCodigo}</TableCell>
+                        <TableCellNum className={cn('font-bold', a.quantidadeDelta >= 0 ? 'text-success-fg' : 'text-destructive')}>
                           {a.quantidadeDelta >= 0 ? '+' : ''}{a.quantidadeDelta}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{qtdAjustadaLinha}</td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{MOTIVOS.find((m) => m.value === a.motivo)?.label ?? a.motivo}</td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{a.responsavelNome ?? '—'}</td>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">{new Date(a.createdAt).toLocaleString('pt-BR')}</td>
-                        <td className="px-4 py-2.5"><StatusBadge status={a.status} /></td>
-                        <td className="px-4 py-2.5">
+                        </TableCellNum>
+                        <TableCellNum>{qtdAjustadaLinha}</TableCellNum>
+                        <TableCell className="text-muted-foreground">{MOTIVOS.find((m) => m.value === a.motivo)?.label ?? a.motivo}</TableCell>
+                        <TableCell className="text-muted-foreground">{a.responsavelNome ?? '—'}</TableCell>
+                        <TableCellNum>{new Date(a.createdAt).toLocaleString('pt-BR')}</TableCellNum>
+                        <TableCell><StatusPill variant={status.variant} label={status.label} /></TableCell>
+                        <TableCell>
                           {pendente && podeAprovar ? (
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => setModalDecisao({ ajuste: a, decisao: 'aprovar' })}
-                                className="h-6 rounded border border-success-strong/30 px-2 text-[11px] font-medium text-success-strong hover:bg-success-surface"
-                              >
+                            <div className="flex justify-end gap-1">
+                              <Button variant="secondary" size="sm" onClick={() => setModalDecisao({ ajuste: a, decisao: 'aprovar' })}>
                                 Aprovar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setModalDecisao({ ajuste: a, decisao: 'rejeitar' })}
-                                className="h-6 rounded border border-danger-border px-2 text-[11px] font-medium text-destructive hover:bg-danger-surface"
-                              >
+                              </Button>
+                              <Button variant="destructiveOutline" size="sm" onClick={() => setModalDecisao({ ajuste: a, decisao: 'rejeitar' })}>
                                 Rejeitar
-                              </button>
+                              </Button>
                             </div>
                           ) : (
-                            <span className="text-[11px] text-placeholder">—</span>
+                            <span className="block text-right text-[11px] text-fg-faint">—</span>
                           )}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       <ModalDecisao

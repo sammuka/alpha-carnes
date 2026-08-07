@@ -2,14 +2,28 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, RefreshCw, Download, Eye, X,
+  AlertTriangle, RefreshCw, Download, Eye,
   Search, FileText, Ban, Info, XCircle,
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { StatusPill } from '@/components/ui/status-pill';
 import { statusNfseVariant } from '@/lib/status-ui';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
+import { cn } from '@/lib/cn';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { SelectNative } from '@/components/ui/select-native';
+import { FormField } from '@/components/ui/form-field';
+import { Textarea } from '@/components/ui/textarea';
+import { PageHeader } from '@/components/ui/page-header';
+import { BadgeCount } from '@/components/ui/badge-count';
+import { KpiStrip, Kpi } from '@/components/ui/kpi-strip';
+import { Card, CardContent, CardHeader, CardTitle, CardAction } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import {
+  Table, TableBody, TableCell, TableCellCode, TableCellNum, TableFooter, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
 import type {
   AmbienteFiscal, NotaFiscalListagem, Paginado, RastreabilidadeNota, StatusNfse,
 } from '@/lib/faturamento';
@@ -18,16 +32,15 @@ import type {
 
 function BadgeAmbiente({ homologacao }: { homologacao: boolean }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border ${
-        homologacao
-          ? 'bg-[var(--color-warning-surface)] text-[var(--color-warning-ink)] border-[var(--color-provisorio-border)]'
-          : 'bg-[var(--color-success-surface)] text-[var(--color-success-strong)] border-[var(--color-success-strong-border)]'
-      }`}
+    <BadgeCount
+      className={cn(
+        'h-[22px] gap-1.5 px-2.5 text-[11px]',
+        homologacao ? 'bg-warning-soft text-warning-fg' : 'bg-success-soft text-success-fg',
+      )}
     >
-      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+      <AlertTriangle className="size-3.5 shrink-0" />
       {homologacao ? 'Homologação EISS' : 'Produção EISS'}
-    </span>
+    </BadgeCount>
   );
 }
 
@@ -53,6 +66,23 @@ function rotuloStatus(status: StatusNfse): string {
     erro_cancelamento: 'Erro no cancelamento',
   };
   return rotulos[status];
+}
+
+/** Mapeamento StatusPill exigido pela Tarefa 28 — autorizada→expedido, erro→bloqueado, processando→recebido, cancelada→pendente ("Cancelada"). */
+function statusPillNota(status: StatusNfse): { variant: ReturnType<typeof statusNfseVariant>; label: string } {
+  switch (status) {
+    case 'emitida':
+      return { variant: 'expedido', label: 'Autorizada' };
+    case 'erro_emissao':
+    case 'erro_cancelamento':
+      return { variant: 'bloqueado', label: 'Erro' };
+    case 'pendente':
+      return { variant: 'recebido', label: 'Processando' };
+    case 'cancelada':
+      return { variant: 'pendente', label: 'Cancelada' };
+    default:
+      return { variant: statusNfseVariant(status), label: rotuloStatus(status) };
+  }
 }
 
 const MOTIVOS_CANCELAMENTO = [
@@ -84,23 +114,19 @@ function ModalCancelar({ nota, onClose, onConfirm }: {
   if (nota.caminhaoLiberado) {
     return (
       <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
-        <DialogContent className="max-w-sm bg-white p-0 gap-0">
-          <DialogHeader className="px-5 py-4 border-b border-[var(--color-border)]">
-            <DialogTitle className="text-[14px] font-bold text-[var(--color-text-strong)]">Cancelamento bloqueado</DialogTitle>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelamento bloqueado</DialogTitle>
           </DialogHeader>
-          <div className="p-5 flex flex-col gap-3">
-            <div className="flex items-start gap-2 bg-[var(--color-danger-surface)] border border-[var(--color-danger-strong-border)] rounded-lg p-3">
-              <Ban className="w-4 h-4 text-[var(--color-danger-rose)] flex-shrink-0 mt-0.5" />
-              <p className="text-[12px] text-[var(--color-danger-strong-text)] leading-snug">
-                O caminhão desta carga já foi liberado. Notas só podem ser canceladas antes da liberação do caminhão.
-              </p>
-            </div>
+          <div className="flex items-start gap-2 rounded-md border border-danger-soft-border bg-danger-soft p-3">
+            <Ban className="mt-0.5 size-3.5 shrink-0 text-danger-fg" />
+            <p className="text-xs leading-snug text-danger-fg">
+              O caminhão desta carga já foi liberado. Notas só podem ser canceladas antes da liberação do caminhão.
+            </p>
           </div>
-          <div className="px-5 pb-5">
-            <button onClick={onClose} className="w-full h-8 rounded-md bg-[var(--color-brand-navy-deep)] text-white text-[12px] font-semibold hover:bg-[var(--color-action-blue)] transition-colors">
-              Entendi
-            </button>
-          </div>
+          <DialogFooter>
+            <Button onClick={onClose}>Entendi</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     );
@@ -108,45 +134,38 @@ function ModalCancelar({ nota, onClose, onConfirm }: {
 
   return (
     <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-md bg-white p-0 gap-0">
-        <DialogHeader className="px-5 py-4 border-b border-[var(--color-border)]">
-          <DialogTitle className="text-[14px] font-bold text-[var(--color-text-strong)]">Cancelar Nota {nota.numeroNfse ?? nota.id}</DialogTitle>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cancelar Nota {nota.numeroNfse ?? nota.id}</DialogTitle>
         </DialogHeader>
-        <div className="p-5 flex flex-col gap-3">
-          <div className="bg-[var(--color-surface-subtle)] rounded-lg p-3 grid grid-cols-2 gap-y-1.5 text-[12px]">
-            <div><span className="text-[var(--color-text-muted)]">Pedido: </span><span className="font-semibold text-[var(--color-text-strong)]">{nota.pedidoVendaId.slice(0, 8)}</span></div>
-            <div><span className="text-[var(--color-text-muted)]">Cliente: </span><span className="font-semibold text-[var(--color-text-strong)]">{nota.clienteNome}</span></div>
-            <div className="col-span-2"><span className="text-[var(--color-text-muted)]">Valor: </span><span className="font-semibold text-[var(--color-text-strong)]">{fmtBRL(Number(nota.valor))}</span></div>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold text-[var(--color-text-graphite)]">Motivo do cancelamento <span className="text-[var(--color-required-mark)]">*</span></label>
-            <select value={motivo} onChange={(e) => setMotivo(e.target.value)}
-              className="h-8 w-full rounded-md border border-[var(--color-border)] px-2.5 text-[12px] text-[var(--color-text-strong)] focus:border-[var(--color-action-blue)] focus:outline-none">
-              <option value="">Selecionar...</option>
-              {MOTIVOS_CANCELAMENTO.map((m) => <option key={m}>{m}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold text-[var(--color-text-graphite)]">Observação</label>
-            <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={2}
-              className="w-full rounded-md border border-[var(--color-border)] px-2.5 py-2 text-[12px] text-[var(--color-text-strong)] resize-none focus:border-[var(--color-action-blue)] focus:outline-none" />
-          </div>
+        <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-surface-2 p-3 text-xs">
+          <div><span className="text-muted-foreground">Pedido: </span><span className="font-data font-semibold text-foreground">{nota.pedidoVendaId.slice(0, 8)}</span></div>
+          <div><span className="text-muted-foreground">Cliente: </span><span className="font-semibold text-foreground">{nota.clienteNome}</span></div>
+          <div className="col-span-2"><span className="text-muted-foreground">Valor: </span><span className="font-data font-semibold text-foreground">{fmtBRL(Number(nota.valor))}</span></div>
         </div>
-        <div className="px-5 pb-5 flex gap-2">
-          <button onClick={onClose} className="flex-1 h-8 rounded-md border border-[var(--color-border)] text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)] transition-colors">
-            Voltar
-          </button>
-          <button
+        <FormField label="Motivo do cancelamento" required htmlFor="motivo-cancelamento-nota">
+          <SelectNative id="motivo-cancelamento-nota" value={motivo} onChange={(e) => setMotivo(e.target.value)}>
+            <option value="">Selecionar...</option>
+            {MOTIVOS_CANCELAMENTO.map((m) => <option key={m}>{m}</option>)}
+          </SelectNative>
+        </FormField>
+        <FormField label="Observação" htmlFor="obs-cancelamento-nota">
+          <Textarea id="obs-cancelamento-nota" rows={2} value={obs} onChange={(e) => setObs(e.target.value)} />
+        </FormField>
+        <DialogFooter>
+          <Button type="button" variant="ghost" onClick={onClose}>Voltar</Button>
+          <Button
+            type="button"
+            variant="destructive"
             disabled={!motivo || submitting}
             onClick={() => {
               setSubmitting(true);
               void onConfirm(motivo).finally(() => setSubmitting(false));
             }}
-            className="flex-1 h-8 rounded-md bg-[var(--color-danger-rose)] text-white text-[12px] font-semibold hover:bg-[var(--color-danger-strong-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             Confirmar Cancelamento
-          </button>
-        </div>
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -172,36 +191,36 @@ function DrawerRastreabilidade({ notaId, onClose }: { notaId: string | null; onC
 
   return (
     <Sheet open={!!notaId} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <SheetContent side="right" className="w-[560px] max-w-full p-0 flex flex-col bg-white border-l border-[var(--color-border)]">
-        <SheetHeader className="flex-shrink-0 px-6 py-4 border-b border-[var(--color-border)] flex flex-row items-center justify-between">
-          <SheetTitle className="text-[15px] font-bold text-[var(--color-text-strong)]">
-            Nota {nota?.numeroNfse ?? '—'}
-          </SheetTitle>
-          <button onClick={onClose}><X className="w-4 h-4 text-[var(--color-text-muted)]" /></button>
+      <SheetContent side="right" className="w-[520px] sm:max-w-[520px] gap-0 p-0">
+        <SheetHeader className="flex-row items-center justify-between gap-2 border-b border-border p-4">
+          <SheetTitle className="text-[16px] font-bold">Nota {nota?.numeroNfse ?? '—'}</SheetTitle>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5">
-          {carregando && <p className="text-[12px] text-[var(--color-text-muted)]">Carregando…</p>}
+        <div className="flex-1 space-y-3 overflow-y-auto p-4">
+          {carregando && <p className="text-xs text-muted-foreground">Carregando…</p>}
 
           {nota && (
             <>
               <div className="flex items-center gap-2">
-                <StatusPill variant={statusNfseVariant(nota.statusNfse)} label={rotuloStatus(nota.statusNfse)} />
+                {(() => {
+                  const s = statusPillNota(nota.statusNfse);
+                  return <StatusPill variant={s.variant} label={s.label} />;
+                })()}
               </div>
 
               {nota.statusNfse === 'erro_emissao' && nota.ultimoErroNfse && (
-                <div className="flex items-start gap-2 bg-[var(--color-danger-surface)] border border-[var(--color-danger-strong-border)] rounded-lg p-3">
-                  <XCircle className="w-3.5 h-3.5 text-[var(--color-danger-rose)] flex-shrink-0 mt-0.5" />
-                  <p className="text-[12px] text-[var(--color-danger-strong-text)]">{nota.ultimoErroNfse}</p>
+                <div className="flex items-start gap-2 rounded-md border border-danger-soft-border bg-danger-soft p-3">
+                  <XCircle className="mt-0.5 size-3.5 shrink-0 text-danger-fg" />
+                  <p className="text-xs text-danger-fg">{nota.ultimoErroNfse}</p>
                 </div>
               )}
 
               {/* Vínculo pedido ↔ peças ↔ pesos ↔ item fiscal */}
               <div>
-                <p className="text-[11px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">
+                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">
                   Vínculo pedido ↔ peças ↔ pesos ↔ item fiscal
                 </p>
-                <div className="grid grid-cols-2 gap-3 text-[12px] bg-[var(--color-surface-subtle)] rounded-lg p-3">
+                <div className="grid grid-cols-2 gap-3 rounded-md bg-surface-2 p-3 text-xs">
                   {[
                     ['Pedido', dados?.pedido?.id?.slice(0, 8) ?? nota.pedidoVendaId.slice(0, 8)],
                     ['Cliente', dados?.pedido?.clienteNome ?? '—'],
@@ -209,8 +228,8 @@ function DrawerRastreabilidade({ notaId, onClose }: { notaId: string | null; onC
                     ['Data/hora', nota.emitidaEm ?? nota.createdAt],
                   ].map(([k, v]) => (
                     <div key={k}>
-                      <p className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider font-medium">{k}</p>
-                      <p className="text-[12px] text-[var(--color-text-strong)] font-semibold mt-0.5">{v}</p>
+                      <p className="text-[10px] font-medium uppercase tracking-[0.04em] text-fg-faint">{k}</p>
+                      <p className="mt-0.5 text-xs font-semibold text-foreground">{v}</p>
                     </div>
                   ))}
                 </div>
@@ -218,48 +237,49 @@ function DrawerRastreabilidade({ notaId, onClose }: { notaId: string | null; onC
 
               {/* Peças/subitens */}
               <div>
-                <p className="text-[11px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2">Peças</p>
-                <div className="border border-[var(--color-border)] rounded-lg overflow-hidden">
-                  <table className="w-full text-[12px]">
-                    <thead>
-                      <tr className="bg-[var(--color-surface-subtle)] border-b border-[var(--color-muted)]">
-                        {['Etiqueta', 'Produto', 'Peso'].map((h) => (
-                          <th key={h} className="px-3 py-2 text-left text-[10px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider whitespace-nowrap">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(dados?.pecas ?? []).map((p, i) => (
-                        <tr key={i} className="border-b border-[var(--color-surface-subtle)] last:border-0">
-                          <td className="px-3 py-2 font-mono text-[10px] text-[var(--color-text-muted)]">{p.etiqueta ?? '—'}</td>
-                          <td className="px-3 py-2 font-bold text-[var(--color-brand-navy-deep)]">{p.produtoNome}</td>
-                          <td className="px-3 py-2 font-mono text-[var(--color-text-slate)] whitespace-nowrap">{fmtKg(Number(p.peso ?? 0))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-[var(--color-surface-subtle)]">
-                        <td className="px-3 py-2 font-bold text-[var(--color-text-strong)]" colSpan={2}>Peso total</td>
-                        <td className="px-3 py-2 font-mono font-black text-[var(--color-brand-navy-deep)] whitespace-nowrap">{dados ? fmtKg(Number(dados.pesoTotalKg)) : '—'}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
+                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">Peças</p>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Etiqueta</TableHead>
+                      <TableHead>Produto</TableHead>
+                      <TableHead className="text-right">Peso</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(dados?.pecas ?? []).map((p, i) => (
+                      <TableRow key={i}>
+                        <TableCellCode>{p.etiqueta ?? '—'}</TableCellCode>
+                        <TableCell className="font-semibold text-foreground">{p.produtoNome}</TableCell>
+                        <TableCellNum>{fmtKg(Number(p.peso ?? 0))}</TableCellNum>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell colSpan={2}>Peso total</TableCell>
+                      <TableCellNum>{dados ? fmtKg(Number(dados.pesoTotalKg)) : '—'}</TableCellNum>
+                    </TableRow>
+                  </TableFooter>
+                </Table>
               </div>
             </>
           )}
         </div>
 
-        <div className="flex-shrink-0 px-6 py-4 border-t border-[var(--color-border)] flex gap-2">
+        <div className="flex gap-2 border-t border-border p-4">
           <a
             href={nota?.linkNfse ?? undefined}
             target="_blank"
             rel="noopener noreferrer"
             title={nota?.linkNfse ? 'Baixar XML' : 'Link da nota ainda não disponível'}
             aria-disabled={!nota?.linkNfse}
-            className={`h-8 px-3 rounded-md border border-[var(--color-border)] text-[12px] font-medium flex items-center gap-1.5 transition-colors ${nota?.linkNfse ? 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)]' : 'text-[var(--color-placeholder)] cursor-not-allowed pointer-events-none'}`}
+            className={cn(
+              buttonVariants({ variant: 'secondary', size: 'sm' }),
+              !nota?.linkNfse && 'pointer-events-none opacity-50',
+            )}
           >
-            <Download className="w-3.5 h-3.5" /> Baixar XML
+            <Download /> Baixar XML
           </a>
           <a
             href={nota?.linkNfse ?? undefined}
@@ -267,13 +287,14 @@ function DrawerRastreabilidade({ notaId, onClose }: { notaId: string | null; onC
             rel="noopener noreferrer"
             title={nota?.linkNfse ? 'Ver DANFE' : 'Link da nota ainda não disponível'}
             aria-disabled={!nota?.linkNfse}
-            className={`h-8 px-3 rounded-md border border-[var(--color-border)] text-[12px] font-medium flex items-center gap-1.5 transition-colors ${nota?.linkNfse ? 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-subtle)]' : 'text-[var(--color-placeholder)] cursor-not-allowed pointer-events-none'}`}
+            className={cn(
+              buttonVariants({ variant: 'secondary', size: 'sm' }),
+              !nota?.linkNfse && 'pointer-events-none opacity-50',
+            )}
           >
-            <FileText className="w-3.5 h-3.5" /> Ver DANFE
+            <FileText /> Ver DANFE
           </a>
-          <button onClick={onClose} className="ml-auto h-8 px-4 rounded-md bg-[var(--color-brand-navy-deep)] text-white text-[12px] font-semibold hover:bg-[var(--color-action-blue)] transition-colors">
-            Fechar
-          </button>
+          <Button className="ml-auto" size="sm" onClick={onClose}>Fechar</Button>
         </div>
       </SheetContent>
     </Sheet>
@@ -379,16 +400,10 @@ export function NotasXmlClient({ permissoes }: { permissoes: string[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-4 h-full">
-      {/* Page header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-[11px] text-[var(--color-text-muted)] font-medium mb-0.5">Faturamento / Notas · XML</p>
-          <h1 className="text-[20px] font-bold text-[var(--color-text-strong)]">Notas / XML</h1>
-          <p className="text-[12px] text-[var(--color-text-secondary)] mt-0.5">Consulta das notas emitidas via integração EISS Osasco-SP.</p>
-        </div>
+    <div className="space-y-3">
+      <PageHeader title="Notas / XML" subtitle="Consulta das notas emitidas via integração EISS Osasco-SP.">
         {ambiente && <BadgeAmbiente homologacao={ambiente.homologacao} />}
-      </div>
+      </PageHeader>
 
       {erro && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -397,142 +412,150 @@ export function NotasXmlClient({ permissoes }: { permissoes: string[] }) {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Autorizadas hoje', value: `${kpis.autorizadasHoje}`, sub: 'notas autorizadas', color: 'text-[var(--color-success-strong)]', bg: 'bg-[var(--color-success-surface)]' },
-          { label: 'Com erro', value: `${kpis.comErro}`, sub: 'aguardando reprocessamento', color: 'text-[var(--color-danger-rose)]', bg: 'bg-[var(--color-danger-surface)]' },
-          { label: 'Aguardando retorno', value: `${kpis.aguardandoRetorno}`, sub: 'processando no EISS', color: 'text-[var(--color-action-blue-hover)]', bg: 'bg-[var(--color-action-blue-bg)]' },
-        ].map(({ label, value, sub, color, bg }) => (
-          <div key={label} className={`border border-[var(--color-border)] rounded-xl px-4 py-3.5 ${bg}`}>
-            <p className="text-[11px] text-[var(--color-text-secondary)] font-medium mb-1">{label}</p>
-            <p className={`text-[26px] font-black leading-none ${color}`}>{value}</p>
-            <p className="text-[10px] text-[var(--color-text-muted)] mt-1.5">{sub}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Filtros */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--color-text-muted)]" />
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar nota, chave, cliente..."
-            className="h-8 w-[280px] rounded-md border border-[var(--color-border)] bg-white pl-8 pr-3 text-[12px] placeholder:text-[var(--color-placeholder)] focus:border-[var(--color-action-blue)] focus:outline-none"
-          />
-        </div>
-        <select
-          value={filtroStatus}
-          onChange={(e) => setFiltroStatus(e.target.value as StatusNfse | 'Todos')}
-          className="h-8 rounded-md border border-[var(--color-border)] bg-white px-2.5 text-[12px] text-[var(--color-text-slate)] focus:border-[var(--color-action-blue)] focus:outline-none"
-        >
-          <option value="Todos">Status: Todos</option>
-          <option value="emitida">Autorizada</option>
-          <option value="erro_emissao">Erro</option>
-          <option value="pendente">Processando</option>
-          <option value="cancelada">Cancelada</option>
-        </select>
-        <span className="ml-auto text-[11px] text-[var(--color-text-muted)]">{total} nota(s)</span>
-      </div>
+      <KpiStrip>
+        <Kpi label="Autorizadas hoje" value={kpis.autorizadasHoje} hint="notas autorizadas" tone="ok" />
+        <Kpi label="Com erro" value={kpis.comErro} hint="aguardando reprocessamento" tone="danger" />
+        <Kpi label="Aguardando retorno" value={kpis.aguardandoRetorno} hint="processando no EISS" tone="alert" />
+      </KpiStrip>
 
       {/* Tabela */}
-      <div className="bg-white border border-[var(--color-border)] rounded-xl flex-1 overflow-y-auto">
-        {loading ? (
-          <p className="text-sm text-muted-foreground p-6" data-testid="loading">Carregando notas…</p>
-        ) : notas.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-14 gap-2">
-            <FileText className="w-8 h-8 text-[var(--color-placeholder)]" />
-            <p className="text-[13px] text-[var(--color-text-muted)]">Nenhuma nota encontrada para os filtros atuais.</p>
-          </div>
-        ) : (
-          <table className="w-full text-[12px]">
-            <thead className="sticky top-0 bg-[var(--color-surface-subtle)] z-10">
-              <tr className="border-b border-[var(--color-muted)]">
-                {['Nº nota', 'Chave / autenticador', 'Pedido / Carga', 'Cliente', 'Valor', 'Status', 'Data/hora', ''].map((h) => (
-                  <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {notas.map((n) => (
-                <tr key={n.id} className="border-b border-[var(--color-surface-subtle)] hover:bg-[var(--color-table-row-hover)]">
-                  <td className="px-4 py-2.5 font-mono font-bold text-[var(--color-brand-navy-deep)] whitespace-nowrap">{n.numeroNfse ?? '—'}</td>
-                  <td className="px-4 py-2.5 font-mono text-[var(--color-text-muted)] whitespace-nowrap text-[11px]">{truncChave(n.codigoVerificacao)}</td>
-                  <td className="px-4 py-2.5 text-[var(--color-text-slate)] whitespace-nowrap">
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-[var(--color-text-strong)]">{n.pedidoVendaId.slice(0, 8)}</span>
-                      <span className="text-[10px] text-[var(--color-text-muted)]">{n.caminhaoId.slice(0, 8)}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2.5 text-[var(--color-text-slate)] max-w-[160px] truncate">{n.clienteNome}</td>
-                  <td className="px-4 py-2.5 font-mono font-bold text-[var(--color-text-strong)] whitespace-nowrap">{fmtBRL(Number(n.valor))}</td>
-                  <td className="px-4 py-2.5">
-                    <StatusPill variant={statusNfseVariant(n.statusNfse)} label={rotuloStatus(n.statusNfse)} />
-                    {n.caminhaoLiberado && <p className="text-[9px] text-[var(--color-text-muted)] mt-1">Caminhão liberado</p>}
-                  </td>
-                  <td className="px-4 py-2.5 text-[var(--color-text-muted)] whitespace-nowrap text-[11px]">{n.emitidaEm ?? n.createdAt}</td>
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-1 flex-wrap">
-                      <a
-                        href={n.linkNfse ?? undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={n.linkNfse ? 'Baixar XML' : 'Link da nota ainda não disponível — emissão pendente ou sem retorno do EISS'}
-                        aria-disabled={!n.linkNfse}
-                        className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${n.linkNfse ? 'hover:bg-[var(--color-muted)] text-[var(--color-text-muted)] hover:text-[var(--color-text-slate)]' : 'text-[var(--color-placeholder)] cursor-not-allowed pointer-events-none'}`}
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </a>
-                      <a
-                        href={n.linkNfse ?? undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={n.linkNfse ? 'Ver DANFE' : 'Link da nota ainda não disponível — emissão pendente ou sem retorno do EISS'}
-                        aria-disabled={!n.linkNfse}
-                        className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${n.linkNfse ? 'hover:bg-[var(--color-muted)] text-[var(--color-text-muted)] hover:text-[var(--color-text-slate)]' : 'text-[var(--color-placeholder)] cursor-not-allowed pointer-events-none'}`}
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                      </a>
-                      <button title="Ver detalhe" onClick={() => setDrawerNotaId(n.id)}
-                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--color-muted)] text-[var(--color-text-muted)] hover:text-[var(--color-text-slate)] transition-colors">
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
-                      {n.statusNfse === 'erro_emissao' && pode('NFSE_EMITIR') && (
-                        <button title="Reprocessar" disabled={reprocessandoId === n.id} onClick={() => void reprocessar(n.id)}
-                          className="h-6 px-2 rounded text-[11px] font-medium text-[var(--color-danger-rose)] hover:bg-[var(--color-danger-surface)] transition-colors border border-[var(--color-danger-strong-border)] flex items-center gap-1">
-                          <RefreshCw className="w-3 h-3" /> {reprocessandoId === n.id ? 'Reprocessando…' : 'Reprocessar'}
-                        </button>
-                      )}
-                      {n.statusNfse === 'emitida' && pode('NFSE_CANCELAR') && (
-                        n.caminhaoLiberado ? (
-                          <span title="Caminhão já liberado — cancelamento bloqueado"
-                            className="w-6 h-6 flex items-center justify-center text-[var(--color-placeholder)] cursor-help">
-                            <Ban className="w-3.5 h-3.5" />
-                          </span>
-                        ) : (
-                          <button title="Cancelar nota" onClick={() => setModalCancelar(n)}
-                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--color-danger-surface)] text-[var(--color-text-muted)] hover:text-[var(--color-danger-rose)] transition-colors">
-                            <XCircle className="w-3.5 h-3.5" />
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Notas fiscais</CardTitle>
+          <BadgeCount>{total}</BadgeCount>
+          <CardAction>
+            <Input
+              adornLeft={<Search />}
+              placeholder="Buscar nota, chave, cliente..."
+              className="h-7 w-[240px] text-xs"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+            <SelectNative
+              selectSize="sm"
+              className="w-[150px]"
+              value={filtroStatus}
+              onChange={(e) => setFiltroStatus(e.target.value as StatusNfse | 'Todos')}
+            >
+              <option value="Todos">Status: Todos</option>
+              <option value="emitida">Autorizada</option>
+              <option value="erro_emissao">Erro</option>
+              <option value="pendente">Processando</option>
+              <option value="cancelada">Cancelada</option>
+            </SelectNative>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <p className="p-6 text-xs text-muted-foreground" data-testid="loading">Carregando notas…</p>
+          ) : notas.length === 0 ? (
+            <EmptyState icon={<FileText />} title="Nenhuma nota encontrada para os filtros atuais." className="py-12" />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead>Nº nota</TableHead>
+                  <TableHead>Chave / autenticador</TableHead>
+                  <TableHead>Pedido / Carga</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Data/hora</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {notas.map((n) => {
+                  const pill = statusPillNota(n.statusNfse);
+                  return (
+                    <TableRow key={n.id} className="group">
+                      <TableCellCode>{n.numeroNfse ?? '—'}</TableCellCode>
+                      <TableCellCode title={n.codigoVerificacao ?? undefined}>{truncChave(n.codigoVerificacao)}</TableCellCode>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-foreground">{n.pedidoVendaId.slice(0, 8)}</span>
+                          <span className="text-[10px] text-muted-foreground">{n.caminhaoId.slice(0, 8)}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[160px] truncate text-fg-secondary">{n.clienteNome}</TableCell>
+                      <TableCellNum>{fmtBRL(Number(n.valor))}</TableCellNum>
+                      <TableCell>
+                        <StatusPill variant={pill.variant} label={pill.label} />
+                        {n.caminhaoLiberado && <p className="mt-0.5 text-[10px] text-muted-foreground">Caminhão liberado</p>}
+                      </TableCell>
+                      <TableCellNum>{n.emitidaEm ?? n.createdAt}</TableCellNum>
+                      <TableCell>
+                        <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                          <a
+                            href={n.linkNfse ?? undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={n.linkNfse ? 'Baixar XML' : 'Link da nota ainda não disponível — emissão pendente ou sem retorno do EISS'}
+                            aria-disabled={!n.linkNfse}
+                            className={cn(
+                              buttonVariants({ variant: 'ghost', size: 'iconSm' }),
+                              !n.linkNfse && 'pointer-events-none opacity-40',
+                            )}
+                          >
+                            <Download />
+                          </a>
+                          <a
+                            href={n.linkNfse ?? undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={n.linkNfse ? 'Ver DANFE' : 'Link da nota ainda não disponível — emissão pendente ou sem retorno do EISS'}
+                            aria-disabled={!n.linkNfse}
+                            className={cn(
+                              buttonVariants({ variant: 'ghost', size: 'iconSm' }),
+                              !n.linkNfse && 'pointer-events-none opacity-40',
+                            )}
+                          >
+                            <FileText />
+                          </a>
+                          <Button variant="ghost" size="iconSm" title="Ver detalhe" onClick={() => setDrawerNotaId(n.id)}>
+                            <Eye />
+                          </Button>
+                          {n.statusNfse === 'erro_emissao' && pode('NFSE_EMITIR') && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Reprocessar"
+                              disabled={reprocessandoId === n.id}
+                              onClick={() => void reprocessar(n.id)}
+                            >
+                              <RefreshCw /> {reprocessandoId === n.id ? 'Reprocessando…' : 'Reprocessar'}
+                            </Button>
+                          )}
+                          {n.statusNfse === 'emitida' && pode('NFSE_CANCELAR') && (
+                            n.caminhaoLiberado ? (
+                              <span
+                                title="Caminhão já liberado — cancelamento bloqueado"
+                                className="flex size-7 items-center justify-center text-fg-faint"
+                              >
+                                <Ban className="size-3.5" />
+                              </span>
+                            ) : (
+                              <Button variant="ghost" size="iconSm" title="Cancelar nota" onClick={() => setModalCancelar(n)}>
+                                <XCircle />
+                              </Button>
+                            )
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Rodapé informativo */}
-      <div className="bg-[var(--color-surface-subtle)] border border-[var(--color-border)] rounded-xl px-5 py-3.5 flex items-start gap-2">
-        <Info className="w-3.5 h-3.5 text-[var(--color-text-muted)] flex-shrink-0 mt-0.5" />
-        <p className="text-[11px] text-[var(--color-text-muted)] leading-snug">
-          Número, chave, XML e DANFE são obtidos do retorno da integração EISS Osasco-SP. Cancelamento de nota só é permitido antes da liberação do caminhão.
-        </p>
-      </div>
+      <p className="text-[11px] text-fg-faint">
+        <Info className="mr-1 inline size-3.5 shrink-0 -translate-y-px" aria-hidden="true" />
+        Número, chave, XML e DANFE são obtidos do retorno da integração EISS Osasco-SP. Cancelamento de nota só é permitido antes da liberação do caminhão.
+      </p>
 
       <DrawerRastreabilidade notaId={drawerNotaId} onClose={() => setDrawerNotaId(null)} />
       <ModalCancelar nota={modalCancelar} onClose={() => setModalCancelar(null)} onConfirm={confirmarCancelamento} />

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Ban, CheckCircle2, Clock, Info, RefreshCw, Search, X } from 'lucide-react';
 import { SeletorOperacao } from '@/components/gestao/seletor-operacao';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -14,14 +15,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { FormField } from '@/components/ui/form-field';
+import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
 import { StatusPill } from '@/components/ui/status-pill';
+import { cn } from '@/lib/cn';
 import { conectarRealtime } from '@/lib/realtime';
 import {
   buscarCobertura,
@@ -45,6 +44,15 @@ const MOTIVOS_CANCELAMENTO = [
 function formatDataHora(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function Par({ rotulo, valor, mono }: { rotulo: string; valor: React.ReactNode; mono?: boolean }) {
+  return (
+    <div>
+      <dt className="text-[11px] text-muted-foreground">{rotulo}</dt>
+      <dd className={cn('text-[13px] font-medium text-foreground', mono && 'font-data')}>{valor}</dd>
+    </div>
+  );
 }
 
 function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
@@ -176,19 +184,16 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
   };
 
   return (
-    <div className="flex h-full flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold">Pendências de Overbooking</h1>
-          <p className="text-sm text-muted-foreground">Gestão de déficits confirmados aguardando decisão</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <SeletorOperacao />
-          <Button variant="outline" size="icon" onClick={() => void carregar()} disabled={carregando}>
-            <RefreshCw className={`h-4 w-4 ${carregando ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-      </div>
+    <div className="space-y-3">
+      <PageHeader
+        title="Pendências de Overbooking"
+        subtitle="Gestão de déficits confirmados aguardando decisão"
+      >
+        <SeletorOperacao />
+        <Button variant="secondary" size="icon" onClick={() => void carregar()} disabled={carregando}>
+          <RefreshCw className={carregando ? 'animate-spin' : ''} />
+        </Button>
+      </PageHeader>
 
       {erro && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -196,27 +201,20 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {[
-          { label: 'Pendências abertas', value: kpis.abertas },
-          { label: 'Em análise', value: kpis.emAnalise },
-          { label: 'Déficit total', value: kpis.deficit },
-          { label: 'Resolvidas hoje', value: kpis.resolvidasHoje },
-        ].map((k) => (
-          <div key={k.label} className="rounded-xl border border-border bg-card px-4 py-3">
-            <p className="text-xs text-muted-foreground">{k.label}</p>
-            <p className="text-2xl font-bold">{k.value}</p>
-          </div>
-        ))}
-      </div>
+      <KpiStrip>
+        <Kpi label="Pendências abertas" value={kpis.abertas} tone="alert" />
+        <Kpi label="Em análise" value={kpis.emAnalise} tone="default" />
+        <Kpi label="Déficit total" value={kpis.deficit} tone="danger" />
+        <Kpi label="Resolvidas hoje" value={kpis.resolvidasHoje} tone="ok" />
+      </KpiStrip>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="h-8 w-56 pl-8" placeholder="Buscar…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="w-[240px]">
+          <Input adornLeft={<Search />} placeholder="Buscar…" className="h-7 text-xs" value={busca} onChange={(e) => setBusca(e.target.value)} />
         </div>
-        <select
-          className="h-8 rounded-md border border-border bg-card px-2 text-xs"
+        <SelectNative
+          selectSize="sm"
+          className="w-[150px]"
           value={filtroStatus}
           onChange={(e) => setFiltroStatus(e.target.value as StatusPendenciaOverbooking | 'todos')}
         >
@@ -224,185 +222,212 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
           {(Object.keys(ROTULO_STATUS_PENDENCIA) as StatusPendenciaOverbooking[]).map((s) => (
             <option key={s} value={s}>{ROTULO_STATUS_PENDENCIA[s]}</option>
           ))}
-        </select>
+        </SelectNative>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="overflow-y-auto rounded-xl border border-border bg-card lg:col-span-4">
-          {filtradas.length === 0 ? (
-            <p className="p-6 text-center text-sm text-muted-foreground">Nenhuma pendência encontrada.</p>
-          ) : (
-            filtradas.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setSelecionada(p)}
-                className={`w-full border-b border-border px-4 py-3 text-left last:border-0 hover:bg-muted/30 ${selecionada?.id === p.id ? 'bg-muted/40' : ''}`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs font-bold text-primary">{p.id.slice(0, 8)}</span>
-                  <StatusPill variant="pendente" label={ROTULO_STATUS_PENDENCIA[p.status]} />
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">Déficit: {p.quantidadeDeficit}</p>
-              </button>
-            ))
-          )}
-        </div>
+      <div className="grid items-start gap-2.5 lg:grid-cols-[320px_1fr]">
+        <Card>
+          <div className="max-h-[560px] overflow-y-auto overflow-x-hidden">
+            {filtradas.length === 0 ? (
+              <p className="p-4 text-center text-xs text-muted-foreground">Nenhuma pendência encontrada.</p>
+            ) : (
+              filtradas.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setSelecionada(p)}
+                  className={cn(
+                    'block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2',
+                    selecionada?.id === p.id && 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]',
+                  )}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="font-data min-w-0 flex-1 truncate text-[13px] font-semibold">{p.id.slice(0, 8)}</span>
+                    <StatusPill variant="pendente" label={ROTULO_STATUS_PENDENCIA[p.status]} className="h-[17px] text-[10px]" />
+                  </span>
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    Déficit: <span className="font-data text-danger-fg">{p.quantidadeDeficit}</span>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </Card>
 
-        <div className="space-y-4 overflow-y-auto lg:col-span-8">
+        <div className="space-y-2.5">
           {!selecionada ? (
-            <p className="text-sm text-muted-foreground">Selecione uma pendência.</p>
+            <Card>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">Selecione uma pendência.</p>
+              </CardContent>
+            </Card>
           ) : (
             <>
-              <div className="rounded-xl border border-border bg-card p-4 text-sm">
-                <h2 className="font-semibold">Detalhe da pendência</h2>
-                <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <div><dt className="text-muted-foreground">Quantidade deficitária</dt><dd className="font-medium">{selecionada.quantidadeDeficit}</dd></div>
-                  <div><dt className="text-muted-foreground">Pedido de origem</dt><dd className="font-mono">{selecionada.pedidoVendaId.slice(0, 8)}</dd></div>
-                  <div><dt className="text-muted-foreground">Cliente</dt><dd>{selecionada.clienteId.slice(0, 8)}</dd></div>
-                  <div><dt className="text-muted-foreground">Confirmação do overbooking</dt><dd>{formatDataHora(selecionada.createdAt)}</dd></div>
-                </dl>
-                {podeResolver && !['resolvida', 'cancelada'].includes(selecionada.status) && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {selecionada.status === 'aberta' && (
-                      <Button size="sm" variant="outline" onClick={() => void alterarStatus('em_analise', {})}>
-                        <Clock className="mr-1 h-3 w-3" /> Iniciar análise
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      className="bg-success-strong text-white hover:bg-success-strong/90"
-                      onClick={() => void alterarStatus('resolvida', { origem: 'manual' })}
-                    >
-                      <CheckCircle2 className="mr-1 h-3 w-3" /> Marcar como resolvido
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                      onClick={() => setModalCancelar(true)}
-                    >
-                      <X className="mr-1 h-3 w-3" /> Cancelar pendência
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-                <h3 className="text-sm font-semibold">1. Compra complementar</h3>
-                {cobertura?.comprasComplementares.length ? (
-                  cobertura.comprasComplementares.map((c) => (
-                    <div key={c.compraProgramadaId} className="flex flex-wrap items-center justify-between gap-2 rounded border border-border p-2 text-xs">
-                      <span>{formatDataHora(c.dataOperacao)} — proj. {c.quantidadeProjetada}</span>
-                      {podeResolver && (
-                        <Button size="sm" onClick={() => void decidir({
-                          caminho: 'compra_complementar',
-                          compraProgramadaId: c.compraProgramadaId,
-                          quantidade: selecionada.quantidadeDeficit,
-                        })}>Programar</Button>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Detalhe da pendência</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <dl className="grid grid-cols-2 gap-3">
+                    <Par rotulo="Quantidade deficitária" valor={selecionada.quantidadeDeficit} mono />
+                    <Par rotulo="Pedido de origem" valor={selecionada.pedidoVendaId.slice(0, 8)} mono />
+                    <Par rotulo="Cliente" valor={selecionada.clienteId.slice(0, 8)} mono />
+                    <Par rotulo="Confirmação do overbooking" valor={formatDataHora(selecionada.createdAt)} />
+                  </dl>
+                  {podeResolver && !['resolvida', 'cancelada'].includes(selecionada.status) && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {selecionada.status === 'aberta' && (
+                        <Button size="sm" variant="secondary" onClick={() => void alterarStatus('em_analise', {})}>
+                          <Clock /> Iniciar análise
+                        </Button>
                       )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground">Nenhuma compra elegível disponível.</p>
-                )}
-              </div>
-
-              <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-                <h3 className="text-sm font-semibold">2. Redistribuição</h3>
-                {cobertura?.redistribuicoes.length ? (
-                  cobertura.redistribuicoes.map((r) => (
-                    <div key={r.reservaId} className="flex flex-wrap items-center justify-between gap-2 rounded border border-border p-2 text-xs">
-                      <span>{r.clienteNome} — reserva {r.quantidadeReservada}</span>
-                      {podeResolver && (
-                        <Button size="sm" variant="outline" onClick={() => void decidir({
-                          caminho: 'redistribuicao',
-                          reservaOrigemId: r.reservaId,
-                          quantidade: selecionada.quantidadeDeficit,
-                        })}>Redistribuir</Button>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground">Nenhuma reserva doadora disponível.</p>
-                )}
-              </div>
-
-              <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-                <h3 className="text-sm font-semibold">3. Postergar para próxima operação</h3>
-                {cobertura?.proximaOperacao && cobertura.comprasComplementares[0] ? (
-                  <>
-                    <p className="text-xs text-muted-foreground">
-                      A quantidade postergada gera um novo pedido de venda para o mesmo cliente, a ser atendido em uma próxima operação.
-                    </p>
-                    <p className="text-xs font-medium">{cobertura.proximaOperacao.rotulo}</p>
-                    {podeResolver && (
-                      <Button size="sm" onClick={() => { setQtdPostergar(selecionada.quantidadeDeficit); setModalPostergar(true); }}>
-                        Postergar
+                      <Button
+                        size="sm"
+                        onClick={() => void alterarStatus('resolvida', { origem: 'manual' })}
+                      >
+                        <CheckCircle2 /> Marcar como resolvido
                       </Button>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Nenhuma operação destino elegível.</p>
-                )}
-              </div>
+                      <Button
+                        size="sm"
+                        variant="destructiveOutline"
+                        onClick={() => setModalCancelar(true)}
+                      >
+                        <X /> Cancelar pendência
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-              <div className="rounded-xl border border-border bg-card p-4">
-                <h3 className="text-sm font-semibold">Histórico</h3>
-                {historico.length === 0 ? (
-                  <p className="mt-2 text-xs text-muted-foreground">Sem eventos registrados.</p>
-                ) : (
-                  <ul className="mt-2 space-y-2">
-                    {historico.map((h) => (
-                      <li key={h.id} className="text-xs">
-                        <span className="font-medium">{h.autorNome ?? '—'}</span>
-                        {' · '}{ROTULO_STATUS_PENDENCIA[h.acao as StatusPendenciaOverbooking] ?? h.acao}
-                        {' · '}{formatDataHora(h.criadoEm)}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>1. Compra complementar</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {cobertura?.comprasComplementares.length ? (
+                    cobertura.comprasComplementares.map((c) => (
+                      <div key={c.compraProgramadaId} className="flex flex-wrap items-center justify-between gap-2 rounded border border-border p-2 text-xs">
+                        <span>{formatDataHora(c.dataOperacao)} — proj. {c.quantidadeProjetada}</span>
+                        {podeResolver && (
+                          <Button size="sm" variant="secondary" onClick={() => void decidir({
+                            caminho: 'compra_complementar',
+                            compraProgramadaId: c.compraProgramadaId,
+                            quantidade: selecionada.quantidadeDeficit,
+                          })}>Programar</Button>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Nenhuma compra elegível disponível.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>2. Redistribuição</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {cobertura?.redistribuicoes.length ? (
+                    cobertura.redistribuicoes.map((r) => (
+                      <div key={r.reservaId} className="flex flex-wrap items-center justify-between gap-2 rounded border border-border p-2 text-xs">
+                        <span>{r.clienteNome} — reserva {r.quantidadeReservada}</span>
+                        {podeResolver && (
+                          <Button size="sm" variant="secondary" onClick={() => void decidir({
+                            caminho: 'redistribuicao',
+                            reservaOrigemId: r.reservaId,
+                            quantidade: selecionada.quantidadeDeficit,
+                          })}>Redistribuir</Button>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Nenhuma reserva doadora disponível.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>3. Postergar para próxima operação</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {cobertura?.proximaOperacao && cobertura.comprasComplementares[0] ? (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        A quantidade postergada gera um novo pedido de venda para o mesmo cliente, a ser atendido em uma próxima operação.
+                      </p>
+                      <p className="text-xs font-medium">{cobertura.proximaOperacao.rotulo}</p>
+                      {podeResolver && (
+                        <Button size="sm" variant="secondary" onClick={() => { setQtdPostergar(selecionada.quantidadeDeficit); setModalPostergar(true); }}>
+                          Postergar
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Nenhuma operação destino elegível.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Histórico</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {historico.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Sem eventos registrados.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {historico.map((h) => (
+                        <li key={h.id} className="text-xs">
+                          <span className="font-medium">{h.autorNome ?? '—'}</span>
+                          {' · '}{ROTULO_STATUS_PENDENCIA[h.acao as StatusPendenciaOverbooking] ?? h.acao}
+                          {' · '}{formatDataHora(h.criadoEm)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
             </>
           )}
         </div>
       </div>
 
       <Dialog open={modalCancelar} onOpenChange={(open) => { if (!open) setModalCancelar(false); }}>
-        <DialogContent className="max-w-sm gap-0 p-0">
-          <DialogHeader className="border-b px-5 py-4">
-            <DialogTitle className="text-sm font-bold">Cancelar Pendência</DialogTitle>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancelar Pendência</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-3 p-5">
-            <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3">
-              <Ban className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
-              <p className="text-xs leading-snug text-destructive">
+          <div className="flex flex-col gap-3 px-4">
+            <div className="flex items-start gap-2 rounded-lg border border-danger-soft-border bg-danger-soft p-3">
+              <Ban className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger-fg" />
+              <p className="text-xs leading-snug text-danger-fg">
                 O cancelamento não resolve o déficit no pedido de origem. Use apenas quando a pendência não fizer mais sentido (ex.: pedido cancelado).
               </p>
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold">Motivo <span className="text-destructive">*</span></label>
-              <Select value={motivoCancelamento} onValueChange={setMotivoCancelamento}>
-                <SelectTrigger size="sm" aria-label="Motivo do cancelamento">
-                  <SelectValue placeholder="Selecionar…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MOTIVOS_CANCELAMENTO.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold">Observação</label>
-              <Textarea rows={2} value={obsCancelamento} onChange={(e) => setObsCancelamento(e.target.value)} />
-            </div>
+            <FormField label="Motivo" required htmlFor="motivo-cancelamento">
+              <SelectNative
+                id="motivo-cancelamento"
+                aria-label="Motivo do cancelamento"
+                value={motivoCancelamento}
+                onChange={(e) => setMotivoCancelamento(e.target.value)}
+              >
+                <option value="">Selecionar…</option>
+                {MOTIVOS_CANCELAMENTO.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </SelectNative>
+            </FormField>
+            <FormField label="Observação" htmlFor="obs-cancelamento">
+              <Textarea id="obs-cancelamento" rows={2} value={obsCancelamento} onChange={(e) => setObsCancelamento(e.target.value)} />
+            </FormField>
           </div>
-          <DialogFooter className="flex gap-2 px-5 pb-5">
-            <Button variant="outline" className="flex-1" onClick={() => setModalCancelar(false)}>Voltar</Button>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setModalCancelar(false)}>Voltar</Button>
             <Button
               variant="destructive"
-              className="flex-1"
               disabled={!motivoCancelamento}
               onClick={() => void cancelarPendencia()}
             >
@@ -413,25 +438,30 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
       </Dialog>
 
       <Dialog open={modalPostergar} onOpenChange={(open) => { if (!open) setModalPostergar(false); }}>
-        <DialogContent className="max-w-sm gap-0 p-0">
-          <DialogHeader className="border-b px-5 py-4">
-            <DialogTitle className="text-sm font-bold">Postergar para Próxima Operação</DialogTitle>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Postergar para Próxima Operação</DialogTitle>
           </DialogHeader>
           {selecionada && cobertura?.proximaOperacao && cobertura.comprasComplementares[0] && (
-            <div className="flex flex-col gap-3 p-5">
-              <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
-                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                <p className="text-xs leading-snug text-primary">
+            <div className="flex flex-col gap-3 px-4">
+              <div className="flex items-start gap-2 rounded-lg border border-primary-soft-border bg-primary-soft p-3">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-fg" />
+                <p className="text-xs leading-snug text-primary-fg">
                   A quantidade postergada gera um novo pedido de venda para o mesmo cliente, a ser atendido em uma próxima operação.
                 </p>
               </div>
-              <dl className="grid grid-cols-2 gap-3 text-xs">
-                <div><dt className="text-muted-foreground">Cliente</dt><dd className="font-medium">{selecionada.clienteId.slice(0, 8)}</dd></div>
-                <div><dt className="text-muted-foreground">Produto</dt><dd className="font-medium">{selecionada.itemComercialId.slice(0, 8)}</dd></div>
+              <dl className="grid grid-cols-2 gap-3">
+                <Par rotulo="Cliente" valor={selecionada.clienteId.slice(0, 8)} mono />
+                <Par rotulo="Produto" valor={selecionada.itemComercialId.slice(0, 8)} mono />
               </dl>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold">Quantidade a postergar <span className="text-destructive">*</span></label>
+              <FormField
+                label="Quantidade a postergar"
+                required
+                help={`Déficit total desta pendência: ${selecionada.quantidadeDeficit}.`}
+                htmlFor="qtd-postergar"
+              >
                 <Input
+                  id="qtd-postergar"
                   type="number"
                   min={1}
                   max={Number(selecionada.quantidadeDeficit)}
@@ -441,15 +471,14 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
                     const v = Math.max(1, Math.min(max, Number(e.target.value) || 1));
                     setQtdPostergar(String(v));
                   }}
+                  className="text-right font-data"
                 />
-                <p className="text-xs text-muted-foreground">Déficit total desta pendência: {selecionada.quantidadeDeficit}.</p>
-              </div>
+              </FormField>
             </div>
           )}
-          <DialogFooter className="flex gap-2 px-5 pb-5">
-            <Button variant="outline" className="flex-1" onClick={() => setModalPostergar(false)}>Cancelar</Button>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setModalPostergar(false)}>Cancelar</Button>
             <Button
-              className="flex-1"
               onClick={() => {
                 if (!selecionada || !cobertura?.proximaOperacao || !cobertura.comprasComplementares[0]) return;
                 void decidir({

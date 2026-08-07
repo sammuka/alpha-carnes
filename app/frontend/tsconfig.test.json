@@ -4,5 +4,6 @@
     "types": ["jest", "node", "@testing-library/jest-dom"],
     "jsx": "react-jsx"
   },
+  "exclude": ["node_modules"],
   "include": ["src/**/*.ts", "src/**/*.tsx", "__tests__/**/*.ts", "__tests__/**/*.tsx", "jest.setup.ts"]
 }

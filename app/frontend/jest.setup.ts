@@ -119,3 +119,12 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
     value: JestResizeObserver,
   });
 }
+
+// jsdom não implementa Element.scrollIntoView; `cmdk` (usado por ComboboxField, DS v3)
+// chama esse método em um layout effect ao montar a lista de opções — sem o polyfill,
+// qualquer teste que abra um ComboboxField falha com "scrollIntoView is not a function".
+// Guardado com typeof Element porque suítes com testEnvironment edge-runtime (BFF/middleware)
+// não expõem o global Element.
+if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = function scrollIntoView(): void {};
+}

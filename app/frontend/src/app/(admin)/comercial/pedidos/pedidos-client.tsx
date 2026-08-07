@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Clock3, Plus, Search, ShieldCheck, ShoppingCart } from 'lucide-react';
+import { Clock3, Plus, Search } from 'lucide-react';
 import type {
   AdendoPedido,
   CompraProgramada,
@@ -12,10 +12,23 @@ import type {
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { rotuloStatusPedido } from '@/lib/status-pedido';
 import { ActivityItem } from '@/components/ui/activity-item';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { Button } from '@/components/ui/button';
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { KpiCard } from '@/components/ui/kpi-card';
+import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
+import { PageHeader } from '@/components/ui/page-header';
+import { SelectNative } from '@/components/ui/select-native';
 import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableCellCode,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { ModalLiberarReserva } from './modal-liberar-reserva';
 import {
   PedidoEditor,
@@ -226,7 +239,7 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
 
   if (modoEditor) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-3">
         <PedidoEditor
           pedido={pedidoSelecionado}
           clientes={clientes}
@@ -241,12 +254,13 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
           onChanged={atualizar}
         />
         {pedidoSelecionado && (adendos.length > 0 || auditoria.length > 0) && (
-          <section className="rounded-xl border bg-card p-5">
-            <div className="mb-2 flex items-center gap-2">
-              <Clock3 className="h-4 w-4 text-muted-foreground" />
-              <h2 className="font-semibold">Linha do tempo</h2>
-            </div>
-            <div className="divide-y">
+          <Card>
+            <CardHeader>
+              <Clock3 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+              <CardTitle>Linha do tempo</CardTitle>
+              <BadgeCount>{adendos.length + auditoria.length}</BadgeCount>
+            </CardHeader>
+            <CardContent className="p-0">
               {adendos.map((adendo) => (
                 <HistoricoEntry
                   key={`adendo-${adendo.id}`}
@@ -263,20 +277,19 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
                   data={entry.createdAt}
                 />
               ))}
-            </div>
-          </section>
+            </CardContent>
+          </Card>
         )}
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Pedidos de Venda</h1>
-          <p className="text-sm text-muted-foreground">Acompanhe reservas, overbooking e atendimento comercial.</p>
-        </div>
+    <div className="space-y-3">
+      <PageHeader
+        title="Pedidos de Venda"
+        subtitle="Acompanhe reservas, overbooking e atendimento comercial"
+      >
         {podeGerenciar && (
           <Button
             type="button"
@@ -285,11 +298,11 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
               setModoEditor(true);
             }}
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus />
             Novo pedido
           </Button>
         )}
-      </div>
+      </PageHeader>
 
       {erro && (
         <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
@@ -297,82 +310,137 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Total de pedidos" value={String(contadores.total)} sub="Na visão atual" Icon={ShoppingCart} />
-        <KpiCard label="Rascunhos" value={String(contadores.rascunhos)} sub="Com reserva ativa" Icon={Clock3} variant="warning" />
-        <KpiCard label="Overbooking" value={String(contadores.overbooking)} sub="Exigem atenção" Icon={ShieldCheck} variant="violet" />
-        <KpiCard label="Finalizados" value={String(contadores.finalizados)} sub="Pedidos concluídos" Icon={CalendarDays} variant="success" />
-      </div>
+      <KpiStrip>
+        <Kpi label="Total de pedidos" value={contadores.total} hint="na visão atual" tone="default" />
+        <Kpi label="Rascunhos" value={contadores.rascunhos} hint="com reserva ativa" tone="default" />
+        <Kpi label="Overbooking" value={contadores.overbooking} hint="exige atenção" tone="alert" />
+        <Kpi label="Finalizados" value={contadores.finalizados} hint="pedidos concluídos" tone="ok" />
+      </KpiStrip>
 
-      <section className="rounded-xl border bg-card">
-        <div className="grid gap-3 border-b p-4 md:grid-cols-[1fr_240px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={busca}
-              onChange={(event) => setBusca(event.target.value)}
-              placeholder="Buscar pedido ou cliente..."
-              className="pl-9"
-            />
-          </div>
-          <select
-            aria-label="Filtrar por status"
-            className="h-10 rounded-md border bg-background px-3 text-sm"
-            value={statusFiltro}
-            onChange={(event) => setStatusFiltro(event.target.value)}
-          >
-            <option value="todos">Todos os status</option>
-            {Object.keys({
-              rascunho: true,
-              em_elaboracao_reserva_ativa: true,
-              aguardando_confirmacao_overbooking: true,
-              finalizado: true,
-              parcialmente_atendido: true,
-              atendido: true,
-              faturado: true,
-              cancelado: true,
-            }).map((status) => (
-              <option key={status} value={status}>{rotuloStatusPedido(status, status === 'rascunho')}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="divide-y">
-          {carregando && <p className="p-6 text-sm text-muted-foreground">Carregando pedidos...</p>}
-          {!carregando && pedidosFiltrados.length === 0 && (
-            <p className="p-6 text-sm text-muted-foreground">Nenhum pedido encontrado.</p>
-          )}
-          {pedidosFiltrados.map((pedido) => {
-            const cliente = clientes.find((item) => item.id === pedido.clienteId);
-            const temReservaAtiva = pedido.status === 'rascunho'
-              || pedido.status === 'em_elaboracao_reserva_ativa';
-            return (
-              <article key={pedido.id} className="flex flex-wrap items-center gap-4 p-4">
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 text-left"
-                  aria-label={`Abrir pedido ${pedido.id}`}
-                  onClick={() => void abrirPedido(pedido.id)}
-                >
-                  <p className="truncate font-semibold">{cliente?.nomeFantasia || cliente?.razaoSocial || pedido.clienteId}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {pedido.id} · {pedido.representanteNome || 'Sem representante'} · {pedido.rotaPrevista || pedido.rotaNome || 'Sem rota'}
-                  </p>
-                </button>
-                <StatusPill
-                  variant={varianteStatus(pedido.status)}
-                  label={rotuloStatusPedido(pedido.status, temReservaAtiva)}
-                />
-                {podeLiberar && pedido.status === 'rascunho' && (
-                  <Button type="button" variant="outline" size="sm" onClick={() => setLiberarPedidoId(pedido.id)}>
-                    Liberar reserva
-                  </Button>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Pedidos</CardTitle>
+          <BadgeCount>{pedidosFiltrados.length}</BadgeCount>
+          <CardAction>
+            <div className="w-[240px]">
+              <Input
+                value={busca}
+                onChange={(event) => setBusca(event.target.value)}
+                placeholder="Buscar pedido ou cliente..."
+                adornLeft={<Search />}
+                className="h-7 text-xs"
+              />
+            </div>
+            <SelectNative
+              aria-label="Filtrar por status"
+              selectSize="sm"
+              className="w-[170px]"
+              value={statusFiltro}
+              onChange={(event) => setStatusFiltro(event.target.value)}
+            >
+              <option value="todos">Todos os status</option>
+              {Object.keys({
+                rascunho: true,
+                em_elaboracao_reserva_ativa: true,
+                aguardando_confirmacao_overbooking: true,
+                finalizado: true,
+                parcialmente_atendido: true,
+                atendido: true,
+                faturado: true,
+                cancelado: true,
+              }).map((status) => (
+                <option key={status} value={status}>{rotuloStatusPedido(status, status === 'rascunho')}</option>
+              ))}
+            </SelectNative>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Pedido</TableHead>
+                <TableHead>Cliente</TableHead>
+                <TableHead>Representante</TableHead>
+                <TableHead>Rota</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {carregando && (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-24 text-center text-xs text-muted-foreground">
+                    Carregando pedidos...
+                  </TableCell>
+                </TableRow>
+              )}
+              {!carregando && pedidosFiltrados.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-24 text-center text-xs text-muted-foreground">
+                    Nenhum pedido encontrado.
+                  </TableCell>
+                </TableRow>
+              )}
+              {pedidosFiltrados.map((pedido) => {
+                const cliente = clientes.find((item) => item.id === pedido.clienteId);
+                const temReservaAtiva = pedido.status === 'rascunho'
+                  || pedido.status === 'em_elaboracao_reserva_ativa';
+                return (
+                  <TableRow
+                    key={pedido.id}
+                    className="group cursor-pointer"
+                    onClick={() => void abrirPedido(pedido.id)}
+                  >
+                    <TableCellCode>{pedido.id.slice(0, 8).toUpperCase()}</TableCellCode>
+                    <TableCell className="text-[13px] font-semibold text-foreground">
+                      {cliente?.nomeFantasia || cliente?.razaoSocial || pedido.clienteId}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {pedido.representanteNome || 'Sem representante'}
+                    </TableCell>
+                    <TableCellCode>{pedido.rotaPrevista || pedido.rotaNome || '—'}</TableCellCode>
+                    <TableCell>
+                      <StatusPill
+                        variant={varianteStatus(pedido.status)}
+                        label={rotuloStatusPedido(pedido.status, temReservaAtiva)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Abrir pedido ${pedido.id}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void abrirPedido(pedido.id);
+                          }}
+                        >
+                          Abrir
+                        </Button>
+                        {podeLiberar && pedido.status === 'rascunho' && (
+                          <Button
+                            type="button"
+                            variant="destructiveOutline"
+                            size="sm"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setLiberarPedidoId(pedido.id);
+                            }}
+                          >
+                            Liberar reserva
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {liberarPedidoId && (
         <ModalLiberarReserva

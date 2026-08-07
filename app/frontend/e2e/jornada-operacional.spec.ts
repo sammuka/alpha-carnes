@@ -145,6 +145,38 @@ async function fillInputValue(page: Page, selector: string, value: string) {
   await expect(input).toHaveValue(value);
 }
 
+/**
+ * Seleciona uma data ISO (`yyyy-MM-dd`) num `DatePickerField` (trigger `<button>` +
+ * Popover com `react-day-picker`). Não dá para usar `.fill()` — precisa navegar o
+ * calendário até o mês certo e clicar no dia.
+ */
+async function selecionarDataNoPicker(page: Page, selector: string, isoDate: string) {
+  await page.locator(selector).click();
+
+  const popover = page.locator('[data-slot="popover-content"]');
+  await expect(popover).toBeVisible();
+
+  const [ano, mes, dia] = isoDate.split('-').map(Number);
+  const hoje = new Date();
+  // Sem data selecionada, o Calendar abre no mês atual (defaultMonth={selected} == undefined).
+  const diffMeses = (ano - hoje.getFullYear()) * 12 + (mes - 1 - hoje.getMonth());
+  const botaoNavegacao = popover.getByRole('button', {
+    name: diffMeses >= 0 ? 'Go to next month' : 'Go to previous month',
+  });
+  for (let i = 0; i < Math.abs(diffMeses); i += 1) {
+    await botaoNavegacao.click();
+  }
+
+  // Exclui dias de mês adjacente ("outside day"), que reaproveitam a classe
+  // `text-fg-faint` (ver classNames.day_outside em calendar.tsx).
+  const diaCell = popover
+    .getByRole('gridcell', { name: String(dia), exact: true })
+    .and(popover.locator(':not(.text-fg-faint)'));
+  await diaCell.click();
+
+  await expect(popover).toBeHidden();
+}
+
 function makeCpf(seed: number): string {
   const baseNumber = 100_000_000 + (Math.abs(seed) % 899_999_999);
   const digits = String(baseNumber).split('').map(Number);
@@ -545,7 +577,7 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     const compra = await criarCompraConfirmada(request, auth.cookieHeader, { fornecedorId, itemCompraId, runId });
 
     await page.goto(`${BASE_URL}/comercial/disponibilidade`);
-    await fillInputValue(page, '#data', compra.dataOperacao);
+    await selecionarDataNoPicker(page, '#data', compra.dataOperacao);
     await page.getByRole('button', { name: /^Grade$/ }).click();
     await expect(page.getByText(itemComercialCodigo, { exact: true })).toBeVisible({
       timeout: 15_000,
@@ -564,7 +596,8 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     await page.goto(`${BASE_URL}/comercial/pedidos`);
     await page.getByRole('button', { name: 'Novo pedido' }).click();
     await page.locator('#pedido-operacao').selectOption(compra.compraProgramadaId);
-    await page.locator('#pedido-cliente').selectOption(clienteId);
+    await page.locator('#pedido-cliente').click();
+    await page.getByRole('option', { name: `Cliente ${runId}` }).click();
     await page.locator('#produto-novo').selectOption(itemComercialId);
     await page.locator('#quantidade-produto-novo').fill('2');
     await page.getByRole('button', { name: 'Adicionar produto' }).click();
@@ -579,7 +612,7 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     }));
     expect(respostaPedido.request().postDataJSON().dataOperacao).toBeDefined();
     const pedido = (await respostaPedido.json()) as { id: string; status: string };
-    const artigoPedido = page.locator('article').filter({ hasText: pedido.id });
+    const artigoPedido = page.locator('tr').filter({ hasText: pedido.id.slice(0, 8).toUpperCase() });
     await expect(
       artigoPedido.locator('span', { hasText: /^Rascunho com reserva ativa$/ }),
     ).toBeVisible();

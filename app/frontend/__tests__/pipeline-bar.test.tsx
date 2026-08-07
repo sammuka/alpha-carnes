@@ -20,9 +20,9 @@ describe('PipelineBar', () => {
   });
 
   it('exibe contadores por etapa quando informados', () => {
-    render(<PipelineBar etapaAtual="Recebimento" contadores={{ recebimento: '12', carga: '3' }} />);
+    render(<PipelineBar etapaAtual="Recebimento" contadores={{ recebimento: '12', carga: '7' }} />);
     expect(screen.getByText('12')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
   });
 
   it('marca a etapa atual para leitores de tela', () => {

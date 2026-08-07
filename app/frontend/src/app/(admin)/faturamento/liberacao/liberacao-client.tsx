@@ -5,11 +5,17 @@ import Link from 'next/link';
 import { CheckCircle2, FileText, Lock, Search, ShieldCheck, Truck, XCircle, AlertTriangle } from 'lucide-react';
 import type { StatusCaminhao } from '@/lib/operacao';
 import { statusCaminhaoVariant, statusNfseVariant } from '@/lib/status-ui';
-import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
 import { Input } from '@/components/ui/input';
+import { PageHeader } from '@/components/ui/page-header';
+import { KpiStrip, Kpi } from '@/components/ui/kpi-strip';
+import { EmptyState } from '@/components/ui/empty-state';
+import {
+  Table, TableBody, TableCell, TableCellCode, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import type { ChecklistLiberacao, NotaFiscalListagem, Paginado, RequisitoChecklist, StatusNfse } from '@/lib/faturamento';
 import { extrairMensagemErro } from '@/lib/error-message';
@@ -52,12 +58,14 @@ const LINK_RESOLUCAO: Record<RequisitoChecklist['chave'], { texto: string; href:
 
 function RequisitoLinha({ ok, label, detalhe }: { ok: boolean; label: string; detalhe?: string }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-2 border-b border-[var(--color-muted)] last:border-0">
-      <div className="flex items-center gap-2">
-        {ok ? <CheckCircle2 className="w-4 h-4 text-[var(--color-success-strong)] flex-shrink-0" /> : <XCircle className="w-4 h-4 text-[var(--color-danger-rose)] flex-shrink-0" />}
-        <span className={`text-[13px] font-medium ${ok ? 'text-[var(--color-text-strong)]' : 'text-[var(--color-danger-strong-text)]'}`}>{label}</span>
-      </div>
-      {detalhe && <span className={`text-[11px] font-semibold ${ok ? 'text-[var(--color-text-secondary)]' : 'text-[var(--color-danger-rose)]'}`}>{detalhe}</span>}
+    <div className="flex items-center gap-2 py-1 text-xs">
+      {ok ? (
+        <CheckCircle2 size={14} className="shrink-0 text-success" />
+      ) : (
+        <XCircle size={14} className="shrink-0 text-danger-fg" />
+      )}
+      <span className={cn('font-medium', ok ? 'text-foreground' : 'text-danger-fg')}>{label}</span>
+      {detalhe && <span className="ml-auto text-fg-secondary">{detalhe}</span>}
     </div>
   );
 }
@@ -220,19 +228,19 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
   const liberado = selecionado?.statusCaminhao === 'liberado_saida';
 
   return (
-    <div className="flex h-full flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Liberação do Caminhão</h1>
-          <p className="text-sm text-muted-foreground">
-            Checklist calculado a partir do estado real da carga, notas fiscais e seguro. Libera apenas quando todos os requisitos estiverem OK.
-          </p>
-        </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="min-w-[250px] pl-9" placeholder="Buscar placa…" value={busca} onChange={(e) => setBusca(e.target.value)} />
-        </div>
-      </div>
+    <div className="space-y-3">
+      <PageHeader
+        title="Liberação do Caminhão"
+        subtitle="Checklist calculado a partir do estado real da carga, notas fiscais e seguro. Libera apenas quando todos os requisitos estiverem OK."
+      >
+        <Input
+          adornLeft={<Search />}
+          placeholder="Buscar placa…"
+          className="h-8 w-[200px]"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+        />
+      </PageHeader>
 
       {erro && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -241,169 +249,173 @@ export function LiberacaoCaminhaoClient({ permissoes }: { permissoes: string[] }
       )}
 
       {/* KPIs — LiberacaoCaminhao.tsx:143-156 */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'Cargas no pátio', value: `${kpis.total}`, sub: 'aguardando liberação', color: 'text-[var(--color-brand-navy-deep)]', bg: 'bg-[var(--color-surface-subtle)]' },
-          { label: 'Liberáveis agora', value: `${kpis.liberaveis}`, sub: 'todos os requisitos OK', color: 'text-[var(--color-success-strong)]', bg: 'bg-[var(--color-success-surface)]' },
-          { label: 'Com pendência', value: `${kpis.pendentes}`, sub: 'requisitos incompletos', color: 'text-[var(--color-warning-ink)]', bg: 'bg-[var(--color-warning-surface)]' },
-          { label: 'Liberadas', value: `${kpis.liberadas}`, sub: 'alterações bloqueadas', color: 'text-[var(--color-text-secondary)]', bg: 'bg-[var(--color-muted)]' },
-        ].map(({ label, value, sub, color, bg }) => (
-          <div key={label} className={`border border-[var(--color-border)] rounded-xl px-4 py-3.5 ${bg}`}>
-            <p className="text-[11px] text-[var(--color-text-secondary)] font-medium mb-1">{label}</p>
-            <p className={`text-[26px] font-black leading-none ${color}`}>{value}</p>
-            <p className="text-[10px] text-[var(--color-text-muted)] mt-1.5">{sub}</p>
-          </div>
-        ))}
-      </div>
+      <KpiStrip>
+        <Kpi label="Cargas no pátio" value={kpis.total} hint="aguardando liberação" tone="default" />
+        <Kpi label="Liberáveis agora" value={kpis.liberaveis} hint="todos os requisitos OK" tone="ok" />
+        <Kpi label="Com pendência" value={kpis.pendentes} hint="requisitos incompletos" tone="alert" />
+        <Kpi label="Liberadas" value={kpis.liberadas} hint="alterações bloqueadas" tone="default" />
+      </KpiStrip>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 lg:grid-cols-12">
-        <Card className="lg:col-span-4">
-          <CardContent className="flex h-full flex-col gap-4 p-5">
-            <h2 className="flex items-center gap-2 font-bold">
-              <Truck className="h-5 w-5 text-primary" />
-              Caminhões no Pátio
-            </h2>
-            <div className="flex-1 space-y-3 overflow-auto">
-              {loading && <p className="text-sm text-muted-foreground">Carregando…</p>}
-              {filtrados.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setSelecionado(c)}
-                  className={`w-full rounded-lg border p-4 text-left transition-colors ${
-                    selecionado?.id === c.id ? 'border-primary bg-primary/5' : 'hover:border-primary/30'
-                  }`}
-                >
-                  <div className="mb-2 flex items-start justify-between">
-                    <Badge variant="outline" className="font-mono">
-                      {c.placa}
-                    </Badge>
-                    {statusBadge(c)}
-                  </div>
-                  <p className="font-semibold">{c.motorista}</p>
-                  <p className="text-xs text-muted-foreground">{c.rota ?? '—'}</p>
-                </button>
-              ))}
-            </div>
+      <div className="grid items-start gap-2.5 lg:grid-cols-[320px_1fr]">
+        {/* Master */}
+        <Card>
+          <CardContent className="flex items-center gap-2 p-2.5">
+            <Truck className="size-4 text-primary" />
+            <h2 className="text-[13px] font-bold text-foreground">Caminhões no Pátio</h2>
           </CardContent>
+          <div className="max-h-[560px] overflow-y-auto overflow-x-hidden">
+            {loading && <p className="p-3 text-xs text-muted-foreground">Carregando…</p>}
+            {!loading && filtrados.length === 0 && (
+              <EmptyState icon={<Truck />} title="Nenhum veículo encontrado." className="py-12" />
+            )}
+            {!loading &&
+              filtrados.map((c) => {
+                const selecionadoAtual = selecionado?.id === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSelecionado(c)}
+                    className={cn(
+                      'block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2',
+                      selecionadoAtual && 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]',
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <b className="min-w-0 flex-1 truncate font-data text-[13px] font-bold">{c.placa}</b>
+                      {statusBadge(c)}
+                    </span>
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      {c.motorista} · {c.rota ?? '—'}
+                    </span>
+                  </button>
+                );
+              })}
+          </div>
         </Card>
 
-        <Card className="flex flex-col lg:col-span-8">
+        {/* Detail */}
+        <Card>
           {!selecionado ? (
-            <CardContent className="p-8 text-sm text-muted-foreground">Selecione um veículo.</CardContent>
+            <CardContent className="p-8">
+              <EmptyState icon={<Truck />} title="Selecione um veículo." />
+            </CardContent>
           ) : (
-            <>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 p-6">
+            <CardContent className="space-y-3 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-bold">
+                  <h2 className="text-[15px] font-bold text-foreground">
                     {selecionado.motorista} — {selecionado.placa}
                   </h2>
-                  <p className="text-sm text-muted-foreground capitalize">
+                  <p className="text-xs text-muted-foreground">
                     {selecionado.statusCaminhao.replace(/_/g, ' ')} · Faturamento:{' '}
                     {selecionado.statusFaturamento?.replace(/_/g, ' ') ?? '—'}
                   </p>
                 </div>
                 {(pode('LIBERACAO_GERENCIAR') || pode('FATURAMENTO_GERENCIAR') || pode('EXPEDICAO_GERENCIAR')) ? (
                   <Button
-                    className="gap-2"
+                    variant={liberado ? 'secondary' : 'default'}
                     disabled={submitting || !checklist?.liberavel || liberado}
                     onClick={() => void liberarSaida()}
                   >
-                    <CheckCircle2 className="h-5 w-5" />
-                    {liberado ? 'Já liberado' : submitting ? 'Liberando…' : 'Liberar Caminhão'}
+                    {liberado ? (
+                      'Já liberado'
+                    ) : (
+                      <>
+                        <CheckCircle2 />
+                        {submitting ? 'Liberando…' : 'Liberar Caminhão'}
+                      </>
+                    )}
                   </Button>
                 ) : (
                   statusBadge(selecionado)
                 )}
               </div>
-              <CardContent className="flex flex-1 flex-col gap-4 overflow-auto p-6">
-                {/* Banner de confirmação de liberação — LiberacaoCaminhao.tsx:201-215 */}
-                {liberado && selecionado.liberacaoSaida && (
-                  <div className="bg-[var(--color-success-surface)] border border-[var(--color-success-strong-border)] rounded-xl px-5 py-3.5 flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-2.5">
-                      <CheckCircle2 className="w-5 h-5 text-[var(--color-success-strong)] flex-shrink-0" />
-                      <div>
-                        <p className="text-[13px] font-bold text-[var(--color-success-strong)]">
-                          Caminhão liberado por {selecionado.liberacaoSaida.responsavelNome ?? '—'} em {fmtDataHoraLiberacao(selecionado.liberacaoSaida.dataHora)}
-                        </p>
-                        <p className="text-[11px] text-[var(--color-success-strong-hover)]">Alterações operacionais bloqueadas para esta carga.</p>
+
+              {/* Banner de confirmação de liberação — LiberacaoCaminhao.tsx:201-215 */}
+              {liberado && selecionado.liberacaoSaida && (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-success-soft-border bg-success-soft p-3">
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="size-5 shrink-0 text-success-fg" />
+                    <div>
+                      <p className="text-[13px] font-bold text-success-fg">
+                        Caminhão liberado por {selecionado.liberacaoSaida.responsavelNome ?? '—'} em {fmtDataHoraLiberacao(selecionado.liberacaoSaida.dataHora)}
+                      </p>
+                      <p className="text-[11px] text-success-fg">Alterações operacionais bloqueadas para esta carga.</p>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1 text-[11px] font-bold text-background">
+                    <Lock className="size-3" /> Liberado — alterações bloqueadas
+                  </span>
+                </div>
+              )}
+
+              {/* Checklist calculado (D10.6) */}
+              <Card>
+                <CardContent className="space-y-0.5 p-3">
+                  <h3 className="mb-1 flex items-center gap-2 text-[13px] font-bold">
+                    <FileText className="size-4 text-primary" />
+                    Requisitos para liberação
+                  </h3>
+                  {checklist?.requisitos.map((r) => (
+                    <RequisitoLinha key={r.chave} ok={r.ok} label={r.rotulo} detalhe={r.detalhe} />
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Pendências impeditivas */}
+              {checklist && !checklist.liberavel && !liberado && (
+                <div className="overflow-hidden rounded-md border border-warning-soft-border bg-warning-soft">
+                  <div className="flex items-center gap-2 border-b border-warning-soft-border px-3 py-2">
+                    <AlertTriangle className="size-3.5 text-warning-fg" />
+                    <h3 className="text-[13px] font-bold text-warning-fg">Pendências impeditivas</h3>
+                  </div>
+                  <div className="divide-y divide-warning-soft-border">
+                    {checklist.requisitos.filter((r) => !r.ok).map((r) => (
+                      <div key={r.chave} className="flex items-center justify-between gap-3 px-3 py-2">
+                        <p className="text-xs text-warning-fg">{r.rotulo} — {r.detalhe}</p>
+                        <Link href={LINK_RESOLUCAO[r.chave].href} className="whitespace-nowrap text-xs font-semibold text-primary-fg hover:underline">
+                          {LINK_RESOLUCAO[r.chave].texto}
+                        </Link>
                       </div>
-                    </div>
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-[var(--color-brand-navy-deep)] text-white">
-                      <Lock className="w-3 h-3" /> Liberado — alterações bloqueadas
-                    </span>
+                    ))}
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Checklist calculado (D10.6) */}
-                <Card>
-                  <CardContent className="p-0">
-                    <div className="px-5 py-3.5 border-b flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-primary" />
-                      <h3 className="text-[13px] font-bold">Requisitos para liberação</h3>
-                    </div>
-                    <div className="px-5 py-1">
-                      {checklist?.requisitos.map((r) => (
-                        <RequisitoLinha key={r.chave} ok={r.ok} label={r.rotulo} detalhe={r.detalhe} />
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Pendências impeditivas */}
-                {checklist && !checklist.liberavel && !liberado && (
-                  <div className="bg-[var(--color-warning-surface)] border border-[var(--color-provisorio-border)] rounded-xl overflow-hidden">
-                    <div className="px-5 py-3 border-b border-[var(--color-provisorio-border)] flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-[var(--color-warning-ink)]" />
-                      <h3 className="text-[13px] font-bold text-[var(--color-provisorio-text)]">Pendências impeditivas</h3>
-                    </div>
-                    <div className="flex flex-col divide-y divide-[var(--color-provisorio-border)]/60">
-                      {checklist.requisitos.filter((r) => !r.ok).map((r) => (
-                        <div key={r.chave} className="px-5 py-3 flex items-center justify-between gap-3">
-                          <p className="text-[12px] text-[var(--color-provisorio-text)]">{r.rotulo} — {r.detalhe}</p>
-                          <Link href={LINK_RESOLUCAO[r.chave].href} className="text-[12px] font-semibold text-[var(--color-action-blue-hover)] hover:underline whitespace-nowrap">
-                            {LINK_RESOLUCAO[r.chave].texto}
-                          </Link>
-                        </div>
-                      ))}
-                    </div>
+              {/* Notas fiscais desta carga — LiberacaoCaminhao.tsx:298-325 */}
+              <Card>
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+                    <ShieldCheck className="size-4 text-primary" />
+                    <h3 className="text-[13px] font-bold">Notas fiscais desta carga</h3>
                   </div>
-                )}
-
-                {/* Notas fiscais desta carga — LiberacaoCaminhao.tsx:298-325 */}
-                <Card>
-                  <CardContent className="p-0">
-                    <div className="px-5 py-3.5 border-b flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-primary" />
-                      <h3 className="text-[13px] font-bold">Notas fiscais desta carga</h3>
-                    </div>
-                    <table className="w-full text-[12px]">
-                      <thead>
-                        <tr className="bg-[var(--color-surface-subtle)] border-b border-[var(--color-muted)]">
-                          <th className="px-4 py-2 text-left text-[10px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Nº nota</th>
-                          <th className="px-4 py-2 text-left text-[10px] font-bold text-[var(--color-text-secondary)] uppercase tracking-wider">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {notasCarga.length === 0 && (
-                          <tr>
-                            <td colSpan={2} className="px-4 py-3 text-[12px] text-muted-foreground">Nenhuma nota vinculada a esta carga.</td>
-                          </tr>
-                        )}
-                        {notasCarga.map((n) => (
-                          <tr key={n.id} className="border-b border-[var(--color-surface-subtle)] last:border-0">
-                            <td className="px-4 py-2 font-mono font-bold text-[var(--color-brand-navy-deep)]">{n.numeroNfse ?? '—'}</td>
-                            <td className="px-4 py-2">
-                              <StatusPill variant={statusNfseVariant(n.statusNfse)} label={rotuloNota(n.statusNfse)} />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </CardContent>
-                </Card>
-              </CardContent>
-            </>
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead>Nº nota</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {notasCarga.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={2} className="text-muted-foreground">Nenhuma nota vinculada a esta carga.</TableCell>
+                        </TableRow>
+                      )}
+                      {notasCarga.map((n) => (
+                        <TableRow key={n.id}>
+                          <TableCellCode>{n.numeroNfse ?? '—'}</TableCellCode>
+                          <TableCell>
+                            <StatusPill variant={statusNfseVariant(n.statusNfse)} label={rotuloNota(n.statusNfse)} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </CardContent>
           )}
         </Card>
       </div>

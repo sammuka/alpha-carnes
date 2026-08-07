@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Direção A · Clientes — AlphaCarnes DS v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .cli-item {
+    display: block; width: 100%; text-align: left;
+    border: 0; background: none; cursor: pointer;
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    transition: background var(--t-fast) var(--ease);
+  }
+  .cli-item:hover { background: var(--surface-2); }
+  .cli-item.sel { background: var(--primary-soft); box-shadow: inset 2px 0 0 var(--primary); }
+  .cli-item .r1 { display: flex; align-items: center; gap: 8px; }
+  .cli-item .r1 b { font-size: var(--fs-13); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cli-item .r2 { display: block; font-size: var(--fs-11); color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cli-list { max-height: 560px; overflow-y: auto; overflow-x: hidden; }
+  .cli-item .r2 .code { font-family: var(--font-data); }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="logo">A</div>
+      <div><div class="name">AlphaCarnes</div><div class="tag">DISTRIBUIÇÃO DE CARNES</div></div>
+    </div>
+    <nav class="sb-nav">
+      <div class="sb-group">
+        <button class="sb-group-label">Comercial <span>⌄</span></button>
+        <a class="sb-item active" href="clientes.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Clientes</a>
+        <a class="sb-item" href="pedidos.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>Pedidos de Venda</a>
+        <a class="sb-item" href="#"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/></svg>Tabela de Preços</a>
+        <a class="sb-item" href="#"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>Disponibilidade</a>
+        <a class="sb-item" href="#"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/></svg>Espelho Comercial</a>
+      </div>
+      <div class="sb-group"><button class="sb-group-label">Gestão <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Recebimento &amp; Balança <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Desossa <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Estoque <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Carga <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Faturamento <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Cadastros &amp; Regras <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Administração <span>›</span></button></div>
+    </nav>
+    <div class="sb-user">
+      <div class="avatar">A</div>
+      <div class="who"><b>Administrador</b><span>Administrador</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <nav class="crumbs">Comercial <span class="sep">/</span> <b>Clientes</b></nav>
+      <div class="meta">
+        <span>Usuário: <b>Administrador</b></span>
+        <span class="mono" style="font-size:var(--fs-11);">qua., 05 ago 2026</span>
+        <div class="avatar">A</div>
+      </div>
+    </header>
+
+    <main class="page">
+      <div class="page-head">
+        <h1>Cadastro de Clientes</h1>
+        <span class="sub">Gerenciamento de clientes e preferências operacionais</span>
+        <div class="actions">
+          <span class="badge badge-count" style="height:22px; font-size:var(--fs-11); padding:0 9px;">15 ativos</span>
+          <button class="btn btn-primary"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>Novo cliente</button>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns: 320px 1fr; align-items:start;">
+        <!-- Lista -->
+        <div class="card">
+          <div class="card-body" style="padding:10px 10px 6px; display:flex; gap:6px;">
+            <div class="input-wrap" style="flex:1;">
+              <span class="adorn left"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+              <input class="input input-sm" placeholder="Buscar cliente…" style="padding-left:28px;">
+            </div>
+            <select class="select input-sm" style="width:110px; height:var(--h-ctl-sm); font-size:var(--fs-12);">
+              <option>Ativos</option>
+              <option>Todos</option>
+              <option>Inativos</option>
+            </select>
+          </div>
+          <div class="cli-list">
+            <button class="cli-item sel">
+              <span class="r1"><b>Nobre Corte</b><span class="pill expedido" style="height:17px; font-size:var(--fs-10);">Ativo</span></span>
+              <span class="r2">Casa de Carnes Nobre Corte Ltda · <span class="code">11.003.016/0002-02</span></span>
+            </button>
+            <button class="cli-item">
+              <span class="r1"><b>Trigo Dourado</b><span class="pill expedido" style="height:17px; font-size:var(--fs-10);">Ativo</span></span>
+              <span class="r2">Padaria e Rotisseria Trigo Dourado Ltda · <span class="code">11.003.014/0009-09</span></span>
+            </button>
+            <button class="cli-item">
+              <span class="r1"><b>Irmãos Lima</b><span class="pill expedido" style="height:17px; font-size:var(--fs-10);">Ativo</span></span>
+              <span class="r2">Comércio de Carnes Irmãos Lima Ltda · <span class="code">11.003.013/0008-08</span></span>
+            </button>
+            <button class="cli-item">
+              <span class="r1"><b>Family Supermercados</b><span class="pill expedido" style="height:17px; font-size:var(--fs-10);">Ativo</span></span>
+              <span class="r2">Supermercados Family Ltda · <span class="code">11.003.012/0007-07</span></span>
+            </button>
+            <button class="cli-item">
+              <span class="r1"><b>Elegance Buffet</b><span class="pill expedido" style="height:17px; font-size:var(--fs-10);">Ativo</span></span>
+              <span class="r2">Buffet Elegance Eventos Ltda · <span class="code">11.003.011/0006-06</span></span>
+            </button>
+            <button class="cli-item">
+              <span class="r1"><b>Açougue do Zé</b><span class="pill expedido" style="height:17px; font-size:var(--fs-10);">Ativo</span></span>
+              <span class="r2">Açougue do Zé Comércio de Carnes Ltda · <span class="code">000.000.001-23</span></span>
+            </button>
+            <button class="cli-item">
+              <span class="r1"><b>Boi na Brasa</b><span class="pill expedido" style="height:17px; font-size:var(--fs-10);">Ativo</span></span>
+              <span class="r2">Churrascaria Boi na Brasa Ltda · <span class="code">11.003.001/0001-01</span></span>
+            </button>
+            <button class="cli-item">
+              <span class="r1"><b>Bom Corte</b><span class="pill expedido" style="height:17px; font-size:var(--fs-10);">Ativo</span></span>
+              <span class="r2">Casa de Carnes Bom Corte Ltda · <span class="code">11.003.004/0004-04</span></span>
+            </button>
+            <button class="cli-item">
+              <span class="r1"><b>Carnes Premium</b><span class="pill pendente" style="height:17px; font-size:var(--fs-10);">Inativo</span></span>
+              <span class="r2">Carnes Premium Distribuição Ltda · <span class="code">11.003.009/0005-05</span></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Detalhe -->
+        <div class="card">
+          <div class="card-body" style="display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--border); padding:12px;">
+            <div style="width:36px; height:36px; border-radius:8px; background:var(--primary-soft); color:var(--primary-fg); display:grid; place-items:center; font-weight:700;">NC</div>
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:var(--fs-16); font-weight:700;">Nobre Corte</div>
+              <div style="font-size:var(--fs-12); color:var(--fg-muted);">Casa de Carnes Nobre Corte Ltda · <span class="mono">CLI-016</span></div>
+            </div>
+            <label class="row" style="gap:7px; font-size:var(--fs-13); font-weight:600;">
+              <span class="switch"><input type="checkbox" checked><span class="track"></span></span>
+              Cliente ativo
+            </label>
+            <button class="btn btn-primary"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7M7 3v4a1 1 0 0 0 1 1h7"/></svg>Salvar</button>
+          </div>
+
+          <div style="padding: 0 12px;" data-tab-group="cli">
+            <div class="tabs">
+              <button class="tab active" data-tab="gerais">Dados gerais</button>
+              <button class="tab" data-tab="fiscais">Fiscais &amp; endereço</button>
+              <button class="tab" data-tab="contatos">Contatos</button>
+              <button class="tab" data-tab="prefs">Preferências operacionais</button>
+            </div>
+          </div>
+
+          <div class="card-body stack" style="gap:12px;" data-tab-panel="gerais" data-scope="cli">
+            <div class="callout callout-info">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+              <span><b>Representante e Rota são herdados automaticamente</b> pelo pedido de venda ao selecionar este cliente — não precisam ser escolhidos novamente na venda.</span>
+            </div>
+            <div class="form-grid">
+              <div class="field"><label>Nome fantasia <span class="req">*</span></label><input class="input" value="Nobre Corte"></div>
+              <div class="field"><label>Razão social</label><input class="input" value="Casa de Carnes Nobre Corte Ltda"></div>
+              <div class="field"><label>CNPJ/CPF</label><input class="input mono" value="11.003.016/0002-02"></div>
+              <div class="field"><label>Código interno</label><input class="input mono" value="CLI-016" readonly><span class="help">Gerado automaticamente.</span></div>
+              <div class="field"><label>Representante</label><select class="select"><option>Eduardo Farias Ltda</option><option>José Roberto Andrade</option></select></div>
+              <div class="field"><label>Itinerário / rota</label><select class="select"><option>Santana/Norte SP</option><option>ROTA-CENTRO</option><option>ROTA-BARUERI</option></select></div>
+              <div class="field"><label>Prioridade padrão</label><select class="select"><option>Alta</option><option>Média</option><option>Baixa</option></select></div>
+              <div class="field"><label>Tabela de preço</label><select class="select"><option>Faixa A</option><option>Faixa B</option><option>Faixa C</option><option>Faixa D</option></select></div>
+              <div class="field span-2"><label>Observações</label><textarea class="textarea" placeholder="Instruções de entrega, restrições, janela de recebimento…"></textarea></div>
+            </div>
+          </div>
+          <div class="card-body" data-tab-panel="fiscais" data-scope="cli" style="display:none;">
+            <div class="empty"><b>Dados fiscais &amp; endereço</b><span>Conteúdo da aba no app real.</span></div>
+          </div>
+          <div class="card-body" data-tab-panel="contatos" data-scope="cli" style="display:none;">
+            <div class="empty"><b>Contatos</b><span>Conteúdo da aba no app real.</span></div>
+          </div>
+          <div class="card-body" data-tab-panel="prefs" data-scope="cli" style="display:none;">
+            <div class="empty"><b>Preferências operacionais</b><span>Conteúdo da aba no app real.</span></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="../shared/preview.js"></script>
+</body>
+</html>
