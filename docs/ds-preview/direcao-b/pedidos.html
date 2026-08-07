@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Direção B · Pedidos de Venda — AlphaCarnes DS v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="logo">A</div>
+      <div><div class="name">AlphaCarnes</div><div class="tag">DISTRIBUIÇÃO DE CARNES</div></div>
+    </div>
+    <nav class="sb-nav">
+      <div class="sb-group">
+        <button class="sb-group-label">Comercial <span>⌄</span></button>
+        <a class="sb-item" href="clientes.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Clientes</a>
+        <a class="sb-item active" href="pedidos.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>Pedidos de Venda</a>
+        <a class="sb-item" href="#"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/></svg>Tabela de Preços</a>
+        <a class="sb-item" href="#"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>Disponibilidade</a>
+        <a class="sb-item" href="#"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/></svg>Espelho Comercial</a>
+      </div>
+      <div class="sb-group"><button class="sb-group-label">Gestão <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Recebimento &amp; Balança <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Desossa <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Estoque <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Carga <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Faturamento <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Cadastros &amp; Regras <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Administração <span>›</span></button></div>
+    </nav>
+    <div class="sb-user">
+      <div class="avatar">A</div>
+      <div class="who"><b>Administrador</b><span>Administrador</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <nav class="crumbs">Comercial <span class="sep">/</span> <b>Pedidos de Venda</b></nav>
+      <div class="meta">
+        <span>Usuário: <b>Administrador</b></span>
+        <span class="mono" style="font-size:var(--fs-11);">qua., 05 ago 2026</span>
+        <div class="avatar">A</div>
+      </div>
+    </header>
+
+    <main class="page">
+      <div class="page-head">
+        <h1>Pedidos de Venda</h1>
+        <span class="sub">Acompanhe reservas, overbooking e atendimento comercial</span>
+        <div class="actions">
+          <button class="btn btn-primary"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>Novo pedido</button>
+        </div>
+      </div>
+
+      <div class="kpi-strip" style="margin-bottom:10px;">
+        <div class="kpi"><div class="k-label">Total de pedidos</div><div class="k-value">18</div><div class="k-hint">na visão atual</div></div>
+        <div class="kpi"><div class="k-label">Rascunhos</div><div class="k-value">1</div><div class="k-hint">com reserva ativa</div></div>
+        <div class="kpi alert"><div class="k-label">Overbooking</div><div class="k-value">1</div><div class="k-hint">exige atenção</div></div>
+        <div class="kpi ok"><div class="k-label">Finalizados</div><div class="k-value">4</div><div class="k-hint">pedidos concluídos</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Pedidos</h2>
+          <span class="badge badge-count">18</span>
+          <span class="spacer"></span>
+          <div class="row" style="gap:6px;">
+            <button class="chip on" data-toggle>Operação atual</button>
+            <button class="chip" data-toggle>Só com reserva</button>
+          </div>
+          <div class="input-wrap" style="width:250px;">
+            <span class="adorn left"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+            <input class="input input-sm" placeholder="Buscar pedido ou cliente…" style="padding-left:28px;">
+          </div>
+          <select class="select input-sm" style="width:170px; height:var(--h-ctl-sm); font-size:var(--fs-12);">
+            <option>Todos os status</option>
+            <option>Em elaboração c/ reserva</option>
+            <option>Aguard. overbooking</option>
+            <option>Finalizado</option>
+            <option>Faturado</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="dt">
+            <thead>
+              <tr>
+                <th>Pedido</th>
+                <th class="sortable">Cliente <span class="sort-ind">▼</span></th>
+                <th>Representante</th>
+                <th>Rota</th>
+                <th class="num-cell">Itens</th>
+                <th class="num-cell">Qtd total</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr data-selectable><td class="code">6C15-9724</td><td class="main-cell">Boi na Brasa</td><td class="sub-cell">José Roberto Andrade</td><td class="code">ROTA-CENTRO</td><td class="num-cell">1</td><td class="num-cell">8.000</td><td><span class="pill recebido">Em elaboração · reserva ativa</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">6BB5-030C</td><td class="main-cell">Bom Corte</td><td class="sub-cell">José Roberto Andrade</td><td class="code">ROTA-SANTANA</td><td class="num-cell">1</td><td class="num-cell">8.000</td><td><span class="pill recebido">Em elaboração · reserva ativa</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">6B59-364D</td><td class="main-cell">Nobre Corte</td><td class="sub-cell">Eduardo Farias Ltda</td><td class="code">ROTA-CARAPICUIBA</td><td class="num-cell">1</td><td class="num-cell">8.000</td><td><span class="pill recebido">Em elaboração · reserva ativa</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">6AF9-508E</td><td class="main-cell">Distribuidora Alimentos Vale Norte Ltda</td><td class="sub-cell">Sem representante</td><td class="code">ROTA-BARUERI</td><td class="num-cell">1</td><td class="num-cell">8.000</td><td><span class="pill recebido">Em elaboração · reserva ativa</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">6A71-66B8</td><td class="main-cell">Trigo Dourado</td><td class="sub-cell">Ana Paula Represent.</td><td class="code">ROTA-OSASCO</td><td class="num-cell">1</td><td class="num-cell">2.500</td><td><span class="pill expedido">Finalizado</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">69E9-8176</td><td class="main-cell">Irmãos Lima</td><td class="sub-cell">José Roberto Andrade</td><td class="code">ROTA-CENTRO</td><td class="num-cell">1</td><td class="num-cell">2.500</td><td><span class="pill recebido">Em elaboração · reserva ativa</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">6959-91A2</td><td class="main-cell">Family Supermercados</td><td class="sub-cell">Eduardo Farias Ltda</td><td class="code">ROTA-SANTANA</td><td class="num-cell">1</td><td class="num-cell">2.500</td><td><span class="pill expedido">Finalizado</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">68C9-F2F8</td><td class="main-cell">Elegance Buffet</td><td class="sub-cell">Ana Paula Represent.</td><td class="code">ROTA-OSASCO</td><td class="num-cell">1</td><td class="num-cell">2.500</td><td><span class="pill recebido">Em elaboração · reserva ativa</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">683D-7D22</td><td class="main-cell">Açougue do Zé</td><td class="sub-cell">José Roberto Andrade</td><td class="code">ROTA-CENTRO</td><td class="num-cell">1</td><td class="num-cell">2.500</td><td><span class="pill expedido">Finalizado</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">67AD-961D</td><td class="main-cell">Sabor &amp; Cia</td><td class="sub-cell">Eduardo Farias Ltda</td><td class="code">ROTA-SANTANA</td><td class="num-cell">1</td><td class="num-cell">2.500</td><td><span class="pill recebido">Em elaboração · reserva ativa</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">674D-7DC3</td><td class="main-cell">Mercadinho da Vila</td><td class="sub-cell">Sem representante</td><td class="code">ROTA-BARUERI</td><td class="num-cell">1</td><td class="num-cell">1.200</td><td><span class="pill bloqueado">Cancelado</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">66C1-E5F1</td><td class="main-cell">Bairro Feliz</td><td class="sub-cell">Ana Paula Represent.</td><td class="code">ROTA-OSASCO</td><td class="num-cell">1</td><td class="num-cell">3.000</td><td><span class="pill expedido">Faturado</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">6605-BDCC</td><td class="main-cell">Espeto de Prata</td><td class="sub-cell">José Roberto Andrade</td><td class="code">ROTA-CENTRO</td><td class="num-cell">1</td><td class="num-cell">3.000</td><td><span class="pill expedido">Atendido</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">6545-D6D0</td><td class="main-cell">Carnes Premium</td><td class="sub-cell">Eduardo Farias Ltda</td><td class="code">ROTA-SANTANA</td><td class="num-cell">1</td><td class="num-cell">3.000</td><td><span class="pill pesado">Parcialmente atendido</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">6485-33EF</td><td class="main-cell">Açougue Central</td><td class="sub-cell">Ana Paula Represent.</td><td class="code">ROTA-OSASCO</td><td class="num-cell">1</td><td class="num-cell">3.000</td><td><span class="pill expedido">Finalizado</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">63F5-57F3</td><td class="main-cell">Preço Bom</td><td class="sub-cell">José Roberto Andrade</td><td class="code">ROTA-CENTRO</td><td class="num-cell">1</td><td class="num-cell">3.000</td><td><span class="pill divergencia">Aguardando confirmação de overbooking</span></td><td><div class="row-actions"><button class="btn btn-secondary btn-sm">Decidir</button></div></td></tr>
+              <tr data-selectable><td class="code">6369-1251</td><td class="main-cell">Boi na Brasa</td><td class="sub-cell">José Roberto Andrade</td><td class="code">ROTA-CENTRO</td><td class="num-cell">1</td><td class="num-cell">3.000</td><td><span class="pill recebido">Em elaboração · reserva ativa</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button></div></td></tr>
+              <tr data-selectable><td class="code">62D9-F00A</td><td class="main-cell">Bom Corte</td><td class="sub-cell">José Roberto Andrade</td><td class="code">ROTA-SANTANA</td><td class="num-cell">1</td><td class="num-cell">3.000</td><td><span class="pill pendente">Rascunho · reserva ativa</span></td><td><div class="row-actions"><button class="btn btn-ghost btn-sm">Abrir</button><button class="btn btn-danger-outline btn-sm">Liberar reserva</button></div></td></tr>
+            </tbody>
+            <tfoot>
+              <tr><td colspan="4">18 pedidos</td><td class="num-cell">18</td><td class="num-cell">67.200</td><td colspan="2"></td></tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+<script src="../shared/preview.js"></script>
+</body>
+</html>

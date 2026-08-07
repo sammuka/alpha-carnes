@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Direção B · Componentes — AlphaCarnes DS v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { padding: 28px 36px 80px; max-width: 1240px; margin: 0 auto; }
+  .doc-head { margin-bottom: 28px; }
+  .doc-head .kicker { font-size: var(--fs-11); font-weight: 700; letter-spacing: 0.12em; color: var(--accent-fg); text-transform: uppercase; }
+  .doc-head h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin-top: 4px; }
+  .doc-head p { color: var(--fg-muted); margin-top: 6px; max-width: 68ch; }
+  section.spec { margin-top: 36px; }
+  section.spec > h2 { font-size: var(--fs-16); font-weight: 700; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 14px; letter-spacing: -0.01em; }
+  .demo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .demo {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card);
+    padding: 14px; box-shadow: var(--sh-1);
+  }
+  .demo > h3 { font-size: var(--fs-11); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-muted); margin-bottom: 10px; }
+  .demo .lane { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .demo .lane + .lane { margin-top: 8px; }
+  .demo.wide { grid-column: 1 / -1; }
+  .backlink { font-size: var(--fs-12); }
+</style>
+</head>
+<body>
+
+<div class="doc-head">
+  <a class="backlink" href="../index.html">← Voltar ao hub</a>
+  <div class="kicker">Direção B · Ousada</div>
+  <h1>Galeria de componentes</h1>
+  <p>Todos os controles do DS com vocabulário completo de estados: default, hover, focus, active, disabled, error, loading e readonly. Controles a 30px (26px compacto), linhas de tabela a 32px, dados em JetBrains Mono tabular.</p>
+</div>
+
+<!-- ============ BOTÕES ============ -->
+<section class="spec">
+  <h2>Botões</h2>
+  <div class="demo-grid">
+    <div class="demo wide">
+      <h3>Hierarquia · md 32px</h3>
+      <div class="lane">
+        <button class="btn btn-primary">Finalizar pedido</button>
+        <button class="btn btn-secondary">Copiar tabela anterior</button>
+        <button class="btn btn-ghost">Cancelar</button>
+        <button class="btn btn-danger">Excluir peça</button>
+        <button class="btn btn-danger-outline">Estornar pesagem</button>
+        <button class="btn btn-primary" disabled>Publicar</button>
+        <button class="btn btn-primary loading"><span class="spinner"></span>Salvando…</button>
+      </div>
+      <div class="lane">
+        <button class="btn btn-primary btn-sm">Aplicar</button>
+        <button class="btn btn-secondary btn-sm">Histórico</button>
+        <button class="btn btn-ghost btn-sm">Limpar filtros</button>
+        <button class="btn btn-secondary btn-icon btn-sm" aria-label="Editar"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+        <span class="btn-split">
+          <button class="btn btn-primary btn-sm">Novo recebimento</button>
+          <button class="btn btn-primary btn-sm" aria-label="Mais opções"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+        </span>
+      </div>
+      <div class="lane">
+        <button class="btn btn-primary"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>Novo pedido</button>
+        <button class="btn btn-secondary"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>Atualizar</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CAMPOS ============ -->
+<section class="spec">
+  <h2>Campos de formulário</h2>
+  <div class="demo-grid">
+    <div class="demo">
+      <h3>Text input · estados</h3>
+      <div class="stack">
+        <div class="field">
+          <label>Nome fantasia <span class="req">*</span></label>
+          <input class="input" value="Nobre Corte">
+        </div>
+        <div class="field">
+          <label>Razão social</label>
+          <input class="input" placeholder="Ex.: Casa de Carnes Nobre Corte Ltda">
+          <span class="help">Como consta no CNPJ.</span>
+        </div>
+        <div class="field">
+          <label>CNPJ/CPF</label>
+          <input class="input error mono" value="11.003.016/0002">
+          <span class="error-msg">CNPJ incompleto — verifique os dígitos finais.</span>
+        </div>
+        <div class="field">
+          <label>Código interno</label>
+          <input class="input mono" value="CLI-016" readonly>
+          <span class="help">Gerado automaticamente.</span>
+        </div>
+        <div class="field">
+          <label>Campo desabilitado</label>
+          <input class="input" value="Sem permissão de edição" disabled>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo">
+      <h3>Numérico · unidade e moeda</h3>
+      <div class="stack">
+        <div class="field">
+          <label>Peso capturado</label>
+          <div class="input-wrap suffix">
+            <input class="input" value="28,450">
+            <span class="adorn right">kg</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Preço A</label>
+          <div class="input-wrap prefix-currency">
+            <span class="adorn left">R$</span>
+            <input class="input" value="41,00">
+          </div>
+        </div>
+        <div class="field">
+          <label>Quantidade</label>
+          <div class="input-wrap suffix">
+            <input class="input" value="8">
+            <span class="adorn right">un.</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Busca</label>
+          <div class="input-wrap">
+            <span class="adorn left"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+            <input class="input" placeholder="Buscar lote, PC, fornecedor, NF…">
+          </div>
+        </div>
+        <div class="field">
+          <label>Observações</label>
+          <textarea class="textarea" placeholder="Instruções de entrega, restrições…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo">
+      <h3>Select nativo estilizado</h3>
+      <div class="stack">
+        <div class="field">
+          <label>Status</label>
+          <select class="select">
+            <option>Todos os status</option>
+            <option>Em elaboração com reserva ativa</option>
+            <option>Aguardando confirmação de overbooking</option>
+            <option>Finalizado</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Prioridade padrão</label>
+          <select class="select"><option>Alta</option><option>Média</option><option>Baixa</option></select>
+        </div>
+        <div class="field">
+          <label>Select com erro</label>
+          <select class="select error"><option>Selecione…</option></select>
+          <span class="error-msg">Campo obrigatório.</span>
+        </div>
+        <div class="field">
+          <label>Desabilitado</label>
+          <select class="select" disabled><option>Rota herdada do cliente</option></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo">
+      <h3>Combobox com busca</h3>
+      <div class="field combo">
+        <label>Cliente</label>
+        <button class="input" style="text-align:left; display:flex; align-items:center; cursor:pointer;" data-pop-trigger="#combo-a">
+          <span style="flex:1;">Boi na Brasa</span>
+          <svg class="ic" style="width:13px;height:13px;color:var(--fg-faint)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg>
+        </button>
+        <div class="popover" id="combo-a" style="width: 100%;">
+          <div class="combo-search">
+            <div class="input-wrap">
+              <span class="adorn left"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+              <input class="input input-sm" placeholder="Buscar cliente…" style="padding-left:28px;">
+            </div>
+          </div>
+          <div class="combo-list">
+            <div class="combo-opt selected">Boi na Brasa <span class="sub">CLI-001</span></div>
+            <div class="combo-opt">Bom Corte <span class="sub">CLI-004</span></div>
+            <div class="combo-opt">Nobre Corte <span class="sub">CLI-016</span></div>
+            <div class="combo-opt">Distribuidora Alimentos Vale Norte Ltda <span class="sub">CLI-009</span></div>
+            <div class="combo-opt">Trigo Dourado <span class="sub">CLI-014</span></div>
+            <div class="combo-opt">Irmãos Lima <span class="sub">CLI-013</span></div>
+          </div>
+        </div>
+        <span class="help">Clique para abrir. Digitação filtra em tempo real.</span>
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label>Multi-select · produtos</label>
+        <div class="input" style="height:auto; min-height:var(--h-ctl); padding:3px 6px; display:flex; flex-wrap:wrap; gap:4px; align-items:center;">
+          <span class="chip on" style="height:22px;">TZ — Traseiro <span class="x">×</span></span>
+          <span class="chip on" style="height:22px;">DT — Dianteiro <span class="x">×</span></span>
+          <span style="color:var(--fg-faint); font-size:var(--fs-12); padding-left:2px;">Adicionar…</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo">
+      <h3>Datepicker do DS</h3>
+      <div class="field combo">
+        <label>Data operacional</label>
+        <button class="input mono" style="text-align:left; display:flex; align-items:center; gap:8px; cursor:pointer; width:170px;" data-pop-trigger="#dp-a">
+          <svg class="ic" style="width:14px;height:14px;color:var(--fg-muted)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          05/08/2026
+        </button>
+        <div class="popover dp" id="dp-a">
+          <div class="dp-head">
+            <button class="btn btn-ghost btn-icon btn-sm" aria-label="Mês anterior"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg></button>
+            <b>Agosto 2026</b>
+            <button class="btn btn-ghost btn-icon btn-sm" aria-label="Próximo mês"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg></button>
+          </div>
+          <div class="dp-grid">
+            <span class="dp-dow">D</span><span class="dp-dow">S</span><span class="dp-dow">T</span><span class="dp-dow">Q</span><span class="dp-dow">Q</span><span class="dp-dow">S</span><span class="dp-dow">S</span>
+            <button class="dp-day other">26</button><button class="dp-day other">27</button><button class="dp-day other">28</button><button class="dp-day other">29</button><button class="dp-day other">30</button><button class="dp-day other">31</button><button class="dp-day">1</button>
+            <button class="dp-day">2</button><button class="dp-day">3</button><button class="dp-day">4</button><button class="dp-day sel">5</button><button class="dp-day">6</button><button class="dp-day">7</button><button class="dp-day">8</button>
+            <button class="dp-day">9</button><button class="dp-day">10</button><button class="dp-day">11</button><button class="dp-day">12</button><button class="dp-day">13</button><button class="dp-day">14</button><button class="dp-day">15</button>
+            <button class="dp-day">16</button><button class="dp-day">17</button><button class="dp-day">18</button><button class="dp-day">19</button><button class="dp-day">20</button><button class="dp-day">21</button><button class="dp-day">22</button>
+            <button class="dp-day">23</button><button class="dp-day">24</button><button class="dp-day">25</button><button class="dp-day">26</button><button class="dp-day">27</button><button class="dp-day">28</button><button class="dp-day">29</button>
+            <button class="dp-day">30</button><button class="dp-day">31</button>
+          </div>
+          <div class="dp-foot">
+            <button class="btn btn-ghost btn-sm">Hoje</button>
+            <button class="btn btn-ghost btn-sm">Ontem</button>
+            <button class="btn btn-ghost btn-sm ml-auto">Limpar</button>
+          </div>
+        </div>
+        <span class="help">Formato dd/mm/aaaa · atalhos Hoje/Ontem para a rotina da operação.</span>
+      </div>
+    </div>
+
+    <div class="demo">
+      <h3>Grid de formulário denso · 2 col</h3>
+      <div class="form-grid">
+        <div class="field"><label>Nome fantasia</label><input class="input" value="Nobre Corte"></div>
+        <div class="field"><label>Razão social</label><input class="input" value="Casa de Carnes Nobre Corte Ltda"></div>
+        <div class="field"><label>CNPJ/CPF</label><input class="input mono" value="11.003.016/0002-02"></div>
+        <div class="field"><label>Código interno</label><input class="input mono" value="CLI-016" readonly></div>
+        <div class="field"><label>Representante</label><select class="select"><option>Eduardo Farias Ltda</option></select></div>
+        <div class="field"><label>Itinerário / rota</label><select class="select"><option>Santana/Norte SP</option></select></div>
+        <div class="field span-2"><label>Observações</label><textarea class="textarea"></textarea></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STATUS ============ -->
+<section class="spec">
+  <h2>Status, badges e chips</h2>
+  <div class="demo-grid">
+    <div class="demo">
+      <h3>StatusPill · 6 estados operacionais</h3>
+      <div class="lane">
+        <span class="pill recebido">Recebido</span>
+        <span class="pill pesado">Pesado</span>
+        <span class="pill expedido">Expedido</span>
+      </div>
+      <div class="lane">
+        <span class="pill divergencia">Divergência</span>
+        <span class="pill bloqueado">Bloqueado</span>
+        <span class="pill pendente">Pendente</span>
+      </div>
+    </div>
+    <div class="demo">
+      <h3>Status de pedido (mapeados)</h3>
+      <div class="lane"><span class="pill recebido">Em elaboração · reserva ativa</span></div>
+      <div class="lane"><span class="pill divergencia">Aguardando confirmação de overbooking</span></div>
+      <div class="lane"><span class="pill expedido">Finalizado</span> <span class="pill pesado">Parcialmente atendido</span></div>
+      <div class="lane"><span class="pill expedido">Faturado</span> <span class="pill bloqueado">Cancelado</span> <span class="pill pendente">Rascunho</span></div>
+    </div>
+    <div class="demo">
+      <h3>Badges</h3>
+      <div class="lane">
+        <span class="badge badge-provisorio">⚠ Provisório · P11</span>
+        <span class="badge badge-count">16</span>
+        <span class="badge badge-extra">Extraordinária</span>
+      </div>
+      <div class="lane">
+        <span class="dev">Balança: disponível</span>
+        <span class="dev off">Leitor: offline</span>
+      </div>
+    </div>
+    <div class="demo">
+      <h3>Chips de filtro (toggle)</h3>
+      <div class="lane">
+        <button class="chip on" data-toggle>Somente ativos</button>
+        <button class="chip" data-toggle>Mais pesada</button>
+        <button class="chip" data-toggle>Mais gorda</button>
+        <button class="chip" data-toggle>Melhor acabamento</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ KPI ============ -->
+<section class="spec">
+  <h2>KPI strip — substitui os cards de 170px</h2>
+  <div class="kpi-strip" style="margin-bottom:10px;">
+    <div class="kpi"><div class="k-label">Compras programadas</div><div class="k-value">1</div><div class="k-hint">operações do dia</div></div>
+    <div class="kpi"><div class="k-label">Disponibilidade F+V</div><div class="k-value">49.000</div><div class="k-hint">saldo consolidado</div></div>
+    <div class="kpi"><div class="k-label">Reservas em elaboração</div><div class="k-value">5</div><div class="k-hint">com reserva ativa</div></div>
+    <div class="kpi ok"><div class="k-label">Pedidos finalizados</div><div class="k-value">4</div><div class="k-hint">prontos p/ expedição</div></div>
+    <div class="kpi alert"><div class="k-label">Overbookings abertos</div><div class="k-value">2</div><div class="k-hint">aguardando decisão</div></div>
+  </div>
+  <p class="text-muted" style="font-size:var(--fs-12);">Uma faixa de 5 KPIs ocupa ~64px de altura — os cards atuais ocupam ~170px. Valor em mono tabular; cor apenas quando o estado exige atenção.</p>
+</section>
+
+<!-- ============ TABELA ============ -->
+<section class="spec">
+  <h2>Tabela densa</h2>
+  <div class="card">
+    <div class="card-head">
+      <h2>Lotes de recebimento</h2>
+      <span class="badge badge-count">7</span>
+      <span class="spacer"></span>
+      <div class="input-wrap" style="width:240px;">
+        <span class="adorn left"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+        <input class="input input-sm" placeholder="Buscar lote, fornecedor, NF…" style="padding-left:28px;">
+      </div>
+      <button class="btn btn-secondary btn-sm">Exportar</button>
+    </div>
+    <div class="table-wrap">
+      <table class="dt">
+        <thead>
+          <tr>
+            <th>Lote</th>
+            <th class="sortable">Fornecedor <span class="sort-ind">▼</span></th>
+            <th>NF-e</th>
+            <th>Romaneio</th>
+            <th class="num-cell">Peças</th>
+            <th class="num-cell">Peso (kg)</th>
+            <th>Progresso</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr data-selectable>
+            <td class="code">#019FD0BC</td>
+            <td class="main-cell">Central de Abate Novo Horizonte S.A.</td>
+            <td class="code">—</td>
+            <td class="code">ROM-2006</td>
+            <td class="num-cell">124</td>
+            <td class="num-cell">3.482,120</td>
+            <td><div class="bar ok"><i style="width:100%"></i></div></td>
+            <td><span class="pill pendente">Aguard. conferência</span></td>
+            <td><div class="row-actions"><button class="btn btn-ghost btn-icon btn-sm" aria-label="Abrir"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M7 7h10v10"/></svg></button></div></td>
+          </tr>
+          <tr data-selectable class="sel">
+            <td class="code">#019FD0BC</td>
+            <td class="main-cell">Fazenda Recanto das Águas Ltda</td>
+            <td class="code num-cell" style="text-align:left;">100005</td>
+            <td class="code">ROM-2005</td>
+            <td class="num-cell">98</td>
+            <td class="num-cell">2.907,480</td>
+            <td><div class="bar ok"><i style="width:100%"></i></div></td>
+            <td><span class="pill expedido">Conferido s/ diverg.</span></td>
+            <td><div class="row-actions"><button class="btn btn-ghost btn-icon btn-sm" aria-label="Abrir"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M7 7h10v10"/></svg></button></div></td>
+          </tr>
+          <tr data-selectable>
+            <td class="code">#019FD0BC</td>
+            <td class="main-cell">Frigorífico União do Campo Ltda</td>
+            <td class="code">—</td>
+            <td class="code">ROM-2004</td>
+            <td class="num-cell">61</td>
+            <td class="num-cell">1.844,300</td>
+            <td><div class="bar"><i style="width:34%"></i></div></td>
+            <td><span class="pill recebido">Pesagem em andamento</span></td>
+            <td><div class="row-actions"><button class="btn btn-ghost btn-icon btn-sm" aria-label="Abrir"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M7 7h10v10"/></svg></button></div></td>
+          </tr>
+          <tr data-selectable>
+            <td class="code">#019FD0BC</td>
+            <td class="main-cell">Pecuária Vale Verde Ltda</td>
+            <td class="code num-cell" style="text-align:left;">100002</td>
+            <td class="code">ROM-2002</td>
+            <td class="num-cell">87</td>
+            <td class="num-cell">2.518,940</td>
+            <td><div class="bar warn"><i style="width:88%"></i></div></td>
+            <td><span class="pill divergencia">Conferido c/ divergência</span></td>
+            <td><div class="row-actions"><button class="btn btn-ghost btn-icon btn-sm" aria-label="Abrir"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M7 7h10v10"/></svg></button></div></td>
+          </tr>
+          <tr data-selectable>
+            <td class="code">#019FD0BC</td>
+            <td class="main-cell">Fazenda Santa Luzia Agropecuária Ltda</td>
+            <td class="code">—</td>
+            <td class="code">ROM-2000</td>
+            <td class="num-cell">0</td>
+            <td class="num-cell">0,000</td>
+            <td><div class="bar"><i style="width:12%"></i></div></td>
+            <td><span class="pill bloqueado">Cancelado</span></td>
+            <td><div class="row-actions"><button class="btn btn-ghost btn-icon btn-sm" aria-label="Abrir"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17 17 7M7 7h10v10"/></svg></button></div></td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4">5 lotes</td>
+            <td class="num-cell">370</td>
+            <td class="num-cell">10.752,840</td>
+            <td colspan="3"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  <p class="text-muted" style="font-size:var(--fs-12); margin-top:8px;">Linha de 32px · header sticky 11px · números à direita em mono · ações aparecem no hover · linha selecionada em azul suave · footer com totais.</p>
+</section>
+
+<!-- ============ NAVEGAÇÃO / CONTROLES ============ -->
+<section class="spec">
+  <h2>Navegação e seleção</h2>
+  <div class="demo-grid">
+    <div class="demo" data-tab-group="demo1">
+      <h3>Tabs</h3>
+      <div class="tabs">
+        <button class="tab active" data-tab="a">Dados gerais</button>
+        <button class="tab" data-tab="b">Fiscais &amp; endereço</button>
+        <button class="tab" data-tab="c">Contatos</button>
+        <button class="tab" data-tab="d">Preferências</button>
+      </div>
+      <div style="padding-top:10px; font-size:var(--fs-12); color:var(--fg-muted);">Sublinha 2px na aba ativa; peso 600.</div>
+    </div>
+    <div class="demo">
+      <h3>Segmented control</h3>
+      <div class="lane">
+        <div class="seg">
+          <button class="active">Mapa de disponibilidade</button>
+          <button>Grade</button>
+        </div>
+      </div>
+      <div class="lane" style="margin-top:10px;">
+        <div class="seg">
+          <button class="active">Hoje</button>
+          <button>Semana</button>
+          <button>Mês</button>
+        </div>
+      </div>
+    </div>
+    <div class="demo">
+      <h3>Switch · checkbox · radio</h3>
+      <div class="lane">
+        <label class="switch"><input type="checkbox" checked><span class="track"></span></label>
+        <span style="font-size:var(--fs-13); font-weight:600;">Cliente ativo</span>
+      </div>
+      <div class="lane" style="margin-top:10px;">
+        <label class="check"><input type="checkbox" checked> Conferência obrigatória</label>
+        <label class="check"><input type="checkbox"> Zebra na tabela</label>
+      </div>
+      <div class="lane" style="margin-top:6px;">
+        <label class="check"><input type="radio" name="rr" checked> Físico</label>
+        <label class="check"><input type="radio" name="rr"> Virtual</label>
+        <label class="check"><input type="radio" name="rr"> Overbooking</label>
+      </div>
+    </div>
+    <div class="demo">
+      <h3>Pipeline de etapas</h3>
+      <div class="pipeline">
+        <span class="pipe-step done"><span class="n">✓</span>Recebimento</span>
+        <span class="pipe-line done"></span>
+        <span class="pipe-step done"><span class="n">✓</span>Conferência</span>
+        <span class="pipe-line done"></span>
+        <span class="pipe-step now"><span class="n">3</span>Carga</span>
+        <span class="pipe-line"></span>
+        <span class="pipe-step"><span class="n">4</span>Faturamento</span>
+      </div>
+    </div>
+    <div class="demo">
+      <h3>Tooltip</h3>
+      <div class="lane">
+        <span class="tip">
+          <button class="btn btn-secondary btn-sm">Passe o mouse</button>
+          <span class="tip-box">Reserva atualizada a cada ação da grade</span>
+        </span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FEEDBACK ============ -->
+<section class="spec">
+  <h2>Feedback e sobreposições</h2>
+  <div class="demo-grid">
+    <div class="demo">
+      <h3>Callouts</h3>
+      <div class="stack">
+        <div class="callout callout-info">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <span><b>Representante e Rota são herdados</b> pelo pedido ao selecionar este cliente — não precisam ser escolhidos novamente na venda.</span>
+        </div>
+        <div class="callout callout-warning">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/></svg>
+          <span>2 pendências de overbooking com déficit de 1.500 kg aguardando decisão do gestor.</span>
+        </div>
+        <div class="callout callout-danger">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>
+          <span>Falha ao comunicar com a balança — captura manual habilitada até reconexão.</span>
+        </div>
+      </div>
+    </div>
+    <div class="demo">
+      <h3>Toast</h3>
+      <div class="stack">
+        <div class="toast success">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+          <div><b>Tabela publicada</b>Vigente para a operação de 05/08/2026.</div>
+        </div>
+        <div class="toast error">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>
+          <div><b>Reserva não aplicada</b>Saldo virtual insuficiente para JAC — confirme overbooking.</div>
+        </div>
+      </div>
+    </div>
+    <div class="demo">
+      <h3>Modal</h3>
+      <button class="btn btn-danger-outline" data-modal-open="#demo-modal">Encerrar operação…</button>
+      <div class="modal-backdrop" id="demo-modal">
+        <div class="modal">
+          <div class="modal-head"><h3>Encerrar Operação 2026-08-05?</h3></div>
+          <div class="modal-body">O encerramento bloqueia novas reservas e pedidos nesta operação. Pedidos em elaboração com reserva ativa serão notificados. Esta ação é auditada.</div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" data-modal-close>Cancelar</button>
+            <button class="btn btn-danger" data-modal-close>Encerrar operação</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="demo">
+      <h3>Empty state</h3>
+      <div class="empty">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:var(--fg-faint)"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <b>Capture o peso para ver pedidos compatíveis</b>
+        <span>A lista considera produto, faixa de peso e prioridade do cliente.</span>
+      </div>
+    </div>
+    <div class="demo">
+      <h3>Skeleton</h3>
+      <div class="stack" style="gap:7px;">
+        <div class="skeleton" style="height:14px; width:60%;"></div>
+        <div class="skeleton" style="height:14px; width:85%;"></div>
+        <div class="skeleton" style="height:14px; width:72%;"></div>
+        <div class="skeleton" style="height:28px; width:120px; margin-top:4px;"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="../shared/preview.js"></script>
+</body>
+</html>
