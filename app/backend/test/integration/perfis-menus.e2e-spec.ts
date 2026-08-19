@@ -75,6 +75,6 @@ describe('Perfis — menus visíveis e catálogo', () => {
       .flatMap((g: { permissoes: { codigo: string }[] }) => g.permissoes.map((p) => p.codigo))
       .sort();
     expect(codigos).toEqual(Object.keys(DESCRICOES_PERMISSOES).sort());
-    expect(res.body.menus).toHaveLength(39);
+    expect(res.body.menus).toHaveLength(41);
   });
 });

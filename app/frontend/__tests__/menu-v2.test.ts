@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { MENU_V2 } from '../src/lib/menu-v2';
+import { CADASTROS } from '../src/lib/cadastros-config';
 
 const GRUPOS = [
   'COMERCIAL',
@@ -51,6 +52,8 @@ const ITENS_PROTOTIPO: [string, string, string][] = [
   ['CADASTROS & REGRAS', 'Rotas / Itinerários', '/cadastros/rotas'],
   ['CADASTROS & REGRAS', 'Regras de Transformação', '/cadastros/regras-transformacao'],
   ['CADASTROS & REGRAS', 'Modelos de Etiqueta', '/cadastros/modelos-etiqueta'],
+  ['CADASTROS & REGRAS', 'Itens de Compra', '/cadastros/itens-compra'],
+  ['CADASTROS & REGRAS', 'Itens Comerciais', '/cadastros/itens-comerciais'],
   ['ADMINISTRAÇÃO', 'Usuários', '/admin/usuarios'],
   ['ADMINISTRAÇÃO', 'Perfis de Acesso', '/admin/perfis'],
   ['ADMINISTRAÇÃO', 'Parâmetros', '/admin/parametros'],
@@ -62,10 +65,10 @@ describe('menu canônico v2', () => {
     expect(MENU_V2.map((g) => g.title)).toEqual(GRUPOS);
   });
 
-  it('MENU_V2 tem os 39 itens com rotulo e rota do prototipo', () => {
+  it('MENU_V2 tem os 41 itens com rotulo e rota do prototipo (39 originais + 2 da AD-11)', () => {
     const atual = MENU_V2.flatMap((g) => g.items.map((i) => [g.title, i.label, i.href]));
     expect(atual).toEqual(ITENS_PROTOTIPO);
-    expect(atual).toHaveLength(39);
+    expect(atual).toHaveLength(41);
   });
 
   it('MENU_V2 nao tem rota duplicada e todo item declara icone', () => {
@@ -78,10 +81,15 @@ describe('menu canônico v2', () => {
     }
   });
 
-  it('toda rota do menu tem page.tsx correspondente', () => {
+  it('toda rota do menu tem page.tsx correspondente (dedicada ou via [recurso] genérico)', () => {
+    const recursoGenerico = existsSync(join('src', 'app', '(admin)', 'cadastros', '[recurso]', 'page.tsx'));
     const semRota = MENU_V2.flatMap((g) => g.items)
       .map((i) => i.href)
-      .filter((href) => !existsSync(join('src', 'app', '(admin)', ...href.slice(1).split('/'), 'page.tsx')));
+      .filter((href) => {
+        if (existsSync(join('src', 'app', '(admin)', ...href.slice(1).split('/'), 'page.tsx'))) return false;
+        const recurso = href.startsWith('/cadastros/') ? href.slice('/cadastros/'.length) : null;
+        return !(recurso && recursoGenerico && recurso in CADASTROS);
+      });
     expect(semRota).toEqual([]);
   });
 });

@@ -56,6 +56,10 @@ const MATRIZ_RASTREABILIDADE: Record<string, string[]> = {
   '/cadastros/rotas': ['administrador', 'gestor'],
   '/cadastros/regras-transformacao': ['administrador', 'gestor'],
   '/cadastros/modelos-etiqueta': ['administrador', 'gestor'],
+  // AD-11 (docs/execucao/DECISOES.md): só administrador tem ITENS_COMPRA_GERENCIAR /
+  // ITENS_COMERCIAIS_GERENCIAR hoje — os demais perfis só leem essas entidades via API.
+  '/cadastros/itens-compra': ['administrador'],
+  '/cadastros/itens-comerciais': ['administrador'],
   '/admin/usuarios': ['administrador'],
   '/admin/perfis': ['administrador'],
   '/admin/parametros': ['administrador'],
@@ -164,19 +168,19 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     expect(PERFIS).toHaveLength(11);
   });
 
-  it('a matriz transcrita cobre exatamente as 39 rotas do menu', () => {
+  it('a matriz transcrita cobre exatamente as 41 rotas do menu (39 originais + 2 da AD-11)', () => {
     expect(Object.keys(MATRIZ_RASTREABILIDADE).sort()).toEqual([...ROTAS_CANONICAS].sort());
-    expect(ROTAS_CANONICAS).toHaveLength(39);
+    expect(ROTAS_CANONICAS).toHaveLength(41);
   });
 
   it.each(PERFIS)('menus_visiveis do perfil sao exatamente os da matriz: %s', (perfil) => {
     expect([...menusDe(perfil)].sort()).toEqual(menusDaMatriz(perfil));
   });
 
-  it('a matriz soma 126 atribuicoes perfil x rota', () => {
+  it('a matriz soma 128 atribuicoes perfil x rota (126 originais + 2 da AD-11, só administrador)', () => {
     const total = PERFIS.reduce((soma, perfil) => soma + menusDe(perfil).length, 0);
-    expect(total).toBe(126);
-    expect(Object.values(MATRIZ_RASTREABILIDADE).reduce((s, p) => s + p.length, 0)).toBe(126);
+    expect(total).toBe(128);
+    expect(Object.values(MATRIZ_RASTREABILIDADE).reduce((s, p) => s + p.length, 0)).toBe(128);
   });
 
   it('zero perdas: nenhuma rota da matriz fica fora do menu do perfil', () => {
@@ -276,8 +280,8 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     for (const perfil of PERFIS) {
       expect(rotasVisiveis(perfil).sort()).toEqual(menusDaMatriz(perfil));
     }
-    expect(ROTAS_CANONICAS).toHaveLength(39);
-    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(126);
+    expect(ROTAS_CANONICAS).toHaveLength(41);
+    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(128);
 
     // E as permissões novas chegaram ao snapshot, nos perfis de D21.
     const novas = [
