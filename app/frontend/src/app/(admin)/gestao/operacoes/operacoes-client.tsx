@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Info, Plus, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
+import { AlertTriangle, Info, Plus, RefreshCw } from 'lucide-react';
 import { BadgeCount } from '@/components/ui/badge-count';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
@@ -202,6 +203,13 @@ export function OperacoesClient({ permissoes }: { permissoes: string[] }) {
         <BadgeProvisorio pendencia="P1" className="shrink-0" />
       </div>
 
+      <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+        <p className="flex-1 text-xs leading-snug text-amber-900">
+          <span className="font-semibold">Ativar a operação não basta para vender:</span> o Pedido de Venda só lista operações que já têm uma <span className="font-semibold">Compra Programada confirmada</span> na mesma data — é ela que gera a disponibilidade virtual dos produtos. Uma operação sem compra aparece com o selo &quot;Sem compra programada&quot; abaixo; use &quot;Registrar compra&quot; para resolver.
+        </p>
+      </div>
+
       {erro && (
         <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           {erro}
@@ -278,6 +286,19 @@ export function OperacoesClient({ permissoes }: { permissoes: string[] }) {
                       </TableCellNum>
                       <TableCell>
                         <StatusPill variant={statusVariant(o.status)} label={ROTULO_STATUS_OPERACAO[o.status]} />
+                        {o.status !== 'fechada' && o.comprasProgramadas === 0 && (
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span className="whitespace-nowrap text-[10px] font-medium text-amber-700">
+                              Sem compra programada
+                            </span>
+                            <Link
+                              href={`/gestao/compras?data=${o.data}`}
+                              className="whitespace-nowrap text-[10px] font-semibold text-primary underline-offset-2 hover:underline"
+                            >
+                              Registrar compra
+                            </Link>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         {podeGerenciar && proximo && (
