@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { extrairMensagemErro } from '@/lib/error-message';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import {
   MAPA_KPI_UI,
@@ -94,18 +95,14 @@ function DashboardConteudo({ permissoes }: { permissoes: string[] }) {
     try {
       const qs = operacaoId ? `?operacaoId=${encodeURIComponent(operacaoId)}` : '';
       const res = await fetch(`/api/gestao/dashboard${qs}`, { cache: 'no-store' });
-      if (res.status === 404) {
-        const body = await res.json().catch(() => ({}));
-        const msg = (body as { message?: string }).message ?? '';
-        if (msg.includes('OPERACAO_INEXISTENTE')) {
+      if (!res.ok) {
+        const body: unknown = await res.json().catch(() => null);
+        if (res.status === 404 && extrairMensagemErro(body, '').includes('OPERACAO_INEXISTENTE')) {
           setSemOperacao(true);
           setDados(null);
           return;
         }
-      }
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setErro((body as { message?: string }).message ?? 'Erro ao carregar dashboard');
+        setErro(extrairMensagemErro(body, 'Erro ao carregar dashboard'));
         return;
       }
       setDados((await res.json()) as DashboardOperacao);
