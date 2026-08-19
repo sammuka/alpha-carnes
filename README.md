@@ -70,6 +70,14 @@ As portas publicadas no host são:
 - **Email:** `admin@alphacarnes.local` (ou `SEED_ADMIN_EMAIL` do `.env`)
 - **Senha:** `Admin@AlphaCarnes2026!` (ou `SEED_ADMIN_PASSWORD` do `.env`)
 
+O `docker compose up --build` já aplica o seed automaticamente. Para executá-lo manualmente
+(ex.: repopular após um reset, ou rodando o backend fora do Docker):
+
+```bash
+cd app/backend
+npm run db:seed
+```
+
 ### Rollback de migration (F1)
 
 A migration inicial da F1 não tem down script. Para resetar o banco:
