@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { CheckCircle, Plus, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -77,7 +78,11 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const podeLer = permissoes.includes('COMPRAS_PROGRAMADAS_LER');
   const podeGerenciar = permissoes.includes('COMPRAS_PROGRAMADAS_GERENCIAR');
 
-  const [dataOperacao, setDataOperacao] = useState(hojeISO());
+  const searchParams = useSearchParams();
+  const dataDaUrl = searchParams.get('data');
+  const [dataOperacao, setDataOperacao] = useState(
+    dataDaUrl && /^\d{4}-\d{2}-\d{2}$/.test(dataDaUrl) ? dataDaUrl : hojeISO(),
+  );
   const [fornecedorId, setFornecedorId] = useState('');
   const [referenciaExterna, setReferenciaExterna] = useState('');
   const [observacoes, setObservacoes] = useState('');

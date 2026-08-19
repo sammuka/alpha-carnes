@@ -85,6 +85,7 @@
   --color-sidebar-item-hover: rgba(255, 255, 255, 0.08);
   --color-sidebar-item-active: rgba(255, 255, 255, 0.16);
   --color-sidebar-border: rgba(255, 255, 255, 0.12);
+  --color-sidebar-popover: #0F2645;
 
   /* Charts (recharts) */
   --color-chart-1: #2D6BBE;
