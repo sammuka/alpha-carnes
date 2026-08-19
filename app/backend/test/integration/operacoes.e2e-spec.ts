@@ -188,6 +188,17 @@ describe('operacoes e2e', () => {
   });
 
   it('resolverCorrente devolve a próxima não fechada', async () => {
+    // As demais operações do arquivo usam datas fixas (2026-08-03..07); garante aqui uma
+    // operação sempre no futuro para não depender da data em que o CI roda (evita a suíte
+    // decair para a "última" operação, que outro teste pode ter fechado).
+    const { db } = app.get(DRIZZLE) as { db: import('drizzle-orm/node-postgres').NodePgDatabase<typeof schema> };
+    const dataFutura = new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10);
+    await db.insert(schema.operacoes).values({
+      data: dataFutura,
+      diaSemana: new Date(`${dataFutura}T12:00:00Z`).getUTCDay(),
+      rotulo: 'Operação futura (teste resolverCorrente)',
+    });
+
     const service = app.get(OperacoesService);
     const corrente = await service.resolverCorrente();
     expect(corrente).toBeDefined();
