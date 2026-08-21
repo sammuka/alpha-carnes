@@ -19,12 +19,14 @@ export const zodErrorMapPtBr: $ZodErrorMap = (issue) => {
     case 'too_small': {
       const unidade = UNIDADE[String(issue.origin ?? '')] ?? '';
       if (Number(issue.minimum) === 1 && unidade === 'caracteres') return 'Campo obrigatório.';
+      if (Number(issue.minimum) === 1 && unidade === 'itens') return 'Deve ter pelo menos 1 item.';
       return unidade
         ? `Deve ter pelo menos ${issue.minimum} ${unidade}.`
         : `Deve ser maior ou igual a ${issue.minimum}.`;
     }
     case 'too_big': {
       const unidade = UNIDADE[String(issue.origin ?? '')] ?? '';
+      if (Number(issue.maximum) === 1 && unidade === 'itens') return 'Deve ter no máximo 1 item.';
       return unidade
         ? `Deve ter no máximo ${issue.maximum} ${unidade}.`
         : `Deve ser menor ou igual a ${issue.maximum}.`;

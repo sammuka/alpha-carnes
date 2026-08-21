@@ -27,6 +27,10 @@ describe('zodErrorMapPtBr (registrado via z.config)', () => {
     expect(mensagem(z.number().min(10).safeParse(5))).toBe('Deve ser maior ou igual a 10.');
   });
 
+  it('array com min(1) usa singular "item"', () => {
+    expect(mensagem(z.array(z.string()).min(1).safeParse([]))).toBe('Deve ter pelo menos 1 item.');
+  });
+
   it('e-mail inválido', () => {
     expect(mensagem(z.email().safeParse('nao-email'))).toBe('E-mail inválido.');
   });
