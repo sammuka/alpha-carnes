@@ -22,7 +22,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { mensagemDeErro } from '@/lib/error-message';
+import { detalharErro, mensagemDeErro } from '@/lib/error-message';
+import { useErrosPorCampo } from '@/lib/use-erros-campo';
 
 export type StatusCadastro = 'ativo' | 'inativo';
 
@@ -38,12 +39,16 @@ export interface ColunaCadastro<T> {
 export interface CampoCadastro {
   nome: string;
   rotulo: string;
-  tipo: 'texto' | 'numero' | 'textarea' | 'select';
+  tipo: 'texto' | 'numero' | 'textarea' | 'select' | 'data';
   obrigatorio?: boolean;
   placeholder?: string;
   colSpan?: 1 | 2;
   opcoes?: Array<{ valor: string; rotulo: string }>;
   monoespacado?: boolean;
+  /** Reformata o valor a cada digitação (ex.: mascararPlaca). Nunca bloqueia colar. */
+  mascara?: (valor: string) => string;
+  /** Limite físico de digitação — copiar do `.max(N)` do DTO do backend. */
+  maxLength?: number;
 }
 
 /** Um `select` da barra de filtros. `''` é a opção neutra e não vai para a query. */
@@ -124,6 +129,7 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
   const [editando, setEditando] = useState<T | null>(null);
   const [form, setForm] = useState<Record<string, string>>(formularioVazio);
   const [salvando, setSalvando] = useState(false);
+  const { erros, setErros, limparCampo, limparTudo } = useErrosPorCampo();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -171,12 +177,14 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
   }, [carregar]);
 
   const abrirNovo = () => {
+    limparTudo();
     setEditando(null);
     setForm({ ...formularioVazio });
     setDrawerAberto(true);
   };
 
   const abrirEdicao = (registro: T) => {
+    limparTudo();
     setEditando(registro);
     setForm(paraFormulario(registro));
     setDrawerAberto(true);
@@ -194,6 +202,7 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
 
   const salvar = async () => {
     if (faltando.length > 0) {
+      setErros(Object.fromEntries(faltando.map((c) => [c.nome, 'Campo obrigatório.'])));
       toast.error(`Preencha: ${faltando.map((c) => c.rotulo).join(', ')}`);
       return;
     }
@@ -205,7 +214,9 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
         body: JSON.stringify(paraPayload(form)),
       });
       if (!res.ok) {
-        toast.error(await mensagemDeErro(res));
+        const { mensagem, porCampo } = await detalharErro(res, 'Falha ao salvar');
+        setErros(porCampo);
+        toast.error(mensagem);
         return;
       }
       toast.success(editando ? 'Registro atualizado.' : 'Registro criado.');
@@ -432,6 +443,7 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
                   label={campo.rotulo}
                   required={campo.obrigatorio}
                   htmlFor={campo.nome}
+                  error={erros[campo.nome]}
                   className={campo.tipo === 'textarea' || campo.colSpan === 2 ? 'sm:col-span-2' : undefined}
                 >
                   {campo.tipo === 'textarea' ? (
@@ -440,13 +452,22 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
                       rows={3}
                       value={form[campo.nome] ?? ''}
                       placeholder={campo.placeholder}
-                      onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
+                      maxLength={campo.maxLength}
+                      aria-invalid={campo.nome in erros || undefined}
+                      onChange={(e) => {
+                        limparCampo(campo.nome);
+                        setForm((f) => ({ ...f, [campo.nome]: e.target.value }));
+                      }}
                     />
                   ) : campo.tipo === 'select' ? (
                     <SelectNative
                       id={campo.nome}
                       value={form[campo.nome] ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
+                      aria-invalid={campo.nome in erros || undefined}
+                      onChange={(e) => {
+                        limparCampo(campo.nome);
+                        setForm((f) => ({ ...f, [campo.nome]: e.target.value }));
+                      }}
                     >
                       {campo.placeholder && <option value="">{campo.placeholder}</option>}
                       {(campo.opcoes ?? []).map((opcao) => (
@@ -458,10 +479,16 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
                   ) : (
                     <Input
                       id={campo.nome}
-                      type={campo.tipo === 'numero' ? 'number' : 'text'}
+                      type={campo.tipo === 'numero' ? 'number' : campo.tipo === 'data' ? 'date' : 'text'}
                       value={form[campo.nome] ?? ''}
                       placeholder={campo.placeholder}
-                      onChange={(e) => setForm((f) => ({ ...f, [campo.nome]: e.target.value }))}
+                      maxLength={campo.maxLength}
+                      aria-invalid={campo.nome in erros || undefined}
+                      onChange={(e) => {
+                        const valor = campo.mascara ? campo.mascara(e.target.value) : e.target.value;
+                        limparCampo(campo.nome);
+                        setForm((f) => ({ ...f, [campo.nome]: valor }));
+                      }}
                       className={campo.monoespacado ? 'font-data' : undefined}
                     />
                   )}
