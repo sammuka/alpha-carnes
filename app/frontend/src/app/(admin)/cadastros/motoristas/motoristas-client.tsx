@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { CadastroTabelaDrawer } from '@/components/cadastros/cadastro-tabela-drawer';
 import { mensagemDeErro } from '@/lib/error-message';
 import type { Caminhao, Motorista } from '@/lib/frota';
+import { mascararTelefone } from '@/lib/masks';
 
 export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) {
   const [caminhoes, setCaminhoes] = useState<Caminhao[]>([]);
@@ -83,9 +84,9 @@ export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) 
         },
       ]}
       campos={[
-        { nome: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, placeholder: 'Ex: Carlos Souza' },
-        { nome: 'documento', rotulo: 'Documento', tipo: 'texto', obrigatorio: true, placeholder: 'CNH nº', monoespacado: true },
-        { nome: 'telefone', rotulo: 'Telefone', tipo: 'texto', placeholder: '(11) 90000-0000' },
+        { nome: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, placeholder: 'Ex: Carlos Souza', maxLength: 200 },
+        { nome: 'documento', rotulo: 'Documento', tipo: 'texto', obrigatorio: true, placeholder: 'CNH nº', monoespacado: true, maxLength: 100 },
+        { nome: 'telefone', rotulo: 'Telefone', tipo: 'texto', placeholder: '(11) 90000-0000', mascara: mascararTelefone },
         {
           nome: 'caminhaoPadraoId',
           rotulo: 'Caminhão padrão',

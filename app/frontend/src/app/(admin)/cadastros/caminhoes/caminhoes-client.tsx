@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { CadastroTabelaDrawer } from '@/components/cadastros/cadastro-tabela-drawer';
 import { mensagemDeErro } from '@/lib/error-message';
 import type { Caminhao } from '@/lib/frota';
+import { mascararPlaca } from '@/lib/masks';
 
 interface RotaOpcao {
   id: string;
@@ -82,8 +83,8 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         },
       ]}
       campos={[
-        { nome: 'placa', rotulo: 'Placa', tipo: 'texto', obrigatorio: true, placeholder: 'ABC-1D23', monoespacado: true },
-        { nome: 'descricao', rotulo: 'Descrição', tipo: 'texto', placeholder: 'Ex: Baú refrigerado — Mercedes 710' },
+        { nome: 'placa', rotulo: 'Placa', tipo: 'texto', obrigatorio: true, placeholder: 'ABC-1D23', monoespacado: true, mascara: mascararPlaca },
+        { nome: 'descricao', rotulo: 'Descrição', tipo: 'texto', placeholder: 'Ex: Baú refrigerado — Mercedes 710', maxLength: 200 },
         { nome: 'capacidadeKg', rotulo: 'Capacidade (kg)', tipo: 'numero' },
         {
           nome: 'rotaPadraoId',
