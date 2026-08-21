@@ -18,7 +18,7 @@ import type {
   ImpactoCompra,
   RespostaEdicaoItem,
 } from '@/lib/comercial';
-import { mensagemDeErro } from '@/lib/error-message';
+import { detalharErro } from '@/lib/error-message';
 
 interface Props {
   open: boolean;
@@ -35,6 +35,7 @@ export function ComprasEditModal({ open, compra, itensCompra, onClose, onSalvo }
   const [confirmarDeficit, setConfirmarDeficit] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [errosPorItem, setErrosPorItem] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!compra) return;
@@ -44,6 +45,7 @@ export function ComprasEditModal({ open, compra, itensCompra, onClose, onSalvo }
     setConfirmarDeficit(false);
     setImpacto(null);
     setErro(null);
+    setErrosPorItem({});
     void fetch(`/api/comercial/compras-programadas/${compra.id}/historico`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setHistorico);
@@ -81,6 +83,7 @@ export function ComprasEditModal({ open, compra, itensCompra, onClose, onSalvo }
     if (!compra) return;
     setSalvando(true);
     setErro(null);
+    setErrosPorItem({});
     try {
       for (const item of compra.itens) {
         const qtd = qtds[item.id];
@@ -103,7 +106,13 @@ export function ComprasEditModal({ open, compra, itensCompra, onClose, onSalvo }
             return;
           }
         }
-        if (!res.ok) throw new Error(await mensagemDeErro(res));
+        if (!res.ok) {
+          const { mensagem, porCampo } = await detalharErro(res, 'Erro ao salvar');
+          setErrosPorItem((m) => ({ ...m, [item.id]: porCampo.quantidadeComprada ?? mensagem }));
+          setErro(mensagem);
+          setSalvando(false);
+          return;
+        }
         const parsed = (await res.json()) as RespostaEdicaoItem;
         setImpacto(parsed.impacto);
       }
@@ -130,13 +139,24 @@ export function ComprasEditModal({ open, compra, itensCompra, onClose, onSalvo }
               <span className="flex-1 text-[13px] font-medium">
                 {itensCompra.find((c) => c.id === it.itemCompraId)?.nome ?? it.itemCompraId.slice(0, 8)}
               </span>
-              <Input
-                type="number"
-                step="0.001"
-                className="h-7 w-28 text-right font-data"
-                value={qtds[it.id] ?? ''}
-                onChange={(e) => setQtds((p) => ({ ...p, [it.id]: e.target.value }))}
-              />
+              <div className="flex w-28 flex-col gap-1">
+                <Input
+                  type="number"
+                  step="0.001"
+                  aria-invalid={it.id in errosPorItem || undefined}
+                  className="h-7 w-28 text-right font-data"
+                  value={qtds[it.id] ?? ''}
+                  onChange={(e) => {
+                    setQtds((p) => ({ ...p, [it.id]: e.target.value }));
+                    setErrosPorItem(({ [it.id]: _r, ...resto }) => resto);
+                  }}
+                />
+                {errosPorItem[it.id] && (
+                  <p role="alert" className="text-[11px] font-medium text-danger-fg">
+                    {errosPorItem[it.id]}
+                  </p>
+                )}
+              </div>
             </div>
           ))}
           {impacto && <PainelImpacto impacto={impacto} />}
