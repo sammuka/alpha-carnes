@@ -21,9 +21,9 @@ export const pesarSubitemSchema = z
   })
   .superRefine((v, ctx) => {
     if (v.modoCaptura === 'manual_assistido') {
-      if (v.pesoManual === undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pesoManual'], message: 'pesoManual é obrigatório no modo manual assistido' });
+      if (v.pesoManual === undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pesoManual'], message: 'Informe o peso manual no modo manual assistido.' });
       if (!v.motivo) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['motivo'], message: 'motivo é obrigatório no modo manual assistido' });
-      if (v.motivo === 'outro' && !v.motivoDetalhe) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['motivoDetalhe'], message: 'motivoDetalhe é obrigatório quando motivo = outro' });
+      if (v.motivo === 'outro' && !v.motivoDetalhe) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['motivoDetalhe'], message: 'Detalhe o motivo ao selecionar "Outro".' });
     }
   });
 export type PesarSubitemDto = z.infer<typeof pesarSubitemSchema>;
@@ -49,6 +49,6 @@ export const semCoberturaSubitemSchema = z
   })
   .superRefine((v, ctx) => {
     if (v.destino === 'sobra' && !v.motivo) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['motivo'], message: 'motivo é obrigatório para destinar à sobra' });
-    if (v.destino === 'divergencia' && !v.divergencia) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['divergencia'], message: 'classificação de divergência é obrigatória' });
+    if (v.destino === 'divergencia' && !v.divergencia) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['divergencia'], message: 'Classificação de divergência é obrigatória.' });
   });
 export type SemCoberturaSubitemDto = z.infer<typeof semCoberturaSubitemSchema>;

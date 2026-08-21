@@ -431,7 +431,7 @@ export class PedidosService {
   ): Promise<PlanoItem[]> {
     const ids = itens.map((item) => item.itemComercialId);
     if (new Set(ids).size !== ids.length) {
-      throw new BadRequestException('item comercial duplicado no mesmo pedido');
+      throw new BadRequestException('Item comercial duplicado no mesmo pedido.');
     }
     const resultado = operacaoId === null
       ? { rows: [] as Array<{

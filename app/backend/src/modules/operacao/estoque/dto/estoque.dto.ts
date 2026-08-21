@@ -52,7 +52,7 @@ export const criarEntradaSchema = z
   })
   .superRefine((v, ctx) => {
     if (v.destino === 'pedido' && !v.pedidoVendaItemId) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pedidoVendaItemId'], message: 'pedidoVendaItemId é obrigatório quando destino=pedido' });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pedidoVendaItemId'], message: 'Selecione o item do pedido ao destinar para pedido.' });
     }
   });
 export type CriarEntradaDto = z.infer<typeof criarEntradaSchema>;

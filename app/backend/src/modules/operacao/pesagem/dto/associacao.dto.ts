@@ -26,10 +26,12 @@ export const semCoberturaSchema = z
   })
   .superRefine((v, ctx) => {
     if (v.destino === 'sobra' && !v.motivo) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['motivo'], message: 'motivo é obrigatório para destinar à sobra (RF-PS-21)' });
+      // RF-PS-21
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['motivo'], message: 'Informe o motivo para destinar à sobra.' });
     }
     if (v.destino === 'divergencia' && !v.divergencia) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['divergencia'], message: 'classificação de divergência é obrigatória (RF-PS-22)' });
+      // RF-PS-22
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['divergencia'], message: 'Classificação de divergência é obrigatória.' });
     }
   });
 export type SemCoberturaDto = z.infer<typeof semCoberturaSchema>;

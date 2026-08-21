@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida — use o formato AAAA-MM-DD.');
+
 export const createMotoristaSchema = z.object({
   nome: z.string().trim().min(1).max(200),
   documento: z.string().trim().min(1).max(100),

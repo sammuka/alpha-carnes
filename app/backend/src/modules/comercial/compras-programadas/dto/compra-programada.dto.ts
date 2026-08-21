@@ -14,7 +14,7 @@ const itemCompraSchema = z.object({
 });
 
 export const createCompraProgramadaSchema = z.object({
-  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dataOperacao deve ser YYYY-MM-DD'),
+  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data da operação inválida — use o formato AAAA-MM-DD.'),
   fornecedorId: z.string().uuid(),
   numeroInterno: z.string().trim().max(100).optional(),
   referenciaExterna: z.string().trim().max(100).optional(),
@@ -62,7 +62,7 @@ export const impactoQuerySchema = z.object({
 export const atualizarItemCompraSchema = z.object({
   quantidadeComprada: z
     .union([
-      z.string().trim().regex(/^\d+(\.\d{1,3})?$/, 'quantidade deve ter até 3 casas decimais'),
+      z.string().trim().regex(/^\d+(\.\d{1,3})?$/, 'Quantidade deve ter até 3 casas decimais.'),
       quantidadeSchema,
     ])
     .transform((valor) => (typeof valor === 'number' ? valor.toFixed(3) : valor))
