@@ -23,6 +23,34 @@ export function extrairMensagemErro(body: unknown, fallback = 'Erro'): string {
   return fallback;
 }
 
+/** Extrai um mapa `caminho.pontilhado -> mensagem` dos issues do Zod, para destacar campo a campo. */
+export function extrairErrosPorCampo(body: unknown): Record<string, string> {
+  if (body == null || typeof body !== 'object') return {};
+  const msg = (body as { message?: unknown }).message;
+  if (typeof msg !== 'object' || msg === null) return {};
+  const errors = (msg as { errors?: unknown }).errors;
+  if (!Array.isArray(errors)) return {};
+
+  const mapa: Record<string, string> = {};
+  for (const e of errors) {
+    if (typeof e !== 'object' || e === null) continue;
+    const issue = e as { path?: unknown; message?: unknown };
+    const texto = typeof issue.message === 'string' ? issue.message.trim() : '';
+    const caminho = Array.isArray(issue.path) ? issue.path.join('.') : '';
+    if (texto && caminho) mapa[caminho] = texto;
+  }
+  return mapa;
+}
+
+/** Lê o corpo de erro uma única vez e devolve texto (banner/toast) + mapa por campo juntos. */
+export async function detalharErro(
+  res: Response,
+  fallback = 'Falha na operação',
+): Promise<{ mensagem: string; porCampo: Record<string, string> }> {
+  const body: unknown = await res.json().catch(() => null);
+  return { mensagem: extrairMensagemErro(body, fallback), porCampo: extrairErrosPorCampo(body) };
+}
+
 /** Extrai o código estável de erro, inclusive do envelope aninhado do AllExceptionsFilter. */
 export function extrairCodigoErro(body: unknown): string | null {
   if (body == null || typeof body !== 'object') return null;
