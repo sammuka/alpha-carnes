@@ -15,6 +15,7 @@ import {
   Search,
   XCircle,
 } from 'lucide-react';
+import { extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import {
   TIPOS_DIVERGENCIA,
@@ -271,7 +272,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     setCarregandoPedidos(false);
     if (!res.ok) {
       setPedidosRecebiveis([]);
-      setErro((body as { message?: string }).message ?? 'Erro ao carregar Pedidos ao Fornecedor');
+      setErro(extrairMensagemErro(body, 'Erro ao carregar Pedidos ao Fornecedor'));
       return;
     }
     setPedidosRecebiveis((body as Paginado<PedidoFornecedorResumoRecebivel>).data);
@@ -283,7 +284,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     const res = await fetch(`/api/operacao/recebimentos/previsao/${id}`, { cache: 'no-store' });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setErro((body as { message?: string }).message ?? 'Erro ao carregar previsão');
+      setErro(extrairMensagemErro(body, 'Erro ao carregar previsão'));
       return;
     }
     setPrevisao(body as PrevisaoRecebimento);
@@ -302,8 +303,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     setErro(null);
     const res = await fetch(`/api/operacao/recebimentos/${id}`, { cache: 'no-store' });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setErro((body as { message?: string }).message ?? 'Erro ao carregar recebimento');
+      setErro(await mensagemDeErro(res, 'Erro ao carregar recebimento'));
       return;
     }
     const d = (await res.json()) as RecebimentoDetalhe;
@@ -426,7 +426,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     const body = await res.json().catch(() => ({}));
     setSalvando(false);
     if (!res.ok) {
-      setErro((body as { message?: string }).message ?? 'Erro ao criar lote');
+      setErro(extrairMensagemErro(body, 'Erro ao criar lote'));
       return;
     }
     const rec = (body as { recebimento: { id: string } }).recebimento;
@@ -461,10 +461,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
         observacoes: formNfe.observacoes || undefined,
       }),
     });
-    const body = await res.json().catch(() => ({}));
     setSalvando(false);
     if (!res.ok) {
-      setErro((body as { message?: string }).message ?? 'Erro ao atualizar NF');
+      setErro(await mensagemDeErro(res, 'Erro ao atualizar NF'));
       return;
     }
     setSheetNfeAberto(false);
@@ -486,10 +485,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
         observacoes: formMetadados.observacoes.trim() || undefined,
       }),
     });
-    const body = await res.json().catch(() => ({}));
     setSalvando(false);
     if (!res.ok) {
-      setErro((body as { message?: string }).message ?? 'Erro ao salvar metadados');
+      setErro(await mensagemDeErro(res, 'Erro ao salvar metadados'));
       return;
     }
     await carregarDetalhe(recebimentoId);
@@ -523,10 +521,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
         },
       }),
     });
-    const body = await res.json().catch(() => ({}));
     setSalvando(false);
     if (!res.ok) {
-      setErro((body as { message?: string }).message ?? 'Erro ao registrar divergência');
+      setErro(await mensagemDeErro(res, 'Erro ao registrar divergência'));
       return;
     }
     setDialogDivergenciaAberto(false);
@@ -562,10 +559,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
         itens,
       }),
     });
-    const body = await res.json().catch(() => ({}));
     setSalvando(false);
     if (!res.ok) {
-      setErro((body as { message?: string }).message ?? 'Erro ao capturar itens da NF');
+      setErro(await mensagemDeErro(res, 'Erro ao capturar itens da NF'));
       return;
     }
     await carregarDetalhe(detalhe.id);
@@ -585,10 +581,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
         ...(obsConferencia.trim() ? { observacao: obsConferencia.trim() } : {}),
       }),
     });
-    const body = await res.json().catch(() => ({}));
     setSalvando(false);
     if (!res.ok) {
-      setErro((body as { message?: string }).message ?? 'Erro ao concluir a conferência');
+      setErro(await mensagemDeErro(res, 'Erro ao concluir a conferência'));
       return;
     }
     setDialogConferenciaAberto(false);
@@ -607,10 +602,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     setSalvando(true);
     setErro(null);
     const res = await fetch(`/api/operacao/recebimentos/${recebimentoId}/suspender`, { method: 'POST' });
-    const body = await res.json().catch(() => ({}));
     setSalvando(false);
     if (!res.ok) {
-      setErro((body as { message?: string }).message ?? 'Erro ao suspender recebimento');
+      setErro(await mensagemDeErro(res, 'Erro ao suspender recebimento'));
       return;
     }
     await carregarDetalhe(recebimentoId);
@@ -626,9 +620,8 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     if (!window.confirm('Confirma o cancelamento deste lote?')) return;
     setErro(null);
     const res = await fetch(`/api/operacao/recebimentos/${recebimentoId}/cancelar`, { method: 'POST' });
-    const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setErro((body as { message?: string }).message ?? 'Erro ao cancelar lote');
+      setErro(await mensagemDeErro(res, 'Erro ao cancelar lote'));
       return;
     }
     setDetalhe(null);

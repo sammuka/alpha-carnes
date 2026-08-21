@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Eye, Printer, QrCode, Search, XCircle } from 'lucide-react';
 import type { EtiquetaListada, EstadoEtiqueta, PaginadoRecebimento, RecebimentoResumo } from '@/lib/operacao';
+import { mensagemDeErro } from '@/lib/error-message';
 import { rotuloDestinoPeca, statusPecaVariant } from '@/lib/status-ui';
 import { Badge } from '@/components/ui/badge';
 import { BadgeCount } from '@/components/ui/badge-count';
@@ -131,8 +132,7 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
     if (estadoFiltro) qs.set('estado', estadoFiltro);
     const res = await fetch(`/api/operacao/etiquetas?${qs}`, { cache: 'no-store' });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setErro((body as { message?: string }).message ?? 'Erro ao carregar etiquetas');
+      setErro(await mensagemDeErro(res, 'Erro ao carregar etiquetas'));
       setCarregando(false);
       return;
     }
@@ -149,8 +149,7 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
     setErro(null);
     const res = await fetch(`/api/operacao/pesagem/pecas/${pecaId}/etiqueta/reimprimir`, { method: 'POST' });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setErro((body as { message?: string }).message ?? 'Erro ao reimprimir');
+      setErro(await mensagemDeErro(res, 'Erro ao reimprimir'));
       return;
     }
     setModalReimprimir(false);
@@ -169,8 +168,7 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
       }),
     });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setErro((body as { message?: string }).message ?? 'Erro ao cancelar etiqueta');
+      setErro(await mensagemDeErro(res, 'Erro ao cancelar etiqueta'));
       return;
     }
     setModalCancelar(false);
