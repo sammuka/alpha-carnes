@@ -9,6 +9,7 @@ import type {
   PedidoAbertoExistente,
   PedidoVendaDetalhe,
 } from '@/lib/comercial';
+import { extrairMensagemErro } from '@/lib/error-message';
 import { AlertItem } from '@/components/ui/alert-item';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,12 +74,7 @@ async function corpoDeErro(response: Response): Promise<{ texto: string; dados?:
   if (!texto) return { texto: `Falha HTTP ${response.status}` };
   try {
     const dados = JSON.parse(texto) as { message?: unknown; error?: unknown };
-    const mensagem = typeof dados.message === 'string'
-      ? dados.message
-      : typeof dados.error === 'string'
-        ? dados.error
-        : texto;
-    return { texto: mensagem, dados };
+    return { texto: extrairMensagemErro(dados, texto), dados };
   } catch {
     return { texto };
   }

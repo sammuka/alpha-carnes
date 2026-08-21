@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Filter, Search } from 'lucide-react';
 import type { DisponibilidadeDia } from '@/lib/comercial';
+import { extrairMensagemErro } from '@/lib/error-message';
 import type { DetalheMapa, EstadoMapa, MapaProduto } from '@/lib/mapa-disponibilidade';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { AlertItem } from '@/components/ui/alert-item';
@@ -44,7 +45,7 @@ async function lerResposta<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const texto = await response.text();
     try {
-      throw new Error((JSON.parse(texto) as { message?: string }).message ?? texto);
+      throw new Error(extrairMensagemErro(JSON.parse(texto), texto));
     } catch (error) {
       if (error instanceof SyntaxError) throw new Error(texto || `Falha HTTP ${response.status}`);
       throw error;
