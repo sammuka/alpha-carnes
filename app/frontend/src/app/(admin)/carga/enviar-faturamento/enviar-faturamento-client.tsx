@@ -7,6 +7,7 @@ import {
 import type { CargaEnvio } from '@/lib/expedicao-ui';
 import { ROTULO_STATUS_CARGA, variantStatusCarga } from '@/lib/expedicao-ui';
 import type { StatusCaminhao } from '@/lib/operacao';
+import { mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime } from '@/lib/realtime';
 import { cn } from '@/lib/cn';
 import { PipelineBar } from '@/components/ui/pipeline-bar';
@@ -128,9 +129,8 @@ export function EnviarFaturamentoClient({ permissoes }: { permissoes: string[] }
       const res = await fetch(`/api/operacao/expedicao/caminhoes/${carga.id}/liberar-faturamento`, {
         method: 'POST',
       });
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErro((data as { message?: string }).message ?? 'Falha ao enviar para faturamento');
+        setErro(await mensagemDeErro(res, 'Falha ao enviar para faturamento'));
         return;
       }
       await carregar();

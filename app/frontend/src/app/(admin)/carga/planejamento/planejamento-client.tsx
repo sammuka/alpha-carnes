@@ -8,6 +8,7 @@ import {
 import type { PedidoVenda } from '@/lib/comercial';
 import type { Caminhao, CaminhaoDetalhe } from '@/lib/operacao';
 import { ROTULO_STATUS_CARGA, rotuloPrioridade } from '@/lib/expedicao-ui';
+import { mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime } from '@/lib/realtime';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
@@ -174,9 +175,8 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pedidoVendaId }),
       });
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErro((data as { message?: string }).message ?? 'Falha ao vincular pedido');
+        setErro(await mensagemDeErro(res, 'Falha ao vincular pedido'));
         return;
       }
       setModalPedido(null);
@@ -206,9 +206,8 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
           dataOperacao,
         }),
       });
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErro((data as { message?: string }).message ?? 'Falha ao criar caminhão');
+        setErro(await mensagemDeErro(res, 'Falha ao criar caminhão'));
         return;
       }
       setNovoCaminhao({ frotaCaminhaoId: '', placa: '', motorista: '', rota: '' });
@@ -225,9 +224,8 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
     setSubmitting(true);
     try {
       const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErro((data as { message?: string }).message ?? 'Operação falhou');
+        setErro(await mensagemDeErro(res, 'Operação falhou'));
         return;
       }
       await carregar();
