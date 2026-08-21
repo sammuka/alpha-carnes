@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/cn';
+import { mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime } from '@/lib/realtime';
 import {
   compativeisEntrada,
@@ -312,8 +313,7 @@ function AbaConsultaEstoque({
           : `/api/operacao/corte/subitens/${item.id}/etiqueta/reimprimir`;
       const res = await fetch(rota, { method: 'POST' });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setErroAcao((body as { message?: string }).message ?? 'Falha ao reimprimir etiqueta');
+        setErroAcao(await mensagemDeErro(res, 'Falha ao reimprimir etiqueta'));
       }
     } catch {
       setErroAcao('Erro de conexão ao reimprimir etiqueta');
