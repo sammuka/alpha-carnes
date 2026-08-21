@@ -27,6 +27,7 @@ import {
 import type {
   AmbienteFiscal, NotaFiscalListagem, Paginado, RastreabilidadeNota, StatusNfse,
 } from '@/lib/faturamento';
+import { mensagemDeErro } from '@/lib/error-message';
 
 // ── Badge de ambiente EISS (mesmo padrão de pre-faturamento-client.tsx — T8) ────
 
@@ -373,8 +374,7 @@ export function NotasXmlClient({ permissoes }: { permissoes: string[] }) {
       const res = await fetch(`/api/operacao/faturamento/notas/${notaId}/reprocessar`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setErro((data as { message?: string }).message ?? 'Falha ao reprocessar'); return; }
+      if (!res.ok) { setErro(await mensagemDeErro(res, 'Falha ao reprocessar')); return; }
       await carregar();
     } catch {
       setErro('Erro de conexão');
@@ -390,8 +390,7 @@ export function NotasXmlClient({ permissoes }: { permissoes: string[] }) {
       const res = await fetch(`/api/operacao/faturamento/notas/${modalCancelar.id}/cancelar`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ motivo }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setErro((data as { message?: string }).message ?? 'Falha ao cancelar'); return; }
+      if (!res.ok) { setErro(await mensagemDeErro(res, 'Falha ao cancelar')); return; }
       setModalCancelar(null);
       await carregar();
     } catch {

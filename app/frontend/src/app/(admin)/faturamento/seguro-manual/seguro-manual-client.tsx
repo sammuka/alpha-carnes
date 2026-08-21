@@ -17,6 +17,7 @@ import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill'
 import { SelectNative } from '@/components/ui/select-native';
 import { EmptyState } from '@/components/ui/empty-state';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
+import { mensagemDeErro } from '@/lib/error-message';
 import type { Paginado, SeguroCargaComCaminhao, StatusSeguro } from '@/lib/faturamento';
 
 function fmtBRL(v: number) {
@@ -90,8 +91,7 @@ export function SeguroManualClient({ permissoes }: { permissoes: string[] }) {
       const res = await fetch(`/api/operacao/faturamento/seguros/${seguroId}/status`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setErro((data as { message?: string }).message ?? 'Falha ao alterar status'); return; }
+      if (!res.ok) { setErro(await mensagemDeErro(res, 'Falha ao alterar status')); return; }
       await carregar();
     } catch {
       setErro('Erro de conexão');
@@ -108,8 +108,7 @@ export function SeguroManualClient({ permissoes }: { permissoes: string[] }) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome: anexoNome.trim(), descricao: anexoDescricao.trim() || undefined }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setErro((data as { message?: string }).message ?? 'Falha ao anexar comprovante'); return; }
+      if (!res.ok) { setErro(await mensagemDeErro(res, 'Falha ao anexar comprovante')); return; }
       setDialogAnexoAbertoPara(null);
       setAnexoNome('');
       setAnexoDescricao('');
