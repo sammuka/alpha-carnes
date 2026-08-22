@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import './common/validation/zod-config';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
 import cookieParser from 'cookie-parser';

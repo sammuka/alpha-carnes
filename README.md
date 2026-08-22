@@ -78,6 +78,27 @@ cd app/backend
 npm run db:seed
 ```
 
+### Carga inicial (opcional)
+
+Popula Clientes, Fornecedores, Frota (veículos e motoristas) e um catálogo/tabela de
+preços curados a partir de dados reais extraídos do ERP legado, em
+`docs/alphacarnes_json_extracoes/`. É uma carga única — não roda automaticamente no
+`docker compose up` nem no `npm run db:seed` (que só cuida de RBAC/parâmetros/catálogo
+provisório). Rode depois do seed padrão:
+
+```bash
+cd app/backend
+npm run db:migrate   # garante as colunas novas de frota (onda_frota_dados_legado)
+npm run db:seed      # garante o catálogo canônico (TZ/DT/PA/CB/CBA/JAC/FC/BPORCO)
+cd ../..
+DATABASE_URL=postgres://alphacarnes:alphacarnes@localhost:15433/alphacarnes \
+  npx tsx scripts/carga-inicial/carga-inicial.ts
+```
+
+Registros com CNPJ/CPF inválido (dígito verificador) ou duplicado são pulados —
+não inventamos documento fiscal. A lista completa de excluídos fica em
+`docs/alphacarnes_json_extracoes/relatorio-carga-inicial.md` após a execução.
+
 ### Rollback de migration (F1)
 
 A migration inicial da F1 não tem down script. Para resetar o banco:

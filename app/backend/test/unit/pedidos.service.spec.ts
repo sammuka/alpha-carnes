@@ -143,7 +143,7 @@ describe('PedidosService — branches de conflito', () => {
     await expect(service({}).planejarSobLock(tx as never, 'op-1', [
       { itemComercialId: 'i1', quantidade: '1' },
       { itemComercialId: 'i1', quantidade: '2' },
-    ] as never)).rejects.toThrow('item comercial duplicado');
+    ] as never)).rejects.toThrow('Item comercial duplicado');
   });
 
   it('planejarSobLock sem operacaoId retorna déficit total', async () => {

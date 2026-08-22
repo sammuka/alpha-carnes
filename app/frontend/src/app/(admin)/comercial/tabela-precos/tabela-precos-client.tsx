@@ -10,6 +10,7 @@ import type {
   TabelaPrecoItem,
   TabelaPrecoPublicacao,
 } from '@/lib/precos';
+import { extrairMensagemErro } from '@/lib/error-message';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
@@ -66,13 +67,7 @@ async function respostaJson<T>(response: Response): Promise<T> {
       && typeof (dados as { message?: unknown }).message === 'object'
       ? (dados as { message: unknown }).message
       : dados;
-    const mensagem = negocio && typeof negocio === 'object'
-      && 'message' in negocio
-      && typeof (negocio as { message?: unknown }).message === 'string'
-      ? (negocio as { message: string }).message
-      : typeof negocio === 'string'
-        ? negocio
-        : `Falha HTTP ${response.status}`;
+    const mensagem = extrairMensagemErro(dados, `Falha HTTP ${response.status}`);
     const error = new Error(mensagem) as Error & { dados?: unknown };
     error.dados = negocio;
     throw error;

@@ -1,0 +1,19 @@
+{
+  "source_file": "Cadastro_Clientes.xlsx",
+  "sheet_count": 1,
+  "sheets": [
+    {
+      "name": "Consulta_Clientes",
+      "used_range": "A1:T1270",
+      "rows_including_header": 1270,
+      "data_rows": 1269,
+      "columns": 20,
+      "output_file": "Cadastro_Clientes/Consulta_Clientes.json",
+      "has_formulas": false,
+      "date_columns_normalized": [
+        "Data_Inativacao",
+        "Data_Modificacao"
+      ]
+    }
+  ]
+}

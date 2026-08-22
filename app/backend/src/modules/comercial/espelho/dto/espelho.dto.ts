@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const consultarEspelhoSchema = z.object({
-  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dataOperacao deve ser YYYY-MM-DD'),
+  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data da operação inválida — use o formato AAAA-MM-DD.'),
   agrupar: z.enum(['cliente', 'rota', 'representante']).default('cliente'),
   clienteId: z.string().uuid().optional(),
   rotaId: z.string().uuid().optional(),

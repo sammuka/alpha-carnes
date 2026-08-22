@@ -28,13 +28,13 @@ export const registrarPesagemSchema = z
   .superRefine((v, ctx) => {
     if (v.modoCaptura === 'manual_assistido') {
       if (v.pesoManual === undefined) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pesoManual'], message: 'pesoManual é obrigatório no modo manual assistido' });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['pesoManual'], message: 'Informe o peso manual no modo manual assistido.' });
       }
       if (!v.motivo) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['motivo'], message: 'motivo é obrigatório no modo manual assistido' });
       }
       if (v.motivo === 'outro' && !v.motivoDetalhe) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['motivoDetalhe'], message: 'motivoDetalhe é obrigatório quando motivo = outro' });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['motivoDetalhe'], message: 'Detalhe o motivo ao selecionar "Outro".' });
       }
     }
   });

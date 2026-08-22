@@ -43,6 +43,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { mensagemDeErro } from '@/lib/error-message';
 import type { EtiquetaDesossaListada } from '@/lib/desossa';
 
 export type PaginadoEtiquetasDesossa = {
@@ -483,10 +484,7 @@ export function DesossaEtiquetasClient({ operacaoId }: { operacaoId?: string }) 
     );
     if (!res.ok) {
       setEtiquetas([]);
-      setErro(
-        (await res.json().catch(() => ({}))).message ??
-          `Erro ao carregar etiquetas (${res.status})`,
-      );
+      setErro(await mensagemDeErro(res, `Erro ao carregar etiquetas (${res.status})`));
       return;
     }
     const json = (await res.json()) as PaginadoEtiquetasDesossa;
@@ -505,7 +503,7 @@ export function DesossaEtiquetasClient({ operacaoId }: { operacaoId?: string }) 
       { method: 'POST' },
     );
     if (!res.ok) {
-      setErro((await res.json().catch(() => ({}))).message ?? 'Erro ao reimprimir');
+      setErro(await mensagemDeErro(res, 'Erro ao reimprimir'));
       return;
     }
     setModalReimprimir(null);
@@ -523,7 +521,7 @@ export function DesossaEtiquetasClient({ operacaoId }: { operacaoId?: string }) 
       }),
     });
     if (!res.ok) {
-      setErro((await res.json().catch(() => ({}))).message ?? 'Erro ao cancelar etiqueta');
+      setErro(await mensagemDeErro(res, 'Erro ao cancelar etiqueta'));
       return;
     }
     setModalCancelar(null);

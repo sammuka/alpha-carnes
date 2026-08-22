@@ -1,0 +1,107 @@
+{
+  "package": "AlphaCarnes - Extracoes JSON",
+  "generated_at": "2026-08-20T05:50:36",
+  "structure": "Um diretório por arquivo Excel, com um JSON por aba e um arquivo de metadados do workbook.",
+  "date_normalization": {
+    "description": "Em 'rows', colunas identificadas como datas são convertidas de serial Excel para ISO 8601. 'raw_values' preserva o valor original da planilha.",
+    "excel_epoch": "1899-12-30"
+  },
+  "workbooks": [
+    {
+      "source_file": "Cadastro_Produtos.xlsx",
+      "sheet_count": 1,
+      "sheets": [
+        {
+          "name": "Consulta_Produtos",
+          "used_range": "A1:W121",
+          "rows_including_header": 121,
+          "data_rows": 120,
+          "columns": 23,
+          "output_file": "Cadastro_Produtos/Consulta_Produtos.json",
+          "has_formulas": false,
+          "date_columns_normalized": [
+            "Data_Cadastro"
+          ]
+        }
+      ]
+    },
+    {
+      "source_file": "Cadastro_Motorista.xlsx",
+      "sheet_count": 1,
+      "sheets": [
+        {
+          "name": "Consulta_Motorista",
+          "used_range": "A1:AC41",
+          "rows_including_header": 41,
+          "data_rows": 40,
+          "columns": 29,
+          "output_file": "Cadastro_Motorista/Consulta_Motorista.json",
+          "has_formulas": false,
+          "date_columns_normalized": [
+            "Validade_Habilitacao",
+            "Data_Motorista",
+            "Emissao_Habilitacao",
+            "Data_1Habilita",
+            "Inicio_Fornecedor",
+            "Data_Inativacao"
+          ]
+        }
+      ]
+    },
+    {
+      "source_file": "Cadastro_Frota.xlsx",
+      "sheet_count": 1,
+      "sheets": [
+        {
+          "name": "Consulta_Frota",
+          "used_range": "A1:Z14",
+          "rows_including_header": 14,
+          "data_rows": 13,
+          "columns": 26,
+          "output_file": "Cadastro_Frota/Consulta_Frota.json",
+          "has_formulas": false,
+          "date_columns_normalized": [
+            "Data_Certificado"
+          ]
+        }
+      ]
+    },
+    {
+      "source_file": "Cadastro_Fornecedores.xlsx",
+      "sheet_count": 1,
+      "sheets": [
+        {
+          "name": "Consulta_Fornecedores",
+          "used_range": "A1:R697",
+          "rows_including_header": 697,
+          "data_rows": 696,
+          "columns": 18,
+          "output_file": "Cadastro_Fornecedores/Consulta_Fornecedores.json",
+          "has_formulas": false,
+          "date_columns_normalized": [
+            "Data_Exclusao"
+          ]
+        }
+      ]
+    },
+    {
+      "source_file": "Cadastro_Clientes.xlsx",
+      "sheet_count": 1,
+      "sheets": [
+        {
+          "name": "Consulta_Clientes",
+          "used_range": "A1:T1270",
+          "rows_including_header": 1270,
+          "data_rows": 1269,
+          "columns": 20,
+          "output_file": "Cadastro_Clientes/Consulta_Clientes.json",
+          "has_formulas": false,
+          "date_columns_normalized": [
+            "Data_Inativacao",
+            "Data_Modificacao"
+          ]
+        }
+      ]
+    }
+  ]
+}

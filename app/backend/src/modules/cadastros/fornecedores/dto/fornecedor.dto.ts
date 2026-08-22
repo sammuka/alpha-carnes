@@ -7,9 +7,9 @@ import { normalizarDocumento, validarDocumentoFiscal } from '../../../../common/
 
 const documentoFiscalSchema = z
   .string()
-  .min(1, 'documentoFiscal é obrigatório')
+  .min(1, 'CNPJ ou CPF é obrigatório.')
   .transform(normalizarDocumento)
-  .refine(validarDocumentoFiscal, { message: 'documentoFiscal inválido (CNPJ ou CPF com dígito verificador inválido)' });
+  .refine(validarDocumentoFiscal, { message: 'CNPJ ou CPF inválido — confira o número digitado.' });
 
 export const createFornecedorSchema = z.object({
   codigo: z.string().trim().min(1).max(50),

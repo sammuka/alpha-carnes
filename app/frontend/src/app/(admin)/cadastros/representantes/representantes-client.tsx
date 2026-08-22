@@ -107,10 +107,10 @@ export function RepresentantesClient({ podeGerenciar }: { podeGerenciar: boolean
         },
       ]}
       campos={[
-        { nome: 'codigo', rotulo: 'Código', tipo: 'texto', obrigatorio: true, placeholder: 'REP-01', monoespacado: true },
-        { nome: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, placeholder: 'Ex: Sabrina' },
-        { nome: 'tipoCanal', rotulo: 'Tipo / canal', tipo: 'texto', placeholder: 'Ex: Interno' },
-        { nome: 'contato', rotulo: 'Contato', tipo: 'texto', placeholder: 'Telefone e/ou e-mail' },
+        { nome: 'codigo', rotulo: 'Código', tipo: 'texto', obrigatorio: true, placeholder: 'REP-01', monoespacado: true, maxLength: 50 },
+        { nome: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, placeholder: 'Ex: Sabrina', maxLength: 200 },
+        { nome: 'tipoCanal', rotulo: 'Tipo / canal', tipo: 'texto', placeholder: 'Ex: Interno', maxLength: 100 },
+        { nome: 'contato', rotulo: 'Contato', tipo: 'texto', placeholder: 'Telefone e/ou e-mail', maxLength: 200 },
         { nome: 'observacao', rotulo: 'Observação', tipo: 'textarea' },
       ]}
       formularioVazio={{ codigo: '', nome: '', tipoCanal: '', contato: '', observacao: '', status: 'ativo' }}

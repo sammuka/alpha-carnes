@@ -14,8 +14,10 @@ import { StatusPill } from '@/components/ui/status-pill';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/cn';
+import { detalharErro } from '@/lib/error-message';
 import type { CriarRotaDto, Paginado, ParadaRota, Rota } from '@/lib/rotas';
 import { DIAS_SEMANA } from '@/lib/rotas';
+import { useErrosPorCampo } from '@/lib/use-erros-campo';
 
 type FormRota = CriarRotaDto & { id?: string };
 
@@ -74,6 +76,7 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [modoNovo, setModoNovo] = useState(false);
+  const { erros, setErros, limparCampo, limparTudo } = useErrosPorCampo();
 
   const carregar = useCallback(async () => {
     setErro(null);
@@ -104,12 +107,14 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
     setSelecionada(r);
     setForm(rotaParaForm(r));
     setModoNovo(false);
+    limparTudo();
   };
 
   const iniciarNova = () => {
     setSelecionada(null);
     setForm({ ...FORM_VAZIO });
     setModoNovo(true);
+    limparTudo();
   };
 
   const cancelar = () => {
@@ -127,8 +132,10 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
   const renumerar = (lista: ParadaRota[]) =>
     lista.map((parada, indice) => ({ ordem: indice + 1, descricao: parada.descricao }));
 
-  const adicionarParada = () =>
+  const adicionarParada = () => {
     setCampo('paradas', renumerar([...form.paradas, { ordem: form.paradas.length + 1, descricao: '' }]));
+    limparTudo();
+  };
 
   const atualizarParada = (indice: number, descricao: string) =>
     setCampo(
@@ -136,8 +143,10 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
       form.paradas.map((parada, i) => (i === indice ? { ...parada, descricao } : parada)),
     );
 
-  const removerParada = (indice: number) =>
+  const removerParada = (indice: number) => {
     setCampo('paradas', renumerar(form.paradas.filter((_, i) => i !== indice)));
+    limparTudo();
+  };
 
   const moverParada = (indice: number, delta: number) => {
     const destino = indice + delta;
@@ -149,6 +158,7 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
     lista[indice] = outro;
     lista[destino] = atual;
     setCampo('paradas', renumerar(lista));
+    limparTudo();
   };
 
   const alternarDia = (dia: string) =>
@@ -162,15 +172,24 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
   const salvar = async () => {
     if (!podeGerenciar) return;
     if (!form.codigo.trim() || !form.nome.trim()) {
+      setErros({
+        ...(form.codigo.trim() ? {} : { codigo: 'Campo obrigatório.' }),
+        ...(form.nome.trim() ? {} : { nome: 'Campo obrigatório.' }),
+      });
       setErro('Preencha código e nome da rota.');
       return;
     }
-    if (form.paradas.some((parada) => parada.descricao.trim() === '')) {
+    const paradasVazias = form.paradas
+      .map((p, i) => (p.descricao.trim() === '' ? i : -1))
+      .filter((i) => i >= 0);
+    if (paradasVazias.length > 0) {
+      setErros(Object.fromEntries(paradasVazias.map((i) => [`paradas.${i}.descricao`, 'Campo obrigatório.'])));
       setErro('Informe a descrição de todas as paradas.');
       return;
     }
     setSalvando(true);
     setErro(null);
+    limparTudo();
     try {
       const payload = formParaPayload(form);
       const res = form.id
@@ -185,8 +204,9 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
             body: JSON.stringify(payload),
           });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setErro((body as { message?: string }).message ?? 'Falha ao salvar rota');
+        const { mensagem, porCampo } = await detalharErro(res, 'Falha ao salvar rota');
+        setErro(mensagem);
+        setErros(porCampo);
         return;
       }
       const salva = (await res.json()) as Rota;
@@ -328,52 +348,82 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
 
               <CardContent className="space-y-3">
                 <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
-                  <FormField label="Nome da Rota" htmlFor="nome">
+                  <FormField label="Nome da Rota" htmlFor="nome" error={erros.nome}>
                     <Input
                       id="nome"
                       value={form.nome}
+                      maxLength={200}
                       disabled={!podeGerenciar}
-                      onChange={(e) => setCampo('nome', e.target.value)}
+                      aria-invalid={'nome' in erros || undefined}
+                      onChange={(e) => {
+                        limparCampo('nome');
+                        setCampo('nome', e.target.value);
+                      }}
                     />
                   </FormField>
-                  <FormField label="Código Rápido" htmlFor="codigo">
+                  <FormField label="Código Rápido" htmlFor="codigo" error={erros.codigo}>
                     <Input
                       id="codigo"
                       value={form.codigo}
+                      maxLength={50}
                       disabled={!podeGerenciar || (!modoNovo && !!form.id)}
-                      onChange={(e) => setCampo('codigo', e.target.value)}
+                      aria-invalid={'codigo' in erros || undefined}
+                      onChange={(e) => {
+                        limparCampo('codigo');
+                        setCampo('codigo', e.target.value);
+                      }}
                     />
                   </FormField>
-                  <FormField label="Região" htmlFor="regiao">
+                  <FormField label="Região" htmlFor="regiao" error={erros.regiao}>
                     <Input
                       id="regiao"
                       value={form.regiao ?? ''}
+                      maxLength={100}
                       disabled={!podeGerenciar}
-                      onChange={(e) => setCampo('regiao', e.target.value)}
+                      aria-invalid={'regiao' in erros || undefined}
+                      onChange={(e) => {
+                        limparCampo('regiao');
+                        setCampo('regiao', e.target.value);
+                      }}
                     />
                   </FormField>
-                  <FormField label="Representante padrão" htmlFor="representante">
+                  <FormField label="Representante padrão" htmlFor="representante" error={erros.representantePadrao}>
                     <Input
                       id="representante"
                       value={form.representantePadrao ?? ''}
+                      maxLength={200}
                       disabled={!podeGerenciar}
-                      onChange={(e) => setCampo('representantePadrao', e.target.value)}
+                      aria-invalid={'representantePadrao' in erros || undefined}
+                      onChange={(e) => {
+                        limparCampo('representantePadrao');
+                        setCampo('representantePadrao', e.target.value);
+                      }}
                     />
                   </FormField>
-                  <FormField label="Caminhão padrão" htmlFor="caminhao">
+                  <FormField label="Caminhão padrão" htmlFor="caminhao" error={erros.caminhaoPadrao}>
                     <Input
                       id="caminhao"
                       value={form.caminhaoPadrao ?? ''}
+                      maxLength={100}
                       disabled={!podeGerenciar}
-                      onChange={(e) => setCampo('caminhaoPadrao', e.target.value)}
+                      aria-invalid={'caminhaoPadrao' in erros || undefined}
+                      onChange={(e) => {
+                        limparCampo('caminhaoPadrao');
+                        setCampo('caminhaoPadrao', e.target.value);
+                      }}
                     />
                   </FormField>
-                  <FormField label="Motorista padrão" htmlFor="motorista">
+                  <FormField label="Motorista padrão" htmlFor="motorista" error={erros.motoristaPadrao}>
                     <Input
                       id="motorista"
                       value={form.motoristaPadrao ?? ''}
+                      maxLength={200}
                       disabled={!podeGerenciar}
-                      onChange={(e) => setCampo('motoristaPadrao', e.target.value)}
+                      aria-invalid={'motoristaPadrao' in erros || undefined}
+                      onChange={(e) => {
+                        limparCampo('motoristaPadrao');
+                        setCampo('motoristaPadrao', e.target.value);
+                      }}
                     />
                   </FormField>
                 </div>
@@ -391,12 +441,16 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
                   </div>
                 </div>
 
-                <FormField label="Observações" htmlFor="observacoes">
+                <FormField label="Observações" htmlFor="observacoes" error={erros.observacoes}>
                   <Textarea
                     id="observacoes"
                     value={form.observacoes ?? ''}
                     disabled={!podeGerenciar}
-                    onChange={(e) => setCampo('observacoes', e.target.value)}
+                    aria-invalid={'observacoes' in erros || undefined}
+                    onChange={(e) => {
+                      limparCampo('observacoes');
+                      setCampo('observacoes', e.target.value);
+                    }}
                     rows={4}
                   />
                 </FormField>
@@ -415,47 +469,62 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
                     <EmptyState title="Nenhuma parada cadastrada nesta rota." />
                   )}
 
-                  {form.paradas.map((parada, indice) => (
-                    <div key={parada.ordem} className="flex items-center gap-2 rounded-md border border-border bg-surface-2 p-2">
-                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-3 text-[11px] font-bold text-fg-secondary">
-                        {indice + 1}
-                      </span>
-                      <Input
-                        aria-label={`Parada ${indice + 1}`}
-                        className="flex-1"
-                        value={parada.descricao}
-                        disabled={!podeGerenciar}
-                        onChange={(e) => atualizarParada(indice, e.target.value)}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="iconSm"
-                        aria-label="Subir parada"
-                        disabled={!podeGerenciar || indice === 0}
-                        onClick={() => moverParada(indice, -1)}
-                      >
-                        <ArrowUp />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="iconSm"
-                        aria-label="Descer parada"
-                        disabled={!podeGerenciar || indice === form.paradas.length - 1}
-                        onClick={() => moverParada(indice, 1)}
-                      >
-                        <ArrowDown />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="iconSm"
-                        aria-label="Remover parada"
-                        disabled={!podeGerenciar}
-                        onClick={() => removerParada(indice)}
-                      >
-                        <Trash2 className="text-destructive" />
-                      </Button>
-                    </div>
-                  ))}
+                  {form.paradas.map((parada, indice) => {
+                    const chaveErro = `paradas.${indice}.descricao`;
+                    return (
+                      <div key={parada.ordem} className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 rounded-md border border-border bg-surface-2 p-2">
+                          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-3 text-[11px] font-bold text-fg-secondary">
+                            {indice + 1}
+                          </span>
+                          <Input
+                            aria-label={`Parada ${indice + 1}`}
+                            className="flex-1"
+                            value={parada.descricao}
+                            maxLength={120}
+                            disabled={!podeGerenciar}
+                            aria-invalid={chaveErro in erros || undefined}
+                            onChange={(e) => {
+                              limparCampo(chaveErro);
+                              atualizarParada(indice, e.target.value);
+                            }}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="iconSm"
+                            aria-label="Subir parada"
+                            disabled={!podeGerenciar || indice === 0}
+                            onClick={() => moverParada(indice, -1)}
+                          >
+                            <ArrowUp />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="iconSm"
+                            aria-label="Descer parada"
+                            disabled={!podeGerenciar || indice === form.paradas.length - 1}
+                            onClick={() => moverParada(indice, 1)}
+                          >
+                            <ArrowDown />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="iconSm"
+                            aria-label="Remover parada"
+                            disabled={!podeGerenciar}
+                            onClick={() => removerParada(indice)}
+                          >
+                            <Trash2 className="text-destructive" />
+                          </Button>
+                        </div>
+                        {erros[chaveErro] && (
+                          <p role="alert" className="text-[11px] font-medium text-danger-fg">
+                            {erros[chaveErro]}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
 
                   {podeGerenciar && (
                     <Button type="button" variant="secondary" size="sm" className="w-full" onClick={adicionarParada}>

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { FieldValues } from 'react-hook-form';
 import type { LucideIcon } from 'lucide-react';
 import { Building2, MapPin, Truck } from 'lucide-react';
+import { mascararCep, mascararCpfCnpj, mascararTelefone } from '@/lib/masks';
 
 export type AbaCadastro = 'gerais' | 'fiscais' | 'contatos' | 'preferencias' | 'parametros';
 
@@ -22,6 +23,10 @@ export interface CampoConfig {
   aba?: AbaCadastro;
   secao?: string;
   jsonCampo?: string;
+  /** Reformata o valor a cada digitação (ex.: mascararCpfCnpj). Nunca bloqueia colar. */
+  mascara?: (valor: string) => string;
+  /** Limite físico de digitação — copiar do `.max(N)` do DTO do backend, nunca inventar. */
+  maxLength?: number;
 }
 
 export interface ColunaConfig {
@@ -48,7 +53,9 @@ const statusOpcoes = [
 
 // Schemas de formulário (validação na borda do front — RA-01: regra crítica fica no backend).
 const documentoRegex = /^\d{11}$|^\d{14}$/;
-const documentoMsg = 'Informe um CNPJ (14 dígitos) ou CPF (11 dígitos), apenas números';
+const documentoMsg = 'Informe um CNPJ (14 dígitos) ou CPF (11 dígitos)';
+/** Valida ignorando a pontuação da máscara — mesmo critério do backend (normalizarDocumento). */
+const documentoValido = (valor: string) => documentoRegex.test(valor.replace(/\D/g, ''));
 
 const dadosFiscaisFormSchema = z
   .object({
@@ -96,8 +103,12 @@ const parametrosFornecedorFormSchema = z
       .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM')
       .optional()
       .or(z.literal('')),
-    capacidadeMaximaKg: z.coerce.number().int().min(0).optional(),
-    toleranciaDivergenciaPercentual: z.coerce.number().min(0).max(100).optional(),
+    capacidadeMaximaKg: z.coerce.number().int().min(0, 'Deve ser maior ou igual a zero').optional(),
+    toleranciaDivergenciaPercentual: z.coerce
+      .number()
+      .min(0, 'Deve ser maior ou igual a zero')
+      .max(100, 'Deve ser no máximo 100')
+      .optional(),
     notaQualidade: z.enum(['A', 'B', 'C']).optional(),
   })
   .optional();
@@ -114,16 +125,24 @@ export const clientesConfig: CadastroConfig = {
     { campo: 'status', rotulo: 'Status' },
   ],
   campos: [
-    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true, aba: 'gerais' },
-    { nome: 'razaoSocial', rotulo: 'Razão Social', tipo: 'text', obrigatorio: true, aba: 'gerais' },
-    { nome: 'nomeFantasia', rotulo: 'Nome Fantasia', tipo: 'text', aba: 'gerais' },
+    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true, aba: 'gerais', maxLength: 50 },
+    {
+      nome: 'razaoSocial',
+      rotulo: 'Razão Social',
+      tipo: 'text',
+      obrigatorio: true,
+      aba: 'gerais',
+      maxLength: 200,
+    },
+    { nome: 'nomeFantasia', rotulo: 'Nome Fantasia', tipo: 'text', aba: 'gerais', maxLength: 200 },
     {
       nome: 'documentoFiscal',
       rotulo: 'CNPJ/CPF',
       tipo: 'text',
       obrigatorio: true,
-      placeholder: 'Somente números',
+      placeholder: '00.000.000/0000-00',
       aba: 'gerais',
+      mascara: mascararCpfCnpj,
     },
     { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes, aba: 'gerais' },
     {
@@ -146,6 +165,7 @@ export const clientesConfig: CadastroConfig = {
       tipo: 'text',
       aba: 'fiscais',
       jsonCampo: 'dadosFiscaisJson',
+      maxLength: 200,
     },
     {
       nome: 'numero',
@@ -153,6 +173,7 @@ export const clientesConfig: CadastroConfig = {
       tipo: 'text',
       aba: 'fiscais',
       jsonCampo: 'dadosFiscaisJson',
+      maxLength: 20,
     },
     {
       nome: 'bairro',
@@ -160,6 +181,7 @@ export const clientesConfig: CadastroConfig = {
       tipo: 'text',
       aba: 'fiscais',
       jsonCampo: 'dadosFiscaisJson',
+      maxLength: 100,
     },
     {
       nome: 'cidade',
@@ -167,15 +189,32 @@ export const clientesConfig: CadastroConfig = {
       tipo: 'text',
       aba: 'fiscais',
       jsonCampo: 'dadosFiscaisJson',
+      maxLength: 100,
     },
-    { nome: 'uf', rotulo: 'UF', tipo: 'text', aba: 'fiscais', jsonCampo: 'dadosFiscaisJson' },
-    { nome: 'cep', rotulo: 'CEP', tipo: 'text', aba: 'fiscais', jsonCampo: 'dadosFiscaisJson' },
+    {
+      nome: 'uf',
+      rotulo: 'UF',
+      tipo: 'text',
+      aba: 'fiscais',
+      jsonCampo: 'dadosFiscaisJson',
+      maxLength: 2,
+      mascara: (v: string) => v.toUpperCase(),
+    },
+    {
+      nome: 'cep',
+      rotulo: 'CEP',
+      tipo: 'text',
+      aba: 'fiscais',
+      jsonCampo: 'dadosFiscaisJson',
+      mascara: mascararCep,
+    },
     {
       nome: 'inscricaoEstadual',
       rotulo: 'Inscrição estadual',
       tipo: 'text',
       aba: 'fiscais',
       jsonCampo: 'dadosFiscaisJson',
+      maxLength: 30,
     },
     {
       nome: 'nome',
@@ -183,6 +222,7 @@ export const clientesConfig: CadastroConfig = {
       tipo: 'text',
       aba: 'contatos',
       jsonCampo: 'dadosContatoJson',
+      maxLength: 200,
     },
     {
       nome: 'telefone',
@@ -190,6 +230,7 @@ export const clientesConfig: CadastroConfig = {
       tipo: 'text',
       aba: 'contatos',
       jsonCampo: 'dadosContatoJson',
+      mascara: mascararTelefone,
     },
     {
       nome: 'email',
@@ -204,6 +245,7 @@ export const clientesConfig: CadastroConfig = {
       tipo: 'text',
       aba: 'contatos',
       jsonCampo: 'dadosContatoJson',
+      maxLength: 100,
     },
     {
       nome: 'prefereMaisPesada',
@@ -231,9 +273,9 @@ export const clientesConfig: CadastroConfig = {
     codigo: z.string().min(1, 'Código obrigatório'),
     razaoSocial: z.string().min(1, 'Razão social obrigatória'),
     nomeFantasia: z.string().optional(),
-    documentoFiscal: z.string().regex(documentoRegex, documentoMsg),
+    documentoFiscal: z.string().refine(documentoValido, documentoMsg),
     status: z.enum(['ativo', 'inativo']).optional(),
-    representanteId: z.string().uuid().optional().or(z.literal('')),
+    representanteId: z.string().uuid('Identificador do representante inválido').optional().or(z.literal('')),
     prioridade: z.string().optional(),
     observacoesOperacionais: z.string().optional(),
     dadosFiscaisJson: dadosFiscaisFormSchema,
@@ -259,15 +301,30 @@ export const fornecedoresConfig: CadastroConfig = {
     { chave: 'parametros-operacionais', titulo: 'Parâmetros Operacionais', icone: Truck, coluna: 2 },
   ],
   campos: [
-    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true, secao: 'dados-principais' },
-    { nome: 'razaoSocial', rotulo: 'Razão Social', tipo: 'text', obrigatorio: true, secao: 'dados-principais' },
+    {
+      nome: 'codigo',
+      rotulo: 'Código',
+      tipo: 'text',
+      obrigatorio: true,
+      secao: 'dados-principais',
+      maxLength: 50,
+    },
+    {
+      nome: 'razaoSocial',
+      rotulo: 'Razão Social',
+      tipo: 'text',
+      obrigatorio: true,
+      secao: 'dados-principais',
+      maxLength: 200,
+    },
     {
       nome: 'documentoFiscal',
       rotulo: 'CNPJ/CPF',
       tipo: 'text',
       obrigatorio: true,
-      placeholder: 'Somente números',
+      placeholder: '00.000.000/0000-00',
       secao: 'dados-principais',
+      mascara: mascararCpfCnpj,
     },
     { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes, secao: 'dados-principais' },
     { nome: 'observacoes', rotulo: 'Observações', tipo: 'textarea', secao: 'dados-principais' },
@@ -277,6 +334,7 @@ export const fornecedoresConfig: CadastroConfig = {
       tipo: 'text',
       secao: 'endereco-contato',
       jsonCampo: 'contatosJson',
+      maxLength: 200,
     },
     {
       nome: 'telefone',
@@ -284,6 +342,7 @@ export const fornecedoresConfig: CadastroConfig = {
       tipo: 'text',
       secao: 'endereco-contato',
       jsonCampo: 'contatosJson',
+      mascara: mascararTelefone,
     },
     {
       nome: 'email',
@@ -298,6 +357,7 @@ export const fornecedoresConfig: CadastroConfig = {
       tipo: 'text',
       secao: 'endereco-contato',
       jsonCampo: 'contatosJson',
+      maxLength: 100,
     },
     {
       nome: 'romaneioAntecipado',
@@ -313,6 +373,7 @@ export const fornecedoresConfig: CadastroConfig = {
       placeholder: 'HH:MM',
       secao: 'parametros-operacionais',
       jsonCampo: 'parametrosOperacionaisJson',
+      maxLength: 5,
     },
     {
       nome: 'capacidadeMaximaKg',
@@ -344,7 +405,7 @@ export const fornecedoresConfig: CadastroConfig = {
   schema: z.object({
     codigo: z.string().min(1, 'Código obrigatório'),
     razaoSocial: z.string().min(1, 'Razão social obrigatória'),
-    documentoFiscal: z.string().regex(documentoRegex, documentoMsg),
+    documentoFiscal: z.string().refine(documentoValido, documentoMsg),
     status: z.enum(['ativo', 'inativo']).optional(),
     observacoes: z.string().optional(),
     contatosJson: contatosFornecedorFormSchema,
@@ -364,10 +425,16 @@ export const itensCompraConfig: CadastroConfig = {
     { campo: 'status', rotulo: 'Status' },
   ],
   campos: [
-    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true },
-    { nome: 'descricao', rotulo: 'Descrição', tipo: 'text', obrigatorio: true },
-    { nome: 'categoria', rotulo: 'Categoria', tipo: 'text' },
-    { nome: 'unidadeCompra', rotulo: 'Unidade de Compra', tipo: 'text', obrigatorio: true },
+    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true, maxLength: 50 },
+    { nome: 'descricao', rotulo: 'Descrição', tipo: 'text', obrigatorio: true, maxLength: 200 },
+    { nome: 'categoria', rotulo: 'Categoria', tipo: 'text', maxLength: 100 },
+    {
+      nome: 'unidadeCompra',
+      rotulo: 'Unidade de Compra',
+      tipo: 'text',
+      obrigatorio: true,
+      maxLength: 30,
+    },
     { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes },
   ],
   schema: z.object({
@@ -391,10 +458,16 @@ export const itensComerciaisConfig: CadastroConfig = {
     { campo: 'status', rotulo: 'Status' },
   ],
   campos: [
-    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true },
-    { nome: 'descricao', rotulo: 'Descrição', tipo: 'text', obrigatorio: true },
-    { nome: 'categoria', rotulo: 'Categoria', tipo: 'text' },
-    { nome: 'unidadeComercial', rotulo: 'Unidade Comercial', tipo: 'text', obrigatorio: true },
+    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true, maxLength: 50 },
+    { nome: 'descricao', rotulo: 'Descrição', tipo: 'text', obrigatorio: true, maxLength: 200 },
+    { nome: 'categoria', rotulo: 'Categoria', tipo: 'text', maxLength: 100 },
+    {
+      nome: 'unidadeComercial',
+      rotulo: 'Unidade Comercial',
+      tipo: 'text',
+      obrigatorio: true,
+      maxLength: 30,
+    },
     { nome: 'permiteCorte', rotulo: 'Permite Corte', tipo: 'checkbox' },
     { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes },
   ],

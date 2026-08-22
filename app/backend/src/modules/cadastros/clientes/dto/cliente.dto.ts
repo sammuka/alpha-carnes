@@ -9,9 +9,9 @@ import { normalizarDocumento, validarDocumentoFiscal } from '../../../../common/
 // documentoFiscal: aceita CNPJ E CPF; validado por dígito verificador; normalizado (só dígitos).
 const documentoFiscalSchema = z
   .string()
-  .min(1, 'documentoFiscal é obrigatório')
+  .min(1, 'CNPJ ou CPF é obrigatório.')
   .transform(normalizarDocumento)
-  .refine(validarDocumentoFiscal, { message: 'documentoFiscal inválido (CNPJ ou CPF com dígito verificador inválido)' });
+  .refine(validarDocumentoFiscal, { message: 'CNPJ ou CPF inválido — confira o número digitado.' });
 
 const statusSchema = z.enum(['ativo', 'inativo']);
 

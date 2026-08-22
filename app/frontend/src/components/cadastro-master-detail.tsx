@@ -16,6 +16,8 @@ import { cn } from '@/lib/cn';
 import type { AbaCadastro, CampoConfig, CadastroConfig } from '@/lib/cadastros-config';
 import { ABA_LABELS, ABA_ORDEM, CADASTROS } from '@/lib/cadastros-config';
 import type { Paginado } from '@/lib/cadastros';
+import { detalharErro, extrairMensagemErro } from '@/lib/error-message';
+import { useErrosPorCampo } from '@/lib/use-erros-campo';
 
 type Registro = Record<string, unknown> & { id: string };
 type FormValor = string | boolean;
@@ -103,16 +105,19 @@ function CampoFormulario({
   campo,
   form,
   podeGerenciar,
+  erro,
   onChange,
 }: {
   campo: CampoConfig;
   form: FormState;
   podeGerenciar: boolean;
+  erro?: string;
   onChange: (chave: string, valor: FormValor) => void;
 }) {
   const chave = chaveFormulario(campo);
   const desabilitado = !podeGerenciar || campo.nome === 'codigo';
   const valor = form[chave];
+  const invalido = erro ? true : undefined;
 
   if (campo.tipo === 'checkbox') {
     return (
@@ -131,11 +136,17 @@ function CampoFormulario({
   }
 
   return (
-    <FormField label={campo.rotulo} htmlFor={chave} className={campo.tipo === 'textarea' ? 'sm:col-span-2' : undefined}>
+    <FormField
+      label={campo.rotulo}
+      htmlFor={chave}
+      error={erro}
+      className={campo.tipo === 'textarea' ? 'sm:col-span-2' : undefined}
+    >
       {campo.tipo === 'select' ? (
         <SelectNative
           id={chave}
           disabled={desabilitado}
+          aria-invalid={invalido}
           value={typeof valor === 'string' ? valor : ''}
           onChange={(e) => onChange(chave, e.target.value)}
         >
@@ -149,6 +160,8 @@ function CampoFormulario({
         <Textarea
           id={chave}
           readOnly={desabilitado}
+          aria-invalid={invalido}
+          maxLength={campo.maxLength}
           placeholder={campo.placeholder}
           value={typeof valor === 'string' ? valor : ''}
           onChange={(e) => onChange(chave, e.target.value)}
@@ -159,9 +172,11 @@ function CampoFormulario({
           id={chave}
           type={campo.tipo === 'number' ? 'number' : campo.tipo === 'date' ? 'date' : 'text'}
           readOnly={desabilitado}
+          aria-invalid={invalido}
+          maxLength={campo.maxLength}
           placeholder={campo.placeholder}
           value={typeof valor === 'string' ? valor : ''}
-          onChange={(e) => onChange(chave, e.target.value)}
+          onChange={(e) => onChange(chave, campo.mascara ? campo.mascara(e.target.value) : e.target.value)}
         />
       )}
     </FormField>
@@ -187,6 +202,7 @@ export function CadastroMasterDetail({
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const { erros, setErros, limparCampo, limparTudo } = useErrosPorCampo();
 
   const usaAbas = useMemo(() => config.campos.some((c) => c.aba != null), [config.campos]);
 
@@ -218,7 +234,7 @@ export function CadastroMasterDetail({
       const res = await fetch(`/api/cadastros/${config.recurso}?${qs.toString()}`, { cache: 'no-store' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setErro((body as { message?: string }).message ?? 'Erro ao carregar lista');
+        setErro(extrairMensagemErro(body, 'Erro ao carregar lista'));
         setLista([]);
         return;
       }
@@ -234,11 +250,12 @@ export function CadastroMasterDetail({
 
   const carregarDetalhe = useCallback(async (id: string) => {
     setErro(null);
+    limparTudo();
     try {
       const res = await fetch(`/api/cadastros/${config.recurso}/${id}`, { cache: 'no-store' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setErro((body as { message?: string }).message ?? 'Erro ao carregar registro');
+        setErro(extrairMensagemErro(body, 'Erro ao carregar registro'));
         return;
       }
       const reg = (await res.json()) as Registro;
@@ -286,6 +303,7 @@ export function CadastroMasterDetail({
     setSalvando(true);
     setMensagem(null);
     setErro(null);
+    limparTudo();
     try {
       const payload = montarPayload(config, form);
       const res = await fetch(`/api/cadastros/${config.recurso}/${detalhe.id}`, {
@@ -294,8 +312,15 @@ export function CadastroMasterDetail({
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setErro((body as { message?: string }).message ?? 'Falha ao salvar');
+        const { mensagem: msgErro, porCampo } = await detalharErro(res, 'Falha ao salvar');
+        setErro(msgErro);
+        setErros(porCampo);
+        if (usaAbas) {
+          const abaComErro = abasPresentes.find((aba) =>
+            (camposPorAba.get(aba) ?? []).some((c) => chaveFormulario(c) in porCampo),
+          );
+          if (abaComErro) setAbaAtiva(abaComErro);
+        }
         return;
       }
       setMensagem('Alterações salvas.');
@@ -309,6 +334,7 @@ export function CadastroMasterDetail({
   }
 
   function handleCampoChange(chave: string, valor: FormValor) {
+    limparCampo(chave);
     setForm((f) => ({ ...f, [chave]: valor }));
   }
 
@@ -321,6 +347,7 @@ export function CadastroMasterDetail({
             campo={campo}
             form={form}
             podeGerenciar={podeGerenciar}
+            erro={erros[chaveFormulario(campo)]}
             onChange={handleCampoChange}
           />
         ))}
@@ -465,7 +492,11 @@ export function CadastroMasterDetail({
                     <Tabs value={abaAtiva} onValueChange={setAbaAtiva}>
                       <TabsList>
                         {abasPresentes.map((aba) => (
-                          <TabsTrigger key={aba} value={aba}>
+                          <TabsTrigger
+                            key={aba}
+                            value={aba}
+                            temErro={(camposPorAba.get(aba) ?? []).some((c) => chaveFormulario(c) in erros)}
+                          >
                             {ABA_LABELS[aba]}
                           </TabsTrigger>
                         ))}

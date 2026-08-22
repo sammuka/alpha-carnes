@@ -9,6 +9,7 @@ import type {
   PedidoVenda,
   PedidoVendaDetalhe,
 } from '@/lib/comercial';
+import { extrairMensagemErro } from '@/lib/error-message';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { rotuloStatusPedido } from '@/lib/status-pedido';
 import { ActivityItem } from '@/components/ui/activity-item';
@@ -60,7 +61,7 @@ async function lerJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.text();
     try {
-      throw new Error((JSON.parse(body) as { message?: string }).message ?? body);
+      throw new Error(extrairMensagemErro(JSON.parse(body), body));
     } catch (error) {
       if (error instanceof SyntaxError) throw new Error(body || `Falha HTTP ${response.status}`);
       throw error;
