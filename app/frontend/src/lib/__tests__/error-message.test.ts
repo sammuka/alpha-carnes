@@ -1,4 +1,4 @@
-import { extrairErrosPorCampo } from '../error-message';
+import { extrairErrosPorCampo, extrairMensagemErro } from '../error-message';
 
 describe('extrairErrosPorCampo', () => {
   const body = {
@@ -25,5 +25,23 @@ describe('extrairErrosPorCampo', () => {
     expect(extrairErrosPorCampo({ message: 'Não encontrado' })).toEqual({});
     expect(extrairErrosPorCampo(null)).toEqual({});
     expect(extrairErrosPorCampo('texto')).toEqual({});
+  });
+});
+
+describe('extrairMensagemErro', () => {
+  it('envelope de validação Zod: extrai o detalhe do campo, nunca o texto genérico nem o fallback', () => {
+    const body = {
+      statusCode: 400,
+      message: {
+        message: 'Validação falhou',
+        errors: [{ path: ['razaoSocial'], message: 'Campo obrigatório.', code: 'too_small' }],
+      },
+    };
+
+    const resultado = extrairMensagemErro(body, 'fallback');
+
+    expect(resultado).not.toBe('Validação falhou');
+    expect(resultado).not.toBe('fallback');
+    expect(resultado).toContain('Campo obrigatório.');
   });
 });
