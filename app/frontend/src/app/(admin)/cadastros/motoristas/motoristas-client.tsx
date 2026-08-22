@@ -8,6 +8,12 @@ import { mensagemDeErro } from '@/lib/error-message';
 import type { Caminhao, Motorista } from '@/lib/frota';
 import { mascararTelefone } from '@/lib/masks';
 
+const ROTULO_VINCULO: Record<string, string> = {
+  motorista: 'Motorista',
+  agregado: 'Agregado',
+  chapa: 'Chapa',
+};
+
 export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) {
   const [caminhoes, setCaminhoes] = useState<Caminhao[]>([]);
 
@@ -35,7 +41,7 @@ export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) 
       substantivoSingular="motorista"
       substantivoPlural="motoristas"
       endpoint="/api/cadastros/frota-motoristas"
-      larguraDrawer={460}
+      larguraDrawer={520}
       podeGerenciar={podeGerenciar}
       mensagemVazia="Nenhum motorista encontrado para os filtros aplicados."
       statusDe={(m) => m.status}
@@ -68,7 +74,19 @@ export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) 
         {
           chave: 'telefone',
           titulo: 'Telefone',
-          render: (m) => <span className="text-muted-foreground">{m.telefone ?? '—'}</span>,
+          render: (m) => <span className="text-muted-foreground">{m.telefone ?? m.celular ?? '—'}</span>,
+        },
+        {
+          chave: 'tipoVinculo',
+          titulo: 'Vínculo',
+          render: (m) => (
+            <span className="text-muted-foreground">{m.tipoVinculo ? ROTULO_VINCULO[m.tipoVinculo] : '—'}</span>
+          ),
+        },
+        {
+          chave: 'validadeHabilitacao',
+          titulo: 'CNH válida até',
+          render: (m) => <span className="text-muted-foreground">{m.validadeHabilitacao ?? '—'}</span>,
         },
         {
           chave: 'caminhaoPadrao',
@@ -87,6 +105,18 @@ export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) 
         { nome: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, placeholder: 'Ex: Carlos Souza', maxLength: 200 },
         { nome: 'documento', rotulo: 'Documento', tipo: 'texto', obrigatorio: true, placeholder: 'CNH nº', monoespacado: true, maxLength: 100 },
         { nome: 'telefone', rotulo: 'Telefone', tipo: 'texto', placeholder: '(11) 90000-0000', mascara: mascararTelefone },
+        { nome: 'celular', rotulo: 'Celular', tipo: 'texto', placeholder: '(11) 90000-0000', mascara: mascararTelefone },
+        {
+          nome: 'tipoVinculo',
+          rotulo: 'Vínculo',
+          tipo: 'select',
+          placeholder: 'Não informado',
+          opcoes: [
+            { valor: 'motorista', rotulo: 'Motorista' },
+            { valor: 'agregado', rotulo: 'Agregado' },
+            { valor: 'chapa', rotulo: 'Chapa' },
+          ],
+        },
         {
           nome: 'caminhaoPadraoId',
           rotulo: 'Caminhão padrão',
@@ -97,14 +127,41 @@ export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) 
             rotulo: c.status === 'ativo' ? c.placa : `${c.placa} (inativo)`,
           })),
         },
+        { nome: 'rg', rotulo: 'RG', tipo: 'texto', monoespacado: true, maxLength: 30 },
+        { nome: 'carteiraProfissional', rotulo: 'Carteira profissional (CTPS)', tipo: 'texto', monoespacado: true, maxLength: 50 },
+        { nome: 'nacionalidade', rotulo: 'Nacionalidade', tipo: 'texto', maxLength: 50 },
+        { nome: 'carteiraHabilitacao', rotulo: 'CNH (número)', tipo: 'texto', monoespacado: true, maxLength: 30 },
+        { nome: 'validadeHabilitacao', rotulo: 'CNH — validade', tipo: 'data' },
+        { nome: 'emissaoHabilitacao', rotulo: 'CNH — emissão', tipo: 'data' },
+        { nome: 'dataPrimeiraHabilitacao', rotulo: 'CNH — primeira habilitação', tipo: 'data' },
+        { nome: 'inicioVinculo', rotulo: 'Início do vínculo', tipo: 'data' },
+        { nome: 'contato', rotulo: 'Contato', tipo: 'texto', placeholder: 'Contato adicional', maxLength: 200 },
+        { nome: 'email', rotulo: 'E-mail', tipo: 'texto', placeholder: 'nome@dominio.com', maxLength: 200 },
       ]}
-      formularioVazio={{ nome: '', documento: '', telefone: '', caminhaoPadraoId: '', status: 'ativo' }}
+      formularioVazio={{
+        nome: '', documento: '', telefone: '', caminhaoPadraoId: '', status: 'ativo',
+        celular: '', tipoVinculo: '', rg: '', carteiraProfissional: '', nacionalidade: '',
+        carteiraHabilitacao: '', validadeHabilitacao: '', emissaoHabilitacao: '',
+        dataPrimeiraHabilitacao: '', inicioVinculo: '', contato: '', email: '',
+      }}
       paraFormulario={(m) => ({
         nome: m.nome,
         documento: m.documento,
         telefone: m.telefone ?? '',
         caminhaoPadraoId: m.caminhaoPadraoId ?? '',
         status: m.status,
+        celular: m.celular ?? '',
+        tipoVinculo: m.tipoVinculo ?? '',
+        rg: m.rg ?? '',
+        carteiraProfissional: m.carteiraProfissional ?? '',
+        nacionalidade: m.nacionalidade ?? '',
+        carteiraHabilitacao: m.carteiraHabilitacao ?? '',
+        validadeHabilitacao: m.validadeHabilitacao ?? '',
+        emissaoHabilitacao: m.emissaoHabilitacao ?? '',
+        dataPrimeiraHabilitacao: m.dataPrimeiraHabilitacao ?? '',
+        inicioVinculo: m.inicioVinculo ?? '',
+        contato: m.contato ?? '',
+        email: m.email ?? '',
       })}
       paraPayload={(f) => ({
         nome: (f.nome ?? '').trim(),
@@ -112,6 +169,18 @@ export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) 
         telefone: (f.telefone ?? '').trim() || undefined,
         caminhaoPadraoId: (f.caminhaoPadraoId ?? '').trim() || null,
         status: f.status,
+        celular: (f.celular ?? '').trim() || undefined,
+        tipoVinculo: (f.tipoVinculo ?? '').trim() || undefined,
+        rg: (f.rg ?? '').trim() || undefined,
+        carteiraProfissional: (f.carteiraProfissional ?? '').trim() || undefined,
+        nacionalidade: (f.nacionalidade ?? '').trim() || undefined,
+        carteiraHabilitacao: (f.carteiraHabilitacao ?? '').trim() || undefined,
+        validadeHabilitacao: (f.validadeHabilitacao ?? '').trim() || undefined,
+        emissaoHabilitacao: (f.emissaoHabilitacao ?? '').trim() || undefined,
+        dataPrimeiraHabilitacao: (f.dataPrimeiraHabilitacao ?? '').trim() || undefined,
+        inicioVinculo: (f.inicioVinculo ?? '').trim() || undefined,
+        contato: (f.contato ?? '').trim() || undefined,
+        email: (f.email ?? '').trim() || undefined,
       })}
     />
   );

@@ -40,7 +40,7 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
       substantivoSingular="caminhão"
       substantivoPlural="caminhões"
       endpoint="/api/cadastros/frota-caminhoes"
-      larguraDrawer={460}
+      larguraDrawer={520}
       podeGerenciar={podeGerenciar}
       mensagemVazia="Nenhum caminhão encontrado para os filtros aplicados."
       statusDe={(c) => c.status}
@@ -71,6 +71,16 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
           render: (c) => <span className="text-foreground">{c.descricao ?? '—'}</span>,
         },
         {
+          chave: 'veiculo',
+          titulo: 'Fabricante / Modelo',
+          render: (c) => (
+            <span className="text-muted-foreground">
+              {[c.fabricante, c.modelo].filter(Boolean).join(' ') || '—'}
+              {c.anoFabricacao ? ` (${c.anoFabricacao})` : ''}
+            </span>
+          ),
+        },
+        {
           chave: 'capacidadeKg',
           titulo: 'Capacidade (kg)',
           tipo: 'numero',
@@ -80,6 +90,13 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
           chave: 'rotaPadrao',
           titulo: 'Rota padrão',
           render: (c) => <span className="text-muted-foreground">{c.rotaPadraoNome ?? '—'}</span>,
+        },
+        {
+          chave: 'veiculoProprio',
+          titulo: 'Propriedade',
+          render: (c) => (
+            <span className="text-muted-foreground">{c.veiculoProprio ? 'Próprio' : 'Agregado'}</span>
+          ),
         },
       ]}
       campos={[
@@ -93,14 +110,60 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
           placeholder: 'Sem rota padrão',
           opcoes: rotas.map((r) => ({ valor: r.id, rotulo: r.nome })),
         },
+        {
+          nome: 'veiculoProprio',
+          rotulo: 'Propriedade',
+          tipo: 'select',
+          opcoes: [
+            { valor: 'true', rotulo: 'Próprio' },
+            { valor: 'false', rotulo: 'Agregado' },
+          ],
+        },
+        { nome: 'nomeProprietario', rotulo: 'Proprietário', tipo: 'texto', placeholder: 'Nome do proprietário (agregado)', maxLength: 200 },
+        { nome: 'fabricante', rotulo: 'Fabricante', tipo: 'texto', placeholder: 'Ex: Volvo', maxLength: 100 },
+        { nome: 'modelo', rotulo: 'Modelo', tipo: 'texto', placeholder: 'Ex: VM 260 6X2R', maxLength: 100 },
+        { nome: 'anoFabricacao', rotulo: 'Ano de fabricação', tipo: 'numero' },
+        { nome: 'anoModelo', rotulo: 'Ano do modelo', tipo: 'numero' },
+        { nome: 'cor', rotulo: 'Cor', tipo: 'texto', maxLength: 50 },
+        { nome: 'chassi', rotulo: 'Chassi', tipo: 'texto', monoespacado: true, maxLength: 50, mascara: (v) => v.toUpperCase() },
+        { nome: 'certificadoNumero', rotulo: 'Certificado (número)', tipo: 'texto', monoespacado: true, maxLength: 50 },
+        { nome: 'certificadoCidade', rotulo: 'Certificado (cidade)', tipo: 'texto', maxLength: 100 },
+        { nome: 'certificadoUf', rotulo: 'Certificado (UF)', tipo: 'texto', maxLength: 2, mascara: (v) => v.toUpperCase() },
+        { nome: 'certificadoData', rotulo: 'Certificado (data)', tipo: 'data' },
+        { nome: 'numeroSeguro', rotulo: 'Número do seguro', tipo: 'texto', maxLength: 50 },
+        { nome: 'kilometragem', rotulo: 'Quilometragem', tipo: 'numero' },
+        { nome: 'taraKg', rotulo: 'Tara (kg)', tipo: 'numero' },
+        { nome: 'capacidadeM3', rotulo: 'Capacidade (m³)', tipo: 'numero' },
       ]}
-      formularioVazio={{ placa: '', descricao: '', capacidadeKg: '0', rotaPadraoId: '', status: 'ativo' }}
+      formularioVazio={{
+        placa: '', descricao: '', capacidadeKg: '0', rotaPadraoId: '', status: 'ativo',
+        veiculoProprio: 'true', nomeProprietario: '', fabricante: '', modelo: '',
+        anoFabricacao: '', anoModelo: '', cor: '', chassi: '', certificadoNumero: '',
+        certificadoCidade: '', certificadoUf: '', certificadoData: '', numeroSeguro: '',
+        kilometragem: '', taraKg: '', capacidadeM3: '',
+      }}
       paraFormulario={(c) => ({
         placa: c.placa,
         descricao: c.descricao ?? '',
         capacidadeKg: String(c.capacidadeKg),
         rotaPadraoId: c.rotaPadraoId ?? '',
         status: c.status,
+        veiculoProprio: String(c.veiculoProprio),
+        nomeProprietario: c.nomeProprietario ?? '',
+        fabricante: c.fabricante ?? '',
+        modelo: c.modelo ?? '',
+        anoFabricacao: c.anoFabricacao != null ? String(c.anoFabricacao) : '',
+        anoModelo: c.anoModelo != null ? String(c.anoModelo) : '',
+        cor: c.cor ?? '',
+        chassi: c.chassi ?? '',
+        certificadoNumero: c.certificadoNumero ?? '',
+        certificadoCidade: c.certificadoCidade ?? '',
+        certificadoUf: c.certificadoUf ?? '',
+        certificadoData: c.certificadoData ?? '',
+        numeroSeguro: c.numeroSeguro ?? '',
+        kilometragem: c.kilometragem != null ? String(c.kilometragem) : '',
+        taraKg: c.taraKg != null ? String(c.taraKg) : '',
+        capacidadeM3: c.capacidadeM3 != null ? String(c.capacidadeM3) : '',
       })}
       paraPayload={(f) => ({
         placa: (f.placa ?? '').trim().toUpperCase(),
@@ -108,6 +171,22 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         capacidadeKg: (f.capacidadeKg ?? '').trim() || '0',
         rotaPadraoId: (f.rotaPadraoId ?? '').trim() || null,
         status: f.status,
+        veiculoProprio: (f.veiculoProprio ?? 'true') === 'true',
+        nomeProprietario: (f.nomeProprietario ?? '').trim() || undefined,
+        fabricante: (f.fabricante ?? '').trim() || undefined,
+        modelo: (f.modelo ?? '').trim() || undefined,
+        anoFabricacao: (f.anoFabricacao ?? '').trim() || undefined,
+        anoModelo: (f.anoModelo ?? '').trim() || undefined,
+        cor: (f.cor ?? '').trim() || undefined,
+        chassi: (f.chassi ?? '').trim() || undefined,
+        certificadoNumero: (f.certificadoNumero ?? '').trim() || undefined,
+        certificadoCidade: (f.certificadoCidade ?? '').trim() || undefined,
+        certificadoUf: (f.certificadoUf ?? '').trim() || undefined,
+        certificadoData: (f.certificadoData ?? '').trim() || undefined,
+        numeroSeguro: (f.numeroSeguro ?? '').trim() || undefined,
+        kilometragem: (f.kilometragem ?? '').trim() || undefined,
+        taraKg: (f.taraKg ?? '').trim() || undefined,
+        capacidadeM3: (f.capacidadeM3 ?? '').trim() || undefined,
       })}
     />
   );
