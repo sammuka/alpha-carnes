@@ -1,0 +1,18 @@
+{
+  "source_file": "Cadastro_Fornecedores.xlsx",
+  "sheet_count": 1,
+  "sheets": [
+    {
+      "name": "Consulta_Fornecedores",
+      "used_range": "A1:R697",
+      "rows_including_header": 697,
+      "data_rows": 696,
+      "columns": 18,
+      "output_file": "Cadastro_Fornecedores/Consulta_Fornecedores.json",
+      "has_formulas": false,
+      "date_columns_normalized": [
+        "Data_Exclusao"
+      ]
+    }
+  ]
+}
