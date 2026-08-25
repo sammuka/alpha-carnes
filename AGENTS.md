@@ -27,6 +27,21 @@ reporte o bloqueio. Nunca invente uma decisão de produto.
 - Mantenha worktrees de onda em `.worktrees/o<N>`; nunca implemente no worktree coordenador.
 - Estado efêmero fica em `.codex/runtime/` e nunca é commitado.
 
+## Regra de branching (sem exceção)
+
+`develop` não aceita commit nem push direto — a proteção de branch no GitHub exige PR
+(`required_pull_request_reviews`, `enforce_admins: true`, sem force-push, sem exclusão) e
+bloqueia isso para qualquer identidade, incluindo o owner do repositório. Todo trabalho, de
+agente ou humano:
+
+1. Cria uma branch filha de `develop` (ou worktree dedicado, ex. `.worktrees/o<N>`) —
+   convenção `feature/<contexto>`, `fix/<contexto>` ou `feature/onda<N>-*`.
+2. Integra em `develop` **somente** via PR, com o CI (oito jobs canônicos) verde.
+3. Nunca usa `git push origin <branch>:develop` nem edita/comita na cópia local de `develop`.
+
+Violar isso é bloqueio a reportar, não um atalho a tomar — mesmo em correções triviais ou
+urgentes.
+
 ## Papéis e separação obrigatória
 
 O agente raiz é apenas o coordenador. Ele delega e consolida; não escreve plano, código,
