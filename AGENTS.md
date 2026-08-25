@@ -27,12 +27,12 @@ reporte o bloqueio. Nunca invente uma decisão de produto.
 - Mantenha worktrees de onda em `.worktrees/o<N>`; nunca implemente no worktree coordenador.
 - Estado efêmero fica em `.codex/runtime/` e nunca é commitado.
 
-## Regra de branching (sem exceção)
+## Regra de branching
 
-`develop` não aceita commit nem push direto — a proteção de branch no GitHub exige PR
-(`required_pull_request_reviews`, `enforce_admins: true`, sem force-push, sem exclusão) e
-bloqueia isso para qualquer identidade, incluindo o owner do repositório. Todo trabalho, de
-agente ou humano:
+`develop` e `main` não aceitam commit nem push direto — a proteção de branch no GitHub exige
+PR (`required_pull_request_reviews`, sem force-push, sem exclusão). A única exceção é o owner
+do repositório (`sammuka`, `enforce_admins: false`); qualquer outra identidade, incluindo
+agentes, é bloqueada. Todo trabalho de agente:
 
 1. Cria uma branch filha de `develop` (ou worktree dedicado, ex. `.worktrees/o<N>`) —
    convenção `feature/<contexto>`, `fix/<contexto>` ou `feature/onda<N>-*`.
