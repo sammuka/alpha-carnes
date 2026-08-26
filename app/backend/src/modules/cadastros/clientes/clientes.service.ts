@@ -15,7 +15,8 @@ type Tx = NodePgDatabase<typeof schema>;
 
 const TENTATIVAS_CODIGO_AUTO = 5;
 
-function ehConflitoDeCodigo(err: unknown): boolean {
+/** Exposta para testes de branch do retry de código automático (AD-13). */
+export function ehConflitoDeCodigo(err: unknown): boolean {
   if (err instanceof ConflictException) {
     return String(err.message).includes('este código');
   }
