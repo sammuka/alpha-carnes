@@ -135,7 +135,7 @@ function abaDaChave(chave: string): AbaClientes {
   if (chave.startsWith('dadosFiscaisJson.')) return 'fiscais';
   if (chave.startsWith('dadosContatoJson.')) return 'contatos';
   if (chave.startsWith('preferenciasJson.')) return 'preferencias';
-  return 'gerais'; // razaoSocial, nomeFantasia, documentoFiscal, codigo, representanteId, rotaId, prioridade, status
+  return 'gerais'; // razaoSocial, nomeFantasia, documentoFiscal, representanteId, rotaId, prioridade, status
 }
 
 function formatarDocumento(documento: string): string {
@@ -293,7 +293,6 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         method: novo ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          codigo: form.codigo,
           razaoSocial: form.razaoSocial,
           nomeFantasia: form.nomeFantasia || undefined,
           documentoFiscal: form.documentoFiscal,
@@ -445,9 +444,6 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
                     {form.razaoSocial}
-                    {!novo && form.codigo && (
-                      <> · <span className="font-data">{form.codigo}</span></>
-                    )}
                   </p>
                 </div>
                 <label className="flex items-center gap-2 text-[13px] font-semibold">
@@ -494,7 +490,7 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                         </span>
                       </div>
                       <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
-                        <FormField label="Nome Fantasia" htmlFor="nome-fantasia" error={erros.nomeFantasia}>
+                        <FormField label="Nome Fantasia/Marca" htmlFor="nome-fantasia" error={erros.nomeFantasia}>
                           <Input
                             id="nome-fantasia"
                             value={form.nomeFantasia ?? ''}
@@ -526,24 +522,6 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                             onChange={(event) => {
                               limparCampo('documentoFiscal');
                               atualizar('documentoFiscal', mascararCpfCnpj(event.target.value));
-                            }}
-                          />
-                        </FormField>
-                        <FormField
-                          label="Código Interno"
-                          htmlFor="codigo-interno"
-                          help={!novo ? 'Gerado automaticamente.' : undefined}
-                          error={erros.codigo}
-                        >
-                          <Input
-                            id="codigo-interno"
-                            value={form.codigo}
-                            readOnly={!novo}
-                            maxLength={50}
-                            aria-invalid={'codigo' in erros || undefined}
-                            onChange={(event) => {
-                              limparCampo('codigo');
-                              atualizar('codigo', event.target.value);
                             }}
                           />
                         </FormField>

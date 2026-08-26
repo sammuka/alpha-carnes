@@ -49,6 +49,7 @@ const detalhe = {
     codigo: 'CLI-001',
     razaoSocial: 'Açougue Central Ltda.',
     nomeFantasia: 'Açougue Central',
+    documentoFiscal: '12345678000190',
   },
   heranca: {
     representanteId: 'representante-1',
@@ -65,12 +66,14 @@ const clientes = [
     codigo: 'CLI-001',
     razaoSocial: 'Açougue Central Ltda.',
     nomeFantasia: 'Açougue Central',
+    documentoFiscal: '12345678000190',
   },
   {
     id: 'cliente-2',
     codigo: 'CLI-002',
     razaoSocial: 'Mercado Sem Rota Ltda.',
     nomeFantasia: 'Mercado Sem Rota',
+    documentoFiscal: '12345678000191',
   },
 ];
 
