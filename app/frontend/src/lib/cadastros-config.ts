@@ -125,7 +125,6 @@ export const clientesConfig: CadastroConfig = {
     { campo: 'status', rotulo: 'Status' },
   ],
   campos: [
-    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true, aba: 'gerais', maxLength: 50 },
     {
       nome: 'razaoSocial',
       rotulo: 'Razão Social',
@@ -134,7 +133,7 @@ export const clientesConfig: CadastroConfig = {
       aba: 'gerais',
       maxLength: 200,
     },
-    { nome: 'nomeFantasia', rotulo: 'Nome Fantasia', tipo: 'text', aba: 'gerais', maxLength: 200 },
+    { nome: 'nomeFantasia', rotulo: 'Nome Fantasia/Marca', tipo: 'text', aba: 'gerais', maxLength: 200 },
     {
       nome: 'documentoFiscal',
       rotulo: 'CNPJ/CPF',
@@ -270,7 +269,6 @@ export const clientesConfig: CadastroConfig = {
     },
   ],
   schema: z.object({
-    codigo: z.string().min(1, 'Código obrigatório'),
     razaoSocial: z.string().min(1, 'Razão social obrigatória'),
     nomeFantasia: z.string().optional(),
     documentoFiscal: z.string().refine(documentoValido, documentoMsg),

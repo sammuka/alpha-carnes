@@ -10,6 +10,7 @@ import type {
   PedidoVendaDetalhe,
 } from '@/lib/comercial';
 import { extrairMensagemErro } from '@/lib/error-message';
+import { mascararCpfCnpj } from '@/lib/masks';
 import { AlertItem } from '@/components/ui/alert-item';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +36,7 @@ export interface ClientePedido {
   codigo: string;
   razaoSocial: string;
   nomeFantasia?: string | null;
+  documentoFiscal?: string | null;
   representanteNome?: string | null;
   rotaNome?: string | null;
 }
@@ -144,7 +146,7 @@ export function PedidoEditor({
   const itensCombobox = useMemo(() => clientes.map((cliente) => ({
     id: cliente.id,
     label: cliente.nomeFantasia || cliente.razaoSocial,
-    sublabel: cliente.codigo,
+    sublabel: cliente.documentoFiscal ? mascararCpfCnpj(cliente.documentoFiscal) : undefined,
   })), [clientes]);
 
   async function selecionarCliente(id: string) {
