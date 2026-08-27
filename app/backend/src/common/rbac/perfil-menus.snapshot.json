@@ -6,6 +6,8 @@
     "/admin/usuarios",
     "/cadastros/caminhoes",
     "/cadastros/fornecedores",
+    "/cadastros/itens-comerciais",
+    "/cadastros/itens-compra",
     "/cadastros/modelos-etiqueta",
     "/cadastros/motoristas",
     "/cadastros/produtos",

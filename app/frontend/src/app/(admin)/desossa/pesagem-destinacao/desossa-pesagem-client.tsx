@@ -21,6 +21,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { SelectNative } from '@/components/ui/select-native';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/cn';
+import { extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 import type {
   ChecklistResponse,
   PecaElegivelDesossa,
@@ -315,7 +316,7 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
       { cache: 'no-store' },
     );
     if (!res.ok) {
-      setErro((await res.json().catch(() => ({}))).message ?? 'Falha ao carregar TZs');
+      setErro(await mensagemDeErro(res, 'Falha ao carregar TZs'));
       return;
     }
     setTzs((await res.json()) as PecaElegivelDesossa[]);
@@ -335,7 +336,9 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setErro(body.message ?? body.mensagem ?? 'Falha ao carregar checklist');
+      setErro(
+        extrairMensagemErro(body, (body as { mensagem?: string }).mensagem ?? 'Falha ao carregar checklist'),
+      );
       return;
     }
     setChecklist(await res.json());
@@ -350,7 +353,9 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setErro(body.message ?? body.mensagem ?? 'Falha ao vincular regra');
+      setErro(
+        extrairMensagemErro(body, (body as { mensagem?: string }).mensagem ?? 'Falha ao vincular regra'),
+      );
       return;
     }
     setRegraId(regraTransformacaoId);
@@ -367,7 +372,7 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
       }),
     });
     if (!res.ok) {
-      setErro((await res.json().catch(() => ({}))).message ?? 'Falha ao iniciar corte');
+      setErro(await mensagemDeErro(res, 'Falha ao iniciar corte'));
       return;
     }
     const body = (await res.json()) as { id: string };
@@ -596,9 +601,7 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
                       },
                     );
                     if (!rDiv.ok) {
-                      setErro(
-                        (await rDiv.json().catch(() => ({}))).message ?? 'Erro na divergência',
-                      );
+                      setErro(await mensagemDeErro(rDiv, 'Erro na divergência'));
                       return;
                     }
                     const rConc = await fetch(
@@ -610,7 +613,7 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
                       },
                     );
                     if (!rConc.ok) {
-                      setErro((await rConc.json().catch(() => ({}))).message ?? 'Erro ao concluir');
+                      setErro(await mensagemDeErro(rConc, 'Erro ao concluir'));
                       return;
                     }
                     setModalFinalizar(false);
@@ -628,7 +631,7 @@ export function DesossaPesagemClient({ operacaoId }: { operacaoId?: string }) {
                     body: JSON.stringify({}),
                   });
                   if (!r.ok) {
-                    setErro((await r.json().catch(() => ({}))).message ?? 'Erro ao concluir');
+                    setErro(await mensagemDeErro(r, 'Erro ao concluir'));
                     return;
                   }
                   setModalFinalizar(false);

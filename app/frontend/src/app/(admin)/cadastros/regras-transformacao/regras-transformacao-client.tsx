@@ -19,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { Paginado } from '@/lib/cadastros';
+import { mensagemDeErro } from '@/lib/error-message';
 import { SimuladorDesdobramento } from './simulador-desdobramento';
 import { SimuladorDesossa } from './simulador-desossa';
 
@@ -73,8 +74,7 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
     try {
       const res = await fetch('/api/cadastros/regras-desdobramento?pageSize=100', { cache: 'no-store' });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setErro((body as { message?: string }).message ?? 'Erro ao carregar regras');
+        setErro(await mensagemDeErro(res, 'Erro ao carregar regras'));
         setRegras([]);
         return;
       }

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import type { Caminhao, RomaneioItem, Romaneio } from '@/lib/operacao';
 import { ROTULO_STATUS_CARGA, variantStatusCarga } from '@/lib/expedicao-ui';
+import { mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime } from '@/lib/realtime';
 import { cn } from '@/lib/cn';
 import { PipelineBar } from '@/components/ui/pipeline-bar';
@@ -197,9 +198,8 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tipoOrigem: 'peca', modoCaptura: 'automatico' }),
         });
-        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          setBipMensagem({ tipo: 'erro', texto: (data as { message?: string }).message ?? 'Falha na bipagem automática' });
+          setBipMensagem({ tipo: 'erro', texto: await mensagemDeErro(res, 'Falha na bipagem automática') });
           return;
         }
         setBipMensagem({ tipo: 'ok', texto: 'Peça conferida.' });
@@ -228,7 +228,6 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tipoOrigem, modoCaptura: 'manual_assistido', codigo, motivo }),
         });
-        const data = await res.json().catch(() => ({}));
         if (res.ok) {
           setBipMensagem({ tipo: 'ok', texto: `${codigo} conferida.` });
           setModalLeituraManualCodigo(null);
@@ -236,7 +235,7 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
           await carregarRomaneio(cam.id);
           return;
         }
-        ultimoErro = (data as { message?: string }).message ?? 'Falha na conferência manual';
+        ultimoErro = await mensagemDeErro(res, 'Falha na conferência manual');
       }
       setModalLeituraManualCodigo(null);
       setBipInput('');
@@ -257,9 +256,8 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cargaItemId: modalDivergenciaItem.cargaItemId, motivo, observacao: observacao || undefined }),
       });
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErro((data as { message?: string }).message ?? 'Falha ao registrar divergência');
+        setErro(await mensagemDeErro(res, 'Falha ao registrar divergência'));
         return;
       }
       setModalDivergenciaItem(null);
@@ -281,9 +279,8 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       });
-      const dataConcluir = await resConcluir.json().catch(() => ({}));
       if (!resConcluir.ok) {
-        setErro((dataConcluir as { message?: string }).message ?? 'Falha ao concluir conferência');
+        setErro(await mensagemDeErro(resConcluir, 'Falha ao concluir conferência'));
         return;
       }
       const resFechar = await fetch(`/api/operacao/expedicao/caminhoes/${cam.id}/fechar`, {
@@ -291,9 +288,8 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
-      const dataFechar = await resFechar.json().catch(() => ({}));
       if (!resFechar.ok) {
-        setErro((dataFechar as { message?: string }).message ?? 'Conferência concluída, mas o fechamento falhou');
+        setErro(await mensagemDeErro(resFechar, 'Conferência concluída, mas o fechamento falhou'));
         return;
       }
       await carregarLista();

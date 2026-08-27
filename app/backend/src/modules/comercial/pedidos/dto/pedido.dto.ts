@@ -20,7 +20,7 @@ const itensCriacaoPedidoSchema = z.array(itemPedidoSchema)
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [index, 'itemComercialId'],
-          message: 'item comercial duplicado no mesmo pedido',
+          message: 'Item comercial duplicado no mesmo pedido.',
         });
       }
       vistos.add(item.itemComercialId);
@@ -30,8 +30,8 @@ const itensCriacaoPedidoSchema = z.array(itemPedidoSchema)
 export const createPedidoSchema = z.object({
   compraProgramadaId: z.string().uuid(),
   clienteId: z.string().uuid(),
-  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dataOperacao deve ser YYYY-MM-DD'),
-  dataEntrega: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dataEntrega deve ser YYYY-MM-DD').optional(),
+  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data da operação inválida — use o formato AAAA-MM-DD.'),
+  dataEntrega: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data de entrega inválida — use o formato AAAA-MM-DD.').optional(),
   rotaPrevista: z.string().trim().max(100).optional(),
   prioridade: z.number().int().min(0).max(100).optional(),
   observacoesGerais: z.string().trim().max(1000).optional(),
@@ -77,7 +77,7 @@ export type RemoverItemDto = z.infer<typeof removerItemSchema>;
 export const buscarPedidoAbertoSchema = z.object({
   clienteId: z.string().uuid(),
   itemComercialId: z.string().uuid(),
-  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'dataOperacao deve ser YYYY-MM-DD'),
+  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data da operação inválida — use o formato AAAA-MM-DD.'),
 });
 
 export type BuscarPedidoAbertoDto = z.infer<typeof buscarPedidoAbertoSchema>;

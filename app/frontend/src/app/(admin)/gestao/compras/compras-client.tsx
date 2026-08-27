@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { CheckCircle, Plus, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { extrairCodigoErro, extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 import type {
   CompraProgramadaDetalhe,
   CriarCompraProgramadaDto,
@@ -77,7 +79,11 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const podeLer = permissoes.includes('COMPRAS_PROGRAMADAS_LER');
   const podeGerenciar = permissoes.includes('COMPRAS_PROGRAMADAS_GERENCIAR');
 
-  const [dataOperacao, setDataOperacao] = useState(hojeISO());
+  const searchParams = useSearchParams();
+  const dataDaUrl = searchParams.get('data');
+  const [dataOperacao, setDataOperacao] = useState(
+    dataDaUrl && /^\d{4}-\d{2}-\d{2}$/.test(dataDaUrl) ? dataDaUrl : hojeISO(),
+  );
   const [fornecedorId, setFornecedorId] = useState('');
   const [referenciaExterna, setReferenciaExterna] = useState('');
   const [observacoes, setObservacoes] = useState('');
@@ -217,18 +223,15 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                 observacoes: linha.observacoes,
               }),
             });
-            if (res.status === 409) {
+            if (!res.ok) {
               const body = await res.json().catch(() => ({}));
-              if ((body as { codigo?: string }).codigo === 'IMPACTO_CONFIRMACAO_NECESSARIA') {
+              if (res.status === 409 && extrairCodigoErro(body) === 'IMPACTO_CONFIRMACAO_NECESSARIA') {
                 setModalEditar(true);
                 setErro('Alteração projeta déficit — use o painel de impacto para confirmar.');
                 setSalvando(false);
                 return;
               }
-            }
-            if (!res.ok) {
-              const body = await res.json().catch(() => ({}));
-              setErro((body as { message?: string }).message ?? 'Erro ao salvar item');
+              setErro(extrairMensagemErro(body, 'Erro ao salvar item'));
               setSalvando(false);
               return;
             }
@@ -247,9 +250,8 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        const body = await res.json().catch(() => ({}));
         if (!res.ok) {
-          setErro((body as { message?: string }).message ?? 'Erro ao salvar compra');
+          setErro(await mensagemDeErro(res, 'Erro ao salvar compra'));
           return;
         }
       }
@@ -268,7 +270,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
     const res = await fetch(`/api/comercial/compras-programadas/${compra.id}/confirmar`, { method: 'POST' });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setErro((body as { message?: string }).message ?? 'Erro ao confirmar compra');
+      setErro(extrairMensagemErro(body, 'Erro ao confirmar compra'));
       setSalvando(false);
       return;
     }

@@ -2,17 +2,17 @@ import { z } from 'zod';
 
 export const createRegraDesdobramentoSchema = z
   .object({
-    itemCompraId: z.string().uuid('itemCompraId inválido'),
-    itemComercialId: z.string().uuid('itemComercialId inválido'),
+    itemCompraId: z.string().uuid('Selecione um item de compra válido.'),
+    itemComercialId: z.string().uuid('Selecione um item comercial válido.'),
     // fatorQuantidade > 0 (invariante de negócio). Aceita number ou string numérica (NUMERIC).
-    fatorQuantidade: z.coerce.number().positive('fatorQuantidade deve ser maior que zero'),
+    fatorQuantidade: z.coerce.number().positive('O fator de quantidade deve ser maior que zero.'),
     status: z.enum(['ativo', 'inativo']).optional().default('ativo'),
     vigenciaInicio: z.coerce.date(),
     vigenciaFim: z.coerce.date().optional().nullable(),
     observacoes: z.string().trim().optional(),
   })
   .refine((v) => !v.vigenciaFim || v.vigenciaFim > v.vigenciaInicio, {
-    message: 'vigenciaFim deve ser posterior a vigenciaInicio',
+    message: 'O fim da vigência deve ser posterior ao início.',
     path: ['vigenciaFim'],
   });
 
@@ -23,14 +23,14 @@ export const updateRegraDesdobramentoSchema = z
   .object({
     itemCompraId: z.string().uuid().optional(),
     itemComercialId: z.string().uuid().optional(),
-    fatorQuantidade: z.coerce.number().positive('fatorQuantidade deve ser maior que zero').optional(),
+    fatorQuantidade: z.coerce.number().positive('O fator de quantidade deve ser maior que zero.').optional(),
     status: z.enum(['ativo', 'inativo']).optional(),
     vigenciaInicio: z.coerce.date().optional(),
     vigenciaFim: z.coerce.date().optional().nullable(),
     observacoes: z.string().trim().optional(),
   })
   .refine((v) => !(v.vigenciaInicio && v.vigenciaFim) || v.vigenciaFim > v.vigenciaInicio, {
-    message: 'vigenciaFim deve ser posterior a vigenciaInicio',
+    message: 'O fim da vigência deve ser posterior ao início.',
     path: ['vigenciaFim'],
   });
 

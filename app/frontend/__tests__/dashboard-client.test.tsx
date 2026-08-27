@@ -91,6 +91,33 @@ describe('DashboardClient', () => {
     });
   });
 
+  it('sem operação cadastrada mostra empty state (envelope aninhado real do AllExceptionsFilter)', async () => {
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('/api/operacoes')) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [] }) });
+      }
+      // Formato real: NotFoundException('OPERACAO_INEXISTENTE') vira { statusCode, message, error }
+      // e o AllExceptionsFilter aninha isso tudo em `message` — não é uma string simples.
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        json: async () => ({
+          statusCode: 404,
+          message: { statusCode: 404, message: 'OPERACAO_INEXISTENTE', error: 'Not Found' },
+          timestamp: new Date().toISOString(),
+          path: '/gestao/dashboard',
+          requestId: 'req-1',
+        }),
+      });
+    });
+    render(<DashboardClient permissoes={['COMPRAS_PROGRAMADAS_LER']} />);
+    await waitFor(() => {
+      expect(screen.getByText('Cadastre ou gere a cadência de operações para visualizar os KPIs.')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Erro de conexão')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('troca de operação refaz o fetch', async () => {
     render(<DashboardClient permissoes={['COMPRAS_PROGRAMADAS_LER']} />);
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/gestao/dashboard?operacaoId=op-1', expect.any(Object)));

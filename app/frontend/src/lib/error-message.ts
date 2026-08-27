@@ -1,3 +1,25 @@
+/** Um issue do Zod, como aparece em `BadRequestException({ message, errors })` do ZodValidationPipe. */
+interface ZodIssueLike {
+  path?: unknown;
+  message?: unknown;
+}
+
+/** Formata `errors` (issues do Zod) em "campo: mensagem", um por linha lógica, unidos por "; ". */
+function formatarErrosDeCampo(errors: unknown): string | null {
+  if (!Array.isArray(errors) || errors.length === 0) return null;
+  const partes = errors
+    .map((e): string | null => {
+      if (typeof e !== 'object' || e === null) return null;
+      const issue = e as ZodIssueLike;
+      const texto = typeof issue.message === 'string' ? issue.message.trim() : '';
+      if (!texto) return null;
+      const caminho = Array.isArray(issue.path) ? issue.path.join('.') : '';
+      return caminho ? `${caminho}: ${texto}` : texto;
+    })
+    .filter((s): s is string => !!s);
+  return partes.length > 0 ? partes.join('; ') : null;
+}
+
 /** Normaliza payload de erro da API (NestJS + AllExceptionsFilter) para texto exibível. */
 export function extrairMensagemErro(body: unknown, fallback = 'Erro'): string {
   if (body == null || typeof body !== 'object') return fallback;
@@ -12,6 +34,11 @@ export function extrairMensagemErro(body: unknown, fallback = 'Erro'): string {
   }
 
   if (typeof msg === 'object' && msg !== null) {
+    // ZodValidationPipe: { message: 'Validação falhou', errors: [{ path, message, code }] }.
+    // O texto genérico não diz qual campo falhou — priorizamos o detalhe por campo.
+    const detalhado = formatarErrosDeCampo((msg as { errors?: unknown }).errors);
+    if (detalhado) return detalhado;
+
     const nested = (msg as { message?: unknown }).message;
     if (typeof nested === 'string' && nested.trim()) return nested;
     if (Array.isArray(nested)) {
@@ -21,6 +48,34 @@ export function extrairMensagemErro(body: unknown, fallback = 'Erro'): string {
   }
 
   return fallback;
+}
+
+/** Extrai um mapa `caminho.pontilhado -> mensagem` dos issues do Zod, para destacar campo a campo. */
+export function extrairErrosPorCampo(body: unknown): Record<string, string> {
+  if (body == null || typeof body !== 'object') return {};
+  const msg = (body as { message?: unknown }).message;
+  if (typeof msg !== 'object' || msg === null) return {};
+  const errors = (msg as { errors?: unknown }).errors;
+  if (!Array.isArray(errors)) return {};
+
+  const mapa: Record<string, string> = {};
+  for (const e of errors) {
+    if (typeof e !== 'object' || e === null) continue;
+    const issue = e as { path?: unknown; message?: unknown };
+    const texto = typeof issue.message === 'string' ? issue.message.trim() : '';
+    const caminho = Array.isArray(issue.path) ? issue.path.join('.') : '';
+    if (texto && caminho) mapa[caminho] = texto;
+  }
+  return mapa;
+}
+
+/** Lê o corpo de erro uma única vez e devolve texto (banner/toast) + mapa por campo juntos. */
+export async function detalharErro(
+  res: Response,
+  fallback = 'Falha na operação',
+): Promise<{ mensagem: string; porCampo: Record<string, string> }> {
+  const body: unknown = await res.json().catch(() => null);
+  return { mensagem: extrairMensagemErro(body, fallback), porCampo: extrairErrosPorCampo(body) };
 }
 
 /** Extrai o código estável de erro, inclusive do envelope aninhado do AllExceptionsFilter. */

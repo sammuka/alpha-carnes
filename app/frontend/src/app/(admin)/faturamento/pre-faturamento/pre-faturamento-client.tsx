@@ -16,6 +16,7 @@ import { FormField } from '@/components/ui/form-field';
 import { EmptyState } from '@/components/ui/empty-state';
 import type { AmbienteFiscal, ConsolidacaoResposta, NotaFiscal, StatusNfse } from '@/lib/faturamento';
 import type { Caminhao } from '@/lib/operacao';
+import { extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 
 // ── Badge de ambiente EISS (AD-02 — substitui o aviso "pendente de definição") ──
 
@@ -139,7 +140,7 @@ function FormEmissao({ caminhaoId, pedidoVendaId, onSuccess }: FormEmissaoProps)
           setErroLocal(payload.message ?? 'Emissão bloqueada por pendências críticas');
           setBloqueiosLocais(payload.bloqueios);
         } else {
-          setErroLocal(typeof raw === 'string' ? raw : 'Falha ao emitir NFS-e');
+          setErroLocal(extrairMensagemErro(data, 'Falha ao emitir NFS-e'));
         }
         return;
       }
@@ -265,7 +266,7 @@ export function FaturamentoClient({
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErro((body as { message?: string }).message ?? 'Falha ao consolidar');
+        setErro(extrairMensagemErro(body, 'Falha ao consolidar'));
         return;
       }
       setConsolidacao(body as ConsolidacaoResposta);
@@ -319,9 +320,8 @@ export function FaturamentoClient({
         method: 'POST',
         body: '{}',
       });
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErro((data as { message?: string }).message ?? 'Falha ao liberar faturamento');
+        setErro(await mensagemDeErro(res, 'Falha ao liberar faturamento'));
         return;
       }
       await carregarCaminhoesDia();
@@ -356,9 +356,8 @@ export function FaturamentoClient({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ motivo }),
       });
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErro((data as { message?: string }).message ?? 'Falha ao cancelar NFS-e');
+        setErro(await mensagemDeErro(res, 'Falha ao cancelar NFS-e'));
         return;
       }
       setMotivosCancelamento((prev) => {
@@ -384,9 +383,8 @@ export function FaturamentoClient({
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       });
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErro((data as { message?: string }).message ?? 'Falha ao reprocessar NFS-e');
+        setErro(await mensagemDeErro(res, 'Falha ao reprocessar NFS-e'));
         return;
       }
       await carregar();

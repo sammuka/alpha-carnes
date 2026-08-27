@@ -9,6 +9,8 @@ import type {
   PedidoAbertoExistente,
   PedidoVendaDetalhe,
 } from '@/lib/comercial';
+import { extrairMensagemErro } from '@/lib/error-message';
+import { mascararCpfCnpj } from '@/lib/masks';
 import { AlertItem } from '@/components/ui/alert-item';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,6 +36,7 @@ export interface ClientePedido {
   codigo: string;
   razaoSocial: string;
   nomeFantasia?: string | null;
+  documentoFiscal?: string | null;
   representanteNome?: string | null;
   rotaNome?: string | null;
 }
@@ -73,12 +76,7 @@ async function corpoDeErro(response: Response): Promise<{ texto: string; dados?:
   if (!texto) return { texto: `Falha HTTP ${response.status}` };
   try {
     const dados = JSON.parse(texto) as { message?: unknown; error?: unknown };
-    const mensagem = typeof dados.message === 'string'
-      ? dados.message
-      : typeof dados.error === 'string'
-        ? dados.error
-        : texto;
-    return { texto: mensagem, dados };
+    return { texto: extrairMensagemErro(dados, texto), dados };
   } catch {
     return { texto };
   }
@@ -148,7 +146,7 @@ export function PedidoEditor({
   const itensCombobox = useMemo(() => clientes.map((cliente) => ({
     id: cliente.id,
     label: cliente.nomeFantasia || cliente.razaoSocial,
-    sublabel: cliente.codigo,
+    sublabel: cliente.documentoFiscal ? mascararCpfCnpj(cliente.documentoFiscal) : undefined,
   })), [clientes]);
 
   async function selecionarCliente(id: string) {

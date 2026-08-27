@@ -15,7 +15,7 @@ export const criarCaminhaoSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['placa'],
-        message: 'placa é obrigatória quando não há caminhão da frota vinculado',
+        message: 'Informe a placa quando não houver caminhão da frota vinculado.',
       });
     }
   });

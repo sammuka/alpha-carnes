@@ -16,9 +16,10 @@ describe('CadastroForm — clientes (smoke + fluxo crítico)', () => {
 
   it('renderiza os campos do cadastro de clientes (smoke)', () => {
     render(<CadastroForm config={clientesConfig} />);
-    expect(screen.getByLabelText('Código')).toBeInTheDocument();
     expect(screen.getByLabelText('Razão Social')).toBeInTheDocument();
+    expect(screen.getByLabelText('Nome Fantasia/Marca')).toBeInTheDocument();
     expect(screen.getByLabelText('CNPJ/CPF')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Código')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Criar' })).toBeInTheDocument();
   });
 
@@ -26,7 +27,6 @@ describe('CadastroForm — clientes (smoke + fluxo crítico)', () => {
     const user = userEvent.setup();
     render(<CadastroForm config={clientesConfig} />);
 
-    await user.type(screen.getByLabelText('Código'), 'CLI-1');
     await user.type(screen.getByLabelText('Razão Social'), 'Cliente Teste');
     await user.type(screen.getByLabelText('CNPJ/CPF'), '123'); // inválido
     await user.click(screen.getByRole('button', { name: 'Criar' }));
@@ -43,7 +43,6 @@ describe('CadastroForm — clientes (smoke + fluxo crítico)', () => {
     const user = userEvent.setup();
     render(<CadastroForm config={clientesConfig} />);
 
-    await user.type(screen.getByLabelText('Código'), 'CLI-1');
     await user.type(screen.getByLabelText('Razão Social'), 'Cliente Teste');
     await user.type(screen.getByLabelText('CNPJ/CPF'), '11222333000181'); // CNPJ válido (14 dígitos)
     await user.click(screen.getByRole('button', { name: 'Criar' }));
@@ -65,7 +64,6 @@ describe('CadastroForm — clientes (smoke + fluxo crítico)', () => {
     const user = userEvent.setup();
     render(<CadastroForm config={clientesConfig} />);
 
-    await user.type(screen.getByLabelText('Código'), 'CLI-1');
     await user.type(screen.getByLabelText('Razão Social'), 'Cliente Teste');
     await user.type(screen.getByLabelText('CNPJ/CPF'), '11222333000181');
     await user.click(screen.getByRole('button', { name: 'Criar' }));

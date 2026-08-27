@@ -292,6 +292,8 @@ describe('Onda 4 — migrations geradas D36', () => {
         'migrations/0025_onda9_carga_expand.sql',
         // Onda 10: seguros_carga + notas_fiscais.modelo_fiscal (faturamento.schema.ts)
         'migrations/0026_onda10_faturamento_expand.sql',
+        // Carga inicial (dados legados): colunas extras em frota.schema.ts
+        'migrations/0027_onda_frota_dados_legado.sql',
         'migrations/meta/0019_snapshot.json',
         'migrations/meta/0020_snapshot.json',
         'migrations/meta/0021_snapshot.json',
@@ -300,6 +302,7 @@ describe('Onda 4 — migrations geradas D36', () => {
         'migrations/meta/0024_snapshot.json',
         'migrations/meta/0025_snapshot.json',
         'migrations/meta/0026_snapshot.json',
+        'migrations/meta/0027_snapshot.json',
         'schema/relatorios-sif.schema.ts',
         'schema/aprovacoes-operacionais.schema.ts',
         // Emenda 7: importa aprovacoes-operacionais — quebra resolve do probe O4
@@ -335,6 +338,12 @@ describe('Onda 4 — migrations geradas D36', () => {
       fs.copyFileSync(
         path.resolve(__dirname, '../helpers/fixtures/regras-transformacao.schema.pre-onda7.ts'),
         path.join(probe, 'schema/regras-transformacao.schema.ts'),
+      );
+      // Carga inicial (dados legados de frota): colunas extras em frota.schema.ts
+      // gerariam DDL extra no generate O4 — restaura o snapshot pré-carga pinado.
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/frota.schema.pre-carga-legado.ts'),
+        path.join(probe, 'schema/frota.schema.ts'),
       );
       const probeJournal = JSON.parse(
         fs.readFileSync(path.join(probe, 'migrations/meta/_journal.json'), 'utf8'),

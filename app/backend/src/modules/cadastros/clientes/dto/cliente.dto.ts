@@ -9,14 +9,14 @@ import { normalizarDocumento, validarDocumentoFiscal } from '../../../../common/
 // documentoFiscal: aceita CNPJ E CPF; validado por dígito verificador; normalizado (só dígitos).
 const documentoFiscalSchema = z
   .string()
-  .min(1, 'documentoFiscal é obrigatório')
+  .min(1, 'CNPJ ou CPF é obrigatório.')
   .transform(normalizarDocumento)
-  .refine(validarDocumentoFiscal, { message: 'documentoFiscal inválido (CNPJ ou CPF com dígito verificador inválido)' });
+  .refine(validarDocumentoFiscal, { message: 'CNPJ ou CPF inválido — confira o número digitado.' });
 
 const statusSchema = z.enum(['ativo', 'inativo']);
 
 export const createClienteSchema = z.object({
-  codigo: z.string().trim().min(1).max(50),
+  codigo: z.string().trim().min(1).max(50).optional(),
   razaoSocial: z.string().trim().min(1).max(200),
   nomeFantasia: z.string().trim().max(200).optional(),
   documentoFiscal: documentoFiscalSchema,
@@ -32,6 +32,6 @@ export const createClienteSchema = z.object({
 
 export type CreateClienteDto = z.infer<typeof createClienteSchema>;
 
-// Update: todos os campos opcionais (PATCH parcial), sem permitir documento/codigo vazios.
-export const updateClienteSchema = createClienteSchema.partial();
+// Update: PATCH parcial. `codigo` é imutável após a criação (AD-13) e é omitido do DTO.
+export const updateClienteSchema = createClienteSchema.omit({ codigo: true }).partial();
 export type UpdateClienteDto = z.infer<typeof updateClienteSchema>;

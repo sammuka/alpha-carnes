@@ -24,7 +24,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { FormField } from '@/components/ui/form-field';
-import { extrairMensagemErro } from '@/lib/error-message';
+import { detalharErro, extrairMensagemErro } from '@/lib/error-message';
+import { useErrosPorCampo } from '@/lib/use-erros-campo';
 import { RepresentantesPermitidos } from './_components/representantes-permitidos';
 import { ResumoPerfis } from './resumo-perfis';
 
@@ -54,6 +55,7 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
   const [aprovando, setAprovando] = useState(false);
   const [perfilFiltro, setPerfilFiltro] = useState('todos');
   const [statusFiltro, setStatusFiltro] = useState<'todos' | 'ativo' | 'inativo'>('todos');
+  const { erros, setErros, limparCampo, limparTudo } = useErrosPorCampo();
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -96,6 +98,7 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
     setForm({ nome: '', email: '', password: '', perfis: [], representantes: [] });
     setRepresentantesSelecionados([]);
     setAtivo(true);
+    limparTudo();
     setSheetAberto(true);
   }
 
@@ -104,6 +107,7 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
     setForm({ nome: u.nome, email: u.email, password: '', perfis: u.perfis });
     setRepresentantesSelecionados(u.representantesPermitidos.map((r) => r.id));
     setAtivo(u.ativo);
+    limparTudo();
     setSheetAberto(true);
   }
 
@@ -119,8 +123,9 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
           body: JSON.stringify({ nome: form.nome, email: form.email, ativo }),
         });
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          setErro(extrairMensagemErro(data, 'Falha ao atualizar'));
+          const { mensagem, porCampo } = await detalharErro(res, 'Falha ao atualizar');
+          setErro(mensagem);
+          setErros(porCampo);
           return;
         }
         if (pode('PERFIS_GERENCIAR') && form.perfis) {
@@ -130,7 +135,9 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
             body: JSON.stringify({ perfis: form.perfis }),
           });
           if (!resPerfis.ok) {
-            setErro(extrairMensagemErro(await resPerfis.json().catch(() => ({})), 'Falha ao atualizar perfis'));
+            const { mensagem, porCampo } = await detalharErro(resPerfis, 'Falha ao atualizar perfis');
+            setErro(mensagem);
+            setErros(porCampo);
             await carregar();
             return;
           }
@@ -146,7 +153,9 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
             body: JSON.stringify({ representantes: representantesSelecionados }),
           });
           if (!resRep.ok) {
-            setErro(extrairMensagemErro(await resRep.json().catch(() => ({})), 'Falha ao atualizar representantes'));
+            const { mensagem, porCampo } = await detalharErro(resRep, 'Falha ao atualizar representantes');
+            setErro(mensagem);
+            setErros(porCampo);
             await carregar();
             return;
           }
@@ -161,8 +170,9 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
           }),
         });
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          setErro(extrairMensagemErro(data, 'Falha ao criar usuário'));
+          const { mensagem, porCampo } = await detalharErro(res, 'Falha ao criar usuário');
+          setErro(mensagem);
+          setErros(porCampo);
           return;
         }
       }
@@ -357,33 +367,47 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
           <form onSubmit={(e) => void salvar(e)} className="flex flex-1 flex-col overflow-y-auto">
             <div className="flex-1 space-y-3 p-4">
               <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
-                <FormField label="Nome" required htmlFor="nome">
+                <FormField label="Nome" required htmlFor="nome" error={erros.nome}>
                   <Input
                     id="nome"
                     value={form.nome}
-                    onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))}
+                    maxLength={200}
+                    aria-invalid={'nome' in erros || undefined}
+                    onChange={(e) => {
+                      limparCampo('nome');
+                      setForm((s) => ({ ...s, nome: e.target.value }));
+                    }}
                     required
                   />
                 </FormField>
 
-                <FormField label="E-mail" required htmlFor="email">
+                <FormField label="E-mail" required htmlFor="email" error={erros.email}>
                   <Input
                     id="email"
                     type="email"
                     value={form.email}
                     disabled={editando !== null}
-                    onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
+                    maxLength={200}
+                    aria-invalid={'email' in erros || undefined}
+                    onChange={(e) => {
+                      limparCampo('email');
+                      setForm((s) => ({ ...s, email: e.target.value }));
+                    }}
                     required
                   />
                 </FormField>
 
                 {!editando && (
-                  <FormField label="Senha" required htmlFor="senha" className="sm:col-span-2">
+                  <FormField label="Senha" required htmlFor="senha" className="sm:col-span-2" error={erros.password}>
                     <Input
                       id="senha"
                       type="password"
                       value={form.password}
-                      onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))}
+                      aria-invalid={'password' in erros || undefined}
+                      onChange={(e) => {
+                        limparCampo('password');
+                        setForm((s) => ({ ...s, password: e.target.value }));
+                      }}
                       required
                       minLength={8}
                     />
@@ -406,6 +430,7 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
                           id={`perfil-${p.slug}`}
                           checked={form.perfis?.includes(p.slug) ?? false}
                           onCheckedChange={(marcado) => {
+                            limparCampo('perfis');
                             const atuais = form.perfis ?? [];
                             setForm((s) => ({
                               ...s,
@@ -419,6 +444,11 @@ export function UsuariosAdminClient({ permissoes }: { permissoes: string[] }) {
                       </div>
                     ))}
                   </div>
+                  {erros.perfis && (
+                    <p role="alert" className="text-[11px] font-medium text-danger-fg">
+                      {erros.perfis}
+                    </p>
+                  )}
                 </div>
               )}
 

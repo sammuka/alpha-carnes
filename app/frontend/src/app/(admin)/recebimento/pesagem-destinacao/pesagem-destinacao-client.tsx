@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ArrowLeftRight, Scale, Search } from 'lucide-react';
+import { extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import {
   MOTIVOS_CAPTURA_MANUAL,
@@ -205,7 +206,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setSugestao(null);
-      setErro((data as { message?: string }).message ?? 'Falha ao carregar sugestões');
+      setErro(extrairMensagemErro(data, 'Falha ao carregar sugestões'));
       return;
     }
     setSugestao(data as ResultadoSugestao);
@@ -370,7 +371,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErro((data as { message?: string }).message ?? 'Falha na operação');
+        setErro(extrairMensagemErro(data, 'Falha na operação'));
         return null;
       }
       return data as T;
@@ -474,8 +475,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     });
     setSubmitting(false);
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setErro((body as { message?: string }).message ?? 'Não foi possível estornar');
+      setErro(await mensagemDeErro(res, 'Não foi possível estornar'));
       return;
     }
     setPeca((await res.json()) as Peca);

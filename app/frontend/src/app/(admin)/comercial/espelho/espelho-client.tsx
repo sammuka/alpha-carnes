@@ -7,6 +7,7 @@ import type {
   EspelhoResposta,
   StatusEspelho,
 } from '@/lib/espelho';
+import { extrairMensagemErro } from '@/lib/error-message';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -57,7 +58,7 @@ async function lerJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const texto = await response.text();
     try {
-      throw new Error((JSON.parse(texto) as { message?: string }).message ?? texto);
+      throw new Error(extrairMensagemErro(JSON.parse(texto), texto));
     } catch (error) {
       if (error instanceof SyntaxError) throw new Error(texto || `Falha HTTP ${response.status}`);
       throw error;

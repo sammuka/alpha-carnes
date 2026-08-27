@@ -23,8 +23,40 @@ import { StatusPill } from '@/components/ui/status-pill';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/cn';
+import { detalharErro, mensagemDeErro } from '@/lib/error-message';
+import { mascararCep, mascararCpfCnpj, mascararTelefone } from '@/lib/masks';
 import type { Representante } from '@/lib/representantes';
 import type { Rota } from '@/lib/rotas';
+import { useErrosPorCampo } from '@/lib/use-erros-campo';
+
+/** Campos que recebem máscara "conforme digita". */
+const MASCARA_FISCAL: Partial<Record<keyof DadosFiscais, (v: string) => string>> = {
+  cep: mascararCep,
+  telefoneFiscal: mascararTelefone,
+  // IM não tem pontuação padronizada entre municípios — mantém só dígitos.
+  inscricaoMunicipal: (v: string) => v.replace(/\D/g, ''),
+};
+const MASCARA_CONTATO: Partial<Record<keyof DadosContato, (v: string) => string>> = {
+  telefone: mascararTelefone,
+  whatsapp: mascararTelefone,
+};
+
+/** Limites de `json-cadastros.dto.ts` (campos mascarados — cep/telefones — não recebem maxLength). */
+const MAXLENGTH_FISCAL: Partial<Record<keyof DadosFiscais, number>> = {
+  logradouro: 200,
+  numero: 20,
+  complemento: 100,
+  bairro: 100,
+  cidade: 100,
+  uf: 2,
+  // 14 dígitos (leiaute NFe/SEFAZ) + pontuação de exibição por UF — ex.: "123.456.789.000".
+  inscricaoEstadual: 18,
+  inscricaoMunicipal: 15,
+};
+const MAXLENGTH_CONTATO: Partial<Record<keyof DadosContato, number>> = {
+  nome: 200,
+  cargo: 100,
+};
 
 interface DadosFiscais {
   logradouro?: string;
@@ -99,6 +131,16 @@ const CLIENTE_VAZIO: Cliente = {
   observacoesOperacionais: null,
 };
 
+type AbaClientes = 'gerais' | 'fiscais' | 'contatos' | 'preferencias';
+
+/** Mapeia a chave de erro (issue do Zod) devolvida pelo backend para a aba onde o campo aparece. */
+function abaDaChave(chave: string): AbaClientes {
+  if (chave.startsWith('dadosFiscaisJson.')) return 'fiscais';
+  if (chave.startsWith('dadosContatoJson.')) return 'contatos';
+  if (chave.startsWith('preferenciasJson.')) return 'preferencias';
+  return 'gerais'; // razaoSocial, nomeFantasia, documentoFiscal, representanteId, rotaId, prioridade, status
+}
+
 function formatarDocumento(documento: string): string {
   if (documento.length === 14) {
     return documento.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
@@ -107,12 +149,6 @@ function formatarDocumento(documento: string): string {
     return documento.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
   }
   return documento;
-}
-
-async function mensagemDaFalha(response: Response, fallback: string): Promise<string> {
-  const body = await response.json().catch(() => ({})) as { message?: string | string[] };
-  if (Array.isArray(body.message)) return body.message.join('; ');
-  return body.message ?? fallback;
 }
 
 function iniciaisDe(nome: string): string {
@@ -135,6 +171,8 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
+  const [abaAtiva, setAbaAtiva] = useState<AbaClientes>('gerais');
+  const { erros, setErros, limparCampo, limparTudo } = useErrosPorCampo();
 
   const carregarOpcoes = useCallback(async () => {
     const [resRepresentantes, resRotas] = await Promise.all([
@@ -142,10 +180,10 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
       fetch('/api/cadastros/rotas?pageSize=100&status=ativo', { cache: 'no-store' }),
     ]);
     if (!resRepresentantes.ok) {
-      throw new Error(await mensagemDaFalha(resRepresentantes, 'Erro ao carregar representantes'));
+      throw new Error(await mensagemDeErro(resRepresentantes, 'Erro ao carregar representantes'));
     }
     if (!resRotas.ok) {
-      throw new Error(await mensagemDaFalha(resRotas, 'Erro ao carregar rotas'));
+      throw new Error(await mensagemDeErro(resRotas, 'Erro ao carregar rotas'));
     }
     const [listaRepresentantes, listaRotas] = await Promise.all([
       resRepresentantes.json() as Promise<Paginado<Representante>>,
@@ -159,7 +197,7 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
     const qs = new URLSearchParams();
     if (termo) qs.set('search', termo);
     const response = await fetch(`/api/cadastros/clientes?${qs.toString()}`, { cache: 'no-store' });
-    if (!response.ok) throw new Error(await mensagemDaFalha(response, 'Erro ao carregar clientes'));
+    if (!response.ok) throw new Error(await mensagemDeErro(response, 'Erro ao carregar clientes'));
     const paginado = await response.json() as Paginado<Cliente>;
     setClientes(paginado.data);
     setTotalAtivos(paginado.totalAtivos ?? 0);
@@ -168,7 +206,7 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
 
   const carregarDetalhe = useCallback(async (id: string) => {
     const response = await fetch(`/api/cadastros/clientes/${id}`, { cache: 'no-store' });
-    if (!response.ok) throw new Error(await mensagemDaFalha(response, 'Erro ao carregar cliente'));
+    if (!response.ok) throw new Error(await mensagemDeErro(response, 'Erro ao carregar cliente'));
     const detalhe = await response.json() as Cliente;
     setForm({
       ...detalhe,
@@ -242,6 +280,7 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
     setForm(CLIENTE_VAZIO);
     setMensagem(null);
     setErro(null);
+    limparTudo();
   }
 
   async function salvar(event: React.FormEvent) {
@@ -250,13 +289,13 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
     setSalvando(true);
     setErro(null);
     setMensagem(null);
+    limparTudo();
     const url = novo ? '/api/cadastros/clientes' : `/api/cadastros/clientes/${form.id}`;
     try {
       const response = await fetch(url, {
         method: novo ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          codigo: form.codigo,
           razaoSocial: form.razaoSocial,
           nomeFantasia: form.nomeFantasia || undefined,
           documentoFiscal: form.documentoFiscal,
@@ -271,7 +310,11 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         }),
       });
       if (!response.ok) {
-        setErro(await mensagemDaFalha(response, 'Falha ao salvar cliente'));
+        const { mensagem: mensagemErro, porCampo } = await detalharErro(response, 'Falha ao salvar cliente');
+        setErro(mensagemErro);
+        setErros(porCampo);
+        const primeiraChave = Object.keys(porCampo)[0];
+        if (primeiraChave) setAbaAtiva(abaDaChave(primeiraChave));
         return;
       }
       const salvo = await response.json() as Cliente;
@@ -285,6 +328,8 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
       setSalvando(false);
     }
   }
+
+  const abasComErro = useMemo(() => new Set(Object.keys(erros).map(abaDaChave)), [erros]);
 
   return (
     <div className="space-y-3">
@@ -355,6 +400,7 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                   onClick={() => {
                     setNovo(false);
                     setSelecionadoId(cliente.id);
+                    limparTudo();
                   }}
                   className={cn(
                     'block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2',
@@ -401,9 +447,6 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
                     {form.razaoSocial}
-                    {!novo && form.codigo && (
-                      <> · <span className="font-data">{form.codigo}</span></>
-                    )}
                   </p>
                 </div>
                 <label className="flex items-center gap-2 text-[13px] font-semibold">
@@ -424,7 +467,7 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
               </CardContent>
 
               <form id="cliente-form" onSubmit={salvar}>
-                <Tabs defaultValue="gerais">
+                <Tabs value={abaAtiva} onValueChange={(valor) => setAbaAtiva(valor as AbaClientes)}>
                   <div className="px-3">
                     <TabsList>
                       {([
@@ -433,7 +476,7 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                         ['contatos', 'Contatos'],
                         ['preferencias', 'Preferências Operacionais'],
                       ] as const).map(([valor, rotulo]) => (
-                        <TabsTrigger key={valor} value={valor}>
+                        <TabsTrigger key={valor} value={valor} temErro={abasComErro.has(valor)}>
                           {rotulo}
                         </TabsTrigger>
                       ))}
@@ -450,49 +493,55 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                         </span>
                       </div>
                       <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
-                        <FormField label="Nome Fantasia" htmlFor="nome-fantasia">
+                        <FormField label="Nome Fantasia/Marca" htmlFor="nome-fantasia" error={erros.nomeFantasia}>
                           <Input
                             id="nome-fantasia"
                             value={form.nomeFantasia ?? ''}
-                            onChange={(event) => atualizar('nomeFantasia', event.target.value)}
+                            maxLength={200}
+                            aria-invalid={'nomeFantasia' in erros || undefined}
+                            onChange={(event) => {
+                              limparCampo('nomeFantasia');
+                              atualizar('nomeFantasia', event.target.value);
+                            }}
                           />
                         </FormField>
-                        <FormField label="Razão Social" htmlFor="razao-social">
+                        <FormField label="Razão Social" htmlFor="razao-social" error={erros.razaoSocial}>
                           <Input
                             id="razao-social"
                             value={form.razaoSocial}
-                            onChange={(event) => atualizar('razaoSocial', event.target.value)}
+                            maxLength={200}
+                            aria-invalid={'razaoSocial' in erros || undefined}
+                            onChange={(event) => {
+                              limparCampo('razaoSocial');
+                              atualizar('razaoSocial', event.target.value);
+                            }}
                           />
                         </FormField>
-                        <FormField label="CNPJ/CPF" htmlFor="documento-fiscal">
+                        <FormField label="CNPJ/CPF" htmlFor="documento-fiscal" error={erros.documentoFiscal}>
                           <Input
                             id="documento-fiscal"
-                            value={form.documentoFiscal}
-                            onChange={(event) => atualizar('documentoFiscal', event.target.value)}
+                            value={mascararCpfCnpj(form.documentoFiscal)}
+                            aria-invalid={'documentoFiscal' in erros || undefined}
+                            onChange={(event) => {
+                              limparCampo('documentoFiscal');
+                              atualizar('documentoFiscal', mascararCpfCnpj(event.target.value));
+                            }}
                           />
                         </FormField>
-                        <FormField
-                          label="Código Interno"
-                          htmlFor="codigo-interno"
-                          help={!novo ? 'Gerado automaticamente.' : undefined}
-                        >
-                          <Input
-                            id="codigo-interno"
-                            value={form.codigo}
-                            readOnly={!novo}
-                            onChange={(event) => atualizar('codigo', event.target.value)}
-                          />
-                        </FormField>
-                        <FormField label="Representante" htmlFor="representante">
+                        <FormField label="Representante" htmlFor="representante" error={erros.representanteId}>
                           <Select
                             value={form.representanteId ?? 'sem-vinculo'}
                             disabled={!podeGerenciar}
-                            onValueChange={(valor) => atualizar(
-                              'representanteId',
-                              valor === 'sem-vinculo' ? null : valor,
-                            )}
+                            onValueChange={(valor) => {
+                              limparCampo('representanteId');
+                              atualizar('representanteId', valor === 'sem-vinculo' ? null : valor);
+                            }}
                           >
-                            <SelectTrigger id="representante" aria-label="Representante">
+                            <SelectTrigger
+                              id="representante"
+                              aria-label="Representante"
+                              aria-invalid={'representanteId' in erros || undefined}
+                            >
                               <SelectValue placeholder="—" />
                             </SelectTrigger>
                             <SelectContent>
@@ -505,13 +554,20 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                             </SelectContent>
                           </Select>
                         </FormField>
-                        <FormField label="Itinerário / Rota" htmlFor="itinerario-rota">
+                        <FormField label="Itinerário / Rota" htmlFor="itinerario-rota" error={erros.rotaId}>
                           <Select
                             value={form.rotaId ?? 'sem-rota'}
                             disabled={!podeGerenciar}
-                            onValueChange={(valor) => atualizar('rotaId', valor === 'sem-rota' ? null : valor)}
+                            onValueChange={(valor) => {
+                              limparCampo('rotaId');
+                              atualizar('rotaId', valor === 'sem-rota' ? null : valor);
+                            }}
                           >
-                            <SelectTrigger id="itinerario-rota" aria-label="Itinerário / Rota">
+                            <SelectTrigger
+                              id="itinerario-rota"
+                              aria-label="Itinerário / Rota"
+                              aria-invalid={'rotaId' in erros || undefined}
+                            >
                               <SelectValue placeholder="—" />
                             </SelectTrigger>
                             <SelectContent>
@@ -522,13 +578,20 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                             </SelectContent>
                           </Select>
                         </FormField>
-                        <FormField label="Prioridade Padrão" htmlFor="prioridade-padrao">
+                        <FormField label="Prioridade Padrão" htmlFor="prioridade-padrao" error={erros.prioridade}>
                           <Select
                             value={form.prioridade ?? 'normal'}
                             disabled={!podeGerenciar}
-                            onValueChange={(valor) => atualizar('prioridade', valor as 'normal' | 'alta')}
+                            onValueChange={(valor) => {
+                              limparCampo('prioridade');
+                              atualizar('prioridade', valor as 'normal' | 'alta');
+                            }}
                           >
-                            <SelectTrigger id="prioridade-padrao" aria-label="Prioridade Padrão">
+                            <SelectTrigger
+                              id="prioridade-padrao"
+                              aria-label="Prioridade Padrão"
+                              aria-invalid={'prioridade' in erros || undefined}
+                            >
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -554,16 +617,26 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                           ['inscricaoMunicipal', 'Inscrição Municipal', 'text'],
                           ['emailFiscal', 'E-mail Fiscal', 'email'],
                           ['telefoneFiscal', 'Telefone Fiscal', 'text'],
-                        ] as const).map(([chave, rotulo, tipo]) => (
-                          <FormField key={chave} label={rotulo} htmlFor={`fiscal-${chave}`}>
-                            <Input
-                              id={`fiscal-${chave}`}
-                              type={tipo}
-                              value={form.dadosFiscaisJson[chave] ?? ''}
-                              onChange={(event) => atualizarJson('dadosFiscaisJson', chave, event.target.value)}
-                            />
-                          </FormField>
-                        ))}
+                        ] as const).map(([chave, rotulo, tipo]) => {
+                          const chaveErro = `dadosFiscaisJson.${chave}`;
+                          return (
+                            <FormField key={chave} label={rotulo} htmlFor={`fiscal-${chave}`} error={erros[chaveErro]}>
+                              <Input
+                                id={`fiscal-${chave}`}
+                                type={tipo}
+                                value={form.dadosFiscaisJson[chave] ?? ''}
+                                maxLength={MAXLENGTH_FISCAL[chave]}
+                                aria-invalid={chaveErro in erros || undefined}
+                                onChange={(event) => {
+                                  const mascara = MASCARA_FISCAL[chave];
+                                  const valor = mascara ? mascara(event.target.value) : event.target.value;
+                                  limparCampo(chaveErro);
+                                  atualizarJson('dadosFiscaisJson', chave, valor);
+                                }}
+                              />
+                            </FormField>
+                          );
+                        })}
                       </div>
                     </TabsContent>
 
@@ -576,7 +649,11 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                               id="contato-principal"
                               checked={form.dadosContatoJson.principal === true}
                               disabled={!podeGerenciar}
-                              onCheckedChange={(valor) => atualizarJson('dadosContatoJson', 'principal', valor)}
+                              aria-invalid={'dadosContatoJson.principal' in erros || undefined}
+                              onCheckedChange={(valor) => {
+                                limparCampo('dadosContatoJson.principal');
+                                atualizarJson('dadosContatoJson', 'principal', valor);
+                              }}
                             />
                             Principal
                           </label>
@@ -588,23 +665,40 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                             ['telefone', 'Telefone', 'text'],
                             ['whatsapp', 'WhatsApp', 'text'],
                             ['email', 'E-mail', 'email'],
-                          ] as const).map(([chave, rotulo, tipo]) => (
-                            <FormField key={chave} label={rotulo} htmlFor={`contato-${chave}`}>
-                              <Input
-                                id={`contato-${chave}`}
-                                type={tipo}
-                                value={form.dadosContatoJson[chave] ?? ''}
-                                onChange={(event) => atualizarJson('dadosContatoJson', chave, event.target.value)}
-                              />
-                            </FormField>
-                          ))}
-                          <FormField label="Tipo" htmlFor="contato-tipo">
+                          ] as const).map(([chave, rotulo, tipo]) => {
+                            const chaveErro = `dadosContatoJson.${chave}`;
+                            return (
+                              <FormField key={chave} label={rotulo} htmlFor={`contato-${chave}`} error={erros[chaveErro]}>
+                                <Input
+                                  id={`contato-${chave}`}
+                                  type={tipo}
+                                  value={form.dadosContatoJson[chave] ?? ''}
+                                  maxLength={MAXLENGTH_CONTATO[chave]}
+                                  aria-invalid={chaveErro in erros || undefined}
+                                  onChange={(event) => {
+                                    const mascara = MASCARA_CONTATO[chave];
+                                    const valor = mascara ? mascara(event.target.value) : event.target.value;
+                                    limparCampo(chaveErro);
+                                    atualizarJson('dadosContatoJson', chave, valor);
+                                  }}
+                                />
+                              </FormField>
+                            );
+                          })}
+                          <FormField label="Tipo" htmlFor="contato-tipo" error={erros['dadosContatoJson.tipo']}>
                             <Select
                               value={form.dadosContatoJson.tipo ?? 'compra'}
                               disabled={!podeGerenciar}
-                              onValueChange={(valor) => atualizarJson('dadosContatoJson', 'tipo', valor)}
+                              onValueChange={(valor) => {
+                                limparCampo('dadosContatoJson.tipo');
+                                atualizarJson('dadosContatoJson', 'tipo', valor);
+                              }}
                             >
-                              <SelectTrigger id="contato-tipo" aria-label="Tipo do contato">
+                              <SelectTrigger
+                                id="contato-tipo"
+                                aria-label="Tipo do contato"
+                                aria-invalid={'dadosContatoJson.tipo' in erros || undefined}
+                              >
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -628,39 +722,66 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                         </span>
                       </div>
                       <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
-                        <FormField label="Faixa de Peso Mínima (kg)" htmlFor="peso-minimo">
+                        <FormField
+                          label="Faixa de Peso Mínima (kg)"
+                          htmlFor="peso-minimo"
+                          error={erros['preferenciasJson.faixaPesoMin']}
+                        >
                           <Input
                             id="peso-minimo"
                             type="number"
                             adornRight="kg"
                             value={form.preferenciasJson.faixaPesoMin?.toString() ?? ''}
-                            onChange={(event) => atualizarJson(
-                              'preferenciasJson',
-                              'faixaPesoMin',
-                              event.target.value === '' ? undefined : Number(event.target.value),
-                            )}
+                            aria-invalid={'preferenciasJson.faixaPesoMin' in erros || undefined}
+                            onChange={(event) => {
+                              limparCampo('preferenciasJson.faixaPesoMin');
+                              atualizarJson(
+                                'preferenciasJson',
+                                'faixaPesoMin',
+                                event.target.value === '' ? undefined : Number(event.target.value),
+                              );
+                            }}
                           />
                         </FormField>
-                        <FormField label="Faixa de Peso Máxima (kg)" htmlFor="peso-maximo">
+                        <FormField
+                          label="Faixa de Peso Máxima (kg)"
+                          htmlFor="peso-maximo"
+                          error={erros['preferenciasJson.faixaPesoMax']}
+                        >
                           <Input
                             id="peso-maximo"
                             type="number"
                             adornRight="kg"
                             value={form.preferenciasJson.faixaPesoMax?.toString() ?? ''}
-                            onChange={(event) => atualizarJson(
-                              'preferenciasJson',
-                              'faixaPesoMax',
-                              event.target.value === '' ? undefined : Number(event.target.value),
-                            )}
+                            aria-invalid={'preferenciasJson.faixaPesoMax' in erros || undefined}
+                            onChange={(event) => {
+                              limparCampo('preferenciasJson.faixaPesoMax');
+                              atualizarJson(
+                                'preferenciasJson',
+                                'faixaPesoMax',
+                                event.target.value === '' ? undefined : Number(event.target.value),
+                              );
+                            }}
                           />
                         </FormField>
-                        <FormField label="Perfil de Gordura Aceito" htmlFor="perfil-gordura">
+                        <FormField
+                          label="Perfil de Gordura Aceito"
+                          htmlFor="perfil-gordura"
+                          error={erros['preferenciasJson.perfilGordura']}
+                        >
                           <Select
                             value={form.preferenciasJson.perfilGordura ?? 'qualquer'}
                             disabled={!podeGerenciar}
-                            onValueChange={(valor) => atualizarJson('preferenciasJson', 'perfilGordura', valor)}
+                            onValueChange={(valor) => {
+                              limparCampo('preferenciasJson.perfilGordura');
+                              atualizarJson('preferenciasJson', 'perfilGordura', valor);
+                            }}
                           >
-                            <SelectTrigger id="perfil-gordura" aria-label="Perfil de Gordura Aceito">
+                            <SelectTrigger
+                              id="perfil-gordura"
+                              aria-label="Perfil de Gordura Aceito"
+                              aria-invalid={'preferenciasJson.perfilGordura' in erros || undefined}
+                            >
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -676,11 +797,11 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                               id="necessita-corte"
                               checked={form.preferenciasJson.necessitaCorteAcerto === true}
                               disabled={!podeGerenciar}
-                              onCheckedChange={(valor) => atualizarJson(
-                                'preferenciasJson',
-                                'necessitaCorteAcerto',
-                                valor,
-                              )}
+                              aria-invalid={'preferenciasJson.necessitaCorteAcerto' in erros || undefined}
+                              onCheckedChange={(valor) => {
+                                limparCampo('preferenciasJson.necessitaCorteAcerto');
+                                atualizarJson('preferenciasJson', 'necessitaCorteAcerto', valor);
+                              }}
                             />
                             <Label htmlFor="necessita-corte" className="font-normal normal-case text-muted-foreground">
                               Sim, enviar para mesa de corte

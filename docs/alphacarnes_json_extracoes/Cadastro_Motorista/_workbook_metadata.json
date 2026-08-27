@@ -1,0 +1,23 @@
+{
+  "source_file": "Cadastro_Motorista.xlsx",
+  "sheet_count": 1,
+  "sheets": [
+    {
+      "name": "Consulta_Motorista",
+      "used_range": "A1:AC41",
+      "rows_including_header": 41,
+      "data_rows": 40,
+      "columns": 29,
+      "output_file": "Cadastro_Motorista/Consulta_Motorista.json",
+      "has_formulas": false,
+      "date_columns_normalized": [
+        "Validade_Habilitacao",
+        "Data_Motorista",
+        "Emissao_Habilitacao",
+        "Data_1Habilita",
+        "Inicio_Fornecedor",
+        "Data_Inativacao"
+      ]
+    }
+  ]
+}

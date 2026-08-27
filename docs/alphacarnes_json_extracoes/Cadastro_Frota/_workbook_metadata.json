@@ -1,0 +1,18 @@
+{
+  "source_file": "Cadastro_Frota.xlsx",
+  "sheet_count": 1,
+  "sheets": [
+    {
+      "name": "Consulta_Frota",
+      "used_range": "A1:Z14",
+      "rows_including_header": 14,
+      "data_rows": 13,
+      "columns": 26,
+      "output_file": "Cadastro_Frota/Consulta_Frota.json",
+      "has_formulas": false,
+      "date_columns_normalized": [
+        "Data_Certificado"
+      ]
+    }
+  ]
+}

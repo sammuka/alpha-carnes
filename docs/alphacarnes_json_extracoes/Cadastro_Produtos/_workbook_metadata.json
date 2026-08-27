@@ -1,0 +1,18 @@
+{
+  "source_file": "Cadastro_Produtos.xlsx",
+  "sheet_count": 1,
+  "sheets": [
+    {
+      "name": "Consulta_Produtos",
+      "used_range": "A1:W121",
+      "rows_including_header": 121,
+      "data_rows": 120,
+      "columns": 23,
+      "output_file": "Cadastro_Produtos/Consulta_Produtos.json",
+      "has_formulas": false,
+      "date_columns_normalized": [
+        "Data_Cadastro"
+      ]
+    }
+  ]
+}

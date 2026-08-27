@@ -11,7 +11,7 @@ export const listarOperacoesSchema = z.object({
   pagina: z.coerce.number().int().positive().default(1),
   limite: z.coerce.number().int().min(1).max(100).default(20),
 }).refine(({ de, ate }) => !de || !ate || de <= ate, {
-  message: 'de deve ser anterior ou igual a ate',
+  message: 'A data inicial deve ser anterior ou igual à final.',
 });
 
 export type ListarOperacoesDto = z.infer<typeof listarOperacoesSchema>;
@@ -36,7 +36,7 @@ export const criarExtraordinariaSchema = z.object({
 export const gerarCadenciaSchema = z.object({
   de: z.string().date(),
   ate: z.string().date(),
-}).refine(({ de, ate }) => de <= ate, { message: 'de deve ser anterior ou igual a ate' });
+}).refine(({ de, ate }) => de <= ate, { message: 'A data inicial deve ser anterior ou igual à final.' });
 
 export const alterarStatusOperacaoSchema = z.object({
   status: statusOperacaoSchema,

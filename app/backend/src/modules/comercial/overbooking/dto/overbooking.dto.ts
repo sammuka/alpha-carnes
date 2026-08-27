@@ -45,7 +45,7 @@ export const alterarPendenciaSchema = z
     if (v.status === 'cancelada') {
       const motivo = (v.detalhe as { motivo?: unknown }).motivo;
       if (typeof motivo !== 'string' || motivo.trim().length < 5) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['detalhe', 'motivo'], message: 'motivo (mín. 5 caracteres) é obrigatório ao cancelar' });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['detalhe', 'motivo'], message: 'Informe o motivo do cancelamento (mínimo de 5 caracteres).' });
       }
     }
   });

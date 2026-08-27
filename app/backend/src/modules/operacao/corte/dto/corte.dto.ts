@@ -13,7 +13,7 @@ export const iniciarCorteSchema = z
   })
   .superRefine((v, ctx) => {
     if (v.motivo === 'decisao_humana' && !v.motivoDetalhe) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['motivoDetalhe'], message: 'motivoDetalhe é obrigatório para decisão humana' });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['motivoDetalhe'], message: 'Detalhe o motivo da decisão.' });
     }
   });
 export type IniciarCorteDto = z.infer<typeof iniciarCorteSchema>;

@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime } from '@/lib/realtime';
 import type { PainelDesossa, PecaElegivelDesossa } from '@/lib/desossa';
 
@@ -368,7 +369,7 @@ export function DesossaDashboardClient() {
     try {
       const res = await fetch('/api/desossa/painel', { cache: 'no-store' });
       if (!res.ok) {
-        setErro((await res.json().catch(() => ({}))).message ?? 'Erro ao carregar painel');
+        setErro(await mensagemDeErro(res, 'Erro ao carregar painel'));
         return;
       }
       const painelJson = (await res.json()) as PainelDesossa;
@@ -385,10 +386,7 @@ export function DesossaDashboardClient() {
           setTzs((await tzRes.json()) as PecaElegivelDesossa[]);
         } else {
           setTzs([]);
-          setErro(
-            (await tzRes.json().catch(() => ({}))).message ??
-              `Erro ao carregar TZs (${tzRes.status})`,
-          );
+          setErro(await mensagemDeErro(tzRes, `Erro ao carregar TZs (${tzRes.status})`));
         }
       }
     } catch {

@@ -882,7 +882,10 @@ describe('Branches extras — ?? / ternários / filtros', () => {
     };
     const service = new CaminhoesCadastroService({ db } as never, auditoria as never);
     await service.listar({ page: 1, pageSize: 10, search: 'AAA', incluirRemovidos: true });
-    await service.criar({ placa: 'AAA', descricao: 'd', capacidadeKg: 10, status: 'ativo' }, 'u1');
+    await service.criar(
+      { placa: 'AAA', descricao: 'd', capacidadeKg: 10, status: 'ativo', veiculoProprio: true },
+      'u1',
+    );
     await service.atualizar('c1', { placa: 'AAA', descricao: 'e' }, 'u1');
     await service.remover('c1', 'u1');
     await expect(service.remover('c1', 'u1')).rejects.toBeInstanceOf(NotFoundException);

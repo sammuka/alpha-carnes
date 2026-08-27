@@ -36,17 +36,25 @@ function TabsList({
 
 function TabsTrigger({
   className,
+  temErro,
+  children,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+}: React.ComponentProps<typeof TabsPrimitive.Trigger> & { temErro?: boolean }) {
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
         "-mb-px inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 py-[7px] text-[13px] font-medium text-muted-foreground transition-colors duration-100 outline-none hover:text-foreground focus-visible:rounded focus-visible:ring-[3px] focus-visible:ring-ring/35 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-primary data-[state=active]:font-semibold data-[state=active]:text-primary-fg",
+        temErro && "text-destructive data-[state=active]:border-destructive data-[state=active]:text-destructive",
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+      {temErro && (
+        <span aria-label="Aba com campo inválido" className="size-1.5 rounded-full bg-destructive" />
+      )}
+    </TabsPrimitive.Trigger>
   );
 }
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const criarTabelaPrecoSchema = z.object({
-  data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'data deve ser YYYY-MM-DD'),
+  data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida — use o formato AAAA-MM-DD.'),
   observacao: z.string().trim().max(500).optional(),
 });
 export type CriarTabelaPrecoDto = z.infer<typeof criarTabelaPrecoSchema>;

@@ -2,6 +2,10 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ComprasClient } from '../src/app/(admin)/gestao/compras/compras-client';
 
+jest.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 jest.mock('../src/app/(admin)/gestao/compras/compras-edit-modal', () => ({
   ComprasEditModal: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
     open ? (
