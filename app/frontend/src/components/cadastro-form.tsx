@@ -10,21 +10,21 @@ import { DatePickerField } from '@/components/ui/date-picker-field';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { SelectNative } from '@/components/ui/select-native';
-import { CADASTROS, type CadastroConfig } from '@/lib/cadastros-config';
+import { CADASTROS } from '@/lib/cadastros-config';
 import { extrairErrosPorCampo, extrairMensagemErro } from '@/lib/error-message';
 
-export type CadastroFormConfig = Omit<CadastroConfig, 'schema'>;
-
 interface CadastroFormProps {
-  config: CadastroFormConfig;
+  /** Segmento da rota (`fornecedores`, `clientes`, …). O config fica no cliente — funções de máscara não cruzam o limite RSC. */
+  recurso: string;
   /** Quando informado, o formulário edita o registro (PATCH); senão cria (POST). */
   registro?: Record<string, unknown> & { id: string };
 }
 
-export function CadastroForm({ config, registro }: CadastroFormProps) {
+export function CadastroForm({ recurso, registro }: CadastroFormProps) {
   const router = useRouter();
   const [erro, setErro] = useState<string | null>(null);
-  const schema = CADASTROS[config.recurso]?.schema;
+  const config = CADASTROS[recurso];
+  const schema = config?.schema;
 
   const {
     register,
@@ -43,8 +43,8 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
   const onSubmit = async (valores: FieldValues) => {
     setErro(null);
     const url = registro
-      ? `/api/cadastros/${config.recurso}/${registro.id}`
-      : `/api/cadastros/${config.recurso}`;
+      ? `/api/cadastros/${recurso}/${registro.id}`
+      : `/api/cadastros/${recurso}`;
     // Nota: as rotas de página vivem em /cadastros/<recurso> (grupo de rota (admin) não entra na URL).
     // Campos opcionais vazios (UUID, enum status, etc.) não podem ir como "" — o Zod do backend rejeita.
     const payload: Record<string, unknown> = { ...valores };
@@ -75,11 +75,13 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
         setErro(extrairMensagemErro(body, 'Falha ao salvar'));
         return;
       }
-      router.push(`/cadastros/${config.recurso}`);
+      router.push(`/cadastros/${recurso}`);
     } catch {
       setErro('Erro de conexão');
     }
   };
+
+  if (!config) return null;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="max-w-2xl space-y-3" noValidate>
@@ -167,7 +169,7 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
         <Button type="submit" loading={isSubmitting}>
           {registro ? 'Salvar' : 'Criar'}
         </Button>
-        <Button type="button" variant="ghost" onClick={() => router.push(`/cadastros/${config.recurso}`)}>
+        <Button type="button" variant="ghost" onClick={() => router.push(`/cadastros/${recurso}`)}>
           Cancelar
         </Button>
       </div>

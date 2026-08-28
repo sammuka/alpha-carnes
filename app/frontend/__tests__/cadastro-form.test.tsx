@@ -1,7 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CadastroForm } from '../src/components/cadastro-form';
-import { clientesConfig } from '../src/lib/cadastros-config';
 
 const pushMock = jest.fn();
 jest.mock('next/navigation', () => ({
@@ -15,7 +14,7 @@ describe('CadastroForm — clientes (smoke + fluxo crítico)', () => {
   });
 
   it('renderiza os campos do cadastro de clientes (smoke)', () => {
-    render(<CadastroForm config={clientesConfig} />);
+    render(<CadastroForm recurso="clientes" />);
     expect(screen.getByLabelText('Razão Social')).toBeInTheDocument();
     expect(screen.getByLabelText('Nome Fantasia/Marca')).toBeInTheDocument();
     expect(screen.getByLabelText('CNPJ/CPF')).toBeInTheDocument();
@@ -25,7 +24,7 @@ describe('CadastroForm — clientes (smoke + fluxo crítico)', () => {
 
   it('exibe erro de validação quando o CNPJ é inválido e não chama a API', async () => {
     const user = userEvent.setup();
-    render(<CadastroForm config={clientesConfig} />);
+    render(<CadastroForm recurso="clientes" />);
 
     await user.type(screen.getByLabelText('Razão Social'), 'Cliente Teste');
     await user.type(screen.getByLabelText('CNPJ/CPF'), '123'); // inválido
@@ -41,7 +40,7 @@ describe('CadastroForm — clientes (smoke + fluxo crítico)', () => {
       json: async () => ({ id: '1' }),
     });
     const user = userEvent.setup();
-    render(<CadastroForm config={clientesConfig} />);
+    render(<CadastroForm recurso="clientes" />);
 
     await user.type(screen.getByLabelText('Razão Social'), 'Cliente Teste');
     await user.type(screen.getByLabelText('CNPJ/CPF'), '11222333000181'); // CNPJ válido (14 dígitos)
@@ -62,7 +61,7 @@ describe('CadastroForm — clientes (smoke + fluxo crítico)', () => {
       json: async () => ({ message: 'Já existe cliente com este documento fiscal' }),
     });
     const user = userEvent.setup();
-    render(<CadastroForm config={clientesConfig} />);
+    render(<CadastroForm recurso="clientes" />);
 
     await user.type(screen.getByLabelText('Razão Social'), 'Cliente Teste');
     await user.type(screen.getByLabelText('CNPJ/CPF'), '11222333000181');
@@ -70,5 +69,16 @@ describe('CadastroForm — clientes (smoke + fluxo crítico)', () => {
 
     expect(await screen.findByText('Já existe cliente com este documento fiscal')).toBeInTheDocument();
     expect(pushMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('CadastroForm — fornecedores', () => {
+  it('renderiza o formulário e mascara o telefone sem receber função do servidor', () => {
+    render(<CadastroForm recurso="fornecedores" />);
+    expect(screen.getByLabelText('Código')).toBeInTheDocument();
+    expect(screen.getByLabelText('Razão Social')).toBeInTheDocument();
+    const telefone = screen.getByLabelText('Telefone');
+    fireEvent.change(telefone, { target: { value: '11987654321' } });
+    expect(telefone).toHaveValue('(11) 98765-4321');
   });
 });

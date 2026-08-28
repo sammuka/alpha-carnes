@@ -17,15 +17,7 @@ export default async function NovoCadastroPage(props: { params: Promise<{ recurs
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-foreground">Novo — {config.titulo}</h1>
-      <CadastroForm config={withoutSchema(config)} />
+      <CadastroForm recurso={recurso} />
     </div>
   );
-}
-
-function withoutSchema(config: typeof CADASTROS[string]) {
-  // schema (Zod) e secoes.icone (componentes Lucide) não serializam para Client Component
-  const { schema: _omitSchema, secoes: _omitSecoes, ...serializableConfig } = config;
-  void _omitSchema;
-  void _omitSecoes;
-  return serializableConfig;
 }

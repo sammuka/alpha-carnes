@@ -25,15 +25,7 @@ export default async function EditarCadastroPage(props: {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-foreground">Editar — {config.titulo}</h1>
-      <CadastroForm config={withoutSchema(config)} registro={data} />
+      <CadastroForm recurso={recurso} registro={data} />
     </div>
   );
-}
-
-function withoutSchema(config: typeof CADASTROS[string]) {
-  // schema (Zod) e secoes.icone (componentes Lucide) não serializam para Client Component
-  const { schema: _omitSchema, secoes: _omitSecoes, ...serializableConfig } = config;
-  void _omitSchema;
-  void _omitSecoes;
-  return serializableConfig;
 }
