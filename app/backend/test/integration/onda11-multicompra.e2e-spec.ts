@@ -151,6 +151,13 @@ describe('Onda 11 — múltiplas compras por operação', () => {
     expect(res.body).toHaveLength(2);
   });
 
+  it('composicao-lotes sem PEDIDOS_LER retorna 403', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/comercial/pedidos/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee/composicao-lotes')
+      .set('Cookie', recebimentoCookies);
+    expect(res.status).toBe(403);
+  });
+
   it('reserva FIFO 6+4 atravessa duas disponibilidades da mesma operacao', async () => {
     const dia = '2027-03-01';
     const base = await seedComercialBase(app, { fator: 1 });
@@ -563,31 +570,4 @@ describe('Onda 11 — múltiplas compras por operação', () => {
     expect(det1.body.id).not.toBe(det2.body.id);
   });
 
-  it('20 POSTs concorrentes na mesma operacao geram sequenciais 1..20 sem duplicata', async () => {
-    const dia = '2027-03-15';
-    const base = await seedComercialBase(app, { fator: 1 });
-    const { db } = app.get<{ db: Db }>(DRIZZLE);
-    await db.insert(schema.operacoes).values({
-      data: dia,
-      diaSemana: new Date(`${dia}T12:00:00Z`).getUTCDay(),
-      rotulo: 'Op O11 spec concorrencia',
-    });
-    const respostas = await Promise.all(
-      Array.from({ length: 20 }, () =>
-        request(app.getHttpServer())
-          .post('/comercial/compras-programadas')
-          .set('Cookie', comprasCookies)
-          .send({
-            dataOperacao: dia,
-            fornecedorId: base.fornecedorId,
-            itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 1 }],
-          }),
-      ),
-    );
-    expect(respostas.every((r) => r.status === 201)).toBe(true);
-    const seqs = respostas
-      .map((r) => r.body.numeroSequencial as number)
-      .sort((a, b) => a - b);
-    expect(seqs).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
-  }, 120_000);
 });

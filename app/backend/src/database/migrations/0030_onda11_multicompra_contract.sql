@@ -1,9 +1,6 @@
 ALTER TABLE "compras_programadas" ALTER COLUMN "numero_sequencial" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "associacoes_peca_historico" ALTER COLUMN "compra_programada_origem_id" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "associacoes_peca_historico" ALTER COLUMN "recebimento_origem_id" SET NOT NULL;--> statement-breakpoint
-ALTER TABLE "compras_programadas" ALTER COLUMN "numero_sequencial" SET NOT NULL;--> statement-breakpoint
-ALTER TABLE "associacoes_peca_historico" ALTER COLUMN "compra_programada_origem_id" SET NOT NULL;--> statement-breakpoint
-ALTER TABLE "associacoes_peca_historico" ALTER COLUMN "recebimento_origem_id" SET NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_compras_prog_operacao_sequencial" ON "compras_programadas" USING btree ("operacao_id","numero_sequencial") WHERE "compras_programadas"."deleted_at" IS NULL AND "compras_programadas"."status" <> 'cancelada';
 --> statement-breakpoint
 CREATE OR REPLACE FUNCTION pecas_impedir_mutacao_compra_programada()
