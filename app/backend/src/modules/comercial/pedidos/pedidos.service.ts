@@ -280,6 +280,30 @@ export class PedidosService {
     return linha.nomeRota ?? null;
   }
 
+  /**
+   * Resolve a operação do pedido sem criar linha (challenge read-only).
+   * Com `operacaoId`, carrega a operação viva e, se `dataOperacao` vier, exige igualdade.
+   * Sem `operacaoId`, usa `encontrarAtivaPorData` — `garantirOperacao` fica depois do challenge.
+   */
+  private async resolverOperacaoDoPedido(
+    tx: Tx,
+    dto: Pick<CreatePedidoDto, 'operacaoId' | 'dataOperacao'>,
+  ): Promise<{ id: string; data: string } | null> {
+    if (dto.operacaoId) {
+      const [operacao] = await tx
+        .select({ id: operacoes.id, data: operacoes.data })
+        .from(operacoes)
+        .where(and(eq(operacoes.id, dto.operacaoId), isNull(operacoes.deletedAt)))
+        .limit(1);
+      if (!operacao) throw new NotFoundException('Operação não encontrada');
+      if (dto.dataOperacao && operacao.data !== dto.dataOperacao) {
+        throw new BadRequestException('dataOperacao não coincide com a operação informada');
+      }
+      return operacao;
+    }
+    return this.operacoes.encontrarAtivaPorData(tx, dto.dataOperacao!);
+  }
+
   async criar(dto: CreatePedidoDto, usuarioId: string, confirmado = false) {
     const resultado = await this.db.transaction((tx) =>
       this.criarNaTx(tx, dto, usuarioId, confirmado),
@@ -302,9 +326,7 @@ export class PedidosService {
     }));
     // O challenge é estritamente read-only: não chame garantirOperacao antes
     // de decidir se a confirmação é necessária.
-    const operacaoExistente = await this.operacoes.encontrarAtivaPorData(
-      tx, dto.dataOperacao,
-    );
+    const operacaoExistente = await this.resolverOperacaoDoPedido(tx, dto);
     // Sem operação ativa na data não pode existir pedido aberto para checar: pedidos_venda.operacao_id
     // é NOT NULL e FK para operacoes(id), logo o conjunto de conflitos é provadamente vazio.
     // A operação é criada logo abaixo por garantirOperacao (primeiro pedido do dia).
@@ -326,10 +348,11 @@ export class PedidosService {
 
     const operacao = operacaoExistente
       ?? (await this.operacoes.garantirOperacao(
-        tx, dto.dataOperacao, usuarioId,
+        tx, dto.dataOperacao!, usuarioId,
       )).operacao;
     const pedido = primeiroOuFalha(await tx.insert(pedidosVenda).values({
-      compraProgramadaId: dto.compraProgramadaId,
+      // AD-14: campo legado aceito na borda e ignorado em pedidos novos.
+      compraProgramadaId: null,
       clienteId: dto.clienteId,
       operacaoId: operacao.id,
       dataEntrega: dto.dataEntrega,
