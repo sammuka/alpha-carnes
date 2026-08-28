@@ -389,7 +389,7 @@ export class LiberacaoService {
 
       const pedidosMap = new Map<
         string,
-        { pedidoVendaId: string; clienteNome: string | null; pecas: Array<{ etiqueta: string | null; produtoNome: string; peso: string }> }
+        { pedidoVendaId: string; clienteNome: string | null; pecas: Array<{ etiqueta: string | null; produtoNome: string; peso: string; loteOrigem: string; numeroSequencial: number | null }> }
       >();
       for (const item of itensDoCaminhao) {
         const existente = pedidosMap.get(item.pedidoVendaId) ?? {

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Onda 11 — evidências multicompra</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 24px; color: #111; }
+    h1 { font-size: 1.4rem; }
+    table { border-collapse: collapse; margin: 12px 0 24px; }
+    td, th { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+    img { max-width: 100%; border: 1px solid #e5e5e5; margin: 8px 0 24px; }
+    code { font-size: 0.9em; }
+    .note { background: #fff8e6; border: 1px solid #e6d9a8; padding: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Onda 11 — Múltiplas compras por operação</h1>
+  <p>Referência visual: <strong>AD-10 / DS v3</strong> (<code>docs/ds-preview/direcao-a/</code>). Protótipo v1.1 não foi exigido.</p>
+  <table>
+    <tr><th>SHA</th><td><code>7c051c0071a7dd3e5f7d0b6ccf5a499fbd9a3999</code></td></tr>
+    <tr><th>Data</th><td>2026-08-28T10:03:22.361Z</td></tr>
+    <tr><th>Run</th><td>20260828100314</td></tr>
+    <tr><th>Operação</th><td><code>01a047d2-d4ff-7559-a2d1-54ae360f2f3f</code> · 2026-08-28</td></tr>
+    <tr><th>Compra 001</th><td><code>01a047d2-d515-732d-bea4-562f25173b4c</code> · Lote 001</td></tr>
+    <tr><th>Compra 002</th><td><code>01a047d2-d54e-7700-830c-75535ce76982</code> · Lote 002</td></tr>
+    <tr><th>Pedido</th><td><code>01a047d2-e95e-7d32-8ddf-108cc3349e22</code></td></tr>
+    <tr><th>Recebimentos</th><td><code>01a047d2-d5ad-744f-a425-5f3ce7be2800</code> / <code>01a047d2-d5e7-7c1c-9fc5-b0d19b989f05</code></td></tr>
+    <tr><th>Caminhão</th><td><code>01a047d2-efba-79b9-8438-b86ed7e4957a</code></td></tr>
+  </table>
+  <h2>Comandos do gate local</h2>
+  <pre>HARDWARE_FAKE=1 NFSE_FAKE=1
+npm ci / lint / type-check / test
+app/backend: npm run test:cov ; npx drizzle-kit check
+app/frontend: npm test ; npx playwright test e2e/onda5-gestao.spec.ts e2e/onda11-multicompra.spec.ts
+docker compose up --build -d</pre>
+  <p>Playwright O11 URLs: <code>http://localhost:4000/gestao/compras?dataOperacao=2026-08-28&amp;compraId=01a047d2-d515-732d-bea4-562f25173b4c</code> · <code>http://localhost:4000/comercial/pedidos</code> · <code>http://localhost:4000/recebimento/pesagem-destinacao?recebimentoId=01a047d2-d5ad-744f-a425-5f3ce7be2800</code> · <code>http://localhost:4000/carga/conferencia</code></p>
+  <h2>Telas (DS v3)</h2>
+  <h3>01 — Compras master-detail</h3>
+  <p><a href="01-compras-master-detail.png">01-compras-master-detail.png</a></p>
+  <img src="01-compras-master-detail.png" alt="Compras master-detail" />
+  <h3>02 — Pedido seleciona operação</h3>
+  <p><a href="02-pedido-operacao.png">02-pedido-operacao.png</a></p>
+  <img src="02-pedido-operacao.png" alt="Pedido operação" />
+  <h3>03 — Pesagem com lote sequencial</h3>
+  <p><a href="03-pesagem-lote.png">03-pesagem-lote.png</a></p>
+  <img src="03-pesagem-lote.png" alt="Pesagem lote" />
+  <h3>04 — Expedição origem do lote</h3>
+  <p><a href="04-expedicao-origem.png">04-expedicao-origem.png</a></p>
+  <img src="04-expedicao-origem.png" alt="Expedição origem" />
+  <div class="note">
+    <strong>Pendência da etiqueta</strong>
+    <p>v1.1 §16.12: o payload/layout físico não possui campo canônico de lote; inclusão exige decisão registrada. Onda 11 preserva o layout.</p>
+  </div>
+</body>
+</html>

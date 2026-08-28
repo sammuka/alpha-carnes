@@ -209,17 +209,8 @@ async function fillInputValue(page: Page, selector: string, value: string) {
 }
 
 async function selecionarDataCompras(page: Page, dataOperacao: string, compraId: string) {
-  await page.goto('/gestao/compras');
-  await page.waitForLoadState('domcontentloaded');
-  const input = page.locator('#data');
-  await expect(input).toBeEnabled({ timeout: 15_000 });
-  const detalhe = page.waitForResponse(
-    (r) => r.url().includes(`/api/comercial/compras-programadas/${compraId}`) && r.ok(),
-    { timeout: 30_000 },
-  );
-  await fillInputValue(page, '#data', dataOperacao);
-  await detalhe;
-  await expect(page.getByRole('button', { name: 'Editar compra confirmada' })).toBeVisible({ timeout: 30_000 });
+  await page.goto(`/gestao/compras?dataOperacao=${dataOperacao}&compraId=${compraId}`);
+  await expect(page.getByText(/Lote 001/)).toBeVisible();
 }
 
 async function obterOuCriarOperacaoExtraordinaria(
