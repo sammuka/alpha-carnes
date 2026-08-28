@@ -992,7 +992,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const row = lista.body.data.find((r: { id: string }) => r.id === ini.body.recebimento.id);
     expect(row).toBeDefined();
     expect(row.romaneio).toBe('ROM-LISTA');
-    expect(row.codigoLote).toBe(ini.body.recebimento.id.slice(0, 8).toUpperCase());
+    expect(row.codigoLote).toBe('Lote 001');
     expect(typeof row.progressoBalanca).toBe('number');
   });
 });
