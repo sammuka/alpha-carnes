@@ -5,11 +5,13 @@ describe('DisponibilidadeService — branches', () => {
     const chain: {
       innerJoin: (...args: unknown[]) => typeof chain;
       where: (...args: unknown[]) => typeof chain;
+      groupBy: (...args: unknown[]) => typeof chain;
       orderBy: (...args: unknown[]) => Promise<unknown[]>;
       from: (...args: unknown[]) => typeof chain;
     } = {
       innerJoin: () => chain,
       where: () => chain,
+      groupBy: () => chain,
       orderBy: () => Promise.resolve(rows),
       from: () => chain,
     };
@@ -43,19 +45,13 @@ describe('DisponibilidadeService — branches', () => {
     expect(db.select).toHaveBeenCalled();
   });
 
-  it('listar → sem dataOperacao e sem compraProgramadaId não filtra', async () => {
-    const db = {
-      select: jest.fn(() => ({
-        from: () => ({
-          where: () => ({
-            orderBy: () => Promise.resolve([]),
-          }),
-        }),
-      })),
-    };
+  it('listar → sem compraProgramadaId agrega por operacao', async () => {
+    const chain = makeChain([]);
+    const db = { select: jest.fn(() => chain) };
     const service = new DisponibilidadeService({ db } as never, { registrar: jest.fn() } as never);
 
-    const result = await service.listar({} as never);
+    const result = await service.listar({ dataOperacao: '2026-12-20' } as never);
     expect(result).toEqual([]);
+    expect(db.select).toHaveBeenCalled();
   });
 });

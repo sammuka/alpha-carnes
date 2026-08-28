@@ -589,7 +589,7 @@ export class RecebimentoService {
       if (divergenciaAberta && !ehExcedente) {
         pedidosEmRisco = await this.disponibilidade.listarPedidosEmRisco(
           tx,
-          ctx.compraProgramadaId,
+          ctx.operacaoId,
           dto.itemComercialId,
         );
       }
@@ -677,7 +677,7 @@ export class RecebimentoService {
         .where(eq(recebimentosItens.recebimentoId, recebimentoId));
       const pedidosEmRisco: PedidoEmRisco[] = [];
       for (const it of itens) {
-        const risco = await this.disponibilidade.listarPedidosEmRisco(tx, ctx.compraProgramadaId, it.itemComercialId);
+        const risco = await this.disponibilidade.listarPedidosEmRisco(tx, ctx.operacaoId, it.itemComercialId);
         pedidosEmRisco.push(...risco);
       }
 
@@ -983,7 +983,7 @@ export class RecebimentoService {
   private async contextoOperacional(
     tx: Tx,
     recebimento: Pick<Recebimento, 'pedidoFornecedorId' | 'operacaoId'>,
-  ): Promise<{ compraProgramadaId: string; dataOperacao: string }> {
+  ): Promise<{ compraProgramadaId: string; dataOperacao: string; operacaoId: string }> {
     const linha = await tx
       .select({
         compraProgramadaId: pedidosFornecedor.compraProgramadaId,
@@ -994,7 +994,7 @@ export class RecebimentoService {
       .where(eq(pedidosFornecedor.id, recebimento.pedidoFornecedorId))
       .then((r) => r[0] ?? null);
     if (!linha) throw new NotFoundException('Contexto operacional do recebimento não encontrado');
-    return linha;
+    return { ...linha, operacaoId: recebimento.operacaoId };
   }
 
   private async buscarAtivo(tx: Tx, id: string): Promise<Recebimento | null> {
