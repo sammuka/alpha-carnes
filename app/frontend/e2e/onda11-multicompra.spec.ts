@@ -498,9 +498,7 @@ test.describe('Onda 11 — jornada multicompra', () => {
       );
 
       await page.goto('/carga/conferencia');
-      await page.getByText(caminhao.id.slice(0, 8)).first().click({ timeout: 20_000 }).catch(async () => {
-        await page.locator('button').filter({ hasText: /O11|Placa/ }).first().click();
-      });
+      await page.getByRole('button', { name: new RegExp(`O11${dados.runId.slice(-4)}`) }).click({ timeout: 20_000 });
       await expect(page.getByText(rotuloLote(dados.seq1))).toBeVisible({ timeout: 20_000 });
       await shot(page, '04-expedicao-origem.png');
     } finally {

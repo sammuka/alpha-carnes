@@ -17,15 +17,15 @@
   <h1>Onda 11 — Múltiplas compras por operação</h1>
   <p>Referência visual: <strong>AD-10 / DS v3</strong> (<code>docs/ds-preview/direcao-a/</code>). Protótipo v1.1 não foi exigido.</p>
   <table>
-    <tr><th>SHA</th><td><code>7c051c0071a7dd3e5f7d0b6ccf5a499fbd9a3999</code></td></tr>
-    <tr><th>Data</th><td>2026-08-28T10:03:22.361Z</td></tr>
-    <tr><th>Run</th><td>20260828100314</td></tr>
-    <tr><th>Operação</th><td><code>01a047d2-d4ff-7559-a2d1-54ae360f2f3f</code> · 2026-08-28</td></tr>
-    <tr><th>Compra 001</th><td><code>01a047d2-d515-732d-bea4-562f25173b4c</code> · Lote 001</td></tr>
-    <tr><th>Compra 002</th><td><code>01a047d2-d54e-7700-830c-75535ce76982</code> · Lote 002</td></tr>
-    <tr><th>Pedido</th><td><code>01a047d2-e95e-7d32-8ddf-108cc3349e22</code></td></tr>
-    <tr><th>Recebimentos</th><td><code>01a047d2-d5ad-744f-a425-5f3ce7be2800</code> / <code>01a047d2-d5e7-7c1c-9fc5-b0d19b989f05</code></td></tr>
-    <tr><th>Caminhão</th><td><code>01a047d2-efba-79b9-8438-b86ed7e4957a</code></td></tr>
+    <tr><th>SHA</th><td><code>1c96973f64835ac0a9217eeebd52d0bc3ecdd323</code></td></tr>
+    <tr><th>Data</th><td>2026-08-28T11:18:45.937Z</td></tr>
+    <tr><th>Run</th><td>20260828111840</td></tr>
+    <tr><th>Operação</th><td><code>01a04812-5d84-7988-aef9-88153103c14f</code> · 2026-08-28</td></tr>
+    <tr><th>Compra 001</th><td><code>01a04817-e3b1-7637-a0ac-50907fe9d7e5</code> · Lote 007</td></tr>
+    <tr><th>Compra 002</th><td><code>01a04817-e3d7-756c-83d7-abc9fed4b94b</code> · Lote 008</td></tr>
+    <tr><th>Pedido</th><td><code>01a04817-eee2-79b8-8693-c27e0e9d7946</code></td></tr>
+    <tr><th>Recebimentos</th><td><code>01a04817-e40f-7aef-8146-00a5243b9730</code> / <code>01a04817-e437-7f86-af9d-8868b1bde870</code></td></tr>
+    <tr><th>Caminhão</th><td><code>01a04817-f51b-71c0-aeb9-061a8a44820d</code></td></tr>
   </table>
   <h2>Comandos do gate local</h2>
   <pre>HARDWARE_FAKE=1 NFSE_FAKE=1
@@ -33,7 +33,7 @@ npm ci / lint / type-check / test
 app/backend: npm run test:cov ; npx drizzle-kit check
 app/frontend: npm test ; npx playwright test e2e/onda5-gestao.spec.ts e2e/onda11-multicompra.spec.ts
 docker compose up --build -d</pre>
-  <p>Playwright O11 URLs: <code>http://localhost:4000/gestao/compras?dataOperacao=2026-08-28&amp;compraId=01a047d2-d515-732d-bea4-562f25173b4c</code> · <code>http://localhost:4000/comercial/pedidos</code> · <code>http://localhost:4000/recebimento/pesagem-destinacao?recebimentoId=01a047d2-d5ad-744f-a425-5f3ce7be2800</code> · <code>http://localhost:4000/carga/conferencia</code></p>
+  <p>Playwright O11 URLs: <code>http://localhost:4000/gestao/compras?dataOperacao=2026-08-28&amp;compraId=01a04817-e3b1-7637-a0ac-50907fe9d7e5</code> · <code>http://localhost:4000/comercial/pedidos</code> · <code>http://localhost:4000/recebimento/pesagem-destinacao?recebimentoId=01a04817-e40f-7aef-8146-00a5243b9730</code> · <code>http://localhost:4000/carga/conferencia</code></p>
   <h2>Telas (DS v3)</h2>
   <h3>01 — Compras master-detail</h3>
   <p><a href="01-compras-master-detail.png">01-compras-master-detail.png</a></p>
