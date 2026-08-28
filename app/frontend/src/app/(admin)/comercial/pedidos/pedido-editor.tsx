@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Plus, Save, Send, Trash2 } from 'lucide-react';
 import type {
+  ComposicaoLotePedido,
   CriarPedidoDto,
   OverbookingChallenge,
   PedidoAbertoExistente,
@@ -127,12 +128,32 @@ export function PedidoEditor({
   const [retryChallenge, setRetryChallenge] = useState<(() => Promise<void>) | null>(null);
   const [adendo, setAdendo] = useState<AdendoPendente | null>(null);
   const [fecharAposAdendo, setFecharAposAdendo] = useState(false);
+  const [composicaoLotes, setComposicaoLotes] = useState<ComposicaoLotePedido[] | null>(null);
 
   useEffect(() => {
     setQuantidades(Object.fromEntries(
       (pedido?.itens ?? []).map((item) => [item.id, String(Number(item.quantidadePedida))]),
     ));
   }, [pedido]);
+
+  useEffect(() => {
+    if (!pedido?.id) {
+      setComposicaoLotes(null);
+      return;
+    }
+    let ativo = true;
+    void fetch(`/api/comercial/pedidos/${pedido.id}/composicao-lotes`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((linhas: ComposicaoLotePedido[]) => {
+        if (ativo) setComposicaoLotes(Array.isArray(linhas) ? linhas : []);
+      })
+      .catch(() => {
+        if (ativo) setComposicaoLotes([]);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [pedido?.id]);
 
   const operacaoSelecionada = operacoes.find((operacao) => operacao.id === operacaoId);
   const produtosAusentes = useMemo(() => {
@@ -655,6 +676,30 @@ export function PedidoEditor({
           </Button>
         </CardFooter>
       </Card>
+
+      {pedido && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Origem do atendimento</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {composicaoLotes && composicaoLotes.length > 0 ? (
+              <ul className="space-y-1.5">
+                {composicaoLotes.map((lote) => (
+                  <li key={`${lote.compraProgramadaId}-${lote.recebimentoId}`} className="text-sm">
+                    <span className="font-data font-semibold">
+                      {`Lote ${String(lote.numeroSequencial).padStart(3, '0')}`}
+                    </span>
+                    {` · ${lote.quantidadeUnidades} peças · ${lote.pesoTotal} kg`}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhuma peça associada</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onBack}>Cancelar</Button>

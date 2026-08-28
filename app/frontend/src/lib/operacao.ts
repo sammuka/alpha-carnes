@@ -145,6 +145,7 @@ export interface PrevisaoRecebimento {
   operacaoId: string;
   dataOperacao: string;
   compraProgramadaId: string;
+  numeroSequencialCompra?: number;
   numeroInternoCompra: string | null;
   fornecedorId: string;
   fornecedorNome: string;
@@ -373,6 +374,8 @@ export interface RomaneioItem {
   etiqueta: string | null;
   produtoNome: string;
   peso: string | null;
+  loteOrigem?: string;
+  numeroSequencial?: number;
 }
 
 export interface RomaneioPedido {

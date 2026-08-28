@@ -58,6 +58,7 @@ export interface RecebimentoResumoEnriquecido {
   id: string;
   codigoLote: string;
   compraProgramadaId: string;
+  numeroSequencialCompra: number;
   numeroInternoCompra: string | null;
   fornecedorId: string;
   fornecedorNome: string;
@@ -87,6 +88,7 @@ export interface PrevisaoRecebimento {
   operacaoId: string;
   dataOperacao: string;
   compraProgramadaId: string;
+  numeroSequencialCompra: number;
   numeroInternoCompra: string | null;
   fornecedorId: string;
   fornecedorNome: string;
@@ -117,6 +119,7 @@ type SnapshotPedidoFornecedor = {
   fornecedorNome: string;
   dataOperacao: string;
   numeroInternoCompra: string | null;
+  numeroSequencialCompra: number;
   observacoesCompra: string | null;
   tipoCarga: string | null;
   resumoCompra: string;
@@ -146,6 +149,10 @@ export interface AcaoLote {
   acao: string;
 }
 
+function codigoLoteDeSequencial(numeroSequencial: number): string {
+  return `Lote ${String(numeroSequencial).padStart(3, '0')}`;
+}
+
 @Injectable()
 export class RecebimentoService {
   constructor(
@@ -171,6 +178,7 @@ export class RecebimentoService {
         .select({
           recebimento: recebimentos,
           numeroInterno: comprasProgramadas.numeroInterno,
+          numeroSequencial: comprasProgramadas.numeroSequencial,
           compraProgramadaId: pedidosFornecedor.compraProgramadaId,
           fornecedorNome: fornecedores.razaoSocial,
           dataOperacao: operacoes.data,
@@ -201,8 +209,9 @@ export class RecebimentoService {
       const tipoCarga = await derivarTipoCarga(this.db, linha.compraProgramadaId);
       enriquecidos.push({
         id: linha.recebimento.id,
-        codigoLote: linha.recebimento.id.slice(0, 8).toUpperCase(),
+        codigoLote: codigoLoteDeSequencial(linha.numeroSequencial),
         compraProgramadaId: linha.compraProgramadaId,
+        numeroSequencialCompra: linha.numeroSequencial,
         numeroInternoCompra: linha.numeroInterno,
         fornecedorId: linha.recebimento.fornecedorId,
         fornecedorNome: linha.fornecedorNome,
@@ -227,6 +236,7 @@ export class RecebimentoService {
       operacaoId: snapshot.pedido.operacaoId,
       dataOperacao: snapshot.dataOperacao,
       compraProgramadaId: snapshot.pedido.compraProgramadaId,
+      numeroSequencialCompra: snapshot.numeroSequencialCompra,
       numeroInternoCompra: snapshot.numeroInternoCompra,
       fornecedorId: snapshot.pedido.fornecedorId,
       fornecedorNome: snapshot.fornecedorNome,
@@ -251,6 +261,12 @@ export class RecebimentoService {
     if (!recebimento) throw new NotFoundException('Recebimento não encontrado');
 
     const pecasMap = await contarPecasPorItem(this.db, id);
+    const [compra] = await this.db
+      .select({ numeroSequencial: comprasProgramadas.numeroSequencial })
+      .from(comprasProgramadas)
+      .where(eq(comprasProgramadas.id, recebimento.pedidoFornecedor.compraProgramadaId))
+      .limit(1);
+    if (!compra) throw new NotFoundException('Compra programada do recebimento não encontrada');
     const tipoCarga = await derivarTipoCarga(this.db, recebimento.pedidoFornecedor.compraProgramadaId);
     const progressoBalanca = await this.calcularProgressoLote(id);
     const nfAtiva = await buscarNfAtivaDoRecebimento(this.db, id);
@@ -273,7 +289,8 @@ export class RecebimentoService {
       ...recebimento,
       tipoCarga,
       progressoBalanca,
-      codigoLote: recebimento.id.slice(0, 8).toUpperCase(),
+      codigoLote: codigoLoteDeSequencial(compra.numeroSequencial),
+      numeroSequencialCompra: compra.numeroSequencial,
       nfeNumero: nfAtiva?.numero ?? recebimento.notaFiscalFornecedor,
       nfeSerie: nfAtiva?.serie ?? null,
       nfeChave: nfAtiva?.chave ?? null,
@@ -862,6 +879,7 @@ export class RecebimentoService {
         fornecedorNome: fornecedores.razaoSocial,
         dataOperacao: operacoes.data,
         numeroInternoCompra: comprasProgramadas.numeroInterno,
+        numeroSequencialCompra: comprasProgramadas.numeroSequencial,
         observacoesCompra: comprasProgramadas.observacoes,
       })
       .from(pedidosFornecedor)
