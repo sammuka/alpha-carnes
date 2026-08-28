@@ -597,7 +597,7 @@ describe('SubitemService — branches unitários', () => {
       peso: '5.000',
       deletedAt: null,
     };
-    const peca = { id: 'pc1', compraProgramadaId: 'cp1', deletedAt: null };
+    const peca = { id: 'pc1', compraProgramadaId: 'cp1', operacaoId: 'op1', deletedAt: null };
 
     // sugerir usa this.db: 1ª call = subitemAtivo, 2ª call = pecaAtiva, 3ª = calcularCompativeisItem
     let dCall = 0;

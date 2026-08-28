@@ -1,11 +1,12 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import { operacoes,
   associacoesPecaHistorico,
+  comprasProgramadas,
   pecas,
   pedidosVenda,
   pedidosVendaItens,
@@ -55,12 +56,7 @@ export class AssociacaoService {
   async sugerir(pecaId: string): Promise<ResultadoSugestao> {
     const peca = await this.buscarAtiva(this.db, pecaId);
     if (!peca) throw new NotFoundException('Peça não encontrada');
-    const compativeis = await calcularCompativeisItem(this.db, {
-      compraProgramadaId: peca.compraProgramadaId,
-      itemComercialId: peca.itemComercialBaseId,
-      peso: peca.pesoOriginal,
-      caracteristicas: caracteristicasDeCapturaMeta(peca.capturaMeta),
-    });
+    const compativeis = await calcularCompativeisItem(this.db, await this.paramsCompativeis(this.db, peca));
     return { pecaId, sugestao: compativeis[0] ?? null, compativeis };
   }
 
@@ -68,12 +64,7 @@ export class AssociacaoService {
   async listarCompativeis(pecaId: string): Promise<SugestaoScored[]> {
     const peca = await this.buscarAtiva(this.db, pecaId);
     if (!peca) throw new NotFoundException('Peça não encontrada');
-    return calcularCompativeisItem(this.db, {
-      compraProgramadaId: peca.compraProgramadaId,
-      itemComercialId: peca.itemComercialBaseId,
-      peso: peca.pesoOriginal,
-      caracteristicas: caracteristicasDeCapturaMeta(peca.capturaMeta),
-    });
+    return calcularCompativeisItem(this.db, await this.paramsCompativeis(this.db, peca));
   }
 
   /**
@@ -91,12 +82,7 @@ export class AssociacaoService {
       const item = await this.buscarItemCompativel(tx, peca, dto.pedidoVendaItemId);
 
       // Snapshot da sugestão no momento da decisão (a sugestão é efêmera).
-      const compativeis = await calcularCompativeisItem(tx, {
-        compraProgramadaId: peca.compraProgramadaId,
-        itemComercialId: peca.itemComercialBaseId,
-        peso: peca.pesoOriginal,
-        caracteristicas: caracteristicasDeCapturaMeta(peca.capturaMeta),
-      });
+      const compativeis = await calcularCompativeisItem(tx, await this.paramsCompativeis(tx, peca));
       const sugerido = compativeis.find((c) => c.pedidoVendaItemId === dto.pedidoVendaItemId) ?? null;
 
       const consumido = await consumirSaldo(tx, dto.pedidoVendaItemId);
@@ -371,14 +357,17 @@ export class AssociacaoService {
 
   // ── internos ───────────────────────────────────────────────────────────────
 
-  /** Valida que o item existe, é compatível e pertence à compra da peça. */
+  /** Valida que o item existe, é compatível e pertence à operação da peça. */
   private async buscarItemCompativel(tx: Tx, peca: Peca, pedidoVendaItemId: string) {
     const item = await tx
       .select({
         id: pedidosVendaItens.id,
         pedidoVendaId: pedidosVendaItens.pedidoVendaId,
         itemComercialId: pedidosVendaItens.itemComercialId,
-        compraProgramadaId: pedidosVenda.compraProgramadaId,
+        operacaoId: pedidosVenda.operacaoId,
+        pecaOperacaoId: sql<string>`(
+          select cp.operacao_id from compras_programadas cp where cp.id = ${peca.compraProgramadaId}
+        )`,
         statusPedido: pedidosVenda.status,
         deletedAt: pedidosVenda.deletedAt,
       })
@@ -392,8 +381,8 @@ export class AssociacaoService {
     if (item.itemComercialId !== peca.itemComercialBaseId) {
       throw new ConflictException('Item de pedido incompatível com a peça');
     }
-    if (item.compraProgramadaId !== peca.compraProgramadaId) {
-      throw new ConflictException('Pedido pertence a outra compra programada');
+    if (item.operacaoId !== item.pecaOperacaoId) {
+      throw new ConflictException('Pedido pertence a outra operação');
     }
     return item;
   }
@@ -463,6 +452,21 @@ export class AssociacaoService {
       .where(eq(recebimentos.id, peca.recebimentoId))
       .then((rows) => rows[0] ?? null);
     return r?.dataOperacao ?? '';
+  }
+
+  private async paramsCompativeis(tx: Tx, peca: Peca) {
+    const [compra] = await tx
+      .select({ operacaoId: comprasProgramadas.operacaoId })
+      .from(comprasProgramadas)
+      .where(eq(comprasProgramadas.id, peca.compraProgramadaId));
+    if (!compra) throw new NotFoundException('Operação da peça não encontrada');
+    return {
+      operacaoId: compra.operacaoId,
+      compraProgramadaOrigemId: peca.compraProgramadaId,
+      itemComercialId: peca.itemComercialBaseId,
+      peso: peca.pesoOriginal,
+      caracteristicas: caracteristicasDeCapturaMeta(peca.capturaMeta),
+    };
   }
 
   private async buscarAtiva(tx: Tx, id: string): Promise<Peca | null> {
