@@ -28,7 +28,7 @@
 3. **RN-01/RN-02/RN-03 só são revogadas no lado comercial.** Pedido ao fornecedor, recebimento, NF do fornecedor, conferência tripla e peça continuam vinculados à compra/lote.
 4. **RA-01:** operação, saldo, risco, compatibilidade e bloqueios são decididos no backend. BFF apenas repassa contrato.
 5. **RA-02:** criação/numeração da compra e associação física permanecem transacionais e auditadas. Snapshots de origem são append-only.
-6. **RA-04:** sem `setInterval`, refresh periódico ou polling. `COMPRA_CRIADA`, `COMPRA_ATUALIZADA`, `COMPRA_CANCELADA`, `COMPRA_CONFIRMADA`, `DISPONIBILIDADE_GERADA` e `COMPRA_ALTERADA_IMPACTO` são emitidos somente após commit. Clients reagem por WebSocket ou ação explícita.
+6. **RA-04:** sem `setInterval`, refresh periódico ou polling. `COMPRA_CRIADA`, `COMPRA_ATUALIZADA`, `COMPRA_CANCELADA`, `COMPRA_CONFIRMADA`, `DISPONIBILIDADE_GERADA` e `COMPRA_ALTERADA_IMPACTO` são emitidos somente após commit. Cada um dos seis possui handler `@OnEvent` em `realtime.gateway.ts` que chama `this.broadcast(...)`; emitir no service sem handler não entrega o evento ao cliente. Clients reagem por WebSocket ou ação explícita.
 7. **RA-05/06:** erro de lock, banco, numeração, incompatibilidade ou rastreabilidade é propagado. Não capturar `23505` para devolver sucesso, não usar fallback inventado e não ocultar falha.
 8. **AD-03 intacta:** unicidade de pedido aberto continua `(cliente, item comercial, operação)` em `pedidos.service.ts:233-265`.
 9. **AD-05 intacta:** overbooking ilimitado exige challenge 409 read-only e confirmação explícita. Compra complementar da mesma operação passa a compor o saldo disponível.
@@ -152,6 +152,8 @@ app/backend/src/modules/comercial/compras-programadas/dto/compra-programada.dto.
 app/backend/src/modules/comercial/compras-programadas/compras-programadas.controller.ts
 app/backend/src/modules/comercial/compras-programadas/compras-programadas.service.ts
 app/backend/src/realtime/events/eventos.ts
+app/backend/src/realtime/realtime.gateway.ts
+app/backend/test/unit/realtime-gateway-onda11.spec.ts
 app/backend/src/modules/comercial/disponibilidade/{dto/disponibilidade.dto.ts,disponibilidade.service.ts,mapa.service.ts}
 app/backend/src/modules/comercial/pedidos/{dto/pedido.dto.ts,pedidos.controller.ts,pedidos.service.ts}
 app/backend/src/modules/comercial/overbooking/{dto/overbooking.dto.ts,overbooking.service.ts}
@@ -187,7 +189,7 @@ docs/superpowers/plans/2026-07-22-matriz-rastreabilidade-v1.1.md
 | DOD11-03 `pecas.compra_programada_id` NOT NULL e imutável por trigger | `onda11-migrations.e2e-spec.ts`: `23502` para NULL, trigger rejeita troca de UUID e UPDATE de outro campo passa |
 | DOD11-04 N compras e sequenciais sem colisão sob concorrência | `compras-programadas.e2e-spec.ts` |
 | DOD11-05 filtros e payload enriquecido | `compras-programadas.e2e-spec.ts` |
-| DOD11-06 seis eventos reais e eventos de criar/editar/cancelar pós-commit | `compras-programadas.e2e-spec.ts`: uma emissão por mutação, zero em rollback/no-op |
+| DOD11-06 seis eventos reais e eventos de criar/editar/cancelar pós-commit | `compras-programadas.e2e-spec.ts`: uma emissão por mutação, zero em rollback/no-op; `realtime.gateway.ts` handlers `handleCompraCriada`/`handleCompraAtualizada`/`handleCompraCancelada`; `realtime-gateway-onda11.spec.ts` |
 | DOD11-07 agregado da disponibilidade e detalhe por compra | `onda11-multicompra.e2e-spec.ts` |
 | DOD11-08 risco no escopo de operação sem falso positivo | `recebimento.e2e-spec.ts` |
 | DOD11-09 mapa V soma múltiplos lotes | `onda11-multicompra.e2e-spec.ts` |
@@ -204,7 +206,7 @@ docs/superpowers/plans/2026-07-22-matriz-rastreabilidade-v1.1.md
 | DOD11-20 pedido seleciona operação e não envia compra | `onda4-pedidos.test.tsx` |
 | DOD11-21 overbooking não escolhe compra arbitrária | `overbooking-client.test.tsx` prova payload `novo_pedido` sem `compraProgramadaId`; compra complementar mantém escolha explícita |
 | DOD11-22 origem sequencial visível em quatro fluxos | testes React de recebimento/pesagem/carga + Playwright O11 |
-| DOD11-23 sem polling; subscriptions usam os seis nomes reais | grep de gate + `compras-client.test.tsx` + teste backend de eventos |
+| DOD11-23 sem polling; subscriptions usam os seis nomes reais | grep de gate + `compras-client.test.tsx` + `realtime-gateway-onda11.spec.ts` (`handleCompraCriada`/`handleCompraAtualizada`/`handleCompraCancelada` + `COMPRA_CONFIRMADA`/`DISPONIBILIDADE_GERADA`/`COMPRA_ALTERADA_IMPACTO` já cobertos no gateway) |
 | DOD11-24 evidências DS v3 e emenda da matriz | Playwright + diff documental |
 
 ---
@@ -346,7 +348,7 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
 
 ## Task 2 — SAM-111 T03 — Compras: sequencial, filtros e eventos
 
-**Files:** `compra-programada.dto.ts:16-26`, controller `:27-31`, `compras-programadas.service.ts:42-49,78-175,177-210,367-459`, `realtime/events/eventos.ts:4-79,129-142,429-500`, `compras-programadas.e2e-spec.ts:202-228`.
+**Files:** `compra-programada.dto.ts:16-26`, controller `:27-31`, `compras-programadas.service.ts:42-49,78-175,177-210,367-459`, `realtime/events/eventos.ts:4-79,129-142,429-500`, `realtime/realtime.gateway.ts:16-51,166-168`, `test/unit/realtime-gateway-onda11.spec.ts`, `compras-programadas.e2e-spec.ts:202-228`.
 
 - [ ] **Step 1 — RED:** inverter o teste `uma compra ATIVA...` para criar duas compras no mesmo dia e esperar `201`, `numeroSequencial` 1 e 2; adicionar `Promise.all` com 20 POSTs na mesma operação e esperar conjunto exato 1..20 sem erro/duplicata. Espionar `EventEmitter2.emit`: criar, atualizar e cancelar emitem exatamente uma vez, respectivamente, `COMPRA_CRIADA`, `COMPRA_ATUALIZADA` e `COMPRA_CANCELADA`; forçar erro antes do commit em cada mutação e esperar zero emissão.
 - [ ] **Step 2 — query DTO:** importar `listarQuerySchema` e adicionar:
@@ -416,7 +418,7 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
   COMPRA_ATUALIZADA: 'compra_programada_atualizada',
   COMPRA_CANCELADA: 'compra_programada_cancelada',
   ```
-  Adicionar o contrato:
+  Exportar o contrato imediatamente antes de `CompraConfirmadaPayload` (`eventos.ts:129`), junto dos demais `export interface` de payload — um único tipo reutilizado pelos três eventos novos e importado pelo gateway:
   ```ts
   export interface CompraMutadaPayload {
     compraId: string;
@@ -436,7 +438,91 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
   compra_programada_atualizada: CompraMutadaPayload;
   compra_programada_cancelada: CompraMutadaPayload;
   ```
-- [ ] **Step 7 — emits pós-commit:** em `criar`, substituir o retorno posterior à transação:
+- [ ] **Step 7 — RED gateway:** criar `app/backend/test/unit/realtime-gateway-onda11.spec.ts` no molde de `realtime-gateway-onda5.spec.ts` (spy em `hub.broadcast`, rooms `dashboard`, `desossa`, `operacao:${dataOperacao}`). O spec falha até o Step 8 existir. Conteúdo literal:
+  ```ts
+  import { HttpAdapterHost } from '@nestjs/core';
+  import { RealtimeGateway } from '../../src/realtime/realtime.gateway';
+  import { RealtimeHub } from '../../src/realtime/realtime.hub';
+  import { TokenService } from '../../src/modules/auth/token.service';
+
+  describe('RealtimeGateway — Onda 11', () => {
+    const hub = new RealtimeHub();
+    const broadcastSpy = jest.spyOn(hub, 'broadcast');
+    const gateway = new RealtimeGateway(
+      {} as HttpAdapterHost,
+      {} as TokenService,
+      hub,
+    );
+
+    const dataOperacao = '2026-08-03';
+    const rooms = ['dashboard', 'desossa', `operacao:${dataOperacao}`];
+
+    beforeEach(() => {
+      broadcastSpy.mockClear();
+    });
+
+    function expectBroadcast(evento: string, payload: unknown) {
+      expect(broadcastSpy).toHaveBeenCalledTimes(rooms.length);
+      for (const room of rooms) {
+        expect(broadcastSpy).toHaveBeenCalledWith(room, evento, payload);
+      }
+    }
+
+    const payload = {
+      compraId: 'c1',
+      operacaoId: 'op1',
+      dataOperacao,
+      numeroSequencial: 1,
+    };
+
+    it('handleCompraCriada faz broadcast nas rooms corretas', () => {
+      gateway.handleCompraCriada(payload);
+      expectBroadcast('compra_programada_criada', payload);
+    });
+
+    it('handleCompraAtualizada faz broadcast nas rooms corretas', () => {
+      gateway.handleCompraAtualizada(payload);
+      expectBroadcast('compra_programada_atualizada', payload);
+    });
+
+    it('handleCompraCancelada faz broadcast nas rooms corretas', () => {
+      gateway.handleCompraCancelada(payload);
+      expectBroadcast('compra_programada_cancelada', payload);
+    });
+  });
+  ```
+- [ ] **Step 8 — handlers WebSocket:** em `realtime.gateway.ts`, importar `CompraMutadaPayload` no bloco de tipos de `./events/eventos`. Substituir:
+  ```ts
+  // old_string
+  type CompraConfirmadaPayload,
+  type DisponibilidadeGeradaPayload,
+  ```
+  por:
+  ```ts
+  // new_string
+  type CompraConfirmadaPayload,
+  type CompraMutadaPayload,
+  type DisponibilidadeGeradaPayload,
+  ```
+  Imediatamente após `handleCompraConfirmada` (`realtime.gateway.ts:166-168`), inserir literalmente:
+  ```ts
+  @OnEvent(EVENTOS.COMPRA_CRIADA)
+  handleCompraCriada(payload: CompraMutadaPayload): void {
+    this.broadcast(EVENTOS.COMPRA_CRIADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.COMPRA_ATUALIZADA)
+  handleCompraAtualizada(payload: CompraMutadaPayload): void {
+    this.broadcast(EVENTOS.COMPRA_ATUALIZADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.COMPRA_CANCELADA)
+  handleCompraCancelada(payload: CompraMutadaPayload): void {
+    this.broadcast(EVENTOS.COMPRA_CANCELADA, payload, payload.dataOperacao);
+  }
+  ```
+  Não criar polling, room extra nem wrapper. Os handlers existentes de `COMPRA_CONFIRMADA` (`:166-168`) e `COMPRA_ALTERADA_IMPACTO` (`:330-332`) permanecem. `npm test -- realtime-gateway-onda11 --runInBand` → 3 `it()` verdes.
+- [ ] **Step 9 — emits pós-commit:** em `criar`, substituir o retorno posterior à transação:
   ```ts
   // old_string
   return this.detalhar(compraId);
@@ -488,7 +574,7 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
   return compra;
   ```
   Esses três blocos ficam depois de `await this.db.transaction(...)`; nunca emitir dentro da callback transacional. Preservar as emissões pós-commit de `confirmar` e `atualizarItem`; acrescentar literalmente `operacaoId: compra.operacaoId` e `numeroSequencial: compra.numeroSequencial` aos payloads de `COMPRA_CONFIRMADA` e `DISPONIBILIDADE_GERADA`. Testar que confirmação emite uma vez e confirmação idempotente não duplica `COMPRA_CONFIRMADA`/`DISPONIBILIDADE_GERADA`; rollback de qualquer mutação emite zero evento.
-- [ ] **GREEN:** `npm test -- compras-programadas --runInBand` → todos verdes, incluindo concorrência.
+- [ ] **GREEN:** `npm test -- compras-programadas realtime-gateway-onda11 --runInBand` → todos verdes, incluindo concorrência e os três handlers de broadcast.
 - [ ] **Commit:** `feat(onda11): numerar e listar multiplas compras por operacao`.
 
 ---
@@ -1002,7 +1088,7 @@ O body registra AD-14, SHA base/head, migrations/hashes, comandos/resultados, DO
 - [ ] Sequencial concorrente usa lock da operação + índice parcial; zero sucesso silencioso.
 - [ ] `planejarSobLock` não tem diff.
 - [ ] `uq_disp_compra_item` não tem diff.
-- [ ] Os seis eventos usam nomes reais; criar/atualizar/cancelar emitem uma vez pós-commit e rollback não emite; zero polling.
+- [ ] Os seis eventos usam nomes reais; criar/atualizar/cancelar emitem uma vez pós-commit e rollback não emite; `realtime.gateway.ts` tem `@OnEvent` + `broadcast` para `COMPRA_CRIADA`/`COMPRA_ATUALIZADA`/`COMPRA_CANCELADA` (prova `realtime-gateway-onda11.spec.ts`); zero polling.
 - [ ] AD-03/AD-05 preservadas.
 - [ ] BFF sem regra de negócio.
 - [ ] DS v3/AD-10 citado por tela; protótipo inacessível não foi usado.
