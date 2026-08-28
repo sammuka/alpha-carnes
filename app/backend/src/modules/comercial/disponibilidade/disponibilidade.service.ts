@@ -12,7 +12,6 @@ import {
 } from '../../../common/crud/decimal';
 import type { ListarDisponibilidadeQuery } from './dto/disponibilidade.dto';
 
-type DisponibilidadeVirtual = typeof disponibilidadesVirtuais.$inferSelect;
 type CompraProgramada = typeof schema.comprasProgramadas.$inferSelect;
 type Tx = NodePgDatabase<typeof schema>;
 

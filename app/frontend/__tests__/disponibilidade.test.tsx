@@ -23,7 +23,9 @@ class MockWebSocket {
 
 const disponibilidades = [
   {
+    modo: 'compra' as const,
     id: 'd1',
+    compraProgramadaId: 'cp-1',
     operacaoId: 'operacao-1',
     itemComercialId: 'item-1',
     dataOperacao: '2026-06-07',
