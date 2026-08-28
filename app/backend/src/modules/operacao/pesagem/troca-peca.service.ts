@@ -165,6 +165,8 @@ export class TrocaPecaService {
           motivo: dto.motivo,
           operadorId,
           statusExpedicaoNoMomento: 'aberta',
+          compraProgramadaOrigemId: retirada.compraProgramadaId,
+          recebimentoOrigemId: retirada.recebimentoId,
         },
         {
           pecaId: inserida.id,
@@ -174,6 +176,8 @@ export class TrocaPecaService {
           motivo: dto.motivo,
           operadorId,
           statusExpedicaoNoMomento: 'aberta',
+          compraProgramadaOrigemId: inserida.compraProgramadaId,
+          recebimentoOrigemId: inserida.recebimentoId,
         },
       ]);
 

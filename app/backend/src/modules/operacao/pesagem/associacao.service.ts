@@ -429,6 +429,15 @@ export class AssociacaoService {
       operadorId: string;
     },
   ): Promise<void> {
+    const origem = await tx
+      .select({
+        compraProgramadaId: pecas.compraProgramadaId,
+        recebimentoId: pecas.recebimentoId,
+      })
+      .from(pecas)
+      .where(eq(pecas.id, h.pecaId))
+      .then((r) => r[0] ?? null);
+    if (!origem) throw new NotFoundException('Peça não encontrada');
     await tx.insert(associacoesPecaHistorico).values({
       pecaId: h.pecaId,
       acao: h.acao,
@@ -439,6 +448,8 @@ export class AssociacaoService {
       scoreSugerido: h.scoreSugerido ?? null,
       justificativaSugerida: h.justificativaSugerida ?? null,
       operadorId: h.operadorId,
+      compraProgramadaOrigemId: origem.compraProgramadaId,
+      recebimentoOrigemId: origem.recebimentoId,
       // Expedição é F5: enquanto não existe fechamento, o momento é 'aberta'.
       statusExpedicaoNoMomento: 'aberta',
     });

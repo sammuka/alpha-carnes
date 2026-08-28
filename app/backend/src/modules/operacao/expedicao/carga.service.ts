@@ -169,16 +169,21 @@ export class CargaService {
 
       // Compatibilidade por tipo_origem
       let itemComercialOrigem: string;
+      let origemCompraId: string;
+      let origemRecebimentoId: string;
       if (item.tipoOrigem === 'peca') {
         const peca = await tx
           .select({
             itemComercialBaseId: pecas.itemComercialBaseId,
             compraProgramadaId: pecas.compraProgramadaId,
+            recebimentoId: pecas.recebimentoId,
           })
           .from(pecas)
           .where(eq(pecas.id, item.pecaId!))
           .then((r) => r[0]!);
         itemComercialOrigem = peca.itemComercialBaseId;
+        origemCompraId = peca.compraProgramadaId;
+        origemRecebimentoId = peca.recebimentoId;
         if (peca.compraProgramadaId !== itemDestino.compraProgramadaId) {
           throw new ConflictException('Transferência só permitida dentro da mesma compra programada');
         }
@@ -187,12 +192,15 @@ export class CargaService {
           .select({
             itemComercialId: subitens.itemComercialId,
             compraProgramadaId: pecas.compraProgramadaId,
+            recebimentoId: pecas.recebimentoId,
           })
           .from(subitens)
           .innerJoin(pecas, eq(subitens.pecaOrigemId, pecas.id))
           .where(eq(subitens.id, item.subitemId!))
           .then((r) => r[0]!);
         itemComercialOrigem = sub.itemComercialId;
+        origemCompraId = sub.compraProgramadaId;
+        origemRecebimentoId = sub.recebimentoId;
         if (sub.compraProgramadaId !== itemDestino.compraProgramadaId) {
           throw new ConflictException('Transferência só permitida dentro da mesma compra programada');
         }
@@ -242,6 +250,8 @@ export class CargaService {
         motivo: dto.motivo,
         operadorId,
         statusExpedicaoNoMomento: caminhao.statusCaminhao,
+        compraProgramadaOrigemId: origemCompraId,
+        recebimentoOrigemId: origemRecebimentoId,
       });
 
       await this.auditoria.registrar(tx, {
