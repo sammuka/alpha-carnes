@@ -196,6 +196,49 @@ export class PedidosService {
     });
   }
 
+  async composicaoLotes(id: string, usuarioId: string) {
+    return this.db.transaction(async (tx) => {
+      await this.exigirPedidoNoEscopo(tx, id, usuarioId, false);
+      const linhas = await tx.execute<{
+        compra_programada_id: string;
+        numero_sequencial: number;
+        recebimento_id: string;
+        quantidade_unidades: number;
+        peso_total: string;
+      }>(sql`
+        WITH atuais AS (
+          SELECT p.compra_programada_id, p.recebimento_id, p.peso_original AS peso
+            FROM pecas p
+           WHERE p.pedido_venda_id = ${id}
+             AND p.deleted_at IS NULL
+             AND p.status_peca = 'associada'
+          UNION ALL
+          SELECT peca.compra_programada_id, peca.recebimento_id, coalesce(s.peso, 0)
+            FROM subitens s
+            JOIN pecas peca ON peca.id = s.peca_origem_id
+           WHERE s.pedido_venda_id = ${id}
+             AND s.deleted_at IS NULL
+        )
+        SELECT a.compra_programada_id,
+               cp.numero_sequencial,
+               a.recebimento_id,
+               count(*)::int AS quantidade_unidades,
+               coalesce(sum(a.peso), 0)::numeric(15,3)::text AS peso_total
+          FROM atuais a
+          JOIN compras_programadas cp ON cp.id = a.compra_programada_id
+         GROUP BY a.compra_programada_id, cp.numero_sequencial, a.recebimento_id
+         ORDER BY cp.numero_sequencial, a.recebimento_id
+      `);
+      return linhas.rows.map((r) => ({
+        compraProgramadaId: r.compra_programada_id,
+        numeroSequencial: Number(r.numero_sequencial),
+        recebimentoId: r.recebimento_id,
+        quantidadeUnidades: Number(r.quantidade_unidades),
+        pesoTotal: r.peso_total,
+      }));
+    });
+  }
+
   /** Devolve o pedido aberto (payload do `ModalAdendo`) ou lança 404 se a data não tem operação. */
   async buscarAberto(query: BuscarPedidoAbertoDto, usuarioId: string) {
     return this.db.transaction(async (tx) => {
