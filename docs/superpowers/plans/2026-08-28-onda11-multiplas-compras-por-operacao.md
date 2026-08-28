@@ -24,18 +24,18 @@
    ```ts
    compraProgramadaId: uuid('compra_programada_id').notNull().references(() => comprasProgramadas.id),
    ```
-   Nenhuma task remove `.notNull()`, torna o campo opcional, aceita `null` ou altera essa coluna em migration. A imutabilidade continua porque nenhum fluxo atualiza `pecas.compra_programada_id`.
+   Nenhuma task remove `.notNull()`, torna o campo opcional ou aceita `null`. A migration 0030 instala `trg_pecas_compra_programada_imutavel`, que rejeita qualquer troca do UUID com a mensagem `pecas.compra_programada_id is immutable (AD-14)`. Nenhum service executa `SET compra_programada_id` em `pecas`.
 3. **RN-01/RN-02/RN-03 só são revogadas no lado comercial.** Pedido ao fornecedor, recebimento, NF do fornecedor, conferência tripla e peça continuam vinculados à compra/lote.
 4. **RA-01:** operação, saldo, risco, compatibilidade e bloqueios são decididos no backend. BFF apenas repassa contrato.
 5. **RA-02:** criação/numeração da compra e associação física permanecem transacionais e auditadas. Snapshots de origem são append-only.
-6. **RA-04:** sem `setInterval`, refresh periódico ou polling. `COMPRA_CONFIRMADA` e `DISPONIBILIDADE_GERADA` continuam emitidos somente após commit em `compras-programadas.service.ts:409-425`. Clients reagem por WebSocket ou ação explícita.
+6. **RA-04:** sem `setInterval`, refresh periódico ou polling. `COMPRA_CRIADA`, `COMPRA_ATUALIZADA`, `COMPRA_CANCELADA`, `COMPRA_CONFIRMADA`, `DISPONIBILIDADE_GERADA` e `COMPRA_ALTERADA_IMPACTO` são emitidos somente após commit. Clients reagem por WebSocket ou ação explícita.
 7. **RA-05/06:** erro de lock, banco, numeração, incompatibilidade ou rastreabilidade é propagado. Não capturar `23505` para devolver sucesso, não usar fallback inventado e não ocultar falha.
 8. **AD-03 intacta:** unicidade de pedido aberto continua `(cliente, item comercial, operação)` em `pedidos.service.ts:233-265`.
 9. **AD-05 intacta:** overbooking ilimitado exige challenge 409 read-only e confirmação explícita. Compra complementar da mesma operação passa a compor o saldo disponível.
 10. **AD-10 / Princípio I:** a referência visual canônica é DS v3, não `F:\Projetos\alpha-carnes-prototipo`. O protótipo v1.1 inacessível não bloqueia a onda.
 11. **Princípio II:** nenhuma tela parcial. `/gestao/compras` entrega lista, seleção, detalhe, criação, edição, confirmação, empty state, deep-link e estados de erro/carregamento.
 12. **Princípio IX:** zero rótulo isolado ou busca “Marca”. Fornecedor é exibido por **Nome Fantasia** quando disponível e, como fallback real, Razão Social. Não fabricar nome fantasia.
-13. **Princípio X:** todas as migrations nascem de `drizzle-kit generate`; DDL nunca é escrito à mão. O único SQL editado manualmente é o DML/guarda do arquivo criado por `generate --custom`.
+13. **Princípio X:** todas as migrations nascem de `drizzle-kit generate`. As únicas edições SQL manuais permitidas nesta onda são o DML/guarda de `0029`, criado por `generate --custom`, e a função/trigger de imutabilidade adicionada ao SQL `0030` criado por `generate`; nenhum outro DML/DDL manual é permitido.
 14. `disponibilidades_virtuais.uq_disp_compra_item` em `disponibilidades-virtuais.schema.ts:34` permanece inalterado.
 15. `gerarParaCompra`, `listarEsperadoDaCompra`, `aplicarRecebimentoDelta`, `projetarImpacto` e `recalcularParaCompra` continuam por compra.
 16. `PedidosService.planejarSobLock` em `pedidos.service.ts:427-474` não é alterado: já filtra `operacao_id`, ordena `created_at, id`, trava `FOR UPDATE` e distribui FIFO.
@@ -52,7 +52,7 @@
 - Três migrations geradas `0028/0029/0030`, schemas e testes de proveniência/invariantes.
 - Filtros/enriquecimento/listagem e numeração concorrente de compras.
 - Disponibilidade agregada por operação e detalhada por compra.
-- Pedido novo por operação, com `compraProgramadaId` legado aceito e ignorado.
+- Pedido novo por operação; no DTO geral de criação o campo legado `compraProgramadaId` continua aceito e ignorado, enquanto o caminho de overbooking `novo_pedido` o remove do schema e o ignora por strip se vier como chave extra.
 - Compatibilidade peça→pedido dentro da operação, bônus de score por cobertura no lote e bloqueio interoperações.
 - Snapshot físico e endpoint de composição por lote.
 - BFF/tipos sem regra.
@@ -151,8 +151,10 @@ app/backend/test/unit/onda11-migrations-meta.spec.ts
 app/backend/src/modules/comercial/compras-programadas/dto/compra-programada.dto.ts
 app/backend/src/modules/comercial/compras-programadas/compras-programadas.controller.ts
 app/backend/src/modules/comercial/compras-programadas/compras-programadas.service.ts
+app/backend/src/realtime/events/eventos.ts
 app/backend/src/modules/comercial/disponibilidade/{dto/disponibilidade.dto.ts,disponibilidade.service.ts,mapa.service.ts}
 app/backend/src/modules/comercial/pedidos/{dto/pedido.dto.ts,pedidos.controller.ts,pedidos.service.ts}
+app/backend/src/modules/comercial/overbooking/{dto/overbooking.dto.ts,overbooking.service.ts}
 app/backend/src/modules/operacao/pesagem/{compatibilidade.ts,associacao-score.ts,associacao.service.ts,troca-peca.service.ts}
 app/backend/src/modules/operacao/expedicao/{carga.service.ts,liberacao.service.ts}
 app/backend/src/modules/operacao/recebimento/recebimento.service.ts
@@ -180,16 +182,16 @@ docs/superpowers/plans/2026-07-22-matriz-rastreabilidade-v1.1.md
 
 | DoD | Prova |
 |---|---|
-| DOD11-01 três migrations geradas, contíguas e sem DDL manual | `onda11-migrations-meta.spec.ts` + `npx drizzle-kit check` |
+| DOD11-01 três migrations geradas e contíguas; SQL manual restrito ao backfill 0029 e trigger 0030 | `onda11-migrations-meta.spec.ts` + `npx drizzle-kit check` |
 | DOD11-02 backfill `row_number()` por operação/created_at/id | `onda11-migrations.e2e-spec.ts` |
-| DOD11-03 `pecas.compra_programada_id` NOT NULL e imutável | `onda11-migrations.e2e-spec.ts` + `onda11-multicompra.e2e-spec.ts` |
+| DOD11-03 `pecas.compra_programada_id` NOT NULL e imutável por trigger | `onda11-migrations.e2e-spec.ts`: `23502` para NULL, trigger rejeita troca de UUID e UPDATE de outro campo passa |
 | DOD11-04 N compras e sequenciais sem colisão sob concorrência | `compras-programadas.e2e-spec.ts` |
 | DOD11-05 filtros e payload enriquecido | `compras-programadas.e2e-spec.ts` |
-| DOD11-06 eventos pós-commit, sem emissão em rollback/no-op | `compras-programadas.e2e-spec.ts` |
+| DOD11-06 seis eventos reais e eventos de criar/editar/cancelar pós-commit | `compras-programadas.e2e-spec.ts`: uma emissão por mutação, zero em rollback/no-op |
 | DOD11-07 agregado da disponibilidade e detalhe por compra | `onda11-multicompra.e2e-spec.ts` |
 | DOD11-08 risco no escopo de operação sem falso positivo | `recebimento.e2e-spec.ts` |
 | DOD11-09 mapa V soma múltiplos lotes | `onda11-multicompra.e2e-spec.ts` |
-| DOD11-10 pedido novo grava compra legada NULL e aceita campo antigo | `pedidos-reserva.e2e-spec.ts` |
+| DOD11-10 pedido novo grava compra legada NULL; overbooking `novo_pedido` independe de compra | `pedidos-reserva.e2e-spec.ts` + POST de decisão sem `compraProgramadaId` e chave extra ignorada por Zod |
 | DOD11-11 reserva atravessa lotes FIFO sem alterar motor | `onda11-multicompra.e2e-spec.ts` |
 | DOD11-12 AD-03 e AD-05 preservadas | `pedidos-reserva.e2e-spec.ts` + `pedidos-concorrencia.e2e-spec.ts` |
 | DOD11-13 score dá bônus apenas à reserva coberta pelo lote | `associacao-score.spec.ts` + `compatibilidade.spec.ts` |
@@ -200,9 +202,9 @@ docs/superpowers/plans/2026-07-22-matriz-rastreabilidade-v1.1.md
 | DOD11-18 BFF repassa query e composição | `bff-disponibilidade.test.ts` |
 | DOD11-19 compras master-detail completa | `compras-client.test.tsx` |
 | DOD11-20 pedido seleciona operação e não envia compra | `onda4-pedidos.test.tsx` |
-| DOD11-21 overbooking não escolhe compra arbitrária | `overbooking-client.test.tsx` |
+| DOD11-21 overbooking não escolhe compra arbitrária | `overbooking-client.test.tsx` prova payload `novo_pedido` sem `compraProgramadaId`; compra complementar mantém escolha explícita |
 | DOD11-22 origem sequencial visível em quatro fluxos | testes React de recebimento/pesagem/carga + Playwright O11 |
-| DOD11-23 sem polling e eventos pós-commit | grep de gate + teste de eventos |
+| DOD11-23 sem polling; subscriptions usam os seis nomes reais | grep de gate + `compras-client.test.tsx` + teste backend de eventos |
 | DOD11-24 evidências DS v3 e emenda da matriz | Playwright + diff documental |
 
 ---
@@ -220,7 +222,7 @@ compraProgramadaOrigemId: uuid('compra_programada_origem_id').notNull().referenc
 recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => recebimentos.id)
 ```
 
-- [ ] **Step 1 — RED:** criar `onda11-migrations-meta.spec.ts` exigindo tags 28/29/30, snapshots encadeados e SQL: 0028 remove `uq_compras_prog_operacao`, adiciona `numero_sequencial`, drop NOT NULL apenas de `pedidos_venda.compra_programada_id`, adiciona snapshots nullable; 0029 contém `row_number() over (partition by operacao_id order by created_at, id)` e não contém `CREATE|ALTER|DROP|TRUNCATE`; 0030 seta NOT NULL em sequencial/snapshots e cria `uq_compras_prog_operacao_sequencial`.
+- [ ] **Step 1 — RED:** criar `onda11-migrations-meta.spec.ts` exigindo tags 28/29/30, snapshots encadeados e SQL: 0028 remove `uq_compras_prog_operacao`, adiciona `numero_sequencial`, drop NOT NULL apenas de `pedidos_venda.compra_programada_id`, adiciona snapshots nullable; 0029 contém `row_number() over (partition by operacao_id order by created_at, id)` e não contém `CREATE|ALTER|DROP|TRUNCATE`; 0030 seta NOT NULL em sequencial/snapshots, cria `uq_compras_prog_operacao_sequencial`, a função `pecas_impedir_mutacao_compra_programada` e o trigger `trg_pecas_compra_programada_imutavel`.
 - [ ] **Step 2 — expand schema.** Substituir em `compras-programadas.schema.ts:14-17,31-34`:
   ```ts
   // old_string
@@ -257,7 +259,7 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
   Set-Location app/backend
   npm run db:generate -- --name=onda11_multicompra_expand
   ```
-  Saída: `0028_onda11_multicompra_expand.sql`, snapshot 0028 e journal idx 28. Se o nome/índice divergir, parar.
+  Saída: `0028_onda11_multicompra_expand.sql`, snapshot 0028 e journal idx 28. Se o nome ou índice gerado divergir, **PARAR E REPORTAR** sem renomear arquivo nem editar journal/snapshot.
 - [ ] **Step 6 — gerar custom vazio:**
   ```powershell
   npm run db:generate -- --custom --name=onda11_multicompra_backfill
@@ -317,7 +319,25 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
   npm run db:generate -- --name=onda11_multicompra_contract
   npx drizzle-kit check
   ```
-- [ ] **Step 8 — integração:** banco descartável chega até 0027; inserir 3 compras na mesma operação com `created_at` fora da ordem de UUID; aplicar 0028/29/30; esperar sequenciais 1/2/3 por `created_at,id`; rerun idempotente; esperar `pedidos_venda.compra_programada_id IS NULL` permitido; tentar `pecas.compra_programada_id=NULL` e esperar `23502`; consultar `information_schema.columns.is_nullable='NO'`.
+  Saída: `0030_onda11_multicompra_contract.sql`, snapshot 0030 e journal idx 30. Se o nome ou índice gerado divergir, **PARAR E REPORTAR** sem renomear arquivo nem editar journal/snapshot. No final de `0030_onda11_multicompra_contract.sql`, após o DDL gerado, adicionar literalmente o único DDL manual da migration contract:
+  ```sql
+  CREATE OR REPLACE FUNCTION pecas_impedir_mutacao_compra_programada()
+  RETURNS trigger LANGUAGE plpgsql AS $$
+  BEGIN
+    IF NEW.compra_programada_id IS DISTINCT FROM OLD.compra_programada_id THEN
+      RAISE EXCEPTION 'pecas.compra_programada_id is immutable (AD-14)';
+    END IF;
+    RETURN NEW;
+  END;
+  $$;
+  --> statement-breakpoint
+  CREATE TRIGGER trg_pecas_compra_programada_imutavel
+    BEFORE UPDATE ON pecas
+    FOR EACH ROW
+    EXECUTE FUNCTION pecas_impedir_mutacao_compra_programada();
+  ```
+  PostgreSQL 18 e o projeto aceitam `EXECUTE FUNCTION`; usar essa forma literal. Não criar lógica equivalente em service.
+- [ ] **Step 8 — integração:** banco descartável chega até 0027; inserir 3 compras na mesma operação com `created_at` fora da ordem de UUID; aplicar 0028/29/30; esperar sequenciais 1/2/3 por `created_at,id`; rerun idempotente; esperar `pedidos_venda.compra_programada_id IS NULL` permitido; tentar `pecas.compra_programada_id=NULL` e esperar `23502`; consultar `information_schema.columns.is_nullable='NO'`. Inserir duas compras e uma peça válida ligada à primeira; executar `UPDATE pecas SET compra_programada_id = '<uuid-da-segunda>' WHERE id = '<peca-id>'` e esperar exceção contendo `pecas.compra_programada_id is immutable (AD-14)`; executar `UPDATE pecas SET peso_original = peso_original WHERE id = '<peca-id>'` e esperar sucesso. A prova de imutabilidade é o trigger, não apenas `.notNull()`.
 - [ ] **Step 9 — drift:** `npm run db:generate -- --name=onda11_drift_probe` deve responder `No schema changes, nothing to migrate`, sem criar 0031.
 - [ ] **GREEN:** `npm test -- onda11-migrations --runInBand` → 2 suítes verdes; `npx drizzle-kit check` → `Everything's fine`.
 - [ ] **Commit do Worker:** `feat(onda11): gerar migrations expand backfill contract multicompra`.
@@ -326,9 +346,9 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
 
 ## Task 2 — SAM-111 T03 — Compras: sequencial, filtros e eventos
 
-**Files:** `compra-programada.dto.ts:16-26`, controller `:27-31`, service `:42-49,78-175,367-428`, `compras-programadas.e2e-spec.ts:202-228`.
+**Files:** `compra-programada.dto.ts:16-26`, controller `:27-31`, `compras-programadas.service.ts:42-49,78-175,177-210,367-459`, `realtime/events/eventos.ts:4-79,129-142,429-500`, `compras-programadas.e2e-spec.ts:202-228`.
 
-- [ ] **Step 1 — RED:** inverter o teste `uma compra ATIVA...` para criar duas compras no mesmo dia e esperar `201`, `numeroSequencial` 1 e 2; adicionar `Promise.all` com 20 POSTs na mesma operação e esperar conjunto exato 1..20 sem erro/duplicata.
+- [ ] **Step 1 — RED:** inverter o teste `uma compra ATIVA...` para criar duas compras no mesmo dia e esperar `201`, `numeroSequencial` 1 e 2; adicionar `Promise.all` com 20 POSTs na mesma operação e esperar conjunto exato 1..20 sem erro/duplicata. Espionar `EventEmitter2.emit`: criar, atualizar e cancelar emitem exatamente uma vez, respectivamente, `COMPRA_CRIADA`, `COMPRA_ATUALIZADA` e `COMPRA_CANCELADA`; forçar erro antes do commit em cada mutação e esperar zero emissão.
 - [ ] **Step 2 — query DTO:** importar `listarQuerySchema` e adicionar:
   ```ts
   export const listarComprasProgramadasSchema = listarQuerySchema.extend({
@@ -390,7 +410,84 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
   if (!sequencia) throw new Error('Falha ao calcular número sequencial da compra');
   ```
   e inserir `numeroSequencial: sequencia.proximo` em `.values`.
-- [ ] **Step 6 — eventos:** preservar literalmente emissão pós-commit `:411-425`; acrescentar `operacaoId` e `numeroSequencial` aos payloads sem mover `emit` para a transação. Testar que compra confirmada emite uma vez e confirmação idempotente não duplica `COMPRA_CONFIRMADA/DISPONIBILIDADE_GERADA`.
+- [ ] **Step 6 — catálogo de eventos:** em `eventos.ts`, imediatamente após `DISPONIBILIDADE_GERADA`, adicionar:
+  ```ts
+  COMPRA_CRIADA: 'compra_programada_criada',
+  COMPRA_ATUALIZADA: 'compra_programada_atualizada',
+  COMPRA_CANCELADA: 'compra_programada_cancelada',
+  ```
+  Adicionar o contrato:
+  ```ts
+  export interface CompraMutadaPayload {
+    compraId: string;
+    operacaoId: string;
+    dataOperacao: string;
+    numeroSequencial?: number;
+  }
+  ```
+  Ampliar literalmente `CompraConfirmadaPayload` e `DisponibilidadeGeradaPayload` com:
+  ```ts
+  operacaoId: string;
+  numeroSequencial?: number;
+  ```
+  e estas entradas literais em `PayloadPorEvento`:
+  ```ts
+  compra_programada_criada: CompraMutadaPayload;
+  compra_programada_atualizada: CompraMutadaPayload;
+  compra_programada_cancelada: CompraMutadaPayload;
+  ```
+- [ ] **Step 7 — emits pós-commit:** em `criar`, substituir o retorno posterior à transação:
+  ```ts
+  // old_string
+  return this.detalhar(compraId);
+  ```
+  por:
+  ```ts
+  // new_string
+  const compra = await this.detalhar(compraId);
+  this.eventEmitter.emit(EVENTOS.COMPRA_CRIADA, {
+    compraId: compra.id,
+    operacaoId: compra.operacaoId,
+    dataOperacao: compra.dataOperacao,
+    numeroSequencial: compra.numeroSequencial,
+  });
+  return compra;
+  ```
+  No retorno posterior à transação de `atualizar`, substituir:
+  ```ts
+  // old_string
+  return this.detalhar(compraId);
+  ```
+  por:
+  ```ts
+  // new_string
+  const compra = await this.detalhar(compraId);
+  this.eventEmitter.emit(EVENTOS.COMPRA_ATUALIZADA, {
+    compraId: compra.id,
+    operacaoId: compra.operacaoId,
+    dataOperacao: compra.dataOperacao,
+    numeroSequencial: compra.numeroSequencial,
+  });
+  return compra;
+  ```
+  No retorno posterior à transação de `cancelar`, substituir:
+  ```ts
+  // old_string
+  return this.detalhar(compraId);
+  ```
+  por:
+  ```ts
+  // new_string
+  const compra = await this.detalhar(compraId);
+  this.eventEmitter.emit(EVENTOS.COMPRA_CANCELADA, {
+    compraId: compra.id,
+    operacaoId: compra.operacaoId,
+    dataOperacao: compra.dataOperacao,
+    numeroSequencial: compra.numeroSequencial,
+  });
+  return compra;
+  ```
+  Esses três blocos ficam depois de `await this.db.transaction(...)`; nunca emitir dentro da callback transacional. Preservar as emissões pós-commit de `confirmar` e `atualizarItem`; acrescentar literalmente `operacaoId: compra.operacaoId` e `numeroSequencial: compra.numeroSequencial` aos payloads de `COMPRA_CONFIRMADA` e `DISPONIBILIDADE_GERADA`. Testar que confirmação emite uma vez e confirmação idempotente não duplica `COMPRA_CONFIRMADA`/`DISPONIBILIDADE_GERADA`; rollback de qualquer mutação emite zero evento.
 - [ ] **GREEN:** `npm test -- compras-programadas --runInBand` → todos verdes, incluindo concorrência.
 - [ ] **Commit:** `feat(onda11): numerar e listar multiplas compras por operacao`.
 
@@ -404,7 +501,52 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
 - [ ] **Step 2 — DTO:** adicionar `operacaoId?: uuid`. Exigir via `superRefine` pelo menos um entre `operacaoId`, `dataOperacao`, `compraProgramadaId` para evitar leitura global ambígua.
 - [ ] **Step 3 — agregado.** Substituir `listar` por dois helpers:
   ```ts
-  private listarPorCompra(compraProgramadaId: string) { /* select atual por compra */ }
+  private async listarPorCompra(query: { dataOperacao?: string; compraProgramadaId: string }) {
+    if (query.dataOperacao) {
+      return this.db
+        .select({
+          modo: sql<'compra'>`'compra'`,
+          id: disponibilidadesVirtuais.id,
+          compraProgramadaId: disponibilidadesVirtuais.compraProgramadaId,
+          operacaoId: disponibilidadesVirtuais.operacaoId,
+          itemComercialId: disponibilidadesVirtuais.itemComercialId,
+          quantidadeTotalGerada: disponibilidadesVirtuais.quantidadeTotalGerada,
+          quantidadeReservada: disponibilidadesVirtuais.quantidadeReservada,
+          quantidadeDisponivel: disponibilidadesVirtuais.quantidadeDisponivel,
+          quantidadeRecebida: disponibilidadesVirtuais.quantidadeRecebida,
+          quantidadeComDivergencia: disponibilidadesVirtuais.quantidadeComDivergencia,
+          status: disponibilidadesVirtuais.status,
+          createdAt: disponibilidadesVirtuais.createdAt,
+          updatedAt: disponibilidadesVirtuais.updatedAt,
+        })
+        .from(disponibilidadesVirtuais)
+        .innerJoin(operacoes, eq(operacoes.id, disponibilidadesVirtuais.operacaoId))
+        .where(and(
+          eq(operacoes.data, query.dataOperacao),
+          eq(disponibilidadesVirtuais.compraProgramadaId, query.compraProgramadaId),
+        ))
+        .orderBy(disponibilidadesVirtuais.itemComercialId);
+    }
+    return this.db
+      .select({
+        modo: sql<'compra'>`'compra'`,
+        id: disponibilidadesVirtuais.id,
+        compraProgramadaId: disponibilidadesVirtuais.compraProgramadaId,
+        operacaoId: disponibilidadesVirtuais.operacaoId,
+        itemComercialId: disponibilidadesVirtuais.itemComercialId,
+        quantidadeTotalGerada: disponibilidadesVirtuais.quantidadeTotalGerada,
+        quantidadeReservada: disponibilidadesVirtuais.quantidadeReservada,
+        quantidadeDisponivel: disponibilidadesVirtuais.quantidadeDisponivel,
+        quantidadeRecebida: disponibilidadesVirtuais.quantidadeRecebida,
+        quantidadeComDivergencia: disponibilidadesVirtuais.quantidadeComDivergencia,
+        status: disponibilidadesVirtuais.status,
+        createdAt: disponibilidadesVirtuais.createdAt,
+        updatedAt: disponibilidadesVirtuais.updatedAt,
+      })
+      .from(disponibilidadesVirtuais)
+      .where(eq(disponibilidadesVirtuais.compraProgramadaId, query.compraProgramadaId))
+      .orderBy(disponibilidadesVirtuais.itemComercialId);
+  }
 
   private listarAgregado(query: { operacaoId?: string; dataOperacao?: string }) {
     return this.db
@@ -432,7 +574,7 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
       .orderBy(disponibilidadesVirtuais.itemComercialId);
   }
   ```
-  `listar()` escolhe detalhe quando `compraProgramadaId` existe; caso contrário agregado.
+  `listar()` chama `listarPorCompra({ dataOperacao: query.dataOperacao, compraProgramadaId: query.compraProgramadaId })` quando `compraProgramadaId` existe; caso contrário chama `listarAgregado(query)`.
 - [ ] **Step 4 — risco:** trocar assinatura para `(tx, operacaoId, itemComercialId)`. A CTE `disp` filtra `operacao_id`; `reservas_ativas` entra por `pedidos_venda.operacao_id`; `total_recebido` soma todas as linhas da operação. O resultado usa o mesmo total recebido para pedidos da operação.
 - [ ] **Step 5 — callers:** em `recebimento.service.ts`, passar `ctx.operacaoId`, não `ctx.compraProgramadaId`, nos dois pontos. `gerarParaCompra` e `aplicarRecebimentoDelta` permanecem byte a byte por compra.
 - [ ] **Step 6 — falso positivo:** compra 001 recebe 4 de 6, compra 002 recebe 6 de 4, reserva total 10; `listarPedidosEmRisco` retorna `[]`. Com recebido total 9, retorna pedidos ativos da operação.
@@ -525,7 +667,7 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
 
 **Files:** `pesagem.schema.ts:53-86`, todos os inserts localizados em `associacao.service.ts:417-444`, `troca-peca.service.ts:160-178`, `carga.service.ts:234-245`, `estoque/destinar.service.ts:84-138`; `pedidos.controller.ts`; `pedidos.service.ts`.
 
-- [ ] **Step 1 — RED:** após confirmar/redirecionar/trocar/destinar, toda linha de histórico tem compra e recebimento de origem. Adicionar teste de schema que falha se `pecas.compra_programada_id` for nullable.
+- [ ] **Step 1 — RED:** após confirmar/redirecionar/trocar/destinar, toda linha de histórico tem compra e recebimento de origem. Reusar a prova da Task 1: schema rejeita NULL e `trg_pecas_compra_programada_imutavel` rejeita troca do UUID; UPDATE de outro campo passa. Confirmar por busca estática que nenhum service contém `SET compra_programada_id` ou `.set({ compraProgramadaId:` para `pecas`.
 - [ ] **Step 2 — helper obrigatório:** criar em `associacao.service.ts` helper que recebe `pecaId` e carrega `{ compraProgramadaId, recebimentoId }`; `gravarHistorico` sempre inclui ambos. Nos inserts diretos de troca/carga/estoque, carregar origem da peça ou `subitem→peca`.
 - [ ] **Step 3 — endpoint:** em `PedidosController`, antes de `@Get(':id')`, adicionar:
   ```ts
@@ -592,7 +734,7 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
   setCompra(confirmacao.compra);
   ```
 - [ ] **Step 7 — detalhe de disponibilidade:** carregar `?compraProgramadaId=${compra.id}` para o painel do detalhe; o master não mistura saldo de outros lotes.
-- [ ] **Step 8 — realtime:** conectar à room da operação e, em `compra_confirmada|disponibilidade_gerada|compra_alterada_impacto`, refazer lista/detalhe. Sem timer.
+- [ ] **Step 8 — realtime:** conectar à room da operação e refazer lista/detalhe ao receber qualquer um dos seis nomes reais: `compra_programada_criada`, `compra_programada_atualizada`, `compra_programada_cancelada`, `compra_programada_confirmada`, `disponibilidade_virtual_gerada`, `compra_programada_alterada_impacto`. Sem timer. O teste dispara cada nome e comprova a atualização; nomes abreviados não são usados.
 - [ ] **Step 9 — terminologia:** fornecedor exibe `fornecedorNomeFantasia ?? fornecedorRazaoSocial`; grep de rótulo isolado “Marca” vazio.
 - [ ] **GREEN:** `npm test -- compras-client --runInBand`.
 - [ ] **Commit:** `feat(onda11): transformar compras em master detail multicompra`.
@@ -601,9 +743,9 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
 
 ## Task 9 — SAM-118 T10 — Editor de pedido e overbooking
 
-**Files:** `pedidos-client.tsx:92-132,241-249`, `pedido-editor.tsx:52-61,104-138,319-333,486-498`, `overbooking-client.tsx:302-316,350-363,440-488`; testes.
+**Files:** `pedidos-client.tsx:92-132,241-249`, `pedido-editor.tsx:52-61,104-138,319-333,486-498`, `overbooking-client.tsx:302-316,350-363,440-488`, backend `overbooking/dto/overbooking.dto.ts:17-37`, `overbooking/overbooking.service.ts:516-584`; `pedidos-reserva.e2e-spec.ts`, testes frontend `onda4-pedidos` e `overbooking-client`.
 
-- [ ] **Step 1 — RED:** catálogo passa a buscar `/api/operacoes`; selector usa `operacao.id`; payload contém `operacaoId/dataOperacao` e não contém `compraProgramadaId`.
+- [ ] **Step 1 — RED:** catálogo passa a buscar `/api/operacoes`; selector usa `operacao.id`; payload do editor contém `operacaoId/dataOperacao` e não contém `compraProgramadaId`. No backend, `POST` de decisão `novo_pedido` sem `compraProgramadaId` retorna `200/201`, cria pedido com `compra_programada_id IS NULL` e `operacao_id` igual à operação destino. Repetir com `compraProgramadaId` extra no body e esperar o mesmo resultado: `z.object` faz strip da chave não declarada. No frontend, postergar envia exatamente `{ caminho: 'novo_pedido', operacaoDestinoId, quantidade }`; compra complementar continua enviando `compraProgramadaId` explicitamente.
 - [ ] **Step 2 — parent:** trocar estado/prop `compras` por `operacoes: Operacao[]`; usar `listarOperacoes()` ou `/api/operacoes?limite=100`; não filtrar compras.
 - [ ] **Step 3 — editor:** substituir estado `compraProgramadaId`/`compraSelecionada` por `operacaoId`/`operacaoSelecionada`. Substituir o bloco `pedido-editor.tsx:486-498` por:
   ```tsx
@@ -635,7 +777,119 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
   clienteId,
   dataOperacao: operacaoSelecionada.data,
   ```
-- [ ] **Step 5 — overbooking:** “Compra complementar” mantém escolha explícita do card. “Postergar” deixa de depender de `comprasComplementares[0]` e envia somente `operacaoDestinoId`, `quantidade`; backend de decisão resolve pelo pool da operação, sem compra arbitrária. Atualizar contrato/serviço de overbooking se o schema atual exigir compra.
+- [ ] **Step 5 — DTO overbooking literal:** em `overbooking.dto.ts`, substituir:
+  ```ts
+  // old_string
+  z.object({
+    caminho: z.literal('novo_pedido'),
+    operacaoDestinoId: z.string().uuid(),
+    compraProgramadaId: z.string().uuid(),
+    quantidade: z.string().regex(/^\d+(\.\d{1,3})?$/),
+    observacao: z.string().trim().max(500).optional(),
+  }),
+  ```
+  por:
+  ```ts
+  // new_string
+  z.object({
+    caminho: z.literal('novo_pedido'),
+    operacaoDestinoId: z.string().uuid(),
+    quantidade: z.string().regex(/^\d+(\.\d{1,3})?$/),
+    observacao: z.string().trim().max(500).optional(),
+  }),
+  ```
+  Não aplicar `.strict()`: Zod 4 mantém o comportamento padrão de strip, portanto `compraProgramadaId` extra é ignorado e não chega ao service.
+- [ ] **Step 6 — service overbooking literal:** em `aplicarNovoPedido`, remover integralmente:
+  ```ts
+  // old_string
+  const compra = await tx.select({ id: comprasProgramadas.id }).from(comprasProgramadas)
+    .where(and(
+      eq(comprasProgramadas.id, dto.compraProgramadaId),
+      eq(comprasProgramadas.operacaoId, destino.id),
+      ne(comprasProgramadas.status, 'cancelada'),
+      isNull(comprasProgramadas.deletedAt),
+    )).then((r) => r[0]);
+  if (!compra) {
+    throw new ConflictException('Compra programada não pertence à operação de destino ou está cancelada');
+  }
+  ```
+  Substituir a chamada:
+  ```ts
+  // old_string
+  const novoPedido = await this.pedidos.criarNaTx(tx, {
+    compraProgramadaId: compra.id,
+    clienteId: pendencia.clienteId,
+    dataOperacao: destino.data,
+    observacoesGerais: motivo,
+    salvarComoRascunho: false,
+  ```
+  por:
+  ```ts
+  // new_string
+  const novoPedido = await this.pedidos.criarNaTx(tx, {
+    operacaoId: destino.id,
+    clienteId: pendencia.clienteId,
+    dataOperacao: destino.data,
+    observacoesGerais: motivo,
+    salvarComoRascunho: false,
+  ```
+  preservando literalmente o array `itens` e os argumentos finais existentes. Na Task 4, `criarNaTx` grava `compraProgramadaId: null`; não passar essa propriedade neste call site. Em `detalhe`, substituir:
+  ```ts
+  // old_string
+  operacaoDestinoId: destino.id,
+  compraProgramadaId: compra.id,
+  itemOrigemRemovido: ehZero(novaQuantidade),
+  novoPedidoId: novoPedido.pedido.id,
+  ```
+  por:
+  ```ts
+  // new_string
+  operacaoDestinoId: destino.id,
+  itemOrigemRemovido: ehZero(novaQuantidade),
+  novoPedidoId: novoPedido.pedido.id,
+  ```
+  Remover `comprasProgramadas` do import de schema; manter `ne` porque ele continua usado em outros métodos do mesmo service.
+- [ ] **Step 7 — frontend overbooking literal:** “Compra complementar” conserva o payload atual com `compraProgramadaId: c.compraProgramadaId`. No card de “Postergar”, substituir:
+  ```tsx
+  // old_string
+  {cobertura?.proximaOperacao && cobertura.comprasComplementares[0] ? (
+  ```
+  por:
+  ```tsx
+  // new_string
+  {cobertura?.proximaOperacao ? (
+  ```
+  No conteúdo do modal, substituir:
+  ```tsx
+  // old_string
+  {selecionada && cobertura?.proximaOperacao && cobertura.comprasComplementares[0] && (
+  ```
+  por:
+  ```tsx
+  // new_string
+  {selecionada && cobertura?.proximaOperacao && (
+  ```
+  No handler, substituir:
+  ```ts
+  // old_string
+  if (!selecionada || !cobertura?.proximaOperacao || !cobertura.comprasComplementares[0]) return;
+  void decidir({
+    caminho: 'novo_pedido',
+    operacaoDestinoId: cobertura.proximaOperacao.id,
+    compraProgramadaId: cobertura.comprasComplementares[0].compraProgramadaId,
+    quantidade: Number(qtdPostergar).toFixed(3),
+  });
+  ```
+  por:
+  ```ts
+  // new_string
+  if (!selecionada || !cobertura?.proximaOperacao) return;
+  void decidir({
+    caminho: 'novo_pedido',
+    operacaoDestinoId: cobertura.proximaOperacao.id,
+    quantidade: Number(qtdPostergar).toFixed(3),
+  });
+  ```
 - [ ] **GREEN:** `npm test -- onda4-pedidos overbooking-client --runInBand`.
 - [ ] **Commit:** `feat(onda11): selecionar operacao real em pedidos`.
 
@@ -661,7 +915,7 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
 **Files:** testes integration existentes, novo `onda11-multicompra.e2e-spec.ts`, `onda5-gestao.spec.ts:211-223`, Playwright O11, evidências e matriz.
 
 - [ ] **Step 1 — inverter teste legado:** o teste `compras-programadas.e2e-spec.ts:202-228` passa a afirmar N compras, não erro.
-- [ ] **Step 2 — cenários backend obrigatórios no novo spec:** reserva FIFO 6+4 em duas disponibilidades; pedido legado nullable; continuidade física 6 peças do lote 001 + 4 do 002; composição/snapshots; score; bloqueio interoperações; conferência tripla independente dos dois lotes; risco sem falso positivo; 20 compras concorrentes com sequenciais únicos; tentativa de null/mudança de `pecas.compra_programada_id`; overbooking AD-05.
+- [ ] **Step 2 — cenários backend obrigatórios no novo spec:** reserva FIFO 6+4 em duas disponibilidades; pedido legado nullable; continuidade física 6 peças do lote 001 + 4 do 002; composição/snapshots; score; bloqueio interoperações; conferência tripla independente dos dois lotes; risco sem falso positivo; 20 compras concorrentes com sequenciais únicos; tentativa de NULL em `pecas.compra_programada_id` rejeitada por NOT NULL; troca do UUID rejeitada por `trg_pecas_compra_programada_imutavel`; UPDATE de outro campo da peça permitido; overbooking AD-05; decisão `novo_pedido` sem compra cria pedido na operação destino com compra NULL e chave extra `compraProgramadaId` é ignorada.
 - [ ] **Step 3 — helper Playwright:** substituir `selecionarDataCompras` em `onda5-gestao.spec.ts:211-223` para navegar:
   ```ts
   await page.goto(`/gestao/compras?dataOperacao=${dataOperacao}&compraId=${compraId}`);
@@ -675,10 +929,12 @@ recebimentoOrigemId: uuid('recebimento_origem_id').notNull().references(() => re
   ```powershell
   rg "planejarSobLock" app/backend/src/modules/comercial/pedidos/pedidos.service.ts
   rg "compraProgramadaId:\s+uuid\('compra_programada_id'\)\.notNull" app/backend/src/database/schema/pesagem.schema.ts
+  rg "trg_pecas_compra_programada_imutavel|pecas_impedir_mutacao_compra_programada" app/backend/src/database/migrations/0030_onda11_multicompra_contract.sql
+  rg "SET\s+compra_programada_id|\.set\(\{\s*compraProgramadaId" app/backend/src/modules
   rg "setInterval|setTimeout\(.*carregar|poll" app/frontend/src/app app/frontend/src/lib
   rg "\bMarca\b" app/frontend/src/app/(admin)/gestao/compras app/frontend/src/app/(admin)/comercial/pedidos
   ```
-  Esperado: motor presente e sem diff; peça NOT NULL presente; zero polling novo; zero rótulo isolado banido.
+  Esperado: motor presente e sem diff; peça NOT NULL presente; função e trigger presentes em 0030; busca por mutação da coluna física vazia; zero polling novo; zero rótulo isolado banido.
 - [ ] **GREEN:** todos os cenários e evidências presentes.
 - [ ] **Commit:** `test(onda11): cobrir jornada multicompra ponta a ponta`.
 
@@ -740,13 +996,13 @@ O body registra AD-14, SHA base/head, migrations/hashes, comandos/resultados, DO
 ## Self-Review
 
 - [ ] AD-14 aplicada sem reabertura.
-- [ ] `pecas.compra_programada_id` continua NOT NULL e imutável em schema, migration e runtime.
+- [ ] `pecas.compra_programada_id` continua NOT NULL e o trigger contract rejeita troca de UUID; UPDATE de outro campo continua permitido.
 - [ ] Cadeia física continua por lote; conferências dos lotes são independentes.
 - [ ] `listarPedidosEmRisco` usa operação, não compra.
 - [ ] Sequencial concorrente usa lock da operação + índice parcial; zero sucesso silencioso.
 - [ ] `planejarSobLock` não tem diff.
 - [ ] `uq_disp_compra_item` não tem diff.
-- [ ] Eventos continuam pós-commit; zero polling.
+- [ ] Os seis eventos usam nomes reais; criar/atualizar/cancelar emitem uma vez pós-commit e rollback não emite; zero polling.
 - [ ] AD-03/AD-05 preservadas.
 - [ ] BFF sem regra de negócio.
 - [ ] DS v3/AD-10 citado por tela; protótipo inacessível não foi usado.
@@ -766,7 +1022,7 @@ A matriz atual **não possui linha “Onda 11”**. A linha 10 (`docs/superpower
 Na Task 11, substituir a linha 10 inteira pelo texto literal:
 
 ```markdown
-| 10 | `/gestao/compras` | Compras / Pedidos de Compra em master-detail (N compras por Operação, `numero_sequencial`, desdobramento Boi Casado, edição com painel de impacto) | `comercial/compras-programadas` (+ `operacoes`, `disponibilidade`) | `compras_programadas`, `compras_programadas_itens`, `operacoes`, `regras_desdobramento_comercial`, `disponibilidades_virtuais` | CRUD + `/confirmar`, `GET /:id/impacto`, filtros `operacaoId`/`dataOperacao`/`status`/`fornecedorId`; eventos `COMPRA_CONFIRMADA`, `DISPONIBILIDADE_GERADA`, `COMPRA_ALTERADA_IMPACTO` pós-commit | `compras`, `gestor`, `administrador`; consulta: `comercial` | **Conforme — Onda 11 / AD-14** | AD-14; AD-10; v1.1 §6.1/§8.3; doc 04 §2.2 | N compras por operação com sequencial concorrente; disponibilidade comercial agregada como pool `(operacao, item_comercial)` e reserva FIFO entre compras. Pedido de venda pertence à operação (`compra_programada_id` legado nullable). Cadeia física permanece por lote: pedido ao fornecedor, recebimento, NF, conferência tripla e `pecas.compra_programada_id` obrigatório/imutável. UI master-detail fiel ao DS v3 (AD-10). Composição do boi casado permanece AD-01: 2 TZ + 2 DT + 2 PA. |
+| 10 | `/gestao/compras` | Compras / Pedidos de Compra em master-detail (N compras por Operação, `numero_sequencial`, desdobramento Boi Casado, edição com painel de impacto) | `comercial/compras-programadas` (+ `operacoes`, `disponibilidade`) | `compras_programadas`, `compras_programadas_itens`, `operacoes`, `regras_desdobramento_comercial`, `disponibilidades_virtuais` | CRUD + `/confirmar`, `GET /:id/impacto`, filtros `operacaoId`/`dataOperacao`/`status`/`fornecedorId`; eventos `COMPRA_CRIADA`, `COMPRA_ATUALIZADA`, `COMPRA_CANCELADA`, `COMPRA_CONFIRMADA`, `DISPONIBILIDADE_GERADA`, `COMPRA_ALTERADA_IMPACTO` pós-commit | `compras`, `gestor`, `administrador`; consulta: `comercial` | **Conforme — Onda 11 / AD-14** | AD-14; AD-10; v1.1 §6.1/§8.3; doc 04 §2.2 | N compras por operação com sequencial concorrente; disponibilidade comercial agregada como pool `(operacao, item_comercial)` e reserva FIFO entre compras. Pedido de venda pertence à operação (`compra_programada_id` legado nullable). Cadeia física permanece por lote: pedido ao fornecedor, recebimento, NF, conferência tripla e `pecas.compra_programada_id` obrigatório/imutável por trigger. UI master-detail fiel ao DS v3 (AD-10). Composição do boi casado permanece AD-01: 2 TZ + 2 DT + 2 PA. |
 ```
 
 Acrescentar em “Mecânicas transversais”, após “Consumo automático físico → virtual → overbooking”, a linha literal:
