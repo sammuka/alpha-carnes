@@ -352,7 +352,7 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
                   <CardTitle>3. Postergar para próxima operação</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {cobertura?.proximaOperacao && cobertura.comprasComplementares[0] ? (
+                  {cobertura?.proximaOperacao ? (
                     <>
                       <p className="text-xs text-muted-foreground">
                         A quantidade postergada gera um novo pedido de venda para o mesmo cliente, a ser atendido em uma próxima operação.
@@ -442,7 +442,7 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
           <DialogHeader>
             <DialogTitle>Postergar para Próxima Operação</DialogTitle>
           </DialogHeader>
-          {selecionada && cobertura?.proximaOperacao && cobertura.comprasComplementares[0] && (
+          {selecionada && cobertura?.proximaOperacao && (
             <div className="flex flex-col gap-3 px-4">
               <div className="flex items-start gap-2 rounded-lg border border-primary-soft-border bg-primary-soft p-3">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-fg" />
@@ -480,11 +480,10 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
             <Button variant="ghost" onClick={() => setModalPostergar(false)}>Cancelar</Button>
             <Button
               onClick={() => {
-                if (!selecionada || !cobertura?.proximaOperacao || !cobertura.comprasComplementares[0]) return;
+                if (!selecionada || !cobertura?.proximaOperacao) return;
                 void decidir({
                   caminho: 'novo_pedido',
                   operacaoDestinoId: cobertura.proximaOperacao.id,
-                  compraProgramadaId: cobertura.comprasComplementares[0].compraProgramadaId,
                   quantidade: Number(qtdPostergar).toFixed(3),
                 });
                 setModalPostergar(false);

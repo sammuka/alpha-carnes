@@ -30,7 +30,6 @@ export const decidirPendenciaSchema = z.discriminatedUnion('caminho', [
   z.object({
     caminho: z.literal('novo_pedido'),
     operacaoDestinoId: z.string().uuid(),
-    compraProgramadaId: z.string().uuid(),
     quantidade: z.string().regex(/^\d+(\.\d{1,3})?$/),
     observacao: z.string().trim().max(500).optional(),
   }),
