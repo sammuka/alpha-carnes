@@ -341,6 +341,12 @@ export interface CaminhaoDetalhe {
     ordemNaCarga: number | null;
     previsto: number;
     carregado: number;
+    pecas?: Array<{
+      etiqueta: string | null;
+      produtoNome?: string;
+      loteOrigem?: string;
+      numeroSequencial?: number;
+    }>;
   }>;
 }
 
