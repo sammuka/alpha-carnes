@@ -464,7 +464,9 @@ test.describe('Onda 11 — jornada multicompra', () => {
       await shot(page, '03-pesagem-lote.png');
 
       await page.goto('/recebimento/recebimento-carga');
-      await expect(page.getByText(rotuloLote(dados.seq1)).or(page.getByText(`#${rotuloLote(dados.seq1)}`))).toBeVisible({ timeout: 20_000 }).catch(() => undefined);
+      await expect(page.getByRole('heading', { name: 'Recebimento de carga' })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText(rotuloLote(dados.seq1))).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText(rotuloLote(dados.seq2))).toBeVisible();
 
       const caminhao = await backend<{ id: string }>(
         request,
@@ -490,6 +492,13 @@ test.describe('Onda 11 — jornada multicompra', () => {
         tipoOrigem: 'peca',
         id: peca2,
       });
+
+      await page.goto('/carga/planejamento');
+      await expect(page.getByRole('heading', { name: 'Planejamento de Expedição' })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText(`O11${dados.runId.slice(-4)}`)).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText(rotuloLote(dados.seq1))).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByText(rotuloLote(dados.seq2))).toBeVisible();
+
       await backend(
         request,
         adminCookie,

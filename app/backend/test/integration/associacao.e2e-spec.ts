@@ -21,7 +21,7 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
     recebimentoCookies = await loginCookies(app, receb.adminEmail, receb.adminPassword);
     comprasCookies = await loginCookies(app, compras.adminEmail, compras.adminPassword);
     comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
-  }, 60000);
+  }, 180000);
 
   afterAll(async () => {
     await cleanupDb(app);
@@ -257,27 +257,64 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
       dataOperacao: dia,
       quantidade: 10,
     });
-    const peca1 = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c1.recebimentoId,
-      itemComercialBaseId: c1.itemComercialId,
-    });
-    const peca2 = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: rec2,
-      itemComercialBaseId: c1.itemComercialId,
-    });
 
-    const sug1 = await request(srv()).get(`/operacao/pesagem/pecas/${peca1}/sugestao`).set('Cookie', recebimentoCookies);
-    const sug2 = await request(srv()).get(`/operacao/pesagem/pecas/${peca2}/sugestao`).set('Cookie', recebimentoCookies);
+    const idsLote001: string[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      idsLote001.push(await pesarPeca(app, recebimentoCookies, {
+        recebimentoId: c1.recebimentoId,
+        itemComercialBaseId: c1.itemComercialId,
+      }));
+    }
+    const idsLote002: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      idsLote002.push(await pesarPeca(app, recebimentoCookies, {
+        recebimentoId: rec2,
+        itemComercialBaseId: c1.itemComercialId,
+      }));
+    }
+
+    const sug1 = await request(srv()).get(`/operacao/pesagem/pecas/${idsLote001[0]}/sugestao`).set('Cookie', recebimentoCookies);
+    const sug2 = await request(srv()).get(`/operacao/pesagem/pecas/${idsLote002[0]}/sugestao`).set('Cookie', recebimentoCookies);
     expect(sug1.status).toBe(200);
     expect(sug2.status).toBe(200);
     expect(sug1.body.compativeis.some((c: { pedidoVendaItemId: string }) => c.pedidoVendaItemId === pedido.pedidoItemId)).toBe(true);
     expect(sug2.body.compativeis.some((c: { pedidoVendaItemId: string }) => c.pedidoVendaItemId === pedido.pedidoItemId)).toBe(true);
 
-    const ok1 = await request(srv()).post(`/operacao/pesagem/pecas/${peca1}/confirmar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: pedido.pedidoItemId });
-    const ok2 = await request(srv()).post(`/operacao/pesagem/pecas/${peca2}/confirmar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: pedido.pedidoItemId });
-    expect(ok1.status).toBe(201);
-    expect(ok2.status).toBe(201);
-  });
+    for (const pecaId of [...idsLote001, ...idsLote002]) {
+      const ok = await request(srv())
+        .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
+        .set('Cookie', recebimentoCookies)
+        .send({ pedidoVendaItemId: pedido.pedidoItemId });
+      expect(ok.status).toBe(201);
+    }
+
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const pecasPedido = await db.select().from(schema.pecas).where(eq(schema.pecas.pedidoVendaItemId, pedido.pedidoItemId));
+    expect(pecasPedido).toHaveLength(10);
+    expect(pecasPedido.filter((p) => p.compraProgramadaId === c1.compraId)).toHaveLength(6);
+    expect(pecasPedido.filter((p) => p.compraProgramadaId === compra2)).toHaveLength(4);
+    expect(pecasPedido.every((p) => p.compraProgramadaId != null)).toBe(true);
+
+    const item = await db.select().from(schema.pedidosVendaItens).where(eq(schema.pedidosVendaItens.id, pedido.pedidoItemId)).then((r) => r[0]!);
+    expect(item.quantidadeAtendida).toBe('10.000');
+
+    const composicao = await request(srv())
+      .get(`/comercial/pedidos/${pedido.pedidoId}/composicao-lotes`)
+      .set('Cookie', comercialCookies);
+    expect(composicao.status).toBe(200);
+    expect(composicao.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        quantidadeUnidades: 6,
+        compraProgramadaId: c1.compraId,
+        recebimentoId: c1.recebimentoId,
+      }),
+      expect.objectContaining({
+        quantidadeUnidades: 4,
+        compraProgramadaId: compra2,
+        recebimentoId: rec2,
+      }),
+    ]));
+  }, 120000);
 
   it('Onda 11: associacao interoperacao retorna mensagem exata', async () => {
     const { default: request } = await import('supertest');
