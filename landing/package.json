@@ -14,7 +14,7 @@
     "d3": "^7.9.0",
     "lenis": "^1.1.18",
     "marked": "^15.0.6",
-    "mermaid": "^11.4.1"
+    "mermaid": "^11.17.2"
   },
   "devDependencies": {
     "vite": "^6.3.2"
