@@ -29,4 +29,14 @@ describe('FaturamentoClient (Pré-Faturamento) — badge de ambiente', () => {
     render(<FaturamentoClient permissoes={['FATURAMENTO_LER']} />);
     expect(await screen.findByText('Produção EISS')).toBeInTheDocument();
   });
+
+  it('empty state pede selecao de carga sem UUID', async () => {
+    mockFetch(false);
+    render(<FaturamentoClient permissoes={['FATURAMENTO_LER']} mostrarListaCaminhoes />);
+    expect(
+      await screen.findByText('Selecione uma carga abaixo para consultar a consolidação.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('UUID do caminhão')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('ID do Caminhão')).not.toBeInTheDocument();
+  });
 });

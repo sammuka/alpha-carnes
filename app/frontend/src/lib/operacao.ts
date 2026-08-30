@@ -124,6 +124,7 @@ export interface RecebimentoResumo {
   dataOperacao: string;
   status: string;
   codigoLote?: string;
+  fornecedorNome: string;
   progressoBalanca?: number;
 }
 

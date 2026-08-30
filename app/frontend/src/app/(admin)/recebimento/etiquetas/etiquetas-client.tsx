@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
+import { ComboboxField } from '@/components/ui/combobox-field';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
@@ -111,16 +112,17 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
   const [modalCancelar, setModalCancelar] = useState(false);
   const [modalReimprimir, setModalReimprimir] = useState(false);
 
-  const codigoLote = recebimentos.find((r) => r.id === recebimentoId)?.codigoLote
-    ?? recebimentoId.slice(0, 8).toUpperCase();
+  const codigoLote = recebimentos.find((r) => r.id === recebimentoId)?.codigoLote ?? '';
 
   const carregarRecebimentos = useCallback(async () => {
     const res = await fetch('/api/operacao/recebimentos?pageSize=30', { cache: 'no-store' });
-    if (res.ok) {
-      const pag = (await res.json()) as PaginadoRecebimento;
-      setRecebimentos(pag.data);
-      if (pag.data[0] && !recebimentoId) setRecebimentoId(pag.data[0].id);
+    if (!res.ok) {
+      setErro(await mensagemDeErro(res, 'Erro ao carregar recebimentos'));
+      return;
     }
+    const pag = (await res.json()) as PaginadoRecebimento;
+    setRecebimentos(pag.data);
+    if (pag.data[0] && !recebimentoId) setRecebimentoId(pag.data[0].id);
   }, [recebimentoId]);
 
   const carregarEtiquetas = useCallback(async () => {
@@ -206,19 +208,21 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
           <CardTitle>Etiquetas</CardTitle>
           <BadgeCount>{etiquetas.length}</BadgeCount>
           <CardAction>
-            <SelectNative
-              aria-label="Recebimento"
-              selectSize="sm"
-              className="w-[220px]"
-              value={recebimentoId}
-              onChange={(e) => setRecebimentoId(e.target.value)}
-            >
-              {recebimentos.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.dataOperacao} — {r.codigoLote ?? r.id.slice(0, 8)}…
-                </option>
-              ))}
-            </SelectNative>
+            <div className="w-[260px]">
+              <ComboboxField
+                id="etiqueta-recebimento"
+                items={recebimentos.map((r) => ({
+                  id: r.id,
+                  label: `#${r.codigoLote ?? ''} — ${r.fornecedorNome}`,
+                  sublabel: r.status,
+                }))}
+                value={recebimentoId}
+                onChange={setRecebimentoId}
+                placeholder="Recebimento"
+                searchPlaceholder="Buscar recebimento..."
+                emptyText="Nenhum recebimento encontrado."
+              />
+            </div>
             <SelectNative
               aria-label="Estado"
               selectSize="sm"
@@ -265,7 +269,7 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
                     <TableCellCode>
                       <span className="inline-flex items-center gap-1">
                         <QrCode size={13} />
-                        {e.codigo ?? e.pecaId.slice(0, 8)}
+                        {e.codigo ?? '—'}
                       </span>
                     </TableCellCode>
                     <TableCell><StatusPill variant={statusEtiquetaVariant(e)} label={rotuloEtiqueta(e)} /></TableCell>
@@ -353,7 +357,7 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
                         <dt className="text-muted-foreground">Cliente/Pedido</dt>
                         <dd>
                           {selecionada.clienteNome ?? '—'}
-                          {selecionada.pedidoVendaId ? ` · Pedido ${selecionada.pedidoVendaId.slice(0, 8)}…` : ''}
+                          {selecionada.pedidoVendaId ? ' · Pedido vinculado' : ''}
                         </dd>
                       </div>
                       <div><dt className="text-muted-foreground">Representante</dt><dd>{selecionada.representanteNome ?? '—'}</dd></div>
@@ -425,7 +429,7 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
           </DialogHeader>
           {selecionada && (
             <p className="text-[13px] text-fg-secondary">
-              Inclui etiquetas pendentes de impressão. Confirma reimpressão de {selecionada.codigo ?? selecionada.pecaId.slice(0, 8)}?
+              Inclui etiquetas pendentes de impressão. Confirma reimpressão de {selecionada.codigo ?? 'esta etiqueta'}?
             </p>
           )}
           <DialogFooter>
