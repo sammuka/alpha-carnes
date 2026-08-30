@@ -322,7 +322,9 @@ export type StatusCaminhao =
 export interface Caminhao {
   id: string;
   placa: string;
+  motoristaId: string | null;
   motorista: string;
+  rotaId: string | null;
   rota: string | null;
   dataOperacao: string;
   frotaCaminhaoId: string | null;

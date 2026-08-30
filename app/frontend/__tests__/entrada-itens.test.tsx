@@ -39,6 +39,17 @@ function mockFetch() {
     if (u.includes('/api/cadastros/produtos')) {
       return { ok: true, json: async () => ({ data: [produtoCaixaria], total: 1, page: 1, pageSize: 100 }) } as Response;
     }
+    if (u.includes('/api/cadastros/fornecedores')) {
+      return {
+        ok: true,
+        json: async () => ({
+          data: [{ id: 'forn-1', codigo: 'FR-01', razaoSocial: 'Frigorífico Central', status: 'ativo' }],
+          total: 1,
+          page: 1,
+          pageSize: 100,
+        }),
+      } as Response;
+    }
     return { ok: true, json: async () => ({}) } as Response;
   }) as unknown as typeof fetch;
 }
@@ -59,7 +70,8 @@ describe('EntradaItensClient', () => {
     await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
     await userEvent.click(await screen.findByRole('option', { name: new RegExp(produtoCaixaria.nome) }));
     fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '5' } });
-    fireEvent.change(screen.getByPlaceholderText('Ex.: Frigorífico Boi Forte'), { target: { value: 'Frigorífico Central' } });
+    await userEvent.click(screen.getByRole('combobox', { name: 'Fornecedor/origem' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'FR-01 — Frigorífico Central' }));
     fireEvent.click(screen.getByRole('button', { name: 'Pedido' }));
 
     expect(screen.getByRole('button', { name: /Confirmar entrada/ })).toBeDisabled();
@@ -68,6 +80,28 @@ describe('EntradaItensClient', () => {
     fireEvent.click(screen.getByText('Açougue Dois Irmãos'));
 
     expect(screen.getByRole('button', { name: /Confirmar entrada/ })).not.toBeDisabled();
+  });
+
+  it('entrada envia fornecedorId e exibe somente o label', async () => {
+    render(<EntradaItensClient podeRegistrar />);
+    await waitFor(() => expect(screen.getByText('Nova entrada')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
+    await userEvent.click(await screen.findByRole('option', { name: new RegExp(produtoCaixaria.nome) }));
+    fireEvent.change(screen.getByPlaceholderText('0'), { target: { value: '5' } });
+    await userEvent.click(screen.getByRole('combobox', { name: 'Fornecedor/origem' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'FR-01 — Frigorífico Central' }));
+    expect(screen.getByRole('combobox', { name: 'Fornecedor/origem' })).not.toHaveTextContent('forn-1');
+    await userEvent.click(screen.getByRole('button', { name: /Confirmar entrada/ }));
+    await waitFor(() => {
+      const post = (global.fetch as jest.Mock).mock.calls.find(
+        ([url, init]: [string, RequestInit]) =>
+          String(url) === '/api/operacao/estoque/entradas' && init?.method === 'POST',
+      );
+      expect(post).toBeDefined();
+      const payload = JSON.parse(String((post?.[1] as RequestInit).body));
+      expect(payload).toMatchObject({ fornecedorId: 'forn-1' });
+      expect(payload).not.toHaveProperty('fornecedorNome');
+    });
   });
 
   it('placeholder "Buscar cliente" presente (Princípio IX)', async () => {
