@@ -24,7 +24,9 @@ interface CadastroFormProps {
 export function CadastroForm({ config, registro }: CadastroFormProps) {
   const router = useRouter();
   const [erro, setErro] = useState<string | null>(null);
-  const schema = CADASTROS[config.recurso]?.schema;
+  const catalogo = CADASTROS[config.recurso];
+  const schema = catalogo?.schema;
+  const campos = catalogo?.campos ?? config.campos;
 
   const {
     register,
@@ -84,7 +86,7 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="max-w-2xl space-y-3" noValidate>
       <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
-        {config.campos.map((campo) => {
+        {campos.map((campo) => {
           const chave = campo.jsonCampo ? `${campo.jsonCampo}.${campo.nome}` : campo.nome;
           const erroCampo = getFieldState(chave, formState).error?.message;
           return (

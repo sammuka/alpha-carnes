@@ -8,6 +8,7 @@ import { DESCRICOES_PERMISSOES, MAPA_PERFIL_PERMISSOES } from '../common/rbac/pe
 import { MENUS_VISIVEIS_POR_PERFIL } from '../common/rbac/menus-canonicos';
 import { modelosEtiqueta, parametros, perfis } from './schema';
 import { seedCatalogoMvp } from './seed-catalogo-mvp';
+import { seedRegrasDesdobramentoComercial } from './seed-regras-desdobramento-comercial';
 import { seedRegrasTransformacaoTz } from './seed-regras-transformacao-tz';
 
 type Db = NodePgDatabase<typeof schema>;
@@ -409,6 +410,9 @@ export async function seed() {
 
     await seedCatalogoMvp(db);
     console.log('✅ Catálogo MVP (11 pares) semeado — Provisório P11');
+
+    await seedRegrasDesdobramentoComercial(db);
+    console.log('✅ Regras de desdobramento comercial (AD-01 BOI + identidade) semeadas');
 
     await seedRegrasTransformacaoTz(db);
     console.log('✅ Regras TZ A/B provisórias semeadas — P12');

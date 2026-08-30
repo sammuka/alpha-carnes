@@ -19,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { Paginado } from '@/lib/cadastros';
+import type { PaginadoRegras } from '@/lib/desossa';
 import { mensagemDeErro } from '@/lib/error-message';
 import { SimuladorDesdobramento } from './simulador-desdobramento';
 import { SimuladorDesossa } from './simulador-desossa';
@@ -224,9 +225,54 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
               Cada unidade de TZ atende exatamente uma das alternativas abaixo.
             </p>
           </div>
+          <AlternativasDesossaTz />
           <SimuladorDesossa />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function AlternativasDesossaTz() {
+  const [nomes, setNomes] = useState<string[]>([]);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch('/api/desossa/regras-transformacao?pageSize=20', { cache: 'no-store' });
+      if (!res.ok) {
+        setErro(await mensagemDeErro(res, 'Erro ao carregar alternativas de TZ'));
+        return;
+      }
+      const paginado = (await res.json()) as PaginadoRegras;
+      setNomes(paginado.data.map((r) => r.nome));
+    })();
+  }, []);
+
+  if (erro) {
+    return <p className="text-sm text-destructive">{erro}</p>;
+  }
+
+  if (nomes.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Nenhuma alternativa de TZ cadastrada. Rode o seed (TZ_A: Coxão-bola + Jacaré; TZ_B: Coxão-bola c/ alcatra + Filé curto).
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid gap-2.5 md:grid-cols-2">
+      {nomes.map((nome) => (
+        <Card key={nome}>
+          <CardHeader>
+            <CardTitle>{nome}</CardTitle>
+            <CardAction>
+              <BadgeProvisorio pendencia="P12" />
+            </CardAction>
+          </CardHeader>
+        </Card>
+      ))}
     </div>
   );
 }

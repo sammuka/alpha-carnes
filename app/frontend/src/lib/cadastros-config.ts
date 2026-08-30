@@ -486,6 +486,26 @@ export const CADASTROS: Record<string, CadastroConfig> = {
   'itens-comerciais': itensComerciaisConfig,
 };
 
+/**
+ * Props seguras para Client Components: schema Zod, ícones Lucide e máscaras
+ * são funções e o Next.js recusa serializá-las (quebra a rota de criação).
+ * O formulário relê schema e máscaras de CADASTROS no cliente.
+ */
+export function configCadastroParaCliente(
+  config: CadastroConfig,
+): Omit<CadastroConfig, 'schema' | 'secoes'> {
+  const { schema: _schema, secoes: _secoes, ...rest } = config;
+  void _schema;
+  void _secoes;
+  return {
+    ...rest,
+    campos: rest.campos.map(({ mascara: _mascara, ...campo }) => {
+      void _mascara;
+      return campo;
+    }),
+  };
+}
+
 export const ABA_LABELS: Record<AbaCadastro, string> = {
   gerais: 'Gerais',
   fiscais: 'Fiscais',

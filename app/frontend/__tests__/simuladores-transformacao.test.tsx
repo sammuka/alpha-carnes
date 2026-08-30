@@ -27,7 +27,7 @@ it('simulador de desossa marca bloqueado e lista alternativas', async () => {
     if (String(url).includes('/produtos')) {
       return Promise.resolve({
         ok: true,
-        json: async () => ({ data: [{ id: 'p1', nome: 'Acém' }] }),
+        json: async () => ({ data: [{ id: 'p1', nome: 'Acém', tipoOperacional: 'derivado_desossa' }] }),
       });
     }
     if (init?.method === 'POST') {
