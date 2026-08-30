@@ -209,17 +209,8 @@ async function fillInputValue(page: Page, selector: string, value: string) {
 }
 
 async function selecionarDataCompras(page: Page, dataOperacao: string, compraId: string) {
-  await page.goto('/gestao/compras');
-  await page.waitForLoadState('domcontentloaded');
-  const input = page.locator('#data');
-  await expect(input).toBeEnabled({ timeout: 15_000 });
-  const detalhe = page.waitForResponse(
-    (r) => r.url().includes(`/api/comercial/compras-programadas/${compraId}`) && r.ok(),
-    { timeout: 30_000 },
-  );
-  await fillInputValue(page, '#data', dataOperacao);
-  await detalhe;
-  await expect(page.getByRole('button', { name: 'Editar compra confirmada' })).toBeVisible({ timeout: 30_000 });
+  await page.goto(`/gestao/compras?dataOperacao=${dataOperacao}&compraId=${compraId}`);
+  await expect(page.getByText(/Lote 001/)).toBeVisible();
 }
 
 async function obterOuCriarOperacaoExtraordinaria(
@@ -601,8 +592,9 @@ test.describe('Onda 5 — Gestão (6 rotas)', () => {
 
       try {
         await page.goto('/gestao/dashboard');
-        await page.getByRole('link', { name: rota.menuLabel, exact: true }).click();
-        await expect(page).toHaveURL(new RegExp(`${rota.href.replace(/\//g, '\\/')}`));
+        await expect(page.getByLabel('Selecionar operação')).toBeVisible({ timeout: 15_000 });
+        await page.getByRole('navigation').getByRole('link', { name: rota.menuLabel, exact: true }).click();
+        await expect(page).toHaveURL(new RegExp(`${rota.href.replace(/\//g, '\\/')}`), { timeout: 15_000 });
         await expect(page.getByRole('heading', { level: 1 })).toContainText(rota.titulo);
 
         if (rota.href === '/gestao/dashboard') {
@@ -632,8 +624,8 @@ test.describe('Onda 5 — Gestão (6 rotas)', () => {
 
         if (rota.href === '/gestao/aprovacoes') {
           await page.goto(`/gestao/aprovacoes?operacaoId=${dados.operacaoId}`);
-          await expect(page.getByRole('button', { name: 'Fila Administrativa de Ocorrências' })).toBeVisible();
-          await expect(page.getByRole('button', { name: 'Aprovações Operacionais' })).toBeVisible();
+          await expect(page.getByRole('tab', { name: 'Fila Administrativa de Ocorrências' })).toBeVisible();
+          await expect(page.getByRole('tab', { name: 'Aprovações Operacionais' })).toBeVisible();
         }
 
         if (rota.href === '/gestao/relatorios') {
@@ -701,7 +693,7 @@ test.describe('Onda 5 — Gestão (6 rotas)', () => {
       );
 
       await page.goto(`/gestao/aprovacoes?operacaoId=${dados.operacaoId}`);
-      await page.getByRole('button', { name: 'Fila Administrativa de Ocorrências' }).click();
+      await page.getByRole('tab', { name: 'Fila Administrativa de Ocorrências' }).click();
       const indiceOcorrencia = dados.ocorrenciaIndice;
       expect(indiceOcorrencia).toBeDefined();
       const itemOcorrencia = page

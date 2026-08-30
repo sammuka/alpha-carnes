@@ -213,7 +213,7 @@ export const clientesConfig: CadastroConfig = {
       tipo: 'text',
       aba: 'fiscais',
       jsonCampo: 'dadosFiscaisJson',
-      maxLength: 30,
+      maxLength: 18,
     },
     {
       nome: 'nome',

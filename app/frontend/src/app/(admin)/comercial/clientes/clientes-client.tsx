@@ -33,6 +33,8 @@ import { useErrosPorCampo } from '@/lib/use-erros-campo';
 const MASCARA_FISCAL: Partial<Record<keyof DadosFiscais, (v: string) => string>> = {
   cep: mascararCep,
   telefoneFiscal: mascararTelefone,
+  // IM não tem pontuação padronizada entre municípios — mantém só dígitos.
+  inscricaoMunicipal: (v: string) => v.replace(/\D/g, ''),
 };
 const MASCARA_CONTATO: Partial<Record<keyof DadosContato, (v: string) => string>> = {
   telefone: mascararTelefone,
@@ -47,8 +49,9 @@ const MAXLENGTH_FISCAL: Partial<Record<keyof DadosFiscais, number>> = {
   bairro: 100,
   cidade: 100,
   uf: 2,
-  inscricaoEstadual: 30,
-  inscricaoMunicipal: 30,
+  // 14 dígitos (leiaute NFe/SEFAZ) + pontuação de exibição por UF — ex.: "123.456.789.000".
+  inscricaoEstadual: 18,
+  inscricaoMunicipal: 15,
 };
 const MAXLENGTH_CONTATO: Partial<Record<keyof DadosContato, number>> = {
   nome: 200,
