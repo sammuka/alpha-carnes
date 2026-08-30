@@ -1,5 +1,31 @@
 # Onda 12 — Domínio de campos controlados na UI — Plano de Implementação
 
+## Emenda 5 — T6 ComboboxField disabled
+
+Esta emenda fecha exclusivamente o achado do Worker na Task 6: depois do empty state, o
+popover do `cmdk` ainda está aberto e tanto o trigger quanto o `CommandInput` possuem
+`role="combobox"`. Em caso de conflito, esta seção prevalece sobre o `it` literal
+`combobox-field.test.tsx › 'DoD 12.4 filtra por label e sublabel, seleciona por teclado e
+limpa opcional'` e sobre a Task 6. Não reabre SAM-166, migrations, FKs, PR nem qualquer
+outro ponto já fechado. O botão “Limpar seleção” permanece irmão do `PopoverTrigger`, sem
+aninhamento, e a seleção filtrada de Norte permanece por `await user.keyboard('{Enter}')`.
+
+No `it` literal, imediatamente antes do `rerender(<ComboboxControl disabled />)`, usar uma
+única sequência, sem alternativa por `data-slot`:
+
+```ts
+await user.keyboard('{Escape}');
+expect(screen.queryByPlaceholderText('Buscar rota')).not.toBeInTheDocument();
+rerender(<ComboboxControl disabled />);
+expect(screen.getByRole('combobox')).toBeDisabled();
+```
+
+`Escape` fecha o popover antes do `rerender`; assim, resta um único elemento com o papel
+`combobox`, o trigger desabilitado. Não alterar `ComboboxField` além do que a Task 6 já pede.
+
+**Estado da Emenda 5:** `ok`. O teste fecha explicitamente o popover antes de consultar o
+único `combobox`, sem decisão ou alternativa residual para o Worker.
+
 ## Emenda 1 — Portão 1
 
 Esta emenda incorpora a decisão do Quality Owner Jefferson em 2026-08-30 e responde ao veredito de Portão 1 de `2026-08-30T14:30:46Z` (plano anterior SHA-256 iniciado por `1721180B`). Em caso de conflito, esta seção prevalece sobre o texto remanescente do plano.
@@ -2329,7 +2355,15 @@ await seedRegrasTransformacaoTz(db);
 ```
 
 - [ ] Manter busca pelo `value={`${item.label} ${item.sublabel ?? ''}`}` e seleção por teclado do `cmdk`.
-- [ ] Testar label, sublabel, teclado, limpeza, disabled e empty state no `it` literal 12.4.
+- [ ] Testar label, sublabel, teclado, limpeza, disabled e empty state no `it` literal 12.4. O botão “Limpar seleção” é irmão do `PopoverTrigger`, e a seleção após filtrar Norte usa `await user.keyboard('{Enter}')`.
+- [ ] Antes do `rerender` disabled, fechar obrigatoriamente o popover e só então consultar o único `combobox`; usar exatamente esta sequência, sem alternativa por `data-slot`:
+
+```ts
+await user.keyboard('{Escape}');
+expect(screen.queryByPlaceholderText('Buscar rota')).not.toBeInTheDocument();
+rerender(<ComboboxControl disabled />);
+expect(screen.getByRole('combobox')).toBeDisabled();
+```
 
 **Commit da Task 6:** `feat(onda12): padronizar domínios pesquisáveis`
 
