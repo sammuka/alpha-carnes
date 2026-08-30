@@ -6,7 +6,7 @@ import {
   ArrowRightLeft, CheckCircle2, ClipboardCheck, MapPin, PackageCheck, Plus, Search, Truck,
 } from 'lucide-react';
 import type { PedidoVenda } from '@/lib/comercial';
-import type { Caminhao, CaminhaoDetalhe } from '@/lib/operacao';
+import type { Caminhao, CaminhaoDetalhe, Romaneio } from '@/lib/operacao';
 import { ROTULO_STATUS_CARGA, rotuloPrioridade } from '@/lib/expedicao-ui';
 import { mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime } from '@/lib/realtime';
@@ -98,9 +98,27 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
 
       const detalhesCam = await Promise.all(
         listaCam.map(async (c) => {
-          const r = await fetch(`/api/operacao/expedicao/caminhoes/${c.id}`);
+          const [r, romRes] = await Promise.all([
+            fetch(`/api/operacao/expedicao/caminhoes/${c.id}`),
+            fetch(`/api/operacao/expedicao/caminhoes/${c.id}/romaneio`),
+          ]);
           if (!r.ok) return null;
-          return lerJson<CaminhaoDetalhe>(r);
+          const detalhe = await lerJson<CaminhaoDetalhe>(r);
+          if (!romRes.ok) return detalhe;
+          const romaneio = await lerJson<Romaneio>(romRes);
+          const pecasPorPedido = new Map(romaneio.pedidos.map((p) => [p.pedidoVendaId, p.itens]));
+          return {
+            ...detalhe,
+            pedidos: detalhe.pedidos.map((p) => ({
+              ...p,
+              pecas: (pecasPorPedido.get(p.pedidoVendaId) ?? []).map((item) => ({
+                etiqueta: item.etiqueta,
+                produtoNome: item.produtoNome,
+                loteOrigem: item.loteOrigem,
+                numeroSequencial: item.numeroSequencial,
+              })),
+            })),
+          };
         }),
       );
       setDetalhes(detalhesCam.filter(Boolean) as CaminhaoDetalhe[]);
@@ -444,6 +462,21 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
                                 <p className="text-[10px] text-muted-foreground">
                                   <span className="font-data">{p.pedidoVendaId.slice(0, 8)}…</span> · previsto {p.previsto} · carregado {p.carregado}
                                 </p>
+                                {p.pecas?.map((peca, pecaIdx) => {
+                                  const lote = peca.loteOrigem
+                                    ?? (peca.numeroSequencial != null
+                                      ? `Lote ${String(peca.numeroSequencial).padStart(3, '0')}`
+                                      : '');
+                                  if (!lote) return null;
+                                  return (
+                                    <p
+                                      key={`${p.pedidoVendaId}-${peca.etiqueta ?? pecaIdx}`}
+                                      className="font-data text-[11px] text-muted-foreground"
+                                    >
+                                      {lote}
+                                    </p>
+                                  );
+                                })}
                               </div>
                             </div>
                           );

@@ -63,6 +63,8 @@ export const associacoesPecaHistorico = pgTable(
     pedidoOrigemId:            uuid('pedido_origem_id').references(() => pedidosVenda.id),
     pedidoDestinoId:           uuid('pedido_destino_id').references(() => pedidosVenda.id),
     pedidoItemDestinoId:       uuid('pedido_item_destino_id').references(() => pedidosVendaItens.id),
+    compraProgramadaOrigemId: uuid('compra_programada_origem_id').notNull().references(() => comprasProgramadas.id),
+    recebimentoOrigemId:      uuid('recebimento_origem_id').notNull().references(() => recebimentos.id),
     acao:                      text('acao').notNull(),
     motivo:                    text('motivo'),
     scoreSugerido:             integer('score_sugerido'),

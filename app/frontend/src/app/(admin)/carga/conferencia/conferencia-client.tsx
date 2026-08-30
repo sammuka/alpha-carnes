@@ -493,6 +493,9 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
                                 <TableCellCode>{item.etiqueta ?? '—'}</TableCellCode>
                                 <TableCell>
                                   <p className="text-[13px] font-semibold text-foreground">{item.produtoNome}</p>
+                                  <p className="font-data text-[11px] text-muted-foreground">
+                                    {item.loteOrigem ?? (item.numeroSequencial != null ? `Lote ${String(item.numeroSequencial).padStart(3, '0')}` : '')}
+                                  </p>
                                   {item.statusCargaItem === 'divergente' && item.divergenciaMotivo && (
                                     <p className="text-[11px] text-destructive">{item.divergenciaMotivo}</p>
                                   )}

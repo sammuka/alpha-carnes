@@ -624,14 +624,14 @@ erDiagram
 
 **Relacionamentos:**
 - 1 CompraProgramada → N CompraProgamadaItem
-- 1 CompraProgramada → N DisponibilidadeVirtual (geradas automaticamente)
-- 1 CompraProgramada → N PedidoVenda
-- 1 CompraProgramada → N Recebimento (geralmente 1 na V1)
+- 1 CompraProgramada → N DisponibilidadeVirtual (geradas automaticamente; origem física do lote)
+- ~~1 CompraProgramada → N PedidoVenda~~ **Superado por [AD-14](../execucao/DECISOES.md):** o pedido de venda pertence à Operação (pool comercial), não a uma compra.
+- 1 CompraProgramada → N Recebimento (cadeia física por lote; geralmente 1 por compra)
 
 **Invariantes de negócio:**
-- Apenas uma CompraProgramada por `dataOperacao` na V1 (constraint UNIQUE).
+- ~~Apenas uma CompraProgramada por `dataOperacao` na V1 (constraint UNIQUE).~~ **Superado por AD-14 (2026-08-27).** N compras coexistem na mesma operação, com `numero_sequencial` único dentro da operação.
 - Disponibilidade virtual só é gerada após status `confirmada`.
-- CompraProgramada `cancelada` não pode ter novos pedidos nem recebimentos.
+- CompraProgramada `cancelada` não pode ter novos recebimentos na cadeia daquele lote.
 - A mudança de status é unidirecional exceto de `rascunho` para `cancelada`.
 
 ---
@@ -1206,9 +1206,9 @@ As seguintes regras atravessam múltiplos domínios e devem ser garantidas pela 
 
 | Código | Regra |
 |--------|-------|
-| **RN-01** | Um pedido pertence a um único lote do dia (`compraProgramadaId` imutável). |
-| **RN-02** | Pedido não pode consumir disponibilidade de mais de uma CompraProgramada. |
-| **RN-03** | Disponibilidade virtual é diária e vinculada ao lote do dia. |
+| **RN-01** | ~~Um pedido pertence a um único lote do dia (`compraProgramadaId` imutável).~~ **AD-14 (lado comercial revogado):** o pedido de venda pertence à operação. **Lado físico preservado:** cada peça continua com `pecas.compra_programada_id` obrigatório e imutável. |
+| **RN-02** | ~~Pedido não pode consumir disponibilidade de mais de uma CompraProgramada.~~ **AD-14 (lado comercial revogado):** a reserva consome FIFO o pool `(operacao, item_comercial)` e pode atravessar compras da mesma operação. A cadeia física (pedido ao fornecedor, recebimento, NF, conferência tripla) permanece por compra. |
+| **RN-03** | ~~Disponibilidade virtual é diária e vinculada ao lote do dia.~~ **AD-14:** a disponibilidade é gerada por compra confirmada e lida como pool por operação e item comercial. O lote físico continua identificável via `disponibilidades_virtuais.compra_programada_id` e `pecas.compra_programada_id`. |
 | **RN-04** | `quantidadeReservada <= quantidadeDisponivel` em DisponibilidadeVirtual — sem overbooking. |
 | **RN-05** | Peca/SubItem tem uma única destinação operacional ativa por vez. |
 | **RN-06** | Peca/SubItem não pode estar em dois pedidos, dois caminhões ou dois estados finais incompatíveis. |

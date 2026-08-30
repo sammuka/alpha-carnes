@@ -260,7 +260,7 @@ describe('AssociacaoService — branches de erro', () => {
     );
   });
 
-  it('confirmar → ConflictException se pedido é de outra compra', async () => {
+  it('confirmar → ConflictException se pedido é de outra operação', async () => {
     const txSelect = jest.fn(() => ({
       from: jest.fn(() => ({
         where: jest.fn(() => Promise.resolve([pecaBase()])),
@@ -271,7 +271,8 @@ describe('AssociacaoService — branches de erro', () => {
                 id: 'pvi-1',
                 pedidoVendaId: 'pv-1',
                 itemComercialId: 'ic-1',
-                compraProgramadaId: 'cp-outra',
+                operacaoId: 'op-outra',
+                pecaOperacaoId: 'op-1',
                 statusPedido: 'em_elaboracao_reserva_ativa',
                 deletedAt: null,
               },

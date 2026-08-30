@@ -1,5 +1,11 @@
 import { INestApplication } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
+import { AuditoriaService } from '../../src/common/auditoria/auditoria.service';
+import { DRIZZLE } from '../../src/database/database.module';
+import * as schema from '../../src/database/schema';
+import { EVENTOS } from '../../src/realtime/events/eventos';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase, lerDisponibilidade } from '../helpers/comercial-fixtures';
 
@@ -199,32 +205,74 @@ describe('Compras programadas e2e (CRUD + RBAC + edição de item)', () => {
     expect(cancelar.status).toBe(409);
   });
 
-  it('uma compra ATIVA por dia: segunda compra no mesmo dia falha (409/500 via unique)', async () => {
+  it('N compras ativas no mesmo dia recebem numeroSequencial 1 e 2', async () => {
     const dia = '2026-08-15';
     const primeira = await request(app.getHttpServer())
       .post('/comercial/compras-programadas')
       .set('Cookie', comprasCookies)
       .send(novaCompra({ dataOperacao: dia }));
     expect(primeira.status).toBe(201);
+    expect(primeira.body.numeroSequencial).toBe(1);
 
     const segunda = await request(app.getHttpServer())
       .post('/comercial/compras-programadas')
       .set('Cookie', comprasCookies)
       .send(novaCompra({ dataOperacao: dia }));
-    expect(segunda.status).toBeGreaterThanOrEqual(400);
+    expect(segunda.status).toBe(201);
+    expect(segunda.body.numeroSequencial).toBe(2);
+  });
 
-    // S2: após cancelar a primeira, o dia é liberado para nova compra.
-    const cancelar = await request(app.getHttpServer())
-      .delete(`/comercial/compras-programadas/${primeira.body.id}`)
-      .set('Cookie', comprasCookies)
-      .send();
-    expect(cancelar.status).toBe(200);
+  it('20 POSTs concorrentes na mesma operacao geram sequenciais 1..20 sem duplicata', async () => {
+    const dia = '2026-11-20';
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    await db.insert(schema.operacoes).values({
+      data: dia,
+      diaSemana: new Date(`${dia}T12:00:00Z`).getUTCDay(),
+      rotulo: 'Op O11 concorrencia',
+    });
+    const respostas = await Promise.all(
+      Array.from({ length: 20 }, () =>
+        request(app.getHttpServer())
+          .post('/comercial/compras-programadas')
+          .set('Cookie', comprasCookies)
+          .send(novaCompra({ dataOperacao: dia })),
+      ),
+    );
+    expect(respostas.every((r) => r.status === 201)).toBe(true);
+    const seqs = respostas
+      .map((r) => r.body.numeroSequencial as number)
+      .sort((a, b) => a - b);
+    expect(seqs).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
+  }, 120_000);
 
-    const terceira = await request(app.getHttpServer())
+  it('listagem escopada filtra, enriquece e ordena por numeroSequencial', async () => {
+    const dia = '2026-11-21';
+    const a = await request(app.getHttpServer())
       .post('/comercial/compras-programadas')
       .set('Cookie', comprasCookies)
       .send(novaCompra({ dataOperacao: dia }));
-    expect(terceira.status).toBe(201);
+    const b = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao: dia }));
+    expect(a.status).toBe(201);
+    expect(b.status).toBe(201);
+
+    const lista = await request(app.getHttpServer())
+      .get(`/comercial/compras-programadas?dataOperacao=${dia}&pageSize=100`)
+      .set('Cookie', comprasCookies);
+    expect(lista.status).toBe(200);
+    const linhas = lista.body.data as Array<{
+      id: string;
+      numeroSequencial: number;
+      fornecedorNomeFantasia: string | null;
+      fornecedorRazaoSocial: string;
+      totalItens: number;
+    }>;
+    expect(linhas.map((l) => l.numeroSequencial)).toEqual([1, 2]);
+    expect(linhas.every((l) => l.fornecedorNomeFantasia === null)).toBe(true);
+    expect(linhas.every((l) => l.fornecedorRazaoSocial === 'Fornecedor F3')).toBe(true);
+    expect(linhas.every((l) => l.totalItens === 1)).toBe(true);
   });
 
   it('todos os retornos publicos derivam dataOperacao da operacao vinculada', async () => {
@@ -294,5 +342,110 @@ describe('Compras programadas e2e (CRUD + RBAC + edição de item)', () => {
       status: 'cancelada',
     });
     expect(cancelada.body.itens).toHaveLength(1);
+  });
+
+  it('criar, atualizar e cancelar emitem exatamente um evento pos-commit', async () => {
+    const emitter = app.get(EventEmitter2);
+    const spy = jest.spyOn(emitter, 'emit');
+    const dia = '2026-11-22';
+
+    spy.mockClear();
+    const criada = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao: dia }));
+    expect(criada.status).toBe(201);
+    expect(spy.mock.calls.filter((c) => c[0] === EVENTOS.COMPRA_CRIADA)).toHaveLength(1);
+
+    spy.mockClear();
+    const atualizada = await request(app.getHttpServer())
+      .patch(`/comercial/compras-programadas/${criada.body.id}`)
+      .set('Cookie', comprasCookies)
+      .send({ observacoes: 'ajuste' });
+    expect(atualizada.status).toBe(200);
+    expect(spy.mock.calls.filter((c) => c[0] === EVENTOS.COMPRA_ATUALIZADA)).toHaveLength(1);
+
+    spy.mockClear();
+    const cancelada = await request(app.getHttpServer())
+      .delete(`/comercial/compras-programadas/${criada.body.id}`)
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(cancelada.status).toBe(200);
+    expect(spy.mock.calls.filter((c) => c[0] === EVENTOS.COMPRA_CANCELADA)).toHaveLength(1);
+    spy.mockRestore();
+  });
+
+  it('rollback de criar/atualizar/cancelar nao emite evento', async () => {
+    const emitter = app.get(EventEmitter2);
+    const auditoria = app.get(AuditoriaService);
+    const emitSpy = jest.spyOn(emitter, 'emit');
+    const registrarSpy = jest.spyOn(auditoria, 'registrar').mockRejectedValue(new Error('falha forçada'));
+    const dia = '2026-11-23';
+
+    emitSpy.mockClear();
+    const criar = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao: dia }));
+    expect(criar.status).toBeGreaterThanOrEqual(400);
+    expect(emitSpy.mock.calls.filter((c) => c[0] === EVENTOS.COMPRA_CRIADA)).toHaveLength(0);
+
+    registrarSpy.mockRestore();
+    const criada = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao: dia }));
+    expect(criada.status).toBe(201);
+
+    jest.spyOn(auditoria, 'registrar').mockRejectedValue(new Error('falha forçada'));
+    emitSpy.mockClear();
+    const atualizar = await request(app.getHttpServer())
+      .patch(`/comercial/compras-programadas/${criada.body.id}`)
+      .set('Cookie', comprasCookies)
+      .send({ observacoes: 'nao deve persistir' });
+    expect(atualizar.status).toBeGreaterThanOrEqual(400);
+    expect(emitSpy.mock.calls.filter((c) => c[0] === EVENTOS.COMPRA_ATUALIZADA)).toHaveLength(0);
+
+    emitSpy.mockClear();
+    const cancelar = await request(app.getHttpServer())
+      .delete(`/comercial/compras-programadas/${criada.body.id}`)
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(cancelar.status).toBeGreaterThanOrEqual(400);
+    expect(emitSpy.mock.calls.filter((c) => c[0] === EVENTOS.COMPRA_CANCELADA)).toHaveLength(0);
+
+    (auditoria.registrar as jest.Mock).mockRestore();
+    emitSpy.mockRestore();
+  });
+
+  it('confirmacao emite uma vez; confirmacao idempotente nao duplica', async () => {
+    const emitter = app.get(EventEmitter2);
+    const spy = jest.spyOn(emitter, 'emit');
+    const dia = '2026-11-24';
+    const criada = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao: dia }));
+    expect(criada.status).toBe(201);
+
+    spy.mockClear();
+    const primeira = await request(app.getHttpServer())
+      .post(`/comercial/compras-programadas/${criada.body.id}/confirmar`)
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(primeira.status).toBe(201);
+    expect(spy.mock.calls.filter((c) => c[0] === EVENTOS.COMPRA_CONFIRMADA)).toHaveLength(1);
+    expect(spy.mock.calls.filter((c) => c[0] === EVENTOS.DISPONIBILIDADE_GERADA)).toHaveLength(1);
+
+    spy.mockClear();
+    const segunda = await request(app.getHttpServer())
+      .post(`/comercial/compras-programadas/${criada.body.id}/confirmar`)
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(segunda.status).toBe(201);
+    expect(segunda.body.jaConfirmada).toBe(true);
+    expect(spy.mock.calls.filter((c) => c[0] === EVENTOS.COMPRA_CONFIRMADA)).toHaveLength(0);
+    expect(spy.mock.calls.filter((c) => c[0] === EVENTOS.DISPONIBILIDADE_GERADA)).toHaveLength(0);
+    spy.mockRestore();
   });
 });
