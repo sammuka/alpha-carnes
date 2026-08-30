@@ -62,10 +62,11 @@ export class CaminhaoService {
         await tx
           .insert(caminhoes)
           .values({
-            frotaCaminhaoId: dto.frotaCaminhaoId,
+            frotaCaminhaoId: dto.frotaCaminhaoId ?? null,
             placa: placa!,
-            motorista: dto.motorista,
-            rota: dto.rota,
+            motoristaId: dto.motoristaId,
+            motorista: dto.motoristaId,
+            rotaId: dto.rotaId ?? null,
             itinerario: dto.itinerario,
             operacaoId: operacao.id,
             observacoes: dto.observacoes,

@@ -138,6 +138,7 @@ export class PedidosService {
           clienteId: pedidosVenda.clienteId,
           operacaoId: pedidosVenda.operacaoId,
           dataEntrega: pedidosVenda.dataEntrega,
+          rotaId: pedidosVenda.rotaId,
           rotaPrevista: pedidosVenda.rotaPrevista,
           prioridade: pedidosVenda.prioridade,
           status: pedidosVenda.status,
@@ -399,7 +400,8 @@ export class PedidosService {
       clienteId: dto.clienteId,
       operacaoId: operacao.id,
       dataEntrega: dto.dataEntrega,
-      rotaPrevista: dto.rotaPrevista ?? (await this.rotaHerdadaDoCliente(tx, dto.clienteId)),
+      rotaId: dto.rotaId ?? null,
+      rotaPrevista: dto.rotaId == null ? (await this.rotaHerdadaDoCliente(tx, dto.clienteId)) : null,
       prioridade: dto.prioridade,
       // AD-06: rascunho também tem reserva ativa; a única diferença é o status inicial.
       status: dto.salvarComoRascunho ? 'rascunho' : 'em_elaboracao_reserva_ativa',

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ufBrasilSchema } from './dominios.dto';
 
 /** Endereço e dados fiscais do cliente (JSONB). */
 export const dadosFiscaisJsonSchema = z
@@ -8,7 +9,7 @@ export const dadosFiscaisJsonSchema = z
     complemento: z.string().trim().max(100).optional(),
     bairro: z.string().trim().max(100).optional(),
     cidade: z.string().trim().max(100).optional(),
-    uf: z.string().trim().max(2).optional(),
+    uf: ufBrasilSchema.optional(),
     cep: z.string().trim().max(10).optional(),
     codigoIbge: z.string().trim().max(10).optional(),
     // IE: até 14 dígitos (leiaute NFe/SEFAZ) + pontuação de exibição por UF (ex.: "123.456.789.000").
@@ -71,6 +72,10 @@ export const contatosFornecedorJsonSchema = z
 export const parametrosOperacionaisJsonSchema = z
   .object({
     romaneioAntecipado: z.boolean().optional(),
+    horarioLimiteRecebimento: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    capacidadeMaximaKg: z.number().int().nonnegative().optional(),
+    toleranciaDivergenciaPercentual: z.number().min(0).max(100).optional(),
+    notaQualidade: z.enum(['A', 'B', 'C']).optional(),
     produtosFornecidos: z.array(z.string()).optional(),
     prazoEntrega: z.number().int().nonnegative().optional(),
   })

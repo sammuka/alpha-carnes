@@ -111,7 +111,7 @@ export class ClientesService {
       const anterior = await this.buscarNoEscopo(id, usuarioId, tx);
       if (!anterior) throw new NotFoundException('Cliente não encontrado');
 
-      if (dto.representanteId !== undefined) {
+      if (dto.representanteId) {
         await this.exigirRepresentanteNoEscopo(tx, dto.representanteId, usuarioId);
       }
 

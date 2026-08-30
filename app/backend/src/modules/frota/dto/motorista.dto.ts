@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fkOpcionalSchema } from '../../../common/dto/dominios.dto';
 
 const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida — use o formato AAAA-MM-DD.');
 
@@ -6,7 +7,7 @@ export const createMotoristaSchema = z.object({
   nome: z.string().trim().min(1).max(200),
   documento: z.string().trim().min(1).max(100),
   telefone: z.string().trim().max(50).optional(),
-  caminhaoPadraoId: z.string().uuid().nullable().optional(),
+  caminhaoPadraoId: fkOpcionalSchema,
   status: z.enum(['ativo', 'inativo']).default('ativo'),
   rg: z.string().trim().max(30).optional(),
   carteiraProfissional: z.string().trim().max(50).optional(),

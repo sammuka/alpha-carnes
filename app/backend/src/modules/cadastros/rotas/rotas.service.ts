@@ -5,7 +5,7 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import { rotas } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
-import { calcularRange, montarPaginado, primeiroOuFalha, type ListarQuery, type Paginado } from '../../../common/crud/paginacao';
+import { calcularRange, montarPaginado, primeiroOuFalha, type ListarCadastroQuery, type Paginado } from '../../../common/crud/paginacao';
 import type { CreateRotaDto, UpdateRotaDto } from './dto/rota.dto';
 
 type Rota = typeof rotas.$inferSelect;
@@ -33,9 +33,10 @@ export class RotasService {
     return [...new Set(dias)].sort((a, b) => ordem.indexOf(a) - ordem.indexOf(b));
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<Rota>> {
+  async listar(query: ListarCadastroQuery): Promise<Paginado<Rota>> {
     const { limit, offset } = calcularRange(query);
     const filtros = [query.incluirRemovidos ? undefined : isNull(rotas.deletedAt)];
+    if (query.status) filtros.push(eq(rotas.status, query.status));
     if (query.search) {
       const termo = `%${query.search}%`;
       filtros.push(or(ilike(rotas.nome, termo), ilike(rotas.codigo, termo), ilike(rotas.regiao, termo)));
@@ -67,9 +68,9 @@ export class RotasService {
             codigo: dto.codigo,
             nome: dto.nome,
             regiao: dto.regiao,
-            representantePadrao: dto.representantePadrao,
-            caminhaoPadrao: dto.caminhaoPadrao,
-            motoristaPadrao: dto.motoristaPadrao,
+            representantePadraoId: dto.representantePadraoId ?? null,
+            caminhaoPadraoId: dto.caminhaoPadraoId ?? null,
+            motoristaPadraoId: dto.motoristaPadraoId ?? null,
             observacoes: dto.observacoes,
             paradas: this.normalizarParadas(dto.paradas),
             diasAtendimento: this.normalizarDias(dto.diasAtendimento),
@@ -105,9 +106,15 @@ export class RotasService {
             codigo: dto.codigo ?? anterior.codigo,
             nome: dto.nome ?? anterior.nome,
             regiao: dto.regiao ?? anterior.regiao,
-            representantePadrao: dto.representantePadrao ?? anterior.representantePadrao,
-            caminhaoPadrao: dto.caminhaoPadrao ?? anterior.caminhaoPadrao,
-            motoristaPadrao: dto.motoristaPadrao ?? anterior.motoristaPadrao,
+            representantePadraoId: dto.representantePadraoId === undefined
+              ? anterior.representantePadraoId
+              : dto.representantePadraoId,
+            caminhaoPadraoId: dto.caminhaoPadraoId === undefined
+              ? anterior.caminhaoPadraoId
+              : dto.caminhaoPadraoId,
+            motoristaPadraoId: dto.motoristaPadraoId === undefined
+              ? anterior.motoristaPadraoId
+              : dto.motoristaPadraoId,
             observacoes: dto.observacoes ?? anterior.observacoes,
             paradas: dto.paradas ? this.normalizarParadas(dto.paradas) : anterior.paradas,
             diasAtendimento: dto.diasAtendimento

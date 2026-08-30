@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { unidadeMedidaSchema } from '../../../../common/dto/dominios.dto';
 
 const tipoOperacionalSchema = z.enum([
   'peca_inteira_pesavel',
@@ -15,7 +16,7 @@ export const createProdutoSchema = z.object({
   nomeOperacional: z.string().trim().max(200).optional(),
   categoria: z.string().trim().max(100).optional(),
   tipoOperacional: tipoOperacionalSchema.optional().default('peca_inteira_pesavel'),
-  unidadePedido: z.string().trim().min(1).max(30),
+  unidadePedido: unidadeMedidaSchema,
   unidadePreco: unidadePrecoSchema.optional().default('kg'),
   exigePeso: z.boolean().optional().default(true),
   passaBalanca: z.boolean().optional().default(false),
