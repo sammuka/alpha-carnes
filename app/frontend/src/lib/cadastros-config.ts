@@ -480,7 +480,6 @@ export const itensComerciaisConfig: CadastroConfig = {
 };
 
 export const CADASTROS: Record<string, CadastroConfig> = {
-  clientes: clientesConfig,
   fornecedores: fornecedoresConfig,
   'itens-compra': itensCompraConfig,
   'itens-comerciais': itensComerciaisConfig,

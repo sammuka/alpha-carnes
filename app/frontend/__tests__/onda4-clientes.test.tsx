@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { clientesConfig } from '@/lib/cadastros-config';
 import { ClientesClient } from '../src/app/(admin)/comercial/clientes/clientes-client';
 
@@ -54,7 +55,7 @@ function instalarFetch() {
     if (url === '/api/cadastros/clientes/cliente-1') return respostaJson(cliente);
     if (url.startsWith('/api/cadastros/representantes')) {
       return respostaJson({
-        data: [{ id: 'representante-1', nome: 'Helena Prado', status: 'ativo' }],
+        data: [{ id: 'representante-1', codigo: 'RP-01', nome: 'Helena Prado', status: 'ativo' }],
         total: 1,
         page: 1,
         pageSize: 100,
@@ -101,6 +102,13 @@ it('clientes exibe as 4 abas do prototipo na ordem', async () => {
   ]);
 });
 
+it('DoD 12.10 cliente mantém o rótulo Nome Fantasia/Marca', async () => {
+  render(<ClientesClient podeGerenciar />);
+  expect(await screen.findByLabelText('Nome Fantasia/Marca')).toBeInTheDocument();
+  expect(screen.queryByLabelText(/^Nome Fantasia$/)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/^Marca$/)).not.toBeInTheDocument();
+});
+
 it('clientes usa Nome Fantasia/Marca e Buscar cliente (AD-13)', async () => {
   const { container } = render(<ClientesClient podeGerenciar />);
   expect(container.innerHTML).not.toMatch(/\bBuscar marca/i);
@@ -134,4 +142,27 @@ it('selects de representante e rota sao populados pela API de cadastros', async 
 it('badge do cabecalho mostra a contagem real de clientes ativos', async () => {
   render(<ClientesClient podeGerenciar={false} />);
   expect(await screen.findByText('37 ativos')).toBeInTheDocument();
+});
+
+it('DoD 12.1 limpa FKs opcionais com JSON null', async () => {
+  const user = userEvent.setup();
+  render(<ClientesClient podeGerenciar />);
+  expect(await screen.findByRole('combobox', { name: 'Representante' })).toHaveTextContent(
+    'RP-01 — Helena Prado',
+  );
+  const limpar = await screen.findAllByRole('button', { name: 'Limpar seleção' });
+  await user.click(limpar[0]!);
+  await user.click(limpar[1]!);
+  await user.click(screen.getByRole('button', { name: 'Salvar' }));
+  await waitFor(() => {
+    const chamada = (global.fetch as jest.Mock).mock.calls.find(
+      ([url, init]: [string, RequestInit]) =>
+        String(url) === '/api/cadastros/clientes/cliente-1' && init?.method === 'PATCH',
+    );
+    expect(chamada).toBeDefined();
+    expect(JSON.parse(String((chamada?.[1] as RequestInit).body))).toMatchObject({
+      representanteId: null,
+      rotaId: null,
+    });
+  });
 });

@@ -36,4 +36,8 @@ describe('configCadastroParaCliente', () => {
       itensComerciaisConfig.campos.length,
     );
   });
+
+  it('DoD 12.1 clientes possui uma única UI canônica', () => {
+    expect(CADASTROS).not.toHaveProperty('clientes');
+  });
 });

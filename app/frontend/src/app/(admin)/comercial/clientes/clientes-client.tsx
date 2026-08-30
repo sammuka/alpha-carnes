@@ -18,15 +18,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ComboboxField } from '@/components/ui/combobox-field';
 import { SelectNative } from '@/components/ui/select-native';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/cn';
+import { labelCodigoNome, UFS_BRASIL } from '@/lib/dominios';
 import { detalharErro, mensagemDeErro } from '@/lib/error-message';
 import { mascararCep, mascararCpfCnpj, mascararTelefone } from '@/lib/masks';
-import type { Representante } from '@/lib/representantes';
-import type { Rota } from '@/lib/rotas';
 import { useErrosPorCampo } from '@/lib/use-erros-campo';
 
 /** Campos que recebem máscara "conforme digita". */
@@ -107,6 +107,9 @@ interface Cliente {
   observacoesOperacionais: string | null;
 }
 
+interface RepresentanteOpcao { id: string; codigo: string; nome: string; status: 'ativo' | 'inativo' }
+interface RotaOpcao { id: string; codigo: string; nome: string; status: 'ativo' | 'inativo' }
+
 interface Paginado<T> {
   data: T[];
   total: number;
@@ -162,8 +165,8 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativo' | 'inativo'>('ativo');
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [totalAtivos, setTotalAtivos] = useState(0);
-  const [representantes, setRepresentantes] = useState<Representante[]>([]);
-  const [rotas, setRotas] = useState<Rota[]>([]);
+  const [representantes, setRepresentantes] = useState<RepresentanteOpcao[]>([]);
+  const [rotas, setRotas] = useState<RotaOpcao[]>([]);
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
   const [form, setForm] = useState<Cliente | null>(null);
   const [novo, setNovo] = useState(false);
@@ -179,18 +182,10 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
       fetch('/api/cadastros/representantes?pageSize=100&status=ativo', { cache: 'no-store' }),
       fetch('/api/cadastros/rotas?pageSize=100&status=ativo', { cache: 'no-store' }),
     ]);
-    if (!resRepresentantes.ok) {
-      throw new Error(await mensagemDeErro(resRepresentantes, 'Erro ao carregar representantes'));
-    }
-    if (!resRotas.ok) {
-      throw new Error(await mensagemDeErro(resRotas, 'Erro ao carregar rotas'));
-    }
-    const [listaRepresentantes, listaRotas] = await Promise.all([
-      resRepresentantes.json() as Promise<Paginado<Representante>>,
-      resRotas.json() as Promise<Paginado<Rota>>,
-    ]);
-    setRepresentantes(listaRepresentantes.data);
-    setRotas(listaRotas.data);
+    if (!resRepresentantes.ok) throw new Error(await mensagemDeErro(resRepresentantes, 'Erro ao carregar representantes'));
+    if (!resRotas.ok) throw new Error(await mensagemDeErro(resRotas, 'Erro ao carregar rotas'));
+    setRepresentantes(((await resRepresentantes.json()) as { data: RepresentanteOpcao[] }).data);
+    setRotas(((await resRotas.json()) as { data: RotaOpcao[] }).data);
   }, []);
 
   const carregarLista = useCallback(async (termo = '') => {
@@ -292,22 +287,26 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
     limparTudo();
     const url = novo ? '/api/cadastros/clientes' : `/api/cadastros/clientes/${form.id}`;
     try {
+      const payload = {
+        razaoSocial: form.razaoSocial,
+        nomeFantasia: form.nomeFantasia || undefined,
+        documentoFiscal: form.documentoFiscal,
+        representanteId: form.representanteId || null,
+        rotaId: form.rotaId || null,
+        prioridade: form.prioridade || undefined,
+        dadosFiscaisJson: {
+          ...form.dadosFiscaisJson,
+          uf: form.dadosFiscaisJson.uf || undefined,
+        },
+        dadosContatoJson: form.dadosContatoJson,
+        preferenciasJson: form.preferenciasJson,
+        observacoesOperacionais: form.observacoesOperacionais || undefined,
+        status: form.status,
+      };
       const response = await fetch(url, {
         method: novo ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          razaoSocial: form.razaoSocial,
-          nomeFantasia: form.nomeFantasia || undefined,
-          documentoFiscal: form.documentoFiscal,
-          status: form.status,
-          representanteId: form.representanteId || undefined,
-          rotaId: form.rotaId,
-          prioridade: form.prioridade ?? undefined,
-          dadosFiscaisJson: form.dadosFiscaisJson,
-          dadosContatoJson: form.dadosContatoJson,
-          preferenciasJson: form.preferenciasJson,
-          observacoesOperacionais: form.observacoesOperacionais || undefined,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const { mensagem: mensagemErro, porCampo } = await detalharErro(response, 'Falha ao salvar cliente');
@@ -328,6 +327,38 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
       setSalvando(false);
     }
   }
+
+  const representantesOpcoes = useMemo(() => {
+    const lista = [...representantes];
+    if (form?.representanteId && !lista.some((item) => item.id === form.representanteId)) {
+      lista.push({
+        id: form.representanteId,
+        codigo: '',
+        nome: form.representanteNome ?? '',
+        status: 'inativo',
+      });
+    }
+    return lista.map((item) => ({
+      id: item.id,
+      label: `${labelCodigoNome(item.codigo, item.nome)}${item.status === 'ativo' ? '' : ' (inativo)'}`,
+    }));
+  }, [form?.representanteId, form?.representanteNome, representantes]);
+
+  const rotasOpcoes = useMemo(() => {
+    const lista = [...rotas];
+    if (form?.rotaId && !lista.some((item) => item.id === form.rotaId)) {
+      lista.push({
+        id: form.rotaId,
+        codigo: '',
+        nome: form.rotaNome ?? '',
+        status: 'inativo',
+      });
+    }
+    return lista.map((item) => ({
+      id: item.id,
+      label: `${labelCodigoNome(item.codigo, item.nome)}${item.status === 'ativo' ? '' : ' (inativo)'}`,
+    }));
+  }, [form?.rotaId, form?.rotaNome, rotas]);
 
   const abasComErro = useMemo(() => new Set(Object.keys(erros).map(abaDaChave)), [erros]);
 
@@ -529,54 +560,36 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                           />
                         </FormField>
                         <FormField label="Representante" htmlFor="representante" error={erros.representanteId}>
-                          <Select
-                            value={form.representanteId ?? 'sem-vinculo'}
-                            disabled={!podeGerenciar}
-                            onValueChange={(valor) => {
+                          <ComboboxField
+                            id="representante"
+                            items={representantesOpcoes}
+                            value={form.representanteId ?? ''}
+                            onChange={(id) => {
                               limparCampo('representanteId');
-                              atualizar('representanteId', valor === 'sem-vinculo' ? null : valor);
+                              atualizar('representanteId', id || null);
                             }}
-                          >
-                            <SelectTrigger
-                              id="representante"
-                              aria-label="Representante"
-                              aria-invalid={'representanteId' in erros || undefined}
-                            >
-                              <SelectValue placeholder="—" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="sem-vinculo">—</SelectItem>
-                              {representantes.map((representante) => (
-                                <SelectItem key={representante.id} value={representante.id}>
-                                  {representante.nome}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            placeholder="—"
+                            searchPlaceholder="Buscar representante"
+                            emptyText="Nenhum representante encontrado"
+                            clearable
+                            disabled={!podeGerenciar}
+                          />
                         </FormField>
                         <FormField label="Itinerário / Rota" htmlFor="itinerario-rota" error={erros.rotaId}>
-                          <Select
-                            value={form.rotaId ?? 'sem-rota'}
-                            disabled={!podeGerenciar}
-                            onValueChange={(valor) => {
+                          <ComboboxField
+                            id="itinerario-rota"
+                            items={rotasOpcoes}
+                            value={form.rotaId ?? ''}
+                            onChange={(id) => {
                               limparCampo('rotaId');
-                              atualizar('rotaId', valor === 'sem-rota' ? null : valor);
+                              atualizar('rotaId', id || null);
                             }}
-                          >
-                            <SelectTrigger
-                              id="itinerario-rota"
-                              aria-label="Itinerário / Rota"
-                              aria-invalid={'rotaId' in erros || undefined}
-                            >
-                              <SelectValue placeholder="—" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="sem-rota">—</SelectItem>
-                              {rotas.map((rota) => (
-                                <SelectItem key={rota.id} value={rota.id}>{rota.nome}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            placeholder="—"
+                            searchPlaceholder="Buscar rota"
+                            emptyText="Nenhuma rota encontrada"
+                            clearable
+                            disabled={!podeGerenciar}
+                          />
                         </FormField>
                         <FormField label="Prioridade Padrão" htmlFor="prioridade-padrao" error={erros.prioridade}>
                           <Select
@@ -619,6 +632,27 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                           ['telefoneFiscal', 'Telefone Fiscal', 'text'],
                         ] as const).map(([chave, rotulo, tipo]) => {
                           const chaveErro = `dadosFiscaisJson.${chave}`;
+                          if (chave === 'uf') {
+                            return (
+                              <FormField key={chave} label={rotulo} htmlFor={`fiscal-${chave}`} error={erros[chaveErro]}>
+                                <SelectNative
+                                  id={`fiscal-${chave}`}
+                                  aria-label="UF"
+                                  value={form.dadosFiscaisJson.uf ?? ''}
+                                  aria-invalid={chaveErro in erros || undefined}
+                                  onChange={(event) => {
+                                    limparCampo(chaveErro);
+                                    atualizarJson('dadosFiscaisJson', 'uf', event.target.value);
+                                  }}
+                                >
+                                  <option value="">—</option>
+                                  {UFS_BRASIL.map((uf) => (
+                                    <option key={uf} value={uf}>{uf}</option>
+                                  ))}
+                                </SelectNative>
+                              </FormField>
+                            );
+                          }
                           return (
                             <FormField key={chave} label={rotulo} htmlFor={`fiscal-${chave}`} error={erros[chaveErro]}>
                               <Input

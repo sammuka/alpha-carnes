@@ -17,6 +17,7 @@ const nextConfig: NextConfig = {
       { source: '/operacao/corte', destination: '/desossa/pesagem-destinacao', permanent: false },
       { source: '/operacao/expedicao', destination: '/carga/planejamento', permanent: false },
       { source: '/operacao/faturamento', destination: '/faturamento/pre-faturamento', permanent: false },
+      { source: '/cadastros/clientes/:path*', destination: '/comercial/clientes', permanent: false },
       // AD-11: /cadastros/itens-compra e /cadastros/itens-comerciais são rotas canônicas próprias.
       // Não redirecionar para /cadastros/produtos.
     ];
