@@ -119,3 +119,42 @@ describe('CadastroForm — itens-compra (smoke)', () => {
     expect(screen.getByRole('button', { name: 'Criar' })).toBeInTheDocument();
   });
 });
+
+describe('CadastroForm — fornecedor parâmetros', () => {
+  it('DoD 12.12 formulário envia zero false horário tolerância e nota', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: '1' }),
+    });
+    const user = userEvent.setup();
+    render(<CadastroForm config={fornecedoresConfig} />);
+
+    await user.type(screen.getByLabelText('Código'), 'FRIG-01');
+    await user.type(screen.getByLabelText('Razão Social'), 'Frigorífico Teste');
+    await user.type(screen.getByLabelText('CNPJ/CPF'), '11222333000181');
+    await user.type(screen.getByLabelText('Horário Limite Recebimento'), '18:30');
+    await user.clear(screen.getByLabelText('Capacidade Max. Caminhão (kg)'));
+    await user.type(screen.getByLabelText('Capacidade Max. Caminhão (kg)'), '0');
+    await user.clear(screen.getByLabelText('Tolerância de Divergência (%)'));
+    await user.type(screen.getByLabelText('Tolerância de Divergência (%)'), '0');
+    await user.selectOptions(screen.getByLabelText('Nota de Qualidade'), 'B');
+    await user.click(screen.getByRole('button', { name: 'Criar' }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/cadastros/fornecedores',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+    const corpo = JSON.parse(String((global.fetch as jest.Mock).mock.calls.at(-1)?.[1].body)) as {
+      parametrosOperacionaisJson: Record<string, unknown>;
+    };
+    expect(corpo.parametrosOperacionaisJson).toMatchObject({
+      romaneioAntecipado: false,
+      horarioLimiteRecebimento: '18:30',
+      capacidadeMaximaKg: 0,
+      toleranciaDivergenciaPercentual: 0,
+      notaQualidade: 'B',
+    });
+  });
+});

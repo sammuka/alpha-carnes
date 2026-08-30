@@ -25,7 +25,7 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
   const router = useRouter();
   const [erro, setErro] = useState<string | null>(null);
   const catalogo = CADASTROS[config.recurso];
-  const schema = catalogo?.schema;
+  const schema = catalogo?.schema ?? (config as CadastroConfig).schema;
   const campos = catalogo?.campos ?? config.campos;
 
   const {
@@ -38,7 +38,11 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
     formState,
   } = useForm<FieldValues>({
     resolver: schema ? zodResolver(schema) : undefined,
-    defaultValues: registro ?? {},
+    defaultValues: {
+      unidadeCompra: 'unidade',
+      unidadeComercial: 'unidade',
+      ...(registro ?? {}),
+    },
   });
   const { isSubmitting } = formState;
 
@@ -61,6 +65,20 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
         }
         payload[k] = obj;
       }
+    }
+    const raw = (payload.parametrosOperacionaisJson ?? {}) as Record<string, unknown>;
+    if (config.recurso === 'fornecedores') {
+      payload.parametrosOperacionaisJson = {
+        romaneioAntecipado: Boolean(raw.romaneioAntecipado),
+        ...(raw.horarioLimiteRecebimento ? { horarioLimiteRecebimento: raw.horarioLimiteRecebimento } : {}),
+        ...(raw.capacidadeMaximaKg === '' || raw.capacidadeMaximaKg === undefined
+          ? {}
+          : { capacidadeMaximaKg: Number(raw.capacidadeMaximaKg) }),
+        ...(raw.toleranciaDivergenciaPercentual === '' || raw.toleranciaDivergenciaPercentual === undefined
+          ? {}
+          : { toleranciaDivergenciaPercentual: Number(raw.toleranciaDivergenciaPercentual) }),
+        ...(raw.notaQualidade ? { notaQualidade: raw.notaQualidade } : {}),
+      };
     }
     try {
       const res = await fetch(url, {

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { FieldValues } from 'react-hook-form';
 import type { LucideIcon } from 'lucide-react';
 import { Building2, MapPin, Truck } from 'lucide-react';
+import { UNIDADE_MEDIDA_OPTIONS } from '@/lib/dominios';
 import { mascararCep, mascararCpfCnpj, mascararTelefone } from '@/lib/masks';
 
 export type AbaCadastro = 'gerais' | 'fiscais' | 'contatos' | 'preferencias' | 'parametros';
@@ -429,9 +430,9 @@ export const itensCompraConfig: CadastroConfig = {
     {
       nome: 'unidadeCompra',
       rotulo: 'Unidade de Compra',
-      tipo: 'text',
+      tipo: 'select',
       obrigatorio: true,
-      maxLength: 30,
+      opcoes: UNIDADE_MEDIDA_OPTIONS,
     },
     { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes },
   ],
@@ -439,7 +440,7 @@ export const itensCompraConfig: CadastroConfig = {
     codigo: z.string().min(1, 'Código obrigatório'),
     descricao: z.string().min(1, 'Descrição obrigatória'),
     categoria: z.string().optional(),
-    unidadeCompra: z.string().min(1, 'Unidade obrigatória'),
+    unidadeCompra: z.enum(['kg', 'unidade']),
     status: z.enum(['ativo', 'inativo']).optional(),
   }),
 };
@@ -462,9 +463,9 @@ export const itensComerciaisConfig: CadastroConfig = {
     {
       nome: 'unidadeComercial',
       rotulo: 'Unidade Comercial',
-      tipo: 'text',
+      tipo: 'select',
       obrigatorio: true,
-      maxLength: 30,
+      opcoes: UNIDADE_MEDIDA_OPTIONS,
     },
     { nome: 'permiteCorte', rotulo: 'Permite Corte', tipo: 'checkbox' },
     { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes },
@@ -473,7 +474,7 @@ export const itensComerciaisConfig: CadastroConfig = {
     codigo: z.string().min(1, 'Código obrigatório'),
     descricao: z.string().min(1, 'Descrição obrigatória'),
     categoria: z.string().optional(),
-    unidadeComercial: z.string().min(1, 'Unidade obrigatória'),
+    unidadeComercial: z.enum(['kg', 'unidade']),
     permiteCorte: z.boolean().optional(),
     status: z.enum(['ativo', 'inativo']).optional(),
   }),
