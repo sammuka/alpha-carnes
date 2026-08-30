@@ -35,6 +35,7 @@ import {
   PedidoEditor,
   type ClientePedido,
   type ProdutoPedido,
+  type RotaPedido,
 } from './pedido-editor';
 
 interface PedidosClientProps {
@@ -93,6 +94,7 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
   const [pedidos, setPedidos] = useState<PedidoVenda[]>([]);
   const [clientes, setClientes] = useState<ClientePedido[]>([]);
   const [produtos, setProdutos] = useState<ProdutoPedido[]>([]);
+  const [rotas, setRotas] = useState<RotaPedido[]>([]);
   const [operacoes, setOperacoes] = useState<Operacao[]>([]);
   const [pedidoSelecionado, setPedidoSelecionado] = useState<PedidoVendaDetalhe | null>(null);
   const [modoEditor, setModoEditor] = useState(false);
@@ -116,18 +118,21 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
   }, []);
 
   const carregarCatalogos = useCallback(async () => {
-    const [clientesResponse, produtosResponse, operacoesResponse] = await Promise.all([
+    const [clientesResponse, produtosResponse, rotasResponse, operacoesResponse] = await Promise.all([
       fetch('/api/cadastros/clientes?pageSize=100', { cache: 'no-store' }),
-      fetch('/api/cadastros/itens-comerciais?pageSize=100', { cache: 'no-store' }),
+      fetch('/api/cadastros/itens-comerciais?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
+      fetch('/api/cadastros/rotas?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
       fetch('/api/operacoes?limite=100', { cache: 'no-store' }),
     ]);
-    const [clientesPage, produtosPage, operacoesPage] = await Promise.all([
+    const [clientesPage, produtosPage, rotasPage, operacoesPage] = await Promise.all([
       lerJson<Paginado<ClientePedido>>(clientesResponse),
       lerJson<Paginado<ProdutoPedido>>(produtosResponse),
+      lerJson<Paginado<RotaPedido>>(rotasResponse),
       lerJson<Paginado<Operacao>>(operacoesResponse),
     ]);
     setClientes(clientesPage.data);
     setProdutos(produtosPage.data);
+    setRotas(rotasPage.data);
     setOperacoes(operacoesPage.data);
   }, []);
 
@@ -245,6 +250,7 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
           pedido={pedidoSelecionado}
           clientes={clientes}
           produtos={produtos}
+          rotas={rotas}
           operacoes={operacoes}
           podeGerenciar={podeGerenciar}
           podeFinalizar={podeFinalizar}
