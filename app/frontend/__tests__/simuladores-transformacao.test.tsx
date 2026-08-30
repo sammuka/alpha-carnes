@@ -1,4 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { RegrasTransformacaoClient } from '../src/app/(admin)/cadastros/regras-transformacao/regras-transformacao-client';
 import { SimuladorDesdobramento } from '../src/app/(admin)/cadastros/regras-transformacao/simulador-desdobramento';
 import { SimuladorDesossa } from '../src/app/(admin)/cadastros/regras-transformacao/simulador-desossa';
 
@@ -64,3 +66,71 @@ it('erro do backend vira alert e nao exibe numeros', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Regra inválida');
   expect(screen.queryByText(/Total de partes geradas/i)).not.toBeInTheDocument();
 });
+
+const regraListada = {
+  id: 'regra-1',
+  itemCompraId: 'compra-uuid',
+  itemComercialId: 'comercial-uuid',
+  fatorQuantidade: '2.000',
+  status: 'ativo',
+  vigenciaInicio: '2026-01-01',
+  vigenciaFim: null,
+  observacoes: null,
+  itemCompraCodigo: 'BOI',
+  itemCompraNome: 'Boi casado',
+  itemComercialCodigo: 'TZ',
+  itemComercialNome: 'Traseiro',
+};
+
+function mockRegrasFetch(overrides: { postOk?: boolean } = {}) {
+  global.fetch = jest.fn(async (url: string, init?: RequestInit) => {
+    const u = String(url);
+    if (u.includes('/regras-desdobramento') && init?.method === 'POST') {
+      return {
+        ok: overrides.postOk !== false,
+        json: async () => (overrides.postOk === false ? { message: 'Regra inválida' } : { id: 'nova' }),
+      };
+    }
+    if (u.includes('/regras-desdobramento')) {
+      return { ok: true, json: async () => ({ data: [regraListada], total: 1, page: 1, pageSize: 100 }) };
+    }
+    if (u.includes('/itens-compra')) {
+      return { ok: true, json: async () => ({ data: [{ id: 'compra-uuid', codigo: 'BOI', descricao: 'Boi casado' }] }) };
+    }
+    if (u.includes('/itens-comerciais')) {
+      return { ok: true, json: async () => ({ data: [{ id: 'comercial-uuid', codigo: 'TZ', descricao: 'Traseiro' }] }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  }) as unknown as typeof fetch;
+}
+
+it('lista regra com codigo e nome sem UUID e cria via dialog', async () => {
+  mockRegrasFetch();
+  render(<RegrasTransformacaoClient podeGerenciar />);
+  expect(await screen.findByText('TZ — Traseiro')).toBeInTheDocument();
+  expect(screen.getByText('BOI — Boi casado')).toBeInTheDocument();
+  expect(screen.queryByText('compra-uuid')).not.toBeInTheDocument();
+  expect(screen.queryByText('comercial-uuid')).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Nova regra' }));
+  await userEvent.click(screen.getByRole('combobox', { name: 'Item de compra' }));
+  await userEvent.click(await screen.findByRole('option', { name: 'BOI — Boi casado' }));
+  await userEvent.click(screen.getByRole('combobox', { name: 'Item comercial' }));
+  await userEvent.click(await screen.findByRole('option', { name: 'TZ — Traseiro' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Salvar regra' }));
+
+  await waitFor(() => {
+    const post = (global.fetch as jest.Mock).mock.calls.find(
+      ([url, init]: [string, RequestInit]) =>
+        String(url) === '/api/cadastros/regras-desdobramento' && init?.method === 'POST',
+    );
+    expect(post).toBeDefined();
+    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toMatchObject({
+      itemCompraId: 'compra-uuid',
+      itemComercialId: 'comercial-uuid',
+      fatorQuantidade: 1,
+      status: 'ativo',
+    });
+  });
+});
+
