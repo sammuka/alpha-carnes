@@ -37,17 +37,36 @@ export class RegrasDesdobramentoService {
     const where = query.incluirRemovidos ? undefined : isNull(regrasDesdobramentoComercial.deletedAt);
 
     const [linhas, totalRow] = await Promise.all([
-      this.db
-        .select()
-        .from(regrasDesdobramentoComercial)
+      this.db.select({
+        id: regrasDesdobramentoComercial.id,
+        itemCompraId: regrasDesdobramentoComercial.itemCompraId,
+        itemComercialId: regrasDesdobramentoComercial.itemComercialId,
+        fatorQuantidade: regrasDesdobramentoComercial.fatorQuantidade,
+        status: regrasDesdobramentoComercial.status,
+        vigenciaInicio: regrasDesdobramentoComercial.vigenciaInicio,
+        vigenciaFim: regrasDesdobramentoComercial.vigenciaFim,
+        observacoes: regrasDesdobramentoComercial.observacoes,
+        createdAt: regrasDesdobramentoComercial.createdAt,
+        updatedAt: regrasDesdobramentoComercial.updatedAt,
+        deletedAt: regrasDesdobramentoComercial.deletedAt,
+        itemCompraCodigo: itensCompra.codigo,
+        itemCompraNome: itensCompra.descricao,
+        itemComercialCodigo: itensComerciais.codigo,
+        itemComercialNome: itensComerciais.descricao,
+      }).from(regrasDesdobramentoComercial)
+        .innerJoin(itensCompra, eq(itensCompra.id, regrasDesdobramentoComercial.itemCompraId))
+        .innerJoin(itensComerciais, eq(itensComerciais.id, regrasDesdobramentoComercial.itemComercialId))
         .where(where)
         .orderBy(desc(regrasDesdobramentoComercial.createdAt))
         .limit(limit)
         .offset(offset),
       this.db.select({ total: sql<number>`count(*)::int` }).from(regrasDesdobramentoComercial).where(where),
     ]);
-
-    return montarPaginado(linhas, totalRow[0]?.total ?? 0, query);
+    const total = totalRow[0]?.total ?? 0;
+    if (linhas.length !== Math.min(limit, Math.max(0, total - offset))) {
+      throw new ConflictException({ codigo: 'REGRA_REFERENCIA_INVALIDA', message: 'Regra possui item de compra ou comercial ausente' });
+    }
+    return montarPaginado(linhas, total, query);
   }
 
   async detalhar(id: string): Promise<Regra> {

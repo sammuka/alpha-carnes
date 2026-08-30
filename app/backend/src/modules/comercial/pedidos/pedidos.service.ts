@@ -324,6 +324,21 @@ export class PedidosService {
     return linha.nomeRota ?? null;
   }
 
+  private async resolverRota(
+    tx: Tx,
+    id: string | null | undefined,
+  ): Promise<{ id: string; nome: string } | null> {
+    if (id == null) return null;
+    const rota = await tx.select({ id: rotas.id, nome: rotas.nome })
+      .from(rotas)
+      .where(and(eq(rotas.id, id), eq(rotas.status, 'ativo'), isNull(rotas.deletedAt)))
+      .then((rows) => rows[0] ?? null);
+    if (!rota) {
+      throw new BadRequestException({ codigo: 'ROTA_INVALIDA', message: 'Rota não encontrada, removida ou inativa' });
+    }
+    return rota;
+  }
+
   /**
    * Resolve a operação do pedido sem criar linha (challenge read-only).
    * Com `operacaoId`, carrega a operação viva e, se `dataOperacao` vier, exige igualdade.
@@ -363,6 +378,7 @@ export class PedidosService {
     confirmado: boolean,
   ): Promise<{ pedido: PedidoVenda; eventos: EventoDominio[] }> {
     await this.exigirClienteNoEscopo(tx, dto.clienteId, usuarioId);
+    const rota = await this.resolverRota(tx, dto.rotaId);
     const solicitados: ItemSolicitado[] = dto.itens.map((item) => ({
       itemComercialId: item.itemComercialId,
       quantidade: item.quantidadePedida,
@@ -400,8 +416,8 @@ export class PedidosService {
       clienteId: dto.clienteId,
       operacaoId: operacao.id,
       dataEntrega: dto.dataEntrega,
-      rotaId: dto.rotaId ?? null,
-      rotaPrevista: dto.rotaId == null ? (await this.rotaHerdadaDoCliente(tx, dto.clienteId)) : null,
+      rotaId: rota?.id ?? null,
+      rotaPrevista: rota?.nome ?? null,
       prioridade: dto.prioridade,
       // AD-06: rascunho também tem reserva ativa; a única diferença é o status inicial.
       status: dto.salvarComoRascunho ? 'rascunho' : 'em_elaboracao_reserva_ativa',

@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../database/database.module';
@@ -95,12 +95,14 @@ export class MotoristasService {
     return this.db.transaction(async (tx) => {
       await this.assertDocumentoLivre(tx, dto.documento);
 
+      const caminhao = await this.resolverCaminhaoPadrao(tx, dto.caminhaoPadraoId, null);
+
       const criado = primeiroOuFalha(
         await tx.insert(frotaMotoristas).values({
           nome: dto.nome,
           documento: dto.documento,
           telefone: dto.telefone,
-          caminhaoPadraoId: dto.caminhaoPadraoId ?? null,
+          caminhaoPadraoId: caminhao?.id ?? null,
           status: dto.status,
           rg: dto.rg,
           carteiraProfissional: dto.carteiraProfissional,
@@ -133,13 +135,16 @@ export class MotoristasService {
         await this.assertDocumentoLivre(tx, dto.documento);
       }
 
+      const caminhao = dto.caminhaoPadraoId === undefined
+        ? null
+        : await this.resolverCaminhaoPadrao(tx, dto.caminhaoPadraoId, anterior.caminhaoPadraoId);
+
       const atualizado = primeiroOuFalha(
         await tx.update(frotaMotoristas).set({
           nome: dto.nome ?? anterior.nome,
           documento: dto.documento ?? anterior.documento,
           telefone: dto.telefone ?? anterior.telefone,
-          caminhaoPadraoId:
-            dto.caminhaoPadraoId === undefined ? anterior.caminhaoPadraoId : dto.caminhaoPadraoId,
+          caminhaoPadraoId: dto.caminhaoPadraoId === undefined ? anterior.caminhaoPadraoId : caminhao?.id ?? null,
           status: dto.status ?? anterior.status,
           rg: dto.rg ?? anterior.rg,
           carteiraProfissional: dto.carteiraProfissional ?? anterior.carteiraProfissional,
@@ -221,5 +226,21 @@ export class MotoristasService {
     return exec.select().from(frotaMotoristas)
       .where(and(eq(frotaMotoristas.id, id), isNull(frotaMotoristas.deletedAt)))
       .then((r) => r[0] ?? null);
+  }
+
+  private async resolverCaminhaoPadrao(
+    tx: NodePgDatabase<typeof schema>,
+    id: string | null | undefined,
+    idPersistidoAtual: string | null,
+  ): Promise<{ id: string } | null> {
+    if (id == null) return null;
+    const vinculo = await tx.select({ id: frotaCaminhoes.id, status: frotaCaminhoes.status })
+      .from(frotaCaminhoes)
+      .where(and(eq(frotaCaminhoes.id, id), isNull(frotaCaminhoes.deletedAt)))
+      .then((rows) => rows[0] ?? null);
+    if (!vinculo || (vinculo.status !== 'ativo' && vinculo.id !== idPersistidoAtual)) {
+      throw new BadRequestException({ codigo: 'VINCULO_CADASTRO_INVALIDO', message: 'Caminhão não encontrado, removido ou inativo' });
+    }
+    return { id: vinculo.id };
   }
 }

@@ -1,4 +1,10 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
@@ -111,8 +117,16 @@ export class ClientesService {
       const anterior = await this.buscarNoEscopo(id, usuarioId, tx);
       if (!anterior) throw new NotFoundException('Cliente não encontrado');
 
-      if (dto.representanteId) {
-        await this.exigirRepresentanteNoEscopo(tx, dto.representanteId, usuarioId);
+      if (typeof dto.representanteId === 'string') {
+        await this.exigirRepresentanteNoEscopo(
+          tx,
+          dto.representanteId,
+          usuarioId,
+          anterior.representanteId,
+        );
+      }
+      if (typeof dto.rotaId === 'string') {
+        await this.exigirRotaAtiva(tx, dto.rotaId, anterior.rotaId);
       }
 
       await this.assertUnico(tx, anterior.codigo, dto.documentoFiscal ?? anterior.documentoFiscal, id);
@@ -125,7 +139,9 @@ export class ClientesService {
             nomeFantasia: dto.nomeFantasia ?? anterior.nomeFantasia,
             documentoFiscal: dto.documentoFiscal ?? anterior.documentoFiscal,
             status: dto.status ?? anterior.status,
-            representanteId: dto.representanteId ?? anterior.representanteId,
+            representanteId: dto.representanteId !== undefined
+              ? dto.representanteId
+              : anterior.representanteId,
             rotaId: dto.rotaId !== undefined ? dto.rotaId : anterior.rotaId,
             prioridade: dto.prioridade ?? anterior.prioridade,
             preferenciasJson: dto.preferenciasJson ?? anterior.preferenciasJson,
@@ -272,17 +288,46 @@ export class ClientesService {
     tx: NodePgDatabase<typeof schema>,
     representanteId: string,
     usuarioId: string,
+    representanteIdPersistido: string | null = null,
   ): Promise<void> {
     const permitido = await tx
-      .select({ id: representantes.id })
+      .select({ id: representantes.id, status: representantes.status })
       .from(representantes)
       .where(and(
         eq(representantes.id, representanteId),
+        isNull(representantes.deletedAt),
         escopoRepresentantes(usuarioId, representantes.id),
       ))
       .limit(1)
       .then((linhas) => linhas[0] ?? null);
-    if (!permitido) throw new NotFoundException('Cliente não encontrado');
+    if (
+      !permitido
+      || (permitido.status !== 'ativo' && permitido.id !== representanteIdPersistido)
+    ) {
+      throw new BadRequestException({
+        codigo: 'VINCULO_CADASTRO_INVALIDO',
+        message: 'Representante não encontrado, removido ou inativo',
+      });
+    }
+  }
+
+  private async exigirRotaAtiva(
+    tx: NodePgDatabase<typeof schema>,
+    rotaId: string,
+    rotaIdPersistida: string | null,
+  ): Promise<void> {
+    const rota = await tx
+      .select({ id: rotas.id, status: rotas.status })
+      .from(rotas)
+      .where(and(eq(rotas.id, rotaId), isNull(rotas.deletedAt)))
+      .limit(1)
+      .then((linhas) => linhas[0] ?? null);
+    if (!rota || (rota.status !== 'ativo' && rota.id !== rotaIdPersistida)) {
+      throw new BadRequestException({
+        codigo: 'VINCULO_CADASTRO_INVALIDO',
+        message: 'Rota não encontrada, removida ou inativa',
+      });
+    }
   }
 
   private async assertUnico(
