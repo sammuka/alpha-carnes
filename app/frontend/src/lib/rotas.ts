@@ -20,8 +20,11 @@ export interface Rota {
   codigo: string;
   nome: string;
   regiao: string | null;
+  representantePadraoId: string | null;
   representantePadrao: string | null;
+  caminhaoPadraoId: string | null;
   caminhaoPadrao: string | null;
+  motoristaPadraoId: string | null;
   motoristaPadrao: string | null;
   observacoes: string | null;
   status: StatusCadastro;
@@ -36,9 +39,9 @@ export interface CriarRotaDto {
   codigo: string;
   nome: string;
   regiao?: string;
-  representantePadrao?: string;
-  caminhaoPadrao?: string;
-  motoristaPadrao?: string;
+  representantePadraoId?: string | null;
+  caminhaoPadraoId?: string | null;
+  motoristaPadraoId?: string | null;
   observacoes?: string;
   status?: StatusCadastro;
   paradas: ParadaRota[];
