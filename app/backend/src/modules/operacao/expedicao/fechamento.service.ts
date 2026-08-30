@@ -15,6 +15,7 @@ import {
   pecas,
   subitens,
   itensComerciais,
+  comprasProgramadas,
 } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
@@ -254,9 +255,11 @@ export class FechamentoService {
           etiqueta: pecas.etiquetaAtual,
           produtoNome: itensComerciais.descricao,
           peso: pecas.pesoOriginal,
+          numeroSequencial: comprasProgramadas.numeroSequencial,
         })
         .from(cargaItens)
         .innerJoin(pecas, eq(pecas.id, cargaItens.pecaId))
+        .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
         .innerJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
         .where(
           and(
@@ -275,9 +278,12 @@ export class FechamentoService {
           etiqueta: subitens.etiquetaAtual,
           produtoNome: itensComerciais.descricao,
           peso: subitens.peso,
+          numeroSequencial: comprasProgramadas.numeroSequencial,
         })
         .from(cargaItens)
         .innerJoin(subitens, eq(subitens.id, cargaItens.subitemId))
+        .innerJoin(pecas, eq(pecas.id, subitens.pecaOrigemId))
+        .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
         .innerJoin(itensComerciais, eq(itensComerciais.id, subitens.itemComercialId))
         .where(
           and(
@@ -322,7 +328,10 @@ export class FechamentoService {
         ordemNaCarga: v.ordemNaCarga,
         previsto: previstoPorPedido.get(v.pedidoVendaId) ?? 0,
         carregado: realPorPedido.get(v.pedidoVendaId) ?? 0,
-        itens: itensPorPedido.get(v.pedidoVendaId) ?? [],
+        itens: (itensPorPedido.get(v.pedidoVendaId) ?? []).map((item) => ({
+          ...item,
+          loteOrigem: `Lote ${String(item.numeroSequencial).padStart(3, '0')}`,
+        })),
       };
     });
 
