@@ -33,6 +33,7 @@ export async function createTestApp(
     app.use(cookieParser());
     app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
+    await app.listen(0);
     return app;
   } finally {
     // Restaura a env para não vazar entre suítes

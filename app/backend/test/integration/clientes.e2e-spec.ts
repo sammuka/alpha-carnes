@@ -193,7 +193,7 @@ describe('Clientes e2e (CRUD + RBAC + validação + soft delete + auditoria)', (
           observacoesOperacionais: 'obs',
         });
       expect(editar.status).toBe(200);
-      expect(editar.body.codigo).toBe('CLI-FULL-2');
+      expect(editar.body.codigo).toBe('CLI-FULL');
       expect(editar.body.status).toBe('inativo');
       expect(editar.body.preferenciasJson).toEqual({ prefereMaisPesada: true });
     });
@@ -245,6 +245,67 @@ describe('Clientes e2e (CRUD + RBAC + validação + soft delete + auditoria)', (
         .get('/clientes?incluirRemovidos=true')
         .set('Cookie', adminCookies);
       expect(res.status).toBe(200);
+    });
+  });
+
+  describe('Código interno gerado (AD-13)', () => {
+    function gerarCnpjValido(base12: string): string {
+      const calcularDigito = (digitos: number[], qtd: number): number => {
+        let soma = 0;
+        let peso = 2;
+        for (let i = qtd - 1; i >= 0; i--) {
+          soma += (digitos[i] ?? 0) * peso;
+          peso = peso === 9 ? 2 : peso + 1;
+        }
+        const resto = soma % 11;
+        return resto < 2 ? 0 : 11 - resto;
+      };
+      const digitos = base12.split('').map(Number);
+      const d1 = calcularDigito(digitos, 12);
+      const d2 = calcularDigito([...digitos, d1], 13);
+      return `${base12}${d1}${d2}`;
+    }
+
+    it('POST sem codigo persiste numeração automática', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', adminCookies)
+        .send({ razaoSocial: 'Cliente Auto LTDA', documentoFiscal: gerarCnpjValido('500000200001') });
+      expect(res.status).toBe(201);
+      expect(res.body.codigo).toMatch(/^\d+$/);
+    });
+
+    it('dois POSTs sem codigo não colidem', async () => {
+      const a = await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', adminCookies)
+        .send({ razaoSocial: 'Cliente Auto A', documentoFiscal: gerarCnpjValido('500000210001') });
+      const b = await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', adminCookies)
+        .send({ razaoSocial: 'Cliente Auto B', documentoFiscal: gerarCnpjValido('500000220001') });
+      expect(a.status).toBe(201);
+      expect(b.status).toBe(201);
+      expect(a.body.codigo).toMatch(/^\d+$/);
+      expect(b.body.codigo).toMatch(/^\d+$/);
+      expect(a.body.codigo).not.toBe(b.body.codigo);
+    });
+
+    it('PATCH ignora codigo enviado e preserva o original', async () => {
+      const criar = await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', adminCookies)
+        .send({ razaoSocial: 'Cliente Imutavel', documentoFiscal: gerarCnpjValido('500000230001') });
+      expect(criar.status).toBe(201);
+      const original = criar.body.codigo as string;
+
+      const editar = await request(app.getHttpServer())
+        .patch(`/clientes/${criar.body.id}`)
+        .set('Cookie', adminCookies)
+        .send({ codigo: 'NAO-DEVE-MUDAR', razaoSocial: 'Cliente Imutavel 2' });
+      expect(editar.status).toBe(200);
+      expect(editar.body.codigo).toBe(original);
+      expect(editar.body.razaoSocial).toBe('Cliente Imutavel 2');
     });
   });
 

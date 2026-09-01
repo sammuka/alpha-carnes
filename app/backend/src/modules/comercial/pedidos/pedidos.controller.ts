@@ -68,6 +68,12 @@ export class PedidosController {
     return this.service.buscarAberto(query, user.sub);
   }
 
+  @Get(':id/composicao-lotes')
+  @RequirePermissoes('PEDIDOS_LER')
+  composicaoLotes(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.service.composicaoLotes(id, user.sub);
+  }
+
   @Get(':id')
   @RequirePermissoes('PEDIDOS_LER')
   async detalhar(

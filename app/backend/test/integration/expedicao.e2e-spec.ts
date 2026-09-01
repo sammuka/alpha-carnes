@@ -787,6 +787,50 @@ describe('Expedicao e2e (F5)', () => {
     expect(res.status).toBe(409);
   });
 
+  it('Onda 11: transferencia interoperacao retorna Pedido pertence a outra operação', async () => {
+    const { default: request } = await import('supertest');
+    const base = await seedComercialBase(app, { fator: 1 });
+    const cOrigem = await montarCenarioPesagem(
+      app,
+      { compras: comprasCookies, recebimento: recebimentoCookies },
+      base,
+      { dataOperacao: '2027-04-01', quantidade: 10 },
+    );
+    const cDestino = await montarCenarioPesagem(
+      app,
+      { compras: comprasCookies, recebimento: recebimentoCookies },
+      base,
+      { dataOperacao: '2027-04-02', quantidade: 10 },
+    );
+    const pOrigem = await criarPedido(app, comercialCookies, {
+      compraId: cOrigem.compraId,
+      clienteId: cOrigem.clienteId,
+      itemComercialId: cOrigem.itemComercialId,
+      dataOperacao: cOrigem.dataOperacao,
+      quantidade: 5,
+    });
+    const pDestino = await criarPedido(app, comercialCookies, {
+      compraId: cDestino.compraId,
+      clienteId: cDestino.clienteId,
+      itemComercialId: cDestino.itemComercialId,
+      dataOperacao: cDestino.dataOperacao,
+      quantidade: 5,
+    });
+    const pecaId = await pecaElegivel(cOrigem, pOrigem.pedidoItemId);
+
+    const caminhaoId = await criarCaminhao(app, expedicaoCookies, { dataOperacao: cOrigem.dataOperacao });
+    await abrirCarga(app, expedicaoCookies, caminhaoId);
+    const cargaItemId = await adicionarPecaNaCarga(app, expedicaoCookies, caminhaoId, pecaId);
+
+    const res = await request(srv())
+      .post(`/operacao/expedicao/itens/${cargaItemId}/transferir`)
+      .set('Cookie', expedicaoCookies)
+      .send({ pedidoVendaItemDestinoId: pDestino.pedidoItemId, motivo: 'tentativa interoperacao' });
+    expect(res.status).toBe(409);
+    const msg = typeof res.body.message === 'string' ? res.body.message : res.body.message?.message;
+    expect(msg).toBe('Pedido pertence a outra operação');
+  });
+
   // ──────────────────────────────────────────────────────────────────────────────
   // Branch coverage: transferencia de subitem entre pedidos
   // ──────────────────────────────────────────────────────────────────────────────
