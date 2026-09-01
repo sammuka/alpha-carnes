@@ -1,6 +1,6 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -13,6 +13,7 @@ import {
   regrasTransformacaoSaidas,
   subitens,
   transformacoes,
+  comprasProgramadas,
 } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
@@ -324,13 +325,18 @@ export class SubitemService {
 
   private async compativeis(tx: Tx, subitem: Subitem) {
     const peca = await tx
-      .select()
+      .select({
+        compraProgramadaId: pecas.compraProgramadaId,
+        operacaoId: comprasProgramadas.operacaoId,
+      })
       .from(pecas)
+      .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
       .where(eq(pecas.id, subitem.pecaOrigemId))
       .then((r) => r[0] ?? null);
     if (!peca) throw new NotFoundException('Peça de origem não encontrada');
     return calcularCompativeisItem(tx, {
-      compraProgramadaId: peca.compraProgramadaId,
+      operacaoId: peca.operacaoId,
+      compraProgramadaOrigemId: peca.compraProgramadaId,
       itemComercialId: subitem.itemComercialId,
       peso: subitem.peso ?? '0',
     });
@@ -349,7 +355,10 @@ export class SubitemService {
         id: schema.pedidosVendaItens.id,
         pedidoVendaId: schema.pedidosVendaItens.pedidoVendaId,
         itemComercialId: schema.pedidosVendaItens.itemComercialId,
-        compraProgramadaId: schema.pedidosVenda.compraProgramadaId,
+        operacaoId: schema.pedidosVenda.operacaoId,
+        pecaOperacaoId: sql<string>`(
+          select cp.operacao_id from compras_programadas cp where cp.id = ${peca.compraProgramadaId}
+        )`,
         statusPedido: schema.pedidosVenda.status,
         deletedAt: schema.pedidosVenda.deletedAt,
       })
@@ -360,7 +369,7 @@ export class SubitemService {
     if (!item || item.deletedAt) throw new NotFoundException('Item de pedido não encontrado');
     if (item.statusPedido === 'cancelado') throw new ConflictException('Pedido cancelado não aceita associação');
     if (item.itemComercialId !== subitem.itemComercialId) throw new ConflictException('Item de pedido incompatível com o subitem');
-    if (item.compraProgramadaId !== peca.compraProgramadaId) throw new ConflictException('Pedido pertence a outra compra programada');
+    if (item.operacaoId !== item.pecaOperacaoId) throw new ConflictException('Pedido pertence a outra operação');
     return item;
   }
 

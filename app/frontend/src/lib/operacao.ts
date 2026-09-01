@@ -73,6 +73,7 @@ export interface RecebimentoDetalhe {
   codigoLote: string;
   /** Pode vir no topo ou aninhado em pedidoFornecedor (API Onda 6). */
   compraProgramadaId?: string;
+  numeroSequencialCompra?: number;
   pedidoFornecedorId: string;
   fornecedorId: string;
   dataOperacao?: string;
@@ -105,6 +106,7 @@ export interface RecebimentoResumoEnriquecido {
   id: string;
   codigoLote: string;
   compraProgramadaId: string;
+  numeroSequencialCompra?: number;
   numeroInternoCompra: string | null;
   fornecedorId: string;
   fornecedorNome: string;
@@ -143,6 +145,7 @@ export interface PrevisaoRecebimento {
   operacaoId: string;
   dataOperacao: string;
   compraProgramadaId: string;
+  numeroSequencialCompra?: number;
   numeroInternoCompra: string | null;
   fornecedorId: string;
   fornecedorNome: string;
@@ -216,6 +219,8 @@ export interface Peca {
   pedidoVendaId: string | null;
   pedidoVendaItemId: string | null;
   capturaMeta: Record<string, unknown>;
+  numeroSequencialCompra?: number;
+  loteOrigem?: string;
 }
 
 export interface SugestaoScored {
@@ -336,6 +341,12 @@ export interface CaminhaoDetalhe {
     ordemNaCarga: number | null;
     previsto: number;
     carregado: number;
+    pecas?: Array<{
+      etiqueta: string | null;
+      produtoNome?: string;
+      loteOrigem?: string;
+      numeroSequencial?: number;
+    }>;
   }>;
 }
 
@@ -355,6 +366,8 @@ export interface CargaItem {
   divergenciaObservacao: string | null;
   conferido: boolean;
   dataHoraEntradaCarga: string;
+  loteOrigem?: string;
+  numeroSequencial?: number;
 }
 
 // ── Romaneio (F5 + D9.6: itens por pedido com etiqueta/produto/peso/status) ───
@@ -367,6 +380,8 @@ export interface RomaneioItem {
   etiqueta: string | null;
   produtoNome: string;
   peso: string | null;
+  loteOrigem?: string;
+  numeroSequencial?: number;
 }
 
 export interface RomaneioPedido {

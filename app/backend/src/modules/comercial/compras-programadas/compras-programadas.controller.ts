@@ -5,17 +5,18 @@ import { RbacGuard } from '../../../common/guards/rbac.guard';
 import { RequirePermissoes } from '../../../common/rbac/require-permissoes.decorator';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
-import { listarQuerySchema, type ListarQuery } from '../../../common/crud/paginacao';
 import { ComprasProgramadasService } from './compras-programadas.service';
 import {
   createCompraProgramadaSchema,
   updateCompraProgramadaSchema,
   impactoQuerySchema,
   atualizarItemCompraSchema,
+  listarComprasProgramadasSchema,
   type CreateCompraProgramadaDto,
   type UpdateCompraProgramadaDto,
   type ImpactoQueryDto,
   type AtualizarItemCompraDto,
+  type ListarComprasProgramadasDto,
 } from './dto/compra-programada.dto';
 
 @SkipThrottle()
@@ -26,7 +27,7 @@ export class ComprasProgramadasController {
 
   @Get()
   @RequirePermissoes('COMPRAS_PROGRAMADAS_LER')
-  async listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
+  async listar(@Query(new ZodValidationPipe(listarComprasProgramadasSchema)) query: ListarComprasProgramadasDto) {
     return this.service.listar(query);
   }
 

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { OverbookingClient } from '../src/app/(admin)/gestao/overbooking/overbooking-client';
 
 const mockSearchParams = new URLSearchParams('operacaoId=op-1');
@@ -25,8 +26,11 @@ const PENDENCIA = {
 };
 
 beforeEach(() => {
-  global.fetch = jest.fn((input: RequestInfo | URL) => {
+  global.fetch = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url.includes('/decisao')) {
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    }
     if (url.includes('/api/operacoes')) {
       return Promise.resolve({ ok: true, json: async () => ({ data: [{ id: 'op-1', rotulo: 'Op', status: 'aberta', data: '2026-07-22', diaSemana: 2, extraordinaria: false, comprasProgramadas: 0, pedidosVenda: 0, pendenciasOverbookingAbertas: 1 }] }) });
     }
@@ -61,5 +65,37 @@ describe('OverbookingClient', () => {
     expect(screen.getByText('1. Compra complementar')).toBeInTheDocument();
     expect(screen.getByText('2. Redistribuição')).toBeInTheDocument();
     expect(screen.getByText('3. Postergar para próxima operação')).toBeInTheDocument();
+  });
+
+  it('compra complementar conserva compraProgramadaId no payload', async () => {
+    render(<OverbookingClient permissoes={['OVERBOOKING_RESOLVER', 'PEDIDOS_LER']} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Programar' }));
+    await waitFor(() => {
+      const chamada = (global.fetch as jest.Mock).mock.calls.find(([url, init]: [string, RequestInit]) =>
+        String(url).includes('/decisao') && init?.method === 'POST');
+      expect(chamada).toBeDefined();
+      expect(JSON.parse(String(chamada?.[1]?.body))).toEqual({
+        caminho: 'compra_complementar',
+        compraProgramadaId: 'cp1',
+        quantidade: '3.000',
+      });
+    });
+  });
+
+  it('postergar envia novo_pedido só com operacaoDestinoId e quantidade', async () => {
+    render(<OverbookingClient permissoes={['OVERBOOKING_RESOLVER', 'PEDIDOS_LER']} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Postergar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Gerar novo pedido' }));
+    await waitFor(() => {
+      const chamada = (global.fetch as jest.Mock).mock.calls.find(([url, init]: [string, RequestInit]) =>
+        String(url).includes('/decisao') && init?.method === 'POST'
+        && String(init.body).includes('novo_pedido'));
+      expect(chamada).toBeDefined();
+      expect(JSON.parse(String(chamada?.[1]?.body))).toEqual({
+        caminho: 'novo_pedido',
+        operacaoDestinoId: 'op-2',
+        quantidade: '3.000',
+      });
+    });
   });
 });
