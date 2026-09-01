@@ -74,7 +74,7 @@ jobs:
         working-directory: app/backend
         env:
           NODE_OPTIONS: --max-old-space-size=6144
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: backend-coverage
           path: app/backend/coverage
