@@ -69,6 +69,11 @@ const STATUS_RECEB_LABEL: Record<StatusRecebimento, string> = {
   cancelado: 'Cancelado',
 };
 
+/** Backend já envia `codigoLote` como `Lote NNN` (D11.2). */
+function rotuloLote(codigoLote: string, fornecedorNome?: string): string {
+  return fornecedorNome ? `${codigoLote} — ${fornecedorNome}` : codigoLote;
+}
+
 function formatPeso(val: string | null | undefined): string {
   if (!val) return '0,000';
   const n = Number(val);
@@ -518,7 +523,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
         <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2">
           {detalhe ? (
             <>
-              <span className="font-data text-sm font-bold">{detalhe.codigoLote}</span>
+              <span className="font-data text-sm font-bold">{rotuloLote(detalhe.codigoLote)}</span>
               <StatusPill
                 variant={statusRecebimentoVariant(detalhe.status)}
                 label={STATUS_RECEB_LABEL[detalhe.status]}
@@ -580,7 +585,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                   </option>
                   {recebimentos.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.codigoLote} — {r.fornecedorNome} ({STATUS_RECEB_LABEL[r.status as StatusRecebimento] ?? r.status})
+                      {rotuloLote(r.codigoLote, r.fornecedorNome)} ({STATUS_RECEB_LABEL[r.status as StatusRecebimento] ?? r.status})
                     </option>
                   ))}
                 </SelectNative>

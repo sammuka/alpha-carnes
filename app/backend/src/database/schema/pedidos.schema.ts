@@ -14,7 +14,7 @@ export const pedidosVenda = pgTable(
   'pedidos_venda',
   {
     id:                  uuid('id').primaryKey().default(sql`uuidv7()`),
-    compraProgramadaId:  uuid('compra_programada_id').notNull().references(() => comprasProgramadas.id),
+    compraProgramadaId:  uuid('compra_programada_id').references(() => comprasProgramadas.id),
     clienteId:           uuid('cliente_id').notNull().references(() => clientes.id),
     operacaoId:          uuid('operacao_id').notNull().references(() => operacoes.id),
     dataEntrega:         date('data_entrega'),

@@ -63,6 +63,7 @@ function makeService(opts: {
         pedidoVendaId: 'pv-1',
         itemComercialId: 'ic-1',
         statusPedido: 'em_elaboracao_reserva_ativa',
+        operacaoId: 'op-1',
         deletedAt: null,
       }
     : opts.item;

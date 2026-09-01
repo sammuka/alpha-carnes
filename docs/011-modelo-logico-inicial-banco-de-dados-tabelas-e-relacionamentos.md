@@ -155,10 +155,10 @@ Este documento é uma base inicial e pode ser refinado posteriormente na modelag
 
 ### Restrições
 - FK fornecedorId -> fornecedores.id
-- unique(dataOperacao) na V1, considerando um lote principal por dia
+- ~~unique(dataOperacao) na V1, considerando um lote principal por dia~~ **Superado por [AD-14](execucao/DECISOES.md) (2026-08-27).** A unicidade passou a ser `numero_sequencial` único dentro da operação; N compras ativas coexistem no mesmo dia.
 
 ### Índices sugeridos
-- unique(dataOperacao)
+- ~~unique(dataOperacao)~~ unique(`operacao_id`, `numero_sequencial`) — AD-14
 - index(statusCompra)
 - index(fornecedorId)
 

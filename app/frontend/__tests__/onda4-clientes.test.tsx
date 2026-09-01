@@ -85,6 +85,7 @@ it('config de clientes nao expoe o campo legado de rota', () => {
     [campoLegado]: 'Rota antiga',
   });
 
+  expect(clientesConfig.campos.map((campo) => campo.nome)).not.toContain('codigo');
   expect(clientesConfig.campos.map((campo) => campo.nome)).not.toContain(campoLegado);
   expect(resultado).not.toHaveProperty(campoLegado);
 });
@@ -100,10 +101,11 @@ it('clientes exibe as 4 abas do prototipo na ordem', async () => {
   ]);
 });
 
-it('clientes nao usa o termo banido e usa Nome Fantasia e Buscar cliente', async () => {
+it('clientes usa Nome Fantasia/Marca e Buscar cliente (AD-13)', async () => {
   const { container } = render(<ClientesClient podeGerenciar />);
-  expect(container.innerHTML).not.toMatch(/[Mm]arca/);
-  expect(await screen.findByLabelText('Nome Fantasia')).toBeInTheDocument();
+  expect(container.innerHTML).not.toMatch(/\bBuscar marca/i);
+  expect(await screen.findByLabelText('Nome Fantasia/Marca')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Código Interno')).not.toBeInTheDocument();
   expect(await screen.findByPlaceholderText('Buscar cliente...')).toBeInTheDocument();
 });
 
