@@ -4,7 +4,7 @@ import { PedidosClient } from '../src/app/(admin)/comercial/pedidos/pedidos-clie
 import { ModalAdendo } from '../src/app/(admin)/comercial/pedidos/modal-adendo';
 import { ModalOverbooking } from '../src/app/(admin)/comercial/pedidos/modal-overbooking';
 import { ROTULOS_STATUS_PEDIDO, rotuloStatusPedido } from '@/lib/status-pedido';
-import type { CompraProgramada } from '@/lib/comercial';
+import type { PedidoVenda } from '@/lib/comercial';
 
 const pedido = {
   id: 'pedido-1',
@@ -49,6 +49,7 @@ const detalhe = {
     codigo: 'CLI-001',
     razaoSocial: 'Açougue Central Ltda.',
     nomeFantasia: 'Açougue Central',
+    documentoFiscal: '12345678000190',
   },
   heranca: {
     representanteId: 'representante-1',
@@ -65,12 +66,14 @@ const clientes = [
     codigo: 'CLI-001',
     razaoSocial: 'Açougue Central Ltda.',
     nomeFantasia: 'Açougue Central',
+    documentoFiscal: '12345678000190',
   },
   {
     id: 'cliente-2',
     codigo: 'CLI-002',
     razaoSocial: 'Mercado Sem Rota Ltda.',
     nomeFantasia: 'Mercado Sem Rota',
+    documentoFiscal: '12345678000191',
   },
 ];
 
@@ -89,17 +92,16 @@ const produtos = [
   },
 ];
 
-const compraDaApi: CompraProgramada = {
-  id: 'compra-1',
-  operacaoId: 'operacao-1',
-  dataOperacao: '2026-07-28',
-  fornecedorId: 'fornecedor-1',
-  numeroInterno: null,
-  referenciaExterna: null,
-  previsaoEntrega: null,
-  status: 'confirmada',
-  observacoes: null,
-  createdAt: '2026-07-27T10:00:00.000Z',
+const operacaoDaApi = {
+  id: 'operacao-1',
+  data: '2026-07-28',
+  diaSemana: 2,
+  rotulo: 'Terça regular',
+  status: 'aberta' as const,
+  extraordinaria: false,
+  comprasProgramadas: 1,
+  pedidosVenda: 0,
+  pendenciasOverbookingAbertas: 0,
 };
 
 function json(body: unknown, status = 200) {
@@ -121,9 +123,9 @@ function instalarFetch() {
     if (url === '/api/cadastros/itens-comerciais?pageSize=100') {
       return json({ data: produtos, page: 1, pageSize: 100, total: produtos.length });
     }
-    if (url === '/api/comercial/compras-programadas?pageSize=100') {
+    if (url === '/api/operacoes?limite=100') {
       return json({
-        data: [compraDaApi],
+        data: [operacaoDaApi],
         page: 1,
         pageSize: 100,
         total: 1,
@@ -240,13 +242,13 @@ it('selecionar cliente herda representante e rota do cadastro no editor de pedid
   expect(screen.getByLabelText('Rota')).toHaveAttribute('placeholder', '—');
 });
 
-it('novo pedido usa dataOperacao recebida da compra sem fallback', async () => {
+it('novo pedido usa operacaoId e dataOperacao da operação sem compraProgramadaId', async () => {
   render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
   await userEvent.click(await screen.findByRole('button', { name: 'Novo pedido' }));
-  await screen.findByRole('option', { name: compraDaApi.dataOperacao });
+  await screen.findByRole('option', { name: `${operacaoDaApi.rotulo} — ${operacaoDaApi.data}` });
   await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
   await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
-  fireEvent.change(screen.getByLabelText('Operação'), { target: { value: compraDaApi.id } });
+  fireEvent.change(screen.getByLabelText('Operação'), { target: { value: operacaoDaApi.id } });
   fireEvent.change(screen.getByLabelText('Produto'), { target: { value: 'item-comercial-novo' } });
   fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
   await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
@@ -258,9 +260,10 @@ it('novo pedido usa dataOperacao recebida da compra sem fallback', async () => {
     expect(chamada).toBeDefined();
     const payload = JSON.parse(String(chamada?.[1]?.body));
     expect(payload).toMatchObject({
-      compraProgramadaId: compraDaApi.id,
-      dataOperacao: compraDaApi.dataOperacao,
+      operacaoId: operacaoDaApi.id,
+      dataOperacao: operacaoDaApi.data,
     });
+    expect(payload).not.toHaveProperty('compraProgramadaId');
     expect(payload.dataOperacao).not.toBeUndefined();
   });
 });

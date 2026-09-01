@@ -25,7 +25,7 @@ O projeto está em **implementação ativa** (fases F1–F6a concluídas; Ciclo 
 1. Decisões registradas — `docs/execucao/DECISOES.md` (AD-01..AD-06: composição do boi,
    EISS Osasco, unicidade por operação, 11 perfis, overbooking e reserva sem expiração).
 2. **Spec funcional v1.1** — `docs_v2/alphacarnes_contexto_funcional_e_recomendacoes_prototipo_v1.1.md`.
-3. **Protótipo validado** — `F:\Projetos\alpha-carnes-prototipo`, branch `feature/completude-v1.1`
+3. **Protótipo validado** — `F:\Projetos\alpha-carnes-prototipo`, branch `main`
    (fonte de verdade de UI/UX: telas devem ser idênticas — Princípio I da constituição).
 4. `docs_v2/` 00–05 (spec v0.1, onde não contradita pela v1.1).
 5. `docs/` 001–018 + `docs/architecture/adr/` (ADR-001..011).

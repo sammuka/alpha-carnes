@@ -121,7 +121,7 @@ O processo de revisão e merge que aplica esses gates está em [`framework-revis
 
 ### Princípios de ordenação (vinculantes)
 
-1. **Fidelidade ao protótipo é o critério de pronto de toda onda com UI.** O protótipo `feature/completude-v1.1` (39 rotas, validado com o usuário) é o contrato visual: cada tela entra idêntica — componentes, layout, fontes, cores, menu, fluxo — e o Portão 2 compara tela a tela contra o `.tsx` correspondente do protótipo antes do merge. Nenhuma onda fecha com tela "aproximada".
+1. **Fidelidade ao protótipo é o critério de pronto de toda onda com UI.** O protótipo (branch `main`, 39 rotas, validado com o usuário) é o contrato visual: cada tela entra idêntica — componentes, layout, fontes, cores, menu, fluxo — e o Portão 2 compara tela a tela contra o `.tsx` correspondente do protótipo antes do merge. Nenhuma onda fecha com tela "aproximada".
 2. **Correção estrutural antes de features** (Onda 1): as divergências D1 (overbooking), D2 (entidade Operação) e D3 (Pedido ao Fornecedor) corrigem a fundação sob a qual todas as telas seguintes serão construídas.
 3. **Shell/DS antes de qualquer tela** (Onda 2): os tokens e componentes do protótipo são centralizados uma única vez; das Ondas 3–10, nenhuma tela introduz cor/fonte/estrutura fora deles.
 4. Completude E2E por onda: uma feature entra com todos os modais/estados/ações do protótipo ou é reescopada para outra onda inteira — nunca entra pela metade (Princípio II).
@@ -141,6 +141,8 @@ O processo de revisão e merge que aplica esses gates está em [`framework-revis
 | 8 | Estoque (consulta FIFO + destinar, entrada de caixarias, ajustes c/ aprovação) | 7 | idem |
 | 9 | Carga (planejamento, conferência por bipagem, enviar p/ faturamento) | 7 | idem |
 | 10 | Faturamento (adapter EISS real — AD-02 — + flag RTC, Notas/XML, Seguro Manual F6b, Liberação c/ checklist) | 8, 9 | idem |
+| DS v3 | Design System v3 (Direção A + KPI strip da B) em todas as rotas — tokens e componentes, sem alterar lógica/contratos (AD-10) | 0–10 | idem |
+| 11 | Múltiplas compras programadas por operação (AD-14): N pedidos de compra no mesmo dia, disponibilidade como pool por `(operacao, item_comercial)`, cadeia física (pedido ao fornecedor, recebimento, NF, conferência tripla, `pecas.compra_programada_id`) permanece por lote | 0–10, DS v3 | idem |
 
 ```mermaid
 flowchart TD
@@ -156,6 +158,8 @@ flowchart TD
     O7 --> O9["Onda 9 Carga"]
     O8 --> O10["Onda 10 Faturamento"]
     O9 --> O10
+    O10 --> DSv3["Onda DS v3"]
+    DSv3 --> O11["Onda 11 Multiplas compras por operacao"]
 ```
 
 Estado corrente por onda: [`../execucao/EXECUCAO-STATUS.md`](../execucao/EXECUCAO-STATUS.md). Decisões que fecham pendências: [`../execucao/DECISOES.md`](../execucao/DECISOES.md) (AD-01: boi casado = 2 TZ + 2 DT + 2 PA; AD-02: fiscal = EISS Osasco).

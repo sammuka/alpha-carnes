@@ -9,6 +9,7 @@ function candidato(over: Partial<CandidatoPedido>): CandidatoPedido {
     saldoPendente: '5.000',
     prioridade: null,
     rotaPrevista: null,
+    cobertaPeloLote: false,
     preferencias: {},
     ...over,
   };
@@ -77,5 +78,13 @@ describe('associacao-score (motor de sugestão — função pura)', () => {
     expect(com.map((s) => s.score)).toEqual(sem.map((s) => s.score));
     expect(com.find((s) => s.pedidoVendaItemId === 'pvi-match')!.prefCompativel).toBe(true);
     expect(com.find((s) => s.pedidoVendaItemId === 'pvi-prio')!.prefCompativel).toBe(false);
+  });
+
+  it('bônus cobertaPeloLote só quando a reserva pertence ao lote de origem', () => {
+    const sem = calcularScores(peca, [candidato({ cobertaPeloLote: false })]);
+    const com = calcularScores(peca, [candidato({ cobertaPeloLote: true })]);
+    expect(com[0]!.score).toBe((sem[0]!.score) + 5);
+    expect(com[0]!.justificativa).toContain('reserva coberta pelo lote de origem');
+    expect(sem[0]!.justificativa).not.toContain('reserva coberta pelo lote de origem');
   });
 });
