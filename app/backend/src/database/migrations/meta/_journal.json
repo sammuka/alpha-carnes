@@ -197,6 +197,27 @@
       "when": 1787331752472,
       "tag": "0027_onda_frota_dados_legado",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1787907129465,
+      "tag": "0028_onda11_multicompra_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1787907139332,
+      "tag": "0029_onda11_multicompra_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1787907156483,
+      "tag": "0030_onda11_multicompra_contract",
+      "breakpoints": true
     }
   ]
 }

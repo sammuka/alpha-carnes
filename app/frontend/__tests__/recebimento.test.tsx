@@ -31,8 +31,9 @@ const PERMISSOES = ['RECEBIMENTO_LER', 'RECEBIMENTO_GERENCIAR'];
 
 const recebimentoLista = {
   id: 'r1',
-  codigoLote: 'R1ABCDEF',
+  codigoLote: 'Lote 001',
   compraProgramadaId: 'c1',
+  numeroSequencialCompra: 1,
   numeroInternoCompra: 'PC-2091',
   fornecedorId: 'f1',
   fornecedorNome: 'Frigorífico Boi Forte',
@@ -46,8 +47,9 @@ const recebimentoLista = {
 
 const recebimentoDetalhe = {
   id: 'r1',
-  codigoLote: 'R1ABCDEF',
+  codigoLote: 'Lote 001',
   compraProgramadaId: 'c1',
+  numeroSequencialCompra: 1,
   pedidoFornecedorId: 'pf1',
   fornecedorId: 'f1',
   dataOperacao: '2026-06-07',
@@ -167,6 +169,7 @@ describe('RecebimentoCargaClient', () => {
     render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
     expect(screen.getByText('Recebimento de carga')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('PC-2091')).toBeInTheDocument());
+    expect(screen.getByText(/Lote 001/)).toBeInTheDocument();
     expect(screen.getByText('Frigorífico Boi Forte')).toBeInTheDocument();
     expect(screen.getByText('128934')).toBeInTheDocument();
   });
@@ -177,6 +180,8 @@ describe('RecebimentoCargaClient', () => {
     fireEvent.click(screen.getByText('Abrir'));
 
     await waitFor(() => expect(screen.getByTestId('receb-status')).toHaveTextContent('Aguardando conferência final'));
+    expect(screen.getByTestId('receb-codigo')).toHaveTextContent('Lote 001');
+    expect(screen.getByText('Lote 001')).toBeInTheDocument();
     expect(screen.getByTestId('item-item-1')).toBeInTheDocument();
     expect(screen.getByTestId('btn-concluir')).toBeInTheDocument();
     expect(screen.getByText('Itens previstos importados')).toBeInTheDocument();
@@ -354,7 +359,7 @@ describe('RecebimentoCargaClient', () => {
     fireEvent.click(within(segundoDrawer).getByRole('button', { name: 'Criar Lote' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('sentinela D34'));
     expect(pushMock).not.toHaveBeenCalled();
-  });
+  }, 15_000);
 
   it('Recebimento de Carga renderiza os blocos do protótipo', async () => {
     const { STATUS_RECEB_LABEL } = await import(

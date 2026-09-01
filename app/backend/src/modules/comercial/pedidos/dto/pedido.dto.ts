@@ -28,15 +28,23 @@ const itensCriacaoPedidoSchema = z.array(itemPedidoSchema)
   });
 
 export const createPedidoSchema = z.object({
-  compraProgramadaId: z.string().uuid(),
+  compraProgramadaId: z.string().uuid().optional(),
+  operacaoId: z.string().uuid().optional(),
   clienteId: z.string().uuid(),
-  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data da operação inválida — use o formato AAAA-MM-DD.'),
+  dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data da operação inválida — use o formato AAAA-MM-DD.').optional(),
   dataEntrega: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data de entrega inválida — use o formato AAAA-MM-DD.').optional(),
   rotaPrevista: z.string().trim().max(100).optional(),
   prioridade: z.number().int().min(0).max(100).optional(),
   observacoesGerais: z.string().trim().max(1000).optional(),
   salvarComoRascunho: z.boolean().optional().default(false),
   itens: itensCriacaoPedidoSchema,
+}).superRefine((val, ctx) => {
+  if (!val.operacaoId && !val.dataOperacao) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Informe operacaoId ou dataOperacao',
+    });
+  }
 });
 
 export type CreatePedidoDto = z.infer<typeof createPedidoSchema>;

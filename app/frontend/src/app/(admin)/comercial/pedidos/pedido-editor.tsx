@@ -3,13 +3,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Plus, Save, Send, Trash2 } from 'lucide-react';
 import type {
-  CompraProgramada,
+  ComposicaoLotePedido,
   CriarPedidoDto,
   OverbookingChallenge,
   PedidoAbertoExistente,
   PedidoVendaDetalhe,
 } from '@/lib/comercial';
+import type { Operacao } from '@/lib/gestao-operacoes';
 import { extrairMensagemErro } from '@/lib/error-message';
+import { mascararCpfCnpj } from '@/lib/masks';
 import { AlertItem } from '@/components/ui/alert-item';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +37,7 @@ export interface ClientePedido {
   codigo: string;
   razaoSocial: string;
   nomeFantasia?: string | null;
+  documentoFiscal?: string | null;
   representanteNome?: string | null;
   rotaNome?: string | null;
 }
@@ -51,7 +54,7 @@ interface PedidoEditorProps {
   pedido: PedidoVendaDetalhe | null;
   clientes: ClientePedido[];
   produtos: ProdutoPedido[];
-  compras: CompraProgramada[];
+  operacoes: Operacao[];
   podeGerenciar: boolean;
   podeFinalizar: boolean;
   onBack: () => void;
@@ -103,14 +106,14 @@ export function PedidoEditor({
   pedido,
   clientes,
   produtos,
-  compras,
+  operacoes,
   podeGerenciar,
   podeFinalizar,
   onBack,
   onChanged,
 }: PedidoEditorProps) {
   const [clienteId, setClienteId] = useState(pedido?.clienteId ?? '');
-  const [compraProgramadaId, setCompraProgramadaId] = useState(pedido?.compraProgramadaId ?? '');
+  const [operacaoId, setOperacaoId] = useState(pedido?.operacaoId ?? '');
   const [representante, setRepresentante] = useState(pedido?.heranca?.representanteNome ?? '');
   const [rota, setRota] = useState(pedido?.rotaPrevista ?? pedido?.heranca?.rotaNome ?? '');
   const [prioridade, setPrioridade] = useState(String(pedido?.prioridade ?? 0));
@@ -125,6 +128,7 @@ export function PedidoEditor({
   const [retryChallenge, setRetryChallenge] = useState<(() => Promise<void>) | null>(null);
   const [adendo, setAdendo] = useState<AdendoPendente | null>(null);
   const [fecharAposAdendo, setFecharAposAdendo] = useState(false);
+  const [composicaoLotes, setComposicaoLotes] = useState<ComposicaoLotePedido[] | null>(null);
 
   useEffect(() => {
     setQuantidades(Object.fromEntries(
@@ -132,7 +136,26 @@ export function PedidoEditor({
     ));
   }, [pedido]);
 
-  const compraSelecionada = compras.find((compra) => compra.id === compraProgramadaId);
+  useEffect(() => {
+    if (!pedido?.id) {
+      setComposicaoLotes(null);
+      return;
+    }
+    let ativo = true;
+    void fetch(`/api/comercial/pedidos/${pedido.id}/composicao-lotes`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((linhas: ComposicaoLotePedido[]) => {
+        if (ativo) setComposicaoLotes(Array.isArray(linhas) ? linhas : []);
+      })
+      .catch(() => {
+        if (ativo) setComposicaoLotes([]);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [pedido?.id]);
+
+  const operacaoSelecionada = operacoes.find((operacao) => operacao.id === operacaoId);
   const produtosAusentes = useMemo(() => {
     const ids = new Set([
       ...(pedido?.itens.map((item) => item.itemComercialId) ?? []),
@@ -144,7 +167,7 @@ export function PedidoEditor({
   const itensCombobox = useMemo(() => clientes.map((cliente) => ({
     id: cliente.id,
     label: cliente.nomeFantasia || cliente.razaoSocial,
-    sublabel: cliente.codigo,
+    sublabel: cliente.documentoFiscal ? mascararCpfCnpj(cliente.documentoFiscal) : undefined,
   })), [clientes]);
 
   async function selecionarCliente(id: string) {
@@ -315,14 +338,14 @@ export function PedidoEditor({
   }
 
   function payloadNovo(salvarComoRascunho: boolean): CriarPedidoDto | null {
-    if (!clienteId || !compraSelecionada || itensNovos.length === 0) {
+    if (!clienteId || !operacaoSelecionada || itensNovos.length === 0) {
       setErro('Cliente, operação e ao menos um produto são obrigatórios.');
       return null;
     }
     return {
-      compraProgramadaId: compraSelecionada.id,
+      operacaoId: operacaoSelecionada.id,
       clienteId,
-      dataOperacao: compraSelecionada.dataOperacao,
+      dataOperacao: operacaoSelecionada.data,
       rotaPrevista: rota || undefined,
       prioridade: Number(prioridade) || 0,
       observacoesGerais: observacoes || undefined,
@@ -406,7 +429,7 @@ export function PedidoEditor({
           const query = new URLSearchParams({
             clienteId: payload.clienteId,
             itemComercialId,
-            dataOperacao: payload.dataOperacao,
+            dataOperacao: payload.dataOperacao ?? '',
           });
           const abertoResponse = await fetch(`/api/comercial/pedidos/aberto?${query.toString()}`, {
             cache: 'no-store',
@@ -484,13 +507,15 @@ export function PedidoEditor({
           <FormField label="Operação" htmlFor="pedido-operacao">
             <SelectNative
               id="pedido-operacao"
-              value={compraProgramadaId}
+              value={operacaoId}
               disabled={Boolean(pedido) || !podeGerenciar}
-              onChange={(event) => setCompraProgramadaId(event.target.value)}
+              onChange={(event) => setOperacaoId(event.target.value)}
             >
               <option value="">Selecione</option>
-              {compras.map((compra) => (
-                <option key={compra.id} value={compra.id}>{compra.dataOperacao}</option>
+              {operacoes.map((operacao) => (
+                <option key={operacao.id} value={operacao.id}>
+                  {operacao.rotulo} — {operacao.data}
+                </option>
               ))}
             </SelectNative>
           </FormField>
@@ -651,6 +676,30 @@ export function PedidoEditor({
           </Button>
         </CardFooter>
       </Card>
+
+      {pedido && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Origem do atendimento</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {composicaoLotes && composicaoLotes.length > 0 ? (
+              <ul className="space-y-1.5">
+                {composicaoLotes.map((lote) => (
+                  <li key={`${lote.compraProgramadaId}-${lote.recebimentoId}`} className="text-sm">
+                    <span className="font-data font-semibold">
+                      {`Lote ${String(lote.numeroSequencial).padStart(3, '0')}`}
+                    </span>
+                    {` · ${lote.quantidadeUnidades} peças · ${lote.pesoTotal} kg`}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhuma peça associada</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onBack}>Cancelar</Button>

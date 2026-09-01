@@ -597,7 +597,7 @@ describe('SubitemService — branches unitários', () => {
       peso: '5.000',
       deletedAt: null,
     };
-    const peca = { id: 'pc1', compraProgramadaId: 'cp1', deletedAt: null };
+    const peca = { id: 'pc1', compraProgramadaId: 'cp1', operacaoId: 'op1', deletedAt: null };
 
     // sugerir usa this.db: 1ª call = subitemAtivo, 2ª call = pecaAtiva, 3ª = calcularCompativeisItem
     let dCall = 0;
@@ -801,12 +801,20 @@ describe('SubitemService — branches unitários', () => {
     await expect(make().associar('s1', { pedidoVendaItemId: 'pvi1' } as never, 'u1')).rejects.toThrow('incompatível');
   });
 
-  // ─── itemCompativel: compra programada diferente ──────────────────────────────
-  it('associar → lança 409 se pedido pertence a outra compra programada', async () => {
+  // ─── itemCompativel: operação diferente (lotes da mesma operação são livres) ──
+  it('associar → lança 409 se pedido pertence a outra operação', async () => {
     const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', itemComercialId: 'ic1', deletedAt: null };
     const transf = { id: 't1', statusTransformacao: 'aberta', deletedAt: null };
     const peca = { id: 'pc1', compraProgramadaId: 'cp1', deletedAt: null };
-    const itemOutraCompra = { id: 'pvi1', pedidoVendaId: 'pv1', itemComercialId: 'ic1', compraProgramadaId: 'cp-OUTRA', statusPedido: 'aberto', deletedAt: null };
+    const itemOutraOperacao = {
+      id: 'pvi1',
+      pedidoVendaId: 'pv1',
+      itemComercialId: 'ic1',
+      operacaoId: 'op-OUTRA',
+      pecaOperacaoId: 'op1',
+      statusPedido: 'aberto',
+      deletedAt: null,
+    };
 
     function make() {
       let selectCall = 0;
@@ -816,7 +824,7 @@ describe('SubitemService — branches unitários', () => {
           if (selectCall === 1) return makeSelectChain([subitem]);
           if (selectCall === 2) return makeSelectChain([transf]);
           if (selectCall === 3) return makeSelectChain([peca]);
-          return makeSelectChain([itemOutraCompra]);
+          return makeSelectChain([itemOutraOperacao]);
         }),
         update: jest.fn(),
         insert: jest.fn(),
@@ -828,7 +836,7 @@ describe('SubitemService — branches unitários', () => {
     }
 
     await expect(make().associar('s1', { pedidoVendaItemId: 'pvi1' } as never, 'u1')).rejects.toThrow(ConflictException);
-    await expect(make().associar('s1', { pedidoVendaItemId: 'pvi1' } as never, 'u1')).rejects.toThrow('outra compra programada');
+    await expect(make().associar('s1', { pedidoVendaItemId: 'pvi1' } as never, 'u1')).rejects.toThrow('outra operação');
   });
 
   // ─── itemCompativel: item deletado ────────────────────────────────────────────
