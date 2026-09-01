@@ -7,12 +7,26 @@ export interface Paginado<T> {
   total: number;
 }
 
-export interface DisponibilidadeDia {
+export interface DisponibilidadeCompra {
+  modo: 'compra';
   id: string;
   operacaoId: string;
-  compraProgramadaId?: string;
+  compraProgramadaId: string;
   itemComercialId: string;
-  dataOperacao: string;
+  quantidadeTotalGerada: string;
+  quantidadeReservada: string;
+  quantidadeDisponivel: string;
+  quantidadeRecebida: string;
+  quantidadeComDivergencia: string;
+  status: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DisponibilidadeAgregado {
+  modo: 'agregado';
+  operacaoId: string;
+  itemComercialId: string;
   quantidadeTotalGerada: string;
   quantidadeReservada: string;
   quantidadeDisponivel: string;
@@ -21,11 +35,25 @@ export interface DisponibilidadeDia {
   status: string;
 }
 
+export type DisponibilidadeDia = DisponibilidadeCompra | DisponibilidadeAgregado;
+
+export interface ComposicaoLotePedido {
+  compraProgramadaId: string;
+  numeroSequencial: number;
+  recebimentoId: string;
+  quantidadeUnidades: number;
+  pesoTotal: string;
+}
+
 export interface CompraProgramada {
   id: string;
   operacaoId: string;
   dataOperacao: string;
   fornecedorId: string;
+  numeroSequencial: number;
+  fornecedorNomeFantasia: string | null;
+  fornecedorRazaoSocial: string | null;
+  totalItens: number;
   numeroInterno: string | null;
   referenciaExterna: string | null;
   previsaoEntrega: string | null;
@@ -101,7 +129,7 @@ export interface CriarCompraProgramadaDto {
 
 export interface PedidoVenda {
   id: string;
-  compraProgramadaId: string;
+  compraProgramadaId: string | null;
   clienteId: string;
   operacaoId?: string;
   dataOperacao?: string;
@@ -157,9 +185,10 @@ export interface PedidoVendaDetalhe extends PedidoVenda {
 }
 
 export interface CriarPedidoDto {
-  compraProgramadaId: string;
+  compraProgramadaId?: string | null;
+  operacaoId?: string;
   clienteId: string;
-  dataOperacao: string;
+  dataOperacao?: string;
   dataEntrega?: string;
   rotaPrevista?: string;
   prioridade?: number;

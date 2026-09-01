@@ -100,3 +100,44 @@ describe('mapa de disponibilidade — Onda 4 (D17)', () => {
     expect(restoDetalheF.body[0].peso_original).toBe('15.000');
   });
 });
+
+describe('mapa de disponibilidade — Onda 11 (pool V por operacao)', () => {
+  let app: INestApplication;
+  let cookies: string;
+  let mapaService: MapaService;
+
+  beforeAll(async () => {
+    app = await createTestApp();
+    mapaService = app.get(MapaService);
+  }, 60000);
+
+  afterAll(async () => {
+    await cleanupDb(app);
+    await app.close();
+  });
+
+  beforeEach(async () => {
+    await cleanupDb(app);
+    const admin = await createTestUser(app, { perfil: 'administrador' });
+    cookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
+  }, 60000);
+
+  it('estado V soma disponibilidade de duas compras da mesma operacao', async () => {
+    const { seedComercialBase, criarCompraConfirmada } = await import('../helpers/comercial-fixtures');
+    const { DRIZZLE } = await import('../../src/database/database.module');
+    const schema = await import('../../src/database/schema');
+    const { eq } = await import('drizzle-orm');
+    const dia = '2026-12-22';
+    const base = await seedComercialBase(app, { fator: 1 });
+    const c1 = await criarCompraConfirmada(app, cookies, base, { dataOperacao: dia, quantidade: 6 });
+    await criarCompraConfirmada(app, cookies, base, { dataOperacao: dia, quantidade: 4 });
+
+    const { db } = app.get<{ db: import('drizzle-orm/node-postgres').NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const [compra] = await db.select({ operacaoId: schema.comprasProgramadas.operacaoId })
+      .from(schema.comprasProgramadas)
+      .where(eq(schema.comprasProgramadas.id, c1));
+    const mapa = await mapaService.consultar(compra!.operacaoId);
+    const linha = mapa.find((l) => l.itemComercialId === base.itemComercialId);
+    expect(linha?.estados.V).toBe('10.000');
+  });
+});
