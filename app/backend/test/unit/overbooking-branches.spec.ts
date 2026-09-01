@@ -1087,15 +1087,13 @@ describe('OverbookingService — branches', () => {
 
               selectN += 1;
 
-              if (selectN === 1 || selectN === 6) return { for: () => lockRows([atual]) };
+              if (selectN === 1 || selectN === 5) return { for: () => lockRows([atual]) };
 
               if (selectN === 2) return Promise.resolve([{ id: 'op-dest', data: '2026-08-10', status: 'aberta' }]);
 
               if (selectN === 3) return Promise.resolve([{ id: 'op-1', data: '2026-08-03' }]);
 
-              if (selectN === 4) return Promise.resolve([{ id: 'cp-dest' }]);
-
-              if (selectN === 5) return { for: () => lockRows([{ id: 'pvi-def', quantidadePedida: '5.000' }]) };
+              if (selectN === 4) return { for: () => lockRows([{ id: 'pvi-def', quantidadePedida: '5.000' }]) };
 
               return Promise.resolve([{ data: '2026-08-03' }]);
 
@@ -1130,8 +1128,6 @@ describe('OverbookingService — branches', () => {
       caminho: 'novo_pedido',
 
       operacaoDestinoId: 'op-dest',
-
-      compraProgramadaId: 'cp-dest',
 
       quantidade: '2.000',
 
@@ -1313,66 +1309,6 @@ describe('OverbookingService — branches', () => {
 
       operacaoDestinoId: 'op-dest',
 
-      compraProgramadaId: 'cp-dest',
-
-      quantidade: '1.000',
-
-    }, 'user-1')).rejects.toBeInstanceOf(ConflictException);
-
-  });
-
-
-
-  it('decidir novo pedido rejeita compra inválida na operação de destino', async () => {
-
-    const atual = {
-
-      id: 'p1', status: 'aberta', operacaoId: 'op-1', quantidadeDeficit: '1.000',
-
-      pedidoVendaItemId: 'pvi-def', itemComercialId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
-
-    };
-
-    let selectN = 0;
-
-    const db = {
-
-      transaction: jest.fn(async (cb: (tx: object) => Promise<unknown>) => cb({
-
-        select: jest.fn(() => ({
-
-          from: () => ({
-
-            where: () => {
-
-              selectN += 1;
-
-              if (selectN === 1) return { for: () => lockRows([atual]) };
-
-              if (selectN === 2) return Promise.resolve([{ id: 'op-dest', data: '2026-08-10', status: 'aberta' }]);
-
-              if (selectN === 3) return Promise.resolve([{ id: 'op-1', data: '2026-08-03' }]);
-
-              return Promise.resolve([]);
-
-            },
-
-          }),
-
-        })),
-
-      })),
-
-    };
-
-    await expect(service(db).decidir('p1', {
-
-      caminho: 'novo_pedido',
-
-      operacaoDestinoId: 'op-dest',
-
-      compraProgramadaId: 'cp-dest',
-
       quantidade: '1.000',
 
     }, 'user-1')).rejects.toBeInstanceOf(ConflictException);
@@ -1537,15 +1473,13 @@ describe('OverbookingService — branches', () => {
 
               selectN += 1;
 
-              if (selectN === 1 || selectN === 6) return { for: () => lockRows([atual]) };
+              if (selectN === 1 || selectN === 5) return { for: () => lockRows([atual]) };
 
               if (selectN === 2) return Promise.resolve([{ id: 'op-dest', data: '2026-08-10', status: 'aberta' }]);
 
               if (selectN === 3) return Promise.resolve([{ id: 'op-1', data: '2026-08-03' }]);
 
-              if (selectN === 4) return Promise.resolve([{ id: 'cp-dest' }]);
-
-              if (selectN === 5) return { for: () => lockRows([{ id: 'pvi-def', quantidadePedida: '5.000' }]) };
+              if (selectN === 4) return { for: () => lockRows([{ id: 'pvi-def', quantidadePedida: '5.000' }]) };
 
               return Promise.resolve([{ data: '2026-08-03' }]);
 
@@ -1572,8 +1506,6 @@ describe('OverbookingService — branches', () => {
       caminho: 'novo_pedido',
 
       operacaoDestinoId: 'op-dest',
-
-      compraProgramadaId: 'cp-dest',
 
       quantidade: '5.000',
 
@@ -1628,8 +1560,6 @@ describe('OverbookingService — branches', () => {
       caminho: 'novo_pedido',
 
       operacaoDestinoId: 'op-dest',
-
-      compraProgramadaId: 'cp-dest',
 
       quantidade: '1.000',
 

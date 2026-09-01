@@ -358,4 +358,58 @@ describe('Troca de Peça e2e (v1.1 §6.13 + P10)', () => {
       );
     expect(pendencias).toHaveLength(0);
   });
+
+  it('Onda 11: troca interoperacao retorna Pedido pertence a outra operação', async () => {
+    const { default: request } = await import('supertest');
+    const base = await seedComercialBase(app, { fator: 1 });
+    const cOrigem = await montarCenarioPesagem(
+      app,
+      { compras: comprasCookies, recebimento: recebimentoCookies },
+      base,
+      { dataOperacao: '2026-09-11', quantidade: 10 },
+    );
+    const cDestino = await montarCenarioPesagem(
+      app,
+      { compras: comprasCookies, recebimento: recebimentoCookies },
+      base,
+      { dataOperacao: '2026-09-12', quantidade: 10 },
+    );
+    const pecaRetiradaId = await pecaAssociadaComEtiqueta(app, recebimentoCookies, {
+      recebimentoId: cOrigem.recebimentoId,
+      itemComercialBaseId: cOrigem.itemComercialId,
+      pedidoVendaItemId: (
+        await criarPedido(app, comercialCookies, {
+          compraId: cOrigem.compraId,
+          clienteId: cOrigem.clienteId,
+          itemComercialId: cOrigem.itemComercialId,
+          dataOperacao: cOrigem.dataOperacao,
+          quantidade: 2,
+        })
+      ).pedidoItemId,
+      peso: '12.500',
+    });
+    const pecaInseridaId = await pesarPeca(app, recebimentoCookies, {
+      recebimentoId: cOrigem.recebimentoId,
+      itemComercialBaseId: cOrigem.itemComercialId,
+      peso: '13.100',
+    });
+    const pedidoOutra = await criarPedido(app, comercialCookies, {
+      compraId: cDestino.compraId,
+      clienteId: cDestino.clienteId,
+      itemComercialId: cDestino.itemComercialId,
+      dataOperacao: cDestino.dataOperacao,
+      quantidade: 1,
+    });
+
+    const res = await request(srv()).post('/operacao/pesagem/trocas').set('Cookie', recebimentoCookies).send({
+      pecaRetiradaId,
+      pecaInseridaId,
+      pedidoVendaItemId: pedidoOutra.pedidoItemId,
+      destinoRetirada: 'estoque',
+      motivo: 'peca_mais_adequada',
+    });
+    expect(res.status).toBe(409);
+    const msg = typeof res.body.message === 'string' ? res.body.message : res.body.message?.message;
+    expect(msg).toBe('Pedido pertence a outra operação');
+  });
 });
