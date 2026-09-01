@@ -7,9 +7,14 @@ Leia somente o necessário e aplique esta precedência:
 1. `docs/governance/constituicao.md`.
 2. `docs/execucao/DECISOES.md`.
 3. `docs_v2/alphacarnes_contexto_funcional_e_recomendacoes_prototipo_v1.1.md`.
-4. Protótipo na branch `feature/completude-v1.1`; caminho padrão
-   `F:\Projetos\alpha-carnes-prototipo`, substituível por
-   `-PrototypePath` ou `ALPHACARNES_PROTOTYPE_PATH`.
+4. Protótipo na branch `main`; caminho padrão `F:\Projetos\alpha-carnes-prototipo` (existe só
+   na máquina do owner). Em qualquer outra máquina: `git clone
+   https://github.com/sammuka/alpha-carnes-prototipo` (repo privado — exige convite de
+   colaborador) e apontar `ALPHACARNES_PROTOTYPE_PATH` (ou `-PrototypePath`) para esse clone.
+   Sem isso, o Portão 1 de qualquer onda com UI bloqueia em `requires-human` — é o
+   comportamento correto, não um bug. Referências antigas a `feature/completude-v1.1` em
+   documentos históricos (planos de onda já mergeados, evidências, testes) são registro do
+   que era verdade quando escritas — leia-as como `main`, a branch atual não existe mais.
 5. `docs/governance/roadmap-canonico.md`, plano mestre e matriz de rastreabilidade.
 6. Demais documentos e ADRs.
 

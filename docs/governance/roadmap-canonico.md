@@ -121,7 +121,7 @@ O processo de revisão e merge que aplica esses gates está em [`framework-revis
 
 ### Princípios de ordenação (vinculantes)
 
-1. **Fidelidade ao protótipo é o critério de pronto de toda onda com UI.** O protótipo `feature/completude-v1.1` (39 rotas, validado com o usuário) é o contrato visual: cada tela entra idêntica — componentes, layout, fontes, cores, menu, fluxo — e o Portão 2 compara tela a tela contra o `.tsx` correspondente do protótipo antes do merge. Nenhuma onda fecha com tela "aproximada".
+1. **Fidelidade ao protótipo é o critério de pronto de toda onda com UI.** O protótipo (branch `main`, 39 rotas, validado com o usuário) é o contrato visual: cada tela entra idêntica — componentes, layout, fontes, cores, menu, fluxo — e o Portão 2 compara tela a tela contra o `.tsx` correspondente do protótipo antes do merge. Nenhuma onda fecha com tela "aproximada".
 2. **Correção estrutural antes de features** (Onda 1): as divergências D1 (overbooking), D2 (entidade Operação) e D3 (Pedido ao Fornecedor) corrigem a fundação sob a qual todas as telas seguintes serão construídas.
 3. **Shell/DS antes de qualquer tela** (Onda 2): os tokens e componentes do protótipo são centralizados uma única vez; das Ondas 3–10, nenhuma tela introduz cor/fonte/estrutura fora deles.
 4. Completude E2E por onda: uma feature entra com todos os modais/estados/ações do protótipo ou é reescopada para outra onda inteira — nunca entra pela metade (Princípio II).
