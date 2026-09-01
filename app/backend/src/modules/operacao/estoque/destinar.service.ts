@@ -88,6 +88,8 @@ export class DestinarEstoqueService {
       pedidoItemDestinoId: item.id,
       operadorId,
       statusExpedicaoNoMomento: 'aberta',
+      compraProgramadaOrigemId: peca.compraProgramadaId,
+      recebimentoOrigemId: peca.recebimentoId,
     });
 
     await this.auditoria.registrar(tx, {
@@ -125,6 +127,16 @@ export class DestinarEstoqueService {
         .returning(),
     );
 
+    const pecaOrigem = await tx
+      .select({
+        compraProgramadaId: pecas.compraProgramadaId,
+        recebimentoId: pecas.recebimentoId,
+      })
+      .from(pecas)
+      .where(eq(pecas.id, subitem.pecaOrigemId))
+      .then((r) => r[0] ?? null);
+    if (!pecaOrigem) throw new NotFoundException('Peça de origem do subitem não encontrada');
+
     await tx.insert(associacoesPecaHistorico).values({
       subitemId: dto.id,
       acao: 'destinar_estoque',
@@ -132,6 +144,8 @@ export class DestinarEstoqueService {
       pedidoItemDestinoId: item.id,
       operadorId,
       statusExpedicaoNoMomento: 'aberta',
+      compraProgramadaOrigemId: pecaOrigem.compraProgramadaId,
+      recebimentoOrigemId: pecaOrigem.recebimentoId,
     });
 
     await this.auditoria.registrar(tx, {

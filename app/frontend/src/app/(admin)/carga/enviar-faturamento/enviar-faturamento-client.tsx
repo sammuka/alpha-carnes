@@ -300,6 +300,7 @@ export function EnviarFaturamentoClient({ permissoes }: { permissoes: string[] }
                           <TableRow className="hover:bg-transparent">
                             <TableHead>Etiqueta</TableHead>
                             <TableHead>Produto</TableHead>
+                            <TableHead>Lote</TableHead>
                             <TableHead className="text-right">Peso</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -308,6 +309,9 @@ export function EnviarFaturamentoClient({ permissoes }: { permissoes: string[] }
                             <TableRow key={`${pedido.pedidoVendaId}-${idx}`}>
                               <TableCellCode>{peca.etiqueta ?? '—'}</TableCellCode>
                               <TableCell className="text-foreground">{peca.produtoNome}</TableCell>
+                              <TableCell className="font-data text-[11px] text-muted-foreground">
+                                {peca.loteOrigem ?? (peca.numeroSequencial != null ? `Lote ${String(peca.numeroSequencial).padStart(3, '0')}` : '—')}
+                              </TableCell>
                               <TableCellNum>{fmtKg(peca.peso)}</TableCellNum>
                             </TableRow>
                           ))}
