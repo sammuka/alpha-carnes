@@ -858,11 +858,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
               <div>
                 <p className="text-muted-foreground">Pedido de Compra</p>
                 <p className="font-medium">
-                  {detalhe.compra?.numeroInterno
-                    ?? (detalhe.compraProgramadaId
-                      ?? detalhe.pedidoFornecedor?.compraProgramadaId
-                      ?? '—'
-                    ).toString().slice(0, 8)}
+                  {detalhe.numeroSequencialCompra != null
+                    ? `Lote ${String(detalhe.numeroSequencialCompra).padStart(3, '0')}`
+                    : detalhe.codigoLote}
                 </p>
               </div>
               <div>

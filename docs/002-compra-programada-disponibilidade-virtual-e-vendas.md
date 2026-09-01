@@ -190,8 +190,8 @@ flowchart TD
 ## Regras de negócio consolidadas
 
 ### Compra programada
-- Deve existir uma compra principal por dia operacional.
-- A compra confirmada é a única origem da disponibilidade virtual do dia.
+- ~~Deve existir uma compra principal por dia operacional.~~ **Superado por [AD-14](execucao/DECISOES.md) (2026-08-27).** N compras programadas coexistem na mesma operação, com numeração sequencial única dentro da operação.
+- ~~A compra confirmada é a única origem da disponibilidade virtual do dia.~~ **Superado por AD-14.** A disponibilidade virtual é pool por `(operacao, item_comercial)`: cada compra confirmada gera as suas linhas, e a reserva comercial consome FIFO entre todas as compras da operação. A cadeia física (pedido ao fornecedor, recebimento, NF, conferência tripla) permanece por lote.
 - Não deve haver geração de disponibilidade sem regra de desdobramento válida.
 
 ### Disponibilidade virtual
