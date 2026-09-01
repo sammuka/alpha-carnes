@@ -31,6 +31,8 @@ export interface CandidatoPedido {
   prioridade: number | null;
   rotaPrevista: string | null;
   preferencias: PreferenciasCliente;
+  /** Reserva ativa coberta por disponibilidade da compra de origem da peça. */
+  cobertaPeloLote: boolean;
 }
 
 export interface SugestaoScored extends CandidatoPedido {
@@ -49,6 +51,7 @@ const PESO_COMPATIVEL = 50;
 const PESO_FAIXA_PESO = 25;
 const PESO_PRIORIDADE = 15;
 const PESO_SALDO = 10;
+const PESO_COBERTURA_LOTE = 5;
 
 /**
  * Calcula e ordena os candidatos compatíveis para uma peça (RF-PS-08).
@@ -92,6 +95,11 @@ export function calcularScores(peca: PecaParaScore, candidatos: CandidatoPedido[
     if (saldo > 0) {
       score += Math.min(PESO_SALDO, saldo);
       motivos.push(`saldo pendente ${c.saldoPendente}`);
+    }
+
+    if (c.cobertaPeloLote) {
+      score += PESO_COBERTURA_LOTE;
+      motivos.push('reserva coberta pelo lote de origem');
     }
 
     const preferidas = c.preferencias.caracteristicasPreferidas ?? [];

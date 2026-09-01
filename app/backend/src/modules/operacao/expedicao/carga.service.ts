@@ -7,6 +7,7 @@ import * as schema from '../../../database/schema';
 import {
   associacoesPecaHistorico,
   cargaItens,
+  comprasProgramadas,
   pecas,
   pedidosVenda,
   pedidosVendaItens,
@@ -149,7 +150,7 @@ export class CargaService {
           pedidoVendaId: pedidosVendaItens.pedidoVendaId,
           itemComercialId: pedidosVendaItens.itemComercialId,
           statusPedido: pedidosVenda.status,
-          compraProgramadaId: pedidosVenda.compraProgramadaId,
+          operacaoId: pedidosVenda.operacaoId,
           deletedAt: pedidosVenda.deletedAt,
         })
         .from(pedidosVendaItens)
@@ -169,32 +170,44 @@ export class CargaService {
 
       // Compatibilidade por tipo_origem
       let itemComercialOrigem: string;
+      let origemCompraId: string;
+      let origemRecebimentoId: string;
       if (item.tipoOrigem === 'peca') {
         const peca = await tx
           .select({
             itemComercialBaseId: pecas.itemComercialBaseId,
             compraProgramadaId: pecas.compraProgramadaId,
+            recebimentoId: pecas.recebimentoId,
+            operacaoId: comprasProgramadas.operacaoId,
           })
           .from(pecas)
+          .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
           .where(eq(pecas.id, item.pecaId!))
           .then((r) => r[0]!);
         itemComercialOrigem = peca.itemComercialBaseId;
-        if (peca.compraProgramadaId !== itemDestino.compraProgramadaId) {
-          throw new ConflictException('Transferência só permitida dentro da mesma compra programada');
+        origemCompraId = peca.compraProgramadaId;
+        origemRecebimentoId = peca.recebimentoId;
+        if (peca.operacaoId !== itemDestino.operacaoId) {
+          throw new ConflictException('Pedido pertence a outra operação');
         }
       } else {
         const sub = await tx
           .select({
             itemComercialId: subitens.itemComercialId,
             compraProgramadaId: pecas.compraProgramadaId,
+            recebimentoId: pecas.recebimentoId,
+            operacaoId: comprasProgramadas.operacaoId,
           })
           .from(subitens)
           .innerJoin(pecas, eq(subitens.pecaOrigemId, pecas.id))
+          .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
           .where(eq(subitens.id, item.subitemId!))
           .then((r) => r[0]!);
         itemComercialOrigem = sub.itemComercialId;
-        if (sub.compraProgramadaId !== itemDestino.compraProgramadaId) {
-          throw new ConflictException('Transferência só permitida dentro da mesma compra programada');
+        origemCompraId = sub.compraProgramadaId;
+        origemRecebimentoId = sub.recebimentoId;
+        if (sub.operacaoId !== itemDestino.operacaoId) {
+          throw new ConflictException('Pedido pertence a outra operação');
         }
       }
 
@@ -242,6 +255,8 @@ export class CargaService {
         motivo: dto.motivo,
         operadorId,
         statusExpedicaoNoMomento: caminhao.statusCaminhao,
+        compraProgramadaOrigemId: origemCompraId,
+        recebimentoOrigemId: origemRecebimentoId,
       });
 
       await this.auditoria.registrar(tx, {

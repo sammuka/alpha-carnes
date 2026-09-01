@@ -1,6 +1,6 @@
 # Constituição do Projeto AlphaCarnes
 
-> **Versão:** 1.0.0 · **Status:** Vigente · **Ratificada em:** 2026-07-23
+> **Versão:** 1.1.0 · **Status:** Vigente · **Ratificada em:** 2026-07-23 · **Emendada em:** 2026-08-25
 > Documento de princípios **inegociáveis** do projeto. Em conflito com qualquer outro documento, prática ou preferência, **esta constituição prevalece** — exceto instrução direta e explícita do Quality Owner, registrada como emenda.
 > Aplicada nos gates: todo plano (Portão 1) e todo PR (Portão 2) são auditados contra os princípios abaixo, citados por número. Ver [`pipeline-execucao.md`](pipeline-execucao.md).
 
@@ -8,7 +8,7 @@
 
 ## Princípio I — Fidelidade absoluta ao protótipo validado (NÃO-NEGOCIÁVEL)
 
-O protótipo `F:\Projetos\alpha-carnes-prototipo`, branch `feature/completude-v1.1`, é a **fonte de verdade de UI/UX com prioridade zero**. Foi validado com o usuário final e não é uma sugestão — é o contrato visual e de interação do produto.
+O protótipo `F:\Projetos\alpha-carnes-prototipo`, branch `main`, é a **fonte de verdade de UI/UX com prioridade zero**. Foi validado com o usuário final e não é uma sugestão — é o contrato visual e de interação do produto.
 
 1. **Tudo idêntico ao prototipado:** componentes, layout de telas, hierarquia do menu (9 grupos, ordem e rótulos), fontes (Inter 400/500/600/700), cores (paleta do protótipo: navy `#265389`, hover `#1E4070`, blue-mid `#3B7FD4`, fundo `#F5F7FA`, sidebar em gradiente `#1E3A5F → #1B4E9B`, status `#18A84A`/`#F5B019`/`#FC5241`/`#3B7FD4`/`#7C3AED`, badge Provisório `#FEF3C7`/`#92400E`), espaçamentos, modais, abas, estados visuais, microcopy e fluxos de navegação.
 2. **Únicas alterações permitidas:** (a) remoção de textos que existem apenas por ser protótipo (ex.: "SIMULAR PERFIL", datas fictícias hardcoded, avisos de dado demo); (b) substituição de dados mockados por dados reais; (c) correções que o próprio plano mestre registra como discrepância conhecida do protótipo (ex.: catálogo legado da aba "Grade Tabular" da Disponibilidade — usar o catálogo MVP correto). Qualquer outra divergência visual ou de fluxo é **defeito de gate**.
@@ -47,7 +47,7 @@ Os pontos que a spec v1.1 marca como pendentes (e os que o plano mestre lista em
 
 ## Princípio IX — Terminologia do domínio
 
-`Nome Fantasia` e `Razão Social` no cadastro; `Buscar cliente` nas buscas. A palavra **"Marca" é banida** de telas, rótulos, entidades, código e documentação nova (v1.1 §6.8). `Estoque` é o destino interno — a AlphaCarnes nunca é cadastrada como cliente interno.
+`Nome Fantasia/Marca` e `Razão Social` no cadastro de clientes; `Buscar cliente` nas buscas. A palavra **"Marca"** permanece banida como nome de entidade, rótulo isolado e termo de busca (v1.1 §6.8). O único rótulo autorizado que a contém é `Nome Fantasia/Marca` no campo `nomeFantasia` (AD-13). `Estoque` é o destino interno — a AlphaCarnes nunca é cadastrada como cliente interno.
 
 ## Princípio X — Dados conforme convenções, migrations disciplinadas
 
@@ -59,7 +59,7 @@ Convenções de [`../data/convencoes-schema.md`](../data/convencoes-schema.md): 
 
 - **Stack fixada** (ADR-001..011): NestJS 11 + TS 5 strict, Next.js 16 App Router (BFF), PostgreSQL 18 + Drizzle, Zod 4, WebSocket nativo, JWT+RBAC 11 perfis (doc 013), node-soap p/ EISS. Trocar peça da stack = ADR nova + emenda.
 - **Sem over-engineering:** sem CQRS, sem Event Sourcing, sem microserviços, sem camada de repositório genérica. Se pode ser uma função, não vira serviço.
-- **Fontes de verdade em ordem de precedência:** (1) decisões registradas em `docs/execucao/DECISOES.md`; (2) `docs_v2/alphacarnes_contexto_funcional_e_recomendacoes_prototipo_v1.1.md`; (3) código do protótipo `feature/completude-v1.1`; (4) docs_v2 v0.1 onde não contradito; (5) docs/001–018 + ADRs. Nunca inventar fato que nenhuma fonte sustenta.
+- **Fontes de verdade em ordem de precedência:** (1) decisões registradas em `docs/execucao/DECISOES.md`; (2) `docs_v2/alphacarnes_contexto_funcional_e_recomendacoes_prototipo_v1.1.md`; (3) código do protótipo (branch `main`); (4) docs_v2 v0.1 onde não contradito; (5) docs/001–018 + ADRs. Nunca inventar fato que nenhuma fonte sustenta.
 - **Cobertura backend ≥ 80% (linha e branch)** nos services de domínio — gate de CI, não meta aspiracional.
 
 ## Pendências externas declaradas
@@ -86,3 +86,4 @@ O rito completo (Plano → Portão 1 → Implementação → Portão 2 → Merge
 | Versão | Data | Mudança |
 |---|---|---|
 | 1.0.0 | 2026-07-23 | Ratificação inicial. Consolida RA-01..RA-06 (quality-gates), premissas do usuário (fidelidade ao protótipo como Princípio I; completude E2E como Princípio II) e convenções vigentes. Incorpora AD-01 (boi casado 2TZ+2DT+2PA) e AD-02 (fiscal = EISS Osasco) por referência. |
+| 1.1.0 | 2026-08-25 | MINOR — Princípio IX: autoriza o rótulo composto `Nome Fantasia/Marca` no cadastro de clientes (AD-13). “Marca” segue banida como entidade, rótulo isolado e termo de busca. |
