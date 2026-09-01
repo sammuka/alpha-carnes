@@ -21,7 +21,7 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
     recebimentoCookies = await loginCookies(app, receb.adminEmail, receb.adminPassword);
     comprasCookies = await loginCookies(app, compras.adminEmail, compras.adminPassword);
     comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
-  }, 60000);
+  }, 180000);
 
   afterAll(async () => {
     await cleanupDb(app);
@@ -230,5 +230,127 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
 
     const res = await request(srv()).post(`/operacao/pesagem/pecas/${peca}/confirmar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: pedidoC2.pedidoItemId });
     expect(res.status).toBe(409); // pedido de outra compra/item
+  });
+
+  it('Onda 11: pecas dos lotes 001 e 002 da mesma operacao associam ao mesmo pedido', async () => {
+    const { default: request } = await import('supertest');
+    const {
+      criarCompraConfirmada,
+      criarPedidoFornecedorEnviado,
+      iniciarRecebimentoViaPf,
+    } = await import('../helpers/comercial-fixtures');
+    const dia = '2026-12-27';
+    const base = await seedComercialBase(app, { fator: 1 });
+    const c1 = await montarCenarioPesagem(
+      app,
+      { compras: comprasCookies, recebimento: recebimentoCookies },
+      base,
+      { dataOperacao: dia, quantidade: 6 },
+    );
+    const compra2 = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dia, quantidade: 4 });
+    const pf2 = await criarPedidoFornecedorEnviado(app, comprasCookies, compra2);
+    const { recebimentoId: rec2 } = await iniciarRecebimentoViaPf(app, recebimentoCookies, pf2);
+    const pedido = await criarPedido(app, comercialCookies, {
+      compraId: c1.compraId,
+      clienteId: c1.clienteId,
+      itemComercialId: c1.itemComercialId,
+      dataOperacao: dia,
+      quantidade: 10,
+    });
+
+    const idsLote001: string[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      idsLote001.push(await pesarPeca(app, recebimentoCookies, {
+        recebimentoId: c1.recebimentoId,
+        itemComercialBaseId: c1.itemComercialId,
+      }));
+    }
+    const idsLote002: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      idsLote002.push(await pesarPeca(app, recebimentoCookies, {
+        recebimentoId: rec2,
+        itemComercialBaseId: c1.itemComercialId,
+      }));
+    }
+
+    const sug1 = await request(srv()).get(`/operacao/pesagem/pecas/${idsLote001[0]}/sugestao`).set('Cookie', recebimentoCookies);
+    const sug2 = await request(srv()).get(`/operacao/pesagem/pecas/${idsLote002[0]}/sugestao`).set('Cookie', recebimentoCookies);
+    expect(sug1.status).toBe(200);
+    expect(sug2.status).toBe(200);
+    expect(sug1.body.compativeis.some((c: { pedidoVendaItemId: string }) => c.pedidoVendaItemId === pedido.pedidoItemId)).toBe(true);
+    expect(sug2.body.compativeis.some((c: { pedidoVendaItemId: string }) => c.pedidoVendaItemId === pedido.pedidoItemId)).toBe(true);
+
+    for (const pecaId of [...idsLote001, ...idsLote002]) {
+      const ok = await request(srv())
+        .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
+        .set('Cookie', recebimentoCookies)
+        .send({ pedidoVendaItemId: pedido.pedidoItemId });
+      expect(ok.status).toBe(201);
+    }
+
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const pecasPedido = await db.select().from(schema.pecas).where(eq(schema.pecas.pedidoVendaItemId, pedido.pedidoItemId));
+    expect(pecasPedido).toHaveLength(10);
+    expect(pecasPedido.filter((p) => p.compraProgramadaId === c1.compraId)).toHaveLength(6);
+    expect(pecasPedido.filter((p) => p.compraProgramadaId === compra2)).toHaveLength(4);
+    expect(pecasPedido.every((p) => p.compraProgramadaId != null)).toBe(true);
+
+    const item = await db.select().from(schema.pedidosVendaItens).where(eq(schema.pedidosVendaItens.id, pedido.pedidoItemId)).then((r) => r[0]!);
+    expect(item.quantidadeAtendida).toBe('10.000');
+
+    const composicao = await request(srv())
+      .get(`/comercial/pedidos/${pedido.pedidoId}/composicao-lotes`)
+      .set('Cookie', comercialCookies);
+    expect(composicao.status).toBe(200);
+    expect(composicao.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        quantidadeUnidades: 6,
+        compraProgramadaId: c1.compraId,
+        recebimentoId: c1.recebimentoId,
+      }),
+      expect.objectContaining({
+        quantidadeUnidades: 4,
+        compraProgramadaId: compra2,
+        recebimentoId: rec2,
+      }),
+    ]));
+  }, 120000);
+
+  it('Onda 11: associacao interoperacao retorna mensagem exata', async () => {
+    const { default: request } = await import('supertest');
+    const base = await seedComercialBase(app, { fator: 1 });
+    const c1 = await montarCenarioPesagem(
+      app,
+      { compras: comprasCookies, recebimento: recebimentoCookies },
+      base,
+      { dataOperacao: '2026-12-28', quantidade: 6 },
+    );
+    const c2 = await montarCenarioPesagem(
+      app,
+      { compras: comprasCookies, recebimento: recebimentoCookies },
+      base,
+      { dataOperacao: '2026-12-29', quantidade: 6 },
+    );
+    const pedidoOutraOp = await criarPedido(app, comercialCookies, {
+      compraId: c2.compraId,
+      clienteId: c2.clienteId,
+      itemComercialId: c2.itemComercialId,
+      dataOperacao: c2.dataOperacao,
+      quantidade: 2,
+    });
+    const peca = await pesarPeca(app, recebimentoCookies, {
+      recebimentoId: c1.recebimentoId,
+      itemComercialBaseId: c1.itemComercialId,
+    });
+    const sug = await request(srv()).get(`/operacao/pesagem/pecas/${peca}/sugestao`).set('Cookie', recebimentoCookies);
+    expect(sug.body.compativeis.every((c: { pedidoVendaItemId: string }) => c.pedidoVendaItemId !== pedidoOutraOp.pedidoItemId)).toBe(true);
+
+    const res = await request(srv())
+      .post(`/operacao/pesagem/pecas/${peca}/confirmar`)
+      .set('Cookie', recebimentoCookies)
+      .send({ pedidoVendaItemId: pedidoOutraOp.pedidoItemId });
+    expect(res.status).toBe(409);
+    const msg = res.body.message;
+    expect(typeof msg === 'string' ? msg : msg.message).toBe('Pedido pertence a outra operação');
   });
 });

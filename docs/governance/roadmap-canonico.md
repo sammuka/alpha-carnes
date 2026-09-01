@@ -141,6 +141,8 @@ O processo de revisão e merge que aplica esses gates está em [`framework-revis
 | 8 | Estoque (consulta FIFO + destinar, entrada de caixarias, ajustes c/ aprovação) | 7 | idem |
 | 9 | Carga (planejamento, conferência por bipagem, enviar p/ faturamento) | 7 | idem |
 | 10 | Faturamento (adapter EISS real — AD-02 — + flag RTC, Notas/XML, Seguro Manual F6b, Liberação c/ checklist) | 8, 9 | idem |
+| DS v3 | Design System v3 (Direção A + KPI strip da B) em todas as rotas — tokens e componentes, sem alterar lógica/contratos (AD-10) | 0–10 | idem |
+| 11 | Múltiplas compras programadas por operação (AD-14): N pedidos de compra no mesmo dia, disponibilidade como pool por `(operacao, item_comercial)`, cadeia física (pedido ao fornecedor, recebimento, NF, conferência tripla, `pecas.compra_programada_id`) permanece por lote | 0–10, DS v3 | idem |
 
 ```mermaid
 flowchart TD
@@ -156,6 +158,8 @@ flowchart TD
     O7 --> O9["Onda 9 Carga"]
     O8 --> O10["Onda 10 Faturamento"]
     O9 --> O10
+    O10 --> DSv3["Onda DS v3"]
+    DSv3 --> O11["Onda 11 Multiplas compras por operacao"]
 ```
 
 Estado corrente por onda: [`../execucao/EXECUCAO-STATUS.md`](../execucao/EXECUCAO-STATUS.md). Decisões que fecham pendências: [`../execucao/DECISOES.md`](../execucao/DECISOES.md) (AD-01: boi casado = 2 TZ + 2 DT + 2 PA; AD-02: fiscal = EISS Osasco).

@@ -16,6 +16,7 @@ import { operacoes,
   clientes,
   auditoria,
   usuarios,
+  comprasProgramadas,
  } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
@@ -305,9 +306,11 @@ export class LiberacaoService {
         etiqueta: pecas.etiquetaAtual,
         produtoNome: itensComerciais.descricao,
         peso: pecas.pesoOriginal,
+        numeroSequencial: comprasProgramadas.numeroSequencial,
       })
       .from(cargaItens)
       .innerJoin(pecas, eq(pecas.id, cargaItens.pecaId))
+      .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
       .innerJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
       .where(
         and(
@@ -326,9 +329,12 @@ export class LiberacaoService {
         etiqueta: subitens.etiquetaAtual,
         produtoNome: itensComerciais.descricao,
         peso: subitens.peso,
+        numeroSequencial: comprasProgramadas.numeroSequencial,
       })
       .from(cargaItens)
       .innerJoin(subitens, eq(subitens.id, cargaItens.subitemId))
+      .innerJoin(pecas, eq(pecas.id, subitens.pecaOrigemId))
+      .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
       .innerJoin(itensComerciais, eq(itensComerciais.id, subitens.itemComercialId))
       .where(
         and(
@@ -383,7 +389,7 @@ export class LiberacaoService {
 
       const pedidosMap = new Map<
         string,
-        { pedidoVendaId: string; clienteNome: string | null; pecas: Array<{ etiqueta: string | null; produtoNome: string; peso: string }> }
+        { pedidoVendaId: string; clienteNome: string | null; pecas: Array<{ etiqueta: string | null; produtoNome: string; peso: string; loteOrigem: string; numeroSequencial: number | null }> }
       >();
       for (const item of itensDoCaminhao) {
         const existente = pedidosMap.get(item.pedidoVendaId) ?? {
@@ -395,6 +401,8 @@ export class LiberacaoService {
           etiqueta: item.etiqueta,
           produtoNome: item.produtoNome,
           peso: item.peso ?? '0',
+          loteOrigem: `Lote ${String(item.numeroSequencial).padStart(3, '0')}`,
+          numeroSequencial: item.numeroSequencial,
         });
         pedidosMap.set(item.pedidoVendaId, existente);
       }

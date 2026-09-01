@@ -17,6 +17,7 @@ import {
   EVENTOS,
   roomsDaData,
   type CompraConfirmadaPayload,
+  type CompraMutadaPayload,
   type DisponibilidadeGeradaPayload,
   type PedidoSemCoberturaPayload,
   type ReservaAtualizadaPayload,
@@ -166,6 +167,21 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.COMPRA_CONFIRMADA)
   handleCompraConfirmada(payload: CompraConfirmadaPayload): void {
     this.broadcast(EVENTOS.COMPRA_CONFIRMADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.COMPRA_CRIADA)
+  handleCompraCriada(payload: CompraMutadaPayload): void {
+    this.broadcast(EVENTOS.COMPRA_CRIADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.COMPRA_ATUALIZADA)
+  handleCompraAtualizada(payload: CompraMutadaPayload): void {
+    this.broadcast(EVENTOS.COMPRA_ATUALIZADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.COMPRA_CANCELADA)
+  handleCompraCancelada(payload: CompraMutadaPayload): void {
+    this.broadcast(EVENTOS.COMPRA_CANCELADA, payload, payload.dataOperacao);
   }
 
   @OnEvent(EVENTOS.PEDIDO_SEM_COBERTURA)

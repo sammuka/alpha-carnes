@@ -309,7 +309,10 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     // A query é a fonte de verdade do alerta: deve listar AMBOS os pedidos.
     const { db } = app.get<{ db: Db }>(DRIZZLE);
     const disponibilidade = app.get(DisponibilidadeService);
-    const risco = await disponibilidade.listarPedidosEmRisco(db, compraId, base.itemComercialId);
+    const [compra] = await db.select({ operacaoId: schema.comprasProgramadas.operacaoId })
+      .from(schema.comprasProgramadas)
+      .where(eq(schema.comprasProgramadas.id, compraId));
+    const risco = await disponibilidade.listarPedidosEmRisco(db, compra!.operacaoId, base.itemComercialId);
     expect(risco).toHaveLength(2);
     expect(risco.every((r) => Number(r.quantidadeRecebida) === 10)).toBe(true);
   });
@@ -332,8 +335,48 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
 
     const { db } = app.get<{ db: Db }>(DRIZZLE);
     const disponibilidade = app.get(DisponibilidadeService);
-    const risco = await disponibilidade.listarPedidosEmRisco(db, compraId, base.itemComercialId);
+    const [compra] = await db.select({ operacaoId: schema.comprasProgramadas.operacaoId })
+      .from(schema.comprasProgramadas)
+      .where(eq(schema.comprasProgramadas.id, compraId));
+    const risco = await disponibilidade.listarPedidosEmRisco(db, compra!.operacaoId, base.itemComercialId);
     expect(risco).toHaveLength(0); // reservado 6 <= recebido 10
+  });
+
+  it('lote deficitario nao gera falso positivo quando outro lote da operacao cobre o total', async () => {
+    const dia = '2026-12-21';
+    const base = await seedComercialBase(app, { fator: 1 });
+    const c1 = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dia, quantidade: 6 });
+    const c2 = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dia, quantidade: 4 });
+    const pedido = await request(srv())
+      .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({
+        compraProgramadaId: c1,
+        clienteId: base.clienteId,
+        dataOperacao: dia,
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 10 }],
+      });
+    expect(pedido.status).toBe(201);
+
+    const { db } = app.get<{ db: Db }>(DRIZZLE);
+    await db.update(schema.disponibilidadesVirtuais)
+      .set({ quantidadeRecebida: '4.000' })
+      .where(eq(schema.disponibilidadesVirtuais.compraProgramadaId, c1));
+    await db.update(schema.disponibilidadesVirtuais)
+      .set({ quantidadeRecebida: '6.000' })
+      .where(eq(schema.disponibilidadesVirtuais.compraProgramadaId, c2));
+
+    const disponibilidade = app.get(DisponibilidadeService);
+    const [compra] = await db.select({ operacaoId: schema.comprasProgramadas.operacaoId })
+      .from(schema.comprasProgramadas)
+      .where(eq(schema.comprasProgramadas.id, c1));
+    expect(await disponibilidade.listarPedidosEmRisco(db, compra!.operacaoId, base.itemComercialId)).toEqual([]);
+
+    await db.update(schema.disponibilidadesVirtuais)
+      .set({ quantidadeRecebida: '5.000' })
+      .where(eq(schema.disponibilidadesVirtuais.compraProgramadaId, c2));
+    const comDeficit = await disponibilidade.listarPedidosEmRisco(db, compra!.operacaoId, base.itemComercialId);
+    expect(comDeficit.length).toBeGreaterThan(0);
   });
 
   // Helper: cria recebimento com uma divergência aberta; retorna ids úteis.
@@ -949,7 +992,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const row = lista.body.data.find((r: { id: string }) => r.id === ini.body.recebimento.id);
     expect(row).toBeDefined();
     expect(row.romaneio).toBe('ROM-LISTA');
-    expect(row.codigoLote).toBe(ini.body.recebimento.id.slice(0, 8).toUpperCase());
+    expect(row.codigoLote).toBe('Lote 001');
     expect(typeof row.progressoBalanca).toBe('number');
   });
 });
