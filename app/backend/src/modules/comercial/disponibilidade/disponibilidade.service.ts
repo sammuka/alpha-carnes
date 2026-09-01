@@ -12,7 +12,6 @@ import {
 } from '../../../common/crud/decimal';
 import type { ListarDisponibilidadeQuery } from './dto/disponibilidade.dto';
 
-type DisponibilidadeVirtual = typeof disponibilidadesVirtuais.$inferSelect;
 type CompraProgramada = typeof schema.comprasProgramadas.$inferSelect;
 type Tx = NodePgDatabase<typeof schema>;
 
@@ -191,7 +190,7 @@ export class DisponibilidadeService {
    * pedido individual precisa exceder o recebido. Ex.: 2 pedidos × 6, recebido 10
    * → Σ=12 > 10, ambos entram. Nunca silencioso.
    */
-  async listarPedidosEmRisco(tx: Tx, compraProgramadaId: string, itemComercialId: string): Promise<PedidoEmRisco[]> {
+  async listarPedidosEmRisco(tx: Tx, operacaoId: string, itemComercialId: string): Promise<PedidoEmRisco[]> {
     const linhas = await tx.execute<{
       pedido_id: string;
       item_comercial_id: string;
@@ -201,30 +200,34 @@ export class DisponibilidadeService {
       WITH disp AS (
         SELECT id, item_comercial_id, quantidade_recebida
         FROM disponibilidades_virtuais
-        WHERE compra_programada_id = ${compraProgramadaId}
+        WHERE operacao_id = ${operacaoId}
           AND item_comercial_id = ${itemComercialId}
       ),
       reservas_ativas AS (
         SELECT pvi.pedido_venda_id AS pedido_id,
                SUM(r.quantidade_reservada) AS quantidade_reservada
         FROM reservas_disponibilidade r
-        JOIN disp ON disp.id = r.disponibilidade_virtual_id
         JOIN pedidos_venda_itens pvi ON pvi.id = r.pedido_venda_item_id
+          AND pvi.item_comercial_id = ${itemComercialId}
         JOIN pedidos_venda pv ON pv.id = pvi.pedido_venda_id AND pv.deleted_at IS NULL
+          AND pv.operacao_id = ${operacaoId}
         WHERE r.status = 'ativa'
         GROUP BY pvi.pedido_venda_id
       ),
       total AS (
         SELECT COALESCE(SUM(quantidade_reservada), 0) AS reservado_item
         FROM reservas_ativas
+      ),
+      total_recebido AS (
+        SELECT COALESCE(SUM(quantidade_recebida), 0) AS recebido
+        FROM disp
       )
       SELECT reservas_ativas.pedido_id,
              ${itemComercialId} AS item_comercial_id,
              reservas_ativas.quantidade_reservada,
-             (SELECT quantidade_recebida FROM disp) AS quantidade_recebida
+             (SELECT recebido FROM total_recebido) AS quantidade_recebida
       FROM reservas_ativas
-      -- Déficit coletivo: Σ reservas do item > recebido → todos os pedidos em risco.
-      WHERE (SELECT reservado_item FROM total) > (SELECT quantidade_recebida FROM disp)
+      WHERE (SELECT reservado_item FROM total) > (SELECT recebido FROM total_recebido)
       ORDER BY reservas_ativas.pedido_id
     `);
     return linhas.rows.map((r) => ({
@@ -366,14 +369,21 @@ export class DisponibilidadeService {
     }
   }
 
-  async listar(query: ListarDisponibilidadeQuery): Promise<DisponibilidadeVirtual[]> {
+  async listar(query: ListarDisponibilidadeQuery) {
+    if (query.compraProgramadaId) {
+      return this.listarPorCompra({
+        dataOperacao: query.dataOperacao,
+        compraProgramadaId: query.compraProgramadaId,
+      });
+    }
+    return this.listarAgregado(query);
+  }
+
+  private async listarPorCompra(query: { dataOperacao?: string; compraProgramadaId: string }) {
     if (query.dataOperacao) {
-      const filtros = [eq(operacoes.data, query.dataOperacao)];
-      if (query.compraProgramadaId) {
-        filtros.push(eq(disponibilidadesVirtuais.compraProgramadaId, query.compraProgramadaId));
-      }
       return this.db
         .select({
+          modo: sql<'compra'>`'compra'`,
           id: disponibilidadesVirtuais.id,
           compraProgramadaId: disponibilidadesVirtuais.compraProgramadaId,
           operacaoId: disponibilidadesVirtuais.operacaoId,
@@ -389,13 +399,56 @@ export class DisponibilidadeService {
         })
         .from(disponibilidadesVirtuais)
         .innerJoin(operacoes, eq(operacoes.id, disponibilidadesVirtuais.operacaoId))
-        .where(and(...filtros))
+        .where(and(
+          eq(operacoes.data, query.dataOperacao),
+          eq(disponibilidadesVirtuais.compraProgramadaId, query.compraProgramadaId),
+        ))
         .orderBy(disponibilidadesVirtuais.itemComercialId);
     }
+    return this.db
+      .select({
+        modo: sql<'compra'>`'compra'`,
+        id: disponibilidadesVirtuais.id,
+        compraProgramadaId: disponibilidadesVirtuais.compraProgramadaId,
+        operacaoId: disponibilidadesVirtuais.operacaoId,
+        itemComercialId: disponibilidadesVirtuais.itemComercialId,
+        quantidadeTotalGerada: disponibilidadesVirtuais.quantidadeTotalGerada,
+        quantidadeReservada: disponibilidadesVirtuais.quantidadeReservada,
+        quantidadeDisponivel: disponibilidadesVirtuais.quantidadeDisponivel,
+        quantidadeRecebida: disponibilidadesVirtuais.quantidadeRecebida,
+        quantidadeComDivergencia: disponibilidadesVirtuais.quantidadeComDivergencia,
+        status: disponibilidadesVirtuais.status,
+        createdAt: disponibilidadesVirtuais.createdAt,
+        updatedAt: disponibilidadesVirtuais.updatedAt,
+      })
+      .from(disponibilidadesVirtuais)
+      .where(eq(disponibilidadesVirtuais.compraProgramadaId, query.compraProgramadaId))
+      .orderBy(disponibilidadesVirtuais.itemComercialId);
+  }
 
-    const where = query.compraProgramadaId
-      ? eq(disponibilidadesVirtuais.compraProgramadaId, query.compraProgramadaId)
-      : undefined;
-    return this.db.select().from(disponibilidadesVirtuais).where(where).orderBy(disponibilidadesVirtuais.itemComercialId);
+  private listarAgregado(query: { operacaoId?: string; dataOperacao?: string }) {
+    return this.db
+      .select({
+        modo: sql<'agregado'>`'agregado'`,
+        operacaoId: disponibilidadesVirtuais.operacaoId,
+        itemComercialId: disponibilidadesVirtuais.itemComercialId,
+        quantidadeTotalGerada: sql<string>`sum(${disponibilidadesVirtuais.quantidadeTotalGerada})`,
+        quantidadeReservada: sql<string>`sum(${disponibilidadesVirtuais.quantidadeReservada})`,
+        quantidadeDisponivel: sql<string>`sum(${disponibilidadesVirtuais.quantidadeDisponivel})`,
+        quantidadeRecebida: sql<string>`sum(${disponibilidadesVirtuais.quantidadeRecebida})`,
+        quantidadeComDivergencia: sql<string>`sum(${disponibilidadesVirtuais.quantidadeComDivergencia})`,
+        status: sql<string>`CASE
+          WHEN sum(${disponibilidadesVirtuais.quantidadeDisponivel}) = 0 THEN 'esgotada'
+          WHEN sum(${disponibilidadesVirtuais.quantidadeReservada}) > 0 THEN 'parcialmente_reservada'
+          ELSE 'gerada' END`,
+      })
+      .from(disponibilidadesVirtuais)
+      .innerJoin(operacoes, eq(operacoes.id, disponibilidadesVirtuais.operacaoId))
+      .where(and(
+        query.operacaoId ? eq(disponibilidadesVirtuais.operacaoId, query.operacaoId) : undefined,
+        query.dataOperacao ? eq(operacoes.data, query.dataOperacao) : undefined,
+      ))
+      .groupBy(disponibilidadesVirtuais.operacaoId, disponibilidadesVirtuais.itemComercialId)
+      .orderBy(disponibilidadesVirtuais.itemComercialId);
   }
 }

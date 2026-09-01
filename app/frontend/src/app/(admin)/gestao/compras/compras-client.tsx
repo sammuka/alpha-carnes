@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle, Plus, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,8 +23,11 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { extrairCodigoErro, extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
+import { conectarRealtime } from '@/lib/realtime';
 import type {
+  CompraProgramada,
   CompraProgramadaDetalhe,
+  ConfirmacaoCompraProgramada,
   CriarCompraProgramadaDto,
   DisponibilidadeDia,
   Paginado,
@@ -75,12 +78,31 @@ function statusCompraVariant(status: string): StatusPillVariant {
   }
 }
 
+function rotuloLote(numeroSequencial: number): string {
+  return `Lote ${String(numeroSequencial).padStart(3, '0')}`;
+}
+
+function nomeFornecedor(compra: Pick<CompraProgramada, 'fornecedorNomeFantasia' | 'fornecedorRazaoSocial'>): string {
+  return compra.fornecedorNomeFantasia ?? compra.fornecedorRazaoSocial ?? '—';
+}
+
+const EVENTOS_COMPRA = new Set([
+  'compra_programada_criada',
+  'compra_programada_atualizada',
+  'compra_programada_cancelada',
+  'compra_programada_confirmada',
+  'disponibilidade_virtual_gerada',
+  'compra_programada_alterada_impacto',
+]);
+
 export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const podeLer = permissoes.includes('COMPRAS_PROGRAMADAS_LER');
   const podeGerenciar = permissoes.includes('COMPRAS_PROGRAMADAS_GERENCIAR');
 
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const dataDaUrl = searchParams.get('data');
+  const dataDaUrl = searchParams.get('dataOperacao') ?? searchParams.get('data');
+  const compraIdUrl = searchParams.get('compraId');
   const [dataOperacao, setDataOperacao] = useState(
     dataDaUrl && /^\d{4}-\d{2}-\d{2}$/.test(dataDaUrl) ? dataDaUrl : hojeISO(),
   );
@@ -89,6 +111,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const [observacoes, setObservacoes] = useState('');
   const [linhas, setLinhas] = useState<LinhaItem[]>([{ itemCompraId: '', quantidadeComprada: '', observacoes: '' }]);
 
+  const [compras, setCompras] = useState<CompraProgramada[]>([]);
   const [compra, setCompra] = useState<CompraProgramadaDetalhe | null>(null);
   const [disponibilidade, setDisponibilidade] = useState<DisponibilidadeDia[]>([]);
   const [fornecedores, setFornecedores] = useState<CadastroItem[]>([]);
@@ -97,6 +120,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const [salvando, setSalvando] = useState(false);
   const [modalEditar, setModalEditar] = useState(false);
   const [simulacoes, setSimulacoes] = useState<Map<string, SimulacaoDesdobramento>>(new Map());
+  const rascunhoNovoRef = useRef(false);
 
   const editavel = compra ? ['rascunho', 'em_negociacao'].includes(compra.status) : true;
   const podeSimular = !compra || compra.status === 'rascunho';
@@ -116,47 +140,100 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
     }
   }, []);
 
-  const carregarCompraDia = useCallback(async () => {
+  const aplicarDetalhe = useCallback((det: CompraProgramadaDetalhe) => {
+    setCompra(det);
+    setFornecedorId(det.fornecedorId);
+    setReferenciaExterna(det.referenciaExterna ?? '');
+    setObservacoes(det.observacoes ?? '');
+    setLinhas(
+      det.itens.map((it) => ({
+        itemCompraId: it.itemCompraId,
+        quantidadeComprada: it.quantidadeComprada,
+        observacoes: it.observacoes ?? '',
+      })),
+    );
+  }, []);
+
+  const limparFormulario = useCallback(() => {
+    setCompra(null);
+    setFornecedorId('');
+    setReferenciaExterna('');
+    setObservacoes('');
+    setLinhas([{ itemCompraId: '', quantidadeComprada: '', observacoes: '' }]);
+    setDisponibilidade([]);
+  }, []);
+
+  const navegar = useCallback((data: string, compraId?: string | null) => {
+    const qs = new URLSearchParams({ dataOperacao: data });
+    if (compraId) qs.set('compraId', compraId);
+    router.replace(`?${qs.toString()}`);
+  }, [router]);
+
+  const carregarComprasDia = useCallback(async (selecionarId?: string | null) => {
     if (!podeLer) return;
     setErro(null);
-    const res = await fetch('/api/comercial/compras-programadas?pageSize=10', { cache: 'no-store' });
+    const res = await fetch(
+      `/api/comercial/compras-programadas?dataOperacao=${dataOperacao}&pageSize=100`,
+      { cache: 'no-store' },
+    );
     if (!res.ok) return;
-    const pag = (await res.json()) as Paginado<{ id: string; dataOperacao: string; status: string }>;
-    const doDia = pag.data.find((c) => c.dataOperacao === dataOperacao && c.status !== 'cancelada');
-    if (!doDia) {
-      setCompra(null);
+    const pag = (await res.json()) as Paginado<CompraProgramada>;
+    const lista = pag.data;
+    setCompras(lista);
+    if (rascunhoNovoRef.current && selecionarId == null && !compraIdUrl) {
       return;
     }
-    const detRes = await fetch(`/api/comercial/compras-programadas/${doDia.id}`, { cache: 'no-store' });
-    if (detRes.ok) {
-      const det = (await detRes.json()) as CompraProgramadaDetalhe;
-      setCompra(det);
-      setFornecedorId(det.fornecedorId);
-      setReferenciaExterna(det.referenciaExterna ?? '');
-      setObservacoes(det.observacoes ?? '');
-      setLinhas(
-        det.itens.map((it) => ({
-          itemCompraId: it.itemCompraId,
-          quantidadeComprada: it.quantidadeComprada,
-          observacoes: it.observacoes ?? '',
-        })),
-      );
+    const alvoId = selecionarId ?? compraIdUrl;
+    const alvo = lista.find((c) => c.id === alvoId) ?? lista[0] ?? null;
+    if (!alvo) {
+      limparFormulario();
+      return;
     }
-  }, [dataOperacao, podeLer]);
+    const detRes = await fetch(`/api/comercial/compras-programadas/${alvo.id}`, { cache: 'no-store' });
+    if (detRes.ok) {
+      aplicarDetalhe((await detRes.json()) as CompraProgramadaDetalhe);
+    }
+  }, [aplicarDetalhe, compraIdUrl, dataOperacao, limparFormulario, podeLer]);
 
   const carregarDisponibilidade = useCallback(async () => {
-    const res = await fetch(`/api/comercial/disponibilidade?dataOperacao=${dataOperacao}`, { cache: 'no-store' });
+    if (!compra) {
+      setDisponibilidade([]);
+      return;
+    }
+    const res = await fetch(`/api/comercial/disponibilidade?compraProgramadaId=${compra.id}`, { cache: 'no-store' });
     if (res.ok) setDisponibilidade((await res.json()) as DisponibilidadeDia[]);
-  }, [dataOperacao]);
+  }, [compra]);
 
   useEffect(() => {
     void carregarCadastros();
   }, [carregarCadastros]);
 
   useEffect(() => {
-    void carregarCompraDia();
+    void carregarComprasDia();
+  }, [carregarComprasDia]);
+
+  useEffect(() => {
     void carregarDisponibilidade();
-  }, [carregarCompraDia, carregarDisponibilidade]);
+  }, [carregarDisponibilidade]);
+
+  const operacaoIdRealtime = compra?.operacaoId ?? compras[0]?.operacaoId;
+
+  useEffect(() => {
+    if (!operacaoIdRealtime) return;
+    return conectarRealtime({
+      rooms: [`operacao:${operacaoIdRealtime}`],
+      onMessage: (msg) => {
+        if (EVENTOS_COMPRA.has(msg.type)) {
+          void carregarComprasDia(compra?.id);
+          void carregarDisponibilidade();
+        }
+      },
+      onReconnect: () => {
+        void carregarComprasDia(compra?.id);
+        void carregarDisponibilidade();
+      },
+    });
+  }, [carregarComprasDia, carregarDisponibilidade, compra?.id, operacaoIdRealtime]);
 
   useEffect(() => {
     if (!podeSimular) return;
@@ -254,8 +331,13 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
           setErro(await mensagemDeErro(res, 'Erro ao salvar compra'));
           return;
         }
+        const criada = (await res.json()) as CompraProgramadaDetalhe;
+        rascunhoNovoRef.current = false;
+        navegar(dataOperacao, criada.id);
+        await carregarComprasDia(criada.id);
+        return;
       }
-      await carregarCompraDia();
+      await carregarComprasDia(compra.id);
     } catch {
       setErro('Erro de conexão');
     } finally {
@@ -274,7 +356,8 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
       setSalvando(false);
       return;
     }
-    setCompra(body as CompraProgramadaDetalhe);
+    const confirmacao = body as ConfirmacaoCompraProgramada;
+    setCompra(confirmacao.compra);
     await carregarDisponibilidade();
     setSalvando(false);
   };
@@ -289,6 +372,19 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
         title="Compra Programada (Pedido de Compra)"
         subtitle="Planejamento de compra e geração de disponibilidade virtual"
       >
+        {podeGerenciar && (
+          <Button
+            variant="secondary"
+            onClick={() => {
+              rascunhoNovoRef.current = true;
+              limparFormulario();
+              navegar(dataOperacao);
+            }}
+          >
+            <Plus />
+            Novo pedido de compra
+          </Button>
+        )}
         {podeGerenciar && editavel && (
           <>
             <Button variant="secondary" onClick={salvar} disabled={salvando}>
@@ -321,7 +417,60 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-12">
+      <div className="grid grid-cols-1 items-start gap-2.5 lg:grid-cols-[320px_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Lotes da operação</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 p-2">
+            {compras.length === 0 ? (
+              <div className="space-y-2 p-2">
+                <p>Nenhum pedido de compra para esta operação.</p>
+                {podeGerenciar && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      rascunhoNovoRef.current = true;
+                      limparFormulario();
+                      navegar(dataOperacao);
+                    }}
+                  >
+                    <Plus />
+                    Novo pedido de compra
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {compras.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      className={`flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left text-xs ${
+                        compra?.id === item.id ? 'bg-primary-soft text-primary-fg' : 'hover:bg-surface-2'
+                      }`}
+                      onClick={() => {
+                        rascunhoNovoRef.current = false;
+                        navegar(dataOperacao, item.id);
+                        void carregarComprasDia(item.id);
+                      }}
+                    >
+                      <span className="font-data font-semibold">{rotuloLote(item.numeroSequencial)}</span>
+                      <span>{nomeFornecedor(item)}</span>
+                      <span className="flex items-center gap-2 text-muted-foreground">
+                        <StatusPill variant={statusCompraVariant(item.status)} label={ROTULO_COMPRA[item.status] ?? item.status} />
+                        <span className="font-data">{item.totalItens} itens</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-12">
         <div className="space-y-2.5 xl:col-span-8">
           <Card>
             <CardContent className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2 xl:grid-cols-4">
@@ -329,8 +478,10 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                 <DatePickerField
                   id="data"
                   value={dataOperacao}
-                  onChange={setDataOperacao}
-                  disabled={Boolean(compra)}
+                  onChange={(proxima) => {
+                    setDataOperacao(proxima);
+                    navegar(proxima);
+                  }}
                 />
               </FormField>
               <FormField label="Fornecedor" required className="sm:col-span-2" htmlFor="fornecedor">
@@ -523,7 +674,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
               ) : (
                 <ul className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
                   {disponibilidade.map((d) => (
-                    <li key={d.id} className="flex justify-between text-xs">
+                    <li key={d.modo === 'compra' ? d.id : d.itemComercialId} className="flex justify-between text-xs">
                       <span className="font-data text-[11px]">{d.itemComercialId.slice(0, 8)}…</span>
                       <span className="font-data font-semibold text-primary">{d.quantidadeDisponivel} disp.</span>
                     </li>
@@ -541,6 +692,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
             )}
           </Card>
         </div>
+        </div>
       </div>
 
       <ComprasEditModal
@@ -549,7 +701,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
         itensCompra={itensCompra}
         onClose={() => setModalEditar(false)}
         onSalvo={() => {
-          void carregarCompraDia();
+          void carregarComprasDia(compra?.id);
           void carregarDisponibilidade();
         }}
       />

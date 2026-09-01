@@ -13,6 +13,20 @@ import { createTestUser, loginCookies } from './test-app';
 
 type Db = NodePgDatabase<typeof schema>;
 
+function somarDiasIso(iso: string, dias: number): string {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Datas sequenciais longe das suítes que fixam 2026/2027 — o banco de teste é compartilhado. */
+let proximaDataSeq = 0;
+
+function ehConflitoDeCompraNoDia(erro: unknown): boolean {
+  const msg = erro instanceof Error ? erro.message : String(erro);
+  return msg.includes('409') && msg.includes('Já existe compra programada');
+}
+
 /**
  * Monta operação → fornecedor → pedido ao fornecedor → recebimento → NF → pesagem → conclusão
  * usando os serviços reais (nunca INSERT cru).
@@ -26,11 +40,26 @@ export async function criarConclusaoConferencia(
   const comprasCookies = await loginCookies(app, compras.adminEmail, compras.adminPassword);
 
   const base = await seedComercialBase(app, { fator: 1 });
-  const dataOperacao = `2026-${String(Math.floor(Math.random() * 11) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 27) + 1).padStart(2, '0')}`;
-  const compraId = await criarCompraConfirmada(app, comprasCookies, base, {
-    dataOperacao,
-    quantidade: 10,
-  });
+  const maxTentativas = 60;
+  let compraId: string | undefined;
+  let ultimoErro = '';
+  for (let i = 0; i < maxTentativas; i++) {
+    proximaDataSeq += 1;
+    const dataOperacao = somarDiasIso('2028-06-01', proximaDataSeq);
+    try {
+      compraId = await criarCompraConfirmada(app, comprasCookies, base, {
+        dataOperacao,
+        quantidade: 10,
+      });
+      break;
+    } catch (erro) {
+      ultimoErro = erro instanceof Error ? erro.message : String(erro);
+      if (!ehConflitoDeCompraNoDia(erro)) throw erro;
+    }
+  }
+  if (!compraId) {
+    throw new Error(`Falha ao criar compra após ${maxTentativas} datas: ${ultimoErro}`);
+  }
   const pfId = await criarPedidoFornecedorEnviado(app, comprasCookies, compraId);
   const { recebimentoId } = await iniciarRecebimentoViaPf(app, recebimentoCookies, pfId);
 

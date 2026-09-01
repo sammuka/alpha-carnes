@@ -11,6 +11,21 @@ import type { CreateClienteDto, UpdateClienteDto } from './dto/cliente.dto';
 
 type Cliente = typeof clientes.$inferSelect;
 type ClienteComVinculos = Cliente & { rotaNome: string | null; representanteNome: string | null };
+type Tx = NodePgDatabase<typeof schema>;
+
+const TENTATIVAS_CODIGO_AUTO = 5;
+
+/** Exposta para testes de branch do retry de código automático (AD-13). */
+export function ehConflitoDeCodigo(err: unknown): boolean {
+  if (err instanceof ConflictException) {
+    return String(err.message).includes('este código');
+  }
+  const code = (err as { code?: string }).code
+    ?? (err as { cause?: { code?: string } }).cause?.code;
+  const constraint = (err as { constraint?: string }).constraint
+    ?? (err as { cause?: { constraint?: string } }).cause?.constraint;
+  return code === '23505' && constraint === 'uq_clientes_codigo';
+}
 
 @Injectable()
 export class ClientesService {
@@ -75,43 +90,20 @@ export class ClientesService {
   }
 
   async criar(dto: CreateClienteDto, usuarioId: string): Promise<Cliente> {
-    return this.db.transaction(async (tx) => {
-      if (dto.representanteId) {
-        await this.exigirRepresentanteNoEscopo(tx, dto.representanteId, usuarioId);
+    const codigoInformado = dto.codigo?.trim() || undefined;
+    const tentativas = codigoInformado ? 1 : TENTATIVAS_CODIGO_AUTO;
+    let ultimoErro: unknown;
+    for (let i = 0; i < tentativas; i++) {
+      try {
+        return await this.inserirCliente(dto, usuarioId, codigoInformado);
+      } catch (err) {
+        ultimoErro = err;
+        if (codigoInformado || !ehConflitoDeCodigo(err)) throw err;
       }
-      await this.assertUnico(tx, dto.codigo, dto.documentoFiscal, null);
-
-      const criado = primeiroOuFalha(
-        await tx
-          .insert(clientes)
-          .values({
-            codigo: dto.codigo,
-            razaoSocial: dto.razaoSocial,
-            nomeFantasia: dto.nomeFantasia,
-            documentoFiscal: dto.documentoFiscal,
-            status: dto.status,
-            representanteId: dto.representanteId,
-            rotaId: dto.rotaId,
-            prioridade: dto.prioridade,
-            preferenciasJson: dto.preferenciasJson ?? {},
-            dadosFiscaisJson: dto.dadosFiscaisJson ?? {},
-            dadosContatoJson: dto.dadosContatoJson ?? {},
-            observacoesOperacionais: dto.observacoesOperacionais,
-          })
-          .returning(),
-      );
-
-      await this.auditoria.registrar(tx, {
-        tabela: 'clientes',
-        registroId: criado.id,
-        operacao: 'INSERT',
-        modulo: 'cadastros',
-        usuarioId,
-        dadosAnteriores: {},
-        dadosNovos: criado,
-      });
-      return criado;
-    });
+    }
+    throw ultimoErro instanceof Error
+      ? ultimoErro
+      : new ConflictException('Já existe cliente com este código');
   }
 
   async atualizar(id: string, dto: UpdateClienteDto, usuarioId: string): Promise<Cliente> {
@@ -123,13 +115,12 @@ export class ClientesService {
         await this.exigirRepresentanteNoEscopo(tx, dto.representanteId, usuarioId);
       }
 
-      await this.assertUnico(tx, dto.codigo ?? anterior.codigo, dto.documentoFiscal ?? anterior.documentoFiscal, id);
+      await this.assertUnico(tx, anterior.codigo, dto.documentoFiscal ?? anterior.documentoFiscal, id);
 
       const atualizado = primeiroOuFalha(
         await tx
           .update(clientes)
           .set({
-            codigo: dto.codigo ?? anterior.codigo,
             razaoSocial: dto.razaoSocial ?? anterior.razaoSocial,
             nomeFantasia: dto.nomeFantasia ?? anterior.nomeFantasia,
             documentoFiscal: dto.documentoFiscal ?? anterior.documentoFiscal,
@@ -204,6 +195,60 @@ export class ClientesService {
       });
       return restaurado;
     });
+  }
+
+  private async inserirCliente(
+    dto: CreateClienteDto,
+    usuarioId: string,
+    codigoInformado: string | undefined,
+  ): Promise<Cliente> {
+    return this.db.transaction(async (tx) => {
+      if (dto.representanteId) {
+        await this.exigirRepresentanteNoEscopo(tx, dto.representanteId, usuarioId);
+      }
+      const codigo = codigoInformado ?? await this.proximoCodigoNumerico(tx);
+      await this.assertUnico(tx, codigo, dto.documentoFiscal, null);
+
+      const criado = primeiroOuFalha(
+        await tx
+          .insert(clientes)
+          .values({
+            codigo,
+            razaoSocial: dto.razaoSocial,
+            nomeFantasia: dto.nomeFantasia,
+            documentoFiscal: dto.documentoFiscal,
+            status: dto.status,
+            representanteId: dto.representanteId,
+            rotaId: dto.rotaId,
+            prioridade: dto.prioridade,
+            preferenciasJson: dto.preferenciasJson ?? {},
+            dadosFiscaisJson: dto.dadosFiscaisJson ?? {},
+            dadosContatoJson: dto.dadosContatoJson ?? {},
+            observacoesOperacionais: dto.observacoesOperacionais,
+          })
+          .returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'clientes',
+        registroId: criado.id,
+        operacao: 'INSERT',
+        modulo: 'cadastros',
+        usuarioId,
+        dadosAnteriores: {},
+        dadosNovos: criado,
+      });
+      return criado;
+    });
+  }
+
+  private async proximoCodigoNumerico(tx: Tx): Promise<string> {
+    const resultado = await tx.execute<{ proximo: string | number }>(sql`
+      SELECT COALESCE(MAX(codigo::bigint), 0) + 1 AS proximo
+      FROM clientes
+      WHERE codigo ~ '^[0-9]+$'
+    `);
+    return String(resultado.rows[0]?.proximo ?? 1);
   }
 
   private async buscarNoEscopo(

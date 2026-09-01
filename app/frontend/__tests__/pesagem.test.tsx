@@ -33,7 +33,7 @@ const itemComercialId = 'i1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 
 const recebimentoLista = {
   id: recebimentoId,
-  codigoLote: '001',
+  codigoLote: 'Lote 001',
   compraProgramadaId: 'c1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
   numeroInternoCompra: 'PC-001',
   fornecedorId: 'f1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
@@ -48,7 +48,7 @@ const recebimentoLista = {
 
 const recebimentoDetalhe = {
   id: recebimentoId,
-  codigoLote: '001',
+  codigoLote: 'Lote 001',
   compraProgramadaId: recebimentoLista.compraProgramadaId,
   pedidoFornecedorId: 'pf1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
   fornecedorId: recebimentoLista.fornecedorId,
@@ -130,6 +130,13 @@ describe('PesagemDestinacaoClient', () => {
     MockWebSocket.instances = [];
     (global as unknown as { WebSocket: unknown }).WebSocket = MockWebSocket;
     mockFetch();
+  });
+
+  it('lote bar exibe codigoLote Lote 001 e o seletor Lote 001 — fornecedor', async () => {
+    render(<PesagemDestinacaoClient permissoes={['PESAGEM_LER', 'PESAGEM_GERENCIAR']} />);
+    expect(await screen.findByText('Lote 001')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Trocar lote/i }));
+    expect(screen.getByRole('option', { name: /Lote 001 — Frigorífico Teste/ })).toBeInTheDocument();
   });
 
   it('mostra o status dos dispositivos sempre visível (RA-05)', async () => {
