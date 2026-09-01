@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
@@ -23,7 +24,7 @@
     "@nestjs/passport": "11.0.5",
     "@nestjs/platform-express": "11.1.28",
     "@nestjs/throttler": "6.5.0",
-    "@node-rs/argon2": "2.0.2",
+    "@node-rs/argon2": "2.1.0",
     "cookie-parser": "1.4.7",
     "drizzle-orm": "0.45.2",
     "nestjs-pino": "4.6.1",
@@ -40,7 +41,7 @@
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.21",
-    "@nestjs/testing": "11.1.28",
+    "@nestjs/testing": "11.2.3",
     "@types/cookie-parser": "1.4.7",
     "@types/express": "5.0.0",
     "@types/node": "26.4.0",
