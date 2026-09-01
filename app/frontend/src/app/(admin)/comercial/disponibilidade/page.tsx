@@ -111,7 +111,7 @@ export default function DisponibilidadePage() {
           quantidadeDisponivel: string;
         };
         setLinhas((atuais) => atuais.map((linha) =>
-          linha.id === payload.disponibilidadeId
+          linha.modo === 'compra' && linha.id === payload.disponibilidadeId
             ? {
                 ...linha,
                 quantidadeReservada: payload.quantidadeReservada,
@@ -283,8 +283,9 @@ export default function DisponibilidadePage() {
                           ? Math.min(100, Math.round((reservado / total) * 100))
                           : 0;
                         const produto = mapa.find((item) => item.itemComercialId === linha.itemComercialId);
+                        const chave = linha.modo === 'compra' ? linha.id : `${linha.operacaoId}:${linha.itemComercialId}`;
                         return (
-                          <TableRow key={linha.id} data-testid={`disp-${linha.id}`}>
+                          <TableRow key={chave} data-testid={`disp-${chave}`}>
                             <TableCell>
                               <p className="text-[13px] font-semibold text-foreground">{produto?.descricao ?? linha.itemComercialId}</p>
                               {produto && <p className="font-data text-[11px] text-fg-secondary">{produto.codigo}</p>}
@@ -293,11 +294,11 @@ export default function DisponibilidadePage() {
                             <TableCellNum>{linha.quantidadeReservada}</TableCellNum>
                             <TableCellNum
                               className={disponivel <= 0 ? 'text-danger-fg' : 'text-success-fg'}
-                              data-testid={`disp-${linha.id}-disponivel`}
+                              data-testid={`disp-${chave}-disponivel`}
                             >
                               {linha.quantidadeDisponivel}
                             </TableCellNum>
-                            <TableCellNum data-testid={`disp-${linha.id}-recebido`}>
+                            <TableCellNum data-testid={`disp-${chave}-recebido`}>
                               {linha.quantidadeRecebida}
                             </TableCellNum>
                             <TableCell className="min-w-36">
@@ -330,7 +331,7 @@ export default function DisponibilidadePage() {
                 ) : (
                   esgotados.map((linha) => (
                     <AlertItem
-                      key={linha.id}
+                      key={linha.modo === 'compra' ? linha.id : `${linha.operacaoId}:${linha.itemComercialId}`}
                       title="Item esgotado"
                       description={`Reservado: ${linha.quantidadeReservada} / Gerado: ${linha.quantidadeTotalGerada}`}
                       time=""

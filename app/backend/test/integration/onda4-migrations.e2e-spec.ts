@@ -294,6 +294,9 @@ describe('Onda 4 — migrations geradas D36', () => {
         'migrations/0026_onda10_faturamento_expand.sql',
         // Carga inicial (dados legados): colunas extras em frota.schema.ts
         'migrations/0027_onda_frota_dados_legado.sql',
+        'migrations/0028_onda11_multicompra_expand.sql',
+        'migrations/0029_onda11_multicompra_backfill.sql',
+        'migrations/0030_onda11_multicompra_contract.sql',
         'migrations/meta/0019_snapshot.json',
         'migrations/meta/0020_snapshot.json',
         'migrations/meta/0021_snapshot.json',
@@ -303,6 +306,9 @@ describe('Onda 4 — migrations geradas D36', () => {
         'migrations/meta/0025_snapshot.json',
         'migrations/meta/0026_snapshot.json',
         'migrations/meta/0027_snapshot.json',
+        'migrations/meta/0028_snapshot.json',
+        'migrations/meta/0029_snapshot.json',
+        'migrations/meta/0030_snapshot.json',
         'schema/relatorios-sif.schema.ts',
         'schema/aprovacoes-operacionais.schema.ts',
         // Emenda 7: importa aprovacoes-operacionais — quebra resolve do probe O4
@@ -344,6 +350,15 @@ describe('Onda 4 — migrations geradas D36', () => {
       fs.copyFileSync(
         path.resolve(__dirname, '../helpers/fixtures/frota.schema.pre-carga-legado.ts'),
         path.join(probe, 'schema/frota.schema.ts'),
+      );
+      // Onda 11: numero_sequencial / compra nullable gerariam DDL extra no generate O4.
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/compras-programadas.schema.pre-onda11.ts'),
+        path.join(probe, 'schema/compras-programadas.schema.ts'),
+      );
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/pedidos.schema.pre-onda11.ts'),
+        path.join(probe, 'schema/pedidos.schema.ts'),
       );
       const probeJournal = JSON.parse(
         fs.readFileSync(path.join(probe, 'migrations/meta/_journal.json'), 'utf8'),
