@@ -53,6 +53,8 @@ export interface CargaEnvioPeca {
   etiqueta: string | null;
   produtoNome: string;
   peso: string;
+  loteOrigem?: string;
+  numeroSequencial?: number;
 }
 
 export interface CargaEnvioPedido {

@@ -40,6 +40,9 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
       .sort(([a], [b]) => b.length - a.length)
       .find(([k]) => urlStr.includes(k));
     if (found) return { ok: true, json: async () => found[1] };
+    if (urlStr.includes('/romaneio')) {
+      return { ok: true, json: async () => ({ caminhao: caminhaoBase, pedidos: [] }) };
+    }
     if (urlStr.includes('/caminhoes')) {
       return { ok: true, json: async () => [] };
     }
@@ -123,6 +126,51 @@ describe('PlanejamentoExpedicaoClient', () => {
     await waitFor(() => expect(screen.getByText('Prioridade ALTA')).toBeInTheDocument());
     expect(screen.getByText('Prioridade BAIXA')).toBeInTheDocument();
     expect(screen.queryByText(/Prioridade MÉDIA/)).not.toBeInTheDocument();
+  });
+
+  it('exibe Lote 001 sob cada peça alocada no caminhão', async () => {
+    mockFetch({
+      '/caminhoes/c1aaaaaabbbbccccddddeeeeffff0001/romaneio': {
+        caminhao: { ...caminhaoBase, pesoCarregadoKg: '12.000' },
+        pedidos: [{
+          pedidoVendaId: 'ped-lote',
+          clienteId: 'cli-1',
+          ordemNaCarga: 1,
+          previsto: 1,
+          carregado: 1,
+          itens: [
+            {
+              cargaItemId: 'item-1',
+              pedidoVendaId: 'ped-lote',
+              statusCargaItem: 'em_carga',
+              divergenciaMotivo: null,
+              etiqueta: 'ETQ-001',
+              produtoNome: 'TZ',
+              peso: '12.000',
+              loteOrigem: 'Lote 001',
+            },
+            {
+              cargaItemId: 'item-2',
+              pedidoVendaId: 'ped-lote',
+              statusCargaItem: 'em_carga',
+              divergenciaMotivo: null,
+              etiqueta: 'ETQ-002',
+              produtoNome: 'DT',
+              peso: '8.000',
+              numeroSequencial: 2,
+            },
+          ],
+        }],
+      },
+      '/caminhoes/c1aaaaaabbbbccccddddeeeeffff0001': {
+        caminhao: { ...caminhaoBase, pesoCarregadoKg: '12.000' },
+        pedidos: [{ pedidoVendaId: 'ped-lote', ordemNaCarga: 1, previsto: 1, carregado: 1 }],
+      },
+      '/caminhoes': [caminhaoBase],
+    });
+    render(<PlanejamentoExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
+    await waitFor(() => expect(screen.getByText('Lote 001')).toBeInTheDocument());
+    expect(screen.getByText('Lote 002')).toBeInTheDocument();
   });
 
   it('barra de ocupação ausente quando capacidade é null', async () => {

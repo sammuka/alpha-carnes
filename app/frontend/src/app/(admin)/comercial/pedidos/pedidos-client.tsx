@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Clock3, Plus, Search } from 'lucide-react';
 import type {
   AdendoPedido,
-  CompraProgramada,
   Paginado,
   PedidoVenda,
   PedidoVendaDetalhe,
 } from '@/lib/comercial';
+import type { Operacao } from '@/lib/gestao-operacoes';
 import { extrairMensagemErro } from '@/lib/error-message';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { rotuloStatusPedido } from '@/lib/status-pedido';
@@ -93,7 +93,7 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
   const [pedidos, setPedidos] = useState<PedidoVenda[]>([]);
   const [clientes, setClientes] = useState<ClientePedido[]>([]);
   const [produtos, setProdutos] = useState<ProdutoPedido[]>([]);
-  const [compras, setCompras] = useState<CompraProgramada[]>([]);
+  const [operacoes, setOperacoes] = useState<Operacao[]>([]);
   const [pedidoSelecionado, setPedidoSelecionado] = useState<PedidoVendaDetalhe | null>(null);
   const [modoEditor, setModoEditor] = useState(false);
   const [busca, setBusca] = useState('');
@@ -116,19 +116,19 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
   }, []);
 
   const carregarCatalogos = useCallback(async () => {
-    const [clientesResponse, produtosResponse, comprasResponse] = await Promise.all([
+    const [clientesResponse, produtosResponse, operacoesResponse] = await Promise.all([
       fetch('/api/cadastros/clientes?pageSize=100', { cache: 'no-store' }),
       fetch('/api/cadastros/itens-comerciais?pageSize=100', { cache: 'no-store' }),
-      fetch('/api/comercial/compras-programadas?pageSize=100', { cache: 'no-store' }),
+      fetch('/api/operacoes?limite=100', { cache: 'no-store' }),
     ]);
-    const [clientesPage, produtosPage, comprasPage] = await Promise.all([
+    const [clientesPage, produtosPage, operacoesPage] = await Promise.all([
       lerJson<Paginado<ClientePedido>>(clientesResponse),
       lerJson<Paginado<ProdutoPedido>>(produtosResponse),
-      lerJson<Paginado<CompraProgramada>>(comprasResponse),
+      lerJson<Paginado<Operacao>>(operacoesResponse),
     ]);
     setClientes(clientesPage.data);
     setProdutos(produtosPage.data);
-    setCompras(comprasPage.data.filter((compra) => compra.status !== 'cancelada'));
+    setOperacoes(operacoesPage.data);
   }, []);
 
   const carregarHistorico = useCallback(async (pedidoId: string) => {
@@ -245,7 +245,7 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
           pedido={pedidoSelecionado}
           clientes={clientes}
           produtos={produtos}
-          compras={compras}
+          operacoes={operacoes}
           podeGerenciar={podeGerenciar}
           podeFinalizar={podeFinalizar}
           onBack={() => {

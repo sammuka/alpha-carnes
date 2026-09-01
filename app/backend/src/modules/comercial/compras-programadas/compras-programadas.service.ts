@@ -1,6 +1,6 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, desc, eq, getTableColumns, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -8,6 +8,7 @@ import {
   auditoria,
   comprasProgramadas,
   comprasProgramadasItens,
+  fornecedores,
   operacoes,
   usuarios,
 } from '../../../database/schema';
@@ -16,7 +17,6 @@ import {
   calcularRange,
   montarPaginado,
   primeiroOuFalha,
-  type ListarQuery,
   type Paginado,
 } from '../../../common/crud/paginacao';
 import {
@@ -33,6 +33,7 @@ import {
 import type {
   AtualizarItemCompraDto,
   CreateCompraProgramadaDto,
+  ListarComprasProgramadasDto,
   UpdateCompraProgramadaDto,
 } from './dto/compra-programada.dto';
 
@@ -46,6 +47,13 @@ type ConfirmacaoCompraProgramada = { compra: CompraComItens; jaConfirmada: boole
 const COMPRA_COM_DATA = {
   ...getTableColumns(comprasProgramadas),
   dataOperacao: operacoes.data,
+  fornecedorNomeFantasia: sql<string | null>`NULL`,
+  fornecedorRazaoSocial: fornecedores.razaoSocial,
+  totalItens: sql<number>`(
+    SELECT count(*)::int FROM compras_programadas_itens cpi
+    WHERE cpi.compra_programada_id = ${comprasProgramadas.id}
+      AND cpi.deleted_at IS NULL
+  )`,
 };
 
 export interface ImpactoCompra {
@@ -75,20 +83,36 @@ export class ComprasProgramadasService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<CompraProgramada & { dataOperacao: string }>> {
+  async listar(query: ListarComprasProgramadasDto): Promise<Paginado<CompraProgramada & { dataOperacao: string }>> {
     const { limit, offset } = calcularRange(query);
-    const where = query.incluirRemovidos ? undefined : isNull(comprasProgramadas.deletedAt);
+    const filtros = and(
+      query.incluirRemovidos ? undefined : isNull(comprasProgramadas.deletedAt),
+      query.operacaoId ? eq(comprasProgramadas.operacaoId, query.operacaoId) : undefined,
+      query.dataOperacao ? eq(operacoes.data, query.dataOperacao) : undefined,
+      query.status ? eq(comprasProgramadas.status, query.status) : undefined,
+      query.fornecedorId ? eq(comprasProgramadas.fornecedorId, query.fornecedorId) : undefined,
+    );
+    const escopado = Boolean(query.operacaoId || query.dataOperacao);
 
     const [linhas, totalRow] = await Promise.all([
       this.db
         .select(COMPRA_COM_DATA)
         .from(comprasProgramadas)
         .innerJoin(operacoes, eq(comprasProgramadas.operacaoId, operacoes.id))
-        .where(where)
-        .orderBy(desc(comprasProgramadas.createdAt))
+        .innerJoin(fornecedores, eq(comprasProgramadas.fornecedorId, fornecedores.id))
+        .where(filtros)
+        .orderBy(
+          escopado
+            ? asc(comprasProgramadas.numeroSequencial)
+            : desc(comprasProgramadas.createdAt),
+        )
         .limit(limit)
         .offset(offset),
-      this.db.select({ total: sql<number>`count(*)::int` }).from(comprasProgramadas).where(where),
+      this.db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(comprasProgramadas)
+        .innerJoin(operacoes, eq(comprasProgramadas.operacaoId, operacoes.id))
+        .where(filtros),
     ]);
 
     return montarPaginado(linhas, totalRow[0]?.total ?? 0, query);
@@ -99,6 +123,7 @@ export class ComprasProgramadasService {
       .select(COMPRA_COM_DATA)
       .from(comprasProgramadas)
       .innerJoin(operacoes, eq(comprasProgramadas.operacaoId, operacoes.id))
+      .innerJoin(fornecedores, eq(comprasProgramadas.fornecedorId, fornecedores.id))
       .where(and(eq(comprasProgramadas.id, id), isNull(comprasProgramadas.deletedAt)))
       .limit(1)
       .then((r) => r[0] ?? null);
@@ -114,28 +139,26 @@ export class ComprasProgramadasService {
     const compraId = await this.db.transaction(async (tx) => {
       const { operacao } = await this.operacoes.garantirOperacao(tx, dto.dataOperacao, usuarioId);
 
-      const compraExistenteNoDia = await tx
-        .select({ id: comprasProgramadas.id })
-        .from(comprasProgramadas)
-        .where(
-          and(
-            eq(comprasProgramadas.operacaoId, operacao.id),
-            isNull(comprasProgramadas.deletedAt),
-            ne(comprasProgramadas.status, 'cancelada'),
-          ),
-        )
-        .limit(1)
-        .then((r) => r[0] ?? null);
+      await tx
+        .select({ id: operacoes.id })
+        .from(operacoes)
+        .where(eq(operacoes.id, operacao.id))
+        .for('update');
 
-      if (compraExistenteNoDia) {
-        throw new ConflictException('Já existe compra programada ativa para esta data');
-      }
+      const [sequencia] = await tx
+        .select({
+          proximo: sql<number>`coalesce(max(${comprasProgramadas.numeroSequencial}), 0)::int + 1`,
+        })
+        .from(comprasProgramadas)
+        .where(eq(comprasProgramadas.operacaoId, operacao.id));
+      if (!sequencia) throw new Error('Falha ao calcular número sequencial da compra');
 
       const criada = primeiroOuFalha(
         await tx
           .insert(comprasProgramadas)
           .values({
             operacaoId: operacao.id,
+            numeroSequencial: sequencia.proximo,
             fornecedorId: dto.fornecedorId,
             numeroInterno: dto.numeroInterno,
             referenciaExterna: dto.referenciaExterna,
@@ -171,7 +194,14 @@ export class ComprasProgramadasService {
 
       return criada.id;
     });
-    return this.detalhar(compraId);
+    const compra = await this.detalhar(compraId);
+    this.eventEmitter.emit(EVENTOS.COMPRA_CRIADA, {
+      compraId: compra.id,
+      operacaoId: compra.operacaoId,
+      dataOperacao: compra.dataOperacao,
+      numeroSequencial: compra.numeroSequencial,
+    });
+    return compra;
   }
 
   async atualizar(id: string, dto: UpdateCompraProgramadaDto, usuarioId: string): Promise<CompraComItens> {
@@ -206,7 +236,14 @@ export class ComprasProgramadasService {
       });
       return atualizada.id;
     });
-    return this.detalhar(compraId);
+    const compra = await this.detalhar(compraId);
+    this.eventEmitter.emit(EVENTOS.COMPRA_ATUALIZADA, {
+      compraId: compra.id,
+      operacaoId: compra.operacaoId,
+      dataOperacao: compra.dataOperacao,
+      numeroSequencial: compra.numeroSequencial,
+    });
+    return compra;
   }
 
   async atualizarItem(
@@ -412,11 +449,15 @@ export class ComprasProgramadasService {
     if (!resultado.jaConfirmada) {
       this.eventEmitter.emit(EVENTOS.COMPRA_CONFIRMADA, {
         compraId: compra.id,
+        operacaoId: compra.operacaoId,
         dataOperacao: compra.dataOperacao,
+        numeroSequencial: compra.numeroSequencial,
       });
       this.eventEmitter.emit(EVENTOS.DISPONIBILIDADE_GERADA, {
         compraId: compra.id,
+        operacaoId: compra.operacaoId,
         dataOperacao: compra.dataOperacao,
+        numeroSequencial: compra.numeroSequencial,
         itens: resultado.disponibilidades.map((d) => ({
           disponibilidadeId: d.id,
           itemComercialId: d.itemComercialId,
@@ -455,7 +496,14 @@ export class ComprasProgramadasService {
       });
       return cancelada.id;
     });
-    return this.detalhar(compraId);
+    const compra = await this.detalhar(compraId);
+    this.eventEmitter.emit(EVENTOS.COMPRA_CANCELADA, {
+      compraId: compra.id,
+      operacaoId: compra.operacaoId,
+      dataOperacao: compra.dataOperacao,
+      numeroSequencial: compra.numeroSequencial,
+    });
+    return compra;
   }
 
   private assertEditavel(status: string): void {

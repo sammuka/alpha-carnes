@@ -9,6 +9,7 @@ function makeSelectChain(rows: unknown[]) {
     orderBy: (...args: unknown[]) => typeof chain;
     limit: (...args: unknown[]) => typeof chain;
     offset: (...args: unknown[]) => typeof chain;
+    for: (...args: unknown[]) => typeof chain;
     then: (cb: (r: unknown[]) => unknown) => unknown;
   } = {
     innerJoin: () => chain,
@@ -16,6 +17,7 @@ function makeSelectChain(rows: unknown[]) {
     orderBy: () => chain,
     limit: () => chain,
     offset: () => chain,
+    for: () => chain,
     then: (cb) => cb(rows),
   };
   return { from: () => chain };
@@ -54,15 +56,40 @@ describe('ComprasProgramadasService — branches', () => {
     expect(result.total).toBe(0);
   });
 
-  it('criar → lança 409 se já existe compra ativa na data', async () => {
+  it('criar → numera sob lock da operacao', async () => {
     operacoesService.garantirOperacao.mockResolvedValue({ operacao: { id: 'op1' } });
-    const tx = { select: jest.fn(() => makeSelectChain([{ id: 'cp-existente' }])) };
+    let selectCall = 0;
+    const tx = {
+      select: jest.fn(() => {
+        selectCall += 1;
+        if (selectCall === 1) return makeSelectChain([{ id: 'op1' }]);
+        return makeSelectChain([{ proximo: 2 }]);
+      }),
+      insert: jest.fn(() => ({
+        values: (v: { numeroSequencial?: number } | unknown[]) => {
+          if (!Array.isArray(v)) expect(v.numeroSequencial).toBe(2);
+          return {
+            returning: async () => (
+              Array.isArray(v)
+                ? []
+                : [{ id: 'cp-new', operacaoId: 'op1', numeroSequencial: 2 }]
+            ),
+          };
+        },
+      })),
+    };
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
     const service = makeService(db);
-    jest.spyOn(service, 'detalhar').mockResolvedValue({ id: 'cp1', dataOperacao: '2026-07-01', itens: [] } as never);
+    jest.spyOn(service, 'detalhar').mockResolvedValue({
+      id: 'cp-new',
+      operacaoId: 'op1',
+      dataOperacao: '2026-06-23',
+      numeroSequencial: 2,
+      itens: [],
+    } as never);
     await expect(
       service.criar({ dataOperacao: '2026-06-23', fornecedorId: 'f1', itens: [] } as never, 'u1'),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).resolves.toMatchObject({ id: 'cp-new', numeroSequencial: 2 });
   });
 
   it('atualizar → lança 404 se compra não encontrada', async () => {
