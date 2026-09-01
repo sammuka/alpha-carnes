@@ -42,7 +42,8 @@ describe('calcularCompativeisItem — preferências', () => {
     };
 
     const sugestoes = await calcularCompativeisItem(tx as never, {
-      compraProgramadaId: 'cp-1',
+      operacaoId: 'op-1',
+      compraProgramadaOrigemId: 'cp-1',
       itemComercialId: 'ic-1',
       peso: '12.500',
     });

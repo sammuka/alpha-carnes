@@ -652,13 +652,14 @@ Registra ações relevantes de usuário.
 - 1 RegraDesdobramento gera N Disponibilidades virtuais ao longo do tempo
 
 ## 4.2 Disponibilidade e pedidos
-- 1 CompraProgramada possui N PedidoVenda
+- 1 CompraProgramada gera N DisponibilidadeVirtual (origem física do lote)
+- 1 Operacao possui N PedidoVenda (pool comercial — [AD-14](execucao/DECISOES.md))
 - 1 PedidoVenda possui N PedidoVendaItem
-- N PedidoVendaItem consomem N DisponibilidadeVirtual por item comercial
-- cada PedidoVenda pertence a 1 único lote principal do dia
+- N PedidoVendaItem consomem N DisponibilidadeVirtual por item comercial **da mesma operação**, atravessando compras se necessário
+- ~~cada PedidoVenda pertence a 1 único lote principal do dia~~ **Superado por AD-14 (2026-08-27).** O pedido de venda pertence à operação; a peça física continua amarrada ao lote via `pecas.compra_programada_id` obrigatório e imutável.
 
 ## 4.3 Recebimento e divergência
-- 1 CompraProgramada pode ter 1 ou mais Recebimentos, conforme decisão futura, mas na V1 o lote do dia é a compra principal operacional
+- 1 CompraProgramada pode ter 1 ou mais Recebimentos (cadeia física por lote, preservada por [AD-14](execucao/DECISOES.md)); ~~na V1 o lote do dia é a compra principal operacional~~ **superado por AD-14** — N compras/lotes coexistem na mesma operação
 - 1 Recebimento possui N RecebimentoItem
 - 1 Recebimento pode gerar N DivergenciasRecebimento
 - 1 DivergenciaRecebimento pode gerar 1 ou N OcorrenciasFornecedor

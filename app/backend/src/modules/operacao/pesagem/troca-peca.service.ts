@@ -165,6 +165,8 @@ export class TrocaPecaService {
           motivo: dto.motivo,
           operadorId,
           statusExpedicaoNoMomento: 'aberta',
+          compraProgramadaOrigemId: retirada.compraProgramadaId,
+          recebimentoOrigemId: retirada.recebimentoId,
         },
         {
           pecaId: inserida.id,
@@ -174,6 +176,8 @@ export class TrocaPecaService {
           motivo: dto.motivo,
           operadorId,
           statusExpedicaoNoMomento: 'aberta',
+          compraProgramadaOrigemId: inserida.compraProgramadaId,
+          recebimentoOrigemId: inserida.recebimentoId,
         },
       ]);
 
@@ -269,6 +273,7 @@ export class TrocaPecaService {
         pedidoVendaId: pedidosVendaItens.pedidoVendaId,
         itemComercialId: pedidosVendaItens.itemComercialId,
         statusPedido: pedidosVenda.status,
+        operacaoId: pedidosVenda.operacaoId,
         deletedAt: pedidosVenda.deletedAt,
       })
       .from(pedidosVendaItens)
@@ -287,6 +292,9 @@ export class TrocaPecaService {
     }
 
     const { dataOperacao, operacaoId } = await this.dadosOperacaoDaPeca(this.db, inserida);
+    if (item.operacaoId !== operacaoId) {
+      throw new ConflictException('Pedido pertence a outra operação');
+    }
     const codigoNovaEtiqueta = inserida.etiquetaAtual ?? `QR-${inserida.id}`;
 
     return {

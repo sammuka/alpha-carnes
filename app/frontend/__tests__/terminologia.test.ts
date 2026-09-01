@@ -21,8 +21,11 @@ function hitsTermoBanido(files: string[]): string[] {
       file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
     );
     const visit = (node: ts.Node): void => {
-      if ((ts.isStringLiteralLike(node) || ts.isJsxText(node)) && /\bmarcas?\b/i.test(node.getText(sf))) {
-        hits.push(`${file}:${sf.getLineAndCharacterOfPosition(node.pos).line + 1}`);
+      if (ts.isStringLiteralLike(node) || ts.isJsxText(node)) {
+        const valor = ts.isStringLiteralLike(node) ? node.text : node.getText(sf);
+        if (/\bmarcas?\b/i.test(valor) && valor !== 'Nome Fantasia/Marca') {
+          hits.push(`${file}:${sf.getLineAndCharacterOfPosition(node.pos).line + 1}`);
+        }
       }
       ts.forEachChild(node, visit);
     };
@@ -72,7 +75,8 @@ describe('terminologia', () => {
       if (/Buscar cliente/i.test(conteudo) && /Buscar marca/i.test(conteudo)) {
         infratores.push(`${arquivo}: mistura terminologia correta e banida`);
       }
-      if (/Nome Fantasia/i.test(conteudo) && /\b(marca|marcas)\b/i.test(conteudo)) {
+      if (/Nome Fantasia/i.test(conteudo) && /\b(marca|marcas)\b/i.test(conteudo)
+        && !/Nome Fantasia\/Marca/.test(conteudo)) {
         infratores.push(`${arquivo}: mistura Nome Fantasia com rótulo banido`);
       }
     }

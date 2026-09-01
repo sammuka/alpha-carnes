@@ -114,6 +114,48 @@ describe('Disponibilidade virtual e2e (geração transacional + idempotência + 
     const semFiltro = await request(app.getHttpServer())
       .get('/comercial/disponibilidade')
       .set('Cookie', comprasCookies);
-    expect(semFiltro.status).toBe(200);
+    expect(semFiltro.status).toBe(400);
+  });
+
+  it('agrega disponibilidade de duas compras da mesma operacao e detalha por compra', async () => {
+    const dia = '2026-12-20';
+    base = await seedComercialBase(app, { fator: 1 });
+    const criar = async (qtd: number) => {
+      const res = await request(app.getHttpServer())
+        .post('/comercial/compras-programadas')
+        .set('Cookie', comprasCookies)
+        .send({
+          dataOperacao: dia,
+          fornecedorId: base.fornecedorId,
+          itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: qtd }],
+        });
+      expect(res.status).toBe(201);
+      const conf = await request(app.getHttpServer())
+        .post(`/comercial/compras-programadas/${res.body.id}/confirmar`)
+        .set('Cookie', comprasCookies)
+        .send();
+      expect(conf.status).toBe(201);
+      return res.body.id as string;
+    };
+    await criar(6);
+    const compra002 = await criar(4);
+
+    const agregado = await request(app.getHttpServer())
+      .get(`/comercial/disponibilidade?dataOperacao=${dia}`)
+      .set('Cookie', comprasCookies);
+    expect(agregado.status).toBe(200);
+    const linha = (agregado.body as Array<{ itemComercialId: string; modo: string; quantidadeTotalGerada: string }>)
+      .find((r) => r.itemComercialId === base.itemComercialId);
+    expect(linha?.modo).toBe('agregado');
+    expect(linha).not.toHaveProperty('id');
+    expect(linha).not.toHaveProperty('compraProgramadaId');
+    expect(Number(linha?.quantidadeTotalGerada)).toBe(10);
+
+    const detalhe002 = await request(app.getHttpServer())
+      .get(`/comercial/disponibilidade?compraProgramadaId=${compra002}`)
+      .set('Cookie', comprasCookies);
+    expect(detalhe002.status).toBe(200);
+    expect(detalhe002.body[0].modo).toBe('compra');
+    expect(Number(detalhe002.body[0].quantidadeTotalGerada)).toBe(4);
   });
 });

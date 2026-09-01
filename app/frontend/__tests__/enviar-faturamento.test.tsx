@@ -24,7 +24,7 @@ const cargaConferencia = {
   motorista: 'Carlos Silva',
   rota: 'Rota Sul',
   statusCaminhao: 'em_conferencia' as const,
-  pedidos: [{ pedidoVendaId: 'ped-1', clienteNome: 'Cliente A', pecas: [{ etiqueta: 'ETQ-1', produtoNome: 'TZ', peso: '49.500' }] }],
+  pedidos: [{ pedidoVendaId: 'ped-1', clienteNome: 'Cliente A', pecas: [{ etiqueta: 'ETQ-1', produtoNome: 'TZ', peso: '49.500', loteOrigem: 'Lote 001' }] }],
   totalClientes: 1,
   totalPecas: 1,
   pesoTotal: '49.500',
@@ -84,6 +84,12 @@ describe('EnviarFaturamentoClient', () => {
       const cards = screen.getAllByRole('button', { name: /Carga #/ });
       expect(cards).toHaveLength(1);
     });
+  });
+
+  it('exibe Lote 001 sob cada peça da carga', async () => {
+    mockFetch([cargaFechada]);
+    render(<EnviarFaturamentoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
+    await waitFor(() => expect(screen.getByText('Lote 001')).toBeInTheDocument());
   });
 
   it('histórico renderiza — quando não há responsável', async () => {
