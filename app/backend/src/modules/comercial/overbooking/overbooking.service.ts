@@ -18,7 +18,6 @@ import { montarPaginado, type Paginado } from '../../../common/crud/paginacao';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
-  comprasProgramadas,
   disponibilidadesVirtuais,
   operacoes,
   pedidosVendaItens,
@@ -532,17 +531,6 @@ export class OverbookingService {
       throw new ConflictException('A operação de destino deve ser posterior à da pendência');
     }
 
-    const compra = await tx.select({ id: comprasProgramadas.id }).from(comprasProgramadas)
-      .where(and(
-        eq(comprasProgramadas.id, dto.compraProgramadaId),
-        eq(comprasProgramadas.operacaoId, destino.id),
-        ne(comprasProgramadas.status, 'cancelada'),
-        isNull(comprasProgramadas.deletedAt),
-      )).then((r) => r[0]);
-    if (!compra) {
-      throw new ConflictException('Compra programada não pertence à operação de destino ou está cancelada');
-    }
-
     const item = await tx.select().from(pedidosVendaItens)
       .where(eq(pedidosVendaItens.id, pendencia.pedidoVendaItemId)).for('update').then((r) => r[0]);
     if (!item) throw new NotFoundException('Item do pedido de origem não encontrado');
@@ -558,7 +546,7 @@ export class OverbookingService {
     }
 
     const novoPedido = await this.pedidos.criarNaTx(tx, {
-      compraProgramadaId: compra.id,
+      operacaoId: destino.id,
       clienteId: pendencia.clienteId,
       dataOperacao: destino.data,
       observacoesGerais: motivo,
@@ -575,7 +563,6 @@ export class OverbookingService {
       detalhe: {
         quantidade: dto.quantidade,
         operacaoDestinoId: destino.id,
-        compraProgramadaId: compra.id,
         itemOrigemRemovido: ehZero(novaQuantidade),
         novoPedidoId: novoPedido.pedido.id,
         observacao: dto.observacao ?? null,

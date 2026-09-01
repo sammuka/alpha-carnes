@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
 import { DRIZZLE } from '../../src/database/database.module';
@@ -365,5 +366,127 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
     expect(item.itemComercial.id).toBe(base.itemComercialId);
     expect(item.reservas[0].disponibilidade.itemComercialId).toBe(base.itemComercialId);
     expect(item).toHaveProperty('preferenciasAplicadasJson');
+  });
+
+  it('Onda 11: pedido com operacaoId e sem compra persiste compraProgramadaId NULL', async () => {
+    const { base, compraId } = await cenarioComSaldo('2026-12-23', 1, 10);
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const [compra] = await db.select({ operacaoId: schema.comprasProgramadas.operacaoId })
+      .from(schema.comprasProgramadas)
+      .where(eq(schema.comprasProgramadas.id, compraId));
+    const res = await request(app.getHttpServer())
+      .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({
+        operacaoId: compra!.operacaoId,
+        clienteId: base.clienteId,
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+      });
+    expect(res.status).toBe(201);
+    const [pedido] = await db.select()
+      .from(schema.pedidosVenda)
+      .where(eq(schema.pedidosVenda.id, res.body.id as string));
+    expect(pedido!.compraProgramadaId).toBeNull();
+    expect(pedido!.operacaoId).toBe(compra!.operacaoId);
+  });
+
+  it('Onda 11: compraProgramadaId legado e aceito e gravado como NULL', async () => {
+    const { base, compraId } = await cenarioComSaldo('2026-12-24', 1, 10);
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const res = await request(app.getHttpServer())
+      .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({
+        compraProgramadaId: compraId,
+        clienteId: base.clienteId,
+        dataOperacao: '2026-12-24',
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+      });
+    expect(res.status).toBe(201);
+    const [pedido] = await db.select()
+      .from(schema.pedidosVenda)
+      .where(eq(schema.pedidosVenda.id, res.body.id as string));
+    expect(pedido!.compraProgramadaId).toBeNull();
+  });
+
+  it('Onda 11: reserva FIFO 6+4 atravessa duas compras; lote de outra operacao nao cobre', async () => {
+    const dia = '2026-12-25';
+    const base = await seedComercialBase(app, { fator: 1 });
+    const criarConfirmada = async (data: string, qtd: number) => {
+      const criar = await request(app.getHttpServer())
+        .post('/comercial/compras-programadas')
+        .set('Cookie', comprasCookies)
+        .send({
+          dataOperacao: data,
+          fornecedorId: base.fornecedorId,
+          itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: qtd }],
+        });
+      expect(criar.status).toBe(201);
+      const conf = await request(app.getHttpServer())
+        .post(`/comercial/compras-programadas/${criar.body.id}/confirmar`)
+        .set('Cookie', comprasCookies)
+        .send();
+      expect(conf.status).toBe(201);
+      return criar.body.id as string;
+    };
+    await criarConfirmada(dia, 6);
+    await criarConfirmada(dia, 4);
+    await criarConfirmada('2026-12-26', 20);
+
+    const pedido = await request(app.getHttpServer())
+      .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({
+        clienteId: base.clienteId,
+        dataOperacao: dia,
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 10 }],
+      });
+    expect(pedido.status).toBe(201);
+
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const itens = await db.select()
+      .from(schema.pedidosVendaItens)
+      .where(eq(schema.pedidosVendaItens.pedidoVendaId, pedido.body.id as string));
+    const reservas = await db.select()
+      .from(schema.reservasDisponibilidade)
+      .where(eq(schema.reservasDisponibilidade.pedidoVendaItemId, itens[0]!.id));
+    const idsVirtuais = reservas
+      .map((r) => r.disponibilidadeVirtualId)
+      .filter((id): id is string => id !== null);
+    expect(new Set(idsVirtuais).size).toBe(2);
+    expect(reservas.map((r) => Number(r.quantidadeReservada)).sort((a, b) => a - b)).toEqual([4, 6]);
+
+    const outroClienteId = await criarOutroCliente(app);
+    const challenge = await request(app.getHttpServer())
+      .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({
+        clienteId: outroClienteId,
+        dataOperacao: dia,
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 1 }],
+      });
+    expect(challenge.status).toBe(409);
+    expect(challengePayload(challenge.body).code).toBe('OVERBOOKING_CONFIRMACAO_NECESSARIA');
+
+    const confirmado = await request(app.getHttpServer())
+      .post('/comercial/pedidos/confirmar-overbooking')
+      .set('Cookie', comercialCookies)
+      .send({
+        clienteId: outroClienteId,
+        dataOperacao: dia,
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 1 }],
+      });
+    expect(confirmado.status).toBe(201);
+
+    const duplicado = await request(app.getHttpServer())
+      .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({
+        clienteId: base.clienteId,
+        dataOperacao: dia,
+        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 1 }],
+      });
+    expect(duplicado.status).toBe(409);
+    expect(duplicado.body.code ?? duplicado.body.message).toBeDefined();
   });
 });

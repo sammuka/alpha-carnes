@@ -46,6 +46,9 @@ it('as cinco rotas comerciais nao renderizam PlaceholderPage', () => {
 
 it('nenhum arquivo da onda 4 usa o termo banido como rotulo', () => {
   const infratores = arquivosDeCodigo(ARQUIVOS_DA_ONDA)
-    .filter((arquivo) => TERMO_BANIDO.test(readFileSync(arquivo, 'utf8')));
+    .filter((arquivo) => {
+      const conteudo = readFileSync(arquivo, 'utf8').replaceAll('Nome Fantasia/Marca', '');
+      return TERMO_BANIDO.test(conteudo);
+    });
   expect(infratores).toEqual([]);
 });

@@ -1,7 +1,13 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../../database/schema';
-import { clientes, pedidosVenda, pedidosVendaItens } from '../../../database/schema';
+import {
+  clientes,
+  disponibilidadesVirtuais,
+  pedidosVenda,
+  pedidosVendaItens,
+  reservasDisponibilidade,
+} from '../../../database/schema';
 import { subtrairQtd } from '../../../common/crud/decimal';
 import { calcularScores, type CandidatoPedido, type SugestaoScored } from './associacao-score';
 
@@ -17,11 +23,12 @@ export function caracteristicasDeCapturaMeta(meta: unknown): string[] {
   return out;
 }
 
-/** Itens de pedidos da MESMA compra (RN-02), abertos, do mesmo item comercial, com saldo. */
+/** Itens de pedidos da MESMA operação (AD-14), abertos, do mesmo item comercial, com saldo. */
 export async function calcularCompativeisItem(
   tx: Tx,
   params: {
-    compraProgramadaId: string;
+    operacaoId: string;
+    compraProgramadaOrigemId: string;
     itemComercialId: string;
     peso: string;
     caracteristicas?: string[];
@@ -38,13 +45,21 @@ export async function calcularCompativeisItem(
       prioridade: pedidosVenda.prioridade,
       rotaPrevista: pedidosVenda.rotaPrevista,
       preferenciasCliente: clientes.preferenciasJson,
+      cobertaPeloLote: sql<boolean>`exists (
+        select 1
+          from ${reservasDisponibilidade} r
+          join ${disponibilidadesVirtuais} dv on dv.id = r.disponibilidade_virtual_id
+         where r.pedido_venda_item_id = ${pedidosVendaItens.id}
+           and r.status = 'ativa'
+           and dv.compra_programada_id = ${params.compraProgramadaOrigemId}
+      )`,
     })
     .from(pedidosVendaItens)
     .innerJoin(pedidosVenda, eq(pedidosVendaItens.pedidoVendaId, pedidosVenda.id))
     .innerJoin(clientes, eq(pedidosVenda.clienteId, clientes.id))
     .where(
       and(
-        eq(pedidosVenda.compraProgramadaId, params.compraProgramadaId),
+        eq(pedidosVenda.operacaoId, params.operacaoId),
         eq(pedidosVendaItens.itemComercialId, params.itemComercialId),
         isNull(pedidosVenda.deletedAt),
         sql`${pedidosVenda.status} <> 'cancelado'`,
@@ -62,6 +77,7 @@ export async function calcularCompativeisItem(
       saldoPendente: subtrairQtd(l.quantidadePedida, l.quantidadeAtendida),
       prioridade: l.prioridade,
       rotaPrevista: l.rotaPrevista,
+      cobertaPeloLote: Boolean(l.cobertaPeloLote),
       preferencias: {
         faixaPesoMin: typeof pref.faixaPesoMin === 'number' ? pref.faixaPesoMin : undefined,
         faixaPesoMax: typeof pref.faixaPesoMax === 'number' ? pref.faixaPesoMax : undefined,

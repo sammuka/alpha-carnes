@@ -4,6 +4,9 @@
 export const EVENTOS = {
   COMPRA_CONFIRMADA: 'compra_programada_confirmada',
   DISPONIBILIDADE_GERADA: 'disponibilidade_virtual_gerada',
+  COMPRA_CRIADA: 'compra_programada_criada',
+  COMPRA_ATUALIZADA: 'compra_programada_atualizada',
+  COMPRA_CANCELADA: 'compra_programada_cancelada',
   RESERVA_ATUALIZADA: 'reserva_disponibilidade_atualizada',
   PEDIDO_SEM_COBERTURA: 'pedido_sem_cobertura',
   // Onda 1 — Operação pivô / overbooking / fornecedor
@@ -126,14 +129,25 @@ export interface AjusteEstoqueDecididoPayload {
   dataOperacao: string;
 }
 
+export interface CompraMutadaPayload {
+  compraId: string;
+  operacaoId: string;
+  dataOperacao: string;
+  numeroSequencial?: number;
+}
+
 export interface CompraConfirmadaPayload {
   compraId: string;
+  operacaoId: string;
   dataOperacao: string;
+  numeroSequencial?: number;
 }
 
 export interface DisponibilidadeGeradaPayload {
   compraId: string;
+  operacaoId: string;
   dataOperacao: string;
+  numeroSequencial?: number;
   itens: Array<{
     disponibilidadeId: string;
     itemComercialId: string;
@@ -475,6 +489,9 @@ export interface PayloadPorEvento {
     justificativa: string;
   };
   tabela_preco_publicada: { tabelaPrecoId: string; data: string; autorId: string };
+  compra_programada_criada: CompraMutadaPayload;
+  compra_programada_atualizada: CompraMutadaPayload;
+  compra_programada_cancelada: CompraMutadaPayload;
   // ── Onda 5 — Gestão ───────────────────────────────────────────────────────
   compra_programada_alterada_impacto: CompraAlteradaImpactoPayload;
   aprovacao_operacional_registrada: AprovacaoOperacionalPayload;
