@@ -11,8 +11,10 @@ export const dadosFiscaisJsonSchema = z
     uf: z.string().trim().max(2).optional(),
     cep: z.string().trim().max(10).optional(),
     codigoIbge: z.string().trim().max(10).optional(),
-    inscricaoEstadual: z.string().trim().max(30).optional(),
-    inscricaoMunicipal: z.string().trim().max(30).optional(),
+    // IE: até 14 dígitos (leiaute NFe/SEFAZ) + pontuação de exibição por UF (ex.: "123.456.789.000").
+    inscricaoEstadual: z.string().trim().max(18).optional(),
+    // IM: até 15 caracteres — padrão adotado por sistemas fiscais integrados (varia por município).
+    inscricaoMunicipal: z.string().trim().max(15).optional(),
     emailFiscal: z.string().trim().email().optional().or(z.literal('')),
     telefoneFiscal: z.string().trim().max(20).optional(),
     condicaoFiscal: z.string().trim().max(100).optional(),
