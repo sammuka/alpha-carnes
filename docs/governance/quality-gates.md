@@ -235,7 +235,7 @@ Monta a carga física por caminhão e a congela no fechamento. **Reusa** o contr
 ### Gate transversal adicional do Ciclo v1.1 — Fidelidade ao protótipo (Princípio I, NÃO-NEGOCIÁVEL)
 
 Vale para **todo PR com UI**, somado aos gates transversais acima:
-- Cada tela do PR referencia no plano tático o arquivo `.tsx` de origem no protótipo (`feature/completude-v1.1`) e é **estruturalmente idêntica** a ele: seções, abas, modais, botões, rótulos, estados visuais, fluxo de navegação.
+- Cada tela do PR referencia no plano tático o arquivo `.tsx` de origem no protótipo (branch `main`) e é **estruturalmente idêntica** a ele: seções, abas, modais, botões, rótulos, estados visuais, fluxo de navegação.
 - Zero cores hex fora dos tokens do DS/paleta do protótipo; fonte única Inter; menu com os 9 grupos, ordem e rótulos do protótipo.
 - Terminologia: "Nome Fantasia" / "Buscar cliente"; **zero ocorrências de "Marca"** em UI (teste/grep no gate).
 - Pendências abertas (P1–P15 do plano mestre §7) aparecem como parâmetro + badge "Provisório" — nunca regra fixa; badge só sai com AD-xx registrada em [`../execucao/DECISOES.md`](../execucao/DECISOES.md).

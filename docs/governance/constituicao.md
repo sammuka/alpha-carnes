@@ -8,7 +8,7 @@
 
 ## Princípio I — Fidelidade absoluta ao protótipo validado (NÃO-NEGOCIÁVEL)
 
-O protótipo `F:\Projetos\alpha-carnes-prototipo`, branch `feature/completude-v1.1`, é a **fonte de verdade de UI/UX com prioridade zero**. Foi validado com o usuário final e não é uma sugestão — é o contrato visual e de interação do produto.
+O protótipo `F:\Projetos\alpha-carnes-prototipo`, branch `main`, é a **fonte de verdade de UI/UX com prioridade zero**. Foi validado com o usuário final e não é uma sugestão — é o contrato visual e de interação do produto.
 
 1. **Tudo idêntico ao prototipado:** componentes, layout de telas, hierarquia do menu (9 grupos, ordem e rótulos), fontes (Inter 400/500/600/700), cores (paleta do protótipo: navy `#265389`, hover `#1E4070`, blue-mid `#3B7FD4`, fundo `#F5F7FA`, sidebar em gradiente `#1E3A5F → #1B4E9B`, status `#18A84A`/`#F5B019`/`#FC5241`/`#3B7FD4`/`#7C3AED`, badge Provisório `#FEF3C7`/`#92400E`), espaçamentos, modais, abas, estados visuais, microcopy e fluxos de navegação.
 2. **Únicas alterações permitidas:** (a) remoção de textos que existem apenas por ser protótipo (ex.: "SIMULAR PERFIL", datas fictícias hardcoded, avisos de dado demo); (b) substituição de dados mockados por dados reais; (c) correções que o próprio plano mestre registra como discrepância conhecida do protótipo (ex.: catálogo legado da aba "Grade Tabular" da Disponibilidade — usar o catálogo MVP correto). Qualquer outra divergência visual ou de fluxo é **defeito de gate**.
@@ -59,7 +59,7 @@ Convenções de [`../data/convencoes-schema.md`](../data/convencoes-schema.md): 
 
 - **Stack fixada** (ADR-001..011): NestJS 11 + TS 5 strict, Next.js 16 App Router (BFF), PostgreSQL 18 + Drizzle, Zod 4, WebSocket nativo, JWT+RBAC 11 perfis (doc 013), node-soap p/ EISS. Trocar peça da stack = ADR nova + emenda.
 - **Sem over-engineering:** sem CQRS, sem Event Sourcing, sem microserviços, sem camada de repositório genérica. Se pode ser uma função, não vira serviço.
-- **Fontes de verdade em ordem de precedência:** (1) decisões registradas em `docs/execucao/DECISOES.md`; (2) `docs_v2/alphacarnes_contexto_funcional_e_recomendacoes_prototipo_v1.1.md`; (3) código do protótipo `feature/completude-v1.1`; (4) docs_v2 v0.1 onde não contradito; (5) docs/001–018 + ADRs. Nunca inventar fato que nenhuma fonte sustenta.
+- **Fontes de verdade em ordem de precedência:** (1) decisões registradas em `docs/execucao/DECISOES.md`; (2) `docs_v2/alphacarnes_contexto_funcional_e_recomendacoes_prototipo_v1.1.md`; (3) código do protótipo (branch `main`); (4) docs_v2 v0.1 onde não contradito; (5) docs/001–018 + ADRs. Nunca inventar fato que nenhuma fonte sustenta.
 - **Cobertura backend ≥ 80% (linha e branch)** nos services de domínio — gate de CI, não meta aspiracional.
 
 ## Pendências externas declaradas
