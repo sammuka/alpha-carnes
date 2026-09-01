@@ -12,7 +12,9 @@ Leia somente o necessário e aplique esta precedência:
    https://github.com/sammuka/alpha-carnes-prototipo` (repo privado — exige convite de
    colaborador) e apontar `ALPHACARNES_PROTOTYPE_PATH` (ou `-PrototypePath`) para esse clone.
    Sem isso, o Portão 1 de qualquer onda com UI bloqueia em `requires-human` — é o
-   comportamento correto, não um bug.
+   comportamento correto, não um bug. Referências antigas a `feature/completude-v1.1` em
+   documentos históricos (planos de onda já mergeados, evidências, testes) são registro do
+   que era verdade quando escritas — leia-as como `main`, a branch atual não existe mais.
 5. `docs/governance/roadmap-canonico.md`, plano mestre e matriz de rastreabilidade.
 6. Demais documentos e ADRs.
 

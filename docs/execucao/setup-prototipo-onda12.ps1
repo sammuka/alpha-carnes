@@ -13,6 +13,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    throw "git não encontrado no PATH. Instale o Git for Windows e reabra o terminal antes de rodar este script."
+}
+
 $prototypePath = Join-Path $ParentDir 'alpha-carnes-prototipo'
 
 if (Test-Path (Join-Path $prototypePath '.git')) {
