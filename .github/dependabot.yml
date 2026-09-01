@@ -2,21 +2,26 @@ version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
   - package-ecosystem: "npm"
     directory: "/app/backend"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
   - package-ecosystem: "npm"
     directory: "/app/frontend"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
   - package-ecosystem: "npm"
     directory: "/landing"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
