@@ -257,4 +257,36 @@ describe('ConferenciaExpedicaoClient', () => {
     render(<ConferenciaExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
     await waitFor(() => expect(screen.getByText('1 / 2 peças')).toBeInTheDocument());
   });
+
+  it('exibe Lote 001 sob cada peça do romaneio', async () => {
+    mockFetch({
+      '/caminhoes/c1aaaaaabbbbccccddddeeeeffff0001/romaneio': {
+        caminhao: caminhaoBase,
+        pedidos: [
+          {
+            pedidoVendaId: 'ped-1',
+            clienteId: 'cli-1',
+            ordemNaCarga: 1,
+            previsto: 1,
+            carregado: 1,
+            itens: [
+              {
+                cargaItemId: 'item-1',
+                pedidoVendaId: 'ped-1',
+                statusCargaItem: 'em_carga',
+                divergenciaMotivo: null,
+                etiqueta: 'ETQ-001',
+                produtoNome: 'TZ',
+                peso: '49.5',
+                loteOrigem: 'Lote 001',
+              },
+            ],
+          },
+        ],
+      },
+      '/caminhoes?dataOperacao': [caminhaoBase],
+    });
+    render(<ConferenciaExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
+    await waitFor(() => expect(screen.getByText('Lote 001')).toBeInTheDocument());
+  });
 });

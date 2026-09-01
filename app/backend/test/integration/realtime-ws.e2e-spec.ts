@@ -6,8 +6,7 @@ import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpe
 import { seedComercialBase } from '../helpers/comercial-fixtures';
 import { EVENTOS } from '../../src/realtime/events/eventos';
 
-// Único teste que faz app.listen(0) e abre uma conexão WebSocket REAL para
-// validar handshake/auth/broadcast. Os demais e2e não tocam WS.
+// Handshake/auth/broadcast via WebSocket real. createTestApp já faz listen(0).
 describe('Realtime WebSocket e2e (handshake, auth, broadcast pós-commit)', () => {
   let app: INestApplication;
   let comprasCookies: string;
@@ -17,7 +16,6 @@ describe('Realtime WebSocket e2e (handshake, auth, broadcast pós-commit)', () =
     app = await createTestApp();
     const compras = await createTestUser(app, { perfil: 'compras' });
     comprasCookies = await loginCookies(app, compras.adminEmail, compras.adminPassword);
-    await app.listen(0);
     port = (app.getHttpServer().address() as AddressInfo).port;
   }, 60000);
 

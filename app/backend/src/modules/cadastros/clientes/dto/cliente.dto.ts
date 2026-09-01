@@ -16,7 +16,7 @@ const documentoFiscalSchema = z
 const statusSchema = z.enum(['ativo', 'inativo']);
 
 export const createClienteSchema = z.object({
-  codigo: z.string().trim().min(1).max(50),
+  codigo: z.string().trim().min(1).max(50).optional(),
   razaoSocial: z.string().trim().min(1).max(200),
   nomeFantasia: z.string().trim().max(200).optional(),
   documentoFiscal: documentoFiscalSchema,
@@ -32,6 +32,6 @@ export const createClienteSchema = z.object({
 
 export type CreateClienteDto = z.infer<typeof createClienteSchema>;
 
-// Update: todos os campos opcionais (PATCH parcial), sem permitir documento/codigo vazios.
-export const updateClienteSchema = createClienteSchema.partial();
+// Update: PATCH parcial. `codigo` é imutável após a criação (AD-13) e é omitido do DTO.
+export const updateClienteSchema = createClienteSchema.omit({ codigo: true }).partial();
 export type UpdateClienteDto = z.infer<typeof updateClienteSchema>;
