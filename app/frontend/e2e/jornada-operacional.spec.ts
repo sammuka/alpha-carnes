@@ -271,6 +271,14 @@ async function findByCode(api: APIRequestContext, cookieHeader: string, recurso:
   return found.id;
 }
 
+async function findByDocumento(api: APIRequestContext, cookieHeader: string, recurso: string, documento: string) {
+  const qs = new URLSearchParams({ search: documento, pageSize: '5' });
+  const result = await backend<Paginado<CadastroRegistro>>(api, cookieHeader, 'GET', `/${recurso}?${qs.toString()}`);
+  const found = result.data.find((item) => item.documentoFiscal === documento);
+  if (!found) throw new Error(`Registro ${recurso} com documento ${documento} não encontrado após criação`);
+  return found.id;
+}
+
 async function createCadastroViaUi(
   page: Page,
   steps: StepEvidence[],
@@ -509,7 +517,7 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
       'Dashboard carregado sem 404, com sidebar e indicadores operacionais.',
     );
 
-    const clienteCodigo = codigo('CLI');
+    const clienteDocumento = makeCpf(seed + 1);
     const fornecedorCodigo = codigo('FORN');
     const itemCompraCodigo = codigo('ICOMP');
     const itemComercialCodigo = codigo('ICOM');
@@ -518,14 +526,13 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
       recurso: 'clientes',
       title: 'Cadastro de Clientes',
       fields: {
-        Código: clienteCodigo,
         'Razão Social': `Cliente E2E ${runId}`,
-        'Nome Fantasia': `Cliente ${runId}`,
-        'CNPJ/CPF': makeCpf(seed + 1),
+        'Nome Fantasia/Marca': `Cliente ${runId}`,
+        'CNPJ/CPF': clienteDocumento,
       },
       screenshotId: '03-clientes',
     });
-    const clienteId = await findByCode(request, auth.cookieHeader, 'clientes', clienteCodigo);
+    const clienteId = await findByDocumento(request, auth.cookieHeader, 'clientes', clienteDocumento);
 
     await createCadastroViaUi(page, steps, {
       recurso: 'fornecedores',

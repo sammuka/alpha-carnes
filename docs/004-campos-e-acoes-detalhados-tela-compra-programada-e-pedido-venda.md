@@ -138,7 +138,7 @@ Ao confirmar a compra, o sistema deve:
 ## 1.10 Mensagens e alertas esperados
 
 ### Exemplos
-- “Já existe uma compra principal confirmada para esta data.”
+- ~~“Já existe uma compra principal confirmada para esta data.”~~ **Superado por [AD-14](execucao/DECISOES.md) (2026-08-27).** Essa mensagem correspondia à unicidade de uma compra por operação; a trava foi revogada. A tela passa a listar N pedidos de compra do dia (master-detail).
 - “O item ‘Boi’ não possui regra de desdobramento válida.”
 - “A compra foi confirmada com sucesso.”
 - “Não é possível cancelar a compra pois já existem pedidos de venda vinculados.”
