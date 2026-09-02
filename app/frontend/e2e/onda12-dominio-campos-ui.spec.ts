@@ -289,6 +289,8 @@ test.describe('Onda 12 — domínio de campos na UI', () => {
     await page.getByPlaceholder('Buscar...').press('Enter');
     await page.getByRole('button', { name: new RegExp(razao) }).click();
     await expect(page.getByLabel('Horário Limite Recebimento')).toHaveValue('16:45');
+    await page.getByRole('button', { name: 'Salvar' }).click();
+    await expect(page.getByText('Alterações salvas.')).toBeVisible();
     await shot(page, '17-fornecedores.png');
   });
 

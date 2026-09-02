@@ -15,13 +15,12 @@ import { PageHeader } from '@/components/ui/page-header';
 import { cn } from '@/lib/cn';
 import type { AbaCadastro, CampoConfig, CadastroConfig } from '@/lib/cadastros-config';
 import { ABA_LABELS, ABA_ORDEM, CADASTROS } from '@/lib/cadastros-config';
+import { chaveFormulario, montarPayload, type FormState, type FormValor } from '@/lib/cadastro-payload';
 import type { Paginado } from '@/lib/cadastros';
 import { detalharErro, extrairMensagemErro } from '@/lib/error-message';
 import { useErrosPorCampo } from '@/lib/use-erros-campo';
 
 type Registro = Record<string, unknown> & { id: string };
-type FormValor = string | boolean;
-type FormState = Record<string, FormValor>;
 
 interface CadastroMasterDetailProps {
   config: Omit<CadastroConfig, 'schema'>;
@@ -45,10 +44,6 @@ function iniciaisDe(nome: string): string {
   return limpo.slice(0, 2).toUpperCase();
 }
 
-function chaveFormulario(campo: CampoConfig): string {
-  return campo.jsonCampo ? `${campo.jsonCampo}.${campo.nome}` : campo.nome;
-}
-
 function lerValorCampo(reg: Registro, campo: CampoConfig): FormValor {
   if (campo.jsonCampo) {
     const json = reg[campo.jsonCampo];
@@ -60,45 +55,6 @@ function lerValorCampo(reg: Registro, campo: CampoConfig): FormValor {
   const v = reg[campo.nome];
   if (campo.tipo === 'checkbox') return v === true;
   return v == null ? '' : String(v);
-}
-
-function montarPayload(config: Omit<CadastroConfig, 'schema'>, form: FormState): Record<string, unknown> {
-  const payload: Record<string, unknown> = {};
-  const jsonBuckets = new Map<string, Record<string, unknown>>();
-
-  for (const campo of config.campos) {
-    const chave = chaveFormulario(campo);
-    const valor = form[chave];
-
-    if (campo.jsonCampo) {
-      if (!jsonBuckets.has(campo.jsonCampo)) {
-        jsonBuckets.set(campo.jsonCampo, {});
-      }
-      const bucket = jsonBuckets.get(campo.jsonCampo)!;
-      if (campo.tipo === 'checkbox') {
-        bucket[campo.nome] = valor === true;
-      } else {
-        bucket[campo.nome] = typeof valor === 'string' ? valor : '';
-      }
-      continue;
-    }
-
-    if (campo.tipo === 'checkbox') {
-      payload[campo.nome] = valor === true;
-    } else {
-      const str = typeof valor === 'string' ? valor : String(valor ?? '');
-      if (campo.nome === 'representanteId' && str.trim() === '') {
-        continue;
-      }
-      payload[campo.nome] = str;
-    }
-  }
-
-  for (const [jsonCampo, obj] of jsonBuckets) {
-    payload[jsonCampo] = obj;
-  }
-
-  return payload;
 }
 
 function CampoFormulario({
@@ -150,6 +106,9 @@ function CampoFormulario({
           value={typeof valor === 'string' ? valor : ''}
           onChange={(e) => onChange(chave, e.target.value)}
         >
+          {!campo.obrigatorio && campo.jsonCampo ? (
+            <option value="">—</option>
+          ) : null}
           {campo.opcoes?.map((op) => (
             <option key={op.valor} value={op.valor}>
               {op.rotulo}
