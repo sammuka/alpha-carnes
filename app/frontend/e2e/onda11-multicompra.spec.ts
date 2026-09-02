@@ -242,12 +242,12 @@ async function prepararCenario(
   const itemCompra = await backend<{ id: string }>(api, adminCookie, 'POST', '/itens-compra', {
     codigo: `O11IC${suffix}`,
     descricao: 'Boi Onda11',
-    unidadeCompra: 'cabeca',
+    unidadeCompra: 'unidade',
   });
   const itemComercial = await backend<{ id: string }>(api, adminCookie, 'POST', '/itens-comerciais', {
     codigo: `O11TZ${suffix}`,
     descricao: itemDesc,
-    unidadeComercial: 'parte',
+    unidadeComercial: 'kg',
   });
   const cliente = await backend<{ id: string }>(api, adminCookie, 'POST', '/clientes', {
     codigo: `O11CL${suffix}`,
@@ -468,6 +468,13 @@ test.describe('Onda 11 — jornada multicompra', () => {
       await expect(page.getByText(rotuloLote(dados.seq1))).toBeVisible({ timeout: 20_000 });
       await expect(page.getByText(rotuloLote(dados.seq2))).toBeVisible();
 
+      const motoristaCadastro = await backend<{ id: string }>(
+        request,
+        adminCookie,
+        'POST',
+        '/frota/motoristas',
+        { nome: 'Motorista O11', documento: `O11M${dados.runId.slice(-6)}` },
+      );
       const caminhao = await backend<{ id: string }>(
         request,
         adminCookie,
@@ -475,7 +482,7 @@ test.describe('Onda 11 — jornada multicompra', () => {
         '/operacao/expedicao/caminhoes',
         {
           placa: `O11${dados.runId.slice(-4)}`,
-          motorista: 'Motorista O11',
+          motoristaId: motoristaCadastro.id,
           dataOperacao: dados.dataOperacao,
         },
       );

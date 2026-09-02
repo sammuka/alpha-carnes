@@ -6,6 +6,7 @@ import { seedComercialBase } from '../helpers/comercial-fixtures';
 import { iniciarCorte, subitemCompleto } from '../helpers/corte-fixtures';
 import {
   criarCaminhao,
+  inserirMotoristaFrota,
   vincularPedido,
   abrirCarga,
   adicionarSubitemNaCarga,
@@ -91,10 +92,11 @@ describe('Faturamento F6a — e2e', () => {
       const { default: request } = await import('supertest');
 
       // Criar caminhão ainda planejado (não-fechado)
+      const motorista = await inserirMotoristaFrota(app);
       const criarRes = await request(srv())
         .post('/operacao/expedicao/caminhoes')
         .set('Cookie', expedicaoCookies)
-        .send({ placa: `TST-${Date.now().toString().slice(-4)}`, motorista: 'Motorista', dataOperacao: '2027-02-01' });
+        .send({ placa: `TST-${Date.now().toString().slice(-4)}`, motoristaId: motorista.id, dataOperacao: '2027-02-01' });
       const caminhaoId = criarRes.body.id as string;
 
       const res = await request(srv())
@@ -227,10 +229,11 @@ describe('Faturamento F6a — e2e', () => {
     it('retorna bloqueios críticos com codigo, causa, impacto, acao', async () => {
       const { default: request } = await import('supertest');
       // Usar um caminhão inexistente ou não-fechado para garantir bloqueio
+      const motorista = await inserirMotoristaFrota(app, 'M');
       const criarRes = await request(srv())
         .post('/operacao/expedicao/caminhoes')
         .set('Cookie', expedicaoCookies)
-        .send({ placa: `BLOQ-${Date.now().toString().slice(-4)}`, motorista: 'M', dataOperacao: '2027-02-03' });
+        .send({ placa: `BLOQ-${Date.now().toString().slice(-4)}`, motoristaId: motorista.id, dataOperacao: '2027-02-03' });
       const caminhaoId = criarRes.body.id as string;
 
       const res = await request(srv())

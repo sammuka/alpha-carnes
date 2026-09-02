@@ -15,6 +15,20 @@ import { extrairErrosPorCampo, extrairMensagemErro } from '@/lib/error-message';
 
 export type CadastroFormConfig = Omit<CadastroConfig, 'schema'>;
 
+function omitirNulos(valor: unknown): unknown {
+  if (valor === null) return undefined;
+  if (Array.isArray(valor)) return valor.map(omitirNulos);
+  if (valor && typeof valor === 'object') {
+    return Object.fromEntries(
+      Object.entries(valor as Record<string, unknown>).flatMap(([chave, atual]) => {
+        const limpo = omitirNulos(atual);
+        return limpo === undefined ? [] : [[chave, limpo]];
+      }),
+    );
+  }
+  return valor;
+}
+
 interface CadastroFormProps {
   config: CadastroFormConfig;
   /** Quando informado, o formulário edita o registro (PATCH); senão cria (POST). */
@@ -41,7 +55,7 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
     defaultValues: {
       unidadeCompra: 'unidade',
       unidadeComercial: 'unidade',
-      ...(registro ?? {}),
+      ...((registro ? omitirNulos(registro) : {}) as FieldValues),
     },
   });
   const { isSubmitting } = formState;
@@ -56,7 +70,7 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
     const payload: Record<string, unknown> = { ...valores };
     for (const k of Object.keys(payload)) {
       const v = payload[k];
-      if (v === '') {
+      if (v === '' || v === null || v === undefined) {
         delete payload[k];
       } else if (v && typeof v === 'object' && !Array.isArray(v)) {
         const obj = { ...(v as Record<string, unknown>) };

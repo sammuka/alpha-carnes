@@ -9,7 +9,7 @@ const produtoCaixaria = {
   nomeOperacional: null,
   categoria: null,
   tipoOperacional: 'entrada_unidade' as const,
-  unidadePedido: 'caixa',
+  unidadePedido: 'unidade',
   unidadePreco: 'unidade' as const,
   exigePeso: false,
   passaBalanca: false,

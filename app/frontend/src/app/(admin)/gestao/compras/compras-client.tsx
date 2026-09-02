@@ -538,7 +538,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                 <TableBody>
                   {linhas.map((linha, idx) => {
                     const simulacao = simulacoes.get(linha.itemCompraId);
-                    const regraDesdobramento = simulacao
+                    const regraDesdobramento = simulacao?.itens?.length
                       ? simulacao.itens.map((i) => `${i.fator}× ${i.descricao}`).join(' + ')
                       : '—';
                     return (
@@ -640,7 +640,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                   (() => {
                     const agregado = new Map<string, { descricao: string; total: number }>();
                     for (const sim of simulacoes.values()) {
-                      for (const item of sim.itens) {
+                      for (const item of sim.itens ?? []) {
                         const atual = agregado.get(item.itemComercialId);
                         agregado.set(item.itemComercialId, {
                           descricao: item.descricao,

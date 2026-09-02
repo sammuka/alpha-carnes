@@ -300,10 +300,12 @@ export class ClientesService {
       ))
       .limit(1)
       .then((linhas) => linhas[0] ?? null);
-    if (
-      !permitido
-      || (permitido.status !== 'ativo' && permitido.id !== representanteIdPersistido)
-    ) {
+    // Fora do escopo ou inexistente: 404 idêntico ao detalhe (E5.1 — não enumerar).
+    // Inativo no escopo: 400 da Onda 12, salvo reenvio do UUID já persistido.
+    if (!permitido) {
+      throw new NotFoundException('Cliente não encontrado');
+    }
+    if (permitido.status !== 'ativo' && permitido.id !== representanteIdPersistido) {
       throw new BadRequestException({
         codigo: 'VINCULO_CADASTRO_INVALIDO',
         message: 'Representante não encontrado, removido ou inativo',

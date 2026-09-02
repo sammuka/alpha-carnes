@@ -104,6 +104,7 @@ it('clientes exibe as 4 abas do prototipo na ordem', async () => {
 
 it('DoD 12.10 cliente mantém o rótulo Nome Fantasia/Marca', async () => {
   render(<ClientesClient podeGerenciar />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Novo cliente' }));
   expect(await screen.findByLabelText('Nome Fantasia/Marca')).toBeInTheDocument();
   expect(screen.queryByLabelText(/^Nome Fantasia$/)).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/^Marca$/)).not.toBeInTheDocument();
@@ -112,9 +113,10 @@ it('DoD 12.10 cliente mantém o rótulo Nome Fantasia/Marca', async () => {
 it('clientes usa Nome Fantasia/Marca e Buscar cliente (AD-13)', async () => {
   const { container } = render(<ClientesClient podeGerenciar />);
   expect(container.innerHTML).not.toMatch(/\bBuscar marca/i);
+  expect(await screen.findByPlaceholderText('Buscar cliente...')).toBeInTheDocument();
+  await userEvent.click(await screen.findByRole('button', { name: 'Novo cliente' }));
   expect(await screen.findByLabelText('Nome Fantasia/Marca')).toBeInTheDocument();
   expect(screen.queryByLabelText('Código Interno')).not.toBeInTheDocument();
-  expect(await screen.findByPlaceholderText('Buscar cliente...')).toBeInTheDocument();
 });
 
 it('selects de representante e rota sao populados pela API de cadastros', async () => {

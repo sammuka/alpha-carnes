@@ -29,4 +29,6 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   setupFilesAfterEnv: ['<rootDir>/test/jest-setup.ts'],
   maxWorkers: 1,
+  // Nest+pino acumula workers de log no processo único; reciclar evita OOM no suite local.
+  workerIdleMemoryLimit: '384MB',
 };

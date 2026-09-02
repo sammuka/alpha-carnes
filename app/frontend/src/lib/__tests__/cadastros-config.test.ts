@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
   CADASTROS,
   configCadastroParaCliente,
@@ -39,5 +41,8 @@ describe('configCadastroParaCliente', () => {
 
   it('DoD 12.1 clientes possui uma única UI canônica', () => {
     expect(CADASTROS).not.toHaveProperty('clientes');
+    const bff = path.join(__dirname, '../../app/api/cadastros/clientes');
+    expect(fs.existsSync(path.join(bff, 'route.ts'))).toBe(true);
+    expect(fs.existsSync(path.join(bff, '[id]/route.ts'))).toBe(true);
   });
 });

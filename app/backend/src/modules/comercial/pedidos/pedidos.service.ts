@@ -377,8 +377,9 @@ export class PedidosService {
     usuarioId: string,
     confirmado: boolean,
   ): Promise<{ pedido: PedidoVenda; eventos: EventoDominio[] }> {
-    await this.exigirClienteNoEscopo(tx, dto.clienteId, usuarioId);
-    const rota = await this.resolverRota(tx, dto.rotaId);
+    const cliente = await this.exigirClienteNoEscopo(tx, dto.clienteId, usuarioId);
+    const rotaIdEfetivo = dto.rotaId !== undefined ? dto.rotaId : cliente.rotaId;
+    const rota = await this.resolverRota(tx, rotaIdEfetivo);
     const solicitados: ItemSolicitado[] = dto.itens.map((item) => ({
       itemComercialId: item.itemComercialId,
       quantidade: item.quantidadePedida,

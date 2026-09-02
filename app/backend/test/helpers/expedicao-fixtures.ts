@@ -1,18 +1,42 @@
 import type { INestApplication } from '@nestjs/common';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { DRIZZLE } from '../../src/database/database.module';
+import * as schema from '../../src/database/schema';
+
+type Db = NodePgDatabase<typeof schema>;
+
+/** Insere motorista ativo em frota_motoristas para o contrato T11 (`motoristaId`). */
+export async function inserirMotoristaFrota(
+  app: INestApplication,
+  nome = 'Motorista Teste',
+): Promise<{ id: string; nome: string }> {
+  const { db } = app.get<{ db: Db }>(DRIZZLE);
+  const [row] = await db
+    .insert(schema.frotaMotoristas)
+    .values({
+      nome,
+      documento: `DOC-${Date.now()}-${Math.floor(Math.random() * 1e9)}`,
+      status: 'ativo',
+    })
+    .returning({ id: schema.frotaMotoristas.id, nome: schema.frotaMotoristas.nome });
+  if (!row) throw new Error('Falha ao inserir motorista de teste');
+  return row;
+}
 
 /** Cria um caminhao planejado e retorna o id. */
 export async function criarCaminhao(
   app: INestApplication,
   cookies: string,
-  opts: { dataOperacao: string; placa?: string },
+  opts: { dataOperacao: string; placa?: string; motoristaNome?: string },
 ): Promise<string> {
   const { default: request } = await import('supertest');
+  const motorista = await inserirMotoristaFrota(app, opts.motoristaNome ?? 'Motorista Teste');
   const res = await request(app.getHttpServer())
     .post('/operacao/expedicao/caminhoes')
     .set('Cookie', cookies)
     .send({
       placa: opts.placa ?? `ABC-${Date.now().toString().slice(-4)}`,
-      motorista: 'Motorista Teste',
+      motoristaId: motorista.id,
       dataOperacao: opts.dataOperacao,
     });
   if (res.status !== 201) throw new Error(`Falha ao criar caminhao: ${JSON.stringify(res.body)}`);

@@ -19,13 +19,13 @@ describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobrepo
     const itemCompra = await request(app.getHttpServer())
       .post('/itens-compra')
       .set('Cookie', adminCookies)
-      .send({ codigo: 'IC-BOI', descricao: 'Boi', unidadeCompra: 'cabeca' });
+      .send({ codigo: 'IC-BOI', descricao: 'Boi', unidadeCompra: 'unidade' });
     itemCompraId = itemCompra.body.id;
 
     const itemComercial = await request(app.getHttpServer())
       .post('/itens-comerciais')
       .set('Cookie', adminCookies)
-      .send({ codigo: 'ICM-DIANT', descricao: 'Dianteiro', unidadeComercial: 'peca' });
+      .send({ codigo: 'ICM-DIANT', descricao: 'Dianteiro', unidadeComercial: 'kg' });
     itemComercialId = itemComercial.body.id;
   });
 
@@ -118,11 +118,11 @@ describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobrepo
       const ic = await request(app.getHttpServer())
         .post('/itens-compra')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-PARTIAL', descricao: 'B', unidadeCompra: 'cabeca' });
+        .send({ codigo: 'IC-PARTIAL', descricao: 'B', unidadeCompra: 'unidade' });
       const icm = await request(app.getHttpServer())
         .post('/itens-comerciais')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-PARTIAL', descricao: 'T', unidadeComercial: 'peca' });
+        .send({ codigo: 'ICM-PARTIAL', descricao: 'T', unidadeComercial: 'kg' });
       // Criação mínima: sem vigenciaFim e sem observacoes (cobre ramos de default).
       const criar = await request(app.getHttpServer())
         .post('/regras-desdobramento')
@@ -148,11 +148,11 @@ describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobrepo
       const ic = await request(app.getHttpServer())
         .post('/itens-compra')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-LIFE-R', descricao: 'Boi L', unidadeCompra: 'cabeca' });
+        .send({ codigo: 'IC-LIFE-R', descricao: 'Boi L', unidadeCompra: 'unidade' });
       const icm = await request(app.getHttpServer())
         .post('/itens-comerciais')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-LIFE-R', descricao: 'Traseiro L', unidadeComercial: 'peca' });
+        .send({ codigo: 'ICM-LIFE-R', descricao: 'Traseiro L', unidadeComercial: 'kg' });
 
       const criar = await request(app.getHttpServer())
         .post('/regras-desdobramento')
@@ -209,11 +209,11 @@ describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobrepo
       const ic = await request(app.getHttpServer())
         .post('/itens-compra')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-SUINO', descricao: 'Suíno', unidadeCompra: 'lote' });
+        .send({ codigo: 'IC-SUINO', descricao: 'Suíno', unidadeCompra: 'unidade' });
       const icm = await request(app.getHttpServer())
         .post('/itens-comerciais')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-PERNIL', descricao: 'Pernil', unidadeComercial: 'peca' });
+        .send({ codigo: 'ICM-PERNIL', descricao: 'Pernil', unidadeComercial: 'kg' });
 
       const aberta = await request(app.getHttpServer())
         .post('/regras-desdobramento')

@@ -124,16 +124,20 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
       fetch('/api/cadastros/rotas?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
       fetch('/api/operacoes?limite=100', { cache: 'no-store' }),
     ]);
-    const [clientesPage, produtosPage, rotasPage, operacoesPage] = await Promise.all([
-      lerJson<Paginado<ClientePedido>>(clientesResponse),
-      lerJson<Paginado<ProdutoPedido>>(produtosResponse),
-      lerJson<Paginado<RotaPedido>>(rotasResponse),
-      lerJson<Paginado<Operacao>>(operacoesResponse),
-    ]);
-    setClientes(clientesPage.data);
-    setProdutos(produtosPage.data);
-    setRotas(rotasPage.data);
-    setOperacoes(operacoesPage.data);
+    const aplicar = async <T,>(response: Response, setter: (linhas: T[]) => void) => {
+      if (!response.ok) return false;
+      const page = await lerJson<Paginado<T>>(response);
+      setter(page.data);
+      return true;
+    };
+    const aplicados: Array<[Response, boolean]> = [
+      [clientesResponse, await aplicar<ClientePedido>(clientesResponse, setClientes)],
+      [produtosResponse, await aplicar<ProdutoPedido>(produtosResponse, setProdutos)],
+      [rotasResponse, await aplicar<RotaPedido>(rotasResponse, setRotas)],
+      [operacoesResponse, await aplicar<Operacao>(operacoesResponse, setOperacoes)],
+    ];
+    const falhou = aplicados.find(([, ok]) => !ok)?.[0];
+    if (falhou) await lerJson(falhou);
   }, []);
 
   const carregarHistorico = useCallback(async (pedidoId: string) => {
@@ -303,6 +307,7 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
             onClick={() => {
               setPedidoSelecionado(null);
               setModoEditor(true);
+              void carregarCatalogos();
             }}
           >
             <Plus />

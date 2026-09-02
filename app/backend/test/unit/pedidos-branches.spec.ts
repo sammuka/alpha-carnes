@@ -152,11 +152,10 @@ describe('PedidosService — branches', () => {
     const pedidoInserido = { id: 'p1', operacaoId: 'op-existente', clienteId: 'c1', status: 'em_elaboracao_reserva_ativa' };
     const tx = {
       execute: jest.fn().mockResolvedValue({ rows: [] }),
-      // 1ª: exigirClienteNoEscopo; 2ª: exigirUnicidadeAd03; 3ª: rotaHerdadaDoCliente.
+      // 1ª: exigirClienteNoEscopo; 2ª: exigirUnicidadeAd03. rotaId omitido + cliente sem rota → sem SELECT extra.
       select: jest.fn()
         .mockImplementationOnce(() => chain([{ id: 'c1', representanteId: null, rotaId: null }]))
-        .mockImplementationOnce(() => chain([]))
-        .mockImplementationOnce(() => chain([{ nomeRota: null }])),
+        .mockImplementationOnce(() => chain([])),
       insert: jest.fn(() => ({ values: () => ({ returning: jest.fn(async () => [pedidoInserido]) }) })),
     };
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
