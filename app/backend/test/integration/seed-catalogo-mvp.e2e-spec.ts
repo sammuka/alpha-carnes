@@ -33,6 +33,13 @@ describe('Onda 4 — seed do catálogo MVP (D5/D6, Provisório P11)', () => {
     expect(new Set(prods.map((p) => p.legadoItemComercialId)).size).toBe(11);
     expect(prods.filter((p) => p.unidadePreco === 'unidade').map((p) => p.codigo).sort())
       .toEqual(['CXFIG', 'CXMIU', 'CXRABO']);
+    expect(prods.every((p) => p.unidadePedido === 'unidade')).toBe(true);
+    expect(prods.find((p) => p.codigo === 'TZ')).toEqual(expect.objectContaining({
+      origemTransformacao: true,
+      passaDesossa: true,
+    }));
+    expect(prods.filter((p) => p.saidaTransformacao).map((p) => p.codigo).sort())
+      .toEqual(['CB', 'CBA', 'FC', 'JAC']);
   });
 
   it('seed e idempotente', async () => {

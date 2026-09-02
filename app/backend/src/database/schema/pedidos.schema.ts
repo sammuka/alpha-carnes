@@ -6,6 +6,7 @@ import { itensComerciais } from './itens-comerciais.schema';
 import { disponibilidadesVirtuais } from './disponibilidades-virtuais.schema';
 import { operacoes } from './operacoes.schema';
 import { usuarios } from './auth.schema';
+import { rotas } from './rotas.schema';
 
 // ── pedidos_venda ───────────────────────────────────────────────────────────
 // Pedido de venda do dia. Consome saldo virtual de uma única compra programada
@@ -18,6 +19,7 @@ export const pedidosVenda = pgTable(
     clienteId:           uuid('cliente_id').notNull().references(() => clientes.id),
     operacaoId:          uuid('operacao_id').notNull().references(() => operacoes.id),
     dataEntrega:         date('data_entrega'),
+    rotaId:              uuid('rota_id').references(() => rotas.id),
     rotaPrevista:        text('rota_prevista'),
     prioridade:          integer('prioridade'),
     status:              text('status').notNull().default('em_elaboracao_reserva_ativa'),
@@ -38,6 +40,7 @@ export const pedidosVenda = pgTable(
     index('idx_pedidos_venda_cliente').on(t.clienteId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_pedidos_venda_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
     index('idx_pedidos_venda_operacao').on(t.operacaoId).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_pedidos_venda_rota').on(t.rotaId).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 

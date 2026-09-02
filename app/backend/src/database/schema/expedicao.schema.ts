@@ -5,7 +5,8 @@ import { subitens } from './transformacoes.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
 import { operacoes } from './operacoes.schema';
 import { usuarios } from './auth.schema';
-import { frotaCaminhoes } from './frota.schema';
+import { frotaCaminhoes, frotaMotoristas } from './frota.schema';
+import { rotas } from './rotas.schema';
 
 // ── caminhoes ─────────────────────────────────────────────────────────────────
 // Representa um caminhão alocado para uma operação de expedição em uma data.
@@ -14,7 +15,9 @@ export const caminhoes = pgTable(
   {
     id:                   uuid('id').primaryKey().default(sql`uuidv7()`),
     placa:                text('placa').notNull(),
+    motoristaId:          uuid('motorista_id').references(() => frotaMotoristas.id),
     motorista:            text('motorista').notNull(),
+    rotaId:               uuid('rota_id').references(() => rotas.id),
     rota:                 text('rota'),
     itinerario:           text('itinerario'),
     operacaoId:           uuid('operacao_id').notNull().references(() => operacoes.id),
@@ -36,6 +39,8 @@ export const caminhoes = pgTable(
     index('idx_caminhoes_operacao').on(t.operacaoId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_caminhoes_status').on(t.statusCaminhao).where(sql`${t.deletedAt} IS NULL`),
     index('idx_caminhoes_frota').on(t.frotaCaminhaoId).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_caminhoes_motorista').on(t.motoristaId).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_caminhoes_rota').on(t.rotaId).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 

@@ -76,12 +76,12 @@ export async function seedCargaPronta(request: APIRequestContext): Promise<Cenar
   const itemCompra = await api<{ id: string }>(request, cookieHeader, 'POST', '/itens-compra', {
     codigo: `O9IC${suffix}`,
     descricao: 'Boi Onda9',
-    unidadeCompra: 'cabeca',
+    unidadeCompra: 'unidade',
   });
   const itemComercial = await api<{ id: string }>(request, cookieHeader, 'POST', '/itens-comerciais', {
     codigo: `O9TZ${suffix}`,
     descricao: 'Traseiro Onda9',
-    unidadeComercial: 'parte',
+    unidadeComercial: 'kg',
   });
   await api(request, cookieHeader, 'POST', '/regras-desdobramento', {
     itemCompraId: itemCompra.id,
@@ -175,10 +175,13 @@ export async function seedCargaPronta(request: APIRequestContext): Promise<Cenar
   await api(request, cookieHeader, 'POST', `/operacao/pesagem/pecas/${peca.id}/etiqueta`, {});
 
   // Caminhão + carga aberta + item carregado.
+  const motoristaCadastro = await api<{ id: string }>(request, cookieHeader, 'POST', '/frota/motoristas', {
+    nome: 'Motorista Onda9',
+    documento: `O9M${suffix}`,
+  });
   const caminhao = await api<{ id: string; placa: string }>(request, cookieHeader, 'POST', '/operacao/expedicao/caminhoes', {
     placa: `O9-${suffix}`.toUpperCase(),
-    motorista: 'Motorista Onda9',
-    rota: 'Rota Onda9',
+    motoristaId: motoristaCadastro.id,
     dataOperacao,
   });
   await api(request, cookieHeader, 'POST', `/operacao/expedicao/caminhoes/${caminhao.id}/pedidos`, {

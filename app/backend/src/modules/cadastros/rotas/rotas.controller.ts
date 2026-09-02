@@ -5,7 +5,10 @@ import { RbacGuard } from '../../../common/guards/rbac.guard';
 import { RequirePermissoes } from '../../../common/rbac/require-permissoes.decorator';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
-import { listarQuerySchema, type ListarQuery } from '../../../common/crud/paginacao';
+import {
+  listarCadastroQuerySchema,
+  type ListarCadastroQuery,
+} from '../../../common/crud/paginacao';
 import { RotasService } from './rotas.service';
 import {
   createRotaSchema,
@@ -22,7 +25,7 @@ export class RotasController {
 
   @Get()
   @RequirePermissoes('ROTAS_LER')
-  async listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
+  async listar(@Query(new ZodValidationPipe(listarCadastroQuerySchema)) query: ListarCadastroQuery) {
     return this.rotasService.listar(query);
   }
 

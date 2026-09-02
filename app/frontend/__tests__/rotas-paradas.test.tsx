@@ -3,7 +3,9 @@ import { RotasClient } from '../src/app/(admin)/cadastros/rotas/rotas-client';
 
 const ROTA = {
   id: 'r1', codigo: 'L1', nome: 'Rota L1', regiao: 'Centro', status: 'ativo',
-  representantePadrao: null, caminhaoPadrao: null, motoristaPadrao: null, observacoes: null,
+  representantePadraoId: null, representantePadrao: null,
+  caminhaoPadraoId: null, caminhaoPadrao: null,
+  motoristaPadraoId: null, motoristaPadrao: null, observacoes: null,
   paradas: [
     { ordem: 1, descricao: 'Centro' },
     { ordem: 2, descricao: 'Bela Vista' },
@@ -12,9 +14,12 @@ const ROTA = {
 };
 
 beforeEach(() => {
-  global.fetch = jest.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({ data: [ROTA], total: 1, page: 1, pageSize: 100 }),
+  global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes('/api/cadastros/rotas')) {
+      return { ok: true, json: async () => ({ data: [ROTA], total: 1, page: 1, pageSize: 100 }) };
+    }
+    return { ok: true, json: async () => ({ data: [], total: 0, page: 1, pageSize: 100 }) };
   }) as unknown as typeof fetch;
 });
 

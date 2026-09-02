@@ -20,6 +20,7 @@ export const itensComerciais = pgTable(
   },
   (t) => [
     check('chk_itens_comerciais_status', sql`${t.status} IN ('ativo','inativo')`),
+    check('chk_itens_comerciais_unidade', sql`${t.unidadeComercial} IN ('kg','unidade')`),
     uniqueIndex('uq_itens_comerciais_codigo').on(t.codigo).where(sql`${t.deletedAt} IS NULL`),
     index('idx_itens_comerciais_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
   ],

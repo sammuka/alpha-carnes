@@ -5,6 +5,7 @@ import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase } from '../helpers/comercial-fixtures';
+import { inserirMotoristaFrota } from '../helpers/expedicao-fixtures';
 
 describe('operacoes-writers e2e', () => {
   let app: INestApplication;
@@ -124,19 +125,21 @@ describe('operacoes-writers e2e', () => {
     }
 
     if (tabela === 'caminhoes') {
+      const motorista = await inserirMotoristaFrota(app, 'João');
       const cam = await request(app.getHttpServer())
         .post('/operacao/expedicao/caminhoes')
         .set('Cookie', expedicaoCookies)
-        .send({ placa: `ABC${diaSeq}D1`, motorista: 'João', dataOperacao: data });
+        .send({ placa: `ABC${diaSeq}D1`, motoristaId: motorista.id, dataOperacao: data });
       expect([200, 201]).toContain(cam.status);
       return;
     }
 
     if (tabela === 'faturamentos') {
+      const motorista = await inserirMotoristaFrota(app, 'Pedro');
       const cam = await request(app.getHttpServer())
         .post('/operacao/expedicao/caminhoes')
         .set('Cookie', expedicaoCookies)
-        .send({ placa: `FAT${diaSeq}D1`, motorista: 'Pedro', dataOperacao: data });
+        .send({ placa: `FAT${diaSeq}D1`, motoristaId: motorista.id, dataOperacao: data });
       expect([200, 201]).toContain(cam.status);
       const { db } = app.get(DRIZZLE) as { db: import('drizzle-orm/node-postgres').NodePgDatabase<typeof schema> };
       await db.update(schema.caminhoes)

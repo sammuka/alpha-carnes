@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fkOpcionalSchema } from '../../../../common/dto/dominios.dto';
 import {
   dadosContatoJsonSchema,
   dadosFiscaisJsonSchema,
@@ -21,8 +22,8 @@ export const createClienteSchema = z.object({
   nomeFantasia: z.string().trim().max(200).optional(),
   documentoFiscal: documentoFiscalSchema,
   status: statusSchema.optional().default('ativo'),
-  representanteId: z.string().uuid().optional(),
-  rotaId: z.string().uuid().optional().nullable(),
+  representanteId: fkOpcionalSchema,
+  rotaId: fkOpcionalSchema,
   prioridade: z.enum(['normal', 'alta']).optional(),
   preferenciasJson: preferenciasJsonSchema,
   dadosFiscaisJson: dadosFiscaisJsonSchema,

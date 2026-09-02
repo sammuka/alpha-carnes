@@ -24,11 +24,12 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/cn';
+import { labelCodigoRazaoSocial } from '@/lib/dominios';
 import {
   compativeisPorProduto,
-  criarEntrada,
   listarEntradas,
   type EntradaItem,
+  type FornecedorOpcao,
   type PedidoCompativelEstoque,
 } from '@/lib/estoque';
 import { mensagemDeErro } from '@/lib/error-message';
@@ -43,7 +44,8 @@ export function EntradaItensClient({ podeRegistrar }: { podeRegistrar: boolean }
   const [produtoId, setProdutoId] = useState('');
   const [quantidade, setQuantidade] = useState('');
   const [unidade, setUnidade] = useState<'caixa' | 'unidade'>('caixa');
-  const [fornecedor, setFornecedor] = useState('');
+  const [fornecedores, setFornecedores] = useState<FornecedorOpcao[]>([]);
+  const [fornecedorId, setFornecedorId] = useState('');
   const [loteNf, setLoteNf] = useState('');
   const [local, setLocal] = useState('Câmara 1');
   const [destino, setDestino] = useState<Destino>('estoque');
@@ -76,6 +78,14 @@ export function EntradaItensClient({ podeRegistrar }: { podeRegistrar: boolean }
       const body = (await res.json()) as { data: Produto[] };
       setProdutosCaixaria(body.data.filter((p) => p.tipoOperacional === 'entrada_unidade'));
     })();
+    void (async () => {
+      const res = await fetch('/api/cadastros/fornecedores?page=1&pageSize=100&status=ativo', { cache: 'no-store' });
+      if (!res.ok) {
+        setErro(await mensagemDeErro(res, 'Falha ao carregar fornecedores'));
+        return;
+      }
+      setFornecedores(((await res.json()) as { data: FornecedorOpcao[] }).data);
+    })();
   }, [carregarEntradas]);
 
   useEffect(() => {
@@ -102,14 +112,14 @@ export function EntradaItensClient({ podeRegistrar }: { podeRegistrar: boolean }
     produtoId !== '' &&
     !Number.isNaN(qtdNumerica) &&
     qtdNumerica > 0 &&
-    fornecedor.trim() !== '' &&
+    fornecedorId !== '' &&
     (destino === 'estoque' || pedidoSelecionado !== null);
 
   const limparForm = () => {
     setProdutoId('');
     setQuantidade('');
     setUnidade('caixa');
-    setFornecedor('');
+    setFornecedorId('');
     setLoteNf('');
     setLocal('Câmara 1');
     setDestino('estoque');
@@ -123,17 +133,23 @@ export function EntradaItensClient({ podeRegistrar }: { podeRegistrar: boolean }
     setEnviando(true);
     setErro(null);
     try {
-      await criarEntrada({
+      const payload = {
         produtoId,
         quantidade: qtdNumerica,
         unidade,
-        fornecedorNome: fornecedor.trim(),
+        fornecedorId,
         loteNf: loteNf.trim() || undefined,
         local,
         destino,
-        pedidoVendaItemId: destino === 'pedido' ? pedidoSelecionado?.pedidoVendaItemId : undefined,
+        pedidoVendaItemId: destino === 'pedido' ? pedidoSelecionado?.pedidoVendaItemId ?? null : null,
         observacao: observacao.trim() || undefined,
+      };
+      const res = await fetch('/api/operacao/estoque/entradas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
+      if (!res.ok) throw new Error(await mensagemDeErro(res, 'Falha ao registrar entrada'));
       setFeedback(true);
       setTimeout(() => setFeedback(false), 2500);
       limparForm();
@@ -208,11 +224,17 @@ export function EntradaItensClient({ podeRegistrar }: { podeRegistrar: boolean }
               </div>
 
               <FormField label="Fornecedor/origem" required htmlFor="fornecedor-entrada">
-                <Input
+                <ComboboxField
                   id="fornecedor-entrada"
-                  value={fornecedor}
-                  onChange={(e) => setFornecedor(e.target.value)}
-                  placeholder="Ex.: Frigorífico Boi Forte"
+                  items={fornecedores.map((f) => ({
+                    id: f.id,
+                    label: labelCodigoRazaoSocial(f.codigo, f.razaoSocial),
+                  }))}
+                  value={fornecedorId}
+                  onChange={setFornecedorId}
+                  placeholder="Selecionar..."
+                  searchPlaceholder="Buscar fornecedor…"
+                  emptyText="Nenhum fornecedor encontrado."
                 />
               </FormField>
 

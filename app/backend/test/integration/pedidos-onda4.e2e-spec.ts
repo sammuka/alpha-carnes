@@ -32,6 +32,7 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
     representanteId: string;
     nomeRepresentante: string;
     nomeRotaDoCliente: string;
+    rotaDesvioId: string;
   };
 
   beforeAll(async () => {
@@ -67,10 +68,13 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
     const [rota] = await db.insert(schema.rotas)
       .values({ codigo: uid('ROTA'), nome: 'Rota Norte' })
       .returning();
+    const [rotaDesvio] = await db.insert(schema.rotas)
+      .values({ codigo: uid('ROTAD'), nome: 'Entrega direta' })
+      .returning();
     const [representante] = await db.insert(schema.representantes)
       .values({ codigo: uid('REP'), nome: 'Representante Sul' })
       .returning();
-    if (!rota || !representante) throw new Error('Falha ao criar rota/representante do teste');
+    if (!rota || !rotaDesvio || !representante) throw new Error('Falha ao criar rota/representante do teste');
 
     const [clienteComRota] = await db.insert(schema.clientes).values({
       codigo: uid('CLIHER'),
@@ -92,6 +96,7 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
       representanteId: representante.id,
       nomeRepresentante: representante.nome,
       nomeRotaDoCliente: rota.nome,
+      rotaDesvioId: rotaDesvio.id,
     };
   }, 60000);
 
@@ -133,7 +138,7 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
 
   it('pedido herda rota do cliente e expoe o representante do cadastro', async () => {
     const comHeranca = await service.criar(
-      { ...dtoBase, clienteId: ctx.clienteComRotaId, rotaPrevista: undefined }, usuarioId,
+      { ...dtoBase, clienteId: ctx.clienteComRotaId }, usuarioId,
     );
     expect(comHeranca.rotaPrevista).toBe(ctx.nomeRotaDoCliente);
     const detalhe = await service.detalhar(comHeranca.id, usuarioId);
@@ -145,13 +150,12 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
 
     const comDesvio = await service.criar(
       { ...dtoBase, clienteId: ctx.clienteComRotaId, dataOperacao: '2026-08-03',
-        rotaPrevista: 'Entrega direta' }, usuarioId,
+        rotaId: ctx.rotaDesvioId }, usuarioId,
     );
     expect(comDesvio.rotaPrevista).toBe('Entrega direta');
 
     const semRota = await service.criar(
-      { ...dtoBase, clienteId: ctx.clienteSemRotaId, dataOperacao: '2026-08-04',
-        rotaPrevista: undefined }, usuarioId,
+      { ...dtoBase, clienteId: ctx.clienteSemRotaId, dataOperacao: '2026-08-04' }, usuarioId,
     );
     expect(semRota.rotaPrevista).toBeNull();
   });

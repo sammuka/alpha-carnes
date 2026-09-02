@@ -30,7 +30,7 @@ describe('Cadastros F7 e2e (produtos, rotas, representantes)', () => {
         .send({
           codigo: 'PROD-F7-1',
           nome: 'Traseiro inteiro',
-          unidadePedido: 'peca',
+          unidadePedido: 'unidade',
           passaBalanca: true,
           saidaTransformacao: true,
         });
@@ -40,7 +40,7 @@ describe('Cadastros F7 e2e (produtos, rotas, representantes)', () => {
       const negado = await request(srv())
         .post('/produtos')
         .set('Cookie', comercialCookies)
-        .send({ codigo: 'PROD-X', nome: 'X', unidadePedido: 'peca' });
+        .send({ codigo: 'PROD-X', nome: 'X', unidadePedido: 'unidade' });
       expect(negado.status).toBe(403);
 
       const editar = await request(srv())
@@ -63,11 +63,11 @@ describe('Cadastros F7 e2e (produtos, rotas, representantes)', () => {
       await request(srv())
         .post('/produtos')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'PROD-DUP', nome: 'A', unidadePedido: 'peca' });
+        .send({ codigo: 'PROD-DUP', nome: 'A', unidadePedido: 'unidade' });
       const dup = await request(srv())
         .post('/produtos')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'PROD-DUP', nome: 'B', unidadePedido: 'peca' });
+        .send({ codigo: 'PROD-DUP', nome: 'B', unidadePedido: 'unidade' });
       expect(dup.status).toBe(409);
 
       const det = await request(srv())
@@ -141,7 +141,7 @@ describe('Cadastros F7 e2e (produtos, rotas, representantes)', () => {
         codigo: 'PRD-FISCAL',
         nome: 'Coxão mole',
         tipoOperacional: 'peca_inteira_pesavel',
-        unidadePedido: 'Peça',
+        unidadePedido: 'unidade',
         unidadePreco: 'kg',
         atributosJson: { fiscal: { ncm: '0201.30.00', cfop: '5102' } },
       });

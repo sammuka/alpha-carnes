@@ -10,7 +10,6 @@ import { DatePickerField } from '@/components/ui/date-picker-field';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
-import { SelectNative } from '@/components/ui/select-native';
 import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
 import {
   Table,
@@ -22,6 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { labelCodigoDescricao } from '@/lib/dominios';
 import { extrairCodigoErro, extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime } from '@/lib/realtime';
 import type {
@@ -36,7 +36,8 @@ import { ComprasEditModal } from './compras-edit-modal';
 
 interface CadastroItem {
   id: string;
-  codigo?: string;
+  codigo: string;
+  descricao?: string;
   nome?: string;
   razaoSocial?: string;
 }
@@ -128,7 +129,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const carregarCadastros = useCallback(async () => {
     const [fRes, iRes] = await Promise.all([
       fetch('/api/cadastros/fornecedores?pageSize=100', { cache: 'no-store' }),
-      fetch('/api/cadastros/itens-compra?pageSize=100', { cache: 'no-store' }),
+      fetch('/api/cadastros/itens-compra?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
     ]);
     if (fRes.ok) {
       const f = (await fRes.json()) as Paginado<CadastroItem>;
@@ -537,27 +538,28 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                 <TableBody>
                   {linhas.map((linha, idx) => {
                     const simulacao = simulacoes.get(linha.itemCompraId);
-                    const regraDesdobramento = simulacao
+                    const regraDesdobramento = simulacao?.itens?.length
                       ? simulacao.itens.map((i) => `${i.fator}× ${i.descricao}`).join(' + ')
                       : '—';
                     return (
                       <TableRow key={idx} className="group">
                         <TableCell>
-                          <SelectNative
-                            selectSize="sm"
+                          <label className="sr-only" htmlFor={`item-compra-${idx}`}>Item de compra</label>
+                          <ComboboxField
+                            id={`item-compra-${idx}`}
+                            items={itensCompra.map((it) => ({
+                              id: it.id,
+                              label: labelCodigoDescricao(it.codigo, it.descricao ?? it.nome ?? ''),
+                            }))}
                             value={linha.itemCompraId}
-                            onChange={(e) =>
-                              setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, itemCompraId: e.target.value } : l)))
+                            onChange={(id) =>
+                              setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, itemCompraId: id } : l)))
                             }
+                            placeholder="Item"
+                            searchPlaceholder="Buscar item de compra..."
+                            emptyText="Nenhum item encontrado."
                             disabled={!editavel}
-                          >
-                            <option value="">Item</option>
-                            {itensCompra.map((it) => (
-                              <option key={it.id} value={it.id}>
-                                {it.nome ?? it.codigo ?? it.id.slice(0, 8)}
-                              </option>
-                            ))}
-                          </SelectNative>
+                          />
                         </TableCell>
                         <TableCell>
                           <Input
@@ -638,7 +640,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                   (() => {
                     const agregado = new Map<string, { descricao: string; total: number }>();
                     for (const sim of simulacoes.values()) {
-                      for (const item of sim.itens) {
+                      for (const item of sim.itens ?? []) {
                         const atual = agregado.get(item.itemComercialId);
                         agregado.set(item.itemComercialId, {
                           descricao: item.descricao,

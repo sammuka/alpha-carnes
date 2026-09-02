@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, X } from "lucide-react";
 
 import { cn } from "./utils";
 import {
@@ -31,6 +31,7 @@ interface ComboboxFieldProps {
   id?: string;
   disabled?: boolean;
   className?: string;
+  clearable?: boolean;
 }
 
 export function ComboboxField({
@@ -43,11 +44,13 @@ export function ComboboxField({
   id,
   disabled,
   className,
+  clearable,
 }: ComboboxFieldProps) {
   const [open, setOpen] = React.useState(false);
   const selected = items.find((i) => i.id === value);
 
   return (
+    <div className={cn("relative w-full", className)}>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
@@ -62,7 +65,6 @@ export function ComboboxField({
             "hover:not-disabled:border-fg-faint",
             "focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-ring/35",
             "disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-surface-3 disabled:text-muted-foreground",
-            className,
           )}
         >
           <span className={cn("flex-1 truncate text-left", !selected && "text-fg-faint")}>
@@ -109,5 +111,20 @@ export function ComboboxField({
         </Command>
       </PopoverContent>
     </Popover>
+    {clearable && value ? (
+      <button
+        type="button"
+        aria-label="Limpar seleção"
+        className="absolute top-1/2 right-8 -translate-y-1/2"
+        disabled={disabled}
+        onClick={(event) => {
+          event.stopPropagation();
+          onChange('');
+        }}
+      >
+        <X className="size-3.5" aria-hidden="true" />
+      </button>
+    ) : null}
+    </div>
   );
 }

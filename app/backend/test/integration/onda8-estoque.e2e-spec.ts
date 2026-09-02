@@ -52,6 +52,20 @@ async function produtoCaixariaId(db: Db, codigo = 'CXMIU'): Promise<string> {
   return p.id;
 }
 
+async function inserirFornecedor(db: Db, razaoSocial = 'Frigorífico X'): Promise<string> {
+  const [row] = await db
+    .insert(schema.fornecedores)
+    .values({
+      codigo: `FORN-${Date.now()}-${Math.floor(Math.random() * 1e9)}`,
+      razaoSocial,
+      documentoFiscal: `${Date.now()}${Math.floor(Math.random() * 1e6)}`.slice(-14).padStart(14, '1'),
+      status: 'ativo',
+    })
+    .returning({ id: schema.fornecedores.id });
+  if (!row) throw new Error('Falha ao inserir fornecedor de teste');
+  return row.id;
+}
+
 describe('Onda 8 — Estoque', () => {
   let app: INestApplication;
   let db: Db;
@@ -292,11 +306,12 @@ describe('Onda 8 — Estoque', () => {
     const receb = await createTestUser(app, { perfil: 'recebimento_pesagem' });
     const cookiesReceb = await loginCookies(app, receb.adminEmail, receb.adminPassword);
     const produtoId = await produtoCaixariaId(db);
+    const fornecedorId = await inserirFornecedor(db);
 
     const ok = await request(app.getHttpServer())
       .post('/estoque/entradas')
       .set('Cookie', cookiesReceb)
-      .send({ produtoId, quantidade: 5, unidade: 'caixa', fornecedorNome: 'Frigorífico X', destino: 'estoque' });
+      .send({ produtoId, quantidade: 5, unidade: 'caixa', fornecedorId, destino: 'estoque' });
     expect(ok.status).toBe(201);
 
     const [naoCaixaria] = await db.select({ id: schema.produtos.id }).from(schema.produtos)
@@ -304,7 +319,7 @@ describe('Onda 8 — Estoque', () => {
     const falha = await request(app.getHttpServer())
       .post('/estoque/entradas')
       .set('Cookie', cookiesReceb)
-      .send({ produtoId: naoCaixaria!.id, quantidade: 5, unidade: 'caixa', fornecedorNome: 'Frigorífico X', destino: 'estoque' });
+      .send({ produtoId: naoCaixaria!.id, quantidade: 5, unidade: 'caixa', fornecedorId, destino: 'estoque' });
     expect(falha.status).toBe(409);
     const payload = typeof falha.body.message === 'object' ? falha.body.message : falha.body;
     expect(payload.codigo).toBe('PRODUTO_NAO_E_CAIXARIA');
@@ -320,6 +335,7 @@ describe('Onda 8 — Estoque', () => {
     const cookiesReceb = await loginCookies(app, receb.adminEmail, receb.adminPassword);
     const cookiesCompras = await loginCookies(app, compras.adminEmail, compras.adminPassword);
     const cookiesComercial = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
+    const fornecedorId = await inserirFornecedor(db);
 
     const [produtoCx] = await db.select().from(schema.produtos).where(and(eq(schema.produtos.codigo, 'CXMIU'), isNull(schema.produtos.deletedAt)));
     if (!produtoCx?.legadoItemComercialId) throw new Error('fixture: CXMIU sem legadoItemComercialId');
@@ -338,7 +354,7 @@ describe('Onda 8 — Estoque', () => {
       .post('/estoque/entradas')
       .set('Cookie', cookiesReceb)
       .send({
-        produtoId: produtoCx.id, quantidade: 3, unidade: 'caixa', fornecedorNome: 'Frigorífico X',
+        produtoId: produtoCx.id, quantidade: 3, unidade: 'caixa', fornecedorId,
         destino: 'pedido', pedidoVendaItemId: pedido.pedidoItemId,
       });
     expect(ok.status).toBe(201);
@@ -349,7 +365,7 @@ describe('Onda 8 — Estoque', () => {
       .post('/estoque/entradas')
       .set('Cookie', cookiesReceb)
       .send({
-        produtoId: produtoCx.id, quantidade: 1, unidade: 'caixa', fornecedorNome: 'Frigorífico X',
+        produtoId: produtoCx.id, quantidade: 1, unidade: 'caixa', fornecedorId,
         destino: 'pedido', pedidoVendaItemId: pedido.pedidoItemId,
       });
     expect(acima.status).toBe(409);
@@ -366,10 +382,11 @@ describe('Onda 8 — Estoque', () => {
     const receb = await createTestUser(app, { perfil: 'recebimento_pesagem' });
     const cookiesReceb = await loginCookies(app, receb.adminEmail, receb.adminPassword);
     const produtoId = await produtoCaixariaId(db);
+    const fornecedorId = await inserirFornecedor(db);
     const entrada = await request(app.getHttpServer())
       .post('/estoque/entradas')
       .set('Cookie', cookiesReceb)
-      .send({ produtoId, quantidade: 10, unidade: 'caixa', fornecedorNome: 'Frigorífico X', destino: 'estoque' });
+      .send({ produtoId, quantidade: 10, unidade: 'caixa', fornecedorId, destino: 'estoque' });
     const entradaId = entrada.body.id as string;
 
     const res = await request(app.getHttpServer())
@@ -388,10 +405,11 @@ describe('Onda 8 — Estoque', () => {
     const cookiesReceb = await loginCookies(app, receb.adminEmail, receb.adminPassword);
     await seedOperacaoAberta(db);
     const produtoId = await produtoCaixariaId(db);
+    const fornecedorId = await inserirFornecedor(db);
     const entrada = await request(app.getHttpServer())
       .post('/estoque/entradas')
       .set('Cookie', cookiesReceb)
-      .send({ produtoId, quantidade: 20, unidade: 'caixa', fornecedorNome: 'Frigorífico X', destino: 'estoque' });
+      .send({ produtoId, quantidade: 20, unidade: 'caixa', fornecedorId, destino: 'estoque' });
     const entradaId = entrada.body.id as string;
 
     const res = await request(app.getHttpServer())
@@ -417,10 +435,11 @@ describe('Onda 8 — Estoque', () => {
     const cookiesGestor = await loginCookies(app, gestor.adminEmail, gestor.adminPassword);
     await seedOperacaoAberta(db);
     const produtoId = await produtoCaixariaId(db);
+    const fornecedorId = await inserirFornecedor(db);
     const entrada = await request(app.getHttpServer())
       .post('/estoque/entradas')
       .set('Cookie', cookiesGestor)
-      .send({ produtoId, quantidade: 20, unidade: 'caixa', fornecedorNome: 'Frigorífico X', destino: 'estoque' });
+      .send({ produtoId, quantidade: 20, unidade: 'caixa', fornecedorId, destino: 'estoque' });
     const entradaId = entrada.body.id as string;
     const criado = await request(app.getHttpServer())
       .post('/estoque/ajustes')
@@ -446,10 +465,11 @@ describe('Onda 8 — Estoque', () => {
     const cookiesGestor = await loginCookies(app, gestor.adminEmail, gestor.adminPassword);
     await seedOperacaoAberta(db);
     const produtoId = await produtoCaixariaId(db);
+    const fornecedorId = await inserirFornecedor(db);
     const entrada = await request(app.getHttpServer())
       .post('/estoque/entradas')
       .set('Cookie', cookiesReceb)
-      .send({ produtoId, quantidade: 20, unidade: 'caixa', fornecedorNome: 'Frigorífico X', destino: 'estoque' });
+      .send({ produtoId, quantidade: 20, unidade: 'caixa', fornecedorId, destino: 'estoque' });
     const entradaId = entrada.body.id as string;
     const criado = await request(app.getHttpServer())
       .post('/estoque/ajustes')
@@ -526,10 +546,11 @@ describe('Onda 8 — Estoque', () => {
 
     await seedOperacaoAberta(db);
     const produtoId = await produtoCaixariaId(db);
+    const fornecedorId = await inserirFornecedor(db);
     const entrada = await request(app.getHttpServer())
       .post('/estoque/entradas')
       .set('Cookie', cookiesExpedicao)
-      .send({ produtoId, quantidade: 20, unidade: 'caixa', fornecedorNome: 'Frigorífico X', destino: 'estoque' });
+      .send({ produtoId, quantidade: 20, unidade: 'caixa', fornecedorId, destino: 'estoque' });
     const criado = await request(app.getHttpServer())
       .post('/estoque/ajustes')
       .set('Cookie', cookiesExpedicao)

@@ -35,13 +35,13 @@ describe('Desossa e estoque e2e', () => {
     const prodOrigem = await request(srv())
       .post('/produtos')
       .set('Cookie', adminCookies)
-      .send({ codigo: 'TZ-F7', nome: 'Traseiro origem', unidadePedido: 'peca', origemTransformacao: true });
+      .send({ codigo: 'TZ-F7', nome: 'Traseiro origem', unidadePedido: 'unidade', origemTransformacao: true });
     expect(prodOrigem.status).toBe(201);
 
     const prodSaida = await request(srv())
       .post('/produtos')
       .set('Cookie', adminCookies)
-      .send({ codigo: 'PA-F7', nome: 'Patinho', unidadePedido: 'peca', saidaTransformacao: true });
+      .send({ codigo: 'PA-F7', nome: 'Patinho', unidadePedido: 'unidade', saidaTransformacao: true });
     expect(prodSaida.status).toBe(201);
 
     const criar = await request(srv())
@@ -83,7 +83,7 @@ describe('Desossa e estoque e2e', () => {
     const prodSaida = await request(srv())
       .post('/produtos')
       .set('Cookie', adminCookies)
-      .send({ codigo: 'PA-REST', nome: 'Patinho', unidadePedido: 'peca', saidaTransformacao: true });
+      .send({ codigo: 'PA-REST', nome: 'Patinho', unidadePedido: 'unidade', saidaTransformacao: true });
     expect(prodSaida.status).toBe(201);
 
     const criar = await request(srv())

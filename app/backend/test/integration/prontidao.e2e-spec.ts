@@ -42,11 +42,11 @@ describe('DP-01 — Prontidão de cadastros e2e', () => {
     const ic = await request(app.getHttpServer())
       .post('/itens-compra')
       .set('Cookie', adminCookies)
-      .send({ codigo: 'IC-DP01', descricao: 'Boi', unidadeCompra: 'cabeca' });
+      .send({ codigo: 'IC-DP01', descricao: 'Boi', unidadeCompra: 'unidade' });
     const icm = await request(app.getHttpServer())
       .post('/itens-comerciais')
       .set('Cookie', adminCookies)
-      .send({ codigo: 'ICM-DP01', descricao: 'Dianteiro', unidadeComercial: 'peca' });
+      .send({ codigo: 'ICM-DP01', descricao: 'Dianteiro', unidadeComercial: 'kg' });
 
     // Sem a regra de desdobramento, ainda deve falhar (apenas regrasDesdobramento faltando).
     const semRegra = await request(app.getHttpServer()).get('/cadastros/prontidao').set('Cookie', adminCookies);

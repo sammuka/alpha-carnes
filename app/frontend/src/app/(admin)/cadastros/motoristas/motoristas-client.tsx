@@ -19,7 +19,7 @@ export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) 
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch('/api/cadastros/frota-caminhoes?page=1&pageSize=100', { cache: 'no-store' });
+      const res = await fetch('/api/cadastros/frota-caminhoes?page=1&pageSize=100&status=ativo', { cache: 'no-store' });
       if (!res.ok) {
         toast.error(await mensagemDeErro(res));
         return;
@@ -120,11 +120,11 @@ export function MotoristasClient({ podeGerenciar }: { podeGerenciar: boolean }) 
         {
           nome: 'caminhaoPadraoId',
           rotulo: 'Caminhão padrão',
-          tipo: 'select',
+          tipo: 'combobox',
           placeholder: 'Sem caminhão padrão',
           opcoes: caminhoes.map((c) => ({
             valor: c.id,
-            rotulo: c.status === 'ativo' ? c.placa : `${c.placa} (inativo)`,
+            rotulo: `${c.placa}${c.descricao ? ` — ${c.descricao}` : ''}${c.status === 'ativo' ? '' : ' (inativo)'}`,
           })),
         },
         { nome: 'rg', rotulo: 'RG', tipo: 'texto', monoespacado: true, maxLength: 30 },

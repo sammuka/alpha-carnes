@@ -35,6 +35,7 @@ import {
   PedidoEditor,
   type ClientePedido,
   type ProdutoPedido,
+  type RotaPedido,
 } from './pedido-editor';
 
 interface PedidosClientProps {
@@ -93,6 +94,7 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
   const [pedidos, setPedidos] = useState<PedidoVenda[]>([]);
   const [clientes, setClientes] = useState<ClientePedido[]>([]);
   const [produtos, setProdutos] = useState<ProdutoPedido[]>([]);
+  const [rotas, setRotas] = useState<RotaPedido[]>([]);
   const [operacoes, setOperacoes] = useState<Operacao[]>([]);
   const [pedidoSelecionado, setPedidoSelecionado] = useState<PedidoVendaDetalhe | null>(null);
   const [modoEditor, setModoEditor] = useState(false);
@@ -116,19 +118,26 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
   }, []);
 
   const carregarCatalogos = useCallback(async () => {
-    const [clientesResponse, produtosResponse, operacoesResponse] = await Promise.all([
+    const [clientesResponse, produtosResponse, rotasResponse, operacoesResponse] = await Promise.all([
       fetch('/api/cadastros/clientes?pageSize=100', { cache: 'no-store' }),
-      fetch('/api/cadastros/itens-comerciais?pageSize=100', { cache: 'no-store' }),
+      fetch('/api/cadastros/itens-comerciais?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
+      fetch('/api/cadastros/rotas?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
       fetch('/api/operacoes?limite=100', { cache: 'no-store' }),
     ]);
-    const [clientesPage, produtosPage, operacoesPage] = await Promise.all([
-      lerJson<Paginado<ClientePedido>>(clientesResponse),
-      lerJson<Paginado<ProdutoPedido>>(produtosResponse),
-      lerJson<Paginado<Operacao>>(operacoesResponse),
-    ]);
-    setClientes(clientesPage.data);
-    setProdutos(produtosPage.data);
-    setOperacoes(operacoesPage.data);
+    const aplicar = async <T,>(response: Response, setter: (linhas: T[]) => void) => {
+      if (!response.ok) return false;
+      const page = await lerJson<Paginado<T>>(response);
+      setter(page.data);
+      return true;
+    };
+    const aplicados: Array<[Response, boolean]> = [
+      [clientesResponse, await aplicar<ClientePedido>(clientesResponse, setClientes)],
+      [produtosResponse, await aplicar<ProdutoPedido>(produtosResponse, setProdutos)],
+      [rotasResponse, await aplicar<RotaPedido>(rotasResponse, setRotas)],
+      [operacoesResponse, await aplicar<Operacao>(operacoesResponse, setOperacoes)],
+    ];
+    const falhou = aplicados.find(([, ok]) => !ok)?.[0];
+    if (falhou) await lerJson(falhou);
   }, []);
 
   const carregarHistorico = useCallback(async (pedidoId: string) => {
@@ -245,6 +254,7 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
           pedido={pedidoSelecionado}
           clientes={clientes}
           produtos={produtos}
+          rotas={rotas}
           operacoes={operacoes}
           podeGerenciar={podeGerenciar}
           podeFinalizar={podeFinalizar}
@@ -297,6 +307,7 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
             onClick={() => {
               setPedidoSelecionado(null);
               setModoEditor(true);
+              void carregarCatalogos();
             }}
           >
             <Plus />

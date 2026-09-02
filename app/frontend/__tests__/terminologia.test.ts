@@ -40,6 +40,20 @@ const ALVOS_GESTAO = globSync('src/{app/(admin)/gestao,components/gestao}/**/*.{
 });
 
 describe('terminologia', () => {
+  it('DoD 12.10 permite Nome Fantasia/Marca e proíbe Marca isolada fora da AD-13', () => {
+    const arquivos = fontes('src');
+    const rotuloNomeFantasia = arquivos.flatMap((file) => {
+      const conteudo = readFileSync(file, 'utf8');
+      return [...conteudo.matchAll(/['"]Nome Fantasia\/Marca['"]/g)].map(() => file);
+    });
+    expect(rotuloNomeFantasia.length).toBeGreaterThan(0);
+    for (const file of arquivos) {
+      const conteudo = readFileSync(file, 'utf8');
+      const semExcecaoAd13 = conteudo.replaceAll('Nome Fantasia/Marca', 'Nome Fantasia');
+      expect(semExcecaoAd13).not.toMatch(/\bmarca\b/i);
+    }
+  });
+
   it('strings de UI não contêm o rótulo banido', () => {
     expect(hitsTermoBanido(fontes('src'))).toEqual([]);
   });
