@@ -553,7 +553,7 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
         Código: itemCompraCodigo,
         Descrição: `Bovino E2E ${runId}`,
         Categoria: 'Bovino',
-        'Unidade de Compra': 'cabeca',
+        'Unidade de Compra': 'Unidade',
       },
       screenshotId: '05-itens-compra',
     });

@@ -5,7 +5,7 @@ import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpe
 import { seedComercialBase } from '../helpers/comercial-fixtures';
 import { montarCenarioPesagem, criarPedido, pesarPeca, fakes, type CenarioPesagem } from '../helpers/pesagem-fixtures';
 import {
-  criarCaminhao, abrirCarga, vincularPedido, adicionarPecaNaCarga,
+  criarCaminhao, inserirMotoristaFrota, abrirCarga, vincularPedido, adicionarPecaNaCarga,
   iniciarConferencia, concluirConferencia, fecharCaminhao,
 } from '../helpers/expedicao-fixtures';
 import { iniciarCorte, subitemCompleto } from '../helpers/corte-fixtures';
@@ -106,11 +106,12 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2027-01-01');
     const frotaId = await criarFrota('FRT-0001', 5000);
+    const motoristaFrota = await inserirMotoristaFrota(app, 'Motorista Frota');
 
     const comFrota = await request(srv())
       .post('/operacao/expedicao/caminhoes')
       .set('Cookie', expedicaoCookies)
-      .send({ frotaCaminhaoId: frotaId, motorista: 'Motorista Frota', dataOperacao: c.dataOperacao });
+      .send({ frotaCaminhaoId: frotaId, motoristaId: motoristaFrota.id, dataOperacao: c.dataOperacao });
     expect(comFrota.status).toBe(201);
     expect(comFrota.body.placa).toBe('FRT-0001');
     expect(comFrota.body.frotaCaminhaoId).toBe(frotaId);
@@ -123,10 +124,11 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
     );
     expect(itemComFrota?.capacidadeKg).toBe(5000);
 
+    const motoristaAvulso = await inserirMotoristaFrota(app, 'Motorista Avulso');
     const semFrota = await request(srv())
       .post('/operacao/expedicao/caminhoes')
       .set('Cookie', expedicaoCookies)
-      .send({ placa: 'AVU-9999', motorista: 'Motorista Avulso', dataOperacao: c.dataOperacao });
+      .send({ placa: 'AVU-9999', motoristaId: motoristaAvulso.id, dataOperacao: c.dataOperacao });
     expect(semFrota.status).toBe(201);
 
     const listaSemFrota = await request(srv())

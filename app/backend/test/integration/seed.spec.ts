@@ -64,6 +64,30 @@ describe('Seed idempotência', () => {
     expect(linhas.map((l) => l.codigo)).toContain('EXPEDICAO_GERENCIAR');
   });
 
+  it('seed cria desdobramento AD-01 do boi casado (2 TZ + 2 DT + 2 PA)', async () => {
+    const regras = await db
+      .select({
+        compra: schema.itensCompra.codigo,
+        comercial: schema.itensComerciais.codigo,
+        fator: schema.regrasDesdobramentoComercial.fatorQuantidade,
+      })
+      .from(schema.regrasDesdobramentoComercial)
+      .innerJoin(schema.itensCompra, eq(schema.itensCompra.id, schema.regrasDesdobramentoComercial.itemCompraId))
+      .innerJoin(
+        schema.itensComerciais,
+        eq(schema.itensComerciais.id, schema.regrasDesdobramentoComercial.itemComercialId),
+      )
+      .where(eq(schema.itensCompra.codigo, 'BOI'));
+    expect(regras).toHaveLength(3);
+    expect(regras.map((r) => ({ compra: r.compra, comercial: r.comercial, fator: Number(r.fator) }))).toEqual(
+      expect.arrayContaining([
+        { compra: 'BOI', comercial: 'TZ', fator: 2 },
+        { compra: 'BOI', comercial: 'DT', fator: 2 },
+        { compra: 'BOI', comercial: 'PA', fator: 2 },
+      ]),
+    );
+  });
+
   it('perfil gestor tem EXPEDICAO_REABRIR após seed', async () => {
     const linhas = await db
       .select({ codigo: schema.permissoes.codigo })

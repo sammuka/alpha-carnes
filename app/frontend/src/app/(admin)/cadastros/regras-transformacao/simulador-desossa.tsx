@@ -15,8 +15,15 @@ interface Resultado {
   alternativasPossiveis: Array<{ id: string; nome: string }>;
 }
 
+interface ProdutoOpcao {
+  id: string;
+  nome: string;
+  tipoOperacional?: string;
+  saidaTransformacao?: boolean;
+}
+
 export function SimuladorDesossa() {
-  const [produtos, setProdutos] = useState<Array<{ id: string; nome: string }>>([]);
+  const [produtos, setProdutos] = useState<ProdutoOpcao[]>([]);
   /** Valores iniciais do protótipo — RegraDesdobramento.tsx:323 (`10`) e :325 (`3`). */
   const [tzLivre, setTzLivre] = useState('10');
   const [produtoId, setProdutoId] = useState('');
@@ -32,8 +39,10 @@ export function SimuladorDesossa() {
         setErro(await mensagemDeErro(res));
         return;
       }
-      const corpo = (await res.json()) as { data: Array<{ id: string; nome: string }> };
-      setProdutos(corpo.data);
+      const corpo = (await res.json()) as { data: ProdutoOpcao[] };
+      setProdutos(
+        corpo.data.filter((p) => p.tipoOperacional === 'derivado_desossa' || p.saidaTransformacao),
+      );
     })();
   }, []);
 

@@ -49,10 +49,20 @@ beforeEach(() => {
   global.fetch = jest.fn((input: RequestInfo | URL) => {
     const url = String(input);
     if (url.startsWith('/api/cadastros/representantes')) {
-      return resposta({ data: [{ id: 'representante-1', nome: 'Helena Prado' }], page: 1, pageSize: 100, total: 1 });
+      return resposta({
+        data: [{ id: 'representante-1', codigo: 'RP-01', nome: 'Helena Prado' }],
+        page: 1,
+        pageSize: 100,
+        total: 1,
+      });
     }
     if (url.startsWith('/api/cadastros/rotas')) {
-      return resposta({ data: [{ id: 'rota-1', nome: 'Rota Oeste' }], page: 1, pageSize: 100, total: 1 });
+      return resposta({
+        data: [{ id: 'rota-1', codigo: 'RO-OESTE', nome: 'Rota Oeste' }],
+        page: 1,
+        pageSize: 100,
+        total: 1,
+      });
     }
     if (url.startsWith('/api/comercial/espelho?')) {
       const agrupar = new URL(`http://local${url}`).searchParams.get('agrupar') as 'cliente' | 'rota' | 'representante';
@@ -60,6 +70,18 @@ beforeEach(() => {
     }
     return resposta({ message: `URL inesperada: ${url}` }, 500);
   }) as jest.Mock;
+});
+
+it('filtros de representante e rota sao comboboxes com codigo e nome', async () => {
+  render(<EspelhoClient dataInicial="2026-07-28" />);
+  await userEvent.click(await screen.findByRole('combobox', { name: 'Vendedor / representante' }));
+  expect(await screen.findByRole('option', { name: 'RP-01 — Helena Prado' })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'Todos' })).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: 'representante-1' })).not.toBeInTheDocument();
+  await userEvent.keyboard('{Escape}');
+  await userEvent.click(screen.getByRole('combobox', { name: 'Rota' }));
+  expect(await screen.findByRole('option', { name: 'RO-OESTE — Rota Oeste' })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'Todos' })).toBeInTheDocument();
 });
 
 it('espelho exibe badge provisorio P15 do marco de fechamento', async () => {

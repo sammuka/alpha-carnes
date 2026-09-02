@@ -7,17 +7,19 @@ import type {
   EspelhoResposta,
   StatusEspelho,
 } from '@/lib/espelho';
-import { extrairMensagemErro } from '@/lib/error-message';
+import { labelCodigoNome } from '@/lib/dominios';
+import { extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ComboboxField } from '@/components/ui/combobox-field';
 import { DatePickerField } from '@/components/ui/date-picker-field';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FilterChip } from '@/components/ui/filter-chip';
+import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
 import { PageHeader } from '@/components/ui/page-header';
-import { SelectNative } from '@/components/ui/select-native';
 import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
 import {
   Table,
@@ -33,11 +35,13 @@ type Agrupamento = 'cliente' | 'rota' | 'representante';
 
 interface RepresentanteResumo {
   id: string;
+  codigo: string;
   nome: string;
 }
 
 interface RotaResumo {
   id: string;
+  codigo: string;
   nome: string;
 }
 
@@ -109,8 +113,8 @@ export function EspelhoClient({ dataInicial = hojeISO() }: EspelhoClientProps) {
   const carregarCatalogos = useCallback(async () => {
     try {
       const [representantesResponse, rotasResponse] = await Promise.all([
-        fetch('/api/cadastros/representantes?pageSize=100', { cache: 'no-store' }),
-        fetch('/api/cadastros/rotas?pageSize=100', { cache: 'no-store' }),
+        fetch('/api/cadastros/representantes?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
+        fetch('/api/cadastros/rotas?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
       ]);
       const [representantesPage, rotasPage] = await Promise.all([
         lerJson<Paginado<RepresentanteResumo>>(representantesResponse),
@@ -136,7 +140,11 @@ export function EspelhoClient({ dataInicial = hojeISO() }: EspelhoClientProps) {
         const response = await fetch(`/api/comercial/espelho?${query.toString()}`, {
           cache: 'no-store',
         });
-        const dados = await lerJson<EspelhoResposta>(response);
+        if (!response.ok) {
+          if (ativo) setErro(await mensagemDeErro(response, 'Falha ao carregar o espelho.'));
+          return;
+        }
+        const dados = (await response.json()) as EspelhoResposta;
         if (ativo) setEspelho(dados);
       } catch (error) {
         if (ativo) setErro(error instanceof Error ? error.message : 'Falha ao carregar o espelho.');
@@ -193,28 +201,42 @@ export function EspelhoClient({ dataInicial = hojeISO() }: EspelhoClientProps) {
       <Card>
         <CardContent className="flex flex-wrap items-center gap-2 px-3 py-2">
           <DatePickerField aria-label="Data operacional" value={data} onChange={setData} />
-          <SelectNative
-            aria-label="Vendedor / representante"
-            selectSize="sm"
-            className="w-[200px]"
-            value={representanteId}
-            onChange={(event) => setRepresentanteId(event.target.value)}
-          >
-            <option value="">Vendedor/representante: Todos</option>
-            {representantes.map((representante) => (
-              <option key={representante.id} value={representante.id}>{representante.nome}</option>
-            ))}
-          </SelectNative>
-          <SelectNative
-            aria-label="Rota"
-            selectSize="sm"
-            className="w-[150px]"
-            value={rotaId}
-            onChange={(event) => setRotaId(event.target.value)}
-          >
-            <option value="">Rota: Todas</option>
-            {rotas.map((rota) => <option key={rota.id} value={rota.id}>{rota.nome}</option>)}
-          </SelectNative>
+          <FormField label="Vendedor / representante" htmlFor="espelho-representante" className="w-[200px]">
+            <ComboboxField
+              id="espelho-representante"
+              items={[
+                { id: '', label: 'Todos' },
+                ...representantes.map((representante) => ({
+                  id: representante.id,
+                  label: labelCodigoNome(representante.codigo, representante.nome),
+                })),
+              ]}
+              value={representanteId}
+              onChange={setRepresentanteId}
+              placeholder="Todos"
+              searchPlaceholder="Buscar representante..."
+              emptyText="Nenhum representante encontrado."
+              clearable
+            />
+          </FormField>
+          <FormField label="Rota" htmlFor="espelho-rota" className="w-[150px]">
+            <ComboboxField
+              id="espelho-rota"
+              items={[
+                { id: '', label: 'Todos' },
+                ...rotas.map((rota) => ({
+                  id: rota.id,
+                  label: labelCodigoNome(rota.codigo, rota.nome),
+                })),
+              ]}
+              value={rotaId}
+              onChange={setRotaId}
+              placeholder="Todos"
+              searchPlaceholder="Buscar rota..."
+              emptyText="Nenhuma rota encontrada."
+              clearable
+            />
+          </FormField>
           <div className="w-[240px]">
             <Input
               adornLeft={<Search />}

@@ -10,6 +10,7 @@ import type {
   PedidoVendaDetalhe,
 } from '@/lib/comercial';
 import type { Operacao } from '@/lib/gestao-operacoes';
+import { labelCodigoDescricao, labelCodigoNome, sufixoInativo } from '@/lib/dominios';
 import { extrairMensagemErro } from '@/lib/error-message';
 import { mascararCpfCnpj } from '@/lib/masks';
 import { AlertItem } from '@/components/ui/alert-item';
@@ -38,22 +39,33 @@ export interface ClientePedido {
   razaoSocial: string;
   nomeFantasia?: string | null;
   documentoFiscal?: string | null;
+  representanteId?: string | null;
   representanteNome?: string | null;
+  rotaId?: string | null;
   rotaNome?: string | null;
 }
 
 export interface ProdutoPedido {
   id: string;
   codigo: string;
-  descricao?: string;
+  descricao: string;
+  status: string;
   nome?: string;
   unidadeComercial?: string;
+}
+
+export interface RotaPedido {
+  id: string;
+  codigo: string;
+  nome: string;
+  status: string;
 }
 
 interface PedidoEditorProps {
   pedido: PedidoVendaDetalhe | null;
   clientes: ClientePedido[];
   produtos: ProdutoPedido[];
+  rotas: RotaPedido[];
   operacoes: Operacao[];
   podeGerenciar: boolean;
   podeFinalizar: boolean;
@@ -106,6 +118,7 @@ export function PedidoEditor({
   pedido,
   clientes,
   produtos,
+  rotas,
   operacoes,
   podeGerenciar,
   podeFinalizar,
@@ -115,7 +128,7 @@ export function PedidoEditor({
   const [clienteId, setClienteId] = useState(pedido?.clienteId ?? '');
   const [operacaoId, setOperacaoId] = useState(pedido?.operacaoId ?? '');
   const [representante, setRepresentante] = useState(pedido?.heranca?.representanteNome ?? '');
-  const [rota, setRota] = useState(pedido?.rotaPrevista ?? pedido?.heranca?.rotaNome ?? '');
+  const [rotaId, setRotaId] = useState(pedido?.rotaId ?? pedido?.heranca?.rotaId ?? '');
   const [prioridade, setPrioridade] = useState(String(pedido?.prioridade ?? 0));
   const [observacoes, setObservacoes] = useState(pedido?.observacoesGerais ?? '');
   const [produtoNovo, setProdutoNovo] = useState('');
@@ -173,7 +186,7 @@ export function PedidoEditor({
   async function selecionarCliente(id: string) {
     setClienteId(id);
     setRepresentante('');
-    setRota('');
+    setRotaId('');
     if (!id) return;
     const response = await fetch(`/api/cadastros/clientes/${id}`, { cache: 'no-store' });
     if (!response.ok) {
@@ -182,7 +195,7 @@ export function PedidoEditor({
     }
     const cliente = await response.json() as ClientePedido;
     setRepresentante(cliente.representanteNome ?? '');
-    setRota(cliente.rotaNome ?? '');
+    setRotaId(cliente.rotaId ?? '');
   }
 
   async function mutar(
@@ -346,7 +359,7 @@ export function PedidoEditor({
       operacaoId: operacaoSelecionada.id,
       clienteId,
       dataOperacao: operacaoSelecionada.data,
-      rotaPrevista: rota || undefined,
+      rotaId: rotaId || null,
       prioridade: Number(prioridade) || 0,
       observacoesGerais: observacoes || undefined,
       salvarComoRascunho,
@@ -528,12 +541,18 @@ export function PedidoEditor({
             />
           </FormField>
           <FormField label="Rota" htmlFor="pedido-rota">
-            <Input
+            <ComboboxField
               id="pedido-rota"
-              value={rota}
-              onChange={(event) => setRota(event.target.value)}
-              readOnly={Boolean(pedido) || !podeGerenciar}
+              items={rotas.map((rota) => ({
+                id: rota.id,
+                label: `${labelCodigoNome(rota.codigo, rota.nome)}${sufixoInativo(rota.status)}`,
+              }))}
+              value={rotaId}
+              onChange={setRotaId}
               placeholder="—"
+              searchPlaceholder="Buscar rota..."
+              emptyText="Nenhuma rota encontrada."
+              disabled={Boolean(pedido) || !podeGerenciar}
             />
           </FormField>
           <FormField label="Prioridade" htmlFor="pedido-prioridade">
@@ -646,17 +665,19 @@ export function PedidoEditor({
 
         <CardFooter className="flex-wrap items-end gap-2">
           <FormField label="Produto" htmlFor="produto-novo" className="flex-1">
-            <SelectNative
+            <ComboboxField
               id="produto-novo"
+              items={produtosAusentes.map((produto) => ({
+                id: produto.id,
+                label: labelCodigoDescricao(produto.codigo, produto.descricao),
+              }))}
               value={produtoNovo}
+              onChange={setProdutoNovo}
+              placeholder="Selecione"
+              searchPlaceholder="Buscar produto..."
+              emptyText="Nenhum produto encontrado."
               disabled={!podeGerenciar}
-              onChange={(event) => setProdutoNovo(event.target.value)}
-            >
-              <option value="">Selecione</option>
-              {produtosAusentes.map((produto) => (
-                <option key={produto.id} value={produto.id}>{nomeProduto(produto)}</option>
-              ))}
-            </SelectNative>
+            />
           </FormField>
           <FormField label="Quantidade do novo produto" htmlFor="quantidade-produto-novo">
             <Input

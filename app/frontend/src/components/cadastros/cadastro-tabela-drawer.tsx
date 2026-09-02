@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pencil, Plus, Power, PowerOff, Search } from 'lucide-react';
 import { toast } from 'sonner';
+import { ComboboxField } from '@/components/ui/combobox-field';
 import { Button } from '@/components/ui/button';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
@@ -22,7 +23,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { detalharErro, mensagemDeErro } from '@/lib/error-message';
+import { mensagemDeErro } from '@/lib/error-message';
 import { useErrosPorCampo } from '@/lib/use-erros-campo';
 
 export type StatusCadastro = 'ativo' | 'inativo';
@@ -39,7 +40,7 @@ export interface ColunaCadastro<T> {
 export interface CampoCadastro {
   nome: string;
   rotulo: string;
-  tipo: 'texto' | 'numero' | 'textarea' | 'select' | 'data';
+  tipo: 'texto' | 'numero' | 'textarea' | 'select' | 'data' | 'combobox';
   obrigatorio?: boolean;
   placeholder?: string;
   colSpan?: 1 | 2;
@@ -213,17 +214,12 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(paraPayload(form)),
       });
-      if (!res.ok) {
-        const { mensagem, porCampo } = await detalharErro(res, 'Falha ao salvar');
-        setErros(porCampo);
-        toast.error(mensagem);
-        return;
-      }
+      if (!res.ok) throw new Error(await mensagemDeErro(res, `Falha ao salvar ${substantivoSingular}`));
       toast.success(editando ? 'Registro atualizado.' : 'Registro criado.');
       fechar();
       await carregar();
-    } catch {
-      toast.error('Erro de conexão com o servidor.');
+    } catch (falha) {
+      toast.error(falha instanceof Error ? falha.message : 'Erro de conexão com o servidor.');
     } finally {
       setSalvando(false);
     }
@@ -476,6 +472,23 @@ export function CadastroTabelaDrawer<T extends { id: string }>({
                         </option>
                       ))}
                     </SelectNative>
+                  ) : campo.tipo === 'combobox' ? (
+                    <ComboboxField
+                      id={campo.nome}
+                      items={(campo.opcoes ?? []).map((opcao) => ({
+                        id: opcao.valor,
+                        label: opcao.rotulo,
+                      }))}
+                      value={form[campo.nome] ?? ''}
+                      onChange={(id) => {
+                        limparCampo(campo.nome);
+                        setForm((f) => ({ ...f, [campo.nome]: id }));
+                      }}
+                      placeholder={campo.placeholder ?? '—'}
+                      searchPlaceholder={`Buscar ${campo.rotulo.toLowerCase()}`}
+                      emptyText="Nenhum registro encontrado"
+                      clearable
+                    />
                   ) : (
                     <Input
                       id={campo.nome}

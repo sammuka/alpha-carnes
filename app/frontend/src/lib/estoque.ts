@@ -160,15 +160,22 @@ export async function historicoItem(tipo: TipoItemEstoque, id: string): Promise<
 
 // ── Entradas ────────────────────────────────────────────────────────────────
 
+export interface FornecedorOpcao {
+  id: string;
+  codigo: string;
+  razaoSocial: string;
+  status: 'ativo' | 'inativo';
+}
+
 export interface CriarEntradaPayload {
   produtoId: string;
   quantidade: number;
   unidade: 'caixa' | 'unidade';
-  fornecedorNome: string;
+  fornecedorId: string;
   loteNf?: string;
   local?: string;
   destino: 'estoque' | 'pedido';
-  pedidoVendaItemId?: string;
+  pedidoVendaItemId?: string | null;
   observacao?: string;
 }
 

@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import { check, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { produtos } from './produtos.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
+import { fornecedores } from './fornecedores.schema';
 import { pecas } from './pesagem.schema';
 import { subitens } from './transformacoes.schema';
 import { aprovacoesOperacionais } from './aprovacoes-operacionais.schema';
@@ -17,6 +18,7 @@ export const entradasItens = pgTable(
     quantidade:          integer('quantidade').notNull(),
     quantidadeDestinada: integer('quantidade_destinada').notNull().default(0),
     unidade:             text('unidade').notNull().default('caixa'),
+    fornecedorId:        uuid('fornecedor_id').references(() => fornecedores.id),
     fornecedorNome:      text('fornecedor_nome').notNull(),
     loteNf:              text('lote_nf'),
     local:               text('local'),
@@ -36,6 +38,7 @@ export const entradasItens = pgTable(
     check('chk_entradas_itens_destino', sql`${t.destino} IN ('estoque','pedido')`),
     index('idx_entradas_itens_produto').on(t.produtoId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_entradas_itens_created').on(t.createdAt).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_entradas_itens_fornecedor').on(t.fornecedorId).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 

@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -9,6 +9,7 @@ import * as schema from '../../../database/schema';
 import {
   clientes,
   entradasItens,
+  fornecedores,
   operacoes,
   pedidosVenda,
   pedidosVendaItens,
@@ -33,6 +34,7 @@ export class EntradasEstoqueService {
 
   async criar(dto: CriarEntradaDto, userId: string) {
     const resultado = await this.db.transaction(async (tx) => {
+      const fornecedor = await this.resolverFornecedor(tx, dto.fornecedorId);
       const produto = await tx
         .select()
         .from(produtos)
@@ -69,7 +71,8 @@ export class EntradasEstoqueService {
             produtoId: dto.produtoId,
             quantidade: dto.quantidade,
             unidade: dto.unidade,
-            fornecedorNome: dto.fornecedorNome,
+            fornecedorId: fornecedor.id,
+            fornecedorNome: fornecedor.razaoSocial,
             loteNf: dto.loteNf ?? null,
             local: dto.local ?? null,
             destino: dto.destino,
@@ -182,5 +185,19 @@ export class EntradasEstoqueService {
       .limit(1)
       .then((rows) => rows[0] ?? null);
     return r?.data ?? '';
+  }
+
+  private async resolverFornecedor(
+    tx: Tx,
+    id: string,
+  ): Promise<{ id: string; razaoSocial: string }> {
+    const fornecedor = await tx.select({ id: fornecedores.id, razaoSocial: fornecedores.razaoSocial })
+      .from(fornecedores)
+      .where(and(eq(fornecedores.id, id), eq(fornecedores.status, 'ativo'), isNull(fornecedores.deletedAt)))
+      .then((rows) => rows[0] ?? null);
+    if (!fornecedor) {
+      throw new BadRequestException({ codigo: 'FORNECEDOR_INVALIDO', message: 'Fornecedor não encontrado, removido ou inativo' });
+    }
+    return fornecedor;
   }
 }

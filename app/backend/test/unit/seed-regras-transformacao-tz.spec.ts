@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import { isNull } from 'drizzle-orm';
+import { eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../src/database/schema';
 import { regrasTransformacao } from '../../src/database/schema';
@@ -36,5 +36,24 @@ describe('seedRegrasTransformacaoTz', () => {
     const ativas = regras.filter((r) => r.codigo === 'TZ_A' || r.codigo === 'TZ_B');
     expect(ativas).toHaveLength(2);
     expect(ativas.every((r) => r.provisorio === true)).toBe(true);
+
+    const saidas = await db
+      .select({
+        regra: schema.regrasTransformacao.codigo,
+        produto: schema.produtos.codigo,
+      })
+      .from(schema.regrasTransformacaoSaidas)
+      .innerJoin(schema.regrasTransformacao, eq(schema.regrasTransformacao.id, schema.regrasTransformacaoSaidas.regraId))
+      .innerJoin(schema.produtos, eq(schema.produtos.id, schema.regrasTransformacaoSaidas.produtoId))
+      .where(isNull(schema.regrasTransformacao.deletedAt));
+    expect(saidas).toEqual(
+      expect.arrayContaining([
+        { regra: 'TZ_A', produto: 'CB' },
+        { regra: 'TZ_A', produto: 'JAC' },
+        { regra: 'TZ_B', produto: 'CBA' },
+        { regra: 'TZ_B', produto: 'FC' },
+      ]),
+    );
+    expect(saidas).toHaveLength(4);
   });
 });

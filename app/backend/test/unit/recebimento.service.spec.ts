@@ -292,7 +292,7 @@ describe('RecebimentoService — snapshot canônico do Pedido ao Fornecedor', ()
   const snapshotSelects = (): unknown[][] => [
     [cabecalho],
     [itemSnapshot],
-    [{ id: 'i1', codigo: 'TZ', unidadeComercial: 'peca' }],
+    [{ id: 'i1', codigo: 'TZ', unidadeComercial: 'kg' }],
     [{ itemComercialId: 'i1', passaBalanca: true }],
     [{ itemComercialId: 'i1', itemComercialCodigo: 'TZ', itemCompraDescricao: 'Boi' }],
     [{ descricao: 'Boi', quantidade: '99.000' }],

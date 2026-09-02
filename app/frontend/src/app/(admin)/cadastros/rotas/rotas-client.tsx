@@ -13,25 +13,24 @@ import { PageHeader } from '@/components/ui/page-header';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { ComboboxField } from '@/components/ui/combobox-field';
 import { cn } from '@/lib/cn';
-import { detalharErro } from '@/lib/error-message';
+import { labelCodigoNome } from '@/lib/dominios';
+import { detalharErro, mensagemDeErro } from '@/lib/error-message';
 import type { CriarRotaDto, Paginado, ParadaRota, Rota } from '@/lib/rotas';
 import { DIAS_SEMANA } from '@/lib/rotas';
 import { useErrosPorCampo } from '@/lib/use-erros-campo';
 
+interface RepresentanteOpcao { id: string; codigo: string; nome: string; status: 'ativo' | 'inativo' }
+interface CaminhaoOpcao { id: string; placa: string; descricao: string | null; status: 'ativo' | 'inativo' }
+interface MotoristaOpcao { id: string; nome: string; documento: string; status: 'ativo' | 'inativo' }
+
 type FormRota = CriarRotaDto & { id?: string };
 
 const FORM_VAZIO: FormRota = {
-  codigo: '',
-  nome: '',
-  regiao: '',
-  representantePadrao: '',
-  caminhaoPadrao: '',
-  motoristaPadrao: '',
-  observacoes: '',
-  status: 'ativo',
-  paradas: [],
-  diasAtendimento: [],
+  codigo: '', nome: '', regiao: '', representantePadraoId: '',
+  caminhaoPadraoId: '', motoristaPadraoId: '', observacoes: '',
+  status: 'ativo', paradas: [], diasAtendimento: [],
 };
 
 function rotaParaForm(r: Rota): FormRota {
@@ -40,28 +39,13 @@ function rotaParaForm(r: Rota): FormRota {
     codigo: r.codigo,
     nome: r.nome,
     regiao: r.regiao ?? '',
-    representantePadrao: r.representantePadrao ?? '',
-    caminhaoPadrao: r.caminhaoPadrao ?? '',
-    motoristaPadrao: r.motoristaPadrao ?? '',
+    representantePadraoId: r.representantePadraoId ?? '',
+    caminhaoPadraoId: r.caminhaoPadraoId ?? '',
+    motoristaPadraoId: r.motoristaPadraoId ?? '',
     observacoes: r.observacoes ?? '',
     status: r.status,
     paradas: r.paradas ?? [],
     diasAtendimento: r.diasAtendimento ?? [],
-  };
-}
-
-function formParaPayload(form: FormRota): CriarRotaDto {
-  return {
-    codigo: form.codigo.trim(),
-    nome: form.nome.trim(),
-    regiao: form.regiao?.trim() || undefined,
-    representantePadrao: form.representantePadrao?.trim() || undefined,
-    caminhaoPadrao: form.caminhaoPadrao?.trim() || undefined,
-    motoristaPadrao: form.motoristaPadrao?.trim() || undefined,
-    observacoes: form.observacoes?.trim() || undefined,
-    status: form.status,
-    paradas: form.paradas,
-    diasAtendimento: form.diasAtendimento,
   };
 }
 
@@ -76,7 +60,30 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [modoNovo, setModoNovo] = useState(false);
+  const [representantes, setRepresentantes] = useState<RepresentanteOpcao[]>([]);
+  const [caminhoes, setCaminhoes] = useState<CaminhaoOpcao[]>([]);
+  const [motoristas, setMotoristas] = useState<MotoristaOpcao[]>([]);
   const { erros, setErros, limparCampo, limparTudo } = useErrosPorCampo();
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [resRepresentantes, resCaminhoes, resMotoristas] = await Promise.all([
+          fetch('/api/cadastros/representantes?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
+          fetch('/api/cadastros/frota-caminhoes?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
+          fetch('/api/cadastros/frota-motoristas?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
+        ]);
+        if (!resRepresentantes.ok) throw new Error(await mensagemDeErro(resRepresentantes, 'Erro ao carregar representantes'));
+        if (!resCaminhoes.ok) throw new Error(await mensagemDeErro(resCaminhoes, 'Erro ao carregar caminhões'));
+        if (!resMotoristas.ok) throw new Error(await mensagemDeErro(resMotoristas, 'Erro ao carregar motoristas'));
+        setRepresentantes(((await resRepresentantes.json()) as { data: RepresentanteOpcao[] }).data);
+        setCaminhoes(((await resCaminhoes.json()) as { data: CaminhaoOpcao[] }).data);
+        setMotoristas(((await resMotoristas.json()) as { data: MotoristaOpcao[] }).data);
+      } catch (falha) {
+        setErro(falha instanceof Error ? falha.message : 'Erro ao carregar catálogos');
+      }
+    })();
+  }, []);
 
   const carregar = useCallback(async () => {
     setErro(null);
@@ -191,23 +198,23 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
     setErro(null);
     limparTudo();
     try {
-      const payload = formParaPayload(form);
-      const res = form.id
-        ? await fetch(`/api/cadastros/rotas/${form.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          })
-        : await fetch('/api/cadastros/rotas', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
+      const payload: CriarRotaDto = {
+        codigo: form.codigo.trim(), nome: form.nome.trim(),
+        regiao: form.regiao?.trim() || undefined,
+        representantePadraoId: form.representantePadraoId || null,
+        caminhaoPadraoId: form.caminhaoPadraoId || null,
+        motoristaPadraoId: form.motoristaPadraoId || null,
+        observacoes: form.observacoes?.trim() || undefined,
+        status: form.status, paradas: form.paradas, diasAtendimento: form.diasAtendimento,
+      };
+      const res = await fetch(form.id ? `/api/cadastros/rotas/${form.id}` : '/api/cadastros/rotas', {
+        method: form.id ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
       if (!res.ok) {
         const { mensagem, porCampo } = await detalharErro(res, 'Falha ao salvar rota');
-        setErro(mensagem);
-        setErros(porCampo);
-        return;
+        setErro(mensagem); setErros(porCampo); return;
       }
       const salva = (await res.json()) as Rota;
       setSelecionada(salva);
@@ -387,43 +394,96 @@ export function RotasClient({ permissoes }: { permissoes: string[] }) {
                       }}
                     />
                   </FormField>
-                  <FormField label="Representante padrão" htmlFor="representante" error={erros.representantePadrao}>
-                    <Input
+                  <FormField label="Representante padrão" htmlFor="representante" error={erros.representantePadraoId}>
+                    <ComboboxField
                       id="representante"
-                      value={form.representantePadrao ?? ''}
-                      maxLength={200}
-                      disabled={!podeGerenciar}
-                      aria-invalid={'representantePadrao' in erros || undefined}
-                      onChange={(e) => {
-                        limparCampo('representantePadrao');
-                        setCampo('representantePadrao', e.target.value);
+                      items={(() => {
+                        const lista = [...representantes];
+                        if (form.representantePadraoId && !lista.some((i) => i.id === form.representantePadraoId) && selecionada) {
+                          lista.push({
+                            id: form.representantePadraoId,
+                            codigo: '',
+                            nome: selecionada.representantePadrao ?? '',
+                            status: 'inativo',
+                          });
+                        }
+                        return lista.map((item) => ({
+                          id: item.id,
+                          label: `${labelCodigoNome(item.codigo, item.nome)}${item.status === 'ativo' ? '' : ' (inativo)'}`,
+                        }));
+                      })()}
+                      value={form.representantePadraoId ?? ''}
+                      onChange={(id) => {
+                        limparCampo('representantePadraoId');
+                        setCampo('representantePadraoId', id);
                       }}
+                      placeholder="—"
+                      searchPlaceholder="Buscar representante"
+                      emptyText="Nenhum representante encontrado"
+                      clearable
+                      disabled={!podeGerenciar}
                     />
                   </FormField>
-                  <FormField label="Caminhão padrão" htmlFor="caminhao" error={erros.caminhaoPadrao}>
-                    <Input
+                  <FormField label="Caminhão padrão" htmlFor="caminhao" error={erros.caminhaoPadraoId}>
+                    <ComboboxField
                       id="caminhao"
-                      value={form.caminhaoPadrao ?? ''}
-                      maxLength={100}
-                      disabled={!podeGerenciar}
-                      aria-invalid={'caminhaoPadrao' in erros || undefined}
-                      onChange={(e) => {
-                        limparCampo('caminhaoPadrao');
-                        setCampo('caminhaoPadrao', e.target.value);
+                      items={(() => {
+                        const lista = [...caminhoes];
+                        if (form.caminhaoPadraoId && !lista.some((i) => i.id === form.caminhaoPadraoId) && selecionada) {
+                          lista.push({
+                            id: form.caminhaoPadraoId,
+                            placa: selecionada.caminhaoPadrao ?? '',
+                            descricao: null,
+                            status: 'inativo',
+                          });
+                        }
+                        return lista.map((item) => ({
+                          id: item.id,
+                          label: `${item.placa}${item.descricao ? ` — ${item.descricao}` : ''}${item.status === 'ativo' ? '' : ' (inativo)'}`,
+                          sublabel: item.descricao ?? undefined,
+                        }));
+                      })()}
+                      value={form.caminhaoPadraoId ?? ''}
+                      onChange={(id) => {
+                        limparCampo('caminhaoPadraoId');
+                        setCampo('caminhaoPadraoId', id);
                       }}
+                      placeholder="—"
+                      searchPlaceholder="Buscar caminhão"
+                      emptyText="Nenhum caminhão encontrado"
+                      clearable
+                      disabled={!podeGerenciar}
                     />
                   </FormField>
-                  <FormField label="Motorista padrão" htmlFor="motorista" error={erros.motoristaPadrao}>
-                    <Input
+                  <FormField label="Motorista padrão" htmlFor="motorista" error={erros.motoristaPadraoId}>
+                    <ComboboxField
                       id="motorista"
-                      value={form.motoristaPadrao ?? ''}
-                      maxLength={200}
-                      disabled={!podeGerenciar}
-                      aria-invalid={'motoristaPadrao' in erros || undefined}
-                      onChange={(e) => {
-                        limparCampo('motoristaPadrao');
-                        setCampo('motoristaPadrao', e.target.value);
+                      items={(() => {
+                        const lista = [...motoristas];
+                        if (form.motoristaPadraoId && !lista.some((i) => i.id === form.motoristaPadraoId) && selecionada) {
+                          lista.push({
+                            id: form.motoristaPadraoId,
+                            nome: selecionada.motoristaPadrao ?? '',
+                            documento: '',
+                            status: 'inativo',
+                          });
+                        }
+                        return lista.map((item) => ({
+                          id: item.id,
+                          label: `${item.nome}${item.status === 'ativo' ? '' : ' (inativo)'}`,
+                          sublabel: item.documento || undefined,
+                        }));
+                      })()}
+                      value={form.motoristaPadraoId ?? ''}
+                      onChange={(id) => {
+                        limparCampo('motoristaPadraoId');
+                        setCampo('motoristaPadraoId', id);
                       }}
+                      placeholder="—"
+                      searchPlaceholder="Buscar motorista"
+                      emptyText="Nenhum motorista encontrado"
+                      clearable
+                      disabled={!podeGerenciar}
                     />
                   </FormField>
                 </div>

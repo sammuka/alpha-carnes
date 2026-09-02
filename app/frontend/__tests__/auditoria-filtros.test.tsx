@@ -22,6 +22,12 @@ beforeEach(() => {
     if (String(url).includes('/facetas')) {
       return Promise.resolve({ ok: true, json: async () => FACETAS });
     }
+    if (String(url).includes('/usuarios')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => [{ id: 'u1', nome: 'Admin', email: 'admin@alpha.local' }],
+      });
+    }
     if (String(url).includes('/export')) {
       return Promise.resolve({
         ok: true,
@@ -47,11 +53,10 @@ it('cinco filtros do prototipo estao presentes', async () => {
 
 it('selects de Usuario e Modulo populados por facetas', async () => {
   render(<AuditoriaAdminClient />);
-  await screen.findByText('Todos os usuários');
-  const combos = screen.getAllByRole('combobox');
-  fireEvent.click(combos[0]!);
-  expect(await screen.findByRole('option', { name: 'Admin' })).toBeInTheDocument();
-  fireEvent.click(combos[1]!);
+  await screen.findByRole('combobox', { name: 'Usuário' });
+  fireEvent.click(screen.getByRole('combobox', { name: 'Usuário' }));
+  expect(await screen.findByRole('option', { name: /Admin/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('combobox', { name: 'Módulo' }));
   expect(await screen.findByRole('option', { name: 'cadastros' })).toBeInTheDocument();
 });
 
@@ -107,6 +112,12 @@ it('cabecalho X-Auditoria-Truncado 1 mostra aviso', async () => {
   global.fetch = jest.fn().mockImplementation((url: string) => {
     if (String(url).includes('/facetas')) {
       return Promise.resolve({ ok: true, json: async () => FACETAS });
+    }
+    if (String(url).includes('/usuarios')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => [{ id: 'u1', nome: 'Admin', email: 'admin@alpha.local' }],
+      });
     }
     if (String(url).includes('/export')) {
       return Promise.resolve({

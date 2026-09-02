@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
@@ -10,6 +10,8 @@ import { operacoes,
   pedidosVenda,
   pedidosVendaItens,
   frotaCaminhoes,
+  frotaMotoristas,
+  rotas,
   pecas,
   subitens,
  } from '../../../database/schema';
@@ -39,6 +41,9 @@ export class CaminhaoService {
     return this.db.transaction(async (tx) => {
       const { operacao } = await this.operacoes.garantirOperacao(tx, dto.dataOperacao, operadorId);
 
+      const motorista = await this.resolverMotorista(tx, dto.motoristaId);
+      const rota = await this.resolverRota(tx, dto.rotaId);
+
       let placa = dto.placa;
       if (dto.frotaCaminhaoId) {
         const frota = await tx
@@ -62,10 +67,12 @@ export class CaminhaoService {
         await tx
           .insert(caminhoes)
           .values({
-            frotaCaminhaoId: dto.frotaCaminhaoId,
+            frotaCaminhaoId: dto.frotaCaminhaoId ?? null,
             placa: placa!,
-            motorista: dto.motorista,
-            rota: dto.rota,
+            motoristaId: motorista.id,
+            motorista: motorista.nome,
+            rotaId: rota?.id ?? null,
+            rota: rota?.nome ?? null,
             itinerario: dto.itinerario,
             operacaoId: operacao.id,
             observacoes: dto.observacoes,
@@ -313,5 +320,34 @@ export class CaminhaoService {
       .then((r) => r[0] ?? null);
     if (!c) throw new NotFoundException('Caminhão não encontrado');
     return c;
+  }
+
+  private async resolverMotorista(
+    tx: Tx,
+    id: string,
+  ): Promise<{ id: string; nome: string }> {
+    const motorista = await tx.select({ id: frotaMotoristas.id, nome: frotaMotoristas.nome })
+      .from(frotaMotoristas)
+      .where(and(eq(frotaMotoristas.id, id), eq(frotaMotoristas.status, 'ativo'), isNull(frotaMotoristas.deletedAt)))
+      .then((rows) => rows[0] ?? null);
+    if (!motorista) {
+      throw new BadRequestException({ codigo: 'MOTORISTA_INVALIDO', message: 'Motorista não encontrado, removido ou inativo' });
+    }
+    return motorista;
+  }
+
+  private async resolverRota(
+    tx: Tx,
+    id: string | null | undefined,
+  ): Promise<{ id: string; nome: string } | null> {
+    if (id == null) return null;
+    const rota = await tx.select({ id: rotas.id, nome: rotas.nome })
+      .from(rotas)
+      .where(and(eq(rotas.id, id), eq(rotas.status, 'ativo'), isNull(rotas.deletedAt)))
+      .then((rows) => rows[0] ?? null);
+    if (!rota) {
+      throw new BadRequestException({ codigo: 'ROTA_INVALIDA', message: 'Rota não encontrada, removida ou inativa' });
+    }
+    return rota;
   }
 }

@@ -34,6 +34,7 @@ export const produtos = pgTable(
   (t) => [
     check('chk_produtos_status', sql`${t.status} IN ('ativo','inativo')`),
     check('chk_produtos_unidade_preco', sql`${t.unidadePreco} IN ('kg','unidade')`),
+    check('chk_produtos_unidade_pedido', sql`${t.unidadePedido} IN ('kg','unidade')`),
     check('chk_produtos_tipo_operacional', sql`${t.tipoOperacional} IN ('peca_inteira_pesavel','derivado_desossa','entrada_unidade','compra_base')`),
     uniqueIndex('uq_produtos_codigo').on(t.codigo).where(sql`${t.deletedAt} IS NULL`),
     index('idx_produtos_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),

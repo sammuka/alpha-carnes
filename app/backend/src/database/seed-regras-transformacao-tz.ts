@@ -67,4 +67,19 @@ export async function seedRegrasTransformacaoTz(db: Db): Promise<void> {
     { produtoId: cba.id, qtd: '1' },
     { produtoId: fc.id, qtd: '1' },
   ]);
+
+  await db.update(produtos).set({
+    origemTransformacao: true,
+    passaDesossa: true,
+    updatedAt: new Date(),
+  }).where(and(eq(produtos.codigo, 'TZ'), isNull(produtos.deletedAt)));
+
+  for (const codigo of ['CB', 'JAC', 'CBA', 'FC'] as const) {
+    await db.update(produtos).set({
+      saidaTransformacao: true,
+      passaDesossa: true,
+      tipoOperacional: 'derivado_desossa',
+      updatedAt: new Date(),
+    }).where(and(eq(produtos.codigo, codigo), isNull(produtos.deletedAt)));
+  }
 }
