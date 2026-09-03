@@ -230,7 +230,7 @@ export class PedidosService {
          GROUP BY a.compra_programada_id, cp.numero_sequencial, a.recebimento_id
          ORDER BY cp.numero_sequencial, a.recebimento_id
       `);
-      return linhas.rows.map((r) => ({
+      return linhas.rows.map((r: { compra_programada_id: string; numero_sequencial: number; recebimento_id: string; quantidade_unidades: number; peso_total: string }) => ({
         compraProgramadaId: r.compra_programada_id,
         numeroSequencial: Number(r.numero_sequencial),
         recebimentoId: r.recebimento_id,
@@ -540,8 +540,8 @@ export class PedidosService {
 
     return itens.map((item) => {
       let restante = formatarQtd(item.quantidade);
-      const linhas = resultado.rows.filter((row) => row.item_comercial_id === item.itemComercialId);
-      const disponivelAntes = somarListaQtd(linhas.map((row) => row.quantidade_disponivel));
+      const linhas = resultado.rows.filter((row: { id: string; item_comercial_id: string; quantidade_disponivel: string }) => row.item_comercial_id === item.itemComercialId);
+      const disponivelAntes = somarListaQtd(linhas.map((row: { id: string; item_comercial_id: string; quantidade_disponivel: string }) => row.quantidade_disponivel));
       const coberturas: CoberturaPlanejada[] = [];
       for (const row of linhas) {
         if (ehZero(restante)) break;
@@ -1228,7 +1228,10 @@ export class PedidosService {
       WHERE id = ${disponibilidadeId}
       RETURNING quantidade_reservada, quantidade_disponivel
     `);
-    const linha = primeiroOuFalha(atualizada.rows, 'Disponibilidade não encontrada na devolução');
+    const linha = primeiroOuFalha<{ quantidade_reservada: string; quantidade_disponivel: string }>(
+      atualizada.rows,
+      'Disponibilidade não encontrada na devolução',
+    );
     return {
       quantidadeReservada: linha.quantidade_reservada,
       quantidadeDisponivel: linha.quantidade_disponivel,

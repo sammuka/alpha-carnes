@@ -330,14 +330,14 @@ export class OverbookingService {
       pendenciaId: pendencia.id,
       itemComercialId: pendencia.itemComercialId,
       quantidadeDeficit: pendencia.quantidadeDeficit,
-      comprasComplementares: compras.rows.map((c) => ({
+      comprasComplementares: compras.rows.map((c: { compra_programada_id: string; operacao_id: string; data: string; status: string; quantidade_projetada: string }) => ({
         compraProgramadaId: c.compra_programada_id,
         operacaoId: c.operacao_id,
         dataOperacao: c.data,
         status: c.status,
         quantidadeProjetada: formatarQtd(c.quantidade_projetada),
       })),
-      redistribuicoes: redistribuicoes.rows.map((r) => ({
+      redistribuicoes: redistribuicoes.rows.map((r: { pedido_venda_id: string; pedido_venda_item_id: string; cliente_nome: string; quantidade_reservada: string; reserva_id: string; disponibilidade_virtual_id: string }) => ({
         pedidoVendaId: r.pedido_venda_id,
         pedidoVendaItemId: r.pedido_venda_item_id,
         clienteNome: r.cliente_nome,
