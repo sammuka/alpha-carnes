@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../database/database.module';
@@ -88,12 +88,14 @@ export class CaminhoesCadastroService {
     return this.db.transaction(async (tx) => {
       await this.assertPlacaLivre(tx, dto.placa);
 
+      const rota = await this.resolverRotaPadrao(tx, dto.rotaPadraoId, null);
+
       const criado = primeiroOuFalha(
         await tx.insert(frotaCaminhoes).values({
           placa: dto.placa,
           descricao: dto.descricao,
           capacidadeKg: dto.capacidadeKg,
-          rotaPadraoId: dto.rotaPadraoId ?? null,
+          rotaPadraoId: rota?.id ?? null,
           status: dto.status,
           fabricante: dto.fabricante,
           modelo: dto.modelo,
@@ -128,12 +130,16 @@ export class CaminhoesCadastroService {
       if (!anterior) throw new NotFoundException('Caminhão não encontrado');
       if (dto.placa && dto.placa !== anterior.placa) await this.assertPlacaLivre(tx, dto.placa);
 
+      const rota = dto.rotaPadraoId === undefined
+        ? null
+        : await this.resolverRotaPadrao(tx, dto.rotaPadraoId, anterior.rotaPadraoId);
+
       const atualizado = primeiroOuFalha(
         await tx.update(frotaCaminhoes).set({
           placa: dto.placa ?? anterior.placa,
           descricao: dto.descricao ?? anterior.descricao,
           capacidadeKg: dto.capacidadeKg ?? anterior.capacidadeKg,
-          rotaPadraoId: dto.rotaPadraoId === undefined ? anterior.rotaPadraoId : dto.rotaPadraoId,
+          rotaPadraoId: dto.rotaPadraoId === undefined ? anterior.rotaPadraoId : rota?.id ?? null,
           status: dto.status ?? anterior.status,
           fabricante: dto.fabricante ?? anterior.fabricante,
           modelo: dto.modelo ?? anterior.modelo,
@@ -219,5 +225,21 @@ export class CaminhoesCadastroService {
     return exec.select().from(frotaCaminhoes)
       .where(and(eq(frotaCaminhoes.id, id), isNull(frotaCaminhoes.deletedAt)))
       .then((r) => r[0] ?? null);
+  }
+
+  private async resolverRotaPadrao(
+    tx: NodePgDatabase<typeof schema>,
+    id: string | null | undefined,
+    idPersistidoAtual: string | null,
+  ): Promise<{ id: string } | null> {
+    if (id == null) return null;
+    const vinculo = await tx.select({ id: rotas.id, status: rotas.status })
+      .from(rotas)
+      .where(and(eq(rotas.id, id), isNull(rotas.deletedAt)))
+      .then((rows) => rows[0] ?? null);
+    if (!vinculo || (vinculo.status !== 'ativo' && vinculo.id !== idPersistidoAtual)) {
+      throw new BadRequestException({ codigo: 'VINCULO_CADASTRO_INVALIDO', message: 'Rota não encontrada, removida ou inativa' });
+    }
+    return { id: vinculo.id };
   }
 }

@@ -15,6 +15,20 @@ import { extrairErrosPorCampo, extrairMensagemErro } from '@/lib/error-message';
 
 export type CadastroFormConfig = Omit<CadastroConfig, 'schema'>;
 
+function omitirNulos(valor: unknown): unknown {
+  if (valor === null) return undefined;
+  if (Array.isArray(valor)) return valor.map(omitirNulos);
+  if (valor && typeof valor === 'object') {
+    return Object.fromEntries(
+      Object.entries(valor as Record<string, unknown>).flatMap(([chave, atual]) => {
+        const limpo = omitirNulos(atual);
+        return limpo === undefined ? [] : [[chave, limpo]];
+      }),
+    );
+  }
+  return valor;
+}
+
 interface CadastroFormProps {
   config: CadastroFormConfig;
   /** Quando informado, o formulário edita o registro (PATCH); senão cria (POST). */
@@ -24,7 +38,9 @@ interface CadastroFormProps {
 export function CadastroForm({ config, registro }: CadastroFormProps) {
   const router = useRouter();
   const [erro, setErro] = useState<string | null>(null);
-  const schema = CADASTROS[config.recurso]?.schema;
+  const catalogo = CADASTROS[config.recurso];
+  const schema = catalogo?.schema ?? (config as CadastroConfig).schema;
+  const campos = catalogo?.campos ?? config.campos;
 
   const {
     register,
@@ -36,7 +52,11 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
     formState,
   } = useForm<FieldValues>({
     resolver: schema ? zodResolver(schema) : undefined,
-    defaultValues: registro ?? {},
+    defaultValues: {
+      unidadeCompra: 'unidade',
+      unidadeComercial: 'unidade',
+      ...((registro ? omitirNulos(registro) : {}) as FieldValues),
+    },
   });
   const { isSubmitting } = formState;
 
@@ -50,7 +70,7 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
     const payload: Record<string, unknown> = { ...valores };
     for (const k of Object.keys(payload)) {
       const v = payload[k];
-      if (v === '') {
+      if (v === '' || v === null || v === undefined) {
         delete payload[k];
       } else if (v && typeof v === 'object' && !Array.isArray(v)) {
         const obj = { ...(v as Record<string, unknown>) };
@@ -59,6 +79,20 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
         }
         payload[k] = obj;
       }
+    }
+    const raw = (payload.parametrosOperacionaisJson ?? {}) as Record<string, unknown>;
+    if (config.recurso === 'fornecedores') {
+      payload.parametrosOperacionaisJson = {
+        romaneioAntecipado: Boolean(raw.romaneioAntecipado),
+        ...(raw.horarioLimiteRecebimento ? { horarioLimiteRecebimento: raw.horarioLimiteRecebimento } : {}),
+        ...(raw.capacidadeMaximaKg === '' || raw.capacidadeMaximaKg === undefined
+          ? {}
+          : { capacidadeMaximaKg: Number(raw.capacidadeMaximaKg) }),
+        ...(raw.toleranciaDivergenciaPercentual === '' || raw.toleranciaDivergenciaPercentual === undefined
+          ? {}
+          : { toleranciaDivergenciaPercentual: Number(raw.toleranciaDivergenciaPercentual) }),
+        ...(raw.notaQualidade ? { notaQualidade: raw.notaQualidade } : {}),
+      };
     }
     try {
       const res = await fetch(url, {
@@ -84,7 +118,7 @@ export function CadastroForm({ config, registro }: CadastroFormProps) {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="max-w-2xl space-y-3" noValidate>
       <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
-        {config.campos.map((campo) => {
+        {campos.map((campo) => {
           const chave = campo.jsonCampo ? `${campo.jsonCampo}.${campo.nome}` : campo.nome;
           const erroCampo = getFieldState(chave, formState).error?.message;
           return (

@@ -134,6 +134,7 @@ export interface PedidoVenda {
   operacaoId?: string;
   dataOperacao?: string;
   dataEntrega: string | null;
+  rotaId: string | null;
   rotaPrevista: string | null;
   prioridade: number | null;
   status: string;
@@ -190,7 +191,7 @@ export interface CriarPedidoDto {
   clienteId: string;
   dataOperacao?: string;
   dataEntrega?: string;
-  rotaPrevista?: string;
+  rotaId?: string | null;
   prioridade?: number;
   observacoesGerais?: string;
   salvarComoRascunho?: boolean;

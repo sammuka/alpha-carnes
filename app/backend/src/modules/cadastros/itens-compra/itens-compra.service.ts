@@ -5,7 +5,7 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import { itensCompra } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
-import { calcularRange, montarPaginado, primeiroOuFalha, type ListarQuery, type Paginado } from '../../../common/crud/paginacao';
+import { calcularRange, montarPaginado, primeiroOuFalha, type ListarCadastroQuery, type Paginado } from '../../../common/crud/paginacao';
 import type { CreateItemCompraDto, UpdateItemCompraDto } from './dto/item-compra.dto';
 
 type ItemCompra = typeof itensCompra.$inferSelect;
@@ -22,9 +22,10 @@ export class ItensCompraService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<ItemCompra>> {
+  async listar(query: ListarCadastroQuery): Promise<Paginado<ItemCompra>> {
     const { limit, offset } = calcularRange(query);
     const filtros = [query.incluirRemovidos ? undefined : isNull(itensCompra.deletedAt)];
+    if (query.status) filtros.push(eq(itensCompra.status, query.status));
     if (query.search) {
       const termo = `%${query.search}%`;
       filtros.push(or(ilike(itensCompra.descricao, termo), ilike(itensCompra.codigo, termo)));

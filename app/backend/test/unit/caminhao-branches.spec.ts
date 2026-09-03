@@ -110,22 +110,32 @@ describe('CaminhaoService — branches', () => {
   });
 
   it('criar → lança 404 FROTA_NAO_ENCONTRADA se frota inativa/inexistente', async () => {
-    const tx = { select: jest.fn(() => makeSelectChain([])) };
+    const motorista = { id: 'mot-1', nome: 'M' };
+    let call = 0;
+    const tx = {
+      select: jest.fn(() => {
+        call++;
+        if (call === 1) return makeSelectChain([motorista]);
+        return makeSelectChain([]);
+      }),
+    };
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
     operacoesService.garantirOperacao.mockResolvedValue({ operacao: { id: 'op-1' } });
     const service = new CaminhaoService({ db } as never, auditoria as never, operacoesService as never);
     await expect(
-      service.criar({ frotaCaminhaoId: 'frota-x', motorista: 'M', dataOperacao: '2026-06-23' } as never, 'u1'),
+      service.criar({ frotaCaminhaoId: 'frota-x', motoristaId: 'mot-1', dataOperacao: '2026-06-23' } as never, 'u1'),
     ).rejects.toMatchObject({ response: { codigo: 'FROTA_NAO_ENCONTRADA' } });
   });
 
   it('criar → resolve placa via frota ativa', async () => {
+    const motorista = { id: 'mot-1', nome: 'M' };
     const frota = { id: 'frota-1', placa: 'FRT-0001', status: 'ativo', deletedAt: null };
     let call = 0;
     const tx = {
       select: jest.fn(() => {
         call++;
-        return makeSelectChain(call === 1 ? [frota] : []);
+        if (call === 1) return makeSelectChain([motorista]);
+        return makeSelectChain([frota]);
       }),
       insert: jest.fn(() => ({
         values: () => ({
@@ -136,7 +146,7 @@ describe('CaminhaoService — branches', () => {
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
     operacoesService.garantirOperacao.mockResolvedValue({ operacao: { id: 'op-1' } });
     const service = new CaminhaoService({ db } as never, auditoria as never, operacoesService as never);
-    const result = await service.criar({ frotaCaminhaoId: 'frota-1', motorista: 'M', dataOperacao: '2026-06-23' } as never, 'u1');
+    const result = await service.criar({ frotaCaminhaoId: 'frota-1', motoristaId: 'mot-1', dataOperacao: '2026-06-23' } as never, 'u1');
     expect(result.placa).toBe('FRT-0001');
   });
 

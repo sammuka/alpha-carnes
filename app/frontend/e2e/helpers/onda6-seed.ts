@@ -167,7 +167,7 @@ export async function seedLoteParaConferencia(request: APIRequestContext): Promi
   const itemCompra = await api<{ id: string }>(request, cookieHeader, 'POST', '/itens-compra', {
     codigo: `O6IC${suffix}`,
     descricao: 'Boi Onda6',
-    unidadeCompra: 'cabeca',
+    unidadeCompra: 'unidade',
   });
   const itemComercial = await api<{ id: string }>(
     request,
@@ -177,7 +177,7 @@ export async function seedLoteParaConferencia(request: APIRequestContext): Promi
     {
       codigo: `O6TZ${suffix}`,
       descricao: 'Traseiro Onda6',
-      unidadeComercial: 'parte',
+      unidadeComercial: 'kg',
     },
   );
   await api(request, cookieHeader, 'POST', '/regras-desdobramento', {

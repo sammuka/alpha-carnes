@@ -18,6 +18,7 @@ export const itensCompra = pgTable(
   },
   (t) => [
     check('chk_itens_compra_status', sql`${t.status} IN ('ativo','inativo')`),
+    check('chk_itens_compra_unidade', sql`${t.unidadeCompra} IN ('kg','unidade')`),
     uniqueIndex('uq_itens_compra_codigo').on(t.codigo).where(sql`${t.deletedAt} IS NULL`),
     index('idx_itens_compra_status').on(t.status).where(sql`${t.deletedAt} IS NULL`),
   ],

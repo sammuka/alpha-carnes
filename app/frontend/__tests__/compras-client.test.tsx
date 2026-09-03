@@ -114,7 +114,14 @@ beforeEach(() => {
     }
     if (url.includes('/disponibilidade')) return Promise.resolve({ ok: true, json: async () => [] });
     if (url.includes('/fornecedores')) return Promise.resolve({ ok: true, json: async () => ({ data: [] }) });
-    if (url.includes('/itens-compra')) return Promise.resolve({ ok: true, json: async () => ({ data: [] }) });
+    if (url.includes('/itens-compra')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          data: [{ id: 'ic1', codigo: 'BOI', descricao: 'Boi casado', nome: 'Boi casado' }],
+        }),
+      });
+    }
     return Promise.resolve({ ok: true, json: async () => ({}) });
   }) as jest.Mock;
 });
@@ -166,6 +173,17 @@ describe('ComprasClient', () => {
         expect.anything(),
       );
     });
+  });
+
+  it('item de compra da grade e combobox com codigo e descricao', async () => {
+    listaCompras = [];
+    render(<ComprasClient permissoes={['COMPRAS_PROGRAMADAS_LER', 'COMPRAS_PROGRAMADAS_GERENCIAR']} />);
+    await waitFor(() => {
+      expect(screen.getByText('Nenhum pedido de compra para esta operação.')).toBeInTheDocument();
+    });
+    await userEvent.click(screen.getByRole('combobox', { name: 'Item de compra' }));
+    expect(await screen.findByRole('option', { name: 'BOI — Boi casado' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'ic1' })).not.toBeInTheDocument();
   });
 
   it('mostra empty state e ação Novo pedido de compra', async () => {

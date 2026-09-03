@@ -402,12 +402,12 @@ test.describe('Onda 5 — Escopo por representante: clientes e pedidos distintos
     const itemCompra = await backendCall<{ id: string }>(request, adminCookie, 'POST', '/itens-compra', {
       codigo: `O5ESCIC${suffix}`,
       descricao: 'Boi Escopo E2E',
-      unidadeCompra: 'cabeca',
+      unidadeCompra: 'unidade',
     });
     const itemComercial = await backendCall<{ id: string }>(request, adminCookie, 'POST', '/itens-comerciais', {
       codigo: `O5ESCTZ${suffix}`,
       descricao: 'Traseiro Escopo E2E',
-      unidadeComercial: 'parte',
+      unidadeComercial: 'kg',
     });
     await backendCall(request, adminCookie, 'POST', '/regras-desdobramento', {
       itemCompraId: itemCompra.id,

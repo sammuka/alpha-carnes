@@ -10,13 +10,14 @@ import type { Caminhao, CaminhaoDetalhe, Romaneio } from '@/lib/operacao';
 import { ROTULO_STATUS_CARGA, rotuloPrioridade } from '@/lib/expedicao-ui';
 import { mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime } from '@/lib/realtime';
+import { labelCodigoNome } from '@/lib/dominios';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
+import { ComboboxField } from '@/components/ui/combobox-field';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, CardContent } from '@/components/ui/card';
 import { FormField } from '@/components/ui/form-field';
-import { SelectNative } from '@/components/ui/select-native';
 import { StatusPill } from '@/components/ui/status-pill';
 import { BadgeCount } from '@/components/ui/badge-count';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -35,7 +36,19 @@ interface FrotaCaminhaoOpcao {
   placa: string;
   descricao: string | null;
   capacidadeKg: number;
-  status: string;
+  rotaPadraoId: string | null;
+  status: 'ativo' | 'inativo';
+}
+interface MotoristaOpcao {
+  id: string;
+  nome: string;
+  documento: string;
+  caminhaoPadraoId: string | null;
+  status: 'ativo' | 'inativo';
+}
+interface RotaOpcao { id: string; codigo: string; nome: string; status: 'ativo' | 'inativo' }
+interface NovoCaminhaoForm {
+  frotaCaminhaoId: string; placa: string; motoristaId: string; rotaId: string;
 }
 
 const EVENTOS_REFETCH = new Set([
@@ -61,40 +74,47 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
   const [pedidos, setPedidos] = useState<PedidoVenda[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [frotaOpcoes, setFrotaOpcoes] = useState<FrotaCaminhaoOpcao[]>([]);
+  const [motoristas, setMotoristas] = useState<MotoristaOpcao[]>([]);
+  const [rotas, setRotas] = useState<RotaOpcao[]>([]);
   const [busca, setBusca] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [modalPedido, setModalPedido] = useState<PedidoVenda | null>(null);
-  const [novoCaminhao, setNovoCaminhao] = useState({ frotaCaminhaoId: '', placa: '', motorista: '', rota: '' });
+  const [novoCaminhao, setNovoCaminhao] = useState<NovoCaminhaoForm>({
+    frotaCaminhaoId: '', placa: '', motoristaId: '', rotaId: '',
+  });
 
   const carregar = useCallback(async () => {
     setLoading(true);
     setErro(null);
     try {
-      const [resCam, resPed, resCli, resFrota] = await Promise.all([
+      const [resCam, resPed, resCli, resFrota, resMot, resRotas] = await Promise.all([
         fetch(`/api/operacao/expedicao/caminhoes?dataOperacao=${encodeURIComponent(dataOperacao)}`),
         fetch('/api/comercial/pedidos?pageSize=100'),
         fetch('/api/cadastros/clientes?pageSize=100'),
-        fetch('/api/cadastros/frota-caminhoes?pageSize=100&status=ativo'),
+        fetch('/api/cadastros/frota-caminhoes?page=1&pageSize=100&status=ativo'),
+        fetch('/api/cadastros/frota-motoristas?page=1&pageSize=100&status=ativo'),
+        fetch('/api/cadastros/rotas?page=1&pageSize=100&status=ativo'),
       ]);
-      if (!resCam.ok || !resPed.ok) {
-        setErro('Falha ao carregar dados');
-        return;
+      for (const res of [resCam, resPed, resCli, resFrota, resMot, resRotas]) {
+        if (!res.ok) {
+          setErro(await mensagemDeErro(res, 'Falha ao carregar dados'));
+          return;
+        }
       }
       const listaCam = await lerJson<Caminhao[]>(resCam);
       const pagPed = await lerJson<{ data: PedidoVenda[] }>(resPed);
+      const pagCli = await lerJson<{ data: Cliente[] }>(resCli);
+      const pagFrota = await lerJson<{ data: FrotaCaminhaoOpcao[] }>(resFrota);
+      const pagMot = await lerJson<{ data: MotoristaOpcao[] }>(resMot);
+      const pagRotas = await lerJson<{ data: RotaOpcao[] }>(resRotas);
       setCaminhoes(listaCam);
       setPedidos(pagPed.data.filter((p) => p.status !== 'cancelado'));
-
-      if (resCli.ok) {
-        const pagCli = await lerJson<{ data: Cliente[] }>(resCli);
-        setClientes(pagCli.data);
-      }
-      if (resFrota.ok) {
-        const pagFrota = await lerJson<{ data: FrotaCaminhaoOpcao[] }>(resFrota);
-        setFrotaOpcoes(pagFrota.data);
-      }
+      setClientes(pagCli.data);
+      setFrotaOpcoes(pagFrota.data);
+      setMotoristas(pagMot.data);
+      setRotas(pagRotas.data);
 
       const detalhesCam = await Promise.all(
         listaCam.map(async (c) => {
@@ -208,27 +228,28 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
 
   async function criarCaminhao(e: React.FormEvent) {
     e.preventDefault();
-    if (!novoCaminhao.motorista) return;
-    if (!novoCaminhao.frotaCaminhaoId && !novoCaminhao.placa) return;
+    if (!novoCaminhao.motoristaId) return;
+    if (!novoCaminhao.frotaCaminhaoId && !novoCaminhao.placa.trim()) return;
     setErro(null);
     setSubmitting(true);
     try {
+      const payload = {
+        frotaCaminhaoId: novoCaminhao.frotaCaminhaoId || null,
+        placa: novoCaminhao.frotaCaminhaoId ? undefined : novoCaminhao.placa.trim(),
+        motoristaId: novoCaminhao.motoristaId,
+        rotaId: novoCaminhao.rotaId || null,
+        dataOperacao,
+      };
       const res = await fetch('/api/operacao/expedicao/caminhoes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          frotaCaminhaoId: novoCaminhao.frotaCaminhaoId || undefined,
-          placa: novoCaminhao.frotaCaminhaoId ? undefined : novoCaminhao.placa,
-          motorista: novoCaminhao.motorista,
-          rota: novoCaminhao.rota || undefined,
-          dataOperacao,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         setErro(await mensagemDeErro(res, 'Falha ao criar caminhão'));
         return;
       }
-      setNovoCaminhao({ frotaCaminhaoId: '', placa: '', motorista: '', rota: '' });
+      setNovoCaminhao({ frotaCaminhaoId: '', placa: '', motoristaId: '', rotaId: '' });
       await carregar();
     } catch {
       setErro('Erro de conexão');
@@ -283,29 +304,66 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
         <Card>
           <CardContent className="flex flex-wrap items-end gap-2.5">
             <FormField label="Caminhão da frota" htmlFor="frota-caminhao" className="w-52">
-              <SelectNative
+              <ComboboxField
                 id="frota-caminhao"
+                items={[
+                  { id: '', label: 'Avulso (placa manual)' },
+                  ...frotaOpcoes.map((f) => ({
+                    id: f.id,
+                    label: f.placa,
+                    sublabel: f.descricao ?? `${f.capacidadeKg.toLocaleString('pt-BR')} kg`,
+                  })),
+                ]}
                 value={novoCaminhao.frotaCaminhaoId}
-                onChange={(e) => setNovoCaminhao((s) => ({ ...s, frotaCaminhaoId: e.target.value }))}
-              >
-                <option value="">Avulso (placa manual)</option>
-                {frotaOpcoes.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.placa} · {f.capacidadeKg.toLocaleString('pt-BR')} kg
-                  </option>
-                ))}
-              </SelectNative>
+                onChange={(frotaId) => {
+                  const candidatos = motoristas.filter((m) => m.caminhaoPadraoId === frotaId);
+                  const frotaSelecionada = frotaOpcoes.find((f) => f.id === frotaId);
+                  setNovoCaminhao((atual) => ({
+                    ...atual,
+                    frotaCaminhaoId: frotaId,
+                    motoristaId: candidatos.length === 1 ? candidatos[0]!.id : '',
+                    rotaId: frotaSelecionada?.rotaPadraoId ?? '',
+                  }));
+                }}
+                placeholder="Avulso (placa manual)"
+                searchPlaceholder="Buscar caminhão..."
+                emptyText="Nenhum caminhão encontrado."
+              />
             </FormField>
             {!novoCaminhao.frotaCaminhaoId && (
               <FormField label="Placa" htmlFor="placa">
                 <Input id="placa" value={novoCaminhao.placa} onChange={(e) => setNovoCaminhao((s) => ({ ...s, placa: e.target.value }))} />
               </FormField>
             )}
-            <FormField label="Motorista" htmlFor="motorista">
-              <Input id="motorista" value={novoCaminhao.motorista} onChange={(e) => setNovoCaminhao((s) => ({ ...s, motorista: e.target.value }))} />
+            <FormField label="Motorista" htmlFor="motorista" className="w-52">
+              <ComboboxField
+                id="motorista"
+                items={motoristas.map((m) => ({
+                  id: m.id,
+                  label: m.nome,
+                  sublabel: m.documento,
+                }))}
+                value={novoCaminhao.motoristaId}
+                onChange={(motoristaId) => setNovoCaminhao((s) => ({ ...s, motoristaId }))}
+                placeholder="Selecione"
+                searchPlaceholder="Buscar motorista..."
+                emptyText="Nenhum motorista encontrado."
+              />
             </FormField>
-            <FormField label="Rota" htmlFor="rota">
-              <Input id="rota" value={novoCaminhao.rota} onChange={(e) => setNovoCaminhao((s) => ({ ...s, rota: e.target.value }))} />
+            <FormField label="Rota" htmlFor="rota" className="w-52">
+              <ComboboxField
+                id="rota"
+                items={rotas.map((rota) => ({
+                  id: rota.id,
+                  label: labelCodigoNome(rota.codigo, rota.nome),
+                }))}
+                value={novoCaminhao.rotaId}
+                onChange={(rotaId) => setNovoCaminhao((s) => ({ ...s, rotaId }))}
+                placeholder="—"
+                searchPlaceholder="Buscar rota..."
+                emptyText="Nenhuma rota encontrada."
+                clearable
+              />
             </FormField>
             <Button type="button" disabled={submitting} onClick={(e) => void criarCaminhao(e)}>
               <Plus />

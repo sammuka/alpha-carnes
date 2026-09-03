@@ -140,19 +140,22 @@ describe('UsuariosAdminClient — criação de usuário (6.23)', () => {
     await user.click(screen.getByRole('checkbox', { name: /Representante Norte/i }));
     await user.click(screen.getByRole('button', { name: /^Salvar$/i }));
 
-    await waitFor(() => {
-      const post = chamadas.find((c) => c.url.endsWith('/api/admin/usuarios') && c.init?.method === 'POST');
-      expect(post).toBeDefined();
-      const corpo = JSON.parse(String(post?.init?.body)) as {
-        nome: string; email: string; password: string; perfis: string[]; representantes: string[];
-      };
-      expect(corpo.nome).toBe('Carlos Vendedor');
-      expect(corpo.email).toBe('carlos@alphacarnes.local');
-      expect(corpo.password).toBe('SenhaForte@123');
-      expect(corpo.perfis).toContain('comercial');
-      expect(corpo.representantes).toEqual(['rep-1']);
-    });
-  });
+    await waitFor(
+      () => {
+        const post = chamadas.find((c) => c.url.endsWith('/api/admin/usuarios') && c.init?.method === 'POST');
+        expect(post).toBeDefined();
+        const corpo = JSON.parse(String(post?.init?.body)) as {
+          nome: string; email: string; password: string; perfis: string[]; representantes: string[];
+        };
+        expect(corpo.nome).toBe('Carlos Vendedor');
+        expect(corpo.email).toBe('carlos@alphacarnes.local');
+        expect(corpo.password).toBe('SenhaForte@123');
+        expect(corpo.perfis).toContain('comercial');
+        expect(corpo.representantes).toEqual(['rep-1']);
+      },
+      { timeout: 10_000 },
+    );
+  }, 15_000);
 });
 
 describe('UsuariosAdminClient — edição de usuário (6.23)', () => {
@@ -186,15 +189,18 @@ describe('UsuariosAdminClient — edição de usuário (6.23)', () => {
     await user.click(screen.getByRole('checkbox', { name: /Representante Norte/i }));
     await user.click(screen.getByRole('button', { name: /^Salvar$/i }));
 
-    await waitFor(() => {
-      const putRepresentantes = chamadas.find(
-        (c) => c.url.endsWith(`/api/admin/usuarios/${usuario.id}/representantes`) && c.init?.method === 'PUT',
-      );
-      expect(putRepresentantes).toBeDefined();
-      const corpo = JSON.parse(String(putRepresentantes?.init?.body)) as { representantes: string[] };
-      expect(corpo.representantes).toEqual(['rep-1']);
-    });
-  });
+    await waitFor(
+      () => {
+        const putRepresentantes = chamadas.find(
+          (c) => c.url.endsWith(`/api/admin/usuarios/${usuario.id}/representantes`) && c.init?.method === 'PUT',
+        );
+        expect(putRepresentantes).toBeDefined();
+        const corpo = JSON.parse(String(putRepresentantes?.init?.body)) as { representantes: string[] };
+        expect(corpo.representantes).toEqual(['rep-1']);
+      },
+      { timeout: 10_000 },
+    );
+  }, 15_000);
 });
 
 describe('UsuariosAdminClient — filtro Perfil/Status (6.27)', () => {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fkOpcionalSchema } from '../../../../common/dto/dominios.dto';
 
 export const DIAS_SEMANA = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'] as const;
 
@@ -11,9 +12,9 @@ export const createRotaSchema = z.object({
   codigo: z.string().trim().min(1).max(50),
   nome: z.string().trim().min(1).max(200),
   regiao: z.string().trim().max(100).optional(),
-  representantePadrao: z.string().trim().max(200).optional(),
-  caminhaoPadrao: z.string().trim().max(100).optional(),
-  motoristaPadrao: z.string().trim().max(200).optional(),
+  representantePadraoId: fkOpcionalSchema,
+  caminhaoPadraoId: fkOpcionalSchema,
+  motoristaPadraoId: fkOpcionalSchema,
   observacoes: z.string().trim().optional(),
   paradas: z.array(paradaSchema).max(100).default([]),
   diasAtendimento: z.array(z.enum(DIAS_SEMANA)).max(7).default([]),

@@ -39,7 +39,7 @@ describe('conferencia-tripla', () => {
     const [caixa] = await db.insert(schema.itensComerciais).values({
       codigo: `CX-${Date.now()}`,
       descricao: 'Caixa de Rabo',
-      unidadeComercial: 'caixa',
+      unidadeComercial: 'kg',
     }).returning();
 
     const criar = await request(app.getHttpServer())
@@ -210,7 +210,7 @@ describe('conferencia-tripla', () => {
     const [extra] = await db.insert(schema.itensComerciais).values({
       codigo: `EXT-${Date.now()}`,
       descricao: 'Não previsto',
-      unidadeComercial: 'parte',
+      unidadeComercial: 'kg',
     }).returning();
     await db.insert(schema.pecas).values({
       compraProgramadaId: compraId,

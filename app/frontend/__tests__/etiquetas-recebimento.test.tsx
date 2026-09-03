@@ -75,7 +75,14 @@ describe('EtiquetasRecebimentoClient', () => {
         return {
           ok: true,
           json: async () => ({
-            data: [{ id: base.recebimentoId, dataOperacao: '2026-07-31', codigoLote: 'R1ABCDEF' }],
+            data: [{
+              id: base.recebimentoId,
+              dataOperacao: '2026-07-31',
+              codigoLote: 'R1ABCDEF',
+              fornecedorNome: 'Boi Forte',
+              status: 'conferido_sem_divergencia',
+              compraProgramadaId: 'c1',
+            }],
             page: 1,
             pageSize: 30,
             total: 1,
@@ -122,7 +129,14 @@ describe('EtiquetasRecebimentoClient', () => {
         return {
           ok: true,
           json: async () => ({
-            data: [{ id: base.recebimentoId, dataOperacao: '2026-07-31', codigoLote: 'R1ABCDEF' }],
+            data: [{
+              id: base.recebimentoId,
+              dataOperacao: '2026-07-31',
+              codigoLote: 'R1ABCDEF',
+              fornecedorNome: 'Boi Forte',
+              status: 'conferido_sem_divergencia',
+              compraProgramadaId: 'c1',
+            }],
             page: 1,
             pageSize: 30,
             total: 1,

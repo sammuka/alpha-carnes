@@ -46,7 +46,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev -- --port 3100',
+    command:
+      process.arch === 'ia32'
+        ? 'npx next dev --webpack --port 3100'
+        : 'npx next dev --port 3100',
     url: frontendUrl,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

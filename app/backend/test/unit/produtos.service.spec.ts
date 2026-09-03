@@ -62,7 +62,7 @@ describe('ProdutosService — sincronização legado', () => {
   const payloadVenda = {
     codigo: 'DIANT',
     nome: 'Dianteiro',
-    unidadePedido: 'peca',
+    unidadePedido: 'unidade',
     tipoOperacional: 'peca_inteira_pesavel' as const,
     unidadePreco: 'kg' as const,
     exigePeso: true,
@@ -79,7 +79,7 @@ describe('ProdutosService — sincronização legado', () => {
   const payloadCompra = {
     codigo: 'BOI',
     nome: 'Boi inteiro',
-    unidadePedido: 'cabeca',
+    unidadePedido: 'unidade',
     tipoOperacional: 'compra_base' as const,
     unidadePreco: 'unidade' as const,
     exigePeso: false,
@@ -110,7 +110,7 @@ describe('ProdutosService — sincronização legado', () => {
         valores: expect.objectContaining({
           codigo: 'DIANT',
           descricao: 'Dianteiro',
-          unidadeComercial: 'peca',
+          unidadeComercial: 'unidade',
           permiteCorte: false,
         }),
       },
@@ -134,7 +134,7 @@ describe('ProdutosService — sincronização legado', () => {
         valores: expect.objectContaining({
           codigo: 'BOI',
           descricao: 'Boi inteiro',
-          unidadeCompra: 'cabeca',
+          unidadeCompra: 'unidade',
         }),
       },
     ]);

@@ -6,6 +6,7 @@ import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { statusCaminhaoVariant, statusNfseVariant } from '@/lib/status-ui';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
+import { ComboboxField } from '@/components/ui/combobox-field';
 import { Input } from '@/components/ui/input';
 import { StatusPill } from '@/components/ui/status-pill';
 import { PageHeader } from '@/components/ui/page-header';
@@ -215,7 +216,7 @@ export function FaturamentoClient({
   const [submittingNota, setSubmittingNota] = useState<string | null>(null);
   const [motivosCancelamento, setMotivosCancelamento] = useState<Record<string, string>>({});
   const [caminhoesDia, setCaminhoesDia] = useState<Caminhao[]>([]);
-  const [carregandoCaminhoes, setCarregandoCaminhoes] = useState(mostrarListaCaminhoes);
+  const [carregandoCaminhoes, setCarregandoCaminhoes] = useState(true);
   const [liberando, setLiberando] = useState(false);
   const [ambiente, setAmbiente] = useState<AmbienteFiscal | null>(null);
 
@@ -230,25 +231,22 @@ export function FaturamentoClient({
     ['fechado', 'liberado_faturamento', 'faturado'].includes(c.statusCaminhao),
   );
 
-  const exibirFormManual =
-    !mostrarListaCaminhoes || (!carregandoCaminhoes && caminhoesElegiveis.length === 0);
-
   const carregarCaminhoesDia = useCallback(async () => {
-    if (!mostrarListaCaminhoes) return;
     setCarregandoCaminhoes(true);
     try {
       const res = await fetch(`/api/operacao/expedicao/caminhoes?dataOperacao=${encodeURIComponent(hoje)}`);
-      if (res.ok) {
-        setCaminhoesDia((await res.json()) as Caminhao[]);
-      } else {
+      if (!res.ok) {
+        setErro(await mensagemDeErro(res, 'Falha ao carregar caminhões'));
         setCaminhoesDia([]);
+        return;
       }
+      setCaminhoesDia((await res.json()) as Caminhao[]);
     } catch {
       setCaminhoesDia([]);
     } finally {
       setCarregandoCaminhoes(false);
     }
-  }, [hoje, mostrarListaCaminhoes]);
+  }, [hoje]);
 
   useEffect(() => {
     void carregarCaminhoesDia();
@@ -276,15 +274,6 @@ export function FaturamentoClient({
       setLoading(false);
     }
   }, [caminhaoAtivo]);
-
-  function consolidar(e: React.FormEvent) {
-    e.preventDefault();
-    const id = caminhaoId.trim();
-    if (!id) return;
-    setCaminhaoAtivo(id);
-    setConsolidacao(null);
-    void carregar(id);
-  }
 
   // Realtime: re-carrega ao receber eventos de NFS-e
   useEffect(() => {
@@ -448,32 +437,44 @@ export function FaturamentoClient({
         </div>
       )}
 
+      <FormField label="Carga" htmlFor="caminhao-carga" className="w-72">
+        <ComboboxField
+          id="caminhao-carga"
+          items={caminhoesDia.map((c) => ({
+            id: c.id,
+            label: c.placa,
+            sublabel: `${c.motorista} — ${c.statusCaminhao}`,
+          }))}
+          value={caminhaoId}
+          onChange={(id) => {
+            if (id) selecionarCaminhao(id);
+            else {
+              setCaminhaoId('');
+              setCaminhaoAtivo(null);
+              setConsolidacao(null);
+            }
+          }}
+          placeholder="Selecione uma carga"
+          searchPlaceholder="Buscar placa..."
+          emptyText="Nenhuma carga encontrada."
+        />
+      </FormField>
+
       {mostrarListaCaminhoes && !carregandoCaminhoes && caminhoesElegiveis.length === 0 && (
         <div data-testid="sem-caminhoes-dia">
           <EmptyState
             icon={<Truck />}
             title="Nenhum caminhão elegível para faturamento hoje"
-            description="Caminhões aparecem aqui após fechamento da expedição. Use o ID abaixo para consolidar manualmente, se necessário."
+            description="Caminhões aparecem aqui após fechamento da expedição."
           />
         </div>
       )}
 
-      {/* Formulário de seleção de caminhão */}
-      {exibirFormManual && (
-        <form onSubmit={consolidar} className="flex flex-wrap items-end gap-3">
-          <FormField label="ID do Caminhão" htmlFor="caminhao-id" className="w-64">
-            <Input
-              id="caminhao-id"
-              type="text"
-              value={caminhaoId}
-              onChange={(e) => setCaminhaoId(e.target.value)}
-              placeholder="UUID do caminhão"
-            />
-          </FormField>
-          <Button type="submit" disabled={loading || !caminhaoId.trim()}>
-            {loading ? 'Consolidando…' : 'Consolidar'}
-          </Button>
-        </form>
+      {!caminhaoAtivo && !loading && (
+        <EmptyState
+          icon={<Truck />}
+          title="Selecione uma carga abaixo para consultar a consolidação."
+        />
       )}
 
       {mostrarListaCaminhoes && caminhaoAtivo && consolidacao?.caminhao.statusCaminhao === 'fechado' &&

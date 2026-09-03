@@ -12,6 +12,7 @@ const pedido = {
   clienteId: 'cliente-1',
   operacaoId: 'operacao-1',
   dataEntrega: null,
+  rotaId: 'rota-1',
   rotaPrevista: 'Rota Oeste',
   prioridade: 10,
   status: 'rascunho',
@@ -67,6 +68,8 @@ const clientes = [
     razaoSocial: 'Açougue Central Ltda.',
     nomeFantasia: 'Açougue Central',
     documentoFiscal: '12345678000190',
+    representanteId: 'representante-1',
+    rotaId: 'rota-1',
   },
   {
     id: 'cliente-2',
@@ -74,7 +77,13 @@ const clientes = [
     razaoSocial: 'Mercado Sem Rota Ltda.',
     nomeFantasia: 'Mercado Sem Rota',
     documentoFiscal: '12345678000191',
+    representanteId: null,
+    rotaId: null,
   },
+];
+
+const rotas = [
+  { id: 'rota-1', codigo: 'RO-OESTE', nome: 'Rota Oeste', status: 'ativo' },
 ];
 
 const produtos = [
@@ -82,12 +91,14 @@ const produtos = [
     id: item.itemComercialId,
     codigo: item.itemComercial.codigo,
     descricao: item.itemComercial.nome,
+    status: 'ativo',
     unidadeComercial: 'kg',
   })),
   {
     id: 'item-comercial-novo',
     codigo: 'NOVO',
     descricao: 'Produto novo',
+    status: 'ativo',
     unidadeComercial: 'kg',
   },
 ];
@@ -117,11 +128,14 @@ function instalarFetch() {
     if (url === '/api/comercial/pedidos?pageSize=100') {
       return json({ data: [pedido], page: 1, pageSize: 100, total: 1 });
     }
-    if (url === '/api/cadastros/clientes?pageSize=100') {
+    if (url.startsWith('/api/cadastros/clientes?')) {
       return json({ data: clientes, page: 1, pageSize: 100, total: 2 });
     }
-    if (url === '/api/cadastros/itens-comerciais?pageSize=100') {
+    if (url.startsWith('/api/cadastros/itens-comerciais?')) {
       return json({ data: produtos, page: 1, pageSize: 100, total: produtos.length });
+    }
+    if (url.startsWith('/api/cadastros/rotas?')) {
+      return json({ data: rotas, page: 1, pageSize: 100, total: 1 });
     }
     if (url === '/api/operacoes?limite=100') {
       return json({
@@ -133,7 +147,11 @@ function instalarFetch() {
     }
     if (url === '/api/comercial/pedidos/pedido-1') return json(detalhe);
     if (url === '/api/cadastros/clientes/cliente-1') {
-      return json({ ...clientes[0], representanteNome: 'Helena Prado', rotaNome: 'Rota Oeste' });
+      return json({
+        ...clientes[0],
+        representanteNome: 'Helena Prado',
+        rotaNome: 'Rota Oeste',
+      });
     }
     if (url === '/api/cadastros/clientes/cliente-2') {
       return json({ ...clientes[1], representanteNome: null, rotaNome: null });
@@ -234,12 +252,12 @@ it('selecionar cliente herda representante e rota do cadastro no editor de pedid
   await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
   await waitFor(() => expect(screen.getByLabelText('Representante')).toHaveValue('Helena Prado'));
   expect(screen.getByLabelText('Representante')).toHaveAttribute('readonly');
-  expect(screen.getByLabelText('Rota')).toHaveValue('Rota Oeste');
+  expect(screen.getByRole('combobox', { name: 'Rota' })).toHaveTextContent('RO-OESTE — Rota Oeste');
+  expect(screen.getByRole('combobox', { name: 'Rota' })).not.toHaveTextContent('rota-1');
 
   await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
   await userEvent.click(await screen.findByRole('option', { name: /Mercado Sem Rota/i }));
-  await waitFor(() => expect(screen.getByLabelText('Rota')).toHaveValue(''));
-  expect(screen.getByLabelText('Rota')).toHaveAttribute('placeholder', '—');
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Rota' })).toHaveTextContent('—'));
 });
 
 it('novo pedido usa operacaoId e dataOperacao da operação sem compraProgramadaId', async () => {
@@ -249,7 +267,8 @@ it('novo pedido usa operacaoId e dataOperacao da operação sem compraProgramada
   await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
   await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
   fireEvent.change(screen.getByLabelText('Operação'), { target: { value: operacaoDaApi.id } });
-  fireEvent.change(screen.getByLabelText('Produto'), { target: { value: 'item-comercial-novo' } });
+  await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
+  await userEvent.click(await screen.findByRole('option', { name: 'NOVO — Produto novo' }));
   fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
   await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
   await userEvent.click(screen.getByRole('button', { name: 'Salvar Rascunho' }));
@@ -262,8 +281,10 @@ it('novo pedido usa operacaoId e dataOperacao da operação sem compraProgramada
     expect(payload).toMatchObject({
       operacaoId: operacaoDaApi.id,
       dataOperacao: operacaoDaApi.data,
+      rotaId: 'rota-1',
     });
     expect(payload).not.toHaveProperty('compraProgramadaId');
+    expect(payload).not.toHaveProperty('rotaPrevista');
     expect(payload.dataOperacao).not.toBeUndefined();
   });
 });
@@ -290,7 +311,8 @@ it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente par
   await userEvent.type(await screen.findByLabelText(/^Motivo/), 'Complemento solicitado pelo cliente');
   await userEvent.click(screen.getByRole('button', { name: 'Registrar adendo' }));
 
-  fireEvent.change(screen.getByLabelText('Produto'), { target: { value: 'item-comercial-novo' } });
+  await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
+  await userEvent.click(await screen.findByRole('option', { name: 'NOVO — Produto novo' }));
   fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
   await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
 

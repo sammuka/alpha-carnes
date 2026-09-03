@@ -30,11 +30,11 @@ export async function seedComercialBase(
     .returning();
   const [itemCompra] = await db
     .insert(schema.itensCompra)
-    .values({ codigo: uid('ICOMP'), descricao: 'Boi', unidadeCompra: 'cabeca' })
+    .values({ codigo: uid('ICOMP'), descricao: 'Boi', unidadeCompra: 'unidade' })
     .returning();
   const [itemComercial] = await db
     .insert(schema.itensComerciais)
-    .values({ codigo: uid('ICOM'), descricao: 'Dianteiro', unidadeComercial: 'parte' })
+    .values({ codigo: uid('ICOM'), descricao: 'Dianteiro', unidadeComercial: 'kg' })
     .returning();
   const [cliente] = await db
     .insert(schema.clientes)

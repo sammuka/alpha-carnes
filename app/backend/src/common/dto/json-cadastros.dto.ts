@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ufBrasilSchema } from './dominios.dto';
 
 /** Endereço e dados fiscais do cliente (JSONB). */
 export const dadosFiscaisJsonSchema = z
@@ -8,7 +9,7 @@ export const dadosFiscaisJsonSchema = z
     complemento: z.string().trim().max(100).optional(),
     bairro: z.string().trim().max(100).optional(),
     cidade: z.string().trim().max(100).optional(),
-    uf: z.string().trim().max(2).optional(),
+    uf: ufBrasilSchema.optional(),
     cep: z.string().trim().max(10).optional(),
     codigoIbge: z.string().trim().max(10).optional(),
     // IE: até 14 dígitos (leiaute NFe/SEFAZ) + pontuação de exibição por UF (ex.: "123.456.789.000").
@@ -67,10 +68,34 @@ export const contatosFornecedorJsonSchema = z
   .partial()
   .optional();
 
+/** Input vazio de <input>/<select> não é ausência para o Zod — trata como campo omitido. */
+function ausenteSeVazio(valor: unknown): unknown {
+  return valor === '' || valor === null ? undefined : valor;
+}
+
+/** Aceita número JSON ou string vinda do formulário de edição; `""` vira omitido, não zero. */
+function numeroOpcional(valor: unknown): unknown {
+  const limpo = ausenteSeVazio(valor);
+  if (limpo === undefined) return undefined;
+  if (typeof limpo === 'number') return limpo;
+  if (typeof limpo === 'string') {
+    const n = Number(limpo);
+    return Number.isFinite(n) ? n : limpo;
+  }
+  return limpo;
+}
+
 /** Parâmetros operacionais do fornecedor (JSONB). */
 export const parametrosOperacionaisJsonSchema = z
   .object({
     romaneioAntecipado: z.boolean().optional(),
+    horarioLimiteRecebimento: z.preprocess(
+      ausenteSeVazio,
+      z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    ),
+    capacidadeMaximaKg: z.preprocess(numeroOpcional, z.number().int().nonnegative().optional()),
+    toleranciaDivergenciaPercentual: z.preprocess(numeroOpcional, z.number().min(0).max(100).optional()),
+    notaQualidade: z.preprocess(ausenteSeVazio, z.enum(['A', 'B', 'C']).optional()),
     produtosFornecidos: z.array(z.string()).optional(),
     prazoEntrega: z.number().int().nonnegative().optional(),
   })

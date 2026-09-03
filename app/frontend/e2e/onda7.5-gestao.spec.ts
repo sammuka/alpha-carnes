@@ -216,12 +216,12 @@ async function prepararDados(api: APIRequestContext, adminCookie: string): Promi
   const itemCompra = await backend<{ id: string }>(api, adminCookie, 'POST', '/itens-compra', {
     codigo: `O75IC${suffix}`,
     descricao: 'Boi Onda75',
-    unidadeCompra: 'cabeca',
+    unidadeCompra: 'unidade',
   });
   const itemComercial = await backend<{ id: string }>(api, adminCookie, 'POST', '/itens-comerciais', {
     codigo: `O75TZ${suffix}`,
     descricao: 'Traseiro Onda75',
-    unidadeComercial: 'parte',
+    unidadeComercial: 'kg',
   });
   const cliente = await backend<{ id: string }>(api, adminCookie, 'POST', '/clientes', {
     codigo: `O75CL${suffix}`,
