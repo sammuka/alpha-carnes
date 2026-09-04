@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { Pool } from 'pg';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { hash } from '@node-rs/argon2';
@@ -386,6 +386,28 @@ export async function seed() {
         .onConflictDoNothing();
     }
     console.log(`✅ ${PERMISSOES_FIXAS.length} permissões inseridas/verificadas`);
+
+    await db.execute(sql`
+      DELETE FROM perfis_permissoes
+      WHERE permissao_id IN (
+        SELECT id FROM permissoes
+        WHERE codigo IN (
+          'ITENS_COMERCIAIS_LER',
+          'ITENS_COMERCIAIS_GERENCIAR',
+          'ITENS_COMPRA_LER',
+          'ITENS_COMPRA_GERENCIAR'
+        )
+      )
+    `);
+    await db.execute(sql`
+      DELETE FROM permissoes
+      WHERE codigo IN (
+        'ITENS_COMERCIAIS_LER',
+        'ITENS_COMERCIAIS_GERENCIAR',
+        'ITENS_COMPRA_LER',
+        'ITENS_COMPRA_GERENCIAR'
+      )
+    `);
 
     // 3. Inserir mapa perfis_permissoes (resolve o id da permissão por código no banco)
     const permissoesDb = await db.select().from(schema.permissoes);
