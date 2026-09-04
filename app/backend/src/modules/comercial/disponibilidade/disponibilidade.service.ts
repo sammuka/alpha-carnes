@@ -99,7 +99,7 @@ export class DisponibilidadeService {
       RETURNING id, item_comercial_id, quantidade_total_gerada
     `);
 
-    const linhas = inseridas.rows.map((r) => ({
+    const linhas = inseridas.rows.map((r: { id: string; item_comercial_id: string; quantidade_total_gerada: string }) => ({
       id: r.id,
       itemComercialId: r.item_comercial_id,
       quantidadeTotalGerada: r.quantidade_total_gerada,
@@ -230,7 +230,7 @@ export class DisponibilidadeService {
       WHERE (SELECT reservado_item FROM total) > (SELECT recebido FROM total_recebido)
       ORDER BY reservas_ativas.pedido_id
     `);
-    return linhas.rows.map((r) => ({
+    return linhas.rows.map((r: { pedido_id: string; item_comercial_id: string; quantidade_reservada: string; quantidade_recebida: string }) => ({
       pedidoId: r.pedido_id,
       itemComercialId: r.item_comercial_id,
       quantidadeReservada: r.quantidade_reservada,
@@ -287,7 +287,7 @@ export class DisponibilidadeService {
     ORDER BY ic.codigo
   `);
 
-    return linhas.rows.map((l) => {
+    return linhas.rows.map((l: { item_comercial_id: string; codigo: string; descricao: string; gerada_atual: string; gerada_projetada: string; reservada: string; saldo_atual: string }) => {
       const projetada = formatarQtd(l.gerada_projetada);
       const atual = formatarQtd(l.gerada_atual);
       const reservada = formatarQtd(l.reservada);
