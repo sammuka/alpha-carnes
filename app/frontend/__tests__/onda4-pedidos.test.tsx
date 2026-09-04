@@ -268,6 +268,47 @@ it('novo pedido usa operacaoId e dataOperacao da operação sem compraProgramada
   });
 });
 
+it('novo pedido remove item local e devolve o produto ao seletor sem chamar a API', async () => {
+  render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Novo pedido' }));
+  await screen.findByRole('option', { name: `${operacaoDaApi.rotulo} — ${operacaoDaApi.data}` });
+  await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
+  await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
+  fireEvent.change(screen.getByLabelText('Operação'), { target: { value: operacaoDaApi.id } });
+
+  fireEvent.change(screen.getByLabelText('Produto'), { target: { value: 'item-comercial-novo' } });
+  fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
+  await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
+
+  fireEvent.change(screen.getByLabelText('Produto'), { target: { value: 'item-comercial-estavel' } });
+  fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '3' } });
+  await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
+
+  const removido = screen.getByTestId('linha-nova-item-comercial-novo');
+  expect(within(removido).getByText('Produto novo')).toBeInTheDocument();
+  expect(within(screen.getByLabelText('Produto')).queryByRole('option', { name: 'Produto novo' }))
+    .not.toBeInTheDocument();
+
+  await userEvent.click(within(removido).getByRole('button', { name: 'Remover Produto novo' }));
+
+  expect(screen.queryByTestId('linha-nova-item-comercial-novo')).not.toBeInTheDocument();
+  expect(screen.getByTestId('linha-nova-item-comercial-estavel')).toBeInTheDocument();
+  expect(within(screen.getByLabelText('Produto')).getByRole('option', { name: 'Produto novo' }))
+    .toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Salvar Rascunho' }));
+
+  await waitFor(() => {
+    const chamada = (global.fetch as jest.Mock).mock.calls.find(([url, init]) =>
+      url === '/api/comercial/pedidos' && init?.method === 'POST');
+    expect(chamada).toBeDefined();
+    const payload = JSON.parse(String(chamada?.[1]?.body));
+    expect(payload.itens).toEqual([{ itemComercialId: 'item-comercial-estavel', quantidadePedida: 3 }]);
+  });
+  expect((global.fetch as jest.Mock).mock.calls.some(([url, init]) =>
+    String(url).includes('/itens/') && init?.method === 'DELETE')).toBe(false);
+});
+
 it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente para os endpoints reais', async () => {
   render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
   await userEvent.click(await screen.findByRole('button', { name: /Abrir pedido pedido-1/ }));

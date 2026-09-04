@@ -337,6 +337,10 @@ export function PedidoEditor({
     }
   }
 
+  function removerItemNovo(itemComercialId: string) {
+    setItensNovos((atuais) => atuais.filter((entry) => entry.itemComercialId !== itemComercialId));
+  }
+
   function payloadNovo(salvarComoRascunho: boolean): CriarPedidoDto | null {
     if (!clienteId || !operacaoSelecionada || itensNovos.length === 0) {
       setErro('Cliente, operação e ao menos um produto são obrigatórios.');
@@ -619,7 +623,7 @@ export function PedidoEditor({
                             aria-label={`Remover ${nome}`}
                             onClick={() => void removerItem(item)}
                           >
-                            <Trash2 />
+                            <Trash2 className="text-destructive" />
                           </Button>
                         </div>
                       </TableCell>
@@ -634,12 +638,33 @@ export function PedidoEditor({
         {itensNovos.length > 0 && (
           <CardContent className="pt-0">
             <ul className="divide-y divide-border rounded-lg border border-border">
-              {itensNovos.map((item) => (
-                <li key={item.itemComercialId} className="flex items-center justify-between px-3 py-2 text-sm">
-                  <span>{nomeProduto(produtos.find((produto) => produto.id === item.itemComercialId))}</span>
-                  <span className="font-data">{item.quantidadePedida}</span>
-                </li>
-              ))}
+              {itensNovos.map((item) => {
+                const nome = nomeProduto(produtos.find((produto) => produto.id === item.itemComercialId));
+                return (
+                  <li
+                    key={item.itemComercialId}
+                    data-testid={`linha-nova-${item.itemComercialId}`}
+                    className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                  >
+                    <span>{nome}</span>
+                    <div className="flex items-center gap-1">
+                      <span className="font-data">{item.quantidadePedida}</span>
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="iconSm"
+                          disabled={!podeGerenciar || pendente}
+                          aria-label={`Remover ${nome}`}
+                          onClick={() => removerItemNovo(item.itemComercialId)}
+                        >
+                          <Trash2 className="text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </CardContent>
         )}
