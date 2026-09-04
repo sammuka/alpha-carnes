@@ -1,12 +1,41 @@
 import '@testing-library/jest-dom';
-import userEvent from '@testing-library/user-event';
 
-// CI Linux + jsdom: user-event 14 trava cliques em Radix Popover/Combobox quando
-// pointerEventsCheck está ativo ou pointer capture do jsdom está quebrado.
-const originalUserEventSetup = userEvent.setup.bind(userEvent);
-(userEvent as typeof userEvent & { setup: typeof userEvent.setup }).setup = (options) =>
-  originalUserEventSetup({ pointerEventsCheck: 0, ...options });
+// CI Linux + jsdom: user-event 14 trava cliques em Radix Popover/Combobox.
+// Só aplicar em jsdom — importar user-event em edge/node quebra Clipboard (navigator).
+if (typeof window !== 'undefined') {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ue = require('@testing-library/user-event').default as typeof import('@testing-library/user-event').default;
+  const patched = ue as Record<string, unknown>;
+  const pointerFix = { pointerEventsCheck: 0 as const };
 
+  const withOptsAt =
+    (original: (...args: never[]) => unknown, index: number) =>
+    (...args: unknown[]) => {
+      const next = [...args];
+      if (typeof next[index] === 'object' && next[index] !== null) {
+        next[index] = { ...pointerFix, ...(next[index] as object) };
+      } else {
+        next.splice(index, 0, pointerFix);
+      }
+      return original(...(next as never[]));
+    };
+
+  patched.setup = ((originalSetup) => (options?: Parameters<typeof ue.setup>[0]) =>
+    originalSetup({ ...pointerFix, ...options }))(ue.setup.bind(ue));
+  patched.click = withOptsAt(ue.click.bind(ue), 1);
+  patched.dblClick = withOptsAt(ue.dblClick.bind(ue), 1);
+  patched.tripleClick = withOptsAt(ue.tripleClick.bind(ue), 1);
+  patched.hover = withOptsAt(ue.hover.bind(ue), 1);
+  patched.unhover = withOptsAt(ue.unhover.bind(ue), 1);
+  patched.type = withOptsAt(ue.type.bind(ue), 2);
+  patched.clear = withOptsAt(ue.clear.bind(ue), 1);
+  patched.selectOptions = withOptsAt(ue.selectOptions.bind(ue), 2);
+  patched.deselectOptions = withOptsAt(ue.deselectOptions.bind(ue), 2);
+  patched.upload = withOptsAt(ue.upload.bind(ue), 2);
+  patched.keyboard = withOptsAt(ue.keyboard.bind(ue), 1);
+  patched.tab = withOptsAt(ue.tab.bind(ue), 0);
+  patched.pointer = withOptsAt(ue.pointer.bind(ue), 1);
+}
 // jsdom não expõe Fetch API completa; NextRequest (BFF) exige Request/Headers.
 if (typeof globalThis.Headers === 'undefined') {
   class JestHeaders {
