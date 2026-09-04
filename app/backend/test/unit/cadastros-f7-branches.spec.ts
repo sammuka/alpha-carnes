@@ -141,7 +141,14 @@ describe('ProdutosService — branches de erro', () => {
     };
 
     const service = new ProdutosService({ db } as never, auditoria as never);
-    await service.listar({ page: 1, pageSize: 10, search: 'DIANT', incluirRemovidos: false });
+    await service.listar({
+      page: 1,
+      pageSize: 10,
+      search: 'DIANT',
+      incluirRemovidos: false,
+      ativoVenda: undefined,
+      ativoCompra: undefined,
+    });
     expect(db.select).toHaveBeenCalledTimes(2);
   });
 

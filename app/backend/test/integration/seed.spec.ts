@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { count, eq } from 'drizzle-orm';
+import { alias, count, eq } from 'drizzle-orm';
 import * as schema from '../../src/database/schema';
 import { seed } from '../../src/database/seed';
 import { DESCRICOES_PERMISSOES } from '../../src/common/rbac/permissoes';
@@ -65,19 +65,18 @@ describe('Seed idempotência', () => {
   });
 
   it('seed cria desdobramento AD-01 do boi casado (2 TZ + 2 DT + 2 PA)', async () => {
+    const produtoOrigem = alias(schema.produtos, 'produto_origem');
+    const produtoDestino = alias(schema.produtos, 'produto_destino');
     const regras = await db
       .select({
-        compra: schema.produtos.codigo,
-        comercial: schema.produtos.codigo,
+        compra: produtoOrigem.codigo,
+        comercial: produtoDestino.codigo,
         fator: schema.regrasDesdobramentoComercial.fatorQuantidade,
       })
       .from(schema.regrasDesdobramentoComercial)
-      .innerJoin(schema.produtos, eq(schema.produtos.id, schema.regrasDesdobramentoComercial.produtoId))
-      .innerJoin(
-        schema.produtos,
-        eq(schema.produtos.id, schema.regrasDesdobramentoComercial.produtoId),
-      )
-      .where(eq(schema.produtos.codigo, 'BOI'));
+      .innerJoin(produtoOrigem, eq(produtoOrigem.id, schema.regrasDesdobramentoComercial.produtoOrigemId))
+      .innerJoin(produtoDestino, eq(produtoDestino.id, schema.regrasDesdobramentoComercial.produtoDestinoId))
+      .where(eq(produtoOrigem.codigo, 'BOI'));
     expect(regras).toHaveLength(3);
     expect(regras.map((r) => ({ compra: r.compra, comercial: r.comercial, fator: Number(r.fator) }))).toEqual(
       expect.arrayContaining([

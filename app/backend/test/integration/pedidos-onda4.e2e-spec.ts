@@ -170,7 +170,7 @@ describe('pedidos-onda4 (AD-06 liberar reserva administrativa)', () => {
   let comprasCookies: string;
   let comercialCookies: string;
   let gestorCookies: string;
-  let base: { fornecedorId: string; produtoId: string; produtoId: string; clienteId: string };
+  let base: Awaited<ReturnType<typeof seedComercialBase>>;
 
   beforeAll(async () => {
     app = await createTestApp();

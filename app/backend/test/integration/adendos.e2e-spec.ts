@@ -18,7 +18,7 @@ describe('adendos (adendo com histórico append-only)', () => {
   let pedidos: PedidosService;
   let adendos: AdendosService;
   let usuarioId: string;
-  let base: { fornecedorId: string; produtoId: string; produtoId: string; clienteId: string };
+  let base: Awaited<ReturnType<typeof seedComercialBase>>;
 
   beforeAll(async () => {
     app = await createTestApp();

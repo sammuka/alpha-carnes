@@ -8,7 +8,6 @@ import {
   parametros,
   pecas,
   pedidosVenda,
-  produtos,
   recebimentos,
   subitens,
 } from '../../src/database/schema';
@@ -63,7 +62,6 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
         { id: 'ent-destino', quantidade: 5, quantidadeDestinada: 2, unidade: 'caixa', produtoId: 'prod1', fornecedorNome: 'Forn', loteNf: null, local: 'Câmara 1', destino: 'pedido', pedidoId: 'pv1', createdAt: createdAtHoje },
       ]],
       [produtos, []],
-      [produtos, []],
       [recebimentos, []],
       [pedidosVenda, []],
       [parametros, [{ valorJson: { valor: false } }]],
@@ -93,7 +91,6 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
       [subitens, []],
       [entradasItens, []],
       [produtos, []],
-      [produtos, []],
       [recebimentos, []],
       [pedidosVenda, []],
       [parametros, [{ valorJson: { valor: true } }]],
@@ -114,7 +111,6 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
       [subitens, []],
       [entradasItens, []],
       [produtos, []],
-      [produtos, []],
       [recebimentos, []],
       [pedidosVenda, []],
       [parametros, [{ valorJson: { valor: false } }]],
@@ -131,7 +127,7 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
         { id: 'p1', statusFisico: 'em_sobra', peso: '1.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
         { id: 'p2', statusFisico: 'em_sobra', peso: '1.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtOntem },
       ]],
-      [subitens, []], [entradasItens, []], [produtos, []], [produtos, []],
+      [subitens, []], [entradasItens, []], [produtos, []],
       [recebimentos, []], [pedidosVenda, []], [parametros, []],
     ]);
 
@@ -143,11 +139,11 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
   it('filtro produtoId/search/status restringe o resultado', async () => {
     const porTabela = new Map<unknown, unknown[]>([
       [pecas, [
-        { id: 'p1', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: 'TZ-000001', produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
-        { id: 'p2', statusFisico: 'associada', peso: '10.000', etiquetaAtual: 'TZ-000002', produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: 'pv1', capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'p1', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: 'TZ-000001', produtoId: 'prod-tz', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'p2', statusFisico: 'associada', peso: '10.000', etiquetaAtual: 'TZ-000002', produtoId: 'prod-tz', recebimentoId: 'r1', pedidoVendaId: 'pv1', capturaMeta: {}, createdAt: createdAtHoje },
       ]],
-      [subitens, []], [entradasItens, []], [produtos, []],
-      [produtos, [{ produtoId: 'ic1', id: 'prod-tz', codigo: 'TZ', nome: 'Traseiro' }]],
+      [subitens, []], [entradasItens, []],
+      [produtos, [{ id: 'prod-tz', codigo: 'TZ', nome: 'Traseiro' }]],
       [recebimentos, []], [pedidosVenda, []], [parametros, [{ valorJson: { valor: false } }]],
     ]);
 
@@ -166,7 +162,7 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
   it('retorna lista vazia quando não há peças, subitens nem entradas', async () => {
     const porTabela = new Map<unknown, unknown[]>([
       [pecas, []], [subitens, []], [entradasItens, []], [produtos, []],
-      [produtos, []], [recebimentos, []], [pedidosVenda, []], [parametros, []],
+      [recebimentos, []], [pedidosVenda, []], [parametros, []],
     ]);
     const service = new EstoqueConsultaService({ db: makeDb(porTabela) } as never);
     await expect(service.consultar({})).resolves.toEqual([]);
@@ -177,7 +173,7 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
       [pecas, [
         { id: 'p1', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
       ]],
-      [subitens, []], [entradasItens, []], [produtos, []], [produtos, []],
+      [subitens, []], [entradasItens, []], [produtos, []],
       [recebimentos, [{ id: 'r1', fornecedorNome: 'Frigorífico Boi Forte', romaneio: 'ROM-1', nfNumero: '128934' }]],
       [pedidosVenda, []], [parametros, []],
     ]);
@@ -192,7 +188,7 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
       [pecas, [
         { id: 'p1', statusFisico: 'associada', peso: '10.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: 'pv1', capturaMeta: {}, createdAt: createdAtHoje },
       ]],
-      [subitens, []], [entradasItens, []], [produtos, []], [produtos, []], [recebimentos, []],
+      [subitens, []], [entradasItens, []], [produtos, []], [recebimentos, []],
       [pedidosVenda, [{ id: 'pv1', clienteNome: 'Açougue Nova Era' }]],
       [parametros, []],
     ]);

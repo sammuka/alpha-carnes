@@ -29,7 +29,7 @@ describe('Disponibilidade virtual e2e (geração transacional + idempotência + 
       .send({
         dataOperacao,
         fornecedorId: base.fornecedorId,
-        itens: [{ produtoId: base.produtoOrigemId, quantidadeComprada: quantidade }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: quantidade }],
       });
     expect(criar.status).toBe(201);
     return criar.body.id as string;
@@ -127,7 +127,7 @@ describe('Disponibilidade virtual e2e (geração transacional + idempotência + 
         .send({
           dataOperacao: dia,
           fornecedorId: base.fornecedorId,
-          itens: [{ produtoId: base.produtoOrigemId, quantidadeComprada: qtd }],
+          itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: qtd }],
         });
       expect(res.status).toBe(201);
       const conf = await request(app.getHttpServer())

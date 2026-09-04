@@ -53,7 +53,14 @@ describe('ProdutosService — cobertura de branches Onda 12', () => {
   it('listar filtra por status e inclui removidos', async () => {
     const db = listarDb([], []);
     const service = new ProdutosService({ db } as never, auditoria as never);
-    const r = await service.listar({ page: 1, pageSize: 10, status: 'inativo', incluirRemovidos: true });
+    const r = await service.listar({
+      page: 1,
+      pageSize: 10,
+      status: 'inativo',
+      incluirRemovidos: true,
+      ativoVenda: undefined,
+      ativoCompra: undefined,
+    });
     expect(r.total).toBe(0);
   });
 
@@ -183,136 +190,6 @@ describe('ProdutosService — cobertura de branches Onda 12', () => {
     const r = await service.remover('prod-1', 'user-1');
     expect(r.id).toBe('prod-1');
     expect(r.deletedAt).toBeInstanceOf(Date);
-  });
-});
-
-describe('produtosService — cobertura de branches Onda 12', () => {
-  const item = {
-    id: 'ic-1',
-    codigo: 'IC1',
-    descricao: 'Dianteiro',
-    categoria: null,
-    unidadeComercial: 'kg',
-    permiteCorte: false,
-    status: 'ativo',
-    observacoesOperacionais: null,
-    deletedAt: null,
-  };
-
-  it('listar aplica status, busca e inclui removidos', async () => {
-    const db = listarDb([item]);
-    const service = new ProdutosService({ db } as never, auditoria as never);
-    const r = await service.listar({
-      page: 1,
-      pageSize: 10,
-      status: 'ativo',
-      search: 'Dian',
-      incluirRemovidos: true,
-    });
-    expect(r.data).toHaveLength(1);
-  });
-
-  it('detalhar e mutações de inexistente → NotFoundException', async () => {
-    const vazio = {
-      select: jest.fn(() => ({ from: jest.fn(() => ({ where: jest.fn(() => Promise.resolve([])) })) })),
-    };
-    const dbTx = { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(vazio)) };
-    const service = new ProdutosService({ db: { ...vazio, ...dbTx } } as never, auditoria as never);
-    await expect(service.detalhar('x')).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.atualizar('x', { descricao: 'Y' }, 'u')).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.remover('x', 'u')).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.restaurar('x', 'u')).rejects.toBeInstanceOf(NotFoundException);
-  });
-
-  it('criar, atualizar, remover e restaurar caminho feliz', async () => {
-    const txCriar = {
-      select: jest.fn(() => ({ from: jest.fn(() => ({ where: jest.fn(() => Promise.resolve([])) })) })),
-      insert: jest.fn(() => ({
-        values: jest.fn(() => ({ returning: jest.fn(() => Promise.resolve([item])) })),
-      })),
-    };
-    const service = new ProdutosService(
-      { db: { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(txCriar)) } } as never,
-      auditoria as never,
-    );
-    expect((await service.criar({
-      codigo: 'IC1',
-      descricao: 'Dianteiro',
-      unidadeComercial: 'kg',
-      permiteCorte: false,
-      status: 'ativo',
-    }, 'u')).id).toBe('ic-1');
-
-    const txUpd = {
-      select: jest.fn(() => ({ from: jest.fn(() => ({ where: jest.fn(() => Promise.resolve([item])) })) })),
-      update: jest.fn(() => ({
-        set: jest.fn(() => ({
-          where: jest.fn(() => ({ returning: jest.fn(() => Promise.resolve([item])) })),
-        })),
-      })),
-    };
-    const svcUpd = new ProdutosService(
-      { db: { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(txUpd)) } } as never,
-      auditoria as never,
-    );
-    expect((await svcUpd.atualizar('ic-1', {}, 'u')).codigo).toBe('IC1');
-    expect((await svcUpd.remover('ic-1', 'u')).id).toBe('ic-1');
-
-    const txRest = {
-      select: jest.fn()
-        .mockImplementationOnce(() => ({
-          from: jest.fn(() => ({
-            where: jest.fn(() => Promise.resolve([{ ...item, deletedAt: new Date() }])),
-          })),
-        }))
-        .mockImplementationOnce(() => ({
-          from: jest.fn(() => ({ where: jest.fn(() => Promise.resolve([{ id: 'ic-1' }])) })),
-        })),
-      update: jest.fn(() => ({
-        set: jest.fn(() => ({
-          where: jest.fn(() => ({
-            returning: jest.fn(() => Promise.resolve([{ ...item, deletedAt: null }])),
-          })),
-        })),
-      })),
-    };
-    const svcRest = new ProdutosService(
-      { db: { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(txRest)) } } as never,
-      auditoria as never,
-    );
-    expect((await svcRest.restaurar('ic-1', 'u')).deletedAt).toBeNull();
-  });
-
-  it('restaurar item ativo → ConflictException; criar código duplicado → ConflictException', async () => {
-    const txAtivo = {
-      select: jest.fn(() => ({
-        from: jest.fn(() => ({ where: jest.fn(() => Promise.resolve([item])) })),
-      })),
-    };
-    const svc = new ProdutosService(
-      { db: { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(txAtivo)) } } as never,
-      auditoria as never,
-    );
-    await expect(svc.restaurar('ic-1', 'u')).rejects.toBeInstanceOf(ConflictException);
-
-    const txDup = {
-      select: jest.fn(() => ({
-        from: jest.fn(() => ({ where: jest.fn(() => Promise.resolve([{ id: 'outro' }])) })),
-      })),
-    };
-    const svcDup = new ProdutosService(
-      { db: { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(txDup)) } } as never,
-      auditoria as never,
-    );
-    await expect(
-      svcDup.criar({
-        codigo: 'IC1',
-        descricao: 'X',
-        unidadeComercial: 'kg',
-        permiteCorte: false,
-        status: 'ativo',
-      }, 'u'),
-    ).rejects.toBeInstanceOf(ConflictException);
   });
 });
 
