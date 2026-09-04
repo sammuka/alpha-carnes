@@ -98,7 +98,14 @@ export async function loginCookies(
 ): Promise<string> {
   const { default: request } = await import('supertest');
   const res = await request(app.getHttpServer()).post('/auth/login').send({ email, password });
-  return joinSetCookie(res);
+  if (res.status !== 200 && res.status !== 201) {
+    throw new Error(`Login falhou (${res.status}) para ${email}: ${JSON.stringify(res.body)}`);
+  }
+  const cookies = joinSetCookie(res);
+  if (!cookies.includes('access_token=')) {
+    throw new Error(`Login sem access_token para ${email}`);
+  }
+  return cookies;
 }
 
 // Os 11 perfis canônicos (slugs do CHECK em perfis). Todos são criados nos testes para
