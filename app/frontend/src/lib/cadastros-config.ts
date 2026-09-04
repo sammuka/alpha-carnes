@@ -2,7 +2,6 @@ import { z } from 'zod';
 import type { FieldValues } from 'react-hook-form';
 import type { LucideIcon } from 'lucide-react';
 import { Building2, MapPin, Truck } from 'lucide-react';
-import { UNIDADE_MEDIDA_OPTIONS } from '@/lib/dominios';
 import { mascararCep, mascararCpfCnpj, mascararTelefone } from '@/lib/masks';
 
 export type AbaCadastro = 'gerais' | 'fiscais' | 'contatos' | 'preferencias' | 'parametros';

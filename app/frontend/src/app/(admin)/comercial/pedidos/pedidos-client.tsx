@@ -120,7 +120,7 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
   const carregarCatalogos = useCallback(async () => {
     const [clientesResponse, produtosResponse, rotasResponse, operacoesResponse] = await Promise.all([
       fetch('/api/cadastros/clientes?pageSize=100', { cache: 'no-store' }),
-      fetch('/api/cadastros/itens-comerciais?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
+      fetch('/api/cadastros/produtos?page=1&pageSize=100&status=ativo&ativoVenda=true', { cache: 'no-store' }),
       fetch('/api/cadastros/rotas?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
       fetch('/api/operacoes?limite=100', { cache: 'no-store' }),
     ]);

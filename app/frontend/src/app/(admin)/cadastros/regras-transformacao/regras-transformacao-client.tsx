@@ -39,23 +39,22 @@ import { SimuladorDesossa } from './simulador-desossa';
 
 interface RegraDesdobramento {
   id: string;
-  itemCompraId: string;
-  itemComercialId: string;
+  produtoOrigemId: string;
+  produtoDestinoId: string;
   fatorQuantidade: string;
   status: 'ativo' | 'inativo';
   vigenciaInicio: string;
   vigenciaFim: string | null;
   observacoes: string | null;
-  itemCompraCodigo: string;
-  itemCompraNome: string;
-  itemComercialCodigo: string;
-  itemComercialNome: string;
+  produtoOrigemCodigo: string;
+  produtoOrigemNome: string;
+  produtoDestinoCodigo: string;
+  produtoDestinoNome: string;
 }
-interface ItemCompraOpcao { id: string; codigo: string; descricao: string }
-interface ItemComercialOpcao { id: string; codigo: string; descricao: string }
+interface ProdutoOpcao { id: string; codigo: string; nome: string }
 interface NovaRegraForm {
-  itemCompraId: string;
-  itemComercialId: string;
+  produtoOrigemId: string;
+  produtoDestinoId: string;
   fator: string;
   vigenciaInicio: string;
   vigenciaFim: string;
@@ -69,8 +68,8 @@ function hojeLocal(): string {
 
 function formVazio(): NovaRegraForm {
   return {
-    itemCompraId: '',
-    itemComercialId: '',
+    produtoOrigemId: '',
+    produtoDestinoId: '',
     fator: '1.000',
     vigenciaInicio: hojeLocal(),
     vigenciaFim: '',
@@ -89,8 +88,8 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [dialogAberto, setDialogAberto] = useState(false);
-  const [itensCompra, setItensCompra] = useState<ItemCompraOpcao[]>([]);
-  const [itensComerciais, setItensComerciais] = useState<ItemComercialOpcao[]>([]);
+  const [produtosCompra, setProdutosCompra] = useState<ProdutoOpcao[]>([]);
+  const [produtosVenda, setProdutosVenda] = useState<ProdutoOpcao[]>([]);
   const [formRegra, setFormRegra] = useState<NovaRegraForm>(formVazio);
   const [salvandoRegra, setSalvandoRegra] = useState(false);
   const [erroRegra, setErroRegra] = useState<string | null>(null);
@@ -115,20 +114,20 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
   }, []);
 
   const carregarCatalogos = useCallback(async () => {
-    const [compraRes, comercialRes] = await Promise.all([
-      fetch('/api/cadastros/itens-compra?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
-      fetch('/api/cadastros/itens-comerciais?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
+    const [compraRes, vendaRes] = await Promise.all([
+      fetch('/api/cadastros/produtos?page=1&pageSize=100&status=ativo&ativoCompra=true', { cache: 'no-store' }),
+      fetch('/api/cadastros/produtos?page=1&pageSize=100&status=ativo&ativoVenda=true', { cache: 'no-store' }),
     ]);
     if (!compraRes.ok) {
-      setErroRegra(await mensagemDeErro(compraRes, 'Falha ao carregar itens de compra'));
+      setErroRegra(await mensagemDeErro(compraRes, 'Falha ao carregar produtos de compra'));
       return;
     }
-    if (!comercialRes.ok) {
-      setErroRegra(await mensagemDeErro(comercialRes, 'Falha ao carregar itens comerciais'));
+    if (!vendaRes.ok) {
+      setErroRegra(await mensagemDeErro(vendaRes, 'Falha ao carregar produtos de venda'));
       return;
     }
-    setItensCompra(((await compraRes.json()) as { data: ItemCompraOpcao[] }).data);
-    setItensComerciais(((await comercialRes.json()) as { data: ItemComercialOpcao[] }).data);
+    setProdutosCompra(((await compraRes.json()) as { data: ProdutoOpcao[] }).data);
+    setProdutosVenda(((await vendaRes.json()) as { data: ProdutoOpcao[] }).data);
   }, []);
 
   useEffect(() => {
@@ -141,21 +140,15 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
     [regras],
   );
 
-  const itemCompraSelecionadoId = regras[0]?.itemCompraId ?? null;
-
-  function abrirDialog() {
-    setErroRegra(null);
-    setFormRegra(formVazio());
-    setDialogAberto(true);
-  }
+  const produtoOrigemSelecionadoId = regras[0]?.produtoOrigemId ?? null;
 
   async function salvarRegra() {
-    if (!formRegra.itemCompraId || !formRegra.itemComercialId || !formRegra.vigenciaInicio) return;
+    if (!formRegra.produtoOrigemId || !formRegra.produtoDestinoId || !formRegra.vigenciaInicio) return;
     setSalvandoRegra(true);
     setErroRegra(null);
     const payload = {
-      itemCompraId: formRegra.itemCompraId,
-      itemComercialId: formRegra.itemComercialId,
+      produtoOrigemId: formRegra.produtoOrigemId,
+      produtoDestinoId: formRegra.produtoDestinoId,
       fatorQuantidade: Number(formRegra.fator),
       vigenciaInicio: formRegra.vigenciaInicio,
       ...(formRegra.vigenciaFim ? { vigenciaFim: formRegra.vigenciaFim } : {}),
@@ -176,6 +169,12 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
     setFormRegra(formVazio());
     setSalvandoRegra(false);
     await carregar();
+  }
+
+  function abrirDialog() {
+    setErroRegra(null);
+    setFormRegra(formVazio());
+    setDialogAberto(true);
   }
 
   return (
@@ -249,12 +248,12 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
                       <TableRow key={regra.id} className="group">
                         <TableCell>
                           <p className="text-[13px] font-semibold">
-                            {regra.itemComercialCodigo} — {regra.itemComercialNome}
+                            {regra.produtoDestinoCodigo} — {regra.produtoDestinoNome}
                           </p>
                         </TableCell>
                         <TableCell>
                           <p className="text-[13px] font-semibold">
-                            {regra.itemCompraCodigo} — {regra.itemCompraNome}
+                            {regra.produtoOrigemCodigo} — {regra.produtoOrigemNome}
                           </p>
                         </TableCell>
                         <TableCellNum>{regra.fatorQuantidade}</TableCellNum>
@@ -288,7 +287,7 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
             </CardContent>
           </Card>
 
-          <SimuladorDesdobramento itemCompraId={itemCompraSelecionadoId} />
+          <SimuladorDesdobramento produtoOrigemId={produtoOrigemSelecionadoId} />
         </TabsContent>
 
         <TabsContent value="desossa" className="space-y-3">
@@ -312,32 +311,32 @@ export function RegrasTransformacaoClient({ podeGerenciar }: { podeGerenciar: bo
             <p role="alert" className="text-sm text-destructive">{erroRegra}</p>
           )}
           <div className="grid gap-2.5">
-            <FormField label="Item de compra" required htmlFor="regra-item-compra">
+            <FormField label="Produto origem (compra)" required htmlFor="regra-produto-origem">
               <ComboboxField
-                id="regra-item-compra"
-                items={itensCompra.map((it) => ({
+                id="regra-produto-origem"
+                items={produtosCompra.map((it) => ({
                   id: it.id,
-                  label: labelCodigoDescricao(it.codigo, it.descricao),
+                  label: labelCodigoDescricao(it.codigo, it.nome),
                 }))}
-                value={formRegra.itemCompraId}
-                onChange={(itemCompraId) => setFormRegra((s) => ({ ...s, itemCompraId }))}
+                value={formRegra.produtoOrigemId}
+                onChange={(produtoOrigemId) => setFormRegra((s) => ({ ...s, produtoOrigemId }))}
                 placeholder="Selecione"
-                searchPlaceholder="Buscar item de compra..."
-                emptyText="Nenhum item encontrado."
+                searchPlaceholder="Buscar produto de compra..."
+                emptyText="Nenhum produto encontrado."
               />
             </FormField>
-            <FormField label="Item comercial" required htmlFor="regra-item-comercial">
+            <FormField label="Produto destino (venda)" required htmlFor="regra-produto-destino">
               <ComboboxField
-                id="regra-item-comercial"
-                items={itensComerciais.map((it) => ({
+                id="regra-produto-destino"
+                items={produtosVenda.map((it) => ({
                   id: it.id,
-                  label: labelCodigoDescricao(it.codigo, it.descricao),
+                  label: labelCodigoDescricao(it.codigo, it.nome),
                 }))}
-                value={formRegra.itemComercialId}
-                onChange={(itemComercialId) => setFormRegra((s) => ({ ...s, itemComercialId }))}
+                value={formRegra.produtoDestinoId}
+                onChange={(produtoDestinoId) => setFormRegra((s) => ({ ...s, produtoDestinoId }))}
                 placeholder="Selecione"
-                searchPlaceholder="Buscar item comercial..."
-                emptyText="Nenhum item encontrado."
+                searchPlaceholder="Buscar produto de venda..."
+                emptyText="Nenhum produto encontrado."
               />
             </FormField>
             <FormField label="Fator" required htmlFor="regra-fator">

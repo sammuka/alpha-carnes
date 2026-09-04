@@ -452,7 +452,7 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
               </div>
               <dl className="grid grid-cols-2 gap-3">
                 <Par rotulo="Cliente" valor={selecionada.clienteId.slice(0, 8)} mono />
-                <Par rotulo="Produto" valor={selecionada.itemComercialId.slice(0, 8)} mono />
+                <Par rotulo="Produto" valor={selecionada.produtoId.slice(0, 8)} mono />
               </dl>
               <FormField
                 label="Quantidade a postergar"

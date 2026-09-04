@@ -10,7 +10,7 @@ jest.mock('next/navigation', () => ({
 
 const COMPARATIVO = {
   itens: [{
-    itemComercialId: 'ic1',
+    produtoId: 'ic1',
     codigo: 'TZ',
     descricao: 'Traseiro',
     qtdPedido: '10',

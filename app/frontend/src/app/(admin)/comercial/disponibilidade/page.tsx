@@ -147,7 +147,7 @@ export default function DisponibilidadePage() {
     try {
       const query = new URLSearchParams({ operacaoId, estado });
       const response = await fetch(
-        `/api/comercial/disponibilidade/mapa/${produto.itemComercialId}/detalhe?${query.toString()}`,
+        `/api/comercial/disponibilidade/mapa/${produto.produtoId}/detalhe?${query.toString()}`,
         { cache: 'no-store' },
       );
       setUnidadesDetalhe(await lerResposta<DetalheMapa[]>(response));
@@ -162,8 +162,8 @@ export default function DisponibilidadePage() {
     if (!busca.trim()) return linhas;
     const termo = busca.toLocaleLowerCase('pt-BR');
     return linhas.filter((linha) => {
-      const produto = mapa.find((item) => item.itemComercialId === linha.itemComercialId);
-      return linha.itemComercialId.toLocaleLowerCase('pt-BR').includes(termo)
+      const produto = mapa.find((item) => item.produtoId === linha.produtoId);
+      return linha.produtoId.toLocaleLowerCase('pt-BR').includes(termo)
         || linha.status.toLocaleLowerCase('pt-BR').includes(termo)
         || produto?.descricao.toLocaleLowerCase('pt-BR').includes(termo)
         || produto?.codigo.toLocaleLowerCase('pt-BR').includes(termo);
@@ -219,7 +219,7 @@ export default function DisponibilidadePage() {
               <MapaTeatro
                 produtos={mapa}
                 selecionado={produtoDetalhe && estadoDetalhe
-                  ? { itemComercialId: produtoDetalhe.itemComercialId, estado: estadoDetalhe }
+                  ? { produtoId: produtoDetalhe.produtoId, estado: estadoDetalhe }
                   : null}
                 onSelecionar={(produto, estado) => void selecionarEstado(produto, estado)}
               />
@@ -282,12 +282,12 @@ export default function DisponibilidadePage() {
                         const percentual = total > 0
                           ? Math.min(100, Math.round((reservado / total) * 100))
                           : 0;
-                        const produto = mapa.find((item) => item.itemComercialId === linha.itemComercialId);
-                        const chave = linha.modo === 'compra' ? linha.id : `${linha.operacaoId}:${linha.itemComercialId}`;
+                        const produto = mapa.find((item) => item.produtoId === linha.produtoId);
+                        const chave = linha.modo === 'compra' ? linha.id : `${linha.operacaoId}:${linha.produtoId}`;
                         return (
                           <TableRow key={chave} data-testid={`disp-${chave}`}>
                             <TableCell>
-                              <p className="text-[13px] font-semibold text-foreground">{produto?.descricao ?? linha.itemComercialId}</p>
+                              <p className="text-[13px] font-semibold text-foreground">{produto?.descricao ?? linha.produtoId}</p>
                               {produto && <p className="font-data text-[11px] text-fg-secondary">{produto.codigo}</p>}
                             </TableCell>
                             <TableCellNum>{linha.quantidadeTotalGerada}</TableCellNum>
@@ -331,7 +331,7 @@ export default function DisponibilidadePage() {
                 ) : (
                   esgotados.map((linha) => (
                     <AlertItem
-                      key={linha.modo === 'compra' ? linha.id : `${linha.operacaoId}:${linha.itemComercialId}`}
+                      key={linha.modo === 'compra' ? linha.id : `${linha.operacaoId}:${linha.produtoId}`}
                       title="Item esgotado"
                       description={`Reservado: ${linha.quantidadeReservada} / Gerado: ${linha.quantidadeTotalGerada}`}
                       time=""

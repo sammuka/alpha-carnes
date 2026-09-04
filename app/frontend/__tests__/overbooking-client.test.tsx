@@ -13,7 +13,7 @@ const PENDENCIA = {
   id: 'p1',
   pedidoVendaId: 'pv1',
   pedidoVendaItemId: 'pvi1',
-  itemComercialId: 'ic1',
+  produtoId: 'ic1',
   clienteId: 'cl1',
   vendedorUsuarioId: 'u1',
   operacaoId: 'op-1',
@@ -39,7 +39,7 @@ beforeEach(() => {
         ok: true,
         json: async () => ({
           pendenciaId: 'p1',
-          itemComercialId: 'ic1',
+          produtoId: 'ic1',
           quantidadeDeficit: '3.000',
           comprasComplementares: [{ compraProgramadaId: 'cp1', operacaoId: 'op-1', dataOperacao: '2026-07-24', status: 'confirmada', quantidadeProjetada: '10' }],
           redistribuicoes: [{ pedidoVendaId: 'pv2', pedidoVendaItemId: 'pvi2', clienteNome: 'Cliente A', quantidadeReservada: '2', reservaId: 'r1', disponibilidadeVirtualId: 'dv1' }],

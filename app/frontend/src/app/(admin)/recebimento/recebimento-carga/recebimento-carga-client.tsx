@@ -202,10 +202,10 @@ function calcDifPeso(_item: RecebimentoItem): string {
 }
 
 function labelProdutoItem(item: RecebimentoItem): string {
-  if (item.itemComercial) {
-    return `${item.itemComercial.codigo}${item.itemComercial.descricao ? ` — ${item.itemComercial.descricao}` : ''}`;
+  if (item.produto) {
+    return `${item.produto.codigo}${item.produto.descricao ? ` — ${item.produto.descricao}` : ''}`;
   }
-  return item.itemComercialId.slice(0, 8);
+  return item.produtoId.slice(0, 8);
 }
 
 export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] }) {
@@ -512,7 +512,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        itemComercialId: itemSelecionado.itemComercialId,
+        produtoId: itemSelecionado.produtoId,
         quantidadeRecebida: qtdApuradaItem(itemSelecionado),
         divergencia: {
           tipo: formDivergencia.tipo,
@@ -541,7 +541,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     setSalvando(true);
     setErro(null);
     const itens = detalhe.itens.map((item) => ({
-      itemComercialId: item.itemComercialId,
+      produtoId: item.produtoId,
       quantidadeDeclarada: Number(item.quantidadeEsperada),
       ...(item.pesoTotalApurado ? { pesoDeclarado: Number(item.pesoTotalApurado) } : {}),
     }));
@@ -914,9 +914,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
           {quadro.length > 0 && (
             <QuadroComparativo
               itens={quadro.map((q) => ({
-                itemComercialId: q.itemComercialId,
+                produtoId: q.produtoId,
                 codigo: null,
-                descricao: q.itemComercialId.slice(0, 8),
+                descricao: q.produtoId.slice(0, 8),
                 qtdPedido: q.qtdPedido ?? '—',
                 qtdNf: q.qtdNf,
                 qtdApurada: q.qtdApurada,
@@ -1015,14 +1015,14 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                   {detalhe.itens.map((item) => (
                     <TableRow
                       key={item.id}
-                      data-testid={`item-${item.itemComercialId}`}
+                      data-testid={`item-${item.produtoId}`}
                       className="group cursor-pointer"
                       data-state={itemSelecionadoId === item.id ? 'selected' : undefined}
                       onClick={() => setItemSelecionadoId(item.id)}
                     >
                       <TableCell className="text-[13px] font-semibold text-foreground">
-                        {item.itemComercial?.codigo ?? item.itemComercialId.slice(0, 8)}
-                        {item.itemComercial?.descricao ? ` — ${item.itemComercial.descricao}` : ''}
+                        {item.produto?.codigo ?? item.produtoId.slice(0, 8)}
+                        {item.produto?.descricao ? ` — ${item.produto.descricao}` : ''}
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">{item.origemDescricao ?? '—'}</TableCell>
                       <TableCellNum>{item.quantidadeEsperada}</TableCellNum>
@@ -1128,7 +1128,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                       </TableHeader>
                       <TableBody>
                         {previsao.itensOperacionais.map((item) => (
-                          <TableRow key={item.itemComercialId}>
+                          <TableRow key={item.produtoId}>
                             <TableCell>{item.produtoCodigo} — {item.produtoDescricao}</TableCell>
                             <TableCellNum>{item.quantidadePrevista}</TableCellNum>
                             <TableCell>{item.unidade}</TableCell>
@@ -1319,9 +1319,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
           {quadro.length > 0 && (
             <QuadroComparativo
               itens={quadro.map((q) => ({
-                itemComercialId: q.itemComercialId,
+                produtoId: q.produtoId,
                 codigo: null,
-                descricao: q.itemComercialId.slice(0, 8),
+                descricao: q.produtoId.slice(0, 8),
                 qtdPedido: q.qtdPedido ?? '—',
                 qtdNf: q.qtdNf,
                 qtdApurada: q.qtdApurada,

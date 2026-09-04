@@ -11,7 +11,7 @@ const IMPACTO: ImpactoCompra = {
   resumo: '-3 TZ virtuais; déficit projetado: 3 TZ.',
   itens: [
     {
-      itemComercialId: 'ic-1',
+      produtoId: 'ic-1',
       codigo: 'TZ',
       descricao: 'Traseiro',
       quantidadeGeradaAtual: '80.000',

@@ -10,7 +10,7 @@ export interface EspelhoItem {
   representante: string | null;
   rotaId: string | null;
   rota: string | null;
-  itemComercialId: string;
+  produtoId: string;
   produto: string;
   unidade: string;
   quantidadePedida: string;
