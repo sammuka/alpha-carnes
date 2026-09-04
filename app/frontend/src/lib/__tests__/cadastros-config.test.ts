@@ -4,8 +4,6 @@ import {
   CADASTROS,
   configCadastroParaCliente,
   fornecedoresConfig,
-  itensCompraConfig,
-  itensComerciaisConfig,
 } from '../cadastros-config';
 
 function contemFuncao(valor: unknown): boolean {
@@ -27,15 +25,9 @@ describe('configCadastroParaCliente', () => {
     },
   );
 
-  it('mantém os campos de fornecedores, itens-compra e itens-comerciais', () => {
+  it('mantém os campos de fornecedores', () => {
     expect(configCadastroParaCliente(fornecedoresConfig).campos.map((c) => c.nome)).toEqual(
       fornecedoresConfig.campos.map((c) => c.nome),
-    );
-    expect(configCadastroParaCliente(itensCompraConfig).campos).toHaveLength(
-      itensCompraConfig.campos.length,
-    );
-    expect(configCadastroParaCliente(itensComerciaisConfig).campos).toHaveLength(
-      itensComerciaisConfig.campos.length,
     );
   });
 
@@ -44,5 +36,10 @@ describe('configCadastroParaCliente', () => {
     const bff = path.join(__dirname, '../../app/api/cadastros/clientes');
     expect(fs.existsSync(path.join(bff, 'route.ts'))).toBe(true);
     expect(fs.existsSync(path.join(bff, '[id]/route.ts'))).toBe(true);
+  });
+
+  it('AD-15: CADASTROS não inclui itens-compra nem itens-comerciais', () => {
+    expect(CADASTROS).not.toHaveProperty('itens-compra');
+    expect(CADASTROS).not.toHaveProperty('itens-comerciais');
   });
 });

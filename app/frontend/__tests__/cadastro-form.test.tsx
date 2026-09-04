@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CadastroForm } from '../src/components/cadastro-form';
-import { clientesConfig, fornecedoresConfig, itensCompraConfig } from '../src/lib/cadastros-config';
+import { clientesConfig, fornecedoresConfig } from '../src/lib/cadastros-config';
 
 const pushMock = jest.fn();
 jest.mock('next/navigation', () => ({
@@ -107,16 +107,6 @@ describe('CadastroForm — fornecedores (smoke + fluxo crítico)', () => {
       );
     });
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith('/cadastros/fornecedores'));
-  });
-});
-
-describe('CadastroForm — itens-compra (smoke)', () => {
-  it('renderiza os campos do cadastro de itens de compra', () => {
-    render(<CadastroForm config={itensCompraConfig} />);
-    expect(screen.getByLabelText('Código')).toBeInTheDocument();
-    expect(screen.getByLabelText('Descrição')).toBeInTheDocument();
-    expect(screen.getByLabelText('Unidade de Compra')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Criar' })).toBeInTheDocument();
   });
 });
 
