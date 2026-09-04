@@ -73,8 +73,8 @@ export class EspelhoService {
         itemPedidoId: pedidosVendaItens.id,
         produtoId: pedidosVendaItens.produtoId,
         produtoCodigo: produtos.codigo,
-        produtoDescricao: produtos.descricao,
-        unidadeComercial: produtos.unidadeComercial,
+        produtoDescricao: produtos.nome,
+        unidadeComercial: produtos.unidadePedido,
         quantidadePedida: pedidosVendaItens.quantidadePedida,
         quantidadeAtendida: pedidosVendaItens.quantidadeAtendida,
       })

@@ -36,7 +36,7 @@ type TipoDivergenciaV11 =
 
 interface QuadroRow {
   recebimento_item_id: string | null;
-  item_comercial_id: string;
+  produto_id: string;
   previsto_no_pedido: boolean;
   qtd_pedido: string | null;
   qtd_nf: string;
@@ -47,7 +47,7 @@ interface QuadroRow {
 
 export interface QuadroItem {
   recebimentoItemId: string | null;
-  itemComercialId: string;
+  produtoId: string;
   previstoNoPedido: boolean;
   qtdPedido: string | null;
   qtdNf: string;
@@ -88,7 +88,7 @@ export function classificarTipoV11(item: QuadroItem): TipoDivergenciaV11 {
 
 function descreverDiferenca(item: QuadroItem): string {
   return [
-    `item=${item.itemComercialId}`,
+    `item=${item.produtoId}`,
     `qtd_nf=${item.qtdNf}`,
     `qtd_apurada=${item.qtdApurada}`,
     `peso_nf=${item.pesoNf ?? 'n/a'}`,
@@ -116,7 +116,7 @@ export class ConferenciaService {
   ): Promise<QuadroItem[]> {
     const resultado = await db.execute(sql`
       WITH nf_itens AS (
-        SELECT nf.recebimento_id, nfi.item_comercial_id,
+        SELECT nf.recebimento_id, nfi.produto_id,
                SUM(nfi.quantidade_declarada) AS qtd_nf,
                SUM(nfi.peso_declarado)
                  FILTER (WHERE nfi.peso_declarado IS NOT NULL) AS peso_nf
@@ -124,30 +124,30 @@ export class ConferenciaService {
         JOIN notas_fiscais_fornecedor_itens nfi
           ON nfi.nf_id=nf.id AND nfi.deleted_at IS NULL
         WHERE nf.recebimento_id=${recebimentoId} AND nf.deleted_at IS NULL
-        GROUP BY nf.recebimento_id, nfi.item_comercial_id
+        GROUP BY nf.recebimento_id, nfi.produto_id
       ), pecas_apuradas AS (
-        SELECT recebimento_id, item_comercial_base_id AS item_comercial_id,
+        SELECT recebimento_id, produto_base_id AS produto_id,
                COUNT(id)::numeric AS qtd_pecas,
                COALESCE(SUM(peso_original), 0) AS peso_apurado
         FROM pecas
         WHERE recebimento_id=${recebimentoId} AND deleted_at IS NULL
-        GROUP BY recebimento_id, item_comercial_base_id
+        GROUP BY recebimento_id, produto_base_id
       ), item_ids AS (
-        SELECT pfi.item_comercial_id
+        SELECT pfi.produto_id
         FROM recebimentos r
         JOIN pedidos_fornecedor_itens pfi
           ON pfi.pedido_fornecedor_id=r.pedido_fornecedor_id AND pfi.deleted_at IS NULL
         WHERE r.id=${recebimentoId}
         UNION
-        SELECT item_comercial_id FROM nf_itens
+        SELECT produto_id FROM nf_itens
         UNION
-        SELECT item_comercial_id
+        SELECT produto_id
         FROM recebimentos_itens
         WHERE recebimento_id=${recebimentoId}
         UNION
-        SELECT item_comercial_id FROM pecas_apuradas
+        SELECT produto_id FROM pecas_apuradas
       )
-      SELECT ids.item_comercial_id,
+      SELECT ids.produto_id,
              ri.id AS recebimento_item_id,
              pfi.quantidade_prevista AS qtd_pedido,
              COALESCE(nfi.qtd_nf, 0) AS qtd_nf,
@@ -165,14 +165,14 @@ export class ConferenciaService {
       JOIN item_ids ids ON true
       LEFT JOIN pedidos_fornecedor_itens pfi
         ON pfi.pedido_fornecedor_id=r.pedido_fornecedor_id
-       AND pfi.item_comercial_id=ids.item_comercial_id
+       AND pfi.produto_id=ids.produto_id
        AND pfi.deleted_at IS NULL
       LEFT JOIN recebimentos_itens ri
-        ON ri.recebimento_id=r.id AND ri.item_comercial_id=ids.item_comercial_id
+        ON ri.recebimento_id=r.id AND ri.produto_id=ids.produto_id
       LEFT JOIN nf_itens nfi
-        ON nfi.recebimento_id=r.id AND nfi.item_comercial_id=ids.item_comercial_id
+        ON nfi.recebimento_id=r.id AND nfi.produto_id=ids.produto_id
       LEFT JOIN pecas_apuradas pa
-        ON pa.recebimento_id=r.id AND pa.item_comercial_id=ids.item_comercial_id
+        ON pa.recebimento_id=r.id AND pa.produto_id=ids.produto_id
       WHERE r.id=${recebimentoId};
     `);
 
@@ -180,7 +180,7 @@ export class ConferenciaService {
       const r = raw as unknown as QuadroRow;
       const base = {
         recebimentoItemId: r.recebimento_item_id,
-        itemComercialId: r.item_comercial_id,
+        produtoId: r.produto_id,
         previstoNoPedido: Boolean(r.previsto_no_pedido),
         qtdPedido: r.qtd_pedido,
         qtdNf: String(r.qtd_nf ?? '0'),
@@ -294,7 +294,7 @@ export class ConferenciaService {
           await tx.insert(divergenciasRecebimento).values({
             recebimentoId,
             recebimentoItemId: item.recebimentoItemId,
-            itemComercialId: item.itemComercialId,
+            produtoId: item.produtoId,
             conclusaoConferenciaId: conclusao.id,
             nfFornecedorId: nfs.length === 1 ? nfs[0]!.id : null,
             tipo: classificarTipoV11(item),

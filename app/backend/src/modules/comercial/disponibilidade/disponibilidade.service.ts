@@ -3,7 +3,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { disponibilidadesVirtuais, operacoes } from '../../../database/schema';
+import { disponibilidadesVirtuais, operacoes, produtos } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import {
   compararQtd,

@@ -3,7 +3,7 @@ import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { produtos, produtos } from '../../../database/schema';
+import { produtos } from '../../../database/schema';
 import { somarQtd, subtrairQtd } from '../../../common/crud/decimal';
 import type { EstadoMapa, MapaProduto } from './dto/mapa.dto';
 
@@ -199,17 +199,15 @@ export class MapaService {
       .select({
         produtoId: produtos.id,
         codigo: produtos.codigo,
-        descricao: produtos.descricao,
-        provisorio: sql<boolean>`coalesce(bool_or((${produtos.atributosJson}->>'provisorio')::boolean), false)`,
+        descricao: produtos.nome,
+        provisorio: sql<boolean>`coalesce((${produtos.atributosJson}->>'provisorio')::boolean, false)`,
       })
       .from(produtos)
-      .leftJoin(produtos, eq(produtos.legadoprodutoId, produtos.id))
       .where(and(
         eq(produtos.status, 'ativo'),
         isNull(produtos.deletedAt),
         produtoId ? eq(produtos.id, produtoId) : undefined,
       ))
-      .groupBy(produtos.id, produtos.codigo, produtos.descricao)
       .orderBy(asc(produtos.codigo));
 
     return catalogo.map((item): MapaProduto => {
