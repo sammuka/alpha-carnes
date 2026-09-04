@@ -322,7 +322,7 @@ export async function semearDivergenciasLegadas(
     const recebimentoId = r.rows[0]!.id;
     const ri = await client.query<{ id: string }>(
       `INSERT INTO recebimentos_itens
-         (recebimento_id, produto_id, quantidade_esperada)
+         (recebimento_id, item_comercial_id, quantidade_esperada)
        VALUES ($1, $2, 1) RETURNING id`,
       [recebimentoId, produtoId],
     );
@@ -332,7 +332,7 @@ export async function semearDivergenciasLegadas(
     for (const tipo of tipos) {
       const d = await client.query<{ id: string }>(
         `INSERT INTO divergencias_recebimento
-           (recebimento_id, recebimento_item_id, produto_id, tipo, descricao,
+           (recebimento_id, recebimento_item_id, item_comercial_id, tipo, descricao,
             acao_imediata, responsavel_registro_id)
          VALUES ($1, $2, $3, $4, 'legado', 'tratar', $5) RETURNING id`,
         [recebimentoId, recebimentoItemId, produtoId, tipo, usuarioId],

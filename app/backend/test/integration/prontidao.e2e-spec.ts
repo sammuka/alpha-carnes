@@ -11,6 +11,7 @@ describe('DP-01 — Prontidão de cadastros e2e', () => {
 
   beforeAll(async () => {
     app = await createTestApp();
+    await cleanupDb(app);
     const admin = await createTestUser(app, { perfil: 'administrador' });
     adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
   });
