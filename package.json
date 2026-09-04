@@ -7,7 +7,9 @@
     "sharp": "0.35.0",
     "next": {
       "postcss": "8.5.22"
-    }
+    },
+    "pg": "8.23.0",
+    "@types/pg": "8.23.1"
   },
   "scripts": {
     "lint": "npm run lint --workspaces --if-present",
