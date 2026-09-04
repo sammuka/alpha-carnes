@@ -11,7 +11,7 @@ import { operacoes,
   notasFiscais,
   pecas,
   subitens,
-  itensComerciais,
+  produtos,
   pedidosVenda,
   clientes,
   auditoria,
@@ -304,14 +304,14 @@ export class LiberacaoService {
         caminhaoId: cargaItens.caminhaoId,
         pedidoVendaId: cargaItens.pedidoVendaId,
         etiqueta: pecas.etiquetaAtual,
-        produtoNome: itensComerciais.descricao,
+        produtoNome: produtos.nome,
         peso: pecas.pesoOriginal,
         numeroSequencial: comprasProgramadas.numeroSequencial,
       })
       .from(cargaItens)
       .innerJoin(pecas, eq(pecas.id, cargaItens.pecaId))
       .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
-      .innerJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
+      .innerJoin(produtos, eq(produtos.id, pecas.produtoBaseId))
       .where(
         and(
           inArray(cargaItens.caminhaoId, caminhaoIds),
@@ -327,7 +327,7 @@ export class LiberacaoService {
         caminhaoId: cargaItens.caminhaoId,
         pedidoVendaId: cargaItens.pedidoVendaId,
         etiqueta: subitens.etiquetaAtual,
-        produtoNome: itensComerciais.descricao,
+        produtoNome: produtos.nome,
         peso: subitens.peso,
         numeroSequencial: comprasProgramadas.numeroSequencial,
       })
@@ -335,7 +335,7 @@ export class LiberacaoService {
       .innerJoin(subitens, eq(subitens.id, cargaItens.subitemId))
       .innerJoin(pecas, eq(pecas.id, subitens.pecaOrigemId))
       .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
-      .innerJoin(itensComerciais, eq(itensComerciais.id, subitens.itemComercialId))
+      .innerJoin(produtos, eq(produtos.id, subitens.produtoId))
       .where(
         and(
           inArray(cargaItens.caminhaoId, caminhaoIds),

@@ -150,14 +150,14 @@ export interface DisponibilidadeGeradaPayload {
   numeroSequencial?: number;
   itens: Array<{
     disponibilidadeId: string;
-    itemComercialId: string;
+    produtoId: string;
     quantidadeTotalGerada: string;
   }>;
 }
 
 export interface ReservaAtualizadaPayload {
   disponibilidadeId: string;
-  itemComercialId: string;
+  produtoId: string;
   dataOperacao: string;
   quantidadeReservada: string;
   quantidadeDisponivel: string;
@@ -168,7 +168,7 @@ export interface PedidoSemCoberturaPayload {
   dataOperacao: string;
   itens: Array<{
     pedidoItemId: string;
-    itemComercialId: string;
+    produtoId: string;
     quantidadePendente: string;
   }>;
 }
@@ -186,7 +186,7 @@ export interface RecebimentoRegistradoPayload {
   dataOperacao: string;
   /** 'item' = um item conferido; 'conclusao' = recebimento concluído. */
   etapa: 'item' | 'conclusao';
-  itemComercialId?: string;
+  produtoId?: string;
 }
 
 export interface DivergenciaRecebimentoPayload {
@@ -209,7 +209,7 @@ export interface PedidoEmRiscoPayload {
   origem: 'recebimento' | 'conclusao';
   pedidos: Array<{
     pedidoId: string;
-    itemComercialId: string;
+    produtoId: string;
     quantidadeReservada: string;
     quantidadeRecebida: string;
   }>;
@@ -400,7 +400,7 @@ export interface CompraAlteradaImpactoPayload {
   operacaoId: string;
   dataOperacao: string;
   deficitTotal: string;
-  itens: Array<{ itemComercialId: string; delta: string; deficitProjetado: string }>;
+  itens: Array<{ produtoId: string; delta: string; deficitProjetado: string }>;
 }
 
 export interface AprovacaoOperacionalPayload {
@@ -479,7 +479,7 @@ export interface PayloadPorEvento {
   adendo_registrado: {
     adendoId: string;
     pedidoVendaId: string;
-    itemComercialId: string;
+    produtoId: string;
     quantidadeAdicionada: string;
     origemConsumo: 'fisico' | 'virtual' | 'overbooking';
   };

@@ -4,7 +4,7 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
-  notasFiscais, caminhoes, clientes, pedidosVenda, cargaItens, pecas, subitens, itensComerciais,
+  notasFiscais, caminhoes, clientes, pedidosVenda, cargaItens, pecas, subitens, produtos,
 } from '../../../database/schema';
 import { calcularRange, montarPaginado } from '../../../common/crud/paginacao';
 import type { ListarNotasQuery } from './dto/faturamento.dto';
@@ -67,17 +67,17 @@ export class NotasConsultaService {
       .where(eq(pedidosVenda.id, nota.pedidoVendaId)).then((r) => r[0] ?? null);
 
     const itensPeca = await this.db.select({
-      etiqueta: pecas.etiquetaAtual, produtoNome: itensComerciais.descricao, peso: pecas.pesoOriginal,
+      etiqueta: pecas.etiquetaAtual, produtoNome: produtos.nome, peso: pecas.pesoOriginal,
     }).from(cargaItens)
       .innerJoin(pecas, eq(pecas.id, cargaItens.pecaId))
-      .innerJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
+      .innerJoin(produtos, eq(produtos.id, pecas.produtoBaseId))
       .where(and(eq(cargaItens.caminhaoId, nota.caminhaoId), eq(cargaItens.pedidoVendaId, nota.pedidoVendaId), eq(cargaItens.tipoOrigem, 'peca')));
 
     const itensSubitem = await this.db.select({
-      etiqueta: subitens.etiquetaAtual, produtoNome: itensComerciais.descricao, peso: subitens.peso,
+      etiqueta: subitens.etiquetaAtual, produtoNome: produtos.nome, peso: subitens.peso,
     }).from(cargaItens)
       .innerJoin(subitens, eq(subitens.id, cargaItens.subitemId))
-      .innerJoin(itensComerciais, eq(itensComerciais.id, subitens.itemComercialId))
+      .innerJoin(produtos, eq(produtos.id, subitens.produtoId))
       .where(and(eq(cargaItens.caminhaoId, nota.caminhaoId), eq(cargaItens.pedidoVendaId, nota.pedidoVendaId), eq(cargaItens.tipoOrigem, 'subitem')));
 
     const pecasRastreio = [...itensPeca, ...itensSubitem];

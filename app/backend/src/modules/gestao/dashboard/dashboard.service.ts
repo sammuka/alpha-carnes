@@ -7,7 +7,7 @@ import * as schema from '../../../database/schema';
 import {
   auditoria,
   clientes,
-  itensComerciais,
+  produtos,
   pedidosVenda,
   pedidosVendaItens,
   pecas,
@@ -283,11 +283,11 @@ export class DashboardService {
     for (const p of pedidos) {
       const itens = await this.db
         .select({
-          codigo: itensComerciais.codigo,
+          codigo: produtos.codigo,
           quantidade: pedidosVendaItens.quantidadePedida,
         })
         .from(pedidosVendaItens)
-        .innerJoin(itensComerciais, eq(itensComerciais.id, pedidosVendaItens.itemComercialId))
+        .innerJoin(produtos, eq(produtos.id, pedidosVendaItens.produtoId))
         .where(and(
           eq(pedidosVendaItens.pedidoVendaId, p.pedidoId),
           isNull(pedidosVendaItens.deletedAt),
