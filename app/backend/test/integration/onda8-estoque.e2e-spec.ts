@@ -338,7 +338,7 @@ describe('Onda 8 — Estoque', () => {
     const fornecedorId = await inserirFornecedor(db);
 
     const [produtoCx] = await db.select().from(schema.produtos).where(and(eq(schema.produtos.codigo, 'CXMIU'), isNull(schema.produtos.deletedAt)));
-    if (!produtoCx?.legadoprodutoId) throw new Error('fixture: CXMIU sem legadoprodutoId');
+    if (!produtoCx?.id) throw new Error('fixture: CXMIU ausente');
 
     const base = await seedComercialBase(app, { fator: 1 });
     const c = await montarCenarioPesagem(
@@ -346,7 +346,7 @@ describe('Onda 8 — Estoque', () => {
       { dataOperacao: '2026-08-01', quantidade: 5 },
     );
     const pedido = await criarPedido(app, cookiesComercial, {
-      compraId: c.compraId, clienteId: c.clienteId, produtoId: produtoCx.legadoprodutoId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: produtoCx.id,
       dataOperacao: c.dataOperacao, quantidade: 3,
     });
 

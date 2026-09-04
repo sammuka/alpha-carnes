@@ -15,19 +15,19 @@ function dbOf(app: INestApplication): Db {
 
 /**
  * Emenda 7 — seed Task 2 (catálogo MVP + regras TZ A/B) e devolve
- * legadoprodutoId do produto CB (saída canônica Alternativa A).
+ * id do produto CB (saída canônica Alternativa A).
  */
 export async function itemSaidaCanonicoCb(app: INestApplication): Promise<string> {
   const db = dbOf(app);
   await seedCatalogoMvp(db);
   await seedRegrasTransformacaoTz(db);
   const [saidaCb] = await db
-    .select({ produtoId: schema.produtos.legadoprodutoId })
+    .select({ produtoId: schema.produtos.id })
     .from(schema.produtos)
     .where(and(eq(schema.produtos.codigo, 'CB'), isNull(schema.produtos.deletedAt)))
     .limit(1);
   if (!saidaCb?.produtoId) {
-    throw new Error('Produto CB seed sem legadoprodutoId (catálogo MVP / Task 2)');
+    throw new Error('Produto CB seed ausente (catálogo MVP / Task 2)');
   }
   return saidaCb.produtoId;
 }
@@ -71,17 +71,17 @@ export async function prepararTransformacaoComRegraTzA(
   }
 
   const [saidaCb] = await db
-    .select({ produtoId: schema.produtos.legadoprodutoId })
+    .select({ produtoId: schema.produtos.id })
     .from(schema.produtos)
     .where(and(eq(schema.produtos.codigo, 'CB'), isNull(schema.produtos.deletedAt)))
     .limit(1);
   const [saidaJac] = await db
-    .select({ produtoId: schema.produtos.legadoprodutoId })
+    .select({ produtoId: schema.produtos.id })
     .from(schema.produtos)
     .where(and(eq(schema.produtos.codigo, 'JAC'), isNull(schema.produtos.deletedAt)))
     .limit(1);
   if (!saidaCb?.produtoId || !saidaJac?.produtoId) {
-    throw new Error('Produtos CB/JAC seed sem legadoprodutoId (catálogo MVP / Task 2)');
+    throw new Error('Produtos CB/JAC seed ausentes (catálogo MVP / Task 2)');
   }
   return {
     regraId: regraA.id,

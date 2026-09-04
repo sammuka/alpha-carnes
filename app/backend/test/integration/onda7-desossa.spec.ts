@@ -79,11 +79,11 @@ async function seedFixtureEtiquetaSubitemEmCargaFechada(
   }
 
   const [saidaCb] = await db
-    .select({ produtoId: schema.produtos.legadoprodutoId })
+    .select({ produtoId: schema.produtos.id })
     .from(schema.produtos)
     .where(and(eq(schema.produtos.codigo, 'CB'), isNull(schema.produtos.deletedAt)))
     .limit(1);
-  if (!saidaCb?.produtoId) throw new Error('Produto CB seed sem legadoprodutoId');
+  if (!saidaCb?.produtoId) throw new Error('Produto CB seed ausente');
   const itemSaidaRegraId = saidaCb.produtoId;
 
   const pedido = await criarPedido(app, cookiesComercial, {
@@ -186,11 +186,11 @@ async function seedFixtureEtiquetaSubitemSemCarga(
   }
 
   const [saidaCb] = await db
-    .select({ produtoId: schema.produtos.legadoprodutoId })
+    .select({ produtoId: schema.produtos.id })
     .from(schema.produtos)
     .where(and(eq(schema.produtos.codigo, 'CB'), isNull(schema.produtos.deletedAt)))
     .limit(1);
-  if (!saidaCb?.produtoId) throw new Error('Produto CB seed sem legadoprodutoId');
+  if (!saidaCb?.produtoId) throw new Error('Produto CB seed ausente');
   const itemSaidaRegraId = saidaCb.produtoId;
 
   const pedido = await criarPedido(app, cookiesComercial, {
@@ -290,7 +290,7 @@ describe('Onda 7 — desossa', () => {
     });
     const transformacaoId = await iniciarCorte(app, cookiesCorte, pecaId);
     const [cb] = await db
-      .select({ id: schema.produtos.legadoprodutoId })
+      .select({ id: schema.produtos.id })
       .from(schema.produtos)
       .where(eq(schema.produtos.codigo, 'CB'))
       .limit(1);
@@ -385,7 +385,7 @@ describe('Onda 7 — desossa', () => {
       .set('Cookie', cookiesCorte)
       .send({ regraTransformacaoId: regraA!.id });
     const [fc] = await db
-      .select({ id: schema.produtos.legadoprodutoId })
+      .select({ id: schema.produtos.id })
       .from(schema.produtos)
       .where(eq(schema.produtos.codigo, 'FC'))
       .limit(1);

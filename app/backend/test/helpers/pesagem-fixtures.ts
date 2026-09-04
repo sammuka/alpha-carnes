@@ -47,10 +47,13 @@ export interface CenarioPesagem {
 export async function montarCenarioPesagem(
   app: INestApplication,
   cookies: { compras: string; recebimento: string },
-  base: { fornecedorId: string; produtoId: string; produtoId: string },
+  base: { fornecedorId: string; produtoCompraId: string; produtoId: string },
   opts: { dataOperacao: string; quantidade: number },
 ): Promise<CenarioPesagem> {
-  const compraId = await criarCompraConfirmada(app, cookies.compras, base, opts);
+  const compraId = await criarCompraConfirmada(app, cookies.compras, {
+    fornecedorId: base.fornecedorId,
+    produtoCompraId: base.produtoCompraId,
+  }, opts);
   const pedidoFornecedorId = await criarPedidoFornecedorEnviado(app, cookies.compras, compraId);
   const { recebimentoId } = await iniciarRecebimentoViaPf(app, cookies.recebimento, pedidoFornecedorId);
 

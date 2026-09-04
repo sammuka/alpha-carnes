@@ -27,7 +27,6 @@ describe('FaltasService', () => {
                     id: 'prod-1',
                     codigo: 'PA',
                     nome: 'Patinho',
-                    legadoprodutoId: 'ic-1',
                   },
                 ]),
               ),
@@ -40,7 +39,7 @@ describe('FaltasService', () => {
               innerJoin: jest.fn(() => ({
                 where: jest.fn(() => ({
                   groupBy: jest.fn(() =>
-                    Promise.resolve([{ produtoId: 'ic-1', total: '5' }]),
+                    Promise.resolve([{ produtoId: 'prod-1', total: '5' }]),
                   ),
                 })),
               })),
@@ -54,8 +53,8 @@ describe('FaltasService', () => {
                 groupBy: jest.fn(() =>
                   Promise.resolve(
                     idx === 2
-                      ? [{ produtoId: 'ic-1', total: '1' }]
-                      : [{ produtoId: 'ic-1', total: '2' }],
+                      ? [{ produtoId: 'prod-1', total: '1' }]
+                      : [{ produtoId: 'prod-1', total: '2' }],
                   ),
                 ),
               })),
@@ -89,7 +88,7 @@ describe('FaltasService', () => {
     });
   });
 
-  it('ignora produtos de saída sem item comercial legado vinculado', async () => {
+  it('retorna vazio quando produto de saída não tem demanda pendente', async () => {
     let selectCall = 0;
     const db = {
       select: jest.fn(() => {
@@ -102,8 +101,7 @@ describe('FaltasService', () => {
                   {
                     id: 'prod-x',
                     codigo: 'X',
-                    nome: 'Sem legado',
-                    legadoprodutoId: null,
+                    nome: 'Sem demanda',
                   },
                 ]),
               ),

@@ -46,8 +46,6 @@ const produtoBase = {
   status: 'ativo',
   observacoesOperacionais: null,
   atributosJson: {},
-  legadoprodutoId: null,
-  legadoprodutoId: null,
   deletedAt: null,
 };
 
@@ -165,69 +163,6 @@ describe('ProdutosService — cobertura de branches Onda 12', () => {
       'user-1',
     );
     expect(criado.id).toBe('prod-1');
-  });
-
-  it('sincronizarLegado atualiza item de compra existente e rejeita código duplicado', async () => {
-    const service = new ProdutosService({ db: { transaction: jest.fn() } } as never, auditoria as never);
-    const txUpdate = {
-      select: jest.fn(() => ({ from: jest.fn(() => ({ where: jest.fn(() => Promise.resolve([])) })) })),
-      update: jest.fn(() => ({
-        set: jest.fn(() => ({
-          where: jest.fn(() => ({
-            returning: jest.fn(() => Promise.resolve([{ id: 'icp-legado' }])),
-          })),
-        })),
-      })),
-    };
-    const res = await service.sincronizarLegado(
-      txUpdate as never,
-      {
-        codigo: 'BOI',
-        nome: 'Boi',
-        tipoOperacional: 'compra_base',
-        unidadePedido: 'unidade',
-        unidadePreco: 'unidade',
-        exigePeso: false,
-        passaBalanca: false,
-        passaDesossa: false,
-        origemTransformacao: false,
-        saidaTransformacao: false,
-        podeEstoque: true,
-        ativoVenda: false,
-        ativoCompra: true,
-        status: 'ativo',
-      },
-      { legadoprodutoId: null, legadoprodutoId: 'icp-legado' },
-    );
-    expect(res.legadoprodutoId).toBe('icp-legado');
-
-    const txDup = {
-      select: jest.fn(() => ({
-        from: jest.fn(() => ({ where: jest.fn(() => Promise.resolve([{ id: 'outro' }])) })),
-      })),
-    };
-    await expect(
-      service.sincronizarLegado(
-        txDup as never,
-        {
-          codigo: 'BOI',
-          nome: 'Boi',
-          tipoOperacional: 'compra_base',
-          unidadePedido: 'unidade',
-          unidadePreco: 'unidade',
-          exigePeso: false,
-          passaBalanca: false,
-          passaDesossa: false,
-          origemTransformacao: false,
-          saidaTransformacao: false,
-          podeEstoque: true,
-          ativoVenda: false,
-          ativoCompra: true,
-          status: 'ativo',
-        },
-        { legadoprodutoId: null, legadoprodutoId: null },
-      ),
-    ).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('remover produto existente', async () => {

@@ -1,0 +1,4 @@
+
+> @alphacarnes/backend@0.1.0 test:cov
+> jest --coverage --passWithNoTests
+
