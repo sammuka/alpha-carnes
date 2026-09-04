@@ -17,8 +17,6 @@ import { ClientesModule } from './modules/cadastros/clientes/clientes.module';
 import { FornecedoresModule } from './modules/cadastros/fornecedores/fornecedores.module';
 import { FrotaModule } from './modules/frota/frota.module';
 import { ModelosEtiquetaModule } from './modules/modelos-etiqueta/modelos-etiqueta.module';
-import { ItensCompraModule } from './modules/cadastros/itens-compra/itens-compra.module';
-import { ItensComerciaisModule } from './modules/cadastros/itens-comerciais/itens-comerciais.module';
 import { RegrasDesdobramentoModule } from './modules/cadastros/regras-desdobramento/regras-desdobramento.module';
 import { ProdutosModule } from './modules/cadastros/produtos/produtos.module';
 import { RepresentantesModule } from './modules/cadastros/representantes/representantes.module';
@@ -73,8 +71,6 @@ import type { IncomingMessage } from 'http';
     FornecedoresModule,
     FrotaModule,
     ModelosEtiquetaModule,
-    ItensCompraModule,
-    ItensComerciaisModule,
     ProdutosModule,
     RepresentantesModule,
     RotasModule,

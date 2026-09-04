@@ -2,7 +2,6 @@ import { relations, sql } from 'drizzle-orm';
 import { check, index, jsonb, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { pecas } from './pesagem.schema';
 import { produtos } from './produtos.schema';
-import { produtos } from './produtos.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
 import { usuarios } from './auth.schema';
 import { regrasTransformacao } from './regras-transformacao.schema';

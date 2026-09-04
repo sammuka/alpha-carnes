@@ -3,7 +3,6 @@ import { check, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, 
 import { fornecedores } from './fornecedores.schema';
 import { produtos } from './produtos.schema';
 import { operacoes } from './operacoes.schema';
-import { comprasProgramadas } from './compras-programadas.schema';
 import { usuarios } from './auth.schema';
 
 export const comprasProgramadas = pgTable(

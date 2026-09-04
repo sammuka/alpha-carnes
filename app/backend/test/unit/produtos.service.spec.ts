@@ -1,64 +1,8 @@
-import { itensComerciais, itensCompra } from '../../src/database/schema';
+import { produtos } from '../../src/database/schema';
 import { ProdutosService } from '../../src/modules/cadastros/produtos/produtos.service';
+import { listarProdutoQuerySchema } from '../../src/common/crud/paginacao';
 
-describe('ProdutosService — sincronização legado', () => {
-  function criarTxMock() {
-    const inserts: { tabela: 'comercial' | 'compra'; valores: unknown }[] = [];
-    const updates: { tabela: 'comercial' | 'compra'; valores: unknown }[] = [];
-
-    const tx = {
-      select: jest.fn((cols?: unknown) => ({
-        from: jest.fn(() => ({
-          where: jest.fn(() => {
-            if (cols && typeof cols === 'object' && cols !== null && 'id' in cols) {
-              return Promise.resolve([]);
-            }
-            return Promise.resolve([]);
-          }),
-        })),
-      })),
-      insert: jest.fn((tabela: unknown) => ({
-        values: jest.fn((valores: unknown) => ({
-          returning: jest.fn(() => {
-            if (tabela === itensComerciais) {
-              inserts.push({ tabela: 'comercial', valores });
-              return Promise.resolve([{ id: 'ic-mock-1' }]);
-            }
-            if (tabela === itensCompra) {
-              inserts.push({ tabela: 'compra', valores });
-              return Promise.resolve([{ id: 'icp-mock-1' }]);
-            }
-            return Promise.resolve([{ id: 'outro-mock-1' }]);
-          }),
-        })),
-      })),
-      update: jest.fn((tabela: unknown) => ({
-        set: jest.fn((valores: unknown) => ({
-          where: jest.fn(() => ({
-            returning: jest.fn(() => {
-              if (tabela === itensComerciais) {
-                updates.push({ tabela: 'comercial', valores });
-                return Promise.resolve([{ id: 'ic-legado-1' }]);
-              }
-              if (tabela === itensCompra) {
-                updates.push({ tabela: 'compra', valores });
-                return Promise.resolve([{ id: 'icp-legado-1' }]);
-              }
-              return Promise.resolve([{ id: 'outro-mock-1' }]);
-            }),
-          })),
-        })),
-      })),
-    };
-
-    return { tx, inserts, updates };
-  }
-
-  function montarService() {
-    const auditoria = { registrar: jest.fn().mockResolvedValue(undefined) };
-    return new ProdutosService({ db: { transaction: jest.fn() } } as never, auditoria as never);
-  }
-
+describe('ProdutosService — catálogo único (AD-15)', () => {
   const payloadVenda = {
     codigo: 'DIANT',
     nome: 'Dianteiro',
@@ -76,104 +20,93 @@ describe('ProdutosService — sincronização legado', () => {
     status: 'ativo' as const,
   };
 
-  const payloadCompra = {
-    codigo: 'BOI',
-    nome: 'Boi inteiro',
-    unidadePedido: 'unidade',
-    tipoOperacional: 'compra_base' as const,
-    unidadePreco: 'unidade' as const,
-    exigePeso: false,
-    passaBalanca: false,
-    passaDesossa: false,
-    origemTransformacao: false,
-    saidaTransformacao: false,
-    podeEstoque: true,
-    ativoVenda: false,
-    ativoCompra: true,
-    status: 'ativo' as const,
-  };
+  function montarService(dbMock: unknown) {
+    const auditoria = { registrar: jest.fn().mockResolvedValue(undefined) };
+    return new ProdutosService({ db: dbMock } as never, auditoria as never);
+  }
 
-  it('cria item comercial legado quando ativoVenda=true', async () => {
-    const { tx, inserts } = criarTxMock();
-    const service = montarService();
+  it('criar com ativoVenda insere somente em produtos', async () => {
+    const inserts: unknown[] = [];
+    const tx = {
+      select: jest.fn(() => ({
+        from: jest.fn(() => ({
+          where: jest.fn(() => Promise.resolve([])),
+        })),
+      })),
+      insert: jest.fn((tabela: unknown) => ({
+        values: jest.fn((valores: unknown) => ({
+          returning: jest.fn(() => {
+            if (tabela === produtos) {
+              inserts.push(valores);
+              return Promise.resolve([{ id: 'prod-mock-1', ...payloadVenda }]);
+            }
+            throw new Error(`insert inesperado em ${String(tabela)}`);
+          }),
+        })),
+      })),
+    };
+    const db = {
+      transaction: jest.fn((fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+    };
+    const service = montarService(db);
 
-    const resultado = await service.sincronizarLegado(tx as never, payloadVenda, {
-      legadoItemComercialId: null,
-      legadoItemCompraId: null,
-    });
+    await service.criar(payloadVenda, 'user-1');
 
-    expect(resultado.legadoItemComercialId).toBe('ic-mock-1');
-    expect(resultado.legadoItemCompraId).toBeNull();
-    expect(inserts).toEqual([
-      {
-        tabela: 'comercial',
-        valores: expect.objectContaining({
-          codigo: 'DIANT',
-          descricao: 'Dianteiro',
-          unidadeComercial: 'unidade',
-          permiteCorte: false,
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]).toEqual(expect.objectContaining({ codigo: 'DIANT', ativoVenda: true }));
+  });
+
+  it('listar com ativoVenda=true exclui BOI (filtro no WHERE)', async () => {
+    const boi = { id: '1', codigo: 'BOI', ativoVenda: false, ativoCompra: true, deletedAt: null };
+    const tz = { id: '2', codigo: 'TZ', ativoVenda: true, ativoCompra: true, deletedAt: null };
+    const whereCalls: unknown[] = [];
+
+    const db = {
+      select: jest.fn(() => ({
+        from: jest.fn(() => ({
+          where: jest.fn((cond: unknown) => {
+            whereCalls.push(cond);
+            return {
+              orderBy: jest.fn(() => ({
+                limit: jest.fn(() => ({
+                  offset: jest.fn(() => Promise.resolve([tz])),
+                })),
+              })),
+            };
+          }),
+        })),
+      })),
+    };
+    (db.select as jest.Mock).mockImplementationOnce(() => ({
+      from: jest.fn(() => ({
+        where: jest.fn((cond: unknown) => {
+          whereCalls.push(cond);
+          return {
+            orderBy: jest.fn(() => ({
+              limit: jest.fn(() => ({
+                offset: jest.fn(() => Promise.resolve([tz])),
+              })),
+            })),
+          };
         }),
-      },
-    ]);
+      })),
+    }));
+    (db.select as jest.Mock).mockImplementationOnce(() => ({
+      from: jest.fn(() => ({
+        where: jest.fn(() => Promise.resolve([{ total: 1 }])),
+      })),
+    }));
+
+    const service = montarService(db);
+    const resultado = await service.listar({ page: 1, pageSize: 20, ativoVenda: true, incluirRemovidos: false });
+
+    expect(resultado.data).toEqual([tz]);
+    expect(resultado.data.some((p) => p.codigo === 'BOI')).toBe(false);
+    expect(whereCalls.length).toBeGreaterThan(0);
   });
 
-  it('cria item de compra legado quando ativoCompra=true', async () => {
-    const { tx, inserts } = criarTxMock();
-    const service = montarService();
-
-    const resultado = await service.sincronizarLegado(tx as never, payloadCompra, {
-      legadoItemComercialId: null,
-      legadoItemCompraId: null,
-    });
-
-    expect(resultado.legadoItemCompraId).toBe('icp-mock-1');
-    expect(resultado.legadoItemComercialId).toBeNull();
-    expect(inserts).toEqual([
-      {
-        tabela: 'compra',
-        valores: expect.objectContaining({
-          codigo: 'BOI',
-          descricao: 'Boi inteiro',
-          unidadeCompra: 'unidade',
-        }),
-      },
-    ]);
-  });
-
-  it('atualiza registros legados existentes em vez de criar novos', async () => {
-    const { tx, inserts, updates } = criarTxMock();
-    const service = montarService();
-
-    const resultado = await service.sincronizarLegado(
-      tx as never,
-      { ...payloadVenda, ativoCompra: true, nome: 'Dianteiro atualizado' },
-      { legadoItemComercialId: 'ic-legado-1', legadoItemCompraId: 'icp-legado-1' },
-    );
-
-    expect(resultado).toEqual({
-      legadoItemComercialId: 'ic-legado-1',
-      legadoItemCompraId: 'icp-legado-1',
-    });
-    expect(updates).toHaveLength(2);
-    expect(inserts).toHaveLength(0);
-  });
-
-  it('mapeia permiteCorte=true para derivado_desossa', async () => {
-    const { tx, inserts } = criarTxMock();
-    const service = montarService();
-
-    await service.sincronizarLegado(
-      tx as never,
-      {
-        ...payloadVenda,
-        tipoOperacional: 'derivado_desossa',
-        passaDesossa: true,
-      },
-      { legadoItemComercialId: null, legadoItemCompraId: null },
-    );
-
-    expect(inserts[0]?.valores).toEqual(
-      expect.objectContaining({ permiteCorte: true }),
-    );
+  it('query string ativoVenda=false não vira true (listarProdutoQuerySchema)', () => {
+    const parsed = listarProdutoQuerySchema.parse({ page: '1', pageSize: '20', ativoVenda: 'false' });
+    expect(parsed.ativoVenda).toBe(false);
   });
 });

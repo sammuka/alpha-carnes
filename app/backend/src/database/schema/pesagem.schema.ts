@@ -3,7 +3,6 @@ import { boolean, check, index, integer, jsonb, numeric, pgTable, text, timestam
 import { comprasProgramadas } from './compras-programadas.schema';
 import { recebimentos } from './recebimentos.schema';
 import { produtos } from './produtos.schema';
-import { produtos } from './produtos.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
 import { usuarios } from './auth.schema';
 
