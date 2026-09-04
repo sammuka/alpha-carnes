@@ -97,6 +97,7 @@ Texto vigente: `produtos` é a entidade única; `itens_comerciais` e `itens_comp
 22. **Permissões RBAC órfãs:** `DELETE` físico nas tabelas `permissoes` / `perfis_permissoes` só para os quatro códigos `ITENS_*` (não são entidade de negócio). Snapshot via `npx tsx scripts/regen-rbac-snapshot.ts` em `app/backend`.
 23. **T07 em 6 commits** (um por domínio da Task 7). T02–T06, T08–T11: um commit cada.
 24. **Gate local sem abrir PR.** A seção “abertura do PR” deste plano é intencionalmente um no-op. PR = Task 13 após ALP-75 Done.
+25. **`rg` de aceite nunca varre `app/backend/src/database/migrations/**`.** SQL e snapshots `0001`–`0033` são história de migrate e **conservam** `item_comercial_id` / `itens_compra`. T05 só varre `src/database/schema`. Seeds (`seed-*.ts`) só precisam ficar limpos **depois** da T06. Comandos literais nas Tasks 5/7 e no Gate local.
 
 ---
 
@@ -689,11 +690,11 @@ Ordem efetiva do arquivo (generate + esses inserts): SET NOT NULL nas 13 → CHE
 
 ```powershell
 Set-Location app/backend
-rg "itensComerciais|itensCompra|itens-comerciais|itens-compra|legadoItem" src/database
+rg "itensComerciais|itensCompra|itens-comerciais|itens-compra|legadoItem" src/database/schema
 npx drizzle-kit check
 ```
 
-Saída esperada: `rg` vazio. `check` sem drift. Services quebrados são esperados até T06/T07 — **não corrigir** aqui.
+Saída esperada: `rg` vazio **só nesses paths** (schema pós-contract). `src/database/migrations/**` **não** entra neste `rg` (D25). `seed-*.ts` ainda podem citar legado — isso é T06, não falha da T05. `check` sem drift. Services quebrados são esperados até T06/T07 — **não corrigir** aqui.
 
 **Commit:** `test(onda13): verifica drizzle sem legado após contract` — só se houver arquivo de evidência/teste de journal. Se o diff for vazio, **não** criar commit vazio; registrar no relatório “T05 ok, diff vazio” e seguir.
 
@@ -867,7 +868,152 @@ Mapear retorno para `{ id, produtoId, quantidadeTotalGerada }`.
 `disponibilidade.service.ts`, `disponibilidade.controller.ts` (param `:itemComercialId` → `:produtoId`), `mapa.service.ts`, `dto/mapa.dto.ts`, `espelho.service.ts`, `dto/espelho.dto.ts`, `overbooking.service.ts`, `pedidos.service.ts`, `dto/pedido.dto.ts`, `adendos.service.ts`, `dto/adendo.dto.ts`, `overbooking-challenge.exception.ts`
 
 **Commit 7c — recebimento**  
-`recebimento.service.ts`, `recebimento-metadados.helper.ts` (`passaBalanca` = `produtos.passaBalanca` por `produtos.id` direto; default `true` só se o produto não existir — e nesse caso **lançar** se o ID veio de FK, não silenciar), `conferencia.service.ts`, `pedido-fornecedor.service.ts`, `nota-fiscal-fornecedor.persistence.ts`, `divergencia-recebimento.service.ts`, `dto/recebimento.dto.ts`, `dto/pedido-fornecedor.dto.ts`
+`recebimento.service.ts`, `recebimento-metadados.helper.ts` (corpo literal abaixo), `conferencia.service.ts`, `pedido-fornecedor.service.ts`, `nota-fiscal-fornecedor.persistence.ts`, `divergencia-recebimento.service.ts`, `dto/recebimento.dto.ts`, `dto/pedido-fornecedor.dto.ts`
+
+#### `recebimento-metadados.helper.ts` — substituição literal
+
+Apagar imports de `itensComerciais` / `itensCompra`. Importar `alias` de `drizzle-orm/pg-core`. `calcularProgressoBalanca` **não muda**. As três funções abaixo substituem as atuais por completo. **Proibido** `?? true` / default silencioso de `passaBalanca`.
+
+```ts
+export interface MetadadoItemPrevisto {
+  produtoId: string;
+  origemDescricao: string;
+  unidadeEsperada: string;
+  requerBalanca: boolean;
+}
+
+export async function resolverMetadadosItensPrevistos(
+  tx: Tx,
+  compraProgramadaId: string,
+  numeroInterno: string | null,
+  produtoIds: string[],
+): Promise<Map<string, MetadadoItemPrevisto>> {
+  const mapa = new Map<string, MetadadoItemPrevisto>();
+  if (produtoIds.length === 0) return mapa;
+
+  const pc = numeroInterno ?? 'Compra';
+
+  const encontrados = await tx
+    .select({
+      id: produtos.id,
+      codigo: produtos.codigo,
+      nome: produtos.nome,
+      unidadePedido: produtos.unidadePedido,
+      passaBalanca: produtos.passaBalanca,
+    })
+    .from(produtos)
+    .where(inArray(produtos.id, produtoIds));
+
+  const faltando = produtoIds.filter((id) => !encontrados.some((p) => p.id === id));
+  if (faltando.length > 0) {
+    throw new Error(
+      `Onda 13: produto(s) inexistente(s) ao resolver metadados de recebimento: ${faltando.join(',')}`,
+    );
+  }
+
+  const origem = alias(produtos, 'produto_origem');
+  const destino = alias(produtos, 'produto_destino');
+  const regras = await tx
+    .select({
+      produtoDestinoId: regrasDesdobramentoComercial.produtoDestinoId,
+      produtoDestinoCodigo: destino.codigo,
+      produtoOrigemNome: origem.nome,
+    })
+    .from(disponibilidadesVirtuais)
+    .innerJoin(
+      regrasDesdobramentoComercial,
+      and(
+        eq(regrasDesdobramentoComercial.produtoDestinoId, disponibilidadesVirtuais.produtoId),
+        eq(regrasDesdobramentoComercial.status, 'ativo'),
+        isNull(regrasDesdobramentoComercial.deletedAt),
+      ),
+    )
+    .innerJoin(destino, eq(destino.id, regrasDesdobramentoComercial.produtoDestinoId))
+    .innerJoin(
+      comprasProgramadasItens,
+      and(
+        eq(comprasProgramadasItens.compraProgramadaId, compraProgramadaId),
+        eq(comprasProgramadasItens.produtoId, regrasDesdobramentoComercial.produtoOrigemId),
+        isNull(comprasProgramadasItens.deletedAt),
+      ),
+    )
+    .innerJoin(origem, eq(origem.id, regrasDesdobramentoComercial.produtoOrigemId))
+    .where(eq(disponibilidadesVirtuais.compraProgramadaId, compraProgramadaId));
+
+  const origemPorItem = new Map<string, string>();
+  const regrasPorCompra = new Map<string, Set<string>>();
+  for (const r of regras) {
+    const chave = r.produtoOrigemNome;
+    const set = regrasPorCompra.get(chave) ?? new Set<string>();
+    set.add(r.produtoDestinoCodigo);
+    regrasPorCompra.set(chave, set);
+  }
+  for (const r of regras) {
+    const codigos = [...(regrasPorCompra.get(r.produtoOrigemNome) ?? [])].sort().join('/');
+    origemPorItem.set(
+      r.produtoDestinoId,
+      `${pc} / Regra ${r.produtoOrigemNome} → ${codigos}`,
+    );
+  }
+
+  for (const p of encontrados) {
+    mapa.set(p.id, {
+      produtoId: p.id,
+      origemDescricao: origemPorItem.get(p.id) ?? pc,
+      unidadeEsperada: p.unidadePedido,
+      requerBalanca: p.passaBalanca,
+    });
+  }
+
+  return mapa;
+}
+
+export async function derivarTipoCarga(tx: Tx, compraProgramadaId: string): Promise<string | null> {
+  const linha = await tx
+    .select({ categoria: produtos.categoria })
+    .from(comprasProgramadasItens)
+    .innerJoin(produtos, eq(produtos.id, comprasProgramadasItens.produtoId))
+    .where(
+      and(
+        eq(comprasProgramadasItens.compraProgramadaId, compraProgramadaId),
+        isNull(comprasProgramadasItens.deletedAt),
+      ),
+    )
+    .limit(1)
+    .then((r) => r[0] ?? null);
+  return linha?.categoria ?? null;
+}
+
+export async function contarPecasPorItem(
+  tx: Tx,
+  recebimentoId: string,
+): Promise<Map<string, { quantidade: number; pesoTotal: string }>> {
+  const linhas = await tx.execute<{
+    produto_base_id: string;
+    quantidade: string;
+    peso_total: string;
+  }>(sql`
+    SELECT
+      produto_base_id,
+      count(*)::text AS quantidade,
+      COALESCE(SUM(peso_original), 0)::text AS peso_total
+    FROM pecas
+    WHERE recebimento_id = ${recebimentoId}
+      AND deleted_at IS NULL
+    GROUP BY produto_base_id
+  `);
+  const mapa = new Map<string, { quantidade: number; pesoTotal: string }>();
+  for (const row of linhas.rows) {
+    mapa.set(row.produto_base_id, {
+      quantidade: Number(row.quantidade),
+      pesoTotal: row.peso_total,
+    });
+  }
+  return mapa;
+}
+```
+
+Não voltar a `itens_*`. Chamadores (`recebimento.service.ts` etc.) trocam `itemComercialId` / `itemComercialIds` por `produtoId` / `produtoIds` e leem `metadado.produtoId`.
 
 **Commit 7d — pesagem**  
 `pesagem.service.ts`, `dto/pesagem.dto.ts`, `associacao.service.ts`, `associacao-score.ts`, `compatibilidade.ts`, `troca-peca.service.ts`, `etiqueta.service.ts`
@@ -889,10 +1035,10 @@ Mensagens:
 ### Aceite desta task
 
 ```powershell
-rg "itemComercial|itensComerciais|itemCompra|itensCompra|item_comercial|itens-comerciais|itens-compra" app/backend/src
+rg "itemComercial|itensComerciais|itemCompra|itensCompra|item_comercial|itens-comerciais|itens-compra" app/backend/src --glob "!**/database/migrations/**"
 ```
 
-Vazio. Comentários novos com esses termos são proibidos. `npm run type-check` no backend verde.
+Vazio **fora** de `database/migrations/**` (D25). Comentários novos com esses termos são proibidos. `npm run type-check` no backend verde.
 
 ---
 
@@ -960,6 +1106,8 @@ Não reescrever os atributos históricos das seções 3.3/3.4.
 - `next.config.ts` — **não** criar redirect dessas rotas para `/cadastros/produtos`. Se houver redirect AD-11 residual, apagar (404 natural).
 - BFF `api/cadastros/[recurso]` — já rejeita recurso fora de `CADASTROS`; sem rota dedicada para apagar (não existem pastas `itens-*`).
 - Testes: `menu-v2.test.ts`, `menu-rbac.test.ts`, `cadastros-config.test.ts` — contagem 39; administrador sem os dois hrefs.
+- `app/frontend/__tests__/next-config-rotas.test.ts` — manter as asserções (nenhum `source` `/cadastros/itens-*`, nenhum `destination` `/cadastros/produtos`). Trocar o título do `it` para `'não redireciona itens-compra nem itens-comerciais para produtos (AD-15, 404 natural)'` — a menção AD-11 no título some.
+- `app/frontend/__tests__/cadastro-form.test.tsx` — **apagar** o `describe('CadastroForm — itens-compra (smoke)')` (L113–121) e o import `itensCompraConfig`. Os describes de clientes/fornecedores ficam.
 
 **Commit:** `feat(onda13): menu e cadastros-config sem itens comerciais/compra`
 
@@ -981,6 +1129,8 @@ Troca mecânica: fetches e tipos. **Não** filtrar BOI no cliente.
 | `mapa-teatro.tsx`, `disponibilidade/page.tsx` | path `[itemComercialId]` | pasta BFF `api/comercial/disponibilidade/mapa/[produtoId]/detalhe` (renomear diretório) |
 | `recebimento-carga-client.tsx`, `pesagem-destinacao-client.tsx` | nested `itemComercial` | `produto` com `codigo`/`nome` |
 | `quadro-comparativo.tsx`, `painel-impacto.tsx`, `overbooking-client.tsx` | `itemComercialId` | `produtoId` |
+| `espelho-client.tsx` | `item.itemComercialId` na `key` da `TableRow` (~L309) | `item.produtoId` na mesma `key` |
+| `app/frontend/src/app/api/comercial/pedidos/aberto/route.ts` | `PedidoAberto.itemComercialId` | `produtoId` (proxy continua `fetchBackend` + querystring; o backend já troca o nome do campo na T07) |
 | `lib/comercial.ts`, `operacao.ts`, `overbooking.ts`, `espelho.ts`, `desossa.ts`, `mapa-disponibilidade.ts`, `produtos.ts` | campos legado | `produtoId` / `produtoBaseId`; apagar `legadoItem*` |
 
 Payload de item de pedido:
@@ -992,7 +1142,7 @@ Payload de item de pedido:
 `#produto-novo` permanece. Opções = `` `${codigo} ${nome}` ``. BOI não vem do GET com `ativoVenda=true`.
 
 Jest mínimo a atualizar (mocks `/api/cadastros/produtos?...` + `produtoId`):  
-`onda4-pedidos.test.tsx`, `disponibilidade.test.tsx`, `onda4-disponibilidade.test.tsx`, `onda4-espelho.test.tsx`, `recebimento.test.tsx`, `pesagem.test.tsx`, `compras-client.test.tsx`, `overbooking-client.test.tsx`, `painel-impacto.test.tsx`, `quadro-comparativo.test.tsx`, `simuladores-transformacao.test.tsx`.
+`onda4-pedidos.test.tsx`, `disponibilidade.test.tsx`, `onda4-disponibilidade.test.tsx`, `onda4-espelho.test.tsx`, `recebimento.test.tsx`, `pesagem.test.tsx`, `compras-client.test.tsx`, `overbooking-client.test.tsx`, `painel-impacto.test.tsx`, `quadro-comparativo.test.tsx`, `simuladores-transformacao.test.tsx`, `aprovacoes-client.test.tsx` (`COMPARATIVO.itens[0].itemComercialId` → `produtoId`; `descricao` permanece se o comparativo ainda expõe esse campo, senão `nome`), `api.test.ts` (`desafios: [{ produtoId: 'i1', quantidadeDeficit: '1.000' }]`).
 
 ```powershell
 rg "itens-comerciais|itens-compra|itemComercial|itemCompra" app/frontend/src
@@ -1099,10 +1249,10 @@ npm run test
 Playwright jornada contra a stack Docker (`4000` / `4001` / `15433`).
 
 ```powershell
-rg "itemComercial|itensComerciais|itemCompra|itensCompra|ITENS_COMERCIAIS_|ITENS_COMPRA_|itens-comerciais|itens-compra" app/backend/src app/frontend/src
+rg "itemComercial|itensComerciais|itemCompra|itensCompra|ITENS_COMERCIAIS_|ITENS_COMPRA_|itens-comerciais|itens-compra" app/backend/src app/frontend/src --glob "!**/database/migrations/**"
 ```
 
-Saída esperada: vazio. Exceções permitidas **somente** em `docs/execucao/DECISOES.md`, planos históricos já mergeados e este plano.
+Saída esperada: vazio **fora** de `database/migrations/**` (D25). Exceções permitidas **somente** em `docs/execucao/DECISOES.md`, planos históricos já mergeados, este plano e os snapshots `*.schema.pre-onda*` (fora de `src`). Testes em `app/frontend/__tests__` já foram reescritos nas Tasks 9–10 — se algum ainda casar, corrigir ali, não no `rg` do gate.
 
 **Proibido nesta seção:** `gh pr create`, `git push` para abrir PR, merge, edição de `GATE-VEREDITOS.md`.
 
@@ -1129,5 +1279,6 @@ Saída esperada: vazio. Exceções permitidas **somente** em `docs/execucao/DECI
 - [x] Nenhuma pendência §16 fechada (P11 permanece provisório).
 - [x] Palavra “Marca” não entra como rótulo/campo/entidade.
 - [x] Worker não escreve `docs/execucao/`.
+- [x] Emenda Portão 1 (2026-09-04): D25 + `rg` sem migrations; Task 10 inclui `espelho-client.tsx` e BFF `aberto/route.ts`; Jest `cadastro-form` / `next-config-rotas` / `aprovacoes-client` / `api.test`; helper de recebimento com corpo literal e sem default silencioso de `passaBalanca`.
 
 **Próximo passo humano/orquestração:** Executor commita este plano no o13, aponta `EXECUCAO-STATUS` Onda 13 para este path e marca `aguardando_portao1`. Monitor **novo** roda `$gate-plano`. Worker só depois de `aprovado`.
