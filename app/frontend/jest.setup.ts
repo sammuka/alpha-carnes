@@ -1,4 +1,11 @@
 import '@testing-library/jest-dom';
+import userEvent from '@testing-library/user-event';
+
+// CI Linux + jsdom: user-event 14 trava cliques em Radix Popover/Combobox quando
+// pointerEventsCheck está ativo ou pointer capture do jsdom está quebrado.
+const originalUserEventSetup = userEvent.setup.bind(userEvent);
+(userEvent as typeof userEvent & { setup: typeof userEvent.setup }).setup = (options) =>
+  originalUserEventSetup({ pointerEventsCheck: 0, ...options });
 
 // jsdom não expõe Fetch API completa; NextRequest (BFF) exige Request/Headers.
 if (typeof globalThis.Headers === 'undefined') {
@@ -129,21 +136,15 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !=
   Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 }
 
-// user-event 14 + Radix Popover/Combobox no jsdom do CI Linux: sem pointer capture
-// o clique do trigger nunca completa e o teste estoura timeout.
+// user-event 14 + Radix Popover/Combobox no jsdom do CI Linux: o jsdom expõe pointer
+// capture parcialmente implementado — sobrescrever sempre evita clique pendurado.
 if (typeof HTMLElement !== 'undefined') {
   const proto = HTMLElement.prototype as HTMLElement & {
-    hasPointerCapture?: (id: number) => boolean;
-    setPointerCapture?: (id: number) => void;
-    releasePointerCapture?: (id: number) => void;
+    hasPointerCapture: (id: number) => boolean;
+    setPointerCapture: (id: number) => void;
+    releasePointerCapture: (id: number) => void;
   };
-  if (typeof proto.hasPointerCapture !== 'function') {
-    proto.hasPointerCapture = () => false;
-  }
-  if (typeof proto.setPointerCapture !== 'function') {
-    proto.setPointerCapture = () => {};
-  }
-  if (typeof proto.releasePointerCapture !== 'function') {
-    proto.releasePointerCapture = () => {};
-  }
+  proto.hasPointerCapture = () => false;
+  proto.setPointerCapture = () => {};
+  proto.releasePointerCapture = () => {};
 }

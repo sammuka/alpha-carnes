@@ -9,6 +9,6 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   maxWorkers: 2,
   passWithNoTests: true,
-  // userEvent + drawers saturam o CPU no suite completo (Windows/CI); 15s flakava no GitHub Actions.
-  testTimeout: 30_000,
+  // userEvent + drawers/combobox no jsdom do CI Linux saturam CPU; 60s evita flake no Actions.
+  testTimeout: 60_000,
 };
