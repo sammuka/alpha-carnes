@@ -26,12 +26,6 @@ describe('Onda 13 — unificação do catálogo (AD-15)', () => {
   beforeAll(async () => {
     app = await createTestApp();
     ({ db } = app.get(DRIZZLE));
-    const compras = await createTestUser(app, { perfil: 'compras' });
-    const comercial = await createTestUser(app, { perfil: 'comercial' });
-    const admin = await createTestUser(app, { perfil: 'administrador' });
-    comprasCookies = await loginCookies(app, compras.adminEmail, compras.adminPassword);
-    comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
-    adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
   });
 
   afterAll(async () => {
@@ -39,8 +33,19 @@ describe('Onda 13 — unificação do catálogo (AD-15)', () => {
     await app.close();
   });
 
+  async function refreshAuth() {
+    const compras = await createTestUser(app, { perfil: 'compras' });
+    const comercial = await createTestUser(app, { perfil: 'comercial' });
+    const admin = await createTestUser(app, { perfil: 'administrador' });
+    comprasCookies = await loginCookies(app, compras.adminEmail, compras.adminPassword);
+    comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
+    adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
+  }
+
   beforeEach(async () => {
     await cleanupDb(app);
+    ({ db } = app.get(DRIZZLE));
+    await refreshAuth();
     await seedCatalogoMvp(db);
     await seedRegrasDesdobramentoComercial(db);
     const [fornecedor] = await db.insert(schema.fornecedores).values({
