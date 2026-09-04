@@ -1,12 +1,11 @@
 # Onda 13 — Evidências de unificação do catálogo (AD-15)
 
-Screenshots previstos para validação do Quality Owner (ALP-75):
+Capturas para validação ALP-75 (Quality Owner):
 
-1. `01-menu-cadastros.png` — grupo CADASTROS & REGRAS sem Itens de Compra / Itens Comerciais
-2. `02-produtos-boi-bporco.png` — lista Produtos com BOI (`compra_base`) e BPORCO (duas flags)
-3. `03-pedidos-seletor-sem-boi.png` — novo pedido: seletor Produto sem BOI
-4. `04-compras-seletor-com-boi.png` — Gestão → Compras: seletor inclui BOI
-5. `05-regras-so-boi.png` — Regras de Transformação: só BOI→TZ/DT/PA
+1. `01-menu-cadastros.png` — grupo CADASTROS sem Itens de Compra / Itens Comerciais
+2. `02-produtos-boi-bporco.png` — BOI `compra_base` e BPORCO com duas flags
+3. `03-pedidos-seletor-sem-boi.png` — seletor de pedidos sem BOI
+4. `04-compras-seletor-com-boi.png` — seletor de compras com BOI
+5. `05-regras-so-boi.png` — regras só BOI→TZ/DT/PA
 
-> Placeholder: capturas dependem de stack Docker local (`localhost:4000`) após migrate+seed.
-> Jefferson (QO) executa o roteiro ALP-75 e substitui estes arquivos.
+Screenshots são produzidas manualmente pelo QO na jornada localhost:4000 (Task 12).
