@@ -1341,7 +1341,7 @@ const produtoId = await findByCode(request, auth.cookieHeader, 'produtos', itemC
 ```ts
 for (const rota of ['/cadastros/itens-compra/novo', '/cadastros/itens-comerciais/novo'] as const) {
   await page.goto(rota, { waitUntil: 'load' });
-  await expect(page.getByRole('heading', { name: '404' })).toBeVisible();
+  await expect(page.getByText(/404|This page could not be found|Página não encontrada/i).first()).toBeVisible();
   await expect(page.getByLabel('Unidade de Compra')).toHaveCount(0);
   await expect(page.getByLabel('Unidade Comercial')).toHaveCount(0);
 }
