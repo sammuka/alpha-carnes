@@ -98,6 +98,7 @@ Texto vigente: `produtos` é a entidade única; `itens_comerciais` e `itens_comp
 23. **T07 em 6 commits** (um por domínio da Task 7). T02–T06, T08–T11: um commit cada.
 24. **Gate local sem abrir PR.** A seção “abertura do PR” deste plano é intencionalmente um no-op. PR = Task 13 após ALP-75 Done.
 25. **`rg` de aceite nunca varre `app/backend/src/database/migrations/**`.** SQL e snapshots `0001`–`0033` são história de migrate e **conservam** `item_comercial_id` / `itens_compra`. T05 só varre `src/database/schema`. Seeds (`seed-*.ts`) só precisam ficar limpos **depois** da T06. Comandos literais nas Tasks 5/7 e no Gate local.
+26. **Testes históricos de migrate** (`migrarAte` / `aplicarTags` que param em tag `< 0034`) **não** entram no `rg` vazio da T11. Eles inserem em `itens_comerciais` no schema intermediário de Ondas 1–12. O glob `!**/*-migrations*` + `!**/*.schema.pre-onda*` cobre isso. Não reescrever o SQL legado desses specs.
 
 ---
 
@@ -1275,17 +1276,92 @@ Inverter fixtures e2e que hoje fazem `POST /itens-comerciais` ou `POST /itens-co
 - `app/frontend/e2e/helpers/onda6-seed.ts`, `onda9-seed.ts`, `onda10-seed.ts`
 - `app/frontend/e2e/onda5-gestao.spec.ts`, `onda5-usuarios-representantes.spec.ts`, `onda7.5-gestao.spec.ts`, `onda11-multicompra.spec.ts`, `onda12-dominio-campos-ui.spec.ts`, `jornada-operacional.spec.ts`
 
-Substituição: `POST /produtos` (ou `/api/cadastros/produtos` no BFF) com `{ codigo, nome, unidadePedido, unidadePreco, tipoOperacional, ativoVenda, ativoCompra }`. Jornada operacional cria produto em `/cadastros/produtos`, não em `/cadastros/itens-comerciais/novo`.
+Substituição: `POST /produtos` (ou `/api/cadastros/produtos` no BFF) com `{ codigo, nome, unidadePedido, unidadePreco, tipoOperacional, ativoVenda, ativoCompra }`.
+
+### Playwright — jornada e Onda 12 (literal)
+
+`createCadastroViaUi` em `jornada-operacional.spec.ts` **não** serve para Produtos (drawer `produtos-client.tsx`, 8 abas, botão `Salvar Produto`, fora de `cadastros-config.ts`). **Apagar** os dois blocos `recurso: 'itens-compra'` e `recurso: 'itens-comerciais'` (~L549–574) e o `POST /regras-desdobramento` 1:1 (~L576–583). A jornada desta onda é identidade implícita: **um** produto com as duas flags, sem regra origem=destino.
+
+Inserir helper (no mesmo arquivo):
+
+```ts
+async function createProdutoViaUi(
+  page: Page,
+  steps: StepEvidence[],
+  options: {
+    codigo: string;
+    nome: string;
+    ativoVenda: boolean;
+    ativoCompra: boolean;
+    screenshotId: string;
+  },
+) {
+  await page.goto(`${BASE_URL}/cadastros/produtos`);
+  await page.getByRole('button', { name: 'Novo Produto' }).click();
+  await expect(page.getByRole('heading', { name: 'Novo Produto' })).toBeVisible();
+  await page.getByLabel('Código interno', { exact: true }).fill(options.codigo);
+  await page.getByLabel('Nome do produto', { exact: true }).fill(options.nome);
+  await page.getByRole('tab', { name: 'Comercial' }).click();
+  const venda = page.getByLabel('Ativo para venda / tabela de preços');
+  const compra = page.getByLabel('Ativo para compra');
+  if (options.ativoVenda) await venda.check(); else await venda.uncheck();
+  if (options.ativoCompra) await compra.check(); else await compra.uncheck();
+  await page.getByRole('tab', { name: 'Operacional' }).click();
+  await page.getByLabel('Unidade do pedido').selectOption('unidade');
+  const postPromise = page.waitForResponse(
+    (res) => res.url().includes('/api/cadastros/produtos') && res.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Salvar Produto' }).click();
+  const postRes = await postPromise;
+  expect(postRes.ok(), `POST produtos falhou: ${postRes.status()} ${await postRes.text()}`).toBeTruthy();
+  await capture(page, steps, options.screenshotId, 'Cadastro de Produtos',
+    'Criar produto vendável e comprável na tela /cadastros/produtos.',
+    'Drawer Novo Produto preenchido (Gerais + Comercial + Operacional).',
+    'Produto persistido; listagem visível.');
+}
+```
+
+Chamada no lugar dos dois cadastros + regra:
+
+```ts
+await createProdutoViaUi(page, steps, {
+  codigo: itemComercialCodigo,
+  nome: `Peca E2E ${runId}`,
+  ativoVenda: true,
+  ativoCompra: true,
+  screenshotId: '05-produtos',
+});
+const produtoId = await findByCode(request, auth.cookieHeader, 'produtos', itemComercialCodigo);
+```
+
+`criarCompraConfirmada`: `itens: [{ produtoId: params.produtoId, quantidadeComprada: 4 }]` (param `itemCompraId` some). Expect da grade: `getByText(itemComercialCodigo)`. Sem `POST /regras-desdobramento`.
+
+**Onda 12 `onda12-dominio-campos-ui.spec.ts` DoD 12.9** (~L128–141): manter o bloco de `/cadastros/produtos` + aba Operacional + `getByLabel('Unidade do pedido')`. **Substituir** os dois `goto` de `/cadastros/itens-compra/novo` e `/cadastros/itens-comerciais/novo` por 404 (DoD 13.2):
+
+```ts
+for (const rota of ['/cadastros/itens-compra/novo', '/cadastros/itens-comerciais/novo'] as const) {
+  await page.goto(rota, { waitUntil: 'load' });
+  await expect(page.getByRole('heading', { name: '404' })).toBeVisible();
+  await expect(page.getByLabel('Unidade de Compra')).toHaveCount(0);
+  await expect(page.getByLabel('Unidade Comercial')).toHaveCount(0);
+}
+```
+
+`postJson(..., '/api/cadastros/itens-compra'|'itens-comerciais', ...)` neste spec → `POST /api/cadastros/produtos` com `{ codigo, nome, unidadePedido: 'unidade', unidadePreco: 'kg', tipoOperacional: 'peca_inteira_pesavel', ativoVenda, ativoCompra }`.
 
 Helpers backend `test/helpers/*-fixtures.ts`: trocar inserts em `itensComerciais`/`itensCompra` por `produtos`. Fixtures `*.schema.pre-onda*` de ondas passadas **não** se atualizam (são snapshots históricos de migrate) — só se algum teste da Onda 13 as importar para o schema atual; nesse caso parar e reportar.
 
-**Regra mecânica — todo `app/backend/test/**` exceto `**/helpers/fixtures/*.schema.pre-onda*`:** aplicar a tabela Before/Depois da Task 7 em fixtures, mocks, selects e asserções (`itemComercialId`→`produtoId`, `itemComercialBaseId`→`produtoBaseId`, `itemCompraId`→`produtoId` em compra/simulação, `itemCompraId`+`itemComercialId` de regra → `produtoOrigemId`+`produtoDestinoId`, join `itensComerciais`→`produtos`, `ic.descricao`→`produtos.nome`). Chamadas `POST /itens-comerciais` e `POST /itens-compra` viram 404 (cadastros-diversos) ou `POST /produtos` com o payload desta task. Não deixar spec de fora: se `npm run test` falhar, corrigir o spec — não pular. Aceite:
+**Regra mecânica — todo `app/backend/test/**` exceto migrate histórico e `*.schema.pre-onda*`:** aplicar a tabela Before/Depois da Task 7 em fixtures, mocks, selects e asserções (`itemComercialId`→`produtoId`, `itemComercialBaseId`→`produtoBaseId`, `itemCompraId`→`produtoId` em compra/simulação, `itemCompraId`+`itemComercialId` de regra → `produtoOrigemId`+`produtoDestinoId`, join `itensComerciais`→`produtos`, `ic.descricao`→`produtos.nome`). Chamadas `POST /itens-comerciais` e `POST /itens-compra` viram 404 (cadastros-diversos) ou `POST /produtos` com o payload desta task. Não deixar spec de fora: se `npm run test` falhar, corrigir o spec — não pular.
+
+**Fora desta regra (não reescrever, D26):** qualquer arquivo cujo nome contém `-migrations` — `onda1-migrations.ts`, `onda4-migrations.ts`, `onda1-migrations.e2e-spec.ts`, `onda4-migrations.e2e-spec.ts`, `onda6-migrations.e2e-spec.ts`, `onda11-migrations.e2e-spec.ts`, `onda12-migrations.e2e-spec.ts`, `onda12-migrations-meta.spec.ts` e equivalentes `migrarAte`/`aplicarTags` que param em tag `< 0034`. Eles falam com o schema intermediário das ondas antigas.
+
+Aceite:
 
 ```powershell
-rg "itemComercial|itensComerciais|itemCompra|itensCompra|itens-comerciais|itens-compra" app/backend/test --glob "!**/*.schema.pre-onda*"
+rg "itemComercial|itensComerciais|itemCompra|itensCompra|itens-comerciais|itens-compra" app/backend/test --glob "!**/*.schema.pre-onda*" --glob "!**/*-migrations*"
 ```
 
-Vazio. Inclui `pedidos-onda4.e2e-spec.ts`, `disponibilidade.e2e-spec.ts`, `regras-desdobramento.e2e-spec.ts`, `seed.spec.ts` e os unitários listados pelo `rg` atual.
+Vazio. Inclui `pedidos-onda4.e2e-spec.ts`, `disponibilidade.e2e-spec.ts`, `regras-desdobramento.e2e-spec.ts`, `seed.spec.ts` e os unitários que não são `*-migrations*`.
 
 `prontidao.e2e-spec.ts`: gate ≥1 produto `ativoVenda`.
 
@@ -1392,5 +1468,6 @@ Saída esperada: vazio **fora** de `database/migrations/**` (D25). Exceções pe
 - [x] Worker não escreve `docs/execucao/`.
 - [x] Emenda Portão 1 (2026-09-04): D25 + `rg` sem migrations; Task 10 inclui `espelho-client.tsx` e BFF `aberto/route.ts`; Jest `cadastro-form` / `next-config-rotas` / `aprovacoes-client` / `api.test`; helper de recebimento com corpo literal e sem default silencioso de `passaBalanca`.
 - [x] Emenda Portão 1 recheck: CHECK origem≠destino tolera `deleted_at`; SQL literal de `recalcularParaCompra` e `projetarImpacto`; regra mecânica para `app/backend/test/**`.
+- [x] Emenda Portão 1 recheck2: D26 + glob `*-migrations*`; Playwright literal `createProdutoViaUi` e 404 da DoD 12.9.
 
 **Próximo passo humano/orquestração:** Executor commita este plano no o13, aponta `EXECUCAO-STATUS` Onda 13 para este path e marca `aguardando_portao1`. Monitor **novo** roda `$gate-plano`. Worker só depois de `aprovado`.
