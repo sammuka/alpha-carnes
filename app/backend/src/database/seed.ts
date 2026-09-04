@@ -445,7 +445,7 @@ export async function seed() {
 
     // 4. Inserir usuário admin
     const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@alphacarnes.local';
-    const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'Admin@AlphaCarnes2026!';
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'change-me-admin-password';
     const senhaHash = await hash(adminPassword);
 
     const adminPerfilId = perfilIdPorSlug.get('administrador');
@@ -469,9 +469,9 @@ export async function seed() {
       throw new Error(`Falha ao verificar usuário admin: ${adminEmail}`);
     }
 
-    await db.insert(schema.usuariosPerfis)
-      .values({ usuarioId: admin.id, perfilId: adminPerfilId })
-      .onConflictDoNothing();
+    // Reconcilia vínculo: perfis podem ter UUID distinto do PERFIS_FIXOS após testes/migrations
+    await db.delete(schema.usuariosPerfis).where(eq(schema.usuariosPerfis.usuarioId, admin.id));
+    await db.insert(schema.usuariosPerfis).values({ usuarioId: admin.id, perfilId: adminPerfilId });
     console.log(`✅ Usuário admin verificado: ${adminEmail}`);
 
     console.log('🎉 Seed concluído com sucesso!');

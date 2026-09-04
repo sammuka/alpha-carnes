@@ -1,6 +1,7 @@
+import { verify } from '@node-rs/argon2';
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { count, eq, sql } from 'drizzle-orm';
+import { and, count, eq, isNull, sql } from 'drizzle-orm';
 import * as schema from '../../src/database/schema';
 import { seed } from '../../src/database/seed';
 import { DESCRICOES_PERMISSOES } from '../../src/common/rbac/permissoes';
@@ -42,6 +43,25 @@ describe('Seed idempotência', () => {
       .from(schema.usuarios)
       .where(eq(schema.usuarios.email, adminEmail));
     expect(rows.length).toBe(1);
+  });
+
+  it('usuário admin autenticável com perfil administrador após seed 2×', async () => {
+    const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@alphacarnes.local';
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'change-me-admin-password';
+    const [admin] = await db
+      .select()
+      .from(schema.usuarios)
+      .where(and(eq(schema.usuarios.email, adminEmail), isNull(schema.usuarios.deletedAt)));
+    expect(admin).toBeTruthy();
+    expect(admin!.ativo).toBe(true);
+    expect(await verify(admin!.senhaHash, adminPassword)).toBe(true);
+
+    const perfisAdmin = await db
+      .select({ slug: schema.perfis.slug })
+      .from(schema.usuariosPerfis)
+      .innerJoin(schema.perfis, eq(schema.usuariosPerfis.perfilId, schema.perfis.id))
+      .where(eq(schema.usuariosPerfis.usuarioId, admin!.id));
+    expect(perfisAdmin.map((p) => p.slug)).toEqual(['administrador']);
   });
 
   it('perfil corte tem a permissão CORTE_GERENCIAR após seed', async () => {
