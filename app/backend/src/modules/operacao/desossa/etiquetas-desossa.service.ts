@@ -10,7 +10,7 @@ import {
   cargaItens,
   clientes,
   etiquetasImpressoes,
-  itensComerciais,
+  produtos,
   pecas,
   pedidosVenda,
   recebimentos,
@@ -80,8 +80,8 @@ export class EtiquetasDesossaService {
         estado: etiquetasImpressoes.estado,
         peso: subitens.peso,
         modoCapturaPeso: subitens.modoCapturaPeso,
-        produtoCodigo: itensComerciais.codigo,
-        produtoNome: itensComerciais.descricao,
+        produtoCodigo: produtos.codigo,
+        produtoNome: produtos.nome,
         parteCodigo: subitens.etiquetaAtual,
         pecaMaeCodigo: pecas.etiquetaAtual,
         transformacaoId: transformacoes.id,
@@ -110,7 +110,7 @@ export class EtiquetasDesossaService {
       .innerJoin(transformacoes, eq(transformacoes.id, subitens.transformacaoId))
       .innerJoin(pecas, eq(pecas.id, transformacoes.pecaOrigemId))
       .innerJoin(recebimentos, eq(recebimentos.id, pecas.recebimentoId))
-      .innerJoin(itensComerciais, eq(itensComerciais.id, subitens.itemComercialId))
+      .innerJoin(produtos, eq(produtos.id, subitens.produtoId))
       .leftJoin(pedidosVenda, eq(pedidosVenda.id, subitens.pedidoVendaId))
       .leftJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
       .where(and(...condicoes, isNull(subitens.deletedAt)))
