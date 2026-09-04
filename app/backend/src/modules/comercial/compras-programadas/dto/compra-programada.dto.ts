@@ -1,8 +1,6 @@
 import { z } from 'zod';
 import { listarQuerySchema } from '../../../../common/crud/paginacao';
 
-// Quantidade comercial: numérico positivo com até 3 casas. Mantida como número
-// na borda; convertida para string NUMERIC no service.
 const quantidadeSchema = z
   .number()
   .positive('quantidade deve ser maior que zero')
@@ -34,7 +32,6 @@ export const listarComprasProgramadasSchema = listarQuerySchema.extend({
 });
 export type ListarComprasProgramadasDto = z.infer<typeof listarComprasProgramadasSchema>;
 
-// Atualização do cabeçalho da compra (apenas enquanto não confirmada).
 export const updateCompraProgramadaSchema = z.object({
   fornecedorId: z.string().uuid().optional(),
   numeroInterno: z.string().trim().max(100).optional(),
@@ -42,7 +39,7 @@ export const updateCompraProgramadaSchema = z.object({
   previsaoEntrega: z.string().datetime({ offset: true }).optional(),
   observacoes: z.string().trim().max(1000).optional(),
   status: z.enum(['rascunho', 'em_negociacao']).optional(),
-});
+}).strict();
 
 export type UpdateCompraProgramadaDto = z.infer<typeof updateCompraProgramadaSchema>;
 

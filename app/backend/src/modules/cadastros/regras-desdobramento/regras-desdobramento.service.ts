@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { alias } from 'drizzle-orm/pg-core';
 import { and, desc, eq, isNull, ne, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -12,6 +12,7 @@ import type { CreateRegraDesdobramentoDto, UpdateRegraDesdobramentoDto } from '.
 
 type Regra = typeof regrasDesdobramentoComercial.$inferSelect;
 
+/** Estado efetivo de uma regra após aplicar um update parcial, usado nas validações. */
 interface EstadoRegra {
   produtoOrigemId: string;
   produtoDestinoId: string;
@@ -35,8 +36,8 @@ export class RegrasDesdobramentoService {
   async listar(query: ListarQuery): Promise<Paginado<Regra>> {
     const { limit, offset } = calcularRange(query);
     const where = query.incluirRemovidos ? undefined : isNull(regrasDesdobramentoComercial.deletedAt);
-    const origem = alias(produtos, 'produto_origem');
-    const destino = alias(produtos, 'produto_destino');
+    const produtoOrigem = alias(produtos, 'produto_origem');
+    const produtoDestino = alias(produtos, 'produto_destino');
 
     const [linhas, totalRow] = await Promise.all([
       this.db.select({
@@ -51,13 +52,13 @@ export class RegrasDesdobramentoService {
         createdAt: regrasDesdobramentoComercial.createdAt,
         updatedAt: regrasDesdobramentoComercial.updatedAt,
         deletedAt: regrasDesdobramentoComercial.deletedAt,
-        produtoOrigemCodigo: origem.codigo,
-        produtoOrigemNome: origem.nome,
-        produtoDestinoCodigo: destino.codigo,
-        produtoDestinoNome: destino.nome,
+        produtoOrigemCodigo: produtoOrigem.codigo,
+        produtoOrigemNome: produtoOrigem.nome,
+        produtoDestinoCodigo: produtoDestino.codigo,
+        produtoDestinoNome: produtoDestino.nome,
       }).from(regrasDesdobramentoComercial)
-        .innerJoin(origem, eq(origem.id, regrasDesdobramentoComercial.produtoOrigemId))
-        .innerJoin(destino, eq(destino.id, regrasDesdobramentoComercial.produtoDestinoId))
+        .innerJoin(produtoOrigem, eq(produtoOrigem.id, regrasDesdobramentoComercial.produtoOrigemId))
+        .innerJoin(produtoDestino, eq(produtoDestino.id, regrasDesdobramentoComercial.produtoDestinoId))
         .where(where)
         .orderBy(desc(regrasDesdobramentoComercial.createdAt))
         .limit(limit)
@@ -66,7 +67,7 @@ export class RegrasDesdobramentoService {
     ]);
     const total = totalRow[0]?.total ?? 0;
     if (linhas.length !== Math.min(limit, Math.max(0, total - offset))) {
-      throw new ConflictException({ codigo: 'REGRA_REFERENCIA_INVALIDA', message: 'Regra possui produto origem ou destino ausente' });
+      throw new ConflictException({ codigo: 'REGRA_REFERENCIA_INVALIDA', message: 'Regra possui produto de origem ou destino ausente' });
     }
     return montarPaginado(linhas, total, query);
   }
@@ -132,10 +133,6 @@ export class RegrasDesdobramentoService {
         vigenciaInicio: dto.vigenciaInicio ?? anterior.vigenciaInicio,
         vigenciaFim: dto.vigenciaFim === undefined ? anterior.vigenciaFim : dto.vigenciaFim,
       };
-
-      if (estado.produtoOrigemId === estado.produtoDestinoId) {
-        throw new BadRequestException('Origem e destino devem ser produtos distintos');
-      }
 
       await this.assertProdutosAtivos(tx, estado.produtoOrigemId, estado.produtoDestinoId);
       if (estado.status === 'ativo') {
@@ -240,30 +237,33 @@ export class RegrasDesdobramentoService {
     });
   }
 
+  /**
+   * Simulador da aba "Desdobramento de Compra" (RegraDesdobramento.tsx, linhas 203–240).
+   * Multiplica a quantidade comprada pelo fator de cada produto destino ativo da origem.
+   */
   async simular(produtoOrigemId: string, quantidade: number): Promise<{
     quantidade: number;
-    itens: Array<{ produtoDestinoId: string; descricao: string; fator: string; total: number }>;
+    itens: Array<{ produtoId: string; descricao: string; fator: string; total: number }>;
     somaFatores: number;
     totalPartes: number;
   }> {
-    const destino = alias(produtos, 'produto_destino');
     const regras = await this.db
       .select({
-        produtoDestinoId: regrasDesdobramentoComercial.produtoDestinoId,
-        descricao: destino.nome,
+        produtoId: regrasDesdobramentoComercial.produtoDestinoId,
+        descricao: produtos.nome,
         fator: regrasDesdobramentoComercial.fatorQuantidade,
       })
       .from(regrasDesdobramentoComercial)
-      .innerJoin(destino, eq(regrasDesdobramentoComercial.produtoDestinoId, destino.id))
+      .innerJoin(produtos, eq(regrasDesdobramentoComercial.produtoDestinoId, produtos.id))
       .where(and(
         eq(regrasDesdobramentoComercial.produtoOrigemId, produtoOrigemId),
         eq(regrasDesdobramentoComercial.status, 'ativo'),
         isNull(regrasDesdobramentoComercial.deletedAt),
       ))
-      .orderBy(destino.nome);
+      .orderBy(produtos.nome);
 
     const itens = regras.map((r) => ({
-      produtoDestinoId: r.produtoDestinoId,
+      produtoId: r.produtoId,
       descricao: r.descricao,
       fator: r.fator,
       total: multiplicar(r.fator, quantidade),
@@ -291,14 +291,29 @@ export class RegrasDesdobramentoService {
     produtoOrigemId: string,
     produtoDestinoId: string,
   ): Promise<void> {
-    for (const produtoId of [produtoOrigemId, produtoDestinoId]) {
-      const produto = await tx
-        .select({ id: produtos.id })
-        .from(produtos)
-        .where(and(eq(produtos.id, produtoId), isNull(produtos.deletedAt), eq(produtos.status, 'ativo')))
-        .then((r) => r[0] ?? null);
-      if (!produto) throw new BadRequestException('Produto inexistente ou inativo');
-    }
+    const origem = await tx
+      .select({ id: produtos.id })
+      .from(produtos)
+      .where(and(
+        eq(produtos.id, produtoOrigemId),
+        isNull(produtos.deletedAt),
+        eq(produtos.status, 'ativo'),
+        eq(produtos.ativoCompra, true),
+      ))
+      .then((r) => r[0] ?? null);
+    if (!origem) throw new BadRequestException('Produto de origem inexistente, inativo ou não comprável');
+
+    const destino = await tx
+      .select({ id: produtos.id })
+      .from(produtos)
+      .where(and(
+        eq(produtos.id, produtoDestinoId),
+        isNull(produtos.deletedAt),
+        eq(produtos.status, 'ativo'),
+        eq(produtos.ativoVenda, true),
+      ))
+      .then((r) => r[0] ?? null);
+    if (!destino) throw new BadRequestException('Produto de destino inexistente, inativo ou não vendável');
   }
 
   private async assertSemSobreposicaoAtiva(
