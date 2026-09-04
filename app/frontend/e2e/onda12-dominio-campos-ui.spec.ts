@@ -132,13 +132,13 @@ test.describe('Onda 12 — domínio de campos na UI', () => {
     await expect(page.getByLabel('Unidade do pedido')).toBeVisible();
     await shot(page, '02-produtos.png');
 
-    await page.goto('/cadastros/itens-compra/novo', { waitUntil: 'load' });
+    await page.goto('/cadastros/produtos/novo', { waitUntil: 'load' });
     await expect(page.getByLabel('Unidade de Compra')).toBeVisible();
-    await shot(page, '03-itens-compra.png');
+    await shot(page, '03-produtos.png');
 
-    await page.goto('/cadastros/itens-comerciais/novo', { waitUntil: 'load' });
+    await page.goto('/cadastros/produtos/novo', { waitUntil: 'load' });
     await expect(page.getByLabel('Unidade Comercial')).toBeVisible();
-    await shot(page, '04-itens-comerciais.png');
+    await shot(page, '04-produtos.png');
   });
 
   test('DoD 12.5 pedido busca produto e rota herdada', async ({ page }) => {
@@ -218,24 +218,24 @@ test.describe('Onda 12 — domínio de campos na UI', () => {
     const suffix = `r${Date.now().toString(36).slice(-6)}`;
     const compra = {
       codigo: `CR${suffix}`,
-      descricao: `Compra Regra ${suffix}`,
+      nome: `Compra Regra ${suffix}`,
       label: `CR${suffix} — Compra Regra ${suffix}`,
     };
     const comercial = {
       codigo: `MR${suffix}`,
-      descricao: `Comercial Regra ${suffix}`,
+      nome: `Comercial Regra ${suffix}`,
       label: `MR${suffix} — Comercial Regra ${suffix}`,
     };
-    await postJson(request, '/api/cadastros/itens-compra', {
+    await postJson(request, '/api/cadastros/produtos?page=1&pageSize=100&status=ativo&ativoCompra=true', {
       codigo: compra.codigo,
-      descricao: compra.descricao,
-      unidadeCompra: 'unidade',
+      nome: compra.descricao,
+      unidadePedido: 'unidade',
       status: 'ativo',
     });
-    await postJson(request, '/api/cadastros/itens-comerciais', {
+    await postJson(request, '/api/cadastros/produtos?page=1&pageSize=100&status=ativo&ativoVenda=true', {
       codigo: comercial.codigo,
-      descricao: comercial.descricao,
-      unidadeComercial: 'kg',
+      nome: comercial.descricao,
+      unidadePedido: 'kg',
       status: 'ativo',
     });
 
@@ -330,12 +330,12 @@ test.describe('Onda 12 — domínio de campos na UI', () => {
       },
       itemCompra: {
         codigo: `CI${suffix}`,
-        descricao: `Compra Inativa ${suffix}`,
+        nome: `Compra Inativa ${suffix}`,
         label: `CI${suffix} — Compra Inativa ${suffix}`,
       },
       itemComercial: {
         codigo: `MI${suffix}`,
-        descricao: `Comercial Inativo ${suffix}`,
+        nome: `Comercial Inativo ${suffix}`,
         label: `MI${suffix} — Comercial Inativo ${suffix}`,
       },
     };
@@ -348,12 +348,12 @@ test.describe('Onda 12 — domínio de campos na UI', () => {
       },
       itemCompra: {
         codigo: `CA${suffix}`,
-        descricao: `Compra Ativa ${suffix}`,
+        nome: `Compra Ativa ${suffix}`,
         label: `CA${suffix} — Compra Ativa ${suffix}`,
       },
       itemComercial: {
         codigo: `MA${suffix}`,
-        descricao: `Comercial Ativo ${suffix}`,
+        nome: `Comercial Ativo ${suffix}`,
         label: `MA${suffix} — Comercial Ativo ${suffix}`,
       },
     };
@@ -384,28 +384,28 @@ test.describe('Onda 12 — domínio de campos na UI', () => {
       documentoFiscal: cnpjDeSemente(Date.now() + 2),
       status: 'ativo',
     });
-    await postJson(request, '/api/cadastros/itens-compra', {
+    await postJson(request, '/api/cadastros/produtos?page=1&pageSize=100&status=ativo&ativoCompra=true', {
       codigo: inativo.itemCompra.codigo,
-      descricao: inativo.itemCompra.descricao,
-      unidadeCompra: 'unidade',
+      nome: inativo.itemCompra.descricao,
+      unidadePedido: 'unidade',
       status: 'inativo',
     });
-    await postJson(request, '/api/cadastros/itens-compra', {
+    await postJson(request, '/api/cadastros/produtos?page=1&pageSize=100&status=ativo&ativoCompra=true', {
       codigo: ativo.itemCompra.codigo,
-      descricao: ativo.itemCompra.descricao,
-      unidadeCompra: 'unidade',
+      nome: ativo.itemCompra.descricao,
+      unidadePedido: 'unidade',
       status: 'ativo',
     });
-    await postJson(request, '/api/cadastros/itens-comerciais', {
+    await postJson(request, '/api/cadastros/produtos?page=1&pageSize=100&status=ativo&ativoVenda=true', {
       codigo: inativo.itemComercial.codigo,
-      descricao: inativo.itemComercial.descricao,
-      unidadeComercial: 'kg',
+      nome: inativo.itemComercial.descricao,
+      unidadePedido: 'kg',
       status: 'inativo',
     });
-    await postJson(request, '/api/cadastros/itens-comerciais', {
+    await postJson(request, '/api/cadastros/produtos?page=1&pageSize=100&status=ativo&ativoVenda=true', {
       codigo: ativo.itemComercial.codigo,
-      descricao: ativo.itemComercial.descricao,
-      unidadeComercial: 'kg',
+      nome: ativo.itemComercial.descricao,
+      unidadePedido: 'kg',
       status: 'ativo',
     });
 

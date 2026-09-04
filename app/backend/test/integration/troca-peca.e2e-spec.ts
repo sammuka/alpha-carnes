@@ -57,19 +57,19 @@ describe('Troca de Peça e2e (v1.1 §6.13 + P10)', () => {
     const { pedidoId, pedidoItemId } = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      produtoId: c.produtoId,
       dataOperacao: c.dataOperacao,
       quantidade: 2,
     });
     const pecaRetiradaId = await pecaAssociadaComEtiqueta(app, recebimentoCookies, {
       recebimentoId: c.recebimentoId,
-      itemComercialBaseId: c.itemComercialId,
+      produtoBaseId: c.produtoId,
       pedidoVendaItemId: pedidoItemId,
       peso: '12.500',
     });
     const pecaInseridaId = await pesarPeca(app, recebimentoCookies, {
       recebimentoId: c.recebimentoId,
-      itemComercialBaseId: c.itemComercialId,
+      produtoBaseId: c.produtoId,
       peso: '13.100',
     });
     return { c, pedidoId, pedidoItemId, pecaRetiradaId, pecaInseridaId };
@@ -376,12 +376,12 @@ describe('Troca de Peça e2e (v1.1 §6.13 + P10)', () => {
     );
     const pecaRetiradaId = await pecaAssociadaComEtiqueta(app, recebimentoCookies, {
       recebimentoId: cOrigem.recebimentoId,
-      itemComercialBaseId: cOrigem.itemComercialId,
+      produtoBaseId: cOrigem.produtoId,
       pedidoVendaItemId: (
         await criarPedido(app, comercialCookies, {
           compraId: cOrigem.compraId,
           clienteId: cOrigem.clienteId,
-          itemComercialId: cOrigem.itemComercialId,
+          produtoId: cOrigem.produtoId,
           dataOperacao: cOrigem.dataOperacao,
           quantidade: 2,
         })
@@ -390,13 +390,13 @@ describe('Troca de Peça e2e (v1.1 §6.13 + P10)', () => {
     });
     const pecaInseridaId = await pesarPeca(app, recebimentoCookies, {
       recebimentoId: cOrigem.recebimentoId,
-      itemComercialBaseId: cOrigem.itemComercialId,
+      produtoBaseId: cOrigem.produtoId,
       peso: '13.100',
     });
     const pedidoOutra = await criarPedido(app, comercialCookies, {
       compraId: cDestino.compraId,
       clienteId: cDestino.clienteId,
-      itemComercialId: cDestino.itemComercialId,
+      produtoId: cDestino.produtoId,
       dataOperacao: cDestino.dataOperacao,
       quantidade: 1,
     });

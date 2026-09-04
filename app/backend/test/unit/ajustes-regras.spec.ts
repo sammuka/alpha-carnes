@@ -219,12 +219,12 @@ describe('AjustesEstoqueService — limiar, segregação e aplicação (D8.8/8.9
     ).rejects.toThrow(NotFoundException);
   });
 
-  it('criar tipo=subitem dentro do limiar → captura código via itemComercialId e aplica (delete lógico)', async () => {
+  it('criar tipo=subitem dentro do limiar → captura código via produtoId e aplica (delete lógico)', async () => {
     let selectCall = 0;
-    const subitem = { id: 's1', itemComercialId: 'ic1' };
+    const subitem = { id: 's1', produtoId: 'ic1' };
     const selectResponses = [
       [subitem], // capturarAlvo: SELECT subitem FOR UPDATE
-      [{ codigo: 'CB' }], // codigoDoItemComercial
+      [{ codigo: 'CB' }], // codigoDoproduto
       [{ valorJson: { valor: 5 } }], // lerLimiar
     ];
     const insertReturning = [{
@@ -378,7 +378,7 @@ describe('DestinarEstoqueService — DoD 8.15: rollback não emite evento', () =
   });
 
   it('destinarPeca: peça já associada (não em_sobra) → 409 sem consumir saldo nem emitir evento', async () => {
-    const pecaAssociada = { id: 'p1', statusPeca: 'associada', itemComercialBaseId: 'ic1', recebimentoId: 'r1', deletedAt: null };
+    const pecaAssociada = { id: 'p1', statusPeca: 'associada', produtoBaseId: 'ic1', recebimentoId: 'r1', deletedAt: null };
     const tx = { select: jest.fn(() => makeChain([pecaAssociada])) };
     const emitter = makeEmitter();
     const db = { transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(tx)) };

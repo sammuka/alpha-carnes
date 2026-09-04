@@ -39,7 +39,7 @@ function nfBase(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const itemDto = [{ itemComercialId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }];
+const itemDto = [{ produtoId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }];
 
 describe('nota-fiscal-fornecedor.persistence', () => {
   it('temCamposNfEstruturados detecta campos parciais', () => {
@@ -55,7 +55,7 @@ describe('nota-fiscal-fornecedor.persistence', () => {
         nfeVolumes: 12,
       },
       'rec-1',
-      [{ itemComercialId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
+      [{ produtoId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
     );
     expect(dto.pesoTotalDeclarado).toBeUndefined();
     expect(dto.payload).toEqual({ pesoLiquido: 900, volumes: 12 });
@@ -69,7 +69,7 @@ describe('nota-fiscal-fornecedor.persistence', () => {
         nfePesoLiquido: 900,
       },
       'rec-1',
-      [{ itemComercialId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
+      [{ produtoId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
     );
     expect(dto.pesoTotalDeclarado).toBe(1000);
     expect(dto.payload).toEqual({ pesoLiquido: 900 });
@@ -131,7 +131,7 @@ describe('nota-fiscal-fornecedor.persistence', () => {
     expect(() => mapearCamposNfParaRegistrar(
       { nfeSerie: '1' },
       'rec-1',
-      [{ itemComercialId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
+      [{ produtoId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
     )).toThrow(/nfeNumero/i);
   });
 

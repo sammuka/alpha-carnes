@@ -366,7 +366,7 @@ describe('OverbookingService — branches', () => {
 
       quantidadeDeficit: '3.000',
 
-      itemComercialId: 'item-1',
+      produtoId: 'item-1',
 
       pedidoVendaId: 'pv-1',
 
@@ -580,7 +580,7 @@ describe('OverbookingService — branches', () => {
 
               operacaoId: 'op-1',
 
-              itemComercialId: 'item-1',
+              produtoId: 'item-1',
 
               quantidadeDeficit: '2.000',
 
@@ -690,7 +690,7 @@ describe('OverbookingService — branches', () => {
 
               operacaoId: 'op-missing',
 
-              itemComercialId: 'item-1',
+              produtoId: 'item-1',
 
               quantidadeDeficit: '1.000',
 
@@ -921,7 +921,7 @@ describe('OverbookingService — branches', () => {
 
       pedidoVendaItemId: 'pvi-def',
 
-      itemComercialId: 'item-1',
+      produtoId: 'item-1',
 
       pedidoVendaId: 'pv-1',
 
@@ -1063,7 +1063,7 @@ describe('OverbookingService — branches', () => {
 
       pedidoVendaItemId: 'pvi-def',
 
-      itemComercialId: 'item-1',
+      produtoId: 'item-1',
 
       pedidoVendaId: 'pv-1',
 
@@ -1149,7 +1149,7 @@ describe('OverbookingService — branches', () => {
 
       id: 'p1', status: 'aberta', operacaoId: 'op-1', quantidadeDeficit: '5.000',
 
-      pedidoVendaItemId: 'pvi-def', itemComercialId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
+      pedidoVendaItemId: 'pvi-def', produtoId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
 
     };
 
@@ -1205,7 +1205,7 @@ describe('OverbookingService — branches', () => {
 
       id: 'p1', status: 'aberta', operacaoId: 'op-1', quantidadeDeficit: '5.000',
 
-      pedidoVendaItemId: 'pvi-def', itemComercialId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
+      pedidoVendaItemId: 'pvi-def', produtoId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
 
     };
 
@@ -1269,7 +1269,7 @@ describe('OverbookingService — branches', () => {
 
       id: 'p1', status: 'aberta', operacaoId: 'op-1', quantidadeDeficit: '1.000',
 
-      pedidoVendaItemId: 'pvi-def', itemComercialId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
+      pedidoVendaItemId: 'pvi-def', produtoId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
 
     };
 
@@ -1323,7 +1323,7 @@ describe('OverbookingService — branches', () => {
 
       id: 'p1', status: 'aberta', operacaoId: 'op-1', quantidadeDeficit: '1.000',
 
-      pedidoVendaItemId: 'pvi-def', itemComercialId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
+      pedidoVendaItemId: 'pvi-def', produtoId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
 
     };
 
@@ -1379,7 +1379,7 @@ describe('OverbookingService — branches', () => {
 
       id: 'p1', status: 'aberta', operacaoId: 'op-1', quantidadeDeficit: '1.000',
 
-      pedidoVendaItemId: 'pvi-def', itemComercialId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
+      pedidoVendaItemId: 'pvi-def', produtoId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
 
     };
 
@@ -1455,7 +1455,7 @@ describe('OverbookingService — branches', () => {
 
       id: 'p1', status: 'aberta', operacaoId: 'op-1', quantidadeDeficit: '5.000',
 
-      pedidoVendaItemId: 'pvi-def', itemComercialId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
+      pedidoVendaItemId: 'pvi-def', produtoId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
 
     };
 
@@ -1523,7 +1523,7 @@ describe('OverbookingService — branches', () => {
 
       id: 'p1', status: 'aberta', operacaoId: 'op-1', quantidadeDeficit: '1.000',
 
-      pedidoVendaItemId: 'pvi-def', itemComercialId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
+      pedidoVendaItemId: 'pvi-def', produtoId: 'item-1', pedidoVendaId: 'pv-1', clienteId: 'c1',
 
     };
 
@@ -1581,7 +1581,7 @@ describe('OverbookingService — branches', () => {
 
       quantidadeDeficit: '1.000',
 
-      itemComercialId: 'item-1',
+      produtoId: 'item-1',
 
       pedidoVendaItemId: 'pvi-1',
 
@@ -1655,7 +1655,7 @@ describe('OverbookingService — branches', () => {
 
       quantidadeDeficit: '1.000',
 
-      itemComercialId: 'item-1',
+      produtoId: 'item-1',
 
       pedidoVendaItemId: 'pvi-1',
 
@@ -1733,7 +1733,7 @@ describe('OverbookingService — branches', () => {
 
               operacaoId: 'op-1',
 
-              itemComercialId: 'item-1',
+              produtoId: 'item-1',
 
               quantidadeDeficit: '1.000',
 

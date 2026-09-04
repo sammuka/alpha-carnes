@@ -6,8 +6,8 @@ describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobrepo
   let app: INestApplication;
   let adminCookies: string;
   let comercialCookies: string;
-  let itemCompraId: string;
-  let itemComercialId: string;
+  let produtoOrigemId: string;
+  let produtoDestinoId: string;
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -16,17 +16,30 @@ describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobrepo
     adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
     comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
 
-    const itemCompra = await request(app.getHttpServer())
-      .post('/itens-compra')
+    const produtoCompra = await request(app.getHttpServer())
+      .post('/produtos')
       .set('Cookie', adminCookies)
-      .send({ codigo: 'IC-BOI', descricao: 'Boi', unidadeCompra: 'unidade' });
-    itemCompraId = itemCompra.body.id;
+      .send({
+        codigo: 'IC-BOI',
+        nome: 'Boi',
+        unidadePedido: 'unidade',
+        tipoOperacional: 'compra_base',
+        ativoCompra: true,
+        ativoVenda: false,
+      });
+    produtoOrigemId = produtoCompra.body.id;
 
-    const itemComercial = await request(app.getHttpServer())
-      .post('/itens-comerciais')
+    const produtoVenda = await request(app.getHttpServer())
+      .post('/produtos')
       .set('Cookie', adminCookies)
-      .send({ codigo: 'ICM-DIANT', descricao: 'Dianteiro', unidadeComercial: 'kg' });
-    itemComercialId = itemComercial.body.id;
+      .send({
+        codigo: 'ICM-DIANT',
+        nome: 'Dianteiro',
+        unidadePedido: 'kg',
+        ativoCompra: true,
+        ativoVenda: true,
+      });
+    produtoDestinoId = produtoVenda.body.id;
   });
 
   afterAll(async () => {
@@ -35,8 +48,8 @@ describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobrepo
   });
 
   const novaRegra = (over: Record<string, unknown> = {}) => ({
-    itemCompraId,
-    itemComercialId,
+    produtoOrigemId,
+    produtoDestinoId,
     fatorQuantidade: 1.5,
     vigenciaInicio: '2026-01-01T00:00:00.000Z',
     vigenciaFim: '2026-06-30T00:00:00.000Z',
@@ -79,7 +92,7 @@ describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobrepo
       const res = await request(app.getHttpServer())
         .post('/regras-desdobramento')
         .set('Cookie', adminCookies)
-        .send(novaRegra({ itemCompraId: '019e9e00-0000-7000-8000-000000000999' }));
+        .send(novaRegra({ produtoOrigemId: '019e9e00-0000-7000-8000-000000000999' }));
       expect(res.status).toBe(400);
     });
 
@@ -116,20 +129,18 @@ describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobrepo
 
     it('atualiza apenas o status sem mexer em vigência/itens (ramos de fallback)', async () => {
       const ic = await request(app.getHttpServer())
-        .post('/itens-compra')
-        .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-PARTIAL', descricao: 'B', unidadeCompra: 'unidade' });
+        .post('/produtos').set('Cookie', adminCookies).send({ codigo: 'IC-PARTIAL', nome: 'B', unidadePedido: 'unidade', ativoCompra: true, ativoVenda: false });
       const icm = await request(app.getHttpServer())
-        .post('/itens-comerciais')
+        .post('/produtos')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-PARTIAL', descricao: 'T', unidadeComercial: 'kg' });
+        .send({ codigo: 'ICM-PARTIAL', nome: 'T', unidadePedido: 'kg', ativoCompra: true, ativoVenda: true });
       // Criação mínima: sem vigenciaFim e sem observacoes (cobre ramos de default).
       const criar = await request(app.getHttpServer())
         .post('/regras-desdobramento')
         .set('Cookie', adminCookies)
         .send({
-          itemCompraId: ic.body.id,
-          itemComercialId: icm.body.id,
+          produtoOrigemId: ic.body.id,
+          produtoDestinoId: icm.body.id,
           fatorQuantidade: 1,
           vigenciaInicio: '2026-01-01T00:00:00.000Z',
         });
@@ -146,20 +157,18 @@ describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobrepo
     it('ciclo completo: detalhar, editar, soft-delete, restore e 404', async () => {
       // Par de itens isolado.
       const ic = await request(app.getHttpServer())
-        .post('/itens-compra')
-        .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-LIFE-R', descricao: 'Boi L', unidadeCompra: 'unidade' });
+        .post('/produtos').set('Cookie', adminCookies).send({ codigo: 'IC-PARTIAL', nome: 'B', unidadePedido: 'unidade', ativoCompra: true, ativoVenda: false });
       const icm = await request(app.getHttpServer())
-        .post('/itens-comerciais')
+        .post('/produtos')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-LIFE-R', descricao: 'Traseiro L', unidadeComercial: 'kg' });
+        .send({ codigo: 'ICM-LIFE-R', nome: 'Traseiro L', unidadePedido: 'kg', ativoCompra: true, ativoVenda: true });
 
       const criar = await request(app.getHttpServer())
         .post('/regras-desdobramento')
         .set('Cookie', adminCookies)
         .send({
-          itemCompraId: ic.body.id,
-          itemComercialId: icm.body.id,
+          produtoOrigemId: ic.body.id,
+          produtoDestinoId: icm.body.id,
           fatorQuantidade: 1.2,
           vigenciaInicio: '2026-01-01T00:00:00.000Z',
           vigenciaFim: '2026-06-30T00:00:00.000Z',
@@ -207,20 +216,18 @@ describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobrepo
     it('vigência aberta (fim NULL) sobrepõe qualquer período posterior ao início', async () => {
       // Cria par novo de itens para isolar este cenário.
       const ic = await request(app.getHttpServer())
-        .post('/itens-compra')
-        .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-SUINO', descricao: 'Suíno', unidadeCompra: 'unidade' });
+        .post('/produtos').set('Cookie', adminCookies).send({ codigo: 'IC-PARTIAL', nome: 'B', unidadePedido: 'unidade', ativoCompra: true, ativoVenda: false });
       const icm = await request(app.getHttpServer())
-        .post('/itens-comerciais')
+        .post('/produtos')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-PERNIL', descricao: 'Pernil', unidadeComercial: 'kg' });
+        .send({ codigo: 'ICM-PERNIL', nome: 'Pernil', unidadePedido: 'kg', ativoCompra: true, ativoVenda: true });
 
       const aberta = await request(app.getHttpServer())
         .post('/regras-desdobramento')
         .set('Cookie', adminCookies)
         .send({
-          itemCompraId: ic.body.id,
-          itemComercialId: icm.body.id,
+          produtoOrigemId: ic.body.id,
+          produtoDestinoId: icm.body.id,
           fatorQuantidade: 2,
           vigenciaInicio: '2026-01-01T00:00:00.000Z',
           vigenciaFim: null,
@@ -231,8 +238,8 @@ describe('Regras de desdobramento e2e (fator>0, vigência, itens ativos, sobrepo
         .post('/regras-desdobramento')
         .set('Cookie', adminCookies)
         .send({
-          itemCompraId: ic.body.id,
-          itemComercialId: icm.body.id,
+          produtoOrigemId: ic.body.id,
+          produtoDestinoId: icm.body.id,
           fatorQuantidade: 3,
           vigenciaInicio: '2027-05-01T00:00:00.000Z',
           vigenciaFim: '2027-08-01T00:00:00.000Z',

@@ -246,9 +246,9 @@ describe('ProdutosService — branches de erro', () => {
         ativoCompra: false,
         status: 'ativo',
       },
-      { legadoItemComercialId: null, legadoItemCompraId: null },
+      { legadoprodutoId: null, legadoprodutoId: null },
     );
-    expect(res.legadoItemComercialId).toBe('ic-new');
+    expect(res.legadoprodutoId).toBe('ic-new');
     expect(tx.insert).toHaveBeenCalled();
   });
 
@@ -289,9 +289,9 @@ describe('ProdutosService — branches de erro', () => {
         ativoCompra: false,
         status: 'ativo',
       },
-      { legadoItemComercialId: 'ic-legado', legadoItemCompraId: null },
+      { legadoprodutoId: 'ic-legado', legadoprodutoId: null },
     );
-    expect(res.legadoItemComercialId).toBe('ic-legado');
+    expect(res.legadoprodutoId).toBe('ic-legado');
     expect(tx.update).toHaveBeenCalled();
   });
 
@@ -330,9 +330,9 @@ describe('ProdutosService — branches de erro', () => {
         ativoCompra: true,
         status: 'ativo',
       },
-      { legadoItemComercialId: null, legadoItemCompraId: null },
+      { legadoprodutoId: null, legadoprodutoId: null },
     );
-    expect(res.legadoItemCompraId).toBe('icp-new');
+    expect(res.legadoprodutoId).toBe('icp-new');
     expect(tx.insert).toHaveBeenCalled();
   });
 
@@ -368,7 +368,7 @@ describe('ProdutosService — branches de erro', () => {
           ativoCompra: false,
           status: 'ativo',
         },
-        { legadoItemComercialId: null, legadoItemCompraId: null },
+        { legadoprodutoId: null, legadoprodutoId: null },
       ),
     ).rejects.toBeInstanceOf(ConflictException);
   });

@@ -55,7 +55,7 @@ async function seedFixtureEtiquetaSubitemEmCargaFechada(
 
   const pecaMaeId = await pesarPeca(app, cookiesReceb, {
     recebimentoId: c.recebimentoId,
-    itemComercialBaseId: c.itemComercialId,
+    produtoBaseId: c.produtoId,
   });
   const transformacaoId = await iniciarCorte(app, cookiesCorte, pecaMaeId);
 
@@ -79,17 +79,17 @@ async function seedFixtureEtiquetaSubitemEmCargaFechada(
   }
 
   const [saidaCb] = await db
-    .select({ itemComercialId: schema.produtos.legadoItemComercialId })
+    .select({ produtoId: schema.produtos.legadoprodutoId })
     .from(schema.produtos)
     .where(and(eq(schema.produtos.codigo, 'CB'), isNull(schema.produtos.deletedAt)))
     .limit(1);
-  if (!saidaCb?.itemComercialId) throw new Error('Produto CB seed sem legadoItemComercialId');
-  const itemSaidaRegraId = saidaCb.itemComercialId;
+  if (!saidaCb?.produtoId) throw new Error('Produto CB seed sem legadoprodutoId');
+  const itemSaidaRegraId = saidaCb.produtoId;
 
   const pedido = await criarPedido(app, cookiesComercial, {
     compraId: c.compraId,
     clienteId: c.clienteId,
-    itemComercialId: itemSaidaRegraId,
+    produtoId: itemSaidaRegraId,
     dataOperacao: c.dataOperacao,
     quantidade: 5,
   });
@@ -162,7 +162,7 @@ async function seedFixtureEtiquetaSubitemSemCarga(
 
   const pecaMaeId = await pesarPeca(app, cookiesReceb, {
     recebimentoId: c.recebimentoId,
-    itemComercialBaseId: c.itemComercialId,
+    produtoBaseId: c.produtoId,
   });
   const transformacaoId = await iniciarCorte(app, cookiesCorte, pecaMaeId);
 
@@ -186,17 +186,17 @@ async function seedFixtureEtiquetaSubitemSemCarga(
   }
 
   const [saidaCb] = await db
-    .select({ itemComercialId: schema.produtos.legadoItemComercialId })
+    .select({ produtoId: schema.produtos.legadoprodutoId })
     .from(schema.produtos)
     .where(and(eq(schema.produtos.codigo, 'CB'), isNull(schema.produtos.deletedAt)))
     .limit(1);
-  if (!saidaCb?.itemComercialId) throw new Error('Produto CB seed sem legadoItemComercialId');
-  const itemSaidaRegraId = saidaCb.itemComercialId;
+  if (!saidaCb?.produtoId) throw new Error('Produto CB seed sem legadoprodutoId');
+  const itemSaidaRegraId = saidaCb.produtoId;
 
   const pedido = await criarPedido(app, cookiesComercial, {
     compraId: c.compraId,
     clienteId: c.clienteId,
-    itemComercialId: itemSaidaRegraId,
+    produtoId: itemSaidaRegraId,
     dataOperacao: c.dataOperacao,
     quantidade: 5,
   });
@@ -286,18 +286,18 @@ describe('Onda 7 — desossa', () => {
     fakes(app).balanca.definirPeso('10.000');
     const pecaId = await pesarPeca(app, cookiesReceb, {
       recebimentoId: c.recebimentoId,
-      itemComercialBaseId: c.itemComercialId,
+      produtoBaseId: c.produtoId,
     });
     const transformacaoId = await iniciarCorte(app, cookiesCorte, pecaId);
     const [cb] = await db
-      .select({ id: schema.produtos.legadoItemComercialId })
+      .select({ id: schema.produtos.legadoprodutoId })
       .from(schema.produtos)
       .where(eq(schema.produtos.codigo, 'CB'))
       .limit(1);
     const res = await request(app.getHttpServer())
       .post(`/operacao/corte/${transformacaoId}/subitens`)
       .set('Cookie', cookiesCorte)
-      .send({ itemComercialId: cb!.id });
+      .send({ produtoId: cb!.id });
     expect(res.status).toBe(409);
     // AllExceptionsFilter envelopa HttpException.getResponse() em `message`
     const payload = typeof res.body.message === 'object' ? res.body.message : res.body;
@@ -372,7 +372,7 @@ describe('Onda 7 — desossa', () => {
     fakes(app).balanca.definirPeso('10.000');
     const pecaId = await pesarPeca(app, cookiesReceb, {
       recebimentoId: c.recebimentoId,
-      itemComercialBaseId: c.itemComercialId,
+      produtoBaseId: c.produtoId,
     });
     const transformacaoId = await iniciarCorte(app, cookiesCorte, pecaId);
     const [regraA] = await db
@@ -385,14 +385,14 @@ describe('Onda 7 — desossa', () => {
       .set('Cookie', cookiesCorte)
       .send({ regraTransformacaoId: regraA!.id });
     const [fc] = await db
-      .select({ id: schema.produtos.legadoItemComercialId })
+      .select({ id: schema.produtos.legadoprodutoId })
       .from(schema.produtos)
       .where(eq(schema.produtos.codigo, 'FC'))
       .limit(1);
     const res = await request(app.getHttpServer())
       .post(`/operacao/corte/${transformacaoId}/subitens`)
       .set('Cookie', cookiesCorte)
-      .send({ itemComercialId: fc!.id });
+      .send({ produtoId: fc!.id });
     expect(res.status).toBe(409);
     const payload = typeof res.body.message === 'object' ? res.body.message : res.body;
     expect(payload.codigo).toBe('SAIDA_FORA_DA_REGRA');

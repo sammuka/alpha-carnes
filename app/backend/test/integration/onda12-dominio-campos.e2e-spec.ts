@@ -318,16 +318,16 @@ describe('Onda 12 — domínio de campos', () => {
   });
 
   async function basePedido() {
-    const itemCompra = await request(srv()).post('/itens-compra').set('Cookie', adminCookies).send({
+    const produtoCompra = await request(srv()).post('/itens-compra').set('Cookie', adminCookies).send({
       codigo: uid('ICO'), descricao: 'Boi O12', unidadeCompra: 'unidade',
     });
-    const itemComercial = await request(srv()).post('/itens-comerciais').set('Cookie', adminCookies)
+    const produto = await request(srv()).post('/itens-comerciais').set('Cookie', adminCookies)
       .send({ codigo: uid('ICM'), descricao: 'Dianteiro O12', unidadeComercial: 'kg' });
-    expect(itemCompra.status).toBe(201);
-    expect(itemComercial.status).toBe(201);
+    expect(produtoCompra.status).toBe(201);
+    expect(produto.status).toBe(201);
     const regra = await request(srv()).post('/regras-desdobramento').set('Cookie', adminCookies).send({
-      itemCompraId: itemCompra.body.id,
-      itemComercialId: itemComercial.body.id,
+      produtoId: produtoCompra.body.id,
+      produtoId: produto.body.id,
       fatorQuantidade: 1,
       vigenciaInicio: '2026-01-01T00:00:00.000Z',
     });
@@ -343,12 +343,12 @@ describe('Onda 12 — domínio de campos', () => {
     const compraId = await criarCompraConfirmada(
       app,
       comprasCookies,
-      { fornecedorId: fornecedor.body.id, itemCompraId: itemCompra.body.id },
+      { fornecedorId: fornecedor.body.id, produtoId: produtoCompra.body.id },
       { dataOperacao: '2026-09-01', quantidade: 10 },
     );
     return {
-      itemCompraId: itemCompra.body.id as string,
-      itemComercialId: itemComercial.body.id as string,
+      produtoId: produtoCompra.body.id as string,
+      produtoId: produto.body.id as string,
       clienteId: cliente.body.id as string,
       compraId,
       fornecedorId: fornecedor.body.id as string,
@@ -365,7 +365,7 @@ describe('Onda 12 — domínio de campos', () => {
         clienteId: base.clienteId,
         dataOperacao: '2026-09-01',
         rotaId: rota.body.id,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
       });
     expect(criar.status).toBe(201);
     const rows = await db.execute<{ rota_id: string | null; rota_prevista: string | null }>(
@@ -394,7 +394,7 @@ describe('Onda 12 — domínio de campos', () => {
         clienteId: base.clienteId,
         dataOperacao: '2026-09-01',
         rotaId: rota.body.id,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
       });
     expect(criar.status).toBe(400);
     const pedidosDepois = await db.execute<{ total: string }>(
@@ -654,7 +654,7 @@ describe('Onda 12 — domínio de campos', () => {
         compraProgramadaId: base.compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-09-01',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 1 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 1 }],
       });
     expect(pedido.status).toBe(201);
     const det = await request(srv()).get(`/comercial/pedidos/${pedido.body.id}`)
@@ -689,17 +689,17 @@ describe('Onda 12 — domínio de campos', () => {
   });
 
   it('DoD 12.11 lista regra com labels e cria por FKs ativas', async () => {
-    const itemCompra = await request(srv()).post('/itens-compra').set('Cookie', adminCookies).send({
+    const produtoCompra = await request(srv()).post('/itens-compra').set('Cookie', adminCookies).send({
       codigo: 'BOI-O12', descricao: 'Boi casado O12', unidadeCompra: 'unidade',
     });
-    const itemComercial = await request(srv()).post('/itens-comerciais').set('Cookie', adminCookies)
+    const produto = await request(srv()).post('/itens-comerciais').set('Cookie', adminCookies)
       .send({ codigo: 'TZ-O12', descricao: 'Traseiro O12', unidadeComercial: 'kg' });
-    expect(itemCompra.status).toBe(201);
-    expect(itemComercial.status).toBe(201);
+    expect(produtoCompra.status).toBe(201);
+    expect(produto.status).toBe(201);
     const criar = await request(srv()).post('/regras-desdobramento').set('Cookie', adminCookies)
       .send({
-        itemCompraId: itemCompra.body.id,
-        itemComercialId: itemComercial.body.id,
+        produtoId: produtoCompra.body.id,
+        produtoId: produto.body.id,
         fatorQuantidade: 2,
         vigenciaInicio: '2026-01-01T00:00:00.000Z',
       });
@@ -709,16 +709,16 @@ describe('Onda 12 — domínio de campos', () => {
     expect(lista.status).toBe(200);
     const linha = (lista.body.data as Array<{
       id: string;
-      itemCompraCodigo: string;
-      itemCompraNome: string;
-      itemComercialCodigo: string;
-      itemComercialNome: string;
+      produtoCompraCodigo: string;
+      produtoCompraNome: string;
+      produtoCodigo: string;
+      produtoNome: string;
     }>).find((r) => r.id === criar.body.id);
     expect(linha).toMatchObject({
-      itemCompraCodigo: 'BOI-O12',
-      itemCompraNome: 'Boi casado O12',
-      itemComercialCodigo: 'TZ-O12',
-      itemComercialNome: 'Traseiro O12',
+      produtoCompraCodigo: 'BOI-O12',
+      produtoCompraNome: 'Boi casado O12',
+      produtoCodigo: 'TZ-O12',
+      produtoNome: 'Traseiro O12',
     });
   });
 

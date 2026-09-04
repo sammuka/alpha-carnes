@@ -51,13 +51,13 @@ describe('Estorno de associação e2e (D6.3 / D6.18 / D6.19)', () => {
     const { pedidoId, pedidoItemId } = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      produtoId: c.produtoId,
       dataOperacao: c.dataOperacao,
       quantidade: 2,
     });
     const pecaId = await pecaAssociadaComEtiqueta(app, recebimentoCookies, {
       recebimentoId: c.recebimentoId,
-      itemComercialBaseId: c.itemComercialId,
+      produtoBaseId: c.produtoId,
       pedidoVendaItemId: pedidoItemId,
     });
     return { ...c, pedidoId, pedidoItemId, pecaId };
@@ -131,14 +131,14 @@ describe('Estorno de associação e2e (D6.3 / D6.18 / D6.19)', () => {
     const { pedidoItemId } = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      produtoId: c.produtoId,
       dataOperacao: c.dataOperacao,
       quantidade: 2,
     });
     const pecaId = await import('../helpers/pesagem-fixtures').then((m) =>
       m.pesarPeca(app, recebimentoCookies, {
         recebimentoId: c.recebimentoId,
-        itemComercialBaseId: c.itemComercialId,
+        produtoBaseId: c.produtoId,
       }),
     );
 

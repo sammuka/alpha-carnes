@@ -80,13 +80,13 @@ describe('Onda 11 — múltiplas compras por operação', () => {
     const pedido = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      produtoId: c.produtoId,
       dataOperacao: c.dataOperacao,
       quantidade: 2,
     });
     const pecaId = await pesarPeca(app, recebimentoCookies, {
       recebimentoId: c.recebimentoId,
-      itemComercialBaseId: c.itemComercialId,
+      produtoBaseId: c.produtoId,
     });
     const ok = await request(app.getHttpServer())
       .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
@@ -117,7 +117,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
     const pedido = await criarPedido(app, comercialCookies, {
       compraId: c1.compraId,
       clienteId: c1.clienteId,
-      itemComercialId: c1.itemComercialId,
+      produtoId: c1.produtoId,
       dataOperacao: dia,
       quantidade: 10,
     });
@@ -128,7 +128,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
         await db.insert(schema.pecas).values({
           compraProgramadaId: compraId,
           recebimentoId,
-          itemComercialBaseId: c1.itemComercialId,
+          produtoBaseId: c1.produtoId,
           pesoOriginal: '1.000',
           modoCapturaPeso: 'automatico',
           statusPeca: 'associada',
@@ -166,7 +166,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
     const pedido = await criarPedido(app, comercialCookies, {
       compraId: c1,
       clienteId: base.clienteId,
-      itemComercialId: base.itemComercialId,
+      produtoId: base.produtoId,
       dataOperacao: dia,
       quantidade: 10,
     });
@@ -201,7 +201,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
       .send({
         clienteId: base.clienteId,
         dataOperacao: dia,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
       });
     expect(res.status).toBe(201);
     const { db } = app.get<{ db: Db }>(DRIZZLE);
@@ -227,13 +227,13 @@ describe('Onda 11 — múltiplas compras por operação', () => {
     const pedido = await criarPedido(app, comercialCookies, {
       compraId: cB.compraId,
       clienteId: cB.clienteId,
-      itemComercialId: cB.itemComercialId,
+      produtoId: cB.produtoId,
       dataOperacao: cB.dataOperacao,
       quantidade: 1,
     });
     const pecaId = await pesarPeca(app, recebimentoCookies, {
       recebimentoId: cA.recebimentoId,
-      itemComercialBaseId: cA.itemComercialId,
+      produtoBaseId: cA.produtoId,
     });
     const res = await request(app.getHttpServer())
       .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
@@ -253,7 +253,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
     );
     const pecaId = await pesarPeca(app, recebimentoCookies, {
       recebimentoId: c.recebimentoId,
-      itemComercialBaseId: c.itemComercialId,
+      produtoBaseId: c.produtoId,
     });
     const { db } = app.get<{ db: Db }>(DRIZZLE);
     await expect(db.execute(sql`UPDATE pecas SET compra_programada_id = NULL WHERE id = ${pecaId}::uuid`))
@@ -286,7 +286,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
       .send({
         clienteId: base.clienteId,
         dataOperacao: dia,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 9 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 9 }],
       });
     expect(challenge.status).toBe(409);
     const disp = await request(app.getHttpServer())
@@ -301,7 +301,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
       .send({
         clienteId: base.clienteId,
         dataOperacao: dia,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 9 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 9 }],
       });
     expect(ok.status).toBe(201);
   });
@@ -318,7 +318,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
       .send({
         clienteId: await criarOutroCliente(app),
         dataOperacao: origemDia,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 8 }],
       });
     expect(over.status).toBe(201);
     const { db } = app.get<{ db: Db }>(DRIZZLE);
@@ -348,7 +348,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
       .send({
         clienteId: await criarOutroCliente(app),
         dataOperacao: origemDia,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 8 }],
       });
     const [pendencia2] = await db.select().from(schema.pendenciasOverbooking)
       .where(eq(schema.pendenciasOverbooking.pedidoVendaId, over2.body.id));
@@ -377,8 +377,8 @@ describe('Onda 11 — múltiplas compras por operação', () => {
       .get(`/comercial/disponibilidade?dataOperacao=${dia}`)
       .set('Cookie', comercialCookies);
     expect(agregado.status).toBe(200);
-    const linha = (agregado.body as Array<{ itemComercialId: string; quantidadeDisponivel: string; modo?: string }>)
-      .find((d) => d.itemComercialId === base.itemComercialId);
+    const linha = (agregado.body as Array<{ produtoId: string; quantidadeDisponivel: string; modo?: string }>)
+      .find((d) => d.produtoId === base.produtoId);
     expect(Number(linha?.quantidadeDisponivel)).toBe(10);
     const det1 = await request(app.getHttpServer())
       .get(`/comercial/disponibilidade?compraProgramadaId=${c1}`)
@@ -405,17 +405,17 @@ describe('Onda 11 — múltiplas compras por operação', () => {
     const pedido = await criarPedido(app, comercialCookies, {
       compraId: c1.compraId,
       clienteId: c1.clienteId,
-      itemComercialId: c1.itemComercialId,
+      produtoId: c1.produtoId,
       dataOperacao: dia,
       quantidade: 5,
     });
     const pecaLote1 = await pesarPeca(app, recebimentoCookies, {
       recebimentoId: c1.recebimentoId,
-      itemComercialBaseId: c1.itemComercialId,
+      produtoBaseId: c1.produtoId,
     });
     const pecaLote2 = await pesarPeca(app, recebimentoCookies, {
       recebimentoId: rec2,
-      itemComercialBaseId: c1.itemComercialId,
+      produtoBaseId: c1.produtoId,
     });
     const sug1 = await request(app.getHttpServer())
       .get(`/operacao/pesagem/pecas/${pecaLote1}/sugestao`)
@@ -451,8 +451,8 @@ describe('Onda 11 — múltiplas compras por operação', () => {
       .get(`/comercial/disponibilidade/mapa?operacaoId=${compra!.operacaoId}`)
       .set('Cookie', comercialCookies);
     expect(mapa.status).toBe(200);
-    const linha = (mapa.body as Array<{ itemComercialId: string; estados: { V: string } }>)
-      .find((l) => l.itemComercialId === base.itemComercialId);
+    const linha = (mapa.body as Array<{ produtoId: string; estados: { V: string } }>)
+      .find((l) => l.produtoId === base.produtoId);
     expect(linha?.estados.V).toBe('10.000');
   });
 
@@ -464,7 +464,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
     await criarPedido(app, comercialCookies, {
       compraId: c1,
       clienteId: base.clienteId,
-      itemComercialId: base.itemComercialId,
+      produtoId: base.produtoId,
       dataOperacao: dia,
       quantidade: 10,
     });
@@ -475,31 +475,31 @@ describe('Onda 11 — múltiplas compras por operação', () => {
     await db.transaction(async (tx) => {
       await disp.aplicarRecebimentoDelta(tx, {
         compraProgramadaId: c1,
-        itemComercialId: base.itemComercialId,
+        produtoId: base.produtoId,
         deltaRecebido: '4',
         deltaComDivergencia: '0',
       });
       await disp.aplicarRecebimentoDelta(tx, {
         compraProgramadaId: c2,
-        itemComercialId: base.itemComercialId,
+        produtoId: base.produtoId,
         deltaRecebido: '6',
         deltaComDivergencia: '0',
       });
     });
     const semRisco = await db.transaction((tx) =>
-      disp.listarPedidosEmRisco(tx, op!.id, base.itemComercialId),
+      disp.listarPedidosEmRisco(tx, op!.id, base.produtoId),
     );
     expect(semRisco).toEqual([]);
     await db.transaction(async (tx) => {
       await disp.aplicarRecebimentoDelta(tx, {
         compraProgramadaId: c2,
-        itemComercialId: base.itemComercialId,
+        produtoId: base.produtoId,
         deltaRecebido: '-1',
         deltaComDivergencia: '0',
       });
     });
     const comRisco = await db.transaction((tx) =>
-      disp.listarPedidosEmRisco(tx, op!.id, base.itemComercialId),
+      disp.listarPedidosEmRisco(tx, op!.id, base.produtoId),
     );
     expect(comRisco.length).toBeGreaterThan(0);
   });
@@ -525,12 +525,12 @@ describe('Onda 11 — múltiplas compras por operação', () => {
         .send({
           numero: `NF-${qtd}-${recebimentoId.slice(0, 8)}`,
           recebimentoId,
-          itens: [{ itemComercialId: base.itemComercialId, quantidadeDeclarada: qtd }],
+          itens: [{ produtoId: base.produtoCompraId, quantidadeDeclarada: qtd }],
         });
       await request(app.getHttpServer())
         .post(`/operacao/recebimentos/${recebimentoId}/itens`)
         .set('Cookie', recebimentoCookies)
-        .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: qtd });
+        .send({ produtoId: base.produtoId, quantidadeRecebida: qtd });
       await db.update(schema.recebimentosItens)
         .set({ requerBalanca: false, statusApuracao: 'entrada_direta' })
         .where(eq(schema.recebimentosItens.recebimentoId, recebimentoId));

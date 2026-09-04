@@ -53,7 +53,7 @@ describe('Pesagem e2e (captura ADR-009: automático/manual, fallback sem falha s
     const res = await request(srv())
       .post('/operacao/pesagem/pecas')
       .set('Cookie', recebimentoCookies)
-      .send({ recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId, modoCaptura: 'automatico' });
+      .send({ recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId, modoCaptura: 'automatico' });
 
     expect(res.status).toBe(201);
     expect(res.body.modoCapturaPeso).toBe('automatico');
@@ -70,7 +70,7 @@ describe('Pesagem e2e (captura ADR-009: automático/manual, fallback sem falha s
     const res = await request(srv())
       .post('/operacao/pesagem/pecas')
       .set('Cookie', recebimentoCookies)
-      .send({ recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId, modoCaptura: 'automatico' });
+      .send({ recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId, modoCaptura: 'automatico' });
 
     expect(res.status).toBe(409);
 
@@ -87,7 +87,7 @@ describe('Pesagem e2e (captura ADR-009: automático/manual, fallback sem falha s
     const res = await request(srv())
       .post('/operacao/pesagem/pecas')
       .set('Cookie', recebimentoCookies)
-      .send({ recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId, modoCaptura: 'automatico' });
+      .send({ recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId, modoCaptura: 'automatico' });
 
     expect(res.status).toBe(409);
   });
@@ -105,7 +105,7 @@ describe('Pesagem e2e (captura ADR-009: automático/manual, fallback sem falha s
       .set('Cookie', comercialCookies)
       .send({
         recebimentoId: c.recebimentoId,
-        itemComercialBaseId: c.itemComercialId,
+        produtoBaseId: c.produtoId,
         modoCaptura: 'manual_assistido',
         pesoManual: 11.2,
         motivo: 'dispositivo_indisponivel',
@@ -123,7 +123,7 @@ describe('Pesagem e2e (captura ADR-009: automático/manual, fallback sem falha s
       .set('Cookie', recebimentoCookies)
       .send({
         recebimentoId: c.recebimentoId,
-        itemComercialBaseId: c.itemComercialId,
+        produtoBaseId: c.produtoId,
         modoCaptura: 'manual_assistido',
         pesoManual: 11.2,
       });
@@ -141,7 +141,7 @@ describe('Pesagem e2e (captura ADR-009: automático/manual, fallback sem falha s
       .set('Cookie', recebimentoCookies)
       .send({
         recebimentoId: c.recebimentoId,
-        itemComercialBaseId: c.itemComercialId,
+        produtoBaseId: c.produtoId,
         modoCaptura: 'manual_assistido',
         pesoManual: 11.25,
         motivo: 'dispositivo_indisponivel',
@@ -161,7 +161,7 @@ describe('Pesagem e2e (captura ADR-009: automático/manual, fallback sem falha s
     const res = await request(srv())
       .post('/operacao/pesagem/pecas')
       .set('Cookie', recebimentoCookies)
-      .send({ recebimentoId: '019ea000-0000-7000-8000-000000000000', itemComercialBaseId: '019ea000-0000-7000-8000-000000000001', modoCaptura: 'automatico' });
+      .send({ recebimentoId: '019ea000-0000-7000-8000-000000000000', produtoBaseId: '019ea000-0000-7000-8000-000000000001', modoCaptura: 'automatico' });
     expect(res.status).toBe(404);
   });
 
@@ -171,7 +171,7 @@ describe('Pesagem e2e (captura ADR-009: automático/manual, fallback sem falha s
     const res = await request(srv())
       .post('/operacao/pesagem/pecas')
       .set('Cookie', recebimentoCookies)
-      .send({ recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId, modoCaptura: 'manual_assistido', pesoManual: 10, motivo: 'outro' });
+      .send({ recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId, modoCaptura: 'manual_assistido', pesoManual: 10, motivo: 'outro' });
     expect(res.status).toBe(400);
   });
 
@@ -182,14 +182,14 @@ describe('Pesagem e2e (captura ADR-009: automático/manual, fallback sem falha s
     const instavel = await request(srv())
       .post('/operacao/pesagem/pecas')
       .set('Cookie', recebimentoCookies)
-      .send({ recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId, modoCaptura: 'automatico' });
+      .send({ recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId, modoCaptura: 'automatico' });
     expect(instavel.status).toBe(409);
 
     fakes(app).balanca.definirStatus('disponivel');
     const ok = await request(srv())
       .post('/operacao/pesagem/pecas')
       .set('Cookie', recebimentoCookies)
-      .send({ recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId, modoCaptura: 'automatico' });
+      .send({ recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId, modoCaptura: 'automatico' });
     expect(ok.status).toBe(201);
   });
 

@@ -23,7 +23,7 @@ interface TabelaPreco {
 }
 
 interface MapaProduto {
-  itemComercialId: string;
+  produtoId: string;
   estados: Record<string, string>;
 }
 
@@ -74,8 +74,7 @@ describe('jornada integrada do comercial — Onda 4', () => {
       clienteId: base.clienteId,
       dataOperacao,
       salvarComoRascunho: true,
-      itens: [{
-        itemComercialId: base.itemComercialId,
+      itens: [{ produtoId: base.produtoCompraId,
         quantidadePedida: 8,
       }],
     };
@@ -99,7 +98,7 @@ describe('jornada integrada do comercial — Onda 4', () => {
     expect(duplicado.body.message.code).toBe('PEDIDO_ABERTO_EXISTENTE');
 
     const adendoBody = {
-      itemComercialId: base.itemComercialId,
+      produtoId: base.produtoId,
       quantidadeAdicionada: 5,
       motivo: 'Cliente solicitou cinco unidades adicionais',
     };
@@ -161,7 +160,7 @@ describe('jornada integrada do comercial — Onda 4', () => {
       .set('Cookie', adminCookies);
     expect(mapa.status).toBe(200);
     const produtoNoMapa = (mapa.body as MapaProduto[])
-      .find((item) => item.itemComercialId === base.itemComercialId);
+      .find((item) => item.produtoId === base.produtoId);
     expect(produtoNoMapa).toBeDefined();
     expect(produtoNoMapa?.estados.V).toBe('10.000');
     expect(produtoNoMapa?.estados.R).toBe('0.000');

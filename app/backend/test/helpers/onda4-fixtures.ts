@@ -16,7 +16,7 @@ function uid(prefix: string): string {
 
 export interface CtxFixtureMapa {
   operacaoId: string;
-  itemComercialId: string;
+  produtoId: string;
   compraProgramadaId: string;
   recebimentoId: string;
   dataOperacao: string;
@@ -48,7 +48,7 @@ export async function montarCenarioMapa(
 
   const base = await seedComercialBase(app, { fator: 1 });
   const compraProgramadaId = await criarCompraConfirmada(
-    app, cookies, { fornecedorId: base.fornecedorId, itemCompraId: base.itemCompraId },
+    app, cookies, { fornecedorId: base.fornecedorId, produtoCompraId: base.produtoCompraId },
     { dataOperacao, quantidade: 100 },
   );
   const pedidoFornecedorId = await criarPedidoFornecedorEnviado(app, cookies, compraProgramadaId);
@@ -61,33 +61,33 @@ export async function montarCenarioMapa(
 
   // F — peça pesada, livre.
   await pesarPeca(app, cookies, {
-    recebimentoId, itemComercialBaseId: base.itemComercialId, peso: '15.000',
+    recebimentoId, produtoBaseId: base.produtoId, peso: '15.000',
   });
 
   // D — peça pesada enviada ao corte (iniciar move para 'em_transformacao').
   const pecaCorteId = await pesarPeca(app, cookies, {
-    recebimentoId, itemComercialBaseId: base.itemComercialId, peso: '8.000',
+    recebimentoId, produtoBaseId: base.produtoId, peso: '8.000',
   });
   const transformacaoId = await iniciarCorte(app, cookies, pecaCorteId);
 
   // ! — peça divergente na destinação. Não há writer no domínio (D17); a fixture
   // grava o estado diretamente, como o CHECK de `pecas.status_peca` já admite.
   const [pecaDivergente] = await db.insert(pecas).values({
-    compraProgramadaId, recebimentoId, itemComercialBaseId: base.itemComercialId,
+    compraProgramadaId, recebimentoId, produtoBaseId: base.produtoId,
     pesoOriginal: '5.000', modoCapturaPeso: 'automatico', statusPeca: 'divergente',
   }).returning();
   if (!pecaDivergente) throw new Error('Falha ao semear peça divergente da fixture do mapa');
 
   // R — pedido em elaboração com reserva ativa (cliente 1).
   const { pedidoId, pedidoItemId } = await criarPedido(app, cookies, {
-    compraId: compraProgramadaId, clienteId: base.clienteId, itemComercialId: base.itemComercialId,
+    compraId: compraProgramadaId, clienteId: base.clienteId, produtoId: base.produtoId,
     dataOperacao, quantidade: 50,
   });
 
   // C — mesma mecânica de reserva, pedido finalizado comercialmente (cliente 2).
   const clienteFinalizado = await criarOutroCliente(app);
   const { pedidoId: pedidoIdFinalizado } = await criarPedido(app, cookies, {
-    compraId: compraProgramadaId, clienteId: clienteFinalizado, itemComercialId: base.itemComercialId,
+    compraId: compraProgramadaId, clienteId: clienteFinalizado, produtoId: base.produtoId,
     dataOperacao, quantidade: 50,
   });
   const { default: request } = await import('supertest');
@@ -102,7 +102,7 @@ export async function montarCenarioMapa(
   // O — reserva sem lastro (saldo virtual já exaurido por R + C = 100 = total da compra).
   const clienteOverbooking = await criarOutroCliente(app);
   await criarPedido(app, cookies, {
-    compraId: compraProgramadaId, clienteId: clienteOverbooking, itemComercialId: base.itemComercialId,
+    compraId: compraProgramadaId, clienteId: clienteOverbooking, produtoId: base.produtoId,
     dataOperacao, quantidade: 40,
   });
 
@@ -117,17 +117,17 @@ export async function montarCenarioMapa(
   if (!caminhaoFechado) throw new Error('Falha ao semear caminhão fechado da fixture do mapa');
 
   const [pecaConferida] = await db.insert(pecas).values({
-    compraProgramadaId, recebimentoId, itemComercialBaseId: base.itemComercialId,
+    compraProgramadaId, recebimentoId, produtoBaseId: base.produtoId,
     pesoOriginal: pesoPecaConferida, modoCapturaPeso: 'automatico', statusPeca: 'associada',
     pedidoVendaId: pedidoId, pedidoVendaItemId: pedidoItemId,
   }).returning();
   const [pecaRemovida] = await db.insert(pecas).values({
-    compraProgramadaId, recebimentoId, itemComercialBaseId: base.itemComercialId,
+    compraProgramadaId, recebimentoId, produtoBaseId: base.produtoId,
     pesoOriginal: '9.000', modoCapturaPeso: 'automatico', statusPeca: 'associada',
     pedidoVendaId: pedidoId, pedidoVendaItemId: pedidoItemId,
   }).returning();
   const [subitemEmCarga] = await db.insert(subitens).values({
-    transformacaoId, pecaOrigemId: pecaCorteId, itemComercialId: base.itemComercialId,
+    transformacaoId, pecaOrigemId: pecaCorteId, produtoId: base.produtoId,
     peso: pesoSubitemEmCarga, statusSubitem: 'associado',
     pedidoVendaId: pedidoId, pedidoVendaItemId: pedidoItemId,
   }).returning();
@@ -154,7 +154,7 @@ export async function montarCenarioMapa(
   ]);
 
   return {
-    operacaoId, itemComercialId: base.itemComercialId, compraProgramadaId, recebimentoId, dataOperacao,
+    operacaoId, produtoId: base.produtoId, compraProgramadaId, recebimentoId, dataOperacao,
     pedidoId, pedidoItemId, pesoPecaConferida, pesoSubitemEmCarga,
     caminhaoFechadoId: caminhaoFechado.id, pecaConferidaId: pecaConferida.id,
     subitemEmCargaId: subitemEmCarga.id, pecaRemovidaId: pecaRemovida.id,

@@ -2,9 +2,9 @@ import { calcularFaltasDesossa, parseQuantidade } from '../../src/modules/operac
 
 describe('calcularFaltasDesossa', () => {
   const produtos = [
-    { id: 'p1', codigo: 'JAC', nome: 'Jacaré', legadoItemComercialId: 'ic1' },
-    { id: 'p2', codigo: 'ALC', nome: 'Alcatra', legadoItemComercialId: 'ic2' },
-    { id: 'p3', codigo: 'SEM-LINK', nome: 'Sem vínculo', legadoItemComercialId: null },
+    { id: 'p1', codigo: 'JAC', nome: 'Jacaré', legadoprodutoId: 'ic1' },
+    { id: 'p2', codigo: 'ALC', nome: 'Alcatra', legadoprodutoId: 'ic2' },
+    { id: 'p3', codigo: 'SEM-LINK', nome: 'Sem vínculo', legadoprodutoId: null },
   ];
 
   it('calcula faltante como demanda menos estoque', () => {

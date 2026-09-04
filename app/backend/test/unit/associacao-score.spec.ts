@@ -4,7 +4,7 @@ function candidato(over: Partial<CandidatoPedido>): CandidatoPedido {
   return {
     pedidoVendaId: 'pv-1',
     pedidoVendaItemId: 'pvi-1',
-    itemComercialId: 'item-A',
+    produtoId: 'item-A',
     clienteId: 'cli-1',
     saldoPendente: '5.000',
     prioridade: null,
@@ -16,11 +16,11 @@ function candidato(over: Partial<CandidatoPedido>): CandidatoPedido {
 }
 
 describe('associacao-score (motor de sugestão — função pura)', () => {
-  const peca = { itemComercialBaseId: 'item-A', pesoOriginal: '12.500' };
+  const peca = { produtoBaseId: 'item-A', pesoOriginal: '12.500' };
 
   it('exclui itens incompatíveis e sem saldo', () => {
     const r = calcularScores(peca, [
-      candidato({ pedidoVendaItemId: 'incompativel', itemComercialId: 'item-B' }),
+      candidato({ pedidoVendaItemId: 'incompativel', produtoId: 'item-B' }),
       candidato({ pedidoVendaItemId: 'sem-saldo', saldoPendente: '0.000' }),
       candidato({ pedidoVendaItemId: 'ok' }),
     ]);
@@ -52,7 +52,7 @@ describe('associacao-score (motor de sugestão — função pura)', () => {
   });
 
   it('sem candidatos compatíveis retorna lista vazia', () => {
-    const r = calcularScores(peca, [candidato({ itemComercialId: 'item-X' })]);
+    const r = calcularScores(peca, [candidato({ produtoId: 'item-X' })]);
     expect(r).toEqual([]);
   });
 

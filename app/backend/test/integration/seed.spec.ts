@@ -67,17 +67,17 @@ describe('Seed idempotência', () => {
   it('seed cria desdobramento AD-01 do boi casado (2 TZ + 2 DT + 2 PA)', async () => {
     const regras = await db
       .select({
-        compra: schema.itensCompra.codigo,
-        comercial: schema.itensComerciais.codigo,
+        compra: schema.produtos.codigo,
+        comercial: schema.produtos.codigo,
         fator: schema.regrasDesdobramentoComercial.fatorQuantidade,
       })
       .from(schema.regrasDesdobramentoComercial)
-      .innerJoin(schema.itensCompra, eq(schema.itensCompra.id, schema.regrasDesdobramentoComercial.itemCompraId))
+      .innerJoin(schema.produtos, eq(schema.produtos.id, schema.regrasDesdobramentoComercial.produtoId))
       .innerJoin(
-        schema.itensComerciais,
-        eq(schema.itensComerciais.id, schema.regrasDesdobramentoComercial.itemComercialId),
+        schema.produtos,
+        eq(schema.produtos.id, schema.regrasDesdobramentoComercial.produtoId),
       )
-      .where(eq(schema.itensCompra.codigo, 'BOI'));
+      .where(eq(schema.produtos.codigo, 'BOI'));
     expect(regras).toHaveLength(3);
     expect(regras.map((r) => ({ compra: r.compra, comercial: r.comercial, fator: Number(r.fator) }))).toEqual(
       expect.arrayContaining([

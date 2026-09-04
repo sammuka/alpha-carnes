@@ -57,7 +57,7 @@ describe('operacoes-writers e2e', () => {
       .send({
         dataOperacao: data,
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 5 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 5 }],
       });
     expect(criar.status).toBe(201);
     const conf = await request(app.getHttpServer())
@@ -77,7 +77,7 @@ describe('operacoes-writers e2e', () => {
         .send({
           dataOperacao: data,
           fornecedorId: base.fornecedorId,
-          itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 5 }],
+          itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 5 }],
         });
       expect(criar.status).toBe(201);
       return;
@@ -97,7 +97,7 @@ describe('operacoes-writers e2e', () => {
           compraProgramadaId: compraId,
           clienteId: base.clienteId,
           dataOperacao: data,
-          itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 1 }],
+          itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 1 }],
         });
       expect(pedido.status).toBe(201);
       return;

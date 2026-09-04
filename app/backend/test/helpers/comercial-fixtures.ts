@@ -16,8 +16,8 @@ export async function seedComercialBase(
   opts: { fator?: number } = {},
 ): Promise<{
   fornecedorId: string;
-  itemCompraId: string;
-  itemComercialId: string;
+  produtoCompraId: string;
+  produtoId: string;
   clienteId: string;
   fator: number;
 }> {
@@ -28,26 +28,41 @@ export async function seedComercialBase(
     .insert(schema.fornecedores)
     .values({ codigo: uid('FORN'), razaoSocial: 'Fornecedor F3', documentoFiscal: uid('DOC') })
     .returning();
-  const [itemCompra] = await db
-    .insert(schema.itensCompra)
-    .values({ codigo: uid('ICOMP'), descricao: 'Boi', unidadeCompra: 'unidade' })
+  const [produtoCompra] = await db
+    .insert(schema.produtos)
+    .values({
+      codigo: uid('ICOMP'),
+      nome: 'Boi',
+      unidadePedido: 'unidade',
+      unidadePreco: 'kg',
+      tipoOperacional: 'compra_base',
+      ativoCompra: true,
+      ativoVenda: false,
+    })
     .returning();
-  const [itemComercial] = await db
-    .insert(schema.itensComerciais)
-    .values({ codigo: uid('ICOM'), descricao: 'Dianteiro', unidadeComercial: 'kg' })
+  const [produtoVenda] = await db
+    .insert(schema.produtos)
+    .values({
+      codigo: uid('ICOM'),
+      nome: 'Dianteiro',
+      unidadePedido: 'kg',
+      unidadePreco: 'kg',
+      ativoCompra: true,
+      ativoVenda: true,
+    })
     .returning();
   const [cliente] = await db
     .insert(schema.clientes)
     .values({ codigo: uid('CLI'), razaoSocial: 'Cliente F3', documentoFiscal: uid('DOCC') })
     .returning();
 
-  if (!fornecedor || !itemCompra || !itemComercial || !cliente) {
+  if (!fornecedor || !produtoCompra || !produtoVenda || !cliente) {
     throw new Error('Falha ao criar cadastros base de F3');
   }
 
   await db.insert(schema.regrasDesdobramentoComercial).values({
-    itemCompraId: itemCompra.id,
-    itemComercialId: itemComercial.id,
+    produtoOrigemId: produtoCompra.id,
+    produtoDestinoId: produtoVenda.id,
     fatorQuantidade: String(fator),
     status: 'ativo',
     vigenciaInicio: new Date(Date.now() - 24 * 60 * 60 * 1000),
@@ -55,17 +70,17 @@ export async function seedComercialBase(
 
   return {
     fornecedorId: fornecedor.id,
-    itemCompraId: itemCompra.id,
-    itemComercialId: itemComercial.id,
+    produtoCompraId: produtoCompra.id,
+    produtoId: produtoVenda.id,
     clienteId: cliente.id,
     fator,
   };
 }
 
-/** Lê a disponibilidade gerada para um item comercial (estado atual de saldo). */
+/** Lê a disponibilidade gerada para um produto (estado atual de saldo). */
 export async function lerDisponibilidade(
   app: INestApplication,
-  itemComercialId: string,
+  produtoId: string,
 ): Promise<{
   id: string;
   quantidadeTotalGerada: string;
@@ -79,7 +94,7 @@ export async function lerDisponibilidade(
   const rows = await db
     .select()
     .from(schema.disponibilidadesVirtuais)
-    .where(eq(schema.disponibilidadesVirtuais.itemComercialId, itemComercialId));
+    .where(eq(schema.disponibilidadesVirtuais.produtoId, produtoId));
   const row = rows[0];
   if (!row) return null;
   return {
@@ -100,7 +115,7 @@ export async function lerDisponibilidade(
 export async function criarCompraConfirmada(
   app: INestApplication,
   comprasCookies: string,
-  base: { fornecedorId: string; itemCompraId: string },
+  base: { fornecedorId: string; produtoCompraId: string },
   opts: { dataOperacao: string; quantidade: number },
 ): Promise<string> {
   const { default: request } = await import('supertest');
@@ -110,7 +125,7 @@ export async function criarCompraConfirmada(
     .send({
       dataOperacao: opts.dataOperacao,
       fornecedorId: base.fornecedorId,
-      itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: opts.quantidade }],
+      itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: opts.quantidade }],
     });
   if (criar.status !== 201 || !criar.body?.id) {
     throw new Error(`Falha ao criar compra: ${criar.status} ${JSON.stringify(criar.body)}`);
@@ -125,7 +140,6 @@ export async function criarCompraConfirmada(
   }
   return compraId;
 }
-
 
 /** Cria Pedido ao Fornecedor a partir de compra confirmada e envia (status aguardando_recebimento). */
 export async function criarPedidoFornecedorEnviado(

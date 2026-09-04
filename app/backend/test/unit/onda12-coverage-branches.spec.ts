@@ -1,6 +1,5 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ProdutosService } from '../../src/modules/cadastros/produtos/produtos.service';
-import { ItensComerciaisService } from '../../src/modules/cadastros/itens-comerciais/itens-comerciais.service';
 import { RegrasDesdobramentoService } from '../../src/modules/cadastros/regras-desdobramento/regras-desdobramento.service';
 
 const auditoria = { registrar: jest.fn().mockResolvedValue(undefined) };
@@ -47,8 +46,8 @@ const produtoBase = {
   status: 'ativo',
   observacoesOperacionais: null,
   atributosJson: {},
-  legadoItemComercialId: null,
-  legadoItemCompraId: null,
+  legadoprodutoId: null,
+  legadoprodutoId: null,
   deletedAt: null,
 };
 
@@ -198,9 +197,9 @@ describe('ProdutosService — cobertura de branches Onda 12', () => {
         ativoCompra: true,
         status: 'ativo',
       },
-      { legadoItemComercialId: null, legadoItemCompraId: 'icp-legado' },
+      { legadoprodutoId: null, legadoprodutoId: 'icp-legado' },
     );
-    expect(res.legadoItemCompraId).toBe('icp-legado');
+    expect(res.legadoprodutoId).toBe('icp-legado');
 
     const txDup = {
       select: jest.fn(() => ({
@@ -226,7 +225,7 @@ describe('ProdutosService — cobertura de branches Onda 12', () => {
           ativoCompra: true,
           status: 'ativo',
         },
-        { legadoItemComercialId: null, legadoItemCompraId: null },
+        { legadoprodutoId: null, legadoprodutoId: null },
       ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
@@ -252,7 +251,7 @@ describe('ProdutosService — cobertura de branches Onda 12', () => {
   });
 });
 
-describe('ItensComerciaisService — cobertura de branches Onda 12', () => {
+describe('produtosService — cobertura de branches Onda 12', () => {
   const item = {
     id: 'ic-1',
     codigo: 'IC1',
@@ -267,7 +266,7 @@ describe('ItensComerciaisService — cobertura de branches Onda 12', () => {
 
   it('listar aplica status, busca e inclui removidos', async () => {
     const db = listarDb([item]);
-    const service = new ItensComerciaisService({ db } as never, auditoria as never);
+    const service = new ProdutosService({ db } as never, auditoria as never);
     const r = await service.listar({
       page: 1,
       pageSize: 10,
@@ -283,7 +282,7 @@ describe('ItensComerciaisService — cobertura de branches Onda 12', () => {
       select: jest.fn(() => ({ from: jest.fn(() => ({ where: jest.fn(() => Promise.resolve([])) })) })),
     };
     const dbTx = { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(vazio)) };
-    const service = new ItensComerciaisService({ db: { ...vazio, ...dbTx } } as never, auditoria as never);
+    const service = new ProdutosService({ db: { ...vazio, ...dbTx } } as never, auditoria as never);
     await expect(service.detalhar('x')).rejects.toBeInstanceOf(NotFoundException);
     await expect(service.atualizar('x', { descricao: 'Y' }, 'u')).rejects.toBeInstanceOf(NotFoundException);
     await expect(service.remover('x', 'u')).rejects.toBeInstanceOf(NotFoundException);
@@ -297,7 +296,7 @@ describe('ItensComerciaisService — cobertura de branches Onda 12', () => {
         values: jest.fn(() => ({ returning: jest.fn(() => Promise.resolve([item])) })),
       })),
     };
-    const service = new ItensComerciaisService(
+    const service = new ProdutosService(
       { db: { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(txCriar)) } } as never,
       auditoria as never,
     );
@@ -317,7 +316,7 @@ describe('ItensComerciaisService — cobertura de branches Onda 12', () => {
         })),
       })),
     };
-    const svcUpd = new ItensComerciaisService(
+    const svcUpd = new ProdutosService(
       { db: { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(txUpd)) } } as never,
       auditoria as never,
     );
@@ -342,7 +341,7 @@ describe('ItensComerciaisService — cobertura de branches Onda 12', () => {
         })),
       })),
     };
-    const svcRest = new ItensComerciaisService(
+    const svcRest = new ProdutosService(
       { db: { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(txRest)) } } as never,
       auditoria as never,
     );
@@ -355,7 +354,7 @@ describe('ItensComerciaisService — cobertura de branches Onda 12', () => {
         from: jest.fn(() => ({ where: jest.fn(() => Promise.resolve([item])) })),
       })),
     };
-    const svc = new ItensComerciaisService(
+    const svc = new ProdutosService(
       { db: { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(txAtivo)) } } as never,
       auditoria as never,
     );
@@ -366,7 +365,7 @@ describe('ItensComerciaisService — cobertura de branches Onda 12', () => {
         from: jest.fn(() => ({ where: jest.fn(() => Promise.resolve([{ id: 'outro' }])) })),
       })),
     };
-    const svcDup = new ItensComerciaisService(
+    const svcDup = new ProdutosService(
       { db: { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(txDup)) } } as never,
       auditoria as never,
     );
@@ -443,8 +442,8 @@ describe('RegrasDesdobramentoService — cobertura de branches Onda 12', () => {
     await expect(
       service.criar(
         {
-          itemCompraId: 'c1',
-          itemComercialId: 'm1',
+          produtoId: 'c1',
+          produtoId: 'm1',
           fatorQuantidade: 2,
           status: 'ativo',
           vigenciaInicio: new Date('2026-01-01'),
@@ -473,8 +472,8 @@ describe('RegrasDesdobramentoService — cobertura de branches Onda 12', () => {
             where: jest.fn(() => ({
               orderBy: jest.fn(() =>
                 Promise.resolve([
-                  { itemComercialId: 'm1', descricao: 'TZ', fator: '2' },
-                  { itemComercialId: 'm2', descricao: 'DT', fator: '2' },
+                  { produtoId: 'm1', descricao: 'TZ', fator: '2' },
+                  { produtoId: 'm2', descricao: 'DT', fator: '2' },
                 ]),
               ),
             })),

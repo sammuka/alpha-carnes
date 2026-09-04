@@ -166,7 +166,7 @@ describe('Faturamento F6a — e2e', () => {
           compraProgramadaId: cenario.compraId,
           clienteId: clienteSubitem.id,
           dataOperacao,
-          itens: [{ itemComercialId: cenario.itemComercialId, quantidadePedida: 1 }],
+          itens: [{ produtoId: cenario.produtoId, quantidadePedida: 1 }],
         });
       expect(pedidoRes.status).toBe(201);
       const pedidoSubitemId = pedidoRes.body.id as string;
@@ -178,7 +178,7 @@ describe('Faturamento F6a — e2e', () => {
       // Pesar uma peça e transformar em subitem
       const pecaId = await pesarPeca(app, recebimentoCookies, {
         recebimentoId: cenario.recebimentoId,
-        itemComercialBaseId: cenario.itemComercialId,
+        produtoBaseId: cenario.produtoId,
       });
       // Confirmar peça (associar ao pedido) e etiquetar
       await request(srv())
@@ -193,7 +193,7 @@ describe('Faturamento F6a — e2e', () => {
       // Iniciar corte e gerar subitem completo (pesado + associado + etiquetado)
       const transformacaoId = await iniciarCorte(app, corteCookies, pecaId);
       const subitemId = await subitemCompleto(
-        app, corteCookies, transformacaoId, cenario.itemComercialId, pedidoItemSubitemId,
+        app, corteCookies, transformacaoId, cenario.produtoId, pedidoItemSubitemId,
       );
 
       // Criar caminhão, adicionar SUBITEM na carga e fechar

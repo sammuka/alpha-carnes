@@ -58,7 +58,7 @@ describe('PedidosService — emissão de evento pós-commit', () => {
           nome: EVENTOS.RESERVA_ATUALIZADA,
           payload: {
             disponibilidadeId: 'd1',
-            itemComercialId: 'i1',
+            produtoId: 'i1',
             quantidadeReservada: '4.000',
             quantidadeDisponivel: '0.000',
             dataOperacao: '2026-06-06',
@@ -123,7 +123,7 @@ describe('PedidosService — branches de conflito', () => {
       }),
     };
     await expect(service(db).incluirItem('p1', {
-      itemComercialId: 'i1', quantidade: 1,
+      produtoId: 'i1', quantidade: 1,
     } as never, 'user-1')).rejects.toThrow('Item comercial já existe neste pedido');
   });
 
@@ -134,21 +134,21 @@ describe('PedidosService — branches de conflito', () => {
       }),
     };
     await expect(service(db).incluirItem('p1', {
-      itemComercialId: 'i1', quantidade: 1,
+      produtoId: 'i1', quantidade: 1,
     } as never, 'user-1')).rejects.toThrow('falha genérica');
   });
 
   it('planejarSobLock rejeita item comercial duplicado no payload', async () => {
     const tx = { execute: jest.fn() };
     await expect(service({}).planejarSobLock(tx as never, 'op-1', [
-      { itemComercialId: 'i1', quantidade: '1' },
-      { itemComercialId: 'i1', quantidade: '2' },
+      { produtoId: 'i1', quantidade: '1' },
+      { produtoId: 'i1', quantidade: '2' },
     ] as never)).rejects.toThrow('Item comercial duplicado');
   });
 
   it('planejarSobLock sem operacaoId retorna déficit total', async () => {
     const plano = await service({}).planejarSobLock({} as never, null, [
-      { itemComercialId: 'i1', quantidade: '3.000' },
+      { produtoId: 'i1', quantidade: '3.000' },
     ] as never);
     expect(plano).toHaveLength(1);
     expect(plano[0]?.deficit).toBe('3.000');
@@ -165,7 +165,7 @@ describe('PedidosService — aplicarAlocacaoNoItem', () => {
   }
 
   const pedido = { id: 'p1', operacaoId: 'op1', clienteId: 'c1' } as never;
-  const item = { id: 'pi1', itemComercialId: 'ic1' } as never;
+  const item = { id: 'pi1', produtoId: 'ic1' } as never;
 
   it('emite RESERVA_ATUALIZADA para cada cobertura virtual', async () => {
     const tx = {
@@ -187,7 +187,7 @@ describe('PedidosService — aplicarAlocacaoNoItem', () => {
       pedido,
       item,
       {
-        itemComercialId: 'ic1',
+        produtoId: 'ic1',
         quantidadeSolicitada: '4.000',
         disponivelAntes: '4.000',
         coberturas: [{ disponibilidadeId: 'd1', quantidade: '4.000' }],
@@ -200,7 +200,7 @@ describe('PedidosService — aplicarAlocacaoNoItem', () => {
       nome: EVENTOS.RESERVA_ATUALIZADA,
       payload: {
         disponibilidadeId: 'd1',
-        itemComercialId: 'ic1',
+        produtoId: 'ic1',
         dataOperacao: '2026-06-06',
         quantidadeReservada: '4.000',
         quantidadeDisponivel: '0.000',
@@ -243,7 +243,7 @@ describe('PedidosService — aplicarAlocacaoNoItem', () => {
       pedido,
       item,
       {
-        itemComercialId: 'ic1',
+        produtoId: 'ic1',
         quantidadeSolicitada: '10.000',
         disponivelAntes: '0.000',
         coberturas: [],
@@ -276,7 +276,7 @@ describe('PedidosService — aplicarAlocacaoNoItem', () => {
       pedido,
       item,
       {
-        itemComercialId: 'ic1',
+        produtoId: 'ic1',
         quantidadeSolicitada: '5.000',
         disponivelAntes: '0.000',
         coberturas: [],

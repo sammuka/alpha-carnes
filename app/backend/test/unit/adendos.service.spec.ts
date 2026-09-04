@@ -9,7 +9,7 @@ const itemBase = {
   quantidadePedida: '10.000',
   quantidadeReservada: '10.000',
   quantidadeOverbooking: '0.000',
-  itemComercialId: 'ic1',
+  produtoId: 'ic1',
 };
 
 function montar(alocacao: { coberturas: { disponibilidadeId: string; quantidade: string }[]; deficit: string }) {
@@ -60,7 +60,7 @@ describe('AdendosService — origem do consumo (D27)', () => {
       deficit: '0.000',
     });
     await semDeficit.service.registrar('p1', {
-      itemComercialId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
+      produtoId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
     }, 'user-1', false);
     expect(semDeficit.emitSpy).toHaveBeenCalledWith(
       EVENTOS.ADENDO_REGISTRADO,
@@ -69,7 +69,7 @@ describe('AdendosService — origem do consumo (D27)', () => {
 
     const comDeficit = montar({ coberturas: [], deficit: '5.000' });
     await comDeficit.service.registrar('p1', {
-      itemComercialId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
+      produtoId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
     }, 'user-1', true);
     expect(comDeficit.emitSpy).toHaveBeenCalledWith(
       EVENTOS.ADENDO_REGISTRADO,
@@ -86,12 +86,12 @@ describe('AdendosService — ordem commit→emit (RA-04)', () => {
     });
 
     await service.registrar('p1', {
-      itemComercialId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
+      produtoId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
     }, 'user-1', false);
 
     expect(emitSpy).toHaveBeenCalledWith(
       EVENTOS.ADENDO_REGISTRADO,
-      expect.objectContaining({ pedidoVendaId: 'p1', itemComercialId: 'ic1' }),
+      expect.objectContaining({ pedidoVendaId: 'p1', produtoId: 'ic1' }),
     );
     expect(ordem.indexOf('commit')).toBeLessThan(ordem.indexOf(`emit:${EVENTOS.ADENDO_REGISTRADO}`));
   });
@@ -101,7 +101,7 @@ describe('AdendosService — ordem commit→emit (RA-04)', () => {
     pedidos.exigirItemDoPedido.mockRejectedValueOnce(new Error('falha simulada na tx'));
 
     await expect(service.registrar('p1', {
-      itemComercialId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
+      produtoId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
     }, 'user-1', false)).rejects.toThrow('falha simulada');
     expect(emitSpy).not.toHaveBeenCalled();
   });
@@ -138,7 +138,7 @@ describe('AdendosService — branches', () => {
   it('registrar sem confirmacao lança challenge quando há deficit', async () => {
     const { service } = montar({ coberturas: [], deficit: '5.000' });
     await expect(service.registrar('p1', {
-      itemComercialId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
+      produtoId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
     }, 'user-1', false)).rejects.toBeInstanceOf(OverbookingChallengeException);
   });
 
@@ -146,7 +146,7 @@ describe('AdendosService — branches', () => {
     const { service, pedidos } = montar({ coberturas: [], deficit: '0.000' });
     pedidos.planejarSobLock.mockResolvedValueOnce([]);
     await expect(service.registrar('p1', {
-      itemComercialId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
+      produtoId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
     }, 'user-1', false)).rejects.toThrow('planejarSobLock não devolveu alocação');
   });
 
@@ -176,7 +176,7 @@ describe('AdendosService — branches', () => {
     };
     const service = new AdendosService({ db } as never, { registrar: jest.fn() } as never, new EventEmitter2(), pedidos as never);
     const resultado = await service.registrar('p1', {
-      itemComercialId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
+      produtoId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
     }, 'user-1', true);
     expect(resultado.item.status).toBe('overbooking_confirmado');
   });

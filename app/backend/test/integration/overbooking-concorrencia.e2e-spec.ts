@@ -37,7 +37,7 @@ describe('overbooking-concorrencia', () => {
       .send({
         dataOperacao,
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: quantidade }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: quantidade }],
       });
     const compraId = criar.body.id as string;
     await request(app.getHttpServer())
@@ -47,7 +47,7 @@ describe('overbooking-concorrencia', () => {
     return { base, compraId };
   }
 
-  it('duas inclusões concorrentes do mesmo itemComercialId deixam uma linha', async () => {
+  it('duas inclusões concorrentes do mesmo produtoId deixam uma linha', async () => {
     const { base, compraId } = await cenario('2026-12-01', 10);
     const outro = await seedComercialBase(app, { fator: 1 });
 
@@ -58,7 +58,7 @@ describe('overbooking-concorrencia', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-01',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 1 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 1 }],
       })
       .expect(201);
 
@@ -66,11 +66,11 @@ describe('overbooking-concorrencia', () => {
       request(app.getHttpServer())
         .post(`/comercial/pedidos/${pedido.body.id}/itens/confirmar-overbooking`)
         .set('Cookie', comercialCookies)
-        .send({ itemComercialId: outro.itemComercialId, quantidade: 2 }),
+        .send({ produtoId: outro.produtoId, quantidade: 2 }),
       request(app.getHttpServer())
         .post(`/comercial/pedidos/${pedido.body.id}/itens/confirmar-overbooking`)
         .set('Cookie', comercialCookies)
-        .send({ itemComercialId: outro.itemComercialId, quantidade: 2 }),
+        .send({ produtoId: outro.produtoId, quantidade: 2 }),
     ]);
 
     const statuses = [a.status, b.status].sort();
@@ -81,7 +81,7 @@ describe('overbooking-concorrencia', () => {
     const itens = await db.select().from(schema.pedidosVendaItens)
       .where(and(
         eq(schema.pedidosVendaItens.pedidoVendaId, pedido.body.id),
-        eq(schema.pedidosVendaItens.itemComercialId, outro.itemComercialId),
+        eq(schema.pedidosVendaItens.produtoId, outro.produtoId),
         isNull(schema.pedidosVendaItens.deletedAt),
       ));
     expect(itens).toHaveLength(1);
@@ -97,7 +97,7 @@ describe('overbooking-concorrencia', () => {
           compraProgramadaId: compraId,
           clienteId: base.clienteId,
           dataOperacao: '2026-12-02',
-          itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+          itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
         }),
       request(app.getHttpServer())
         .post('/comercial/pedidos/confirmar-overbooking')
@@ -106,12 +106,12 @@ describe('overbooking-concorrencia', () => {
           compraProgramadaId: compraId,
           clienteId: base.clienteId,
           dataOperacao: '2026-12-02',
-          itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+          itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
         }),
     ]);
 
     expect(results.every((r) => r.status === 201 || r.status === 409)).toBe(true);
-    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    const disp = await lerDisponibilidade(app, base.produtoId);
     expect(Number(disp!.quantidadeDisponivel)).toBeGreaterThanOrEqual(0);
     expect(Number(disp!.quantidadeReservada)).toBeLessThanOrEqual(2);
   });

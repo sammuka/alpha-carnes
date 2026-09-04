@@ -49,8 +49,8 @@ describe('Reetiqueta de subitem e2e (F4c — RF-RT-04, best-effort)', () => {
     fakes(app).balanca.definirPeso('6.000');
     fakes(app).impressora.definirStatus('disponivel');
     const itemSaidaCbId = await itemSaidaCanonicoCb(app);
-    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId, dataOperacao: c.dataOperacao, quantidade: 5 });
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, produtoId: itemSaidaCbId, dataOperacao: c.dataOperacao, quantidade: 5 });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
     const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
     await pesarSubitem(app, corteCookies, subId);

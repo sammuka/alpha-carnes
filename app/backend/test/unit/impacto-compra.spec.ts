@@ -28,7 +28,7 @@ describe('montarImpacto', () => {
 
   it('déficit = reservada - projetada, nunca negativo', async () => {
     const itens: ItemImpacto[] = [{
-      itemComercialId: 'ic1',
+      produtoId: 'ic1',
       codigo: 'TZ',
       descricao: 'Traseiro',
       quantidadeGeradaAtual: '200.000',
@@ -67,7 +67,7 @@ describe('montarImpacto', () => {
 
   it('resumo do protótipo lista sinal, sigla e déficit por item', async () => {
     const itens: ItemImpacto[] = [{
-      itemComercialId: 'ic1',
+      produtoId: 'ic1',
       codigo: 'TZ',
       descricao: 'Traseiro',
       quantidadeGeradaAtual: '200.000',
@@ -100,7 +100,7 @@ describe('montarImpacto', () => {
       })),
     };
     disponibilidadeService.projetarImpacto.mockResolvedValue([{
-      itemComercialId: 'ic1',
+      produtoId: 'ic1',
       codigo: 'TZ',
       descricao: 'Traseiro',
       quantidadeGeradaAtual: '200.000',

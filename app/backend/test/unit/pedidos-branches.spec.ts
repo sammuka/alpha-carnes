@@ -45,8 +45,8 @@ describe('PedidosService — branches', () => {
     const service = makeService({});
     await expect(
       service.planejarSobLock(tx as never, null, [
-        { itemComercialId: 'ic1', quantidade: 5 },
-        { itemComercialId: 'ic1', quantidade: 3 },
+        { produtoId: 'ic1', quantidade: 5 },
+        { produtoId: 'ic1', quantidade: 3 },
       ]),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -57,7 +57,7 @@ describe('PedidosService — branches', () => {
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
     const service = makeService(db);
     await expect(
-      service.incluirItem('p1', { itemComercialId: 'ic1', quantidade: 5 } as never, 'u1'),
+      service.incluirItem('p1', { produtoId: 'ic1', quantidade: 5 } as never, 'u1'),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -171,7 +171,7 @@ describe('PedidosService — branches', () => {
       insert: jest.fn(() => ({ values: () => ({ returning: jest.fn(async () => [{ id: 'item1' }]) }) })),
     };
     const plano = [{
-      itemComercialId: 'ic1',
+      produtoId: 'ic1',
       quantidadeSolicitada: '5.000',
       disponivelAntes: '0.000',
       coberturas: [],
@@ -182,7 +182,7 @@ describe('PedidosService — branches', () => {
       service.persistirItensPlanejados(
         tx as never,
         pedido as never,
-        [{ itemComercialId: 'ic1', quantidade: 5 }],
+        [{ produtoId: 'ic1', quantidade: 5 }],
         plano,
         'u1',
       ),
@@ -217,7 +217,7 @@ describe('PedidosService — branches', () => {
     const service = makeService(db);
     await expect(service.buscarAberto({
       clienteId: 'c1',
-      itemComercialId: 'ic1',
+      produtoId: 'ic1',
       dataOperacao: '2026-08-01',
     }, 'u1')).resolves.toBeNull();
   });

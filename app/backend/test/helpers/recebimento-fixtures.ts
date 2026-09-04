@@ -78,14 +78,14 @@ export async function criarConclusaoConferencia(
     .send({
       numero: '900301',
       recebimentoId,
-      itens: [{ itemComercialId: base.itemComercialId, quantidadeDeclarada: 10 }],
+      itens: [{ produtoId: base.produtoCompraId, quantidadeDeclarada: 10 }],
     })
     .expect(201);
 
   await request(srv)
     .post(`/operacao/recebimentos/${recebimentoId}/itens`)
     .set('Cookie', recebimentoCookies)
-    .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 })
+    .send({ produtoId: base.produtoId, quantidadeRecebida: 10 })
     .expect(201);
 
   const { db } = app.get<{ db: Db }>(DRIZZLE);
@@ -93,7 +93,7 @@ export async function criarConclusaoConferencia(
     .set({ requerBalanca: false, statusApuracao: 'entrada_direta' })
     .where(and(
       eq(schema.recebimentosItens.recebimentoId, recebimentoId),
-      eq(schema.recebimentosItens.itemComercialId, base.itemComercialId),
+      eq(schema.recebimentosItens.produtoId, base.produtoId),
     ));
 
   await request(srv)

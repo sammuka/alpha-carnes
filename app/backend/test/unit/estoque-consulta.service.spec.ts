@@ -3,7 +3,7 @@ import {
   clientes,
   entradasItens,
   fornecedores,
-  itensComerciais,
+  produtos,
   notasFiscaisFornecedor,
   parametros,
   pecas,
@@ -48,21 +48,21 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
   it('mapeia status de peça/subitem/entrada para os rótulos do protótipo (D8.2)', async () => {
     const porTabela = new Map<unknown, unknown[]>([
       [pecas, [
-        { id: 'peca-sobra', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
-        { id: 'peca-assoc', statusFisico: 'associada', peso: '10.000', etiquetaAtual: null, itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: 'pv1', capturaMeta: {}, createdAt: createdAtHoje },
-        { id: 'peca-transf', statusFisico: 'em_transformacao', peso: '10.000', etiquetaAtual: null, itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
-        { id: 'peca-analise', statusFisico: 'em_analise', peso: '10.000', etiquetaAtual: null, itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'peca-sobra', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'peca-assoc', statusFisico: 'associada', peso: '10.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: 'pv1', capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'peca-transf', statusFisico: 'em_transformacao', peso: '10.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'peca-analise', statusFisico: 'em_analise', peso: '10.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
       ]],
       [subitens, [
-        { id: 'sub-sobra', statusFisico: 'em_sobra', peso: '2.000', quantidade: '1', etiquetaAtual: null, itemComercialId: 'ic2', pecaOrigemId: 'peca-sobra', pedidoVendaId: null, createdAt: createdAtHoje },
-        { id: 'sub-assoc', statusFisico: 'associado', peso: '2.000', quantidade: '1', etiquetaAtual: null, itemComercialId: 'ic2', pecaOrigemId: 'peca-sobra', pedidoVendaId: 'pv1', createdAt: createdAtHoje },
-        { id: 'sub-analise', statusFisico: 'em_analise', peso: '2.000', quantidade: '1', etiquetaAtual: null, itemComercialId: 'ic2', pecaOrigemId: 'peca-sobra', pedidoVendaId: null, createdAt: createdAtHoje },
+        { id: 'sub-sobra', statusFisico: 'em_sobra', peso: '2.000', quantidade: '1', etiquetaAtual: null, produtoId: 'ic2', pecaOrigemId: 'peca-sobra', pedidoVendaId: null, createdAt: createdAtHoje },
+        { id: 'sub-assoc', statusFisico: 'associado', peso: '2.000', quantidade: '1', etiquetaAtual: null, produtoId: 'ic2', pecaOrigemId: 'peca-sobra', pedidoVendaId: 'pv1', createdAt: createdAtHoje },
+        { id: 'sub-analise', statusFisico: 'em_analise', peso: '2.000', quantidade: '1', etiquetaAtual: null, produtoId: 'ic2', pecaOrigemId: 'peca-sobra', pedidoVendaId: null, createdAt: createdAtHoje },
       ]],
       [entradasItens, [
         { id: 'ent-sobra', quantidade: 10, quantidadeDestinada: 0, unidade: 'caixa', produtoId: 'prod1', fornecedorNome: 'Forn', loteNf: null, local: 'Câmara 1', destino: 'estoque', pedidoId: null, createdAt: createdAtHoje },
         { id: 'ent-destino', quantidade: 5, quantidadeDestinada: 2, unidade: 'caixa', produtoId: 'prod1', fornecedorNome: 'Forn', loteNf: null, local: 'Câmara 1', destino: 'pedido', pedidoId: 'pv1', createdAt: createdAtHoje },
       ]],
-      [itensComerciais, []],
+      [produtos, []],
       [produtos, []],
       [recebimentos, []],
       [pedidosVenda, []],
@@ -87,12 +87,12 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
   it('ordena createdAt ASC quando operacao.fifo_estoque=true (D8.3)', async () => {
     const porTabela = new Map<unknown, unknown[]>([
       [pecas, [
-        { id: 'peca-novo', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
-        { id: 'peca-antigo', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtOntem },
+        { id: 'peca-novo', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'peca-antigo', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtOntem },
       ]],
       [subitens, []],
       [entradasItens, []],
-      [itensComerciais, []],
+      [produtos, []],
       [produtos, []],
       [recebimentos, []],
       [pedidosVenda, []],
@@ -108,12 +108,12 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
   it('ordena createdAt DESC quando operacao.fifo_estoque=false (D8.3)', async () => {
     const porTabela = new Map<unknown, unknown[]>([
       [pecas, [
-        { id: 'peca-novo', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
-        { id: 'peca-antigo', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtOntem },
+        { id: 'peca-novo', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'peca-antigo', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtOntem },
       ]],
       [subitens, []],
       [entradasItens, []],
-      [itensComerciais, []],
+      [produtos, []],
       [produtos, []],
       [recebimentos, []],
       [pedidosVenda, []],
@@ -128,10 +128,10 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
   it('trata ausência do parâmetro fifo (parametros vazio) como DESC (default seguro)', async () => {
     const porTabela = new Map<unknown, unknown[]>([
       [pecas, [
-        { id: 'p1', statusFisico: 'em_sobra', peso: '1.000', etiquetaAtual: null, itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
-        { id: 'p2', statusFisico: 'em_sobra', peso: '1.000', etiquetaAtual: null, itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtOntem },
+        { id: 'p1', statusFisico: 'em_sobra', peso: '1.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'p2', statusFisico: 'em_sobra', peso: '1.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtOntem },
       ]],
-      [subitens, []], [entradasItens, []], [itensComerciais, []], [produtos, []],
+      [subitens, []], [entradasItens, []], [produtos, []], [produtos, []],
       [recebimentos, []], [pedidosVenda, []], [parametros, []],
     ]);
 
@@ -143,11 +143,11 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
   it('filtro produtoId/search/status restringe o resultado', async () => {
     const porTabela = new Map<unknown, unknown[]>([
       [pecas, [
-        { id: 'p1', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: 'TZ-000001', itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
-        { id: 'p2', statusFisico: 'associada', peso: '10.000', etiquetaAtual: 'TZ-000002', itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: 'pv1', capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'p1', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: 'TZ-000001', produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'p2', statusFisico: 'associada', peso: '10.000', etiquetaAtual: 'TZ-000002', produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: 'pv1', capturaMeta: {}, createdAt: createdAtHoje },
       ]],
-      [subitens, []], [entradasItens, []], [itensComerciais, []],
-      [produtos, [{ itemComercialId: 'ic1', id: 'prod-tz', codigo: 'TZ', nome: 'Traseiro' }]],
+      [subitens, []], [entradasItens, []], [produtos, []],
+      [produtos, [{ produtoId: 'ic1', id: 'prod-tz', codigo: 'TZ', nome: 'Traseiro' }]],
       [recebimentos, []], [pedidosVenda, []], [parametros, [{ valorJson: { valor: false } }]],
     ]);
 
@@ -165,7 +165,7 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
 
   it('retorna lista vazia quando não há peças, subitens nem entradas', async () => {
     const porTabela = new Map<unknown, unknown[]>([
-      [pecas, []], [subitens, []], [entradasItens, []], [itensComerciais, []],
+      [pecas, []], [subitens, []], [entradasItens, []], [produtos, []],
       [produtos, []], [recebimentos, []], [pedidosVenda, []], [parametros, []],
     ]);
     const service = new EstoqueConsultaService({ db: makeDb(porTabela) } as never);
@@ -175,9 +175,9 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
   it('origem/NF de peça vêm do join recebimentos+fornecedores+NF (D8.2)', async () => {
     const porTabela = new Map<unknown, unknown[]>([
       [pecas, [
-        { id: 'p1', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'p1', statusFisico: 'em_sobra', peso: '10.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: null, capturaMeta: {}, createdAt: createdAtHoje },
       ]],
-      [subitens, []], [entradasItens, []], [itensComerciais, []], [produtos, []],
+      [subitens, []], [entradasItens, []], [produtos, []], [produtos, []],
       [recebimentos, [{ id: 'r1', fornecedorNome: 'Frigorífico Boi Forte', romaneio: 'ROM-1', nfNumero: '128934' }]],
       [pedidosVenda, []], [parametros, []],
     ]);
@@ -190,9 +190,9 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
   it('pedidoReservado vem do join pedidosVenda+clientes (nomeFantasia com fallback razaoSocial)', async () => {
     const porTabela = new Map<unknown, unknown[]>([
       [pecas, [
-        { id: 'p1', statusFisico: 'associada', peso: '10.000', etiquetaAtual: null, itemComercialId: 'ic1', recebimentoId: 'r1', pedidoVendaId: 'pv1', capturaMeta: {}, createdAt: createdAtHoje },
+        { id: 'p1', statusFisico: 'associada', peso: '10.000', etiquetaAtual: null, produtoId: 'ic1', recebimentoId: 'r1', pedidoVendaId: 'pv1', capturaMeta: {}, createdAt: createdAtHoje },
       ]],
-      [subitens, []], [entradasItens, []], [itensComerciais, []], [produtos, []], [recebimentos, []],
+      [subitens, []], [entradasItens, []], [produtos, []], [produtos, []], [recebimentos, []],
       [pedidosVenda, [{ id: 'pv1', clienteNome: 'Açougue Nova Era' }]],
       [parametros, []],
     ]);

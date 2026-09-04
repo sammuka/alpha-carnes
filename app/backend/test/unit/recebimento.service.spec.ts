@@ -133,14 +133,14 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
     const { service, emitSpy, ordem } = montar(async () => ({
       itemId: 'it1',
       dataOperacao: '2026-06-07',
-      itemComercialId: 'i1',
+      produtoId: 'i1',
       divergenciaAberta: { id: 'd1', tipo: 'quantidade_menor' },
       pedidosEmRisco: [
-        { pedidoId: 'p1', itemComercialId: 'i1', quantidadeReservada: '4.000', quantidadeRecebida: '2.000' },
+        { pedidoId: 'p1', produtoId: 'i1', quantidadeReservada: '4.000', quantidadeRecebida: '2.000' },
       ],
     }));
 
-    await service.registrarItem('r1', { itemComercialId: 'i1', quantidadeRecebida: 2 } as never, 'user-1');
+    await service.registrarItem('r1', { produtoId: 'i1', quantidadeRecebida: 2 } as never, 'user-1');
 
     expect(emitSpy).toHaveBeenCalledWith(
       EVENTOS.RECEBIMENTO_REGISTRADO,
@@ -161,12 +161,12 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
     const { service, emitSpy } = montar(async () => ({
       itemId: 'it1',
       dataOperacao: '2026-06-07',
-      itemComercialId: 'i1',
+      produtoId: 'i1',
       divergenciaAberta: null,
       pedidosEmRisco: [],
     }));
 
-    await service.registrarItem('r1', { itemComercialId: 'i1', quantidadeRecebida: 10 } as never, 'user-1');
+    await service.registrarItem('r1', { produtoId: 'i1', quantidadeRecebida: 10 } as never, 'user-1');
 
     expect(emitSpy).toHaveBeenCalledWith(EVENTOS.RECEBIMENTO_REGISTRADO, expect.anything());
     expect(emitSpy).not.toHaveBeenCalledWith(EVENTOS.DIVERGENCIA_RECEBIMENTO_ABERTA, expect.anything());
@@ -179,7 +179,7 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
     });
 
     await expect(
-      service.registrarItem('r1', { itemComercialId: 'i1', quantidadeRecebida: 2 } as never, 'user-1'),
+      service.registrarItem('r1', { produtoId: 'i1', quantidadeRecebida: 2 } as never, 'user-1'),
     ).rejects.toThrow('falha no registrar');
     expect(emitSpy).not.toHaveBeenCalled();
   });
@@ -190,7 +190,7 @@ describe('RecebimentoService — emissão de evento pós-commit', () => {
       jaConcluido: false,
       dataOperacao: '2026-06-08',
       pedidosEmRisco: [
-        { pedidoId: 'p1', itemComercialId: 'i1', quantidadeReservada: '4.000', quantidadeRecebida: '2.000' },
+        { pedidoId: 'p1', produtoId: 'i1', quantidadeReservada: '4.000', quantidadeRecebida: '2.000' },
       ],
     }));
 
@@ -283,7 +283,7 @@ describe('RecebimentoService — snapshot canônico do Pedido ao Fornecedor', ()
     observacoesCompra: null,
   };
   const itemSnapshot = {
-    itemComercialId: 'i1',
+    produtoId: 'i1',
     produtoCodigo: 'TZ',
     produtoDescricao: 'Traseiro',
     quantidadePrevista: '12.000',
@@ -293,8 +293,8 @@ describe('RecebimentoService — snapshot canônico do Pedido ao Fornecedor', ()
     [cabecalho],
     [itemSnapshot],
     [{ id: 'i1', codigo: 'TZ', unidadeComercial: 'kg' }],
-    [{ itemComercialId: 'i1', passaBalanca: true }],
-    [{ itemComercialId: 'i1', itemComercialCodigo: 'TZ', itemCompraDescricao: 'Boi' }],
+    [{ produtoId: 'i1', passaBalanca: true }],
+    [{ produtoId: 'i1', produtoCodigo: 'TZ', produtoCompraDescricao: 'Boi' }],
     [{ descricao: 'Boi', quantidade: '99.000' }],
     [{ categoria: 'Boi' }],
   ];
@@ -304,7 +304,7 @@ describe('RecebimentoService — snapshot canônico do Pedido ao Fornecedor', ()
       { db } as never,
       { registrar: jest.fn() } as never,
       new EventEmitter2(),
-      { listarEsperadoDaCompra: jest.fn(() => [{ itemComercialId: 'i1', quantidadeTotalGerada: '99.000' }]) } as never,
+      { listarEsperadoDaCompra: jest.fn(() => [{ produtoId: 'i1', quantidadeTotalGerada: '99.000' }]) } as never,
       {} as never,
       {} as never,
     );
@@ -356,7 +356,7 @@ describe('RecebimentoService — snapshot canônico do Pedido ao Fornecedor', ()
     await serviceCom(inicioDb).iniciar({ pedidoFornecedorId: 'pf1' } as never, 'user-1');
     expect(itensInseridos).toEqual([
       expect.objectContaining({
-        itemComercialId: 'i1',
+        produtoId: 'i1',
         quantidadeEsperada: '12.000',
       }),
     ]);

@@ -6,7 +6,7 @@ describe('ProdutosService — catálogo único (AD-15)', () => {
   const payloadVenda = {
     codigo: 'DIANT',
     nome: 'Dianteiro',
-    unidadePedido: 'unidade',
+    unidadePedido: 'unidade' as const,
     tipoOperacional: 'peca_inteira_pesavel' as const,
     unidadePreco: 'kg' as const,
     exigePeso: true,
@@ -98,7 +98,13 @@ describe('ProdutosService — catálogo único (AD-15)', () => {
     }));
 
     const service = montarService(db);
-    const resultado = await service.listar({ page: 1, pageSize: 20, ativoVenda: true, incluirRemovidos: false });
+    const resultado = await service.listar({
+      page: 1,
+      pageSize: 20,
+      ativoVenda: true,
+      ativoCompra: undefined,
+      incluirRemovidos: false,
+    });
 
     expect(resultado.data).toEqual([tz]);
     expect(resultado.data.some((p) => p.codigo === 'BOI')).toBe(false);

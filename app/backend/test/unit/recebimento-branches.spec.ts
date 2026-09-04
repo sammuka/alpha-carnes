@@ -105,7 +105,7 @@ describe('RecebimentoService — branches', () => {
       select: jest.fn(() => chain(call++ === 0
         ? [cabecalho]
         : [{
-            itemComercialId: 'ic1',
+            produtoId: 'ic1',
             produtoCodigo: 'IC-1',
             produtoDescricao: 'Item 1',
             quantidadePrevista: '5.000',
@@ -140,7 +140,7 @@ describe('RecebimentoService — branches', () => {
       observacoesCompra: null,
     };
     const itemSnapshot = {
-      itemComercialId: 'icA',
+      produtoId: 'icA',
       produtoCodigo: 'IC-A',
       produtoDescricao: 'Item A',
       quantidadePrevista: '5.000',
@@ -148,7 +148,7 @@ describe('RecebimentoService — branches', () => {
     };
     const criado = { id: 'r1', operacaoId: 'op1', pedidoFornecedorId: 'pf1', status: 'pesagem_em_andamento' };
     (resolverMetadadosItensPrevistos as jest.Mock).mockResolvedValue(
-      new Map([['icA', { itemComercialId: 'icA', origemDescricao: 'X', unidadeEsperada: 'kg', requerBalanca: false }]]),
+      new Map([['icA', { produtoId: 'icA', origemDescricao: 'X', unidadeEsperada: 'kg', requerBalanca: false }]]),
     );
 
     const respostasSnapshot = [
@@ -223,7 +223,7 @@ describe('RecebimentoService — branches', () => {
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
     const service = makeService(db);
     await expect(
-      service.registrarItem('r-x', { itemComercialId: 'ic1', quantidadeRecebida: '5' } as never, 'u1'),
+      service.registrarItem('r-x', { produtoId: 'ic1', quantidadeRecebida: '5' } as never, 'u1'),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -257,7 +257,7 @@ describe('RecebimentoService — branches', () => {
     const service = makeService(db);
     const result = await service.registrarItem(
       'r1',
-      { itemComercialId: 'ic1', quantidadeRecebida: '10.000', pesoTotalApurado: '9.500' } as never,
+      { produtoId: 'ic1', quantidadeRecebida: '10.000', pesoTotalApurado: '9.500' } as never,
       'u1',
     );
     expect(result.itemId).toBe('ri1');

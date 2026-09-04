@@ -34,7 +34,7 @@ export function fakes(app: INestApplication): {
 export interface CenarioPesagem {
   compraId: string;
   recebimentoId: string;
-  itemComercialId: string;
+  produtoId: string;
   clienteId: string;
   dataOperacao: string;
 }
@@ -47,7 +47,7 @@ export interface CenarioPesagem {
 export async function montarCenarioPesagem(
   app: INestApplication,
   cookies: { compras: string; recebimento: string },
-  base: { fornecedorId: string; itemCompraId: string; itemComercialId: string },
+  base: { fornecedorId: string; produtoId: string; produtoId: string },
   opts: { dataOperacao: string; quantidade: number },
 ): Promise<CenarioPesagem> {
   const compraId = await criarCompraConfirmada(app, cookies.compras, base, opts);
@@ -60,7 +60,7 @@ export async function montarCenarioPesagem(
   return {
     compraId,
     recebimentoId,
-    itemComercialId: base.itemComercialId,
+    produtoId: base.produtoId,
     clienteId: cliente?.id ?? '',
     dataOperacao: opts.dataOperacao,
   };
@@ -86,7 +86,7 @@ export async function criarOutroCliente(app: INestApplication): Promise<string> 
 export async function criarPedido(
   app: INestApplication,
   comercialCookies: string,
-  params: { compraId: string; clienteId: string; itemComercialId: string; dataOperacao: string; quantidade: number; prioridade?: number },
+  params: { compraId: string; clienteId: string; produtoId: string; dataOperacao: string; quantidade: number; prioridade?: number },
 ): Promise<{ pedidoId: string; pedidoItemId: string }> {
   const { default: request } = await import('supertest');
   const body = {
@@ -94,7 +94,7 @@ export async function criarPedido(
     clienteId: params.clienteId,
     dataOperacao: params.dataOperacao,
     prioridade: params.prioridade,
-    itens: [{ itemComercialId: params.itemComercialId, quantidadePedida: params.quantidade }],
+    itens: [{ produtoId: params.produtoId, quantidadePedida: params.quantidade }],
   };
   let res = await request(app.getHttpServer())
     .post('/comercial/pedidos')
@@ -125,7 +125,7 @@ export async function criarPedido(
 export async function pesarPeca(
   app: INestApplication,
   recebimentoCookies: string,
-  params: { recebimentoId: string; itemComercialBaseId: string; peso?: string },
+  params: { recebimentoId: string; produtoBaseId: string; peso?: string },
 ): Promise<string> {
   fakes(app).balanca.definirStatus('disponivel');
   fakes(app).balanca.definirPeso(params.peso ?? '12.500');
@@ -136,7 +136,7 @@ export async function pesarPeca(
     .set('Cookie', recebimentoCookies)
     .send({
       recebimentoId: params.recebimentoId,
-      itemComercialBaseId: params.itemComercialBaseId,
+      produtoBaseId: params.produtoBaseId,
       modoCaptura: 'automatico',
     });
   if (res.status !== 201) {
@@ -168,7 +168,7 @@ export async function pecaAssociadaComEtiqueta(
   recebimentoCookies: string,
   params: {
     recebimentoId: string;
-    itemComercialBaseId: string;
+    produtoBaseId: string;
     pedidoVendaItemId: string;
     peso?: string;
   },

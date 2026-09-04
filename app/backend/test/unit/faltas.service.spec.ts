@@ -27,7 +27,7 @@ describe('FaltasService', () => {
                     id: 'prod-1',
                     codigo: 'PA',
                     nome: 'Patinho',
-                    legadoItemComercialId: 'ic-1',
+                    legadoprodutoId: 'ic-1',
                   },
                 ]),
               ),
@@ -40,7 +40,7 @@ describe('FaltasService', () => {
               innerJoin: jest.fn(() => ({
                 where: jest.fn(() => ({
                   groupBy: jest.fn(() =>
-                    Promise.resolve([{ itemComercialId: 'ic-1', total: '5' }]),
+                    Promise.resolve([{ produtoId: 'ic-1', total: '5' }]),
                   ),
                 })),
               })),
@@ -54,8 +54,8 @@ describe('FaltasService', () => {
                 groupBy: jest.fn(() =>
                   Promise.resolve(
                     idx === 2
-                      ? [{ itemComercialId: 'ic-1', total: '1' }]
-                      : [{ itemComercialId: 'ic-1', total: '2' }],
+                      ? [{ produtoId: 'ic-1', total: '1' }]
+                      : [{ produtoId: 'ic-1', total: '2' }],
                   ),
                 ),
               })),
@@ -103,7 +103,7 @@ describe('FaltasService', () => {
                     id: 'prod-x',
                     codigo: 'X',
                     nome: 'Sem legado',
-                    legadoItemComercialId: null,
+                    legadoprodutoId: null,
                   },
                 ]),
               ),

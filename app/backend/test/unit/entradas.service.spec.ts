@@ -1,6 +1,6 @@
 /**
  * Testes de branch (mocks, sem DB) para EntradasEstoqueService: listar, compativeis
- * (entrada/produto ausentes, produto sem legadoItemComercialId) e compativeisPorProduto
+ * (entrada/produto ausentes, produto sem legadoprodutoId) e compativeisPorProduto
  * (filtros de pedido compatível + cálculo de pendência). `criar` já é exercitado
  * ponta a ponta pelos DoD 8.7/8.8 do e2e; aqui cobrimos os métodos de leitura que o
  * e2e não chama.
@@ -45,7 +45,7 @@ describe('EntradasEstoqueService — listar/compativeis (branches de leitura)', 
     let selectCall = 0;
     const responses = [
       [{ produtoId: 'prod1' }], // entrada
-      [{ legadoItemComercialId: null }], // produto sem legado → []
+      [{ legadoprodutoId: null }], // produto sem legado → []
     ];
     const db = { select: jest.fn(() => makeChain(responses[selectCall++] ?? [])) };
     const service = new EntradasEstoqueService({ db } as never, { registrar: jest.fn() } as never, { emit: jest.fn() } as never);
@@ -61,8 +61,8 @@ describe('EntradasEstoqueService — listar/compativeis (branches de leitura)', 
     expect(resultado).toEqual([]);
   });
 
-  it('compativeisPorProduto → produto sem legadoItemComercialId → []', async () => {
-    const db = { select: jest.fn(() => makeChain([{ legadoItemComercialId: null }])) };
+  it('compativeisPorProduto → produto sem legadoprodutoId → []', async () => {
+    const db = { select: jest.fn(() => makeChain([{ legadoprodutoId: null }])) };
     const service = new EntradasEstoqueService({ db } as never, { registrar: jest.fn() } as never, { emit: jest.fn() } as never);
     const resultado = await service.compativeisPorProduto('prod1');
     expect(resultado).toEqual([]);
@@ -71,7 +71,7 @@ describe('EntradasEstoqueService — listar/compativeis (branches de leitura)', 
   it('compativeisPorProduto → produto compatível retorna pedidos com pendência calculada', async () => {
     let selectCall = 0;
     const responses = [
-      [{ legadoItemComercialId: 'ic1' }], // produto
+      [{ legadoprodutoId: 'ic1' }], // produto
       [
         {
           pedidoVendaItemId: 'pvi1', pedidoVendaId: 'pv1', clienteNome: 'Açougue Central',

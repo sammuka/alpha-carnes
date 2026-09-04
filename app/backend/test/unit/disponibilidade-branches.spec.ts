@@ -95,12 +95,12 @@ describe('DisponibilidadeService — branches', () => {
   it('gerarParaCompra → audita cada linha inserida', async () => {
     const tx = {
       execute: jest.fn().mockResolvedValue({
-        rows: [{ id: 'd1', item_comercial_id: 'ic1', quantidade_total_gerada: '10.000' }],
+        rows: [{ id: 'd1', produto_id: 'ic1', quantidade_total_gerada: '10.000' }],
       }),
     };
     const compra = { id: 'cp1', operacaoId: 'op1', usuarioConfirmacaoId: 'u1' };
     const result = await serviceWithDb({}).gerarParaCompra(tx as never, compra as never);
-    expect(result).toEqual([{ id: 'd1', itemComercialId: 'ic1', quantidadeTotalGerada: '10.000' }]);
+    expect(result).toEqual([{ id: 'd1', produtoId: 'ic1', quantidadeTotalGerada: '10.000' }]);
     expect(auditoria.registrar).toHaveBeenCalledTimes(1);
   });
 
@@ -108,7 +108,7 @@ describe('DisponibilidadeService — branches', () => {
     const tx = {
       select: jest.fn(() => ({
         from: () => ({
-          where: () => Promise.resolve([{ disponibilidadeId: 'd1', itemComercialId: 'ic1', quantidadeTotalGerada: '6' }]),
+          where: () => Promise.resolve([{ disponibilidadeId: 'd1', produtoId: 'ic1', quantidadeTotalGerada: '6' }]),
         }),
       })),
     };
@@ -121,7 +121,7 @@ describe('DisponibilidadeService — branches', () => {
     const tx = { execute: jest.fn().mockResolvedValue({ rows: [] }) };
     const result = await serviceWithDb({}).aplicarRecebimentoDelta(tx as never, {
       compraProgramadaId: 'cp1',
-      itemComercialId: 'ic1',
+      produtoId: 'ic1',
       deltaRecebido: '1',
       deltaComDivergencia: '0',
     });
@@ -137,7 +137,7 @@ describe('DisponibilidadeService — branches', () => {
     };
     const result = await serviceWithDb({}).aplicarRecebimentoDelta(
       tx as never,
-      { compraProgramadaId: 'cp1', itemComercialId: 'ic1', deltaRecebido: '6', deltaComDivergencia: '0' },
+      { compraProgramadaId: 'cp1', produtoId: 'ic1', deltaRecebido: '6', deltaComDivergencia: '0' },
       'u1',
     );
     expect(result).toEqual({ quantidadeRecebida: '6.000', quantidadeComDivergencia: '0.000' });
@@ -149,7 +149,7 @@ describe('DisponibilidadeService — branches', () => {
       execute: jest.fn().mockResolvedValue({
         rows: [{
           pedido_id: 'pv1',
-          item_comercial_id: 'ic1',
+          produto_id: 'ic1',
           quantidade_reservada: '6.000',
           quantidade_recebida: '4.000',
         }],
@@ -158,7 +158,7 @@ describe('DisponibilidadeService — branches', () => {
     const result = await serviceWithDb({}).listarPedidosEmRisco(tx as never, 'op1', 'ic1');
     expect(result).toEqual([{
       pedidoId: 'pv1',
-      itemComercialId: 'ic1',
+      produtoId: 'ic1',
       quantidadeReservada: '6.000',
       quantidadeRecebida: '4.000',
     }]);
@@ -168,7 +168,7 @@ describe('DisponibilidadeService — branches', () => {
     const tx = {
       execute: jest.fn().mockResolvedValue({
         rows: [{
-          item_comercial_id: 'ic1',
+          produto_id: 'ic1',
           codigo: 'TZ',
           descricao: 'Traseiro',
           gerada_atual: '10',
@@ -188,7 +188,7 @@ describe('DisponibilidadeService — branches', () => {
     const tx = {
       execute: jest.fn().mockResolvedValue({
         rows: [{
-          item_comercial_id: 'ic1',
+          produto_id: 'ic1',
           codigo: 'TZ',
           descricao: 'Traseiro',
           gerada_atual: '20',
@@ -216,8 +216,8 @@ describe('DisponibilidadeService — branches', () => {
       })),
       execute: jest.fn().mockResolvedValue({
         rows: [
-          { id: 'd1', item_comercial_id: 'ic1', quantidade_total_gerada: '10', quantidade_reservada: '0', quantidade_disponivel: '10', status: 'gerada' },
-          { id: 'd2', item_comercial_id: 'ic2', quantidade_total_gerada: '4', quantidade_reservada: '1', quantidade_disponivel: '3', status: 'parcialmente_reservada' },
+          { id: 'd1', produto_id: 'ic1', quantidade_total_gerada: '10', quantidade_reservada: '0', quantidade_disponivel: '10', status: 'gerada' },
+          { id: 'd2', produto_id: 'ic2', quantidade_total_gerada: '4', quantidade_reservada: '1', quantidade_disponivel: '3', status: 'parcialmente_reservada' },
         ],
       }),
     };

@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { NotasConsultaService } from '../../src/modules/operacao/faturamento/notas-consulta.service';
 import {
-  notasFiscais, caminhoes, clientes, pedidosVenda, cargaItens, pecas, subitens, itensComerciais,
+  notasFiscais, caminhoes, clientes, pedidosVenda, cargaItens, pecas, subitens, produtos,
 } from '../../src/database/schema';
 
 /**

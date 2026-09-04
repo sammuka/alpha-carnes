@@ -133,7 +133,7 @@ function instalarFetch() {
     if (url.startsWith('/api/cadastros/clientes?')) {
       return json({ data: clientes, page: 1, pageSize: 100, total: 2 });
     }
-    if (url.startsWith('/api/cadastros/produtos?page=1&pageSize=100&status=ativo&ativoVenda=true&')) {
+    if (url.startsWith('/api/cadastros/produtos?') && url.includes('ativoVenda=true')) {
       return json({ data: produtos, page: 1, pageSize: 100, total: produtos.length });
     }
     if (url.startsWith('/api/cadastros/rotas?')) {
