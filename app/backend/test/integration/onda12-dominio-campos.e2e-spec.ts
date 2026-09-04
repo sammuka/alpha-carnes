@@ -756,10 +756,10 @@ describe('Onda 12 — domínio de campos', () => {
       produtoNome: string;
     }>).find((r) => r.id === criar.body.id);
     expect(linha).toMatchObject({
-      produtoCompraCodigo: 'BOI-O12',
-      produtoCompraNome: 'Boi casado O12',
-      produtoCodigo: 'TZ-O12',
-      produtoNome: 'Traseiro O12',
+      produtoOrigemCodigo: 'BOI-O12',
+      produtoOrigemNome: 'Boi casado O12',
+      produtoDestinoCodigo: 'TZ-O12',
+      produtoDestinoNome: 'Traseiro O12',
     });
   });
 
