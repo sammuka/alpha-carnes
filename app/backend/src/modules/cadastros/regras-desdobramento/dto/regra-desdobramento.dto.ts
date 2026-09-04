@@ -2,33 +2,37 @@ import { z } from 'zod';
 
 export const createRegraDesdobramentoSchema = z
   .object({
-    itemCompraId: z.string().uuid('Selecione um item de compra válido.'),
-    itemComercialId: z.string().uuid('Selecione um item comercial válido.'),
-    // fatorQuantidade > 0 (invariante de negócio). Aceita number ou string numérica (NUMERIC).
+    produtoOrigemId: z.string().uuid('Selecione um produto de origem válido.'),
+    produtoDestinoId: z.string().uuid('Selecione um produto de destino válido.'),
     fatorQuantidade: z.coerce.number().positive('O fator de quantidade deve ser maior que zero.'),
     status: z.enum(['ativo', 'inativo']).optional().default('ativo'),
     vigenciaInicio: z.coerce.date(),
     vigenciaFim: z.coerce.date().optional().nullable(),
     observacoes: z.string().trim().optional(),
   })
+  .strict()
   .refine((v) => !v.vigenciaFim || v.vigenciaFim > v.vigenciaInicio, {
     message: 'O fim da vigência deve ser posterior ao início.',
     path: ['vigenciaFim'],
+  })
+  .refine((v) => v.produtoOrigemId !== v.produtoDestinoId, {
+    message: 'Origem e destino devem ser produtos distintos.',
+    path: ['produtoDestinoId'],
   });
 
 export type CreateRegraDesdobramentoDto = z.infer<typeof createRegraDesdobramentoSchema>;
 
-// Update parcial; mantém a mesma validação de vigência quando ambos os campos vierem.
 export const updateRegraDesdobramentoSchema = z
   .object({
-    itemCompraId: z.string().uuid().optional(),
-    itemComercialId: z.string().uuid().optional(),
+    produtoOrigemId: z.string().uuid().optional(),
+    produtoDestinoId: z.string().uuid().optional(),
     fatorQuantidade: z.coerce.number().positive('O fator de quantidade deve ser maior que zero.').optional(),
     status: z.enum(['ativo', 'inativo']).optional(),
     vigenciaInicio: z.coerce.date().optional(),
     vigenciaFim: z.coerce.date().optional().nullable(),
     observacoes: z.string().trim().optional(),
   })
+  .strict()
   .refine((v) => !(v.vigenciaInicio && v.vigenciaFim) || v.vigenciaFim > v.vigenciaInicio, {
     message: 'O fim da vigência deve ser posterior ao início.',
     path: ['vigenciaFim'],
