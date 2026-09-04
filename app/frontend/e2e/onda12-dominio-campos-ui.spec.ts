@@ -132,12 +132,14 @@ test.describe('Onda 12 — domínio de campos na UI', () => {
     await expect(page.getByLabel('Unidade do pedido')).toBeVisible();
     await shot(page, '02-produtos.png');
 
-    await page.goto('/cadastros/produtos/novo', { waitUntil: 'load' });
-    await expect(page.getByLabel('Unidade de Compra')).toBeVisible();
+    const itensCompra = await page.goto('/cadastros/itens-compra', { waitUntil: 'domcontentloaded' });
+    expect(itensCompra?.status()).toBe(404);
+    await expect(page.getByLabel('Unidade de Compra')).toHaveCount(0);
     await shot(page, '03-produtos.png');
 
-    await page.goto('/cadastros/produtos/novo', { waitUntil: 'load' });
-    await expect(page.getByLabel('Unidade Comercial')).toBeVisible();
+    const itensComerciais = await page.goto('/cadastros/itens-comerciais', { waitUntil: 'domcontentloaded' });
+    expect(itensComerciais?.status()).toBe(404);
+    await expect(page.getByLabel('Unidade Comercial')).toHaveCount(0);
     await shot(page, '04-produtos.png');
   });
 

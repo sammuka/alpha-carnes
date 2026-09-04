@@ -146,11 +146,56 @@ describe('Onda 13 — unificação do catálogo (AD-15)', () => {
   });
 
   it('DoD 13.13 migrations 0034-0036 aplicam em banco seedado', async () => {
-    const cols = await db.execute<{ column_name: string }>(sql`
-      SELECT column_name FROM information_schema.columns
-      WHERE table_name = 'disponibilidades_virtuais' AND column_name = 'produto_id'
+    const journal = await db.execute<{ hash: string }>(sql`
+      SELECT hash FROM drizzle.__drizzle_migrations
     `);
-    expect(cols.rows.length).toBe(1);
+    expect(journal.rows.length).toBeGreaterThanOrEqual(37);
+
+    const produtoId = await db.execute<{ column_name: string; is_nullable: string }>(sql`
+      SELECT column_name, is_nullable FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'disponibilidades_virtuais'
+        AND column_name IN ('produto_id', 'item_comercial_id')
+    `);
+    expect(produtoId.rows).toHaveLength(1);
+    expect(produtoId.rows[0]?.column_name).toBe('produto_id');
+    expect(produtoId.rows[0]?.is_nullable).toBe('NO');
+
+    const legadoProdutos = await db.execute<{ column_name: string }>(sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'produtos'
+        AND column_name IN ('legado_item_comercial_id', 'legado_item_compra_id')
+    `);
+    expect(legadoProdutos.rows).toHaveLength(0);
+
+    const check = await db.execute<{ conname: string }>(sql`
+      SELECT conname FROM pg_constraint
+      WHERE conname = 'chk_regras_desd_origem_destino_distintos'
+    `);
+    expect(check.rows).toHaveLength(1);
+
+    const ids = await idsPorCodigo();
+    await expect(
+      db.insert(schema.regrasDesdobramentoComercial).values({
+        produtoOrigemId: ids.TZ!,
+        produtoDestinoId: ids.TZ!,
+        fatorQuantidade: '1',
+        status: 'ativo',
+        vigenciaInicio: new Date('2020-01-01T00:00:00.000Z'),
+        observacoes: 'DoD 13.13 identidade ativa deve falhar no CHECK da 0036',
+      }),
+    ).rejects.toThrow();
+
+    const [soft] = await db.insert(schema.regrasDesdobramentoComercial).values({
+      produtoOrigemId: ids.TZ!,
+      produtoDestinoId: ids.TZ!,
+      fatorQuantidade: '1',
+      status: 'inativo',
+      vigenciaInicio: new Date('2020-01-01T00:00:00.000Z'),
+      deletedAt: new Date(),
+      observacoes: 'DoD 13.13 identidade soft-deleted permitida pela 0036',
+    }).returning({ id: schema.regrasDesdobramentoComercial.id });
+    expect(soft?.id).toBeTruthy();
   });
 
   it('DoD 13.7 information_schema sem itens_comerciais nem itens_compra', async () => {
