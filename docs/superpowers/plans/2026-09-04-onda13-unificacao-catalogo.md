@@ -63,7 +63,7 @@ Texto vigente: `produtos` é a entidade única; `itens_comerciais` e `itens_comp
 
 8. **Ordem expand:** ADD as 13 colunas **no `.schema.ts` mantendo as antigas**; só então `npx drizzle-kit generate` → gravar como `0034_onda13_catalogo_expand.sql` + journal. O Worker **não** escreve o DDL do expand à mão e depois “alinha” o schema.
 9. **Backfill 0035:** SQL de dados (este plano é a fonte). `drizzle-kit generate --custom --name=onda13_catalogo_backfill` se o kit exigir entrada no journal; o corpo é o bloco literal da Task 3. Não é generate de schema.
-10. **Contract 0036:** Drizzle DROP das colunas/arquivos/índices legados + generate. SQL extra permitido: `SET NOT NULL`, CHECK de origem≠destino, `DO $$` de guarda antes do `DROP TABLE`, e o `COMMENT` de rollback. Sem `.down.sql`. Rollback = backup pré-0036.
+10. **Contract 0036:** Drizzle DROP das colunas/arquivos/índices legados + generate. SQL extra permitido: `SET NOT NULL`, CHECK de origem≠destino **somente em linhas ativas** (`deleted_at IS NOT NULL OR origem <> destino` — as regras identidade soft-deleted da T03 precisam sobreviver), `DO $$` de guarda antes do `DROP TABLE`, e o `COMMENT` de rollback. Sem `.down.sql`. Rollback = backup pré-0036. Sem DELETE físico das regras (Princípio X).
 11. **T05 não reescreve schema.** Só `rg` + `drizzle-kit check`. Drift → volta T04.
 12. **Índices únicos novos (nomes literais, Worker não inventa):**
     | Nome novo (expand) | Tabela | Colunas | Predicado |
@@ -623,9 +623,11 @@ Em `regras-desdobramento.schema.ts` adicionar:
 ```ts
 check(
   'chk_regras_desd_origem_destino_distintos',
-  sql`${t.produtoOrigemId} <> ${t.produtoDestinoId}`,
+  sql`${t.deletedAt} IS NOT NULL OR ${t.produtoOrigemId} <> ${t.produtoDestinoId}`,
 ),
 ```
+
+O CHECK **não** pode ser só `origem <> destino`: a T03 preenche `produto_origem_id = produto_destino_id` e só faz soft-delete (`PARES_IDENTIDADE`). O Postgres avalia CHECK também em linhas com `deleted_at`. Sem o predicado `deleted_at IS NOT NULL OR …`, a 0036 aborta em banco seedado (DoD 13.13). **Não** dar DELETE físico nessas regras.
 
 e, no contract SQL **depois** de DROP do índice antigo:
 
@@ -651,7 +653,7 @@ export * from './itens-comerciais.schema';
 ```sql
 ALTER TABLE "regras_desdobramento_comercial"
   ADD CONSTRAINT "chk_regras_desd_origem_destino_distintos"
-  CHECK (produto_origem_id <> produto_destino_id);
+  CHECK (deleted_at IS NOT NULL OR produto_origem_id <> produto_destino_id);
 
 DO $$
 BEGIN
@@ -850,11 +852,112 @@ const inseridas = await tx.execute<{
 
 Mapear retorno para `{ id, produtoId, quantidadeTotalGerada }`.
 
-`recalcularParaCompra`: a CTE `projecao` usa o **mesmo** `UNION ALL` / `GROUP BY produto_id`; o `UPDATE` casa `dv.produto_id = p.produto_id`.
+`recalcularParaCompra` — substituir a CTE `projecao` + `UPDATE` (hoje L331–356) por:
 
-`projetarImpacto`: `simulacao` é `Map<produtoId, qtd>`; o `VALUES` vira `o(produto_id, quantidade)`; o join de override é `o.produto_id = cpi.produto_id`; a projeção usa o mesmo `UNION ALL` (regras + implícita, com `COALESCE(o.quantidade, cpi.quantidade_comprada)`). Join de nome/código em `produtos`, não `itens_comerciais`.
+```ts
+    const atualizadas = await tx.execute<{
+      id: string; produto_id: string;
+      quantidade_total_gerada: string; quantidade_reservada: string;
+      quantidade_disponivel: string; status: string;
+    }>(sql`
+    WITH projecao AS (
+      SELECT x.produto_id, SUM(x.quantidade) AS gerada
+      FROM (
+        SELECT r.produto_destino_id AS produto_id,
+               (r.fator_quantidade * cpi.quantidade_comprada) AS quantidade
+        FROM compras_programadas_itens cpi
+        JOIN regras_desdobramento_comercial r
+          ON r.produto_origem_id = cpi.produto_id
+         AND r.deleted_at IS NULL AND r.status = 'ativo'
+         AND r.vigencia_inicio <= now()
+         AND (r.vigencia_fim IS NULL OR r.vigencia_fim >= now())
+        WHERE cpi.compra_programada_id = ${compra.id} AND cpi.deleted_at IS NULL
+        UNION ALL
+        SELECT cpi.produto_id AS produto_id,
+               cpi.quantidade_comprada AS quantidade
+        FROM compras_programadas_itens cpi
+        JOIN produtos p ON p.id = cpi.produto_id
+         AND p.deleted_at IS NULL
+         AND p.ativo_venda = true
+         AND p.ativo_compra = true
+        WHERE cpi.compra_programada_id = ${compra.id} AND cpi.deleted_at IS NULL
+      ) x
+      GROUP BY x.produto_id
+    )
+    UPDATE disponibilidades_virtuais dv
+       SET quantidade_total_gerada = p.gerada,
+           quantidade_disponivel   = GREATEST(0, p.gerada - dv.quantidade_reservada),
+           status = CASE
+             WHEN dv.quantidade_reservada = 0 THEN 'gerada'
+             WHEN GREATEST(0, p.gerada - dv.quantidade_reservada) = 0 THEN 'esgotada'
+             ELSE 'parcialmente_reservada'
+           END
+      FROM projecao p
+     WHERE dv.compra_programada_id = ${compra.id}
+       AND dv.produto_id = p.produto_id
+    RETURNING dv.id, dv.produto_id, dv.quantidade_total_gerada,
+              dv.quantidade_reservada, dv.quantidade_disponivel, dv.status
+  `);
+```
 
-`aplicarRecebimentoDelta` / `listarPedidosEmRisco` / `listarEsperadoDaCompra`: `item_comercial_id` → `produto_id` em SQL e params.
+`projetarImpacto` — `simulacao` é `Map<produtoId, qtd>`. Substituir `overrideSql` + query (hoje L251–288) por:
+
+```ts
+    const overrideSql = overrides.length
+      ? sql`(VALUES ${sql.join(
+        overrides.map(([produtoId, qtd]) => sql`(${produtoId}::uuid, ${qtd}::numeric)`),
+        sql`, `,
+      )}) AS o(produto_id, quantidade)`
+      : sql`(SELECT NULL::uuid AS produto_id, NULL::numeric AS quantidade WHERE false) AS o`;
+
+    const linhas = await tx.execute<{
+      produto_id: string; codigo: string; nome: string;
+      gerada_atual: string; gerada_projetada: string;
+      reservada: string; saldo_atual: string;
+    }>(sql`
+    WITH projecao AS (
+      SELECT x.produto_id, SUM(x.quantidade) AS gerada_projetada
+      FROM (
+        SELECT r.produto_destino_id AS produto_id,
+               (r.fator_quantidade * COALESCE(o.quantidade, cpi.quantidade_comprada)) AS quantidade
+        FROM compras_programadas_itens cpi
+        JOIN regras_desdobramento_comercial r
+          ON r.produto_origem_id = cpi.produto_id
+         AND r.deleted_at IS NULL AND r.status = 'ativo'
+         AND r.vigencia_inicio <= now()
+         AND (r.vigencia_fim IS NULL OR r.vigencia_fim >= now())
+        LEFT JOIN ${overrideSql} ON o.produto_id = cpi.produto_id
+        WHERE cpi.compra_programada_id = ${compraId} AND cpi.deleted_at IS NULL
+        UNION ALL
+        SELECT cpi.produto_id AS produto_id,
+               COALESCE(o.quantidade, cpi.quantidade_comprada) AS quantidade
+        FROM compras_programadas_itens cpi
+        JOIN produtos p ON p.id = cpi.produto_id
+         AND p.deleted_at IS NULL
+         AND p.ativo_venda = true
+         AND p.ativo_compra = true
+        LEFT JOIN ${overrideSql} ON o.produto_id = cpi.produto_id
+        WHERE cpi.compra_programada_id = ${compraId} AND cpi.deleted_at IS NULL
+      ) x
+      GROUP BY x.produto_id
+    )
+    SELECT p.produto_id,
+           pr.codigo, pr.nome AS nome,
+           COALESCE(dv.quantidade_total_gerada, 0)::text AS gerada_atual,
+           p.gerada_projetada::text                      AS gerada_projetada,
+           COALESCE(dv.quantidade_reservada, 0)::text    AS reservada,
+           COALESCE(dv.quantidade_disponivel, 0)::text   AS saldo_atual
+    FROM projecao p
+    JOIN produtos pr ON pr.id = p.produto_id
+    LEFT JOIN disponibilidades_virtuais dv
+      ON dv.compra_programada_id = ${compraId} AND dv.produto_id = p.produto_id
+    ORDER BY pr.codigo
+  `);
+```
+
+Mapear retorno: `produtoId` / `codigo` / `descricao: l.nome` (o DTO `ItemImpacto` hoje expõe `descricao`; preencher com `produtos.nome`). Trocar `itemComercialId` no objeto retornado por `produtoId`.
+
+`aplicarRecebimentoDelta` / `listarPedidosEmRisco` / `listarEsperadoDaCompra`: `item_comercial_id` → `produto_id` em SQL e params. `listarPorCompra` / `listarAgregado`: `itemComercialId` → `produtoId` no select/groupBy/orderBy.
 
 `ON CONFLICT` alvo = unique `uq_disp_compra_produto` (colunas `compra_programada_id, produto_id`).
 
@@ -1176,6 +1279,14 @@ Substituição: `POST /produtos` (ou `/api/cadastros/produtos` no BFF) com `{ co
 
 Helpers backend `test/helpers/*-fixtures.ts`: trocar inserts em `itensComerciais`/`itensCompra` por `produtos`. Fixtures `*.schema.pre-onda*` de ondas passadas **não** se atualizam (são snapshots históricos de migrate) — só se algum teste da Onda 13 as importar para o schema atual; nesse caso parar e reportar.
 
+**Regra mecânica — todo `app/backend/test/**` exceto `**/helpers/fixtures/*.schema.pre-onda*`:** aplicar a tabela Before/Depois da Task 7 em fixtures, mocks, selects e asserções (`itemComercialId`→`produtoId`, `itemComercialBaseId`→`produtoBaseId`, `itemCompraId`→`produtoId` em compra/simulação, `itemCompraId`+`itemComercialId` de regra → `produtoOrigemId`+`produtoDestinoId`, join `itensComerciais`→`produtos`, `ic.descricao`→`produtos.nome`). Chamadas `POST /itens-comerciais` e `POST /itens-compra` viram 404 (cadastros-diversos) ou `POST /produtos` com o payload desta task. Não deixar spec de fora: se `npm run test` falhar, corrigir o spec — não pular. Aceite:
+
+```powershell
+rg "itemComercial|itensComerciais|itemCompra|itensCompra|itens-comerciais|itens-compra" app/backend/test --glob "!**/*.schema.pre-onda*"
+```
+
+Vazio. Inclui `pedidos-onda4.e2e-spec.ts`, `disponibilidade.e2e-spec.ts`, `regras-desdobramento.e2e-spec.ts`, `seed.spec.ts` e os unitários listados pelo `rg` atual.
+
 `prontidao.e2e-spec.ts`: gate ≥1 produto `ativoVenda`.
 
 Cobertura: `Set-Location app/backend; npm run test:cov` ≥80% linha e branch. Prioridade de buracos: `disponibilidade.service.ts`, `compras-programadas.service.ts`, `produtos.service.ts`.
@@ -1280,5 +1391,6 @@ Saída esperada: vazio **fora** de `database/migrations/**` (D25). Exceções pe
 - [x] Palavra “Marca” não entra como rótulo/campo/entidade.
 - [x] Worker não escreve `docs/execucao/`.
 - [x] Emenda Portão 1 (2026-09-04): D25 + `rg` sem migrations; Task 10 inclui `espelho-client.tsx` e BFF `aberto/route.ts`; Jest `cadastro-form` / `next-config-rotas` / `aprovacoes-client` / `api.test`; helper de recebimento com corpo literal e sem default silencioso de `passaBalanca`.
+- [x] Emenda Portão 1 recheck: CHECK origem≠destino tolera `deleted_at`; SQL literal de `recalcularParaCompra` e `projetarImpacto`; regra mecânica para `app/backend/test/**`.
 
 **Próximo passo humano/orquestração:** Executor commita este plano no o13, aponta `EXECUCAO-STATUS` Onda 13 para este path e marca `aguardando_portao1`. Monitor **novo** roda `$gate-plano`. Worker só depois de `aprovado`.
