@@ -176,7 +176,7 @@ export class ConferenciaService {
       WHERE r.id=${recebimentoId};
     `);
 
-    return resultado.rows.map((raw) => {
+    return resultado.rows.map((raw: unknown) => {
       const r = raw as unknown as QuadroRow;
       const base = {
         recebimentoItemId: r.recebimento_item_id,
