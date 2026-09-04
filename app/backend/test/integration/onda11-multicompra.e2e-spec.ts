@@ -525,7 +525,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
         .send({
           numero: `NF-${qtd}-${recebimentoId.slice(0, 8)}`,
           recebimentoId,
-          itens: [{ produtoId: base.produtoCompraId, quantidadeDeclarada: qtd }],
+          itens: [{ produtoId: base.produtoId, quantidadeDeclarada: qtd }],
         });
       await request(app.getHttpServer())
         .post(`/operacao/recebimentos/${recebimentoId}/itens`)

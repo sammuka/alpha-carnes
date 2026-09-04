@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
@@ -47,6 +47,7 @@ export async function seedComercialBase(
       nome: 'Dianteiro',
       unidadePedido: 'kg',
       unidadePreco: 'kg',
+      passaBalanca: true,
       ativoCompra: true,
       ativoVenda: true,
     })
@@ -81,6 +82,7 @@ export async function seedComercialBase(
 export async function lerDisponibilidade(
   app: INestApplication,
   produtoId: string,
+  compraProgramadaId?: string,
 ): Promise<{
   id: string;
   quantidadeTotalGerada: string;
@@ -94,7 +96,14 @@ export async function lerDisponibilidade(
   const rows = await db
     .select()
     .from(schema.disponibilidadesVirtuais)
-    .where(eq(schema.disponibilidadesVirtuais.produtoId, produtoId));
+    .where(
+      compraProgramadaId
+        ? and(
+          eq(schema.disponibilidadesVirtuais.produtoId, produtoId),
+          eq(schema.disponibilidadesVirtuais.compraProgramadaId, compraProgramadaId),
+        )
+        : eq(schema.disponibilidadesVirtuais.produtoId, produtoId),
+    );
   const row = rows[0];
   if (!row) return null;
   return {

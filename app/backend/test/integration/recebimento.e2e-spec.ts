@@ -130,7 +130,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       .send({ produtoId: base.produtoId, quantidadeRecebida: 10 });
     expect(res.status).toBe(201);
 
-    const disp = await lerDisponibilidade(app, base.produtoId);
+    const disp = await lerDisponibilidade(app, base.produtoId, compraId);
     expect(Number(disp!.quantidadeRecebida)).toBe(10);
     expect(Number(disp!.quantidadeComDivergencia)).toBe(0);
   });
@@ -160,7 +160,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       .send({ produtoId: base.produtoId, quantidadeRecebida: 6, divergencia: divergenciaFalta });
     expect(res.status).toBe(201);
 
-    const disp = await lerDisponibilidade(app, base.produtoId);
+    const disp = await lerDisponibilidade(app, base.produtoId, compraId);
     expect(Number(disp!.quantidadeRecebida)).toBe(6);
     expect(Number(disp!.quantidadeComDivergencia)).toBe(4); // |10 - 6|
   });
@@ -280,7 +280,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const concl = await request(srv()).post(`/operacao/recebimentos/${recId}/concluir`).set('Cookie', recebimentoCookies).send();
     expect(concl.status).toBe(201);
 
-    const disp = await lerDisponibilidade(app, base.produtoId);
+    const disp = await lerDisponibilidade(app, base.produtoId, compraId);
     expect(Number(disp!.quantidadeRecebida)).toBe(5);
   });
 
@@ -706,7 +706,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       .send({
         numero: '900100',
         recebimentoId: recId,
-        itens: [{ produtoId: base.produtoCompraId, quantidadeDeclarada: 10 }],
+        itens: [{ produtoId: base.produtoId, quantidadeDeclarada: 10 }],
       })
       .expect(201);
 
@@ -799,7 +799,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       .send({
         numero: '910100',
         recebimentoId: recId,
-        itens: [{ produtoId: base.produtoCompraId, quantidadeDeclarada: 10 }],
+        itens: [{ produtoId: base.produtoId, quantidadeDeclarada: 10 }],
       })
       .expect(201);
 

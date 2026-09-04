@@ -78,7 +78,7 @@ export async function criarConclusaoConferencia(
     .send({
       numero: '900301',
       recebimentoId,
-      itens: [{ produtoId: base.produtoCompraId, quantidadeDeclarada: 10 }],
+      itens: [{ produtoId: base.produtoId, quantidadeDeclarada: 10 }],
     })
     .expect(201);
 
