@@ -1,7 +1,5 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { itensComerciais } from './itens-comerciais.schema';
-import { itensCompra } from './itens-compra.schema';
 
 export const produtos = pgTable(
   'produtos',
@@ -25,8 +23,6 @@ export const produtos = pgTable(
     status: text('status').notNull().default('ativo'),
     observacoesOperacionais: text('observacoes_operacionais'),
     atributosJson: jsonb('atributos_json').notNull().default(sql`'{}'::jsonb`),
-    legadoItemComercialId: uuid('legado_item_comercial_id').references(() => itensComerciais.id),
-    legadoItemCompraId: uuid('legado_item_compra_id').references(() => itensCompra.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

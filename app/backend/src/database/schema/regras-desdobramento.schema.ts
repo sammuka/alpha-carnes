@@ -1,24 +1,19 @@
 import { relations, sql } from 'drizzle-orm';
 import { check, index, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
-import { itensCompra } from './itens-compra.schema';
-import { itensComerciais } from './itens-comerciais.schema';
 import { produtos } from './produtos.schema';
 
 // ── regras_desdobramento_comercial ────────────────────────────────────────────
-// Liga item de compra → item comercial com fator de quantidade e vigência.
-// Base que a F3 consome para gerar disponibilidade virtual.
+// Liga produto origem (compra) → produto destino (venda) com fator de quantidade e vigência.
 export const regrasDesdobramentoComercial = pgTable(
   'regras_desdobramento_comercial',
   {
     id:              uuid('id').primaryKey().default(sql`uuidv7()`),
-    produtoOrigemId: uuid('produto_origem_id').references(() => produtos.id),
-    produtoDestinoId: uuid('produto_destino_id').references(() => produtos.id),
-    itemCompraId:    uuid('item_compra_id').notNull().references(() => itensCompra.id),
-    itemComercialId: uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
+    produtoOrigemId: uuid('produto_origem_id').notNull().references(() => produtos.id),
+    produtoDestinoId: uuid('produto_destino_id').notNull().references(() => produtos.id),
     fatorQuantidade: numeric('fator_quantidade', { precision: 10, scale: 3 }).notNull(),
     status:          text('status').notNull().default('ativo'),
     vigenciaInicio:  timestamp('vigencia_inicio', { withTimezone: true }).notNull(),
-    vigenciaFim:     timestamp('vigencia_fim', { withTimezone: true }), // null = vigência aberta
+    vigenciaFim:     timestamp('vigencia_fim', { withTimezone: true }),
     observacoes:     text('observacoes'),
     createdAt:       timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt:       timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -26,28 +21,28 @@ export const regrasDesdobramentoComercial = pgTable(
   },
   (t) => [
     check('chk_regras_desd_status', sql`${t.status} IN ('ativo','inativo')`),
-    // fator_quantidade > 0 (invariante de negócio).
     check('chk_regras_desd_fator_positivo', sql`${t.fatorQuantidade} > 0`),
-    index('idx_regras_desd_item_compra').on(t.itemCompraId).where(sql`${t.deletedAt} IS NULL`),
-    index('idx_regras_desd_item_comercial').on(t.itemComercialId).where(sql`${t.deletedAt} IS NULL`),
-    index('idx_regras_desd_par_ativo')
-      .on(t.itemCompraId, t.itemComercialId)
-      .where(sql`${t.deletedAt} IS NULL AND ${t.status} = 'ativo'`),
+    check(
+      'chk_regras_desd_origem_destino_distintos',
+      sql`${t.deletedAt} IS NOT NULL OR ${t.produtoOrigemId} <> ${t.produtoDestinoId}`,
+    ),
     index('idx_regras_desd_produto_origem').on(t.produtoOrigemId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_regras_desd_produto_destino').on(t.produtoDestinoId).where(sql`${t.deletedAt} IS NULL`),
-    index('idx_regras_desd_par_ativo_produto')
+    index('idx_regras_desd_par_ativo')
       .on(t.produtoOrigemId, t.produtoDestinoId)
       .where(sql`${t.deletedAt} IS NULL AND ${t.status} = 'ativo'`),
   ],
 );
 
 export const regrasDesdobramentoRelations = relations(regrasDesdobramentoComercial, ({ one }) => ({
-  itemCompra: one(itensCompra, {
-    fields: [regrasDesdobramentoComercial.itemCompraId],
-    references: [itensCompra.id],
+  produtoOrigem: one(produtos, {
+    fields: [regrasDesdobramentoComercial.produtoOrigemId],
+    references: [produtos.id],
+    relationName: 'regraDesdobramentoOrigem',
   }),
-  itemComercial: one(itensComerciais, {
-    fields: [regrasDesdobramentoComercial.itemComercialId],
-    references: [itensComerciais.id],
+  produtoDestino: one(produtos, {
+    fields: [regrasDesdobramentoComercial.produtoDestinoId],
+    references: [produtos.id],
+    relationName: 'regraDesdobramentoDestino',
   }),
 }));
