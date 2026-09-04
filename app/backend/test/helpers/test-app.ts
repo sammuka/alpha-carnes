@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
 import { AllExceptionsFilter } from '../../src/common/filters/all-exceptions.filter';
 import { DRIZZLE } from '../../src/database/database.module';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../src/database/schema';
 import { hash } from '@node-rs/argon2';
@@ -122,10 +122,11 @@ export async function createTestUser(
     .returning();
   if (!usuario) throw new Error('Falha ao criar usuário de teste');
 
-  // Inserir TODOS os perfis canônicos (idempotente) — necessário para vínculos e gestão de perfis.
-  for (const slug of PERFIL_SLUGS) {
-    await db.insert(schema.perfis).values({ slug, nome: slug }).onConflictDoNothing();
-  }
+  // Inserir TODOS os perfis canônicos (idempotente) — lote único evita race entre suítes paralelas.
+  await db
+    .insert(schema.perfis)
+    .values(PERFIL_SLUGS.map((slug) => ({ slug, nome: slug, menusVisiveis: [] as string[] })))
+    .onConflictDoNothing({ target: schema.perfis.slug });
 
   // Inserir permissões e popular perfis_permissoes do banco (ADR-008 — fonte da verdade).
   await rbacService.ensurePermissoes();
@@ -134,13 +135,13 @@ export async function createTestUser(
   const [perfil] = await db
     .select()
     .from(schema.perfis)
-    .where(sql`${schema.perfis.slug} = ${opts.perfil}`);
+    .where(eq(schema.perfis.slug, opts.perfil));
   if (!perfil) throw new Error(`Perfil de teste não encontrado: ${opts.perfil}`);
 
   await db
     .insert(schema.usuariosPerfis)
     .values({ usuarioId: usuario.id, perfilId: perfil.id })
-    .onConflictDoNothing();
+    .onConflictDoNothing({ target: [schema.usuariosPerfis.usuarioId, schema.usuariosPerfis.perfilId] });
 
   return { adminEmail: email, adminPassword: password };
 }
