@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import { boolean, check, index, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { fornecedores } from './fornecedores.schema';
 import { itensComerciais } from './itens-comerciais.schema';
+import { produtos } from './produtos.schema';
 import { operacoes } from './operacoes.schema';
 import { pedidosFornecedor } from './pedidos-fornecedor.schema';
 import { usuarios } from './auth.schema';
@@ -68,6 +69,7 @@ export const recebimentosItens = pgTable(
   {
     id:                  uuid('id').primaryKey().default(sql`uuidv7()`),
     recebimentoId:       uuid('recebimento_id').notNull().references(() => recebimentos.id),
+    produtoId:           uuid('produto_id').references(() => produtos.id),
     itemComercialId:     uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
     origemDescricao:     text('origem_descricao'),
     quantidadeEsperada:  numeric('quantidade_esperada', { precision: 15, scale: 3 }).notNull(),
@@ -88,8 +90,10 @@ export const recebimentosItens = pgTable(
       sql`${t.statusApuracao} IN ('aguardando','em_conferencia','conferido','divergente','entrada_direta')`,
     ),
     uniqueIndex('uq_receb_itens_recebimento_item').on(t.recebimentoId, t.itemComercialId),
+    uniqueIndex('uq_receb_itens_recebimento_produto').on(t.recebimentoId, t.produtoId),
     index('idx_receb_itens_recebimento').on(t.recebimentoId),
     index('idx_receb_itens_item_comercial').on(t.itemComercialId),
+    index('idx_receb_itens_produto').on(t.produtoId),
   ],
 );
 
@@ -99,6 +103,7 @@ export const divergenciasRecebimento = pgTable(
     id:                     uuid('id').primaryKey().default(sql`uuidv7()`),
     recebimentoId:          uuid('recebimento_id').notNull().references(() => recebimentos.id),
     recebimentoItemId:      uuid('recebimento_item_id').references(() => recebimentosItens.id),
+    produtoId:              uuid('produto_id').references(() => produtos.id),
     itemComercialId:        uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
     conclusaoConferenciaId: uuid('conclusao_conferencia_id').references(() => conclusoesConferencia.id),
     nfFornecedorId:         uuid('nf_fornecedor_id').references(() => notasFiscaisFornecedor.id),

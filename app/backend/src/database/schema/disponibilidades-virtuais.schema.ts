@@ -3,6 +3,7 @@ import { check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } fr
 import { comprasProgramadas } from './compras-programadas.schema';
 import { itensComerciais } from './itens-comerciais.schema';
 import { operacoes } from './operacoes.schema';
+import { produtos } from './produtos.schema';
 
 // ── disponibilidades_virtuais ───────────────────────────────────────────────
 // Saldo virtual do dia por item comercial, gerado ao confirmar a compra.
@@ -14,6 +15,7 @@ export const disponibilidadesVirtuais = pgTable(
     id:                     uuid('id').primaryKey().default(sql`uuidv7()`),
     compraProgramadaId:     uuid('compra_programada_id').notNull().references(() => comprasProgramadas.id),
     operacaoId:             uuid('operacao_id').notNull().references(() => operacoes.id),
+    produtoId:              uuid('produto_id').references(() => produtos.id),
     itemComercialId:        uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
     quantidadeTotalGerada:  numeric('quantidade_total_gerada', { precision: 15, scale: 3 }).notNull(),
     quantidadeReservada:    numeric('quantidade_reservada', { precision: 15, scale: 3 }).notNull().default('0'),
@@ -32,8 +34,10 @@ export const disponibilidadesVirtuais = pgTable(
     check('chk_disp_com_divergencia_nao_negativo', sql`${t.quantidadeComDivergencia} >= 0`),
     check('chk_disp_status', sql`${t.status} IN ('gerada','parcialmente_reservada','esgotada')`),
     uniqueIndex('uq_disp_compra_item').on(t.compraProgramadaId, t.itemComercialId),
+    uniqueIndex('uq_disp_compra_produto').on(t.compraProgramadaId, t.produtoId),
     index('idx_disp_operacao').on(t.operacaoId),
     index('idx_disp_item_comercial').on(t.itemComercialId),
+    index('idx_disp_produto').on(t.produtoId),
   ],
 );
 
@@ -49,5 +53,9 @@ export const disponibilidadesVirtuaisRelations = relations(disponibilidadesVirtu
   itemComercial: one(itensComerciais, {
     fields: [disponibilidadesVirtuais.itemComercialId],
     references: [itensComerciais.id],
+  }),
+  produto: one(produtos, {
+    fields: [disponibilidadesVirtuais.produtoId],
+    references: [produtos.id],
   }),
 }));

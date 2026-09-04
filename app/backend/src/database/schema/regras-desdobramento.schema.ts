@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import { check, index, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { itensCompra } from './itens-compra.schema';
 import { itensComerciais } from './itens-comerciais.schema';
+import { produtos } from './produtos.schema';
 
 // ── regras_desdobramento_comercial ────────────────────────────────────────────
 // Liga item de compra → item comercial com fator de quantidade e vigência.
@@ -10,6 +11,8 @@ export const regrasDesdobramentoComercial = pgTable(
   'regras_desdobramento_comercial',
   {
     id:              uuid('id').primaryKey().default(sql`uuidv7()`),
+    produtoOrigemId: uuid('produto_origem_id').references(() => produtos.id),
+    produtoDestinoId: uuid('produto_destino_id').references(() => produtos.id),
     itemCompraId:    uuid('item_compra_id').notNull().references(() => itensCompra.id),
     itemComercialId: uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
     fatorQuantidade: numeric('fator_quantidade', { precision: 10, scale: 3 }).notNull(),
@@ -29,6 +32,11 @@ export const regrasDesdobramentoComercial = pgTable(
     index('idx_regras_desd_item_comercial').on(t.itemComercialId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_regras_desd_par_ativo')
       .on(t.itemCompraId, t.itemComercialId)
+      .where(sql`${t.deletedAt} IS NULL AND ${t.status} = 'ativo'`),
+    index('idx_regras_desd_produto_origem').on(t.produtoOrigemId).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_regras_desd_produto_destino').on(t.produtoDestinoId).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_regras_desd_par_ativo_produto')
+      .on(t.produtoOrigemId, t.produtoDestinoId)
       .where(sql`${t.deletedAt} IS NULL AND ${t.status} = 'ativo'`),
   ],
 );

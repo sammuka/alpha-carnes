@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { check, index, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
 import { itensComerciais } from './itens-comerciais.schema';
+import { produtos } from './produtos.schema';
 import { operacoes } from './operacoes.schema';
 import { usuarios } from './auth.schema';
 
@@ -14,6 +15,7 @@ export const adendosPedido = pgTable(
     id:                   uuid('id').primaryKey().default(sql`uuidv7()`),
     pedidoVendaId:        uuid('pedido_venda_id').notNull().references(() => pedidosVenda.id),
     pedidoVendaItemId:    uuid('pedido_venda_item_id').notNull().references(() => pedidosVendaItens.id),
+    produtoId:            uuid('produto_id').references(() => produtos.id),
     itemComercialId:      uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
     operacaoId:           uuid('operacao_id').notNull().references(() => operacoes.id),
     quantidadeAnterior:   numeric('quantidade_anterior', { precision: 10, scale: 3 }).notNull(),

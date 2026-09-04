@@ -3,6 +3,7 @@ import { check, date, index, integer, jsonb, numeric, pgTable, text, timestamp, 
 import { comprasProgramadas } from './compras-programadas.schema';
 import { clientes } from './clientes.schema';
 import { itensComerciais } from './itens-comerciais.schema';
+import { produtos } from './produtos.schema';
 import { disponibilidadesVirtuais } from './disponibilidades-virtuais.schema';
 import { operacoes } from './operacoes.schema';
 import { usuarios } from './auth.schema';
@@ -50,6 +51,7 @@ export const pedidosVendaItens = pgTable(
   {
     id:                        uuid('id').primaryKey().default(sql`uuidv7()`),
     pedidoVendaId:             uuid('pedido_venda_id').notNull().references(() => pedidosVenda.id),
+    produtoId:                 uuid('produto_id').references(() => produtos.id),
     itemComercialId:           uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
     quantidadePedida:          numeric('quantidade_pedida', { precision: 15, scale: 3 }).notNull(),
     quantidadeReservada:       numeric('quantidade_reservada', { precision: 15, scale: 3 }).notNull().default('0'),
@@ -76,8 +78,12 @@ export const pedidosVendaItens = pgTable(
     uniqueIndex('uq_pedido_venda_item_comercial_ativo')
       .on(t.pedidoVendaId, t.itemComercialId)
       .where(sql`${t.deletedAt} IS NULL`),
+    uniqueIndex('uq_pedido_venda_produto_ativo')
+      .on(t.pedidoVendaId, t.produtoId)
+      .where(sql`${t.deletedAt} IS NULL`),
     index('idx_pedidos_itens_pedido').on(t.pedidoVendaId),
     index('idx_pedidos_itens_item_comercial').on(t.itemComercialId),
+    index('idx_pedidos_itens_produto').on(t.produtoId),
     index('idx_pedidos_itens_preferencias_gin').using('gin', t.preferenciasAplicadasJson),
   ],
 );

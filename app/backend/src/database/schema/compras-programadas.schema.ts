@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import { check, index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { fornecedores } from './fornecedores.schema';
 import { itensCompra } from './itens-compra.schema';
+import { produtos } from './produtos.schema';
 import { operacoes } from './operacoes.schema';
 import { usuarios } from './auth.schema';
 
@@ -44,6 +45,7 @@ export const comprasProgramadasItens = pgTable(
   {
     id:                 uuid('id').primaryKey().default(sql`uuidv7()`),
     compraProgramadaId: uuid('compra_programada_id').notNull().references(() => comprasProgramadas.id),
+    produtoId:          uuid('produto_id').references(() => produtos.id),
     itemCompraId:       uuid('item_compra_id').notNull().references(() => itensCompra.id),
     quantidadeComprada: numeric('quantidade_comprada', { precision: 15, scale: 3 }).notNull(),
     observacoes:        text('observacoes'),
@@ -55,6 +57,7 @@ export const comprasProgramadasItens = pgTable(
     check('chk_compras_prog_itens_qtd_positiva', sql`${t.quantidadeComprada} > 0`),
     index('idx_compras_prog_itens_compra').on(t.compraProgramadaId).where(sql`${t.deletedAt} IS NULL`),
     index('idx_compras_prog_itens_item_compra').on(t.itemCompraId).where(sql`${t.deletedAt} IS NULL`),
+    index('idx_compras_prog_itens_produto').on(t.produtoId).where(sql`${t.deletedAt} IS NULL`),
   ],
 );
 

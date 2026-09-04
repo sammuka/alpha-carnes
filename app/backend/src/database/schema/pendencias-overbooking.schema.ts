@@ -12,6 +12,7 @@ import {
 import { usuarios } from './auth.schema';
 import { clientes } from './clientes.schema';
 import { itensComerciais } from './itens-comerciais.schema';
+import { produtos } from './produtos.schema';
 import { operacoes } from './operacoes.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
 
@@ -19,6 +20,7 @@ export const pendenciasOverbooking = pgTable('pendencias_overbooking', {
   id: uuid('id').primaryKey().default(sql`uuidv7()`),
   pedidoVendaId: uuid('pedido_venda_id').notNull().references(() => pedidosVenda.id),
   pedidoVendaItemId: uuid('pedido_venda_item_id').notNull().references(() => pedidosVendaItens.id),
+  produtoId: uuid('produto_id').references(() => produtos.id),
   itemComercialId: uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
   clienteId: uuid('cliente_id').notNull().references(() => clientes.id),
   vendedorUsuarioId: uuid('vendedor_usuario_id').notNull().references(() => usuarios.id),

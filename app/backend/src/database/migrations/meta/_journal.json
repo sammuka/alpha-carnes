@@ -239,6 +239,13 @@
       "when": 1788103510071,
       "tag": "0033_onda12_dominio_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788500474379,
+      "tag": "0034_onda13_catalogo_expand",
+      "breakpoints": true
     }
   ]
 }

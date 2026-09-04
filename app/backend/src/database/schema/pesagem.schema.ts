@@ -3,6 +3,7 @@ import { boolean, check, index, integer, jsonb, numeric, pgTable, text, timestam
 import { comprasProgramadas } from './compras-programadas.schema';
 import { recebimentos } from './recebimentos.schema';
 import { itensComerciais } from './itens-comerciais.schema';
+import { produtos } from './produtos.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
 import { usuarios } from './auth.schema';
 
@@ -17,6 +18,7 @@ export const pecas = pgTable(
     id:                     uuid('id').primaryKey().default(sql`uuidv7()`),
     compraProgramadaId:     uuid('compra_programada_id').notNull().references(() => comprasProgramadas.id),
     recebimentoId:          uuid('recebimento_id').notNull().references(() => recebimentos.id),
+    produtoBaseId:          uuid('produto_base_id').references(() => produtos.id),
     itemComercialBaseId:    uuid('item_comercial_base_id').notNull().references(() => itensComerciais.id),
     classificacaoOperacional: text('classificacao_operacional'),
     pesoOriginal:           numeric('peso_original', { precision: 10, scale: 3 }).notNull(),

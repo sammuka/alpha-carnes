@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import { check, index, jsonb, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { pecas } from './pesagem.schema';
 import { itensComerciais } from './itens-comerciais.schema';
+import { produtos } from './produtos.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
 import { usuarios } from './auth.schema';
 import { regrasTransformacao } from './regras-transformacao.schema';
@@ -55,6 +56,7 @@ export const subitens = pgTable(
     id:                 uuid('id').primaryKey().default(sql`uuidv7()`),
     transformacaoId:    uuid('transformacao_id').notNull().references(() => transformacoes.id),
     pecaOrigemId:       uuid('peca_origem_id').notNull().references(() => pecas.id),
+    produtoId:          uuid('produto_id').references(() => produtos.id),
     itemComercialId:    uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
     classificacao:      text('classificacao'),
     peso:               numeric('peso', { precision: 10, scale: 3 }),

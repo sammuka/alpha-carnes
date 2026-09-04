@@ -11,6 +11,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { itensComerciais } from './itens-comerciais.schema';
+import { produtos } from './produtos.schema';
 import { pedidosFornecedor } from './pedidos-fornecedor.schema';
 import { recebimentos } from './recebimentos.schema';
 
@@ -36,6 +37,7 @@ export const notasFiscaisFornecedor = pgTable('notas_fiscais_fornecedor', {
 export const notasFiscaisFornecedorItens = pgTable('notas_fiscais_fornecedor_itens', {
   id: uuid('id').primaryKey().default(sql`uuidv7()`),
   nfId: uuid('nf_id').notNull().references(() => notasFiscaisFornecedor.id),
+  produtoId: uuid('produto_id').references(() => produtos.id),
   itemComercialId: uuid('item_comercial_id').notNull().references(() => itensComerciais.id),
   quantidadeDeclarada: numeric('quantidade_declarada', { precision: 15, scale: 3 }).notNull(),
   pesoDeclarado: numeric('peso_declarado', { precision: 10, scale: 3 }),
@@ -44,5 +46,7 @@ export const notasFiscaisFornecedorItens = pgTable('notas_fiscais_fornecedor_ite
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (t) => [
   uniqueIndex('uq_nf_fornecedor_item').on(t.nfId, t.itemComercialId).where(sql`${t.deletedAt} IS NULL`),
+  uniqueIndex('uq_nf_fornecedor_produto').on(t.nfId, t.produtoId).where(sql`${t.deletedAt} IS NULL`),
   index('idx_nf_fornecedor_item_comercial').on(t.itemComercialId),
+  index('idx_nf_fornecedor_produto').on(t.produtoId),
 ]);
