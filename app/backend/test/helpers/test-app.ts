@@ -10,8 +10,6 @@ import { hash } from '@node-rs/argon2';
 import { RbacService } from '../../src/modules/auth/rbac.service';
 import cookieParser from 'cookie-parser';
 
-let rbacBootstrapped = false;
-
 export async function createTestApp(
   envOverrides: Record<string, string> = {},
 ): Promise<INestApplication> {
@@ -87,7 +85,6 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
     RESTART IDENTITY CASCADE
   `);
   await ensurePerfisCanonicos(app, { resetVinculos: true });
-  rbacBootstrapped = true;
 }
 
 /** Faz login e devolve o header Cookie pronto para autenticar requisições subsequentes. */
@@ -148,10 +145,7 @@ export async function createTestUser(
   const password = 'TestPass@123456';
   const senhaHash = await hash(password);
 
-  if (!rbacBootstrapped) {
-    await ensurePerfisCanonicos(app);
-    rbacBootstrapped = true;
-  }
+  await ensurePerfisCanonicos(app);
 
   // Inserir usuário
   const [usuario] = await db

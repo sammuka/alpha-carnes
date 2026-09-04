@@ -193,8 +193,12 @@ describe('conferencia-tripla', () => {
     // item só na pesagem
     const [extra] = await db.insert(schema.produtos).values({
       codigo: `EXT-${Date.now()}`,
-      descricao: 'Não previsto',
-      unidadeComercial: 'kg',
+      nome: 'Não previsto',
+      unidadePedido: 'kg',
+      unidadePreco: 'kg',
+      passaBalanca: true,
+      ativoCompra: true,
+      ativoVenda: true,
     }).returning();
     await db.insert(schema.pecas).values({
       compraProgramadaId: compraId,
