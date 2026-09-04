@@ -128,3 +128,22 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
   Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 }
+
+// user-event 14 + Radix Popover/Combobox no jsdom do CI Linux: sem pointer capture
+// o clique do trigger nunca completa e o teste estoura timeout.
+if (typeof HTMLElement !== 'undefined') {
+  const proto = HTMLElement.prototype as HTMLElement & {
+    hasPointerCapture?: (id: number) => boolean;
+    setPointerCapture?: (id: number) => void;
+    releasePointerCapture?: (id: number) => void;
+  };
+  if (typeof proto.hasPointerCapture !== 'function') {
+    proto.hasPointerCapture = () => false;
+  }
+  if (typeof proto.setPointerCapture !== 'function') {
+    proto.setPointerCapture = () => {};
+  }
+  if (typeof proto.releasePointerCapture !== 'function') {
+    proto.releasePointerCapture = () => {};
+  }
+}
