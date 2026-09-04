@@ -81,9 +81,10 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
       tabelas_preco_publicacoes, tabelas_preco_itens, tabelas_preco,
       produtos, rotas, representantes,
       clientes, fornecedores, parametros,
-      refresh_tokens, usuarios_representantes, usuarios_perfis, perfis_permissoes, permissoes, perfis, usuarios
+      refresh_tokens, usuarios_representantes, usuarios_perfis, usuarios
     RESTART IDENTITY CASCADE
   `);
+  await ensurePerfisCanonicos(app);
 }
 
 /** Faz login e devolve o header Cookie pronto para autenticar requisições subsequentes. */
@@ -104,16 +105,33 @@ const PERFIL_SLUGS = [
   'corte', 'expedicao', 'conferente', 'faturamento', 'logistica', 'diretoria',
 ] as const;
 
+/** Bootstrap idempotente dos 11 perfis + permissões (catálogo RBAC de referência). */
+export async function ensurePerfisCanonicos(app: INestApplication): Promise<void> {
+  const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+  const rbacService = app.get(RbacService);
+
+  await db
+    .insert(schema.perfis)
+    .values(PERFIL_SLUGS.map((slug) => ({ slug, nome: slug, menusVisiveis: [] as string[] })))
+    .onConflictDoUpdate({
+      target: schema.perfis.slug,
+      set: { nome: sql`excluded.nome`, menusVisiveis: sql`excluded.menus_visiveis` },
+    });
+
+  await rbacService.ensurePermissoes();
+}
+
 export async function createTestUser(
   app: INestApplication,
   opts: { perfil: string },
 ): Promise<{ adminEmail: string; adminPassword: string }> {
   const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
-  const rbacService = app.get(RbacService);
 
   const email = `test-${opts.perfil}-${Date.now()}-${Math.round(performance.now() * 1000)}@test.local`;
   const password = 'TestPass@123456';
   const senhaHash = await hash(password);
+
+  await ensurePerfisCanonicos(app);
 
   // Inserir usuário
   const [usuario] = await db
@@ -121,15 +139,6 @@ export async function createTestUser(
     .values({ nome: `Test ${opts.perfil}`, email, senhaHash })
     .returning();
   if (!usuario) throw new Error('Falha ao criar usuário de teste');
-
-  // Inserir TODOS os perfis canônicos (idempotente) — lote único evita race entre suítes paralelas.
-  await db
-    .insert(schema.perfis)
-    .values(PERFIL_SLUGS.map((slug) => ({ slug, nome: slug, menusVisiveis: [] as string[] })))
-    .onConflictDoNothing({ target: schema.perfis.slug });
-
-  // Inserir permissões e popular perfis_permissoes do banco (ADR-008 — fonte da verdade).
-  await rbacService.ensurePermissoes();
 
   // Vincular usuário ao perfil
   const [perfil] = await db
