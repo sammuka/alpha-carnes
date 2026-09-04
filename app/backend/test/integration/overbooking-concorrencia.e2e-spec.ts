@@ -58,7 +58,7 @@ describe('overbooking-concorrencia', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-01',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 1 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 1 }],
       })
       .expect(201);
 
@@ -97,7 +97,7 @@ describe('overbooking-concorrencia', () => {
           compraProgramadaId: compraId,
           clienteId: base.clienteId,
           dataOperacao: '2026-12-02',
-          itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+          itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
         }),
       request(app.getHttpServer())
         .post('/comercial/pedidos/confirmar-overbooking')
@@ -106,7 +106,7 @@ describe('overbooking-concorrencia', () => {
           compraProgramadaId: compraId,
           clienteId: base.clienteId,
           dataOperacao: '2026-12-02',
-          itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+          itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
         }),
     ]);
 

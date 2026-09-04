@@ -108,6 +108,26 @@ describe('FaltasService', () => {
             })),
           };
         }
+        if (idx === 1) {
+          return {
+            from: jest.fn(() => ({
+              innerJoin: jest.fn(() => ({
+                where: jest.fn(() => ({
+                  groupBy: jest.fn(() => Promise.resolve([])),
+                })),
+              })),
+            })),
+          };
+        }
+        if (idx === 2 || idx === 3) {
+          return {
+            from: jest.fn(() => ({
+              where: jest.fn(() => ({
+                groupBy: jest.fn(() => Promise.resolve([])),
+              })),
+            })),
+          };
+        }
         return {
           from: jest.fn(() => ({
             innerJoin: jest.fn(() => ({

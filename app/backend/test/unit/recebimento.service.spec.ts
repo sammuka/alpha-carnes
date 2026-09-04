@@ -292,9 +292,8 @@ describe('RecebimentoService — snapshot canônico do Pedido ao Fornecedor', ()
   const snapshotSelects = (): unknown[][] => [
     [cabecalho],
     [itemSnapshot],
-    [{ id: 'i1', codigo: 'TZ', unidadeComercial: 'kg' }],
-    [{ produtoId: 'i1', passaBalanca: true }],
-    [{ produtoId: 'i1', produtoCodigo: 'TZ', produtoCompraDescricao: 'Boi' }],
+    [{ id: 'i1', codigo: 'TZ', nome: 'Traseiro', unidadePedido: 'kg', passaBalanca: true }],
+    [],
     [{ descricao: 'Boi', quantidade: '99.000' }],
     [{ categoria: 'Boi' }],
   ];
@@ -368,6 +367,6 @@ describe('RecebimentoService — snapshot canônico do Pedido ao Fornecedor', ()
     rows[2] = [];
     const db = { select: jest.fn(() => chain(rows.shift() ?? [])) };
     await expect(serviceCom(db).previsaoDoPedidoFornecedor('pf1'))
-      .rejects.toThrow('Pedido ao fornecedor com metadados operacionais incompletos');
+      .rejects.toThrow('Onda 13: produto(s) inexistente(s) ao resolver metadados de recebimento: i1');
   });
 });

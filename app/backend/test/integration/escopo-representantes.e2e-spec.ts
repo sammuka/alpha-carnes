@@ -47,8 +47,7 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
         // Bootstrap do perfil comercial + CLIENTES_GERENCIAR para testar mutações no escopo.
         permissoes: [
           'CLIENTES_LER', 'CLIENTES_GERENCIAR',
-          'FORNECEDORES_LER', 'ITENS_COMPRA_LER', 'ITENS_COMERCIAIS_LER',
-          'PRODUTOS_LER', 'REPRESENTANTES_LER', 'ROTAS_LER',
+          'FORNECEDORES_LER', 'PRODUTOS_LER', 'REPRESENTANTES_LER', 'ROTAS_LER',
           'REGRAS_DESDOBRAMENTO_LER', 'PARAMETROS_LER',
           'COMPRAS_PROGRAMADAS_LER', 'DISPONIBILIDADE_LER',
           'PEDIDOS_LER', 'PEDIDOS_GERENCIAR',

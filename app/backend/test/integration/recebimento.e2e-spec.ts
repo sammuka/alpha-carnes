@@ -260,7 +260,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const pedido = await request(srv())
       .post('/comercial/pedidos')
       .set('Cookie', comercialCookies)
-      .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-11', itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 8 }] });
+      .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-11', itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }] });
     expect(pedido.status).toBe(201);
 
     const ini = await iniciarViaCompra(compraId);
@@ -294,7 +294,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       const p = await request(srv())
         .post('/comercial/pedidos')
         .set('Cookie', comercialCookies)
-        .send({ compraProgramadaId: compraId, clienteId, dataOperacao: '2026-11-17', itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 6 }] });
+        .send({ compraProgramadaId: compraId, clienteId, dataOperacao: '2026-11-17', itens: [{ produtoId: base.produtoId, quantidadePedida: 6 }] });
       expect(p.status).toBe(201);
     }
 
@@ -323,7 +323,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const p = await request(srv())
       .post('/comercial/pedidos')
       .set('Cookie', comercialCookies)
-      .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-18', itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 6 }] });
+      .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-18', itens: [{ produtoId: base.produtoId, quantidadePedida: 6 }] });
     expect(p.status).toBe(201);
 
     const ini = await iniciarViaCompra(compraId);
@@ -354,7 +354,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
         compraProgramadaId: c1,
         clienteId: base.clienteId,
         dataOperacao: dia,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 10 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 10 }],
       });
     expect(pedido.status).toBe(201);
 

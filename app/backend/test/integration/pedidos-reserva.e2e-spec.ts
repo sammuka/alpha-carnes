@@ -72,7 +72,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-10-01',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 4 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 4 }],
       });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('em_elaboracao_reserva_ativa');
@@ -92,7 +92,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-10-02',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 1 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 1 }],
       });
     expect(res.status).toBe(403);
   });
@@ -108,7 +108,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-10-03',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }],
       });
     expect(res.status).toBe(409);
     const payload = challengePayload(res.body);
@@ -132,7 +132,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-10-13',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }],
       });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe('em_elaboracao_reserva_ativa');
@@ -162,7 +162,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-10-04',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 3 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 3 }],
       })
       .expect(201);
 
@@ -176,7 +176,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: outroClienteId,
         dataOperacao: '2026-10-04',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     expect(challenge.status).toBe(409);
     expect(challengePayload(challenge.body).code).toBe('OVERBOOKING_CONFIRMACAO_NECESSARIA');
@@ -188,7 +188,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: outroClienteId,
         dataOperacao: '2026-10-04',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     expect(res.status).toBe(201);
     const detalhe = await request(app.getHttpServer())
@@ -212,7 +212,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-10-05',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 7 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 7 }],
       });
     let disp = await lerDisponibilidade(app, base.produtoId);
     expect(Number(disp!.quantidadeDisponivel)).toBe(3);
@@ -238,7 +238,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-10-06',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }],
       });
     const itemId = (
       await request(app.getHttpServer()).get(`/comercial/pedidos/${pedido.body.id}`).set('Cookie', comercialCookies)
@@ -277,7 +277,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-10-08',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       });
     const itemId = (
       await request(app.getHttpServer()).get(`/comercial/pedidos/${pedido.body.id}`).set('Cookie', comercialCookies)
@@ -305,7 +305,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-10-10',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 6 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 6 }],
       });
     const itemId = (
       await request(app.getHttpServer()).get(`/comercial/pedidos/${pedido.body.id}`).set('Cookie', comercialCookies)
@@ -332,7 +332,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-10-09',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     const primeira = await request(app.getHttpServer())
       .delete(`/comercial/pedidos/${pedido.body.id}`)
@@ -355,7 +355,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-10-07',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     const detalhe = await request(app.getHttpServer())
       .get(`/comercial/pedidos/${pedido.body.id}`)
@@ -380,7 +380,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
       .send({
         operacaoId: compra!.operacaoId,
         clienteId: base.clienteId,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     expect(res.status).toBe(201);
     const [pedido] = await db.select()
@@ -400,7 +400,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-24',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     expect(res.status).toBe(201);
     const [pedido] = await db.select()
@@ -439,7 +439,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
       .send({
         clienteId: base.clienteId,
         dataOperacao: dia,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 10 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 10 }],
       });
     expect(pedido.status).toBe(201);
 
@@ -463,7 +463,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
       .send({
         clienteId: outroClienteId,
         dataOperacao: dia,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 1 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 1 }],
       });
     expect(challenge.status).toBe(409);
     expect(challengePayload(challenge.body).code).toBe('OVERBOOKING_CONFIRMACAO_NECESSARIA');
@@ -474,7 +474,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
       .send({
         clienteId: outroClienteId,
         dataOperacao: dia,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 1 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 1 }],
       });
     expect(confirmado.status).toBe(201);
 
@@ -484,7 +484,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
       .send({
         clienteId: base.clienteId,
         dataOperacao: dia,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 1 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 1 }],
       });
     expect(duplicado.status).toBe(409);
     expect(duplicado.body.code ?? duplicado.body.message).toBeDefined();

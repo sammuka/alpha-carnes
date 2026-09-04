@@ -54,7 +54,7 @@ describe('overbooking-lifecycle', () => {
         compraProgramadaId: criar.body.id,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-11',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       })
       .expect(201);
 
@@ -96,7 +96,7 @@ describe('overbooking-lifecycle', () => {
         compraProgramadaId: criar.body.id,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-10',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       })
       .expect(201);
 

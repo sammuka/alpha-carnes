@@ -62,7 +62,7 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
       clienteId: base.clienteId,
       dataOperacao: '2026-08-05',
       salvarComoRascunho: false,
-      itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+      itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
     };
 
     const [rota] = await db.insert(schema.rotas)
@@ -206,7 +206,7 @@ describe('pedidos-onda4 (AD-06 liberar reserva administrativa)', () => {
         clienteId: base.clienteId,
         dataOperacao,
         salvarComoRascunho: opts.salvarComoRascunho,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     if (res.status !== 201) throw new Error(`Falha ao criar pedido: ${res.status} ${JSON.stringify(res.body)}`);
     return res.body as { id: string; status: string };

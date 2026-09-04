@@ -365,7 +365,7 @@ describe('Onda 12 — domínio de campos', () => {
         clienteId: base.clienteId,
         dataOperacao: '2026-09-01',
         rotaId: rota.body.id,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     expect(criar.status).toBe(201);
     const rows = await db.execute<{ rota_id: string | null; rota_prevista: string | null }>(
@@ -394,7 +394,7 @@ describe('Onda 12 — domínio de campos', () => {
         clienteId: base.clienteId,
         dataOperacao: '2026-09-01',
         rotaId: rota.body.id,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     expect(criar.status).toBe(400);
     const pedidosDepois = await db.execute<{ total: string }>(
@@ -654,7 +654,7 @@ describe('Onda 12 — domínio de campos', () => {
         compraProgramadaId: base.compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-09-01',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 1 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 1 }],
       });
     expect(pedido.status).toBe(201);
     const det = await request(srv()).get(`/comercial/pedidos/${pedido.body.id}`)

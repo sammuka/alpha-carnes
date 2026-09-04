@@ -84,7 +84,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
         clienteId: clienteId ?? base.clienteId,
         dataOperacao,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: quantidade }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: quantidade }],
       })
       .expect(201);
     const { db } = app.get(DRIZZLE);
@@ -211,7 +211,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-07',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }],
       })
       .expect(201);
 
@@ -252,7 +252,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-08',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }],
       })
       .expect(201);
     const clienteOverbooking = await criarOutroCliente(app);
@@ -289,7 +289,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-09',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 6 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 6 }],
       })
       .expect(201);
     const clienteOverbooking = await criarOutroCliente(app);
@@ -348,7 +348,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-11',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 6 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 6 }],
       })
       .expect(201);
     const clienteOverbooking = await criarOutroCliente(app);
@@ -505,7 +505,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-17',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }],
       })
       .expect(201);
     const clienteOverbooking = await criarOutroCliente(app);

@@ -118,7 +118,7 @@ describe('PedidosService — branches de conflito', () => {
       transaction: jest.fn(async () => {
         throw Object.assign(new Error('dup'), {
           code: '23505',
-          constraint: 'uq_pedido_venda_item_comercial_ativo',
+          constraint: 'uq_pedido_venda_produto_ativo',
         });
       }),
     };

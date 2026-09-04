@@ -68,7 +68,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-10',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       });
     expect(res.status).toBe(403);
   });
@@ -82,7 +82,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-11',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 4 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 4 }],
       })
       .expect(201);
 
@@ -109,7 +109,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-01',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       })
       .expect(409);
 
@@ -136,7 +136,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-02',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       })
       .expect(201);
 
@@ -176,7 +176,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-03',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 4 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 4 }],
       })
       .expect(201);
     expect(res.body.status).toBe('em_elaboracao_reserva_ativa');
@@ -214,7 +214,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-05',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       })
       .expect(201);
 
@@ -273,7 +273,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-07',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 4 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 4 }],
       })
       .expect(201);
 
@@ -294,7 +294,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-08',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       })
       .expect(201);
 
@@ -340,7 +340,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-08',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 3 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 3 }],
       })
       .expect(201);
     await request(app.getHttpServer())
@@ -361,7 +361,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-09',
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 4 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 4 }],
       })
       .expect(201);
 

@@ -74,7 +74,7 @@ describe('jornada integrada do comercial — Onda 4', () => {
       clienteId: base.clienteId,
       dataOperacao,
       salvarComoRascunho: true,
-      itens: [{ produtoId: base.produtoCompraId,
+      itens: [{ produtoId: base.produtoId,
         quantidadePedida: 8,
       }],
     };

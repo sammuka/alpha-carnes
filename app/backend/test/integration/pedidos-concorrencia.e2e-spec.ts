@@ -110,7 +110,7 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
           compraProgramadaId: compraId,
           clienteId,
           dataOperacao: '2026-11-01',
-          itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 1 }],
+          itens: [{ produtoId: base.produtoId, quantidadePedida: 1 }],
         }),
       ),
     );
@@ -139,7 +139,7 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
           compraProgramadaId: compraId,
           clienteId,
           dataOperacao: '2026-11-02',
-          itens: [{ produtoId: base.produtoCompraId, quantidadePedida: r }],
+          itens: [{ produtoId: base.produtoId, quantidadePedida: r }],
         }),
       ),
     );
@@ -167,7 +167,7 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
           compraProgramadaId: compraId,
           clienteId,
           dataOperacao: '2026-11-03',
-          itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 4 }],
+          itens: [{ produtoId: base.produtoId, quantidadePedida: 4 }],
         }),
       ),
     );

@@ -377,8 +377,8 @@ describe('RegrasDesdobramentoService — cobertura de branches Onda 12', () => {
     await expect(
       service.criar(
         {
-          produtoId: 'c1',
-          produtoId: 'm1',
+          produtoOrigemId: 'c1',
+          produtoDestinoId: 'm1',
           fatorQuantidade: 2,
           status: 'ativo',
           vigenciaInicio: new Date('2026-01-01'),

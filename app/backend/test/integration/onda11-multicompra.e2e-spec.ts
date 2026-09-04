@@ -201,7 +201,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
       .send({
         clienteId: base.clienteId,
         dataOperacao: dia,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     expect(res.status).toBe(201);
     const { db } = app.get<{ db: Db }>(DRIZZLE);
@@ -286,7 +286,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
       .send({
         clienteId: base.clienteId,
         dataOperacao: dia,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 9 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 9 }],
       });
     expect(challenge.status).toBe(409);
     const disp = await request(app.getHttpServer())
@@ -301,7 +301,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
       .send({
         clienteId: base.clienteId,
         dataOperacao: dia,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 9 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 9 }],
       });
     expect(ok.status).toBe(201);
   });
@@ -318,7 +318,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
       .send({
         clienteId: await criarOutroCliente(app),
         dataOperacao: origemDia,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }],
       });
     expect(over.status).toBe(201);
     const { db } = app.get<{ db: Db }>(DRIZZLE);
@@ -348,7 +348,7 @@ describe('Onda 11 — múltiplas compras por operação', () => {
       .send({
         clienteId: await criarOutroCliente(app),
         dataOperacao: origemDia,
-        itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }],
       });
     const [pendencia2] = await db.select().from(schema.pendenciasOverbooking)
       .where(eq(schema.pendenciasOverbooking.pedidoVendaId, over2.body.id));

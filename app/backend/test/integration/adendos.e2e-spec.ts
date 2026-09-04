@@ -50,7 +50,7 @@ describe('adendos (adendo com histórico append-only)', () => {
       clienteId: base.clienteId,
       dataOperacao,
       salvarComoRascunho: false,
-      itens: [{ produtoId: base.produtoCompraId, quantidadePedida }],
+      itens: [{ produtoId: base.produtoId, quantidadePedida }],
     }, usuarioId);
     const detalhe = await pedidos.detalhar(pedido.id, usuarioId);
     const item = detalhe.itens[0]!;

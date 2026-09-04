@@ -97,7 +97,7 @@ describe('operacoes-writers e2e', () => {
           compraProgramadaId: compraId,
           clienteId: base.clienteId,
           dataOperacao: data,
-          itens: [{ produtoId: base.produtoCompraId, quantidadePedida: 1 }],
+          itens: [{ produtoId: base.produtoId, quantidadePedida: 1 }],
         });
       expect(pedido.status).toBe(201);
       return;

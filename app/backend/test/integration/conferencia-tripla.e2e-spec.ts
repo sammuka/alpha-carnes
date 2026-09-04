@@ -38,8 +38,12 @@ describe('conferencia-tripla', () => {
     // Caixaria (sem balança)
     const [caixa] = await db.insert(schema.produtos).values({
       codigo: `CX-${Date.now()}`,
-      descricao: 'Caixa de Rabo',
-      unidadeComercial: 'kg',
+      nome: 'Caixa de Rabo',
+      unidadePedido: 'kg',
+      unidadePreco: 'kg',
+      ativoCompra: true,
+      ativoVenda: true,
+      passaBalanca: false,
     }).returning();
 
     const criar = await request(app.getHttpServer())
