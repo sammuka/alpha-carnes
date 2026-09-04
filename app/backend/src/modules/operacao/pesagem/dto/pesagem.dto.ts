@@ -17,7 +17,7 @@ export const MOTIVOS_CAPTURA_MANUAL = [
 export const registrarPesagemSchema = z
   .object({
     recebimentoId: z.string().uuid(),
-    itemComercialBaseId: z.string().uuid(),
+    produtoBaseId: z.string().uuid(),
     classificacaoOperacional: z.string().trim().max(200).optional(),
     modoCaptura: z.enum(MODOS_CAPTURA),
     pesoManual: z.number().positive().max(9_999_999.999).optional(),

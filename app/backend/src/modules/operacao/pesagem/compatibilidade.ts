@@ -29,7 +29,7 @@ export async function calcularCompativeisItem(
   params: {
     operacaoId: string;
     compraProgramadaOrigemId: string;
-    itemComercialId: string;
+    produtoId: string;
     peso: string;
     caracteristicas?: string[];
   },
@@ -38,7 +38,7 @@ export async function calcularCompativeisItem(
     .select({
       pedidoVendaId: pedidosVenda.id,
       pedidoVendaItemId: pedidosVendaItens.id,
-      itemComercialId: pedidosVendaItens.itemComercialId,
+      produtoId: pedidosVendaItens.produtoId,
       clienteId: pedidosVenda.clienteId,
       quantidadePedida: pedidosVendaItens.quantidadePedida,
       quantidadeAtendida: pedidosVendaItens.quantidadeAtendida,
@@ -60,7 +60,7 @@ export async function calcularCompativeisItem(
     .where(
       and(
         eq(pedidosVenda.operacaoId, params.operacaoId),
-        eq(pedidosVendaItens.itemComercialId, params.itemComercialId),
+        eq(pedidosVendaItens.produtoId, params.produtoId),
         isNull(pedidosVenda.deletedAt),
         sql`${pedidosVenda.status} <> 'cancelado'`,
         sql`${pedidosVendaItens.status} <> 'cancelado'`,
@@ -72,7 +72,7 @@ export async function calcularCompativeisItem(
     return {
       pedidoVendaId: l.pedidoVendaId,
       pedidoVendaItemId: l.pedidoVendaItemId,
-      itemComercialId: l.itemComercialId,
+      produtoId: l.produtoId,
       clienteId: l.clienteId,
       saldoPendente: subtrairQtd(l.quantidadePedida, l.quantidadeAtendida),
       prioridade: l.prioridade,
@@ -91,7 +91,7 @@ export async function calcularCompativeisItem(
 
   return calcularScores(
     {
-      itemComercialBaseId: params.itemComercialId,
+      produtoBaseId: params.produtoId,
       pesoOriginal: params.peso,
       caracteristicas: params.caracteristicas,
     },
