@@ -180,4 +180,30 @@ describe('AdendosService — branches', () => {
     }, 'user-1', true);
     expect(resultado.item.status).toBe('overbooking_confirmado');
   });
+
+  it('registrar falha quando o UPDATE do item não retorna linha', async () => {
+    const { service, tx } = montar({
+      coberturas: [{ disponibilidadeId: 'd1', quantidade: '5.000' }],
+      deficit: '0.000',
+    });
+    tx.update.mockReturnValueOnce({
+      set: () => ({ where: () => ({ returning: () => Promise.resolve([]) }) }),
+    });
+    await expect(service.registrar('p1', {
+      produtoId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
+    }, 'user-1', false)).rejects.toThrow('Falha ao incrementar o item do pedido no adendo');
+  });
+
+  it('registrar falha quando o INSERT do adendo não retorna linha', async () => {
+    const { service, tx } = montar({
+      coberturas: [{ disponibilidadeId: 'd1', quantidade: '5.000' }],
+      deficit: '0.000',
+    });
+    tx.insert.mockReturnValueOnce({
+      values: () => ({ returning: () => Promise.resolve([]) }),
+    });
+    await expect(service.registrar('p1', {
+      produtoId: 'ic1', quantidadeAdicionada: 5, motivo: 'ajuste de pedido',
+    }, 'user-1', false)).rejects.toThrow('Falha ao registrar o adendo');
+  });
 });
