@@ -13,6 +13,7 @@ describe('Perfis e2e — gestão de permissões em runtime (ADR-008)', () => {
 
   beforeAll(async () => {
     app = await createTestApp();
+    await cleanupDb(app);
     const admin = await createTestUser(app, { perfil: 'administrador' });
     // 'comercial' começa sem CLIENTES_GERENCIAR (apenas leituras).
     await createTestUser(app, { perfil: 'comercial' });

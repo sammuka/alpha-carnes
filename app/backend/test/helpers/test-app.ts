@@ -86,7 +86,7 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
       refresh_tokens, usuarios_representantes, usuarios_perfis, usuarios
     RESTART IDENTITY CASCADE
   `);
-  await ensurePerfisCanonicos(app);
+  await ensurePerfisCanonicos(app, { resetVinculos: true });
   rbacBootstrapped = true;
 }
 
@@ -109,7 +109,10 @@ const PERFIL_SLUGS = [
 ] as const;
 
 /** Bootstrap idempotente dos 11 perfis + permissões (catálogo RBAC de referência). */
-export async function ensurePerfisCanonicos(app: INestApplication): Promise<void> {
+export async function ensurePerfisCanonicos(
+  app: INestApplication,
+  opts: { resetVinculos?: boolean } = {},
+): Promise<void> {
   const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
   const rbacService = app.get(RbacService);
 
@@ -120,6 +123,10 @@ export async function ensurePerfisCanonicos(app: INestApplication): Promise<void
       target: schema.perfis.slug,
       set: { nome: sql`excluded.nome`, menusVisiveis: sql`excluded.menus_visiveis` },
     });
+
+  if (opts.resetVinculos) {
+    await db.delete(schema.perfisPermissoes);
+  }
 
   await rbacService.ensurePermissoes();
 }
