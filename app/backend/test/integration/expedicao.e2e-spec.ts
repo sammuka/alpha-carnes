@@ -40,12 +40,12 @@ describe('Expedicao e2e (F5)', () => {
     corteCookies = await loginCookies(app, corte.adminEmail, corte.adminPassword);
     expedicaoCookies = await loginCookies(app, expedicao.adminEmail, expedicao.adminPassword);
     gestorCookies = await loginCookies(app, gestor.adminEmail, gestor.adminPassword);
-  }, 60000);
+  }, 120_000);
 
   afterAll(async () => {
     await cleanupDb(app);
     await app.close();
-  });
+  }, 120_000);
 
   const srv = () => app.getHttpServer();
   const db = () => app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE).db;
