@@ -409,17 +409,21 @@ export async function seed() {
       )
     `);
 
-    // 3. Inserir mapa perfis_permissoes (resolve o id da permissão por código no banco)
-    const permissoesDb = await db.select().from(schema.permissoes);
+    // 3. Inserir mapa perfis_permissoes (resolve ids reais — testes podem ter criado perfis sem UUID fixo)
+    const [permissoesDb, perfisDb] = await Promise.all([
+      db.select({ id: schema.permissoes.id, codigo: schema.permissoes.codigo }).from(schema.permissoes),
+      db.select({ id: schema.perfis.id, slug: schema.perfis.slug }).from(schema.perfis),
+    ]);
     const idPorCodigo = new Map(permissoesDb.map((p) => [p.codigo, p.id]));
+    const perfilIdPorSlug = new Map(perfisDb.map((p) => [p.slug, p.id]));
     for (const [slug, codigos] of Object.entries(MAPA)) {
-      const perfil = PERFIS_FIXOS.find((p) => p.slug === slug);
-      if (!perfil) continue;
+      const perfilId = perfilIdPorSlug.get(slug);
+      if (!perfilId) continue;
       for (const codigo of codigos) {
         const permissaoId = idPorCodigo.get(codigo);
         if (!permissaoId) continue;
         await db.insert(schema.perfisPermissoes)
-          .values({ perfilId: perfil.id, permissaoId })
+          .values({ perfilId, permissaoId })
           .onConflictDoNothing();
       }
     }
@@ -444,7 +448,8 @@ export async function seed() {
     const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'Admin@AlphaCarnes2026!';
     const senhaHash = await hash(adminPassword);
 
-    const adminPerfil = PERFIS_FIXOS.find((p) => p.slug === 'administrador')!;
+    const adminPerfilId = perfilIdPorSlug.get('administrador');
+    if (!adminPerfilId) throw new Error('Perfil administrador ausente após seed de perfis');
 
     const [admin] = await db.insert(schema.usuarios)
       .values({ nome: 'Administrador', email: adminEmail, senhaHash })
@@ -465,7 +470,7 @@ export async function seed() {
     }
 
     await db.insert(schema.usuariosPerfis)
-      .values({ usuarioId: admin.id, perfilId: adminPerfil.id })
+      .values({ usuarioId: admin.id, perfilId: adminPerfilId })
       .onConflictDoNothing();
     console.log(`✅ Usuário admin verificado: ${adminEmail}`);
 

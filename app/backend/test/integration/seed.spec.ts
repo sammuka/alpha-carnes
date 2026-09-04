@@ -77,6 +77,7 @@ describe('Seed idempotência', () => {
       JOIN produtos po ON po.id = r.produto_origem_id
       JOIN produtos pd ON pd.id = r.produto_destino_id
       WHERE po.codigo = 'BOI'
+        AND r.deleted_at IS NULL
     `);
     const regras = resultado.rows;
     expect(regras).toHaveLength(3);

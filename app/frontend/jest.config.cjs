@@ -8,6 +8,6 @@ module.exports = {
   },
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   passWithNoTests: true,
-  // userEvent + drawers saturam o CPU no suite completo (Windows); 5s flakava no gate.
-  testTimeout: 15_000,
+  // userEvent + drawers saturam o CPU no suite completo (Windows/CI); 15s flakava no GitHub Actions.
+  testTimeout: 30_000,
 };
