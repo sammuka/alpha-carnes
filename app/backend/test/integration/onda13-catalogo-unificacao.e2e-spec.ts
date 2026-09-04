@@ -64,7 +64,7 @@ describe('Onda 13 — unificação do catálogo (AD-15)', () => {
     const compraId = await criarCompraConfirmada(
       app,
       comprasCookies,
-      { fornecedorId, produtoOrigemId: ids.BOI! },
+      { fornecedorId, produtoCompraId: ids.BOI! },
       { dataOperacao: '2026-09-10', quantidade: 1 },
     );
     expect(compraId).toBeTruthy();
@@ -82,7 +82,7 @@ describe('Onda 13 — unificação do catálogo (AD-15)', () => {
     await criarCompraConfirmada(
       app,
       comprasCookies,
-      { fornecedorId, produtoOrigemId: ids.TZ! },
+      { fornecedorId, produtoCompraId: ids.TZ! },
       { dataOperacao: '2026-09-11', quantidade: 3 },
     );
     const disp = await lerDisponibilidade(app, ids.TZ!);
@@ -95,7 +95,7 @@ describe('Onda 13 — unificação do catálogo (AD-15)', () => {
     await criarCompraConfirmada(
       app,
       comprasCookies,
-      { fornecedorId, produtoOrigemId: ids.BPORCO! },
+      { fornecedorId, produtoCompraId: ids.BPORCO! },
       { dataOperacao: '2026-09-12', quantidade: 5 },
     );
     const disp = await lerDisponibilidade(app, ids.BPORCO!);
@@ -108,7 +108,7 @@ describe('Onda 13 — unificação do catálogo (AD-15)', () => {
     await criarCompraConfirmada(
       app,
       comprasCookies,
-      { fornecedorId, produtoOrigemId: ids.TZ! },
+      { fornecedorId, produtoCompraId: ids.TZ! },
       { dataOperacao: '2026-09-13', quantidade: 10 },
     );
 
