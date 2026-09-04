@@ -143,13 +143,13 @@ describe('Cadastros diversos e2e (fornecedores, itens, parâmetros)', () => {
       const ok = await request(app.getHttpServer())
         .post('/itens-compra')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-1', descricao: 'Boi', unidadeCompra: 'cabeca' });
+        .send({ codigo: 'IC-1', descricao: 'Boi', unidadeCompra: 'unidade' });
       expect(ok.status).toBe(201);
 
       const negado = await request(app.getHttpServer())
         .post('/itens-compra')
         .set('Cookie', comercialCookies)
-        .send({ codigo: 'IC-2', descricao: 'Suíno', unidadeCompra: 'lote' });
+        .send({ codigo: 'IC-2', descricao: 'Suíno', unidadeCompra: 'unidade' });
       expect(negado.status).toBe(403);
     });
 
@@ -169,7 +169,7 @@ describe('Cadastros diversos e2e (fornecedores, itens, parâmetros)', () => {
       const criar = await request(app.getHttpServer())
         .post('/itens-comerciais')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-1', descricao: 'Dianteiro', unidadeComercial: 'peca', permiteCorte: true });
+        .send({ codigo: 'ICM-1', descricao: 'Dianteiro', unidadeComercial: 'kg', permiteCorte: true });
       expect(criar.status).toBe(201);
       expect(criar.body.permiteCorte).toBe(true);
 
@@ -185,7 +185,7 @@ describe('Cadastros diversos e2e (fornecedores, itens, parâmetros)', () => {
       const criar = await request(app.getHttpServer())
         .post('/itens-compra')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-LIFE', descricao: 'Frango', categoria: 'aves', unidadeCompra: 'caixa' });
+        .send({ codigo: 'IC-LIFE', descricao: 'Frango', categoria: 'aves', unidadeCompra: 'unidade' });
       const id = criar.body.id;
 
       expect((await request(app.getHttpServer()).get(`/itens-compra/${id}`).set('Cookie', adminCookies)).status).toBe(
@@ -229,7 +229,7 @@ describe('Cadastros diversos e2e (fornecedores, itens, parâmetros)', () => {
       const criar = await request(app.getHttpServer())
         .post('/itens-comerciais')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-LIFE', descricao: 'Traseiro', unidadeComercial: 'peca' });
+        .send({ codigo: 'ICM-LIFE', descricao: 'Traseiro', unidadeComercial: 'kg' });
       const id = criar.body.id;
 
       expect(
@@ -361,7 +361,7 @@ describe('Cadastros diversos e2e (fornecedores, itens, parâmetros)', () => {
       const editar = await request(app.getHttpServer())
         .patch(`/itens-compra/${criar.body.id}`)
         .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-FULL-2', descricao: 'Item 2', categoria: 'cat2', unidadeCompra: 'cx', status: 'inativo' });
+        .send({ codigo: 'IC-FULL-2', descricao: 'Item 2', categoria: 'cat2', unidadeCompra: 'unidade', status: 'inativo' });
       expect(editar.status).toBe(200);
       expect(editar.body.codigo).toBe('IC-FULL-2');
       const busca = await request(app.getHttpServer())
@@ -374,7 +374,7 @@ describe('Cadastros diversos e2e (fornecedores, itens, parâmetros)', () => {
       const criar = await request(app.getHttpServer())
         .post('/itens-comerciais')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-FULL', descricao: 'Item C', categoria: 'cat', unidadeComercial: 'peca' });
+        .send({ codigo: 'ICM-FULL', descricao: 'Item C', categoria: 'cat', unidadeComercial: 'kg' });
       const editar = await request(app.getHttpServer())
         .patch(`/itens-comerciais/${criar.body.id}`)
         .set('Cookie', adminCookies)
@@ -414,7 +414,7 @@ describe('Cadastros diversos e2e (fornecedores, itens, parâmetros)', () => {
       const icm = await request(app.getHttpServer())
         .post('/itens-comerciais')
         .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-MIN', descricao: 'Min', unidadeComercial: 'peca' });
+        .send({ codigo: 'ICM-MIN', descricao: 'Min', unidadeComercial: 'kg' });
       expect(icm.status).toBe(201);
 
       // Parâmetro mínimo (sem valorJson/descricao).

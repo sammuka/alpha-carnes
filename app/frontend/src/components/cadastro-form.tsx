@@ -10,21 +10,37 @@ import { DatePickerField } from '@/components/ui/date-picker-field';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { SelectNative } from '@/components/ui/select-native';
-import { CADASTROS } from '@/lib/cadastros-config';
+import { CADASTROS, type CadastroConfig } from '@/lib/cadastros-config';
 import { extrairErrosPorCampo, extrairMensagemErro } from '@/lib/error-message';
 
+export type CadastroFormConfig = Omit<CadastroConfig, 'schema'>;
+
+function omitirNulos(valor: unknown): unknown {
+  if (valor === null) return undefined;
+  if (Array.isArray(valor)) return valor.map(omitirNulos);
+  if (valor && typeof valor === 'object') {
+    return Object.fromEntries(
+      Object.entries(valor as Record<string, unknown>).flatMap(([chave, atual]) => {
+        const limpo = omitirNulos(atual);
+        return limpo === undefined ? [] : [[chave, limpo]];
+      }),
+    );
+  }
+  return valor;
+}
+
 interface CadastroFormProps {
-  /** Segmento da rota (`fornecedores`, `clientes`, …). O config fica no cliente — funções de máscara não cruzam o limite RSC. */
-  recurso: string;
+  config: CadastroFormConfig;
   /** Quando informado, o formulário edita o registro (PATCH); senão cria (POST). */
   registro?: Record<string, unknown> & { id: string };
 }
 
-export function CadastroForm({ recurso, registro }: CadastroFormProps) {
+export function CadastroForm({ config, registro }: CadastroFormProps) {
   const router = useRouter();
   const [erro, setErro] = useState<string | null>(null);
-  const config = CADASTROS[recurso];
-  const schema = config?.schema;
+  const catalogo = CADASTROS[config.recurso];
+  const schema = catalogo?.schema ?? (config as CadastroConfig).schema;
+  const campos = catalogo?.campos ?? config.campos;
 
   const {
     register,
@@ -36,21 +52,25 @@ export function CadastroForm({ recurso, registro }: CadastroFormProps) {
     formState,
   } = useForm<FieldValues>({
     resolver: schema ? zodResolver(schema) : undefined,
-    defaultValues: registro ?? {},
+    defaultValues: {
+      unidadeCompra: 'unidade',
+      unidadeComercial: 'unidade',
+      ...((registro ? omitirNulos(registro) : {}) as FieldValues),
+    },
   });
   const { isSubmitting } = formState;
 
   const onSubmit = async (valores: FieldValues) => {
     setErro(null);
     const url = registro
-      ? `/api/cadastros/${recurso}/${registro.id}`
-      : `/api/cadastros/${recurso}`;
+      ? `/api/cadastros/${config.recurso}/${registro.id}`
+      : `/api/cadastros/${config.recurso}`;
     // Nota: as rotas de página vivem em /cadastros/<recurso> (grupo de rota (admin) não entra na URL).
     // Campos opcionais vazios (UUID, enum status, etc.) não podem ir como "" — o Zod do backend rejeita.
     const payload: Record<string, unknown> = { ...valores };
     for (const k of Object.keys(payload)) {
       const v = payload[k];
-      if (v === '') {
+      if (v === '' || v === null || v === undefined) {
         delete payload[k];
       } else if (v && typeof v === 'object' && !Array.isArray(v)) {
         const obj = { ...(v as Record<string, unknown>) };
@@ -59,6 +79,20 @@ export function CadastroForm({ recurso, registro }: CadastroFormProps) {
         }
         payload[k] = obj;
       }
+    }
+    const raw = (payload.parametrosOperacionaisJson ?? {}) as Record<string, unknown>;
+    if (config.recurso === 'fornecedores') {
+      payload.parametrosOperacionaisJson = {
+        romaneioAntecipado: Boolean(raw.romaneioAntecipado),
+        ...(raw.horarioLimiteRecebimento ? { horarioLimiteRecebimento: raw.horarioLimiteRecebimento } : {}),
+        ...(raw.capacidadeMaximaKg === '' || raw.capacidadeMaximaKg === undefined
+          ? {}
+          : { capacidadeMaximaKg: Number(raw.capacidadeMaximaKg) }),
+        ...(raw.toleranciaDivergenciaPercentual === '' || raw.toleranciaDivergenciaPercentual === undefined
+          ? {}
+          : { toleranciaDivergenciaPercentual: Number(raw.toleranciaDivergenciaPercentual) }),
+        ...(raw.notaQualidade ? { notaQualidade: raw.notaQualidade } : {}),
+      };
     }
     try {
       const res = await fetch(url, {
@@ -75,18 +109,16 @@ export function CadastroForm({ recurso, registro }: CadastroFormProps) {
         setErro(extrairMensagemErro(body, 'Falha ao salvar'));
         return;
       }
-      router.push(`/cadastros/${recurso}`);
+      router.push(`/cadastros/${config.recurso}`);
     } catch {
       setErro('Erro de conexão');
     }
   };
 
-  if (!config) return null;
-
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="max-w-2xl space-y-3" noValidate>
       <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
-        {config.campos.map((campo) => {
+        {campos.map((campo) => {
           const chave = campo.jsonCampo ? `${campo.jsonCampo}.${campo.nome}` : campo.nome;
           const erroCampo = getFieldState(chave, formState).error?.message;
           return (
@@ -169,7 +201,7 @@ export function CadastroForm({ recurso, registro }: CadastroFormProps) {
         <Button type="submit" loading={isSubmitting}>
           {registro ? 'Salvar' : 'Criar'}
         </Button>
-        <Button type="button" variant="ghost" onClick={() => router.push(`/cadastros/${recurso}`)}>
+        <Button type="button" variant="ghost" onClick={() => router.push(`/cadastros/${config.recurso}`)}>
           Cancelar
         </Button>
       </div>

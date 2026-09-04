@@ -297,6 +297,9 @@ describe('Onda 4 — migrations geradas D36', () => {
         'migrations/0028_onda11_multicompra_expand.sql',
         'migrations/0029_onda11_multicompra_backfill.sql',
         'migrations/0030_onda11_multicompra_contract.sql',
+        'migrations/0031_onda12_dominio_expand.sql',
+        'migrations/0032_onda12_dominio_backfill.sql',
+        'migrations/0033_onda12_dominio_contract.sql',
         'migrations/meta/0019_snapshot.json',
         'migrations/meta/0020_snapshot.json',
         'migrations/meta/0021_snapshot.json',
@@ -309,6 +312,9 @@ describe('Onda 4 — migrations geradas D36', () => {
         'migrations/meta/0028_snapshot.json',
         'migrations/meta/0029_snapshot.json',
         'migrations/meta/0030_snapshot.json',
+        'migrations/meta/0031_snapshot.json',
+        'migrations/meta/0032_snapshot.json',
+        'migrations/meta/0033_snapshot.json',
         'schema/relatorios-sif.schema.ts',
         'schema/aprovacoes-operacionais.schema.ts',
         // Emenda 7: importa aprovacoes-operacionais — quebra resolve do probe O4
@@ -359,6 +365,23 @@ describe('Onda 4 — migrations geradas D36', () => {
       fs.copyFileSync(
         path.resolve(__dirname, '../helpers/fixtures/pedidos.schema.pre-onda11.ts'),
         path.join(probe, 'schema/pedidos.schema.ts'),
+      );
+      // Onda 12: FKs de rota e CHECK de unidade gerariam DDL extra no generate O4.
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/rotas.schema.pre-onda12.ts'),
+        path.join(probe, 'schema/rotas.schema.ts'),
+      );
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/produtos.schema.pre-onda12.ts'),
+        path.join(probe, 'schema/produtos.schema.ts'),
+      );
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/itens-compra.schema.pre-onda12.ts'),
+        path.join(probe, 'schema/itens-compra.schema.ts'),
+      );
+      fs.copyFileSync(
+        path.resolve(__dirname, '../helpers/fixtures/itens-comerciais.schema.pre-onda12.ts'),
+        path.join(probe, 'schema/itens-comerciais.schema.ts'),
       );
       const probeJournal = JSON.parse(
         fs.readFileSync(path.join(probe, 'migrations/meta/_journal.json'), 'utf8'),

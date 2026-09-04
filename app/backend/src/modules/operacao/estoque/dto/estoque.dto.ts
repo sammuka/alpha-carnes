@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { listarQuerySchema } from '../../../../common/crud/paginacao';
+import { fkOpcionalSchema } from '../../../../common/dto/dominios.dto';
 
 export const listarEntradasQuerySchema = listarQuerySchema;
 export type ListarEntradasQuery = z.infer<typeof listarEntradasQuerySchema>;
@@ -43,11 +44,11 @@ export const criarEntradaSchema = z
     produtoId: z.string().uuid(),
     quantidade: z.number().int().min(1),
     unidade: z.enum(['caixa', 'unidade']).default('caixa'),
-    fornecedorNome: z.string().trim().min(1).max(200),
+    fornecedorId: z.string().uuid(),
     loteNf: z.string().trim().max(120).optional(),
     local: z.string().trim().max(60).optional(),
     destino: z.enum(['estoque', 'pedido']),
-    pedidoVendaItemId: z.string().uuid().optional(),
+    pedidoVendaItemId: fkOpcionalSchema,
     observacao: z.string().trim().max(1000).optional(),
   })
   .superRefine((v, ctx) => {

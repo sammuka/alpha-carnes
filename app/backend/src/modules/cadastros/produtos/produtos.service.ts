@@ -5,7 +5,7 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import { itensComerciais, itensCompra, produtos } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
-import { calcularRange, montarPaginado, primeiroOuFalha, type ListarQuery, type Paginado } from '../../../common/crud/paginacao';
+import { calcularRange, montarPaginado, primeiroOuFalha, type ListarCadastroQuery, type Paginado } from '../../../common/crud/paginacao';
 import type { CreateProdutoDto, UpdateProdutoDto } from './dto/produto.dto';
 
 type Produto = typeof produtos.$inferSelect;
@@ -42,9 +42,10 @@ export class ProdutosService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<Produto>> {
+  async listar(query: ListarCadastroQuery): Promise<Paginado<Produto>> {
     const { limit, offset } = calcularRange(query);
     const filtros = [query.incluirRemovidos ? undefined : isNull(produtos.deletedAt)];
+    if (query.status) filtros.push(eq(produtos.status, query.status));
     if (query.search) {
       const termo = `%${query.search}%`;
       filtros.push(

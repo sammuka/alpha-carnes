@@ -174,6 +174,10 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
       .set('Cookie', comercialA)
       .expect(200);
     expect(res.body.data.some((c: { id: string }) => c.id === clienteA)).toBe(true);
+
+    await db.update(schema.representantes)
+      .set({ status: 'ativo' })
+      .where(sql`${schema.representantes.id} = ${repA}`);
   });
 
   it('dois usuários obtêm linhas e totais distintos de clientes', async () => {

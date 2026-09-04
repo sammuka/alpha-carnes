@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { PlanejamentoExpedicaoClient } from '../src/app/(admin)/carga/planejamento/planejamento-client';
 
 class MockWebSocket {
@@ -21,7 +22,9 @@ class MockWebSocket {
 const caminhaoBase = {
   id: 'c1aaaaaabbbbccccddddeeeeffff0001',
   placa: 'ABC-1234',
+  motoristaId: null,
   motorista: 'João Silva',
+  rotaId: null,
   rota: 'Rota Norte',
   dataOperacao: '2026-06-08',
   frotaCaminhaoId: null,
@@ -55,6 +58,12 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
     if (urlStr.includes('/frota-caminhoes')) {
       return { ok: true, json: async () => ({ data: [] }) };
     }
+    if (urlStr.includes('/frota-motoristas')) {
+      return { ok: true, json: async () => ({ data: [] }) };
+    }
+    if (urlStr.includes('/rotas')) {
+      return { ok: true, json: async () => ({ data: [] }) };
+    }
     return { ok: true, json: async () => ({}) };
   }) as unknown as typeof fetch;
 }
@@ -86,7 +95,7 @@ describe('PlanejamentoExpedicaoClient', () => {
     })) as unknown as typeof fetch;
     render(<PlanejamentoExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
-    expect(screen.getByRole('alert')).toHaveTextContent('Falha ao carregar dados');
+    expect(screen.getByRole('alert')).toHaveTextContent('Sem autorização');
   });
 
   it('carrega caminhões do dia quando API responde', async () => {
@@ -184,5 +193,55 @@ describe('PlanejamentoExpedicaoClient', () => {
     render(<PlanejamentoExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
     await waitFor(() => expect(screen.getByText('ABC-1234')).toBeInTheDocument());
     expect(screen.getByText(/— kg/)).toBeInTheDocument();
+  });
+
+  it('DoD 12.7 sugere motorista e rota padrao e envia IDs', async () => {
+    mockFetch({
+      '/frota-caminhoes': {
+        data: [{
+          id: 'frota-1',
+          placa: 'XYZ-9A00',
+          descricao: 'Truck',
+          capacidadeKg: 8000,
+          rotaPadraoId: 'rota-1',
+          status: 'ativo',
+        }],
+      },
+      '/frota-motoristas': {
+        data: [{
+          id: 'mot-1',
+          nome: 'Carlos Souza',
+          documento: '12345678900',
+          caminhaoPadraoId: 'frota-1',
+          status: 'ativo',
+        }],
+      },
+      '/rotas': {
+        data: [{ id: 'rota-1', codigo: 'RO-01', nome: 'Rota Norte', status: 'ativo' }],
+      },
+    });
+    render(<PlanejamentoExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Caminhão da frota' }));
+    await userEvent.click(await screen.findByRole('option', { name: /XYZ-9A00/ }));
+    expect(screen.getByRole('combobox', { name: 'Motorista' })).toHaveTextContent('Carlos Souza');
+    expect(screen.getByRole('combobox', { name: 'Rota' })).toHaveTextContent('RO-01 — Rota Norte');
+    expect(screen.queryByText('mot-1')).not.toBeInTheDocument();
+    expect(screen.queryByText('rota-1')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Novo Caminhão' }));
+    await waitFor(() => {
+      const post = (global.fetch as jest.Mock).mock.calls.find(
+        ([url, init]: [string, RequestInit]) =>
+          String(url) === '/api/operacao/expedicao/caminhoes' && init?.method === 'POST',
+      );
+      expect(post).toBeDefined();
+      const payload = JSON.parse(String((post?.[1] as RequestInit).body));
+      expect(payload).toMatchObject({
+        frotaCaminhaoId: 'frota-1',
+        motoristaId: 'mot-1',
+        rotaId: 'rota-1',
+      });
+      expect(payload).not.toHaveProperty('motorista');
+      expect(payload).not.toHaveProperty('rota');
+    });
   });
 });

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fkOpcionalSchema } from '../../../../common/dto/dominios.dto';
 
 const quantidadeSchema = z
   .number()
@@ -33,7 +34,7 @@ export const createPedidoSchema = z.object({
   clienteId: z.string().uuid(),
   dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data da operação inválida — use o formato AAAA-MM-DD.').optional(),
   dataEntrega: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data de entrega inválida — use o formato AAAA-MM-DD.').optional(),
-  rotaPrevista: z.string().trim().max(100).optional(),
+  rotaId: fkOpcionalSchema,
   prioridade: z.number().int().min(0).max(100).optional(),
   observacoesGerais: z.string().trim().max(1000).optional(),
   salvarComoRascunho: z.boolean().optional().default(false),

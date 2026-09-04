@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import { fkOpcionalSchema } from '../../../../common/dto/dominios.dto';
 
 export const criarCaminhaoSchema = z
   .object({
-    frotaCaminhaoId: z.string().uuid().optional(),
+    frotaCaminhaoId: fkOpcionalSchema,
     placa: z.string().min(1).max(20).optional(),
-    motorista: z.string().min(1).max(200),
-    rota: z.string().max(500).optional(),
+    motoristaId: z.string().uuid(),
+    rotaId: fkOpcionalSchema,
     itinerario: z.string().max(1000).optional(),
     dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD'),
     observacoes: z.string().max(1000).optional(),

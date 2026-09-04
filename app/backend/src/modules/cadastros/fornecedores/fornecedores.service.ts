@@ -5,7 +5,7 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import { divergenciasRecebimento, fornecedores, ocorrenciasFornecedor } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
-import { calcularRange, montarPaginado, primeiroOuFalha, type ListarQuery, type Paginado } from '../../../common/crud/paginacao';
+import { calcularRange, montarPaginado, primeiroOuFalha, type ListarCadastroQuery, type Paginado } from '../../../common/crud/paginacao';
 import type { CreateFornecedorDto, UpdateFornecedorDto } from './dto/fornecedor.dto';
 
 type Fornecedor = typeof fornecedores.$inferSelect;
@@ -78,9 +78,10 @@ export class FornecedoresService {
     };
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<Fornecedor>> {
+  async listar(query: ListarCadastroQuery): Promise<Paginado<Fornecedor>> {
     const { limit, offset } = calcularRange(query);
     const filtros = [query.incluirRemovidos ? undefined : isNull(fornecedores.deletedAt)];
+    if (query.status) filtros.push(eq(fornecedores.status, query.status));
     if (query.search) {
       const termo = `%${query.search}%`;
       filtros.push(

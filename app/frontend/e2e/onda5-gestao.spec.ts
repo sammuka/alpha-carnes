@@ -282,12 +282,12 @@ async function prepararDadosGestao(api: APIRequestContext, adminCookie: string):
   const itemCompra = await backend<{ id: string }>(api, adminCookie, 'POST', '/itens-compra', {
     codigo: `O5IC${suffix}`,
     descricao: 'Boi Onda5',
-    unidadeCompra: 'cabeca',
+    unidadeCompra: 'unidade',
   });
   const itemComercial = await backend<{ id: string }>(api, adminCookie, 'POST', '/itens-comerciais', {
     codigo: `O5TZ${suffix}`,
     descricao: 'Traseiro Onda5',
-    unidadeComercial: 'parte',
+    unidadeComercial: 'kg',
   });
   const cliente = await backend<{ id: string }>(api, adminCookie, 'POST', '/clientes', {
     codigo: `O5CL${suffix}`,

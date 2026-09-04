@@ -8,7 +8,7 @@ module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: '.',
   testRegex: '.*\\.(e2e-)?spec\\.ts$',
-  transform: { '^.+\\.(t|j)s$': 'ts-jest' },
+  transform: { '^.+\\.(t|j)s$': ['ts-jest', { tsconfig: './tsconfig.test.json' }] },
   collectCoverageFrom: [
     'src/**/*.ts',
     // Arquivos declarativos sem lógica testável
@@ -29,4 +29,6 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '/dist/'],
   setupFilesAfterEnv: ['<rootDir>/test/jest-setup.ts'],
   maxWorkers: 1,
+  // Nest+pino acumula workers de log no processo único; reciclar evita OOM no suite local.
+  workerIdleMemoryLimit: '384MB',
 };

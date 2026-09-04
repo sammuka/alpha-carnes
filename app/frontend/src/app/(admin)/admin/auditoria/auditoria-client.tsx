@@ -14,6 +14,7 @@ import { mensagemDeErro } from '@/lib/error-message';
 import { BadgeCount } from '@/components/ui/badge-count';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { ComboboxField } from '@/components/ui/combobox-field';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
@@ -40,7 +41,10 @@ const VARIANT_OPERACAO: Record<OperacaoAuditoria, StatusPillVariant> = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+interface UsuarioAuditoriaOpcao { id: string; nome: string; email: string }
+
 export function AuditoriaAdminClient() {
+  const [usuarios, setUsuarios] = useState<UsuarioAuditoriaOpcao[]>([]);
   const [filtros, setFiltros] = useState<FiltrosAuditoria>({ page: 1, pageSize: 20 });
   const [resultado, setResultado] = useState<PaginadoAuditoria | null>(null);
   const [selecionado, setSelecionado] = useState<RegistroAuditoria | null>(null);
@@ -85,6 +89,21 @@ export function AuditoriaAdminClient() {
         return;
       }
       setFacetas((await res.json()) as FacetasAuditoria);
+    })();
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const resUsuarios = await fetch('/api/admin/usuarios?page=1&pageSize=100&status=ativo', { cache: 'no-store' });
+      if (!resUsuarios.ok) {
+        setErro(await mensagemDeErro(resUsuarios, 'Falha ao carregar usuários'));
+        return;
+      }
+      const raw: unknown = await resUsuarios.json();
+      const lista = Array.isArray(raw)
+        ? raw as UsuarioAuditoriaOpcao[]
+        : ((raw as { data: UsuarioAuditoriaOpcao[] }).data ?? []);
+      setUsuarios(lista);
     })();
   }, []);
 
@@ -157,21 +176,23 @@ export function AuditoriaAdminClient() {
             </div>
           </FormField>
 
-          <FormField label="Usuário">
-            <SelectNative
-              aria-label="Usuário"
-              value={filtros.usuarioId ?? 'todos'}
-              onChange={(e) =>
-                setFiltros((s) => ({ ...s, usuarioId: e.target.value === 'todos' ? undefined : e.target.value, page: 1 }))
+          <FormField label="Usuário" htmlFor="auditoria-usuario">
+            <ComboboxField
+              id="auditoria-usuario"
+              items={usuarios.map((usuario) => ({
+                id: usuario.id,
+                label: usuario.nome,
+                sublabel: usuario.email,
+              }))}
+              value={filtros.usuarioId ?? ''}
+              onChange={(id) =>
+                setFiltros((s) => ({ ...s, usuarioId: id || undefined, page: 1 }))
               }
-            >
-              <option value="todos">Todos os usuários</option>
-              {(facetas?.usuarios ?? []).map((usuario) => (
-                <option key={usuario.id} value={usuario.id}>
-                  {usuario.nome}
-                </option>
-              ))}
-            </SelectNative>
+              placeholder="Todos os usuários"
+              searchPlaceholder="Buscar usuário..."
+              emptyText="Nenhum usuário encontrado."
+              clearable
+            />
           </FormField>
 
           <FormField label="Módulo">

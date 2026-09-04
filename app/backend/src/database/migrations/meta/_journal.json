@@ -218,6 +218,27 @@
       "when": 1787907156483,
       "tag": "0030_onda11_multicompra_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788103452982,
+      "tag": "0031_onda12_dominio_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788103459124,
+      "tag": "0032_onda12_dominio_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788103510071,
+      "tag": "0033_onda12_dominio_contract",
+      "breakpoints": true
     }
   ]
 }

@@ -84,12 +84,12 @@ export async function seedCaminhaoFechado(request: APIRequestContext): Promise<C
   const itemCompra = await api<{ id: string }>(request, cookieHeader, 'POST', '/itens-compra', {
     codigo: `O10IC${suffix}`,
     descricao: 'Boi Onda10',
-    unidadeCompra: 'cabeca',
+    unidadeCompra: 'unidade',
   });
   const itemComercial = await api<{ id: string }>(request, cookieHeader, 'POST', '/itens-comerciais', {
     codigo: `O10TZ${suffix}`,
     descricao: 'Traseiro Onda10',
-    unidadeComercial: 'parte',
+    unidadeComercial: 'kg',
   });
   await api(request, cookieHeader, 'POST', '/regras-desdobramento', {
     itemCompraId: itemCompra.id,
@@ -185,10 +185,13 @@ export async function seedCaminhaoFechado(request: APIRequestContext): Promise<C
 
   const placa = `O10-${suffix}`.toUpperCase();
   const motorista = 'Motorista Onda10';
+  const motoristaCadastro = await api<{ id: string }>(request, cookieHeader, 'POST', '/frota/motoristas', {
+    nome: motorista,
+    documento: `O10M${suffix}`,
+  });
   const caminhao = await api<{ id: string; placa: string }>(request, cookieHeader, 'POST', '/operacao/expedicao/caminhoes', {
     placa,
-    motorista,
-    rota: 'Rota Onda10',
+    motoristaId: motoristaCadastro.id,
     dataOperacao,
   });
   await api(request, cookieHeader, 'POST', `/operacao/expedicao/caminhoes/${caminhao.id}/pedidos`, {

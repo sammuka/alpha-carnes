@@ -5,7 +5,7 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import { itensComerciais } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
-import { calcularRange, montarPaginado, primeiroOuFalha, type ListarQuery, type Paginado } from '../../../common/crud/paginacao';
+import { calcularRange, montarPaginado, primeiroOuFalha, type ListarCadastroQuery, type Paginado } from '../../../common/crud/paginacao';
 import type { CreateItemComercialDto, UpdateItemComercialDto } from './dto/item-comercial.dto';
 
 type ItemComercial = typeof itensComerciais.$inferSelect;
@@ -22,9 +22,10 @@ export class ItensComerciaisService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<ItemComercial>> {
+  async listar(query: ListarCadastroQuery): Promise<Paginado<ItemComercial>> {
     const { limit, offset } = calcularRange(query);
     const filtros = [query.incluirRemovidos ? undefined : isNull(itensComerciais.deletedAt)];
+    if (query.status) filtros.push(eq(itensComerciais.status, query.status));
     if (query.search) {
       const termo = `%${query.search}%`;
       filtros.push(or(ilike(itensComerciais.descricao, termo), ilike(itensComerciais.codigo, termo)));

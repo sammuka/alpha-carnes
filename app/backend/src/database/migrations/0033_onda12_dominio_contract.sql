@@ -1,0 +1,3 @@
+ALTER TABLE "produtos" ADD CONSTRAINT "chk_produtos_unidade_pedido" CHECK ("produtos"."unidade_pedido" IN ('kg','unidade'));--> statement-breakpoint
+ALTER TABLE "itens_compra" ADD CONSTRAINT "chk_itens_compra_unidade" CHECK ("itens_compra"."unidade_compra" IN ('kg','unidade'));--> statement-breakpoint
+ALTER TABLE "itens_comerciais" ADD CONSTRAINT "chk_itens_comerciais_unidade" CHECK ("itens_comerciais"."unidade_comercial" IN ('kg','unidade'));

@@ -126,10 +126,10 @@ async function seedCargaPronta(cookieHeader) {
     codigo: `O9F${suffix}`, razaoSocial: `Fornecedor Onda9 ${suffix}`, documentoFiscal: makeCpf(seedNum + 1),
   });
   const itemCompra = await api(cookieHeader, 'POST', '/itens-compra', {
-    codigo: `O9IC${suffix}`, descricao: 'Boi Onda9', unidadeCompra: 'cabeca',
+    codigo: `O9IC${suffix}`, descricao: 'Boi Onda9', unidadeCompra: 'unidade',
   });
   const itemComercial = await api(cookieHeader, 'POST', '/itens-comerciais', {
-    codigo: `O9TZ${suffix}`, descricao: 'Traseiro Onda9', unidadeComercial: 'parte',
+    codigo: `O9TZ${suffix}`, descricao: 'Traseiro Onda9', unidadeComercial: 'kg',
   });
   await api(cookieHeader, 'POST', '/regras-desdobramento', {
     itemCompraId: itemCompra.id, itemComercialId: itemComercial.id, fatorQuantidade: 2,
@@ -189,8 +189,12 @@ async function seedCargaPronta(cookieHeader) {
   await api(cookieHeader, 'POST', `/operacao/pesagem/pecas/${peca.id}/confirmar`, { pedidoVendaItemId: pedidoItemId });
   await api(cookieHeader, 'POST', `/operacao/pesagem/pecas/${peca.id}/etiqueta`, {});
 
+  const motoristaCadastro = await api(cookieHeader, 'POST', '/frota/motoristas', {
+    nome: 'Motorista Onda9',
+    documento: `O9M${suffix}`,
+  });
   const caminhao = await api(cookieHeader, 'POST', '/operacao/expedicao/caminhoes', {
-    placa: `O9-${suffix}`.toUpperCase(), motorista: 'Motorista Onda9', rota: 'Rota Onda9', dataOperacao,
+    placa: `O9-${suffix}`.toUpperCase(), motoristaId: motoristaCadastro.id, dataOperacao,
   });
   await api(cookieHeader, 'POST', `/operacao/expedicao/caminhoes/${caminhao.id}/pedidos`, { pedidoVendaId: pedido.id });
   await api(cookieHeader, 'POST', `/operacao/expedicao/caminhoes/${caminhao.id}/abrir-carga`, {});

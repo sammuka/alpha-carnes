@@ -37,6 +37,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { UNIDADE_MEDIDA_OPTIONS, type UnidadeMedida } from '@/lib/dominios';
 import { detalharErro } from '@/lib/error-message';
 import { useErrosPorCampo } from '@/lib/use-erros-campo';
 import {
@@ -86,7 +87,7 @@ const FORM_VAZIO: FormProduto = {
   nomeOperacional: '',
   categoria: '',
   tipoOperacional: 'peca_inteira_pesavel',
-  unidadePedido: 'Peça',
+  unidadePedido: 'unidade',
   unidadePreco: 'kg',
   exigePeso: true,
   passaBalanca: false,
@@ -606,14 +607,17 @@ export function ProdutosClient({ permissoes }: { permissoes: string[] }) {
                 </FormField>
 
                 <FormField label="Unidade do pedido" htmlFor="unidadePedido" error={erros[chaveDe('unidadePedido')]}>
-                  <Input
+                  <SelectNative
                     id="unidadePedido"
                     value={form.unidadePedido}
                     disabled={somenteLeitura}
-                    maxLength={30}
                     aria-invalid={chaveDe('unidadePedido') in erros || undefined}
-                    onChange={(e) => setCampo('unidadePedido', e.target.value)}
-                  />
+                    onChange={(e) => setCampo('unidadePedido', e.target.value as UnidadeMedida)}
+                  >
+                    {UNIDADE_MEDIDA_OPTIONS.map((op) => (
+                      <option key={op.valor} value={op.valor}>{op.rotulo}</option>
+                    ))}
+                  </SelectNative>
                 </FormField>
 
                 <div className="space-y-2.5 rounded-md border border-border p-3">

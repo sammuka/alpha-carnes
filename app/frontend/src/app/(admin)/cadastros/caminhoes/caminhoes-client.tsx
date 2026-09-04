@@ -4,21 +4,19 @@ import { useEffect, useState } from 'react';
 import { Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import { CadastroTabelaDrawer } from '@/components/cadastros/cadastro-tabela-drawer';
+import { UF_OPTIONS, labelCodigoNome } from '@/lib/dominios';
 import { mensagemDeErro } from '@/lib/error-message';
 import type { Caminhao } from '@/lib/frota';
 import { mascararPlaca } from '@/lib/masks';
 
-interface RotaOpcao {
-  id: string;
-  nome: string;
-}
+interface RotaOpcao { id: string; codigo: string; nome: string; status: 'ativo' | 'inativo' }
 
 export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
   const [rotas, setRotas] = useState<RotaOpcao[]>([]);
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch('/api/cadastros/rotas?page=1&pageSize=100', { cache: 'no-store' });
+      const res = await fetch('/api/cadastros/rotas?page=1&pageSize=100&status=ativo', { cache: 'no-store' });
       if (!res.ok) {
         toast.error(await mensagemDeErro(res));
         return;
@@ -106,9 +104,12 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         {
           nome: 'rotaPadraoId',
           rotulo: 'Rota padrão',
-          tipo: 'select',
+          tipo: 'combobox',
           placeholder: 'Sem rota padrão',
-          opcoes: rotas.map((r) => ({ valor: r.id, rotulo: r.nome })),
+          opcoes: rotas.map((r) => ({
+            valor: r.id,
+            rotulo: `${labelCodigoNome(r.codigo, r.nome)}${r.status === 'ativo' ? '' : ' (inativo)'}`,
+          })),
         },
         {
           nome: 'veiculoProprio',
@@ -128,7 +129,13 @@ export function CaminhoesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         { nome: 'chassi', rotulo: 'Chassi', tipo: 'texto', monoespacado: true, maxLength: 50, mascara: (v) => v.toUpperCase() },
         { nome: 'certificadoNumero', rotulo: 'Certificado (número)', tipo: 'texto', monoespacado: true, maxLength: 50 },
         { nome: 'certificadoCidade', rotulo: 'Certificado (cidade)', tipo: 'texto', maxLength: 100 },
-        { nome: 'certificadoUf', rotulo: 'Certificado (UF)', tipo: 'texto', maxLength: 2, mascara: (v) => v.toUpperCase() },
+        {
+          nome: 'certificadoUf',
+          rotulo: 'Certificado (UF)',
+          tipo: 'select',
+          placeholder: '—',
+          opcoes: UF_OPTIONS,
+        },
         { nome: 'certificadoData', rotulo: 'Certificado (data)', tipo: 'data' },
         { nome: 'numeroSeguro', rotulo: 'Número do seguro', tipo: 'texto', maxLength: 50 },
         { nome: 'kilometragem', rotulo: 'Quilometragem', tipo: 'numero' },
