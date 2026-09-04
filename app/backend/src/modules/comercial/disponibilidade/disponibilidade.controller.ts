@@ -22,16 +22,16 @@ export class DisponibilidadeController {
   @Get('mapa')
   @RequirePermissoes('DISPONIBILIDADE_LER')
   async consultarMapa(@Query(new ZodValidationPipe(consultarMapaSchema)) query: ConsultarMapaDto) {
-    return this.mapa.consultar(query.operacaoId, query.itemComercialId);
+    return this.mapa.consultar(query.operacaoId, query.produtoId);
   }
 
-  @Get('mapa/:itemComercialId/detalhe')
+  @Get('mapa/:produtoId/detalhe')
   @RequirePermissoes('DISPONIBILIDADE_LER')
   async detalharMapa(
-    @Param('itemComercialId') itemComercialId: string,
+    @Param('produtoId') produtoId: string,
     @Query(new ZodValidationPipe(drillDownSchema)) query: DrillDownDto,
   ) {
-    return this.mapa.detalhar(query.operacaoId, itemComercialId, query.estado);
+    return this.mapa.detalhar(query.operacaoId, produtoId, query.estado);
   }
 
   @Get()

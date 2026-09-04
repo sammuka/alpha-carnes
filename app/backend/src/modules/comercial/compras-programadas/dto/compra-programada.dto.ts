@@ -6,7 +6,7 @@ const quantidadeSchema = z
   .positive('quantidade deve ser maior que zero')
   .max(9_999_999_999.999, 'quantidade fora do intervalo');
 
-const itemCompraSchema = z.object({
+const itemProdutoSchema = z.object({
   produtoId: z.string().uuid(),
   quantidadeComprada: quantidadeSchema,
   observacoes: z.string().trim().max(500).optional(),
@@ -19,7 +19,7 @@ export const createCompraProgramadaSchema = z.object({
   referenciaExterna: z.string().trim().max(100).optional(),
   previsaoEntrega: z.string().datetime({ offset: true }).optional(),
   observacoes: z.string().trim().max(1000).optional(),
-  itens: z.array(itemCompraSchema).min(1, 'compra precisa de ao menos um item'),
+  itens: z.array(itemProdutoSchema).min(1, 'compra precisa de ao menos um item'),
 }).strict();
 
 export type CreateCompraProgramadaDto = z.infer<typeof createCompraProgramadaSchema>;

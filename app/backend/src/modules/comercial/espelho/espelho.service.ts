@@ -5,7 +5,7 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
   clientes,
-  itensComerciais,
+  produtos,
   operacoes,
   pecas,
   pedidosVenda,
@@ -71,10 +71,10 @@ export class EspelhoService {
         representanteId: clientes.representanteId,
         representanteNome: representantes.nome,
         itemPedidoId: pedidosVendaItens.id,
-        itemComercialId: pedidosVendaItens.itemComercialId,
-        produtoCodigo: itensComerciais.codigo,
-        produtoDescricao: itensComerciais.descricao,
-        unidadeComercial: itensComerciais.unidadeComercial,
+        produtoId: pedidosVendaItens.produtoId,
+        produtoCodigo: produtos.codigo,
+        produtoDescricao: produtos.descricao,
+        unidadeComercial: produtos.unidadeComercial,
         quantidadePedida: pedidosVendaItens.quantidadePedida,
         quantidadeAtendida: pedidosVendaItens.quantidadeAtendida,
       })
@@ -87,7 +87,7 @@ export class EspelhoService {
         eq(pedidosVendaItens.pedidoVendaId, pedidosVenda.id),
         isNull(pedidosVendaItens.deletedAt),
       ))
-      .innerJoin(itensComerciais, eq(itensComerciais.id, pedidosVendaItens.itemComercialId))
+      .innerJoin(produtos, eq(produtos.id, pedidosVendaItens.produtoId))
       .where(and(
         eq(operacoes.data, dto.dataOperacao),
         isNull(pedidosVenda.deletedAt),
@@ -121,7 +121,7 @@ export class EspelhoService {
       representante: l.representanteNome,
       rotaId: l.rotaId,
       rota: l.rotaNome,
-      itemComercialId: l.itemComercialId,
+      produtoId: l.produtoId,
       produto: `${l.produtoCodigo} — ${l.produtoDescricao}`,
       unidade: l.unidadeComercial,
       quantidadePedida: l.quantidadePedida,

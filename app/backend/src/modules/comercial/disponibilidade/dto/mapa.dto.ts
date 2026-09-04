@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const consultarMapaSchema = z.object({
   operacaoId: z.string().uuid(),
-  itemComercialId: z.string().uuid().optional(),
+  produtoId: z.string().uuid().optional(),
 });
 export type ConsultarMapaDto = z.infer<typeof consultarMapaSchema>;
 
@@ -14,7 +14,7 @@ export type DrillDownDto = z.infer<typeof drillDownSchema>;
 export type EstadoMapa = 'F' | 'V' | 'R' | 'C' | 'D' | 'O' | 'E' | '!';
 
 export interface MapaProduto {
-  itemComercialId: string;
+  produtoId: string;
   codigo: string;
   descricao: string;
   provisorio: boolean;

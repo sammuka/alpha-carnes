@@ -58,7 +58,7 @@ export type PedidoVenda = typeof pedidosVenda.$inferSelect;
 export type PedidoVendaItem = typeof pedidosVendaItens.$inferSelect;
 
 export interface ItemSolicitado {
-  itemComercialId: string;
+  produtoId: string;
   quantidade: number;
   observacoes?: string;
 }
@@ -69,7 +69,7 @@ interface CoberturaPlanejada {
 }
 
 export interface PlanoItem {
-  itemComercialId: string;
+  produtoId: string;
   quantidadeSolicitada: string;
   disponivelAntes: string;
   coberturas: CoberturaPlanejada[];
@@ -84,7 +84,7 @@ function ehDuplicidadeDeItemNoPedido(error: unknown): boolean {
   const pg = error as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
   const code = pg.code ?? pg.cause?.code;
   const constraint = pg.constraint ?? pg.cause?.constraint;
-  return code === '23505' && constraint === 'uq_pedido_venda_item_comercial_ativo';
+  return code === '23505' && constraint === 'uq_pedido_venda_produto_ativo';
 }
 
 /** Traduz plano → itens de challenge. Exportado para o AdendosService reusar (D2). */
@@ -92,7 +92,7 @@ export function desafiosParaChallenge(plano: PlanoItem[]): OverbookingChallengeI
   return plano
     .filter((p) => compararQtd(p.deficit, '0') > 0)
     .map((p) => ({
-      itemComercialId: p.itemComercialId,
+      produtoId: p.produtoId,
       disponivelAntes: p.disponivelAntes,
       quantidadeSolicitada: p.quantidadeSolicitada,
       overbookingGerado: p.deficit,
@@ -177,7 +177,7 @@ export class PedidosService {
         where: and(eq(pedidosVenda.id, id), isNull(pedidosVenda.deletedAt)),
         with: {
           cliente: true,
-          itens: { with: { itemComercial: true, reservas: { with: { disponibilidade: true } } } },
+          itens: { with: { produto: true, reservas: { with: { disponibilidade: true } } } },
         },
       });
       if (!pedido) throw new NotFoundException('Pedido não encontrado');
@@ -254,7 +254,7 @@ export class PedidosService {
         .select({
           pedidoId: pedidosVenda.id,
           status: pedidosVenda.status,
-          itemComercialId: pedidosVendaItens.itemComercialId,
+          produtoId: pedidosVendaItens.produtoId,
           quantidadeAtual: pedidosVendaItens.quantidadePedida,
         })
         .from(pedidosVendaItens)
@@ -263,7 +263,7 @@ export class PedidosService {
         .where(and(
           eq(pedidosVenda.clienteId, query.clienteId),
           eq(pedidosVenda.operacaoId, operacao.id),
-          eq(pedidosVendaItens.itemComercialId, query.itemComercialId),
+          eq(pedidosVendaItens.produtoId, query.produtoId),
           inArray(pedidosVenda.status, [...PedidosService.STATUS_ABERTOS]),
           isNull(pedidosVenda.deletedAt),
           isNull(pedidosVendaItens.deletedAt),
@@ -279,13 +279,13 @@ export class PedidosService {
    * operação; a inclusão adicional deve ser feita via adendo (Task 7).
    */
   private async exigirUnicidadeAd03(
-    tx: Tx, clienteId: string, operacaoId: string, itensComerciaisIds: string[],
+    tx: Tx, clienteId: string, operacaoId: string, produtosIds: string[],
     pedidoIdIgnorado?: string,
   ): Promise<void> {
     const conflitos = await tx
       .select({
         pedidoId: pedidosVenda.id,
-        itemComercialId: pedidosVendaItens.itemComercialId,
+        produtoId: pedidosVendaItens.produtoId,
         quantidadeAtual: pedidosVendaItens.quantidadePedida,
         status: pedidosVenda.status,
       })
@@ -295,7 +295,7 @@ export class PedidosService {
         eq(pedidosVenda.clienteId, clienteId),
         eq(pedidosVenda.operacaoId, operacaoId),
         inArray(pedidosVenda.status, [...PedidosService.STATUS_ABERTOS]),
-        inArray(pedidosVendaItens.itemComercialId, itensComerciaisIds),
+        inArray(pedidosVendaItens.produtoId, produtosIds),
         isNull(pedidosVenda.deletedAt),
         isNull(pedidosVendaItens.deletedAt),
         pedidoIdIgnorado ? ne(pedidosVenda.id, pedidoIdIgnorado) : undefined,
@@ -381,7 +381,7 @@ export class PedidosService {
     const rotaIdEfetivo = dto.rotaId !== undefined ? dto.rotaId : cliente.rotaId;
     const rota = await this.resolverRota(tx, rotaIdEfetivo);
     const solicitados: ItemSolicitado[] = dto.itens.map((item) => ({
-      itemComercialId: item.itemComercialId,
+      produtoId: item.produtoId,
       quantidade: item.quantidadePedida,
       observacoes: item.observacoes,
     }));
@@ -396,7 +396,7 @@ export class PedidosService {
         tx,
         dto.clienteId,
         operacaoExistente.id,
-        solicitados.map((s) => s.itemComercialId),
+        solicitados.map((s) => s.produtoId),
       );
     }
     const plano = await this.planejarSobLock(
@@ -476,7 +476,7 @@ export class PedidosService {
       .from(pedidosVendaItens)
       .where(and(
         eq(pedidosVendaItens.pedidoVendaId, pedido.id),
-        eq(pedidosVendaItens.itemComercialId, dto.itemComercialId),
+        eq(pedidosVendaItens.produtoId, dto.produtoId),
         isNull(pedidosVendaItens.deletedAt),
       )).limit(1);
     if (itemExistente.length) {
@@ -492,11 +492,11 @@ export class PedidosService {
       });
     }
     await this.exigirUnicidadeAd03(
-      tx, pedido.clienteId, pedido.operacaoId, [dto.itemComercialId], pedido.id,
+      tx, pedido.clienteId, pedido.operacaoId, [dto.produtoId], pedido.id,
     );
 
     const solicitado: ItemSolicitado = {
-      itemComercialId: dto.itemComercialId,
+      produtoId: dto.produtoId,
       quantidade: dto.quantidade,
       observacoes: dto.observacoes,
     };
@@ -514,25 +514,25 @@ export class PedidosService {
     operacaoId: string | null,
     itens: ItemSolicitado[],
   ): Promise<PlanoItem[]> {
-    const ids = itens.map((item) => item.itemComercialId);
+    const ids = itens.map((item) => item.produtoId);
     if (new Set(ids).size !== ids.length) {
       throw new BadRequestException('Item comercial duplicado no mesmo pedido.');
     }
     const resultado = operacaoId === null
       ? { rows: [] as Array<{
         id: string;
-        item_comercial_id: string;
+        produto_id: string;
         quantidade_disponivel: string;
       }> }
       : await tx.execute<{
         id: string;
-        item_comercial_id: string;
+        produto_id: string;
         quantidade_disponivel: string;
       }>(sql`
-        SELECT id, item_comercial_id, quantidade_disponivel
+        SELECT id, produto_id, quantidade_disponivel
         FROM disponibilidades_virtuais
         WHERE operacao_id=${operacaoId}
-          AND item_comercial_id IN (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})
+          AND produto_id IN (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})
           AND quantidade_disponivel > 0
         ORDER BY created_at, id
         FOR UPDATE
@@ -540,8 +540,8 @@ export class PedidosService {
 
     return itens.map((item) => {
       let restante = formatarQtd(item.quantidade);
-      const linhas = resultado.rows.filter((row: { id: string; item_comercial_id: string; quantidade_disponivel: string }) => row.item_comercial_id === item.itemComercialId);
-      const disponivelAntes = somarListaQtd(linhas.map((row: { id: string; item_comercial_id: string; quantidade_disponivel: string }) => row.quantidade_disponivel));
+      const linhas = resultado.rows.filter((row: { id: string; produto_id: string; quantidade_disponivel: string }) => row.produto_id === item.produtoId);
+      const disponivelAntes = somarListaQtd(linhas.map((row: { id: string; produto_id: string; quantidade_disponivel: string }) => row.quantidade_disponivel));
       const coberturas: CoberturaPlanejada[] = [];
       for (const row of linhas) {
         if (ehZero(restante)) break;
@@ -550,7 +550,7 @@ export class PedidosService {
         restante = subtrairQtd(restante, quantidade);
       }
       return {
-        itemComercialId: item.itemComercialId,
+        produtoId: item.produtoId,
         quantidadeSolicitada: formatarQtd(item.quantidade),
         disponivelAntes,
         coberturas,
@@ -573,7 +573,7 @@ export class PedidosService {
       const quantidadeReal = somarListaQtd(alocacao.coberturas.map((c) => c.quantidade));
       const [item] = await tx.insert(pedidosVendaItens).values({
         pedidoVendaId: pedido.id,
-        itemComercialId: solicitado.itemComercialId,
+        produtoId: solicitado.produtoId,
         quantidadePedida: alocacao.quantidadeSolicitada,
         quantidadeReservada: quantidadeReal,
         quantidadePendente: '0.000',
@@ -644,7 +644,7 @@ export class PedidosService {
         nome: EVENTOS.RESERVA_ATUALIZADA,
         payload: {
           disponibilidadeId: linha.id,
-          itemComercialId: alocacao.itemComercialId,
+          produtoId: alocacao.produtoId,
           dataOperacao: dataOperacao ?? '',
           quantidadeReservada: linha.quantidade_reservada,
           quantidadeDisponivel: linha.quantidade_disponivel,
@@ -758,7 +758,7 @@ export class PedidosService {
     }
     const [pendencia] = await tx.insert(pendenciasOverbooking).values({
       pedidoVendaId: pedido.id, pedidoVendaItemId: item.id,
-      itemComercialId: item.itemComercialId, clienteId: pedido.clienteId,
+      produtoId: item.produtoId, clienteId: pedido.clienteId,
       vendedorUsuarioId: usuarioId, operacaoId: pedido.operacaoId,
       quantidadeDeficit: deficit,
     }).returning();
@@ -784,13 +784,13 @@ export class PedidosService {
 
   /** Exige que o produto JÁ esteja no pedido: adendo aumenta item, não cria item. */
   async exigirItemDoPedido(
-    tx: Tx, pedidoId: string, itemComercialId: string, usuarioId: string,
+    tx: Tx, pedidoId: string, produtoId: string, usuarioId: string,
   ): Promise<PedidoVendaItem> {
     await this.exigirPedidoNoEscopo(tx, pedidoId, usuarioId, true);
     const [item] = await tx.select().from(pedidosVendaItens)
       .where(and(
         eq(pedidosVendaItens.pedidoVendaId, pedidoId),
-        eq(pedidosVendaItens.itemComercialId, itemComercialId),
+        eq(pedidosVendaItens.produtoId, produtoId),
         isNull(pedidosVendaItens.deletedAt),
       ))
       .for('update')

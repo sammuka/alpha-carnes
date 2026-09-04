@@ -7,7 +7,7 @@ const quantidadeSchema = z
   .max(9_999_999_999.999, 'quantidade fora do intervalo');
 
 const itemPedidoSchema = z.object({
-  itemComercialId: z.string().uuid(),
+  produtoId: z.string().uuid(),
   quantidadePedida: quantidadeSchema,
   observacoes: z.string().trim().max(500).optional(),
 });
@@ -17,14 +17,14 @@ const itensCriacaoPedidoSchema = z.array(itemPedidoSchema)
   .superRefine((itens, ctx) => {
     const vistos = new Set<string>();
     itens.forEach((item, index) => {
-      if (vistos.has(item.itemComercialId)) {
+      if (vistos.has(item.produtoId)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: [index, 'itemComercialId'],
-          message: 'Item comercial duplicado no mesmo pedido.',
+          path: [index, 'produtoId'],
+          message: 'Produto duplicado no mesmo pedido.',
         });
       }
-      vistos.add(item.itemComercialId);
+      vistos.add(item.produtoId);
     });
   });
 
@@ -39,7 +39,7 @@ export const createPedidoSchema = z.object({
   observacoesGerais: z.string().trim().max(1000).optional(),
   salvarComoRascunho: z.boolean().optional().default(false),
   itens: itensCriacaoPedidoSchema,
-}).superRefine((val, ctx) => {
+}).strict().superRefine((val, ctx) => {
   if (!val.operacaoId && !val.dataOperacao) {
     ctx.addIssue({
       code: 'custom',
@@ -51,14 +51,12 @@ export const createPedidoSchema = z.object({
 export type CreatePedidoDto = z.infer<typeof createPedidoSchema>;
 
 export const incluirItemSchema = z.object({
-  itemComercialId: z.string().uuid(),
+  produtoId: z.string().uuid(),
   quantidade: z.coerce.number().positive(),
   observacoes: z.string().max(1000).optional(),
-});
+}).strict();
 
 export const confirmarCriacaoOverbookingSchema = createPedidoSchema;
-// Inclusão sempre cria uma nova linha. Aumento/redução de linha existente usa
-// os endpoints explícitos de alteração de item; não há itemId ambíguo aqui.
 export const confirmarInclusaoOverbookingSchema = incluirItemSchema;
 export type IncluirItemDto = z.infer<typeof incluirItemSchema>;
 export type ConfirmarInclusaoOverbookingDto =
@@ -67,31 +65,31 @@ export type ConfirmarInclusaoOverbookingDto =
 export const reduzirItemSchema = z.object({
   novaQuantidade: z.coerce.number().positive().max(9_999_999_999.999),
   motivo: z.string().trim().min(1).max(1000),
-});
+}).strict();
 
 export type ReduzirItemDto = z.infer<typeof reduzirItemSchema>;
 
 export const cancelarPedidoSchema = z.object({
   motivo: z.string().trim().min(1).max(1000),
-});
+}).strict();
 
 export type CancelarPedidoDto = z.infer<typeof cancelarPedidoSchema>;
 
 export const removerItemSchema = z.object({
   motivo: z.string().trim().min(1).max(1000),
-});
+}).strict();
 
 export type RemoverItemDto = z.infer<typeof removerItemSchema>;
 
 export const buscarPedidoAbertoSchema = z.object({
   clienteId: z.string().uuid(),
-  itemComercialId: z.string().uuid(),
+  produtoId: z.string().uuid(),
   dataOperacao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data da operação inválida — use o formato AAAA-MM-DD.'),
-});
+}).strict();
 
 export type BuscarPedidoAbertoDto = z.infer<typeof buscarPedidoAbertoSchema>;
 
 export const liberarReservaSchema = z.object({
   justificativa: z.string().trim().min(10, 'justificativa deve ter ao menos 10 caracteres').max(1000),
-});
+}).strict();
 export type LiberarReservaDto = z.infer<typeof liberarReservaSchema>;

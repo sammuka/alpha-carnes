@@ -52,13 +52,13 @@ export class AdendosService {
       const item = await this.pedidos.exigirItemDoPedido(
         tx,
         pedidoId,
-        dto.itemComercialId,
+        dto.produtoId,
         usuarioId,
       );
 
       // 1) Planejamento read-only. Assinatura real: (tx, operacaoId, itens).
       const [alocacao] = await this.pedidos.planejarSobLock(tx, pedido.operacaoId, [
-        { itemComercialId: dto.itemComercialId, quantidade: dto.quantidadeAdicionada },
+        { produtoId: dto.produtoId, quantidade: dto.quantidadeAdicionada },
       ]);
       if (!alocacao) throw new Error('planejarSobLock não devolveu alocação para o adendo');
 
@@ -92,7 +92,7 @@ export class AdendosService {
       const [adendo] = await tx.insert(adendosPedido).values({
         pedidoVendaId: pedido.id,
         pedidoVendaItemId: item.id,
-        itemComercialId: dto.itemComercialId,
+        produtoId: dto.produtoId,
         operacaoId: pedido.operacaoId,
         quantidadeAnterior: anterior,
         quantidadeAdicionada: formatarQtd(dto.quantidadeAdicionada),
@@ -119,7 +119,7 @@ export class AdendosService {
         payload: {
           adendoId: adendo.id,
           pedidoVendaId: pedido.id,
-          itemComercialId: dto.itemComercialId,
+          produtoId: dto.produtoId,
           quantidadeAdicionada: adendo.quantidadeAdicionada,
           origemConsumo: origemDoAdendo(alocacao),
         },

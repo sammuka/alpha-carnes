@@ -41,7 +41,7 @@ type Pendencia = typeof pendenciasOverbooking.$inferSelect;
 
 export interface CoberturaPendencia {
   pendenciaId: string;
-  itemComercialId: string;
+  produtoId: string;
   quantidadeDeficit: string;
   comprasComplementares: Array<{
     compraProgramadaId: string;
@@ -291,9 +291,9 @@ export class OverbookingService {
         JOIN compras_programadas_itens cpi
           ON cpi.compra_programada_id = cp.id AND cpi.deleted_at IS NULL
         JOIN regras_desdobramento_comercial r
-          ON r.item_compra_id = cpi.item_compra_id
+          ON r.produto_id = cpi.produto_id
          AND r.deleted_at IS NULL AND r.status = 'ativo'
-         AND r.item_comercial_id = ${pendencia.itemComercialId}
+         AND r.produto_id = ${pendencia.produtoId}
        WHERE cp.deleted_at IS NULL AND cp.status <> 'cancelada'
          AND op.data >= ${operacao.data}
        GROUP BY cp.id, cp.operacao_id, op.data, cp.status
@@ -314,7 +314,7 @@ export class OverbookingService {
         JOIN clientes c ON c.id = pv.cliente_id
        WHERE rd.status = 'ativa'
          AND rd.tipo_consumo IN ('fisico','virtual')
-         AND pvi.item_comercial_id = ${pendencia.itemComercialId}
+         AND pvi.produto_id = ${pendencia.produtoId}
          AND pv.operacao_id = ${pendencia.operacaoId}
          AND pv.id <> ${pendencia.pedidoVendaId}
          AND pv.deleted_at IS NULL AND pvi.deleted_at IS NULL
@@ -328,7 +328,7 @@ export class OverbookingService {
 
     return {
       pendenciaId: pendencia.id,
-      itemComercialId: pendencia.itemComercialId,
+      produtoId: pendencia.produtoId,
       quantidadeDeficit: pendencia.quantidadeDeficit,
       comprasComplementares: compras.rows.map((c: { compra_programada_id: string; operacao_id: string; data: string; status: string; quantidade_projetada: string }) => ({
         compraProgramadaId: c.compra_programada_id,
@@ -361,9 +361,9 @@ export class OverbookingService {
              EXISTS (
                SELECT 1 FROM compras_programadas_itens cpi
                JOIN regras_desdobramento_comercial r
-                 ON r.item_compra_id = cpi.item_compra_id
+                 ON r.produto_id = cpi.produto_id
                 AND r.deleted_at IS NULL AND r.status = 'ativo'
-                AND r.item_comercial_id = ${pendencia.itemComercialId}
+                AND r.produto_id = ${pendencia.produtoId}
                WHERE cpi.compra_programada_id = cp.id AND cpi.deleted_at IS NULL
              ) AS gera_item
         FROM compras_programadas cp
@@ -485,7 +485,7 @@ export class OverbookingService {
         nome: EVENTOS.RESERVA_ATUALIZADA,
         payload: {
           disponibilidadeId: doadora.disponibilidadeVirtualId,
-          itemComercialId: pendencia.itemComercialId,
+          produtoId: pendencia.produtoId,
           dataOperacao,
           quantidadeReservada: saldos.quantidadeReservada,
           quantidadeDisponivel: saldos.quantidadeDisponivel,
@@ -552,7 +552,7 @@ export class OverbookingService {
       observacoesGerais: motivo,
       salvarComoRascunho: false,
       itens: [{
-        itemComercialId: pendencia.itemComercialId,
+        produtoId: pendencia.produtoId,
         quantidadePedida: Number(dto.quantidade),
       }],
     }, usuarioId, true);
