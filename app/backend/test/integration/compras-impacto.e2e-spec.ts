@@ -49,7 +49,6 @@ describe('Compras — painel de impacto e edição confirmada', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         itens: [{ produtoId: tzId, quantidadePedida: 150 }],
-        confirmado: true,
       })
       .expect(201);
   });

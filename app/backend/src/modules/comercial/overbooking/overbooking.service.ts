@@ -285,17 +285,23 @@ export class OverbookingService {
       status: string; quantidade_projetada: string;
     }>(sql`
       SELECT cp.id AS compra_programada_id, cp.operacao_id, op.data, cp.status,
-             SUM(r.fator_quantidade * cpi.quantidade_comprada)::text AS quantidade_projetada
+             SUM(
+               CASE
+                 WHEN cpi.produto_id = ${pendencia.produtoId} THEN cpi.quantidade_comprada
+                 ELSE r.fator_quantidade * cpi.quantidade_comprada
+               END
+             )::text AS quantidade_projetada
         FROM compras_programadas cp
         JOIN operacoes op ON op.id = cp.operacao_id
         JOIN compras_programadas_itens cpi
           ON cpi.compra_programada_id = cp.id AND cpi.deleted_at IS NULL
-        JOIN regras_desdobramento_comercial r
-          ON r.produto_id = cpi.produto_id
+        LEFT JOIN regras_desdobramento_comercial r
+          ON r.produto_origem_id = cpi.produto_id
+         AND r.produto_destino_id = ${pendencia.produtoId}
          AND r.deleted_at IS NULL AND r.status = 'ativo'
-         AND r.produto_id = ${pendencia.produtoId}
        WHERE cp.deleted_at IS NULL AND cp.status <> 'cancelada'
          AND op.data >= ${operacao.data}
+         AND (cpi.produto_id = ${pendencia.produtoId} OR r.id IS NOT NULL)
        GROUP BY cp.id, cp.operacao_id, op.data, cp.status
        ORDER BY op.data ASC
     `);
@@ -360,11 +366,12 @@ export class OverbookingService {
       SELECT cp.operacao_id, op.data, op_pend.data AS data_pendencia,
              EXISTS (
                SELECT 1 FROM compras_programadas_itens cpi
-               JOIN regras_desdobramento_comercial r
-                 ON r.produto_id = cpi.produto_id
+               LEFT JOIN regras_desdobramento_comercial r
+                 ON r.produto_origem_id = cpi.produto_id
+                AND r.produto_destino_id = ${pendencia.produtoId}
                 AND r.deleted_at IS NULL AND r.status = 'ativo'
-                AND r.produto_id = ${pendencia.produtoId}
                WHERE cpi.compra_programada_id = cp.id AND cpi.deleted_at IS NULL
+                 AND (cpi.produto_id = ${pendencia.produtoId} OR r.id IS NOT NULL)
              ) AS gera_item
         FROM compras_programadas cp
         JOIN operacoes op ON op.id = cp.operacao_id
