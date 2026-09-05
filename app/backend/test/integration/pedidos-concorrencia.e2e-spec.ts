@@ -43,7 +43,7 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
       .send({
         dataOperacao,
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: total }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: total }],
       });
     const compraId = criar.body.id as string;
     await request(app.getHttpServer())
@@ -86,7 +86,7 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
       compraProgramadaId: string;
       clienteId: string;
       dataOperacao: string;
-      itens: Array<{ itemComercialId: string; quantidadePedida: number }>;
+      itens: Array<{ produtoId: string; quantidadePedida: number }>;
     },
   ): Promise<'ok' | 'challenge' | 'error'> {
     try {
@@ -110,7 +110,7 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
           compraProgramadaId: compraId,
           clienteId,
           dataOperacao: '2026-11-01',
-          itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 1 }],
+          itens: [{ produtoId: base.produtoId, quantidadePedida: 1 }],
         }),
       ),
     );
@@ -119,7 +119,7 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
     expect(resultados.filter((r) => r === 'challenge')).toHaveLength(N - T);
     expect(resultados.filter((r) => r === 'error')).toHaveLength(0);
 
-    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    const disp = await lerDisponibilidade(app, base.produtoId);
     expect(Number(disp!.quantidadeDisponivel)).toBe(0);
     expect(Number(disp!.quantidadeReservada)).toBe(T);
     expect(await somaReservasAtivas(disp!.id)).toBe(T);
@@ -139,7 +139,7 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
           compraProgramadaId: compraId,
           clienteId,
           dataOperacao: '2026-11-02',
-          itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: r }],
+          itens: [{ produtoId: base.produtoId, quantidadePedida: r }],
         }),
       ),
     );
@@ -151,7 +151,7 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
     // Cada sucesso consome 3; cabem floor(10/3)=3 sucessos se todos pedem 3.
     expect(ok).toBeLessThanOrEqual(Math.floor(T / r));
 
-    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    const disp = await lerDisponibilidade(app, base.produtoId);
     expect(Number(disp!.quantidadeDisponivel)).toBeGreaterThanOrEqual(0);
     expect(Number(disp!.quantidadeReservada)).toBe(ok * r);
     expect(await somaReservasAtivas(disp!.id)).toBe(ok * r);
@@ -167,14 +167,14 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
           compraProgramadaId: compraId,
           clienteId,
           dataOperacao: '2026-11-03',
-          itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 4 }],
+          itens: [{ produtoId: base.produtoId, quantidadePedida: 4 }],
         }),
       ),
     );
     expect(resultados.filter((r) => r === 'ok')).toHaveLength(2);
     expect(resultados.filter((r) => r === 'challenge')).toHaveLength(1);
 
-    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    const disp = await lerDisponibilidade(app, base.produtoId);
     expect(Number(disp!.quantidadeDisponivel)).toBe(2);
     expect(Number(disp!.quantidadeReservada)).toBe(8);
   }, 60000);

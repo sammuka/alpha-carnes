@@ -32,7 +32,7 @@ describe('Compras programadas e2e (CRUD + RBAC + edição de item)', () => {
   const novaCompra = (over: Record<string, unknown> = {}) => ({
     dataOperacao: '2026-06-06',
     fornecedorId: base.fornecedorId,
-    itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 10 }],
+    itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 10 }],
     ...over,
   });
 
@@ -102,7 +102,7 @@ describe('Compras programadas e2e (CRUD + RBAC + edição de item)', () => {
     expect(editar.body.item.observacoes).toBe('ajuste do fornecedor');
     expect(editar.body.impacto.exigeConfirmacao).toBe(false);
 
-    const dv = await lerDisponibilidade(app, base.itemComercialId);
+    const dv = await lerDisponibilidade(app, base.produtoId);
     expect(Number(dv?.quantidadeTotalGerada)).toBe(99 * base.fator);
   });
 

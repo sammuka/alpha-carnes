@@ -4,7 +4,7 @@ import { fetchBackend } from '@/lib/api';
 interface PedidoAberto {
   pedidoId: string;
   status: string;
-  itemComercialId: string;
+  produtoId: string;
   quantidadeAtual: string;
 }
 

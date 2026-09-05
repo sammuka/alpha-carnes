@@ -28,6 +28,7 @@ out/
 
 # Coverage
 coverage/
+**/cov-output.txt
 
 # Logs
 *.log

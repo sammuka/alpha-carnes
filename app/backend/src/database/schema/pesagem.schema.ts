@@ -2,7 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import { boolean, check, index, integer, jsonb, numeric, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { comprasProgramadas } from './compras-programadas.schema';
 import { recebimentos } from './recebimentos.schema';
-import { itensComerciais } from './itens-comerciais.schema';
+import { produtos } from './produtos.schema';
 import { pedidosVenda, pedidosVendaItens } from './pedidos.schema';
 import { usuarios } from './auth.schema';
 
@@ -17,7 +17,7 @@ export const pecas = pgTable(
     id:                     uuid('id').primaryKey().default(sql`uuidv7()`),
     compraProgramadaId:     uuid('compra_programada_id').notNull().references(() => comprasProgramadas.id),
     recebimentoId:          uuid('recebimento_id').notNull().references(() => recebimentos.id),
-    itemComercialBaseId:    uuid('item_comercial_base_id').notNull().references(() => itensComerciais.id),
+    produtoBaseId:          uuid('produto_base_id').notNull().references(() => produtos.id),
     classificacaoOperacional: text('classificacao_operacional'),
     pesoOriginal:           numeric('peso_original', { precision: 10, scale: 3 }).notNull(),
     dataHoraPesagem:        timestamp('data_hora_pesagem', { withTimezone: true }).notNull().defaultNow(),
@@ -141,9 +141,9 @@ export const pecasRelations = relations(pecas, ({ one, many }) => ({
     fields: [pecas.recebimentoId],
     references: [recebimentos.id],
   }),
-  itemComercialBase: one(itensComerciais, {
-    fields: [pecas.itemComercialBaseId],
-    references: [itensComerciais.id],
+  produtoBase: one(produtos, {
+    fields: [pecas.produtoBaseId],
+    references: [produtos.id],
   }),
   pedido: one(pedidosVenda, {
     fields: [pecas.pedidoVendaId],

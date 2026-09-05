@@ -41,7 +41,7 @@ type Pendencia = typeof pendenciasOverbooking.$inferSelect;
 
 export interface CoberturaPendencia {
   pendenciaId: string;
-  itemComercialId: string;
+  produtoId: string;
   quantidadeDeficit: string;
   comprasComplementares: Array<{
     compraProgramadaId: string;
@@ -285,17 +285,23 @@ export class OverbookingService {
       status: string; quantidade_projetada: string;
     }>(sql`
       SELECT cp.id AS compra_programada_id, cp.operacao_id, op.data, cp.status,
-             SUM(r.fator_quantidade * cpi.quantidade_comprada)::text AS quantidade_projetada
+             SUM(
+               CASE
+                 WHEN cpi.produto_id = ${pendencia.produtoId} THEN cpi.quantidade_comprada
+                 ELSE r.fator_quantidade * cpi.quantidade_comprada
+               END
+             )::text AS quantidade_projetada
         FROM compras_programadas cp
         JOIN operacoes op ON op.id = cp.operacao_id
         JOIN compras_programadas_itens cpi
           ON cpi.compra_programada_id = cp.id AND cpi.deleted_at IS NULL
-        JOIN regras_desdobramento_comercial r
-          ON r.item_compra_id = cpi.item_compra_id
+        LEFT JOIN regras_desdobramento_comercial r
+          ON r.produto_origem_id = cpi.produto_id
+         AND r.produto_destino_id = ${pendencia.produtoId}
          AND r.deleted_at IS NULL AND r.status = 'ativo'
-         AND r.item_comercial_id = ${pendencia.itemComercialId}
        WHERE cp.deleted_at IS NULL AND cp.status <> 'cancelada'
          AND op.data >= ${operacao.data}
+         AND (cpi.produto_id = ${pendencia.produtoId} OR r.id IS NOT NULL)
        GROUP BY cp.id, cp.operacao_id, op.data, cp.status
        ORDER BY op.data ASC
     `);
@@ -314,7 +320,7 @@ export class OverbookingService {
         JOIN clientes c ON c.id = pv.cliente_id
        WHERE rd.status = 'ativa'
          AND rd.tipo_consumo IN ('fisico','virtual')
-         AND pvi.item_comercial_id = ${pendencia.itemComercialId}
+         AND pvi.produto_id = ${pendencia.produtoId}
          AND pv.operacao_id = ${pendencia.operacaoId}
          AND pv.id <> ${pendencia.pedidoVendaId}
          AND pv.deleted_at IS NULL AND pvi.deleted_at IS NULL
@@ -328,7 +334,7 @@ export class OverbookingService {
 
     return {
       pendenciaId: pendencia.id,
-      itemComercialId: pendencia.itemComercialId,
+      produtoId: pendencia.produtoId,
       quantidadeDeficit: pendencia.quantidadeDeficit,
       comprasComplementares: compras.rows.map((c: { compra_programada_id: string; operacao_id: string; data: string; status: string; quantidade_projetada: string }) => ({
         compraProgramadaId: c.compra_programada_id,
@@ -360,11 +366,12 @@ export class OverbookingService {
       SELECT cp.operacao_id, op.data, op_pend.data AS data_pendencia,
              EXISTS (
                SELECT 1 FROM compras_programadas_itens cpi
-               JOIN regras_desdobramento_comercial r
-                 ON r.item_compra_id = cpi.item_compra_id
+               LEFT JOIN regras_desdobramento_comercial r
+                 ON r.produto_origem_id = cpi.produto_id
+                AND r.produto_destino_id = ${pendencia.produtoId}
                 AND r.deleted_at IS NULL AND r.status = 'ativo'
-                AND r.item_comercial_id = ${pendencia.itemComercialId}
                WHERE cpi.compra_programada_id = cp.id AND cpi.deleted_at IS NULL
+                 AND (cpi.produto_id = ${pendencia.produtoId} OR r.id IS NOT NULL)
              ) AS gera_item
         FROM compras_programadas cp
         JOIN operacoes op ON op.id = cp.operacao_id
@@ -485,7 +492,7 @@ export class OverbookingService {
         nome: EVENTOS.RESERVA_ATUALIZADA,
         payload: {
           disponibilidadeId: doadora.disponibilidadeVirtualId,
-          itemComercialId: pendencia.itemComercialId,
+          produtoId: pendencia.produtoId,
           dataOperacao,
           quantidadeReservada: saldos.quantidadeReservada,
           quantidadeDisponivel: saldos.quantidadeDisponivel,
@@ -552,7 +559,7 @@ export class OverbookingService {
       observacoesGerais: motivo,
       salvarComoRascunho: false,
       itens: [{
-        itemComercialId: pendencia.itemComercialId,
+        produtoId: pendencia.produtoId,
         quantidadePedida: Number(dto.quantidade),
       }],
     }, usuarioId, true);

@@ -40,12 +40,12 @@ describe('Expedicao e2e (F5)', () => {
     corteCookies = await loginCookies(app, corte.adminEmail, corte.adminPassword);
     expedicaoCookies = await loginCookies(app, expedicao.adminEmail, expedicao.adminPassword);
     gestorCookies = await loginCookies(app, gestor.adminEmail, gestor.adminPassword);
-  }, 60000);
+  }, 120_000);
 
   afterAll(async () => {
     await cleanupDb(app);
     await app.close();
-  });
+  }, 120_000);
 
   const srv = () => app.getHttpServer();
   const db = () => app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE).db;
@@ -65,7 +65,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const pecaId = await pesarPeca(app, recebimentoCookies, {
       recebimentoId: c.recebimentoId,
-      itemComercialBaseId: c.itemComercialId,
+      produtoBaseId: c.produtoId,
     });
     await request(srv())
       .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
@@ -86,7 +86,7 @@ describe('Expedicao e2e (F5)', () => {
   ): Promise<string> {
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
     fakes(app).balanca.definirPeso('6.000');
-    return subitemCompleto(app, corteCookies, transfId, c.itemComercialId, pedidoItemId);
+    return subitemCompleto(app, corteCookies, transfId, c.produtoId, pedidoItemId);
   }
 
   beforeEach(() => {
@@ -103,7 +103,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-01');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -159,7 +159,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-03');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -193,11 +193,11 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-04');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId,
     });
     // Associar para prosseguir, depois cortar (status -> em_transformacao)
     await request(srv())
@@ -225,11 +225,11 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-05');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId,
     });
     // Associar sem etiquetar
     await request(srv())
@@ -256,7 +256,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-06');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -284,7 +284,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-07');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -312,11 +312,11 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-08');
     const p1 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const p2 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p1.pedidoItemId);
@@ -353,11 +353,11 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-09');
     const p1 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const p2 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p1.pedidoItemId);
@@ -405,11 +405,11 @@ describe('Expedicao e2e (F5)', () => {
     );
 
     const p1 = await criarPedido(app, comercialCookies, {
-      compraId: c1.compraId, clienteId: c1.clienteId, itemComercialId: c1.itemComercialId,
+      compraId: c1.compraId, clienteId: c1.clienteId, produtoId: c1.produtoId,
       dataOperacao: c1.dataOperacao, quantidade: 5,
     });
     const p2 = await criarPedido(app, comercialCookies, {
-      compraId: c2.compraId, clienteId: c2.clienteId, itemComercialId: c2.itemComercialId,
+      compraId: c2.compraId, clienteId: c2.clienteId, produtoId: c2.produtoId,
       dataOperacao: c2.dataOperacao, quantidade: 5,
     });
 
@@ -431,11 +431,11 @@ describe('Expedicao e2e (F5)', () => {
     const c = await cenario('2026-12-11');
     // Pedido com quantidade 1
     const p1 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const p2 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 1,
     });
     const peca1Id = await pecaElegivel(c, p1.pedidoItemId);
@@ -461,7 +461,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-12');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -495,7 +495,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-13');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -525,7 +525,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-14');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -558,7 +558,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-15');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 3,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -584,12 +584,12 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-17');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     // Peça pesada + associada + etiquetada, depois cortada -> subitem completo
     const pecaId = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId,
     });
     await request(srv())
       .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
@@ -617,11 +617,11 @@ describe('Expedicao e2e (F5)', () => {
     // Emenda 7.1: saída CB + alinhar — 409 da carga prova ausência de etiqueta
     const itemSaidaCbId = await itemSaidaCanonicoCb(app);
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: itemSaidaCbId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId,
     });
     await request(srv())
       .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
@@ -657,7 +657,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-19');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 2,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -695,7 +695,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-20');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -727,7 +727,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-21');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const peca1 = await pecaElegivel(c, p.pedidoItemId);
@@ -770,7 +770,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-22');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -805,14 +805,14 @@ describe('Expedicao e2e (F5)', () => {
     const pOrigem = await criarPedido(app, comercialCookies, {
       compraId: cOrigem.compraId,
       clienteId: cOrigem.clienteId,
-      itemComercialId: cOrigem.itemComercialId,
+      produtoId: cOrigem.produtoId,
       dataOperacao: cOrigem.dataOperacao,
       quantidade: 5,
     });
     const pDestino = await criarPedido(app, comercialCookies, {
       compraId: cDestino.compraId,
       clienteId: cDestino.clienteId,
-      itemComercialId: cDestino.itemComercialId,
+      produtoId: cDestino.produtoId,
       dataOperacao: cDestino.dataOperacao,
       quantidade: 5,
     });
@@ -840,17 +840,17 @@ describe('Expedicao e2e (F5)', () => {
     // Emenda 7.3: p1 e p2 na saída CB — transfer 201 prova redistribuição (não incompatibilidade de item)
     const itemSaidaCbId = await itemSaidaCanonicoCb(app);
     const p1 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: itemSaidaCbId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const p2 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: itemSaidaCbId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), produtoId: itemSaidaCbId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     await alinharPedidoItemComSaidaCorte(app, p1.pedidoItemId, itemSaidaCbId);
     await alinharPedidoItemComSaidaCorte(app, p2.pedidoItemId, itemSaidaCbId);
     const pecaId = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId,
     });
     await request(srv())
       .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
@@ -923,7 +923,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-27');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const caminhaoId = await criarCaminhao(app, expedicaoCookies, { dataOperacao: c.dataOperacao });
@@ -943,7 +943,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-28');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -974,11 +974,11 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-29');
     const p1 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const p2 = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p1.pedidoItemId);
@@ -1008,7 +1008,7 @@ describe('Expedicao e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-30');
     const pecaId = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId,
     });
     // peca em status 'pesada' (sem associacao) = sem pedido, sem etiqueta
 

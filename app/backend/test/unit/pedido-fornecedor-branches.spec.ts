@@ -200,7 +200,7 @@ describe('PedidoFornecedorService — branches', () => {
       numero: '1',
       serie: '1',
       dataEmissao: '2026-07-01',
-      itens: [{ itemComercialId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
+      itens: [{ produtoId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
       confirmarSubstituicaoCabecalho: false,
     };
     await expect(service(db).registrarNf('pf-1', nfBase, 'user-1'))
@@ -228,7 +228,7 @@ describe('PedidoFornecedorService — branches', () => {
       serie: '1',
       dataEmissao: '2026-07-01',
       recebimentoId: '019ea000-0000-7000-8000-0000000000rc',
-      itens: [{ itemComercialId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
+      itens: [{ produtoId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
       confirmarSubstituicaoCabecalho: false,
     }, 'user-1')).rejects.toBeInstanceOf(NotFoundException);
   });
@@ -270,7 +270,7 @@ describe('PedidoFornecedorService — branches', () => {
         select: jest.fn().mockReturnValue({
           from: () => ({
             where: () => Promise.resolve([
-              { itemComercialId: 'ic-1', quantidadePrevista: '10.000' },
+              { produtoId: 'ic-1', quantidadePrevista: '10.000' },
             ]),
           }),
         }),
@@ -360,7 +360,7 @@ describe('PedidoFornecedorService — branches', () => {
       pesoTotalDeclarado: 100,
       payload: { origem: 'teste' },
       itens: [{
-        itemComercialId: '019ea000-0000-7000-8000-0000000000ic',
+        produtoId: '019ea000-0000-7000-8000-0000000000ic',
         quantidadeDeclarada: 1,
         pesoDeclarado: 10,
       }],
@@ -394,7 +394,7 @@ describe('PedidoFornecedorService — branches', () => {
       numero: '1',
       serie: '1',
       dataEmissao: '2026-07-01',
-      itens: [{ itemComercialId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
+      itens: [{ produtoId: '019ea000-0000-7000-8000-0000000000ic', quantidadeDeclarada: 1 }],
       confirmarSubstituicaoCabecalho: false,
     }, 'user-1')).rejects.toBeInstanceOf(ConflictException);
   });

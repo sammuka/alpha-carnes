@@ -74,13 +74,13 @@ interface PedidoEditorProps {
 }
 
 interface ItemNovo {
-  itemComercialId: string;
+  produtoId: string;
   quantidadePedida: number;
 }
 
 interface AdendoPendente {
   pedido: PedidoAbertoExistente;
-  itemComercialId: string;
+  produtoId: string;
   quantidadeAdicionar: number;
 }
 
@@ -171,8 +171,8 @@ export function PedidoEditor({
   const operacaoSelecionada = operacoes.find((operacao) => operacao.id === operacaoId);
   const produtosAusentes = useMemo(() => {
     const ids = new Set([
-      ...(pedido?.itens.map((item) => item.itemComercialId) ?? []),
-      ...itensNovos.map((item) => item.itemComercialId),
+      ...(pedido?.itens.map((item) => item.produtoId) ?? []),
+      ...itensNovos.map((item) => item.produtoId),
     ]);
     return produtos.filter((produto) => !ids.has(produto.id));
   }, [itensNovos, pedido, produtos]);
@@ -281,10 +281,10 @@ export function PedidoEditor({
         message: 'Pedido aberto selecionado para adendo.',
         pedidoId: pedido.id,
         status: pedido.status,
-        itemComercialId: item.itemComercialId,
+        produtoId: item.produtoId,
         quantidadeAtual: item.quantidadePedida,
       },
-      itemComercialId: item.itemComercialId,
+      produtoId: item.produtoId,
       quantidadeAdicionar: nova - atual,
     });
   }
@@ -301,7 +301,7 @@ export function PedidoEditor({
   async function confirmarAdendo(motivo: string) {
     if (!adendo) return;
     const body = JSON.stringify({
-      itemComercialId: adendo.itemComercialId,
+      produtoId: adendo.produtoId,
       quantidadeAdicionada: adendo.quantidadeAdicionar,
       motivo,
     });
@@ -330,14 +330,14 @@ export function PedidoEditor({
     }
     if (!pedido) {
       setItensNovos((atuais) => [...atuais, {
-        itemComercialId: produtoNovo,
+        produtoId: produtoNovo,
         quantidadePedida: quantidade,
       }]);
       setProdutoNovo('');
       setQuantidadeNova('1');
       return;
     }
-    const body = JSON.stringify({ itemComercialId: produtoNovo, quantidade });
+    const body = JSON.stringify({ produtoId: produtoNovo, quantidade });
     const ok = await mutar(
       `/api/comercial/pedidos/${pedido.id}/itens`,
       { method: 'POST', body },
@@ -434,14 +434,14 @@ export function PedidoEditor({
 
       if (response.status === 409 && dados?.code === 'PEDIDO_ABERTO_EXISTENTE') {
         const conflitos = Array.isArray(dados.conflitos)
-          ? dados.conflitos as Array<{ itemComercialId?: string }>
+          ? dados.conflitos as Array<{ produtoId?: string }>
           : [];
-        const itemComercialId = conflitos[0]?.itemComercialId ?? itensNovos[0]?.itemComercialId;
-        const item = itensNovos.find((entry) => entry.itemComercialId === itemComercialId);
-        if (itemComercialId && item) {
+        const produtoId = conflitos[0]?.produtoId ?? itensNovos[0]?.produtoId;
+        const item = itensNovos.find((entry) => entry.produtoId === produtoId);
+        if (produtoId && item) {
           const query = new URLSearchParams({
             clienteId: payload.clienteId,
-            itemComercialId,
+            produtoId,
             dataOperacao: payload.dataOperacao ?? '',
           });
           const abertoResponse = await fetch(`/api/comercial/pedidos/aberto?${query.toString()}`, {
@@ -452,7 +452,7 @@ export function PedidoEditor({
             setFecharAposAdendo(true);
             setAdendo({
               pedido: aberto,
-              itemComercialId,
+              produtoId,
               quantidadeAdicionar: item.quantidadePedida,
             });
             return;
@@ -596,9 +596,9 @@ export function PedidoEditor({
               </TableHeader>
               <TableBody>
                 {itensRenderizados.map((item) => {
-                  const produto = produtos.find((entry) => entry.id === item.itemComercialId);
-                  const nome = item.itemComercial?.nome
-                    ?? item.itemComercial?.descricao
+                  const produto = produtos.find((entry) => entry.id === item.produtoId);
+                  const nome = item.produto?.nome
+                    ?? item.produto?.descricao
                     ?? nomeProduto(produto);
                   return (
                     <TableRow key={item.id} data-testid={`linha-${item.id}`} className="group">
@@ -654,8 +654,8 @@ export function PedidoEditor({
           <CardContent className="pt-0">
             <ul className="divide-y divide-border rounded-lg border border-border">
               {itensNovos.map((item) => (
-                <li key={item.itemComercialId} className="flex items-center justify-between px-3 py-2 text-sm">
-                  <span>{nomeProduto(produtos.find((produto) => produto.id === item.itemComercialId))}</span>
+                <li key={item.produtoId} className="flex items-center justify-between px-3 py-2 text-sm">
+                  <span>{nomeProduto(produtos.find((produto) => produto.id === item.produtoId))}</span>
                   <span className="font-data">{item.quantidadePedida}</span>
                 </li>
               ))}

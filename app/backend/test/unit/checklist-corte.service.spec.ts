@@ -224,11 +224,11 @@ describe('ChecklistCorteService', () => {
         },
       ],
       [
-        { itemComercialId: 'ic-cb' },
-        { itemComercialId: 'ic-jac' },
-        { itemComercialId: 'ic-jac' }, // parcial→completo no JAC? wait 2>1 excedente
-        { itemComercialId: 'ic-ex' },
-        { itemComercialId: 'ic-ex' },
+        { produtoId: 'ic-cb' },
+        { produtoId: 'ic-jac' },
+        { produtoId: 'ic-jac' }, // parcial→completo no JAC? wait 2>1 excedente
+        { produtoId: 'ic-ex' },
+        { produtoId: 'ic-ex' },
       ],
       [{ id: 'div-aberta' }],
     ];
@@ -269,7 +269,7 @@ describe('ChecklistCorteService', () => {
           legado: 'ic-cb',
         },
       ],
-      [{ itemComercialId: 'ic-cb' }],
+      [{ produtoId: 'ic-cb' }],
       [],
     ];
     let idx = 0;

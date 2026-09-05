@@ -53,24 +53,24 @@ describe('PainelDesossaService', () => {
         { id: 'prod-cb', legado: 'ic-cb' },
         { id: 'prod-sem', legado: null },
       ],
-      // contextoCargaPorItemComercial — 2 linhas mesmo item (2ª ignorada)
+      // contextoCargaPorproduto — 2 linhas mesmo item (2ª ignorada)
       [
         {
-          itemComercialId: 'ic-cb',
+          produtoId: 'ic-cb',
           rotaCaminhao: 'Centro',
           rotaPrevista: null,
           horaAbertura: new Date('2026-07-31T14:30:00.000Z'),
           representanteNome: 'Sabrina',
         },
         {
-          itemComercialId: 'ic-cb',
+          produtoId: 'ic-cb',
           rotaCaminhao: 'Outra',
           rotaPrevista: null,
           horaAbertura: new Date('2026-07-31T15:00:00.000Z'),
           representanteNome: 'Outro',
         },
         {
-          itemComercialId: 'ic-rota-so',
+          produtoId: 'ic-rota-so',
           rotaCaminhao: null,
           rotaPrevista: 'Sul',
           horaAbertura: null,
@@ -123,7 +123,7 @@ describe('PainelDesossaService', () => {
     const faltas = { listarFaltas: jest.fn().mockResolvedValue([]) };
     let selectIdx = 0;
     const responses: unknown[][] = [
-      // sem faltas → pula produtos e contexto (itemComercialIds vazio)
+      // sem faltas → pula produtos e contexto (produtoIds vazio)
       // tzsNaDesossa com n inválido
       [{ n: 'x' }],
       // regras vazias
@@ -159,7 +159,7 @@ describe('PainelDesossaService', () => {
       [{ id: 'prod-cb', legado: 'ic-cb' }],
       [
         {
-          itemComercialId: 'ic-cb',
+          produtoId: 'ic-cb',
           rotaCaminhao: 'Leste',
           rotaPrevista: null,
           horaAbertura: null,
@@ -205,7 +205,7 @@ describe('PainelDesossaService', () => {
       [{ id: 'prod-cb', legado: 'ic-cb' }],
       [
         {
-          itemComercialId: 'ic-cb',
+          produtoId: 'ic-cb',
           rotaCaminhao: null,
           rotaPrevista: null,
           horaAbertura: null,

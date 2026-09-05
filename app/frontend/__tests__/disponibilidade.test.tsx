@@ -27,7 +27,7 @@ const disponibilidades = [
     id: 'd1',
     compraProgramadaId: 'cp-1',
     operacaoId: 'operacao-1',
-    itemComercialId: 'item-1',
+    produtoId: 'item-1',
     dataOperacao: '2026-06-07',
     quantidadeTotalGerada: '40.000',
     quantidadeReservada: '0.000',
@@ -56,7 +56,7 @@ describe('DisponibilidadePage', () => {
       }
       if (url === '/api/comercial/disponibilidade/mapa?operacaoId=operacao-1') {
         return resposta([{
-          itemComercialId: 'item-1',
+          produtoId: 'item-1',
           codigo: 'TZ',
           descricao: 'Traseiro Bovino',
           provisorio: true,

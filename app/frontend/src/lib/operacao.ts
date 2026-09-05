@@ -45,7 +45,7 @@ export type TipoDivergencia = (typeof TIPOS_DIVERGENCIA)[number];
 
 export interface RecebimentoItem {
   id: string;
-  itemComercialId: string;
+  produtoId: string;
   origemDescricao: string | null;
   quantidadeEsperada: string;
   quantidadeRecebida: string;
@@ -56,7 +56,7 @@ export interface RecebimentoItem {
   pesoApurado?: string | null;
   statusApuracao: StatusApuracaoItem;
   observacoes: string | null;
-  itemComercial?: { id: string; codigo: string; descricao: string };
+  produto?: { id: string; codigo: string; descricao: string };
 }
 
 export interface DivergenciaRecebimento {
@@ -129,7 +129,7 @@ export interface RecebimentoResumo {
 }
 
 export interface PrevisaoItemOperacional {
-  itemComercialId: string;
+  produtoId: string;
   produtoCodigo: string;
   produtoDescricao: string;
   quantidadePrevista: string;
@@ -212,7 +212,7 @@ export type StatusPeca = 'pesada' | 'associada' | 'em_sobra' | 'em_analise' | 'p
 export interface Peca {
   id: string;
   recebimentoId: string;
-  itemComercialBaseId: string;
+  produtoBaseId: string;
   pesoOriginal: string;
   modoCapturaPeso: ModoCaptura;
   statusPeca: StatusPeca;
@@ -227,7 +227,7 @@ export interface Peca {
 export interface SugestaoScored {
   pedidoVendaId: string;
   pedidoVendaItemId: string;
-  itemComercialId: string;
+  produtoId: string;
   clienteId: string;
   saldoPendente: string;
   prioridade: number | null;
@@ -300,7 +300,7 @@ export interface Subitem {
   id: string;
   transformacaoId: string;
   pecaOrigemId: string;
-  itemComercialId: string;
+  produtoId: string;
   peso: string | null;
   quantidade: string;
   statusSubitem: StatusSubitem;
@@ -425,7 +425,7 @@ export interface PedidoFornecedor {
 export interface PedidoFornecedorItem {
   id: string;
   pedidoFornecedorId: string;
-  itemComercialId: string;
+  produtoId: string;
   quantidadePrevista: string;
   pesoPrevisto: string | null;
 }
@@ -454,7 +454,7 @@ export interface CriarPedidoFornecedorDto {
 
 export interface QuadroConferenciaItem {
   recebimentoItemId: string | null;
-  itemComercialId: string;
+  produtoId: string;
   previstoNoPedido: boolean;
   qtdPedido: string | null;
   qtdNf: string;

@@ -144,37 +144,45 @@ describe('Onda 12 — domínio de campos', () => {
     expect(okProduto.status).toBe(201);
     expect(okProduto.body.unidadePedido).toBe('kg');
 
-    const livreCompra = await request(srv()).post('/itens-compra').set('Cookie', adminCookies).send({
+    const livreCompra = await request(srv()).post('/produtos').set('Cookie', adminCookies).send({
       codigo: uid('ICO'),
-      descricao: 'Item livre',
-      unidadeCompra: 'peca',
+      nome: 'Item livre',
+      unidadePedido: 'peca',
+      tipoOperacional: 'compra_base',
+      ativoCompra: true,
+      ativoVenda: false,
     });
     expect(livreCompra.status).toBe(400);
 
-    const okCompra = await request(srv()).post('/itens-compra').set('Cookie', adminCookies).send({
+    const okCompra = await request(srv()).post('/produtos').set('Cookie', adminCookies).send({
       codigo: uid('ICO'),
-      descricao: 'Item unidade',
-      unidadeCompra: 'unidade',
+      nome: 'Item unidade',
+      unidadePedido: 'unidade',
+      tipoOperacional: 'compra_base',
+      ativoCompra: true,
+      ativoVenda: false,
     });
     expect(okCompra.status).toBe(201);
-    expect(okCompra.body.unidadeCompra).toBe('unidade');
+    expect(okCompra.body.unidadePedido).toBe('unidade');
 
-    const livreComercial = await request(srv()).post('/itens-comerciais').set('Cookie', adminCookies)
+    const livreComercial = await request(srv()).post('/produtos').set('Cookie', adminCookies)
       .send({
         codigo: uid('ICM'),
-        descricao: 'Item litro',
-        unidadeComercial: 'litro',
+        nome: 'Item litro',
+        unidadePedido: 'litro',
+        ativoVenda: true,
       });
     expect(livreComercial.status).toBe(400);
 
-    const okComercial = await request(srv()).post('/itens-comerciais').set('Cookie', adminCookies)
+    const okComercial = await request(srv()).post('/produtos').set('Cookie', adminCookies)
       .send({
         codigo: uid('ICM'),
-        descricao: 'Item kg',
-        unidadeComercial: 'kg',
+        nome: 'Item kg',
+        unidadePedido: 'kg',
+        ativoVenda: true,
       });
     expect(okComercial.status).toBe(201);
-    expect(okComercial.body.unidadeComercial).toBe('kg');
+    expect(okComercial.body.unidadePedido).toBe('kg');
   });
 
   it('DoD 12.9 rejeita UF fora do enum em cliente e caminhão', async () => {
@@ -259,20 +267,29 @@ describe('Onda 12 — domínio de campos', () => {
         },
       },
       {
-        endpoint: '/itens-compra',
+        endpoint: '/produtos',
+        queryExtra: 'ativoCompra=true',
         buscaUnica: uid('BUSCAICO'),
         criarAtivo: async (busca: string) => {
-          const res = await request(srv()).post('/itens-compra').set('Cookie', adminCookies).send({
-            codigo: busca, descricao: `${busca} ativo`, unidadeCompra: 'unidade',
+          const res = await request(srv()).post('/produtos').set('Cookie', adminCookies).send({
+            codigo: busca,
+            nome: `${busca} ativo`,
+            unidadePedido: 'unidade',
+            tipoOperacional: 'compra_base',
+            ativoCompra: true,
+            ativoVenda: false,
           });
           expect(res.status).toBe(201);
           return res.body.id as string;
         },
         criarInativo: async (busca: string) => {
-          const res = await request(srv()).post('/itens-compra').set('Cookie', adminCookies).send({
+          const res = await request(srv()).post('/produtos').set('Cookie', adminCookies).send({
             codigo: `${busca}-IN`,
-            descricao: `${busca} inativo`,
-            unidadeCompra: 'unidade',
+            nome: `${busca} inativo`,
+            unidadePedido: 'unidade',
+            tipoOperacional: 'compra_base',
+            ativoCompra: true,
+            ativoVenda: false,
             status: 'inativo',
           });
           expect(res.status).toBe(201);
@@ -280,20 +297,22 @@ describe('Onda 12 — domínio de campos', () => {
         },
       },
       {
-        endpoint: '/itens-comerciais',
+        endpoint: '/produtos',
+        queryExtra: 'ativoVenda=true',
         buscaUnica: uid('BUSCAICM'),
         criarAtivo: async (busca: string) => {
-          const res = await request(srv()).post('/itens-comerciais').set('Cookie', adminCookies)
-            .send({ codigo: busca, descricao: `${busca} ativo`, unidadeComercial: 'kg' });
+          const res = await request(srv()).post('/produtos').set('Cookie', adminCookies)
+            .send({ codigo: busca, nome: `${busca} ativo`, unidadePedido: 'kg', ativoVenda: true });
           expect(res.status).toBe(201);
           return res.body.id as string;
         },
         criarInativo: async (busca: string) => {
-          const res = await request(srv()).post('/itens-comerciais').set('Cookie', adminCookies)
+          const res = await request(srv()).post('/produtos').set('Cookie', adminCookies)
             .send({
               codigo: `${busca}-IN`,
-              descricao: `${busca} inativo`,
-              unidadeComercial: 'kg',
+              nome: `${busca} inativo`,
+              unidadePedido: 'kg',
+              ativoVenda: true,
               status: 'inativo',
             });
           expect(res.status).toBe(201);
@@ -306,7 +325,7 @@ describe('Onda 12 — domínio de campos', () => {
       const ativoId = await caso.criarAtivo(caso.buscaUnica);
       const inativoId = await caso.criarInativo(caso.buscaUnica);
       const response = await request(app.getHttpServer())
-        .get(`${caso.endpoint}?page=1&pageSize=100&status=ativo&search=${caso.buscaUnica}`)
+        .get(`${caso.endpoint}?page=1&pageSize=100&status=ativo&search=${caso.buscaUnica}${'queryExtra' in caso ? `&${caso.queryExtra}` : ''}`)
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
@@ -318,16 +337,27 @@ describe('Onda 12 — domínio de campos', () => {
   });
 
   async function basePedido() {
-    const itemCompra = await request(srv()).post('/itens-compra').set('Cookie', adminCookies).send({
-      codigo: uid('ICO'), descricao: 'Boi O12', unidadeCompra: 'unidade',
+    const produtoCompra = await request(srv()).post('/produtos').set('Cookie', adminCookies).send({
+      codigo: uid('ICO'),
+      nome: 'Boi O12',
+      unidadePedido: 'unidade',
+      tipoOperacional: 'compra_base',
+      ativoCompra: true,
+      ativoVenda: false,
     });
-    const itemComercial = await request(srv()).post('/itens-comerciais').set('Cookie', adminCookies)
-      .send({ codigo: uid('ICM'), descricao: 'Dianteiro O12', unidadeComercial: 'kg' });
-    expect(itemCompra.status).toBe(201);
-    expect(itemComercial.status).toBe(201);
+    const produto = await request(srv()).post('/produtos').set('Cookie', adminCookies)
+      .send({
+        codigo: uid('ICM'),
+        nome: 'Dianteiro O12',
+        unidadePedido: 'kg',
+        ativoVenda: true,
+        ativoCompra: true,
+      });
+    expect(produtoCompra.status).toBe(201);
+    expect(produto.status).toBe(201);
     const regra = await request(srv()).post('/regras-desdobramento').set('Cookie', adminCookies).send({
-      itemCompraId: itemCompra.body.id,
-      itemComercialId: itemComercial.body.id,
+      produtoOrigemId: produtoCompra.body.id,
+      produtoDestinoId: produto.body.id,
       fatorQuantidade: 1,
       vigenciaInicio: '2026-01-01T00:00:00.000Z',
     });
@@ -343,12 +373,12 @@ describe('Onda 12 — domínio de campos', () => {
     const compraId = await criarCompraConfirmada(
       app,
       comprasCookies,
-      { fornecedorId: fornecedor.body.id, itemCompraId: itemCompra.body.id },
+      { fornecedorId: fornecedor.body.id, produtoCompraId: produtoCompra.body.id },
       { dataOperacao: '2026-09-01', quantidade: 10 },
     );
     return {
-      itemCompraId: itemCompra.body.id as string,
-      itemComercialId: itemComercial.body.id as string,
+      produtoCompraId: produtoCompra.body.id as string,
+      produtoId: produto.body.id as string,
       clienteId: cliente.body.id as string,
       compraId,
       fornecedorId: fornecedor.body.id as string,
@@ -365,7 +395,7 @@ describe('Onda 12 — domínio de campos', () => {
         clienteId: base.clienteId,
         dataOperacao: '2026-09-01',
         rotaId: rota.body.id,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     expect(criar.status).toBe(201);
     const rows = await db.execute<{ rota_id: string | null; rota_prevista: string | null }>(
@@ -394,7 +424,7 @@ describe('Onda 12 — domínio de campos', () => {
         clienteId: base.clienteId,
         dataOperacao: '2026-09-01',
         rotaId: rota.body.id,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     expect(criar.status).toBe(400);
     const pedidosDepois = await db.execute<{ total: string }>(
@@ -654,7 +684,7 @@ describe('Onda 12 — domínio de campos', () => {
         compraProgramadaId: base.compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-09-01',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 1 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 1 }],
       });
     expect(pedido.status).toBe(201);
     const det = await request(srv()).get(`/comercial/pedidos/${pedido.body.id}`)
@@ -689,17 +719,28 @@ describe('Onda 12 — domínio de campos', () => {
   });
 
   it('DoD 12.11 lista regra com labels e cria por FKs ativas', async () => {
-    const itemCompra = await request(srv()).post('/itens-compra').set('Cookie', adminCookies).send({
-      codigo: 'BOI-O12', descricao: 'Boi casado O12', unidadeCompra: 'unidade',
+    const produtoCompra = await request(srv()).post('/produtos').set('Cookie', adminCookies).send({
+      codigo: 'BOI-O12',
+      nome: 'Boi casado O12',
+      unidadePedido: 'unidade',
+      tipoOperacional: 'compra_base',
+      ativoCompra: true,
+      ativoVenda: false,
     });
-    const itemComercial = await request(srv()).post('/itens-comerciais').set('Cookie', adminCookies)
-      .send({ codigo: 'TZ-O12', descricao: 'Traseiro O12', unidadeComercial: 'kg' });
-    expect(itemCompra.status).toBe(201);
-    expect(itemComercial.status).toBe(201);
+    const produto = await request(srv()).post('/produtos').set('Cookie', adminCookies)
+      .send({
+        codigo: 'TZ-O12',
+        nome: 'Traseiro O12',
+        unidadePedido: 'kg',
+        ativoVenda: true,
+        ativoCompra: true,
+      });
+    expect(produtoCompra.status).toBe(201);
+    expect(produto.status).toBe(201);
     const criar = await request(srv()).post('/regras-desdobramento').set('Cookie', adminCookies)
       .send({
-        itemCompraId: itemCompra.body.id,
-        itemComercialId: itemComercial.body.id,
+        produtoOrigemId: produtoCompra.body.id,
+        produtoDestinoId: produto.body.id,
         fatorQuantidade: 2,
         vigenciaInicio: '2026-01-01T00:00:00.000Z',
       });
@@ -709,16 +750,16 @@ describe('Onda 12 — domínio de campos', () => {
     expect(lista.status).toBe(200);
     const linha = (lista.body.data as Array<{
       id: string;
-      itemCompraCodigo: string;
-      itemCompraNome: string;
-      itemComercialCodigo: string;
-      itemComercialNome: string;
+      produtoCompraCodigo: string;
+      produtoCompraNome: string;
+      produtoCodigo: string;
+      produtoNome: string;
     }>).find((r) => r.id === criar.body.id);
     expect(linha).toMatchObject({
-      itemCompraCodigo: 'BOI-O12',
-      itemCompraNome: 'Boi casado O12',
-      itemComercialCodigo: 'TZ-O12',
-      itemComercialNome: 'Traseiro O12',
+      produtoOrigemCodigo: 'BOI-O12',
+      produtoOrigemNome: 'Boi casado O12',
+      produtoDestinoCodigo: 'TZ-O12',
+      produtoDestinoNome: 'Traseiro O12',
     });
   });
 

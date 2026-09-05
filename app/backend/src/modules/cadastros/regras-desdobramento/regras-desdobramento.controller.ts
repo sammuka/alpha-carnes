@@ -16,9 +16,9 @@ import {
 } from './dto/regra-desdobramento.dto';
 
 const simularDesdobramentoSchema = z.object({
-  itemCompraId: z.string().uuid(),
+  produtoOrigemId: z.string().uuid(),
   quantidade: z.coerce.number().int().min(1).max(100000),
-});
+}).strict();
 
 @SkipThrottle()
 @Controller('regras-desdobramento')
@@ -35,7 +35,7 @@ export class RegrasDesdobramentoController {
   @Post('simular')
   @RequirePermissoes('REGRAS_DESDOBRAMENTO_LER')
   async simular(@Body(new ZodValidationPipe(simularDesdobramentoSchema)) dto: z.infer<typeof simularDesdobramentoSchema>) {
-    return this.regrasService.simular(dto.itemCompraId, dto.quantidade);
+    return this.regrasService.simular(dto.produtoOrigemId, dto.quantidade);
   }
 
   @Get(':id')

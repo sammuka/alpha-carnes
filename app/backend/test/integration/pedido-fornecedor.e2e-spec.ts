@@ -41,7 +41,7 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
       .send({
         dataOperacao,
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 5 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 5 }],
       })
       .expect(201);
     await request(app.getHttpServer())
@@ -94,7 +94,7 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
       .set('Cookie', recebimentoCookies)
       .expect(200);
     expect(detalhe.body.itens.length).toBeGreaterThanOrEqual(1);
-    expect(detalhe.body.itens[0].itemComercialId).toBe(base.itemComercialId);
+    expect(detalhe.body.itens[0].produtoId).toBe(base.produtoId);
 
     // compra não confirmada
     const rascunho = await request(app.getHttpServer())
@@ -103,7 +103,7 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
       .send({
         dataOperacao: '2026-08-02',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 1 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 1 }],
       })
       .expect(201);
     await request(app.getHttpServer())
@@ -152,7 +152,7 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
       .send({
         numero: '1001',
         recebimentoId: recId,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadeDeclarada: 5 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeDeclarada: 5 }],
       })
       .expect(201);
 
@@ -162,7 +162,7 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
       .send({
         numero: '1002',
         recebimentoId: recId,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadeDeclarada: 3 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeDeclarada: 3 }],
       })
       .expect(201);
 

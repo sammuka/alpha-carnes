@@ -593,7 +593,7 @@ describe('SubitemService — branches unitários', () => {
       transformacaoId: 't1',
       statusSubitem: 'pesado',
       pecaOrigemId: 'pc1',
-      itemComercialId: 'ic1',
+      produtoId: 'ic1',
       peso: '5.000',
       deletedAt: null,
     };
@@ -625,7 +625,7 @@ describe('SubitemService — branches unitários', () => {
       transformacaoId: 't1',
       statusSubitem: 'pesado',
       pecaOrigemId: 'pc1',
-      itemComercialId: 'ic1',
+      produtoId: 'ic1',
       peso: '5.000',
       deletedAt: null,
     };
@@ -654,8 +654,8 @@ describe('SubitemService — branches unitários', () => {
       const { db } = makeDb([[transfConcluida]]);
       return newService(db);
     }
-    await expect(make().adicionar('t1', { itemComercialId: 'ic1', classificacao: 'extra' } as never, 'u1')).rejects.toThrow(ConflictException);
-    await expect(make().adicionar('t1', { itemComercialId: 'ic1', classificacao: 'extra' } as never, 'u1')).rejects.toThrow('Transformação encerrada não aceita alterações');
+    await expect(make().adicionar('t1', { produtoId: 'ic1', classificacao: 'extra' } as never, 'u1')).rejects.toThrow(ConflictException);
+    await expect(make().adicionar('t1', { produtoId: 'ic1', classificacao: 'extra' } as never, 'u1')).rejects.toThrow('Transformação encerrada não aceita alterações');
   });
 
   // ─── adicionar: transformação cancelada ──────────────────────────────────────
@@ -666,8 +666,8 @@ describe('SubitemService — branches unitários', () => {
       const { db } = makeDb([[transfCancelada]]);
       return newService(db);
     }
-    await expect(make().adicionar('t1', { itemComercialId: 'ic1', classificacao: 'extra' } as never, 'u1')).rejects.toThrow(ConflictException);
-    await expect(make().adicionar('t1', { itemComercialId: 'ic1', classificacao: 'extra' } as never, 'u1')).rejects.toThrow('Transformação encerrada não aceita alterações');
+    await expect(make().adicionar('t1', { produtoId: 'ic1', classificacao: 'extra' } as never, 'u1')).rejects.toThrow(ConflictException);
+    await expect(make().adicionar('t1', { produtoId: 'ic1', classificacao: 'extra' } as never, 'u1')).rejects.toThrow('Transformação encerrada não aceita alterações');
   });
 
   // ─── adicionar: transformação não encontrada ──────────────────────────────────
@@ -676,15 +676,15 @@ describe('SubitemService — branches unitários', () => {
       const { db } = makeDb([[]]);
       return newService(db);
     }
-    await expect(make().adicionar('t-inexistente', { itemComercialId: 'ic1', classificacao: 'extra' } as never, 'u1')).rejects.toThrow(NotFoundException);
+    await expect(make().adicionar('t-inexistente', { produtoId: 'ic1', classificacao: 'extra' } as never, 'u1')).rejects.toThrow(NotFoundException);
   });
 
   // ─── redirecionar: destino com saldo zerado ────────────────────────────────────
   it('redirecionar → lança 409 se item de destino está completo (consumirSaldo=false)', async () => {
-    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'associado', pedidoVendaItemId: 'pvi1', pecaOrigemId: 'pc1', itemComercialId: 'ic1', deletedAt: null };
+    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'associado', pedidoVendaItemId: 'pvi1', pecaOrigemId: 'pc1', produtoId: 'ic1', deletedAt: null };
     const transf = { id: 't1', statusTransformacao: 'aberta', deletedAt: null };
     const peca = { id: 'pc1', compraProgramadaId: 'cp1', deletedAt: null };
-    const itemPedido = { id: 'pvi2', pedidoVendaId: 'pv2', itemComercialId: 'ic1', compraProgramadaId: 'cp1', statusPedido: 'aberto', deletedAt: null };
+    const itemPedido = { id: 'pvi2', pedidoVendaId: 'pv2', produtoId: 'ic1', compraProgramadaId: 'cp1', statusPedido: 'aberto', deletedAt: null };
 
     function make() {
       let selectCall = 0;
@@ -714,7 +714,7 @@ describe('SubitemService — branches unitários', () => {
 
   // ─── itemCompativel: item não encontrado ──────────────────────────────────────
   it('associar → lança 404 se item do pedido não encontrado (itemCompativel)', async () => {
-    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', itemComercialId: 'ic1', deletedAt: null };
+    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', produtoId: 'ic1', deletedAt: null };
     const transf = { id: 't1', statusTransformacao: 'aberta', deletedAt: null };
     const peca = { id: 'pc1', compraProgramadaId: 'cp1', deletedAt: null };
 
@@ -743,10 +743,10 @@ describe('SubitemService — branches unitários', () => {
 
   // ─── itemCompativel: pedido cancelado ─────────────────────────────────────────
   it('associar → lança 409 se pedido está cancelado (itemCompativel)', async () => {
-    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', itemComercialId: 'ic1', deletedAt: null };
+    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', produtoId: 'ic1', deletedAt: null };
     const transf = { id: 't1', statusTransformacao: 'aberta', deletedAt: null };
     const peca = { id: 'pc1', compraProgramadaId: 'cp1', deletedAt: null };
-    const itemCancelado = { id: 'pvi1', pedidoVendaId: 'pv1', itemComercialId: 'ic1', compraProgramadaId: 'cp1', statusPedido: 'cancelado', deletedAt: null };
+    const itemCancelado = { id: 'pvi1', pedidoVendaId: 'pv1', produtoId: 'ic1', compraProgramadaId: 'cp1', statusPedido: 'cancelado', deletedAt: null };
 
     function make() {
       let selectCall = 0;
@@ -773,10 +773,10 @@ describe('SubitemService — branches unitários', () => {
 
   // ─── itemCompativel: item comercial incompatível ──────────────────────────────
   it('associar → lança 409 se item comercial incompatível (itemCompativel)', async () => {
-    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', itemComercialId: 'ic1', deletedAt: null };
+    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', produtoId: 'ic1', deletedAt: null };
     const transf = { id: 't1', statusTransformacao: 'aberta', deletedAt: null };
     const peca = { id: 'pc1', compraProgramadaId: 'cp1', deletedAt: null };
-    const itemDiferente = { id: 'pvi1', pedidoVendaId: 'pv1', itemComercialId: 'ic-OUTRO', compraProgramadaId: 'cp1', statusPedido: 'aberto', deletedAt: null };
+    const itemDiferente = { id: 'pvi1', pedidoVendaId: 'pv1', produtoId: 'ic-OUTRO', compraProgramadaId: 'cp1', statusPedido: 'aberto', deletedAt: null };
 
     function make() {
       let selectCall = 0;
@@ -803,13 +803,13 @@ describe('SubitemService — branches unitários', () => {
 
   // ─── itemCompativel: operação diferente (lotes da mesma operação são livres) ──
   it('associar → lança 409 se pedido pertence a outra operação', async () => {
-    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', itemComercialId: 'ic1', deletedAt: null };
+    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', produtoId: 'ic1', deletedAt: null };
     const transf = { id: 't1', statusTransformacao: 'aberta', deletedAt: null };
     const peca = { id: 'pc1', compraProgramadaId: 'cp1', deletedAt: null };
     const itemOutraOperacao = {
       id: 'pvi1',
       pedidoVendaId: 'pv1',
-      itemComercialId: 'ic1',
+      produtoId: 'ic1',
       operacaoId: 'op-OUTRA',
       pecaOperacaoId: 'op1',
       statusPedido: 'aberto',
@@ -841,10 +841,10 @@ describe('SubitemService — branches unitários', () => {
 
   // ─── itemCompativel: item deletado ────────────────────────────────────────────
   it('associar → lança 404 se item do pedido está deletado (deletedAt set)', async () => {
-    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', itemComercialId: 'ic1', deletedAt: null };
+    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', produtoId: 'ic1', deletedAt: null };
     const transf = { id: 't1', statusTransformacao: 'aberta', deletedAt: null };
     const peca = { id: 'pc1', compraProgramadaId: 'cp1', deletedAt: null };
-    const itemDeletado = { id: 'pvi1', pedidoVendaId: 'pv1', itemComercialId: 'ic1', compraProgramadaId: 'cp1', statusPedido: 'aberto', deletedAt: new Date() };
+    const itemDeletado = { id: 'pvi1', pedidoVendaId: 'pv1', produtoId: 'ic1', compraProgramadaId: 'cp1', statusPedido: 'aberto', deletedAt: new Date() };
 
     function make() {
       let selectCall = 0;
@@ -871,7 +871,7 @@ describe('SubitemService — branches unitários', () => {
 
   // ─── itemCompativel: peça de origem não encontrada ────────────────────────────
   it('associar → lança 404 se peça de origem não encontrada em itemCompativel', async () => {
-    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', itemComercialId: 'ic1', deletedAt: null };
+    const subitem = { id: 's1', transformacaoId: 't1', statusSubitem: 'pesado', pecaOrigemId: 'pc1', produtoId: 'ic1', deletedAt: null };
     const transf = { id: 't1', statusTransformacao: 'aberta', deletedAt: null };
 
     function make() {
@@ -998,7 +998,7 @@ describe('SubitemService — branches unitários', () => {
       deletedAt: null,
     };
     const transf = { id: 't1', statusTransformacao: 'aberta', deletedAt: null };
-    const peca = { id: 'pc1', recebimentoId: 'r1', itemComercialBaseId: 'ic1', deletedAt: null };
+    const peca = { id: 'pc1', recebimentoId: 'r1', produtoBaseId: 'ic1', deletedAt: null };
 
     function make() {
       let selectCall = 0;
@@ -1037,7 +1037,7 @@ describe('SubitemService — branches unitários', () => {
       transformacaoId: 't1',
       statusSubitem: 'gerado',
       pecaOrigemId: 'pc1',
-      itemComercialId: 'ic1',
+      produtoId: 'ic1',
       peso: null,
       deletedAt: null,
     };
@@ -1100,7 +1100,7 @@ describe('SubitemService — branches unitários', () => {
       {} as never,
       {} as never,
     );
-    const result = await service.adicionar('t1', { itemComercialId: 'ic1', classificacao: 'extra', quantidade: 3 } as never, 'u1');
+    const result = await service.adicionar('t1', { produtoId: 'ic1', classificacao: 'extra', quantidade: 3 } as never, 'u1');
     expect(result).toEqual(novoSubitem);
     // verifica que insert.values foi chamado (covers linha 48 com quantidade definido)
     expect(customTx.insert).toHaveBeenCalled();

@@ -106,7 +106,7 @@ export class PesagemService {
           .values({
             compraProgramadaId: recebimento.compraProgramadaId,
             recebimentoId: recebimento.id,
-            itemComercialBaseId: dto.itemComercialBaseId,
+            produtoBaseId: dto.produtoBaseId,
             classificacaoOperacional: dto.classificacaoOperacional,
             pesoOriginal: peso,
             modoCapturaPeso: dto.modoCaptura,

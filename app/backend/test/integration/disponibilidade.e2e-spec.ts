@@ -29,7 +29,7 @@ describe('Disponibilidade virtual e2e (geração transacional + idempotência + 
       .send({
         dataOperacao,
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: quantidade }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: quantidade }],
       });
     expect(criar.status).toBe(201);
     return criar.body.id as string;
@@ -44,7 +44,7 @@ describe('Disponibilidade virtual e2e (geração transacional + idempotência + 
       .send();
     expect(confirmar.status).toBe(201);
 
-    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    const disp = await lerDisponibilidade(app, base.produtoId);
     expect(disp).not.toBeNull();
     expect(Number(disp!.quantidadeTotalGerada)).toBe(40); // 4 × 10
     expect(Number(disp!.quantidadeDisponivel)).toBe(40);
@@ -69,7 +69,7 @@ describe('Disponibilidade virtual e2e (geração transacional + idempotência + 
     expect(segunda.status).toBe(201);
     expect(segunda.body.jaConfirmada).toBe(true); // no-op idempotente
 
-    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    const disp = await lerDisponibilidade(app, base.produtoId);
     expect(Number(disp!.quantidadeTotalGerada)).toBe(15); // 3 × 5, não duplicado
   });
 
@@ -127,7 +127,7 @@ describe('Disponibilidade virtual e2e (geração transacional + idempotência + 
         .send({
           dataOperacao: dia,
           fornecedorId: base.fornecedorId,
-          itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: qtd }],
+          itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: qtd }],
         });
       expect(res.status).toBe(201);
       const conf = await request(app.getHttpServer())
@@ -144,8 +144,8 @@ describe('Disponibilidade virtual e2e (geração transacional + idempotência + 
       .get(`/comercial/disponibilidade?dataOperacao=${dia}`)
       .set('Cookie', comprasCookies);
     expect(agregado.status).toBe(200);
-    const linha = (agregado.body as Array<{ itemComercialId: string; modo: string; quantidadeTotalGerada: string }>)
-      .find((r) => r.itemComercialId === base.itemComercialId);
+    const linha = (agregado.body as Array<{ produtoId: string; modo: string; quantidadeTotalGerada: string }>)
+      .find((r) => r.produtoId === base.produtoId);
     expect(linha?.modo).toBe('agregado');
     expect(linha).not.toHaveProperty('id');
     expect(linha).not.toHaveProperty('compraProgramadaId');

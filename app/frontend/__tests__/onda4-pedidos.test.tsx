@@ -28,10 +28,10 @@ const itens = [
   ['item-removido', 'item-comercial-removido', 'Costela', 7],
   ['item-aumentado', 'item-comercial-aumentado', 'Filé mignon', 8],
   ['item-estavel', 'item-comercial-estavel', 'Picanha', 9],
-].map(([id, itemComercialId, nome, quantidade]) => ({
+].map(([id, produtoId, nome, quantidade]) => ({
   id,
   pedidoVendaId: 'pedido-1',
-  itemComercialId,
+  produtoId,
   quantidadePedida: String(quantidade),
   quantidadeReservada: String(quantidade),
   quantidadePendente: '0',
@@ -39,7 +39,7 @@ const itens = [
   quantidadeOverbooking: '0',
   status: 'totalmente_reservado',
   observacoes: null,
-  itemComercial: { id: itemComercialId, codigo: String(itemComercialId), nome },
+  produto: { id: produtoId, codigo: String(produtoId), nome },
   reservas: [{ id: `reserva-${id}`, status: 'ativa', origem: 'virtual' }],
 }));
 
@@ -88,18 +88,20 @@ const rotas = [
 
 const produtos = [
   ...itens.map((item) => ({
-    id: item.itemComercialId,
-    codigo: item.itemComercial.codigo,
-    descricao: item.itemComercial.nome,
+    id: item.produtoId,
+    codigo: item.produto.codigo,
+    nome: item.produto.nome,
+    descricao: item.produto.nome,
     status: 'ativo',
-    unidadeComercial: 'kg',
+    unidadePedido: 'kg',
   })),
   {
-    id: 'item-comercial-novo',
+    id: 'produto-novo',
     codigo: 'NOVO',
+    nome: 'Produto novo',
     descricao: 'Produto novo',
     status: 'ativo',
-    unidadeComercial: 'kg',
+    unidadePedido: 'kg',
   },
 ];
 
@@ -131,7 +133,7 @@ function instalarFetch() {
     if (url.startsWith('/api/cadastros/clientes?')) {
       return json({ data: clientes, page: 1, pageSize: 100, total: 2 });
     }
-    if (url.startsWith('/api/cadastros/itens-comerciais?')) {
+    if (url.startsWith('/api/cadastros/produtos?') && url.includes('ativoVenda=true')) {
       return json({ data: produtos, page: 1, pageSize: 100, total: produtos.length });
     }
     if (url.startsWith('/api/cadastros/rotas?')) {
@@ -197,7 +199,7 @@ it('modal de overbooking renderiza o payload do 409 sem numero fabricado', () =>
         code: 'OVERBOOKING_CONFIRMACAO_NECESSARIA',
         message: 'Confirme',
         itens: [{
-          itemComercialId: 'item-1',
+          produtoId: 'item-1',
           disponivelAntes: '7.250',
           quantidadeSolicitada: '10.500',
           overbookingGerado: '3.250',
@@ -218,7 +220,7 @@ it('modal de adendo mostra pedido aberto existente e envia motivo', async () => 
   render(
     <ModalAdendo
       open
-      pedido={{ pedidoId: 'pedido-existente', status: 'rascunho', itemComercialId: 'item-1', quantidadeAtual: '12' }}
+      pedido={{ pedidoId: 'pedido-existente', status: 'rascunho', produtoId: 'item-1', quantidadeAtual: '12' }}
       quantidadeAdicionar={3}
       onCancel={jest.fn()}
       onConfirm={onConfirm}
@@ -235,7 +237,7 @@ it('modal de adendo exibe badge provisorio P5 da politica de preco', () => {
   render(
     <ModalAdendo
       open
-      pedido={{ pedidoId: 'pedido-1', status: 'rascunho', itemComercialId: 'item-1', quantidadeAtual: '12' }}
+      pedido={{ pedidoId: 'pedido-1', status: 'rascunho', produtoId: 'item-1', quantidadeAtual: '12' }}
       quantidadeAdicionar={3}
       onCancel={jest.fn()}
       onConfirm={jest.fn()}
@@ -348,18 +350,14 @@ it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente par
       '/api/comercial/pedidos/pedido-1/adendos',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({
-          itemComercialId: 'item-comercial-aumentado',
-          quantidadeAdicionada: 3,
-          motivo: 'Complemento solicitado pelo cliente',
-        }),
+        body: JSON.stringify({ produtoId: 'item-comercial-aumentado', quantidadeAdicionada: 3, motivo: 'Complemento solicitado pelo cliente' }),
       }),
     ]);
     expect(chamadas).toContainEqual([
       '/api/comercial/pedidos/pedido-1/itens',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ itemComercialId: 'item-comercial-novo', quantidade: 2 }),
+        body: JSON.stringify({ produtoId: 'produto-novo', quantidade: 2 }),
       }),
     ]);
     expect(chamadas.some(([url, init]) =>

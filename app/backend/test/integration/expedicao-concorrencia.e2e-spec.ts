@@ -50,14 +50,14 @@ describe('Expedicao — concorrencia de transferencia (F5)', () => {
 
     // Pedido origem com muitas pecas
     const pOrigem = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 10,
     });
 
     // Pedido destino com saldo = 3
     const saldo = 3;
     const pDestino = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: await criarOutroCliente(app), produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: saldo,
     });
 
@@ -66,7 +66,7 @@ describe('Expedicao — concorrencia de transferencia (F5)', () => {
     const pecaIds: string[] = [];
     for (let i = 0; i < total; i++) {
       const pecaId = await pesarPeca(app, recebimentoCookies, {
-        recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+        recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId,
       });
       await request(srv())
         .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)

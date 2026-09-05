@@ -28,7 +28,7 @@ describe('ConferenciaService (recebimento) — branches', () => {
     const rows = [
       {
         recebimento_item_id: 'ri1',
-        item_comercial_id: 'ic1',
+        produto_id: 'ic1',
         previsto_no_pedido: true,
         qtd_pedido: '5.000',
         qtd_nf: null,

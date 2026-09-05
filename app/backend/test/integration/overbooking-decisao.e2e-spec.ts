@@ -53,14 +53,14 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
 
   async function cenarioComSaldo(dataOperacao: string, quantidade: number) {
     const base = await seedComercialBase(app, { fator: 1 });
-    tzId = base.itemComercialId;
+    tzId = base.produtoId;
     const criar = await request(app.getHttpServer())
       .post('/comercial/compras-programadas')
       .set('Cookie', comprasCookies)
       .send({
         dataOperacao,
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: quantidade }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: quantidade }],
       })
       .expect(201);
     await request(app.getHttpServer())
@@ -72,7 +72,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
 
   async function criarPedidoOverbooking(
     compraId: string,
-    base: { clienteId: string; itemComercialId: string },
+    base: { clienteId: string; produtoId: string },
     dataOperacao: string,
     quantidade: number,
     clienteId?: string,
@@ -84,7 +84,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
         clienteId: clienteId ?? base.clienteId,
         dataOperacao,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: quantidade }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: quantidade }],
       })
       .expect(201);
     const { db } = app.get(DRIZZLE);
@@ -104,7 +104,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
       .send({
         dataOperacao: '2026-12-02',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 5 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 5 }],
       })
       .expect(201);
 
@@ -151,7 +151,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
       .send({
         dataOperacao: '2026-12-05',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 10 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 10 }],
       })
       .expect(201);
 
@@ -181,7 +181,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
       .send({
         dataOperacao: '2026-11-28',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 10 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 10 }],
       })
       .expect(201);
 
@@ -202,7 +202,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
 
   it('2.5 redistribuição preserva o agregado de disponibilidade', async () => {
     const { base, compraId } = await cenarioComSaldo('2026-12-07', 10);
-    tzId = base.itemComercialId;
+    tzId = base.produtoId;
 
     await request(app.getHttpServer())
       .post('/comercial/pedidos')
@@ -211,7 +211,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-07',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }],
       })
       .expect(201);
 
@@ -252,7 +252,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-08',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }],
       })
       .expect(201);
     const clienteOverbooking = await criarOutroCliente(app);
@@ -289,7 +289,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-09',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 6 }],
       })
       .expect(201);
     const clienteOverbooking = await criarOutroCliente(app);
@@ -303,7 +303,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
       .send({
         dataOperacao: '2026-12-10',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 20 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 20 }],
       })
       .expect(201);
     await request(app.getHttpServer())
@@ -348,7 +348,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-11',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 6 }],
       })
       .expect(201);
     const clienteOverbooking = await criarOutroCliente(app);
@@ -362,7 +362,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
       .send({
         dataOperacao: '2026-12-12',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 10 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 10 }],
       })
       .expect(201);
     await request(app.getHttpServer())
@@ -505,7 +505,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-17',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 8 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }],
       })
       .expect(201);
     const clienteOverbooking = await criarOutroCliente(app);

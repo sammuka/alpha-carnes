@@ -34,7 +34,7 @@ function ComboboxControl({
 
 describe('ComboboxField', () => {
   it('DoD 12.4 filtra por label e sublabel, seleciona por teclado e limpa opcional', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     const { rerender } = render(<ComboboxControl />);
 
     const trigger = screen.getByRole('combobox');

@@ -18,7 +18,7 @@ describe('adendos (adendo com histórico append-only)', () => {
   let pedidos: PedidosService;
   let adendos: AdendosService;
   let usuarioId: string;
-  let base: { fornecedorId: string; itemCompraId: string; itemComercialId: string; clienteId: string };
+  let base: Awaited<ReturnType<typeof seedComercialBase>>;
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -50,7 +50,7 @@ describe('adendos (adendo com histórico append-only)', () => {
       clienteId: base.clienteId,
       dataOperacao,
       salvarComoRascunho: false,
-      itens: [{ itemComercialId: base.itemComercialId, quantidadePedida }],
+      itens: [{ produtoId: base.produtoId, quantidadePedida }],
     }, usuarioId);
     const detalhe = await pedidos.detalhar(pedido.id, usuarioId);
     const item = detalhe.itens[0]!;
@@ -62,7 +62,7 @@ describe('adendos (adendo com histórico append-only)', () => {
       const { pedidoId, itemId } = await criarPedidoComSaldo('2026-09-01', 10, 2);
 
       const resultado = await adendos.registrar(pedidoId, {
-        itemComercialId: base.itemComercialId,
+        produtoId: base.produtoId,
         quantidadeAdicionada: 3,
         motivo: 'cliente pediu mais unidades',
       }, usuarioId, false);
@@ -94,7 +94,7 @@ describe('adendos (adendo com histórico append-only)', () => {
     const { pedidoId, itemId } = await criarPedidoComSaldo('2026-09-02', 5, 2);
 
     await expect(adendos.registrar(pedidoId, {
-      itemComercialId: base.itemComercialId,
+      produtoId: base.produtoId,
       quantidadeAdicionada: 100,
       motivo: 'pedido extra do cliente',
     }, usuarioId, false)).rejects.toMatchObject({ status: 409 });
@@ -119,7 +119,7 @@ describe('adendos (adendo com histórico append-only)', () => {
     const { pedidoId, itemId } = await criarPedidoComSaldo('2026-09-03', 5, 2);
 
     const primeiraConfirmacao = await adendos.registrar(pedidoId, {
-      itemComercialId: base.itemComercialId,
+      produtoId: base.produtoId,
       quantidadeAdicionada: 100,
       motivo: 'pedido extra confirmado pelo gestor',
     }, usuarioId, true);
@@ -140,7 +140,7 @@ describe('adendos (adendo com histórico append-only)', () => {
     expect(pendenciaAntes?.quantidadeDeficit).toBe('97.000');
 
     const segundaConfirmacao = await adendos.registrar(pedidoId, {
-      itemComercialId: base.itemComercialId,
+      produtoId: base.produtoId,
       quantidadeAdicionada: 10,
       motivo: 'novo pedido extra confirmado pelo gestor',
     }, usuarioId, true);

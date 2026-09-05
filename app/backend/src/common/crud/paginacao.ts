@@ -21,6 +21,22 @@ export const listarCadastroQuerySchema = listarQuerySchema.extend({
 
 export type ListarCadastroQuery = z.infer<typeof listarCadastroQuerySchema>;
 
+const queryFlagOpcional = z
+  .union([z.boolean(), z.enum(['true', 'false'])])
+  .optional()
+  .transform((v) => {
+    if (v === undefined) return undefined;
+    if (v === true || v === 'true') return true;
+    return false;
+  });
+
+export const listarProdutoQuerySchema = listarCadastroQuerySchema.extend({
+  ativoVenda: queryFlagOpcional,
+  ativoCompra: queryFlagOpcional,
+});
+
+export type ListarProdutoQuery = z.infer<typeof listarProdutoQuerySchema>;
+
 export interface Paginado<T> {
   data: T[];
   total: number;

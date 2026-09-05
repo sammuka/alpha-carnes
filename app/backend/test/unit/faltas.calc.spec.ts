@@ -2,19 +2,19 @@ import { calcularFaltasDesossa, parseQuantidade } from '../../src/modules/operac
 
 describe('calcularFaltasDesossa', () => {
   const produtos = [
-    { id: 'p1', codigo: 'JAC', nome: 'Jacaré', legadoItemComercialId: 'ic1' },
-    { id: 'p2', codigo: 'ALC', nome: 'Alcatra', legadoItemComercialId: 'ic2' },
-    { id: 'p3', codigo: 'SEM-LINK', nome: 'Sem vínculo', legadoItemComercialId: null },
+    { id: 'p1', codigo: 'JAC', nome: 'Jacaré' },
+    { id: 'p2', codigo: 'ALC', nome: 'Alcatra' },
+    { id: 'p3', codigo: 'SEM-LINK', nome: 'Sem vínculo' },
   ];
 
   it('calcula faltante como demanda menos estoque', () => {
     const demanda = new Map([
-      ['ic1', 13],
-      ['ic2', 15],
+      ['p1', 13],
+      ['p2', 15],
     ]);
     const estoque = new Map([
-      ['ic1', 0],
-      ['ic2', 2],
+      ['p1', 0],
+      ['p2', 2],
     ]);
     const origem = new Map([
       ['p1', 'TZ'],
@@ -41,8 +41,8 @@ describe('calcularFaltasDesossa', () => {
   it('ignora produtos sem demanda pendente', () => {
     const resultado = calcularFaltasDesossa(
       produtos,
-      new Map([['ic1', 5]]),
-      new Map([['ic1', 10]]),
+      new Map([['p1', 5]]),
+      new Map([['p1', 10]]),
       new Map([['p1', 'TZ']]),
     );
 
@@ -54,8 +54,8 @@ describe('calcularFaltasDesossa', () => {
   it('usa origem padrão TZ quando regra não mapeia produto', () => {
     const resultado = calcularFaltasDesossa(
       produtos,
-      new Map([['ic1', 4]]),
-      new Map([['ic1', 1]]),
+      new Map([['p1', 4]]),
+      new Map([['p1', 1]]),
       new Map(),
     );
 
@@ -66,12 +66,12 @@ describe('calcularFaltasDesossa', () => {
     const resultado = calcularFaltasDesossa(
       produtos,
       new Map([
-        ['ic1', 5],
-        ['ic2', 20],
+        ['p1', 5],
+        ['p2', 20],
       ]),
       new Map([
-        ['ic1', 0],
-        ['ic2', 0],
+        ['p1', 0],
+        ['p2', 0],
       ]),
       new Map(),
     );

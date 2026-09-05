@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../src/database/schema';
-import { itensCompra, itensComerciais, regrasDesdobramentoComercial } from '../../src/database/schema';
+import { produtos, regrasDesdobramentoComercial } from '../../src/database/schema';
 import { DRIZZLE } from '../../src/database/database.module';
 import { seedCatalogoMvp } from '../../src/database/seed-catalogo-mvp';
 import { seedRegrasDesdobramentoComercial } from '../../src/database/seed-regras-desdobramento-comercial';
@@ -32,62 +32,51 @@ describe('seedRegrasDesdobramentoComercial', () => {
 
     const [boi] = await db
       .select()
-      .from(itensCompra)
-      .where(and(eq(itensCompra.codigo, 'BOI'), isNull(itensCompra.deletedAt)));
+      .from(produtos)
+      .where(and(eq(produtos.codigo, 'BOI'), isNull(produtos.deletedAt)));
     expect(boi).toBeDefined();
-    expect(boi!.unidadeCompra).toBe('unidade');
+    expect(boi!.tipoOperacional).toBe('compra_base');
+    expect(boi!.ativoCompra).toBe(true);
+    expect(boi!.ativoVenda).toBe(false);
 
     const regras = await db
       .select({
-        codigoComercial: itensComerciais.codigo,
+        codigoDestino: produtos.codigo,
         fator: regrasDesdobramentoComercial.fatorQuantidade,
       })
       .from(regrasDesdobramentoComercial)
-      .innerJoin(itensComerciais, eq(itensComerciais.id, regrasDesdobramentoComercial.itemComercialId))
+      .innerJoin(produtos, eq(produtos.id, regrasDesdobramentoComercial.produtoDestinoId))
       .where(
         and(
-          eq(regrasDesdobramentoComercial.itemCompraId, boi!.id),
+          eq(regrasDesdobramentoComercial.produtoOrigemId, boi!.id),
           isNull(regrasDesdobramentoComercial.deletedAt),
         ),
       );
 
     expect(regras).toHaveLength(3);
-    expect(regras.map((r) => ({ codigoComercial: r.codigoComercial, fator: Number(r.fator) }))).toEqual(
+    expect(regras.map((r) => ({ codigoDestino: r.codigoDestino, fator: Number(r.fator) }))).toEqual(
       expect.arrayContaining([
-        { codigoComercial: 'TZ', fator: 2 },
-        { codigoComercial: 'DT', fator: 2 },
-        { codigoComercial: 'PA', fator: 2 },
+        { codigoDestino: 'TZ', fator: 2 },
+        { codigoDestino: 'DT', fator: 2 },
+        { codigoDestino: 'PA', fator: 2 },
       ]),
     );
   });
 
-  it('liga TZ/DT/PA compra → comercial 1:1 quando o item de compra já existe', async () => {
+  it('não cria regras de identidade origem=destino (AD-15)', async () => {
     await seedCatalogoMvp(db);
-    await db.insert(itensCompra).values([
-      { codigo: 'TZ', descricao: 'traseiro', unidadeCompra: 'kg' },
-      { codigo: 'DT', descricao: 'Dianteiro', unidadeCompra: 'kg' },
-      { codigo: 'PA', descricao: 'Ponta de agulha', unidadeCompra: 'kg' },
-    ]);
     await seedRegrasDesdobramentoComercial(db);
 
     const identidade = await db
-      .select({
-        compra: itensCompra.codigo,
-        comercial: itensComerciais.codigo,
-        fator: regrasDesdobramentoComercial.fatorQuantidade,
-      })
+      .select({ id: regrasDesdobramentoComercial.id })
       .from(regrasDesdobramentoComercial)
-      .innerJoin(itensCompra, eq(itensCompra.id, regrasDesdobramentoComercial.itemCompraId))
-      .innerJoin(itensComerciais, eq(itensComerciais.id, regrasDesdobramentoComercial.itemComercialId))
-      .where(isNull(regrasDesdobramentoComercial.deletedAt));
+      .where(
+        and(
+          isNull(regrasDesdobramentoComercial.deletedAt),
+          eq(regrasDesdobramentoComercial.produtoOrigemId, regrasDesdobramentoComercial.produtoDestinoId),
+        ),
+      );
 
-    expect(identidade).toEqual(
-      expect.arrayContaining([
-        { compra: 'TZ', comercial: 'TZ', fator: expect.any(String) },
-        { compra: 'DT', comercial: 'DT', fator: expect.any(String) },
-        { compra: 'PA', comercial: 'PA', fator: expect.any(String) },
-      ]),
-    );
-    expect(identidade.filter((r) => r.compra === r.comercial).every((r) => Number(r.fator) === 1)).toBe(true);
+    expect(identidade).toHaveLength(0);
   });
 });

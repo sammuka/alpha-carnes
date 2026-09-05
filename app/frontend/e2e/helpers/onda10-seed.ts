@@ -81,19 +81,19 @@ export async function seedCaminhaoFechado(request: APIRequestContext): Promise<C
     razaoSocial: `Fornecedor Onda10 ${suffix}`,
     documentoFiscal: makeCnpj(seedNum),
   });
-  const itemCompra = await api<{ id: string }>(request, cookieHeader, 'POST', '/itens-compra', {
+  const itemCompra = await api<{ id: string }>(request, cookieHeader, 'POST', '/produtos', {
     codigo: `O10IC${suffix}`,
-    descricao: 'Boi Onda10',
-    unidadeCompra: 'unidade',
+    nome: 'Boi Onda10',
+    unidadePedido: 'unidade',
   });
-  const itemComercial = await api<{ id: string }>(request, cookieHeader, 'POST', '/itens-comerciais', {
+  const itemComercial = await api<{ id: string }>(request, cookieHeader, 'POST', '/produtos', {
     codigo: `O10TZ${suffix}`,
-    descricao: 'Traseiro Onda10',
-    unidadeComercial: 'kg',
+    nome: 'Traseiro Onda10',
+    unidadePedido: 'kg',
   });
   await api(request, cookieHeader, 'POST', '/regras-desdobramento', {
-    itemCompraId: itemCompra.id,
-    itemComercialId: itemComercial.id,
+    produtoOrigemId: itemCompra.id,
+    produtoDestinoId: itemComercial.id,
     fatorQuantidade: 2,
     status: 'ativo',
     vigenciaInicio: addDaysISO(-1),
@@ -109,7 +109,7 @@ export async function seedCaminhaoFechado(request: APIRequestContext): Promise<C
         dataOperacao: candidata,
         fornecedorId: fornecedor.id,
         numeroInterno: `O10-${runId}-${offset}`,
-        itens: [{ itemCompraId: itemCompra.id, quantidadeComprada: 5 }],
+        itens: [{ produtoId: itemCompra.id, quantidadeComprada: 5 }],
       },
     });
     const body = (await create.json().catch(() => ({}))) as { id?: string };
@@ -140,11 +140,11 @@ export async function seedCaminhaoFechado(request: APIRequestContext): Promise<C
     nfeSerie: '1',
   });
 
-  type RecebimentoDetalhe = { itens: Array<{ itemComercialId: string; quantidadeEsperada: string | number }> };
+  type RecebimentoDetalhe = { itens: Array<{ produtoId: string; quantidadeEsperada: string | number }> };
   const detalhe = await api<RecebimentoDetalhe>(request, cookieHeader, 'GET', `/operacao/recebimentos/${recebimentoId}`);
   for (const item of detalhe.itens) {
     await api(request, cookieHeader, 'POST', `/operacao/recebimentos/${recebimentoId}/itens`, {
-      itemComercialId: item.itemComercialId,
+      produtoId: item.produtoId,
       quantidadeRecebida: Number(item.quantidadeEsperada),
     });
   }
@@ -165,7 +165,7 @@ export async function seedCaminhaoFechado(request: APIRequestContext): Promise<C
     clienteId: cliente.id,
     dataOperacao,
     rotaPrevista: 'Rota Onda10',
-    itens: [{ itemComercialId: itemComercial.id, quantidadePedida: 1 }],
+    itens: [{ produtoId: itemComercial.id, quantidadePedida: 1 }],
   });
   const pedidoDetalhe = await api<{ itens: Array<{ id: string }> }>(
     request, cookieHeader, 'GET', `/comercial/pedidos/${pedido.id}`,
@@ -175,7 +175,7 @@ export async function seedCaminhaoFechado(request: APIRequestContext): Promise<C
 
   const peca = await api<{ id: string }>(request, cookieHeader, 'POST', '/operacao/pesagem/pecas', {
     recebimentoId,
-    itemComercialBaseId: itemComercial.id,
+    produtoBaseId: itemComercial.id,
     modoCaptura: 'automatico',
   });
   await api(request, cookieHeader, 'POST', `/operacao/pesagem/pecas/${peca.id}/confirmar`, {

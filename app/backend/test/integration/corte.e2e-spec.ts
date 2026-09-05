@@ -63,7 +63,7 @@ describe('Corte/Transformação e2e (F4c)', () => {
   it('403 sem CORTE_GERENCIAR (comercial não pode iniciar corte)', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-10-01');
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const res = await request(srv())
       .post(`/operacao/corte/pecas/${pecaId}/iniciar`)
       .set('Cookie', comercialCookies)
@@ -77,11 +77,11 @@ describe('Corte/Transformação e2e (F4c)', () => {
     const p = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      produtoId: c.produtoId,
       dataOperacao: c.dataOperacao,
       quantidade: 2,
     });
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/confirmar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: p.pedidoItemId });
 
     const antes = await db().select().from(schema.pedidosVendaItens).where(eq(schema.pedidosVendaItens.id, p.pedidoItemId)).then((r) => r[0]!);
@@ -100,7 +100,7 @@ describe('Corte/Transformação e2e (F4c)', () => {
   it('peça inelegível (já transformada) → 409', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-10-03');
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await db().update(schema.pecas).set({ statusPeca: 'transformada' }).where(eq(schema.pecas.id, pecaId));
     const res = await request(srv())
       .post(`/operacao/corte/pecas/${pecaId}/iniciar`)
@@ -115,16 +115,16 @@ describe('Corte/Transformação e2e (F4c)', () => {
     const p = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      produtoId: c.produtoId,
       dataOperacao: c.dataOperacao,
       quantidade: 5,
     });
     fakes(app).balanca.definirPeso('12.500');
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
 
     fakes(app).balanca.definirPeso('13.000');
-    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+    await subitemCompleto(app, corteCookies, transfId, c.produtoId, p.pedidoItemId);
 
     // Emenda 7: fechar checklist (DoD 7.9) antes de exercitar justificativa de peso
     await fecharChecklistSeDivergente(app, corteCookies, transfId);
@@ -145,16 +145,16 @@ describe('Corte/Transformação e2e (F4c)', () => {
     const p = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      produtoId: c.produtoId,
       dataOperacao: c.dataOperacao,
       quantidade: 5,
     });
     fakes(app).balanca.definirPeso('12.500');
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
 
     fakes(app).balanca.definirPeso('10.000'); // perda de 2.500
-    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+    await subitemCompleto(app, corteCookies, transfId, c.produtoId, p.pedidoItemId);
 
     await fecharChecklistSeDivergente(app, corteCookies, transfId);
 
@@ -170,9 +170,9 @@ describe('Corte/Transformação e2e (F4c)', () => {
   it('concluir com subitem sem destino (só pesado) → 409', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-10-05');
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
-    const subId = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    const subId = await adicionarSubitem(app, corteCookies, transfId, c.produtoId);
     await pesarSubitem(app, corteCookies, subId);
     const res = await request(srv()).post(`/operacao/corte/${transfId}/concluir`).set('Cookie', corteCookies).send({});
     expect(res.status).toBe(409);
@@ -186,11 +186,11 @@ describe('Corte/Transformação e2e (F4c)', () => {
     const p = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: itemSaidaCbId,
+      produtoId: itemSaidaCbId,
       dataOperacao: c.dataOperacao,
       quantidade: 5,
     });
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
     const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
     await pesarSubitem(app, corteCookies, subId);
@@ -207,12 +207,12 @@ describe('Corte/Transformação e2e (F4c)', () => {
     const p = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      produtoId: c.produtoId,
       dataOperacao: c.dataOperacao,
       quantidade: 5,
     });
     fakes(app).balanca.definirPeso('12.500');
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/confirmar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: p.pedidoItemId });
     await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/etiqueta`).set('Cookie', recebimentoCookies).send();
     const pecaAntes = await db().select().from(schema.pecas).where(eq(schema.pecas.id, pecaId)).then((r) => r[0]!);
@@ -221,8 +221,8 @@ describe('Corte/Transformação e2e (F4c)', () => {
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
     // Dois subitens com peso somando exatamente o original (12.500 / 2 = 6.250 cada)
     fakes(app).balanca.definirPeso('6.250');
-    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
-    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+    await subitemCompleto(app, corteCookies, transfId, c.produtoId, p.pedidoItemId);
+    await subitemCompleto(app, corteCookies, transfId, c.produtoId, p.pedidoItemId);
 
     // Emenda 7 / DoD 7.9: 2× CB deixa JAC pendente → concluirCorteOnda7 abre divergência
     const ok = await concluirCorteOnda7(app, corteCookies, transfId, {});
@@ -251,21 +251,21 @@ describe('Corte/Transformação e2e (F4c)', () => {
     const p = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      produtoId: c.produtoId,
       dataOperacao: c.dataOperacao,
       quantidade: 5,
     });
     // Peca com 12.500 kg; dois subitens de 6.250 kg cada (Σ == original → sem justificativa)
     fakes(app).balanca.definirPeso('12.500');
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId, { tipoTransformacao: 'destinacao_mista', motivo: 'necessidade_operacional' });
 
     fakes(app).balanca.definirPeso('6.250');
     // Subitem 1: associado + etiqueta (caminho normal)
-    await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+    await subitemCompleto(app, corteCookies, transfId, c.produtoId, p.pedidoItemId);
 
     // Subitem 2: sobra + etiqueta (RF-CT-14 — sem pedido compatível)
-    const sub2 = await adicionarSubitem(app, corteCookies, transfId, c.itemComercialId);
+    const sub2 = await adicionarSubitem(app, corteCookies, transfId, c.produtoId);
     await pesarSubitem(app, corteCookies, sub2);
     const sobra = await request(srv())
       .post(`/operacao/corte/subitens/${sub2}/sem-cobertura`)

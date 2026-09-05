@@ -73,19 +73,19 @@ export async function seedCargaPronta(request: APIRequestContext): Promise<Cenar
     razaoSocial: `Fornecedor Onda9 ${suffix}`,
     documentoFiscal: makeCpf(seedNum + 1),
   });
-  const itemCompra = await api<{ id: string }>(request, cookieHeader, 'POST', '/itens-compra', {
+  const itemCompra = await api<{ id: string }>(request, cookieHeader, 'POST', '/produtos', {
     codigo: `O9IC${suffix}`,
-    descricao: 'Boi Onda9',
-    unidadeCompra: 'unidade',
+    nome: 'Boi Onda9',
+    unidadePedido: 'unidade',
   });
-  const itemComercial = await api<{ id: string }>(request, cookieHeader, 'POST', '/itens-comerciais', {
+  const itemComercial = await api<{ id: string }>(request, cookieHeader, 'POST', '/produtos', {
     codigo: `O9TZ${suffix}`,
-    descricao: 'Traseiro Onda9',
-    unidadeComercial: 'kg',
+    nome: 'Traseiro Onda9',
+    unidadePedido: 'kg',
   });
   await api(request, cookieHeader, 'POST', '/regras-desdobramento', {
-    itemCompraId: itemCompra.id,
-    itemComercialId: itemComercial.id,
+    produtoOrigemId: itemCompra.id,
+    produtoDestinoId: itemComercial.id,
     fatorQuantidade: 2,
     status: 'ativo',
     vigenciaInicio: addDaysISO(-1),
@@ -102,7 +102,7 @@ export async function seedCargaPronta(request: APIRequestContext): Promise<Cenar
         dataOperacao: candidata,
         fornecedorId: fornecedor.id,
         numeroInterno: `O9-${runId}-${offset}`,
-        itens: [{ itemCompraId: itemCompra.id, quantidadeComprada: 5 }],
+        itens: [{ produtoId: itemCompra.id, quantidadeComprada: 5 }],
       },
     });
     const body = (await create.json().catch(() => ({}))) as { id?: string };
@@ -133,11 +133,11 @@ export async function seedCargaPronta(request: APIRequestContext): Promise<Cenar
     nfeSerie: '1',
   });
 
-  type RecebimentoDetalhe = { itens: Array<{ itemComercialId: string; quantidadeEsperada: string | number }> };
+  type RecebimentoDetalhe = { itens: Array<{ produtoId: string; quantidadeEsperada: string | number }> };
   const detalhe = await api<RecebimentoDetalhe>(request, cookieHeader, 'GET', `/operacao/recebimentos/${recebimentoId}`);
   for (const item of detalhe.itens) {
     await api(request, cookieHeader, 'POST', `/operacao/recebimentos/${recebimentoId}/itens`, {
-      itemComercialId: item.itemComercialId,
+      produtoId: item.produtoId,
       quantidadeRecebida: Number(item.quantidadeEsperada),
     });
   }
@@ -155,7 +155,7 @@ export async function seedCargaPronta(request: APIRequestContext): Promise<Cenar
     dataOperacao,
     rotaPrevista: 'Rota Onda9',
     prioridade: 3,
-    itens: [{ itemComercialId: itemComercial.id, quantidadePedida: 1 }],
+    itens: [{ produtoId: itemComercial.id, quantidadePedida: 1 }],
   });
   const pedidoDetalhe = await api<{ itens: Array<{ id: string }> }>(
     request, cookieHeader, 'GET', `/comercial/pedidos/${pedido.id}`,
@@ -166,7 +166,7 @@ export async function seedCargaPronta(request: APIRequestContext): Promise<Cenar
   // Peça pesada, associada, etiquetada.
   const peca = await api<{ id: string }>(request, cookieHeader, 'POST', '/operacao/pesagem/pecas', {
     recebimentoId,
-    itemComercialBaseId: itemComercial.id,
+    produtoBaseId: itemComercial.id,
     modoCaptura: 'automatico',
   });
   await api(request, cookieHeader, 'POST', `/operacao/pesagem/pecas/${peca.id}/confirmar`, {

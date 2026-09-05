@@ -22,20 +22,20 @@ describe('MapaService — branches', () => {
     return new MapaService({ db } as never);
   }
 
-  it('consultar sem itemComercialId retorna todo o catálogo ativo', async () => {
+  it('consultar sem produtoId retorna todo o catálogo ativo', async () => {
     const service = makeService(
       Array(8).fill([]),
-      [{ itemComercialId: 'ic1', codigo: 'TZ', descricao: 'Traseiro', provisorio: false }],
+      [{ produtoId: 'ic1', codigo: 'TZ', descricao: 'Traseiro', provisorio: false }],
     );
     const mapa = await service.consultar('op1');
     expect(mapa).toHaveLength(1);
     expect(mapa[0]?.saldoComercial).toBe('0.000');
   });
 
-  it('consultar com itemComercialId filtra o catálogo', async () => {
+  it('consultar com produtoId filtra o catálogo', async () => {
     const service = makeService(
       Array(8).fill([]),
-      [{ itemComercialId: 'ic1', codigo: 'TZ', descricao: 'Traseiro', provisorio: false }],
+      [{ produtoId: 'ic1', codigo: 'TZ', descricao: 'Traseiro', provisorio: false }],
     );
     await service.consultar('op1', 'ic1');
     expect((service as unknown as { db: { select: jest.Mock } }).db.select).toHaveBeenCalled();

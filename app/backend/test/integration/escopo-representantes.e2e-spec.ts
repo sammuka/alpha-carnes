@@ -23,7 +23,7 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
   let clienteB: string;
   // Fixture de pedidos/adendos (criterios 6.15, 6.16, 6.17) — dois pedidos do cliente A
   // (totais distintos de B) e um item real para exercitar mutacoes/adendo dentro e fora do escopo.
-  let itemComercialId: string;
+  let produtoId: string;
   let pedidoA1Id: string;
   let pedidoA2Id: string;
   let pedidoBId: string;
@@ -47,8 +47,7 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
         // Bootstrap do perfil comercial + CLIENTES_GERENCIAR para testar mutações no escopo.
         permissoes: [
           'CLIENTES_LER', 'CLIENTES_GERENCIAR',
-          'FORNECEDORES_LER', 'ITENS_COMPRA_LER', 'ITENS_COMERCIAIS_LER',
-          'PRODUTOS_LER', 'REPRESENTANTES_LER', 'ROTAS_LER',
+          'FORNECEDORES_LER', 'PRODUTOS_LER', 'REPRESENTANTES_LER', 'ROTAS_LER',
           'REGRAS_DESDOBRAMENTO_LER', 'PARAMETROS_LER',
           'COMPRAS_PROGRAMADAS_LER', 'DISPONIBILIDADE_LER',
           'PEDIDOS_LER', 'PEDIDOS_GERENCIAR',
@@ -100,7 +99,7 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
     const compras = await createTestUser(app, { perfil: 'compras' });
     const comprasCookies = await loginCookies(app, compras.adminEmail, compras.adminPassword);
     const base = await seedComercialBase(app, { fator: 1 });
-    itemComercialId = base.itemComercialId;
+    produtoId = base.produtoId;
 
     const compraA1 = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2027-02-01', quantidade: 10 });
     const pedidoA1 = await request(app.getHttpServer())
@@ -110,7 +109,7 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
         compraProgramadaId: compraA1,
         clienteId: clienteA,
         dataOperacao: '2027-02-01',
-        itens: [{ itemComercialId, quantidadePedida: 2 }],
+        itens: [{ produtoId, quantidadePedida: 2 }],
       });
     if (pedidoA1.status !== 201) {
       throw new Error(`Falha ao criar pedidoA1: ${pedidoA1.status} ${JSON.stringify(pedidoA1.body)}`);
@@ -125,7 +124,7 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
         compraProgramadaId: compraA2,
         clienteId: clienteA,
         dataOperacao: '2027-02-02',
-        itens: [{ itemComercialId, quantidadePedida: 1 }],
+        itens: [{ produtoId, quantidadePedida: 1 }],
       });
     if (pedidoA2.status !== 201) {
       throw new Error(`Falha ao criar pedidoA2: ${pedidoA2.status} ${JSON.stringify(pedidoA2.body)}`);
@@ -140,7 +139,7 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
         compraProgramadaId: compraB,
         clienteId: clienteB,
         dataOperacao: '2027-02-03',
-        itens: [{ itemComercialId, quantidadePedida: 3 }],
+        itens: [{ produtoId, quantidadePedida: 3 }],
       });
     if (pedidoB.status !== 201) {
       throw new Error(`Falha ao criar pedidoB: ${pedidoB.status} ${JSON.stringify(pedidoB.body)}`);
@@ -291,7 +290,7 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
     await request(app.getHttpServer())
       .post(`/comercial/pedidos/${pedidoBId}/itens`)
       .set('Cookie', comercialA)
-      .send({ itemComercialId, quantidade: 1 })
+      .send({ produtoId, quantidade: 1 })
       .expect(404);
 
     await request(app.getHttpServer())
@@ -326,7 +325,7 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
     const registrarNoEscopo = await request(app.getHttpServer())
       .post(`/comercial/pedidos/${pedidoA1Id}/adendos`)
       .set('Cookie', comercialA)
-      .send({ itemComercialId, quantidadeAdicionada: 1, motivo: 'ajuste dentro do escopo' })
+      .send({ produtoId, quantidadeAdicionada: 1, motivo: 'ajuste dentro do escopo' })
       .expect(201);
     expect(registrarNoEscopo.body.item.quantidadePedida).toBe('3.000');
 
@@ -342,7 +341,7 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
     await request(app.getHttpServer())
       .post(`/comercial/pedidos/${pedidoBId}/adendos`)
       .set('Cookie', comercialA)
-      .send({ itemComercialId, quantidadeAdicionada: 1, motivo: 'tentativa fora do escopo' })
+      .send({ produtoId, quantidadeAdicionada: 1, motivo: 'tentativa fora do escopo' })
       .expect(404);
 
     await request(app.getHttpServer())

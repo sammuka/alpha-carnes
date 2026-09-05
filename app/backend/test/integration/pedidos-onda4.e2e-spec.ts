@@ -24,7 +24,7 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
     clienteId: string;
     dataOperacao: string;
     salvarComoRascunho: boolean;
-    itens: Array<{ itemComercialId: string; quantidadePedida: number }>;
+    itens: Array<{ produtoId: string; quantidadePedida: number }>;
   };
   let ctx: {
     clienteComRotaId: string;
@@ -62,7 +62,7 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
       clienteId: base.clienteId,
       dataOperacao: '2026-08-05',
       salvarComoRascunho: false,
-      itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+      itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
     };
 
     const [rota] = await db.insert(schema.rotas)
@@ -128,7 +128,7 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
     expect(pedido.operacaoId).toEqual(expect.any(String));
     await expect(service.buscarAberto({
       clienteId: dtoBase.clienteId,
-      itemComercialId: dtoBase.itens[0]!.itemComercialId,
+      produtoId: dtoBase.itens[0]!.produtoId,
       dataOperacao: '2026-08-10',
     }, usuarioId)).rejects.toMatchObject({
       status: 404,
@@ -170,7 +170,7 @@ describe('pedidos-onda4 (AD-06 liberar reserva administrativa)', () => {
   let comprasCookies: string;
   let comercialCookies: string;
   let gestorCookies: string;
-  let base: { fornecedorId: string; itemCompraId: string; itemComercialId: string; clienteId: string };
+  let base: Awaited<ReturnType<typeof seedComercialBase>>;
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -206,7 +206,7 @@ describe('pedidos-onda4 (AD-06 liberar reserva administrativa)', () => {
         clienteId: base.clienteId,
         dataOperacao,
         salvarComoRascunho: opts.salvarComoRascunho,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       });
     if (res.status !== 201) throw new Error(`Falha ao criar pedido: ${res.status} ${JSON.stringify(res.body)}`);
     return res.body as { id: string; status: string };

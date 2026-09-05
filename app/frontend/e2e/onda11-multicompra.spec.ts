@@ -150,9 +150,9 @@ interface DadosO11 {
   fornecedorId: string;
   clienteId: string;
   clienteRazao: string;
-  itemCompraId: string;
-  itemComercialId: string;
-  itemComercialDescricao: string;
+  produtoId: string;
+  produtoId: string;
+  itemComercialnome: string;
   pedidoId: string;
   recebimento1Id: string;
   recebimento2Id: string;
@@ -239,15 +239,15 @@ async function prepararCenario(
     razaoSocial: `Fornecedor Onda11 ${suffix}`,
     documentoFiscal: makeCpf(Number(suffix) + 11),
   });
-  const itemCompra = await backend<{ id: string }>(api, adminCookie, 'POST', '/itens-compra', {
+  const itemCompra = await backend<{ id: string }>(api, adminCookie, 'POST', '/produtos', {
     codigo: `O11IC${suffix}`,
-    descricao: 'Boi Onda11',
-    unidadeCompra: 'unidade',
+    nome: 'Boi Onda11',
+    unidadePedido: 'unidade',
   });
-  const itemComercial = await backend<{ id: string }>(api, adminCookie, 'POST', '/itens-comerciais', {
+  const itemComercial = await backend<{ id: string }>(api, adminCookie, 'POST', '/produtos', {
     codigo: `O11TZ${suffix}`,
-    descricao: itemDesc,
-    unidadeComercial: 'kg',
+    nome: itemDesc,
+    unidadePedido: 'kg',
   });
   const cliente = await backend<{ id: string }>(api, adminCookie, 'POST', '/clientes', {
     codigo: `O11CL${suffix}`,
@@ -255,8 +255,8 @@ async function prepararCenario(
     documentoFiscal: makeCpf(Number(suffix) + 22),
   });
   await backend(api, adminCookie, 'POST', '/regras-desdobramento', {
-    itemCompraId: itemCompra.id,
-    itemComercialId: itemComercial.id,
+    produtoOrigemId: itemCompra.id,
+    produtoDestinoId: itemComercial.id,
     fatorQuantidade: 1,
     status: 'ativo',
     vigenciaInicio: '2026-01-01',
@@ -290,7 +290,7 @@ async function prepararCenario(
       {
         dataOperacao,
         fornecedorId: fornecedor.id,
-        itens: [{ itemCompraId: itemCompra.id, quantidadeComprada: qtd }],
+        itens: [{ produtoId: itemCompra.id, quantidadeComprada: qtd }],
       },
     );
     await backend(api, adminCookie, 'POST', `/comercial/compras-programadas/${criar.id}/confirmar`);
@@ -328,9 +328,9 @@ async function prepararCenario(
     fornecedorId: fornecedor.id,
     clienteId: cliente.id,
     clienteRazao,
-    itemCompraId: itemCompra.id,
-    itemComercialId: itemComercial.id,
-    itemComercialDescricao: itemDesc,
+    produtoOrigemId: itemCompra.id,
+    produtoDestinoId: itemComercial.id,
+    itemComercialnome: itemDesc,
     pedidoId: '',
     recebimento1Id,
     recebimento2Id,
@@ -407,10 +407,10 @@ test.describe('Onda 11 — jornada multicompra', () => {
       await page.getByPlaceholder('Buscar cliente...').fill(dados.clienteRazao);
       await page.getByRole('option', { name: new RegExp(dados.clienteRazao) }).click();
       await page.locator('#pedido-operacao').selectOption(dados.operacaoId);
-      await page.locator('#produto-novo').selectOption(dados.itemComercialId);
+      await page.locator('#produto-novo').selectOption(dados.produtoId);
       await page.locator('#quantidade-produto-novo').fill('2');
       await page.getByRole('button', { name: 'Adicionar produto' }).click();
-      await expect(page.getByText(dados.itemComercialDescricao)).toBeVisible();
+      await expect(page.getByText(dados.produtoNome)).toBeVisible();
       await shot(page, '02-pedido-operacao.png');
       await page.getByRole('button', { name: 'Salvar Rascunho' }).click();
       await expect(page.getByRole('heading', { name: 'Pedidos de Venda' })).toBeVisible({ timeout: 20_000 });
@@ -440,7 +440,7 @@ test.describe('Onda 11 — jornada multicompra', () => {
           '/operacao/pesagem/pecas',
           {
             recebimentoId,
-            itemComercialBaseId: dados.itemComercialId,
+            produtoBaseId: dados.produtoId,
             modoCaptura: 'automatico',
           },
         );

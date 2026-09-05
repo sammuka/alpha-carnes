@@ -297,7 +297,7 @@ async function completarCabecalhoComItensNaTx(
 
   await tx.insert(notasFiscaisFornecedorItens).values(dto.itens.map((item) => ({
     nfId: existente.id,
-    itemComercialId: item.itemComercialId,
+    produtoId: item.produtoId,
     quantidadeDeclarada: formatarQtd(item.quantidadeDeclarada),
     pesoDeclarado: item.pesoDeclarado === undefined ? null : formatarQtd(item.pesoDeclarado),
   })));
@@ -403,7 +403,7 @@ export async function persistirNfEstruturadaNaTx(
 
   await tx.insert(notasFiscaisFornecedorItens).values(dto.itens.map((item) => ({
     nfId: nf.id,
-    itemComercialId: item.itemComercialId,
+    produtoId: item.produtoId,
     quantidadeDeclarada: formatarQtd(item.quantidadeDeclarada),
     pesoDeclarado: item.pesoDeclarado === undefined ? null : formatarQtd(item.pesoDeclarado),
   })));

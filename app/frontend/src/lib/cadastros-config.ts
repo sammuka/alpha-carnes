@@ -2,7 +2,6 @@ import { z } from 'zod';
 import type { FieldValues } from 'react-hook-form';
 import type { LucideIcon } from 'lucide-react';
 import { Building2, MapPin, Truck } from 'lucide-react';
-import { UNIDADE_MEDIDA_OPTIONS } from '@/lib/dominios';
 import { mascararCep, mascararCpfCnpj, mascararTelefone } from '@/lib/masks';
 
 export type AbaCadastro = 'gerais' | 'fiscais' | 'contatos' | 'preferencias' | 'parametros';
@@ -412,78 +411,8 @@ export const fornecedoresConfig: CadastroConfig = {
   }),
 };
 
-export const itensCompraConfig: CadastroConfig = {
-  recurso: 'itens-compra',
-  titulo: 'Itens de Compra',
-  permissaoLer: 'ITENS_COMPRA_LER',
-  permissaoGerenciar: 'ITENS_COMPRA_GERENCIAR',
-  colunas: [
-    { campo: 'codigo', rotulo: 'Código' },
-    { campo: 'descricao', rotulo: 'Descrição' },
-    { campo: 'unidadeCompra', rotulo: 'Unidade' },
-    { campo: 'status', rotulo: 'Status' },
-  ],
-  campos: [
-    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true, maxLength: 50 },
-    { nome: 'descricao', rotulo: 'Descrição', tipo: 'text', obrigatorio: true, maxLength: 200 },
-    { nome: 'categoria', rotulo: 'Categoria', tipo: 'text', maxLength: 100 },
-    {
-      nome: 'unidadeCompra',
-      rotulo: 'Unidade de Compra',
-      tipo: 'select',
-      obrigatorio: true,
-      opcoes: UNIDADE_MEDIDA_OPTIONS,
-    },
-    { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes },
-  ],
-  schema: z.object({
-    codigo: z.string().min(1, 'Código obrigatório'),
-    descricao: z.string().min(1, 'Descrição obrigatória'),
-    categoria: z.string().optional(),
-    unidadeCompra: z.enum(['kg', 'unidade']),
-    status: z.enum(['ativo', 'inativo']).optional(),
-  }),
-};
-
-export const itensComerciaisConfig: CadastroConfig = {
-  recurso: 'itens-comerciais',
-  titulo: 'Itens Comerciais',
-  permissaoLer: 'ITENS_COMERCIAIS_LER',
-  permissaoGerenciar: 'ITENS_COMERCIAIS_GERENCIAR',
-  colunas: [
-    { campo: 'codigo', rotulo: 'Código' },
-    { campo: 'descricao', rotulo: 'Descrição' },
-    { campo: 'unidadeComercial', rotulo: 'Unidade' },
-    { campo: 'status', rotulo: 'Status' },
-  ],
-  campos: [
-    { nome: 'codigo', rotulo: 'Código', tipo: 'text', obrigatorio: true, maxLength: 50 },
-    { nome: 'descricao', rotulo: 'Descrição', tipo: 'text', obrigatorio: true, maxLength: 200 },
-    { nome: 'categoria', rotulo: 'Categoria', tipo: 'text', maxLength: 100 },
-    {
-      nome: 'unidadeComercial',
-      rotulo: 'Unidade Comercial',
-      tipo: 'select',
-      obrigatorio: true,
-      opcoes: UNIDADE_MEDIDA_OPTIONS,
-    },
-    { nome: 'permiteCorte', rotulo: 'Permite Corte', tipo: 'checkbox' },
-    { nome: 'status', rotulo: 'Status', tipo: 'select', opcoes: statusOpcoes },
-  ],
-  schema: z.object({
-    codigo: z.string().min(1, 'Código obrigatório'),
-    descricao: z.string().min(1, 'Descrição obrigatória'),
-    categoria: z.string().optional(),
-    unidadeComercial: z.enum(['kg', 'unidade']),
-    permiteCorte: z.boolean().optional(),
-    status: z.enum(['ativo', 'inativo']).optional(),
-  }),
-};
-
 export const CADASTROS: Record<string, CadastroConfig> = {
   fornecedores: fornecedoresConfig,
-  'itens-compra': itensCompraConfig,
-  'itens-comerciais': itensComerciaisConfig,
 };
 
 /**

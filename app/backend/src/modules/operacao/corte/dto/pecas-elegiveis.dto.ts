@@ -10,7 +10,7 @@ export type PecaElegivelDesossa = {
   etiquetaAtual: string | null;
   statusPeca: string;
   pesoOriginal: string | null;
-  itemComercialId: string;
+  produtoId: string;
   produtoCodigo: string | null;
   recebimentoId: string;
   transformacaoId: string | null;

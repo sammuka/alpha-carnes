@@ -1,6 +1,7 @@
+import { verify } from '@node-rs/argon2';
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { count, eq } from 'drizzle-orm';
+import { and, count, eq, isNull, sql } from 'drizzle-orm';
 import * as schema from '../../src/database/schema';
 import { seed } from '../../src/database/seed';
 import { DESCRICOES_PERMISSOES } from '../../src/common/rbac/permissoes';
@@ -44,6 +45,25 @@ describe('Seed idempotência', () => {
     expect(rows.length).toBe(1);
   });
 
+  it('usuário admin autenticável com perfil administrador após seed 2×', async () => {
+    const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@alphacarnes.local';
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'change-me-admin-password';
+    const [admin] = await db
+      .select()
+      .from(schema.usuarios)
+      .where(and(eq(schema.usuarios.email, adminEmail), isNull(schema.usuarios.deletedAt)));
+    expect(admin).toBeTruthy();
+    expect(admin!.ativo).toBe(true);
+    expect(await verify(admin!.senhaHash, adminPassword)).toBe(true);
+
+    const perfisAdmin = await db
+      .select({ slug: schema.perfis.slug })
+      .from(schema.usuariosPerfis)
+      .innerJoin(schema.perfis, eq(schema.usuariosPerfis.perfilId, schema.perfis.id))
+      .where(eq(schema.usuariosPerfis.usuarioId, admin!.id));
+    expect(perfisAdmin.map((p) => p.slug)).toEqual(['administrador']);
+  });
+
   it('perfil corte tem a permissão CORTE_GERENCIAR após seed', async () => {
     const linhas = await db
       .select({ codigo: schema.permissoes.codigo })
@@ -65,19 +85,21 @@ describe('Seed idempotência', () => {
   });
 
   it('seed cria desdobramento AD-01 do boi casado (2 TZ + 2 DT + 2 PA)', async () => {
-    const regras = await db
-      .select({
-        compra: schema.itensCompra.codigo,
-        comercial: schema.itensComerciais.codigo,
-        fator: schema.regrasDesdobramentoComercial.fatorQuantidade,
-      })
-      .from(schema.regrasDesdobramentoComercial)
-      .innerJoin(schema.itensCompra, eq(schema.itensCompra.id, schema.regrasDesdobramentoComercial.itemCompraId))
-      .innerJoin(
-        schema.itensComerciais,
-        eq(schema.itensComerciais.id, schema.regrasDesdobramentoComercial.itemComercialId),
-      )
-      .where(eq(schema.itensCompra.codigo, 'BOI'));
+    const resultado = await db.execute<{
+      compra: string;
+      comercial: string;
+      fator: string;
+    }>(sql`
+      SELECT po.codigo AS compra,
+             pd.codigo AS comercial,
+             r.fator_quantidade AS fator
+      FROM regras_desdobramento_comercial r
+      JOIN produtos po ON po.id = r.produto_origem_id
+      JOIN produtos pd ON pd.id = r.produto_destino_id
+      WHERE po.codigo = 'BOI'
+        AND r.deleted_at IS NULL
+    `);
+    const regras = resultado.rows;
     expect(regras).toHaveLength(3);
     expect(regras.map((r) => ({ compra: r.compra, comercial: r.comercial, fator: Number(r.fator) }))).toEqual(
       expect.arrayContaining([

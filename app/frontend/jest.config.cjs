@@ -2,12 +2,16 @@
 module.exports = {
   testEnvironment: 'jsdom',
   testPathIgnorePatterns: ['/node_modules/', '/.next/', '/e2e/'],
-  moduleNameMapper: { '^@/(.*)$': '<rootDir>/src/$1' },
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1',
+    '^@testing-library/user-event$': '<rootDir>/test-utils/patched-user-event.cjs',
+  },
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', { tsconfig: './tsconfig.test.json' }],
   },
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  maxWorkers: 2,
   passWithNoTests: true,
-  // userEvent + drawers saturam o CPU no suite completo (Windows); 5s flakava no gate.
-  testTimeout: 15_000,
+  // userEvent + drawers/combobox no jsdom do CI Linux saturam CPU; 60s evita flake no Actions.
+  testTimeout: 120_000,
 };

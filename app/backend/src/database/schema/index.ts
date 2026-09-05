@@ -7,8 +7,6 @@ export * from './fornecedores.schema';
 export * from './frota.schema';
 export * from './produtos.schema';
 export * from './rotas.schema';
-export * from './itens-compra.schema';
-export * from './itens-comerciais.schema';
 export * from './modelos-etiqueta.schema';
 export * from './regras-desdobramento.schema';
 export * from './parametros.schema';

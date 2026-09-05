@@ -64,7 +64,7 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
     const { default: request } = await import('supertest');
     const pecaId = await pesarPeca(app, recebimentoCookies, {
       recebimentoId: c.recebimentoId,
-      itemComercialBaseId: c.itemComercialId,
+      produtoBaseId: c.produtoId,
     });
     await request(srv())
       .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
@@ -81,7 +81,7 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
   async function subitemElegivel(c: CenarioPesagem, pecaId: string, pedidoItemId: string): Promise<string> {
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
     fakes(app).balanca.definirPeso('6.000');
-    return subitemCompleto(app, corteCookies, transfId, c.itemComercialId, pedidoItemId);
+    return subitemCompleto(app, corteCookies, transfId, c.produtoId, pedidoItemId);
   }
 
   /** Insere caminhão de frota diretamente via Drizzle (fixture — padrão do repo). */
@@ -163,7 +163,7 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2027-01-03');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const peca1 = await pecaElegivel(c, p.pedidoItemId);
@@ -227,7 +227,7 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2027-01-04');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const peca1 = await pecaElegivel(c, p.pedidoItemId);
@@ -265,7 +265,7 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2027-01-05');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const peca1 = await pecaElegivel(c, p.pedidoItemId);
@@ -290,7 +290,7 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2027-01-06');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const peca1 = await pecaElegivel(c, p.pedidoItemId);
@@ -332,7 +332,7 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2027-01-07');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -382,11 +382,11 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2027-01-08');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId, peso: '20.000',
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId, peso: '20.000',
     });
     await request(srv())
       .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
@@ -399,7 +399,7 @@ describe('Onda 9 — Carga e2e (DoD 9.1–9.10)', () => {
 
     // 2ª peça, usada como origem do subitem (mantém a 1ª como item de carga tipo 'peca')
     const pecaOrigemSub = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId, peso: '15.000',
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId, peso: '15.000',
     });
     await request(srv())
       .post(`/operacao/pesagem/pecas/${pecaOrigemSub}/confirmar`)

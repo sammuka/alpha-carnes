@@ -37,8 +37,8 @@ describe('Etiqueta + leitura QR e2e (RF-PS-23/24, ADR-009, REFINO 1)', () => {
 
   async function pecaAssociada(c: CenarioPesagem): Promise<string> {
     const { default: request } = await import('supertest');
-    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 5 });
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId, dataOperacao: c.dataOperacao, quantidade: 5 });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/confirmar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: p.pedidoItemId });
     return pecaId;
   }
@@ -52,7 +52,7 @@ describe('Etiqueta + leitura QR e2e (RF-PS-23/24, ADR-009, REFINO 1)', () => {
   it('etiqueta só pode ser emitida após a confirmação (409 antes de associar)', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-09-01');
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
 
     const res = await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/etiqueta`).set('Cookie', recebimentoCookies).send();
     expect(res.status).toBe(409);
@@ -194,14 +194,14 @@ describe('Etiqueta + leitura QR e2e (RF-PS-23/24, ADR-009, REFINO 1)', () => {
     const { pecaAssociadaComEtiqueta, pesarPeca } = await import('../helpers/pesagem-fixtures');
     const c = await cenario('2026-09-21');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 2,
     });
     const pecaRetiradaId = await pecaAssociadaComEtiqueta(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId, pedidoVendaItemId: p.pedidoItemId,
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId, pedidoVendaItemId: p.pedidoItemId,
     });
     const pecaInseridaId = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId,
     });
     const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
     const etiquetaAntes = await db.select().from(schema.etiquetasImpressoes)
@@ -291,12 +291,12 @@ describe('Etiqueta + leitura QR e2e (RF-PS-23/24, ADR-009, REFINO 1)', () => {
       representanteId: rep!.id, nomeFantasia: 'Fantasia Etiqueta',
     }).where(eq(schema.clientes.id, c.clienteId));
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 2,
     });
     await db.update(schema.pedidosVenda).set({ rotaPrevista: 'Rota Norte' }).where(eq(schema.pedidosVenda.id, p.pedidoId));
     const pecaId = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId,
     });
     await db.update(schema.pecas).set({
       capturaMeta: { maisPesada: true, maisGorda: true, melhorAcabamento: false },

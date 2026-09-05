@@ -61,7 +61,7 @@ describe('Subitens e2e (F4c — pesar/associar/redirecionar/sem-cobertura)', () 
   it('pesar subitem ADR-009: indisponível → 409; sem motivo manual → 400; manual ok com snapshot', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-11-01');
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
     const itemSaidaCbId = await itemSaidaCanonicoCb(app);
     const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
@@ -86,7 +86,7 @@ describe('Subitens e2e (F4c — pesar/associar/redirecionar/sem-cobertura)', () 
     const c = await cenario('2026-11-02');
 
     // Emenda 7 / DoD 7.7: "item2" = JAC (saída TZ_A), não item inventado fora da regra
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
     const saidas = await prepararTransformacaoComRegraTzA(app, corteCookies, transfId);
     const item2Id = saidas.itemSaidaJacId; // reclassifica para JAC
@@ -95,14 +95,14 @@ describe('Subitens e2e (F4c — pesar/associar/redirecionar/sem-cobertura)', () 
     const pedido2 = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: item2Id,
+      produtoId: item2Id,
       dataOperacao: c.dataOperacao,
       quantidade: 2,
     });
     const pedidoBase = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: itemBaseId,
+      produtoId: itemBaseId,
       dataOperacao: c.dataOperacao,
       quantidade: 2,
     });
@@ -141,10 +141,10 @@ describe('Subitens e2e (F4c — pesar/associar/redirecionar/sem-cobertura)', () 
     const { default: request } = await import('supertest');
     const c = await cenario('2026-11-03');
     const itemSaidaCbId = await itemSaidaCanonicoCb(app);
-    const pa = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: itemSaidaCbId, dataOperacao: c.dataOperacao, quantidade: 2 });
-    const pb = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: itemSaidaCbId, dataOperacao: c.dataOperacao, quantidade: 2 });
+    const pa = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, produtoId: itemSaidaCbId, dataOperacao: c.dataOperacao, quantidade: 2 });
+    const pb = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: await criarOutroCliente(app), produtoId: itemSaidaCbId, dataOperacao: c.dataOperacao, quantidade: 2 });
 
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
     const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);
     await pesarSubitem(app, corteCookies, subId);
@@ -166,7 +166,7 @@ describe('Subitens e2e (F4c — pesar/associar/redirecionar/sem-cobertura)', () 
   it('sem cobertura: sobra sem motivo → 400; com motivo → em_sobra; divergência abre ocorrência', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-11-04');
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
     const itemSaidaCbId = await itemSaidaCanonicoCb(app);
     const subId = await adicionarSubitem(app, corteCookies, transfId, itemSaidaCbId);

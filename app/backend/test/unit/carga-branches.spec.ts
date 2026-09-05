@@ -55,7 +55,7 @@ describe('CargaService — transferir branches', () => {
   });
 
   it('transferir → lança 409 se pedido destino cancelado', async () => {
-    const destino = { id: 'pvi2', pedidoVendaId: 'pv2', itemComercialId: 'ic1', statusPedido: 'cancelado', operacaoId: 'op1', deletedAt: null };
+    const destino = { id: 'pvi2', pedidoVendaId: 'pv2', produtoId: 'ic1', statusPedido: 'cancelado', operacaoId: 'op1', deletedAt: null };
     const { service } = makeService([[item], [destino]]);
     await expect(
       service.transferir('ci1', { pedidoVendaItemDestinoId: 'pvi2', motivo: 'x' } as never, 'u1'),
@@ -63,7 +63,7 @@ describe('CargaService — transferir branches', () => {
   });
 
   it('transferir → lança 409 se destino é o mesmo item atual', async () => {
-    const destino = { id: 'pvi1', pedidoVendaId: 'pv1', itemComercialId: 'ic1', statusPedido: 'aberto', operacaoId: 'op1', deletedAt: null };
+    const destino = { id: 'pvi1', pedidoVendaId: 'pv1', produtoId: 'ic1', statusPedido: 'aberto', operacaoId: 'op1', deletedAt: null };
     const { service } = makeService([[item], [destino]]);
     await expect(
       service.transferir('ci1', { pedidoVendaItemDestinoId: 'pvi1', motivo: 'x' } as never, 'u1'),
@@ -71,8 +71,8 @@ describe('CargaService — transferir branches', () => {
   });
 
   it('transferir (peca) → lança 409 se destino é de outra operação', async () => {
-    const destino = { id: 'pvi2', pedidoVendaId: 'pv2', itemComercialId: 'ic1', statusPedido: 'aberto', operacaoId: 'op-OUTRA', deletedAt: null };
-    const peca = { itemComercialBaseId: 'ic1', compraProgramadaId: 'cp1', operacaoId: 'op1' };
+    const destino = { id: 'pvi2', pedidoVendaId: 'pv2', produtoId: 'ic1', statusPedido: 'aberto', operacaoId: 'op-OUTRA', deletedAt: null };
+    const peca = { produtoBaseId: 'ic1', compraProgramadaId: 'cp1', operacaoId: 'op1' };
     const { service } = makeService([[item], [destino], [peca]]);
     await expect(
       service.transferir('ci1', { pedidoVendaItemDestinoId: 'pvi2', motivo: 'x' } as never, 'u1'),
@@ -81,8 +81,8 @@ describe('CargaService — transferir branches', () => {
 
   it('transferir (subitem) → lança 409 se destino é de outra operação', async () => {
     const subItem = { ...item, tipoOrigem: 'subitem', pecaId: null, subitemId: 'sub1' };
-    const destino = { id: 'pvi2', pedidoVendaId: 'pv2', itemComercialId: 'ic1', statusPedido: 'aberto', operacaoId: 'op-OUTRA', deletedAt: null };
-    const sub = { itemComercialId: 'ic1', compraProgramadaId: 'cp1', operacaoId: 'op1' };
+    const destino = { id: 'pvi2', pedidoVendaId: 'pv2', produtoId: 'ic1', statusPedido: 'aberto', operacaoId: 'op-OUTRA', deletedAt: null };
+    const sub = { produtoId: 'ic1', compraProgramadaId: 'cp1', operacaoId: 'op1' };
     const { service } = makeService([[subItem], [destino], [sub]]);
     await expect(
       service.transferir('ci1', { pedidoVendaItemDestinoId: 'pvi2', motivo: 'x' } as never, 'u1'),
@@ -90,8 +90,8 @@ describe('CargaService — transferir branches', () => {
   });
 
   it('transferir → lança 409 se item comercial incompatível com destino', async () => {
-    const destino = { id: 'pvi2', pedidoVendaId: 'pv2', itemComercialId: 'ic-OUTRO', statusPedido: 'aberto', operacaoId: 'op1', deletedAt: null };
-    const peca = { itemComercialBaseId: 'ic1', compraProgramadaId: 'cp1', operacaoId: 'op1' };
+    const destino = { id: 'pvi2', pedidoVendaId: 'pv2', produtoId: 'ic-OUTRO', statusPedido: 'aberto', operacaoId: 'op1', deletedAt: null };
+    const peca = { produtoBaseId: 'ic1', compraProgramadaId: 'cp1', operacaoId: 'op1' };
     const { service } = makeService([[item], [destino], [peca]]);
     await expect(
       service.transferir('ci1', { pedidoVendaItemDestinoId: 'pvi2', motivo: 'x' } as never, 'u1'),

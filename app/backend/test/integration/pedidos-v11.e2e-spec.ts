@@ -45,7 +45,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
       .send({
         dataOperacao,
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: quantidade }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: quantidade }],
       });
     expect(criar.status).toBe(201);
     const compraId = criar.body.id as string;
@@ -54,7 +54,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
       .set('Cookie', comprasCookies)
       .send()
       .expect(201);
-    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    const disp = await lerDisponibilidade(app, base.produtoId);
     if (!disp) throw new Error('disponibilidade não gerada');
     return { base, compraId, disponibilidadeId: disp.id };
   }
@@ -68,7 +68,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-10',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       });
     expect(res.status).toBe(403);
   });
@@ -82,7 +82,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-11',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 4 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 4 }],
       })
       .expect(201);
 
@@ -109,7 +109,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-01',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       })
       .expect(409);
 
@@ -136,12 +136,12 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-02',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       })
       .expect(201);
 
     expect(res.body.status).toBe('em_elaboracao_reserva_ativa');
-    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    const disp = await lerDisponibilidade(app, base.produtoId);
     expect(Number(disp!.quantidadeDisponivel)).toBe(0);
     expect(Number(disp!.quantidadeReservada)).toBe(2);
 
@@ -176,11 +176,11 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-03',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 4 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 4 }],
       })
       .expect(201);
     expect(res.body.status).toBe('em_elaboracao_reserva_ativa');
-    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    const disp = await lerDisponibilidade(app, base.produtoId);
     expect(Number(disp!.quantidadeDisponivel)).toBe(6);
   });
 
@@ -196,8 +196,8 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         clienteId: base.clienteId,
         dataOperacao: '2026-11-04',
         itens: [
-          { itemComercialId: base.itemComercialId, quantidadePedida: 1 },
-          { itemComercialId: base.itemComercialId, quantidadePedida: 1 },
+          { produtoId: base.produtoId, quantidadePedida: 1 },
+          { produtoId: base.produtoId, quantidadePedida: 1 },
         ],
       });
     expect(res.status).toBe(400);
@@ -214,20 +214,20 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-05',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 2 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 2 }],
       })
       .expect(201);
 
     // Segundo item comercial (mesmo saldo restante = 3)
     const base2 = await seedComercialBase(app, { fator: 1 });
-    // Reusa a disponibilidade do mesmo dia: inclui o mesmo itemComercialId → conflito.
+    // Reusa a disponibilidade do mesmo dia: inclui o mesmo produtoId → conflito.
     // Em vez disso, tenta incluir quantidade acima do saldo restante no MESMO item → 409 no challenge.
     // Plano: inclusão de NOVO item comercial. Criamos outro item na mesma compra via nova regra? Simplifica:
     // incluir o mesmo item → 409 Conflict "já existe".
     const dup = await request(app.getHttpServer())
       .post(`/comercial/pedidos/${criado.body.id}/itens`)
       .set('Cookie', comercialCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidade: 1 });
+      .send({ produtoId: base.produtoId, quantidade: 1 });
     expect(dup.status).toBe(409);
     const dupMsg = typeof dup.body.message === 'object' && dup.body.message !== null
       ? (dup.body.message as { message?: string }).message
@@ -243,7 +243,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: c3,
         clienteId: b3.clienteId,
         dataOperacao: '2026-11-06',
-        itens: [{ itemComercialId: b3.itemComercialId, quantidadePedida: 1 }],
+        itens: [{ produtoId: b3.produtoId, quantidadePedida: 1 }],
       })
       .expect(201);
 
@@ -251,7 +251,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
     const challenge = await request(app.getHttpServer())
       .post(`/comercial/pedidos/${p3.body.id}/itens`)
       .set('Cookie', comercialCookies)
-      .send({ itemComercialId: base2.itemComercialId, quantidade: 3 })
+      .send({ produtoId: base2.produtoId, quantidade: 3 })
       .expect(409);
     const payload = challengePayload(challenge.body);
     expect(payload.code).toBe('OVERBOOKING_CONFIRMACAO_NECESSARIA');
@@ -259,7 +259,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
     const ok = await request(app.getHttpServer())
       .post(`/comercial/pedidos/${p3.body.id}/itens/confirmar-overbooking`)
       .set('Cookie', comercialCookies)
-      .send({ itemComercialId: base2.itemComercialId, quantidade: 3 })
+      .send({ produtoId: base2.produtoId, quantidade: 3 })
       .expect(200);
     expect(ok.body.id).toBe(p3.body.id);
   });
@@ -273,7 +273,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-07',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 4 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 4 }],
       })
       .expect(201);
 
@@ -294,7 +294,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-08',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       })
       .expect(201);
 
@@ -309,7 +309,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
       .set('Cookie', comercialCookies)
       .send({ novaQuantidade: 3, motivo: 'ajuste déficit' })
       .expect(200);
-    let disp = await lerDisponibilidade(app, base.itemComercialId);
+    let disp = await lerDisponibilidade(app, base.produtoId);
     expect(Number(disp!.quantidadeDisponivel)).toBe(0);
     expect(Number(disp!.quantidadeReservada)).toBe(2);
 
@@ -319,7 +319,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
       .set('Cookie', comercialCookies)
       .send({ novaQuantidade: 1, motivo: 'devolver real' })
       .expect(200);
-    disp = await lerDisponibilidade(app, base.itemComercialId);
+    disp = await lerDisponibilidade(app, base.produtoId);
     expect(Number(disp!.quantidadeDisponivel)).toBe(1);
     expect(Number(disp!.quantidadeReservada)).toBe(1);
 
@@ -329,7 +329,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
       .set('Cookie', comercialCookies)
       .send({ motivo: 'remover item' })
       .expect(200);
-    disp = await lerDisponibilidade(app, base.itemComercialId);
+    disp = await lerDisponibilidade(app, base.produtoId);
     expect(Number(disp!.quantidadeDisponivel)).toBe(2);
 
     // Novo pedido para cancelar
@@ -340,7 +340,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-08',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 3 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 3 }],
       })
       .expect(201);
     await request(app.getHttpServer())
@@ -348,7 +348,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
       .set('Cookie', comercialCookies)
       .send({ motivo: 'cliente desistiu' })
       .expect(200);
-    disp = await lerDisponibilidade(app, base.itemComercialId);
+    disp = await lerDisponibilidade(app, base.produtoId);
     expect(Number(disp!.quantidadeDisponivel)).toBe(2);
   });
 
@@ -361,7 +361,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
         dataOperacao: '2026-11-09',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 4 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 4 }],
       })
       .expect(201);
 

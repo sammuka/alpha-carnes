@@ -5,7 +5,7 @@
 import { compararQtd } from '../../../common/crud/decimal';
 
 export interface PecaParaScore {
-  itemComercialBaseId: string;
+  produtoBaseId: string;
   /** Peso da peça como string NUMERIC(.,3). */
   pesoOriginal: string;
   /** Flags de pecas.captura_meta (D6.4): mais_pesada, mais_gorda, melhor_acabamento. */
@@ -23,7 +23,7 @@ export interface PreferenciasCliente {
 export interface CandidatoPedido {
   pedidoVendaId: string;
   pedidoVendaItemId: string;
-  itemComercialId: string;
+  produtoId: string;
   clienteId: string;
   /** quantidade_pedida − quantidade_atendida (string NUMERIC). */
   saldoPendente: string;
@@ -63,7 +63,7 @@ export function calcularScores(peca: PecaParaScore, candidatos: CandidatoPedido[
   const scored: SugestaoScored[] = [];
 
   for (const c of candidatos) {
-    if (c.itemComercialId !== peca.itemComercialBaseId) continue; // incompatível
+    if (c.produtoId !== peca.produtoBaseId) continue; // incompatível
     if (compararQtd(c.saldoPendente, '0') <= 0) continue; // sem saldo
 
     let score = PESO_COMPATIVEL;

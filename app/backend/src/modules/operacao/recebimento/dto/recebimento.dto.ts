@@ -69,7 +69,7 @@ const quantidadeSchema = z
   .max(9_999_999_999.999, 'quantidade fora do intervalo');
 
 export const registrarItemSchema = z.object({
-  itemComercialId: z.string().uuid(),
+  produtoId: z.string().uuid(),
   quantidadeRecebida: quantidadeSchema,
   pesoTotalApurado: z.number().nonnegative().max(9_999_999.999).optional(),
   observacoes: z.string().trim().max(1000).optional(),

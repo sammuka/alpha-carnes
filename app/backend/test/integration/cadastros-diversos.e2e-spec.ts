@@ -138,123 +138,21 @@ describe('Cadastros diversos e2e (fornecedores, itens, parâmetros)', () => {
     });
   });
 
-  describe('Itens de compra e comerciais (administrador gerencia)', () => {
-    it('admin cria item de compra; comercial recebe 403', async () => {
-      const ok = await request(app.getHttpServer())
+  describe('Rotas legadas de catálogo (AD-15 → 404)', () => {
+    it('POST /itens-compra retorna 404', async () => {
+      const res = await request(app.getHttpServer())
         .post('/itens-compra')
         .set('Cookie', adminCookies)
         .send({ codigo: 'IC-1', descricao: 'Boi', unidadeCompra: 'unidade' });
-      expect(ok.status).toBe(201);
-
-      const negado = await request(app.getHttpServer())
-        .post('/itens-compra')
-        .set('Cookie', comercialCookies)
-        .send({ codigo: 'IC-2', descricao: 'Suíno', unidadeCompra: 'unidade' });
-      expect(negado.status).toBe(403);
+      expect(res.status).toBe(404);
     });
 
-    it('código duplicado em item de compra → 409', async () => {
-      await request(app.getHttpServer())
-        .post('/itens-compra')
-        .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-DUP', descricao: 'A', unidadeCompra: 'kg' });
-      const dup = await request(app.getHttpServer())
-        .post('/itens-compra')
-        .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-DUP', descricao: 'B', unidadeCompra: 'kg' });
-      expect(dup.status).toBe(409);
-    });
-
-    it('admin cria item comercial com permiteCorte e edita', async () => {
-      const criar = await request(app.getHttpServer())
+    it('POST /itens-comerciais retorna 404', async () => {
+      const res = await request(app.getHttpServer())
         .post('/itens-comerciais')
         .set('Cookie', adminCookies)
         .send({ codigo: 'ICM-1', descricao: 'Dianteiro', unidadeComercial: 'kg', permiteCorte: true });
-      expect(criar.status).toBe(201);
-      expect(criar.body.permiteCorte).toBe(true);
-
-      const editar = await request(app.getHttpServer())
-        .patch(`/itens-comerciais/${criar.body.id}`)
-        .set('Cookie', adminCookies)
-        .send({ descricao: 'Dianteiro c/ osso' });
-      expect(editar.status).toBe(200);
-      expect(editar.body.descricao).toBe('Dianteiro c/ osso');
-    });
-
-    it('item de compra: ciclo completo (detalhar, editar, soft-delete, restore, 404 e conflitos)', async () => {
-      const criar = await request(app.getHttpServer())
-        .post('/itens-compra')
-        .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-LIFE', descricao: 'Frango', categoria: 'aves', unidadeCompra: 'unidade' });
-      const id = criar.body.id;
-
-      expect((await request(app.getHttpServer()).get(`/itens-compra/${id}`).set('Cookie', adminCookies)).status).toBe(
-        200,
-      );
-      expect((await request(app.getHttpServer()).get('/itens-compra').set('Cookie', adminCookies)).status).toBe(200);
-
-      const editar = await request(app.getHttpServer())
-        .patch(`/itens-compra/${id}`)
-        .set('Cookie', adminCookies)
-        .send({ descricao: 'Frango congelado', status: 'inativo' });
-      expect(editar.status).toBe(200);
-      expect(editar.body.status).toBe('inativo');
-
-      expect((await request(app.getHttpServer()).delete(`/itens-compra/${id}`).set('Cookie', adminCookies)).status).toBe(
-        200,
-      );
-      expect((await request(app.getHttpServer()).get(`/itens-compra/${id}`).set('Cookie', adminCookies)).status).toBe(
-        404,
-      );
-
-      const restaurar = await request(app.getHttpServer())
-        .post(`/itens-compra/${id}/restaurar`)
-        .set('Cookie', adminCookies);
-      expect(restaurar.status).toBe(201);
-      // Restaurar de novo (não está removido) → 409.
-      const restaurar2 = await request(app.getHttpServer())
-        .post(`/itens-compra/${id}/restaurar`)
-        .set('Cookie', adminCookies);
-      expect(restaurar2.status).toBe(409);
-
-      // Editar inexistente → 404.
-      const editarInex = await request(app.getHttpServer())
-        .patch('/itens-compra/019e9e00-0000-7000-8000-000000000999')
-        .set('Cookie', adminCookies)
-        .send({ descricao: 'x' });
-      expect(editarInex.status).toBe(404);
-    });
-
-    it('item comercial: ciclo completo (editar, soft-delete, restore, 404)', async () => {
-      const criar = await request(app.getHttpServer())
-        .post('/itens-comerciais')
-        .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-LIFE', descricao: 'Traseiro', unidadeComercial: 'kg' });
-      const id = criar.body.id;
-
-      expect(
-        (await request(app.getHttpServer()).get(`/itens-comerciais/${id}`).set('Cookie', adminCookies)).status,
-      ).toBe(200);
-
-      const editar = await request(app.getHttpServer())
-        .patch(`/itens-comerciais/${id}`)
-        .set('Cookie', adminCookies)
-        .send({ permiteCorte: true, status: 'inativo' });
-      expect(editar.status).toBe(200);
-      expect(editar.body.permiteCorte).toBe(true);
-
-      expect(
-        (await request(app.getHttpServer()).delete(`/itens-comerciais/${id}`).set('Cookie', adminCookies)).status,
-      ).toBe(200);
-      const restaurar = await request(app.getHttpServer())
-        .post(`/itens-comerciais/${id}/restaurar`)
-        .set('Cookie', adminCookies);
-      expect(restaurar.status).toBe(201);
-
-      const removerInex = await request(app.getHttpServer())
-        .delete('/itens-comerciais/019e9e00-0000-7000-8000-000000000999')
-        .set('Cookie', adminCookies);
-      expect(removerInex.status).toBe(404);
+      expect(res.status).toBe(404);
     });
   });
 
@@ -353,79 +251,20 @@ describe('Cadastros diversos e2e (fornecedores, itens, parâmetros)', () => {
       expect(busca.status).toBe(200);
     });
 
-    it('item de compra: atualiza todos os campos + busca', async () => {
-      const criar = await request(app.getHttpServer())
-        .post('/itens-compra')
-        .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-FULL', descricao: 'Item', categoria: 'cat', unidadeCompra: 'kg' });
-      const editar = await request(app.getHttpServer())
-        .patch(`/itens-compra/${criar.body.id}`)
-        .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-FULL-2', descricao: 'Item 2', categoria: 'cat2', unidadeCompra: 'unidade', status: 'inativo' });
-      expect(editar.status).toBe(200);
-      expect(editar.body.codigo).toBe('IC-FULL-2');
-      const busca = await request(app.getHttpServer())
-        .get('/itens-compra?search=Item')
-        .set('Cookie', adminCookies);
-      expect(busca.status).toBe(200);
-    });
-
-    it('item comercial: atualiza todos os campos + busca', async () => {
-      const criar = await request(app.getHttpServer())
-        .post('/itens-comerciais')
-        .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-FULL', descricao: 'Item C', categoria: 'cat', unidadeComercial: 'kg' });
-      const editar = await request(app.getHttpServer())
-        .patch(`/itens-comerciais/${criar.body.id}`)
-        .set('Cookie', adminCookies)
-        .send({
-          codigo: 'ICM-FULL-2',
-          descricao: 'Item C2',
-          categoria: 'cat2',
-          unidadeComercial: 'kg',
-          permiteCorte: true,
-          status: 'inativo',
-          observacoesOperacionais: 'obs',
-        });
-      expect(editar.status).toBe(200);
-      expect(editar.body.unidadeComercial).toBe('kg');
-      const busca = await request(app.getHttpServer())
-        .get('/itens-comerciais?search=Item')
-        .set('Cookie', adminCookies);
-      expect(busca.status).toBe(200);
-    });
-
-    it('fornecedor/itens/parâmetro: criação mínima (sem JSONB/opcionais) e incluirRemovidos', async () => {
-      // Fornecedor mínimo (sem contatosJson/parametros/observacoes) cobre ramos de default.
+    it('fornecedor/parâmetro: criação mínima (sem JSONB/opcionais) e incluirRemovidos', async () => {
       const forn = await request(app.getHttpServer())
         .post('/fornecedores')
         .set('Cookie', comprasCookies)
         .send({ codigo: 'FOR-MIN', razaoSocial: 'Min', documentoFiscal: '19131243000197' });
       expect(forn.status).toBe(201);
 
-      // Item de compra mínimo (sem categoria).
-      const ic = await request(app.getHttpServer())
-        .post('/itens-compra')
-        .set('Cookie', adminCookies)
-        .send({ codigo: 'IC-MIN', descricao: 'Min', unidadeCompra: 'kg' });
-      expect(ic.status).toBe(201);
-
-      // Item comercial mínimo (sem categoria/observacoes/permiteCorte explícito).
-      const icm = await request(app.getHttpServer())
-        .post('/itens-comerciais')
-        .set('Cookie', adminCookies)
-        .send({ codigo: 'ICM-MIN', descricao: 'Min', unidadeComercial: 'kg' });
-      expect(icm.status).toBe(201);
-
-      // Parâmetro mínimo (sem valorJson/descricao).
       const par = await request(app.getHttpServer())
         .post('/parametros')
         .set('Cookie', adminCookies)
         .send({ chave: 'param_min' });
       expect(par.status).toBe(201);
 
-      // incluirRemovidos cobre o ramo de listagem com removidos.
-      for (const rota of ['/fornecedores', '/itens-compra', '/itens-comerciais', '/parametros']) {
+      for (const rota of ['/fornecedores', '/parametros']) {
         const res = await request(app.getHttpServer())
           .get(`${rota}?incluirRemovidos=true`)
           .set('Cookie', adminCookies);

@@ -363,7 +363,7 @@ export class AssociacaoService {
       .select({
         id: pedidosVendaItens.id,
         pedidoVendaId: pedidosVendaItens.pedidoVendaId,
-        itemComercialId: pedidosVendaItens.itemComercialId,
+        produtoId: pedidosVendaItens.produtoId,
         operacaoId: pedidosVenda.operacaoId,
         pecaOperacaoId: sql<string>`(
           select cp.operacao_id from compras_programadas cp where cp.id = ${peca.compraProgramadaId}
@@ -378,7 +378,7 @@ export class AssociacaoService {
 
     if (!item || item.deletedAt) throw new NotFoundException('Item de pedido não encontrado');
     if (item.statusPedido === 'cancelado') throw new ConflictException('Pedido cancelado não aceita associação');
-    if (item.itemComercialId !== peca.itemComercialBaseId) {
+    if (item.produtoId !== peca.produtoBaseId) {
       throw new ConflictException('Item de pedido incompatível com a peça');
     }
     if (item.operacaoId !== item.pecaOperacaoId) {
@@ -395,7 +395,7 @@ export class AssociacaoService {
       .where(
         and(
           eq(recebimentosItens.recebimentoId, peca.recebimentoId),
-          eq(recebimentosItens.itemComercialId, peca.itemComercialBaseId),
+          eq(recebimentosItens.produtoId, peca.produtoBaseId),
         ),
       )
       .then((r) => r[0] ?? null);
@@ -471,7 +471,7 @@ export class AssociacaoService {
     return {
       operacaoId: compra.operacaoId,
       compraProgramadaOrigemId: peca.compraProgramadaId,
-      itemComercialId: peca.itemComercialBaseId,
+      produtoId: peca.produtoBaseId,
       peso: peca.pesoOriginal,
       caracteristicas: caracteristicasDeCapturaMeta(peca.capturaMeta),
     };

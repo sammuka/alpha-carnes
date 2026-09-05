@@ -49,7 +49,7 @@ describe('Conferencia de carga e2e (F5)', () => {
   async function pecaElegivel(c: CenarioPesagem, pedidoItemId: string): Promise<string> {
     const { default: request } = await import('supertest');
     const pecaId = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId,
     });
     await request(srv())
       .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
@@ -76,7 +76,7 @@ describe('Conferencia de carga e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-20');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -106,7 +106,7 @@ describe('Conferencia de carga e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-21');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -136,7 +136,7 @@ describe('Conferencia de carga e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-22');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -161,7 +161,7 @@ describe('Conferencia de carga e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-23');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -184,7 +184,7 @@ describe('Conferencia de carga e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-24');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const peca1Id = await pecaElegivel(c, p.pedidoItemId);
@@ -214,7 +214,7 @@ describe('Conferencia de carga e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-25');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const peca1Id = await pecaElegivel(c, p.pedidoItemId);
@@ -253,11 +253,11 @@ describe('Conferencia de carga e2e (F5)', () => {
     const { iniciarCorte, subitemCompleto } = await import('../helpers/corte-fixtures');
     const c = await cenario('2026-12-27');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pesarPeca(app, recebimentoCookies, {
-      recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId,
+      recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId,
     });
     await request(srv())
       .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)
@@ -270,7 +270,7 @@ describe('Conferencia de carga e2e (F5)', () => {
 
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
     fakes(app).balanca.definirPeso('6.000');
-    const subId = await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+    const subId = await subitemCompleto(app, corteCookies, transfId, c.produtoId, p.pedidoItemId);
     fakes(app).leitor.definirCodigo(`QR-SUB-${subId}`);
 
     const caminhaoId = await criarCaminhao(app, expedicaoCookies, { dataOperacao: c.dataOperacao });
@@ -297,7 +297,7 @@ describe('Conferencia de carga e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-28');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -320,7 +320,7 @@ describe('Conferencia de carga e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-26');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -352,7 +352,7 @@ describe('Conferencia de carga e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-29');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -386,7 +386,7 @@ describe('Conferencia de carga e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-12-30');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);
@@ -426,7 +426,7 @@ describe('Conferencia de carga e2e (F5)', () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2027-01-01');
     const p = await criarPedido(app, comercialCookies, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 5,
     });
     const pecaId = await pecaElegivel(c, p.pedidoItemId);

@@ -244,7 +244,7 @@ export function runDrizzleKit(
   );
   const result = spawnSync(process.execPath, [binary, ...args], {
     cwd,
-    env: process.env,
+    env: { ...process.env, CI: 'true' },
     encoding: 'utf8',
     timeout: 120_000,
   });
