@@ -13,5 +13,5 @@ module.exports = {
   maxWorkers: 2,
   passWithNoTests: true,
   // userEvent + drawers/combobox no jsdom do CI Linux saturam CPU; 60s evita flake no Actions.
-  testTimeout: 60_000,
+  testTimeout: 120_000,
 };

@@ -130,6 +130,22 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !=
   Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 }
 
+if (typeof Element !== 'undefined' && typeof Element.prototype.getBoundingClientRect !== 'function') {
+  Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+    return {
+      x: 0,
+      y: 0,
+      width: 120,
+      height: 32,
+      top: 0,
+      left: 0,
+      bottom: 32,
+      right: 120,
+      toJSON: () => ({}),
+    };
+  };
+}
+
 // user-event 14 + Radix Popover/Combobox no jsdom do CI Linux: o jsdom expõe pointer
 // capture parcialmente implementado — sobrescrever sempre evita clique pendurado.
 if (typeof HTMLElement !== 'undefined') {

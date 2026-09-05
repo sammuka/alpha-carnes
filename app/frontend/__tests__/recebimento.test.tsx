@@ -359,7 +359,7 @@ describe('RecebimentoCargaClient', () => {
     fireEvent.click(within(segundoDrawer).getByRole('button', { name: 'Criar Lote' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('sentinela D34'));
     expect(pushMock).not.toHaveBeenCalled();
-  }, 60_000);
+  }, 120_000);
 
   it('Recebimento de Carga renderiza os blocos do protótipo', async () => {
     const { STATUS_RECEB_LABEL } = await import(

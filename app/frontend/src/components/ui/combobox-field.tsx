@@ -51,7 +51,7 @@ export function ComboboxField({
 
   return (
     <div className={cn("relative w-full", className)}>
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={false}>
       <PopoverTrigger asChild>
         <button
           type="button"
