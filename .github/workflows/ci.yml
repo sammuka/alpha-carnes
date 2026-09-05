@@ -107,7 +107,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run test -- --maxWorkers=2
+      - run: npm run test -- --runInBand
         working-directory: app/frontend
 
   build:
