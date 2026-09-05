@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { Pool } from 'pg';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { hash } from '@node-rs/argon2';
@@ -387,17 +387,43 @@ export async function seed() {
     }
     console.log(`✅ ${PERMISSOES_FIXAS.length} permissões inseridas/verificadas`);
 
-    // 3. Inserir mapa perfis_permissoes (resolve o id da permissão por código no banco)
-    const permissoesDb = await db.select().from(schema.permissoes);
+    await db.execute(sql`
+      DELETE FROM perfis_permissoes
+      WHERE permissao_id IN (
+        SELECT id FROM permissoes
+        WHERE codigo IN (
+          'ITENS_COMERCIAIS_LER',
+          'ITENS_COMERCIAIS_GERENCIAR',
+          'ITENS_COMPRA_LER',
+          'ITENS_COMPRA_GERENCIAR'
+        )
+      )
+    `);
+    await db.execute(sql`
+      DELETE FROM permissoes
+      WHERE codigo IN (
+        'ITENS_COMERCIAIS_LER',
+        'ITENS_COMERCIAIS_GERENCIAR',
+        'ITENS_COMPRA_LER',
+        'ITENS_COMPRA_GERENCIAR'
+      )
+    `);
+
+    // 3. Inserir mapa perfis_permissoes (resolve ids reais — testes podem ter criado perfis sem UUID fixo)
+    const [permissoesDb, perfisDb] = await Promise.all([
+      db.select({ id: schema.permissoes.id, codigo: schema.permissoes.codigo }).from(schema.permissoes),
+      db.select({ id: schema.perfis.id, slug: schema.perfis.slug }).from(schema.perfis),
+    ]);
     const idPorCodigo = new Map(permissoesDb.map((p) => [p.codigo, p.id]));
+    const perfilIdPorSlug = new Map(perfisDb.map((p) => [p.slug, p.id]));
     for (const [slug, codigos] of Object.entries(MAPA)) {
-      const perfil = PERFIS_FIXOS.find((p) => p.slug === slug);
-      if (!perfil) continue;
+      const perfilId = perfilIdPorSlug.get(slug);
+      if (!perfilId) continue;
       for (const codigo of codigos) {
         const permissaoId = idPorCodigo.get(codigo);
         if (!permissaoId) continue;
         await db.insert(schema.perfisPermissoes)
-          .values({ perfilId: perfil.id, permissaoId })
+          .values({ perfilId, permissaoId })
           .onConflictDoNothing();
       }
     }
@@ -419,10 +445,11 @@ export async function seed() {
 
     // 4. Inserir usuário admin
     const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@alphacarnes.local';
-    const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'Admin@AlphaCarnes2026!';
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'change-me-admin-password';
     const senhaHash = await hash(adminPassword);
 
-    const adminPerfil = PERFIS_FIXOS.find((p) => p.slug === 'administrador')!;
+    const adminPerfilId = perfilIdPorSlug.get('administrador');
+    if (!adminPerfilId) throw new Error('Perfil administrador ausente após seed de perfis');
 
     const [admin] = await db.insert(schema.usuarios)
       .values({ nome: 'Administrador', email: adminEmail, senhaHash })
@@ -442,9 +469,9 @@ export async function seed() {
       throw new Error(`Falha ao verificar usuário admin: ${adminEmail}`);
     }
 
-    await db.insert(schema.usuariosPerfis)
-      .values({ usuarioId: admin.id, perfilId: adminPerfil.id })
-      .onConflictDoNothing();
+    // Reconcilia vínculo: perfis podem ter UUID distinto do PERFIS_FIXOS após testes/migrations
+    await db.delete(schema.usuariosPerfis).where(eq(schema.usuariosPerfis.usuarioId, admin.id));
+    await db.insert(schema.usuariosPerfis).values({ usuarioId: admin.id, perfilId: adminPerfilId });
     console.log(`✅ Usuário admin verificado: ${adminEmail}`);
 
     console.log('🎉 Seed concluído com sucesso!');

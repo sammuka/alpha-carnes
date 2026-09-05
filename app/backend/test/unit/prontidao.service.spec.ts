@@ -17,8 +17,7 @@ describe('ProntidaoService', () => {
       contagens: expect.objectContaining({
         clientes: 2,
         fornecedores: 2,
-        itensCompra: 2,
-        itensComerciais: 2,
+        produtosVenda: 2,
         regrasDesdobramento: 2,
       }),
     });
@@ -52,7 +51,7 @@ describe('ProntidaoService', () => {
     const service = new ProntidaoService({ db } as never);
 
     await expect(service.verificarProntidaoCadastros()).rejects.toMatchObject({
-      message: expect.stringContaining('itensCompra'),
+      message: expect.stringContaining('produtosVenda'),
     });
   });
 });

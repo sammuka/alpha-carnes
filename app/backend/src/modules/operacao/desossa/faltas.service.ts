@@ -31,7 +31,6 @@ export class FaltasService {
         id: produtos.id,
         codigo: produtos.codigo,
         nome: produtos.nome,
-        legadoItemComercialId: produtos.legadoItemComercialId,
       })
       .from(produtos)
       .where(
@@ -44,15 +43,13 @@ export class FaltasService {
 
     if (produtosSaida.length === 0) return [];
 
-    const itemComercialIds = produtosSaida
-      .map((p) => p.legadoItemComercialId)
-      .filter((id): id is string => id !== null);
+    const produtoIds = produtosSaida.map((p) => p.id);
 
-    const demandaPorItemComercial = new Map<string, number>();
-    if (itemComercialIds.length > 0) {
+    const demandaPorProduto = new Map<string, number>();
+    if (produtoIds.length > 0) {
       const linhasDemanda = await this.db
         .select({
-          itemComercialId: pedidosVendaItens.itemComercialId,
+          produtoId: pedidosVendaItens.produtoId,
           total: sql<string>`coalesce(sum(${pedidosVendaItens.quantidadePedida} - ${pedidosVendaItens.quantidadeAtendida}), 0)::text`,
         })
         .from(pedidosVendaItens)
@@ -66,24 +63,24 @@ export class FaltasService {
               'finalizado',
               'parcialmente_atendido',
             ]),
-            inArray(pedidosVendaItens.itemComercialId, itemComercialIds),
+            inArray(pedidosVendaItens.produtoId, produtoIds),
             sql`${pedidosVendaItens.status} <> 'cancelado'`,
             sql`${pedidosVendaItens.quantidadePedida} - ${pedidosVendaItens.quantidadeAtendida} > 0`,
           ),
         )
-        .groupBy(pedidosVendaItens.itemComercialId);
+        .groupBy(pedidosVendaItens.produtoId);
 
       for (const linha of linhasDemanda) {
-        demandaPorItemComercial.set(linha.itemComercialId, parseQuantidade(linha.total));
+        demandaPorProduto.set(linha.produtoId, parseQuantidade(linha.total));
       }
     }
 
-    const estoquePorItemComercial = new Map<string, number>();
-    if (itemComercialIds.length > 0) {
+    const estoquePorProduto = new Map<string, number>();
+    if (produtoIds.length > 0) {
       const [pecasSobra, subitensSobra] = await Promise.all([
         this.db
           .select({
-            itemComercialId: pecas.itemComercialBaseId,
+            produtoId: pecas.produtoBaseId,
             total: sql<string>`count(*)::text`,
           })
           .from(pecas)
@@ -91,13 +88,13 @@ export class FaltasService {
             and(
               isNull(pecas.deletedAt),
               eq(pecas.statusPeca, 'em_sobra'),
-              inArray(pecas.itemComercialBaseId, itemComercialIds),
+              inArray(pecas.produtoBaseId, produtoIds),
             ),
           )
-          .groupBy(pecas.itemComercialBaseId),
+          .groupBy(pecas.produtoBaseId),
         this.db
           .select({
-            itemComercialId: subitens.itemComercialId,
+            produtoId: subitens.produtoId,
             total: sql<string>`coalesce(sum(${subitens.quantidade}), 0)::text`,
           })
           .from(subitens)
@@ -105,24 +102,23 @@ export class FaltasService {
             and(
               isNull(subitens.deletedAt),
               eq(subitens.statusSubitem, 'em_sobra'),
-              inArray(subitens.itemComercialId, itemComercialIds),
+              inArray(subitens.produtoId, produtoIds),
             ),
           )
-          .groupBy(subitens.itemComercialId),
+          .groupBy(subitens.produtoId),
       ]);
 
       for (const linha of pecasSobra) {
-        const atual = estoquePorItemComercial.get(linha.itemComercialId) ?? 0;
-        estoquePorItemComercial.set(linha.itemComercialId, atual + parseQuantidade(linha.total));
+        const atual = estoquePorProduto.get(linha.produtoId) ?? 0;
+        estoquePorProduto.set(linha.produtoId, atual + parseQuantidade(linha.total));
       }
       for (const linha of subitensSobra) {
-        const atual = estoquePorItemComercial.get(linha.itemComercialId) ?? 0;
-        estoquePorItemComercial.set(linha.itemComercialId, atual + parseQuantidade(linha.total));
+        const atual = estoquePorProduto.get(linha.produtoId) ?? 0;
+        estoquePorProduto.set(linha.produtoId, atual + parseQuantidade(linha.total));
       }
     }
 
     const origemPorProdutoId = new Map<string, string>();
-    const produtoIds = produtosSaida.map((p) => p.id);
     if (produtoIds.length > 0) {
       const origens = await this.db
         .select({
@@ -150,8 +146,8 @@ export class FaltasService {
 
     return calcularFaltasDesossa(
       produtosSaida,
-      demandaPorItemComercial,
-      estoquePorItemComercial,
+      demandaPorProduto,
+      estoquePorProduto,
       origemPorProdutoId,
     );
   }

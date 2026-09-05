@@ -21,7 +21,7 @@ describe('Compras — painel de impacto e edição confirmada', () => {
     comprasCookies = await loginCookies(app, compras.adminEmail, compras.adminPassword);
     adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
     base = await seedComercialBase(app, { fator: 2 });
-    tzId = base.itemComercialId;
+    tzId = base.produtoId;
 
     const criar = await request(app.getHttpServer())
       .post('/comercial/compras-programadas')
@@ -29,7 +29,7 @@ describe('Compras — painel de impacto e edição confirmada', () => {
       .send({
         dataOperacao: '2026-09-01',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 100 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 100 }],
       });
     compraId = criar.body.id;
     itemId = criar.body.itens[0].id;
@@ -48,8 +48,7 @@ describe('Compras — painel de impacto e edição confirmada', () => {
         dataOperacao: '2026-09-01',
         compraProgramadaId: compraId,
         clienteId: base.clienteId,
-        itens: [{ itemComercialId: tzId, quantidadePedida: 150 }],
-        confirmado: true,
+        itens: [{ produtoId: tzId, quantidadePedida: 150 }],
       })
       .expect(201);
   });
@@ -73,10 +72,10 @@ describe('Compras — painel de impacto e edição confirmada', () => {
   it('projeta desdobramento do boi casado 2 TZ + 2 DT + 2 PA (AD-01)', async () => {
     const { body } = await request(app.getHttpServer())
       .get(`/comercial/compras-programadas/${compraId}/impacto`)
-      .query({ simulacao: `${base.itemCompraId}:80` })
+      .query({ simulacao: `${base.produtoCompraId}:80` })
       .set('Cookie', comprasCookies)
       .expect(200);
-    const tz = body.itens.find((i: { itemComercialId: string }) => i.itemComercialId === tzId);
+    const tz = body.itens.find((i: { produtoId: string }) => i.produtoId === tzId);
     expect(tz.quantidadeGeradaProjetada).toBe('160.000');
   });
 
@@ -123,7 +122,7 @@ describe('Compras — painel de impacto e edição confirmada', () => {
       .send({
         dataOperacao: '2026-09-15',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 10 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 10 }],
       });
     const cid = criar.body.id;
     const iid = criar.body.itens[0].id;
@@ -158,7 +157,7 @@ describe('Compras — painel de impacto e edição confirmada', () => {
       .send({
         dataOperacao: '2026-09-20',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 50 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 50 }],
       });
     const cid = criar.body.id;
     const iid = criar.body.itens[0].id;

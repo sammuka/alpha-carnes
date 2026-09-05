@@ -94,8 +94,8 @@ interface RunContext {
   dataOperacao: string;
   clienteId: string;
   fornecedorId: string;
-  itemCompraId: string;
-  itemComercialId: string;
+  produtoId: string;
+  produtoId: string;
   compraProgramadaId: string;
   pedidoVendaId: string;
   recebimentoId: string;
@@ -279,6 +279,66 @@ async function findByDocumento(api: APIRequestContext, cookieHeader: string, rec
   return found.id;
 }
 
+async function setSwitch(page: Page, label: string, desired: boolean) {
+  const sw = page.getByRole('switch', { name: label });
+  const checked = (await sw.getAttribute('aria-checked')) === 'true';
+  if (checked !== desired) await sw.click();
+}
+
+async function createProdutoViaUi(
+  page: Page,
+  steps: StepEvidence[],
+  options: {
+    codigo: string;
+    nome: string;
+    categoria?: string;
+    tipoOperacional?: string;
+    ativoCompra?: boolean;
+    ativoVenda?: boolean;
+    screenshotId: string;
+    title: string;
+  },
+) {
+  await page.goto(`${BASE_URL}/cadastros/produtos`);
+  await page.getByRole('button', { name: 'Novo Produto' }).click();
+  await expect(page.getByText('Novo Produto').first()).toBeVisible();
+  for (const tab of ['Gerais', 'Comercial', 'Operacional', 'Estoque', 'Fiscal'] as const) {
+    await expect(page.getByRole('tab', { name: tab })).toBeVisible();
+  }
+
+  await page.getByLabel('Código interno').fill(options.codigo);
+  await page.getByLabel('Nome do produto').fill(options.nome);
+  if (options.categoria) await page.getByLabel('Categoria').fill(options.categoria);
+
+  await page.getByRole('tab', { name: 'Comercial' }).click();
+  await setSwitch(page, 'Ativo para compra', options.ativoCompra ?? false);
+  await setSwitch(page, 'Ativo para venda / tabela de preços', options.ativoVenda ?? true);
+
+  if (options.tipoOperacional) {
+    await page.getByRole('tab', { name: 'Operacional' }).click();
+    await page.getByLabel('Tipo operacional').selectOption({ label: options.tipoOperacional });
+  }
+
+  const postPromise = page.waitForResponse(
+    (res) =>
+      res.url().includes('/api/cadastros/produtos') &&
+      res.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Salvar Produto' }).click();
+  const postRes = await postPromise;
+  expect(postRes.ok(), `POST produtos falhou: ${postRes.status()} ${await postRes.text()}`).toBeTruthy();
+  await expect(page.getByRole('button', { name: 'Novo Produto' })).toBeVisible();
+  await capture(
+    page,
+    steps,
+    options.screenshotId,
+    options.title,
+    `Criar produto ${options.codigo} pela tela unificada de Produtos.`,
+    'Formulário Novo Produto preenchido (abas Gerais/Comercial/Operacional) e Salvar Produto.',
+    'Produto persistido e visível na listagem.',
+  );
+}
+
 async function createCadastroViaUi(
   page: Page,
   steps: StepEvidence[],
@@ -321,7 +381,7 @@ async function createCadastroViaUi(
 async function criarCompraConfirmada(
   api: APIRequestContext,
   cookieHeader: string,
-  params: { fornecedorId: string; itemCompraId: string; runId: string },
+  params: { fornecedorId: string; produtoId: string; runId: string },
 ) {
   for (let offset = 0; offset < 45; offset += 1) {
     const dataOperacao = addDaysISO(offset);
@@ -332,7 +392,7 @@ async function criarCompraConfirmada(
         fornecedorId: params.fornecedorId,
         numeroInterno: `E2E-${params.runId}-${offset}`,
         observacoes: 'Compra programada criada pela jornada E2E visual',
-        itens: [{ itemCompraId: params.itemCompraId, quantidadeComprada: 4 }],
+        itens: [{ produtoId: params.produtoId, quantidadeComprada: 4 }],
       },
     });
 
@@ -376,8 +436,8 @@ function writeReport(steps: StepEvidence[], context: RunContext, observations: s
     ['Data operacional', context.dataOperacao],
     ['Cliente', context.clienteId],
     ['Fornecedor', context.fornecedorId],
-    ['Item compra', context.itemCompraId],
-    ['Item comercial', context.itemComercialId],
+    ['Item compra', context.produtoId],
+    ['Item comercial', context.produtoId],
     ['Compra programada', context.compraProgramadaId],
     ['Pedido venda', context.pedidoVendaId],
     ['Recebimento', context.recebimentoId],
@@ -519,8 +579,8 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
 
     const clienteDocumento = makeCpf(seed + 1);
     const fornecedorCodigo = codigo('FORN');
-    const itemCompraCodigo = codigo('ICOMP');
-    const itemComercialCodigo = codigo('ICOM');
+    const produtoCompraCodigo = codigo('ICOMP');
+    const produtoCodigo = codigo('ICOM');
 
     await createCadastroViaUi(page, steps, {
       recurso: 'clientes',
@@ -546,47 +606,54 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     });
     const fornecedorId = await findByCode(request, auth.cookieHeader, 'fornecedores', fornecedorCodigo);
 
-    await createCadastroViaUi(page, steps, {
-      recurso: 'itens-compra',
-      title: 'Cadastro de Itens de Compra',
-      fields: {
-        Código: itemCompraCodigo,
-        Descrição: `Bovino E2E ${runId}`,
-        Categoria: 'Bovino',
-        'Unidade de Compra': 'Unidade',
-      },
-      screenshotId: '05-itens-compra',
-    });
-    const itemCompraId = await findByCode(request, auth.cookieHeader, 'itens-compra', itemCompraCodigo);
+    for (const legado of ['itens-compra', 'itens-comerciais'] as const) {
+      const legadoRes = await page.goto(`${BASE_URL}/cadastros/${legado}`);
+      expect(legadoRes?.status(), `GET /cadastros/${legado} deveria ser 404`).toBe(404);
+      await expect(page).not.toHaveURL(new RegExp(`/cadastros/produtos`));
+    }
 
-    await createCadastroViaUi(page, steps, {
-      recurso: 'itens-comerciais',
-      title: 'Cadastro de Itens Comerciais',
-      fields: {
-        Código: itemComercialCodigo,
-        Descrição: `Dianteiro E2E ${runId}`,
-        Categoria: 'Bovino',
-        'Unidade Comercial': 'parte',
-      },
-      checkboxLabels: ['Permite Corte'],
-      screenshotId: '06-itens-comerciais',
+    await createProdutoViaUi(page, steps, {
+      codigo: produtoCompraCodigo,
+      nome: `Bovino E2E ${runId}`,
+      categoria: 'Bovino',
+      tipoOperacional: 'Produto de compra/base',
+      ativoCompra: true,
+      ativoVenda: false,
+      screenshotId: '05-produtos',
+      title: 'Cadastro de Produto (compra)',
     });
-    const itemComercialId = await findByCode(request, auth.cookieHeader, 'itens-comerciais', itemComercialCodigo);
+    const produtoCompraId = await findByCode(request, auth.cookieHeader, 'produtos', produtoCompraCodigo);
+
+    await createProdutoViaUi(page, steps, {
+      codigo: produtoCodigo,
+      nome: `Dianteiro E2E ${runId}`,
+      categoria: 'Bovino',
+      tipoOperacional: 'Peça inteira pesável',
+      ativoCompra: true,
+      ativoVenda: true,
+      screenshotId: '06-produtos',
+      title: 'Cadastro de Produto (venda)',
+    });
+    const produtoVendaId = await findByCode(request, auth.cookieHeader, 'produtos', produtoCodigo);
 
     await backend(request, auth.cookieHeader, 'POST', '/regras-desdobramento', {
-      itemCompraId,
-      itemComercialId,
+      produtoOrigemId: produtoCompraId,
+      produtoDestinoId: produtoVendaId,
       fatorQuantidade: 1,
       status: 'ativo',
       vigenciaInicio: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
       observacoes: 'Regra criada pela jornada E2E visual',
     });
-    const compra = await criarCompraConfirmada(request, auth.cookieHeader, { fornecedorId, itemCompraId, runId });
+    const compra = await criarCompraConfirmada(request, auth.cookieHeader, {
+      fornecedorId,
+      produtoId: produtoCompraId,
+      runId,
+    });
 
     await page.goto(`${BASE_URL}/comercial/disponibilidade`);
     await selecionarDataNoPicker(page, '#data', compra.dataOperacao);
     await page.getByRole('button', { name: /^Grade$/ }).click();
-    await expect(page.getByText(itemComercialCodigo, { exact: true })).toBeVisible({
+    await expect(page.getByText(produtoCodigo, { exact: true })).toBeVisible({
       timeout: 15_000,
     });
     await capture(
@@ -605,7 +672,7 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     await page.locator('#pedido-operacao').selectOption(compra.compraProgramadaId);
     await page.locator('#pedido-cliente').click();
     await page.getByRole('option', { name: `Cliente ${runId}` }).click();
-    await page.locator('#produto-novo').selectOption(itemComercialId);
+    await page.locator('#produto-novo').selectOption(produtoVendaId);
     await page.locator('#quantidade-produto-novo').fill('2');
     await page.getByRole('button', { name: 'Adicionar produto' }).click();
     const pedidoResponse = page.waitForResponse((res) => res.url().includes('/api/comercial/pedidos') && res.request().method() === 'POST');
@@ -760,8 +827,8 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
         dataOperacao: compra.dataOperacao,
         clienteId,
         fornecedorId,
-        itemCompraId,
-        itemComercialId,
+        produtoId,
+        produtoId,
         compraProgramadaId: compra.compraProgramadaId,
         pedidoVendaId: pedido.id,
         recebimentoId,

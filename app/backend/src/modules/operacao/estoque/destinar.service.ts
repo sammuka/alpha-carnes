@@ -68,7 +68,7 @@ export class DestinarEstoqueService {
       throw new ConflictException({ codigo: 'ITEM_NAO_DISPONIVEL', mensagem: 'Peça não está disponível em estoque' });
     }
 
-    const item = await this.buscarItemPedidoCompativel(tx, peca.itemComercialBaseId, dto.pedidoVendaItemId);
+    const item = await this.buscarItemPedidoCompativel(tx, peca.produtoBaseId, dto.pedidoVendaItemId);
 
     const consumido = await consumirSaldo(tx, dto.pedidoVendaItemId);
     if (!consumido) throw new ConflictException({ codigo: 'ITEM_DO_PEDIDO_COMPLETO', mensagem: 'Item do pedido já está completo' });
@@ -114,7 +114,7 @@ export class DestinarEstoqueService {
       throw new ConflictException({ codigo: 'ITEM_NAO_DISPONIVEL', mensagem: 'Subitem não está disponível em estoque' });
     }
 
-    const item = await this.buscarItemPedidoCompativel(tx, subitem.itemComercialId, dto.pedidoVendaItemId);
+    const item = await this.buscarItemPedidoCompativel(tx, subitem.produtoId, dto.pedidoVendaItemId);
 
     const consumido = await consumirSaldo(tx, dto.pedidoVendaItemId);
     if (!consumido) throw new ConflictException({ codigo: 'ITEM_DO_PEDIDO_COMPLETO', mensagem: 'Item do pedido já está completo' });
@@ -211,12 +211,12 @@ export class DestinarEstoqueService {
 
   // ── internos ────────────────────────────────────────────────────────────
 
-  private async buscarItemPedidoCompativel(tx: Tx, itemComercialBaseId: string, pedidoVendaItemId: string) {
+  private async buscarItemPedidoCompativel(tx: Tx, produtoBaseId: string, pedidoVendaItemId: string) {
     const item = await tx
       .select({
         id: pedidosVendaItens.id,
         pedidoVendaId: pedidosVendaItens.pedidoVendaId,
-        itemComercialId: pedidosVendaItens.itemComercialId,
+        produtoId: pedidosVendaItens.produtoId,
         statusPedido: pedidosVenda.status,
         deletedAt: pedidosVenda.deletedAt,
       })
@@ -229,7 +229,7 @@ export class DestinarEstoqueService {
     if (item.statusPedido === 'cancelado') {
       throw new ConflictException({ codigo: 'ITEM_INCOMPATIVEL', mensagem: 'Pedido cancelado não aceita destinação' });
     }
-    if (item.itemComercialId !== itemComercialBaseId) {
+    if (item.produtoId !== produtoBaseId) {
       throw new ConflictException({ codigo: 'ITEM_INCOMPATIVEL', mensagem: 'Item de pedido incompatível com o item de estoque' });
     }
     return item;

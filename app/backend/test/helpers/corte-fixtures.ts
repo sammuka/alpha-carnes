@@ -15,21 +15,21 @@ function dbOf(app: INestApplication): Db {
 
 /**
  * Emenda 7 — seed Task 2 (catálogo MVP + regras TZ A/B) e devolve
- * legadoItemComercialId do produto CB (saída canônica Alternativa A).
+ * id do produto CB (saída canônica Alternativa A).
  */
 export async function itemSaidaCanonicoCb(app: INestApplication): Promise<string> {
   const db = dbOf(app);
   await seedCatalogoMvp(db);
   await seedRegrasTransformacaoTz(db);
   const [saidaCb] = await db
-    .select({ itemComercialId: schema.produtos.legadoItemComercialId })
+    .select({ produtoId: schema.produtos.id })
     .from(schema.produtos)
     .where(and(eq(schema.produtos.codigo, 'CB'), isNull(schema.produtos.deletedAt)))
     .limit(1);
-  if (!saidaCb?.itemComercialId) {
-    throw new Error('Produto CB seed sem legadoItemComercialId (catálogo MVP / Task 2)');
+  if (!saidaCb?.produtoId) {
+    throw new Error('Produto CB seed ausente (catálogo MVP / Task 2)');
   }
-  return saidaCb.itemComercialId;
+  return saidaCb.produtoId;
 }
 
 /**
@@ -71,41 +71,41 @@ export async function prepararTransformacaoComRegraTzA(
   }
 
   const [saidaCb] = await db
-    .select({ itemComercialId: schema.produtos.legadoItemComercialId })
+    .select({ produtoId: schema.produtos.id })
     .from(schema.produtos)
     .where(and(eq(schema.produtos.codigo, 'CB'), isNull(schema.produtos.deletedAt)))
     .limit(1);
   const [saidaJac] = await db
-    .select({ itemComercialId: schema.produtos.legadoItemComercialId })
+    .select({ produtoId: schema.produtos.id })
     .from(schema.produtos)
     .where(and(eq(schema.produtos.codigo, 'JAC'), isNull(schema.produtos.deletedAt)))
     .limit(1);
-  if (!saidaCb?.itemComercialId || !saidaJac?.itemComercialId) {
-    throw new Error('Produtos CB/JAC seed sem legadoItemComercialId (catálogo MVP / Task 2)');
+  if (!saidaCb?.produtoId || !saidaJac?.produtoId) {
+    throw new Error('Produtos CB/JAC seed ausentes (catálogo MVP / Task 2)');
   }
   return {
     regraId: regraA.id,
-    itemSaidaCbId: saidaCb.itemComercialId,
-    itemSaidaJacId: saidaJac.itemComercialId,
+    itemSaidaCbId: saidaCb.produtoId,
+    itemSaidaJacId: saidaJac.produtoId,
   };
 }
 
 /** Se item informado já é saída da regra, mantém; senão CB (Emenda 6/7). */
 export function resolverItemSaidaRegra(
-  itemComercialId: string,
+  produtoId: string,
   saidas: { itemSaidaCbId: string; itemSaidaJacId: string },
 ): string {
   if (
-    itemComercialId === saidas.itemSaidaCbId ||
-    itemComercialId === saidas.itemSaidaJacId
+    produtoId === saidas.itemSaidaCbId ||
+    produtoId === saidas.itemSaidaJacId
   ) {
-    return itemComercialId;
+    return produtoId;
   }
   return saidas.itemSaidaCbId;
 }
 
 /**
- * Emenda 7 — alinha `pedidos_venda_itens.item_comercial_id` à saída efetiva
+ * Emenda 7 — alinha `pedidos_venda_itens.produto_id` à saída efetiva
  * para `associar` não falhar com "Item de pedido incompatível".
  */
 export async function alinharPedidoItemComSaidaCorte(
@@ -117,7 +117,7 @@ export async function alinharPedidoItemComSaidaCorte(
   const [item] = await db
     .select({
       id: schema.pedidosVendaItens.id,
-      itemComercialId: schema.pedidosVendaItens.itemComercialId,
+      produtoId: schema.pedidosVendaItens.produtoId,
     })
     .from(schema.pedidosVendaItens)
     .where(eq(schema.pedidosVendaItens.id, pedidoVendaItemId))
@@ -125,10 +125,10 @@ export async function alinharPedidoItemComSaidaCorte(
   if (!item) {
     throw new Error(`Pedido item ${pedidoVendaItemId} ausente para alinhar saída O7`);
   }
-  if (item.itemComercialId === itemSaidaId) return;
+  if (item.produtoId === itemSaidaId) return;
   await db
     .update(schema.pedidosVendaItens)
-    .set({ itemComercialId: itemSaidaId, updatedAt: new Date() })
+    .set({ produtoId: itemSaidaId, updatedAt: new Date() })
     .where(eq(schema.pedidosVendaItens.id, pedidoVendaItemId));
 }
 
@@ -217,15 +217,15 @@ export async function adicionarSubitem(
   app: INestApplication,
   cookies: string,
   transformacaoId: string,
-  itemComercialId: string,
+  produtoId: string,
 ): Promise<string> {
   const { default: request } = await import('supertest');
   const saidas = await prepararTransformacaoComRegraTzA(app, cookies, transformacaoId);
-  const itemEfetivo = resolverItemSaidaRegra(itemComercialId, saidas);
+  const itemEfetivo = resolverItemSaidaRegra(produtoId, saidas);
   const res = await request(app.getHttpServer())
     .post(`/operacao/corte/${transformacaoId}/subitens`)
     .set('Cookie', cookies)
-    .send({ itemComercialId: itemEfetivo });
+    .send({ produtoId: itemEfetivo });
   if (res.status !== 200 && res.status !== 201) {
     throw new Error(
       `Falha ao adicionar subitem: ${res.status} ${JSON.stringify(res.body)}`,
@@ -259,18 +259,18 @@ export async function subitemCompleto(
   app: INestApplication,
   cookies: string,
   transformacaoId: string,
-  itemComercialId: string,
+  produtoId: string,
   pedidoVendaItemId: string,
 ): Promise<string> {
   const { default: request } = await import('supertest');
   const saidas = await prepararTransformacaoComRegraTzA(app, cookies, transformacaoId);
-  const itemEfetivo = resolverItemSaidaRegra(itemComercialId, saidas);
+  const itemEfetivo = resolverItemSaidaRegra(produtoId, saidas);
   await alinharPedidoItemComSaidaCorte(app, pedidoVendaItemId, itemEfetivo);
 
   const resAdd = await request(app.getHttpServer())
     .post(`/operacao/corte/${transformacaoId}/subitens`)
     .set('Cookie', cookies)
-    .send({ itemComercialId: itemEfetivo });
+    .send({ produtoId: itemEfetivo });
   if (resAdd.status !== 200 && resAdd.status !== 201) {
     throw new Error(
       `Falha ao adicionar subitem (completo): ${resAdd.status} ${JSON.stringify(resAdd.body)}`,

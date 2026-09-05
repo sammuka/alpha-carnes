@@ -10,12 +10,12 @@ import { mensagemDeErro } from '@/lib/error-message';
 
 interface Resultado {
   quantidade: number;
-  itens: Array<{ itemComercialId: string; descricao: string; fator: string; total: number }>;
+  itens: Array<{ produtoId: string; descricao: string; fator: string; total: number }>;
   somaFatores: number;
   totalPartes: number;
 }
 
-export function SimuladorDesdobramento({ itemCompraId }: { itemCompraId: string | null }) {
+export function SimuladorDesdobramento({ produtoOrigemId }: { produtoOrigemId: string | null }) {
   /** Valor inicial do protótipo — RegraDesdobramento.tsx:65 (`useState(10)`). */
   const [quantidade, setQuantidade] = useState('10');
   const [resultado, setResultado] = useState<Resultado | null>(null);
@@ -23,8 +23,8 @@ export function SimuladorDesdobramento({ itemCompraId }: { itemCompraId: string 
   const [calculando, setCalculando] = useState(false);
 
   const simular = async () => {
-    if (!itemCompraId) {
-      setErro('Selecione um item de compra para simular.');
+    if (!produtoOrigemId) {
+      setErro('Selecione um produto de origem para simular.');
       setResultado(null);
       return;
     }
@@ -34,7 +34,7 @@ export function SimuladorDesdobramento({ itemCompraId }: { itemCompraId: string 
       const res = await fetch('/api/cadastros/regras-desdobramento/simular', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemCompraId, quantidade: Number(quantidade) }),
+        body: JSON.stringify({ produtoOrigemId, quantidade: Number(quantidade) }),
       });
       if (!res.ok) {
         setErro(await mensagemDeErro(res));
@@ -85,7 +85,7 @@ export function SimuladorDesdobramento({ itemCompraId }: { itemCompraId: string 
               <p className="text-sm text-muted-foreground">Nenhuma regra de desdobramento ativa para este item.</p>
             )}
             {resultado.itens.map((item) => (
-              <div key={item.itemComercialId} className="flex justify-between rounded-md border border-border px-3 py-2 text-sm">
+              <div key={item.produtoId} className="flex justify-between rounded-md border border-border px-3 py-2 text-sm">
                 <span>{item.descricao}</span>
                 <span className="font-data">
                   {resultado.quantidade} × {item.fator} = <strong>{item.total}</strong>

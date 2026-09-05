@@ -25,7 +25,7 @@ beforeEach(() => {
       return resposta([{
         id: 'disponibilidade-1',
         operacaoId: 'operacao-1',
-        itemComercialId: 'item-tz',
+        produtoId: 'item-tz',
         quantidadeTotalGerada: '12.000',
         quantidadeReservada: '3.000',
         quantidadeDisponivel: '9.000',
@@ -37,7 +37,7 @@ beforeEach(() => {
     if (url === '/api/comercial/disponibilidade/mapa?operacaoId=operacao-1') {
       return resposta([
         {
-          itemComercialId: 'item-tz',
+          produtoId: 'item-tz',
           codigo: 'TZ',
           descricao: 'Traseiro Bovino',
           provisorio: true,
@@ -46,7 +46,7 @@ beforeEach(() => {
           saldoComercial: '8.000',
         },
         {
-          itemComercialId: 'item-dt',
+          produtoId: 'item-dt',
           codigo: 'DT',
           descricao: 'Dianteiro Bovino',
           provisorio: true,

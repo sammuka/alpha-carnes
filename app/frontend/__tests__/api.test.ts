@@ -57,7 +57,7 @@ describe('BFF POST /api/comercial/pedidos', () => {
     const challenge = {
       code: 'OVERBOOKING_CONFIRMACAO_NECESSARIA',
       message: 'A venda poderá ser concluída, mas a gestão deverá tratar a falta.',
-      desafios: [{ itemComercialId: 'i1', quantidadeDeficit: '1.000' }],
+      desafios: [{ produtoId: 'i1', quantidadeDeficit: '1.000' }],
     };
     global.fetch = jest.fn(async () =>
       new Response(JSON.stringify(challenge), {

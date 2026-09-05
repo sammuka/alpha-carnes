@@ -148,7 +148,7 @@ describe('Onda 11 — migrations 0028/0029/0030 (AD-14)', () => {
        VALUES ('IC-O11', 'Item O11', 'parte')
        RETURNING id`,
     );
-    const itemComercialId = itens[0]!.id;
+    const produtoId = itens[0]!.id;
 
     const { rows: pfs } = await pool.query<{ id: string }>(
       `INSERT INTO pedidos_fornecedor
@@ -174,7 +174,7 @@ describe('Onda 11 — migrations 0028/0029/0030 (AD-14)', () => {
           peso_original, modo_captura_peso)
        VALUES ($1, $2, $3, 12.500, 'automatico')
        RETURNING id`,
-      [compraOrigemId, recebimentoId, itemComercialId],
+      [compraOrigemId, recebimentoId, produtoId],
     );
     const pecaId = pecas[0]!.id;
 

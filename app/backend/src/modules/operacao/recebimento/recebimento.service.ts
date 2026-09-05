@@ -15,8 +15,7 @@ import { notasFiscaisFornecedor, operacoes,
   comprasProgramadas,
   comprasProgramadasItens,
   fornecedores,
-  itensComerciais,
-  itensCompra,
+  produtos,
   pecas,
   pedidosFornecedor,
   pedidosFornecedorItens,
@@ -71,7 +70,7 @@ export interface RecebimentoResumoEnriquecido {
 }
 
 export interface PrevisaoItemOperacional {
-  itemComercialId: string;
+  produtoId: string;
   produtoCodigo: string;
   produtoDescricao: string;
   quantidadePrevista: string;
@@ -124,7 +123,7 @@ type SnapshotPedidoFornecedor = {
   tipoCarga: string | null;
   resumoCompra: string;
   itens: Array<{
-    itemComercialId: string;
+    produtoId: string;
     produtoCodigo: string;
     produtoDescricao: string;
     quantidadePrevista: string;
@@ -254,7 +253,7 @@ export class RecebimentoService {
         fornecedor: true,
         pedidoFornecedor: true,
         operacao: true,
-        itens: { with: { itemComercial: true } },
+        itens: { with: { produto: true } },
         divergencias: true,
       },
     });
@@ -273,7 +272,7 @@ export class RecebimentoService {
     const payloadNf = nfAtiva?.payloadJson as { volumes?: number; pesoLiquido?: number } | null;
 
     const itensEnriquecidos = recebimento.itens.map((item) => {
-      const apurado = pecasMap.get(item.itemComercialId);
+      const apurado = pecasMap.get(item.produtoId);
       const qtdApurada =
         item.requerBalanca === false
           ? item.quantidadeRecebida
@@ -339,7 +338,7 @@ export class RecebimentoService {
           const entradaDireta = !requerBalanca;
           return {
             recebimentoId: criado.id,
-            itemComercialId: item.itemComercialId,
+            produtoId: item.produtoId,
             origemDescricao: item.origemDescricao,
             quantidadeEsperada: item.quantidadePrevista,
             quantidadeRecebida: entradaDireta ? item.quantidadePrevista : '0',
@@ -525,7 +524,7 @@ export class RecebimentoService {
         .where(
           and(
             eq(recebimentosItens.recebimentoId, recebimentoId),
-            eq(recebimentosItens.itemComercialId, dto.itemComercialId),
+            eq(recebimentosItens.produtoId, dto.produtoId),
           ),
         )
         .then((r) => r[0] ?? null);
@@ -537,7 +536,7 @@ export class RecebimentoService {
             .insert(recebimentosItens)
             .values({
               recebimentoId,
-              itemComercialId: dto.itemComercialId,
+              produtoId: dto.produtoId,
               quantidadeEsperada: '0',
               quantidadeRecebida: '0',
               statusApuracao: 'aguardando',
@@ -594,7 +593,7 @@ export class RecebimentoService {
           tx,
           {
             compraProgramadaId: ctx.compraProgramadaId,
-            itemComercialId: dto.itemComercialId,
+            produtoId: dto.produtoId,
             deltaRecebido,
             deltaComDivergencia,
           },
@@ -607,7 +606,7 @@ export class RecebimentoService {
         pedidosEmRisco = await this.disponibilidade.listarPedidosEmRisco(
           tx,
           ctx.operacaoId,
-          dto.itemComercialId,
+          dto.produtoId,
         );
       }
 
@@ -624,7 +623,7 @@ export class RecebimentoService {
       return {
         itemId: atualizado.id,
         dataOperacao: ctx.dataOperacao,
-        itemComercialId: dto.itemComercialId,
+        produtoId: dto.produtoId,
         divergenciaAberta,
         pedidosEmRisco,
       };
@@ -634,7 +633,7 @@ export class RecebimentoService {
       recebimentoId,
       dataOperacao: resultado.dataOperacao,
       etapa: 'item' as const,
-      itemComercialId: resultado.itemComercialId,
+      produtoId: resultado.produtoId,
     });
     if (resultado.divergenciaAberta) {
       this.eventEmitter.emit(EVENTOS.DIVERGENCIA_RECEBIMENTO_ABERTA, {
@@ -689,12 +688,12 @@ export class RecebimentoService {
       }
 
       const itens = await tx
-        .select({ itemComercialId: recebimentosItens.itemComercialId })
+        .select({ produtoId: recebimentosItens.produtoId })
         .from(recebimentosItens)
         .where(eq(recebimentosItens.recebimentoId, recebimentoId));
       const pedidosEmRisco: PedidoEmRisco[] = [];
       for (const it of itens) {
-        const risco = await this.disponibilidade.listarPedidosEmRisco(tx, ctx.operacaoId, it.itemComercialId);
+        const risco = await this.disponibilidade.listarPedidosEmRisco(tx, ctx.operacaoId, it.produtoId);
         pedidosEmRisco.push(...risco);
       }
 
@@ -808,13 +807,13 @@ export class RecebimentoService {
     const linhas = await this.db
       .select({
         peca: pecas,
-        produtoCodigo: itensComerciais.codigo,
-        produtoDescricao: itensComerciais.descricao,
+        produtoCodigo: produtos.codigo,
+        produtoDescricao: produtos.nome,
         clienteNome: clientes.nomeFantasia,
         clienteRazao: clientes.razaoSocial,
       })
       .from(pecas)
-      .innerJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
+      .innerJoin(produtos, eq(produtos.id, pecas.produtoBaseId))
       .leftJoin(pedidosVenda, eq(pedidosVenda.id, pecas.pedidoVendaId))
       .leftJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
       .where(and(eq(pecas.recebimentoId, recebimentoId), isNull(pecas.deletedAt)))
@@ -859,7 +858,7 @@ export class RecebimentoService {
       itens.map((item) => ({
         quantidadeEsperada: item.quantidadeEsperada,
         requerBalanca: item.requerBalanca,
-        quantidadeApurada: pecasMap.get(item.itemComercialId)?.quantidade ?? Number(item.quantidadeRecebida),
+        quantidadeApurada: pecasMap.get(item.produtoId)?.quantidade ?? Number(item.quantidadeRecebida),
       })),
     );
   }
@@ -907,16 +906,16 @@ export class RecebimentoService {
 
     const itensSnapshot = await tx
       .select({
-        itemComercialId: pedidosFornecedorItens.itemComercialId,
-        produtoCodigo: itensComerciais.codigo,
-        produtoDescricao: itensComerciais.descricao,
+        produtoId: pedidosFornecedorItens.produtoId,
+        produtoCodigo: produtos.codigo,
+        produtoDescricao: produtos.nome,
         quantidadePrevista: pedidosFornecedorItens.quantidadePrevista,
         pesoPrevisto: pedidosFornecedorItens.pesoPrevisto,
       })
       .from(pedidosFornecedorItens)
       .innerJoin(
-        itensComerciais,
-        eq(itensComerciais.id, pedidosFornecedorItens.itemComercialId),
+        produtos,
+        eq(produtos.id, pedidosFornecedorItens.produtoId),
       )
       .where(and(
         eq(pedidosFornecedorItens.pedidoFornecedorId, pedidoFornecedorId),
@@ -930,10 +929,10 @@ export class RecebimentoService {
       tx,
       cabecalho.pedido.compraProgramadaId,
       cabecalho.numeroInternoCompra,
-      itensSnapshot.map((item) => item.itemComercialId),
+      itensSnapshot.map((item) => item.produtoId),
     );
     const itens = itensSnapshot.map((item) => {
-      const metadado = metadados.get(item.itemComercialId);
+      const metadado = metadados.get(item.produtoId);
       if (!metadado) {
         throw new ConflictException(
           'Pedido ao fornecedor com metadados operacionais incompletos',
@@ -947,13 +946,13 @@ export class RecebimentoService {
       };
     });
 
-    const itensCompraLinhas = await tx
+    const produtosLinhas = await tx
       .select({
-        descricao: itensCompra.descricao,
+        descricao: produtos.nome,
         quantidade: comprasProgramadasItens.quantidadeComprada,
       })
       .from(comprasProgramadasItens)
-      .innerJoin(itensCompra, eq(itensCompra.id, comprasProgramadasItens.itemCompraId))
+      .innerJoin(produtos, eq(produtos.id, comprasProgramadasItens.produtoId))
       .where(and(
         eq(comprasProgramadasItens.compraProgramadaId, cabecalho.pedido.compraProgramadaId),
         isNull(comprasProgramadasItens.deletedAt),
@@ -962,7 +961,7 @@ export class RecebimentoService {
     return {
       ...cabecalho,
       tipoCarga: await derivarTipoCarga(tx, cabecalho.pedido.compraProgramadaId),
-      resumoCompra: itensCompraLinhas
+      resumoCompra: produtosLinhas
         .map((item) => `${item.quantidade} ${item.descricao}`)
         .join(' + '),
       itens,

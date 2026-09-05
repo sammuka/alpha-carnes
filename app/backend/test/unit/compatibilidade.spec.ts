@@ -11,7 +11,7 @@ describe('calcularCompativeisItem — preferências', () => {
                 {
                   pedidoVendaId: 'pv-1',
                   pedidoVendaItemId: 'pvi-1',
-                  itemComercialId: 'ic-1',
+                  produtoId: 'ic-1',
                   clienteId: 'cli-1',
                   quantidadePedida: '2.000',
                   quantidadeAtendida: '0.000',
@@ -22,7 +22,7 @@ describe('calcularCompativeisItem — preferências', () => {
                 {
                   pedidoVendaId: 'pv-2',
                   pedidoVendaItemId: 'pvi-2',
-                  itemComercialId: 'ic-1',
+                  produtoId: 'ic-1',
                   clienteId: 'cli-2',
                   quantidadePedida: '2.000',
                   quantidadeAtendida: '1.000',
@@ -44,7 +44,7 @@ describe('calcularCompativeisItem — preferências', () => {
     const sugestoes = await calcularCompativeisItem(tx as never, {
       operacaoId: 'op-1',
       compraProgramadaOrigemId: 'cp-1',
-      itemComercialId: 'ic-1',
+      produtoId: 'ic-1',
       peso: '12.500',
     });
     expect(sugestoes.length).toBeGreaterThan(0);

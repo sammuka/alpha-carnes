@@ -6,8 +6,7 @@ import * as schema from '../../../database/schema';
 import {
   clientes,
   fornecedores,
-  itensComerciais,
-  itensCompra,
+  produtos,
   regrasDesdobramentoComercial,
 } from '../../../database/schema';
 
@@ -17,14 +16,7 @@ export interface ProntidaoResultado {
 }
 
 /**
- * DP-01 — Prontidão de cadastros mínimos.
- *
- * O sistema só pode avançar para compra/pedido (F3) quando existir pelo menos um
- * registro ATIVO (deleted_at IS NULL, status='ativo') de cada entidade obrigatória:
- * cliente, fornecedor, item de compra, item comercial e regra de desdobramento.
- *
- * `verificarProntidaoCadastros()` FALHA de forma explícita (ConflictException listando
- * o que falta) quando algo está ausente — nunca retorna silenciosamente (RA-05).
+ * DP-01 — Prontidão de cadastros mínimos (AD-15: catálogo único em produtos).
  */
 @Injectable()
 export class ProntidaoService {
@@ -38,11 +30,13 @@ export class ProntidaoService {
   }
 
   async verificarProntidaoCadastros(): Promise<ProntidaoResultado> {
-    const [qtdClientes, qtdFornecedores, qtdItensCompra, qtdItensComerciais, qtdRegras] = await Promise.all([
+    const [qtdClientes, qtdFornecedores, qtdProdutosVenda, qtdRegras] = await Promise.all([
       this.contar(and(isNull(clientes.deletedAt), eq(clientes.status, 'ativo')), clientes),
       this.contar(and(isNull(fornecedores.deletedAt), eq(fornecedores.status, 'ativo')), fornecedores),
-      this.contar(and(isNull(itensCompra.deletedAt), eq(itensCompra.status, 'ativo')), itensCompra),
-      this.contar(and(isNull(itensComerciais.deletedAt), eq(itensComerciais.status, 'ativo')), itensComerciais),
+      this.contar(
+        and(isNull(produtos.deletedAt), eq(produtos.status, 'ativo'), eq(produtos.ativoVenda, true)),
+        produtos,
+      ),
       this.contar(
         and(isNull(regrasDesdobramentoComercial.deletedAt), eq(regrasDesdobramentoComercial.status, 'ativo')),
         regrasDesdobramentoComercial,
@@ -52,8 +46,7 @@ export class ProntidaoService {
     const contagens: Record<string, number> = {
       clientes: qtdClientes,
       fornecedores: qtdFornecedores,
-      itensCompra: qtdItensCompra,
-      itensComerciais: qtdItensComerciais,
+      produtosVenda: qtdProdutosVenda,
       regrasDesdobramento: qtdRegras,
     };
 
@@ -73,7 +66,7 @@ export class ProntidaoService {
 
   private async contar(
     where: ReturnType<typeof and>,
-    tabela: typeof clientes | typeof fornecedores | typeof itensCompra | typeof itensComerciais | typeof regrasDesdobramentoComercial,
+    tabela: typeof clientes | typeof fornecedores | typeof produtos | typeof regrasDesdobramentoComercial,
   ): Promise<number> {
     const row = await this.db.select({ total: sql<number>`count(*)::int` }).from(tabela).where(where);
     return row[0]?.total ?? 0;

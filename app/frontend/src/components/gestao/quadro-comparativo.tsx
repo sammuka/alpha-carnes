@@ -1,7 +1,7 @@
 import { Info, Scale } from 'lucide-react';
 
 export interface ItemComparativo {
-  itemComercialId: string;
+  produtoId: string;
   codigo: string | null;
   descricao: string | null;
   qtdPedido: string;
@@ -52,9 +52,9 @@ export function QuadroComparativo({ itens }: QuadroComparativoProps) {
           <tbody>
             {itens.map((item) => {
               const divergente = ehDivergente(item.difQtd);
-              const produto = item.codigo ?? item.descricao ?? item.itemComercialId.slice(0, 8);
+              const produto = item.codigo ?? item.descricao ?? item.produtoId.slice(0, 8);
               return (
-                <tr key={item.itemComercialId} className={`border-b border-border last:border-0 ${divergente ? 'bg-[var(--color-status-divergencia-bg)]/40' : ''}`}>
+                <tr key={item.produtoId} className={`border-b border-border last:border-0 ${divergente ? 'bg-[var(--color-status-divergencia-bg)]/40' : ''}`}>
                   <td className="px-4 py-2.5 font-bold text-primary">{produto}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{item.qtdPedido}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{item.qtdNf}</td>

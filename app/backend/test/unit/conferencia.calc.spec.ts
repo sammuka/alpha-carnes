@@ -6,7 +6,7 @@ import {
 function item(partial: Partial<QuadroItem>): QuadroItem {
   return {
     recebimentoItemId: 'ri-1',
-    itemComercialId: 'ic-1',
+    produtoId: 'ic-1',
     previstoNoPedido: true,
     qtdPedido: '5.000',
     qtdNf: '5.000',

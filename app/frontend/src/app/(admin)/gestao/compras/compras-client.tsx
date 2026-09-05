@@ -43,13 +43,13 @@ interface CadastroItem {
 }
 
 interface LinhaItem {
-  itemCompraId: string;
+  produtoId: string;
   quantidadeComprada: string;
   observacoes: string;
 }
 
 interface SimulacaoDesdobramento {
-  itens: Array<{ itemComercialId: string; descricao: string; fator: string; total: number }>;
+  itens: Array<{ produtoId: string; descricao: string; fator: string; total: number }>;
   totalPartes: number;
 }
 
@@ -110,7 +110,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const [fornecedorId, setFornecedorId] = useState('');
   const [referenciaExterna, setReferenciaExterna] = useState('');
   const [observacoes, setObservacoes] = useState('');
-  const [linhas, setLinhas] = useState<LinhaItem[]>([{ itemCompraId: '', quantidadeComprada: '', observacoes: '' }]);
+  const [linhas, setLinhas] = useState<LinhaItem[]>([{ produtoId: '', quantidadeComprada: '', observacoes: '' }]);
 
   const [compras, setCompras] = useState<CompraProgramada[]>([]);
   const [compra, setCompra] = useState<CompraProgramadaDetalhe | null>(null);
@@ -129,7 +129,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const carregarCadastros = useCallback(async () => {
     const [fRes, iRes] = await Promise.all([
       fetch('/api/cadastros/fornecedores?pageSize=100', { cache: 'no-store' }),
-      fetch('/api/cadastros/itens-compra?page=1&pageSize=100&status=ativo', { cache: 'no-store' }),
+      fetch('/api/cadastros/produtos?page=1&pageSize=100&status=ativo&ativoCompra=true', { cache: 'no-store' }),
     ]);
     if (fRes.ok) {
       const f = (await fRes.json()) as Paginado<CadastroItem>;
@@ -148,7 +148,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
     setObservacoes(det.observacoes ?? '');
     setLinhas(
       det.itens.map((it) => ({
-        itemCompraId: it.itemCompraId,
+        produtoId: it.produtoId,
         quantidadeComprada: it.quantidadeComprada,
         observacoes: it.observacoes ?? '',
       })),
@@ -160,7 +160,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
     setFornecedorId('');
     setReferenciaExterna('');
     setObservacoes('');
-    setLinhas([{ itemCompraId: '', quantidadeComprada: '', observacoes: '' }]);
+    setLinhas([{ produtoId: '', quantidadeComprada: '', observacoes: '' }]);
     setDisponibilidade([]);
   }, []);
 
@@ -238,7 +238,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
 
   useEffect(() => {
     if (!podeSimular) return;
-    const candidatas = linhas.filter((l) => l.itemCompraId && Number(l.quantidadeComprada) > 0);
+    const candidatas = linhas.filter((l) => l.produtoId && Number(l.quantidadeComprada) > 0);
     if (candidatas.length === 0) {
       setSimulacoes(new Map());
       return;
@@ -250,12 +250,12 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              itemCompraId: l.itemCompraId,
+              produtoId: l.produtoId,
               quantidade: Math.round(Number(l.quantidadeComprada)),
             }),
           })
             .then((r) => (r.ok ? r.json() : null))
-            .then((s: SimulacaoDesdobramento | null) => [l.itemCompraId, s] as const),
+            .then((s: SimulacaoDesdobramento | null) => [l.produtoId, s] as const),
         ),
       ).then((resultados) => {
         const proximo = new Map<string, SimulacaoDesdobramento>();
@@ -271,9 +271,9 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
     setSalvando(true);
     setErro(null);
     const itensValidos = linhas
-      .filter((l) => l.itemCompraId && Number(l.quantidadeComprada) > 0)
+      .filter((l) => l.produtoId && Number(l.quantidadeComprada) > 0)
       .map((l) => ({
-        itemCompraId: l.itemCompraId,
+        produtoId: l.produtoId,
         quantidadeComprada: Number(l.quantidadeComprada),
         observacoes: l.observacoes || undefined,
       }));
@@ -537,7 +537,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                 </TableHeader>
                 <TableBody>
                   {linhas.map((linha, idx) => {
-                    const simulacao = simulacoes.get(linha.itemCompraId);
+                    const simulacao = simulacoes.get(linha.produtoId);
                     const regraDesdobramento = simulacao?.itens?.length
                       ? simulacao.itens.map((i) => `${i.fator}× ${i.descricao}`).join(' + ')
                       : '—';
@@ -551,9 +551,9 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                               id: it.id,
                               label: labelCodigoDescricao(it.codigo, it.descricao ?? it.nome ?? ''),
                             }))}
-                            value={linha.itemCompraId}
+                            value={linha.produtoId}
                             onChange={(id) =>
-                              setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, itemCompraId: id } : l)))
+                              setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, produtoId: id } : l)))
                             }
                             placeholder="Item"
                             searchPlaceholder="Buscar item de compra..."
@@ -615,7 +615,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => setLinhas((p) => [...p, { itemCompraId: '', quantidadeComprada: '', observacoes: '' }])}
+                  onClick={() => setLinhas((p) => [...p, { produtoId: '', quantidadeComprada: '', observacoes: '' }])}
                 >
                   <Plus />
                   Adicionar item
@@ -641,8 +641,8 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                     const agregado = new Map<string, { descricao: string; total: number }>();
                     for (const sim of simulacoes.values()) {
                       for (const item of sim.itens ?? []) {
-                        const atual = agregado.get(item.itemComercialId);
-                        agregado.set(item.itemComercialId, {
+                        const atual = agregado.get(item.produtoId);
+                        agregado.set(item.produtoId, {
                           descricao: item.descricao,
                           total: (atual?.total ?? 0) + item.total,
                         });
@@ -676,8 +676,8 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
               ) : (
                 <ul className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
                   {disponibilidade.map((d) => (
-                    <li key={d.modo === 'compra' ? d.id : d.itemComercialId} className="flex justify-between text-xs">
-                      <span className="font-data text-[11px]">{d.itemComercialId.slice(0, 8)}…</span>
+                    <li key={d.modo === 'compra' ? d.id : d.produtoId} className="flex justify-between text-xs">
+                      <span className="font-data text-[11px]">{d.produtoId.slice(0, 8)}…</span>
                       <span className="font-data font-semibold text-primary">{d.quantidadeDisponivel} disp.</span>
                     </li>
                   ))}

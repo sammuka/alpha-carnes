@@ -33,7 +33,7 @@ describe('mapa de disponibilidade — Onda 4 (D17)', () => {
   }, 60000);
 
   function linhaDoItem(mapa: MapaProduto[]): MapaProduto {
-    const linha = mapa.find((l) => l.itemComercialId === ctx.itemComercialId);
+    const linha = mapa.find((l) => l.produtoId === ctx.produtoId);
     if (!linha) throw new Error('Item comercial da fixture não apareceu no mapa');
     return linha;
   }
@@ -84,7 +84,7 @@ describe('mapa de disponibilidade — Onda 4 (D17)', () => {
   it('drill-down devolve as unidades reais do estado selecionado', async () => {
     const req = await request();
     const res = await req(app.getHttpServer())
-      .get(`/comercial/disponibilidade/mapa/${ctx.itemComercialId}/detalhe`)
+      .get(`/comercial/disponibilidade/mapa/${ctx.produtoId}/detalhe`)
       .query({ operacaoId: ctx.operacaoId, estado: 'E' })
       .set('Cookie', cookies);
     expect(res.status).toBe(200);
@@ -92,7 +92,7 @@ describe('mapa de disponibilidade — Onda 4 (D17)', () => {
     expect(res.body.length).toBe(2);
 
     const restoDetalheF = await req(app.getHttpServer())
-      .get(`/comercial/disponibilidade/mapa/${ctx.itemComercialId}/detalhe`)
+      .get(`/comercial/disponibilidade/mapa/${ctx.produtoId}/detalhe`)
       .query({ operacaoId: ctx.operacaoId, estado: 'F' })
       .set('Cookie', cookies);
     expect(restoDetalheF.status).toBe(200);
@@ -137,7 +137,7 @@ describe('mapa de disponibilidade — Onda 11 (pool V por operacao)', () => {
       .from(schema.comprasProgramadas)
       .where(eq(schema.comprasProgramadas.id, c1));
     const mapa = await mapaService.consultar(compra!.operacaoId);
-    const linha = mapa.find((l) => l.itemComercialId === base.itemComercialId);
+    const linha = mapa.find((l) => l.produtoId === base.produtoId);
     expect(linha?.estados.V).toBe('10.000');
   });
 });

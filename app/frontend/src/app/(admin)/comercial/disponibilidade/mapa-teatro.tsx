@@ -29,7 +29,7 @@ const COR_ESTADO: Record<EstadoMapa, string> = {
 
 interface MapaTeatroProps {
   produtos: MapaProduto[];
-  selecionado?: { itemComercialId: string; estado: EstadoMapa } | null;
+  selecionado?: { produtoId: string; estado: EstadoMapa } | null;
   onSelecionar: (produto: MapaProduto, estado: EstadoMapa) => void;
 }
 
@@ -51,7 +51,7 @@ export function MapaTeatro({ produtos, selecionado, onSelecionar }: MapaTeatroPr
           <div className="divide-y divide-border">
             {produtos.map((produto) => (
               <div
-                key={produto.itemComercialId}
+                key={produto.produtoId}
                 className="grid grid-cols-[260px_repeat(8,minmax(78px,1fr))] items-center gap-2 px-3 py-2"
               >
                 <div className="min-w-0">
@@ -67,7 +67,7 @@ export function MapaTeatro({ produtos, selecionado, onSelecionar }: MapaTeatroPr
                 {ESTADOS.map(({ estado, label }) => {
                   const valor = produto.estados[estado];
                   const unidades = produto.unidades[estado];
-                  const ativo = selecionado?.itemComercialId === produto.itemComercialId
+                  const ativo = selecionado?.produtoId === produto.produtoId
                     && selecionado.estado === estado;
                   return (
                     <button

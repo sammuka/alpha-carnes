@@ -55,7 +55,7 @@ describe('ComparativoService — branches', () => {
             id: 'cc-1',
             quadroJson: [
               {
-                itemComercialId: 'item-1',
+                produtoId: 'item-1',
                 qtdPedido: '10.000',
                 qtdNf: '9.000',
                 qtdApurada: '9.500',
@@ -64,7 +64,7 @@ describe('ComparativoService — branches', () => {
                 situacao: 'divergente',
               },
               {
-                itemComercialId: 'item-desconhecido',
+                produtoId: 'item-desconhecido',
                 qtdPedido: '1.000',
                 qtdNf: '1.000',
                 qtdApurada: '1.000',

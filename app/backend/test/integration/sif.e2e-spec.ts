@@ -40,7 +40,7 @@ describe('sif (catálogo, pendências, geração e retificação)', () => {
       .send({
         dataOperacao: data,
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 1 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 1 }],
       })
       .expect(201);
     return { operacaoId: compra.body.operacaoId as string, base };

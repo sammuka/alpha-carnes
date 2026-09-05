@@ -71,7 +71,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const criar = await request(srv())
       .post('/comercial/compras-programadas')
       .set('Cookie', comprasCookies)
-      .send({ dataOperacao: '2026-11-01', fornecedorId: base.fornecedorId, itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 10 }] });
+      .send({ dataOperacao: '2026-11-01', fornecedorId: base.fornecedorId, itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 10 }] });
     const compraId = criar.body.id as string; // rascunho (não confirmada)
 
     const res = await request(srv())
@@ -97,7 +97,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     expect(detalhe.body.itens).toHaveLength(1);
     // esperado = fator(4) × comprado(10) = 40, derivado da disponibilidade
     expect(Number(detalhe.body.itens[0].quantidadeEsperada)).toBe(40);
-    expect(detalhe.body.itens[0].itemComercialId).toBe(base.itemComercialId);
+    expect(detalhe.body.itens[0].produtoId).toBe(base.produtoId);
   });
 
   it('permite N recebimentos do mesmo Pedido ao Fornecedor', async () => {
@@ -127,10 +127,10 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const res = await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 });
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 10 });
     expect(res.status).toBe(201);
 
-    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    const disp = await lerDisponibilidade(app, base.produtoId, compraId);
     expect(Number(disp!.quantidadeRecebida)).toBe(10);
     expect(Number(disp!.quantidadeComDivergencia)).toBe(0);
   });
@@ -144,7 +144,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const res = await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 7 }); // esperado 10
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 7 }); // esperado 10
     expect(res.status).toBe(409);
   });
 
@@ -157,10 +157,10 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const res = await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 6, divergencia: divergenciaFalta });
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 6, divergencia: divergenciaFalta });
     expect(res.status).toBe(201);
 
-    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    const disp = await lerDisponibilidade(app, base.produtoId, compraId);
     expect(Number(disp!.quantidadeRecebida)).toBe(6);
     expect(Number(disp!.quantidadeComDivergencia)).toBe(4); // |10 - 6|
   });
@@ -177,14 +177,14 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const semDiverg = await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: baseExtra.itemComercialId, quantidadeRecebida: 3 });
+      .send({ produtoId: baseExtra.produtoId, quantidadeRecebida: 3 });
     expect(semDiverg.status).toBe(409); // excedente exige divergência
 
     const comDiverg = await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
       .send({
-        itemComercialId: baseExtra.itemComercialId,
+        produtoId: baseExtra.produtoId,
         quantidadeRecebida: 3,
         divergencia: { tipo: 'produto_nao_previsto', descricao: 'Item não previsto', acaoImediata: 'Enviar a estoque' },
       });
@@ -200,7 +200,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 6, divergencia: divergenciaFalta });
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 6, divergencia: divergenciaFalta });
 
     const bloqueado = await request(srv()).post(`/operacao/recebimentos/${recId}/concluir`).set('Cookie', recebimentoCookies).send();
     expect(bloqueado.status).toBe(409);
@@ -230,13 +230,13 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 });
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 10 });
     await request(srv()).post(`/operacao/recebimentos/${recId}/concluir`).set('Cookie', recebimentoCookies).send();
 
     const res = await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 8, divergencia: divergenciaFalta });
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 8, divergencia: divergenciaFalta });
     expect(res.status).toBe(409);
   });
 
@@ -245,7 +245,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-10', quantidade: 10 });
     const ini = await iniciarViaCompra(compraId);
     const recId = ini.body.recebimento.id as string;
-    await request(srv()).post(`/operacao/recebimentos/${recId}/itens`).set('Cookie', recebimentoCookies).send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 });
+    await request(srv()).post(`/operacao/recebimentos/${recId}/itens`).set('Cookie', recebimentoCookies).send({ produtoId: base.produtoId, quantidadeRecebida: 10 });
 
     const c1 = await request(srv()).post(`/operacao/recebimentos/${recId}/concluir`).set('Cookie', recebimentoCookies).send();
     const c2 = await request(srv()).post(`/operacao/recebimentos/${recId}/concluir`).set('Cookie', recebimentoCookies).send();
@@ -260,7 +260,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const pedido = await request(srv())
       .post('/comercial/pedidos')
       .set('Cookie', comercialCookies)
-      .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-11', itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 8 }] });
+      .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-11', itens: [{ produtoId: base.produtoId, quantidadePedida: 8 }] });
     expect(pedido.status).toBe(201);
 
     const ini = await iniciarViaCompra(compraId);
@@ -269,7 +269,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const reg = await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 5, divergencia: divergenciaFalta });
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 5, divergencia: divergenciaFalta });
     expect(reg.status).toBe(201);
 
     // Trata a divergência e conclui.
@@ -280,7 +280,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const concl = await request(srv()).post(`/operacao/recebimentos/${recId}/concluir`).set('Cookie', recebimentoCookies).send();
     expect(concl.status).toBe(201);
 
-    const disp = await lerDisponibilidade(app, base.itemComercialId);
+    const disp = await lerDisponibilidade(app, base.produtoId, compraId);
     expect(Number(disp!.quantidadeRecebida)).toBe(5);
   });
 
@@ -294,7 +294,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       const p = await request(srv())
         .post('/comercial/pedidos')
         .set('Cookie', comercialCookies)
-        .send({ compraProgramadaId: compraId, clienteId, dataOperacao: '2026-11-17', itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }] });
+        .send({ compraProgramadaId: compraId, clienteId, dataOperacao: '2026-11-17', itens: [{ produtoId: base.produtoId, quantidadePedida: 6 }] });
       expect(p.status).toBe(201);
     }
 
@@ -304,7 +304,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10, divergencia: divergenciaFalta });
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 10, divergencia: divergenciaFalta });
 
     // A query é a fonte de verdade do alerta: deve listar AMBOS os pedidos.
     const { db } = app.get<{ db: Db }>(DRIZZLE);
@@ -312,7 +312,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const [compra] = await db.select({ operacaoId: schema.comprasProgramadas.operacaoId })
       .from(schema.comprasProgramadas)
       .where(eq(schema.comprasProgramadas.id, compraId));
-    const risco = await disponibilidade.listarPedidosEmRisco(db, compra!.operacaoId, base.itemComercialId);
+    const risco = await disponibilidade.listarPedidosEmRisco(db, compra!.operacaoId, base.produtoId);
     expect(risco).toHaveLength(2);
     expect(risco.every((r) => Number(r.quantidadeRecebida) === 10)).toBe(true);
   });
@@ -323,7 +323,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const p = await request(srv())
       .post('/comercial/pedidos')
       .set('Cookie', comercialCookies)
-      .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-18', itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 6 }] });
+      .send({ compraProgramadaId: compraId, clienteId: base.clienteId, dataOperacao: '2026-11-18', itens: [{ produtoId: base.produtoId, quantidadePedida: 6 }] });
     expect(p.status).toBe(201);
 
     const ini = await iniciarViaCompra(compraId);
@@ -331,14 +331,14 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10, divergencia: divergenciaFalta });
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 10, divergencia: divergenciaFalta });
 
     const { db } = app.get<{ db: Db }>(DRIZZLE);
     const disponibilidade = app.get(DisponibilidadeService);
     const [compra] = await db.select({ operacaoId: schema.comprasProgramadas.operacaoId })
       .from(schema.comprasProgramadas)
       .where(eq(schema.comprasProgramadas.id, compraId));
-    const risco = await disponibilidade.listarPedidosEmRisco(db, compra!.operacaoId, base.itemComercialId);
+    const risco = await disponibilidade.listarPedidosEmRisco(db, compra!.operacaoId, base.produtoId);
     expect(risco).toHaveLength(0); // reservado 6 <= recebido 10
   });
 
@@ -354,7 +354,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
         compraProgramadaId: c1,
         clienteId: base.clienteId,
         dataOperacao: dia,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 10 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 10 }],
       });
     expect(pedido.status).toBe(201);
 
@@ -370,12 +370,12 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const [compra] = await db.select({ operacaoId: schema.comprasProgramadas.operacaoId })
       .from(schema.comprasProgramadas)
       .where(eq(schema.comprasProgramadas.id, c1));
-    expect(await disponibilidade.listarPedidosEmRisco(db, compra!.operacaoId, base.itemComercialId)).toEqual([]);
+    expect(await disponibilidade.listarPedidosEmRisco(db, compra!.operacaoId, base.produtoId)).toEqual([]);
 
     await db.update(schema.disponibilidadesVirtuais)
       .set({ quantidadeRecebida: '5.000' })
       .where(eq(schema.disponibilidadesVirtuais.compraProgramadaId, c2));
-    const comDeficit = await disponibilidade.listarPedidosEmRisco(db, compra!.operacaoId, base.itemComercialId);
+    const comDeficit = await disponibilidade.listarPedidosEmRisco(db, compra!.operacaoId, base.produtoId);
     expect(comDeficit.length).toBeGreaterThan(0);
   });
 
@@ -388,7 +388,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 6, divergencia: divergenciaFalta });
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 6, divergencia: divergenciaFalta });
     const detalhe = await request(srv()).get(`/operacao/recebimentos/${recId}`).set('Cookie', recebimentoCookies);
     return { base, compraId, recId, divergenciaId: detalhe.body.divergencias[0].id as string };
   }
@@ -584,7 +584,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     const criar = await request(srv())
       .post('/comercial/compras-programadas')
       .set('Cookie', comprasCookies)
-      .send({ dataOperacao: '2026-11-25', fornecedorId: base.fornecedorId, itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 10 }] });
+      .send({ dataOperacao: '2026-11-25', fornecedorId: base.fornecedorId, itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 10 }] });
     const res = await request(srv())
       .get(`/operacao/recebimentos/previsao/${criar.body.id}`)
       .set('Cookie', recebimentoCookies);
@@ -706,7 +706,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       .send({
         numero: '900100',
         recebimentoId: recId,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadeDeclarada: 10 }],
+        itens: [{ produtoId: base.produtoId, quantidadeDeclarada: 10 }],
       })
       .expect(201);
 
@@ -726,14 +726,14 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 })
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 10 })
       .expect(201);
 
     await db.update(schema.recebimentosItens)
       .set({ requerBalanca: false, statusApuracao: 'entrada_direta' })
       .where(and(
         eq(schema.recebimentosItens.recebimentoId, recId),
-        eq(schema.recebimentosItens.itemComercialId, base.itemComercialId),
+        eq(schema.recebimentosItens.produtoId, base.produtoId),
       ));
 
     await request(srv())
@@ -799,7 +799,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       .send({
         numero: '910100',
         recebimentoId: recId,
-        itens: [{ itemComercialId: base.itemComercialId, quantidadeDeclarada: 10 }],
+        itens: [{ produtoId: base.produtoId, quantidadeDeclarada: 10 }],
       })
       .expect(201);
 
@@ -830,14 +830,14 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 })
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 10 })
       .expect(201);
 
     await db.update(schema.recebimentosItens)
       .set({ requerBalanca: false, statusApuracao: 'entrada_direta' })
       .where(and(
         eq(schema.recebimentosItens.recebimentoId, recId),
-        eq(schema.recebimentosItens.itemComercialId, base.itemComercialId),
+        eq(schema.recebimentosItens.produtoId, base.produtoId),
       ));
 
     await request(srv())
@@ -931,7 +931,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 })
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 10 })
       .expect(201);
 
     await request(srv())
@@ -956,7 +956,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 });
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 10 });
     await request(srv()).post(`/operacao/recebimentos/${recId}/concluir`).set('Cookie', recebimentoCookies).send();
 
     const res = await request(srv())
@@ -974,7 +974,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     await request(srv())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 });
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 10 });
     await request(srv()).post(`/operacao/recebimentos/${recId}/concluir`).set('Cookie', recebimentoCookies).send();
 
     const res = await request(srv()).post(`/operacao/recebimentos/${recId}/cancelar`).set('Cookie', recebimentoCookies);

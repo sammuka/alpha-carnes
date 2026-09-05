@@ -17,7 +17,7 @@ function pecaBase(overrides: Record<string, unknown> = {}) {
     statusPeca: 'associada',
     pedidoVendaItemId: 'pvi-1',
     pedidoVendaId: 'pv-1',
-    itemComercialBaseId: 'ic-1',
+    produtoBaseId: 'ic-1',
     pesoOriginal: '10.000',
     recebimentoId: 'rec-1',
     etiquetaAtual: 'QR-pec-1',
@@ -61,7 +61,7 @@ function makeService(opts: {
     ? {
         id: 'pvi-1',
         pedidoVendaId: 'pv-1',
-        itemComercialId: 'ic-1',
+        produtoId: 'ic-1',
         statusPedido: 'em_elaboracao_reserva_ativa',
         operacaoId: 'op-1',
         deletedAt: null,
@@ -183,7 +183,7 @@ describe('TrocaPecaService — branches', () => {
       item: {
         id: 'pvi-1',
         pedidoVendaId: 'pv-1',
-        itemComercialId: 'ic-1',
+        produtoId: 'ic-1',
         statusPedido: 'aberto',
         deletedAt: new Date(),
       },
@@ -196,7 +196,7 @@ describe('TrocaPecaService — branches', () => {
       item: {
         id: 'pvi-1',
         pedidoVendaId: 'pv-1',
-        itemComercialId: 'ic-1',
+        produtoId: 'ic-1',
         statusPedido: 'cancelado',
         deletedAt: null,
       },
@@ -211,7 +211,7 @@ describe('TrocaPecaService — branches', () => {
 
   it('validarTroca → ConflictException se peça de entrada incompatível', async () => {
     const { service } = makeService({
-      inserida: pecaBase({ id: 'pec-ins', statusPeca: 'pesada', itemComercialBaseId: 'ic-outro' }),
+      inserida: pecaBase({ id: 'pec-ins', statusPeca: 'pesada', produtoBaseId: 'ic-outro' }),
     });
     await expect(service.executar(dtoBase, 'op-1')).rejects.toThrow('incompatível');
   });
@@ -248,8 +248,8 @@ describe('TrocaPecaService — branches', () => {
 
   it('executar → ConflictException se item comercial diferente entre peças', async () => {
     const { service } = makeService({
-      retirada: pecaBase({ id: 'pec-ret', itemComercialBaseId: 'ic-1' }),
-      pecaInserida: pecaBase({ id: 'pec-ins', statusPeca: 'pesada', itemComercialBaseId: 'ic-2' }),
+      retirada: pecaBase({ id: 'pec-ret', produtoBaseId: 'ic-1' }),
+      pecaInserida: pecaBase({ id: 'pec-ins', statusPeca: 'pesada', produtoBaseId: 'ic-2' }),
     });
     await expect(service.executar(dtoBase, 'op-1')).rejects.toThrow('outro item comercial');
   });

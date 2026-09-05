@@ -6,8 +6,8 @@ import { RequirePermissoes } from '../../../common/rbac/require-permissoes.decor
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
 import {
-  listarCadastroQuerySchema,
-  type ListarCadastroQuery,
+  listarProdutoQuerySchema,
+  type ListarProdutoQuery,
 } from '../../../common/crud/paginacao';
 import { ProdutosService } from './produtos.service';
 import {
@@ -25,7 +25,7 @@ export class ProdutosController {
 
   @Get()
   @RequirePermissoes('PRODUTOS_LER')
-  async listar(@Query(new ZodValidationPipe(listarCadastroQuerySchema)) query: ListarCadastroQuery) {
+  async listar(@Query(new ZodValidationPipe(listarProdutoQuerySchema)) query: ListarProdutoQuery) {
     return this.produtosService.listar(query);
   }
 

@@ -42,7 +42,7 @@ export class DivergenciaRecebimentoService {
   /** Abre a divergência DENTRO da transação do registrar item (status 'aberta'). */
   async abrirNaTx(tx: Tx, params: AbrirNaTxParams, usuarioId: string): Promise<Divergencia> {
     const item = await tx
-      .select({ itemComercialId: recebimentosItens.itemComercialId })
+      .select({ produtoId: recebimentosItens.produtoId })
       .from(recebimentosItens)
       .where(eq(recebimentosItens.id, params.recebimentoItemId))
       .then((r) => r[0] ?? null);
@@ -54,7 +54,7 @@ export class DivergenciaRecebimentoService {
         .values({
           recebimentoId: params.recebimentoId,
           recebimentoItemId: params.recebimentoItemId,
-          itemComercialId: item.itemComercialId,
+          produtoId: item.produtoId,
           tipo: params.tipo,
           descricao: params.descricao,
           acaoImediata: params.acaoImediata,

@@ -23,7 +23,7 @@ export function PainelImpacto({ impacto }: PainelImpactoProps) {
         const deltaAbs = item.delta.replace('-', '');
         const temDeficit = item.deficitProjetado !== '0.000' && item.deficitProjetado !== '0' && !item.deficitProjetado.startsWith('0.000');
         return (
-          <p key={item.itemComercialId} className="text-xs leading-relaxed text-[var(--color-provisorio-text)]">
+          <p key={item.produtoId} className="text-xs leading-relaxed text-[var(--color-provisorio-text)]">
             {reducao ? (
               <>
                 Atenção: reduzir a compra remove <strong>{deltaAbs} {item.codigo}</strong> virtuais.

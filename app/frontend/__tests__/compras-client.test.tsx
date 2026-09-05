@@ -53,7 +53,7 @@ function baseCompra(overrides: Record<string, unknown> = {}) {
     status: 'rascunho',
     observacoes: null,
     createdAt: '2026-07-22T10:00:00Z',
-    itens: [{ id: 'i1', compraProgramadaId: 'c1', itemCompraId: 'ic1', quantidadeComprada: '10', observacoes: null }],
+    itens: [{ id: 'i1', compraProgramadaId: 'c1', produtoId: 'ic1', quantidadeComprada: '10', observacoes: null }],
     ...overrides,
   };
 }
@@ -66,7 +66,7 @@ const COMPRA_2 = baseCompra({
   fornecedorNomeFantasia: null,
   fornecedorRazaoSocial: 'Beta Carnes Ltda',
   status: 'confirmada',
-  itens: [{ id: 'i2', compraProgramadaId: 'c2', itemCompraId: 'ic1', quantidadeComprada: '4', observacoes: null }],
+  itens: [{ id: 'i2', compraProgramadaId: 'c2', produtoId: 'ic1', quantidadeComprada: '4', observacoes: null }],
 });
 const COMPRA_CONFIRMADA = baseCompra({ status: 'confirmada' });
 
@@ -90,7 +90,7 @@ beforeEach(() => {
         status: 409,
         json: async () => ({
           codigo: 'IMPACTO_CONFIRMACAO_NECESSARIA',
-          impacto: { deficitTotal: '3.000', exigeConfirmacao: true, itens: [{ itemComercialId: 'x', codigo: 'TZ', delta: '-3', deficitProjetado: '3', quantidadeReservada: '5', saldoProjetado: '-3', quantidadeGeradaAtual: '10', quantidadeGeradaProjetada: '7', descricao: 'TZ' }], compraId: 'c1', operacaoId: 'o1', status: 'confirmada', resumo: 'teste' },
+          impacto: { deficitTotal: '3.000', exigeConfirmacao: true, itens: [{ produtoId: 'x', codigo: 'TZ', delta: '-3', deficitProjetado: '3', quantidadeReservada: '5', saldoProjetado: '-3', quantidadeGeradaAtual: '10', quantidadeGeradaProjetada: '7', descricao: 'TZ' }], compraId: 'c1', operacaoId: 'o1', status: 'confirmada', resumo: 'teste' },
         }),
       });
     }
@@ -114,7 +114,7 @@ beforeEach(() => {
     }
     if (url.includes('/disponibilidade')) return Promise.resolve({ ok: true, json: async () => [] });
     if (url.includes('/fornecedores')) return Promise.resolve({ ok: true, json: async () => ({ data: [] }) });
-    if (url.includes('/itens-compra')) {
+    if (url.includes('/produtos')) {
       return Promise.resolve({
         ok: true,
         json: async () => ({

@@ -90,8 +90,6 @@ export const MENU_V2: MenuGroupDef[] = [
       { href: '/cadastros/rotas', label: 'Rotas / Itinerários', iconKey: 'Map' },
       { href: '/cadastros/regras-transformacao', label: 'Regras de Transformação', iconKey: 'GitBranch' },
       { href: '/cadastros/modelos-etiqueta', label: 'Modelos de Etiqueta', iconKey: 'Sticker' },
-      { href: '/cadastros/itens-compra', label: 'Itens de Compra', iconKey: 'Boxes' },
-      { href: '/cadastros/itens-comerciais', label: 'Itens Comerciais', iconKey: 'PackageSearch' },
     ],
   },
   {

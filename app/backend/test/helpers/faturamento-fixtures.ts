@@ -107,7 +107,7 @@ export async function criarCaminhaoComCargaFechada(
       compraProgramadaId: cenario.compraId,
       clienteId,
       dataOperacao,
-      itens: [{ itemComercialId: cenario.itemComercialId, quantidadePedida: 2 }],
+      itens: [{ produtoId: cenario.produtoId, quantidadePedida: 2 }],
     });
   if (pedidoRes.status !== 201) {
     throw new Error(`Falha ao criar pedido: ${JSON.stringify(pedidoRes.body)}`);
@@ -121,7 +121,7 @@ export async function criarCaminhaoComCargaFechada(
   // Pesar e associar uma peça ao pedido
   const pecaId = await pesarPeca(app, cookies.recebimento, {
     recebimentoId: cenario.recebimentoId,
-    itemComercialBaseId: cenario.itemComercialId,
+    produtoBaseId: cenario.produtoId,
   });
   await request(app.getHttpServer())
     .post(`/operacao/pesagem/pecas/${pecaId}/confirmar`)

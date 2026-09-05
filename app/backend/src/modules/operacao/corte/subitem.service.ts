@@ -55,13 +55,13 @@ export class SubitemService {
       }
       const saidas = await tx
         .select({
-          legado: produtos.legadoItemComercialId,
+          legado: produtos.id,
         })
         .from(regrasTransformacaoSaidas)
         .innerJoin(produtos, eq(produtos.id, regrasTransformacaoSaidas.produtoId))
         .where(eq(regrasTransformacaoSaidas.regraId, transf.regraTransformacaoId));
       const permitido = new Set(saidas.map((s) => s.legado).filter(Boolean) as string[]);
-      if (!permitido.has(dto.itemComercialId)) {
+      if (!permitido.has(dto.produtoId)) {
         throw new ConflictException({
           codigo: 'SAIDA_FORA_DA_REGRA',
           mensagem: 'Produto incompatível com a regra escolhida para este TZ',
@@ -73,7 +73,7 @@ export class SubitemService {
           .values({
             transformacaoId,
             pecaOrigemId: transf.pecaOrigemId,
-            itemComercialId: dto.itemComercialId,
+            produtoId: dto.produtoId,
             classificacao: dto.classificacao,
             quantidade: dto.quantidade !== undefined ? String(dto.quantidade) : '1',
             statusSubitem: 'gerado',
@@ -337,7 +337,7 @@ export class SubitemService {
     return calcularCompativeisItem(tx, {
       operacaoId: peca.operacaoId,
       compraProgramadaOrigemId: peca.compraProgramadaId,
-      itemComercialId: subitem.itemComercialId,
+      produtoId: subitem.produtoId,
       peso: subitem.peso ?? '0',
     });
   }
@@ -354,7 +354,7 @@ export class SubitemService {
       .select({
         id: schema.pedidosVendaItens.id,
         pedidoVendaId: schema.pedidosVendaItens.pedidoVendaId,
-        itemComercialId: schema.pedidosVendaItens.itemComercialId,
+        produtoId: schema.pedidosVendaItens.produtoId,
         operacaoId: schema.pedidosVenda.operacaoId,
         pecaOperacaoId: sql<string>`(
           select cp.operacao_id from compras_programadas cp where cp.id = ${peca.compraProgramadaId}
@@ -368,7 +368,7 @@ export class SubitemService {
       .then((r) => r[0] ?? null);
     if (!item || item.deletedAt) throw new NotFoundException('Item de pedido não encontrado');
     if (item.statusPedido === 'cancelado') throw new ConflictException('Pedido cancelado não aceita associação');
-    if (item.itemComercialId !== subitem.itemComercialId) throw new ConflictException('Item de pedido incompatível com o subitem');
+    if (item.produtoId !== subitem.produtoId) throw new ConflictException('Item de pedido incompatível com o subitem');
     if (item.operacaoId !== item.pecaOperacaoId) throw new ConflictException('Pedido pertence a outra operação');
     return item;
   }
@@ -386,7 +386,7 @@ export class SubitemService {
       .where(
         and(
           eq(recebimentosItens.recebimentoId, peca.recebimentoId),
-          eq(recebimentosItens.itemComercialId, peca.itemComercialBaseId),
+          eq(recebimentosItens.produtoId, peca.produtoBaseId),
         ),
       )
       .then((r) => r[0] ?? null);

@@ -49,7 +49,7 @@ describe('Realtime WebSocket e2e (handshake, auth, broadcast pós-commit)', () =
       .send({
         dataOperacao: '2026-12-10',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 5 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 5 }],
       });
     const compraId = criar.body.id as string;
 

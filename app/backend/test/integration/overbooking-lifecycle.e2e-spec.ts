@@ -40,7 +40,7 @@ describe('overbooking-lifecycle', () => {
       .send({
         dataOperacao: '2026-12-11',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 1 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 1 }],
       });
     await request(app.getHttpServer())
       .post(`/comercial/compras-programadas/${criar.body.id}/confirmar`)
@@ -54,7 +54,7 @@ describe('overbooking-lifecycle', () => {
         compraProgramadaId: criar.body.id,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-11',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       })
       .expect(201);
 
@@ -82,7 +82,7 @@ describe('overbooking-lifecycle', () => {
       .send({
         dataOperacao: '2026-12-10',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 1 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 1 }],
       });
     await request(app.getHttpServer())
       .post(`/comercial/compras-programadas/${criar.body.id}/confirmar`)
@@ -96,7 +96,7 @@ describe('overbooking-lifecycle', () => {
         compraProgramadaId: criar.body.id,
         clienteId: base.clienteId,
         dataOperacao: '2026-12-10',
-        itens: [{ itemComercialId: base.itemComercialId, quantidadePedida: 5 }],
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 5 }],
       })
       .expect(201);
 

@@ -37,8 +37,8 @@ export class PainelDesossaService {
   }
 
   /** Próxima carga do item comercial — protótipo cols Rota/Carga, Representante, Alvo. */
-  private async contextoCargaPorItemComercial(
-    itemComercialIds: string[],
+  private async contextoCargaPorproduto(
+    produtoIds: string[],
   ): Promise<
     Map<string, { rota: string | null; representante: string | null; horarioAlvo: string | null }>
   > {
@@ -46,11 +46,11 @@ export class PainelDesossaService {
       string,
       { rota: string | null; representante: string | null; horarioAlvo: string | null }
     >();
-    if (itemComercialIds.length === 0) return mapa;
+    if (produtoIds.length === 0) return mapa;
 
     const linhas = await this.db
       .select({
-        itemComercialId: pedidosVendaItens.itemComercialId,
+        produtoId: pedidosVendaItens.produtoId,
         rotaCaminhao: caminhoes.rota,
         rotaPrevista: pedidosVenda.rotaPrevista,
         horaAbertura: caminhoes.horaAberturaCarga,
@@ -72,7 +72,7 @@ export class PainelDesossaService {
         and(
           isNull(pedidosVenda.deletedAt),
           isNull(pedidosVendaItens.deletedAt),
-          inArray(pedidosVendaItens.itemComercialId, itemComercialIds),
+          inArray(pedidosVendaItens.produtoId, produtoIds),
           inArray(pedidosVenda.status, [
             'em_elaboracao_reserva_ativa',
             'aguardando_confirmacao_overbooking',
@@ -84,7 +84,7 @@ export class PainelDesossaService {
       .orderBy(asc(caminhoes.horaAberturaCarga));
 
     for (const l of linhas) {
-      if (mapa.has(l.itemComercialId)) continue;
+      if (mapa.has(l.produtoId)) continue;
       const hora = l.horaAbertura
         ? new Date(l.horaAbertura as Date).toLocaleTimeString('pt-BR', {
             hour: '2-digit',
@@ -99,7 +99,7 @@ export class PainelDesossaService {
           : rotaBase
             ? `Carga ${rotaBase}`
             : null;
-      mapa.set(l.itemComercialId, {
+      mapa.set(l.produtoId, {
         rota,
         representante: l.representanteNome,
         horarioAlvo: hora,
@@ -114,7 +114,7 @@ export class PainelDesossaService {
       listaFaltas.length === 0
         ? []
         : await this.db
-            .select({ id: produtos.id, legado: produtos.legadoItemComercialId })
+            .select({ id: produtos.id, legado: produtos.id })
             .from(produtos)
             .where(
               inArray(
@@ -123,10 +123,10 @@ export class PainelDesossaService {
               ),
             );
     const produtoParaItem = new Map(produtosRows.map((r) => [r.id, r.legado]));
-    const itemComercialIds = [
+    const produtoIds = [
       ...new Set(produtosRows.map((r) => r.legado).filter((x): x is string => !!x)),
     ];
-    const contextos = await this.contextoCargaPorItemComercial(itemComercialIds);
+    const contextos = await this.contextoCargaPorproduto(produtoIds);
 
     const faltasPainel: FaltaPainelInput[] = listaFaltas.map((f) => {
       const itemId = produtoParaItem.get(f.produto.id) ?? null;

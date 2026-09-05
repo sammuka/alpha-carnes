@@ -287,7 +287,7 @@ async function prepararComprasConfirmadas(
   api: APIRequestContext,
   adminCookie: string,
   fornecedorId: string,
-  itemCompraId: string,
+  produtoId: string,
   quantidadeNecessaria: number,
   rotuloPrefixo: string,
   offsetInicial: number,
@@ -308,7 +308,7 @@ async function prepararComprasConfirmadas(
       data: {
         dataOperacao: candidata,
         fornecedorId,
-        itens: [{ itemCompraId, quantidadeComprada: 100 }],
+        itens: [{ produtoId, quantidadeComprada: 100 }],
       },
     });
     if (criarRes.status() === 409) continue;
@@ -399,19 +399,19 @@ test.describe('Onda 5 — Escopo por representante: clientes e pedidos distintos
       razaoSocial: `Fornecedor Escopo ${suffix}`,
       documentoFiscal: makeCpf(Number(suffix) + 3),
     });
-    const itemCompra = await backendCall<{ id: string }>(request, adminCookie, 'POST', '/itens-compra', {
+    const itemCompra = await backendCall<{ id: string }>(request, adminCookie, 'POST', '/produtos', {
       codigo: `O5ESCIC${suffix}`,
-      descricao: 'Boi Escopo E2E',
-      unidadeCompra: 'unidade',
+      nome: 'Boi Escopo E2E',
+      unidadePedido: 'unidade',
     });
-    const itemComercial = await backendCall<{ id: string }>(request, adminCookie, 'POST', '/itens-comerciais', {
+    const itemComercial = await backendCall<{ id: string }>(request, adminCookie, 'POST', '/produtos', {
       codigo: `O5ESCTZ${suffix}`,
-      descricao: 'Traseiro Escopo E2E',
-      unidadeComercial: 'kg',
+      nome: 'Traseiro Escopo E2E',
+      unidadePedido: 'kg',
     });
     await backendCall(request, adminCookie, 'POST', '/regras-desdobramento', {
-      itemCompraId: itemCompra.id,
-      itemComercialId: itemComercial.id,
+      produtoOrigemId: itemCompra.id,
+    produtoDestinoId: itemComercial.id,
       fatorQuantidade: 2,
       status: 'ativo',
       vigenciaInicio: addDaysISO(-1),
@@ -464,19 +464,19 @@ test.describe('Onda 5 — Escopo por representante: clientes e pedidos distintos
       compraProgramadaId: compra1.compraId,
       clienteId: clienteA.id,
       dataOperacao: compra1.dataOperacao,
-      itens: [{ itemComercialId: itemComercial.id, quantidadePedida: 2 }],
+      itens: [{ produtoId: itemComercial.id, quantidadePedida: 2 }],
     });
     await backendCall(request, comercialACookie, 'POST', '/comercial/pedidos', {
       compraProgramadaId: compra2.compraId,
       clienteId: clienteA.id,
       dataOperacao: compra2.dataOperacao,
-      itens: [{ itemComercialId: itemComercial.id, quantidadePedida: 1 }],
+      itens: [{ produtoId: itemComercial.id, quantidadePedida: 1 }],
     });
     await backendCall(request, comercialBCookie, 'POST', '/comercial/pedidos', {
       compraProgramadaId: compra3.compraId,
       clienteId: clienteB.id,
       dataOperacao: compra3.dataOperacao,
-      itens: [{ itemComercialId: itemComercial.id, quantidadePedida: 3 }],
+      itens: [{ produtoId: itemComercial.id, quantidadePedida: 3 }],
     });
 
     // 6. Login real na UI (cookies de sessão via /api/auth/login do próprio Next), um contexto de

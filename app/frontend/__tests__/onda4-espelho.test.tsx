@@ -33,7 +33,7 @@ function espelho(agrupar: 'cliente' | 'rota' | 'representante') {
         representante: 'Helena Prado',
         rotaId: 'rota-1',
         rota: 'Rota Oeste',
-        itemComercialId: 'item-1',
+        produtoId: 'item-1',
         produto: 'TZ — Traseiro Bovino',
         unidade: 'kg',
         quantidadePedida: '5.000',

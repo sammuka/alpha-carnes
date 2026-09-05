@@ -46,14 +46,14 @@ describe('Rastreabilidade do corte e2e (F4c — RF-CT-19/20)', () => {
     const p = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: c.itemComercialId,
+      produtoId: c.produtoId,
       dataOperacao: c.dataOperacao,
       quantidade: 5,
     });
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
-    const sub1 = await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
-    const sub2 = await subitemCompleto(app, corteCookies, transfId, c.itemComercialId, p.pedidoItemId);
+    const sub1 = await subitemCompleto(app, corteCookies, transfId, c.produtoId, p.pedidoItemId);
+    const sub2 = await subitemCompleto(app, corteCookies, transfId, c.produtoId, p.pedidoItemId);
 
     // Consulta por peça
     const porPeca = await request(srv())

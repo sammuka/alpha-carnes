@@ -53,7 +53,7 @@ export function ComprasEditModal({ open, compra, itensCompra, onClose, onSalvo }
 
   const simularImpacto = useCallback(async () => {
     if (!compra) return;
-    const partes = compra.itens.map((it) => `${it.itemCompraId}:${qtds[it.id] ?? it.quantidadeComprada}`);
+    const partes = compra.itens.map((it) => `${it.produtoId}:${qtds[it.id] ?? it.quantidadeComprada}`);
     const timer = setTimeout(async () => {
       const res = await fetch(
         `/api/comercial/compras-programadas/${compra.id}/impacto?simulacao=${encodeURIComponent(partes.join(','))}`,
@@ -137,7 +137,7 @@ export function ComprasEditModal({ open, compra, itensCompra, onClose, onSalvo }
           {compra.itens.map((it) => (
             <div key={it.id} className="flex items-center gap-3">
               <span className="flex-1 text-[13px] font-medium">
-                {itensCompra.find((c) => c.id === it.itemCompraId)?.nome ?? it.itemCompraId.slice(0, 8)}
+                {itensCompra.find((c) => c.id === it.produtoId)?.nome ?? it.produtoId.slice(0, 8)}
               </span>
               <div className="flex w-28 flex-col gap-1">
                 <Input

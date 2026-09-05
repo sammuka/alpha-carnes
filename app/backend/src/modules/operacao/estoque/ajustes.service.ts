@@ -10,7 +10,7 @@ import {
   ajustesEstoque,
   aprovacoesOperacionais,
   entradasItens,
-  itensComerciais,
+  produtos,
   operacoes,
   parametros,
   pecas,
@@ -257,24 +257,24 @@ export class AjustesEstoqueService {
   private async capturarAlvo(tx: Tx, tipo: 'peca' | 'subitem' | 'entrada', id: string): Promise<{ quantidadeAnterior: number; produtoCodigo: string }> {
     if (tipo === 'peca') {
       const peca = await tx
-        .select({ itemComercialId: pecas.itemComercialBaseId })
+        .select({ produtoId: pecas.produtoBaseId })
         .from(pecas)
         .where(and(eq(pecas.id, id), isNull(pecas.deletedAt)))
         .for('update')
         .then((r) => r[0] ?? null);
       if (!peca) throw new NotFoundException('Peça não encontrada');
-      const codigo = await this.codigoDoItemComercial(tx, peca.itemComercialId);
+      const codigo = await this.codigoDoproduto(tx, peca.produtoId);
       return { quantidadeAnterior: 1, produtoCodigo: codigo };
     }
     if (tipo === 'subitem') {
       const sub = await tx
-        .select({ itemComercialId: subitens.itemComercialId })
+        .select({ produtoId: subitens.produtoId })
         .from(subitens)
         .where(and(eq(subitens.id, id), isNull(subitens.deletedAt)))
         .for('update')
         .then((r) => r[0] ?? null);
       if (!sub) throw new NotFoundException('Subitem não encontrado');
-      const codigo = await this.codigoDoItemComercial(tx, sub.itemComercialId);
+      const codigo = await this.codigoDoproduto(tx, sub.produtoId);
       return { quantidadeAnterior: 1, produtoCodigo: codigo };
     }
     const entrada = await tx
@@ -292,11 +292,11 @@ export class AjustesEstoqueService {
     return { quantidadeAnterior: entrada.quantidade - entrada.quantidadeDestinada, produtoCodigo: codigo };
   }
 
-  private async codigoDoItemComercial(tx: Tx, itemComercialId: string): Promise<string> {
+  private async codigoDoproduto(tx: Tx, produtoId: string): Promise<string> {
     const r = await tx
-      .select({ codigo: itensComerciais.codigo })
-      .from(itensComerciais)
-      .where(eq(itensComerciais.id, itemComercialId))
+      .select({ codigo: produtos.codigo })
+      .from(produtos)
+      .where(eq(produtos.id, produtoId))
       .then((rows) => rows[0] ?? null);
     return r?.codigo ?? '—';
   }

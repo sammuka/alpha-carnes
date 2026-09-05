@@ -146,6 +146,13 @@ Representa o item vendável.
 
 ---
 
+> **Emenda AD-15 (2026-09-03):** as seções 3.3 e 3.4 descrevem o modelo histórico
+> pré-unificação. A entidade única de catálogo é `produtos`. `itens_compra` e
+> `itens_comerciais` foram extintos no contract da Onda 13. Papel de compra =
+> `ativoCompra` e/ou `tipoOperacional = 'compra_base'`; papel de venda = `ativoVenda`.
+> A seção 3.5 passa a ligar `produto_origem_id` → `produto_destino_id`. Identidade 1:1
+> (mesmo produto comprável e vendável) **não** tem linha em `regras_desdobramento_comercial`.
+
 ## 3.5 Regra de Desdobramento Comercial
 Define como um item de compra gera disponibilidade virtual comercial.
 

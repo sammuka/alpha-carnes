@@ -32,7 +32,7 @@ describe('aprovacoes (fila unificada + comparativo)', () => {
       .send({
         dataOperacao: '2026-09-01',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 1 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 1 }],
       })
       .expect(201);
     operacaoId = compra.body.operacaoId as string;

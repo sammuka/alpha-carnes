@@ -8,7 +8,7 @@ import {
   clientes,
   etiquetasImpressoes,
   fornecedores,
-  itensComerciais,
+  produtos,
   operacoes,
   pecas,
   pedidosVenda,
@@ -549,8 +549,8 @@ export class EtiquetaService {
         operadorId: etiquetasImpressoes.operadorId,
         operadorNome: sql<string>`coalesce(${usuarios.nome}, '—')`,
         createdAt: etiquetasImpressoes.createdAt,
-        produtoCodigo: itensComerciais.codigo,
-        produtoDescricao: itensComerciais.descricao,
+        produtoCodigo: produtos.codigo,
+        produtoDescricao: produtos.nome,
         caracteristicas: sql<string[]>`array_remove(ARRAY[
           CASE WHEN (${pecas.capturaMeta}->>'maisPesada')::boolean THEN 'Mais pesada' END,
           CASE WHEN (${pecas.capturaMeta}->>'maisGorda')::boolean THEN 'Mais gorda' END,
@@ -572,7 +572,7 @@ export class EtiquetaService {
       .from(etiquetasImpressoes)
       .innerJoin(pecas, eq(pecas.id, etiquetasImpressoes.pecaId))
       .leftJoin(usuarios, eq(usuarios.id, etiquetasImpressoes.operadorId))
-      .innerJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
+      .innerJoin(produtos, eq(produtos.id, pecas.produtoBaseId))
       .innerJoin(recebimentos, eq(recebimentos.id, pecas.recebimentoId))
       .innerJoin(fornecedores, eq(fornecedores.id, recebimentos.fornecedorId))
       .leftJoin(pedidosVenda, eq(pedidosVenda.id, pecas.pedidoVendaId))
@@ -619,7 +619,7 @@ export class EtiquetaService {
   private montarPayload(peca: Peca, codigo: string): Record<string, unknown> {
     return {
       pecaId: peca.id,
-      itemComercialBaseId: peca.itemComercialBaseId,
+      produtoBaseId: peca.produtoBaseId,
       pesoOriginal: peca.pesoOriginal,
       pedidoVendaId: peca.pedidoVendaId,
       pedidoVendaItemId: peca.pedidoVendaItemId,
@@ -641,7 +641,7 @@ export class EtiquetaService {
       subitemId: subitem.id,
       pecaOrigemId: subitem.pecaOrigemId,
       transformacaoId: subitem.transformacaoId,
-      itemComercialId: subitem.itemComercialId,
+      produtoId: subitem.produtoId,
       peso: subitem.peso,
       pedidoVendaId: subitem.pedidoVendaId,
       pedidoVendaItemId: subitem.pedidoVendaItemId,

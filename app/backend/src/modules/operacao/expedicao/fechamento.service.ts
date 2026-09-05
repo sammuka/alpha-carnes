@@ -14,7 +14,7 @@ import {
   pedidosVendaItens,
   pecas,
   subitens,
-  itensComerciais,
+  produtos,
   comprasProgramadas,
 } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
@@ -253,14 +253,14 @@ export class FechamentoService {
           statusCargaItem: cargaItens.statusCargaItem,
           divergenciaMotivo: cargaItens.divergenciaMotivo,
           etiqueta: pecas.etiquetaAtual,
-          produtoNome: itensComerciais.descricao,
+          produtoNome: produtos.nome,
           peso: pecas.pesoOriginal,
           numeroSequencial: comprasProgramadas.numeroSequencial,
         })
         .from(cargaItens)
         .innerJoin(pecas, eq(pecas.id, cargaItens.pecaId))
         .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
-        .innerJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
+        .innerJoin(produtos, eq(produtos.id, pecas.produtoBaseId))
         .where(
           and(
             eq(cargaItens.caminhaoId, caminhaoId),
@@ -276,7 +276,7 @@ export class FechamentoService {
           statusCargaItem: cargaItens.statusCargaItem,
           divergenciaMotivo: cargaItens.divergenciaMotivo,
           etiqueta: subitens.etiquetaAtual,
-          produtoNome: itensComerciais.descricao,
+          produtoNome: produtos.nome,
           peso: subitens.peso,
           numeroSequencial: comprasProgramadas.numeroSequencial,
         })
@@ -284,7 +284,7 @@ export class FechamentoService {
         .innerJoin(subitens, eq(subitens.id, cargaItens.subitemId))
         .innerJoin(pecas, eq(pecas.id, subitens.pecaOrigemId))
         .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
-        .innerJoin(itensComerciais, eq(itensComerciais.id, subitens.itemComercialId))
+        .innerJoin(produtos, eq(produtos.id, subitens.produtoId))
         .where(
           and(
             eq(cargaItens.caminhaoId, caminhaoId),
