@@ -25,6 +25,7 @@ import {
 } from '../../../common/crud/decimal';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { OperacoesService } from '../../operacoes/operacoes.service';
+import { PedidoFornecedorService } from '../../operacao/recebimento/pedido-fornecedor.service';
 import {
   DisponibilidadeService,
   type DisponibilidadeGerada,
@@ -77,6 +78,7 @@ export class ComprasProgramadasService {
     private readonly eventEmitter: EventEmitter2,
     private readonly disponibilidadeService: DisponibilidadeService,
     private readonly operacoes: OperacoesService,
+    private readonly pedidoFornecedor: PedidoFornecedorService,
   ) {}
 
   private get db() {
@@ -403,9 +405,11 @@ export class ComprasProgramadasService {
 
   /**
    * Confirma a compra (gera a disponibilidade virtual do dia) numa única
-   * transação. Idempotente: o UPDATE condicional por status (S5) garante que
-   * chamadas concorrentes/repetidas não regeram saldo nem auditam duplicado.
-   * Eventos publicados SOMENTE após o commit (ADR-004).
+   * transação e materializa o Pedido ao Fornecedor já enviado. Idempotente:
+   * o UPDATE condicional por status (S5) garante que chamadas concorrentes/
+   * repetidas não regeram saldo nem auditam duplicado. Reconfirmação repara
+   * compra confirmada sem Pedido ao Fornecedor. Eventos publicados SOMENTE
+   * após o commit (ADR-004).
    */
   async confirmar(id: string, usuarioId: string): Promise<ConfirmacaoCompraProgramada> {
     const resultado = await this.db.transaction(async (tx) => {
@@ -424,8 +428,13 @@ export class ComprasProgramadasService {
         .then((r) => r[0] ?? null);
 
       if (!confirmada) {
-        // Já confirmada (por esta ou outra chamada concorrente) → no-op idempotente.
-        return { jaConfirmada: true, disponibilidades: [] as DisponibilidadeGerada[] };
+        const materializado = await this.pedidoFornecedor.materializarEnviadoNaTx(tx, atual, usuarioId);
+        return {
+          jaConfirmada: true,
+          disponibilidades: [] as DisponibilidadeGerada[],
+          pedidoCriado: materializado.criado,
+          pedido: materializado.pedido,
+        };
       }
 
       const disponibilidades = await this.disponibilidadeService.gerarParaCompra(tx, confirmada);
@@ -440,12 +449,20 @@ export class ComprasProgramadasService {
         dadosNovos: confirmada,
       });
 
-      return { jaConfirmada: false, disponibilidades };
+      const materializado = await this.pedidoFornecedor.materializarEnviadoNaTx(
+        tx, confirmada, usuarioId,
+      );
+      return {
+        jaConfirmada: false,
+        disponibilidades,
+        pedidoCriado: materializado.criado,
+        pedido: materializado.pedido,
+      };
     });
 
     const compra = await this.detalhar(id);
 
-    // PÓS-COMMIT: eventos de tempo real (não emite em no-op idempotente).
+    // PÓS-COMMIT: eventos de tempo real (não emite confirmação em no-op).
     if (!resultado.jaConfirmada) {
       this.eventEmitter.emit(EVENTOS.COMPRA_CONFIRMADA, {
         compraId: compra.id,
@@ -463,6 +480,12 @@ export class ComprasProgramadasService {
           produtoId: d.produtoId,
           quantidadeTotalGerada: d.quantidadeTotalGerada,
         })),
+      });
+    }
+    if (resultado.pedidoCriado) {
+      this.eventEmitter.emit(EVENTOS.PEDIDO_FORNECEDOR_CRIADO, {
+        pedidoFornecedorId: resultado.pedido.id,
+        operacaoId: resultado.pedido.operacaoId,
       });
     }
 

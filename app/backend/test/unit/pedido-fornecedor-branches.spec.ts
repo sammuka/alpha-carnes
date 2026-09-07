@@ -267,13 +267,17 @@ describe('PedidoFornecedorService — branches', () => {
             }),
           },
         },
-        select: jest.fn().mockReturnValue({
-          from: () => ({
-            where: () => Promise.resolve([
-              { produtoId: 'ic-1', quantidadePrevista: '10.000' },
-            ]),
+        select: jest.fn()
+          .mockReturnValueOnce({
+            from: () => ({ where: () => Promise.resolve([]) }),
+          })
+          .mockReturnValueOnce({
+            from: () => ({
+              where: () => Promise.resolve([
+                { produtoId: 'ic-1', quantidadePrevista: '10.000' },
+              ]),
+            }),
           }),
-        }),
         insert: jest.fn()
           .mockReturnValueOnce({
             values: () => ({
@@ -291,6 +295,102 @@ describe('PedidoFornecedorService — branches', () => {
     );
     expect(result.id).toBe('pf-new');
     expect(emitter.emit).toHaveBeenCalled();
+  });
+
+  it('criar 409 quando pedido ao fornecedor já existe para a compra', async () => {
+    const db = {
+      transaction: jest.fn(async (cb: (tx: object) => Promise<unknown>) => cb({
+        query: {
+          comprasProgramadas: {
+            findFirst: jest.fn().mockResolvedValue({
+              id: 'c1', status: 'confirmada', operacaoId: 'op-1',
+              numeroInterno: 'CP-1', fornecedorId: 'f1',
+            }),
+          },
+        },
+        select: jest.fn().mockReturnValue({
+          from: () => ({
+            where: () => Promise.resolve([{ id: 'pf-existente', status: 'aguardando_recebimento' }]),
+          }),
+        }),
+      })),
+    };
+    await expect(service(db).criar(
+      { compraProgramadaId: '019ea000-0000-7000-8000-0000000000cp' },
+      'user-1',
+    )).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('materializarEnviadoNaTx cria pedido já aguardando recebimento', async () => {
+    const pedido = { id: 'pf-new', operacaoId: 'op-1', status: 'aguardando_recebimento' };
+    const tx = {
+      select: jest.fn()
+        .mockReturnValueOnce({ from: () => ({ where: () => Promise.resolve([]) }) })
+        .mockReturnValueOnce({
+          from: () => ({
+            where: () => Promise.resolve([{ produtoId: 'ic-1', quantidadePrevista: '10.000' }]),
+          }),
+        }),
+      insert: jest.fn()
+        .mockReturnValueOnce({
+          values: () => ({ returning: () => Promise.resolve([pedido]) }),
+        })
+        .mockReturnValueOnce({ values: () => Promise.resolve(undefined) }),
+    };
+    const result = await service({}).materializarEnviadoNaTx(tx as never, {
+      id: 'c1',
+      status: 'confirmada',
+      operacaoId: 'op-1',
+      numeroInterno: 'CP-1',
+      numeroSequencial: 1,
+      fornecedorId: 'f1',
+    } as never, 'user-1');
+    expect(result.criado).toBe(true);
+    expect(result.pedido.status).toBe('aguardando_recebimento');
+  });
+
+  it('materializarEnviadoNaTx reusa pedido ativo', async () => {
+    const existente = { id: 'pf-1', status: 'aguardando_recebimento', operacaoId: 'op-1' };
+    const tx = {
+      select: jest.fn().mockReturnValue({
+        from: () => ({ where: () => Promise.resolve([existente]) }),
+      }),
+    };
+    const result = await service({}).materializarEnviadoNaTx(tx as never, {
+      id: 'c1', operacaoId: 'op-1',
+    } as never, 'user-1');
+    expect(result).toEqual({ pedido: existente, criado: false });
+  });
+
+  it('materializarEnviadoNaTx promove rascunho para aguardando_recebimento', async () => {
+    const rascunho = { id: 'pf-1', status: 'rascunho' };
+    const enviado = { id: 'pf-1', status: 'aguardando_recebimento' };
+    const tx = {
+      select: jest.fn().mockReturnValue({
+        from: () => ({ where: () => Promise.resolve([rascunho]) }),
+      }),
+      update: jest.fn(() => ({
+        set: () => ({ where: () => ({ returning: () => Promise.resolve([enviado]) }) }),
+      })),
+    };
+    const result = await service({}).materializarEnviadoNaTx(tx as never, {
+      id: 'c1', operacaoId: 'op-1',
+    } as never, 'user-1');
+    expect(result).toEqual({ pedido: enviado, criado: false });
+  });
+
+  it('enviar é idempotente quando já aguardando_recebimento', async () => {
+    const atual = { id: 'pf-1', status: 'aguardando_recebimento' };
+    const db = {
+      transaction: jest.fn(async (cb: (tx: object) => Promise<unknown>) => cb({
+        select: jest.fn().mockReturnValue({
+          from: () => ({
+            where: () => Promise.resolve([atual]),
+          }),
+        }),
+      })),
+    };
+    await expect(service(db).enviar('pf-1', 'user-1')).resolves.toEqual(atual);
   });
 
   it('enviar promove rascunho para aguardando_recebimento', async () => {

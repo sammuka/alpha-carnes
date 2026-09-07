@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
-import { seedComercialBase } from '../helpers/comercial-fixtures';
+import { seedComercialBase, criarPedidoFornecedorEnviado } from '../helpers/comercial-fixtures';
 import { inserirMotoristaFrota } from '../helpers/expedicao-fixtures';
 
 describe('operacoes-writers e2e', () => {
@@ -106,20 +106,11 @@ describe('operacoes-writers e2e', () => {
     if (tabela === 'recebimentos') {
       // Desde Task 4 o recebimento nasce do Pedido ao Fornecedor (não mais compra+NF).
       const compraId = await criarCompraConfirmada(data);
-      const pedido = await request(app.getHttpServer())
-        .post('/operacao/pedidos-fornecedor')
-        .set('Cookie', comprasCookies)
-        .send({ compraProgramadaId: compraId });
-      expect(pedido.status).toBe(201);
-      const enviado = await request(app.getHttpServer())
-        .post(`/operacao/pedidos-fornecedor/${pedido.body.id}/enviar`)
-        .set('Cookie', comprasCookies)
-        .send();
-      expect(enviado.status).toBe(200);
+      const pedidoId = await criarPedidoFornecedorEnviado(app, comprasCookies, compraId);
       const rec = await request(app.getHttpServer())
         .post('/operacao/recebimentos')
         .set('Cookie', recebimentoCookies)
-        .send({ pedidoFornecedorId: pedido.body.id });
+        .send({ pedidoFornecedorId: pedidoId });
       expect([200, 201]).toContain(rec.status);
       return;
     }

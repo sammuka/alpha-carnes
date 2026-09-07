@@ -10,7 +10,7 @@ import type {
   PedidoVendaDetalhe,
 } from '@/lib/comercial';
 import type { Operacao } from '@/lib/gestao-operacoes';
-import { labelCodigoDescricao, labelCodigoNome, sufixoInativo } from '@/lib/dominios';
+import { labelCodigoNome, sufixoInativo } from '@/lib/dominios';
 import { extrairMensagemErro } from '@/lib/error-message';
 import { mascararCpfCnpj } from '@/lib/masks';
 import { AlertItem } from '@/components/ui/alert-item';
@@ -48,9 +48,9 @@ export interface ClientePedido {
 export interface ProdutoPedido {
   id: string;
   codigo: string;
-  descricao: string;
+  nome: string;
   status: string;
-  nome?: string;
+  descricao?: string;
   unidadeComercial?: string;
 }
 
@@ -104,7 +104,7 @@ function dadosDeNegocio(dados: unknown): Record<string, unknown> | null {
 }
 
 function nomeProduto(produto: ProdutoPedido | undefined): string {
-  return produto?.descricao ?? produto?.nome ?? produto?.codigo ?? 'Produto';
+  return produto?.nome ?? produto?.descricao ?? produto?.codigo ?? 'Produto';
 }
 
 function origemItem(item: PedidoVendaDetalhe['itens'][number]): 'Físico' | 'Virtual' | 'Overbooking' {
@@ -669,7 +669,7 @@ export function PedidoEditor({
               id="produto-novo"
               items={produtosAusentes.map((produto) => ({
                 id: produto.id,
-                label: labelCodigoDescricao(produto.codigo, produto.descricao),
+                label: labelCodigoNome(produto.codigo, nomeProduto(produto)),
               }))}
               value={produtoNovo}
               onChange={setProdutoNovo}

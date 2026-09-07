@@ -495,13 +495,13 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       base,
       { dataOperacao: '2026-12-21', quantidade: 2 },
     );
-    const pfRascunho = await request(srv())
-      .post('/operacao/pedidos-fornecedor')
-      .set('Cookie', comprasCookies)
-      .send({ compraProgramadaId: compraRascunhoPf })
-      .expect(201);
+    const pfRascunhoId = await criarPedidoFornecedorEnviado(app, comprasCookies, compraRascunhoPf);
+    const { db: dbRascunho } = app.get<{ db: Db }>(DRIZZLE);
+    await dbRascunho.update(schema.pedidosFornecedor)
+      .set({ status: 'rascunho' })
+      .where(eq(schema.pedidosFornecedor.id, pfRascunhoId));
     const estadoInvalido = await request(srv())
-      .get(`/operacao/recebimentos/previsao/${pfRascunho.body.id}`)
+      .get(`/operacao/recebimentos/previsao/${pfRascunhoId}`)
       .set('Cookie', recebimentoCookies);
     expect(estadoInvalido.status).toBe(409);
     expect(estadoInvalido.body.message.message).toBe(

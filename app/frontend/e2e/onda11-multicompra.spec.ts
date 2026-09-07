@@ -300,10 +300,12 @@ async function prepararCenario(
   const compra2 = await criarCompra(4);
 
   const pfDe = async (compraId: string) => {
-    const pf = await backend<{ id: string }>(api, adminCookie, 'POST', '/operacao/pedidos-fornecedor', {
-      compraProgramadaId: compraId,
-    });
-    await backend(api, adminCookie, 'POST', `/operacao/pedidos-fornecedor/${pf.id}/enviar`);
+    const listaPf = await backend<{ data: Array<{ id: string; compraProgramadaId: string }> }>(
+      api, adminCookie, 'GET',
+      '/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100',
+    );
+    const pf = listaPf.data.find((p) => p.compraProgramadaId === compraId);
+    if (!pf) throw new Error('Pedido ao Fornecedor não materializado na confirmação');
     const rec = await backend<{ recebimento: { id: string } }>(
       api,
       adminCookie,
