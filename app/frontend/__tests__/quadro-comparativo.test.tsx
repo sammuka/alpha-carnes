@@ -3,7 +3,7 @@ import { QuadroComparativo } from '../src/components/gestao/quadro-comparativo';
 
 const ITENS = [
   {
-    itemComercialId: 'ic-1',
+    produtoId: 'ic-1',
     codigo: 'TZ',
     descricao: 'Traseiro',
     qtdPedido: '10',
@@ -15,7 +15,7 @@ const ITENS = [
     difPeso: '-5.000',
   },
   {
-    itemComercialId: 'ic-2',
+    produtoId: 'ic-2',
     codigo: 'DT',
     descricao: 'Dianteiro',
     qtdPedido: '5',

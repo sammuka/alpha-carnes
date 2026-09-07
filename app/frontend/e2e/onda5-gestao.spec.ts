@@ -95,8 +95,8 @@ interface DadosGestao {
   operacaoId: string;
   dataOperacao: string;
   compraId: string;
-  itemCompraId: string;
-  itemComercialId: string;
+  produtoId: string;
+  produtoId: string;
   fornecedorId: string;
   clienteId: string;
   ocorrenciaId?: string;
@@ -279,15 +279,15 @@ async function prepararDadosGestao(api: APIRequestContext, adminCookie: string):
     razaoSocial: `Fornecedor Onda5 ${suffix}`,
     documentoFiscal: docFornecedor,
   });
-  const itemCompra = await backend<{ id: string }>(api, adminCookie, 'POST', '/itens-compra', {
+  const itemCompra = await backend<{ id: string }>(api, adminCookie, 'POST', '/produtos', {
     codigo: `O5IC${suffix}`,
-    descricao: 'Boi Onda5',
-    unidadeCompra: 'unidade',
+    nome: 'Boi Onda5',
+    unidadePedido: 'unidade',
   });
-  const itemComercial = await backend<{ id: string }>(api, adminCookie, 'POST', '/itens-comerciais', {
+  const itemComercial = await backend<{ id: string }>(api, adminCookie, 'POST', '/produtos', {
     codigo: `O5TZ${suffix}`,
-    descricao: 'Traseiro Onda5',
-    unidadeComercial: 'kg',
+    nome: 'Traseiro Onda5',
+    unidadePedido: 'kg',
   });
   const cliente = await backend<{ id: string }>(api, adminCookie, 'POST', '/clientes', {
     codigo: `O5CL${suffix}`,
@@ -296,8 +296,8 @@ async function prepararDadosGestao(api: APIRequestContext, adminCookie: string):
   });
 
   await backend(api, adminCookie, 'POST', '/regras-desdobramento', {
-    itemCompraId: itemCompra.id,
-    itemComercialId: itemComercial.id,
+    produtoOrigemId: itemCompra.id,
+    produtoDestinoId: itemComercial.id,
     fatorQuantidade: 2,
     status: 'ativo',
     vigenciaInicio: addDaysISO(-1),
@@ -329,7 +329,7 @@ async function prepararDadosGestao(api: APIRequestContext, adminCookie: string):
       data: {
         dataOperacao: candidata,
         fornecedorId: fornecedor.id,
-        itens: [{ itemCompraId: itemCompra.id, quantidadeComprada: 100 }],
+        itens: [{ produtoId: itemCompra.id, quantidadeComprada: 100 }],
       },
     });
     if (criarRes.status() === 409) continue;
@@ -354,7 +354,7 @@ async function prepararDadosGestao(api: APIRequestContext, adminCookie: string):
       dataOperacao,
       compraProgramadaId: compraId,
       clienteId: cliente.id,
-      itens: [{ itemComercialId: itemComercial.id, quantidadePedida: 250 }],
+      itens: [{ produtoId: itemComercial.id, quantidadePedida: 250 }],
     });
   } catch {
     // Pendência já existente de run anterior — overbooking UI ainda validável.
@@ -370,7 +370,7 @@ async function prepararDadosGestao(api: APIRequestContext, adminCookie: string):
   await backend(api, adminCookie, 'POST', `/operacao/pedidos-fornecedor/${pedidoPf.id}/nf`, {
     numero: `NF-O5-${suffix}`,
     recebimentoId: receb.recebimento.id,
-    itens: [{ itemComercialId: itemComercial.id, quantidadeDeclarada: 1, pesoDeclarado: 10 }],
+    itens: [{ produtoId: itemComercial.id, quantidadeDeclarada: 1, pesoDeclarado: 10 }],
   });
   const conclusao = await backend<{ ocorrencias: number; conclusao: { id: string } }>(
     api,
@@ -413,8 +413,8 @@ async function prepararDadosGestao(api: APIRequestContext, adminCookie: string):
     operacaoId,
     dataOperacao,
     compraId,
-    itemCompraId: itemCompra.id,
-    itemComercialId: itemComercial.id,
+    produtoOrigemId: itemCompra.id,
+    produtoDestinoId: itemComercial.id,
     fornecedorId: fornecedor.id,
     clienteId: cliente.id,
     ocorrenciaId,
@@ -471,8 +471,8 @@ function writeReport(steps: StepEvidence[], dados: DadosGestao, observations: st
     ['Compra programada', dados.compraId],
     ['Fornecedor', dados.fornecedorId],
     ['Cliente', dados.clienteId],
-    ['Item compra', dados.itemCompraId],
-    ['Item comercial', dados.itemComercialId],
+    ['Item compra', dados.produtoId],
+    ['Item comercial', dados.produtoId],
     ...(dados.ocorrenciaId ? [['Ocorrência', dados.ocorrenciaId] as const] : []),
   ]
     .map(

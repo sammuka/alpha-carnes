@@ -153,7 +153,7 @@ export class PedidoFornecedorService {
       }
 
       const itens = await tx.select({
-        itemComercialId: disponibilidadesVirtuais.itemComercialId,
+        produtoId: disponibilidadesVirtuais.produtoId,
         quantidadePrevista: disponibilidadesVirtuais.quantidadeTotalGerada,
       }).from(disponibilidadesVirtuais)
         .where(eq(disponibilidadesVirtuais.compraProgramadaId, compra.id));
@@ -173,7 +173,7 @@ export class PedidoFornecedorService {
       await tx.insert(pedidosFornecedorItens).values(
         itens.map((item) => ({
           pedidoFornecedorId: pedido.id,
-          itemComercialId: item.itemComercialId,
+          produtoId: item.produtoId,
           quantidadePrevista: item.quantidadePrevista,
         })),
       );

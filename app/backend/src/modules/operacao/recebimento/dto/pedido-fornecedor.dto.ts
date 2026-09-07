@@ -36,7 +36,7 @@ export const registrarNfSchema = z.object({
   pesoTotalDeclarado: z.coerce.number().positive().optional(),
   payload: z.record(z.string(), z.unknown()).optional(),
   itens: z.array(z.object({
-    itemComercialId: z.string().uuid(),
+    produtoId: z.string().uuid(),
     quantidadeDeclarada: z.coerce.number().positive(),
     pesoDeclarado: z.coerce.number().positive().optional(),
   })).min(1),

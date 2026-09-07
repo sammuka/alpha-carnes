@@ -6,4 +6,5 @@ description = "Placeholder literal conhecido; cache do graphify contém apenas h
 stopwords = ['''change-me''']
 paths = [
   '''graphify-out/cache/.*''',
+  '''app/backend/cov-output\.txt''',
 ]

@@ -48,8 +48,8 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
   it('sugere quando há pedido compatível aberto (RF-PS-08) e NÃO vincula sozinho (RF-PS-09)', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-08-01');
-    await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 5 });
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId, dataOperacao: c.dataOperacao, quantidade: 5 });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
 
     const res = await request(srv()).get(`/operacao/pesagem/pecas/${pecaId}/sugestao`).set('Cookie', recebimentoCookies);
     expect(res.status).toBe(200);
@@ -65,10 +65,10 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
   it('confirmar incrementa quantidade_atendida e bloqueia item completo (409, RF-PS-17)', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-08-02');
-    const { pedidoItemId } = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 1 });
+    const { pedidoItemId } = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId, dataOperacao: c.dataOperacao, quantidade: 1 });
 
-    const peca1 = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
-    const peca2 = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const peca1 = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
+    const peca2 = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
 
     const ok = await request(srv()).post(`/operacao/pesagem/pecas/${peca1}/confirmar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: pedidoItemId });
     expect(ok.status).toBe(201);
@@ -88,11 +88,11 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
     const c = await cenario('2026-08-03');
     const saldo = 3;
     const total = 6;
-    const { pedidoItemId } = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: saldo });
+    const { pedidoItemId } = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId, dataOperacao: c.dataOperacao, quantidade: saldo });
 
     const pecasIds: string[] = [];
     for (let i = 0; i < total; i++) {
-      pecasIds.push(await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId }));
+      pecasIds.push(await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId }));
     }
 
     // Confirma todas em paralelo no mesmo item.
@@ -115,10 +115,10 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
   it('redirecionar devolve/consome saldo com histórico + auditoria', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-08-04');
-    const pa = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 2 });
-    const pb = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: await criarOutroCliente(app), itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 2 });
+    const pa = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId, dataOperacao: c.dataOperacao, quantidade: 2 });
+    const pb = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: await criarOutroCliente(app), produtoId: c.produtoId, dataOperacao: c.dataOperacao, quantidade: 2 });
 
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/confirmar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: pa.pedidoItemId });
 
     const redir = await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/redirecionar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: pb.pedidoItemId, motivo: 'cliente A cancelou parte' });
@@ -142,7 +142,7 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
     const c = await cenario('2026-08-05');
 
     // sobra sem motivo → 400
-    const pecaSobra = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaSobra = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const semMotivo = await request(srv()).post(`/operacao/pesagem/pecas/${pecaSobra}/sem-cobertura`).set('Cookie', recebimentoCookies).send({ destino: 'sobra' });
     expect(semMotivo.status).toBe(400);
     const comMotivo = await request(srv()).post(`/operacao/pesagem/pecas/${pecaSobra}/sem-cobertura`).set('Cookie', recebimentoCookies).send({ destino: 'sobra', motivo: 'sem pedido compatível' });
@@ -150,8 +150,8 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
     expect(comMotivo.body.statusPeca).toBe('em_sobra');
 
     // corte mantém vínculo rastreável (F4c)
-    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 2 });
-    const pecaCorte = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId, dataOperacao: c.dataOperacao, quantidade: 2 });
+    const pecaCorte = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await request(srv()).post(`/operacao/pesagem/pecas/${pecaCorte}/confirmar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: p.pedidoItemId });
     const corte = await request(srv()).post(`/operacao/pesagem/pecas/${pecaCorte}/sem-cobertura`).set('Cookie', recebimentoCookies).send({ destino: 'corte' });
     expect(corte.status).toBe(201);
@@ -159,7 +159,7 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
     expect(corte.body.pedidoVendaItemId).toBe(p.pedidoItemId); // vínculo mantido
 
     // divergência abre ocorrência (reusa F4a)
-    const pecaDiv = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaDiv = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const div = await request(srv()).post(`/operacao/pesagem/pecas/${pecaDiv}/sem-cobertura`).set('Cookie', recebimentoCookies).send({
       destino: 'divergencia',
       // Tipologia canônica pós-0013 (legado qualidade_divergente → outro).
@@ -185,8 +185,8 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
   it('redirecionar peça não associada → 409; confirmar peça já associada → 409', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-08-08');
-    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 3 });
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId, dataOperacao: c.dataOperacao, quantidade: 3 });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
 
     // redirecionar antes de associar → 409
     const redirAntes = await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/redirecionar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: p.pedidoItemId, motivo: 'x' });
@@ -205,8 +205,8 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
   it('sem cobertura: análise muda status e devolve saldo quando estava associada', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-08-09');
-    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId, dataOperacao: c.dataOperacao, quantidade: 2 });
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const p = await criarPedido(app, comercialCookies, { compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId, dataOperacao: c.dataOperacao, quantidade: 2 });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/confirmar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: p.pedidoItemId });
 
     const res = await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/sem-cobertura`).set('Cookie', recebimentoCookies).send({ destino: 'analise' });
@@ -225,8 +225,8 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
     // o caminho de incompatibilidade via item de pedido de outra compra.
     const c1 = await cenario('2026-08-06');
     const c2 = await cenario('2026-08-07');
-    const pedidoC2 = await criarPedido(app, comercialCookies, { compraId: c2.compraId, clienteId: c2.clienteId, itemComercialId: c2.itemComercialId, dataOperacao: c2.dataOperacao, quantidade: 2 });
-    const peca = await pesarPeca(app, recebimentoCookies, { recebimentoId: c1.recebimentoId, itemComercialBaseId: c1.itemComercialId });
+    const pedidoC2 = await criarPedido(app, comercialCookies, { compraId: c2.compraId, clienteId: c2.clienteId, produtoId: c2.produtoId, dataOperacao: c2.dataOperacao, quantidade: 2 });
+    const peca = await pesarPeca(app, recebimentoCookies, { recebimentoId: c1.recebimentoId, produtoBaseId: c1.produtoId });
 
     const res = await request(srv()).post(`/operacao/pesagem/pecas/${peca}/confirmar`).set('Cookie', recebimentoCookies).send({ pedidoVendaItemId: pedidoC2.pedidoItemId });
     expect(res.status).toBe(409); // pedido de outra compra/item
@@ -253,7 +253,7 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
     const pedido = await criarPedido(app, comercialCookies, {
       compraId: c1.compraId,
       clienteId: c1.clienteId,
-      itemComercialId: c1.itemComercialId,
+      produtoId: c1.produtoId,
       dataOperacao: dia,
       quantidade: 10,
     });
@@ -262,14 +262,14 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
     for (let i = 0; i < 6; i += 1) {
       idsLote001.push(await pesarPeca(app, recebimentoCookies, {
         recebimentoId: c1.recebimentoId,
-        itemComercialBaseId: c1.itemComercialId,
+        produtoBaseId: c1.produtoId,
       }));
     }
     const idsLote002: string[] = [];
     for (let i = 0; i < 4; i += 1) {
       idsLote002.push(await pesarPeca(app, recebimentoCookies, {
         recebimentoId: rec2,
-        itemComercialBaseId: c1.itemComercialId,
+        produtoBaseId: c1.produtoId,
       }));
     }
 
@@ -334,13 +334,13 @@ describe('Associação sugestiva e2e (sugerir/confirmar/redirecionar/sem-cobertu
     const pedidoOutraOp = await criarPedido(app, comercialCookies, {
       compraId: c2.compraId,
       clienteId: c2.clienteId,
-      itemComercialId: c2.itemComercialId,
+      produtoId: c2.produtoId,
       dataOperacao: c2.dataOperacao,
       quantidade: 2,
     });
     const peca = await pesarPeca(app, recebimentoCookies, {
       recebimentoId: c1.recebimentoId,
-      itemComercialBaseId: c1.itemComercialId,
+      produtoBaseId: c1.produtoId,
     });
     const sug = await request(srv()).get(`/operacao/pesagem/pecas/${peca}/sugestao`).set('Cookie', recebimentoCookies);
     expect(sug.body.compativeis.every((c: { pedidoVendaItemId: string }) => c.pedidoVendaItemId !== pedidoOutraOp.pedidoItemId)).toBe(true);

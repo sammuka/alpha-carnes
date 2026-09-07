@@ -5,7 +5,7 @@ export type Pendencia = PendenciaOverbooking;
 
 export interface CoberturaPendencia {
   pendenciaId: string;
-  itemComercialId: string;
+  produtoId: string;
   quantidadeDeficit: string;
   comprasComplementares: Array<{
     compraProgramadaId: string;

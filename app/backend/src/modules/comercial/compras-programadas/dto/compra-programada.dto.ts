@@ -1,15 +1,13 @@
 import { z } from 'zod';
 import { listarQuerySchema } from '../../../../common/crud/paginacao';
 
-// Quantidade comercial: numérico positivo com até 3 casas. Mantida como número
-// na borda; convertida para string NUMERIC no service.
 const quantidadeSchema = z
   .number()
   .positive('quantidade deve ser maior que zero')
   .max(9_999_999_999.999, 'quantidade fora do intervalo');
 
-const itemCompraSchema = z.object({
-  itemCompraId: z.string().uuid(),
+const itemProdutoSchema = z.object({
+  produtoId: z.string().uuid(),
   quantidadeComprada: quantidadeSchema,
   observacoes: z.string().trim().max(500).optional(),
 });
@@ -21,8 +19,8 @@ export const createCompraProgramadaSchema = z.object({
   referenciaExterna: z.string().trim().max(100).optional(),
   previsaoEntrega: z.string().datetime({ offset: true }).optional(),
   observacoes: z.string().trim().max(1000).optional(),
-  itens: z.array(itemCompraSchema).min(1, 'compra precisa de ao menos um item'),
-});
+  itens: z.array(itemProdutoSchema).min(1, 'compra precisa de ao menos um item'),
+}).strict();
 
 export type CreateCompraProgramadaDto = z.infer<typeof createCompraProgramadaSchema>;
 
@@ -34,7 +32,6 @@ export const listarComprasProgramadasSchema = listarQuerySchema.extend({
 });
 export type ListarComprasProgramadasDto = z.infer<typeof listarComprasProgramadasSchema>;
 
-// Atualização do cabeçalho da compra (apenas enquanto não confirmada).
 export const updateCompraProgramadaSchema = z.object({
   fornecedorId: z.string().uuid().optional(),
   numeroInterno: z.string().trim().max(100).optional(),
@@ -42,11 +39,11 @@ export const updateCompraProgramadaSchema = z.object({
   previsaoEntrega: z.string().datetime({ offset: true }).optional(),
   observacoes: z.string().trim().max(1000).optional(),
   status: z.enum(['rascunho', 'em_negociacao']).optional(),
-});
+}).strict();
 
 export type UpdateCompraProgramadaDto = z.infer<typeof updateCompraProgramadaSchema>;
 
-/** `simulacao=<itemCompraId>:<qtd>,<itemCompraId>:<qtd>` — read-only, pré-salvamento. */
+/** `simulacao=<produtoId>:<qtd>,<produtoId>:<qtd>` — read-only, pré-salvamento. */
 export const impactoQuerySchema = z.object({
   simulacao: z.string().trim().optional().transform((valor, ctx) => {
     const mapa = new Map<string, string>();
@@ -58,7 +55,7 @@ export const impactoQuerySchema = z.object({
       if (!idOk.success || !qtdOk) {
         ctx.addIssue({
           code: 'custom',
-          message: `Simulação inválida em "${par}": use <itemCompraId>:<quantidade>`,
+          message: `Simulação inválida em "${par}": use <produtoId>:<quantidade>`,
         });
         return z.NEVER;
       }
@@ -78,7 +75,7 @@ export const atualizarItemCompraSchema = z.object({
     .refine((valor) => Number(valor) > 0, 'quantidade deve ser maior que zero'),
   observacoes: z.string().trim().max(500).optional(),
   confirmarDeficit: z.boolean().default(false),
-});
+}).strict();
 
 export type ImpactoQueryDto = z.infer<typeof impactoQuerySchema>;
 export type AtualizarItemCompraDto = z.infer<typeof atualizarItemCompraSchema>;

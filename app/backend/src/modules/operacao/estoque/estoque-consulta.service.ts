@@ -7,7 +7,6 @@ import {
   clientes,
   entradasItens,
   fornecedores,
-  itensComerciais,
   notasFiscaisFornecedor,
   parametros,
   pecas,
@@ -22,18 +21,18 @@ import type { ConsultaEstoqueQuery } from './dto/estoque.dto';
 export interface ItemEstoqueConsulta {
   id: string;
   tipo: 'peca' | 'subitem' | 'entrada';
-  codigo: string;                       // etiqueta vigente ?? id.slice(0, 8).toUpperCase()
-  statusFisico: string;                 // valor bruto do banco
+  codigo: string;
+  statusFisico: string;
   statusRotulo: 'Disponível' | 'Destinado a pedido' | 'Em desossa' | 'Bloqueado por ocorrência';
   quantidade: string;
   peso: string | null;
-  unidade: string;                      // 'peça' | 'peças' | 'caixas' | 'unidades'
+  unidade: string;
   produto: { id: string | null; codigo: string; nome: string };
-  origem: string;                       // D8.2
+  origem: string;
   nfLote: string | null;
-  local: { valor: string | null; provisorio: boolean };  // AD-09 p/ peca/subitem; capturado p/ entrada
+  local: { valor: string | null; provisorio: boolean };
   caracteristicas: string[];
-  pedidoReservado: string | null;       // '#<id8> — <nomeFantasia>'
+  pedidoReservado: string | null;
   estoqueAnterior: boolean;
   createdAt: Date;
 }
@@ -65,7 +64,7 @@ export class EstoqueConsultaService {
           statusFisico: pecas.statusPeca,
           peso: pecas.pesoOriginal,
           etiquetaAtual: pecas.etiquetaAtual,
-          itemComercialId: pecas.itemComercialBaseId,
+          produtoId: pecas.produtoBaseId,
           recebimentoId: pecas.recebimentoId,
           pedidoVendaId: pecas.pedidoVendaId,
           capturaMeta: pecas.capturaMeta,
@@ -80,7 +79,7 @@ export class EstoqueConsultaService {
           peso: subitens.peso,
           quantidade: subitens.quantidade,
           etiquetaAtual: subitens.etiquetaAtual,
-          itemComercialId: subitens.itemComercialId,
+          produtoId: subitens.produtoId,
           pecaOrigemId: subitens.pecaOrigemId,
           pedidoVendaId: subitens.pedidoVendaId,
           createdAt: subitens.createdAt,
@@ -105,10 +104,11 @@ export class EstoqueConsultaService {
         .where(and(isNull(entradasItens.deletedAt), sql`${entradasItens.quantidade} > 0`)),
     ]);
 
-    const itemComercialIds = [
+    const produtoIds = [
       ...new Set([
-        ...pecasEstoque.map((p) => p.itemComercialId),
-        ...subitensEstoque.map((s) => s.itemComercialId),
+        ...pecasEstoque.map((p) => p.produtoId),
+        ...subitensEstoque.map((s) => s.produtoId),
+        ...entradasEstoque.map((e) => e.produtoId),
       ]),
     ];
     const recebimentoIds = [...new Set(pecasEstoque.map((p) => p.recebimentoId))];
@@ -119,24 +119,23 @@ export class EstoqueConsultaService {
         ...entradasEstoque.map((e) => e.pedidoId).filter((v): v is string => v !== null),
       ]),
     ];
-    const produtoIds = [...new Set(entradasEstoque.map((e) => e.produtoId))];
 
-    const [itensMap, produtosPorItemComercial, produtosPorId, recebimentosMap, pedidosMap, fifoValor] = await Promise.all([
-      this.carregarItensComerciais(itemComercialIds),
-      this.carregarProdutosPorItemComercial(itemComercialIds),
+    const [produtosMap, recebimentosMap, pedidosMap, fifoValor] = await Promise.all([
       this.carregarProdutosPorId(produtoIds),
       this.carregarRecebimentos(recebimentoIds),
       this.carregarPedidos(pedidoVendaIds),
       this.lerParametroFifo(),
     ]);
 
+    const produtoFallback = (produtoId: string) =>
+      produtosMap.get(produtoId) ?? { id: produtoId, codigo: '—', nome: 'Produto' };
+
     const itens: ItemEstoqueConsulta[] = [];
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
 
     for (const peca of pecasEstoque) {
-      const item = itensMap.get(peca.itemComercialId);
-      const produto = produtosPorItemComercial.get(peca.itemComercialId);
+      const produto = produtoFallback(peca.produtoId);
       const recebimento = recebimentosMap.get(peca.recebimentoId);
       const pedido = peca.pedidoVendaId ? pedidosMap.get(peca.pedidoVendaId) : undefined;
       itens.push({
@@ -148,7 +147,7 @@ export class EstoqueConsultaService {
         quantidade: '1',
         peso: peca.peso,
         unidade: 'peça',
-        produto: produto ?? { id: null, codigo: item?.codigo ?? '—', nome: item?.descricao ?? 'Item comercial' },
+        produto,
         origem: recebimento?.fornecedorNome ?? '—',
         nfLote: recebimento?.nfLote ?? recebimento?.romaneio ?? null,
         local: { valor: null, provisorio: true },
@@ -160,8 +159,7 @@ export class EstoqueConsultaService {
     }
 
     for (const sub of subitensEstoque) {
-      const item = itensMap.get(sub.itemComercialId);
-      const produto = produtosPorItemComercial.get(sub.itemComercialId);
+      const produto = produtoFallback(sub.produtoId);
       const pedido = sub.pedidoVendaId ? pedidosMap.get(sub.pedidoVendaId) : undefined;
       itens.push({
         id: sub.id,
@@ -172,7 +170,7 @@ export class EstoqueConsultaService {
         quantidade: sub.quantidade,
         peso: sub.peso,
         unidade: 'peça',
-        produto: produto ?? { id: null, codigo: item?.codigo ?? '—', nome: item?.descricao ?? 'Item comercial' },
+        produto,
         origem: `Desossa interna (${sub.pecaOrigemId.slice(0, 8).toUpperCase()})`,
         nfLote: null,
         local: { valor: null, provisorio: true },
@@ -184,7 +182,7 @@ export class EstoqueConsultaService {
     }
 
     for (const entrada of entradasEstoque) {
-      const produto = produtosPorId.get(entrada.produtoId);
+      const produto = produtosMap.get(entrada.produtoId) ?? { id: entrada.produtoId, codigo: '—', nome: 'Produto' };
       const pedido = entrada.pedidoId ? pedidosMap.get(entrada.pedidoId) : undefined;
       itens.push({
         id: entrada.id,
@@ -195,7 +193,7 @@ export class EstoqueConsultaService {
         quantidade: String(entrada.quantidade - entrada.quantidadeDestinada),
         peso: null,
         unidade: entrada.unidade === 'caixa' ? 'caixas' : 'unidades',
-        produto: produto ?? { id: null, codigo: '—', nome: 'Produto' },
+        produto,
         origem: entrada.fornecedorNome,
         nfLote: entrada.loteNf,
         local: { valor: entrada.local, provisorio: false },
@@ -240,49 +238,6 @@ export class EstoqueConsultaService {
       .then((r) => r[0] ?? null);
     const valor = (linha?.valorJson as { valor?: unknown } | null)?.valor;
     return valor === true;
-  }
-
-  private async carregarItensComerciais(ids: string[]) {
-    const map = new Map<string, { codigo: string; descricao: string }>();
-    if (ids.length === 0) return map;
-
-    const linhas = await this.db
-      .select({ id: itensComerciais.id, codigo: itensComerciais.codigo, descricao: itensComerciais.descricao })
-      .from(itensComerciais)
-      .where(and(inArray(itensComerciais.id, ids), isNull(itensComerciais.deletedAt)));
-
-    for (const linha of linhas) {
-      map.set(linha.id, { codigo: linha.codigo, descricao: linha.descricao });
-    }
-    return map;
-  }
-
-  private async carregarProdutosPorItemComercial(itemComercialIds: string[]) {
-    const map = new Map<string, { id: string; codigo: string; nome: string }>();
-    if (itemComercialIds.length === 0) return map;
-
-    const linhas = await this.db
-      .select({
-        itemComercialId: produtos.legadoItemComercialId,
-        id: produtos.id,
-        codigo: produtos.codigo,
-        nome: produtos.nome,
-      })
-      .from(produtos)
-      .where(
-        and(
-          isNull(produtos.deletedAt),
-          eq(produtos.status, 'ativo'),
-          inArray(produtos.legadoItemComercialId, itemComercialIds),
-        ),
-      );
-
-    for (const linha of linhas) {
-      if (linha.itemComercialId) {
-        map.set(linha.itemComercialId, { id: linha.id, codigo: linha.codigo, nome: linha.nome });
-      }
-    }
-    return map;
   }
 
   private async carregarProdutosPorId(produtoIds: string[]) {

@@ -142,7 +142,7 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
       [
         [cabecalho],
         [{
-          itemComercialId: 'ic1',
+          produtoId: 'ic1',
           produtoCodigo: 'IC-1',
           produtoDescricao: 'Item 1',
           quantidadePrevista: '40.000',
@@ -153,7 +153,7 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
     );
     (resolverMetadadosItensPrevistos as jest.Mock).mockResolvedValue(new Map([
       ['ic1', {
-        itemComercialId: 'ic1',
+        produtoId: 'ic1',
         origemDescricao: 'Compra PC-1',
         unidadeEsperada: 'cab',
         requerBalanca: true,

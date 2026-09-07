@@ -98,10 +98,10 @@ function calcRestante(esperada: string, apurada: string | null | undefined): str
 }
 
 function labelProduto(item: RecebimentoItem): string {
-  if (item.itemComercial) {
-    return `${item.itemComercial.codigo} — ${item.itemComercial.descricao}`;
+  if (item.produto) {
+    return `${item.produto.codigo} — ${item.produto.descricao}`;
   }
-  return item.origemDescricao ?? item.itemComercialId.slice(0, 8);
+  return item.origemDescricao ?? item.produtoId.slice(0, 8);
 }
 
 function pesadoItem(item: RecebimentoItem): string {
@@ -124,7 +124,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
   const [detalhe, setDetalhe] = useState<RecebimentoDetalhe | null>(null);
   const [acoes, setAcoes] = useState<AcaoLote[]>([]);
   const [faltas, setFaltas] = useState<FaltaDesossa[]>([]);
-  const [itemComercialBaseId, setItemComercialBaseId] = useState('');
+  const [produtoBaseId, setprodutoBaseId] = useState('');
   const [dataOperacao, setDataOperacao] = useState('');
 
   const [dispositivos, setDispositivos] = useState<StatusDispositivos | null>(null);
@@ -277,16 +277,16 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
         const key = p.pedidoVendaItemId;
         let ped = porItem.get(key);
         if (!ped) {
-          const itemDet = detalhe?.itens.find((i) => i.itemComercialId === p.itemComercialBaseId);
+          const itemDet = detalhe?.itens.find((i) => i.produtoId === p.produtoBaseId);
           const acao = acoes.find((a) => a.etiqueta && a.etiqueta === p.etiquetaAtual);
-          const ic = itemDet?.itemComercial;
+          const ic = itemDet?.produto;
           ped = {
             pedidoVendaId: p.pedidoVendaId,
             pedidoVendaItemId: key,
             clienteNome: acao?.clientePedido ?? 'Cliente do pedido',
             produtoLabel: ic
               ? `${ic.codigo} — ${ic.descricao}`
-              : p.itemComercialBaseId.slice(0, 8),
+              : p.produtoBaseId.slice(0, 8),
             pecasAssociadas: [],
           };
           porItem.set(key, ped);
@@ -311,11 +311,11 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     if (!detalhe?.itens.length) return;
     const primeiroItem = detalhe.itens[0];
     if (!primeiroItem) return;
-    const atualValido = detalhe.itens.some((i) => i.itemComercialId === itemComercialBaseId);
-    if (!itemComercialBaseId || !atualValido) {
-      setItemComercialBaseId(primeiroItem.itemComercialId);
+    const atualValido = detalhe.itens.some((i) => i.produtoId === produtoBaseId);
+    if (!produtoBaseId || !atualValido) {
+      setprodutoBaseId(primeiroItem.produtoId);
     }
-  }, [detalhe, itemComercialBaseId]);
+  }, [detalhe, produtoBaseId]);
 
   useEffect(() => {
     if (!dataOperacao) return;
@@ -363,7 +363,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
   const pesoExibido = peca?.pesoOriginal ?? null;
   const balancaIndisponivel = dispositivos?.balanca.status !== 'disponivel';
-  const itemAtivo = detalhe?.itens.find((i) => i.itemComercialId === itemComercialBaseId);
+  const itemAtivo = detalhe?.itens.find((i) => i.produtoId === produtoBaseId);
 
   async function chamar<T>(url: string, body?: unknown): Promise<T | null> {
     setErro(null);
@@ -389,7 +389,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
   }
 
   const pesar = async (modo: 'automatico' | 'manual_assistido') => {
-    if (!recebimentoId || !itemComercialBaseId) return;
+    if (!recebimentoId || !produtoBaseId) return;
     const meta: Record<string, unknown> = {};
     if (caracteristicas.maisPesada) meta.maisPesada = true;
     if (caracteristicas.maisGorda) meta.maisGorda = true;
@@ -397,10 +397,10 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
     const body =
       modo === 'automatico'
-        ? { recebimentoId, itemComercialBaseId, modoCaptura: 'automatico', capturaMeta: meta }
+        ? { recebimentoId, produtoBaseId, modoCaptura: 'automatico', capturaMeta: meta }
         : {
             recebimentoId,
-            itemComercialBaseId,
+            produtoBaseId,
             modoCaptura: 'manual_assistido',
             pesoManual: Number(pesoManual),
             motivo,
@@ -605,13 +605,13 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
       {/* Product tabs */}
       {detalhe && detalhe.itens.length > 0 && (
-        <Tabs value={itemComercialBaseId} onValueChange={setItemComercialBaseId}>
+        <Tabs value={produtoBaseId} onValueChange={setprodutoBaseId}>
           <TabsList>
             {detalhe.itens.map((item) => (
-              <TabsTrigger key={item.id} value={item.itemComercialId}>
+              <TabsTrigger key={item.id} value={item.produtoId}>
                 {labelProduto(item)}
                 <BadgeCount>
-                  {acoes.filter((a) => a.produtoCodigo === item.itemComercial?.codigo).length}
+                  {acoes.filter((a) => a.produtoCodigo === item.produto?.codigo).length}
                 </BadgeCount>
               </TabsTrigger>
             ))}
@@ -675,7 +675,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                 <Button
                   className="flex-1"
                   onClick={() => pesar('automatico')}
-                  disabled={!recebimentoId || !itemComercialBaseId || submitting}
+                  disabled={!recebimentoId || !produtoBaseId || submitting}
                 >
                   <Scale />
                   Capturar Peso

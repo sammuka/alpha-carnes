@@ -146,7 +146,7 @@ function makeCpf(seed: number): string {
 type RecebimentoDetalhe = {
   id: string;
   status: string;
-  itens: Array<{ itemComercialId: string; quantidadeEsperada: string | number }>;
+  itens: Array<{ produtoId: string; quantidadeEsperada: string | number }>;
 };
 
 export async function seedLoteParaConferencia(request: APIRequestContext): Promise<{
@@ -164,25 +164,25 @@ export async function seedLoteParaConferencia(request: APIRequestContext): Promi
     razaoSocial: `Fornecedor Onda6 ${suffix}`,
     documentoFiscal: makeCpf(seedNum + 1),
   });
-  const itemCompra = await api<{ id: string }>(request, cookieHeader, 'POST', '/itens-compra', {
+  const itemCompra = await api<{ id: string }>(request, cookieHeader, 'POST', '/produtos', {
     codigo: `O6IC${suffix}`,
-    descricao: 'Boi Onda6',
-    unidadeCompra: 'unidade',
+    nome: 'Boi Onda6',
+    unidadePedido: 'unidade',
   });
   const itemComercial = await api<{ id: string }>(
     request,
     cookieHeader,
     'POST',
-    '/itens-comerciais',
+    '/produtos',
     {
       codigo: `O6TZ${suffix}`,
-      descricao: 'Traseiro Onda6',
-      unidadeComercial: 'kg',
+      nome: 'Traseiro Onda6',
+      unidadePedido: 'kg',
     },
   );
   await api(request, cookieHeader, 'POST', '/regras-desdobramento', {
-    itemCompraId: itemCompra.id,
-    itemComercialId: itemComercial.id,
+    produtoOrigemId: itemCompra.id,
+    produtoDestinoId: itemComercial.id,
     fatorQuantidade: 2,
     status: 'ativo',
     vigenciaInicio: addDaysISO(-1),
@@ -197,7 +197,7 @@ export async function seedLoteParaConferencia(request: APIRequestContext): Promi
         dataOperacao,
         fornecedorId: fornecedor.id,
         numeroInterno: `O6-${runId}-${offset}`,
-        itens: [{ itemCompraId: itemCompra.id, quantidadeComprada: 5 }],
+        itens: [{ produtoId: itemCompra.id, quantidadeComprada: 5 }],
       },
     });
     const body = await parseJson<{ id?: string }>(create);
@@ -249,7 +249,7 @@ export async function seedLoteParaConferencia(request: APIRequestContext): Promi
 
   for (const item of detalhe.itens) {
     await api(request, cookieHeader, 'POST', `/operacao/recebimentos/${recebimentoId}/itens`, {
-      itemComercialId: item.itemComercialId,
+      produtoId: item.produtoId,
       quantidadeRecebida: Number(item.quantidadeEsperada),
     });
   }

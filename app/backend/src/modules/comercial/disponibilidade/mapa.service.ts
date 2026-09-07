@@ -3,14 +3,14 @@ import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { itensComerciais, produtos } from '../../../database/schema';
+import { produtos } from '../../../database/schema';
 import { somarQtd, subtrairQtd } from '../../../common/crud/decimal';
 import type { EstadoMapa, MapaProduto } from './dto/mapa.dto';
 
 const ESTADOS: EstadoMapa[] = ['F', 'V', 'R', 'C', 'D', 'O', 'E', '!'];
 
 interface LinhaAgregada extends Record<string, unknown> {
-  item_comercial_id: string;
+  produto_id: string;
   unidades: number;
   quantidade: string;
 }
@@ -31,7 +31,7 @@ export class MapaService {
 
   private async estadoF(operacaoId: string): Promise<LinhaAgregada[]> {
     const r = await this.db.execute<LinhaAgregada>(sql`
-      SELECT p.item_comercial_base_id AS item_comercial_id,
+      SELECT p.produto_base_id AS produto_id,
              count(*)::int            AS unidades,
              coalesce(sum(p.peso_original), 0)::numeric(15,3) AS quantidade
         FROM pecas p
@@ -41,26 +41,26 @@ export class MapaService {
          AND p.pedido_venda_item_id IS NULL
          AND p.deleted_at IS NULL
          AND r.deleted_at IS NULL
-       GROUP BY p.item_comercial_base_id
+       GROUP BY p.produto_base_id
     `);
     return r.rows;
   }
 
   private async estadoV(operacaoId: string): Promise<LinhaAgregada[]> {
     const r = await this.db.execute<LinhaAgregada>(sql`
-      SELECT dv.item_comercial_id,
+      SELECT dv.produto_id,
              0::int                                      AS unidades,
              sum(dv.quantidade_disponivel)::numeric(15,3) AS quantidade
         FROM disponibilidades_virtuais dv
        WHERE dv.operacao_id = ${operacaoId}
-       GROUP BY dv.item_comercial_id
+       GROUP BY dv.produto_id
     `);
     return r.rows;
   }
 
   private async estadoR(operacaoId: string): Promise<LinhaAgregada[]> {
     const r = await this.db.execute<LinhaAgregada>(sql`
-      SELECT pvi.item_comercial_id,
+      SELECT pvi.produto_id,
              0::int                                       AS unidades,
              sum(rd.quantidade_reservada)::numeric(15,3)  AS quantidade
         FROM reservas_disponibilidade rd
@@ -72,14 +72,14 @@ export class MapaService {
          AND pv.status IN ('rascunho','em_elaboracao_reserva_ativa','aguardando_confirmacao_overbooking')
          AND pvi.deleted_at IS NULL
          AND pv.deleted_at IS NULL
-       GROUP BY pvi.item_comercial_id
+       GROUP BY pvi.produto_id
     `);
     return r.rows;
   }
 
   private async estadoC(operacaoId: string): Promise<LinhaAgregada[]> {
     const r = await this.db.execute<LinhaAgregada>(sql`
-      SELECT pvi.item_comercial_id,
+      SELECT pvi.produto_id,
              0::int                                       AS unidades,
              sum(rd.quantidade_reservada)::numeric(15,3)  AS quantidade
         FROM reservas_disponibilidade rd
@@ -91,14 +91,14 @@ export class MapaService {
          AND pv.status IN ('finalizado','parcialmente_atendido','atendido','faturado')
          AND pvi.deleted_at IS NULL
          AND pv.deleted_at IS NULL
-       GROUP BY pvi.item_comercial_id
+       GROUP BY pvi.produto_id
     `);
     return r.rows;
   }
 
   private async estadoD(operacaoId: string): Promise<LinhaAgregada[]> {
     const r = await this.db.execute<LinhaAgregada>(sql`
-      SELECT p.item_comercial_base_id AS item_comercial_id,
+      SELECT p.produto_base_id AS produto_id,
              count(*)::int            AS unidades,
              coalesce(sum(p.peso_original), 0)::numeric(15,3) AS quantidade
         FROM pecas p
@@ -107,14 +107,14 @@ export class MapaService {
          AND p.status_peca IN ('para_corte','em_transformacao')
          AND p.deleted_at IS NULL
          AND r.deleted_at IS NULL
-       GROUP BY p.item_comercial_base_id
+       GROUP BY p.produto_base_id
     `);
     return r.rows;
   }
 
   private async estadoO(operacaoId: string): Promise<LinhaAgregada[]> {
     const r = await this.db.execute<LinhaAgregada>(sql`
-      SELECT pvi.item_comercial_id,
+      SELECT pvi.produto_id,
              0::int                                       AS unidades,
              sum(rd.quantidade_reservada)::numeric(15,3)  AS quantidade
         FROM reservas_disponibilidade rd
@@ -126,14 +126,14 @@ export class MapaService {
          AND pv.status <> 'cancelado'
          AND pvi.deleted_at IS NULL
          AND pv.deleted_at IS NULL
-       GROUP BY pvi.item_comercial_id
+       GROUP BY pvi.produto_id
     `);
     return r.rows;
   }
 
   private async estadoE(operacaoId: string): Promise<LinhaAgregada[]> {
     const r = await this.db.execute<LinhaAgregada>(sql`
-      SELECT p.item_comercial_base_id AS item_comercial_id,
+      SELECT p.produto_base_id AS produto_id,
              count(*)::int            AS unidades,
              coalesce(sum(p.peso_original), 0)::numeric(15,3) AS quantidade
         FROM carga_itens ci
@@ -147,9 +147,9 @@ export class MapaService {
          AND ci.deleted_at IS NULL
          AND cam.deleted_at IS NULL
          AND p.deleted_at IS NULL
-       GROUP BY p.item_comercial_base_id
+       GROUP BY p.produto_base_id
       UNION ALL
-      SELECT s.item_comercial_id,
+      SELECT s.produto_id,
              count(*)::int                             AS unidades,
              coalesce(sum(s.peso), 0)::numeric(15,3)   AS quantidade
         FROM carga_itens ci
@@ -163,14 +163,14 @@ export class MapaService {
          AND ci.deleted_at IS NULL
          AND cam.deleted_at IS NULL
          AND s.deleted_at IS NULL
-       GROUP BY s.item_comercial_id
+       GROUP BY s.produto_id
     `);
     return r.rows;
   }
 
   private async estadoOcorrencia(operacaoId: string): Promise<LinhaAgregada[]> {
     const r = await this.db.execute<LinhaAgregada>(sql`
-      SELECT p.item_comercial_base_id AS item_comercial_id,
+      SELECT p.produto_base_id AS produto_id,
              count(*)::int            AS unidades,
              coalesce(sum(p.peso_original), 0)::numeric(15,3) AS quantidade
         FROM pecas p
@@ -179,13 +179,13 @@ export class MapaService {
          AND p.status_peca = 'divergente'
          AND p.deleted_at IS NULL
          AND r.deleted_at IS NULL
-       GROUP BY p.item_comercial_base_id
+       GROUP BY p.produto_base_id
     `);
     return r.rows;
   }
 
-  /** As 8 consultas literais de D17, unidas por `item_comercial_id`. */
-  async consultar(operacaoId: string, itemComercialId?: string): Promise<MapaProduto[]> {
+  /** As 8 consultas literais de D17, unidas por `produto_id`. */
+  async consultar(operacaoId: string, produtoId?: string): Promise<MapaProduto[]> {
     const [f, v, r, c, d, o, e, ocorrencia] = await Promise.all([
       this.estadoF(operacaoId), this.estadoV(operacaoId), this.estadoR(operacaoId),
       this.estadoC(operacaoId), this.estadoD(operacaoId), this.estadoO(operacaoId),
@@ -197,34 +197,32 @@ export class MapaService {
 
     const catalogo = await this.db
       .select({
-        itemComercialId: itensComerciais.id,
-        codigo: itensComerciais.codigo,
-        descricao: itensComerciais.descricao,
-        provisorio: sql<boolean>`coalesce(bool_or((${produtos.atributosJson}->>'provisorio')::boolean), false)`,
+        produtoId: produtos.id,
+        codigo: produtos.codigo,
+        descricao: produtos.nome,
+        provisorio: sql<boolean>`coalesce((${produtos.atributosJson}->>'provisorio')::boolean, false)`,
       })
-      .from(itensComerciais)
-      .leftJoin(produtos, eq(produtos.legadoItemComercialId, itensComerciais.id))
+      .from(produtos)
       .where(and(
-        eq(itensComerciais.status, 'ativo'),
-        isNull(itensComerciais.deletedAt),
-        itemComercialId ? eq(itensComerciais.id, itemComercialId) : undefined,
+        eq(produtos.status, 'ativo'),
+        isNull(produtos.deletedAt),
+        produtoId ? eq(produtos.id, produtoId) : undefined,
       ))
-      .groupBy(itensComerciais.id, itensComerciais.codigo, itensComerciais.descricao)
-      .orderBy(asc(itensComerciais.codigo));
+      .orderBy(asc(produtos.codigo));
 
     return catalogo.map((item): MapaProduto => {
       const estados = {} as Record<EstadoMapa, string>;
       const unidades = {} as Record<EstadoMapa, number>;
       for (const estado of ESTADOS) {
         // Estado E é UNION ALL de duas pernas (peça + subitem): pode haver mais de
-        // uma linha por item_comercial_id, e o agregador soma as duas (D17).
-        const linhas = porEstado[estado].filter((l) => l.item_comercial_id === item.itemComercialId);
+        // uma linha por produto_id, e o agregador soma as duas (D17).
+        const linhas = porEstado[estado].filter((l) => l.produto_id === item.produtoId);
         estados[estado] = linhas.reduce((acc, l) => somarQtd(acc, l.quantidade), '0.000');
         unidades[estado] = linhas.reduce((acc, l) => acc + Number(l.unidades), 0);
       }
       const saldoComercial = subtrairQtd(somarQtd(estados.F, estados.V), somarQtd(estados.R, estados.O));
       return {
-        itemComercialId: item.itemComercialId,
+        produtoId: item.produtoId,
         codigo: item.codigo,
         descricao: item.descricao,
         provisorio: item.provisorio,
@@ -236,28 +234,28 @@ export class MapaService {
   }
 
   /** Drill-down: unidades reais do estado clicado, reusando o mesmo WHERE da consulta agregada. */
-  async detalhar(operacaoId: string, itemComercialId: string, estado: EstadoMapa) {
+  async detalhar(operacaoId: string, produtoId: string, estado: EstadoMapa) {
     switch (estado) {
       case 'F':
-        return this.detalharPecas(operacaoId, itemComercialId, sql`p.status_peca = 'pesada' AND p.pedido_venda_item_id IS NULL`);
+        return this.detalharPecas(operacaoId, produtoId, sql`p.status_peca = 'pesada' AND p.pedido_venda_item_id IS NULL`);
       case 'D':
-        return this.detalharPecas(operacaoId, itemComercialId, sql`p.status_peca IN ('para_corte','em_transformacao')`);
+        return this.detalharPecas(operacaoId, produtoId, sql`p.status_peca IN ('para_corte','em_transformacao')`);
       case '!':
-        return this.detalharPecas(operacaoId, itemComercialId, sql`p.status_peca = 'divergente'`);
+        return this.detalharPecas(operacaoId, produtoId, sql`p.status_peca = 'divergente'`);
       case 'V':
-        return this.detalharVirtual(operacaoId, itemComercialId);
+        return this.detalharVirtual(operacaoId, produtoId);
       case 'E':
-        return this.detalharExpedido(operacaoId, itemComercialId);
+        return this.detalharExpedido(operacaoId, produtoId);
       case 'R':
-        return this.detalharReservas(operacaoId, itemComercialId, sql`pv.status IN ('rascunho','em_elaboracao_reserva_ativa','aguardando_confirmacao_overbooking') AND rd.tipo_consumo IN ('fisico','virtual')`);
+        return this.detalharReservas(operacaoId, produtoId, sql`pv.status IN ('rascunho','em_elaboracao_reserva_ativa','aguardando_confirmacao_overbooking') AND rd.tipo_consumo IN ('fisico','virtual')`);
       case 'C':
-        return this.detalharReservas(operacaoId, itemComercialId, sql`pv.status IN ('finalizado','parcialmente_atendido','atendido','faturado') AND rd.tipo_consumo IN ('fisico','virtual')`);
+        return this.detalharReservas(operacaoId, produtoId, sql`pv.status IN ('finalizado','parcialmente_atendido','atendido','faturado') AND rd.tipo_consumo IN ('fisico','virtual')`);
       case 'O':
-        return this.detalharReservas(operacaoId, itemComercialId, sql`pv.status <> 'cancelado' AND rd.tipo_consumo = 'overbooking'`);
+        return this.detalharReservas(operacaoId, produtoId, sql`pv.status <> 'cancelado' AND rd.tipo_consumo = 'overbooking'`);
     }
   }
 
-  private async detalharPecas(operacaoId: string, itemComercialId: string, filtroEstado: ReturnType<typeof sql>) {
+  private async detalharPecas(operacaoId: string, produtoId: string, filtroEstado: ReturnType<typeof sql>) {
     const r = await this.db.execute<{
       id: string; etiqueta_atual: string | null; peso_original: string; status_peca: string; recebimento_id: string;
     }>(sql`
@@ -265,7 +263,7 @@ export class MapaService {
         FROM pecas p
         JOIN recebimentos r ON r.id = p.recebimento_id
        WHERE r.operacao_id = ${operacaoId}
-         AND p.item_comercial_base_id = ${itemComercialId}
+         AND p.produto_base_id = ${produtoId}
          AND (${filtroEstado})
          AND p.deleted_at IS NULL
          AND r.deleted_at IS NULL
@@ -274,7 +272,7 @@ export class MapaService {
     return r.rows;
   }
 
-  private async detalharVirtual(operacaoId: string, itemComercialId: string) {
+  private async detalharVirtual(operacaoId: string, produtoId: string) {
     const r = await this.db.execute<{
       id: string; quantidade_disponivel: string; compra_programada_id: string; numero_interno: string | null;
     }>(sql`
@@ -282,13 +280,13 @@ export class MapaService {
         FROM disponibilidades_virtuais dv
         JOIN compras_programadas cp ON cp.id = dv.compra_programada_id
        WHERE dv.operacao_id = ${operacaoId}
-         AND dv.item_comercial_id = ${itemComercialId}
+         AND dv.produto_id = ${produtoId}
        ORDER BY dv.created_at
     `);
     return r.rows;
   }
 
-  private async detalharExpedido(operacaoId: string, itemComercialId: string) {
+  private async detalharExpedido(operacaoId: string, produtoId: string) {
     const r = await this.db.execute<{
       carga_item_id: string; caminhao_id: string; placa: string; status_caminhao: string;
       tipo_origem: string; etiqueta_atual: string | null;
@@ -303,7 +301,7 @@ export class MapaService {
          AND ci.status_carga_item <> 'removido'
          AND cam.status_caminhao IN
              ('fechado','liberado_faturamento','faturado','liberado_saida','expedido')
-         AND p.item_comercial_base_id = ${itemComercialId}
+         AND p.produto_base_id = ${produtoId}
          AND ci.deleted_at IS NULL AND cam.deleted_at IS NULL AND p.deleted_at IS NULL
       UNION ALL
       SELECT ci.id AS carga_item_id, cam.id AS caminhao_id, cam.placa, cam.status_caminhao,
@@ -316,13 +314,13 @@ export class MapaService {
          AND ci.status_carga_item <> 'removido'
          AND cam.status_caminhao IN
              ('fechado','liberado_faturamento','faturado','liberado_saida','expedido')
-         AND s.item_comercial_id = ${itemComercialId}
+         AND s.produto_id = ${produtoId}
          AND ci.deleted_at IS NULL AND cam.deleted_at IS NULL AND s.deleted_at IS NULL
     `);
     return r.rows;
   }
 
-  private async detalharReservas(operacaoId: string, itemComercialId: string, filtroEstado: ReturnType<typeof sql>) {
+  private async detalharReservas(operacaoId: string, produtoId: string, filtroEstado: ReturnType<typeof sql>) {
     const r = await this.db.execute<{
       id: string; quantidade_reservada: string; tipo_consumo: string;
       pedido_venda_id: string; status_pedido: string; cliente_id: string; razao_social: string;
@@ -335,7 +333,7 @@ export class MapaService {
         JOIN pedidos_venda pv        ON pv.id = pvi.pedido_venda_id
         JOIN clientes cli            ON cli.id = pv.cliente_id
        WHERE pv.operacao_id = ${operacaoId}
-         AND pvi.item_comercial_id = ${itemComercialId}
+         AND pvi.produto_id = ${produtoId}
          AND rd.status = 'ativa'
          AND (${filtroEstado})
          AND pvi.deleted_at IS NULL

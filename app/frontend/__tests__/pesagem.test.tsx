@@ -29,7 +29,7 @@ const statusDispositivos = {
 };
 
 const recebimentoId = 'a1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
-const itemComercialId = 'i1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+const produtoId = 'i1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 
 const recebimentoLista = {
   id: recebimentoId,
@@ -73,7 +73,7 @@ const recebimentoDetalhe = {
   itens: [
     {
       id: 'ri1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-      itemComercialId,
+      produtoId,
       origemDescricao: 'Traseiro',
       quantidadeEsperada: '10',
       quantidadeRecebida: '0',
@@ -82,7 +82,7 @@ const recebimentoDetalhe = {
       pesoTotalApurado: null,
       statusApuracao: 'aguardando',
       observacoes: null,
-      itemComercial: { id: itemComercialId, codigo: 'TZ', descricao: 'Traseiro' },
+      produto: { id: produtoId, codigo: 'TZ', descricao: 'Traseiro' },
     },
   ],
   divergencias: [],
@@ -200,7 +200,7 @@ describe('PesagemDestinacaoClient', () => {
         sugestao: {
           pedidoVendaId: 'pv1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
           pedidoVendaItemId: 'pvi1aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-          itemComercialId,
+          produtoId,
           clienteId: 'c1',
           saldoPendente: '10',
           prioridade: 1,
@@ -212,7 +212,7 @@ describe('PesagemDestinacaoClient', () => {
         compativeis: [{
           pedidoVendaId: 'pv1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
           pedidoVendaItemId: 'pvi1aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-          itemComercialId,
+          produtoId,
           clienteId: 'c1',
           saldoPendente: '10',
           prioridade: 1,
@@ -239,7 +239,7 @@ describe('PesagemDestinacaoClient', () => {
             sugestao: {
               pedidoVendaId: 'pv1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
               pedidoVendaItemId: 'pvi1aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-              itemComercialId,
+              produtoId,
               clienteId: 'c1',
               saldoPendente: '10',
               prioridade: 1,
@@ -251,7 +251,7 @@ describe('PesagemDestinacaoClient', () => {
             compativeis: [{
               pedidoVendaId: 'pv1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
               pedidoVendaItemId: 'pvi1aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-              itemComercialId,
+              produtoId,
               clienteId: 'c1',
               saldoPendente: '10',
               prioridade: 1,

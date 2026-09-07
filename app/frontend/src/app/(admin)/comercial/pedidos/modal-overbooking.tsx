@@ -53,9 +53,9 @@ export function ModalOverbooking({
           </TableHeader>
           <TableBody>
             {challenge.itens.map((item) => (
-              <TableRow key={item.itemComercialId}>
+              <TableRow key={item.produtoId}>
                 <TableCell className="text-[13px] font-semibold text-foreground">
-                  {item.itemComercialId}
+                  {item.produtoId}
                 </TableCell>
                 <TableCellNum>{item.disponivelAntes}</TableCellNum>
                 <TableCellNum>{item.quantidadeSolicitada}</TableCellNum>

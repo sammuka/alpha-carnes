@@ -34,7 +34,7 @@ describe('dashboard-operacao (10 KPIs, alertas e atividades)', () => {
       .send({
         dataOperacao: '2026-09-15',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 5 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 5 }],
       })
       .expect(201);
 
@@ -61,7 +61,7 @@ describe('dashboard-operacao (10 KPIs, alertas e atividades)', () => {
       .send({
         dataOperacao: '2026-09-16',
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 1 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 1 }],
       })
       .expect(201);
 

@@ -141,11 +141,11 @@ export class EntradasEstoqueService {
 
   async compativeisPorProduto(produtoId: string) {
     const produto = await this.db
-      .select({ legadoItemComercialId: produtos.legadoItemComercialId })
+      .select({ id: produtos.id })
       .from(produtos)
       .where(eq(produtos.id, produtoId))
       .then((r) => r[0] ?? null);
-    if (!produto?.legadoItemComercialId) return [];
+    if (!produto?.id) return [];
 
     const linhas = await this.db
       .select({
@@ -160,7 +160,7 @@ export class EntradasEstoqueService {
       .innerJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
       .where(
         and(
-          eq(pedidosVendaItens.itemComercialId, produto.legadoItemComercialId),
+          eq(pedidosVendaItens.produtoId, produto.id),
           isNull(pedidosVendaItens.deletedAt),
           isNull(pedidosVenda.deletedAt),
           sql`${pedidosVenda.status} <> 'cancelado'`,

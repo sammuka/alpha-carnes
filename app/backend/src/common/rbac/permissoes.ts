@@ -11,10 +11,6 @@ export const PERMISSOES = {
   CLIENTES_GERENCIAR: 'CLIENTES_GERENCIAR',
   FORNECEDORES_LER: 'FORNECEDORES_LER',
   FORNECEDORES_GERENCIAR: 'FORNECEDORES_GERENCIAR',
-  ITENS_COMPRA_LER: 'ITENS_COMPRA_LER',
-  ITENS_COMPRA_GERENCIAR: 'ITENS_COMPRA_GERENCIAR',
-  ITENS_COMERCIAIS_LER: 'ITENS_COMERCIAIS_LER',
-  ITENS_COMERCIAIS_GERENCIAR: 'ITENS_COMERCIAIS_GERENCIAR',
   PRODUTOS_LER: 'PRODUTOS_LER',
   PRODUTOS_GERENCIAR: 'PRODUTOS_GERENCIAR',
   REPRESENTANTES_LER: 'REPRESENTANTES_LER',
@@ -112,8 +108,6 @@ export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
 const LEITURA_CADASTROS: Permissao[] = [
   'CLIENTES_LER',
   'FORNECEDORES_LER',
-  'ITENS_COMPRA_LER',
-  'ITENS_COMERCIAIS_LER',
   'PRODUTOS_LER',
   'REPRESENTANTES_LER',
   'ROTAS_LER',
@@ -134,7 +128,6 @@ const LEITURA_CADASTROS: Permissao[] = [
  *   gerencia CLIENTES e REGRAS_DESDOBRAMENTO (desdobramento é decisão comercial).
  * - compras (§2.2): "registrar informações do fornecedor" → gerencia FORNECEDORES.
  * - demais perfis operacionais: apenas leitura de cadastros (consulta com filtro).
- * Itens de compra/comerciais ficam só com o administrador (catálogo estrutural).
  */
 export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
   administrador: [
@@ -147,10 +140,6 @@ export const MAPA_PERFIL_PERMISSOES: Record<string, Permissao[]> = {
     'CLIENTES_GERENCIAR',
     'FORNECEDORES_LER',
     'FORNECEDORES_GERENCIAR',
-    'ITENS_COMPRA_LER',
-    'ITENS_COMPRA_GERENCIAR',
-    'ITENS_COMERCIAIS_LER',
-    'ITENS_COMERCIAIS_GERENCIAR',
     'PRODUTOS_LER',
     'PRODUTOS_GERENCIAR',
     'REPRESENTANTES_LER',
@@ -423,10 +412,6 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   CLIENTES_GERENCIAR: 'Criar, editar, excluir e restaurar clientes',
   FORNECEDORES_LER: 'Consultar fornecedores',
   FORNECEDORES_GERENCIAR: 'Criar, editar, excluir e restaurar fornecedores',
-  ITENS_COMPRA_LER: 'Consultar itens de compra',
-  ITENS_COMPRA_GERENCIAR: 'Criar, editar, excluir e restaurar itens de compra',
-  ITENS_COMERCIAIS_LER: 'Consultar itens comerciais',
-  ITENS_COMERCIAIS_GERENCIAR: 'Criar, editar, excluir e restaurar itens comerciais',
   PRODUTOS_LER: 'Consultar produtos',
   PRODUTOS_GERENCIAR: 'Criar, editar, excluir e restaurar produtos',
   REPRESENTANTES_LER: 'Consultar representantes',

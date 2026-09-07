@@ -2,7 +2,6 @@ export interface ProdutoSaidaTransformacao {
   id: string;
   codigo: string;
   nome: string;
-  legadoItemComercialId: string | null;
 }
 
 export interface FaltaDesossaItem {
@@ -25,19 +24,19 @@ export function parseQuantidade(valor: string | number | null | undefined): numb
  */
 export function calcularFaltasDesossa(
   produtos: ProdutoSaidaTransformacao[],
-  demandaPorItemComercial: ReadonlyMap<string, number>,
-  estoquePorItemComercial: ReadonlyMap<string, number>,
+  demandaPorProduto: ReadonlyMap<string, number>,
+  estoquePorProduto: ReadonlyMap<string, number>,
   origemPorProdutoId: ReadonlyMap<string, string>,
 ): FaltaDesossaItem[] {
   const itens: FaltaDesossaItem[] = [];
 
   for (const produto of produtos) {
-    if (!produto.legadoItemComercialId) continue;
+    if (!produto.id) continue;
 
-    const demanda = demandaPorItemComercial.get(produto.legadoItemComercialId) ?? 0;
+    const demanda = demandaPorProduto.get(produto.id) ?? 0;
     if (demanda <= 0) continue;
 
-    const estoque = estoquePorItemComercial.get(produto.legadoItemComercialId) ?? 0;
+    const estoque = estoquePorProduto.get(produto.id) ?? 0;
     const faltante = Math.max(0, demanda - estoque);
 
     itens.push({

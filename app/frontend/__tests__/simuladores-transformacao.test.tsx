@@ -7,7 +7,7 @@ import { SimuladorDesossa } from '../src/app/(admin)/cadastros/regras-transforma
 it('simulador de desdobramento exibe linha quantidade x fator = total da API', async () => {
   const corpo = {
     quantidade: 10,
-    itens: [{ itemComercialId: 'ic1', descricao: 'TZ', fator: '2', total: 20 }],
+    itens: [{ produtoId: 'ic1', descricao: 'TZ', fator: '2', total: 20 }],
     somaFatores: 6,
     totalPartes: 60,
   };
@@ -16,7 +16,7 @@ it('simulador de desdobramento exibe linha quantidade x fator = total da API', a
     json: async () => corpo,
   }) as unknown as typeof fetch;
 
-  render(<SimuladorDesdobramento itemCompraId="compra-1" />);
+  render(<SimuladorDesdobramento produtoOrigemId="compra-1" />);
   fireEvent.click(screen.getByRole('button', { name: /Simular/i }));
 
   expect(await screen.findByText(`${corpo.quantidade} × ${corpo.itens[0]!.fator} =`)).toBeInTheDocument();
@@ -60,7 +60,7 @@ it('erro do backend vira alert e nao exibe numeros', async () => {
     json: async () => ({ message: 'Regra inválida' }),
   }) as unknown as typeof fetch;
 
-  render(<SimuladorDesdobramento itemCompraId="compra-1" />);
+  render(<SimuladorDesdobramento produtoOrigemId="compra-1" />);
   fireEvent.click(screen.getByRole('button', { name: /Simular/i }));
 
   expect(await screen.findByRole('alert')).toHaveTextContent('Regra inválida');
@@ -69,17 +69,17 @@ it('erro do backend vira alert e nao exibe numeros', async () => {
 
 const regraListada = {
   id: 'regra-1',
-  itemCompraId: 'compra-uuid',
-  itemComercialId: 'comercial-uuid',
+  produtoOrigemId: 'compra-uuid',
+  produtoDestinoId: 'comercial-uuid',
   fatorQuantidade: '2.000',
   status: 'ativo',
   vigenciaInicio: '2026-01-01',
   vigenciaFim: null,
   observacoes: null,
-  itemCompraCodigo: 'BOI',
-  itemCompraNome: 'Boi casado',
-  itemComercialCodigo: 'TZ',
-  itemComercialNome: 'Traseiro',
+  produtoOrigemCodigo: 'BOI',
+  produtoOrigemNome: 'Boi casado',
+  produtoDestinoCodigo: 'TZ',
+  produtoDestinoNome: 'Traseiro',
 };
 
 function mockRegrasFetch(overrides: { postOk?: boolean } = {}) {
@@ -94,11 +94,11 @@ function mockRegrasFetch(overrides: { postOk?: boolean } = {}) {
     if (u.includes('/regras-desdobramento')) {
       return { ok: true, json: async () => ({ data: [regraListada], total: 1, page: 1, pageSize: 100 }) };
     }
-    if (u.includes('/itens-compra')) {
-      return { ok: true, json: async () => ({ data: [{ id: 'compra-uuid', codigo: 'BOI', descricao: 'Boi casado' }] }) };
+    if (u.includes('/produtos') && u.includes('ativoCompra=true')) {
+      return { ok: true, json: async () => ({ data: [{ id: 'compra-uuid', codigo: 'BOI', nome: 'Boi casado' }] }) };
     }
-    if (u.includes('/itens-comerciais')) {
-      return { ok: true, json: async () => ({ data: [{ id: 'comercial-uuid', codigo: 'TZ', descricao: 'Traseiro' }] }) };
+    if (u.includes('/produtos') && u.includes('ativoVenda=true')) {
+      return { ok: true, json: async () => ({ data: [{ id: 'comercial-uuid', codigo: 'TZ', nome: 'Traseiro' }] }) };
     }
     return { ok: true, json: async () => ({}) };
   }) as unknown as typeof fetch;
@@ -113,9 +113,9 @@ it('lista regra com codigo e nome sem UUID e cria via dialog', async () => {
   expect(screen.queryByText('comercial-uuid')).not.toBeInTheDocument();
 
   await userEvent.click(screen.getByRole('button', { name: 'Nova regra' }));
-  await userEvent.click(screen.getByRole('combobox', { name: 'Item de compra' }));
+  await userEvent.click(screen.getByRole('combobox', { name: 'Produto origem (compra)' }));
   await userEvent.click(await screen.findByRole('option', { name: 'BOI — Boi casado' }));
-  await userEvent.click(screen.getByRole('combobox', { name: 'Item comercial' }));
+  await userEvent.click(screen.getByRole('combobox', { name: 'Produto destino (venda)' }));
   await userEvent.click(await screen.findByRole('option', { name: 'TZ — Traseiro' }));
   await userEvent.click(screen.getByRole('button', { name: 'Salvar regra' }));
 
@@ -126,11 +126,10 @@ it('lista regra com codigo e nome sem UUID e cria via dialog', async () => {
     );
     expect(post).toBeDefined();
     expect(JSON.parse(String((post?.[1] as RequestInit).body))).toMatchObject({
-      itemCompraId: 'compra-uuid',
-      itemComercialId: 'comercial-uuid',
+      produtoOrigemId: 'compra-uuid',
+      produtoDestinoId: 'comercial-uuid',
       fatorQuantidade: 1,
       status: 'ativo',
     });
   });
 });
-

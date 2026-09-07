@@ -50,7 +50,7 @@ beforeEach(() => {
 });
 
 describe('DestinarEstoqueService — destinarPeca (buscarItemPedidoCompativel)', () => {
-  const pecaEmSobra = { id: 'p1', statusPeca: 'em_sobra', itemComercialBaseId: 'ic1', recebimentoId: 'r1', deletedAt: null };
+  const pecaEmSobra = { id: 'p1', statusPeca: 'em_sobra', produtoBaseId: 'ic1', recebimentoId: 'r1', deletedAt: null };
 
   it('item de pedido não encontrado → 404', async () => {
     let call = 0;
@@ -66,7 +66,7 @@ describe('DestinarEstoqueService — destinarPeca (buscarItemPedidoCompativel)',
     let call = 0;
     const responses = [
       [pecaEmSobra],
-      [{ id: 'pvi1', pedidoVendaId: 'pv1', itemComercialId: 'ic1', statusPedido: 'cancelado', deletedAt: null }],
+      [{ id: 'pvi1', pedidoVendaId: 'pv1', produtoId: 'ic1', statusPedido: 'cancelado', deletedAt: null }],
     ];
     const tx = { select: jest.fn(() => makeChain(responses[call++] ?? [])) };
     const service = makeService(tx);
@@ -79,7 +79,7 @@ describe('DestinarEstoqueService — destinarPeca (buscarItemPedidoCompativel)',
     let call = 0;
     const responses = [
       [pecaEmSobra],
-      [{ id: 'pvi1', pedidoVendaId: 'pv1', itemComercialId: 'ic-outro', statusPedido: 'em_elaboracao_reserva_ativa', deletedAt: null }],
+      [{ id: 'pvi1', pedidoVendaId: 'pv1', produtoId: 'ic-outro', statusPedido: 'em_elaboracao_reserva_ativa', deletedAt: null }],
     ];
     const tx = { select: jest.fn(() => makeChain(responses[call++] ?? [])) };
     const service = makeService(tx);
@@ -92,7 +92,7 @@ describe('DestinarEstoqueService — destinarPeca (buscarItemPedidoCompativel)',
     let call = 0;
     const responses = [
       [pecaEmSobra],
-      [{ id: 'pvi1', pedidoVendaId: 'pv1', itemComercialId: 'ic1', statusPedido: 'em_elaboracao_reserva_ativa', deletedAt: null }],
+      [{ id: 'pvi1', pedidoVendaId: 'pv1', produtoId: 'ic1', statusPedido: 'em_elaboracao_reserva_ativa', deletedAt: null }],
       [{ dataOperacao: '2026-08-01' }], // dataOperacaoDaPeca
     ];
     consumirSaldoMock.mockResolvedValue(true);
@@ -119,7 +119,7 @@ describe('DestinarEstoqueService — destinarSubitem', () => {
   });
 
   it('subitem não em_sobra → 409 ITEM_NAO_DISPONIVEL', async () => {
-    const subitemAssociado = { id: 's1', statusSubitem: 'associado', itemComercialId: 'ic1', pecaOrigemId: 'p1', deletedAt: null };
+    const subitemAssociado = { id: 's1', statusSubitem: 'associado', produtoId: 'ic1', pecaOrigemId: 'p1', deletedAt: null };
     const tx = { select: jest.fn(() => makeChain([subitemAssociado])) };
     const service = makeService(tx);
     await expect(
@@ -128,11 +128,11 @@ describe('DestinarEstoqueService — destinarSubitem', () => {
   });
 
   it('consumirSaldo falha (item do pedido completo) → 409 sem atualizar subitem', async () => {
-    const subitemEmSobra = { id: 's1', statusSubitem: 'em_sobra', itemComercialId: 'ic1', pecaOrigemId: 'p1', deletedAt: null };
+    const subitemEmSobra = { id: 's1', statusSubitem: 'em_sobra', produtoId: 'ic1', pecaOrigemId: 'p1', deletedAt: null };
     let call = 0;
     const responses = [
       [subitemEmSobra],
-      [{ id: 'pvi1', pedidoVendaId: 'pv1', itemComercialId: 'ic1', statusPedido: 'em_elaboracao_reserva_ativa', deletedAt: null }],
+      [{ id: 'pvi1', pedidoVendaId: 'pv1', produtoId: 'ic1', statusPedido: 'em_elaboracao_reserva_ativa', deletedAt: null }],
     ];
     consumirSaldoMock.mockResolvedValue(false);
     const tx = { select: jest.fn(() => makeChain(responses[call++] ?? [])), update: jest.fn() };
@@ -145,11 +145,11 @@ describe('DestinarEstoqueService — destinarSubitem', () => {
   });
 
   it('sucesso → atualiza subitem e resolve dataOperacao via pecaOrigem', async () => {
-    const subitemEmSobra = { id: 's1', statusSubitem: 'em_sobra', itemComercialId: 'ic1', pecaOrigemId: 'p1', deletedAt: null };
+    const subitemEmSobra = { id: 's1', statusSubitem: 'em_sobra', produtoId: 'ic1', pecaOrigemId: 'p1', deletedAt: null };
     let call = 0;
     const responses = [
       [subitemEmSobra],
-      [{ id: 'pvi1', pedidoVendaId: 'pv1', itemComercialId: 'ic1', statusPedido: 'em_elaboracao_reserva_ativa', deletedAt: null }],
+      [{ id: 'pvi1', pedidoVendaId: 'pv1', produtoId: 'ic1', statusPedido: 'em_elaboracao_reserva_ativa', deletedAt: null }],
       [{ dataOperacao: '2026-08-01' }], // dataOperacaoDoSubitem
     ];
     consumirSaldoMock.mockResolvedValue(true);

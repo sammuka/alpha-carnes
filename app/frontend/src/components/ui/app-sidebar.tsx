@@ -39,8 +39,6 @@ import {
   AlertTriangle,
   CalendarRange,
   LogOut,
-  Boxes,
-  PackageSearch,
   type LucideIcon,
 } from 'lucide-react';
 import { AlphaLogo } from './alpha-logo';
@@ -108,8 +106,6 @@ const ICON_MAP: Record<string, LucideIcon> = {
   ScrollText,
   AlertTriangle,
   CalendarRange,
-  Boxes,
-  PackageSearch,
 };
 
 const LARGURA_PADRAO = 232;

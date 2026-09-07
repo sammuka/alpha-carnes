@@ -148,7 +148,7 @@ export class CargaService {
         .select({
           id: pedidosVendaItens.id,
           pedidoVendaId: pedidosVendaItens.pedidoVendaId,
-          itemComercialId: pedidosVendaItens.itemComercialId,
+          produtoId: pedidosVendaItens.produtoId,
           statusPedido: pedidosVenda.status,
           operacaoId: pedidosVenda.operacaoId,
           deletedAt: pedidosVenda.deletedAt,
@@ -169,13 +169,13 @@ export class CargaService {
       }
 
       // Compatibilidade por tipo_origem
-      let itemComercialOrigem: string;
+      let produtoOrigem: string;
       let origemCompraId: string;
       let origemRecebimentoId: string;
       if (item.tipoOrigem === 'peca') {
         const peca = await tx
           .select({
-            itemComercialBaseId: pecas.itemComercialBaseId,
+            produtoBaseId: pecas.produtoBaseId,
             compraProgramadaId: pecas.compraProgramadaId,
             recebimentoId: pecas.recebimentoId,
             operacaoId: comprasProgramadas.operacaoId,
@@ -184,7 +184,7 @@ export class CargaService {
           .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
           .where(eq(pecas.id, item.pecaId!))
           .then((r) => r[0]!);
-        itemComercialOrigem = peca.itemComercialBaseId;
+        produtoOrigem = peca.produtoBaseId;
         origemCompraId = peca.compraProgramadaId;
         origemRecebimentoId = peca.recebimentoId;
         if (peca.operacaoId !== itemDestino.operacaoId) {
@@ -193,7 +193,7 @@ export class CargaService {
       } else {
         const sub = await tx
           .select({
-            itemComercialId: subitens.itemComercialId,
+            produtoId: subitens.produtoId,
             compraProgramadaId: pecas.compraProgramadaId,
             recebimentoId: pecas.recebimentoId,
             operacaoId: comprasProgramadas.operacaoId,
@@ -203,7 +203,7 @@ export class CargaService {
           .innerJoin(comprasProgramadas, eq(comprasProgramadas.id, pecas.compraProgramadaId))
           .where(eq(subitens.id, item.subitemId!))
           .then((r) => r[0]!);
-        itemComercialOrigem = sub.itemComercialId;
+        produtoOrigem = sub.produtoId;
         origemCompraId = sub.compraProgramadaId;
         origemRecebimentoId = sub.recebimentoId;
         if (sub.operacaoId !== itemDestino.operacaoId) {
@@ -211,7 +211,7 @@ export class CargaService {
         }
       }
 
-      if (itemComercialOrigem !== itemDestino.itemComercialId) {
+      if (produtoOrigem !== itemDestino.produtoId) {
         throw new ConflictException('Item comercial incompatível com o pedido destino');
       }
 

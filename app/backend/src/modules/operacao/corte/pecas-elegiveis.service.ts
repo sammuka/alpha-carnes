@@ -5,7 +5,7 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
   fornecedores,
-  itensComerciais,
+  produtos,
   pecas,
   recebimentos,
   transformacoes,
@@ -32,8 +32,8 @@ export class PecasElegiveisService {
         etiquetaAtual: pecas.etiquetaAtual,
         statusPeca: pecas.statusPeca,
         pesoOriginal: pecas.pesoOriginal,
-        itemComercialId: pecas.itemComercialBaseId,
-        produtoCodigo: itensComerciais.codigo,
+        produtoId: pecas.produtoBaseId,
+        produtoCodigo: produtos.codigo,
         recebimentoId: pecas.recebimentoId,
         transformacaoId: transformacoes.id,
         lote: recebimentos.romaneio,
@@ -44,7 +44,7 @@ export class PecasElegiveisService {
       .from(pecas)
       .innerJoin(recebimentos, eq(recebimentos.id, pecas.recebimentoId))
       .innerJoin(fornecedores, eq(fornecedores.id, recebimentos.fornecedorId))
-      .leftJoin(itensComerciais, eq(itensComerciais.id, pecas.itemComercialBaseId))
+      .leftJoin(produtos, eq(produtos.id, pecas.produtoBaseId))
       .leftJoin(
         transformacoes,
         and(
@@ -79,7 +79,7 @@ export class PecasElegiveisService {
         etiquetaAtual: l.etiquetaAtual,
         statusPeca: l.statusPeca,
         pesoOriginal: l.pesoOriginal,
-        itemComercialId: l.itemComercialId,
+        produtoId: l.produtoId,
         produtoCodigo: l.produtoCodigo,
         recebimentoId: l.recebimentoId,
         transformacaoId: l.transformacaoId,

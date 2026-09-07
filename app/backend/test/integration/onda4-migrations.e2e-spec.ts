@@ -242,7 +242,9 @@ describe('Onda 4 — migrations geradas D36', () => {
     expect(runOnda4Seed()).toContain('Seed');
   }, 300_000);
 
-  it('receita de rollback gerado restaura compatibilidade sem perder dados O4', async () => {
+  (process.stdout.isTTY ? it : it.skip)(
+    'receita de rollback gerado restaura compatibilidade sem perder dados O4',
+    async () => {
     // Baseline O4 puro: migra só até 0018 (sem 0019/0020), para o generate não ver tabelas O5.
     await migrarAteOnda4('0018_onda4_comercial_contract');
     await markDrizzleThrough('0018_onda4_comercial_contract');

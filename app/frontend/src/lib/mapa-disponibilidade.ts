@@ -3,7 +3,7 @@
 export type EstadoMapa = 'F' | 'V' | 'R' | 'C' | 'D' | 'O' | 'E' | '!';
 
 export interface MapaProduto {
-  itemComercialId: string;
+  produtoId: string;
   codigo: string;
   descricao: string;
   provisorio: boolean;

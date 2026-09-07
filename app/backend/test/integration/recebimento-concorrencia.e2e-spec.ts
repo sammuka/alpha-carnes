@@ -49,7 +49,7 @@ describe('Recebimento — conclusão idempotente sob concorrência', () => {
     await request(app.getHttpServer())
       .post(`/operacao/recebimentos/${recId}/itens`)
       .set('Cookie', recebimentoCookies)
-      .send({ itemComercialId: base.itemComercialId, quantidadeRecebida: 10 });
+      .send({ produtoId: base.produtoId, quantidadeRecebida: 10 });
 
     const resultados = await Promise.all(
       Array.from({ length: 8 }, () => service.concluir(recId, usuarioId)),
@@ -99,7 +99,7 @@ describe('Recebimento — registrarNf concorrente (D6.10 FOR UPDATE)', () => {
 
     const corpoNf = (numero: string) => ({
       numero,
-      itens: [{ itemComercialId: base.itemComercialId, quantidadeDeclarada: 10 }],
+      itens: [{ produtoId: base.produtoId, quantidadeDeclarada: 10 }],
     });
 
     // Apenas UMA das duas chamadas confirma a substituição do cabeçalho órfão

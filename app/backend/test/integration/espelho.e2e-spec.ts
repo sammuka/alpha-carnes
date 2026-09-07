@@ -60,7 +60,7 @@ describe('espelho comercial — Onda 4 (D19/D20)', () => {
   async function montarCenario() {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(
-      app, adminCookies, { fornecedorId: base.fornecedorId, itemCompraId: base.itemCompraId },
+      app, adminCookies, { fornecedorId: base.fornecedorId, produtoCompraId: base.produtoCompraId },
       { dataOperacao, quantidade: 100 },
     );
 
@@ -81,10 +81,10 @@ describe('espelho comercial — Onda 4 (D19/D20)', () => {
     if (!clienteA || !clienteB) throw new Error('Falha ao semear clientes do espelho');
 
     await criarPedido(app, adminCookies, {
-      compraId, clienteId: clienteA.id, itemComercialId: base.itemComercialId, dataOperacao, quantidade: 20,
+      compraId, clienteId: clienteA.id, produtoId: base.produtoId, dataOperacao, quantidade: 20,
     });
     await criarPedido(app, adminCookies, {
-      compraId, clienteId: clienteB.id, itemComercialId: base.itemComercialId, dataOperacao, quantidade: 30,
+      compraId, clienteId: clienteB.id, produtoId: base.produtoId, dataOperacao, quantidade: 30,
     });
 
     return { clienteA, clienteB, rota1, rota2, rep1, rep2 };

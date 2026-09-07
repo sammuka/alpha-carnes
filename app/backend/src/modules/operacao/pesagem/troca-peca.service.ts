@@ -71,7 +71,7 @@ export class TrocaPecaService {
       if (inserida.statusPeca === 'associada') {
         throw new ConflictException('Peça de entrada já está associada a um pedido');
       }
-      if (inserida.itemComercialBaseId !== retirada.itemComercialBaseId) {
+      if (inserida.produtoBaseId !== retirada.produtoBaseId) {
         throw new ConflictException('Peça de entrada é de outro item comercial');
       }
       // P10 (§16.13, mestre `:261`) — as duas metades da mitigação, mutuamente exclusivas:
@@ -271,7 +271,7 @@ export class TrocaPecaService {
       .select({
         id: pedidosVendaItens.id,
         pedidoVendaId: pedidosVendaItens.pedidoVendaId,
-        itemComercialId: pedidosVendaItens.itemComercialId,
+        produtoId: pedidosVendaItens.produtoId,
         statusPedido: pedidosVenda.status,
         operacaoId: pedidosVenda.operacaoId,
         deletedAt: pedidosVenda.deletedAt,
@@ -287,7 +287,7 @@ export class TrocaPecaService {
 
     const inserida = await this.buscarAtiva(this.db, dto.pecaInseridaId);
     if (!inserida) throw new NotFoundException('Peça de entrada não encontrada');
-    if (inserida.itemComercialBaseId !== item.itemComercialId) {
+    if (inserida.produtoBaseId !== item.produtoId) {
       throw new ConflictException('Peça de entrada incompatível com o item do pedido');
     }
 
@@ -304,7 +304,7 @@ export class TrocaPecaService {
       codigoNovaEtiqueta,
       payloadEtiqueta: {
         pecaId: inserida.id,
-        itemComercialBaseId: inserida.itemComercialBaseId,
+        produtoBaseId: inserida.produtoBaseId,
         pesoOriginal: inserida.pesoOriginal,
         pedidoVendaId: item.pedidoVendaId,
         pedidoVendaItemId: item.id,

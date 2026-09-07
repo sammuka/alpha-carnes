@@ -1,8 +1,6 @@
 /**
  * Catálogo canônico das rotas do menu (protótipo Layout.tsx → ALL_NAV_GROUPS; 39
- * rotas originais + 2 acrescentadas pela AD-11 — docs/execucao/DECISOES.md).
- * É a fonte única de verdade para `perfis.menus_visiveis`: nenhum href fora desta
- * lista pode ser gravado (decisão 10 do plano da Onda 3).
+ * rotas — AD-15 revogou as 2 entradas da AD-11).
  */
 export const MENUS_CANONICOS = [
   '/comercial/clientes',
@@ -40,8 +38,6 @@ export const MENUS_CANONICOS = [
   '/cadastros/rotas',
   '/cadastros/regras-transformacao',
   '/cadastros/modelos-etiqueta',
-  '/cadastros/itens-compra',
-  '/cadastros/itens-comerciais',
   '/admin/usuarios',
   '/admin/perfis',
   '/admin/parametros',

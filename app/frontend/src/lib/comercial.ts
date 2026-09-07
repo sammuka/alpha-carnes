@@ -12,7 +12,7 @@ export interface DisponibilidadeCompra {
   id: string;
   operacaoId: string;
   compraProgramadaId: string;
-  itemComercialId: string;
+  produtoId: string;
   quantidadeTotalGerada: string;
   quantidadeReservada: string;
   quantidadeDisponivel: string;
@@ -26,7 +26,7 @@ export interface DisponibilidadeCompra {
 export interface DisponibilidadeAgregado {
   modo: 'agregado';
   operacaoId: string;
-  itemComercialId: string;
+  produtoId: string;
   quantidadeTotalGerada: string;
   quantidadeReservada: string;
   quantidadeDisponivel: string;
@@ -65,7 +65,7 @@ export interface CompraProgramada {
 export interface CompraProgramadaItem {
   id: string;
   compraProgramadaId: string;
-  itemCompraId: string;
+  produtoId: string;
   quantidadeComprada: string;
   observacoes: string | null;
 }
@@ -80,7 +80,7 @@ export interface ConfirmacaoCompraProgramada {
 }
 
 export interface ItemImpacto {
-  itemComercialId: string;
+  produtoId: string;
   codigo: string;
   descricao: string;
   quantidadeGeradaAtual: string;
@@ -124,7 +124,7 @@ export interface CriarCompraProgramadaDto {
   referenciaExterna?: string;
   previsaoEntrega?: string;
   observacoes?: string;
-  itens: Array<{ itemCompraId: string; quantidadeComprada: number; observacoes?: string }>;
+  itens: Array<{ produtoId: string; quantidadeComprada: number; observacoes?: string }>;
 }
 
 export interface PedidoVenda {
@@ -148,7 +148,7 @@ export interface PedidoVenda {
 export interface PedidoVendaItem {
   id: string;
   pedidoVendaId: string;
-  itemComercialId: string;
+  produtoId: string;
   quantidadePedida: string;
   quantidadeReservada: string;
   quantidadePendente: string;
@@ -173,7 +173,7 @@ export interface PedidoVendaDetalhe extends PedidoVenda {
   } | null;
   itens: Array<
     PedidoVendaItem & {
-      itemComercial?: { id: string; codigo: string; nome?: string; descricao?: string };
+      produto?: { id: string; codigo: string; nome?: string; descricao?: string };
       reservas?: Array<{
         id: string;
         status: string;
@@ -195,7 +195,7 @@ export interface CriarPedidoDto {
   prioridade?: number;
   observacoesGerais?: string;
   salvarComoRascunho?: boolean;
-  itens: Array<{ itemComercialId: string; quantidadePedida: number; observacoes?: string }>;
+  itens: Array<{ produtoId: string; quantidadePedida: number; observacoes?: string }>;
 }
 
 export interface ResultadoPedido {
@@ -206,7 +206,7 @@ export interface ResultadoPedido {
 // ── Overbooking (onda1 / AD-05) ─────────────────────────────────────────────
 
 export interface OverbookingChallengeItem {
-  itemComercialId: string;
+  produtoId: string;
   disponivelAntes: string;
   quantidadeSolicitada: string;
   overbookingGerado: string;
@@ -232,7 +232,7 @@ export interface PendenciaOverbooking {
   id: string;
   pedidoVendaId: string;
   pedidoVendaItemId: string;
-  itemComercialId: string;
+  produtoId: string;
   clienteId: string;
   vendedorUsuarioId: string;
   operacaoId: string;
@@ -258,7 +258,7 @@ export interface PendenciaOverbookingDetalhe extends PendenciaOverbooking {
 }
 
 export interface IncluirItemPedidoDto {
-  itemComercialId: string;
+  produtoId: string;
   quantidade: number;
   observacoes?: string;
 }
@@ -276,7 +276,7 @@ export interface AdendoPedido {
   id: string;
   pedidoVendaId: string;
   pedidoVendaItemId: string;
-  itemComercialId?: string;
+  produtoId?: string;
   operacaoId?: string;
   quantidadeAnterior: string;
   quantidadeAdicionada: string;
@@ -294,7 +294,7 @@ export interface PedidoAbertoExistente {
   message: string;
   pedidoId: string;
   status: string;
-  itemComercialId: string;
+  produtoId: string;
   quantidadeAtual: string;
 }
 

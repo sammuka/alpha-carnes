@@ -1,7 +1,7 @@
 import { RegrasDesdobramentoService } from '../../src/modules/cadastros/regras-desdobramento/regras-desdobramento.service';
 
 function criarServiceCom(
-  regras: Array<{ itemComercialId: string; descricao: string; fator: string }>,
+  regras: Array<{ produtoId: string; descricao: string; fator: string }>,
 ) {
   const db = {
     select: jest.fn(() => ({
@@ -20,9 +20,9 @@ function criarServiceCom(
 describe('simulador-desdobramento', () => {
   it('simulador de desdobramento multiplica fatores e soma partes', async () => {
     const service = criarServiceCom([
-      { itemComercialId: 'c1', descricao: 'Traseiro', fator: '2' },
-      { itemComercialId: 'c2', descricao: 'Dianteiro', fator: '2' },
-      { itemComercialId: 'c3', descricao: 'Ponta de agulha', fator: '2' },
+      { produtoId: 'c1', descricao: 'Traseiro', fator: '2' },
+      { produtoId: 'c2', descricao: 'Dianteiro', fator: '2' },
+      { produtoId: 'c3', descricao: 'Ponta de agulha', fator: '2' },
     ]);
     const r = await service.simular('compra-1', 100);
     expect(r.itens.map((i) => i.total)).toEqual([200, 200, 200]);

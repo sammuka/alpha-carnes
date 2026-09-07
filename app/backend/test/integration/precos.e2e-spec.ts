@@ -73,6 +73,7 @@ describe('precos.tabelas — Onda 4 (D13/D14/D15/D16)', () => {
   beforeAll(async () => {
     app = await createTestApp();
     ({ db } = app.get(DRIZZLE));
+    await cleanupDb(app);
     await seedCatalogoMvp(db);
     const linhas = await db.select({ id: produtos.id, codigo: produtos.codigo }).from(produtos);
     produtoPorCodigo = new Map(linhas.map((l) => [l.codigo, l.id]));

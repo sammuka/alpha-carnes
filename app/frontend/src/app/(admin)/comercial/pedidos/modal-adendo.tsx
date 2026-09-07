@@ -19,7 +19,7 @@ interface ModalAdendoProps {
   pedido: {
     pedidoId: string;
     status: string;
-    itemComercialId: string;
+    produtoId: string;
     quantidadeAtual: string;
   };
   quantidadeAdicionar: number;

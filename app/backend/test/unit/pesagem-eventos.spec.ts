@@ -60,7 +60,7 @@ describe('PesagemService — emissão pós-commit', () => {
     });
 
     await service.registrarPesagem(
-      { recebimentoId: 'r1', itemComercialBaseId: 'i1', modoCaptura: 'automatico' } as never,
+      { recebimentoId: 'r1', produtoBaseId: 'i1', modoCaptura: 'automatico' } as never,
       user,
     );
 
@@ -78,7 +78,7 @@ describe('PesagemService — emissão pós-commit', () => {
     });
 
     await expect(
-      service.registrarPesagem({ recebimentoId: 'r1', itemComercialBaseId: 'i1', modoCaptura: 'automatico' } as never, user),
+      service.registrarPesagem({ recebimentoId: 'r1', produtoBaseId: 'i1', modoCaptura: 'automatico' } as never, user),
     ).rejects.toThrow('falha na tx');
     expect(emitSpy).not.toHaveBeenCalledWith(EVENTOS.PECA_PESADA, expect.anything());
   });
@@ -91,7 +91,7 @@ describe('PesagemService — emissão pós-commit', () => {
     });
 
     await expect(
-      service.registrarPesagem({ recebimentoId: 'r1', itemComercialBaseId: 'i1', modoCaptura: 'automatico' } as never, user),
+      service.registrarPesagem({ recebimentoId: 'r1', produtoBaseId: 'i1', modoCaptura: 'automatico' } as never, user),
     ).rejects.toThrow(/indispon|instável/i);
     expect(emitSpy).toHaveBeenCalledWith(EVENTOS.DISPOSITIVO_STATUS_ALTERADO, expect.objectContaining({ status: 'indisponivel' }));
     expect(emitSpy).not.toHaveBeenCalledWith(EVENTOS.PECA_PESADA, expect.anything());

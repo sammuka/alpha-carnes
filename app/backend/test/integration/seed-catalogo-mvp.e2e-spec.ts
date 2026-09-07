@@ -1,12 +1,12 @@
 import { INestApplication } from '@nestjs/common';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../src/database/schema';
-import { itensComerciais, produtos } from '../../src/database/schema';
+import { produtos } from '../../src/database/schema';
 import { DRIZZLE } from '../../src/database/database.module';
 import { seedCatalogoMvp } from '../../src/database/seed-catalogo-mvp';
 import { createTestApp, cleanupDb } from '../helpers/test-app';
 
-describe('Onda 4 — seed do catálogo MVP (D5/D6, Provisório P11)', () => {
+describe('Onda 13 — seed do catálogo MVP (AD-15, Provisório P11)', () => {
   let app: INestApplication;
   let db: NodePgDatabase<typeof schema>;
 
@@ -23,28 +23,41 @@ describe('Onda 4 — seed do catálogo MVP (D5/D6, Provisório P11)', () => {
     await cleanupDb(app);
   });
 
-  it('seed cria onze pares item comercial e produto vinculados um para um', async () => {
+  it('seed cria 12 produtos com flags BOI/BPORCO corretas', async () => {
     await seedCatalogoMvp(db);
-    const itens = await db.select().from(itensComerciais);
     const prods = await db.select().from(produtos);
-    expect(itens).toHaveLength(11);
-    expect(prods).toHaveLength(11);
-    expect(prods.every((p) => p.legadoItemComercialId !== null)).toBe(true);
-    expect(new Set(prods.map((p) => p.legadoItemComercialId)).size).toBe(11);
+    expect(prods).toHaveLength(12);
+    expect(new Set(prods.map((p) => p.codigo)).size).toBe(12);
+
+    const boi = prods.find((p) => p.codigo === 'BOI');
+    expect(boi).toEqual(expect.objectContaining({
+      tipoOperacional: 'compra_base',
+      ativoVenda: false,
+      ativoCompra: true,
+    }));
+
+    const bporco = prods.find((p) => p.codigo === 'BPORCO');
+    expect(bporco).toEqual(expect.objectContaining({
+      ativoVenda: true,
+      ativoCompra: true,
+    }));
+
     expect(prods.filter((p) => p.unidadePreco === 'unidade').map((p) => p.codigo).sort())
       .toEqual(['CXFIG', 'CXMIU', 'CXRABO']);
     expect(prods.every((p) => p.unidadePedido === 'unidade')).toBe(true);
     expect(prods.find((p) => p.codigo === 'TZ')).toEqual(expect.objectContaining({
       origemTransformacao: true,
       passaDesossa: true,
+      ativoVenda: true,
+      ativoCompra: true,
     }));
     expect(prods.filter((p) => p.saidaTransformacao).map((p) => p.codigo).sort())
       .toEqual(['CB', 'CBA', 'FC', 'JAC']);
   });
 
-  it('seed e idempotente', async () => {
+  it('seed é idempotente', async () => {
     await seedCatalogoMvp(db);
     await seedCatalogoMvp(db);
-    expect(await db.select().from(produtos)).toHaveLength(11);
+    expect(await db.select().from(produtos)).toHaveLength(12);
   });
 });

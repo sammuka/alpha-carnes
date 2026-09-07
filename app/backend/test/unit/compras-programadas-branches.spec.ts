@@ -185,7 +185,7 @@ describe('ComprasProgramadasService — branches', () => {
 
   it('atualizarItem → usa quantidadeComprada informada no dto', async () => {
     const compra = { id: 'cp1', status: 'rascunho', deletedAt: null, operacaoId: 'op1' };
-    const itemAnterior = { id: 'it1', itemCompraId: 'ic1', quantidadeComprada: '10.000', observacoes: null, deletedAt: null };
+    const itemAnterior = { id: 'it1', produtoId: 'ic1', quantidadeComprada: '10.000', observacoes: null, deletedAt: null };
     const atualizado = { id: 'it1', quantidadeComprada: '25.000' };
     let call = 0;
     const tx = {

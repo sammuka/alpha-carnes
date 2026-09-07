@@ -6,13 +6,13 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
   conclusoesConferencia,
-  itensComerciais,
+  produtos,
   ocorrenciasFornecedor,
   usuarios,
 } from '../../../database/schema';
 
 interface QuadroItem {
-  itemComercialId: string;
+  produtoId: string;
   qtdPedido: string;
   qtdNf: string;
   qtdApurada: string;
@@ -59,9 +59,9 @@ export class ComparativoService {
 
     const itens = conclusao.quadroJson as QuadroItem[];
     const catalogo = await this.db.select({
-      id: itensComerciais.id, codigo: itensComerciais.codigo, descricao: itensComerciais.descricao,
-    }).from(itensComerciais)
-      .where(inArray(itensComerciais.id, itens.map((i) => i.itemComercialId)));
+      id: produtos.id, codigo: produtos.codigo, descricao: produtos.nome,
+    }).from(produtos)
+      .where(inArray(produtos.id, itens.map((i) => i.produtoId)));
 
     return {
       conclusaoId: conclusao.id,
@@ -70,9 +70,9 @@ export class ComparativoService {
       concluidaEm: conclusao.concluidaEm.toISOString(),
       concluidaPorNome: conclusao.concluidaPorNome ?? null,
       itens: itens.map((i) => {
-        const produto = catalogo.find((c) => c.id === i.itemComercialId) ?? null;
+        const produto = catalogo.find((c) => c.id === i.produtoId) ?? null;
         return {
-          itemComercialId: i.itemComercialId,
+          produtoId: i.produtoId,
           codigo: produto?.codigo ?? null,
           descricao: produto?.descricao ?? null,
           qtdPedido: i.qtdPedido,

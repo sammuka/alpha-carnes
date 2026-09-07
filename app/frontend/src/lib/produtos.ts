@@ -28,8 +28,6 @@ export interface Produto {
   status: StatusCadastro;
   observacoesOperacionais: string | null;
   atributosJson: Record<string, unknown>;
-  legadoItemComercialId: string | null;
-  legadoItemCompraId: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;

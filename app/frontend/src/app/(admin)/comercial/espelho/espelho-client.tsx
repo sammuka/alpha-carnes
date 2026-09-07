@@ -306,7 +306,7 @@ export function EspelhoClient({ dataInicial = hojeISO() }: EspelhoClientProps) {
                       </TableCell>
                     </TableRow>
                     {grupo.itens.map((item) => (
-                      <TableRow key={`${item.pedidoVendaId}-${item.itemComercialId}`}>
+                      <TableRow key={`${item.pedidoVendaId}-${item.produtoId}`}>
                         <TableCell className="text-[13px] font-semibold text-foreground">{item.cliente}</TableCell>
                         <TableCell>{item.produto}</TableCell>
                         <TableCellNum>{item.quantidadePedida} {item.unidade}</TableCellNum>

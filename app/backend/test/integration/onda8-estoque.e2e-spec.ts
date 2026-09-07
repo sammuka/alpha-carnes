@@ -102,7 +102,7 @@ describe('Onda 8 — Estoque', () => {
     fakes(app).balanca.definirPeso('12.000');
     const pecaId = await pesarPeca(app, cookiesReceb, {
       recebimentoId: c.recebimentoId,
-      itemComercialBaseId: c.itemComercialId,
+      produtoBaseId: c.produtoId,
     });
     await destinarPecaSobra(app, cookiesReceb, pecaId);
 
@@ -130,10 +130,10 @@ describe('Onda 8 — Estoque', () => {
     );
     fakes(app).balanca.definirStatus('disponivel');
     fakes(app).balanca.definirPeso('10.000');
-    const peca1 = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const peca1 = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await destinarPecaSobra(app, cookiesReceb, peca1);
     fakes(app).balanca.definirPeso('11.000');
-    const peca2 = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const peca2 = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await destinarPecaSobra(app, cookiesReceb, peca2);
 
     await definirFifoEstoque(db, true);
@@ -165,11 +165,11 @@ describe('Onda 8 — Estoque', () => {
     );
     fakes(app).balanca.definirStatus('disponivel');
     fakes(app).balanca.definirPeso('12.000');
-    const pecaId = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await destinarPecaSobra(app, cookiesReceb, pecaId);
 
     const pedido = await criarPedido(app, cookiesComercial, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 3,
     });
 
@@ -201,11 +201,11 @@ describe('Onda 8 — Estoque', () => {
     );
     fakes(app).balanca.definirStatus('disponivel');
     fakes(app).balanca.definirPeso('12.000');
-    const pecaId = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     // peça permanece 'pesada' — nunca foi destinada à sobra: statusPeca !== 'em_sobra'
 
     const pedido = await criarPedido(app, cookiesComercial, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 3,
     });
 
@@ -235,13 +235,13 @@ describe('Onda 8 — Estoque', () => {
       { dataOperacao: '2026-08-01', quantidade: 5 },
     );
     const pedido = await criarPedido(app, cookiesComercial, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 1,
     });
 
     fakes(app).balanca.definirStatus('disponivel');
     fakes(app).balanca.definirPeso('12.000');
-    const pecaCompleta = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaCompleta = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await destinarPecaSobra(app, cookiesReceb, pecaCompleta);
     const completar = await request(app.getHttpServer())
       .post('/estoque/destinar')
@@ -249,7 +249,7 @@ describe('Onda 8 — Estoque', () => {
       .send({ tipo: 'peca', id: pecaCompleta, pedidoVendaItemId: pedido.pedidoItemId });
     expect(completar.status).toBe(201); // consome a 1 unidade pedida
 
-    const peca2 = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const peca2 = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await destinarPecaSobra(app, cookiesReceb, peca2);
     const res = await request(app.getHttpServer())
       .post('/estoque/destinar')
@@ -279,11 +279,11 @@ describe('Onda 8 — Estoque', () => {
     );
     fakes(app).balanca.definirStatus('disponivel');
     fakes(app).balanca.definirPeso('12.000');
-    const pecaId = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await destinarPecaSobra(app, cookiesReceb, pecaId);
 
     const pedidoA = await criarPedido(app, cookiesComercial, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: c.itemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: c.produtoId,
       dataOperacao: c.dataOperacao, quantidade: 2,
     });
 
@@ -338,7 +338,7 @@ describe('Onda 8 — Estoque', () => {
     const fornecedorId = await inserirFornecedor(db);
 
     const [produtoCx] = await db.select().from(schema.produtos).where(and(eq(schema.produtos.codigo, 'CXMIU'), isNull(schema.produtos.deletedAt)));
-    if (!produtoCx?.legadoItemComercialId) throw new Error('fixture: CXMIU sem legadoItemComercialId');
+    if (!produtoCx?.id) throw new Error('fixture: CXMIU ausente');
 
     const base = await seedComercialBase(app, { fator: 1 });
     const c = await montarCenarioPesagem(
@@ -346,7 +346,7 @@ describe('Onda 8 — Estoque', () => {
       { dataOperacao: '2026-08-01', quantidade: 5 },
     );
     const pedido = await criarPedido(app, cookiesComercial, {
-      compraId: c.compraId, clienteId: c.clienteId, itemComercialId: produtoCx.legadoItemComercialId,
+      compraId: c.compraId, clienteId: c.clienteId, produtoId: produtoCx.id,
       dataOperacao: c.dataOperacao, quantidade: 3,
     });
 
@@ -503,7 +503,7 @@ describe('Onda 8 — Estoque', () => {
     );
     fakes(app).balanca.definirStatus('disponivel');
     fakes(app).balanca.definirPeso('12.000');
-    const pecaMinus1 = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaMinus1 = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await destinarPecaSobra(app, cookiesReceb, pecaMinus1);
 
     const okMinus1 = await request(app.getHttpServer())
@@ -515,7 +515,7 @@ describe('Onda 8 — Estoque', () => {
     const [pecaDb] = await db.select().from(schema.pecas).where(eq(schema.pecas.id, pecaMinus1));
     expect(pecaDb?.deletedAt).not.toBeNull();
 
-    const pecaPlus1 = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaPlus1 = await pesarPeca(app, cookiesReceb, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     await destinarPecaSobra(app, cookiesReceb, pecaPlus1);
     const falhaPlus1 = await request(app.getHttpServer())
       .post('/estoque/ajustes')

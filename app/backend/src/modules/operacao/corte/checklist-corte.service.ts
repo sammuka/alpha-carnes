@@ -88,7 +88,7 @@ export class ChecklistCorteService {
           produtoCodigo: produtos.codigo,
           produtoNome: produtos.nome,
           esperado: regrasTransformacaoSaidas.quantidadeFixa,
-          legado: produtos.legadoItemComercialId,
+          legado: produtos.id,
         })
         .from(regrasTransformacaoSaidas)
         .innerJoin(produtos, eq(produtos.id, regrasTransformacaoSaidas.produtoId))
@@ -96,14 +96,14 @@ export class ChecklistCorteService {
 
       const ativos = await tx
         .select({
-          itemComercialId: subitens.itemComercialId,
+          produtoId: subitens.produtoId,
         })
         .from(subitens)
         .where(and(eq(subitens.transformacaoId, transformacaoId), isNull(subitens.deletedAt)));
 
       const contagem = new Map<string, number>();
       for (const s of ativos) {
-        contagem.set(s.itemComercialId, (contagem.get(s.itemComercialId) ?? 0) + 1);
+        contagem.set(s.produtoId, (contagem.get(s.produtoId) ?? 0) + 1);
       }
 
       for (const s of saidas) {

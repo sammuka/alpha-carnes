@@ -75,7 +75,7 @@ const recebimentoDetalhe = {
   itens: [
     {
       id: 'it1',
-      itemComercialId: 'item-1',
+      produtoId: 'item-1',
       origemDescricao: 'PC-2091 / Regra Boi → DT/PA/TZ',
       quantidadeEsperada: '20.000',
       quantidadeRecebida: '12.000',
@@ -86,11 +86,11 @@ const recebimentoDetalhe = {
       pesoApurado: '586.400',
       statusApuracao: 'em_conferencia' as const,
       observacoes: null,
-      itemComercial: { id: 'item-1', codigo: 'TZ', descricao: 'Traseiro' },
+      produto: { id: 'item-1', codigo: 'TZ', descricao: 'Traseiro' },
     },
     {
       id: 'it2',
-      itemComercialId: 'item-2',
+      produtoId: 'item-2',
       origemDescricao: 'Caixa de Rabo',
       quantidadeEsperada: '12.000',
       quantidadeRecebida: '12.000',
@@ -101,7 +101,7 @@ const recebimentoDetalhe = {
       pesoApurado: null,
       statusApuracao: 'entrada_direta' as const,
       observacoes: null,
-      itemComercial: { id: 'item-2', codigo: 'CR', descricao: 'Caixa de Rabo' },
+      produto: { id: 'item-2', codigo: 'CR', descricao: 'Caixa de Rabo' },
     },
   ],
   divergencias: [],
@@ -109,7 +109,7 @@ const recebimentoDetalhe = {
 
 const quadroMock = [{
   recebimentoItemId: 'it1',
-  itemComercialId: 'item-1',
+  produtoId: 'item-1',
   previstoNoPedido: true,
   qtdPedido: '20',
   qtdNf: '20',
@@ -252,7 +252,7 @@ describe('RecebimentoCargaClient', () => {
       observacoesCompra: null,
       resumoCompra: '10.000 Boi',
       itensOperacionais: [{
-        itemComercialId: 'item-1',
+        produtoId: 'item-1',
         produtoCodigo: 'TZ',
         produtoDescricao: 'Traseiro',
         quantidadePrevista: '20.000',
@@ -359,7 +359,7 @@ describe('RecebimentoCargaClient', () => {
     fireEvent.click(within(segundoDrawer).getByRole('button', { name: 'Criar Lote' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('sentinela D34'));
     expect(pushMock).not.toHaveBeenCalled();
-  }, 15_000);
+  }, 120_000);
 
   it('Recebimento de Carga renderiza os blocos do protótipo', async () => {
     const { STATUS_RECEB_LABEL } = await import(

@@ -36,10 +36,14 @@ describe('conferencia-tripla', () => {
     const { db } = app.get(DRIZZLE);
 
     // Caixaria (sem balança)
-    const [caixa] = await db.insert(schema.itensComerciais).values({
+    const [caixa] = await db.insert(schema.produtos).values({
       codigo: `CX-${Date.now()}`,
-      descricao: 'Caixa de Rabo',
-      unidadeComercial: 'kg',
+      nome: 'Caixa de Rabo',
+      unidadePedido: 'kg',
+      unidadePreco: 'kg',
+      ativoCompra: true,
+      ativoVenda: true,
+      passaBalanca: false,
     }).returning();
 
     const criar = await request(app.getHttpServer())
@@ -48,7 +52,7 @@ describe('conferencia-tripla', () => {
       .send({
         dataOperacao: data,
         fornecedorId: base.fornecedorId,
-        itens: [{ itemCompraId: base.itemCompraId, quantidadeComprada: 5 }],
+        itens: [{ produtoId: base.produtoCompraId, quantidadeComprada: 5 }],
       })
       .expect(201);
     await request(app.getHttpServer())
@@ -71,7 +75,7 @@ describe('conferencia-tripla', () => {
     // Inclui caixaria no pedido ao fornecedor
     await db.insert(schema.pedidosFornecedorItens).values({
       pedidoFornecedorId: pedido.body.id,
-      itemComercialId: caixa!.id,
+      produtoId: caixa!.id,
       quantidadePrevista: '10.000',
     });
 
@@ -82,35 +86,15 @@ describe('conferencia-tripla', () => {
       .expect(201);
     const recebimentoId = iniciado.body.recebimento.id as string;
 
-    // A fixture injeta a caixaria direto no PF, sem metadado de compra:
-    // o início materializa a linha conservadoramente como item de balança.
+    // Caixaria sem balança: materialização usa passaBalanca do produto (entrada direta).
     const [caixaMaterializada] = await db.select()
       .from(schema.recebimentosItens)
       .where(and(
         eq(schema.recebimentosItens.recebimentoId, recebimentoId),
-        eq(schema.recebimentosItens.itemComercialId, caixa!.id),
+        eq(schema.recebimentosItens.produtoId, caixa!.id),
       ))
       .limit(1);
     expect(caixaMaterializada).toMatchObject({
-      quantidadeEsperada: '10.000',
-      quantidadeRecebida: '0.000',
-      requerBalanca: true,
-      statusApuracao: 'aguardando',
-    });
-
-    // Adapta a linha existente ao cenário sintético de caixaria direta.
-    await db.update(schema.recebimentosItens)
-      .set({
-        quantidadeRecebida: '10.000',
-        requerBalanca: false,
-        statusApuracao: 'entrada_direta',
-      })
-      .where(eq(schema.recebimentosItens.id, caixaMaterializada!.id));
-    const [caixaRecebida] = await db.select()
-      .from(schema.recebimentosItens)
-      .where(eq(schema.recebimentosItens.id, caixaMaterializada!.id))
-      .limit(1);
-    expect(caixaRecebida).toMatchObject({
       quantidadeEsperada: '10.000',
       quantidadeRecebida: '10.000',
       requerBalanca: false,
@@ -120,7 +104,7 @@ describe('conferencia-tripla', () => {
     // Garante item pesável com requerBalanca
     await db.update(schema.recebimentosItens)
       .set({ requerBalanca: true })
-      .where(eq(schema.recebimentosItens.itemComercialId, base.itemComercialId));
+      .where(eq(schema.recebimentosItens.produtoId, base.produtoId));
 
     return {
       base,
@@ -152,8 +136,8 @@ describe('conferencia-tripla', () => {
         numero: 'NF-CONF-1',
         recebimentoId,
         itens: [
-          { itemComercialId: base.itemComercialId, quantidadeDeclarada: 2, pesoDeclarado: 20 },
-          { itemComercialId: caixaId, quantidadeDeclarada: 10 },
+          { produtoId: base.produtoId, quantidadeDeclarada: 2, pesoDeclarado: 20 },
+          { produtoId: caixaId, quantidadeDeclarada: 10 },
         ],
       })
       .expect(201);
@@ -163,14 +147,14 @@ describe('conferencia-tripla', () => {
       {
         compraProgramadaId: compraId,
         recebimentoId,
-        itemComercialBaseId: base.itemComercialId,
+        produtoBaseId: base.produtoId,
         pesoOriginal: '10.000',
         modoCapturaPeso: 'manual_assistido',
       },
       {
         compraProgramadaId: compraId,
         recebimentoId,
-        itemComercialBaseId: base.itemComercialId,
+        produtoBaseId: base.produtoId,
         pesoOriginal: '10.000',
         modoCapturaPeso: 'manual_assistido',
       },
@@ -180,8 +164,8 @@ describe('conferencia-tripla', () => {
       .get(`/operacao/recebimentos/${recebimentoId}/conferencia`)
       .set('Cookie', recebimentoCookies)
       .expect(200);
-    const tz = quadro.body.find((q: { itemComercialId: string }) => q.itemComercialId === base.itemComercialId);
-    const cx = quadro.body.find((q: { itemComercialId: string }) => q.itemComercialId === caixaId);
+    const tz = quadro.body.find((q: { produtoId: string }) => q.produtoId === base.produtoId);
+    const cx = quadro.body.find((q: { produtoId: string }) => q.produtoId === caixaId);
     expect(tz.situacao).toBe('conforme');
     expect(Number(tz.qtdNf)).toBe(2);
     expect(Number(tz.qtdApurada)).toBe(2);
@@ -194,7 +178,7 @@ describe('conferencia-tripla', () => {
     await db.insert(schema.pecas).values({
       compraProgramadaId: compraId,
       recebimentoId,
-      itemComercialBaseId: base.itemComercialId,
+      produtoBaseId: base.produtoId,
       pesoOriginal: '10.000',
       modoCapturaPeso: 'manual_assistido',
     });
@@ -202,20 +186,24 @@ describe('conferencia-tripla', () => {
       .get(`/operacao/recebimentos/${recebimentoId}/conferencia`)
       .set('Cookie', recebimentoCookies)
       .expect(200);
-    const tzExcesso = quadro.body.find((q: { itemComercialId: string }) => q.itemComercialId === base.itemComercialId);
+    const tzExcesso = quadro.body.find((q: { produtoId: string }) => q.produtoId === base.produtoId);
     expect(tzExcesso.situacao).toBe('divergente');
     expect(Number(tzExcesso.qtdApurada)).toBe(3);
 
     // item só na pesagem
-    const [extra] = await db.insert(schema.itensComerciais).values({
+    const [extra] = await db.insert(schema.produtos).values({
       codigo: `EXT-${Date.now()}`,
-      descricao: 'Não previsto',
-      unidadeComercial: 'kg',
+      nome: 'Não previsto',
+      unidadePedido: 'kg',
+      unidadePreco: 'kg',
+      passaBalanca: true,
+      ativoCompra: true,
+      ativoVenda: true,
     }).returning();
     await db.insert(schema.pecas).values({
       compraProgramadaId: compraId,
       recebimentoId,
-      itemComercialBaseId: extra!.id,
+      produtoBaseId: extra!.id,
       pesoOriginal: '5.000',
       modoCapturaPeso: 'manual_assistido',
     });
@@ -223,7 +211,7 @@ describe('conferencia-tripla', () => {
       .get(`/operacao/recebimentos/${recebimentoId}/conferencia`)
       .set('Cookie', recebimentoCookies)
       .expect(200);
-    const naoPrev = quadro.body.find((q: { itemComercialId: string }) => q.itemComercialId === extra!.id);
+    const naoPrev = quadro.body.find((q: { produtoId: string }) => q.produtoId === extra!.id);
     expect(naoPrev).toMatchObject({
       previstoNoPedido: false,
       situacao: 'divergente',
@@ -242,7 +230,7 @@ describe('conferencia-tripla', () => {
         numero: 'NF-CONF-2',
         recebimentoId,
         itens: [
-          { itemComercialId: base.itemComercialId, quantidadeDeclarada: 1, pesoDeclarado: 10 },
+          { produtoId: base.produtoId, quantidadeDeclarada: 1, pesoDeclarado: 10 },
         ],
       })
       .expect(201);

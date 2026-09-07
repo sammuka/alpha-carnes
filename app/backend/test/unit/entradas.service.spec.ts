@@ -1,9 +1,7 @@
 /**
  * Testes de branch (mocks, sem DB) para EntradasEstoqueService: listar, compativeis
- * (entrada/produto ausentes, produto sem legadoItemComercialId) e compativeisPorProduto
- * (filtros de pedido compatível + cálculo de pendência). `criar` já é exercitado
- * ponta a ponta pelos DoD 8.7/8.8 do e2e; aqui cobrimos os métodos de leitura que o
- * e2e não chama.
+ * (entrada/produto ausentes) e compativeisPorProduto (filtros de pedido compatível +
+ * cálculo de pendência). `criar` já é exercitado ponta a ponta pelos DoD 8.7/8.8 do e2e.
  */
 import { NotFoundException } from '@nestjs/common';
 import { EntradasEstoqueService } from '../../src/modules/operacao/estoque/entradas.service';
@@ -44,8 +42,9 @@ describe('EntradasEstoqueService — listar/compativeis (branches de leitura)', 
   it('compativeis → delega para compativeisPorProduto usando o produtoId da entrada', async () => {
     let selectCall = 0;
     const responses = [
-      [{ produtoId: 'prod1' }], // entrada
-      [{ legadoItemComercialId: null }], // produto sem legado → []
+      [{ produtoId: 'prod1' }],
+      [{ id: 'prod1' }],
+      [],
     ];
     const db = { select: jest.fn(() => makeChain(responses[selectCall++] ?? [])) };
     const service = new EntradasEstoqueService({ db } as never, { registrar: jest.fn() } as never, { emit: jest.fn() } as never);
@@ -61,8 +60,8 @@ describe('EntradasEstoqueService — listar/compativeis (branches de leitura)', 
     expect(resultado).toEqual([]);
   });
 
-  it('compativeisPorProduto → produto sem legadoItemComercialId → []', async () => {
-    const db = { select: jest.fn(() => makeChain([{ legadoItemComercialId: null }])) };
+  it('compativeisPorProduto → produto sem id → []', async () => {
+    const db = { select: jest.fn(() => makeChain([{ id: null }])) };
     const service = new EntradasEstoqueService({ db } as never, { registrar: jest.fn() } as never, { emit: jest.fn() } as never);
     const resultado = await service.compativeisPorProduto('prod1');
     expect(resultado).toEqual([]);
@@ -71,7 +70,7 @@ describe('EntradasEstoqueService — listar/compativeis (branches de leitura)', 
   it('compativeisPorProduto → produto compatível retorna pedidos com pendência calculada', async () => {
     let selectCall = 0;
     const responses = [
-      [{ legadoItemComercialId: 'ic1' }], // produto
+      [{ id: 'prod1' }],
       [
         {
           pedidoVendaItemId: 'pvi1', pedidoVendaId: 'pv1', clienteNome: 'Açougue Central',

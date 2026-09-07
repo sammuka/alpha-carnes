@@ -24,7 +24,7 @@ describe('EspelhoService — branches', () => {
     representanteId: null,
     representanteNome: null,
     itemPedidoId: 'pvi1',
-    itemComercialId: 'ic1',
+    produtoId: 'ic1',
     produtoCodigo: 'TZ',
     produtoDescricao: 'Traseiro',
     unidadeComercial: 'kg',

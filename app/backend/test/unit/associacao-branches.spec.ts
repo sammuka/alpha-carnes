@@ -23,7 +23,7 @@ function pecaBase(overrides: Record<string, unknown> = {}) {
     id: 'pec-1',
     statusPeca: 'pesada',
     compraProgramadaId: 'cp-1',
-    itemComercialBaseId: 'ic-1',
+    produtoBaseId: 'ic-1',
     pesoOriginal: '10.000',
     recebimentoId: 'rec-1',
     pedidoVendaId: null,
@@ -100,7 +100,7 @@ describe('AssociacaoService — branches de erro', () => {
               {
                 id: 'pvi-1',
                 pedidoVendaId: 'pv-1',
-                itemComercialId: 'ic-1',
+                produtoId: 'ic-1',
                 compraProgramadaId: 'cp-1',
                 statusPedido: 'em_elaboracao_reserva_ativa',
                 deletedAt: null,
@@ -147,7 +147,7 @@ describe('AssociacaoService — branches de erro', () => {
               {
                 id: 'pvi-2',
                 pedidoVendaId: 'pv-2',
-                itemComercialId: 'ic-1',
+                produtoId: 'ic-1',
                 compraProgramadaId: 'cp-1',
                 statusPedido: 'em_elaboracao_reserva_ativa',
                 deletedAt: null,
@@ -206,7 +206,7 @@ describe('AssociacaoService — branches de erro', () => {
               {
                 id: 'pvi-1',
                 pedidoVendaId: 'pv-1',
-                itemComercialId: 'ic-1',
+                produtoId: 'ic-1',
                 compraProgramadaId: 'cp-1',
                 statusPedido: 'cancelado',
                 deletedAt: null,
@@ -238,7 +238,7 @@ describe('AssociacaoService — branches de erro', () => {
               {
                 id: 'pvi-1',
                 pedidoVendaId: 'pv-1',
-                itemComercialId: 'ic-outro',
+                produtoId: 'ic-outro',
                 compraProgramadaId: 'cp-1',
                 statusPedido: 'em_elaboracao_reserva_ativa',
                 deletedAt: null,
@@ -270,7 +270,7 @@ describe('AssociacaoService — branches de erro', () => {
               {
                 id: 'pvi-1',
                 pedidoVendaId: 'pv-1',
-                itemComercialId: 'ic-1',
+                produtoId: 'ic-1',
                 operacaoId: 'op-outra',
                 pecaOperacaoId: 'op-1',
                 statusPedido: 'em_elaboracao_reserva_ativa',

@@ -59,12 +59,12 @@ describe('Corte — concorrência de associação de subitens (F4c)', () => {
     const { pedidoItemId } = await criarPedido(app, comercialCookies, {
       compraId: c.compraId,
       clienteId: c.clienteId,
-      itemComercialId: itemSaidaCbId,
+      produtoId: itemSaidaCbId,
       dataOperacao: c.dataOperacao,
       quantidade: saldo,
     });
 
-    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, itemComercialBaseId: c.itemComercialId });
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
     const transfId = await iniciarCorte(app, corteCookies, pecaId);
     await alinharPedidoItemComSaidaCorte(app, pedidoItemId, itemSaidaCbId);
 

@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
 import { AllExceptionsFilter } from '../../src/common/filters/all-exceptions.filter';
 import { DRIZZLE } from '../../src/database/database.module';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../src/database/schema';
 import { hash } from '@node-rs/argon2';
@@ -80,10 +80,11 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
       modelos_etiqueta, frota_motoristas, frota_caminhoes,
       tabelas_preco_publicacoes, tabelas_preco_itens, tabelas_preco,
       produtos, rotas, representantes,
-      clientes, fornecedores, itens_compra, itens_comerciais, parametros,
-      refresh_tokens, usuarios_representantes, usuarios_perfis, perfis_permissoes, permissoes, perfis, usuarios
+      clientes, fornecedores, parametros,
+      refresh_tokens, usuarios_representantes, usuarios_perfis, usuarios
     RESTART IDENTITY CASCADE
   `);
+  await ensurePerfisCanonicos(app, { resetVinculos: true });
 }
 
 /** Faz login e devolve o header Cookie pronto para autenticar requisições subsequentes. */
@@ -94,7 +95,14 @@ export async function loginCookies(
 ): Promise<string> {
   const { default: request } = await import('supertest');
   const res = await request(app.getHttpServer()).post('/auth/login').send({ email, password });
-  return joinSetCookie(res);
+  if (res.status !== 200 && res.status !== 201) {
+    throw new Error(`Login falhou (${res.status}) para ${email}: ${JSON.stringify(res.body)}`);
+  }
+  const cookies = joinSetCookie(res);
+  if (!cookies.includes('access_token=')) {
+    throw new Error(`Login sem access_token para ${email}`);
+  }
+  return cookies;
 }
 
 // Os 11 perfis canônicos (slugs do CHECK em perfis). Todos são criados nos testes para
@@ -104,16 +112,40 @@ const PERFIL_SLUGS = [
   'corte', 'expedicao', 'conferente', 'faturamento', 'logistica', 'diretoria',
 ] as const;
 
+/** Bootstrap idempotente dos 11 perfis + permissões (catálogo RBAC de referência). */
+export async function ensurePerfisCanonicos(
+  app: INestApplication,
+  opts: { resetVinculos?: boolean } = {},
+): Promise<void> {
+  const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+  const rbacService = app.get(RbacService);
+
+  await db
+    .insert(schema.perfis)
+    .values(PERFIL_SLUGS.map((slug) => ({ slug, nome: slug, menusVisiveis: [] as string[] })))
+    .onConflictDoUpdate({
+      target: schema.perfis.slug,
+      set: { nome: sql`excluded.nome`, menusVisiveis: sql`excluded.menus_visiveis` },
+    });
+
+  if (opts.resetVinculos) {
+    await db.delete(schema.perfisPermissoes);
+  }
+
+  await rbacService.ensurePermissoes();
+}
+
 export async function createTestUser(
   app: INestApplication,
   opts: { perfil: string },
 ): Promise<{ adminEmail: string; adminPassword: string }> {
   const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
-  const rbacService = app.get(RbacService);
 
   const email = `test-${opts.perfil}-${Date.now()}-${Math.round(performance.now() * 1000)}@test.local`;
   const password = 'TestPass@123456';
   const senhaHash = await hash(password);
+
+  await ensurePerfisCanonicos(app);
 
   // Inserir usuário
   const [usuario] = await db
@@ -122,25 +154,17 @@ export async function createTestUser(
     .returning();
   if (!usuario) throw new Error('Falha ao criar usuário de teste');
 
-  // Inserir TODOS os perfis canônicos (idempotente) — necessário para vínculos e gestão de perfis.
-  for (const slug of PERFIL_SLUGS) {
-    await db.insert(schema.perfis).values({ slug, nome: slug }).onConflictDoNothing();
-  }
-
-  // Inserir permissões e popular perfis_permissoes do banco (ADR-008 — fonte da verdade).
-  await rbacService.ensurePermissoes();
-
   // Vincular usuário ao perfil
   const [perfil] = await db
     .select()
     .from(schema.perfis)
-    .where(sql`${schema.perfis.slug} = ${opts.perfil}`);
+    .where(eq(schema.perfis.slug, opts.perfil));
   if (!perfil) throw new Error(`Perfil de teste não encontrado: ${opts.perfil}`);
 
   await db
     .insert(schema.usuariosPerfis)
     .values({ usuarioId: usuario.id, perfilId: perfil.id })
-    .onConflictDoNothing();
+    .onConflictDoNothing({ target: [schema.usuariosPerfis.usuarioId, schema.usuariosPerfis.perfilId] });
 
   return { adminEmail: email, adminPassword: password };
 }

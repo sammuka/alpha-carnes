@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { MODOS_CAPTURA, MOTIVOS_CAPTURA_MANUAL } from '../../pesagem/dto/pesagem.dto';
 import { divergenciaInputSchema } from '../../recebimento/divergencia/dto/divergencia-recebimento.dto';
 
-/** Geração de um subitem (antes de pesar). itemComercialId pode reclassificar. */
+/** Geração de um subitem (antes de pesar). produtoId pode reclassificar. */
 export const adicionarSubitemSchema = z.object({
-  itemComercialId: z.string().uuid(),
+  produtoId: z.string().uuid(),
   classificacao: z.string().trim().max(200).optional(),
   quantidade: z.number().positive().max(9_999.999).optional(),
   observacoes: z.string().trim().max(1000).optional(),

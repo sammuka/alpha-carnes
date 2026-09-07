@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom';
 
+// user-event: patch via moduleNameMapper → test-utils/patched-user-event.ts
 // jsdom não expõe Fetch API completa; NextRequest (BFF) exige Request/Headers.
 if (typeof globalThis.Headers === 'undefined') {
   class JestHeaders {
@@ -127,4 +128,33 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 // não expõem o global Element.
 if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
   Element.prototype.scrollIntoView = function scrollIntoView(): void {};
+}
+
+if (typeof Element !== 'undefined' && typeof Element.prototype.getBoundingClientRect !== 'function') {
+  Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+    return {
+      x: 0,
+      y: 0,
+      width: 120,
+      height: 32,
+      top: 0,
+      left: 0,
+      bottom: 32,
+      right: 120,
+      toJSON: () => ({}),
+    };
+  };
+}
+
+// user-event 14 + Radix Popover/Combobox no jsdom do CI Linux: o jsdom expõe pointer
+// capture parcialmente implementado — sobrescrever sempre evita clique pendurado.
+if (typeof HTMLElement !== 'undefined') {
+  const proto = HTMLElement.prototype as HTMLElement & {
+    hasPointerCapture: (id: number) => boolean;
+    setPointerCapture: (id: number) => void;
+    releasePointerCapture: (id: number) => void;
+  };
+  proto.hasPointerCapture = () => false;
+  proto.setPointerCapture = () => {};
+  proto.releasePointerCapture = () => {};
 }

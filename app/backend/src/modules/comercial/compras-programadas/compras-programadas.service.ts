@@ -175,7 +175,7 @@ export class ComprasProgramadasService {
         .values(
           dto.itens.map((item) => ({
             compraProgramadaId: criada.id,
-            itemCompraId: item.itemCompraId,
+            produtoId: item.produtoId,
             quantidadeComprada: String(item.quantidadeComprada),
             observacoes: item.observacoes,
           })),
@@ -270,7 +270,7 @@ export class ComprasProgramadasService {
       const confirmada = compra.status === 'confirmada';
       if (confirmada) {
         const projetado = await this.disponibilidadeService.projetarImpacto(
-          tx, compraId, new Map([[item.itemCompraId, dto.quantidadeComprada]]),
+          tx, compraId, new Map([[item.produtoId, dto.quantidadeComprada]]),
         );
         const impacto = this.montarImpacto(compra, projetado);
         if (impacto.exigeConfirmacao && !dto.confirmarDeficit) {
@@ -321,7 +321,7 @@ export class ComprasProgramadasService {
         dataOperacao,
         deficitTotal: resultado.impacto.deficitTotal,
         itens: resultado.impacto.itens.map((i) => ({
-          itemComercialId: i.itemComercialId,
+          produtoId: i.produtoId,
           delta: i.delta,
           deficitProjetado: i.deficitProjetado,
         })),
@@ -460,7 +460,7 @@ export class ComprasProgramadasService {
         numeroSequencial: compra.numeroSequencial,
         itens: resultado.disponibilidades.map((d) => ({
           disponibilidadeId: d.id,
-          itemComercialId: d.itemComercialId,
+          produtoId: d.produtoId,
           quantidadeTotalGerada: d.quantidadeTotalGerada,
         })),
       });

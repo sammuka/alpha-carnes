@@ -3,9 +3,15 @@ import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { itensComerciais, itensCompra, produtos } from '../../../database/schema';
+import { produtos } from '../../../database/schema';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
-import { calcularRange, montarPaginado, primeiroOuFalha, type ListarCadastroQuery, type Paginado } from '../../../common/crud/paginacao';
+import {
+  calcularRange,
+  montarPaginado,
+  primeiroOuFalha,
+  type ListarProdutoQuery,
+  type Paginado,
+} from '../../../common/crud/paginacao';
 import type { CreateProdutoDto, UpdateProdutoDto } from './dto/produto.dto';
 
 type Produto = typeof produtos.$inferSelect;
@@ -42,10 +48,12 @@ export class ProdutosService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarCadastroQuery): Promise<Paginado<Produto>> {
+  async listar(query: ListarProdutoQuery): Promise<Paginado<Produto>> {
     const { limit, offset } = calcularRange(query);
     const filtros = [query.incluirRemovidos ? undefined : isNull(produtos.deletedAt)];
     if (query.status) filtros.push(eq(produtos.status, query.status));
+    if (query.ativoVenda !== undefined) filtros.push(eq(produtos.ativoVenda, query.ativoVenda));
+    if (query.ativoCompra !== undefined) filtros.push(eq(produtos.ativoCompra, query.ativoCompra));
     if (query.search) {
       const termo = `%${query.search}%`;
       filtros.push(
@@ -76,11 +84,6 @@ export class ProdutosService {
     return this.db.transaction(async (tx) => {
       await this.assertCodigoUnico(tx, dto.codigo, null);
 
-      const legadoIds = await this.sincronizarLegado(tx, dto, {
-        legadoItemComercialId: null,
-        legadoItemCompraId: null,
-      });
-
       const criado = primeiroOuFalha(
         await tx
           .insert(produtos)
@@ -103,8 +106,6 @@ export class ProdutosService {
             status: dto.status,
             observacoesOperacionais: dto.observacoesOperacionais,
             atributosJson: dto.atributosJson ?? {},
-            legadoItemComercialId: legadoIds.legadoItemComercialId,
-            legadoItemCompraId: legadoIds.legadoItemCompraId,
           })
           .returning(),
       );
@@ -130,10 +131,6 @@ export class ProdutosService {
       await this.assertCodigoUnico(tx, dto.codigo ?? anterior.codigo, id);
 
       const payload = this.montarPayload(anterior, dto);
-      const legadoIds = await this.sincronizarLegado(tx, payload, {
-        legadoItemComercialId: anterior.legadoItemComercialId,
-        legadoItemCompraId: anterior.legadoItemCompraId,
-      });
 
       const atualizado = primeiroOuFalha(
         await tx
@@ -157,8 +154,6 @@ export class ProdutosService {
             status: payload.status,
             observacoesOperacionais: payload.observacoesOperacionais,
             atributosJson: payload.atributosJson,
-            legadoItemComercialId: legadoIds.legadoItemComercialId,
-            legadoItemCompraId: legadoIds.legadoItemCompraId,
           })
           .where(eq(produtos.id, id))
           .returning(),
@@ -251,85 +246,6 @@ export class ProdutosService {
     };
   }
 
-  /** Sincroniza tabelas legadas quando ativoVenda/ativoCompra estão habilitados. */
-  async sincronizarLegado(
-    tx: NodePgDatabase<typeof schema>,
-    dto: ProdutoPayload,
-    legado: { legadoItemComercialId: string | null; legadoItemCompraId: string | null },
-  ): Promise<{ legadoItemComercialId: string | null; legadoItemCompraId: string | null }> {
-    let legadoItemComercialId = legado.legadoItemComercialId;
-    let legadoItemCompraId = legado.legadoItemCompraId;
-
-    if (dto.ativoVenda) {
-      legadoItemComercialId = await this.sincronizarItemComercial(tx, dto, legadoItemComercialId);
-    }
-
-    if (dto.ativoCompra) {
-      legadoItemCompraId = await this.sincronizarItemCompra(tx, dto, legadoItemCompraId);
-    }
-
-    return { legadoItemComercialId, legadoItemCompraId };
-  }
-
-  private async sincronizarItemComercial(
-    tx: NodePgDatabase<typeof schema>,
-    dto: ProdutoPayload,
-    legadoId: string | null,
-  ): Promise<string> {
-    const permiteCorte = dto.tipoOperacional === 'derivado_desossa' || dto.passaDesossa;
-    const valores = {
-      codigo: dto.codigo,
-      descricao: dto.nome,
-      categoria: dto.categoria,
-      unidadeComercial: dto.unidadePedido,
-      permiteCorte,
-      status: dto.status,
-      observacoesOperacionais: dto.observacoesOperacionais,
-    };
-
-    if (legadoId) {
-      await this.assertCodigoItemComercialUnico(tx, valores.codigo, legadoId);
-      primeiroOuFalha(
-        await tx.update(itensComerciais).set(valores).where(eq(itensComerciais.id, legadoId)).returning(),
-      );
-      return legadoId;
-    }
-
-    await this.assertCodigoItemComercialUnico(tx, valores.codigo, null);
-    const criado = primeiroOuFalha(
-      await tx.insert(itensComerciais).values(valores).returning(),
-    );
-    return criado.id;
-  }
-
-  private async sincronizarItemCompra(
-    tx: NodePgDatabase<typeof schema>,
-    dto: ProdutoPayload,
-    legadoId: string | null,
-  ): Promise<string> {
-    const valores = {
-      codigo: dto.codigo,
-      descricao: dto.nome,
-      categoria: dto.categoria,
-      unidadeCompra: dto.unidadePedido,
-      status: dto.status,
-    };
-
-    if (legadoId) {
-      await this.assertCodigoItemCompraUnico(tx, valores.codigo, legadoId);
-      primeiroOuFalha(
-        await tx.update(itensCompra).set(valores).where(eq(itensCompra.id, legadoId)).returning(),
-      );
-      return legadoId;
-    }
-
-    await this.assertCodigoItemCompraUnico(tx, valores.codigo, null);
-    const criado = primeiroOuFalha(
-      await tx.insert(itensCompra).values(valores).returning(),
-    );
-    return criado.id;
-  }
-
   private async buscarAtivo(id: string, tx?: NodePgDatabase<typeof schema>): Promise<Produto | null> {
     const exec = tx ?? this.db;
     return exec
@@ -351,36 +267,6 @@ export class ProdutosService {
     for (const c of conflitos) {
       if (idAtual && c.id === idAtual) continue;
       throw new ConflictException('Já existe produto com este código');
-    }
-  }
-
-  private async assertCodigoItemComercialUnico(
-    tx: NodePgDatabase<typeof schema>,
-    codigo: string,
-    idAtual: string | null,
-  ): Promise<void> {
-    const conflitos = await tx
-      .select({ id: itensComerciais.id })
-      .from(itensComerciais)
-      .where(and(isNull(itensComerciais.deletedAt), eq(itensComerciais.codigo, codigo)));
-    for (const c of conflitos) {
-      if (idAtual && c.id === idAtual) continue;
-      throw new ConflictException('Já existe item comercial com este código');
-    }
-  }
-
-  private async assertCodigoItemCompraUnico(
-    tx: NodePgDatabase<typeof schema>,
-    codigo: string,
-    idAtual: string | null,
-  ): Promise<void> {
-    const conflitos = await tx
-      .select({ id: itensCompra.id })
-      .from(itensCompra)
-      .where(and(isNull(itensCompra.deletedAt), eq(itensCompra.codigo, codigo)));
-    for (const c of conflitos) {
-      if (idAtual && c.id === idAtual) continue;
-      throw new ConflictException('Já existe item de compra com este código');
     }
   }
 }
