@@ -31,10 +31,9 @@ describe('iniciarRecebimentoSchema', () => {
     expect(parsed.nfeNumero).toBe('123456');
   });
 
-  it('rejeita NF vazia quando informada', () => {
-    expect(() =>
-      iniciarRecebimentoSchema.parse({ ...base, nfeNumero: '   ' }),
-    ).toThrow();
+  it('converte NF vazia ou em branco em omitida', () => {
+    expect(iniciarRecebimentoSchema.parse({ ...base, nfeNumero: '' }).nfeNumero).toBeUndefined();
+    expect(iniciarRecebimentoSchema.parse({ ...base, nfeNumero: '   ' }).nfeNumero).toBeUndefined();
   });
 
   it('transforma chave vazia em undefined', () => {

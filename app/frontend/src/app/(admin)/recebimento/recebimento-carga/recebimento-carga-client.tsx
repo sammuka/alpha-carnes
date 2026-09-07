@@ -390,13 +390,12 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   });
 
   const montarPayload = (): IniciarRecebimentoPayload | null => {
-    if (!pedidoFornecedorId || !formNfe.nfeNumero.trim()) return null;
-    const payload: IniciarRecebimentoPayload = {
-      pedidoFornecedorId,
-      nfeNumero: formNfe.nfeNumero.trim(),
-    };
+    if (!pedidoFornecedorId) return null;
+    const payload: IniciarRecebimentoPayload = { pedidoFornecedorId };
+    if (formNfe.nfeNumero.trim()) payload.nfeNumero = formNfe.nfeNumero.trim();
     if (formNfe.nfeSerie) payload.nfeSerie = formNfe.nfeSerie.trim();
-    if (formNfe.nfeChave) payload.nfeChave = formNfe.nfeChave.trim();
+    const chaveNf = formNfe.nfeChave.trim();
+    if (/^\d{44}$/.test(chaveNf)) payload.nfeChave = chaveNf;
     if (formNfe.nfeDataEmissao) payload.nfeDataEmissao = formNfe.nfeDataEmissao;
     if (formNfe.romaneio) payload.romaneio = formNfe.romaneio.trim();
     if (formNfe.nfePesoBruto) payload.nfePesoBruto = Number(formNfe.nfePesoBruto);
@@ -413,7 +412,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     if (!podeGerenciar) return;
     const payload = montarPayload();
     if (!payload || !previsao || previsao.itensOperacionais.length === 0) {
-      setErro('Informe o Pedido ao Fornecedor, NF-e e confirme que há itens previstos.');
+      setErro('Informe o Pedido ao Fornecedor e confirme que há itens previstos.');
       return;
     }
     setSalvando(true);
@@ -450,9 +449,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        nfeNumero: formNfe.nfeNumero.trim(),
+        ...(formNfe.nfeNumero.trim() ? { nfeNumero: formNfe.nfeNumero.trim() } : {}),
         nfeSerie: formNfe.nfeSerie || undefined,
-        nfeChave: formNfe.nfeChave || undefined,
+        ...( /^\d{44}$/.test(formNfe.nfeChave.trim()) ? { nfeChave: formNfe.nfeChave.trim() } : {}),
         nfeDataEmissao: formNfe.nfeDataEmissao || undefined,
         romaneio: formNfe.romaneio || undefined,
         nfePesoBruto: formNfe.nfePesoBruto ? Number(formNfe.nfePesoBruto) : undefined,
@@ -1157,7 +1156,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                 será feita na balança.
               </p>
               <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
-                <FormField label="Número da NF-e" required htmlFor="nfeNumero" className="sm:col-span-2">
+                <FormField label="Número da NF-e" htmlFor="nfeNumero" className="sm:col-span-2">
                   <Input id="nfeNumero" value={formNfe.nfeNumero} onChange={(e) => setFormNfe((p) => ({ ...p, nfeNumero: e.target.value }))} />
                 </FormField>
                 <FormField label="Série" htmlFor="nfeSerie">
@@ -1213,14 +1212,14 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
             </Button>
             <Button
               variant="secondary"
-              disabled={salvando || carregandoPedidos || !pedidoFornecedorId || !formNfe.nfeNumero || !previsao?.itensOperacionais.length}
+              disabled={salvando || carregandoPedidos || !pedidoFornecedorId || !previsao?.itensOperacionais.length}
               onClick={() => void criarLote(false)}
               data-testid="btn-criar-lote"
             >
               Criar Lote
             </Button>
             <Button
-              disabled={salvando || carregandoPedidos || !pedidoFornecedorId || !formNfe.nfeNumero || !previsao?.itensOperacionais.length}
+              disabled={salvando || carregandoPedidos || !pedidoFornecedorId || !previsao?.itensOperacionais.length}
               onClick={() => void criarLote(true)}
               data-testid="btn-criar-ir-balanca"
             >
@@ -1245,7 +1244,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
             </FormField>
           </div>
           <div className="flex gap-2 border-t border-border p-4">
-            <Button disabled={salvando || !formNfe.nfeNumero} onClick={() => void salvarNfe()}>
+            <Button disabled={salvando} onClick={() => void salvarNfe()}>
               Salvar
             </Button>
           </div>

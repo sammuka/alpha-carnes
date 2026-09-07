@@ -361,6 +361,90 @@ describe('RecebimentoCargaClient', () => {
     expect(pushMock).not.toHaveBeenCalled();
   }, 120_000);
 
+  it('cria lote sem número da NF-e e não envia chave incompleta', async () => {
+    const user = userEvent.setup();
+    const pedido = {
+      id: 'pf-1',
+      numero: 'PF-0001',
+      status: 'aguardando_recebimento',
+      fornecedorId: 'f1',
+      fornecedorNome: 'Frigorífico Boi Forte',
+      operacaoId: 'op1',
+      dataOperacao: '2026-07-29',
+      compraProgramadaId: 'c1',
+      numeroInternoCompra: 'PC-2091',
+    };
+    const previsao = {
+      pedidoFornecedorId: pedido.id,
+      compraProgramadaId: pedido.compraProgramadaId,
+      dataOperacao: pedido.dataOperacao,
+      numeroInternoCompra: pedido.numeroInternoCompra,
+      fornecedorId: pedido.fornecedorId,
+      fornecedorNome: pedido.fornecedorNome,
+      tipoCarga: 'Boi',
+      observacoesCompra: null,
+      resumoCompra: '10.000 Boi',
+      itensOperacionais: [{
+        produtoId: 'item-1',
+        produtoCodigo: 'TZ',
+        produtoDescricao: 'Traseiro',
+        quantidadePrevista: '20.000',
+        pesoPrevisto: '850.000',
+        unidade: 'peca',
+        passaBalanca: true,
+        origemDescricao: 'PC-2091 / Regra Boi → TZ',
+      }],
+    };
+    global.fetch = jest.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/api/operacao/recebimentos?pageSize')) {
+        return { ok: true, json: async () => ({ data: [], page: 1, pageSize: 50, total: 0 }) };
+      }
+      if (url.includes('/api/operacao/pedidos-fornecedor?')) {
+        return { ok: true, json: async () => ({ data: [pedido], page: 1, pageSize: 100, total: 1 }) };
+      }
+      if (url.includes(`/api/operacao/recebimentos/previsao/${pedido.id}`)) {
+        return { ok: true, json: async () => previsao };
+      }
+      if (url === '/api/operacao/recebimentos' && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ recebimento: { id: 'r-sem-nf' }, jaIniciado: false }),
+        };
+      }
+      if (url.includes('/api/operacao/recebimentos/r-sem-nf')) {
+        return { ok: true, json: async () => ({ ...recebimentoDetalhe, id: 'r-sem-nf', nfeNumero: null }) };
+      }
+      return { ok: true, json: async () => ({ data: [] }) };
+    }) as unknown as typeof fetch;
+
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Novo recebimento' }));
+    const drawer = screen.getByRole('dialog', { name: 'Novo Recebimento de Carga' });
+    expect(within(drawer).getByLabelText('Número da NF-e')).toBeInTheDocument();
+    expect(within(drawer).queryByText('*')).not.toBeInTheDocument();
+
+    const pedidoCombobox = within(drawer).getByRole('combobox', { name: 'Pedido ao fornecedor' });
+    await user.click(pedidoCombobox);
+    await user.click(await screen.findByRole('option', { name: /PF-0001/ }));
+    await waitFor(() => expect(screen.getByText('TZ — Traseiro')).toBeInTheDocument());
+    fireEvent.change(within(drawer).getByLabelText('Chave NF-e'), {
+      target: { value: '0123465790123465790123465790123465790123' },
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Criar Lote' }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+      '/api/operacao/recebimentos',
+      expect.objectContaining({ method: 'POST' }),
+    ));
+    const post = (global.fetch as jest.Mock).mock.calls.find(
+      ([url, init]) => url === '/api/operacao/recebimentos' && init?.method === 'POST',
+    );
+    const body = JSON.parse(post[1].body);
+    expect(body).toEqual({ pedidoFornecedorId: pedido.id });
+    expect(body).not.toHaveProperty('nfeNumero');
+    expect(body).not.toHaveProperty('nfeChave');
+  });
+
   it('Recebimento de Carga renderiza os blocos do protótipo', async () => {
     const { STATUS_RECEB_LABEL } = await import(
       '../src/app/(admin)/recebimento/recebimento-carga/recebimento-carga-client'
