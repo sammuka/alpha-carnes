@@ -12,13 +12,15 @@
 
 **Base pinada no momento do plano:** `origin/develop` @ `b95e1ae8a62c0a6a33b9c605cc0f3ccf3cb71d6b` (Onda 13 mergeada, PR #123 SHA `a88854e`, AD-15). Journal em `app/backend/src/database/migrations/meta/_journal.json` termina em `idx: 36` / `0036_onda13_catalogo_contract`. Próximos nomes livres: `0037`…`0043` (tabela abaixo). Se `origin/develop` avançar e o journal ganhar `idx ≥ 37`, **parar e reportar** — não renumerar sozinho.
 
-**Worktree / branch:** `.worktrees/o14` · `feature/onda14-preco-tabela-pedido`. AD-16 commitada em `4cea1f10a3e81c1cc387d8e68cba40c39928c22b` — **não reabrir**. Worktree HEAD no início desta 3ª correção (`2026-09-07T03:40:46Z`): `e5ffa716e0bedb0efa5b9698848a49aabb233a2d`. `carregar` / `listarAprovacoes` / `carregarDetalheOcorrencia` (aprovacoes-client L86–90) / `realtime.gateway.ts` conferidos neste SHA. Nunca implementar no worktree coordenador.
+**Worktree / branch:** `.worktrees/o14` · `feature/onda14-preco-tabela-pedido`. AD-16 commitada em `4cea1f10a3e81c1cc387d8e68cba40c39928c22b` — **não reabrir**. Worktree HEAD no início desta 4ª correção (`2026-09-07T03:55:27Z`): `cd181984c833769747aca989012e9f86ebbbecc2`. `carregar` / `listarAprovacoes` / `carregarDetalheOcorrencia` (aprovacoes-client L86–90) / card L171–186 / `tabela-precos-client.tsx` `conectarRealtime` L146–155 / `relatorios-client.tsx` (sem Skeleton, Tabs ausentes) / `ProdutoPedido` / `RegistroAuditoria.justificativa` conferidos neste SHA. Nunca implementar no worktree coordenador.
 
 **Correção Portão 1 1ª rodada (5 achados — permanecem fechados, não reabrir):** (1) GET `/precos/vigente` envelope `{ data }` — T04 e T06; `unidadePreco` nullable. (2) T10 embute o JSON literal ALP-85. (3) T08 só list/detail/ciente; T10 declara `@Get('relatorio')` acima de `:id`, sem stub 501. (4) Persistência de preço: Zod + `numeric(15,2)`, nunca `Number()`. (5) T06 remap/lock de cliente + `it('...')` 1:1 em T06/T09.
 
 **Correção Portão 1 2ª rodada (`2026-09-07T03:27:34Z` — fecha exatamente 2 achados, sem mudar escopo):** HEAD então `4a19c25790ece35c4ca6d140f4a679f81a6c5a87`. (1) T08/T09 — `operacaoId` obrigatório no DTO de list, join `pedidos_venda.operacao_id`, fetch literal da fila. (2) T11 — 12 `it('...')` literais ALP-86.
 
 **Correção Portão 1 3ª rodada (`2026-09-07T03:40:46Z` — fecha exatamente 3 achados, sem mudar escopo nem reabrir 1–2):** (1) escala canônica de `diferenca_percentual` = **×100**, 4 casas; T07 persiste, T08/T10 serializam o valor gravado; C7 permanece `null` se original `null`; C8 exemplo `17.00` vs `18.50` → `"-8.1081"`. Worker **não** escolhe a escala. (2) RA-04 — `realtime.gateway.ts` na lista Modificar; handlers `@OnEvent` literais T07=`OCORRENCIA_AJUSTE_PRECO_CRIADA` e T08=`OCORRENCIA_AJUSTE_PRECO_CIENTE` no molde de `handleOcorrenciaAberta` / `handleAprovacaoRegistrada`. (3) T08/T09 contrato campo a campo `OcorrenciaPrecoLista` vs detalhe com `itens`; Jest T09 exige `GET /ocorrencias-preco/:id`; `old_string`/`new_string` do fetch de detalhe sobre `carregarDetalheOcorrencia` L86–90.
+
+**Correção Portão 1 4ª rodada (`2026-09-07T03:55:27Z` — fecha exatamente 4 achados, sem mudar escopo nem reabrir 1–3):** (1) T09 — `carregar` compilável (`ItemFila`, `dataAbertura`→`dataHora`, título, setters); `old_string`/`new_string` do card L171–186 e do painel de preço; `conectarRealtime` literal `rooms: ['dashboard']`. (2) T11 — `onValueChange` literal; aba inicial `sif` se `SIF_LER` senão `gerenciais`; detalhe = `<details>`; loading = `Card` disabled (SIF **não** usa `Skeleton`). (3) T05/T06 unidade — `produtos.unidadePreco` no item e em `ProdutoPedido`; vigente `null` **não** vira `/kg` nem `?? 'kg'`. (4) T05 auditoria — `justificativa: 'pedido.item.preco_ajustado'` + um assert; T12 lista os 12 specs reais do HEAD.
 
 **Linear:** épico [ALP-55](https://linear.app/alphacarnes/issue/ALP-55). T00 [ALP-77](https://linear.app/alphacarnes/issue/ALP-77) Done neste SHA. Este arquivo é T01. Worker executa Task 1 (docs) + T02–T12 = ALP-78…86 + ALP-59 + ALP-61. T13 é o Quality Owner. T14 abre o PR só depois de T13 Done. **Este worker não faz Portão 2 nem merge.**
 
@@ -229,7 +231,7 @@ Matriz ALP-61 + 10 cenários acrescentados. **Não** escrever o cenário removid
 | 14.2 | Pedido carrega preço da faixa na data | criar com tabela publicada → `precoTabelaOriginal = precoAplicado`, `precoAjustado=false` | e2e | T05 |
 | 14.2b | Unidade ao lado do valor | `unidadePreco='unidade'` renderiza `/un` | Jest | T06 |
 | 14.3 | Preço editável para mais e para menos | `PATCH .../preco` acima e abaixo | e2e | T05 |
-| 14.3b | Divergência destaca só a borda | classe `border-warning` (ou equivalente token), sem fundo/ícone/badge | Jest | T06 |
+| 14.3b | Divergência destaca só a borda | classe `border-warning`, sem fundo/ícone/badge | Jest | T06 |
 | 14.3c | Tooltip valor da tabela | `Valor da Tabela: R$ ...` | Jest | T06 |
 | 14.4 | Sem preço inicia em R$ 0,00 | resolvedor `null`; UI `0,00` | unit + Jest | T04/T06 |
 | 14.4b | Só entra com manual > 0 | inclusão sem preço → **400 backend** | e2e | T05 |
@@ -627,7 +629,7 @@ function abaDaChave(chave: string): AbaClientes {
 
 ## Task 4 — `resolverPrecoVigente` (ALP-80)
 
-**Files:** `precos.service.ts`, `precos-vigente.controller.ts`, `dto/preco-vigente.dto.ts`, `precos.module.ts`, BFF, `precos-vigente.spec.ts` + e2e no mesmo arquivo de T05 ou suíte própria.
+**Files:** `precos.service.ts`, `precos-vigente.controller.ts`, `dto/preco-vigente.dto.ts`, `precos.module.ts`, BFF, `app/backend/test/unit/precos-vigente.spec.ts`. HTTP 403/404/envelope no mesmo `precos-vigente.spec.ts` (Supertest). C2 e2e fica só em `onda14-preco-pedido.e2e-spec.ts` (T05). **Não** criar terceira suíte.
 
 **Depende de:** T02 (faixa do cliente existe).
 
@@ -661,7 +663,7 @@ function colunaDaFaixa(faixa: FaixaPreco): typeof tabelasPrecoItens.precoA {
 
 Importar `clientes`, `operacoes` de `../../../database/schema`.
 
-Métodos públicos no service (após `historico` ou no final da classe, **antes** de `precosDaUltimaPublicada`):
+Métodos públicos no service **imediatamente antes** de `precosDaUltimaPublicada` (HEAD L322):
 
 ```ts
   async resolverPrecoVigente(
@@ -942,15 +944,68 @@ Importar `ehPrecoNaoPositivo` e `precoAplicadoSchema` de `./dto/pedido.dto` no s
 
 ### Service — congelar na inclusão
 
-`persistirItensPlanejados` (L562–592): **antes** do `insert`, na mesma `tx`:
+`persistirItensPlanejados` (L562–592): **antes** do `insert`, na mesma `tx`. Acrescentar `produtos` no import nomeado de `../../../database/schema` (HEAD hoje importa `clientes` e `operacoes`, não `produtos`).
 
-1. Ler `cliente.faixaPreco` e `operacoes.data` do `pedido` já persistido (pedido tem `clienteId` + `operacaoId` — uma leitura cada, ou reusar se já carregados).
-2. `this.precos.resolverPrecoVigente(tx, { produtoId: solicitado.produtoId, faixa, data })`.
-3. `unidade_preco` de `produtos.unidadePreco` (join ou campo do resolvedor; se resolvedor `null`, ler `produtos` — **não** usar `unidadePedido`).
-4. `preco_tabela_original` = `vigente?.preco ?? null`; `tabela_preco_id` = `vigente?.tabelaPrecoId ?? null`; `faixa_preco` = faixa do cliente **no momento**.
-5. `preco_aplicado` = `solicitado.precoAplicado ?? vigente?.preco`.
-6. Se `ehPrecoNaoPositivo(preco_aplicado)` → `BadRequestException` nomeando o produto (`codigo`/`nome`). Não gravar `"0"` / `"0.00"`. **Nunca** `Number(...)`.
-7. Se `solicitado.precoAplicado` informado e SQL `${solicitado.precoAplicado}::numeric(15,2) IS DISTINCT FROM ${vigente?.preco ?? null}` → `usuario_ajuste_id` + `ajustado_em = now()`; senão ambos null.
+**Uma vez por chamada** (antes do `for`), faixa e data:
+
+```ts
+    const [clienteFaixa] = await tx.select({ faixaPreco: clientes.faixaPreco })
+      .from(clientes)
+      .where(and(eq(clientes.id, pedido.clienteId), isNull(clientes.deletedAt)))
+      .limit(1);
+    if (!clienteFaixa?.faixaPreco) {
+      throw new ConflictException({
+        code: 'CLIENTE_SEM_FAIXA_PRECO',
+        message: 'Cliente sem faixa de preço.',
+      });
+    }
+    if (!pedido.operacaoId) throw new ConflictException('Pedido sem operação');
+    const [operacaoData] = await tx.select({ data: operacoes.data })
+      .from(operacoes).where(eq(operacoes.id, pedido.operacaoId)).limit(1);
+    if (!operacaoData) throw new NotFoundException('Operação não encontrada');
+```
+
+**Por item**, imediatamente antes do `tx.insert(pedidosVendaItens)`:
+
+```ts
+      const [produto] = await tx.select({
+        codigo: produtos.codigo,
+        nome: produtos.nome,
+        unidadePreco: produtos.unidadePreco,
+      }).from(produtos).where(eq(produtos.id, solicitado.produtoId)).limit(1);
+      if (!produto) throw new NotFoundException('Produto não encontrado');
+      const vigente = await this.precos.resolverPrecoVigente(tx, {
+        produtoId: solicitado.produtoId,
+        faixa: clienteFaixa.faixaPreco as 'A' | 'B' | 'C' | 'D',
+        data: operacaoData.data,
+      });
+      // Catálogo NOT NULL (`produtos.unidade_preco`). Resolvedor null NÃO inventa 'kg'.
+      // Nunca unidadePedido / unidadeComercial.
+      const unidadePreco = produto.unidadePreco as 'kg' | 'unidade';
+      const precoTabelaOriginal = vigente?.preco ?? null;
+      const precoAplicado = solicitado.precoAplicado ?? vigente?.preco ?? null;
+      if (ehPrecoNaoPositivo(precoAplicado)) {
+        throw new BadRequestException(
+          `Informe um preço unitário maior que zero para ${produto.codigo} (${produto.nome}).`,
+        );
+      }
+      const distinto = await tx.execute<{ eq: boolean }>(sql`
+        SELECT (${precoAplicado}::numeric(15,2) IS DISTINCT FROM ${precoTabelaOriginal}::numeric(15,2)) AS eq
+      `);
+      const ajustouNaInclusao = distinto.rows[0]?.eq === true;
+```
+
+No `.values({` do insert, acrescentar (demais campos do HEAD intactos):
+
+```
+        tabelaPrecoId: vigente?.tabelaPrecoId ?? null,
+        faixaPreco: clienteFaixa.faixaPreco,
+        unidadePreco,
+        precoTabelaOriginal,
+        precoAplicado,
+        usuarioAjusteId: ajustouNaInclusao ? usuarioId : null,
+        ajustadoEm: ajustouNaInclusao ? new Date() : null,
+```
 
 `PedidosModule` importa `PrecosModule`. Injetar `PrecosService` no construtor de `PedidosService`.
 
@@ -990,6 +1045,7 @@ Importar `ehPrecoNaoPositivo` e `precoAplicadoSchema` de `./dto/pedido.dto` no s
         operacao: 'UPDATE',
         modulo: 'comercial',
         usuarioId,
+        justificativa: 'pedido.item.preco_ajustado',
         dadosAnteriores: {
           precoAnterior: item.precoAplicado,
           precoTabelaOriginal: item.precoTabelaOriginal,
@@ -1007,7 +1063,7 @@ Importar `ehPrecoNaoPositivo` e `precoAplicadoSchema` de `./dto/pedido.dto` no s
 
 (Ajuste o `tx.execute` ao helper já usado no arquivo — `composicaoLotes` lê `.rows`. Comparação DECIMAL só via `::numeric(15,2)` — **não** `Number`.)
 
-Auditoria operação: usar `'UPDATE'` (o enum do service). Campo descritivo no `dadosNovos` inclui a chave `precoNovo` para o teste procurar `pedido.item.preco_ajustado` **ou** o `dadosNovos` — o Worker registra `dadosNovos.motivoOperacao = 'pedido.item.preco_ajustado'` se o `AuditoriaService` tiver campo livre; senão o teste afirma `dadosNovos.precoNovo`.
+Auditoria: um único payload. `RegistroAuditoria` no HEAD (`auditoria.service.ts` L12–23) **já tem** `justificativa?: string | null`. Usar exatamente `justificativa: 'pedido.item.preco_ajustado'` como acima. **Proibido** o fork “se tiver campo livre / senão precoNovo”. `dadosNovos.precoNovo` permanece no JSON; o assert canônico é só `justificativa`.
 
 ### `finalizar` — revalidar preço > 0
 
@@ -1034,14 +1090,34 @@ A criação da ocorrência entra na **T07** (não nesta task), no mesmo ponto ap
 
 ### `detalhar`
 
-O `with: { itens }` já devolve as colunas novas. Mapear no retorno (após o `findFirst`) um enrich por item:
+O `with: { itens }` já devolve as colunas novas. Após o `findFirst` e o bloco `heranca` (HEAD L184–196), **query auxiliar** (não alterar relations Drizzle):
 
+```ts
+      const idsAjuste = [...new Set(
+        pedido.itens
+          .map((item) => item.usuarioAjusteId)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0),
+      )];
+      const nomesAjuste = idsAjuste.length === 0
+        ? []
+        : await tx.select({ id: usuarios.id, nome: usuarios.nome })
+          .from(usuarios)
+          .where(inArray(usuarios.id, idsAjuste));
+      const mapaNomes = new Map(nomesAjuste.map((u) => [u.id, u.nome]));
+      return {
+        ...pedido,
+        heranca: heranca ?? null,
+        itens: pedido.itens.map((item) => ({
+          ...item,
+          precoAjustado: item.precoTabelaOriginal !== item.precoAplicado,
+          usuarioAjusteNome: item.usuarioAjusteId
+            ? (mapaNomes.get(item.usuarioAjusteId) ?? null)
+            : null,
+        })),
+      };
 ```
-precoTabelaOriginal, precoAplicado, unidadePreco, faixaPreco,
-precoAjustado: original IS DISTINCT FROM aplicado (em JS: `a !== b` nas strings persistidas; se uma for null e a outra não, true),
-usuarioAjusteNome` (left join usuarios no enrich **ou** query auxiliar),
-ajustadoEm
-```
+
+Importar `usuarios` de `../../../database/schema` (`inArray` já está no import do arquivo). `precoAjustado` = `precoTabelaOriginal !== precoAplicado` nas strings persistidas (null vs valor = true).
 
 `composicaoLotes` **não** precisa das colunas de preço (não é payload de item).
 
@@ -1086,7 +1162,21 @@ Não editar o `.set()` de quantidade em `adendos.service.ts` L77–83. Teste C6:
 
 Todos os cenários ALP-81 + C1, C2, C6, 14.5, 14.5b. 403: `createTestUser({ perfil: 'compras' })` no PATCH `.../preco`. 409 em pedido finalizado. `'0'` e `'18.999'` → 400. Republicar tabela + mudar faixa do cliente.
 
-Reusar `comercial-fixtures.ts` (já com `faixaPreco: 'A'`). Criar tabela publicada no `operacao.data` via `PrecosService` ou insert Drizzle (`status='publicada'`, itens com `precoB` etc.).
+Após o PATCH de ajuste, **um** assert de auditoria (tabela `auditoria`, último registro do `itemId`):
+
+```ts
+    const [reg] = await db.select({
+      justificativa: auditoria.justificativa,
+    }).from(auditoria)
+      .where(eq(auditoria.registroId, itemId))
+      .orderBy(desc(auditoria.createdAt))
+      .limit(1);
+    expect(reg?.justificativa).toBe('pedido.item.preco_ajustado');
+```
+
+C1 (sem vigente): item persistido tem `unidade_preco` = `produtos.unidade_preco` do catálogo (nunca `'kg'` inventado). Inclusive produto com `unidadePreco='unidade'`.
+
+Reusar `comercial-fixtures.ts` (já com `faixaPreco: 'A'`). Criar tabela publicada no `operacao.data` por insert Drizzle (`tabelas_preco.status='publicada'` + linhas em `tabelas_preco_itens` com `precoB` etc.). **Não** chamar HTTP de `PrecosService.criar` neste e2e.
 
 **Commit:** `feat(onda14): congela preço no item e PATCH .../preco (PEDIDOS_GERENCIAR)`
 
@@ -1128,6 +1218,35 @@ Reusar `comercial-fixtures.ts` (já com `faixaPreco: 'A'`). Criar tabela publica
 ```
   itens: Array<{ produtoId: string; quantidadePedida: number; observacoes?: string; precoAplicado?: string }>;
 ```
+
+`ProdutoPedido` (HEAD L48–55) **não** tem `unidadePreco` — só `unidadeComercial?: string`. Declarar o campo do catálogo. `old_string` único:
+
+```
+export interface ProdutoPedido {
+  id: string;
+  codigo: string;
+  descricao: string;
+  status: string;
+  nome?: string;
+  unidadeComercial?: string;
+}
+```
+
+`new_string`:
+
+```
+export interface ProdutoPedido {
+  id: string;
+  codigo: string;
+  descricao: string;
+  status: string;
+  nome?: string;
+  unidadeComercial?: string;
+  unidadePreco?: 'kg' | 'unidade';
+}
+```
+
+`GET /api/cadastros/produtos` já devolve `produtos.unidadePreco` (`$inferSelect`). Não usar `unidadeComercial` como sufixo de preço.
 
 `ItemNovo` no editor ganha os campos no patch abaixo (não só o tipo — o Worker aplica o `old_string`/`new_string` de `interface ItemNovo`).
 
@@ -1209,6 +1328,12 @@ function ehPrecoNaoPositivoUi(valor: string): boolean {
   if (trimmed === '' || !/^\d+(\.\d{1,2})?$/.test(trimmed)) return true;
   return /^0+(\.0{1,2})?$/.test(trimmed);
 }
+
+function sufixoUnidadePreco(unidade: 'kg' | 'unidade' | null | undefined): string | null {
+  if (unidade === 'unidade') return '/un';
+  if (unidade === 'kg') return '/kg';
+  return null;
+}
 ```
 
 `ItemNovo` (L76–79) `old_string`:
@@ -1228,7 +1353,7 @@ interface ItemNovo {
   quantidadePedida: number;
   precoAplicado: string;
   precoTabelaOriginal: string | null;
-  unidadePreco: 'kg' | 'unidade';
+  unidadePreco: 'kg' | 'unidade' | null;
 }
 ```
 
@@ -1238,11 +1363,11 @@ Estado após `quantidades` (L137):
   const [precos, setPrecos] = useState<Record<string, string>>({});
   const [precoNovo, setPrecoNovo] = useState('0.00');
   const [precoNovoTabela, setPrecoNovoTabela] = useState<string | null>(null);
-  const [unidadePrecoNovo, setUnidadePrecoNovo] = useState<'kg' | 'unidade'>('kg');
+  const [unidadePrecoNovo, setUnidadePrecoNovo] = useState<'kg' | 'unidade' | null>(null);
   const itensNovosRef = useRef(itensNovos);
   itensNovosRef.current = itensNovos;
 
-`useEffect` de quantidades (L146–150) — estender o mesmo efeito (ou um irmão com `[pedido]`) para hidratar preços persistidos:
+`useEffect` de quantidades (L146–150) — **estender o mesmo efeito** (não criar irmão) para hidratar preços persistidos:
 
 ```
   useEffect(() => {
@@ -1255,7 +1380,7 @@ Estado após `quantidades` (L137):
   }, [pedido]);
 ```
 
-Consulta vigente — **dois** `useEffect` (não um só com `[..., itensNovos]`). Envelope = `{ data }` (T04). `unidadePreco` nullable. Pedido já persistido: cliente e operação estão `disabled` no HEAD (L517 / L524) — **lock**; itens persistidos **nunca** reconsultam tabela.
+Consulta vigente — **dois** `useEffect` (não um só com `[..., itensNovos]`). Envelope = `{ data }` (T04). `unidadePreco` do vigente pode ser `null` (sem tabela) — **não** vira `'kg'`. Sufixo = `ProdutoPedido.unidadePreco` (catálogo). Pedido já persistido: cliente e operação estão `disabled` no HEAD (L517 / L524) — **lock**; itens persistidos **nunca** reconsultam tabela.
 
 ```ts
   type LinhaVigente = {
@@ -1268,8 +1393,16 @@ Consulta vigente — **dois** `useEffect` (não um só com `[..., itensNovos]`).
   function aplicarPrecoDoProdutoNovo(linha: LinhaVigente | undefined) {
     setPrecoNovo(linha?.preco ?? '0.00');
     setPrecoNovoTabela(linha?.preco ?? null);
-    setUnidadePrecoNovo(linha?.unidadePreco ?? 'kg');
   }
+
+  useEffect(() => {
+    const produto = produtos.find((item) => item.id === produtoNovo);
+    setUnidadePrecoNovo(
+      produto?.unidadePreco === 'unidade' || produto?.unidadePreco === 'kg'
+        ? produto.unidadePreco
+        : null,
+    );
+  }, [produtoNovo, produtos]);
 
   // Campo do produto em edição. Não remapeia itensNovos (evita loop).
   useEffect(() => {
@@ -1318,7 +1451,6 @@ Consulta vigente — **dois** `useEffect` (não um só com `[..., itensNovos]`).
             ...item,
             precoAplicado: hit?.preco ?? '0.00',
             precoTabelaOriginal: hit?.preco ?? null,
-            unidadePreco: hit?.unidadePreco ?? 'kg',
           };
         }));
       })
@@ -1331,7 +1463,7 @@ Consulta vigente — **dois** `useEffect` (não um só com `[..., itensNovos]`).
   }, [clienteId, operacaoId, pedido]);
 ```
 
-**Proibido** ler `corpo.itens`. UI usa `corpo.data`. `unidadePreco === null` → exibir `/kg` (não inventar preço). Itens de `pedido.itens` não entram neste remap (preço congelado).
+**Proibido** ler `corpo.itens`. UI usa `corpo.data`. `unidadePreco` do vigente `null` **não** exibe `/kg` e **não** aplica `?? 'kg'`. Sufixo = `sufixoUnidadePreco(produto.unidadePreco)` (campo declarado em `ProdutoPedido`). Se o catálogo não trouxer unidade, omitir o `<span>` do sufixo. Itens de `pedido.itens` não entram neste remap (preço congelado).
 
 `adicionarProduto` (L325–351) — `old_string` do ramo sem pedido:
 
@@ -1363,6 +1495,7 @@ Consulta vigente — **dois** `useEffect` (não um só com `[..., itensNovos]`).
       setQuantidadeNova('1');
       setPrecoNovo('0.00');
       setPrecoNovoTabela(null);
+      setUnidadePrecoNovo(null);
       return;
 ```
 
@@ -1382,7 +1515,19 @@ Ramo com pedido — `old_string`:
     const body = JSON.stringify({ produtoId: produtoNovo, quantidade, precoAplicado: precoNovo });
 ```
 
-Após sucesso do `mutar` de inclusão, resetar `precoNovo`/`precoNovoTabela` como no ramo novo.
+Após sucesso do `mutar` de inclusão, resetar `precoNovo`/`precoNovoTabela`/`unidadePrecoNovo` como no ramo novo.
+
+Botão Adicionar (HEAD L694) — `old_string`:
+
+```
+          <Button type="button" variant="secondary" disabled={!podeGerenciar || pendente} onClick={() => void adicionarProduto()}>
+```
+
+`new_string`:
+
+```
+          <Button type="button" variant="secondary" disabled={!podeGerenciar || pendente || ehPrecoNaoPositivoUi(precoNovo)} onClick={() => void adicionarProduto()}>
+```
 
 `persistirPreco` — após `aplicarQuantidade`:
 
@@ -1442,7 +1587,7 @@ Entre a `TableCell` de Quantidade e a de ações, célula **literal**:
                             )}
                           </Tooltip>
                           <span className="text-[11px] text-muted-foreground">
-                            {item.unidadePreco === 'unidade' ? '/un' : '/kg'}
+                            {sufixoUnidadePreco(item.unidadePreco ?? produtos.find((produto) => produto.id === item.produtoId)?.unidadePreco)}
                           </span>
                         </div>
                       </TableCell>
@@ -1486,7 +1631,7 @@ Footer de inclusão — após o `FormField` de quantidade (L682–693), **antes*
                 onChange={(event) => setPrecoNovo(normalizarPrecoInput(event.target.value))}
               />
               <span className="text-[11px] text-muted-foreground">
-                {unidadePrecoNovo === 'unidade' ? '/un' : '/kg'}
+                {sufixoUnidadePreco(unidadePrecoNovo)}
               </span>
             </div>
           </FormField>
@@ -1507,7 +1652,8 @@ it('preço vem preenchido após escolher cliente e operação via corpo.data', a
   // selecionar cliente+operação+produto; campo Preço unitário do novo produto = 18.50 (não lê corpo.itens).
 });
 it('produto sem preço mostra 0,00 e desabilita incluir', async () => {
-  // mock data: [{ ..., preco: null, unidadePreco: null }]; input 0.00; botão Adicionar produto disabled ou submit mostra a mensagem de preço > 0.
+  // mock data: [{ ..., preco: null, unidadePreco: null }]; input 0.00;
+  // botão Adicionar produto disabled={true} via ehPrecoNaoPositivoUi(precoNovo).
 });
 it('editar para valor diferente aplica a classe border-warning', async () => {
   // item persistido precoAjustado=true; Input com className contendo border-warning.
@@ -1525,7 +1671,7 @@ it('unidade unidade mostra /un, não /kg', async () => {
   // unidadePreco='unidade'; expect(screen.getByText('/un')); query /kg ausente na célula.
 });
 it('sem PEDIDOS_GERENCIAR o campo fica em leitura', async () => {
-  // podeGerenciar=false; Input disabled e/ou readOnly.
+  // podeGerenciar=false; Input `disabled={true}` (a prop `disabled` do JSX literal).
 });
 it('pedido finalizado mantém destaque em leitura', async () => {
   // status=finalizado, precoAjustado=true; Input readOnly + border-warning.
@@ -1537,8 +1683,10 @@ it('trocar cliente remapeia precoAplicado de itensNovos a partir de corpo.data',
 it('pedido persistido não remapeia itens congelados ao montar (lock de cliente)', async () => {
   // pedido com cliente disabled (HEAD L517); item.precoAplicado='18.50'; GET vigente NÃO é chamado para o id do item persistido.
 });
-it('GET /api/precos/vigente com unidadePreco null exibe /kg e não lê corpo.itens', async () => {
-  // mock { data: [{ preco: null, unidadePreco: null }] }; /kg visível; um mock que só tivesse `itens` não preenche o campo.
+it('GET /api/precos/vigente com unidadePreco null usa sufixo do produto e não lê corpo.itens', async () => {
+  // produto.unidadePreco='unidade'; mock { data: [{ preco: null, unidadePreco: null }] };
+  // expect(screen.getByText('/un')); query /kg ausente na célula do novo produto;
+  // um mock que só tivesse `itens` não preenche o campo de preço.
 });
 ```
 
@@ -1881,7 +2029,12 @@ export type ListarOcorrenciasPrecoQuery = z.infer<typeof listarOcorrenciasPrecoQ
   eq(pedidosVenda.operacaoId, query.operacaoId),
   query.status ? eq(ocorrenciasAjustePreco.status, query.status) : undefined,
   query.clienteId ? eq(ocorrenciasAjustePreco.clienteId, query.clienteId) : undefined,
-  // dataInicio / dataFim sobre dataHoraOcorrencia, se presentes
+  query.dataInicio
+    ? sql`${ocorrenciasAjustePreco.dataHoraOcorrencia}::date >= ${query.dataInicio}::date`
+    : undefined,
+  query.dataFim
+    ? sql`${ocorrenciasAjustePreco.dataHoraOcorrencia}::date <= ${query.dataFim}::date`
+    : undefined,
 ))
 ```
 
@@ -2057,6 +2210,30 @@ export type OcorrenciaPrecoDetalhe = OcorrenciaPrecoLista & {
 
 Importar `OcorrenciaPrecoLista` e `OcorrenciaPrecoDetalhe` em `aprovacoes-client.tsx`. Estado extra: `const [detalhePreco, setDetalhePreco] = useState<OcorrenciaPrecoDetalhe | null>(null);`. List alimenta cards (`bruto: OcorrenciaPrecoLista`); a tabela do painel lê **somente** `detalhePreco.itens`.
 
+Import no topo (após `mensagemDeErro`):
+
+```
+import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
+```
+
+Estado da lista — `old_string` único (HEAD L53–55):
+
+```
+  const [ocorrencias, setOcorrencias] = useState<OcorrenciaLista[]>([]);
+  const [operacionais, setOperacionais] = useState<AprovacaoOperacional[]>([]);
+  const [ocorrenciaSel, setOcorrenciaSel] = useState<OcorrenciaLista | null>(null);
+```
+
+`new_string`:
+
+```
+  const [ocorrencias, setOcorrencias] = useState<ItemFila[]>([]);
+  const [operacionais, setOperacionais] = useState<AprovacaoOperacional[]>([]);
+  const [ocorrenciaSel, setOcorrenciaSel] = useState<ItemFila | null>(null);
+```
+
+(`ItemFila` é o tipo discriminado abaixo; colocar o `type ItemFila` **antes** deste `useState`.)
+
 - [ ] Tipo discriminado:
 
 ```ts
@@ -2087,8 +2264,27 @@ type ItemFila =
         ]);
         if (!resPrecoHttp.ok) throw new Error(await mensagemDeErro(resPrecoHttp));
         const resPreco = await resPrecoHttp.json() as { data: OcorrenciaPrecoLista[] };
-        // unir resFornecedor.data + resPreco.data em ItemFila[]; ordenar por dataHora desc;
-        // set da lista unificada; se nada selecionado, selecionar o primeiro.
+        const fila: ItemFila[] = [
+          ...resFornecedor.data.map((o): ItemFila => ({
+            tipo: 'fornecedor',
+            id: o.id,
+            titulo: o.fornecedorNome,
+            status: o.status,
+            dataHora: o.dataAbertura,
+            bruto: o,
+          })),
+          ...resPreco.data.map((o): ItemFila => ({
+            tipo: 'preco',
+            id: o.id,
+            titulo: o.clienteNomeFantasia ?? '—',
+            status: o.status,
+            dataHora: o.dataHora,
+            bruto: o,
+          })),
+        ];
+        fila.sort((a, b) => new Date(b.dataHora).getTime() - new Date(a.dataHora).getTime());
+        setOcorrencias(fila);
+        if (!ocorrenciaSel && fila[0]) setOcorrenciaSel(fila[0]);
 ```
 
 Zero `GET /api/ocorrencias-preco` sem query. Zero filtro inventado no cliente (não recortar por data da operação no frontend). A operação vem só do query param, igual a `listarAprovacoes` (`URLSearchParams` + `operacaoId`).
@@ -2185,15 +2381,201 @@ Zero `GET /api/ocorrencias-preco` sem query. Zero filtro inventado no cliente (n
   }, [ocorrenciaSel, carregarDetalheOcorrencia]);
 ```
 
-Atualizar as duas chamadas `carregarDetalheOcorrencia(ocorrenciaSel.id)` em `enviarAndamento` / `concluir` (HEAD L121 e L133) para `carregarDetalheOcorrencia(ocorrenciaSel)` — só disparam no ramo fornecedor. Estado da lista: `ItemFila[]` / `ItemFila | null` no lugar de `OcorrenciaLista[]`.
+Atualizar as duas chamadas `carregarDetalheOcorrencia(ocorrenciaSel.id)` em `enviarAndamento` / `concluir` (HEAD L121 e L133) para `carregarDetalheOcorrencia(ocorrenciaSel)` — só disparam no ramo fornecedor.
 
-- [ ] Card esquerdo: mesma `<button>` (L171–186). Badge de tipo **antes** do nome (`Fornecedor` / `Preço`). Título preço = `clienteNomeFantasia`. `StatusPill`: `aberta` → `Aberta` variant `pendente`; `ciente` → `Ciente` (mesmo tratamento visual que `resolvida` hoje). Estender `ROTULO_STATUS_OCORRENCIA` em `lib/aprovacoes.ts` com `ciente: 'Ciente'` — **não** remover `resolvida`.
+`ROTULO_STATUS_OCORRENCIA` `old_string` único:
 
-- [ ] Painel direito: se `tipo==='preco'`, bloco próprio (não o de fornecedor L193–219). Cabeçalho a partir de `ocorrenciaSel.bruto` (`OcorrenciaPrecoLista`): Pedido (`pedidoNumero`), Cliente (`clienteNomeFantasia`), Data/hora (`dataHora`), Finalizado por (`usuarioFinalizacaoNome`), Itens ajustados (`quantidadeItensAjustados`), Diferença total (`diferencaTotal`). Tabela: **somente** `detalhePreco?.itens` (Produto, Preço da tabela, Preço aplicado, Diferença, Diferença %, Ajustado por). Zero montar linhas a partir da list. `font-data` à direita. Original null → `—` + legenda `Sem preço de tabela para a data`. Desconto/acréscimo: sinal + `text-destructive` / `text-success-fg` (tokens DS v3).
+```
+export const ROTULO_STATUS_OCORRENCIA: Record<string, string> = {
+  aberta: 'Aberta',
+  em_analise: 'Em tratativa',
+  aguardando_fornecedor: 'Aguardando fornecedor',
+  resolvida: 'Concluída',
+};
+```
 
-- [ ] Botão `Marcar como ciente` só com `permissoes.includes('OCORRENCIA_PRECO_CIENTE')` e `status==='aberta'`. `POST /api/ocorrencias-preco/:id/ciente`. Sem modal de desfecho. Após sucesso, `void carregar()` + `void carregarDetalheOcorrencia(ocorrenciaSel)`; bloco no padrão L199–210 com `detalhePreco`: `Ciente registrado por <usuarioCienteNome> em <dataHoraCiente>`.
+`new_string` (não remover `resolvida`):
 
-- [ ] WS: rooms `['dashboard']` (e `operacao:${data}` se `operacaoId` da URL existir). `onMessage`: se `type` for os dois eventos novos, `void carregar()`. `onReconnect`: refetch. Cleanup no unmount. Sem polling.
+```
+export const ROTULO_STATUS_OCORRENCIA: Record<string, string> = {
+  aberta: 'Aberta',
+  em_analise: 'Em tratativa',
+  aguardando_fornecedor: 'Aguardando fornecedor',
+  resolvida: 'Concluída',
+  ciente: 'Ciente',
+};
+```
+
+- [ ] Card esquerdo — `old_string` único (HEAD L171–186):
+
+```
+                {ocorrencias.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() => setOcorrenciaSel(o)}
+                    className={cn(
+                      'block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2',
+                      ocorrenciaSel?.id === o.id && 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]',
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">{o.fornecedorNome}</b>
+                      <StatusPill variant="pendente" label={ROTULO_STATUS_OCORRENCIA[o.status] ?? o.status} className="h-[17px] text-[10px]" />
+                    </span>
+                  </button>
+                ))}
+```
+
+`new_string`:
+
+```
+                {ocorrencias.map((item) => (
+                  <button
+                    key={`${item.tipo}-${item.id}`}
+                    type="button"
+                    onClick={() => setOcorrenciaSel(item)}
+                    className={cn(
+                      'block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2',
+                      ocorrenciaSel?.id === item.id && ocorrenciaSel.tipo === item.tipo && 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]',
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="shrink-0 text-[10px] font-semibold uppercase text-muted-foreground">
+                        {item.tipo === 'preco' ? 'Preço' : 'Fornecedor'}
+                      </span>
+                      <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">{item.titulo}</b>
+                      <StatusPill variant="pendente" label={ROTULO_STATUS_OCORRENCIA[item.status] ?? item.status} className="h-[17px] text-[10px]" />
+                    </span>
+                  </button>
+                ))}
+```
+
+HEAD usa `variant="pendente"` em todos os status da fila (inclusive `resolvida`). `ciente` permanece `variant="pendente"` + rótulo `Ciente`. Título preço = `item.titulo` (= `clienteNomeFantasia ?? '—'`).
+
+- [ ] Painel direito — `old_string` único (HEAD L191–192):
+
+```
+              {ocorrenciaSel && (
+                <>
+```
+
+`new_string`:
+
+```
+              {ocorrenciaSel?.tipo === 'preco' ? (
+                <Card>
+                  <CardContent className="space-y-3">
+                    <p className="text-[13px]"><strong>Pedido:</strong> {ocorrenciaSel.bruto.pedidoNumero}</p>
+                    <p className="text-[13px]"><strong>Cliente:</strong> {ocorrenciaSel.bruto.clienteNomeFantasia ?? '—'}</p>
+                    <p className="text-[13px]"><strong>Data/hora:</strong> {formatDataHora(ocorrenciaSel.bruto.dataHora)}</p>
+                    <p className="text-[13px]"><strong>Finalizado por:</strong> {ocorrenciaSel.bruto.usuarioFinalizacaoNome ?? '—'}</p>
+                    <p className="text-[13px]"><strong>Itens ajustados:</strong> {ocorrenciaSel.bruto.quantidadeItensAjustados}</p>
+                    <p className={cn(
+                      'text-[13px] font-data',
+                      ocorrenciaSel.bruto.diferencaTotal.startsWith('-') ? 'text-destructive' : 'text-success-fg',
+                    )}>
+                      <strong>Diferença total:</strong> {ocorrenciaSel.bruto.diferencaTotal}
+                    </p>
+                    {detalhePreco?.itens.some((linha) => linha.precoTabelaOriginal == null) && (
+                      <p className="text-xs text-muted-foreground">Sem preço de tabela para a data</p>
+                    )}
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border text-left">
+                          <th className="py-1">Produto</th>
+                          <th className="py-1 text-right">Preço da tabela</th>
+                          <th className="py-1 text-right">Preço aplicado</th>
+                          <th className="py-1 text-right">Diferença</th>
+                          <th className="py-1 text-right">Diferença %</th>
+                          <th className="py-1">Ajustado por</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(detalhePreco?.itens ?? []).map((linha, indice) => (
+                          <tr key={`${linha.produtoCodigo}-${indice}`} className="border-b border-border">
+                            <td className="py-1">{linha.produtoCodigo} {linha.produtoNome}</td>
+                            <td className="py-1 text-right font-data">{linha.precoTabelaOriginal ?? '—'}</td>
+                            <td className="py-1 text-right font-data">{linha.precoAplicado}</td>
+                            <td className={cn(
+                              'py-1 text-right font-data',
+                              linha.diferencaAbsoluta.startsWith('-') ? 'text-destructive' : 'text-success-fg',
+                            )}>{linha.diferencaAbsoluta}</td>
+                            <td className="py-1 text-right font-data">{linha.diferencaPercentual ?? '—'}</td>
+                            <td className="py-1">{linha.usuarioAjusteNome ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {detalhePreco?.status === 'ciente' ? (
+                      <div className="flex items-start gap-2 rounded-lg border border-success-soft-border bg-success-soft p-3">
+                        <div>
+                          <p className="text-[13px] font-bold text-success-fg">Resultado</p>
+                          <p className="mt-0.5 text-[13px] text-success-fg">
+                            Ciente registrado por {detalhePreco.usuarioCienteNome ?? '—'} em {detalhePreco.dataHoraCiente ? formatDataHora(detalhePreco.dataHoraCiente) : '—'}
+                          </p>
+                        </div>
+                      </div>
+                    ) : permissoes.includes('OCORRENCIA_PRECO_CIENTE') && ocorrenciaSel.status === 'aberta' ? (
+                      <Button size="sm" onClick={() => void marcarCiente()}>Marcar como ciente</Button>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              ) : ocorrenciaSel && (
+                <>
+```
+
+Zero montar linhas a partir da list. Tabela lê **somente** `detalhePreco?.itens`. Original null → `—` (não `R$ 0,00`).
+
+`marcarCiente` (após `concluir`):
+
+```ts
+  const marcarCiente = async () => {
+    if (!ocorrenciaSel || ocorrenciaSel.tipo !== 'preco') return;
+    try {
+      const res = await fetch(`/api/ocorrencias-preco/${ocorrenciaSel.id}/ciente`, { method: 'POST' });
+      if (!res.ok) throw new Error(await mensagemDeErro(res));
+      await carregar();
+      await carregarDetalheOcorrencia(ocorrenciaSel);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao marcar como ciente');
+    }
+  };
+```
+
+- [ ] WS — após o `useEffect` que chama `carregar` (HEAD L82–84). `old_string` único:
+
+```
+  useEffect(() => {
+    void carregar();
+  }, [carregar]);
+```
+
+`new_string` (padrão `tabela-precos-client.tsx` L146–155; rooms **fixas** — o gateway já manda `dashboard` via `roomsDaData`):
+
+```
+  useEffect(() => {
+    void carregar();
+  }, [carregar]);
+
+  useEffect(() => {
+    const onMessage = (msg: RealtimeMensagem) => {
+      if (
+        msg.type === 'ocorrencia_ajuste_preco_criada'
+        || msg.type === 'ocorrencia_ajuste_preco_ciente'
+      ) {
+        void carregar();
+      }
+    };
+    return conectarRealtime({
+      rooms: ['dashboard'],
+      onMessage,
+      onReconnect: () => void carregar(),
+    });
+  }, [carregar]);
+```
+
+Sem `operacao:${...}`. Sem polling. Sem `setInterval`. Cleanup = retorno de `conectarRealtime`.
 
 - [ ] Jest: os 10 `it('...')` abaixo. Zero accordion (`rg accordion` no arquivo = vazio, como hoje).
 
@@ -2430,26 +2812,272 @@ export async function GET(req: NextRequest) {
       </PageHeader>
 ```
 
-Envolver o corpo atual (erro + KpiStrip + lista SIF + diálogos) em:
+Envolver o corpo atual (erro permanece **fora** das abas, HEAD L100–102 intacto; KpiStrip + lista SIF + aviso âmbar entram em `sif`; diálogos SIF permanecem depois de `</Tabs>`):
 
-```tsx
-<Tabs value={aba} onValueChange={...}>
-  <TabsList>
-    {podeSif && <TabsTrigger value="sif">Relatórios SIF</TabsTrigger>}
-    {podeGerenciais && <TabsTrigger value="gerenciais">Relatórios Gerenciais</TabsTrigger>}
-  </TabsList>
-  <TabsContent value="sif">
-    <BadgeProvisorio codigo="P8" />
-    {/* aviso âmbar MOVIDO para cá, sem mudar o texto */}
-    {/* KpiStrip + cards SIF intactos */}
-  </TabsContent>
-  <TabsContent value="gerenciais">{/* novo */}</TabsContent>
-</Tabs>
+Após os `useState` existentes de `RelatoriosConteudo`, acrescentar (SIF **não** usa `Skeleton` — `rg Skeleton relatorios-client.tsx` no HEAD = vazio; loading gerencial = `Card` disabled). Helpers de data **fora** do componente:
+
+```ts
+function primeiroDiaMesCorrenteIso(): string {
+  const agora = new Date();
+  const mes = String(agora.getMonth() + 1).padStart(2, '0');
+  return `${agora.getFullYear()}-${mes}-01`;
+}
+function hojeIsoLocal(): string {
+  const agora = new Date();
+  const mes = String(agora.getMonth() + 1).padStart(2, '0');
+  const dia = String(agora.getDate()).padStart(2, '0');
+  return `${agora.getFullYear()}-${mes}-${dia}`;
+}
 ```
 
-`podeSif = permissoes.includes('SIF_LER')`; `podeGerenciais = permissoes.includes('APROVACOES_LER')`. Uma aba só → já selecionada. Importar `Tabs*` como em `aprovacoes-client.tsx` L20.
+Dentro de `RelatoriosConteudo`, depois de `podeGerar`:
 
-- [ ] Aba gerenciais: filtros período (default 1º dia do mês corrente → hoje; consulta só com período válido), Cliente (`ComboboxField`, placeholder `Buscar cliente`), Representante select, Produto combobox `GET /api/cadastros/produtos?status=ativo&ativoVenda=true&pageSize=100`, Faixa A–D + Todas. Tabela: Número (`pedidoNumero` = UUID do T08), Cliente, Representante, Data, Itens ajustados, Valor total ajustado (`font-data`, sinal, cores semânticas). Detalhe: linha expansível (`<details>` ou painel sob a linha — **não** accordion de fila). Colunas iguais à T09. Vazio: `Nenhum pedido com alteração de preço no período selecionado.` Skeleton DS se existir na tela SIF; senão o mesmo `Card` disabled. Erro: `role="alert"` no padrão L100–102. **Sem** botão exportar.
+```ts
+  const podeSif = permissoes.includes('SIF_LER');
+  const podeGerenciais = permissoes.includes('APROVACOES_LER');
+  const [aba, setAba] = useState<'sif' | 'gerenciais'>(podeSif ? 'sif' : 'gerenciais');
+
+  type RelatorioGerencialPedido = {
+    pedidoVendaId: string;
+    pedidoNumero: string;
+    clienteNomeFantasia: string | null;
+    representanteNome: string | null;
+    dataPedido: string;
+    faixaPreco: 'A' | 'B' | 'C' | 'D';
+    quantidadeItensAjustados: number;
+    valorTotalAjustado: string;
+    itens: Array<{
+      produtoCodigo: string;
+      produtoNome: string;
+      precoTabelaOriginal: string | null;
+      precoAplicado: string;
+      diferencaAbsoluta: string;
+      diferencaPercentual: string | null;
+      usuarioAjusteNome: string | null;
+    }>;
+  };
+
+  const [dataInicio, setDataInicio] = useState(primeiroDiaMesCorrenteIso);
+  const [dataFim, setDataFim] = useState(hojeIsoLocal);
+  const [clienteIdFiltro, setClienteIdFiltro] = useState('');
+  const [representanteIdFiltro, setRepresentanteIdFiltro] = useState('');
+  const [produtoIdFiltro, setProdutoIdFiltro] = useState('');
+  const [faixaPrecoFiltro, setFaixaPrecoFiltro] = useState('');
+  const [pedidosGerenciais, setPedidosGerenciais] = useState<RelatorioGerencialPedido[]>([]);
+  const [carregandoGerenciais, setCarregandoGerenciais] = useState(false);
+  const [clientesFiltro, setClientesFiltro] = useState<Array<{ id: string; nomeFantasia?: string | null; razaoSocial: string }>>([]);
+  const [representantesFiltro, setRepresentantesFiltro] = useState<Array<{ id: string; nome: string }>>([]);
+  const [produtosFiltro, setProdutosFiltro] = useState<Array<{ id: string; codigo: string; nome: string }>>([]);
+
+  useEffect(() => {
+    if (!podeGerenciais) return;
+    void Promise.all([
+      fetch('/api/cadastros/clientes?pageSize=100', { cache: 'no-store' }).then((r) => r.ok ? r.json() : { data: [] }),
+      fetch('/api/cadastros/representantes?pageSize=100', { cache: 'no-store' }).then((r) => r.ok ? r.json() : { data: [] }),
+      fetch('/api/cadastros/produtos?status=ativo&ativoVenda=true&pageSize=100', { cache: 'no-store' }).then((r) => r.ok ? r.json() : { data: [] }),
+    ]).then(([c, r, p]) => {
+      setClientesFiltro((c as { data: typeof clientesFiltro }).data ?? []);
+      setRepresentantesFiltro((r as { data: typeof representantesFiltro }).data ?? []);
+      setProdutosFiltro((p as { data: typeof produtosFiltro }).data ?? []);
+    });
+  }, [podeGerenciais]);
+
+  const carregarGerenciais = useCallback(async () => {
+    if (!dataInicio || !dataFim) return;
+    setCarregandoGerenciais(true);
+    setErro(null);
+    try {
+      const qs = new URLSearchParams({ dataInicio, dataFim });
+      if (clienteIdFiltro) qs.set('clienteId', clienteIdFiltro);
+      if (representanteIdFiltro) qs.set('representanteId', representanteIdFiltro);
+      if (produtoIdFiltro) qs.set('produtoId', produtoIdFiltro);
+      if (faixaPrecoFiltro) qs.set('faixaPreco', faixaPrecoFiltro);
+      const res = await fetch(`/api/ocorrencias-preco/relatorio?${qs}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(await mensagemDeErro(res));
+      const corpo = await res.json() as { data: RelatorioGerencialPedido[]; total: number };
+      setPedidosGerenciais(corpo.data);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao carregar relatórios gerenciais');
+    } finally {
+      setCarregandoGerenciais(false);
+    }
+  }, [dataInicio, dataFim, clienteIdFiltro, representanteIdFiltro, produtoIdFiltro, faixaPrecoFiltro]);
+
+  useEffect(() => {
+    if (aba !== 'gerenciais') return;
+    if (!dataInicio || !dataFim) return;
+    void carregarGerenciais();
+  }, [aba, carregarGerenciais, dataInicio, dataFim]);
+```
+
+Importar no topo (além dos já existentes): `mensagemDeErro` de `@/lib/error-message` — **não** usar `import()` dinâmico. Acrescentar `import { mensagemDeErro } from '@/lib/error-message';` e no `carregarGerenciais` usar `mensagemDeErro(res)` direto. Também:
+
+```
+import { ComboboxField } from '@/components/ui/combobox-field';
+import { DatePickerField } from '@/components/ui/date-picker-field';
+import { SelectNative } from '@/components/ui/select-native';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+```
+
+`FormField` já está importado. `Tabs*` = mesmo import de `aprovacoes-client.tsx` L20.
+
+`old_string` imediatamente após o alerta de erro (HEAD L100–102) até o fechamento da lista SIF (antes dos `Dialog`):
+
+Na prática: o Worker envolve KpiStrip + `div.space-y-2.5` dos cards SIF (L104–165) e o aviso âmbar (movido do header) em `TabsContent value="sif"`. JSX literal das abas:
+
+```tsx
+      <Tabs value={aba} onValueChange={(v) => setAba(v as 'sif' | 'gerenciais')}>
+        <TabsList>
+          {podeSif && <TabsTrigger value="sif">Relatórios SIF</TabsTrigger>}
+          {podeGerenciais && <TabsTrigger value="gerenciais">Relatórios Gerenciais</TabsTrigger>}
+        </TabsList>
+        <TabsContent value="sif">
+          <BadgeProvisorio codigo="P8" />
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+            <p className="flex-1 text-xs leading-snug text-amber-900">
+              Modelos oficiais dos relatórios SIF pendentes de fornecimento pelo cliente. Nomes e campos abaixo são provisórios (demonstração).
+            </p>
+          </div>
+          <KpiStrip>
+            <Kpi label="Pendentes de dados" value={kpis.pendentes} tone="alert" />
+            <Kpi label="Prontos para gerar" value={kpis.prontos} tone="ok" />
+            <Kpi label="Gerados/Retificados" value={kpis.gerados} tone="default" />
+          </KpiStrip>
+          {/* colar intacto o bloco de cards SIF do HEAD L110–165 */}
+        </TabsContent>
+        <TabsContent value="gerenciais">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+            <FormField label="Data início" htmlFor="rel-data-inicio">
+              <DatePickerField id="rel-data-inicio" value={dataInicio} onChange={setDataInicio} aria-label="Data início" />
+            </FormField>
+            <FormField label="Data fim" htmlFor="rel-data-fim">
+              <DatePickerField id="rel-data-fim" value={dataFim} onChange={setDataFim} aria-label="Data fim" />
+            </FormField>
+            <FormField label="Cliente" htmlFor="rel-cliente">
+              <ComboboxField
+                id="rel-cliente"
+                items={clientesFiltro.map((c) => ({
+                  id: c.id,
+                  label: c.nomeFantasia || c.razaoSocial,
+                }))}
+                value={clienteIdFiltro}
+                onChange={setClienteIdFiltro}
+                placeholder="Buscar cliente"
+                searchPlaceholder="Buscar cliente"
+                emptyText="Nenhum cliente encontrado."
+                clearable
+              />
+            </FormField>
+            <FormField label="Representante" htmlFor="rel-representante">
+              <SelectNative
+                id="rel-representante"
+                value={representanteIdFiltro}
+                onChange={(event) => setRepresentanteIdFiltro(event.target.value)}
+              >
+                <option value="">Todas</option>
+                {representantesFiltro.map((r) => (
+                  <option key={r.id} value={r.id}>{r.nome}</option>
+                ))}
+              </SelectNative>
+            </FormField>
+            <FormField label="Produto" htmlFor="rel-produto">
+              <ComboboxField
+                id="rel-produto"
+                items={produtosFiltro.map((p) => ({
+                  id: p.id,
+                  label: `${p.codigo} — ${p.nome}`,
+                }))}
+                value={produtoIdFiltro}
+                onChange={setProdutoIdFiltro}
+                placeholder="Todos"
+                searchPlaceholder="Buscar produto..."
+                emptyText="Nenhum produto encontrado."
+                clearable
+              />
+            </FormField>
+            <FormField label="Faixa" htmlFor="rel-faixa">
+              <SelectNative
+                id="rel-faixa"
+                value={faixaPrecoFiltro}
+                onChange={(event) => setFaixaPrecoFiltro(event.target.value)}
+              >
+                <option value="">Todas</option>
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+                <option value="D">D</option>
+              </SelectNative>
+            </FormField>
+          </div>
+          {carregandoGerenciais ? (
+            <Card className="pointer-events-none opacity-60">
+              <CardContent className="p-3">
+                <p className="text-sm text-muted-foreground">Carregando…</p>
+              </CardContent>
+            </Card>
+          ) : pedidosGerenciais.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum pedido com alteração de preço no período selecionado.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {pedidosGerenciais.map((pedido) => (
+                <details key={pedido.pedidoVendaId} className="rounded-lg border border-border">
+                  <summary className="cursor-pointer list-none p-3">
+                    <div className="grid grid-cols-2 gap-2 text-[13px] sm:grid-cols-6">
+                      <span><strong>Número</strong> {pedido.pedidoNumero}</span>
+                      <span><strong>Cliente</strong> {pedido.clienteNomeFantasia ?? '—'}</span>
+                      <span><strong>Representante</strong> {pedido.representanteNome ?? '—'}</span>
+                      <span><strong>Data</strong> {pedido.dataPedido}</span>
+                      <span><strong>Itens ajustados</strong> {pedido.quantidadeItensAjustados}</span>
+                      <span className={cn(
+                        'font-data',
+                        pedido.valorTotalAjustado.startsWith('-') ? 'text-destructive' : 'text-success-fg',
+                      )}>
+                        <strong>Valor total ajustado</strong> {pedido.valorTotalAjustado}
+                      </span>
+                    </div>
+                  </summary>
+                  <div className="border-t border-border p-3">
+                    {pedido.itens.some((item) => item.precoTabelaOriginal == null) && (
+                      <p className="mb-2 text-xs text-muted-foreground">Sem preço de tabela para a data</p>
+                    )}
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border text-left">
+                          <th className="py-1">Produto</th>
+                          <th className="py-1 text-right">Preço da tabela</th>
+                          <th className="py-1 text-right">Preço aplicado</th>
+                          <th className="py-1 text-right">Diferença</th>
+                          <th className="py-1 text-right">Diferença %</th>
+                          <th className="py-1">Ajustado por</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pedido.itens.map((item, indice) => (
+                          <tr key={`${item.produtoCodigo}-${indice}`} className="border-b border-border">
+                            <td className="py-1">{item.produtoCodigo} {item.produtoNome}</td>
+                            <td className="py-1 text-right font-data">{item.precoTabelaOriginal ?? '—'}</td>
+                            <td className="py-1 text-right font-data">{item.precoAplicado}</td>
+                            <td className={cn(
+                              'py-1 text-right font-data',
+                              item.diferencaAbsoluta.startsWith('-') ? 'text-destructive' : 'text-success-fg',
+                            )}>{item.diferencaAbsoluta}</td>
+                            <td className="py-1 text-right font-data">{item.diferencaPercentual ?? '—'}</td>
+                            <td className="py-1">{item.usuarioAjusteNome ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+```
+
+Aba inicial: **`sif` se `SIF_LER`, senão `gerenciais`**. Uma aba só → já selecionada (Jest). Detalhe = **`<details>`** (não painel, não accordion da fila). Loading = **`Card` disabled** (`pointer-events-none opacity-60`) — `Skeleton` existe no DS mas **não** na tela SIF. `cn` já não está em `relatorios-client.tsx`: acrescentar `import { cn } from '@/lib/cn';`. **Sem** botão exportar. `SeletorOperacao` permanece no header. Consulta **não** dispara se `dataInicio` ou `dataFim` estiver vazio.
 
 - [ ] `rg "exportar|Exportar" app/frontend/src/app/(admin)/gestao/relatorios/relatorios-client.tsx` vazio. `menus-canonicos.ts` e `menu-v2.ts` **não** entram no diff.
 
@@ -2508,14 +3136,25 @@ Cada título é o critério de aceite. Corpos: seguir os passos já desta task. 
 
 - [ ] Conferir 1:1 o mapa deste plano: cada linha 14.1–14.10 e C1–C10 tem teste verde com nome rastreável (`it('DoD 14.6 ...')` / `it('C2 sem fallback ...')`).
 - [ ] **Não** existe teste "item comercial sem produto" (`rg "sem produto vinculado|item comercial sem produto" app`).
-- [ ] Regressão 8 áreas — rodar e colar saída na evidência:
+- [ ] Regressão 8 áreas — rodar **estes arquivos que existem no HEAD** (paths relativos a `app/backend`) e colar a saída na evidência. **Não** ajustar glob. **Não** existe `relatorios-sif*`.
 
 ```powershell
 Set-Location app/backend
-npx jest --testPathPattern "pedidos-onda4|pedidos-reserva|pedidos-concorrencia|adendos|overbooking|relatorios-sif|aprovacoes|onda13-catalogo"
+npx jest --runInBand --testPathPattern "test/integration/pedidos-onda4.e2e-spec.ts|test/integration/pedidos-reserva.e2e-spec.ts|test/integration/pedidos-concorrencia.e2e-spec.ts|test/integration/adendos.e2e-spec.ts|test/integration/overbooking-lifecycle.e2e-spec.ts|test/integration/overbooking-decisao.e2e-spec.ts|test/integration/overbooking-concorrencia.e2e-spec.ts|test/integration/sif.e2e-spec.ts|test/integration/aprovacoes.e2e-spec.ts|test/integration/ocorrencia-fornecedor.e2e-spec.ts|test/unit/perfil-permissoes-snapshot.spec.ts|test/integration/onda13-catalogo-unificacao.e2e-spec.ts"
 ```
 
-(Ajuste o glob aos nomes reais se um não existir — `rg` em `test/integration` e rode os que casarem. Não reescrever specs históricos de migrate `< 0034`.)
+Arquivos (1:1 com o comando):
+
+1. Reserva atômica — `test/integration/pedidos-reserva.e2e-spec.ts`
+2. Overbooking AD-05 — `test/integration/overbooking-lifecycle.e2e-spec.ts`, `test/integration/overbooking-decisao.e2e-spec.ts`, `test/integration/overbooking-concorrencia.e2e-spec.ts`
+3. Adendos (quantidade) — `test/integration/adendos.e2e-spec.ts`
+4. `PATCH :id/itens/:itemId` só quantidade — `test/integration/pedidos-onda4.e2e-spec.ts`
+5. 4 SIF + versionamento — `test/integration/sif.e2e-spec.ts`
+6. Fila fornecedor + `Concluir tratativa` — `test/integration/aprovacoes.e2e-spec.ts`, `test/integration/ocorrencia-fornecedor.e2e-spec.ts`
+7. Snapshot RBAC — `test/unit/perfil-permissoes-snapshot.spec.ts`
+8. Catálogo unificado — `test/integration/onda13-catalogo-unificacao.e2e-spec.ts`
+
+Não reescrever specs históricos de migrate `< 0034`.
 
 - [ ] Snapshot RBAC: `OCORRENCIA_PRECO_CIENTE` em admin/gestor; **ausente** `PEDIDO_PRECO_AJUSTAR`; **ausente** `ITENS_COMERCIAIS_*` / `ITENS_COMPRA_*`.
 - [ ] `rg item_comercial_id app/backend/src/database/schema app/backend/src/modules` vazio.
