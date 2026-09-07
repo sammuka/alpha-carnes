@@ -12,7 +12,7 @@
 
 **Base pinada no momento do plano:** `origin/develop` @ `b95e1ae8a62c0a6a33b9c605cc0f3ccf3cb71d6b` (Onda 13 mergeada, PR #123 SHA `a88854e`, AD-15). Journal em `app/backend/src/database/migrations/meta/_journal.json` termina em `idx: 36` / `0036_onda13_catalogo_contract`. Próximos nomes livres: `0037`…`0043` (tabela abaixo). Se `origin/develop` avançar e o journal ganhar `idx ≥ 37`, **parar e reportar** — não renumerar sozinho.
 
-**Worktree / branch:** `.worktrees/o14` · `feature/onda14-preco-tabela-pedido`. AD-16 commitada em `4cea1f10a3e81c1cc387d8e68cba40c39928c22b` — **não reabrir**. Worktree HEAD no início desta 5ª correção (`2026-09-07T04:16:38Z`): `014699c36cde309a5545d22a31dfbd2469d74d59`. Arquivo inteiro `app/frontend/src/app/(admin)/gestao/aprovacoes/aprovacoes-client.tsx` relido neste SHA. Conferências das rodadas 1–4 permanecem. Nunca implementar no worktree coordenador.
+**Worktree / branch:** `.worktrees/o14` · `feature/onda14-preco-tabela-pedido`. AD-16 commitada em `4cea1f10a3e81c1cc387d8e68cba40c39928c22b` — **não reabrir**. Worktree HEAD no início desta 6ª correção (`2026-09-07T04:31:43Z`): `851f6655905a8bb02a764f8c5802ee6b59eee62f`. `relatorios-client.tsx` relido neste SHA (L86–165). Conferências das rodadas 1–5 permanecem. Nunca implementar no worktree coordenador.
 
 **Correção Portão 1 1ª rodada (5 achados — permanecem fechados, não reabrir):** (1) GET `/precos/vigente` envelope `{ data }` — T04 e T06; `unidadePreco` nullable. (2) T10 embute o JSON literal ALP-85. (3) T08 só list/detail/ciente; T10 declara `@Get('relatorio')` acima de `:id`, sem stub 501. (4) Persistência de preço: Zod + `numeric(15,2)`, nunca `Number()`. (5) T06 remap/lock de cliente + `it('...')` 1:1 em T06/T09.
 
@@ -23,6 +23,8 @@
 **Correção Portão 1 4ª rodada (`2026-09-07T03:55:27Z` — fecha exatamente 4 achados, sem mudar escopo nem reabrir 1–3):** (1) T09 — `carregar` compilável (`ItemFila`, `dataAbertura`→`dataHora`, título, setters); `old_string`/`new_string` do card L171–186 e do painel de preço; `conectarRealtime` literal `rooms: ['dashboard']`. (2) T11 — `onValueChange` literal; aba inicial `sif` se `SIF_LER` senão `gerenciais`; detalhe = `<details>`; loading = `Card` disabled (SIF **não** usa `Skeleton`). (3) T05/T06 unidade — `produtos.unidadePreco` no item e em `ProdutoPedido`; vigente `null` **não** vira `/kg` nem `?? 'kg'`. (4) T05 auditoria — `justificativa: 'pedido.item.preco_ajustado'` + um assert; T12 lista os 12 specs reais do HEAD.
 
 **Correção Portão 1 5ª rodada (`2026-09-07T04:16:38Z` — fecha exatamente 1 achado T09, sem mudar escopo nem reabrir 1–4):** T09 — depois dos patches, `ocorrenciaSel` é `ItemFila`; o painel fornecedor (HEAD L195–197) ainda lia `ocorrenciaSel.fornecedorNome` / `nfChave` / `pedidoLote`, que só existem em `bruto` quando `tipo === 'fornecedor'`. `old_string`/`new_string` literais para `ocorrenciaSel.bruto.*`. Inventário completo `ocorrenciaSel.*` e `o.*` na aba ocorrências (StatusPill/labels da lista já no card). Zero acesso órfão. AD-16 intacta. Sem `PEDIDO_PRECO_AJUSTAR`.
+
+**Correção Portão 1 6ª rodada (`2026-09-07T04:31:43Z` — fecha exatamente 2 achados, sem mudar escopo nem reabrir 1–5):** (1) T10 `faixaPreco` — `ocorrencias_ajuste_preco` **não** tem a coluna; origem = `pedidos_venda_itens.faixa_preco` via subquery correlacionada em `pedido_venda_id` da ocorrência (SQL único no SELECT e no filtro); **proibido** `clientes.faixa_preco` atual. (2) T11 wrap SIF — `old_string`/`new_string` literais de HEAD L104–165 (`KpiStrip` + cards); zero “colar”, zero `...` placeholder, zero fork A/B. AD-16 intacta. Sem `PEDIDO_PRECO_AJUSTAR`.
 
 **Linear:** épico [ALP-55](https://linear.app/alphacarnes/issue/ALP-55). T00 [ALP-77](https://linear.app/alphacarnes/issue/ALP-77) Done neste SHA. Este arquivo é T01. Worker executa Task 1 (docs) + T02–T12 = ALP-78…86 + ALP-59 + ALP-61. T13 é o Quality Owner. T14 abre o PR só depois de T13 Done. **Este worker não faz Portão 2 nem merge.**
 
@@ -2745,13 +2747,57 @@ export const relatorioQuerySchema = z.object({
 export type RelatorioQuery = z.infer<typeof relatorioQuerySchema>;
 ```
 
-Sem `dataInicio`/`dataFim` → 400 (Zod). Fonte = `ocorrencias_ajuste_preco` + itens. **Zero** `from(tabelasPrecoItens)`.
+Sem `dataInicio`/`dataFim` → 400 (Zod). Fonte = `ocorrencias_ajuste_preco` + itens. **Zero** `from(tabelasPrecoItens)`. **Não** acrescentar coluna `faixa_preco` em `ocorrencias_ajuste_preco` (T07 intacta).
 
-Filtros AND. `produtoId` restringe **pedidos** que têm aquele produto ajustado; a segunda query `IN (pedidoIds da página)` traz **todos** os itens ajustados desses pedidos.
+### `faixaPreco` no relatório (AD-16 — congelada no item)
+
+A tabela `ocorrencias_ajuste_preco` **não** tem `faixa_preco`. AD-16 congela a faixa em `pedidos_venda_itens.faixa_preco` na inclusão (T05). JSON `faixaPreco` **é** esse valor congelado.
+
+Origem obrigatória: join pelo `pedido_venda_id` da ocorrência → `pedidos_venda_itens`. **Proibido** `clientes.faixa_preco` / `clientes.faixaPreco` (faixa atual do cadastro). `rg "clientes\\.faixaPreco|clientes\\.faixa_preco" app/backend/src/modules/comercial/ocorrencias-preco` = vazio.
+
+Predicado canônico único (SELECT **e** filtro `query.faixaPreco` — o Worker não inventa outro):
+
+```sql
+(
+  SELECT pvi.faixa_preco
+  FROM pedidos_venda_itens pvi
+  WHERE pvi.pedido_venda_id = ocorrencias_ajuste_preco.pedido_venda_id
+    AND pvi.deleted_at IS NULL
+  ORDER BY pvi.created_at ASC, pvi.id ASC
+  LIMIT 1
+)
+```
+
+Drizzle no `OcorrenciasPrecoService.relatorio` (constante única; `sql` já usado na T08 do mesmo arquivo):
+
+```ts
+const faixaCongeladaSql = sql`(
+  SELECT pvi.faixa_preco
+  FROM pedidos_venda_itens pvi
+  WHERE pvi.pedido_venda_id = ${ocorrenciasAjustePreco.pedidoVendaId}
+    AND pvi.deleted_at IS NULL
+  ORDER BY pvi.created_at ASC, pvi.id ASC
+  LIMIT 1
+)`;
+```
+
+SELECT da página (além dos demais campos do envelope):
+
+```ts
+faixaPreco: sql<'A' | 'B' | 'C' | 'D'>`${faixaCongeladaSql}`.as('faixa_preco'),
+```
+
+Filtros AND. Quando `query.faixaPreco` vier, o **mesmo** `faixaCongeladaSql`:
+
+```ts
+query.faixaPreco ? sql`${faixaCongeladaSql} = ${query.faixaPreco}` : undefined,
+```
+
+`produtoId` restringe **pedidos** que têm aquele produto ajustado; a segunda query `IN (pedidoIds da página)` traz **todos** os itens ajustados desses pedidos.
 
 Paginar por pedido (`count` + `limit/offset` na ocorrência). `valorTotalAjustado` = `diferenca_total` da ocorrência (já persistido).
 
-`representanteNome`: `clientes.representante_id` → `representantes.nome` **atual**. Sem representante → `null` (UI `—`). Self-Review: lacuna histórica.
+`representanteNome`: `clientes.representante_id` → `representantes.nome` **atual**. Sem representante → `null` (UI `—`). Self-Review: lacuna histórica. **Não** aplicar a mesma lacuna à faixa: faixa é histórica (item), representante é atual (D10).
 
 ### Shape JSON (ALP-85, literal — este é o contrato)
 
@@ -2803,7 +2849,7 @@ export type RelatorioAjustePrecoPedido = {
   clienteNomeFantasia: string | null;
   representanteNome: string | null;
   dataPedido: string; // YYYY-MM-DD (operacoes.data do pedido)
-  faixaPreco: 'A' | 'B' | 'C' | 'D';
+  faixaPreco: 'A' | 'B' | 'C' | 'D'; // subquery pedidos_venda_itens.faixa_preco; NUNCA clientes.faixa_preco
   quantidadeItensAjustados: number;
   valorTotalAjustado: string; // NUMERIC(15,2), pode ser negativo
   itens: RelatorioAjustePrecoItem[];
@@ -2820,6 +2866,8 @@ export type RelatorioAjustePrecoEnvelope = {
 Nulos JSON: `precoTabelaOriginal`, `diferencaPercentual` (quando original é null), `representanteNome`, `clienteNomeFantasia`, `usuarioAjusteNome`. Não omitir a chave.
 
 Teste de republicação: alterar `tabelas_preco_itens` após a ocorrência → relatório idêntico. 403 sem `APROVACOES_LER`. C7 (`diferencaPercentual` JSON `null` se original null). C8 (`"-8.1081"` no item; `valorTotalAjustado` negativo). C10.
+
+Faixa congelada (obrigatório, mesmo e2e T10): item com `faixa_preco='A'`; `UPDATE clientes SET faixa_preco='C'` depois da ocorrência → JSON `faixaPreco === 'A'`; `GET .../relatorio?faixaPreco=C` **não** devolve esse pedido; `GET ...?faixaPreco=A` devolve. Zero assert sobre `clientes.faixa_preco` no JSON.
 
 BFF GET `app/frontend/src/app/api/ocorrencias-preco/relatorio/route.ts`:
 
@@ -2871,7 +2919,7 @@ export async function GET(req: NextRequest) {
       </PageHeader>
 ```
 
-Envolver o corpo atual (erro permanece **fora** das abas, HEAD L100–102 intacto; KpiStrip + lista SIF + aviso âmbar entram em `sif`; diálogos SIF permanecem depois de `</Tabs>`):
+Erro HEAD L100–102 permanece **fora** das abas (não entra no wrap). Diálogos SIF permanecem **depois** de `</Tabs>`. O wrap é o `old_string`/`new_string` de HEAD L104–165 mais abaixo — o Worker não inventa outro recorte.
 
 Após os `useState` existentes de `RelatoriosConteudo`, acrescentar (SIF **não** usa `Skeleton` — `rg Skeleton relatorios-client.tsx` no HEAD = vazio; loading gerencial = `Card` disabled). Helpers de data **fora** do componente:
 
@@ -2980,9 +3028,76 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 `FormField` já está importado. `Tabs*` = mesmo import de `aprovacoes-client.tsx` L20.
 
-`old_string` imediatamente após o alerta de erro (HEAD L100–102) até o fechamento da lista SIF (antes dos `Dialog`):
+Aplicar **depois** do patch do header. Erro L100–102 **não** entra neste `old_string`.
 
-Na prática: o Worker envolve KpiStrip + `div.space-y-2.5` dos cards SIF (L104–165) e o aviso âmbar (movido do header) em `TabsContent value="sif"`. JSX literal das abas:
+`old_string` único (HEAD `851f665` L104–165 — `KpiStrip` + cards; único no arquivo):
+
+```
+      <KpiStrip>
+        <Kpi label="Pendentes de dados" value={kpis.pendentes} tone="alert" />
+        <Kpi label="Prontos para gerar" value={kpis.prontos} tone="ok" />
+        <Kpi label="Gerados/Retificados" value={kpis.gerados} tone="default" />
+      </KpiStrip>
+
+      <div className="space-y-2.5">
+        {relatorios.map((r) => (
+          <Card key={r.id}>
+            <CardContent className="flex flex-wrap items-center gap-2 p-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-[13px] font-semibold">{r.nome}</h3>
+                  <BadgeProvisorio pendencia="P8" />
+                  <StatusPill variant="pendente" label={ROTULO_STATUS_SIF[r.status]} />
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{r.codigo} · Responsável: {r.perfilResponsavel}</p>
+                {r.pendenciasJson.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {r.pendenciasJson.map((p) => (
+                      <li key={p} className="flex items-center gap-1 text-[11px] text-warning-fg">
+                        <AlertTriangle size={12} /> {p}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {r.ultimaVersao && (
+                  <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    Última versão: v{r.ultimaVersao.versao} em {formatDataHora(r.ultimaVersao.geradoEm)}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <Button
+                  size="sm"
+                  disabled={!podeGerar || r.status === 'pendente_dados'}
+                  title={r.status === 'pendente_dados' ? 'Resolva as pendências de dados antes de gerar' : 'Gerar nova versão'}
+                  onClick={() => void gerarRelatorio(r.id).then(carregar).catch((e: Error) => setErro(e.message))}
+                >
+                  Gerar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void previewRelatorio(r.id)
+                    .then((v) => setModalPreview({ relatorio: r, versao: v }))
+                    .catch((e: Error) => setErro(e.message))}
+                >
+                  <Eye /> Pré-visualizar
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setModalRetificar(r)} disabled={!podeGerar || r.versaoAtual < 1}>
+                  Retificar
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => void abrirHistorico(r)}>
+                  <History /> Histórico
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+```
+
+`new_string` (KpiStrip e cards = HEAD L104–165 reindentados em `TabsContent value="sif"`; P8 + aviso âmbar entram em `sif`; gerenciais no segundo `TabsContent`):
 
 ```tsx
       <Tabs value={aba} onValueChange={(v) => setAba(v as 'sif' | 'gerenciais')}>
@@ -2990,7 +3105,7 @@ Na prática: o Worker envolve KpiStrip + `div.space-y-2.5` dos cards SIF (L104�
           {podeSif && <TabsTrigger value="sif">Relatórios SIF</TabsTrigger>}
           {podeGerenciais && <TabsTrigger value="gerenciais">Relatórios Gerenciais</TabsTrigger>}
         </TabsList>
-        <TabsContent value="sif">
+        <TabsContent value="sif" className="space-y-3">
           <BadgeProvisorio codigo="P8" />
           <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
@@ -3003,9 +3118,64 @@ Na prática: o Worker envolve KpiStrip + `div.space-y-2.5` dos cards SIF (L104�
             <Kpi label="Prontos para gerar" value={kpis.prontos} tone="ok" />
             <Kpi label="Gerados/Retificados" value={kpis.gerados} tone="default" />
           </KpiStrip>
-          {/* colar intacto o bloco de cards SIF do HEAD L110–165 */}
+          <div className="space-y-2.5">
+            {relatorios.map((r) => (
+              <Card key={r.id}>
+                <CardContent className="flex flex-wrap items-center gap-2 p-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-[13px] font-semibold">{r.nome}</h3>
+                      <BadgeProvisorio pendencia="P8" />
+                      <StatusPill variant="pendente" label={ROTULO_STATUS_SIF[r.status]} />
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{r.codigo} · Responsável: {r.perfilResponsavel}</p>
+                    {r.pendenciasJson.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {r.pendenciasJson.map((p) => (
+                          <li key={p} className="flex items-center gap-1 text-[11px] text-warning-fg">
+                            <AlertTriangle size={12} /> {p}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {r.ultimaVersao && (
+                      <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        Última versão: v{r.ultimaVersao.versao} em {formatDataHora(r.ultimaVersao.geradoEm)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Button
+                      size="sm"
+                      disabled={!podeGerar || r.status === 'pendente_dados'}
+                      title={r.status === 'pendente_dados' ? 'Resolva as pendências de dados antes de gerar' : 'Gerar nova versão'}
+                      onClick={() => void gerarRelatorio(r.id).then(carregar).catch((e: Error) => setErro(e.message))}
+                    >
+                      Gerar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void previewRelatorio(r.id)
+                        .then((v) => setModalPreview({ relatorio: r, versao: v }))
+                        .catch((e: Error) => setErro(e.message))}
+                    >
+                      <Eye /> Pré-visualizar
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setModalRetificar(r)} disabled={!podeGerar || r.versaoAtual < 1}>
+                      Retificar
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => void abrirHistorico(r)}>
+                      <History /> Histórico
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
-        <TabsContent value="gerenciais">
+        <TabsContent value="gerenciais" className="space-y-3">
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
             <FormField label="Data início" htmlFor="rel-data-inicio">
               <DatePickerField id="rel-data-inicio" value={dataInicio} onChange={setDataInicio} aria-label="Data início" />
