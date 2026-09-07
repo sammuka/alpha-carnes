@@ -12,11 +12,13 @@
 
 **Base pinada no momento do plano:** `origin/develop` @ `b95e1ae8a62c0a6a33b9c605cc0f3ccf3cb71d6b` (Onda 13 mergeada, PR #123 SHA `a88854e`, AD-15). Journal em `app/backend/src/database/migrations/meta/_journal.json` termina em `idx: 36` / `0036_onda13_catalogo_contract`. Próximos nomes livres: `0037`…`0043` (tabela abaixo). Se `origin/develop` avançar e o journal ganhar `idx ≥ 37`, **parar e reportar** — não renumerar sozinho.
 
-**Worktree / branch:** `.worktrees/o14` · `feature/onda14-preco-tabela-pedido`. AD-16 commitada em `4cea1f10a3e81c1cc387d8e68cba40c39928c22b` — **não reabrir**. Worktree HEAD na 2ª correção do Portão 1 (`2026-09-07T03:27:34Z`): `4a19c25790ece35c4ca6d140f4a679f81a6c5a87`. `carregar` / `listarAprovacoes` conferidos neste SHA. Nunca implementar no worktree coordenador.
+**Worktree / branch:** `.worktrees/o14` · `feature/onda14-preco-tabela-pedido`. AD-16 commitada em `4cea1f10a3e81c1cc387d8e68cba40c39928c22b` — **não reabrir**. Worktree HEAD no início desta 3ª correção (`2026-09-07T03:40:46Z`): `e5ffa716e0bedb0efa5b9698848a49aabb233a2d`. `carregar` / `listarAprovacoes` / `carregarDetalheOcorrencia` (aprovacoes-client L86–90) / `realtime.gateway.ts` conferidos neste SHA. Nunca implementar no worktree coordenador.
 
 **Correção Portão 1 1ª rodada (5 achados — permanecem fechados, não reabrir):** (1) GET `/precos/vigente` envelope `{ data }` — T04 e T06; `unidadePreco` nullable. (2) T10 embute o JSON literal ALP-85. (3) T08 só list/detail/ciente; T10 declara `@Get('relatorio')` acima de `:id`, sem stub 501. (4) Persistência de preço: Zod + `numeric(15,2)`, nunca `Number()`. (5) T06 remap/lock de cliente + `it('...')` 1:1 em T06/T09.
 
-**Correção Portão 1 2ª rodada (`2026-09-07T03:27:34Z` — fecha exatamente 2 achados, sem mudar escopo):** (1) T08/T09 — `operacaoId` obrigatório no DTO de list, join `pedidos_venda.operacao_id`, fetch literal da fila. (2) T11 — 12 `it('...')` literais ALP-86.
+**Correção Portão 1 2ª rodada (`2026-09-07T03:27:34Z` — fecha exatamente 2 achados, sem mudar escopo):** HEAD então `4a19c25790ece35c4ca6d140f4a679f81a6c5a87`. (1) T08/T09 — `operacaoId` obrigatório no DTO de list, join `pedidos_venda.operacao_id`, fetch literal da fila. (2) T11 — 12 `it('...')` literais ALP-86.
+
+**Correção Portão 1 3ª rodada (`2026-09-07T03:40:46Z` — fecha exatamente 3 achados, sem mudar escopo nem reabrir 1–2):** (1) escala canônica de `diferenca_percentual` = **×100**, 4 casas; T07 persiste, T08/T10 serializam o valor gravado; C7 permanece `null` se original `null`; C8 exemplo `17.00` vs `18.50` → `"-8.1081"`. Worker **não** escolhe a escala. (2) RA-04 — `realtime.gateway.ts` na lista Modificar; handlers `@OnEvent` literais T07=`OCORRENCIA_AJUSTE_PRECO_CRIADA` e T08=`OCORRENCIA_AJUSTE_PRECO_CIENTE` no molde de `handleOcorrenciaAberta` / `handleAprovacaoRegistrada`. (3) T08/T09 contrato campo a campo `OcorrenciaPrecoLista` vs detalhe com `itens`; Jest T09 exige `GET /ocorrencias-preco/:id`; `old_string`/`new_string` do fetch de detalhe sobre `carregarDetalheOcorrencia` L86–90.
 
 **Linear:** épico [ALP-55](https://linear.app/alphacarnes/issue/ALP-55). T00 [ALP-77](https://linear.app/alphacarnes/issue/ALP-77) Done neste SHA. Este arquivo é T01. Worker executa Task 1 (docs) + T02–T12 = ALP-78…86 + ALP-59 + ALP-61. T13 é o Quality Owner. T14 abre o PR só depois de T13 Done. **Este worker não faz Portão 2 nem merge.**
 
@@ -46,7 +48,7 @@ Não commitar diff local de `0035_onda13_catalogo_backfill.sql`. Este worktree e
 6. **Princípio II:** preço + ajuste + ocorrência + relatório na mesma onda, com todos os estados.
 7. **Princípio III / RA-01:** resolução, detecção de ajuste e criação de ocorrência são backend. Frontend só exibe e valida formulário. Faixa e data **nunca** vêm do cliente HTTP.
 8. **Princípio IV / RA-02:** inclusão e finalização na `tx` existente + auditoria. Sem transação nova para ocorrência.
-9. **Princípio VI / RA-04:** eventos pós-commit. Sem polling. `aprovacoes-client.tsx` **não tem** WebSocket hoje — a T09 **adiciona** `conectarRealtime` (padrão de `tabela-precos-client.tsx`).
+9. **Princípio VI / RA-04:** eventos pós-commit. Sem polling. `aprovacoes-client.tsx` **não tem** WebSocket hoje — a T09 **adiciona** `conectarRealtime` (padrão de `tabela-precos-client.tsx`). `app/backend/src/realtime/realtime.gateway.ts` só faz broadcast com `@OnEvent` **explícito** (sem wildcard): emitir no service **não** entrega o evento se o gateway não tiver handler. T07 acrescenta `handleOcorrenciaAjustePrecoCriada`; T08 acrescenta `handleOcorrenciaAjustePrecoCiente`. Ambos usam `payload.dataOperacao` + `this.broadcast(..., payload.dataOperacao)` (que já itera `roomsDaData`).
 10. **Princípio VII:** ausência de preço = `null` no resolvedor / R$ 0,00 na UI / inclusão só com manual > 0. Percentual indefinido = `null`, nunca `0` nem `100`. Sem fallback de data.
 11. **Princípio VIII:** P8 (modelos SIF) permanece badge só na aba SIF. P11 intacto. Não fechar pendências §16.
 12. **Princípio IX:** `nomeFantasia`, "Buscar cliente". Zero rótulo isolado "Marca".
@@ -71,7 +73,7 @@ Não commitar diff local de `0035_onda13_catalogo_backfill.sql`. Este worktree e
 
 > **Preço de tabela no pedido de venda, com ajuste manual auditado.** (1) **Escopo novo pós-protótipo:** as adições de UI da Onda 14 — campo `Tabela de Preço` na aba Preferências Operacionais de `/comercial/clientes`, coluna `Preço unitário` editável na grade de itens de `/comercial/pedidos`, ocorrência de ajuste de preço na Fila Administrativa de `/gestao/aprovacoes` e aba `Relatórios Gerenciais` em `/gestao/relatorios` — são **escopo novo do cliente**, não divergência do protótipo validado. O Princípio I permanece íntegro: essas telas não existem no protótipo, logo não há "tela equivalente" a comparar no Portão 2. A referência visual é o DS v3 (AD-10) e o padrão de componente das telas irmãs. Onde o protótipo tem equivalente parcial, ele é seguido: o `PriceInput` de `TabelaPrecos.tsx` (prefixo `R$`, `font-mono`, alinhado à direita) é o padrão do campo de preço, e a Fila Administrativa permanece master-detail com cards, sem accordion. (2) **Faixa, não tabela:** `tabelas_preco` é uma tabela por data com A/B/C/D como quatro colunas de preço por produto; o cliente é associado a uma **faixa** (`clientes.faixa_preco` TEXT + CHECK `IN ('A','B','C','D')`), nunca a uma FK de `tabelas_preco.id`. Clientes existentes recebem backfill `'A'` e a coluna fica `NOT NULL` na mesma onda. (3) **Vigência por data exata:** o preço vem exclusivamente da tabela `publicada` cuja `data` é igual a `operacoes.data` do pedido. Não há fallback para a última publicada anterior. Sem tabela publicada na data, ou com a coluna da faixa `NULL`, o item inicia em R$ 0,00 e só entra no pedido com preço manual maior que zero (Princípio VII: nunca inventar preço). (4) **Adendo herda** `preco_aplicado` e `preco_tabela_original` do item, sem reconsultar a tabela e sem gerar novo ajuste. (5) **Permissão:** ajustar preço reusa `PEDIDOS_GERENCIAR` (quem monta o pedido pode ajustar o preço). Não se cria `PEDIDO_PRECO_AJUSTAR`. (6) **Ocorrência informativa:** ajuste na finalização gera linha em `ocorrencias_ajuste_preco` (tabela nova — `ocorrencias_fornecedor` tem `fornecedor_id NOT NULL` e `aprovacoes_operacionais` exige decisão aprovar/rejeitar, ambas incompatíveis). Status `aberta` ou `ciente`; rótulo `Marcar como ciente`; uma ocorrência por pedido; não bloqueia nem exige aprovação. (7) **Nenhum PR é aberto** antes da validação do Quality Owner na aplicação local.
 
-### D1–D24 — fechadas por este plano (T01)
+### D1–D25 — fechadas por este plano (T01)
 
 1. **Ordem de migrations:** 0037–0039 faixa; 0040–0042 colunas do item; 0043 tabelas de ocorrência. Conferir journal antes de cada `generate`.
 2. **GET `/precos/vigente`:** `PrecosController` no HEAD é `@Controller('precos/tabelas')`. **Não** acrescentar `@Get('vigente')` nele (viraria `/precos/tabelas/vigente`). Criar `PrecosVigenteController` `@Controller('precos')` + `@Get('vigente')` no mesmo `PrecosModule`. Envelope canônico único (T04 e T06): `{ data: PrecoVigenteHttp[] }`. **Proibido** `{ itens }`. `PrecoVigenteHttp.unidadePreco` é `'kg' | 'unidade' | null` (null quando não há vigente).
@@ -97,6 +99,7 @@ Não commitar diff local de `0035_onda13_catalogo_backfill.sql`. Este worktree e
 22. **`listar`/`detalhar`** usam `$inferSelect` — a coluna nova sai sozinha após o schema.
 23. **Regex de preço (Zod, string, sem `Number`):** `/^\d+(\.\d{1,2})?$/` + `.refine` que rejeita zero-like `/^0+(\.0{1,2})?$/` (`"0"`, `"0.0"`, `"0.00"`). Inclusão: se o resolvido (manual ou vigente) for ausente/zero-like → 400 nomeando o produto (não deixar estourar o CHECK). `ajustarPrecoItem` **não** usa `Number(dto.precoAplicado)`.
 24. **Formatação de persistência:** gravar `preco_aplicado` / original com 2 casas (`18.50`). Comparação de "voltar ao original" via SQL `${dto.precoAplicado}::numeric(15,2) IS NOT DISTINCT FROM ${item.precoTabelaOriginal}`, não `Number`.
+25. **Escala `diferenca_percentual` (fixada — Worker não escolhe):** persistir e serializar como **percentual × 100** em `NUMERIC(10,4)`. Fórmula SQL literal (T07, mesma `tx` do insert do item da ocorrência): `CASE WHEN original IS NULL THEN NULL ELSE ROUND(((aplicado - original) / original) * 100, 4) END`. Exemplo canônico: original `"18.50"`, aplicado `"17.00"` → `"-8.1081"`. Original NULL → JSON `null` (nunca `0`, nunca `100`, nunca `"-0.0811"`). T08 list/detail e T10 leem o valor **já persistido** — **proibido** multiplicar ou dividir de novo na serialização HTTP.
 
 ---
 
@@ -191,6 +194,7 @@ Tokens: paleta DS v3 vigente. Zero hex avulso. `font-data` (JetBrains Mono, AD-1
 - `app/backend/src/modules/comercial/pedidos/pedidos.module.ts`
 - `app/backend/src/modules/comercial/comercial.module.ts`
 - `app/backend/src/realtime/events/eventos.ts`
+- `app/backend/src/realtime/realtime.gateway.ts`
 - `app/backend/src/common/rbac/permissoes.ts` + snapshot via `npx tsx scripts/regen-rbac-snapshot.ts` em `app/backend`
 - `app/frontend/src/app/(admin)/comercial/clientes/clientes-client.tsx`
 - `app/frontend/src/app/(admin)/comercial/pedidos/pedido-editor.tsx`
@@ -246,7 +250,7 @@ Matriz ALP-61 + 10 cenários acrescentados. **Não** escrever o cenário removid
 | C5 | Finalização concorrente | unique `uq_ocorr_ajuste_preco_pedido` impede duplicata | e2e | T07 |
 | C6 | Adendo em item ajustado | herda preço; sem novo ajuste | e2e | T05 |
 | C7 | Original `NULL` → percentual `null` em ocorrência, fila e relatório | e2e + Jest | T07/T08/T10 |
-| C8 | Desconto (aplicado < original) → `diferenca_total` negativa | e2e | T07/T10 |
+| C8 | Desconto (aplicado `17.00` < original `18.50`) → `diferenca_total` negativa **e** `diferenca_percentual` `"-8.1081"` (escala ×100, 4 casas; nunca `"-0.0811"`) | e2e | T07/T10 |
 | C9 | Rollback da finalização → 0 ocorrência órfã | e2e | T07 |
 | C10 | Cliente sem representante → relatório `—`, join não quebra | e2e | T10 |
 
@@ -1546,7 +1550,7 @@ O mock do vigente **sempre** `{ data: [{ produtoId, preco, unidadePreco, tabelaP
 
 ## Task 7 — Ocorrência: tabelas + hook na finalização (ALP-83)
 
-**Files:** `ocorrencias-ajuste-preco.schema.ts`, `schema/index.ts`, `0043_onda14_ocorrencias_preco.sql`, `pedidos.service.ts`, `eventos.ts`, e2e T07
+**Files:** `ocorrencias-ajuste-preco.schema.ts`, `schema/index.ts`, `0043_onda14_ocorrencias_preco.sql`, `pedidos.service.ts`, `eventos.ts`, `app/backend/src/realtime/realtime.gateway.ts`, e2e T07
 
 **Depende de:** T05.
 
@@ -1618,15 +1622,54 @@ Em `EVENTOS`, após `TABELA_PRECO_PUBLICADA`:
   OCORRENCIA_AJUSTE_PRECO_CIENTE: 'ocorrencia_ajuste_preco_ciente',
 ```
 
-Em `PayloadPorEvento`:
+Em `PayloadPorEvento` (usar o tipo exportado, não um inline divergente):
 
 ```
-  ocorrencia_ajuste_preco_criada: {
-    ocorrenciaId: string; pedidoVendaId: string; clienteId: string; dataOperacao: string;
-  };
-  ocorrencia_ajuste_preco_ciente: {
-    ocorrenciaId: string; pedidoVendaId: string; clienteId: string; dataOperacao: string;
-  };
+  ocorrencia_ajuste_preco_criada: OcorrenciaAjustePrecoPayload;
+  ocorrencia_ajuste_preco_ciente: OcorrenciaAjustePrecoPayload;
+```
+
+Exportar o tipo (único — T07 e T08 / gateway importam o mesmo). `old_string` único em `eventos.ts` (após `OcorrenciaFornecedorPayload`):
+
+```
+export interface OcorrenciaFornecedorPayload {
+  ocorrenciaId: string;
+  fornecedorId: string;
+  dataOperacao: string;
+  status: string;
+}
+```
+
+`new_string`:
+
+```
+export interface OcorrenciaFornecedorPayload {
+  ocorrenciaId: string;
+  fornecedorId: string;
+  dataOperacao: string;
+  status: string;
+}
+
+export interface OcorrenciaAjustePrecoPayload {
+  ocorrenciaId: string;
+  pedidoVendaId: string;
+  clienteId: string;
+  dataOperacao: string;
+}
+```
+
+`old_string` único em `PayloadPorEvento` (após a linha de tabela de preço):
+
+```
+  tabela_preco_publicada: { tabelaPrecoId: string; data: string; autorId: string };
+```
+
+`new_string`:
+
+```
+  tabela_preco_publicada: { tabelaPrecoId: string; data: string; autorId: string };
+  ocorrencia_ajuste_preco_criada: OcorrenciaAjustePrecoPayload;
+  ocorrencia_ajuste_preco_ciente: OcorrenciaAjustePrecoPayload;
 ```
 
 (`dataOperacao` permite rooms; se a operação não estiver à mão, ler de `operacoes` na tx. Sem data inventada.)
@@ -1639,15 +1682,87 @@ Após o `UPDATE` de status (L1051–1054) e **antes** de `auditoria.registrar` d
 2. Lista vazia → seguir.
 3. Senão: insert 1 ocorrência + N itens na **mesma** `tx`.
 4. `diferenca_total` = soma `(preco_aplicado - preco_tabela_original)` **só** onde original NOT NULL (pode ser negativa). Itens sem original entram em `quantidade_itens_ajustados` mas **fora** da soma.
-5. `diferenca_percentual` = `null` se original `null`; senão `(aplicado - original) / original` com 4 casas. Nunca gravar `0` nem `100` por ausência.
+5. **Escala fixada (D25 — Worker não escolhe).** `diferenca_percentual` = `null` se original `null`; senão **percentual × 100** com 4 casas. SQL literal no INSERT do item da ocorrência:
+
+```sql
+CASE
+  WHEN pedidos_venda_itens.preco_tabela_original IS NULL THEN NULL
+  ELSE ROUND(
+    ((pedidos_venda_itens.preco_aplicado - pedidos_venda_itens.preco_tabela_original)
+      / pedidos_venda_itens.preco_tabela_original) * 100
+    , 4)
+END
+```
+
+Equivalente Drizzle (não gravar fração ` / original` sem `* 100`):
+
+```ts
+sql`CASE
+  WHEN ${pedidosVendaItens.precoTabelaOriginal} IS NULL THEN NULL
+  ELSE ROUND(
+    ((${pedidosVendaItens.precoAplicado} - ${pedidosVendaItens.precoTabelaOriginal})
+      / ${pedidosVendaItens.precoTabelaOriginal}) * 100
+    , 4)
+END`
+```
+
+Exemplo canônico: original `"18.50"`, aplicado `"17.00"` → coluna `NUMERIC(10,4)` = `-8.1081` (JSON `"-8.1081"`). **Proibido** gravar `-0.0811`. Nunca gravar `0` nem `100` por ausência de original.
 6. `auditoria.registrar` da ocorrência (`modulo: 'comercial'`, `operacao: 'INSERT'`).
-7. Push em `eventos`: `EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA`. **Não** emitir dentro da tx.
+7. Push em `eventos`: `EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA` com `OcorrenciaAjustePrecoPayload` (`dataOperacao` lido de `operacoes.data` na tx). **Não** emitir dentro da tx. Emitir **não** basta: o gateway só entrega com `@OnEvent` explícito (passo abaixo).
 
 Não alterar status do pedido em função da ocorrência. Não abrir tx nova.
 
+### Gateway RA-04 (T07 — só `CRIADA`)
+
+HEAD `e5ffa71` — `realtime.gateway.ts` **não** tem wildcard: cada evento exige `@OnEvent` + `this.broadcast(evento, payload, payload.dataOperacao)`, que itera `roomsDaData`. Sem este handler, `OCORRENCIA_AJUSTE_PRECO_CRIADA` não chega no WS.
+
+`old_string` único no import de tipos (L27–28 do HEAD):
+
+```
+  type OcorrenciaFornecedorPayload,
+  type PedidoEmRiscoPayload,
+```
+
+`new_string`:
+
+```
+  type OcorrenciaFornecedorPayload,
+  type OcorrenciaAjustePrecoPayload,
+  type PedidoEmRiscoPayload,
+```
+
+`old_string` único nos handlers (após `handleOcorrenciaAtualizada`, molde idêntico a `handleOcorrenciaAberta` / `handleAprovacaoRegistrada`):
+
+```
+  @OnEvent(EVENTOS.OCORRENCIA_FORNECEDOR_ATUALIZADA)
+  handleOcorrenciaAtualizada(payload: OcorrenciaFornecedorPayload): void {
+    this.broadcast(EVENTOS.OCORRENCIA_FORNECEDOR_ATUALIZADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PEDIDO_EM_RISCO)
+```
+
+`new_string`:
+
+```
+  @OnEvent(EVENTOS.OCORRENCIA_FORNECEDOR_ATUALIZADA)
+  handleOcorrenciaAtualizada(payload: OcorrenciaFornecedorPayload): void {
+    this.broadcast(EVENTOS.OCORRENCIA_FORNECEDOR_ATUALIZADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA)
+  handleOcorrenciaAjustePrecoCriada(payload: OcorrenciaAjustePrecoPayload): void {
+    this.broadcast(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PEDIDO_EM_RISCO)
+```
+
+Zero `@OnEvent('**')`. Zero `OnEvent(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CIENTE)` nesta task — isso é T08.
+
 ### Testes
 
-14.6 / 14.6b / 14.6c / C5 / C7 / C8 / C9 / evento pós-commit (espiar `eventEmitter.emit` **depois** do commit; no-emit se a tx abortar). Concorrência: duas `finalizar` paralelas — uma 200, outra unique 23505 traduzido para 409, **uma** linha na tabela.
+14.6 / 14.6b / 14.6c / C5 / C7 / C8 / C9 / evento pós-commit (espiar `eventEmitter.emit` **depois** do commit; no-emit se a tx abortar). C7: item com `preco_tabela_original` NULL → `diferenca_percentual` SQL/JSON `null`. C8: original `"18.50"` aplicado `"17.00"` → `diferenca_total` negativa **e** `diferenca_percentual` `"-8.1081"` (coluna e JSON; `expect(...).not.toBe('-0.0811')`). Gateway: após emit, `handleOcorrenciaAjustePrecoCriada` chama `hub.broadcast` para cada room de `roomsDaData(payload.dataOperacao)` (`dashboard`, `desossa`, `operacao:${dataOperacao}`). Concorrência: duas `finalizar` paralelas — uma 200, outra unique 23505 traduzido para 409, **uma** linha na tabela.
 
 **Commit:** `feat(onda14): ocorrencias_ajuste_preco na finalização do pedido`
 
@@ -1655,7 +1770,7 @@ Não alterar status do pedido em função da ocorrência. Não abrir tx nova.
 
 ## Task 8 — Endpoints + RBAC (ALP-84)
 
-**Files:** módulo `ocorrencias-preco/*`, `comercial.module.ts`, `permissoes.ts` + snapshot, 3 rotas BFF, e2e
+**Files:** módulo `ocorrencias-preco/*`, `comercial.module.ts`, `permissoes.ts` + snapshot, 3 rotas BFF, `app/backend/src/realtime/realtime.gateway.ts`, e2e
 
 **Depende de:** T07. **Não** criar `PEDIDO_PRECO_AJUSTAR`. **Não** tocar `AprovacoesService`.
 
@@ -1770,13 +1885,79 @@ export type ListarOcorrenciasPrecoQuery = z.infer<typeof listarOcorrenciasPrecoQ
 ))
 ```
 
-Query list: `operacaoId` (obrigatório), `status` (`aberta`\|`ciente`), `clienteId`, `dataInicio`, `dataFim`, `page`, `pageSize`. Ordem `dataHoraOcorrencia DESC`. Shape `{ data, total, page, pageSize }`.
+Query list: `operacaoId` (obrigatório), `status` (`aberta`\|`ciente`), `clienteId`, `dataInicio`, `dataFim`, `page`, `pageSize`. Ordem `dataHoraOcorrencia DESC`. Envelope list `{ data, total, page, pageSize }` — `data: OcorrenciaPrecoLista[]`. **Proibido** incluir `itens` na list. `GET /:id` **não** usa envelope `{ data }` (mesmo padrão do detalhe de fornecedor no HEAD: objeto raiz).
 
-Linha list: `id`, `pedidoNumero` (usar `pedidos_venda.id` se não houver número de negócio — **não inventar** sequencial; se o detalhe do pedido já expõe um campo de número no HEAD, reusar; senão `pedidoVendaId` na chave `pedidoNumero` **é proibido**. Conferir `pedidos.service.ts` `listar`: **não há** `numero`. Devolver `pedidoVendaId` **e** `pedidoIdCurto` = 8 primeiros do UUID **somente se** a UI precisar de rótulo. ALP-84 pede `pedidoNumero`. No HEAD não existe. **Usar `pedidos_venda.id` no campo `pedidoNumero`** com o valor do UUID — identidade real, não fabricada. Documentar no Self-Review: lacuna de numeração de pedido (pré-existente), não inventar sequência.
+`pedidoNumero`: usar `pedidos_venda.id` se não houver número de negócio — **não inventar** sequencial; se o detalhe do pedido já expõe um campo de número no HEAD, reusar; senão `pedidoVendaId` na chave `pedidoNumero` **é proibido**. Conferir `pedidos.service.ts` `listar`: **não há** `numero`. Devolver `pedidoVendaId` **e** `pedidoIdCurto` = 8 primeiros do UUID **somente se** a UI precisar de rótulo. ALP-84 pede `pedidoNumero`. No HEAD não existe. **Usar `pedidos_venda.id` no campo `pedidoNumero`** com o valor do UUID — identidade real, não fabricada. Documentar no Self-Review: lacuna de numeração de pedido (pré-existente), não inventar sequência.
 
-Detail: + itens com `produtoCodigo`, `produtoNome` (join `produtos`), preços **da ocorrência**, `diferencaPercentual` nullable, `usuarioAjusteNome`.
+### Contrato campo a campo (T08 — Worker não inventa chave)
 
-`POST .../ciente`: sem corpo. Já `ciente` → 409 `{ code: 'OCORRENCIA_JA_CIENTE' }`. Grava status, `usuario_ciente_id`, `data_hora_ciente`. Auditoria UPDATE. Evento pós-commit `OCORRENCIA_AJUSTE_PRECO_CIENTE`. Sem volta.
+Copiar estes tipos para `dto/ocorrencia-preco.dto.ts`. `diferencaPercentual` / `diferencaTotal` são o valor **persistido** (D25); serializar NUMERIC como string, sem `* 100` nem `/ 100` no HTTP.
+
+```ts
+export type OcorrenciaPrecoLista = {
+  id: string;
+  pedidoNumero: string; // UUID de pedidos_venda.id
+  clienteNomeFantasia: string | null; // clientes.nome_fantasia (nullable no HEAD)
+  status: 'aberta' | 'ciente';
+  dataHora: string; // ISO de data_hora_ocorrencia
+  usuarioFinalizacaoNome: string | null; // join usuarios em usuario_finalizacao_id
+  quantidadeItensAjustados: number;
+  diferencaTotal: string; // NUMERIC(15,2), pode ser negativo
+};
+
+export type OcorrenciaPrecoItem = {
+  produtoCodigo: string;
+  produtoNome: string;
+  precoTabelaOriginal: string | null;
+  precoAplicado: string;
+  diferencaAbsoluta: string;
+  diferencaPercentual: string | null; // ×100, 4 casas; null se original null; "17.00" vs "18.50" → "-8.1081"
+  usuarioAjusteNome: string | null;
+};
+
+export type OcorrenciaPrecoDetalhe = OcorrenciaPrecoLista & {
+  itens: OcorrenciaPrecoItem[];
+  usuarioCienteNome: string | null;
+  dataHoraCiente: string | null;
+};
+```
+
+`service.listar` → `{ data: OcorrenciaPrecoLista[]; total: number; page: number; pageSize: number }` (zero `itens` em cada linha). `service.detalhar` → `OcorrenciaPrecoDetalhe` (objeto raiz). Join de itens: `produtoCodigo` / `produtoNome` via `produtos`; preços **da ocorrência** (não reconsultar tabela). 404 se id inexistente.
+
+`POST .../ciente`: sem corpo. Já `ciente` → 409 `{ code: 'OCORRENCIA_JA_CIENTE' }`. Grava status, `usuario_ciente_id`, `data_hora_ciente`. Auditoria UPDATE. Evento pós-commit `OCORRENCIA_AJUSTE_PRECO_CIENTE` com `OcorrenciaAjustePrecoPayload` (`dataOperacao` de `operacoes.data`). Sem volta. Emitir **não** basta — handler T08 abaixo.
+
+### Gateway RA-04 (T08 — só `CIENTE`)
+
+Após a T07, `handleOcorrenciaAjustePrecoCriada` já existe. Inserir o par `CIENTE` no molde de `handleOcorrenciaAberta` / `handleAprovacaoRegistrada`.
+
+`old_string` único (só existe depois da T07):
+
+```
+  @OnEvent(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA)
+  handleOcorrenciaAjustePrecoCriada(payload: OcorrenciaAjustePrecoPayload): void {
+    this.broadcast(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PEDIDO_EM_RISCO)
+```
+
+`new_string`:
+
+```
+  @OnEvent(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA)
+  handleOcorrenciaAjustePrecoCriada(payload: OcorrenciaAjustePrecoPayload): void {
+    this.broadcast(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CIENTE)
+  handleOcorrenciaAjustePrecoCiente(payload: OcorrenciaAjustePrecoPayload): void {
+    this.broadcast(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CIENTE, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.PEDIDO_EM_RISCO)
+```
+
+Import de `OcorrenciaAjustePrecoPayload` já entrou na T07. Zero wildcard.
 
 Inexistente → 404.
 
@@ -1795,7 +1976,7 @@ export async function GET(req: NextRequest) {
 
 ### Testes
 
-403 list sem `APROVACOES_LER`; 403 ciente sem `OCORRENCIA_PRECO_CIENTE` (diretoria tem LER, não CIENTE); 400 list sem `operacaoId`; list `operacaoId=A` **não** devolve ocorrência cujo `pedidos_venda.operacao_id=B`; filtros opcionais (`status`, `clienteId`, `dataInicio`, `dataFim`); percentual null; 409 segunda ciência; 404; evento pós-commit; snapshot sem `PEDIDO_PRECO_AJUSTAR` e sem `ITENS_*`.
+403 list sem `APROVACOES_LER`; 403 ciente sem `OCORRENCIA_PRECO_CIENTE` (diretoria tem LER, não CIENTE); 400 list sem `operacaoId`; list `operacaoId=A` **não** devolve ocorrência cujo `pedidos_venda.operacao_id=B`; filtros opcionais (`status`, `clienteId`, `dataInicio`, `dataFim`); list **não** contém chave `itens`; `GET /ocorrencias-preco/:id` devolve `OcorrenciaPrecoDetalhe` (as 8 chaves da list + `itens` + `usuarioCienteNome` + `dataHoraCiente`); C7 percentual `null` no detalhe quando original é null; C8 detalhe `diferencaPercentual === "-8.1081"` para `17.00` vs `18.50`; 409 segunda ciência; 404; evento pós-commit `OCORRENCIA_AJUSTE_PRECO_CIENTE` + handler `handleOcorrenciaAjustePrecoCiente` entrega via `roomsDaData(payload.dataOperacao)`; snapshot sem `PEDIDO_PRECO_AJUSTAR` e sem `ITENS_*`.
 
 **Commit:** `feat(onda14): endpoints de ocorrência de preço e OCORRENCIA_PRECO_CIENTE`
 
@@ -1812,6 +1993,69 @@ export async function GET(req: NextRequest) {
 A tela é master-detail (L167–188) **sem** WebSocket. T09 **adiciona** `conectarRealtime` no padrão de `tabela-precos-client.tsx` (`import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime'`). Sem accordion. Aba `operacionais` **intocada**.
 
 ### Steps
+
+- [ ] Tipos em `lib/aprovacoes.ts` (mesmo contrato T08, campo a campo). `old_string` único após `OcorrenciaLista`:
+
+```
+export interface OcorrenciaLista {
+  id: string;
+  fornecedorNome: string;
+  nfChave: string | null;
+  pedidoLote: string | null;
+  produtosDivergentes: number;
+  difQtdTotal: string | null;
+  difPesoTotal: string | null;
+  responsavelNome: string | null;
+  status: string;
+  dataAbertura: string;
+}
+```
+
+`new_string` (não alterar as 11 chaves de `OcorrenciaLista`):
+
+```
+export interface OcorrenciaLista {
+  id: string;
+  fornecedorNome: string;
+  nfChave: string | null;
+  pedidoLote: string | null;
+  produtosDivergentes: number;
+  difQtdTotal: string | null;
+  difPesoTotal: string | null;
+  responsavelNome: string | null;
+  status: string;
+  dataAbertura: string;
+}
+
+export type OcorrenciaPrecoLista = {
+  id: string;
+  pedidoNumero: string;
+  clienteNomeFantasia: string | null;
+  status: 'aberta' | 'ciente';
+  dataHora: string;
+  usuarioFinalizacaoNome: string | null;
+  quantidadeItensAjustados: number;
+  diferencaTotal: string;
+};
+
+export type OcorrenciaPrecoItem = {
+  produtoCodigo: string;
+  produtoNome: string;
+  precoTabelaOriginal: string | null;
+  precoAplicado: string;
+  diferencaAbsoluta: string;
+  diferencaPercentual: string | null; // persistido T07 ×100; null se original null
+  usuarioAjusteNome: string | null;
+};
+
+export type OcorrenciaPrecoDetalhe = OcorrenciaPrecoLista & {
+  itens: OcorrenciaPrecoItem[];
+  usuarioCienteNome: string | null;
+  dataHoraCiente: string | null;
+};
+```
+
+Importar `OcorrenciaPrecoLista` e `OcorrenciaPrecoDetalhe` em `aprovacoes-client.tsx`. Estado extra: `const [detalhePreco, setDetalhePreco] = useState<OcorrenciaPrecoDetalhe | null>(null);`. List alimenta cards (`bruto: OcorrenciaPrecoLista`); a tabela do painel lê **somente** `detalhePreco.itens`.
 
 - [ ] Tipo discriminado:
 
@@ -1849,11 +2093,105 @@ type ItemFila =
 
 Zero `GET /api/ocorrencias-preco` sem query. Zero filtro inventado no cliente (não recortar por data da operação no frontend). A operação vem só do query param, igual a `listarAprovacoes` (`URLSearchParams` + `operacaoId`).
 
+- [ ] Fetch de detalhe — HEAD `carregarDetalheOcorrencia` L86–90 só chama fornecedor. T09 ramifica; Jest exige `GET /api/ocorrencias-preco/:id` (não montar a tabela a partir da list).
+
+`old_string` único (HEAD L86–94):
+
+```
+  const carregarDetalheOcorrencia = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`/api/operacao/ocorrencias-fornecedor/${id}`);
+      if (!res.ok) throw new Error(await mensagemDeErro(res));
+      setDetalheOcorrencia(await res.json() as DetalheOcorrencia);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao carregar detalhe da ocorrência');
+    }
+  }, []);
+```
+
+`new_string`:
+
+```
+  const carregarDetalheOcorrencia = useCallback(async (item: ItemFila) => {
+    try {
+      if (item.tipo === 'preco') {
+        const res = await fetch(`/api/ocorrencias-preco/${item.id}`);
+        if (!res.ok) throw new Error(await mensagemDeErro(res));
+        setDetalhePreco(await res.json() as OcorrenciaPrecoDetalhe);
+        setDetalheOcorrencia(null);
+        return;
+      }
+      const res = await fetch(`/api/operacao/ocorrencias-fornecedor/${item.id}`);
+      if (!res.ok) throw new Error(await mensagemDeErro(res));
+      setDetalheOcorrencia(await res.json() as DetalheOcorrencia);
+      setDetalhePreco(null);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao carregar detalhe da ocorrência');
+    }
+  }, []);
+```
+
+`old_string` único do `useEffect` de seleção (HEAD L96–113) — **não** chamar `buscarComparativo` em ocorrência de preço:
+
+```
+  useEffect(() => {
+    if (!ocorrenciaSel) {
+      setComparativo(null);
+      setSemComparativo(false);
+      setDetalheOcorrencia(null);
+      return;
+    }
+    void buscarComparativo(ocorrenciaSel.id).then((c) => {
+      if (!c) {
+        setSemComparativo(true);
+        setComparativo(null);
+      } else {
+        setSemComparativo(false);
+        setComparativo(c as { itens: Parameters<typeof QuadroComparativo>[0]['itens'] });
+      }
+    });
+    void carregarDetalheOcorrencia(ocorrenciaSel.id);
+  }, [ocorrenciaSel, carregarDetalheOcorrencia]);
+```
+
+`new_string`:
+
+```
+  useEffect(() => {
+    if (!ocorrenciaSel) {
+      setComparativo(null);
+      setSemComparativo(false);
+      setDetalheOcorrencia(null);
+      setDetalhePreco(null);
+      return;
+    }
+    if (ocorrenciaSel.tipo === 'preco') {
+      setComparativo(null);
+      setSemComparativo(false);
+      setDetalheOcorrencia(null);
+      void carregarDetalheOcorrencia(ocorrenciaSel);
+      return;
+    }
+    void buscarComparativo(ocorrenciaSel.id).then((c) => {
+      if (!c) {
+        setSemComparativo(true);
+        setComparativo(null);
+      } else {
+        setSemComparativo(false);
+        setComparativo(c as { itens: Parameters<typeof QuadroComparativo>[0]['itens'] });
+      }
+    });
+    void carregarDetalheOcorrencia(ocorrenciaSel);
+  }, [ocorrenciaSel, carregarDetalheOcorrencia]);
+```
+
+Atualizar as duas chamadas `carregarDetalheOcorrencia(ocorrenciaSel.id)` em `enviarAndamento` / `concluir` (HEAD L121 e L133) para `carregarDetalheOcorrencia(ocorrenciaSel)` — só disparam no ramo fornecedor. Estado da lista: `ItemFila[]` / `ItemFila | null` no lugar de `OcorrenciaLista[]`.
+
 - [ ] Card esquerdo: mesma `<button>` (L171–186). Badge de tipo **antes** do nome (`Fornecedor` / `Preço`). Título preço = `clienteNomeFantasia`. `StatusPill`: `aberta` → `Aberta` variant `pendente`; `ciente` → `Ciente` (mesmo tratamento visual que `resolvida` hoje). Estender `ROTULO_STATUS_OCORRENCIA` em `lib/aprovacoes.ts` com `ciente: 'Ciente'` — **não** remover `resolvida`.
 
-- [ ] Painel direito: se `tipo==='preco'`, bloco próprio (não o de fornecedor L193–219). Cabeçalho: Pedido, Cliente, Data/hora, Finalizado por, Itens ajustados, Diferença total. Tabela: Produto, Preço da tabela, Preço aplicado, Diferença, Diferença %, Ajustado por. `font-data` à direita. Original null → `—` + legenda `Sem preço de tabela para a data`. Desconto/acréscimo: sinal + `text-destructive` / `text-success-fg` (tokens DS v3).
+- [ ] Painel direito: se `tipo==='preco'`, bloco próprio (não o de fornecedor L193–219). Cabeçalho a partir de `ocorrenciaSel.bruto` (`OcorrenciaPrecoLista`): Pedido (`pedidoNumero`), Cliente (`clienteNomeFantasia`), Data/hora (`dataHora`), Finalizado por (`usuarioFinalizacaoNome`), Itens ajustados (`quantidadeItensAjustados`), Diferença total (`diferencaTotal`). Tabela: **somente** `detalhePreco?.itens` (Produto, Preço da tabela, Preço aplicado, Diferença, Diferença %, Ajustado por). Zero montar linhas a partir da list. `font-data` à direita. Original null → `—` + legenda `Sem preço de tabela para a data`. Desconto/acréscimo: sinal + `text-destructive` / `text-success-fg` (tokens DS v3).
 
-- [ ] Botão `Marcar como ciente` só com `permissoes.includes('OCORRENCIA_PRECO_CIENTE')` e `status==='aberta'`. `POST /api/ocorrencias-preco/:id/ciente`. Sem modal de desfecho. Após sucesso, bloco no padrão L199–210: `Ciente registrado por <usuário> em <data/hora>`.
+- [ ] Botão `Marcar como ciente` só com `permissoes.includes('OCORRENCIA_PRECO_CIENTE')` e `status==='aberta'`. `POST /api/ocorrencias-preco/:id/ciente`. Sem modal de desfecho. Após sucesso, `void carregar()` + `void carregarDetalheOcorrencia(ocorrenciaSel)`; bloco no padrão L199–210 com `detalhePreco`: `Ciente registrado por <usuarioCienteNome> em <dataHoraCiente>`.
 
 - [ ] WS: rooms `['dashboard']` (e `operacao:${data}` se `operacaoId` da URL existir). `onMessage`: se `type` for os dois eventos novos, `void carregar()`. `onReconnect`: refetch. Cleanup no unmount. Sem polling.
 
@@ -1870,7 +2208,8 @@ it('selecionar ocorrência de preço mostra o painel específico', async () => {
   // click no card preço; painel tem Pedido/Cliente/Data/hora — sem bloco de fornecedor.
 });
 it('painel lista todos os itens ajustados', async () => {
-  // N linhas na tabela do detalhe = N itens do GET /ocorrencias-preco/:id.
+  // selecionar card preço dispara GET `/api/ocorrencias-preco/${id}` (não só a list);
+  // N linhas na tabela = N itens do JSON de detalhe (OcorrenciaPrecoDetalhe.itens). Mock da list sem `itens`.
 });
 it('item sem preço de tabela mostra —, não R$ 0,00', async () => {
   // precoTabelaOriginal null → em-dash e legenda Sem preço de tabela para a data; query R$ 0,00 ausente.
@@ -1892,7 +2231,7 @@ it('evento WebSocket atualiza a fila sem polling', async () => {
 });
 ```
 
-Cada título é o critério de aceite. Corpos: seguir os passos já desta task (agregar duas fontes; badge; painel; `—`; sinal; RBAC do botão; bloco "Ciente registrado por"; botão ausente se `ciente`; `onMessage` chama `carregar()`). **Não** reduzir a 10 casos a um único `it`.
+Cada título é o critério de aceite. Corpos: seguir os passos já desta task (agregar duas fontes; badge; painel; `GET /api/ocorrencias-preco/:id` para `itens`; `—`; sinal; RBAC do botão; bloco "Ciente registrado por"; botão ausente se `ciente`; `onMessage` chama `carregar()`). **Não** reduzir a 10 casos a um único `it`.
 
 **Commit:** `feat(onda14): ocorrências de preço na Fila Administrativa`
 
@@ -1975,7 +2314,7 @@ Paginar por pedido (`count` + `limit/offset` na ocorrência). `valorTotalAjustad
 
 ### Shape JSON (ALP-85, literal — este é o contrato)
 
-O handler devolve **exatamente** este envelope. `pedidoNumero` = UUID de `pedidos_venda.id` (T08: não há sequencial no HEAD). `precoTabelaOriginal` e `diferencaPercentual` aceitam JSON `null`. `valorTotalAjustado` / diferenças são strings NUMERIC.
+O handler devolve **exatamente** este envelope. `pedidoNumero` = UUID de `pedidos_venda.id` (T08: não há sequencial no HEAD). `precoTabelaOriginal` e `diferencaPercentual` aceitam JSON `null`. `valorTotalAjustado` / diferenças são strings NUMERIC. `diferencaPercentual` é o valor **persistido na T07** (D25, ×100, 4 casas): original `"18.50"` + aplicado `"17.00"` → `"-8.1081"`. **Proibido** o relatório multiplicar ou dividir de novo.
 
 ```json
 {
@@ -2013,7 +2352,7 @@ export type RelatorioAjustePrecoItem = {
   precoTabelaOriginal: string | null;
   precoAplicado: string;
   diferencaAbsoluta: string;
-  diferencaPercentual: string | null;
+  diferencaPercentual: string | null; // persistido T07 ×100; null se original null; "17.00" vs "18.50" → "-8.1081"
   usuarioAjusteNome: string | null;
 };
 
@@ -2039,7 +2378,7 @@ export type RelatorioAjustePrecoEnvelope = {
 
 Nulos JSON: `precoTabelaOriginal`, `diferencaPercentual` (quando original é null), `representanteNome`, `clienteNomeFantasia`, `usuarioAjusteNome`. Não omitir a chave.
 
-Teste de republicação: alterar `tabelas_preco_itens` após a ocorrência → relatório idêntico. 403 sem `APROVACOES_LER`. C8, C10.
+Teste de republicação: alterar `tabelas_preco_itens` após a ocorrência → relatório idêntico. 403 sem `APROVACOES_LER`. C7 (`diferencaPercentual` JSON `null` se original null). C8 (`"-8.1081"` no item; `valorTotalAjustado` negativo). C10.
 
 BFF GET `app/frontend/src/app/api/ocorrencias-preco/relatorio/route.ts`:
 
