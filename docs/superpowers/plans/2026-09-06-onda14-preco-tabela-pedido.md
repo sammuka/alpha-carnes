@@ -26,6 +26,8 @@
 
 **Correção Portão 1 6ª rodada (`2026-09-07T04:31:43Z` — fecha exatamente 2 achados, sem mudar escopo nem reabrir 1–5):** (1) T10 `faixaPreco` — `ocorrencias_ajuste_preco` **não** tem a coluna; origem = `pedidos_venda_itens.faixa_preco` via subquery correlacionada em `pedido_venda_id` da ocorrência (SQL único no SELECT e no filtro); **proibido** `clientes.faixa_preco` atual. (2) T11 wrap SIF — `old_string`/`new_string` literais de HEAD L104–165 (`KpiStrip` + cards); zero “colar”, zero `...` placeholder, zero fork A/B. AD-16 intacta. Sem `PEDIDO_PRECO_AJUSTAR`.
 
+**Correção Worker T02 (`2026-09-07T05:02:00Z` — fecha exatamente 1 omissão, sem mudar escopo nem reabrir Portão 1 1–6):** `createClienteSchema.faixaPreco` obrigatório. T02 já manda `faixaPreco: 'A'` em `novoCliente()` e nos `insert(clientes)`. O describe **Código interno gerado (AD-13)** em `clientes.e2e-spec.ts` faz POSTs **inline** (não usam o helper) sem a chave — após 0039 dão **400** em vez de **201**. Varredura no HEAD original (`e827eef` / spec em `b5f0ab4` / `origin/develop`): os únicos outros `POST /clientes` **sem** `novoCliente()` e **sem** `faixaPreco` estão em `escopo-representantes.e2e-spec.ts`, `cadastros-f7.e2e-spec.ts`, `onda12-dominio-campos.e2e-spec.ts`, `prontidao.e2e-spec.ts`, `perfis.e2e-spec.ts`. Patches literais na T02. **Não** mudar a regra: POST sem faixa continua 400 (teste novo ALP-78 em `onda14-faixa-preco.e2e-spec.ts`, cujo `novoCliente()` **não** ganha a chave no objeto base). PATCH AD-13 `{ codigo, razaoSocial }` **não** recebe `faixaPreco` (`updateClienteSchema` é `.partial()`). Worktree HEAD `af33aad`; diff T02 uncommitted no disco **não** reverter — aplicar só `old_string` que ainda casa. AD-16 intacta. Sem `PEDIDO_PRECO_AJUSTAR`. Sem commit nesta correção.
+
 **Linear:** épico [ALP-55](https://linear.app/alphacarnes/issue/ALP-55). T00 [ALP-77](https://linear.app/alphacarnes/issue/ALP-77) Done neste SHA. Este arquivo é T01. Worker executa Task 1 (docs) + T02–T12 = ALP-78…86 + ALP-59 + ALP-61. T13 é o Quality Owner. T14 abre o PR só depois de T13 Done. **Este worker não faz Portão 2 nem merge.**
 
 **Numeração de migration (conferida no HEAD `4cea1f1`):**
@@ -192,6 +194,7 @@ Tokens: paleta DS v3 vigente. Zero hex avulso. `font-data` (JetBrains Mono, AD-1
 - `app/backend/src/modules/cadastros/clientes/clientes.service.ts`
 - `scripts/carga-inicial/carga-inicial.ts`
 - inserts de `clientes` nos helpers/e2e listados na T02
+- POSTs HTTP `/clientes` **inline** (sem `novoCliente()`) listados na T02: `clientes.e2e-spec.ts` (AD-13), `escopo-representantes.e2e-spec.ts`, `cadastros-f7.e2e-spec.ts`, `onda12-dominio-campos.e2e-spec.ts`, `prontidao.e2e-spec.ts`, `perfis.e2e-spec.ts`
 - `app/backend/src/modules/comercial/precos/precos.service.ts`
 - `app/backend/src/modules/comercial/precos/precos.module.ts`
 - `app/backend/src/modules/comercial/pedidos/dto/pedido.dto.ts`
@@ -359,7 +362,7 @@ Linha 13 (relatórios) — append:
 
 ## Task 2 — Clientes: `faixa_preco` migration + backend (ALP-78)
 
-**Files:** schema + DTO + service + carga-inicial + inserts de teste + 0037/0038/0039 + `onda14-faixa-preco.e2e-spec.ts`
+**Files:** schema + DTO + service + carga-inicial + inserts de teste + POSTs HTTP inline sem `novoCliente()` (AD-13 + varredura) + 0037/0038/0039 + `onda14-faixa-preco.e2e-spec.ts`
 
 **Interfaces:**
 
@@ -523,9 +526,297 @@ Em `createClienteSchema`, após `prioridade`:
 
 `rg "insert\\((schema\\.)?clientes\\)"` em `app/backend` + `scripts` (exceto `migrations/**`) deve ter `faixaPreco` em cada `.values`.
 
-- [ ] Helpers HTTP `novoCliente()` em `clientes.e2e-spec.ts` e `clientes-onda4.e2e-spec.ts`: acrescentar `faixaPreco: 'A'` no objeto base (senão **todos** os POST existentes passam a 400 — regressão). O teste **novo** da T02 é o POST **sem** a chave.
+- [ ] Helpers HTTP `novoCliente()` em `clientes.e2e-spec.ts` e `clientes-onda4.e2e-spec.ts`: acrescentar `faixaPreco: 'A'` no objeto base (senão **todos** os POST via helper passam a 400 — regressão). Se o diff T02 no disco **já** tiver a chave no helper, **não** reaplicar. O teste **novo** da T02 (`onda14-faixa-preco.e2e-spec.ts` `it('POST /clientes sem faixaPreco → 400, chave faixaPreco')`) é o POST **sem** a chave — o `novoCliente()` **desse** spec **não** ganha `faixaPreco` no objeto base.
 
-- [ ] Rodar `onda14-faixa-preco` + `clientes.e2e-spec` + `clientes-onda4` — verdes.
+- [ ] **POSTs HTTP `/clientes` inline (sem `novoCliente()`, sem `faixaPreco`) — omissão que para o Worker.** `createClienteSchema.faixaPreco` é obrigatório; esses bodies dão **400** em vez do status esperado. Acrescentar `faixaPreco: 'A'` **só** no `.send({...})` de criação. **Proibido** default de produto no DTO/service. **Proibido** alterar o PATCH AD-13 (`{ codigo: 'NAO-DEVE-MUDAR', razaoSocial: 'Cliente Imutavel 2' }`). **Proibido** acrescentar a chave no `it` ALP-78 sem faixa. Bodies extraídos do arquivo atual no worktree (AD-13 idêntico a HEAD `af33aad` / `b5f0ab4` / `e827eef`).
+
+`app/backend/test/integration/clientes.e2e-spec.ts` — describe `Código interno gerado (AD-13)`:
+
+`old_string`:
+
+```
+        .send({ razaoSocial: 'Cliente Auto LTDA', documentoFiscal: gerarCnpjValido('500000200001') });
+```
+
+`new_string`:
+
+```
+        .send({ razaoSocial: 'Cliente Auto LTDA', documentoFiscal: gerarCnpjValido('500000200001'), faixaPreco: 'A' });
+```
+
+`old_string`:
+
+```
+        .send({ razaoSocial: 'Cliente Auto A', documentoFiscal: gerarCnpjValido('500000210001') });
+```
+
+`new_string`:
+
+```
+        .send({ razaoSocial: 'Cliente Auto A', documentoFiscal: gerarCnpjValido('500000210001'), faixaPreco: 'A' });
+```
+
+`old_string`:
+
+```
+        .send({ razaoSocial: 'Cliente Auto B', documentoFiscal: gerarCnpjValido('500000220001') });
+```
+
+`new_string`:
+
+```
+        .send({ razaoSocial: 'Cliente Auto B', documentoFiscal: gerarCnpjValido('500000220001'), faixaPreco: 'A' });
+```
+
+`old_string`:
+
+```
+        .send({ razaoSocial: 'Cliente Imutavel', documentoFiscal: gerarCnpjValido('500000230001') });
+```
+
+`new_string`:
+
+```
+        .send({ razaoSocial: 'Cliente Imutavel', documentoFiscal: gerarCnpjValido('500000230001'), faixaPreco: 'A' });
+```
+
+`app/backend/test/integration/escopo-representantes.e2e-spec.ts` — sem `faixaPreco` o Zod responde 400 **antes** do escopo (mesmo motivo do comentário de CNPJ no arquivo):
+
+`old_string`:
+
+```
+      .send({
+        codigo: uid('NEW'),
+        razaoSocial: 'Novo',
+        // CNPJ válido (dígito verificador) — senão o Zod responde 400 antes do escopo.
+        documentoFiscal: '11222333000181',
+        representanteId: repB,
+      })
+```
+
+`new_string`:
+
+```
+      .send({
+        codigo: uid('NEW'),
+        razaoSocial: 'Novo',
+        // CNPJ válido (dígito verificador) — senão o Zod responde 400 antes do escopo.
+        documentoFiscal: '11222333000181',
+        faixaPreco: 'A',
+        representanteId: repB,
+      })
+```
+
+`old_string`:
+
+```
+      .send({
+        codigo: outroCodigo,
+        razaoSocial: 'Restaurável A',
+        documentoFiscal: '11444777000161',
+        representanteId: repA,
+      })
+```
+
+`new_string`:
+
+```
+      .send({
+        codigo: outroCodigo,
+        razaoSocial: 'Restaurável A',
+        documentoFiscal: '11444777000161',
+        faixaPreco: 'A',
+        representanteId: repA,
+      })
+```
+
+`app/backend/test/integration/cadastros-f7.e2e-spec.ts`:
+
+`old_string`:
+
+```
+        .send({
+          codigo: 'CLI-DOD83',
+          razaoSocial: 'Cliente Vinculado DoD83 LTDA',
+          documentoFiscal: '11222333000181',
+          representanteId,
+        });
+```
+
+`new_string`:
+
+```
+        .send({
+          codigo: 'CLI-DOD83',
+          razaoSocial: 'Cliente Vinculado DoD83 LTDA',
+          documentoFiscal: '11222333000181',
+          faixaPreco: 'A',
+          representanteId,
+        });
+```
+
+`app/backend/test/integration/onda12-dominio-campos.e2e-spec.ts` — o POST `uf: 'XX'` também ganha a chave para o 400 continuar sendo de UF, não de faixa ausente:
+
+`old_string`:
+
+```
+    const cliente = await request(srv()).post('/clientes').set('Cookie', adminCookies).send({
+      razaoSocial: 'Cliente UF',
+      documentoFiscal: proximoCnpj(),
+      dadosFiscaisJson: { uf: 'XX' },
+    });
+```
+
+`new_string`:
+
+```
+    const cliente = await request(srv()).post('/clientes').set('Cookie', adminCookies).send({
+      razaoSocial: 'Cliente UF',
+      documentoFiscal: proximoCnpj(),
+      faixaPreco: 'A',
+      dadosFiscaisJson: { uf: 'XX' },
+    });
+```
+
+`old_string`:
+
+```
+    const clienteOk = await request(srv()).post('/clientes').set('Cookie', adminCookies).send({
+      razaoSocial: 'Cliente SP',
+      documentoFiscal: proximoCnpj(),
+      dadosFiscaisJson: { uf: 'SP' },
+    });
+```
+
+`new_string`:
+
+```
+    const clienteOk = await request(srv()).post('/clientes').set('Cookie', adminCookies).send({
+      razaoSocial: 'Cliente SP',
+      documentoFiscal: proximoCnpj(),
+      faixaPreco: 'A',
+      dadosFiscaisJson: { uf: 'SP' },
+    });
+```
+
+`old_string`:
+
+```
+    const cliente = await request(srv()).post('/clientes').set('Cookie', adminCookies).send({
+      razaoSocial: 'Cliente Pedido O12', documentoFiscal: proximoCnpj(),
+    });
+```
+
+`new_string`:
+
+```
+    const cliente = await request(srv()).post('/clientes').set('Cookie', adminCookies).send({
+      razaoSocial: 'Cliente Pedido O12', documentoFiscal: proximoCnpj(), faixaPreco: 'A',
+    });
+```
+
+`old_string`:
+
+```
+    const criar = await request(srv()).post('/clientes').set('Cookie', adminCookies).send({
+      razaoSocial: uid('CliVinculo'),
+      documentoFiscal: proximoCnpj(),
+      representanteId: representante.id,
+      rotaId: rota.body.id,
+    });
+```
+
+`new_string`:
+
+```
+    const criar = await request(srv()).post('/clientes').set('Cookie', adminCookies).send({
+      razaoSocial: uid('CliVinculo'),
+      documentoFiscal: proximoCnpj(),
+      faixaPreco: 'A',
+      representanteId: representante.id,
+      rotaId: rota.body.id,
+    });
+```
+
+`app/backend/test/integration/prontidao.e2e-spec.ts`:
+
+`old_string`:
+
+```
+        .send({ codigo: 'CLI-DP01', razaoSocial: 'Cliente DP01', documentoFiscal: CNPJ_A });
+```
+
+`new_string`:
+
+```
+        .send({ codigo: 'CLI-DP01', razaoSocial: 'Cliente DP01', documentoFiscal: CNPJ_A, faixaPreco: 'A' });
+```
+
+`app/backend/test/integration/perfis.e2e-spec.ts` — os 403 também recebem a chave (fixture completa; RBAC continua 403). Os 201 sem a chave quebram igual ao AD-13:
+
+`old_string`:
+
+```
+      .send({ codigo: 'CLI-PROP-1', razaoSocial: 'Prop', documentoFiscal: '11222333000181' });
+```
+
+`new_string`:
+
+```
+      .send({ codigo: 'CLI-PROP-1', razaoSocial: 'Prop', documentoFiscal: '11222333000181', faixaPreco: 'A' });
+```
+
+`old_string`:
+
+```
+      .send({ codigo: 'CLI-PROP-2', razaoSocial: 'Prop', documentoFiscal: '04252011000110' });
+```
+
+`new_string`:
+
+```
+      .send({ codigo: 'CLI-PROP-2', razaoSocial: 'Prop', documentoFiscal: '04252011000110', faixaPreco: 'A' });
+```
+
+`old_string`:
+
+```
+      .send({ codigo: 'CLI-PROP-3', razaoSocial: 'Prop', documentoFiscal: '34028316000103' });
+```
+
+`new_string`:
+
+```
+      .send({ codigo: 'CLI-PROP-3', razaoSocial: 'Prop', documentoFiscal: '34028316000103', faixaPreco: 'A' });
+```
+
+`old_string`:
+
+```
+      .send({ codigo: 'CLI-REV-1', razaoSocial: 'Rev', documentoFiscal: '33000167000101' });
+```
+
+`new_string`:
+
+```
+      .send({ codigo: 'CLI-REV-1', razaoSocial: 'Rev', documentoFiscal: '33000167000101', faixaPreco: 'A' });
+```
+
+`old_string`:
+
+```
+      .send({ codigo: 'CLI-REV-2', razaoSocial: 'Rev', documentoFiscal: '60746948000112' });
+```
+
+`new_string`:
+
+```
+      .send({ codigo: 'CLI-REV-2', razaoSocial: 'Rev', documentoFiscal: '60746948000112', faixaPreco: 'A' });
+```
+
+Inventário fechado: `rg "post\\('/clientes'" app/backend/test` em `e827eef`/`b5f0ab4`/`origin/develop` não encontrou outro POST inline. `clientes-onda4.e2e-spec.ts` só usa `novoCliente()`. `onda14-faixa-preco.e2e-spec.ts` (arquivo **novo** da T02) **não** entra nesta lista.
+
+- [ ] Rodar `onda14-faixa-preco` + `clientes.e2e-spec` + `clientes-onda4` + `escopo-representantes` + `cadastros-f7` + `onda12-dominio-campos` + `prontidao` + `perfis` — verdes. O `it` ALP-78 sem `faixaPreco` permanece **400**. AD-13 permanece **201**.
 - [ ] `npm run test:cov` no backend: `ClientesService` ≥80% linha e branch.
 
 **Commit:** `feat(onda14): clientes.faixa_preco A-D via 0037-0039`
