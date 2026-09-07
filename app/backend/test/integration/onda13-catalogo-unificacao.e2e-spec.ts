@@ -52,7 +52,7 @@ describe('Onda 13 — unificação do catálogo (AD-15)', () => {
       codigo: uid('FORN'), razaoSocial: 'Fornecedor Onda13', documentoFiscal: uid('DOC'),
     }).returning();
     const [cliente] = await db.insert(schema.clientes).values({
-      codigo: uid('CLI'), razaoSocial: 'Cliente Onda13', documentoFiscal: uid('DOCC'),
+      codigo: uid('CLI'), razaoSocial: 'Cliente Onda13', documentoFiscal: uid('DOCC'), faixaPreco: 'A',
     }).returning();
     if (!fornecedor || !cliente) throw new Error('Falha ao criar fornecedor/cliente');
     fornecedorId = fornecedor.id;

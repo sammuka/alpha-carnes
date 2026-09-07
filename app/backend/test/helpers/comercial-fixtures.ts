@@ -54,7 +54,7 @@ export async function seedComercialBase(
     .returning();
   const [cliente] = await db
     .insert(schema.clientes)
-    .values({ codigo: uid('CLI'), razaoSocial: 'Cliente F3', documentoFiscal: uid('DOCC') })
+    .values({ codigo: uid('CLI'), razaoSocial: 'Cliente F3', documentoFiscal: uid('DOCC'), faixaPreco: 'A' })
     .returning();
 
   if (!fornecedor || !produtoCompra || !produtoVenda || !cliente) {

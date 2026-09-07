@@ -1,0 +1,2 @@
+ALTER TABLE "clientes" ALTER COLUMN "faixa_preco" SET NOT NULL;--> statement-breakpoint
+ALTER TABLE "clientes" ADD CONSTRAINT "chk_clientes_faixa_preco" CHECK ("clientes"."faixa_preco" IN ('A','B','C','D'));

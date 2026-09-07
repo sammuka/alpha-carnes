@@ -73,14 +73,14 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
     repB = rB.id;
 
     const [cA] = await db.insert(schema.clientes).values({
-      codigo: uid('CA'), razaoSocial: 'Cliente A', documentoFiscal: uid('DA'), representanteId: repA,
+      codigo: uid('CA'), razaoSocial: 'Cliente A', documentoFiscal: uid('DA'), representanteId: repA, faixaPreco: 'A',
     }).returning();
     // Segundo cliente do Rep A → totais distintos (2 vs 1) entre usuários A e B.
     const [cA2] = await db.insert(schema.clientes).values({
-      codigo: uid('CA2'), razaoSocial: 'Cliente A2', documentoFiscal: uid('DA2'), representanteId: repA,
+      codigo: uid('CA2'), razaoSocial: 'Cliente A2', documentoFiscal: uid('DA2'), representanteId: repA, faixaPreco: 'A',
     }).returning();
     const [cB] = await db.insert(schema.clientes).values({
-      codigo: uid('CB'), razaoSocial: 'Cliente B', documentoFiscal: uid('DB'), representanteId: repB,
+      codigo: uid('CB'), razaoSocial: 'Cliente B', documentoFiscal: uid('DB'), representanteId: repB, faixaPreco: 'A',
     }).returning();
     if (!cA || !cA2 || !cB) throw new Error('clientes');
     clienteA = cA.id;

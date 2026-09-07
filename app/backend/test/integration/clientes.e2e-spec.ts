@@ -32,6 +32,7 @@ describe('Clientes e2e (CRUD + RBAC + validação + soft delete + auditoria)', (
     codigo: `CLI-${Math.floor(performance.now() * 1000)}-${Math.round(performance.timeOrigin)}`,
     razaoSocial: 'Cliente Teste LTDA',
     documentoFiscal: CNPJ_VALIDO,
+    faixaPreco: 'A',
     ...over,
   });
 

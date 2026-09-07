@@ -19,6 +19,7 @@ async function criarOutroCliente(app: INestApplication): Promise<string> {
     codigo: `CLI2-${sufixo}`,
     razaoSocial: 'Cliente Reserva 2',
     documentoFiscal: `DOC2-${sufixo}`,
+    faixaPreco: 'A',
   }).returning();
   if (!cliente) throw new Error('Falha ao criar segundo cliente do teste');
   return cliente.id;

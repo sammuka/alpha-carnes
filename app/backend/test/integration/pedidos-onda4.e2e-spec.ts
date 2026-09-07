@@ -82,11 +82,13 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
       documentoFiscal: uid('DOCHER'),
       rotaId: rota.id,
       representanteId: representante.id,
+      faixaPreco: 'A',
     }).returning();
     const [clienteSemRota] = await db.insert(schema.clientes).values({
       codigo: uid('CLISEM'),
       razaoSocial: 'Cliente Sem Rota',
       documentoFiscal: uid('DOCSEM'),
+      faixaPreco: 'A',
     }).returning();
     if (!clienteComRota || !clienteSemRota) throw new Error('Falha ao criar clientes do teste');
 

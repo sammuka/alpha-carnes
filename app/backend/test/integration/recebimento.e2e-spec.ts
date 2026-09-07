@@ -47,6 +47,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
       codigo: `CLIREC-${sufixo}`,
       razaoSocial: 'Cliente Recebimento 2',
       documentoFiscal: `DOCREC-${sufixo}`,
+      faixaPreco: 'A',
     }).returning();
     if (!cliente) throw new Error('Falha ao criar segundo cliente do teste');
     return cliente.id;

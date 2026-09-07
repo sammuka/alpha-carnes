@@ -65,6 +65,7 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
         codigo: `CLICC-${sufixo}`,
         razaoSocial: `Cliente Concorrência ${i}`,
         documentoFiscal: `DOCCC-${sufixo}`,
+        faixaPreco: 'A',
       }).returning();
       if (!cliente) throw new Error('Falha ao criar cliente extra do teste');
       ids.push(cliente.id);

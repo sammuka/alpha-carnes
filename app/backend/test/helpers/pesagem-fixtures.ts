@@ -80,6 +80,7 @@ export async function criarOutroCliente(app: INestApplication): Promise<string> 
     codigo: `CLIPES-${sufixo}`,
     razaoSocial: 'Cliente Pesagem 2',
     documentoFiscal: `DOCPES-${sufixo}`,
+    faixaPreco: 'A',
   }).returning();
   if (!cliente) throw new Error('Falha ao criar segundo cliente do teste');
   return cliente.id;

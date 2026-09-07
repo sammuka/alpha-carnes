@@ -16,6 +16,7 @@ export const clientes = pgTable(
     status:                  text('status').notNull().default('ativo'),
     rotaId:                  uuid('rota_id').references(() => rotas.id),
     prioridade:              text('prioridade'),
+    faixaPreco:              text('faixa_preco').notNull(),
     preferenciasJson:        jsonb('preferencias_json').notNull().default(sql`'{}'::jsonb`),
     dadosFiscaisJson:        jsonb('dados_fiscais_json').notNull().default(sql`'{}'::jsonb`),
     dadosContatoJson:        jsonb('dados_contato_json').notNull().default(sql`'{}'::jsonb`),
@@ -26,6 +27,7 @@ export const clientes = pgTable(
   },
   (t) => [
     check('chk_clientes_status', sql`${t.status} IN ('ativo','inativo')`),
+    check('chk_clientes_faixa_preco', sql`${t.faixaPreco} IN ('A','B','C','D')`),
     // Unicidade parcial: só vale para registros ativos (não colide com soft-deletados).
     uniqueIndex('uq_clientes_codigo').on(t.codigo).where(sql`${t.deletedAt} IS NULL`),
     uniqueIndex('uq_clientes_documento_fiscal').on(t.documentoFiscal).where(sql`${t.deletedAt} IS NULL`),

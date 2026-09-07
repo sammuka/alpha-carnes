@@ -44,6 +44,7 @@ describe('Clientes — Onda 4 (rota_id, prioridade, preferências)', () => {
     codigo: `CLI-ONDA4-${Math.floor(performance.now() * 1000)}-${Math.round(performance.timeOrigin)}`,
     razaoSocial: 'Cliente Onda4 LTDA',
     documentoFiscal: CNPJ_VALIDO,
+    faixaPreco: 'A',
     ...over,
   });
 
