@@ -191,7 +191,35 @@ it('deriva os 9 rotulos de status do prototipo incluindo rascunho com reserva at
   expect(rotuloStatusPedido('rascunho', true)).toBe('Rascunho com reserva ativa');
 });
 
-it('modal de overbooking renderiza o payload do 409 sem numero fabricado', () => {
+it('modal de overbooking renderiza código do produto, nunca UUID', () => {
+  render(
+    <ModalOverbooking
+      open
+      challenge={{
+        code: 'OVERBOOKING_CONFIRMACAO_NECESSARIA',
+        message: 'Confirme',
+        itens: [{
+          produtoId: '01a05a54-d229-7552-b9d0-ddb182915242',
+          produtoCodigo: 'TZ',
+          produtoNome: 'Traseiro',
+          disponivelAntes: '7.250',
+          quantidadeSolicitada: '10.500',
+          overbookingGerado: '3.250',
+          mensagem: 'Déficit',
+        }],
+      }}
+      onCancel={jest.fn()}
+      onConfirm={jest.fn()}
+    />,
+  );
+  expect(screen.getByText('TZ — Traseiro')).toBeInTheDocument();
+  expect(screen.queryByText('01a05a54-d229-7552-b9d0-ddb182915242')).not.toBeInTheDocument();
+  expect(screen.getByText('7.250')).toBeInTheDocument();
+  expect(screen.getByText('10.500')).toBeInTheDocument();
+  expect(screen.getByText('3.250')).toBeInTheDocument();
+});
+
+it('modal de overbooking resolve o rótulo pelo catálogo se o 409 vier só com IDs', () => {
   render(
     <ModalOverbooking
       open
@@ -206,13 +234,13 @@ it('modal de overbooking renderiza o payload do 409 sem numero fabricado', () =>
           mensagem: 'Déficit',
         }],
       }}
+      rotuloProdutoCatalogo={(id) => (id === 'item-1' ? 'BOI — Boi casado' : '—')}
       onCancel={jest.fn()}
       onConfirm={jest.fn()}
     />,
   );
-  expect(screen.getByText('7.250')).toBeInTheDocument();
-  expect(screen.getByText('10.500')).toBeInTheDocument();
-  expect(screen.getByText('3.250')).toBeInTheDocument();
+  expect(screen.getByText('BOI — Boi casado')).toBeInTheDocument();
+  expect(screen.queryByText('item-1')).not.toBeInTheDocument();
 });
 
 it('modal de adendo mostra pedido aberto existente e envia motivo', async () => {

@@ -207,6 +207,8 @@ export interface ResultadoPedido {
 
 export interface OverbookingChallengeItem {
   produtoId: string;
+  produtoCodigo?: string | null;
+  produtoNome?: string | null;
   disponivelAntes: string;
   quantidadeSolicitada: string;
   overbookingGerado: string;
@@ -234,6 +236,9 @@ export interface PendenciaOverbooking {
   pedidoVendaItemId: string;
   produtoId: string;
   clienteId: string;
+  clienteNome?: string;
+  produtoCodigo?: string;
+  produtoNome?: string;
   vendedorUsuarioId: string;
   operacaoId: string;
   quantidadeDeficit: string;

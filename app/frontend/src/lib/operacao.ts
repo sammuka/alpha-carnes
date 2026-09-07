@@ -229,6 +229,7 @@ export interface SugestaoScored {
   pedidoVendaItemId: string;
   produtoId: string;
   clienteId: string;
+  clienteNome?: string;
   saldoPendente: string;
   prioridade: number | null;
   rotaPrevista: string | null;
@@ -390,6 +391,7 @@ export interface RomaneioItem {
 export interface RomaneioPedido {
   pedidoVendaId: string;
   clienteId: string | null;
+  clienteNome?: string | null;
   ordemNaCarga: number | null;
   previsto: number;
   carregado: number;

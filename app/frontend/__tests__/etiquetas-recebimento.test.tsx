@@ -109,6 +109,9 @@ describe('EtiquetasRecebimentoClient', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ver etiqueta' }));
     await waitFor(() => expect(screen.getByText('Preview da etiqueta')).toBeInTheDocument());
     expect(screen.getByText('Pedido vinculado')).toBeInTheDocument();
+    expect(screen.getAllByText('ETQ-1').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(base.pecaId)).not.toBeInTheDocument();
+    expect(screen.queryByText(base.id)).not.toBeInTheDocument();
     expect(screen.getByText(/Restaurante Grill/)).toBeInTheDocument();
     expect(screen.getByText(/TZ\s*·\s*Traseiro/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancelar etiqueta' })).toBeInTheDocument();

@@ -194,6 +194,6 @@ describe('EstoqueConsultaService (D8.2/D8.3)', () => {
     ]);
     const service = new EstoqueConsultaService({ db: makeDb(porTabela) } as never);
     const [item] = await service.consultar({});
-    expect(item?.pedidoReservado).toBe(`#${'pv1'.slice(0, 8)} — Açougue Nova Era`);
+    expect(item?.pedidoReservado).toBe('Açougue Nova Era');
   });
 });

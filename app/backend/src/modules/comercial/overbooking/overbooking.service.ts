@@ -18,11 +18,13 @@ import { montarPaginado, type Paginado } from '../../../common/crud/paginacao';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
+  clientes,
   disponibilidadesVirtuais,
   operacoes,
   pedidosVendaItens,
   pendenciasOverbooking,
   pendenciasOverbookingHistorico,
+  produtos,
   reservasDisponibilidade,
   usuarios,
 } from '../../../database/schema';
@@ -38,6 +40,12 @@ import {
 } from './dto/overbooking.dto';
 
 type Pendencia = typeof pendenciasOverbooking.$inferSelect;
+
+export type PendenciaListada = Pendencia & {
+  clienteNome: string;
+  produtoCodigo: string;
+  produtoNome: string;
+};
 
 export interface CoberturaPendencia {
   pendenciaId: string;
@@ -82,7 +90,7 @@ export class OverbookingService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarPendenciasDto): Promise<Paginado<Pendencia>> {
+  async listar(query: ListarPendenciasDto): Promise<Paginado<PendenciaListada>> {
     const page = query.pagina;
     const pageSize = query.limite;
     const limit = pageSize;
@@ -94,11 +102,28 @@ export class OverbookingService {
     if (query.status) filtros.push(eq(pendenciasOverbooking.status, query.status));
     const where = and(...filtros);
     const [linhas, totalRow] = await Promise.all([
-      this.db.select().from(pendenciasOverbooking).where(where)
+      this.db.select({
+        pendencia: pendenciasOverbooking,
+        clienteNome: sql<string>`coalesce(${clientes.nomeFantasia}, ${clientes.razaoSocial})`,
+        produtoCodigo: produtos.codigo,
+        produtoNome: produtos.nome,
+      }).from(pendenciasOverbooking)
+        .innerJoin(clientes, eq(clientes.id, pendenciasOverbooking.clienteId))
+        .innerJoin(produtos, eq(produtos.id, pendenciasOverbooking.produtoId))
+        .where(where)
         .orderBy(desc(pendenciasOverbooking.createdAt)).limit(limit).offset(offset),
       this.db.select({ total: sql<number>`count(*)::int` }).from(pendenciasOverbooking).where(where),
     ]);
-    return montarPaginado(linhas, totalRow[0]?.total ?? 0, { page, pageSize });
+    return montarPaginado(
+      linhas.map((l) => ({
+        ...l.pendencia,
+        clienteNome: l.clienteNome,
+        produtoCodigo: l.produtoCodigo,
+        produtoNome: l.produtoNome,
+      })),
+      totalRow[0]?.total ?? 0,
+      { page, pageSize },
+    );
   }
 
   async detalhar(id: string): Promise<Pendencia & {

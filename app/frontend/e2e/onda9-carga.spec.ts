@@ -27,8 +27,8 @@ test.describe('Onda 9 — carga', () => {
     // ── Conferência por bipagem ───────────────────────────────────────────
     await page.goto('/carga/conferencia');
     await expect(page.getByText('Conferência de Carga')).toBeVisible();
-    await expect(page.getByText(`Carga #${cenario.caminhaoId.slice(0, 8)}`).first()).toBeVisible({ timeout: 15_000 });
-    await page.getByText(`Carga #${cenario.caminhaoId.slice(0, 8)}`).first().click();
+    await expect(page.getByText(cenario.placa).first()).toBeVisible({ timeout: 15_000 });
+    await page.getByText(cenario.placa).first().click();
     await expect(page.getByText(`Placa: ${cenario.placa}`)).toBeVisible();
 
     // Marcar divergência exige motivo obrigatório (ModalDivergencia).
@@ -54,8 +54,8 @@ test.describe('Onda 9 — carga', () => {
     // ── Enviar para Faturamento ───────────────────────────────────────────
     await page.goto('/carga/enviar-faturamento');
     await expect(page.getByRole('heading', { name: 'Enviar para Faturamento' })).toBeVisible();
-    await expect(page.getByText(`Carga #${cenario.caminhaoId.slice(0, 8)}`).first()).toBeVisible({ timeout: 15_000 });
-    await page.getByText(`Carga #${cenario.caminhaoId.slice(0, 8)}`).first().click();
+    await expect(page.getByText(cenario.placa).first()).toBeVisible({ timeout: 15_000 });
+    await page.getByText(cenario.placa).first().click();
     const botaoEnviar = page.getByRole('button', { name: 'Enviar para Faturamento' });
     await expect(botaoEnviar).toBeEnabled({ timeout: 10_000 });
     await botaoEnviar.click();

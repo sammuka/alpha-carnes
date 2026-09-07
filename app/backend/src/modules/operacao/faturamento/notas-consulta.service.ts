@@ -48,6 +48,7 @@ export class NotasConsultaService {
       linhas.map((l) => ({
         ...l.nota,
         clienteNome: l.cliente.nomeFantasia ?? l.cliente.razaoSocial,
+        caminhaoPlaca: l.caminhao.placa,
         // D10.7/T9 — trava visual de cancelamento no client (NotasXml.tsx:485-497).
         caminhaoLiberado: ['liberado_saida', 'expedido'].includes(l.caminhao.statusCaminhao),
       })),

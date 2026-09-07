@@ -169,7 +169,7 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
   const nomeCliente = useCallback(
     (clienteId: string) => {
       const c = clientes.find((cl) => cl.id === clienteId);
-      return c ? c.nomeFantasia ?? c.razaoSocial : clienteId.slice(0, 8);
+      return c ? c.nomeFantasia ?? c.razaoSocial ?? '—' : '—';
     },
     [clientes],
   );
@@ -411,7 +411,6 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
                                   <BadgeCount className="bg-warning-soft text-warning-fg">S/ Caminhão</BadgeCount>
                                 </div>
                                 <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                                  <span className="font-data">{pedido.id.slice(0, 8)}…</span>
                                   <span title="Peso real apurado na pesagem">— kg</span>
                                   {prioridade && (
                                     <span
@@ -515,10 +514,10 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
                               </span>
                               <div>
                                 <p className="font-semibold text-foreground">
-                                  {pedidoOriginal ? nomeCliente(pedidoOriginal.clienteId) : p.pedidoVendaId.slice(0, 8)}
+                                  {pedidoOriginal ? nomeCliente(pedidoOriginal.clienteId) : '—'}
                                 </p>
                                 <p className="text-[10px] text-muted-foreground">
-                                  <span className="font-data">{p.pedidoVendaId.slice(0, 8)}…</span> · previsto {p.previsto} · carregado {p.carregado}
+                                  previsto {p.previsto} · carregado {p.carregado}
                                 </p>
                                 {p.pecas?.map((peca, pecaIdx) => {
                                   const lote = peca.loteOrigem
@@ -596,7 +595,7 @@ export function PlanejamentoExpedicaoClient({ permissoes }: { permissoes: string
               <div className="rounded-lg bg-surface-2 p-3 text-xs">
                 <p className="font-bold text-foreground">{nomeCliente(modalPedido.clienteId)}</p>
                 <p className="mt-0.5 text-muted-foreground">
-                  <span className="font-data">{modalPedido.id.slice(0, 8)}…</span> · {modalPedido.rotaPrevista ?? 'Sem rota'}
+                  <span className="font-data">{modalPedido.rotaPrevista ?? 'Sem rota'}</span>
                 </p>
               </div>
               <div className="flex flex-col gap-1.5">

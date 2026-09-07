@@ -106,11 +106,11 @@ export async function destinarItem(payload: DestinarPayload): Promise<ItemEstoqu
   return res.json();
 }
 
-/** SugestaoScored do backend não traz nome do cliente — só clienteId (RF-PS-08/09/10). */
 interface SugestaoScoredApi {
   pedidoVendaId: string;
   pedidoVendaItemId: string;
   clienteId: string;
+  clienteNome?: string;
   saldoPendente: string;
   justificativa: string;
 }
@@ -119,7 +119,7 @@ function sugestaoParaCompativel(s: SugestaoScoredApi): PedidoCompativelEstoque {
   return {
     pedidoVendaItemId: s.pedidoVendaItemId,
     pedidoVendaId: s.pedidoVendaId,
-    clienteNome: `Cliente ${s.clienteId.slice(0, 8)}…`,
+  clienteNome: s.clienteNome?.trim() || '—',
     pendencia: s.justificativa,
   };
 }

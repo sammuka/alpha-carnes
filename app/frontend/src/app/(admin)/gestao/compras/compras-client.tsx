@@ -488,7 +488,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
               <FormField label="Fornecedor" required className="sm:col-span-2" htmlFor="fornecedor">
                 <ComboboxField
                   id="fornecedor"
-                  items={fornecedores.map((f) => ({ id: f.id, label: f.razaoSocial ?? f.codigo ?? f.id.slice(0, 8), sublabel: f.codigo }))}
+                  items={fornecedores.map((f) => ({ id: f.id, label: f.razaoSocial ?? f.codigo ?? '—', sublabel: f.codigo }))}
                   value={fornecedorId}
                   onChange={setFornecedorId}
                   placeholder="Selecione o fornecedor"
@@ -677,7 +677,12 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                 <ul className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
                   {disponibilidade.map((d) => (
                     <li key={d.modo === 'compra' ? d.id : d.produtoId} className="flex justify-between text-xs">
-                      <span className="font-data text-[11px]">{d.produtoId.slice(0, 8)}…</span>
+                      <span className="font-data text-[11px]">
+                        {(() => {
+                          const it = itensCompra.find((p) => p.id === d.produtoId);
+                          return it ? labelCodigoDescricao(it.codigo, it.descricao ?? it.nome ?? '') : '—';
+                        })()}
+                      </span>
                       <span className="font-data font-semibold text-primary">{d.quantidadeDisponivel} disp.</span>
                     </li>
                   ))}
