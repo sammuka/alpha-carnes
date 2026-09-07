@@ -12,9 +12,11 @@
 
 **Base pinada no momento do plano:** `origin/develop` @ `b95e1ae8a62c0a6a33b9c605cc0f3ccf3cb71d6b` (Onda 13 mergeada, PR #123 SHA `a88854e`, AD-15). Journal em `app/backend/src/database/migrations/meta/_journal.json` termina em `idx: 36` / `0036_onda13_catalogo_contract`. Próximos nomes livres: `0037`…`0043` (tabela abaixo). Se `origin/develop` avançar e o journal ganhar `idx ≥ 37`, **parar e reportar** — não renumerar sozinho.
 
-**Worktree / branch:** `.worktrees/o14` · `feature/onda14-preco-tabela-pedido`. AD-16 commitada em `4cea1f10a3e81c1cc387d8e68cba40c39928c22b` — **não reabrir**. Worktree HEAD na correção do Portão 1 (`2026-09-07T03:06:42Z`): `0d46bc150cecb94d9a3a8956bd336f36462d7898` (coordenação; arquivos de produto inalterados vs. `4cea1f1`). Patches literais conferidos contra este HEAD. Nunca implementar no worktree coordenador.
+**Worktree / branch:** `.worktrees/o14` · `feature/onda14-preco-tabela-pedido`. AD-16 commitada em `4cea1f10a3e81c1cc387d8e68cba40c39928c22b` — **não reabrir**. Worktree HEAD na 2ª correção do Portão 1 (`2026-09-07T03:27:34Z`): `4a19c25790ece35c4ca6d140f4a679f81a6c5a87`. `carregar` / `listarAprovacoes` conferidos neste SHA. Nunca implementar no worktree coordenador.
 
-**Correção Portão 1 (fecha exatamente 5 achados, sem mudar escopo):** (1) GET `/precos/vigente` envelope `{ data }` — T04 e T06; `unidadePreco` nullable. (2) T10 embute o JSON literal ALP-85. (3) T08 só list/detail/ciente; T10 declara `@Get('relatorio')` acima de `:id`, sem stub 501. (4) Persistência de preço: Zod + `numeric(15,2)`, nunca `Number()`. (5) T06 remap/lock de cliente + `it('...')` 1:1 em T06/T09.
+**Correção Portão 1 1ª rodada (5 achados — permanecem fechados, não reabrir):** (1) GET `/precos/vigente` envelope `{ data }` — T04 e T06; `unidadePreco` nullable. (2) T10 embute o JSON literal ALP-85. (3) T08 só list/detail/ciente; T10 declara `@Get('relatorio')` acima de `:id`, sem stub 501. (4) Persistência de preço: Zod + `numeric(15,2)`, nunca `Number()`. (5) T06 remap/lock de cliente + `it('...')` 1:1 em T06/T09.
+
+**Correção Portão 1 2ª rodada (`2026-09-07T03:27:34Z` — fecha exatamente 2 achados, sem mudar escopo):** (1) T08/T09 — `operacaoId` obrigatório no DTO de list, join `pedidos_venda.operacao_id`, fetch literal da fila. (2) T11 — 12 `it('...')` literais ALP-86.
 
 **Linear:** épico [ALP-55](https://linear.app/alphacarnes/issue/ALP-55). T00 [ALP-77](https://linear.app/alphacarnes/issue/ALP-77) Done neste SHA. Este arquivo é T01. Worker executa Task 1 (docs) + T02–T12 = ALP-78…86 + ALP-59 + ALP-61. T13 é o Quality Owner. T14 abre o PR só depois de T13 Done. **Este worker não faz Portão 2 nem merge.**
 
@@ -1745,6 +1747,7 @@ DTO de list em `dto/ocorrencia-preco.dto.ts`:
 
 ```ts
 export const listarOcorrenciasPrecoQuerySchema = z.object({
+  operacaoId: z.string().uuid(),
   status: z.enum(['aberta', 'ciente']).optional(),
   clienteId: z.string().uuid().optional(),
   dataInicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -1755,7 +1758,19 @@ export const listarOcorrenciasPrecoQuerySchema = z.object({
 export type ListarOcorrenciasPrecoQuery = z.infer<typeof listarOcorrenciasPrecoQuerySchema>;
 ```
 
-Query list: `status` (`aberta`\|`ciente`), `clienteId`, `dataInicio`, `dataFim`, `page`, `pageSize`. Ordem `dataHoraOcorrencia DESC`. Shape `{ data, total, page, pageSize }`.
+`operacaoId` é **obrigatório** (mesmo contrato de `listarAprovacoesSchema`). Sem `operacaoId` → 400 Zod. A tabela `ocorrencias_ajuste_preco` **não** tem `operacao_id`. `service.listar` filtra assim (não inventar coluna, não filtrar por `operacoes.data`):
+
+```ts
+.innerJoin(pedidosVenda, eq(ocorrenciasAjustePreco.pedidoVendaId, pedidosVenda.id))
+.where(and(
+  eq(pedidosVenda.operacaoId, query.operacaoId),
+  query.status ? eq(ocorrenciasAjustePreco.status, query.status) : undefined,
+  query.clienteId ? eq(ocorrenciasAjustePreco.clienteId, query.clienteId) : undefined,
+  // dataInicio / dataFim sobre dataHoraOcorrencia, se presentes
+))
+```
+
+Query list: `operacaoId` (obrigatório), `status` (`aberta`\|`ciente`), `clienteId`, `dataInicio`, `dataFim`, `page`, `pageSize`. Ordem `dataHoraOcorrencia DESC`. Shape `{ data, total, page, pageSize }`.
 
 Linha list: `id`, `pedidoNumero` (usar `pedidos_venda.id` se não houver número de negócio — **não inventar** sequencial; se o detalhe do pedido já expõe um campo de número no HEAD, reusar; senão `pedidoVendaId` na chave `pedidoNumero` **é proibido**. Conferir `pedidos.service.ts` `listar`: **não há** `numero`. Devolver `pedidoVendaId` **e** `pedidoIdCurto` = 8 primeiros do UUID **somente se** a UI precisar de rótulo. ALP-84 pede `pedidoNumero`. No HEAD não existe. **Usar `pedidos_venda.id` no campo `pedidoNumero`** com o valor do UUID — identidade real, não fabricada. Documentar no Self-Review: lacuna de numeração de pedido (pré-existente), não inventar sequência.
 
@@ -1767,11 +1782,20 @@ Inexistente → 404.
 
 `ComercialModule` importa `OcorrenciasPrecoModule`.
 
-BFF: três rotas com `repassar` de `@/lib/bff` (GET list, GET id, POST ciente).
+BFF: três rotas com `repassar` de `@/lib/bff` (GET list, GET id, POST ciente). List **encaminha a query** (padrão HEAD `app/frontend/src/app/api/gestao/aprovacoes/route.ts`):
+
+```ts
+import { NextRequest } from 'next/server';
+import { repassar } from '@/lib/bff';
+
+export async function GET(req: NextRequest) {
+  return repassar(`/ocorrencias-preco${req.nextUrl.search}`);
+}
+```
 
 ### Testes
 
-403 list sem `APROVACOES_LER`; 403 ciente sem `OCORRENCIA_PRECO_CIENTE` (diretoria tem LER, não CIENTE); filtros; percentual null; 409 segunda ciência; 404; evento pós-commit; snapshot sem `PEDIDO_PRECO_AJUSTAR` e sem `ITENS_*`.
+403 list sem `APROVACOES_LER`; 403 ciente sem `OCORRENCIA_PRECO_CIENTE` (diretoria tem LER, não CIENTE); 400 list sem `operacaoId`; list `operacaoId=A` **não** devolve ocorrência cujo `pedidos_venda.operacao_id=B`; filtros opcionais (`status`, `clienteId`, `dataInicio`, `dataFim`); percentual null; 409 segunda ciência; 404; evento pós-commit; snapshot sem `PEDIDO_PRECO_AJUSTAR` e sem `ITENS_*`.
 
 **Commit:** `feat(onda14): endpoints de ocorrência de preço e OCORRENCIA_PRECO_CIENTE`
 
@@ -1797,7 +1821,33 @@ type ItemFila =
   | { tipo: 'preco'; id: string; titulo: string; status: string; dataHora: string; bruto: OcorrenciaPrecoLista };
 ```
 
-- [ ] `carregar` (L65–80): se `aba === 'ocorrencias'`, **duas** chamadas (`listarAprovacoes` existente + `GET /api/ocorrencias-preco?...`). Unir, ordenar por `dataHora` desc.
+- [ ] `carregar` (HEAD L65–80): **não** remover `if (!operacaoId) return`. `operacaoId` é o mesmo `searchParams.get('operacaoId')` de L49. Se `aba === 'ocorrencias'`, duas chamadas em paralelo; a de preço é **este fetch literal** (mesmo `operacaoId` já passado a `listarAprovacoes`). Unir, ordenar por `dataHora` desc.
+
+`old_string` (único em `carregar`):
+
+```
+      if (aba === 'ocorrencias') {
+        const res = await listarAprovacoes<OcorrenciaLista>({ operacaoId, aba: 'ocorrencias' });
+        setOcorrencias(res.data);
+        if (!ocorrenciaSel && res.data[0]) setOcorrenciaSel(res.data[0]);
+```
+
+`new_string`:
+
+```
+      if (aba === 'ocorrencias') {
+        const qsPreco = new URLSearchParams({ operacaoId });
+        const [resFornecedor, resPrecoHttp] = await Promise.all([
+          listarAprovacoes<OcorrenciaLista>({ operacaoId, aba: 'ocorrencias' }),
+          fetch(`/api/ocorrencias-preco?${qsPreco}`),
+        ]);
+        if (!resPrecoHttp.ok) throw new Error(await mensagemDeErro(resPrecoHttp));
+        const resPreco = await resPrecoHttp.json() as { data: OcorrenciaPrecoLista[] };
+        // unir resFornecedor.data + resPreco.data em ItemFila[]; ordenar por dataHora desc;
+        // set da lista unificada; se nada selecionado, selecionar o primeiro.
+```
+
+Zero `GET /api/ocorrencias-preco` sem query. Zero filtro inventado no cliente (não recortar por data da operação no frontend). A operação vem só do query param, igual a `listarAprovacoes` (`URLSearchParams` + `operacaoId`).
 
 - [ ] Card esquerdo: mesma `<button>` (L171–186). Badge de tipo **antes** do nome (`Fornecedor` / `Preço`). Título preço = `clienteNomeFantasia`. `StatusPill`: `aberta` → `Aberta` variant `pendente`; `ciente` → `Ciente` (mesmo tratamento visual que `resolvida` hoje). Estender `ROTULO_STATUS_OCORRENCIA` em `lib/aprovacoes.ts` com `ciente: 'Ciente'` — **não** remover `resolvida`.
 
@@ -1811,7 +1861,7 @@ type ItemFila =
 
 ```ts
 it('fila mistura fornecedor e preço ordenada por data desc', async () => {
-  // mock as duas GETs; cards na ordem dataHora desc misturando tipos.
+  // mock listarAprovacoes({ operacaoId, aba: 'ocorrencias' }) e GET `/api/ocorrencias-preco?${new URLSearchParams({ operacaoId })}` (mesmo uuid da URL); cards na ordem dataHora desc misturando tipos.
 });
 it('badge distingue Fornecedor de Preço', async () => {
   // expect texto Fornecedor e Preço nos badges; título preço = clienteNomeFantasia.
@@ -2015,7 +2065,7 @@ export async function GET(req: NextRequest) {
 
 ### Steps
 
-- [ ] **TDD** 12 casos ALP-86 (duas abas; SIF 4 relatórios intactos; P8 só no SIF; RBAC de abas; período default; limpar período bloqueia; filtros; detalhe; `—`; vazio; `role="alert"`).
+- [ ] **TDD** os 12 `it('...')` literais ALP-86 no bloco Jest no fim desta task. Não colapsar RBAC num único caso.
 
 - [ ] `old_string` do header (L86–98):
 
@@ -2063,6 +2113,49 @@ Envolver o corpo atual (erro + KpiStrip + lista SIF + diálogos) em:
 - [ ] Aba gerenciais: filtros período (default 1º dia do mês corrente → hoje; consulta só com período válido), Cliente (`ComboboxField`, placeholder `Buscar cliente`), Representante select, Produto combobox `GET /api/cadastros/produtos?status=ativo&ativoVenda=true&pageSize=100`, Faixa A–D + Todas. Tabela: Número (`pedidoNumero` = UUID do T08), Cliente, Representante, Data, Itens ajustados, Valor total ajustado (`font-data`, sinal, cores semânticas). Detalhe: linha expansível (`<details>` ou painel sob a linha — **não** accordion de fila). Colunas iguais à T09. Vazio: `Nenhum pedido com alteração de preço no período selecionado.` Skeleton DS se existir na tela SIF; senão o mesmo `Card` disabled. Erro: `role="alert"` no padrão L100–102. **Sem** botão exportar.
 
 - [ ] `rg "exportar|Exportar" app/frontend/src/app/(admin)/gestao/relatorios/relatorios-client.tsx` vazio. `menus-canonicos.ts` e `menu-v2.ts` **não** entram no diff.
+
+- [ ] Jest 1:1 — arquivo `onda14-relatorios-gerenciais.test.tsx`. Cada `it` abaixo é obrigatório (título literal, tabela de testes ALP-86):
+
+```ts
+it('tela renderiza as duas abas', async () => {
+  // SIF_LER + APROVACOES_LER; TabsTrigger Relatórios SIF e Relatórios Gerenciais visíveis.
+});
+it('aba SIF preserva os 4 relatórios e a geração', async () => {
+  // 4 cards SIF + botão Gerar intactos; lógica SIF inalterada.
+});
+it('BadgeProvisorio P8 aparece só na aba SIF', async () => {
+  // P8 e aviso âmbar dentro de TabsContent sif; ausentes no PageHeader e na aba gerenciais.
+});
+it('sem SIF_LER a aba SIF não aparece', async () => {
+  // permissoes só APROVACOES_LER; TabsTrigger Relatórios SIF ausente; aba gerenciais já selecionada.
+});
+it('sem APROVACOES_LER a aba Gerenciais não aparece', async () => {
+  // permissoes só SIF_LER; TabsTrigger Relatórios Gerenciais ausente; aba sif já selecionada.
+});
+it('período default preenchido ao abrir', async () => {
+  // dataInicio = 1º dia do mês corrente; dataFim = hoje (YYYY-MM-DD local).
+});
+it('limpar o período bloqueia a consulta', async () => {
+  // limpar dataInicio ou dataFim; GET /api/ocorrencias-preco/relatorio NÃO disparado.
+});
+it('filtros combinados chegam na query', async () => {
+  // dataInicio, dataFim, clienteId, representanteId, produtoId, faixaPreco na URL do GET /api/ocorrencias-preco/relatorio.
+});
+it('detalhamento mostra todos os itens', async () => {
+  // expandir pedido; N linhas = N itens do JSON; colunas Produto, Preço da tabela, Preço aplicado, Diferença, Diferença %, Ajustado por.
+});
+it('item sem preço de tabela mostra —', async () => {
+  // precoTabelaOriginal null → em-dash nas colunas tabela e %; legenda Sem preço de tabela para a data; query R$ 0,00 e 0% ausentes.
+});
+it('resultado vazio mostra a mensagem correta', async () => {
+  // GET data:[], total:0 → texto Nenhum pedido com alteração de preço no período selecionado.
+});
+it('erro do endpoint aparece em role="alert"', async () => {
+  // GET 500; elemento role=alert com a mensagem; padrão L100–102.
+});
+```
+
+Cada título é o critério de aceite. Corpos: seguir os passos já desta task. **Não** reduzir os 12 casos a um único `it`.
 
 **Commit:** `feat(onda14): aba Relatórios Gerenciais em /gestao/relatorios`
 
