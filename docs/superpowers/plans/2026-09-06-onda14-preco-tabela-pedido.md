@@ -12,7 +12,9 @@
 
 **Base pinada no momento do plano:** `origin/develop` @ `b95e1ae8a62c0a6a33b9c605cc0f3ccf3cb71d6b` (Onda 13 mergeada, PR #123 SHA `a88854e`, AD-15). Journal em `app/backend/src/database/migrations/meta/_journal.json` termina em `idx: 36` / `0036_onda13_catalogo_contract`. Próximos nomes livres: `0037`…`0043` (tabela abaixo). Se `origin/develop` avançar e o journal ganhar `idx ≥ 37`, **parar e reportar** — não renumerar sozinho.
 
-**Worktree / branch:** `.worktrees/o14` · `feature/onda14-preco-tabela-pedido`. HEAD no momento do plano: `4cea1f10a3e81c1cc387d8e68cba40c39928c22b` (AD-16 já commitada). Nunca implementar no worktree coordenador.
+**Worktree / branch:** `.worktrees/o14` · `feature/onda14-preco-tabela-pedido`. AD-16 commitada em `4cea1f10a3e81c1cc387d8e68cba40c39928c22b` — **não reabrir**. Worktree HEAD na correção do Portão 1 (`2026-09-07T03:06:42Z`): `0d46bc150cecb94d9a3a8956bd336f36462d7898` (coordenação; arquivos de produto inalterados vs. `4cea1f1`). Patches literais conferidos contra este HEAD. Nunca implementar no worktree coordenador.
+
+**Correção Portão 1 (fecha exatamente 5 achados, sem mudar escopo):** (1) GET `/precos/vigente` envelope `{ data }` — T04 e T06; `unidadePreco` nullable. (2) T10 embute o JSON literal ALP-85. (3) T08 só list/detail/ciente; T10 declara `@Get('relatorio')` acima de `:id`, sem stub 501. (4) Persistência de preço: Zod + `numeric(15,2)`, nunca `Number()`. (5) T06 remap/lock de cliente + `it('...')` 1:1 em T06/T09.
 
 **Linear:** épico [ALP-55](https://linear.app/alphacarnes/issue/ALP-55). T00 [ALP-77](https://linear.app/alphacarnes/issue/ALP-77) Done neste SHA. Este arquivo é T01. Worker executa Task 1 (docs) + T02–T12 = ALP-78…86 + ALP-59 + ALP-61. T13 é o Quality Owner. T14 abre o PR só depois de T13 Done. **Este worker não faz Portão 2 nem merge.**
 
@@ -55,7 +57,7 @@ Não commitar diff local de `0035_onda13_catalogo_backfill.sql`. Este worktree e
 19. Cobertura backend ≥80% linha **e** branch nos services tocados. `HARDWARE_FAKE=1`, `NFSE_FAKE=1`.
 20. Portas host: frontend `4000`, backend `4001`, PostgreSQL `15433`.
 21. Serialidade: Task 1 → T02 → T03; T02 → T04 → T05 → T06; T05 → T07 → T08 → T09; T07 → T10 → T11; depois T12. T13 humana. T14 só depois de T13.
-22. Preço trafega como **string** `NUMERIC` (`"18.50"`). Nunca `Number` no caminho de persistência.
+22. Preço trafega como **string** `NUMERIC` (`"18.50"`). Nunca `Number` no caminho de persistência (nem `Number(dto.precoAplicado)`, nem `z.coerce.number()`, nem `parseFloat`). Validar com Zod string + comparar via `::numeric(15,2)` / regex DECIMAL.
 23. `preco_ajustado` **não é coluna**. Derivado de `preco_tabela_original IS DISTINCT FROM preco_aplicado`.
 24. Comentário legado em `PedidosService` L105 (`item comercial`) e 409 `"Item comercial já existe neste pedido"` (L455/L483): T05 troca a string de 409 para `"Produto já existe neste pedido"` no mesmo patch de `incluirItem`. Não é onda paralela.
 
@@ -70,12 +72,12 @@ Não commitar diff local de `0035_onda13_catalogo_backfill.sql`. Este worktree e
 ### D1–D24 — fechadas por este plano (T01)
 
 1. **Ordem de migrations:** 0037–0039 faixa; 0040–0042 colunas do item; 0043 tabelas de ocorrência. Conferir journal antes de cada `generate`.
-2. **GET `/precos/vigente`:** `PrecosController` no HEAD é `@Controller('precos/tabelas')`. **Não** acrescentar `@Get('vigente')` nele (viraria `/precos/tabelas/vigente`). Criar `PrecosVigenteController` `@Controller('precos')` + `@Get('vigente')` no mesmo `PrecosModule`.
+2. **GET `/precos/vigente`:** `PrecosController` no HEAD é `@Controller('precos/tabelas')`. **Não** acrescentar `@Get('vigente')` nele (viraria `/precos/tabelas/vigente`). Criar `PrecosVigenteController` `@Controller('precos')` + `@Get('vigente')` no mesmo `PrecosModule`. Envelope canônico único (T04 e T06): `{ data: PrecoVigenteHttp[] }`. **Proibido** `{ itens }`. `PrecoVigenteHttp.unidadePreco` é `'kg' | 'unidade' | null` (null quando não há vigente).
 3. **PATCH preço separado:** `PATCH /comercial/pedidos/:id/itens/:itemId/preco` com `@RequirePermissoes('PEDIDOS_GERENCIAR')`. Não sobrecarregar `PATCH .../itens/:itemId` (`reduzirItem`).
 4. **Pedido editável = `STATUS_ABERTOS`** já no HEAD (`rascunho`, `em_elaboracao_reserva_ativa`, `aguardando_confirmacao_overbooking`). ALP-81 escreveu "em_elaboracao" — o Worker usa `STATUS_ABERTOS`. Finalizado/cancelado → 409.
 5. **Adendo:** `AdendosService.registrar` já faz UPDATE de quantidade sem tocar preço. T05 **não** adiciona reconsulta. Teste prova herança. Sem coluna nova em `adendos_pedido`.
 6. **Backfill `preco_aplicado`:** se `SELECT count(*) FROM pedidos_venda_itens` > 0 na base-alvo, **PARAR e escalar ao QO**. Se 0, registrar evidência e seguir. Fail-closed (Princípio VII).
-7. **`GET /ocorrencias-preco/relatorio` declarado ANTES de `:id`.**
+7. **`GET /ocorrencias-preco/relatorio` declarado ANTES de `:id`.** T08 **não** cria essa rota nem stub 501. T10 insere `@Get('relatorio')` no mesmo controller, **acima** de `@Get(':id')`.
 8. **Fila:** duas fontes no cliente (`/api/aprovacoes/ocorrencias` + `/api/ocorrencias-preco`). Sem agregador Nest. Sem accordion.
 9. **Relatório:** consulta ao vivo em `ocorrencias-preco`. Sem `RelatoriosSifService` / `relatorios_sif`. Zero join com `tabelas_preco_itens`. Paginar por pedido. `produtoId` filtra o pedido; detalhe traz **todos** os itens ajustados.
 10. **Lacuna representante histórico:** `representanteNome` vem do vínculo **atual** do cliente. Reportar no Self-Review; **não** inventar coluna.
@@ -91,8 +93,8 @@ Não commitar diff local de `0035_onda13_catalogo_backfill.sql`. Este worktree e
 20. **Carga inicial** está em `scripts/carga-inicial/carga-inicial.ts` (raiz do repo, não `app/backend/scripts/...`).
 21. **`atualizar` de clientes** lista campos no `.set()` — **não** espalha o DTO. T02 acrescenta `faixaPreco` no `.set()`.
 22. **`listar`/`detalhar`** usam `$inferSelect` — a coluna nova sai sozinha após o schema.
-23. **Regex de preço:** `/^\d+(\.\d{1,2})?$/`. `"0"` casa o regex; o service rejeita `<= 0` com 400 nomeando o produto (não deixar estourar o CHECK).
-24. **Formatação de persistência:** gravar `preco_aplicado` / original com 2 casas (`18.50`). Comparação de "voltar ao original" via SQL `IS NOT DISTINCT FROM`, não `Number`.
+23. **Regex de preço (Zod, string, sem `Number`):** `/^\d+(\.\d{1,2})?$/` + `.refine` que rejeita zero-like `/^0+(\.0{1,2})?$/` (`"0"`, `"0.0"`, `"0.00"`). Inclusão: se o resolvido (manual ou vigente) for ausente/zero-like → 400 nomeando o produto (não deixar estourar o CHECK). `ajustarPrecoItem` **não** usa `Number(dto.precoAplicado)`.
+24. **Formatação de persistência:** gravar `preco_aplicado` / original com 2 casas (`18.50`). Comparação de "voltar ao original" via SQL `${dto.precoAplicado}::numeric(15,2) IS NOT DISTINCT FROM ${item.precoTabelaOriginal}`, não `Number`.
 
 ---
 
@@ -795,6 +797,20 @@ export class PrecosVigenteController {
 }
 ```
 
+Tipo do envelope (exportar de `dto/preco-vigente.dto.ts`). O frontend **não** importa este arquivo — T06 redeclara o mesmo shape como `LinhaVigente`.
+
+```ts
+export type PrecoVigenteHttp = {
+  produtoId: string;
+  preco: string | null;
+  unidadePreco: 'kg' | 'unidade' | null;
+  tabelaPrecoId: string | null;
+};
+export type PrecoVigenteEnvelope = { data: PrecoVigenteHttp[] };
+```
+
+`vigentePorClienteOperacao` já devolve `PrecoVigenteHttp[]`. O controller **só** envelopa `{ data }`. **Nunca** `{ itens }`. Quando não há vigente, `preco`, `unidadePreco` e `tabelaPrecoId` são `null` (não `"0"`, não `'kg'` inventado).
+
 - [ ] `precos.module.ts` — `controllers: [PrecosController, PrecosVigenteController]`. `exports` já tem `PrecosService`.
 
 - [ ] BFF `app/frontend/src/app/api/precos/vigente/route.ts`:
@@ -811,7 +827,7 @@ export async function GET(req: NextRequest) {
 
 (`repassar` de `@/lib/bff` — **não** o helper local de `tabelas/route.ts`.)
 
-- [ ] Testes HTTP: 403 sem `TABELA_PRECO_LER` (perfil `recebimento_pesagem`); 404 operação inexistente; 404 cliente inexistente. Sem fallback (C2) no unitário.
+- [ ] Testes HTTP: 403 sem `TABELA_PRECO_LER` (perfil `recebimento_pesagem`); 404 operação inexistente; 404 cliente inexistente. Sem fallback (C2) no unitário. Envelope: `expect(body).toEqual({ data: expect.any(Array) }); expect(body).not.toHaveProperty('itens');` — cada elemento tem exatamente `produtoId`, `preco` (`string | null`), `unidadePreco` (`'kg' | 'unidade' | null`), `tabelaPrecoId` (`string | null`). Caso sem vigente: os três campos de preço/unidade/tabela são `null`.
 
 - [ ] `rg precosDaUltimaPublicada app/backend/src/modules/comercial/precos/precos.service.ts` — continua **apenas** nas linhas 99, 182 e 322 (criar/copiar/privado). Zero uso em `resolver*`.
 
@@ -883,7 +899,20 @@ No schema, `faixaPreco`, `unidadePreco`, `precoAplicado` passam a `.notNull()`. 
 `itemPedidoSchema` e `incluirItemSchema` ganham:
 
 ```ts
-const precoAplicadoSchema = z.string().regex(/^\d+(\.\d{1,2})?$/, 'precoAplicado deve ter no máximo 2 casas decimais');
+const PRECO_APLICADO_REGEX = /^\d+(\.\d{1,2})?$/;
+const PRECO_ZERO_LIKE = /^0+(\.0{1,2})?$/;
+
+/** NUMERIC(15,2) como string. Sem Number(), sem coerce. */
+export function ehPrecoNaoPositivo(valor: string | null | undefined): boolean {
+  if (valor == null || valor.trim() === '') return true;
+  const s = valor.trim();
+  if (!PRECO_APLICADO_REGEX.test(s)) return true;
+  return PRECO_ZERO_LIKE.test(s);
+}
+
+export const precoAplicadoSchema = z.string()
+  .regex(PRECO_APLICADO_REGEX, 'precoAplicado deve ter no máximo 2 casas decimais')
+  .refine((s) => !PRECO_ZERO_LIKE.test(s), 'precoAplicado deve ser maior que zero');
 ```
 
 ```ts
@@ -903,6 +932,8 @@ export type AjustarPrecoItemDto = z.infer<typeof ajustarPrecoItemSchema>;
 
 `createPedido` / `incluirItem` mapeiam `item.precoAplicado` para `ItemSolicitado`.
 
+Importar `ehPrecoNaoPositivo` e `precoAplicadoSchema` de `./dto/pedido.dto` no service.
+
 ### Service — congelar na inclusão
 
 `persistirItensPlanejados` (L562–592): **antes** do `insert`, na mesma `tx`:
@@ -912,8 +943,8 @@ export type AjustarPrecoItemDto = z.infer<typeof ajustarPrecoItemSchema>;
 3. `unidade_preco` de `produtos.unidadePreco` (join ou campo do resolvedor; se resolvedor `null`, ler `produtos` — **não** usar `unidadePedido`).
 4. `preco_tabela_original` = `vigente?.preco ?? null`; `tabela_preco_id` = `vigente?.tabelaPrecoId ?? null`; `faixa_preco` = faixa do cliente **no momento**.
 5. `preco_aplicado` = `solicitado.precoAplicado ?? vigente?.preco`.
-6. Se `preco_aplicado` ausente / `<= 0` → `BadRequestException` nomeando o produto (`codigo`/`nome`). Não gravar `0`.
-7. Se `solicitado.precoAplicado` informado e `IS DISTINCT FROM` original → `usuario_ajuste_id` + `ajustado_em = now()`; senão ambos null.
+6. Se `ehPrecoNaoPositivo(preco_aplicado)` → `BadRequestException` nomeando o produto (`codigo`/`nome`). Não gravar `"0"` / `"0.00"`. **Nunca** `Number(...)`.
+7. Se `solicitado.precoAplicado` informado e SQL `${solicitado.precoAplicado}::numeric(15,2) IS DISTINCT FROM ${vigente?.preco ?? null}` → `usuario_ajuste_id` + `ajustado_em = now()`; senão ambos null.
 
 `PedidosModule` importa `PrecosModule`. Injetar `PrecosService` no construtor de `PedidosService`.
 
@@ -929,7 +960,12 @@ export type AjustarPrecoItemDto = z.infer<typeof ajustarPrecoItemSchema>;
         throw new ConflictException('Pedido não aceita ajuste de preço');
       }
       const item = await this.obterItemAtivoSobLock(tx, pedidoId, itemId, usuarioId);
-      if (!(Number(dto.precoAplicado) > 0)) {
+      // Zod já rejeitou zero-like / formato. Recheck em NUMERIC(15,2) — nunca Number().
+      // `tx.execute` neste arquivo devolve `{ rows }` (ver `composicaoLotes` L203–233).
+      const positivo = await tx.execute<{ ok: boolean }>(sql`
+        SELECT (${dto.precoAplicado}::numeric(15,2) > 0) AS ok
+      `);
+      if (positivo.rows[0]?.ok !== true) {
         throw new BadRequestException('precoAplicado deve ser maior que zero');
       }
       const igualOriginal = await tx.execute<{ eq: boolean }>(sql`
@@ -963,7 +999,7 @@ export type AjustarPrecoItemDto = z.infer<typeof ajustarPrecoItemSchema>;
   }
 ```
 
-(Ajuste o `tx.execute` ao helper já usado no arquivo — `proximoCodigoNumerico` usa `tx.execute<{...}>`. Se o bind de `item.precoTabelaOriginal` no SQL literal for desajeitado, comparar em JS **após** normalizar ambos com `sql` `to_char(..., 'FM999999999999990.00')` — **não** `Number`.)
+(Ajuste o `tx.execute` ao helper já usado no arquivo — `composicaoLotes` lê `.rows`. Comparação DECIMAL só via `::numeric(15,2)` — **não** `Number`.)
 
 Auditoria operação: usar `'UPDATE'` (o enum do service). Campo descritivo no `dadosNovos` inclui a chave `precoNovo` para o teste procurar `pedido.item.preco_ajustado` **ou** o `dadosNovos` — o Worker registra `dadosNovos.motivoOperacao = 'pedido.item.preco_ajustado'` se o `AuditoriaService` tiver campo livre; senão o teste afirma `dadosNovos.precoNovo`.
 
@@ -1060,7 +1096,7 @@ Reusar `comercial-fixtures.ts` (já com `faixaPreco: 'A'`). Criar tabela publica
 
 ### Steps
 
-- [ ] **TDD Jest** com os 10 casos ALP-82 (+ distinção tooltip). Falham.
+- [ ] **TDD Jest** com os `it('...')` enumerados no final desta task (10 ALP-82 + remap/lock + envelope `data`). Falham.
 
 - [ ] `PedidoVendaItem` em `lib/comercial.ts` (L148–159) ganha:
 
@@ -1126,7 +1162,19 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
                   <TableHead />
 ```
 
-Imports no topo do editor (HEAD não tem `cn` nem Tooltip). Após a linha `import { ModalOverbooking } from './modal-overbooking';`:
+Imports no topo do editor (HEAD L3: `useEffect, useMemo, useState` — sem `useRef`, sem `cn`, sem Tooltip). `old_string`:
+
+```
+import { useEffect, useMemo, useState } from 'react';
+```
+
+`new_string`:
+
+```
+import { useEffect, useMemo, useRef, useState } from 'react';
+```
+
+Após a linha `import { ModalOverbooking } from './modal-overbooking';`:
 
 ```
 import { cn } from '@/lib/cn';
@@ -1137,15 +1185,23 @@ Helper local (após `origemItem`):
 
 ```ts
 function formatarPtBr(valor: string): string {
-  const n = Number(valor);
-  if (!Number.isFinite(n)) return valor;
-  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Só exibição (tooltip). Payload permanece string DECIMAL. Não é persistência.
+  const [inteiraBruta, fracBruta = ''] = valor.split('.');
+  const inteira = (inteiraBruta.replace(/^0+(?=\d)/, '') || '0');
+  const cents = (fracBruta + '00').slice(0, 2);
+  return `${inteira},${cents}`;
 }
 
 function normalizarPrecoInput(bruto: string): string {
   const trimmed = bruto.trim().replace(',', '.');
   if (trimmed === '') return '';
   return trimmed;
+}
+
+function ehPrecoNaoPositivoUi(valor: string): boolean {
+  const trimmed = valor.trim();
+  if (trimmed === '' || !/^\d+(\.\d{1,2})?$/.test(trimmed)) return true;
+  return /^0+(\.0{1,2})?$/.test(trimmed);
 }
 ```
 
@@ -1177,7 +1233,8 @@ Estado após `quantidades` (L137):
   const [precoNovo, setPrecoNovo] = useState('0.00');
   const [precoNovoTabela, setPrecoNovoTabela] = useState<string | null>(null);
   const [unidadePrecoNovo, setUnidadePrecoNovo] = useState<'kg' | 'unidade'>('kg');
-```
+  const itensNovosRef = useRef(itensNovos);
+  itensNovosRef.current = itensNovos;
 
 `useEffect` de quantidades (L146–150) — estender o mesmo efeito (ou um irmão com `[pedido]`) para hidratar preços persistidos:
 
@@ -1192,12 +1249,51 @@ Estado após `quantidades` (L137):
   }, [pedido]);
 ```
 
-Consulta vigente — `useEffect` novo. Dispara quando `clienteId` **e** `operacaoId` estão setados. Produtos = `produtoNovo` (se houver) + ids de `itensNovos`. Pedido já persistido **não** reconsulta tabela para itens existentes (preço já congelado).
+Consulta vigente — **dois** `useEffect` (não um só com `[..., itensNovos]`). Envelope = `{ data }` (T04). `unidadePreco` nullable. Pedido já persistido: cliente e operação estão `disabled` no HEAD (L517 / L524) — **lock**; itens persistidos **nunca** reconsultam tabela.
 
 ```ts
+  type LinhaVigente = {
+    produtoId: string;
+    preco: string | null;
+    unidadePreco: 'kg' | 'unidade' | null;
+    tabelaPrecoId: string | null;
+  };
+
+  function aplicarPrecoDoProdutoNovo(linha: LinhaVigente | undefined) {
+    setPrecoNovo(linha?.preco ?? '0.00');
+    setPrecoNovoTabela(linha?.preco ?? null);
+    setUnidadePrecoNovo(linha?.unidadePreco ?? 'kg');
+  }
+
+  // Campo do produto em edição. Não remapeia itensNovos (evita loop).
   useEffect(() => {
+    if (!clienteId || !operacaoId || !produtoNovo) return;
+    let ativo = true;
+    const qs = new URLSearchParams({
+      clienteId,
+      operacaoId,
+      produtoIds: produtoNovo,
+    });
+    void fetch(`/api/precos/vigente?${qs.toString()}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((corpo: { data?: LinhaVigente[] } | null) => {
+        if (!ativo) return;
+        const doNovo = corpo?.data?.find((linha) => linha.produtoId === produtoNovo);
+        aplicarPrecoDoProdutoNovo(doNovo);
+      })
+      .catch(() => {
+        if (ativo) aplicarPrecoDoProdutoNovo(undefined);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [clienteId, operacaoId, produtoNovo]);
+
+  // Remap do rascunho: só quando cliente/operação mudam. Sem `itensNovos` nas deps.
+  useEffect(() => {
+    if (pedido) return;
     if (!clienteId || !operacaoId) return;
-    const ids = [produtoNovo, ...itensNovos.map((item) => item.produtoId)].filter(Boolean);
+    const ids = itensNovosRef.current.map((item) => item.produtoId);
     if (ids.length === 0) return;
     let ativo = true;
     const qs = new URLSearchParams({
@@ -1207,23 +1303,29 @@ Consulta vigente — `useEffect` novo. Dispara quando `clienteId` **e** `operaca
     });
     void fetch(`/api/precos/vigente?${qs.toString()}`, { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
-      .then((corpo: { itens?: Array<{ produtoId: string; preco: string | null; unidadePreco: 'kg' | 'unidade' }> } | null) => {
-        if (!ativo || !corpo?.itens) return;
-        const doNovo = corpo.itens.find((linha) => linha.produtoId === produtoNovo);
-        if (doNovo) {
-          setPrecoNovo(doNovo.preco ?? '0.00');
-          setPrecoNovoTabela(doNovo.preco);
-          setUnidadePrecoNovo(doNovo.unidadePreco);
-        }
+      .then((corpo: { data?: LinhaVigente[] } | null) => {
+        if (!ativo || !Array.isArray(corpo?.data)) return;
+        const mapa = new Map(corpo.data.map((linha) => [linha.produtoId, linha]));
+        setItensNovos((atuais) => atuais.map((item) => {
+          const hit = mapa.get(item.produtoId);
+          return {
+            ...item,
+            precoAplicado: hit?.preco ?? '0.00',
+            precoTabelaOriginal: hit?.preco ?? null,
+            unidadePreco: hit?.unidadePreco ?? 'kg',
+          };
+        }));
       })
       .catch(() => {
-        /* ausência de rede não inventa preço — deixa 0.00 */
+        /* ausência de rede não inventa preço */
       });
     return () => {
       ativo = false;
     };
-  }, [clienteId, operacaoId, produtoNovo, itensNovos]);
+  }, [clienteId, operacaoId, pedido]);
 ```
+
+**Proibido** ler `corpo.itens`. UI usa `corpo.data`. `unidadePreco === null` → exibir `/kg` (não inventar preço). Itens de `pedido.itens` não entram neste remap (preço congelado).
 
 `adicionarProduto` (L325–351) — `old_string` do ramo sem pedido:
 
@@ -1240,7 +1342,7 @@ Consulta vigente — `useEffect` novo. Dispara quando `clienteId` **e** `operaca
 `new_string`:
 
 ```
-      if (!(Number(precoNovo) > 0)) {
+      if (ehPrecoNaoPositivoUi(precoNovo)) {
         setErro('Informe um preço unitário maior que zero para incluir o produto.');
         return;
       }
@@ -1267,7 +1369,7 @@ Ramo com pedido — `old_string`:
 `new_string`:
 
 ```
-    if (!(Number(precoNovo) > 0)) {
+    if (ehPrecoNaoPositivoUi(precoNovo)) {
       setErro('Informe um preço unitário maior que zero para incluir o produto.');
       return;
     }
@@ -1282,7 +1384,7 @@ Após sucesso do `mutar` de inclusão, resetar `precoNovo`/`precoNovoTabela` com
   async function persistirPreco(item: PedidoVendaDetalhe['itens'][number]) {
     if (!pedido) return;
     const bruto = normalizarPrecoInput(precos[item.id] ?? '');
-    if (!(Number(bruto) > 0)) {
+    if (ehPrecoNaoPositivoUi(bruto)) {
       setErro('Informe um preço unitário maior que zero.');
       return;
     }
@@ -1387,8 +1489,54 @@ Footer de inclusão — após o `FormField` de quantidade (L682–693), **antes*
 BFF GET vigente: `app/frontend/src/app/api/precos/vigente/route.ts` usando `repassar` de `@/lib/bff` (não o helper local do PATCH de item).
 
 - [ ] Pedido finalizado: coluna visível, `readOnly`, destaque preservado.
-- [ ] Estender `onda4-pedidos.test.tsx`: mock de `GET /api/precos/vigente` em `instalarFetch`; payload de criação pode ganhar `precoAplicado` opcional. `rg itemComercialId` nesse arquivo deve permanecer vazio.
-- [ ] Aceite ALP-82. Zero hex. Nenhuma regra de preço decidida no cliente.
+- [ ] Estender `onda4-pedidos.test.tsx`: mock de `GET /api/precos/vigente` em `instalarFetch` devolvendo `{ data: [...] }` (nunca `{ itens }`); payload de criação pode ganhar `precoAplicado` opcional. `rg itemComercialId` nesse arquivo deve permanecer vazio.
+- [ ] Jest 1:1 — arquivo `onda14-pedido-preco.test.tsx`. Cada `it` abaixo é obrigatório (título literal):
+
+```ts
+it('grade renderiza a coluna Preço unitário', async () => {
+  // render editor; expect(screen.getByText('Preço unitário')).toBeInTheDocument();
+});
+it('preço vem preenchido após escolher cliente e operação via corpo.data', async () => {
+  // mock GET /api/precos/vigente → { data: [{ produtoId, preco: '18.50', unidadePreco: 'kg', tabelaPrecoId }] };
+  // selecionar cliente+operação+produto; campo Preço unitário do novo produto = 18.50 (não lê corpo.itens).
+});
+it('produto sem preço mostra 0,00 e desabilita incluir', async () => {
+  // mock data: [{ ..., preco: null, unidadePreco: null }]; input 0.00; botão Adicionar produto disabled ou submit mostra a mensagem de preço > 0.
+});
+it('editar para valor diferente aplica a classe border-warning', async () => {
+  // item persistido precoAjustado=true; Input com className contendo border-warning.
+});
+it('tooltip mostra Valor da Tabela: R$ ...', async () => {
+  // precoTabelaOriginal='18.50'; tooltip `Valor da Tabela: R$ 18,50`.
+});
+it('precoTabelaOriginal nulo mostra Sem preço de tabela para esta data, não R$ 0,00', async () => {
+  // precoAjustado=true, precoTabelaOriginal=null; tooltip texto exato; query `R$ 0,00` ausente no tooltip.
+});
+it('voltar ao valor original remove a borda', async () => {
+  // após PATCH com precoAplicado === original, recarregar com precoAjustado=false; border-warning ausente.
+});
+it('unidade unidade mostra /un, não /kg', async () => {
+  // unidadePreco='unidade'; expect(screen.getByText('/un')); query /kg ausente na célula.
+});
+it('sem PEDIDOS_GERENCIAR o campo fica em leitura', async () => {
+  // podeGerenciar=false; Input disabled e/ou readOnly.
+});
+it('pedido finalizado mantém destaque em leitura', async () => {
+  // status=finalizado, precoAjustado=true; Input readOnly + border-warning.
+});
+it('trocar cliente remapeia precoAplicado de itensNovos a partir de corpo.data', async () => {
+  // sem pedido; adicionar item com 18.50; selecionarCliente(outro); mock vigente do novo cliente { data: [{ preco: '22.00' }] };
+  // lista rascunho mostra R$ 22,00.
+});
+it('pedido persistido não remapeia itens congelados ao montar (lock de cliente)', async () => {
+  // pedido com cliente disabled (HEAD L517); item.precoAplicado='18.50'; GET vigente NÃO é chamado para o id do item persistido.
+});
+it('GET /api/precos/vigente com unidadePreco null exibe /kg e não lê corpo.itens', async () => {
+  // mock { data: [{ preco: null, unidadePreco: null }] }; /kg visível; um mock que só tivesse `itens` não preenche o campo.
+});
+```
+
+O mock do vigente **sempre** `{ data: [{ produtoId, preco, unidadePreco, tabelaPrecoId }] }`. Zero hex. Nenhuma regra de preço decidida no cliente.
 
 **Commit:** `feat(onda14): coluna Preço unitário no editor de pedido`
 
@@ -1539,12 +1687,73 @@ npx tsx scripts/regen-rbac-snapshot.ts
 
 ### Endpoints
 
-| Método | Rota Nest | Permissão |
-|---|---|---|
-| GET | `/ocorrencias-preco` | `APROVACOES_LER` |
-| GET | `/ocorrencias-preco/relatorio` | `APROVACOES_LER` — **declarar na T10**, mas o `@Get('relatorio')` deve existir **antes** de `@Get(':id')` já nesta task como stub 501 **ou** deixar o método da T10 neste arquivo desde já. Preferir: declarar a rota na T10 no **mesmo** controller, acima de `:id`. Nesta task só list/detail/ciente. |
-| GET | `/ocorrencias-preco/:id` | `APROVACOES_LER` |
-| POST | `/ocorrencias-preco/:id/ciente` | `OCORRENCIA_PRECO_CIENTE` |
+T08 cria **somente** list / detail / ciente. **Não** criar `@Get('relatorio')`. **Não** criar stub 501. O método de relatório entra na T10, no **mesmo** arquivo, **acima** de `@Get(':id')`.
+
+| Método | Rota Nest | Permissão | Task |
+|---|---|---|---|
+| GET | `/ocorrencias-preco` | `APROVACOES_LER` | T08 |
+| GET | `/ocorrencias-preco/:id` | `APROVACOES_LER` | T08 |
+| POST | `/ocorrencias-preco/:id/ciente` | `OCORRENCIA_PRECO_CIENTE` | T08 |
+| GET | `/ocorrencias-preco/relatorio` | `APROVACOES_LER` | **T10** — não nesta task |
+
+`ocorrencias-preco.controller.ts` **desta task** (ordem: list, `:id`, `ciente` — `relatorio` ainda não existe):
+
+```ts
+import {
+  Controller, Get, HttpCode, HttpStatus, Param, Post, Query, UseGuards,
+} from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RbacGuard } from '../../../common/guards/rbac.guard';
+import { RequirePermissoes } from '../../../common/rbac/require-permissoes.decorator';
+import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
+import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
+import { OcorrenciasPrecoService } from './ocorrencias-preco.service';
+import {
+  listarOcorrenciasPrecoQuerySchema,
+  type ListarOcorrenciasPrecoQuery,
+} from './dto/ocorrencia-preco.dto';
+
+@SkipThrottle()
+@Controller('ocorrencias-preco')
+@UseGuards(JwtAuthGuard, RbacGuard)
+export class OcorrenciasPrecoController {
+  constructor(private readonly service: OcorrenciasPrecoService) {}
+
+  @Get()
+  @RequirePermissoes('APROVACOES_LER')
+  async listar(@Query(new ZodValidationPipe(listarOcorrenciasPrecoQuerySchema)) query: ListarOcorrenciasPrecoQuery) {
+    return this.service.listar(query);
+  }
+
+  @Get(':id')
+  @RequirePermissoes('APROVACOES_LER')
+  async detalhar(@Param('id') id: string) {
+    return this.service.detalhar(id);
+  }
+
+  @Post(':id/ciente')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissoes('OCORRENCIA_PRECO_CIENTE')
+  async marcarCiente(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
+    return this.service.marcarCiente(id, user.sub);
+  }
+}
+```
+
+DTO de list em `dto/ocorrencia-preco.dto.ts`:
+
+```ts
+export const listarOcorrenciasPrecoQuerySchema = z.object({
+  status: z.enum(['aberta', 'ciente']).optional(),
+  clienteId: z.string().uuid().optional(),
+  dataInicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dataFim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type ListarOcorrenciasPrecoQuery = z.infer<typeof listarOcorrenciasPrecoQuerySchema>;
+```
 
 Query list: `status` (`aberta`\|`ciente`), `clienteId`, `dataInicio`, `dataFim`, `page`, `pageSize`. Ordem `dataHoraOcorrencia DESC`. Shape `{ data, total, page, pageSize }`.
 
@@ -1598,7 +1807,42 @@ type ItemFila =
 
 - [ ] WS: rooms `['dashboard']` (e `operacao:${data}` se `operacaoId` da URL existir). `onMessage`: se `type` for os dois eventos novos, `void carregar()`. `onReconnect`: refetch. Cleanup no unmount. Sem polling.
 
-- [ ] Jest: 10 casos ALP-59. Zero accordion (`rg accordion` no arquivo = vazio, como hoje).
+- [ ] Jest: os 10 `it('...')` abaixo. Zero accordion (`rg accordion` no arquivo = vazio, como hoje).
+
+```ts
+it('fila mistura fornecedor e preço ordenada por data desc', async () => {
+  // mock as duas GETs; cards na ordem dataHora desc misturando tipos.
+});
+it('badge distingue Fornecedor de Preço', async () => {
+  // expect texto Fornecedor e Preço nos badges; título preço = clienteNomeFantasia.
+});
+it('selecionar ocorrência de preço mostra o painel específico', async () => {
+  // click no card preço; painel tem Pedido/Cliente/Data/hora — sem bloco de fornecedor.
+});
+it('painel lista todos os itens ajustados', async () => {
+  // N linhas na tabela do detalhe = N itens do GET /ocorrencias-preco/:id.
+});
+it('item sem preço de tabela mostra —, não R$ 0,00', async () => {
+  // precoTabelaOriginal null → em-dash e legenda Sem preço de tabela para a data; query R$ 0,00 ausente.
+});
+it('desconto e acréscimo diferenciados por sinal', async () => {
+  // diferenca negativa com text-destructive; positiva com text-success-fg.
+});
+it('Marcar como ciente some sem OCORRENCIA_PRECO_CIENTE', async () => {
+  // permissoes sem a chave; getByRole button name /Marcar como ciente/ não existe.
+});
+it('após ciente o painel mostra autor e timestamp', async () => {
+  // POST 200; texto Ciente registrado por ... em ...
+});
+it('ocorrência já ciente não mostra o botão', async () => {
+  // status ciente + permissão presente; botão ausente.
+});
+it('evento WebSocket atualiza a fila sem polling', async () => {
+  // conectarRealtime chamado; onMessage com OCORRENCIA_AJUSTE_PRECO_CRIADA dispara GET de novo; zero setInterval.
+});
+```
+
+Cada título é o critério de aceite. Corpos: seguir os passos já desta task (agregar duas fontes; badge; painel; `—`; sinal; RBAC do botão; bloco "Ciente registrado por"; botão ausente se `ciente`; `onMessage` chama `carregar()`). **Não** reduzir a 10 casos a um único `it`.
 
 **Commit:** `feat(onda14): ocorrências de preço na Fila Administrativa`
 
@@ -1608,11 +1852,54 @@ type ItemFila =
 
 **Files:** mesmo módulo T08; `GET relatorio` **acima** de `:id`; BFF `ocorrencias-preco/relatorio/route.ts`; e2e
 
-**Depende de:** T08 (módulo existe). Permissão `APROVACOES_LER`. **Não** usar `PEDIDO_PRECO_AJUSTAR` (não existe).
+**Depende de:** T08 (módulo existe). Permissão `APROVACOES_LER`. **Não** usar `PEDIDO_PRECO_AJUSTAR` (não existe). **Não** criar stub 501 — inserir o método real.
 
 ### Steps
 
-- [ ] DTO query:
+- [ ] No controller da T08, inserir `@Get('relatorio')` **acima** de `@Get(':id')` (Nest casa na ordem de declaração; se `relatorio` ficar depois de `:id`, vira 404/UUID inválido).
+
+`old_string` (único no arquivo após T08):
+
+```
+  @Get(':id')
+  @RequirePermissoes('APROVACOES_LER')
+  async detalhar(@Param('id') id: string) {
+    return this.service.detalhar(id);
+  }
+```
+
+`new_string`:
+
+```
+  @Get('relatorio')
+  @RequirePermissoes('APROVACOES_LER')
+  async relatorio(
+    @Query(new ZodValidationPipe(relatorioQuerySchema)) query: RelatorioQuery,
+  ) {
+    return this.service.relatorio(query);
+  }
+
+  @Get(':id')
+  @RequirePermissoes('APROVACOES_LER')
+  async detalhar(@Param('id') id: string) {
+    return this.service.detalhar(id);
+  }
+```
+
+Zero `HttpStatus.NOT_IMPLEMENTED`. Zero `501`. Acrescentar no topo do controller:
+
+```
+import {
+  listarOcorrenciasPrecoQuerySchema,
+  relatorioQuerySchema,
+  type ListarOcorrenciasPrecoQuery,
+  type RelatorioQuery,
+} from './dto/ocorrencia-preco.dto';
+```
+
+(substituir o import só de listar que a T08 gravou).
+
+- [ ] DTO query (mesmo arquivo de DTO da T08):
 
 ```ts
 export const relatorioQuerySchema = z.object({
@@ -1625,6 +1912,7 @@ export const relatorioQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
+export type RelatorioQuery = z.infer<typeof relatorioQuerySchema>;
 ```
 
 Sem `dataInicio`/`dataFim` → 400 (Zod). Fonte = `ocorrencias_ajuste_preco` + itens. **Zero** `from(tabelasPrecoItens)`.
@@ -1635,9 +1923,85 @@ Paginar por pedido (`count` + `limit/offset` na ocorrência). `valorTotalAjustad
 
 `representanteNome`: `clientes.representante_id` → `representantes.nome` **atual**. Sem representante → `null` (UI `—`). Self-Review: lacuna histórica.
 
-Shape JSON = ALP-85. Teste de republicação: alterar `tabelas_preco_itens` após a ocorrência → relatório idêntico. 403 sem `APROVACOES_LER`. C8, C10.
+### Shape JSON (ALP-85, literal — este é o contrato)
 
-BFF GET `repassar('/ocorrencias-preco/relatorio?' + qs)`.
+O handler devolve **exatamente** este envelope. `pedidoNumero` = UUID de `pedidos_venda.id` (T08: não há sequencial no HEAD). `precoTabelaOriginal` e `diferencaPercentual` aceitam JSON `null`. `valorTotalAjustado` / diferenças são strings NUMERIC.
+
+```json
+{
+  "data": [{
+    "pedidoVendaId": "...",
+    "pedidoNumero": "...",
+    "clienteNomeFantasia": "...",
+    "representanteNome": "...",
+    "dataPedido": "2026-09-01",
+    "faixaPreco": "B",
+    "quantidadeItensAjustados": 3,
+    "valorTotalAjustado": "-42.50",
+    "itens": [{
+      "produtoCodigo": "...",
+      "produtoNome": "...",
+      "precoTabelaOriginal": "18.50",
+      "precoAplicado": "17.00",
+      "diferencaAbsoluta": "-1.50",
+      "diferencaPercentual": "-8.1081",
+      "usuarioAjusteNome": "..."
+    }]
+  }],
+  "total": 12,
+  "page": 1,
+  "pageSize": 20
+}
+```
+
+Campo a campo (TypeScript = o retorno de `service.relatorio`):
+
+```ts
+export type RelatorioAjustePrecoItem = {
+  produtoCodigo: string;
+  produtoNome: string;
+  precoTabelaOriginal: string | null;
+  precoAplicado: string;
+  diferencaAbsoluta: string;
+  diferencaPercentual: string | null;
+  usuarioAjusteNome: string | null;
+};
+
+export type RelatorioAjustePrecoPedido = {
+  pedidoVendaId: string;
+  pedidoNumero: string; // UUID de pedidos_venda.id
+  clienteNomeFantasia: string | null;
+  representanteNome: string | null;
+  dataPedido: string; // YYYY-MM-DD (operacoes.data do pedido)
+  faixaPreco: 'A' | 'B' | 'C' | 'D';
+  quantidadeItensAjustados: number;
+  valorTotalAjustado: string; // NUMERIC(15,2), pode ser negativo
+  itens: RelatorioAjustePrecoItem[];
+};
+
+export type RelatorioAjustePrecoEnvelope = {
+  data: RelatorioAjustePrecoPedido[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+```
+
+Nulos JSON: `precoTabelaOriginal`, `diferencaPercentual` (quando original é null), `representanteNome`, `clienteNomeFantasia`, `usuarioAjusteNome`. Não omitir a chave.
+
+Teste de republicação: alterar `tabelas_preco_itens` após a ocorrência → relatório idêntico. 403 sem `APROVACOES_LER`. C8, C10.
+
+BFF GET `app/frontend/src/app/api/ocorrencias-preco/relatorio/route.ts`:
+
+```ts
+import { NextRequest } from 'next/server';
+import { repassar } from '@/lib/bff';
+
+export async function GET(req: NextRequest) {
+  const qs = req.nextUrl.searchParams.toString();
+  return repassar(`/ocorrencias-preco/relatorio${qs ? `?${qs}` : ''}`);
+}
+```
 
 **Commit:** `feat(onda14): GET /ocorrencias-preco/relatorio`
 
