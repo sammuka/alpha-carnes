@@ -33,6 +33,12 @@ describe('ComprasProgramadasService — branches', () => {
     recalcularParaCompra: jest.fn().mockResolvedValue(undefined),
   };
   const operacoesService = { garantirOperacao: jest.fn() };
+  const pedidoFornecedorService = {
+    materializarEnviadoNaTx: jest.fn().mockResolvedValue({
+      pedido: { id: 'pf1', operacaoId: 'op1' },
+      criado: true,
+    }),
+  };
 
   function makeService(dbOverrides: Record<string, unknown>) {
     return new ComprasProgramadasService(
@@ -41,6 +47,7 @@ describe('ComprasProgramadasService — branches', () => {
       emitter,
       disponibilidadeService as never,
       operacoesService as never,
+      pedidoFornecedorService as never,
     );
   }
 
@@ -244,6 +251,11 @@ describe('ComprasProgramadasService — branches', () => {
     const emitSpy = jest.spyOn(emitter, 'emit');
     await expect(service.confirmar('cp1', 'u1')).resolves.toEqual({ compra, jaConfirmada: false });
     expect(emitSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ dataOperacao: '2026-06-23' }));
+    expect(pedidoFornecedorService.materializarEnviadoNaTx).toHaveBeenCalled();
+    expect(emitSpy).toHaveBeenCalledWith('pedido_fornecedor_criado', expect.objectContaining({
+      pedidoFornecedorId: 'pf1',
+      operacaoId: 'op1',
+    }));
   });
 
   it('cancelar → lança 404 se compra não encontrada', async () => {
@@ -251,5 +263,41 @@ describe('ComprasProgramadasService — branches', () => {
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
     const service = makeService(db);
     await expect(service.cancelar('cp-x', 'u1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('confirmar idempotente repara Pedido ao Fornecedor ausente sem reemitir confirmação', async () => {
+    const atual = { id: 'cp1', status: 'confirmada', operacaoId: 'op1', deletedAt: null };
+    const tx = {
+      select: jest.fn(() => makeSelectChain([atual])),
+      update: jest.fn(() => ({
+        set: () => ({
+          where: () => ({
+            returning: jest.fn(() => ({ then: (cb: (r: unknown[]) => unknown) => cb([]) })),
+          }),
+        }),
+      })),
+    };
+    const db = {
+      transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)),
+    };
+    pedidoFornecedorService.materializarEnviadoNaTx.mockResolvedValueOnce({
+      pedido: { id: 'pf-repair', operacaoId: 'op1' },
+      criado: true,
+    });
+    const service = makeService(db);
+    jest.spyOn(service, 'detalhar').mockResolvedValue({
+      id: 'cp1', dataOperacao: '2026-06-23', itens: [],
+    } as never);
+    const emitSpy = jest.spyOn(emitter, 'emit');
+    await expect(service.confirmar('cp1', 'u1')).resolves.toEqual({
+      compra: expect.objectContaining({ id: 'cp1' }),
+      jaConfirmada: true,
+    });
+    expect(pedidoFornecedorService.materializarEnviadoNaTx).toHaveBeenCalled();
+    expect(emitSpy).toHaveBeenCalledWith('pedido_fornecedor_criado', {
+      pedidoFornecedorId: 'pf-repair',
+      operacaoId: 'op1',
+    });
+    expect(emitSpy).not.toHaveBeenCalledWith('compra_programada_confirmada', expect.anything());
   });
 });

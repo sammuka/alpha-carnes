@@ -158,7 +158,7 @@ export interface PrevisaoRecebimento {
 
 export interface IniciarRecebimentoPayload {
   pedidoFornecedorId: string;
-  nfeNumero: string;
+  nfeNumero?: string;
   nfeSerie?: string;
   nfeChave?: string;
   nfeDataEmissao?: string;

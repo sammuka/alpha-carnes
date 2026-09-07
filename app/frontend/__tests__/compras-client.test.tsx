@@ -112,6 +112,12 @@ beforeEach(() => {
     if (url.includes('/compras-programadas')) {
       return Promise.resolve({ ok: true, json: async () => ({ data: listaCompras, page: 1, pageSize: 100, total: listaCompras.length }) });
     }
+    if (url.includes('/disponibilidade?compraProgramadaId=')) {
+      return Promise.resolve({ ok: true, json: async () => [] });
+    }
+    if (url.includes('/disponibilidade?dataOperacao=')) {
+      return Promise.resolve({ ok: true, json: async () => [] });
+    }
     if (url.includes('/disponibilidade')) return Promise.resolve({ ok: true, json: async () => [] });
     if (url.includes('/fornecedores')) return Promise.resolve({ ok: true, json: async () => ({ data: [] }) });
     if (url.includes('/produtos')) {
@@ -127,13 +133,68 @@ beforeEach(() => {
 });
 
 describe('ComprasClient', () => {
-  it('exibe aviso de impacto e abre modal para compra confirmada', async () => {
+  it('abre aviso informativo ao editar compra confirmada e só então o modal', async () => {
     render(<ComprasClient permissoes={['COMPRAS_PROGRAMADAS_LER', 'COMPRAS_PROGRAMADAS_GERENCIAR']} />);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Editar compra confirmada' })).toBeInTheDocument();
     });
+    expect(screen.queryByText(/Alterar uma compra confirmada recalcula imediatamente/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Editar compra confirmada' }));
+    expect(screen.getByText('Alterar uma compra confirmada recalcula imediatamente a disponibilidade virtual impactada.')).toBeInTheDocument();
+    expect(screen.queryByText('Modal editar compra')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     expect(screen.getByText('Modal editar compra')).toBeInTheDocument();
+  });
+
+  it('mostra disponibilidade do lote e a somatória de todos os lotes', async () => {
+    const fetchMock = global.fetch as jest.Mock;
+    const original = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/disponibilidade?compraProgramadaId=')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{
+            modo: 'compra',
+            id: 'dv-lote',
+            operacaoId: 'op-1',
+            compraProgramadaId: 'c1',
+            produtoId: 'prod-tz-lote',
+            quantidadeTotalGerada: '10.000',
+            quantidadeReservada: '0',
+            quantidadeDisponivel: '10.000',
+            quantidadeRecebida: '0',
+            quantidadeComDivergencia: '0',
+            status: 'ativa',
+          }],
+        });
+      }
+      if (url.includes('/disponibilidade?dataOperacao=')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{
+            modo: 'agregado',
+            operacaoId: 'op-1',
+            produtoId: 'prod-tz-total',
+            quantidadeTotalGerada: '14.000',
+            quantidadeReservada: '0',
+            quantidadeDisponivel: '14.000',
+            quantidadeRecebida: '0',
+            quantidadeComDivergencia: '0',
+            status: 'ativa',
+          }],
+        });
+      }
+      return original?.(input, init);
+    });
+    render(<ComprasClient permissoes={['COMPRAS_PROGRAMADAS_LER', 'COMPRAS_PROGRAMADAS_GERENCIAR']} />);
+    await waitFor(() => {
+      expect(screen.getByText('Disponibilidade gerada')).toBeInTheDocument();
+      expect(screen.getByText('Disponibilidade total')).toBeInTheDocument();
+    });
+    expect(await screen.findByText('10.000 disp.')).toBeInTheDocument();
+    expect(screen.getAllByText('14.000 disp.').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Todos os lotes')).toBeInTheDocument();
   });
 
   it('lista duas compras do mesmo dia como Lote 001 e Lote 002', async () => {

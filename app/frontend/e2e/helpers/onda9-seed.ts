@@ -117,10 +117,12 @@ export async function seedCargaPronta(request: APIRequestContext): Promise<Cenar
   }
   if (!compraId) throw new Error('Seed Onda 9: sem data livre para compra');
 
-  const pf = await api<{ id: string }>(request, cookieHeader, 'POST', '/operacao/pedidos-fornecedor', {
-    compraProgramadaId: compraId,
-  });
-  await api(request, cookieHeader, 'POST', `/operacao/pedidos-fornecedor/${pf.id}/enviar`);
+  const listaPf = await api<{ data: Array<{ id: string; compraProgramadaId: string }> }>(
+    request, cookieHeader, 'GET',
+    '/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100',
+  );
+  const pf = listaPf.data.find((p) => p.compraProgramadaId === compraId);
+  if (!pf) throw new Error('Seed Onda 9: Pedido ao Fornecedor não materializado na confirmação');
 
   const ini = await api<{ recebimento?: { id: string }; id?: string }>(
     request, cookieHeader, 'POST', '/operacao/recebimentos', { pedidoFornecedorId: pf.id },

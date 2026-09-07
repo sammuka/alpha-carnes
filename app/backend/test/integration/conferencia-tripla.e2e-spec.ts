@@ -9,7 +9,7 @@ import {
   createTestUser,
   loginCookies,
 } from '../helpers/test-app';
-import { seedComercialBase } from '../helpers/comercial-fixtures';
+import { seedComercialBase, criarPedidoFornecedorEnviado } from '../helpers/comercial-fixtures';
 
 describe('conferencia-tripla', () => {
   let app: INestApplication;
@@ -61,20 +61,11 @@ describe('conferencia-tripla', () => {
       .send()
       .expect(201);
 
-    const pedido = await request(app.getHttpServer())
-      .post('/operacao/pedidos-fornecedor')
-      .set('Cookie', comprasCookies)
-      .send({ compraProgramadaId: criar.body.id })
-      .expect(201);
-    await request(app.getHttpServer())
-      .post(`/operacao/pedidos-fornecedor/${pedido.body.id}/enviar`)
-      .set('Cookie', comprasCookies)
-      .send()
-      .expect(200);
+    const pedidoId = await criarPedidoFornecedorEnviado(app, comprasCookies, criar.body.id);
 
     // Inclui caixaria no pedido ao fornecedor
     await db.insert(schema.pedidosFornecedorItens).values({
-      pedidoFornecedorId: pedido.body.id,
+      pedidoFornecedorId: pedidoId,
       produtoId: caixa!.id,
       quantidadePrevista: '10.000',
     });
@@ -82,7 +73,7 @@ describe('conferencia-tripla', () => {
     const iniciado = await request(app.getHttpServer())
       .post('/operacao/recebimentos')
       .set('Cookie', recebimentoCookies)
-      .send({ pedidoFornecedorId: pedido.body.id })
+      .send({ pedidoFornecedorId: pedidoId })
       .expect(201);
     const recebimentoId = iniciado.body.recebimento.id as string;
 
@@ -110,7 +101,7 @@ describe('conferencia-tripla', () => {
       base,
       caixaId: caixa!.id,
       compraId: criar.body.id as string,
-      pedidoId: pedido.body.id as string,
+      pedidoId,
       recebimentoId,
     };
   }

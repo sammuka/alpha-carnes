@@ -17,6 +17,7 @@ describe('montarImpacto', () => {
       emitter as never,
       disponibilidadeService as never,
       operacoesService as never,
+      { materializarEnviadoNaTx: jest.fn() } as never,
     );
   }
 
