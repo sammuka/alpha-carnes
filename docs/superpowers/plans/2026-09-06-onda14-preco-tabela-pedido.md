@@ -12,7 +12,7 @@
 
 **Base pinada no momento do plano:** `origin/develop` @ `b95e1ae8a62c0a6a33b9c605cc0f3ccf3cb71d6b` (Onda 13 mergeada, PR #123 SHA `a88854e`, AD-15). Journal em `app/backend/src/database/migrations/meta/_journal.json` termina em `idx: 36` / `0036_onda13_catalogo_contract`. Próximos nomes livres: `0037`…`0043` (tabela abaixo). Se `origin/develop` avançar e o journal ganhar `idx ≥ 37`, **parar e reportar** — não renumerar sozinho.
 
-**Worktree / branch:** `.worktrees/o14` · `feature/onda14-preco-tabela-pedido`. AD-16 commitada em `4cea1f10a3e81c1cc387d8e68cba40c39928c22b` — **não reabrir**. Worktree HEAD no início desta 4ª correção (`2026-09-07T03:55:27Z`): `cd181984c833769747aca989012e9f86ebbbecc2`. `carregar` / `listarAprovacoes` / `carregarDetalheOcorrencia` (aprovacoes-client L86–90) / card L171–186 / `tabela-precos-client.tsx` `conectarRealtime` L146–155 / `relatorios-client.tsx` (sem Skeleton, Tabs ausentes) / `ProdutoPedido` / `RegistroAuditoria.justificativa` conferidos neste SHA. Nunca implementar no worktree coordenador.
+**Worktree / branch:** `.worktrees/o14` · `feature/onda14-preco-tabela-pedido`. AD-16 commitada em `4cea1f10a3e81c1cc387d8e68cba40c39928c22b` — **não reabrir**. Worktree HEAD no início desta 5ª correção (`2026-09-07T04:16:38Z`): `014699c36cde309a5545d22a31dfbd2469d74d59`. Arquivo inteiro `app/frontend/src/app/(admin)/gestao/aprovacoes/aprovacoes-client.tsx` relido neste SHA. Conferências das rodadas 1–4 permanecem. Nunca implementar no worktree coordenador.
 
 **Correção Portão 1 1ª rodada (5 achados — permanecem fechados, não reabrir):** (1) GET `/precos/vigente` envelope `{ data }` — T04 e T06; `unidadePreco` nullable. (2) T10 embute o JSON literal ALP-85. (3) T08 só list/detail/ciente; T10 declara `@Get('relatorio')` acima de `:id`, sem stub 501. (4) Persistência de preço: Zod + `numeric(15,2)`, nunca `Number()`. (5) T06 remap/lock de cliente + `it('...')` 1:1 em T06/T09.
 
@@ -21,6 +21,8 @@
 **Correção Portão 1 3ª rodada (`2026-09-07T03:40:46Z` — fecha exatamente 3 achados, sem mudar escopo nem reabrir 1–2):** (1) escala canônica de `diferenca_percentual` = **×100**, 4 casas; T07 persiste, T08/T10 serializam o valor gravado; C7 permanece `null` se original `null`; C8 exemplo `17.00` vs `18.50` → `"-8.1081"`. Worker **não** escolhe a escala. (2) RA-04 — `realtime.gateway.ts` na lista Modificar; handlers `@OnEvent` literais T07=`OCORRENCIA_AJUSTE_PRECO_CRIADA` e T08=`OCORRENCIA_AJUSTE_PRECO_CIENTE` no molde de `handleOcorrenciaAberta` / `handleAprovacaoRegistrada`. (3) T08/T09 contrato campo a campo `OcorrenciaPrecoLista` vs detalhe com `itens`; Jest T09 exige `GET /ocorrencias-preco/:id`; `old_string`/`new_string` do fetch de detalhe sobre `carregarDetalheOcorrencia` L86–90.
 
 **Correção Portão 1 4ª rodada (`2026-09-07T03:55:27Z` — fecha exatamente 4 achados, sem mudar escopo nem reabrir 1–3):** (1) T09 — `carregar` compilável (`ItemFila`, `dataAbertura`→`dataHora`, título, setters); `old_string`/`new_string` do card L171–186 e do painel de preço; `conectarRealtime` literal `rooms: ['dashboard']`. (2) T11 — `onValueChange` literal; aba inicial `sif` se `SIF_LER` senão `gerenciais`; detalhe = `<details>`; loading = `Card` disabled (SIF **não** usa `Skeleton`). (3) T05/T06 unidade — `produtos.unidadePreco` no item e em `ProdutoPedido`; vigente `null` **não** vira `/kg` nem `?? 'kg'`. (4) T05 auditoria — `justificativa: 'pedido.item.preco_ajustado'` + um assert; T12 lista os 12 specs reais do HEAD.
+
+**Correção Portão 1 5ª rodada (`2026-09-07T04:16:38Z` — fecha exatamente 1 achado T09, sem mudar escopo nem reabrir 1–4):** T09 — depois dos patches, `ocorrenciaSel` é `ItemFila`; o painel fornecedor (HEAD L195–197) ainda lia `ocorrenciaSel.fornecedorNome` / `nfChave` / `pedidoLote`, que só existem em `bruto` quando `tipo === 'fornecedor'`. `old_string`/`new_string` literais para `ocorrenciaSel.bruto.*`. Inventário completo `ocorrenciaSel.*` e `o.*` na aba ocorrências (StatusPill/labels da lista já no card). Zero acesso órfão. AD-16 intacta. Sem `PEDIDO_PRECO_AJUSTAR`.
 
 **Linear:** épico [ALP-55](https://linear.app/alphacarnes/issue/ALP-55). T00 [ALP-77](https://linear.app/alphacarnes/issue/ALP-77) Done neste SHA. Este arquivo é T01. Worker executa Task 1 (docs) + T02–T12 = ALP-78…86 + ALP-59 + ALP-61. T13 é o Quality Owner. T14 abre o PR só depois de T13 Done. **Este worker não faz Portão 2 nem merge.**
 
@@ -2526,6 +2528,63 @@ HEAD usa `variant="pendente"` em todos os status da fila (inclusive `resolvida`)
 ```
 
 Zero montar linhas a partir da list. Tabela lê **somente** `detalhePreco?.itens`. Original null → `—` (não `R$ 0,00`).
+
+O wrap acima **não** altera HEAD L195–197. Depois dele, `ocorrenciaSel` já é `ItemFila`; o ramo `else` (`tipo !== 'preco'`) ainda teria `ocorrenciaSel.fornecedorNome` / `nfChave` / `pedidoLote`, que **não existem** em `ItemFila` (só em `bruto` quando `tipo === 'fornecedor'`). Aplicar **depois** do wrap:
+
+- [ ] Painel fornecedor — `old_string` único (HEAD L195–197; permanece único após o wrap):
+
+```
+                      <p className="text-[13px]"><strong>Fornecedor:</strong> {ocorrenciaSel.fornecedorNome}</p>
+                      <p className="text-[13px]"><strong>NF:</strong> {ocorrenciaSel.nfChave ?? '—'}</p>
+                      <p className="text-[13px]"><strong>Pedido/lote:</strong> {ocorrenciaSel.pedidoLote ?? '—'}</p>
+```
+
+`new_string`:
+
+```
+                      <p className="text-[13px]"><strong>Fornecedor:</strong> {ocorrenciaSel.bruto.fornecedorNome}</p>
+                      <p className="text-[13px]"><strong>NF:</strong> {ocorrenciaSel.bruto.nfChave ?? '—'}</p>
+                      <p className="text-[13px]"><strong>Pedido/lote:</strong> {ocorrenciaSel.bruto.pedidoLote ?? '—'}</p>
+```
+
+No ramo `else` o ternário `ocorrenciaSel?.tipo === 'preco' ? … : ocorrenciaSel && (…)` estreita `ocorrenciaSel` para `{ tipo: 'fornecedor'; bruto: OcorrenciaLista }`. **Proibido** ler `ocorrenciaSel.fornecedorNome` (top-level). **Proibido** ler `bruto.fornecedorNome` no ramo preço. Labels `Fornecedor` / `NF` / `Pedido/lote` intactos.
+
+### Inventário HEAD `014699c` — aba `ocorrencias` (`aprovacoes-client.tsx` lido inteiro)
+
+Aba `TabsContent value="ocorrencias"` = L167–262. Aba `operacionais` (L264–288, `a.*` / `ROTULO_STATUS_APROVACAO`) **intocada**.
+
+**`o.*` no `ocorrencias.map` (HEAD L171–186)** — já cobertos pelo patch do card (4ª rodada). Após o patch a variável é `item: ItemFila`:
+
+| HEAD | Acesso | Em `ItemFila`? | Patch |
+|---|---|---|---|
+| L173 | `o.id` (key) | sim (`id`) | `` `${item.tipo}-${item.id}` `` |
+| L175 | `setOcorrenciaSel(o)` | o objeto vira `ItemFila` | `item` |
+| L178 | `ocorrenciaSel?.id === o.id` | sim (`id`) | + `ocorrenciaSel.tipo === item.tipo` |
+| L182 | `o.fornecedorNome` (título) | **não** (só `titulo` / `bruto`) | `{item.titulo}` |
+| L183 | `StatusPill` `label={ROTULO_STATUS_OCORRENCIA[o.status] ?? o.status}` `variant="pendente"` | sim (`status`) | `item.status`; variant permanece `"pendente"`; `ciente` → rótulo `Ciente` via `ROTULO` (já acrescentado) |
+
+**`ocorrenciaSel.*` na aba + handlers da aba (HEAD):**
+
+| HEAD | Acesso | Em `ItemFila`? | Patch |
+|---|---|---|---|
+| L55 | `useState<OcorrenciaLista \| null>` | — | `ItemFila \| null` |
+| L72 | `ocorrenciaSel` + `res.data[0]` | `res.data[0]` era `OcorrenciaLista` | `fila[0]` (`carregar`) |
+| L97, L116, L128 | `ocorrenciaSel` (truthy) | — | intacto |
+| L103, L118, L130 | `ocorrenciaSel.id` | sim | intacto |
+| L112, L121, L133 | `carregarDetalheOcorrencia(ocorrenciaSel.id)` | — | passa `ocorrenciaSel` |
+| L178 | `ocorrenciaSel?.id` | sim | + `tipo` (card) |
+| L191 | `{ocorrenciaSel && (` | — | ternário `tipo === 'preco'` (4ª) |
+| L195 | `ocorrenciaSel.fornecedorNome` | **não** | **5ª: `ocorrenciaSel.bruto.fornecedorNome`** |
+| L196 | `ocorrenciaSel.nfChave` | **não** | **5ª: `ocorrenciaSel.bruto.nfChave`** |
+| L197 | `ocorrenciaSel.pedidoLote` | **não** | **5ª: `ocorrenciaSel.bruto.pedidoLote`** |
+
+**Acessos introduzidos pela T09 (não quebram — campos de `ItemFila` ou `bruto` já discriminado):** `ocorrenciaSel.tipo`; `ocorrenciaSel.status` (botão ciente); `ocorrenciaSel.id` (`marcarCiente`); ramo preço `ocorrenciaSel.bruto.{pedidoNumero,clienteNomeFantasia,dataHora,usuarioFinalizacaoNome,quantidadeItensAjustados,diferencaTotal}`.
+
+**`o.*` em `carregar` (após 4ª):** o callback `resFornecedor.data.map((o) => …)` é `OcorrenciaLista` (`o.fornecedorNome`, `o.status`, `o.dataAbertura`, `o.id`); `resPreco.data.map((o) => …)` é `OcorrenciaPrecoLista` (`o.clienteNomeFantasia`, `o.status`, `o.dataHora`, `o.id`). Não são `ItemFila`. Intactos.
+
+**StatusPill / labels:** o único `StatusPill` da aba ocorrências é o da lista (HEAD L183) — já `item.status`. Não há `StatusPill` no painel direito (nem fornecedor nem preço). Labels do painel fornecedor permanecem `Fornecedor` / `NF` / `Pedido/lote`; valores = `bruto`. Badge de tipo (`Preço` / `Fornecedor`) já no card.
+
+**Zero acesso órfão** após este patch: nenhum `ocorrenciaSel.fornecedorNome` / `.nfChave` / `.pedidoLote` / `o.fornecedorNome` restante no TSX pós-T09.
 
 `marcarCiente` (após `concluir`):
 
