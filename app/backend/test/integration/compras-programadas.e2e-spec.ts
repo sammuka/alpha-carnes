@@ -436,6 +436,17 @@ describe('Compras programadas e2e (CRUD + RBAC + edição de item)', () => {
     expect(primeira.status).toBe(201);
     expect(spy.mock.calls.filter((c) => c[0] === EVENTOS.COMPRA_CONFIRMADA)).toHaveLength(1);
     expect(spy.mock.calls.filter((c) => c[0] === EVENTOS.DISPONIBILIDADE_GERADA)).toHaveLength(1);
+    expect(spy.mock.calls.filter((c) => c[0] === EVENTOS.PEDIDO_FORNECEDOR_CRIADO)).toHaveLength(1);
+
+    const elegiveis = await request(app.getHttpServer())
+      .get('/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100')
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(elegiveis.status).toBe(200);
+    expect(
+      (elegiveis.body.data as Array<{ compraProgramadaId: string; status: string }>)
+        .some((p) => p.compraProgramadaId === criada.body.id && p.status === 'aguardando_recebimento'),
+    ).toBe(true);
 
     spy.mockClear();
     const segunda = await request(app.getHttpServer())

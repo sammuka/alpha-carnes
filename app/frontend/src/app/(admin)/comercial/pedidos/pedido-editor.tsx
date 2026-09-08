@@ -48,9 +48,9 @@ export interface ClientePedido {
 export interface ProdutoPedido {
   id: string;
   codigo: string;
-  descricao: string;
+  nome: string;
   status: string;
-  nome?: string;
+  descricao?: string;
   unidadeComercial?: string;
 }
 
@@ -694,7 +694,7 @@ export function PedidoEditor({
               id="produto-novo"
               items={produtosAusentes.map((produto) => ({
                 id: produto.id,
-                label: labelCodigoDescricao(produto.codigo, produto.descricao),
+                label: labelCodigoNome(produto.codigo, nomeProduto(produto)),
               }))}
               value={produtoNovo}
               onChange={setProdutoNovo}

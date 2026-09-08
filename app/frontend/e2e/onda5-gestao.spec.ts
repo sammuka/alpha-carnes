@@ -360,10 +360,12 @@ async function prepararDadosGestao(api: APIRequestContext, adminCookie: string):
     // Pendência já existente de run anterior — overbooking UI ainda validável.
   }
 
-  const pedidoPf = await backend<{ id: string }>(api, adminCookie, 'POST', '/operacao/pedidos-fornecedor', {
-    compraProgramadaId: compraId,
-  });
-  await backend(api, adminCookie, 'POST', `/operacao/pedidos-fornecedor/${pedidoPf.id}/enviar`);
+  const listaPf = await backend<{ data: Array<{ id: string; compraProgramadaId: string }> }>(
+    api, adminCookie, 'GET',
+    '/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100',
+  );
+  const pedidoPf = listaPf.data.find((p) => p.compraProgramadaId === compraId);
+  if (!pedidoPf) throw new Error('Pedido ao Fornecedor não materializado na confirmação');
   const receb = await backend<{ recebimento: { id: string } }>(api, adminCookie, 'POST', '/operacao/recebimentos', {
     pedidoFornecedorId: pedidoPf.id,
   });
@@ -609,7 +611,13 @@ test.describe('Onda 5 — Gestão (6 rotas)', () => {
 
         if (rota.href === '/gestao/compras') {
           await selecionarDataCompras(page, dados.dataOperacao, dados.compraId);
+          await expect(page.getByRole('button', { name: 'Editar compra confirmada' })).toBeVisible();
+          await page.getByRole('button', { name: 'Editar compra confirmada' }).click();
           await expect(page.getByText('Alterar uma compra confirmada recalcula imediatamente')).toBeVisible();
+          await page.getByRole('button', { name: 'Cancelar' }).click();
+          await expect(page.getByText('Lotes da operação')).toBeVisible();
+          await expect(page.getByText('Disponibilidade gerada')).toBeVisible();
+          await expect(page.getByText('Disponibilidade total')).toBeVisible();
         }
 
         if (rota.href === '/gestao/overbooking') {
@@ -657,6 +665,8 @@ test.describe('Onda 5 — Gestão (6 rotas)', () => {
     try {
       await selecionarDataCompras(page, dados.dataOperacao, dados.compraId);
       await page.getByRole('button', { name: 'Editar compra confirmada' }).click();
+      await expect(page.getByText('Alterar uma compra confirmada recalcula imediatamente')).toBeVisible();
+      await page.getByRole('button', { name: 'Continuar' }).click();
       const dialog = page.getByRole('dialog', { name: 'Editar compra confirmada' });
       await expect(dialog).toBeVisible();
       const input = dialog.locator('input[type="number"]').first();
