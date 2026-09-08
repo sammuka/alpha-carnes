@@ -354,7 +354,7 @@ it('novo pedido remove item local e devolve o produto ao seletor sem chamar a AP
       url === '/api/comercial/pedidos' && init?.method === 'POST');
     expect(chamada).toBeDefined();
     const payload = JSON.parse(String(chamada?.[1]?.body));
-    expect(payload.itens).toEqual([{ itemComercialId: 'item-comercial-estavel', quantidadePedida: 3 }]);
+    expect(payload.itens).toEqual([{ produtoId: 'item-comercial-estavel', quantidadePedida: 3 }]);
   });
   expect((global.fetch as jest.Mock).mock.calls.some(([url, init]) =>
     String(url).includes('/itens/') && init?.method === 'DELETE')).toBe(false);

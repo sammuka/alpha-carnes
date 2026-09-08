@@ -350,8 +350,8 @@ export function PedidoEditor({
     }
   }
 
-  function removerItemNovo(itemComercialId: string) {
-    setItensNovos((atuais) => atuais.filter((entry) => entry.itemComercialId !== itemComercialId));
+  function removerItemNovo(produtoId: string) {
+    setItensNovos((atuais) => atuais.filter((entry) => entry.produtoId !== produtoId));
   }
 
   function payloadNovo(salvarComoRascunho: boolean): CriarPedidoDto | null {
@@ -658,11 +658,11 @@ export function PedidoEditor({
           <CardContent className="pt-0">
             <ul className="divide-y divide-border rounded-lg border border-border">
               {itensNovos.map((item) => {
-                const nome = nomeProduto(produtos.find((produto) => produto.id === item.itemComercialId));
+                const nome = nomeProduto(produtos.find((produto) => produto.id === item.produtoId));
                 return (
                   <li
-                    key={item.itemComercialId}
-                    data-testid={`linha-nova-${item.itemComercialId}`}
+                    key={item.produtoId}
+                    data-testid={`linha-nova-${item.produtoId}`}
                     className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
                   >
                     <span>{nome}</span>
@@ -675,7 +675,7 @@ export function PedidoEditor({
                           size="iconSm"
                           disabled={!podeGerenciar || pendente}
                           aria-label={`Remover ${nome}`}
-                          onClick={() => removerItemNovo(item.itemComercialId)}
+                          onClick={() => removerItemNovo(item.produtoId)}
                         >
                           <Trash2 className="text-destructive" />
                         </Button>
