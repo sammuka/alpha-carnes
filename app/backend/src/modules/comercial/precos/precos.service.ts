@@ -6,11 +6,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, asc, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
+  clientes,
+  operacoes,
   produtos,
   tabelasPreco,
   tabelasPrecoItens,
@@ -41,6 +43,22 @@ type FaixasDePreco = {
   precoC: string | null; precoD: string | null;
 };
 type MapaDePrecos = Map<string, FaixasDePreco>;
+
+export type FaixaPreco = 'A' | 'B' | 'C' | 'D';
+export interface PrecoVigente {
+  preco: string;
+  unidadePreco: 'kg' | 'unidade';
+  tabelaPrecoId: string;
+}
+
+function colunaDaFaixa(faixa: FaixaPreco) {
+  switch (faixa) {
+    case 'A': return tabelasPrecoItens.precoA;
+    case 'B': return tabelasPrecoItens.precoB;
+    case 'C': return tabelasPrecoItens.precoC;
+    case 'D': return tabelasPrecoItens.precoD;
+  }
+}
 
 @Injectable()
 export class PrecosService {
@@ -312,6 +330,100 @@ export class PrecosService {
     return new Map(linhas.map((l) => [l.produtoId, {
       precoA: l.precoA, precoB: l.precoB, precoC: l.precoC, precoD: l.precoD,
     }]));
+  }
+
+  async resolverPrecoVigente(
+    tx: Tx,
+    args: { produtoId: string; faixa: FaixaPreco; data: string },
+  ): Promise<PrecoVigente | null> {
+    const mapa = await this.resolverPrecosVigentes(tx, {
+      produtoIds: [args.produtoId],
+      faixa: args.faixa,
+      data: args.data,
+    });
+    return mapa.get(args.produtoId) ?? null;
+  }
+
+  async resolverPrecosVigentes(
+    tx: Tx,
+    args: { produtoIds: string[]; faixa: FaixaPreco; data: string },
+  ): Promise<Map<string, PrecoVigente>> {
+    const saida = new Map<string, PrecoVigente>();
+    if (args.produtoIds.length === 0) return saida;
+    const [tabela] = await tx.select({ id: tabelasPreco.id }).from(tabelasPreco)
+      .where(and(
+        eq(tabelasPreco.data, args.data),
+        eq(tabelasPreco.status, 'publicada'),
+        isNull(tabelasPreco.deletedAt),
+      ))
+      .limit(1);
+    if (!tabela) return saida;
+    const col = colunaDaFaixa(args.faixa);
+    const linhas = await tx
+      .select({
+        produtoId: tabelasPrecoItens.produtoId,
+        preco: col,
+        unidadePreco: produtos.unidadePreco,
+      })
+      .from(tabelasPrecoItens)
+      .innerJoin(produtos, eq(produtos.id, tabelasPrecoItens.produtoId))
+      .where(and(
+        eq(tabelasPrecoItens.tabelaPrecoId, tabela.id),
+        inArray(tabelasPrecoItens.produtoId, args.produtoIds),
+      ));
+    for (const linha of linhas) {
+      if (linha.preco === null) continue;
+      saida.set(linha.produtoId, {
+        preco: linha.preco,
+        unidadePreco: linha.unidadePreco as 'kg' | 'unidade',
+        tabelaPrecoId: tabela.id,
+      });
+    }
+    return saida;
+  }
+
+  async vigentePorClienteOperacao(args: {
+    produtoIds: string[];
+    clienteId: string;
+    operacaoId: string;
+  }): Promise<Array<{
+    produtoId: string;
+    preco: string | null;
+    unidadePreco: 'kg' | 'unidade' | null;
+    tabelaPrecoId: string | null;
+  }>> {
+    return this.db.transaction(async (tx) => {
+      const [cliente] = await tx.select({
+        id: clientes.id,
+        faixaPreco: clientes.faixaPreco,
+      }).from(clientes)
+        .where(and(eq(clientes.id, args.clienteId), isNull(clientes.deletedAt)))
+        .limit(1);
+      if (!cliente) throw new NotFoundException('Cliente não encontrado');
+      if (!cliente.faixaPreco) {
+        throw new ConflictException({
+          code: 'CLIENTE_SEM_FAIXA_PRECO',
+          message: 'Cliente sem faixa de preço.',
+        });
+      }
+      const [operacao] = await tx.select({ id: operacoes.id, data: operacoes.data })
+        .from(operacoes).where(eq(operacoes.id, args.operacaoId)).limit(1);
+      if (!operacao) throw new NotFoundException('Operação não encontrada');
+      const mapa = await this.resolverPrecosVigentes(tx, {
+        produtoIds: args.produtoIds,
+        faixa: cliente.faixaPreco as FaixaPreco,
+        data: operacao.data,
+      });
+      return args.produtoIds.map((produtoId) => {
+        const hit = mapa.get(produtoId);
+        return {
+          produtoId,
+          preco: hit?.preco ?? null,
+          unidadePreco: hit?.unidadePreco ?? null,
+          tabelaPrecoId: hit?.tabelaPrecoId ?? null,
+        };
+      });
+    });
   }
 
   /**
