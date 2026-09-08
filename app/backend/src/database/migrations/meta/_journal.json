@@ -281,6 +281,27 @@
       "when": 1788757152546,
       "tag": "0039_onda14_faixa_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788841200000,
+      "tag": "0040_onda14_item_preco_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788841201000,
+      "tag": "0041_onda14_item_preco_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1788841202000,
+      "tag": "0042_onda14_item_preco_contract",
+      "breakpoints": true
     }
   ]
 }

@@ -21,6 +21,7 @@ import {
   operacoes,
   reservasDisponibilidade,
   rotas,
+  usuarios,
 } from '../../../database/schema';
 import { escopoRepresentantes } from '../../../common/rbac/escopo-representantes';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
@@ -42,7 +43,9 @@ import {
 } from '../../../common/crud/decimal';
 import { EVENTOS, type PayloadPorEvento } from '../../../realtime/events/eventos';
 import { OperacoesService, type Tx } from '../../operacoes/operacoes.service';
+import { PrecosService } from '../precos/precos.service';
 import type {
+  AjustarPrecoItemDto,
   BuscarPedidoAbertoDto,
   CreatePedidoDto,
   IncluirItemDto,
@@ -50,6 +53,7 @@ import type {
   ReduzirItemDto,
   RemoverItemDto,
 } from './dto/pedido.dto';
+import { ehPrecoNaoPositivo } from './dto/pedido.dto';
 import {
   OverbookingChallengeException,
   type OverbookingChallengeItem,
@@ -62,6 +66,7 @@ export interface ItemSolicitado {
   produtoId: string;
   quantidade: number;
   observacoes?: string;
+  precoAplicado?: string;
 }
 
 interface CoberturaPlanejada {
@@ -138,6 +143,7 @@ export class PedidosService {
     private readonly auditoria: AuditoriaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly operacoes: OperacoesService,
+    private readonly precos: PrecosService,
   ) {}
 
   private get db() {
@@ -218,7 +224,28 @@ export class PedidosService {
         .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
         .where(eq(clientes.id, pedido.clienteId))
         .limit(1);
-      return { ...pedido, heranca: heranca ?? null };
+      const idsAjuste = [...new Set(
+        pedido.itens
+          .map((item) => item.usuarioAjusteId)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0),
+      )];
+      const nomesAjuste = idsAjuste.length === 0
+        ? []
+        : await tx.select({ id: usuarios.id, nome: usuarios.nome })
+          .from(usuarios)
+          .where(inArray(usuarios.id, idsAjuste));
+      const mapaNomes = new Map(nomesAjuste.map((u) => [u.id, u.nome]));
+      return {
+        ...pedido,
+        heranca: heranca ?? null,
+        itens: pedido.itens.map((item) => ({
+          ...item,
+          precoAjustado: item.precoTabelaOriginal !== item.precoAplicado,
+          usuarioAjusteNome: item.usuarioAjusteId
+            ? (mapaNomes.get(item.usuarioAjusteId) ?? null)
+            : null,
+        })),
+      };
     });
   }
 
@@ -409,6 +436,7 @@ export class PedidosService {
       produtoId: item.produtoId,
       quantidade: item.quantidadePedida,
       observacoes: item.observacoes,
+      precoAplicado: item.precoAplicado,
     }));
     // O challenge é estritamente read-only: não chame garantirOperacao antes
     // de decidir se a confirmação é necessária.
@@ -477,7 +505,7 @@ export class PedidosService {
       );
     } catch (error) {
       if (ehDuplicidadeDeItemNoPedido(error)) {
-        throw new ConflictException('Item comercial já existe neste pedido');
+        throw new ConflictException('Produto já existe neste pedido');
       }
       throw error;
     }
@@ -505,7 +533,7 @@ export class PedidosService {
         isNull(pedidosVendaItens.deletedAt),
       )).limit(1);
     if (itemExistente.length) {
-      throw new ConflictException('Item comercial já existe neste pedido');
+      throw new ConflictException('Produto já existe neste pedido');
     }
 
     // Pedido é dado persistido com operacao_id NOT NULL; a leitura é explícita e
@@ -524,6 +552,7 @@ export class PedidosService {
       produtoId: dto.produtoId,
       quantidade: dto.quantidade,
       observacoes: dto.observacoes,
+      precoAplicado: dto.precoAplicado,
     };
     const plano = await this.planejarSobLock(tx, pedido.operacaoId, [solicitado]);
     const desafios = await enriquecerDesafiosComProdutos(tx, desafiosParaChallenge(plano));
@@ -592,9 +621,48 @@ export class PedidosService {
     usuarioId: string,
   ): Promise<{ pedido: PedidoVenda; eventos: EventoDominio[] }> {
     const eventos: EventoDominio[] = [];
+    const [clienteFaixa] = await tx.select({ faixaPreco: clientes.faixaPreco })
+      .from(clientes)
+      .where(and(eq(clientes.id, pedido.clienteId), isNull(clientes.deletedAt)))
+      .limit(1);
+    if (!clienteFaixa?.faixaPreco) {
+      throw new ConflictException({
+        code: 'CLIENTE_SEM_FAIXA_PRECO',
+        message: 'Cliente sem faixa de preço.',
+      });
+    }
+    if (!pedido.operacaoId) throw new ConflictException('Pedido sem operação');
+    const [operacaoData] = await tx.select({ data: operacoes.data })
+      .from(operacoes).where(eq(operacoes.id, pedido.operacaoId)).limit(1);
+    if (!operacaoData) throw new NotFoundException('Operação não encontrada');
+
     for (const [indice, alocacao] of plano.entries()) {
       const solicitado = solicitados[indice];
       if (!solicitado) throw new Error('Plano sem item solicitado correspondente');
+      const [produto] = await tx.select({
+        codigo: produtos.codigo,
+        nome: produtos.nome,
+        unidadePreco: produtos.unidadePreco,
+      }).from(produtos).where(eq(produtos.id, solicitado.produtoId)).limit(1);
+      if (!produto) throw new NotFoundException('Produto não encontrado');
+      const vigente = await this.precos.resolverPrecoVigente(tx, {
+        produtoId: solicitado.produtoId,
+        faixa: clienteFaixa.faixaPreco as 'A' | 'B' | 'C' | 'D',
+        data: operacaoData.data,
+      });
+      const unidadePreco = produto.unidadePreco as 'kg' | 'unidade';
+      const precoTabelaOriginal = vigente?.preco ?? null;
+      const precoAplicado = solicitado.precoAplicado ?? vigente?.preco ?? null;
+      if (ehPrecoNaoPositivo(precoAplicado)) {
+        throw new BadRequestException(
+          `Informe um preço unitário maior que zero para ${produto.codigo} (${produto.nome}).`,
+        );
+      }
+      const precoAplicadoPersistido = precoAplicado as string;
+      const distinto = await tx.execute<{ eq: boolean }>(sql`
+        SELECT (${precoAplicadoPersistido}::numeric(15,2) IS DISTINCT FROM ${precoTabelaOriginal}::numeric(15,2)) AS eq
+      `);
+      const ajustouNaInclusao = distinto.rows[0]?.eq === true;
       const quantidadeReal = somarListaQtd(alocacao.coberturas.map((c) => c.quantidade));
       const [item] = await tx.insert(pedidosVendaItens).values({
         pedidoVendaId: pedido.id,
@@ -605,6 +673,13 @@ export class PedidosService {
         quantidadeOverbooking: alocacao.deficit,
         status: ehZero(alocacao.deficit) ? 'totalmente_reservado' : 'overbooking_confirmado',
         observacoes: solicitado.observacoes,
+        tabelaPrecoId: vigente?.tabelaPrecoId ?? null,
+        faixaPreco: clienteFaixa.faixaPreco,
+        unidadePreco,
+        precoTabelaOriginal,
+        precoAplicado: precoAplicadoPersistido,
+        usuarioAjusteId: ajustouNaInclusao ? usuarioId : null,
+        ajustadoEm: ajustouNaInclusao ? new Date() : null,
       }).returning();
       if (!item) throw new Error('Falha ao persistir item do pedido');
       eventos.push(...await this.aplicarAlocacaoNoItem(tx, pedido, item, alocacao, usuarioId));
@@ -1056,6 +1131,52 @@ export class PedidosService {
     });
   }
 
+  async ajustarPrecoItem(
+    pedidoId: string, itemId: string, dto: AjustarPrecoItemDto, usuarioId: string,
+  ): Promise<PedidoVendaItem> {
+    return this.db.transaction(async (tx) => {
+      const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId, usuarioId);
+      if (!(PedidosService.STATUS_ABERTOS as readonly string[]).includes(pedido.status)) {
+        throw new ConflictException('Pedido não aceita ajuste de preço');
+      }
+      const item = await this.obterItemAtivoSobLock(tx, pedidoId, itemId, usuarioId);
+      const positivo = await tx.execute<{ ok: boolean }>(sql`
+        SELECT (${dto.precoAplicado}::numeric(15,2) > 0) AS ok
+      `);
+      if (positivo.rows[0]?.ok !== true) {
+        throw new BadRequestException('precoAplicado deve ser maior que zero');
+      }
+      const igualOriginal = await tx.execute<{ eq: boolean }>(sql`
+        SELECT (${dto.precoAplicado}::numeric(15,2) IS NOT DISTINCT FROM ${item.precoTabelaOriginal}) AS eq
+      `);
+      const limpar = igualOriginal.rows[0]?.eq === true;
+      const [atualizado] = await tx.update(pedidosVendaItens).set({
+        precoAplicado: dto.precoAplicado,
+        usuarioAjusteId: limpar ? null : usuarioId,
+        ajustadoEm: limpar ? null : new Date(),
+        updatedAt: new Date(),
+      }).where(eq(pedidosVendaItens.id, itemId)).returning();
+      await this.auditoria.registrar(tx, {
+        tabela: 'pedidos_venda_itens',
+        registroId: itemId,
+        operacao: 'UPDATE',
+        modulo: 'comercial',
+        usuarioId,
+        justificativa: 'pedido.item.preco_ajustado',
+        dadosAnteriores: {
+          precoAnterior: item.precoAplicado,
+          precoTabelaOriginal: item.precoTabelaOriginal,
+        },
+        dadosNovos: {
+          precoNovo: dto.precoAplicado,
+          precoTabelaOriginal: item.precoTabelaOriginal,
+        },
+      });
+      if (!atualizado) throw new NotFoundException('Item não encontrado');
+      return atualizado;
+    });
+  }
+
   async finalizar(pedidoId: string, usuarioId: string): Promise<PedidoVenda> {
     const resultado = await this.db.transaction(async (tx) => {
       const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId, usuarioId);
@@ -1072,6 +1193,21 @@ export class PedidosService {
         throw new ConflictException('OVERBOOKING_CONFIRMACAO_NECESSARIA');
       }
       // overbooking_confirmado é aceito; não tocar no saldo.
+
+      const semPreco = await tx.select({ id: pedidosVendaItens.id, produtoId: pedidosVendaItens.produtoId })
+        .from(pedidosVendaItens)
+        .where(and(
+          eq(pedidosVendaItens.pedidoVendaId, pedidoId),
+          isNull(pedidosVendaItens.deletedAt),
+          sql`${pedidosVendaItens.precoAplicado} IS NULL OR ${pedidosVendaItens.precoAplicado} <= 0`,
+        ));
+      if (semPreco.length) {
+        throw new ConflictException({
+          code: 'PEDIDO_ITEM_SEM_PRECO',
+          message: 'Há itens sem preço aplicado maior que zero.',
+          itens: semPreco,
+        });
+      }
 
       const finalizado = primeiroOuFalha(await tx.update(pedidosVenda)
         .set({ status: 'finalizado', updatedAt: new Date() })
