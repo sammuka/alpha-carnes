@@ -25,6 +25,7 @@ const notaLiberada: NotaFiscalListagem = {
   canceladaEm: null,
   createdAt: '2026-08-01T09:05:00.000Z',
   clienteNome: 'Restaurante Grill',
+  caminhaoPlaca: 'ABC1D23',
   caminhaoLiberado: true,
 };
 
@@ -46,6 +47,10 @@ describe('NotasXmlClient', () => {
     mockFetch([notaLiberada]);
     render(<NotasXmlClient permissoes={['FATURAMENTO_LER', 'NFSE_CANCELAR']} />);
     expect(await screen.findByTitle('Caminhão já liberado — cancelamento bloqueado')).toBeInTheDocument();
+    expect(screen.getAllByText('Restaurante Grill').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('ABC1D23')).toBeInTheDocument();
+    expect(screen.getByText('000451')).toBeInTheDocument();
+    expect(screen.queryByText(notaLiberada.id)).not.toBeInTheDocument();
   });
 
   it('ModalCancelar exige motivo antes de confirmar', async () => {

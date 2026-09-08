@@ -30,6 +30,11 @@ function montar(alocacao: { coberturas: { disponibilidadeId: string; quantidade:
     insert: jest.fn(() => ({
       values: () => ({ returning: () => Promise.resolve([{ id: 'adendo1', quantidadeAdicionada: '5.000' }]) }),
     })),
+    select: jest.fn(() => ({
+      from: () => ({
+        where: () => Promise.resolve([{ id: 'ic1', codigo: 'TZ', nome: 'Traseiro' }]),
+      }),
+    })),
   };
 
   const db = {
@@ -165,6 +170,11 @@ describe('AdendosService — branches', () => {
       })),
       insert: jest.fn(() => ({
         values: () => ({ returning: () => Promise.resolve([{ id: 'adendo1', quantidadeAdicionada: '5.000' }]) }),
+      })),
+      select: jest.fn(() => ({
+        from: () => ({
+          where: () => Promise.resolve([{ id: 'ic1', codigo: 'TZ', nome: 'Traseiro' }]),
+        }),
       })),
     };
     const db = { transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(tx)) };

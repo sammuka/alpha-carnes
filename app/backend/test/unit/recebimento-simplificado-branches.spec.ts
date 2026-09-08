@@ -378,7 +378,7 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
     );
   });
 
-  it('listarAcoes → fallback de cliente pelo pedido e destino desconhecido', async () => {
+  it('listarAcoes → clientePedido fica nulo sem nome, nunca UUID', async () => {
     const lote = { id: 'rec-1', status: 'pesagem_em_andamento' };
     const pecaRow = {
       peca: {
@@ -427,9 +427,10 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
     expect(acoes[0]).toEqual(
       expect.objectContaining({
         destino: 'Aguardando destino',
-        clientePedido: '019ef701',
+        clientePedido: null,
         operadorNome: null,
       }),
     );
   });
 });
+

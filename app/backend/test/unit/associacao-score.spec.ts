@@ -6,6 +6,7 @@ function candidato(over: Partial<CandidatoPedido>): CandidatoPedido {
     pedidoVendaItemId: 'pvi-1',
     produtoId: 'item-A',
     clienteId: 'cli-1',
+    clienteNome: 'Açougue Nova Era',
     saldoPendente: '5.000',
     prioridade: null,
     rotaPrevista: null,

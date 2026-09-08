@@ -685,8 +685,8 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
       dataOperacao: compra.dataOperacao,
     }));
     expect(respostaPedido.request().postDataJSON().dataOperacao).toBeDefined();
-    const pedido = (await respostaPedido.json()) as { id: string; status: string };
-    const artigoPedido = page.locator('tr').filter({ hasText: pedido.id.slice(0, 8).toUpperCase() });
+    await respostaPedido.json();
+    const artigoPedido = page.locator('tr').filter({ hasText: `Cliente ${runId}` });
     await expect(
       artigoPedido.locator('span', { hasText: /^Rascunho com reserva ativa$/ }),
     ).toBeVisible();

@@ -1,6 +1,6 @@
 import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, desc, eq, inArray, isNull, ne } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
@@ -8,6 +8,7 @@ import {
   caminhoes,
   caminhoesPedidos,
   cargaItens,
+  clientes,
   conferenciasCarga,
   notasFiscais,
   pedidosVenda,
@@ -224,8 +225,10 @@ export class FechamentoService {
         id: pedidosVenda.id,
         clienteId: pedidosVenda.clienteId,
         status: pedidosVenda.status,
+        clienteNome: sql<string>`coalesce(${clientes.nomeFantasia}, ${clientes.razaoSocial})`,
       })
       .from(pedidosVenda)
+      .innerJoin(clientes, eq(clientes.id, pedidosVenda.clienteId))
       .where(inArray(pedidosVenda.id, pedidoIds));
 
     const itensPedido = await this.db
@@ -325,6 +328,7 @@ export class FechamentoService {
       return {
         pedidoVendaId: v.pedidoVendaId,
         clienteId: pedido?.clienteId ?? null,
+        clienteNome: pedido?.clienteNome ?? null,
         ordemNaCarga: v.ordemNaCarga,
         previsto: previstoPorPedido.get(v.pedidoVendaId) ?? 0,
         carregado: realPorPedido.get(v.pedidoVendaId) ?? 0,

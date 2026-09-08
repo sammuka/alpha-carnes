@@ -30,3 +30,29 @@ export function labelCodigoRazaoSocial(codigo: string, razaoSocial: string): str
 export function sufixoInativo(status: string): string {
   return status === 'ativo' ? '' : ' (inativo)';
 }
+
+const UUID_VISIVEL = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function textoVisivel(valor: string | null | undefined): string | null {
+  const t = valor?.trim();
+  if (!t || UUID_VISIVEL.test(t)) return null;
+  return t;
+}
+
+export function rotuloProduto(produto: {
+  codigo?: string | null;
+  nome?: string | null;
+  descricao?: string | null;
+} | null | undefined): string {
+  const codigo = textoVisivel(produto?.codigo);
+  const nome = textoVisivel(produto?.nome) ?? textoVisivel(produto?.descricao);
+  if (codigo && nome) return `${codigo} — ${nome}`;
+  return codigo ?? nome ?? '—';
+}
+
+export function rotuloCliente(cliente: {
+  nomeFantasia?: string | null;
+  razaoSocial?: string | null;
+} | null | undefined): string {
+  return textoVisivel(cliente?.nomeFantasia) ?? textoVisivel(cliente?.razaoSocial) ?? '—';
+}

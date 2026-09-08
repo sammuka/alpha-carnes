@@ -88,6 +88,7 @@ describe('ConferenciaExpedicaoClient', () => {
           {
             pedidoVendaId: 'ped-1',
             clienteId: 'cli-1',
+            clienteNome: 'Cliente A',
             ordemNaCarga: 1,
             previsto: 1,
             carregado: 0,
@@ -109,6 +110,10 @@ describe('ConferenciaExpedicaoClient', () => {
     });
     render(<ConferenciaExpedicaoClient permissoes={['EXPEDICAO_GERENCIAR']} />);
     await waitFor(() => expect(screen.getByText('Finalizar Conferência')).toBeInTheDocument());
+    expect(screen.getAllByText('ABC-1234').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/Carga #/)).not.toBeInTheDocument();
+    expect(screen.getByText('Pedido Cliente A')).toBeInTheDocument();
+    expect(screen.queryByText('ped-1')).not.toBeInTheDocument();
     expect(screen.getByText('Finalizar Conferência').closest('button')).toBeDisabled();
   });
 
