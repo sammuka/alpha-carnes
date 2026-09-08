@@ -124,6 +124,23 @@ function json(body: unknown, status = 200) {
   }));
 }
 
+async function selecionarProdutoComPreco(nomeOpcao: string | RegExp, opcoes?: { pularOperacao?: boolean }) {
+  if (!opcoes?.pularOperacao) {
+    await userEvent.selectOptions(screen.getByLabelText('Operação'), operacaoDaApi.id);
+  }
+  await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
+  await waitFor(() => expect(screen.getByPlaceholderText('Buscar produto...')).toBeInTheDocument());
+  await userEvent.click(await screen.findByText(nomeOpcao));
+  const precoInput = screen.getByLabelText('Preço unitário do novo produto');
+  try {
+    await waitFor(() => {
+      expect(Number(precoInput.getAttribute('value'))).toBeGreaterThan(0);
+    }, { timeout: 2000 });
+  } catch {
+    fireEvent.change(precoInput, { target: { value: '18.50' } });
+  }
+}
+
 function instalarFetch() {
   global.fetch = jest.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -145,6 +162,16 @@ function instalarFetch() {
         page: 1,
         pageSize: 100,
         total: 1,
+      });
+    }
+    if (url.startsWith('/api/precos/vigente?')) {
+      return json({
+        data: produtos.map((produto) => ({
+          produtoId: produto.id,
+          preco: '18.50',
+          unidadePreco: 'kg',
+          tabelaPrecoId: 'tabela-1',
+        })),
       });
     }
     if (url === '/api/comercial/pedidos/pedido-1') return json(detalhe);
@@ -297,8 +324,7 @@ it('novo pedido usa operacaoId e dataOperacao da operação sem compraProgramada
   await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
   await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
   fireEvent.change(screen.getByLabelText('Operação'), { target: { value: operacaoDaApi.id } });
-  await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
-  await userEvent.click(await screen.findByRole('option', { name: 'NOVO — Produto novo' }));
+  await selecionarProdutoComPreco(/Produto novo/);
   fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
   await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
   await userEvent.click(screen.getByRole('button', { name: 'Salvar Rascunho' }));
@@ -327,25 +353,29 @@ it('novo pedido remove item local e devolve o produto ao seletor sem chamar a AP
   await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
   fireEvent.change(screen.getByLabelText('Operação'), { target: { value: operacaoDaApi.id } });
 
-  fireEvent.change(screen.getByLabelText('Produto'), { target: { value: 'item-comercial-novo' } });
+  await selecionarProdutoComPreco(/Produto novo/);
   fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
   await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
 
-  fireEvent.change(screen.getByLabelText('Produto'), { target: { value: 'item-comercial-estavel' } });
+  await selecionarProdutoComPreco(/Picanha/);
   fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '3' } });
   await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
 
-  const removido = screen.getByTestId('linha-nova-item-comercial-novo');
-  expect(within(removido).getByText('Produto novo')).toBeInTheDocument();
-  expect(within(screen.getByLabelText('Produto')).queryByRole('option', { name: 'Produto novo' }))
-    .not.toBeInTheDocument();
+  const removido = screen.getByTestId('linha-nova-produto-novo');
+  expect(within(removido).getByText(/NOVO — Produto novo/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
+  await waitFor(() => expect(screen.getByPlaceholderText('Buscar produto...')).toBeInTheDocument());
+  const command = screen.getByPlaceholderText('Buscar produto...').closest('[data-slot="command"]') as HTMLElement;
+  expect(within(command).queryByText(/NOVO — Produto novo/)).not.toBeInTheDocument();
+  await userEvent.keyboard('{Escape}');
 
-  await userEvent.click(within(removido).getByRole('button', { name: 'Remover Produto novo' }));
+  await userEvent.click(within(removido).getByRole('button', { name: /Remover NOVO — Produto novo/i }));
 
-  expect(screen.queryByTestId('linha-nova-item-comercial-novo')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('linha-nova-produto-novo')).not.toBeInTheDocument();
   expect(screen.getByTestId('linha-nova-item-comercial-estavel')).toBeInTheDocument();
-  expect(within(screen.getByLabelText('Produto')).getByRole('option', { name: 'Produto novo' }))
-    .toBeInTheDocument();
+  await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
+  await waitFor(() => expect(screen.getByPlaceholderText('Buscar produto...')).toBeInTheDocument());
+  expect(await screen.findByText(/NOVO — Produto novo/)).toBeInTheDocument();
 
   await userEvent.click(screen.getByRole('button', { name: 'Salvar Rascunho' }));
 
@@ -354,7 +384,11 @@ it('novo pedido remove item local e devolve o produto ao seletor sem chamar a AP
       url === '/api/comercial/pedidos' && init?.method === 'POST');
     expect(chamada).toBeDefined();
     const payload = JSON.parse(String(chamada?.[1]?.body));
-    expect(payload.itens).toEqual([{ produtoId: 'item-comercial-estavel', quantidadePedida: 3 }]);
+    expect(payload.itens).toEqual([{
+      produtoId: 'item-comercial-estavel',
+      quantidadePedida: 3,
+      precoAplicado: '18.50',
+    }]);
   });
   expect((global.fetch as jest.Mock).mock.calls.some(([url, init]) =>
     String(url).includes('/itens/') && init?.method === 'DELETE')).toBe(false);
@@ -382,8 +416,7 @@ it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente par
   await userEvent.type(await screen.findByLabelText(/^Motivo/), 'Complemento solicitado pelo cliente');
   await userEvent.click(screen.getByRole('button', { name: 'Registrar adendo' }));
 
-  await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
-  await userEvent.click(await screen.findByRole('option', { name: 'NOVO — Produto novo' }));
+  await selecionarProdutoComPreco(/Produto novo/, { pularOperacao: true });
   fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
   await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
 
@@ -426,7 +459,7 @@ it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente par
       '/api/comercial/pedidos/pedido-1/itens',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ produtoId: 'produto-novo', quantidade: 2 }),
+        body: JSON.stringify({ produtoId: 'produto-novo', quantidade: 2, precoAplicado: '18.50' }),
       }),
     ]);
     expect(chamadas.some(([url, init]) =>
