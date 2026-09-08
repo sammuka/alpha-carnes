@@ -268,7 +268,6 @@ export function OperacoesClient({ permissoes }: { permissoes: string[] }) {
                     <TableRow key={o.id} className="group">
                       <TableCell className="whitespace-normal">
                         <p className="text-[13px] font-semibold text-foreground">{o.rotulo}</p>
-                        <p className="font-data text-[10px] text-fg-faint">{o.id.slice(0, 8).toUpperCase()}</p>
                       </TableCell>
                       <TableCellNum>{formatDataBR(o.data)}</TableCellNum>
                       <TableCell className="capitalize text-muted-foreground">

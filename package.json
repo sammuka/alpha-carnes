@@ -5,6 +5,7 @@
   "workspaces": ["app/backend", "app/frontend"],
   "overrides": {
     "sharp": "0.35.0",
+    "multer": "2.3.0",
     "next": {
       "postcss": "8.5.22"
     },

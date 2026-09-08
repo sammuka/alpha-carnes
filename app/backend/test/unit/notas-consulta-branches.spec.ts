@@ -30,9 +30,9 @@ function makeDb(porTabela: Map<unknown, unknown[]>) {
 describe('NotasConsultaService — listar (D10.8)', () => {
   const clienteRow = { id: 'cli-1', razaoSocial: 'Cliente RS', nomeFantasia: 'Fantasia X' };
   const clienteSemFantasia = { id: 'cli-2', razaoSocial: 'Cliente Sem Fantasia', nomeFantasia: null };
-  const caminhaoLiberado = { id: 'cam-1', statusCaminhao: 'liberado_saida' };
-  const caminhaoEmCarga = { id: 'cam-2', statusCaminhao: 'em_carga' };
-  const caminhaoExpedido = { id: 'cam-3', statusCaminhao: 'expedido' };
+  const caminhaoLiberado = { id: 'cam-1', statusCaminhao: 'liberado_saida', placa: 'ABC1D23' };
+  const caminhaoEmCarga = { id: 'cam-2', statusCaminhao: 'em_carga', placa: 'DEF4E56' };
+  const caminhaoExpedido = { id: 'cam-3', statusCaminhao: 'expedido', placa: 'GHI7J89' };
   const nota1 = {
     id: 'nf-1', clienteId: 'cli-1', caminhaoId: 'cam-1', deletedAt: null, statusNfse: 'emitida', createdAt: new Date(),
   };
@@ -80,7 +80,7 @@ describe('NotasConsultaService — listar (D10.8)', () => {
     const service = new NotasConsultaService({ db } as never);
     const resultado = await service.listar({ page: 1, pageSize: 20, status: 'emitida' } as never);
     expect(resultado.total).toBe(1);
-    expect(resultado.data[0]).toMatchObject({ id: 'nf-1', clienteNome: 'Fantasia X', caminhaoLiberado: true });
+    expect(resultado.data[0]).toMatchObject({ id: 'nf-1', clienteNome: 'Fantasia X', caminhaoPlaca: 'ABC1D23', caminhaoLiberado: true });
   });
 
   it('filtro caminhaoId + clienteId + busca → caminhaoLiberado=false para em_carga e clienteNome cai para razaoSocial sem fantasia', async () => {
@@ -111,7 +111,7 @@ describe('NotasConsultaService — listar (D10.8)', () => {
     const resultado = await service.listar({
       page: 1, pageSize: 20, caminhaoId: 'cam-2', clienteId: 'cli-2', busca: 'termo',
     } as never);
-    expect(resultado.data[0]).toMatchObject({ id: 'nf-2', clienteNome: 'Cliente Sem Fantasia', caminhaoLiberado: false });
+    expect(resultado.data[0]).toMatchObject({ id: 'nf-2', clienteNome: 'Cliente Sem Fantasia', caminhaoPlaca: 'DEF4E56', caminhaoLiberado: false });
   });
 
   it('caminhão expedido → caminhaoLiberado=true (trava visual — NotasXml.tsx:485-497)', async () => {

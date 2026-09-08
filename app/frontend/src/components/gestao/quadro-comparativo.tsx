@@ -1,4 +1,5 @@
 import { Info, Scale } from 'lucide-react';
+import { rotuloProduto } from '@/lib/dominios';
 
 export interface ItemComparativo {
   produtoId: string;
@@ -52,7 +53,7 @@ export function QuadroComparativo({ itens }: QuadroComparativoProps) {
           <tbody>
             {itens.map((item) => {
               const divergente = ehDivergente(item.difQtd);
-              const produto = item.codigo ?? item.descricao ?? item.produtoId.slice(0, 8);
+              const produto = rotuloProduto({ codigo: item.codigo, descricao: item.descricao });
               return (
                 <tr key={item.produtoId} className={`border-b border-border last:border-0 ${divergente ? 'bg-[var(--color-status-divergencia-bg)]/40' : ''}`}>
                   <td className="px-4 py-2.5 font-bold text-primary">{produto}</td>

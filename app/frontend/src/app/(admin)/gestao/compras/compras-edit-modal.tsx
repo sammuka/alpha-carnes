@@ -137,7 +137,9 @@ export function ComprasEditModal({ open, compra, itensCompra, onClose, onSalvo }
           {compra.itens.map((it) => (
             <div key={it.id} className="flex items-center gap-3">
               <span className="flex-1 text-[13px] font-medium">
-                {itensCompra.find((c) => c.id === it.produtoId)?.nome ?? it.produtoId.slice(0, 8)}
+                {itensCompra.find((c) => c.id === it.produtoId)?.nome
+                  ?? itensCompra.find((c) => c.id === it.produtoId)?.codigo
+                  ?? '—'}
               </span>
               <div className="flex w-28 flex-col gap-1">
                 <Input

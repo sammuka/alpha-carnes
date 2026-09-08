@@ -27,7 +27,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableCellCode,
   TableCellNum,
   TableHead,
   TableHeader,
@@ -232,7 +231,6 @@ function DashboardConteudo({ permissoes }: { permissoes: string[] }) {
                   <Table>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
-                        <TableHead>Pedido</TableHead>
                         <TableHead>Cliente</TableHead>
                         <TableHead>Produto / Corte</TableHead>
                         <TableHead className="text-right">Peso (kg)</TableHead>
@@ -243,20 +241,19 @@ function DashboardConteudo({ permissoes }: { permissoes: string[] }) {
                     <TableBody>
                       {carregando ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="h-24 text-center text-xs text-muted-foreground">
+                          <TableCell colSpan={5} className="h-24 text-center text-xs text-muted-foreground">
                             Carregando pedidos…
                           </TableCell>
                         </TableRow>
                       ) : (dados?.pedidosEmAndamento?.length ?? 0) === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="h-24 text-center text-xs text-muted-foreground">
+                          <TableCell colSpan={5} className="h-24 text-center text-xs text-muted-foreground">
                             Nenhum pedido em andamento no momento.
                           </TableCell>
                         </TableRow>
                       ) : (
                         dados!.pedidosEmAndamento.map((pedido) => (
                           <TableRow key={pedido.pedidoId} className="group">
-                            <TableCellCode>{pedido.pedidoId.slice(0, 8).toUpperCase()}</TableCellCode>
                             <TableCell className="text-[13px] font-semibold text-foreground">
                               {pedido.clienteNome}
                             </TableCell>

@@ -242,7 +242,7 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
                   )}
                 >
                   <span className="flex items-center gap-2">
-                    <span className="font-data min-w-0 flex-1 truncate text-[13px] font-semibold">{p.id.slice(0, 8)}</span>
+                    <span className="font-data min-w-0 flex-1 truncate text-[13px] font-semibold">{p.clienteNome ?? '—'}</span>
                     <StatusPill variant="pendente" label={ROTULO_STATUS_PENDENCIA[p.status]} className="h-[17px] text-[10px]" />
                   </span>
                   <span className="block truncate text-[11px] text-muted-foreground">
@@ -270,8 +270,16 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
                 <CardContent>
                   <dl className="grid grid-cols-2 gap-3">
                     <Par rotulo="Quantidade deficitária" valor={selecionada.quantidadeDeficit} mono />
-                    <Par rotulo="Pedido de origem" valor={selecionada.pedidoVendaId.slice(0, 8)} mono />
-                    <Par rotulo="Cliente" valor={selecionada.clienteId.slice(0, 8)} mono />
+                    <Par rotulo="Pedido de origem" valor={selecionada.clienteNome ?? '—'} />
+                    <Par rotulo="Cliente" valor={selecionada.clienteNome ?? '—'} />
+                    <Par
+                      rotulo="Produto"
+                      valor={
+                        selecionada.produtoCodigo && selecionada.produtoNome
+                          ? `${selecionada.produtoCodigo} — ${selecionada.produtoNome}`
+                          : (selecionada.produtoNome ?? selecionada.produtoCodigo ?? '—')
+                      }
+                    />
                     <Par rotulo="Confirmação do overbooking" valor={formatDataHora(selecionada.createdAt)} />
                   </dl>
                   {podeResolver && !['resolvida', 'cancelada'].includes(selecionada.status) && (
@@ -451,8 +459,8 @@ function OverbookingConteudo({ permissoes }: { permissoes: string[] }) {
                 </p>
               </div>
               <dl className="grid grid-cols-2 gap-3">
-                <Par rotulo="Cliente" valor={selecionada.clienteId.slice(0, 8)} mono />
-                <Par rotulo="Produto" valor={selecionada.produtoId.slice(0, 8)} mono />
+                <Par rotulo="Cliente" valor={selecionada.clienteNome ?? '—'} />
+                <Par rotulo="Produto" valor={selecionada.produtoCodigo && selecionada.produtoNome ? `${selecionada.produtoCodigo} — ${selecionada.produtoNome}` : (selecionada.produtoNome ?? selecionada.produtoCodigo ?? '—')} />
               </dl>
               <FormField
                 label="Quantidade a postergar"

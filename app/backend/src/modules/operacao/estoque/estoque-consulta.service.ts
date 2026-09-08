@@ -141,7 +141,7 @@ export class EstoqueConsultaService {
       itens.push({
         id: peca.id,
         tipo: 'peca',
-        codigo: peca.etiquetaAtual ?? peca.id.slice(0, 8).toUpperCase(),
+        codigo: peca.etiquetaAtual ?? '—',
         statusFisico: peca.statusFisico,
         statusRotulo: ROTULO_PECA[peca.statusFisico] ?? 'Bloqueado por ocorrência',
         quantidade: '1',
@@ -152,7 +152,7 @@ export class EstoqueConsultaService {
         nfLote: recebimento?.nfLote ?? recebimento?.romaneio ?? null,
         local: { valor: null, provisorio: true },
         caracteristicas: caracteristicasDeCapturaMeta(peca.capturaMeta),
-        pedidoReservado: pedido ? `#${pedido.id.slice(0, 8)} — ${pedido.clienteNome}` : null,
+        pedidoReservado: pedido?.clienteNome ?? null,
         estoqueAnterior: peca.createdAt < hoje,
         createdAt: peca.createdAt,
       });
@@ -164,18 +164,18 @@ export class EstoqueConsultaService {
       itens.push({
         id: sub.id,
         tipo: 'subitem',
-        codigo: sub.etiquetaAtual ?? sub.id.slice(0, 8).toUpperCase(),
+        codigo: sub.etiquetaAtual ?? '—',
         statusFisico: sub.statusFisico,
         statusRotulo: ROTULO_SUBITEM[sub.statusFisico] ?? 'Bloqueado por ocorrência',
         quantidade: sub.quantidade,
         peso: sub.peso,
         unidade: 'peça',
         produto,
-        origem: `Desossa interna (${sub.pecaOrigemId.slice(0, 8).toUpperCase()})`,
+        origem: 'Desossa interna',
         nfLote: null,
         local: { valor: null, provisorio: true },
         caracteristicas: [],
-        pedidoReservado: pedido ? `#${pedido.id.slice(0, 8)} — ${pedido.clienteNome}` : null,
+        pedidoReservado: pedido?.clienteNome ?? null,
         estoqueAnterior: sub.createdAt < hoje,
         createdAt: sub.createdAt,
       });
@@ -187,7 +187,7 @@ export class EstoqueConsultaService {
       itens.push({
         id: entrada.id,
         tipo: 'entrada',
-        codigo: entrada.id.slice(0, 8).toUpperCase(),
+        codigo: entrada.loteNf ?? '—',
         statusFisico: entrada.destino,
         statusRotulo: entrada.pedidoId ? 'Destinado a pedido' : 'Disponível',
         quantidade: String(entrada.quantidade - entrada.quantidadeDestinada),
@@ -198,7 +198,7 @@ export class EstoqueConsultaService {
         nfLote: entrada.loteNf,
         local: { valor: entrada.local, provisorio: false },
         caracteristicas: [],
-        pedidoReservado: pedido ? `#${pedido.id.slice(0, 8)} — ${pedido.clienteNome}` : null,
+        pedidoReservado: pedido?.clienteNome ?? null,
         estoqueAnterior: entrada.createdAt < hoje,
         createdAt: entrada.createdAt,
       });

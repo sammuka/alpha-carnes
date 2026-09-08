@@ -10,7 +10,7 @@ import type {
   PedidoVendaDetalhe,
 } from '@/lib/comercial';
 import type { Operacao } from '@/lib/gestao-operacoes';
-import { labelCodigoNome, sufixoInativo } from '@/lib/dominios';
+import { labelCodigoNome, rotuloProduto, sufixoInativo } from '@/lib/dominios';
 import { extrairMensagemErro } from '@/lib/error-message';
 import { mascararCpfCnpj } from '@/lib/masks';
 import { AlertItem } from '@/components/ui/alert-item';
@@ -104,7 +104,7 @@ function dadosDeNegocio(dados: unknown): Record<string, unknown> | null {
 }
 
 function nomeProduto(produto: ProdutoPedido | undefined): string {
-  return produto?.nome ?? produto?.descricao ?? produto?.codigo ?? 'Produto';
+  return rotuloProduto(produto);
 }
 
 function origemItem(item: PedidoVendaDetalhe['itens'][number]): 'Físico' | 'Virtual' | 'Overbooking' {
@@ -669,7 +669,7 @@ export function PedidoEditor({
               id="produto-novo"
               items={produtosAusentes.map((produto) => ({
                 id: produto.id,
-                label: labelCodigoNome(produto.codigo, nomeProduto(produto)),
+                label: rotuloProduto(produto),
               }))}
               value={produtoNovo}
               onChange={setProdutoNovo}
@@ -747,6 +747,7 @@ export function PedidoEditor({
           open
           challenge={challenge}
           pending={pendente}
+          rotuloProdutoCatalogo={(id) => nomeProduto(produtos.find((produto) => produto.id === id))}
           onCancel={() => {
             setChallenge(null);
             setRetryChallenge(null);

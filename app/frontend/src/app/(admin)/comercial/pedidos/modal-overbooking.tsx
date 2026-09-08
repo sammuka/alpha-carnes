@@ -1,6 +1,7 @@
 'use client';
 
 import type { OverbookingChallenge } from '@/lib/comercial';
+import { rotuloProduto } from '@/lib/dominios';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -26,6 +27,7 @@ interface ModalOverbookingProps {
   onConfirm: () => void;
   onCancel: () => void;
   pending?: boolean;
+  rotuloProdutoCatalogo?: (produtoId: string) => string;
 }
 
 export function ModalOverbooking({
@@ -34,6 +36,7 @@ export function ModalOverbooking({
   onConfirm,
   onCancel,
   pending = false,
+  rotuloProdutoCatalogo,
 }: ModalOverbookingProps) {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
@@ -52,16 +55,20 @@ export function ModalOverbooking({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {challenge.itens.map((item) => (
+            {challenge.itens.map((item) => {
+              const doPayload = rotuloProduto({ codigo: item.produtoCodigo, nome: item.produtoNome });
+              const label = doPayload !== '—' ? doPayload : (rotuloProdutoCatalogo?.(item.produtoId) ?? '—');
+              return (
               <TableRow key={item.produtoId}>
                 <TableCell className="text-[13px] font-semibold text-foreground">
-                  {item.produtoId}
+                  {label}
                 </TableCell>
                 <TableCellNum>{item.disponivelAntes}</TableCellNum>
                 <TableCellNum>{item.quantidadeSolicitada}</TableCellNum>
                 <TableCellNum className="text-danger-fg font-bold">{item.overbookingGerado}</TableCellNum>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
         <DialogFooter>

@@ -299,13 +299,13 @@ export function TrocaPecaFluxo({
                 <dt className="text-muted-foreground">Etiqueta invalidada</dt>
                 <dd className="font-mono">
                   {resultado.etiquetaInvalidada
-                    ? resultado.etiquetaInvalidada.id.slice(0, 8)
+                    ? (resultado.pecaRetirada.etiquetaAtual ?? '—')
                     : 'nenhuma'}
                 </dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Nova etiqueta</dt>
-                <dd className="font-mono">{resultado.etiquetaEmitida.id.slice(0, 8)}</dd>
+                <dd className="font-mono">{resultado.pecaInserida.etiquetaAtual ?? '—'}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Peça retirada</dt>

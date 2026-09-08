@@ -195,11 +195,11 @@ export function EnviarFaturamentoClient({ permissoes }: { permissoes: string[] }
                     )}
                   >
                     <span className="flex items-center gap-2">
-                      <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">Carga #{c.id.slice(0, 8)}</b>
+                      <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">{c.placa}</b>
                       <StatusPill variant={variantStatusCarga(c.statusCaminhao)} className="h-[17px] text-[10px]" label={ROTULO_STATUS_CARGA[c.statusCaminhao]} />
                     </span>
                     <span className="block truncate text-[11px] text-muted-foreground">
-                      <span className="font-data">{c.placa}</span> · {c.rota ?? '—'}
+                      {c.motorista} · {c.rota ?? '—'}
                     </span>
                     <span className="mt-1.5 flex items-center justify-between text-[11px]">
                       <span className="font-medium text-foreground">
@@ -226,7 +226,7 @@ export function EnviarFaturamentoClient({ permissoes }: { permissoes: string[] }
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="mb-1 flex items-center gap-2">
-                    <h2 className="text-[15px] font-bold text-foreground">Carga #{carga.id.slice(0, 8)}</h2>
+                    <h2 className="text-[15px] font-bold text-foreground">{carga.placa}</h2>
                     <StatusPill variant={variantStatusCarga(carga.statusCaminhao)} label={rotuloCarga} />
                   </div>
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -291,7 +291,7 @@ export function EnviarFaturamentoClient({ permissoes }: { permissoes: string[] }
                       <div className="flex items-center justify-between bg-surface-2 px-3 py-2">
                         <div>
                           <p className="text-[13px] font-semibold text-foreground">{pedido.clienteNome ?? '—'}</p>
-                          <p className="text-[11px] text-muted-foreground">Pedido {pedido.pedidoVendaId.slice(0, 8)}…</p>
+                          <p className="text-[11px] text-muted-foreground">{pedido.pecas.length} peças</p>
                         </div>
                         <span className="text-xs font-medium text-muted-foreground">{pedido.pecas.length} peças</span>
                       </div>
@@ -350,7 +350,7 @@ export function EnviarFaturamentoClient({ permissoes }: { permissoes: string[] }
               <TableBody>
                 {historico.map((c) => (
                   <TableRow key={c.id}>
-                    <TableCellCode>#{c.id.slice(0, 8)}</TableCellCode>
+                    <TableCell>{c.motorista ?? '—'}</TableCell>
                     <TableCellCode>{c.placa}</TableCellCode>
                     <TableCell><StatusPill variant={variantStatusCarga(c.statusCaminhao)} label={ROTULO_STATUS_CARGA[c.statusCaminhao]} /></TableCell>
                     <TableCellNum>{c.envio ? fmtDataHora(c.envio.dataHora) : '—'}</TableCellNum>

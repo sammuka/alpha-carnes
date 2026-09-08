@@ -72,6 +72,7 @@ export interface ConsolidacaoResposta {
 /** Linha de `GET /faturamento/notas` — nota + denormalizações do join (cliente/caminhão). */
 export interface NotaFiscalListagem extends NotaFiscal {
   clienteNome: string;
+  caminhaoPlaca?: string;
   /** D10.4 — trava visual de cancelamento (caminhão já liberado/expedido). */
   caminhaoLiberado: boolean;
 }

@@ -15,6 +15,9 @@ const PENDENCIA = {
   pedidoVendaItemId: 'pvi1',
   produtoId: 'ic1',
   clienteId: 'cl1',
+  clienteNome: 'Açougue Nova Era',
+  produtoCodigo: 'TZ',
+  produtoNome: 'Traseiro',
   vendedorUsuarioId: 'u1',
   operacaoId: 'op-1',
   quantidadeDeficit: '3.000',
@@ -65,6 +68,9 @@ describe('OverbookingClient', () => {
     expect(screen.getByText('1. Compra complementar')).toBeInTheDocument();
     expect(screen.getByText('2. Redistribuição')).toBeInTheDocument();
     expect(screen.getByText('3. Postergar para próxima operação')).toBeInTheDocument();
+    expect(screen.getAllByText('Açougue Nova Era').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('TZ — Traseiro')).toBeInTheDocument();
+    expect(screen.queryByText('pv1')).not.toBeInTheDocument();
   });
 
   it('compra complementar conserva compraProgramadaId no payload', async () => {
@@ -85,6 +91,8 @@ describe('OverbookingClient', () => {
   it('postergar envia novo_pedido só com operacaoDestinoId e quantidade', async () => {
     render(<OverbookingClient permissoes={['OVERBOOKING_RESOLVER', 'PEDIDOS_LER']} />);
     await userEvent.click(await screen.findByRole('button', { name: 'Postergar' }));
+    expect(screen.getAllByText('TZ — Traseiro').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Açougue Nova Era').length).toBeGreaterThanOrEqual(1);
     await userEvent.click(screen.getByRole('button', { name: 'Gerar novo pedido' }));
     await waitFor(() => {
       const chamada = (global.fetch as jest.Mock).mock.calls.find(([url, init]: [string, RequestInit]) =>

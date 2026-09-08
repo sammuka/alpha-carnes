@@ -344,11 +344,11 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
                     )}
                   >
                     <span className="flex items-center gap-2">
-                      <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">Carga #{c.id.slice(0, 8)}</b>
+                      <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">{c.placa}</b>
                       <StatusPill variant={variantStatusCarga(c.statusCaminhao)} className="h-[17px] text-[10px]" label={ROTULO_STATUS_CARGA[c.statusCaminhao]} />
                     </span>
                     <span className="block truncate text-[11px] text-muted-foreground">
-                      <span className="font-data">{c.placa}</span> · {c.rota ?? '—'}
+                      {c.motorista} · {c.rota ?? '—'}
                     </span>
                     <span className="mt-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
                       <span />
@@ -377,7 +377,7 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="mb-1 flex items-center gap-2">
-                    <h2 className="text-[15px] font-bold text-foreground">Carga #{cam.id.slice(0, 8)}</h2>
+                    <h2 className="text-[15px] font-bold text-foreground">{cam.placa}</h2>
                     <StatusPill variant={variantStatusCarga(cam.statusCaminhao)} label={rotuloStatus} />
                   </div>
                   <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -464,7 +464,7 @@ export function ConferenciaExpedicaoClient({ permissoes }: { permissoes: string[
                       <AccordionTrigger className="py-2.5 text-xs hover:no-underline">
                         <span className="flex flex-1 items-center justify-between gap-3">
                           <span className="text-[13px] font-semibold text-foreground">
-                            Pedido {pedido.pedidoVendaId.slice(0, 8)}…
+                            Pedido {pedido.clienteNome ?? '—'}
                           </span>
                           <span className="flex items-center gap-3">
                             <span className="text-xs font-medium text-foreground">{conferidas} / {total} peças</span>

@@ -137,10 +137,10 @@ function ModalCancelar({ nota, onClose, onConfirm }: {
     <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Cancelar Nota {nota.numeroNfse ?? nota.id}</DialogTitle>
+          <DialogTitle>Cancelar Nota {nota.numeroNfse ?? '—'}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-y-1.5 rounded-lg bg-surface-2 p-3 text-xs">
-          <div><span className="text-muted-foreground">Pedido: </span><span className="font-data font-semibold text-foreground">{nota.pedidoVendaId.slice(0, 8)}</span></div>
+          <div><span className="text-muted-foreground">Pedido: </span><span className="font-data font-semibold text-foreground">{nota.clienteNome}</span></div>
           <div><span className="text-muted-foreground">Cliente: </span><span className="font-semibold text-foreground">{nota.clienteNome}</span></div>
           <div className="col-span-2"><span className="text-muted-foreground">Valor: </span><span className="font-data font-semibold text-foreground">{fmtBRL(Number(nota.valor))}</span></div>
         </div>
@@ -223,7 +223,7 @@ function DrawerRastreabilidade({ notaId, onClose }: { notaId: string | null; onC
                 </p>
                 <div className="grid grid-cols-2 gap-3 rounded-md bg-surface-2 p-3 text-xs">
                   {[
-                    ['Pedido', dados?.pedido?.id?.slice(0, 8) ?? nota.pedidoVendaId.slice(0, 8)],
+                    ['Pedido', dados?.pedido?.clienteNome ?? '—'],
                     ['Cliente', dados?.pedido?.clienteNome ?? '—'],
                     ['Chave de verificação', nota.codigoVerificacao ?? '—'],
                     ['Data/hora', nota.emitidaEm ?? nota.createdAt],
@@ -472,8 +472,8 @@ export function NotasXmlClient({ permissoes }: { permissoes: string[] }) {
                       <TableCellCode title={n.codigoVerificacao ?? undefined}>{truncChave(n.codigoVerificacao)}</TableCellCode>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="font-semibold text-foreground">{n.pedidoVendaId.slice(0, 8)}</span>
-                          <span className="text-[10px] text-muted-foreground">{n.caminhaoId.slice(0, 8)}</span>
+                          <span className="font-semibold text-foreground">{n.clienteNome}</span>
+                          <span className="text-[10px] text-muted-foreground">{n.caminhaoPlaca ?? '—'}</span>
                         </div>
                       </TableCell>
                       <TableCell className="max-w-[160px] truncate text-fg-secondary">{n.clienteNome}</TableCell>
