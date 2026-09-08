@@ -12,6 +12,8 @@ import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
 import {
   clientes,
+  ocorrenciasAjustePreco,
+  ocorrenciasAjustePrecoItens,
   pendenciasOverbooking,
   pendenciasOverbookingHistorico,
   pedidosVenda,
@@ -91,6 +93,13 @@ function ehDuplicidadeDeItemNoPedido(error: unknown): boolean {
   const code = pg.code ?? pg.cause?.code;
   const constraint = pg.constraint ?? pg.cause?.constraint;
   return code === '23505' && constraint === 'uq_pedido_venda_produto_ativo';
+}
+
+function ehDuplicidadeOcorrenciaPreco(error: unknown): boolean {
+  const pg = error as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
+  const code = pg.code ?? pg.cause?.code;
+  const constraint = pg.constraint ?? pg.cause?.constraint;
+  return code === '23505' && constraint === 'uq_ocorr_ajuste_preco_pedido';
 }
 
 /** Traduz plano → itens de challenge. Exportado para o AdendosService reusar (D2). */
@@ -1178,7 +1187,8 @@ export class PedidosService {
   }
 
   async finalizar(pedidoId: string, usuarioId: string): Promise<PedidoVenda> {
-    const resultado = await this.db.transaction(async (tx) => {
+    try {
+      const resultado = await this.db.transaction(async (tx) => {
       const pedido = await this.obterPedidoAtivoSobLock(tx, pedidoId, usuarioId);
       if (pedido.status === 'cancelado') throw new ConflictException('Pedido cancelado');
       if (pedido.status === 'finalizado') throw new ConflictException('Pedido já finalizado');
@@ -1213,6 +1223,87 @@ export class PedidosService {
         .set({ status: 'finalizado', updatedAt: new Date() })
         .where(eq(pedidosVenda.id, pedidoId))
         .returning());
+
+      const itensAjustados = await tx.select({
+        id: pedidosVendaItens.id,
+        produtoId: pedidosVendaItens.produtoId,
+        precoTabelaOriginal: pedidosVendaItens.precoTabelaOriginal,
+        precoAplicado: pedidosVendaItens.precoAplicado,
+        usuarioAjusteId: pedidosVendaItens.usuarioAjusteId,
+      }).from(pedidosVendaItens)
+        .where(and(
+          eq(pedidosVendaItens.pedidoVendaId, pedidoId),
+          isNull(pedidosVendaItens.deletedAt),
+          sql`${pedidosVendaItens.precoTabelaOriginal} IS DISTINCT FROM ${pedidosVendaItens.precoAplicado}`,
+        ));
+
+      const eventos: EventoDominio[] = [{
+        nome: EVENTOS.PEDIDO_FINALIZADO,
+        payload: { pedidoVendaId: pedidoId },
+      }];
+
+      if (itensAjustados.length > 0) {
+        const [operacaoRow] = await tx.select({ data: operacoes.data })
+          .from(operacoes)
+          .where(eq(operacoes.id, pedido.operacaoId))
+          .limit(1);
+        const dataOperacao = operacaoRow?.data ?? '';
+
+        let diferencaTotal = '0';
+        for (const item of itensAjustados) {
+          if (item.precoTabelaOriginal != null && item.precoAplicado != null) {
+            diferencaTotal = somarQtd(diferencaTotal, subtrairQtd(item.precoAplicado, item.precoTabelaOriginal));
+          }
+        }
+
+        const [ocorrencia] = await tx.insert(ocorrenciasAjustePreco).values({
+          pedidoVendaId: pedidoId,
+          clienteId: pedido.clienteId,
+          quantidadeItensAjustados: itensAjustados.length,
+          diferencaTotal,
+          usuarioFinalizacaoId: usuarioId,
+        }).returning();
+
+        if (!ocorrencia) throw new Error('Falha ao registrar ocorrência de ajuste de preço');
+
+        for (const item of itensAjustados) {
+          const aplicado = item.precoAplicado!;
+          const original = item.precoTabelaOriginal;
+          const diferencaPercentual = original != null
+            ? ((Number(aplicado) - Number(original)) / Number(original) * 100).toFixed(4)
+            : null;
+          await tx.insert(ocorrenciasAjustePrecoItens).values({
+            ocorrenciaId: ocorrencia.id,
+            pedidoVendaItemId: item.id,
+            produtoId: item.produtoId,
+            precoTabelaOriginal: original,
+            precoAplicado: aplicado,
+            diferencaAbsoluta: original != null ? subtrairQtd(aplicado, original) : aplicado,
+            diferencaPercentual,
+            usuarioAjusteId: item.usuarioAjusteId,
+          });
+        }
+
+        await this.auditoria.registrar(tx, {
+          tabela: 'ocorrencias_ajuste_preco',
+          registroId: ocorrencia.id,
+          operacao: 'INSERT',
+          modulo: 'comercial',
+          usuarioId,
+          dadosNovos: ocorrencia,
+        });
+
+        eventos.push({
+          nome: EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA,
+          payload: {
+            ocorrenciaId: ocorrencia.id,
+            pedidoVendaId: pedidoId,
+            clienteId: pedido.clienteId,
+            dataOperacao,
+          },
+        });
+      }
+
       await this.auditoria.registrar(tx, {
         tabela: 'pedidos_venda',
         registroId: pedidoId,
@@ -1224,14 +1315,17 @@ export class PedidosService {
       });
       return {
         pedido: finalizado,
-        eventos: [{
-          nome: EVENTOS.PEDIDO_FINALIZADO,
-          payload: { pedidoVendaId: pedidoId },
-        }] as EventoDominio[],
+        eventos,
       };
     });
-    this.emitirEventosPosCommit(resultado.eventos);
-    return resultado.pedido;
+      this.emitirEventosPosCommit(resultado.eventos);
+      return resultado.pedido;
+    } catch (error) {
+      if (ehDuplicidadeOcorrenciaPreco(error)) {
+        throw new ConflictException('Ocorrência de ajuste de preço já registrada para este pedido');
+      }
+      throw error;
+    }
   }
 
   /** AD-06 — única liberação além de remoção/cancelamento pelo vendedor. Sem TTL, sem job. */

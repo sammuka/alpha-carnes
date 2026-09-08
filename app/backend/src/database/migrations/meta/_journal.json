@@ -302,6 +302,13 @@
       "when": 1788841202000,
       "tag": "0042_onda14_item_preco_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1788841203000,
+      "tag": "0043_onda14_ocorrencias_preco",
+      "breakpoints": true
     }
   ]
 }

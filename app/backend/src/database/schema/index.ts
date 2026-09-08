@@ -27,6 +27,7 @@ export * from './expedicao.schema';
 export * from './faturamento.schema';
 export * from './adendos-pedido.schema';
 export * from './tabelas-preco.schema';
+export * from './ocorrencias-ajuste-preco.schema';
 export * from './relatorios-sif.schema';
 export * from './aprovacoes-operacionais.schema';
 export * from './estoque.schema';
