@@ -340,6 +340,7 @@ async function criarClienteComRepresentante(
       razaoSocial,
       documentoFiscal,
       representanteId,
+      faixaPreco: 'A',
     },
   });
   if (!res.ok()) {

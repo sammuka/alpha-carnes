@@ -157,6 +157,7 @@ export async function seedCaminhaoFechado(request: APIRequestContext): Promise<C
     codigo: `O10CLI${suffix}`,
     razaoSocial: `Cliente Onda10 ${suffix}`,
     documentoFiscal: makeCnpj(seedNum + 1),
+    faixaPreco: 'A',
     dadosFiscaisJson: {
       logradouro: 'Rua Onda10', numero: '10', bairro: 'Centro',
       cidade: 'Osasco', uf: 'SP', cep: '06010000', codigo_ibge: '3534401',
