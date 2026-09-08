@@ -16,6 +16,7 @@ import {
   pendenciasOverbookingHistorico,
   pedidosVenda,
   pedidosVendaItens,
+  produtos,
   representantes,
   operacoes,
   reservasDisponibilidade,
@@ -93,11 +94,35 @@ export function desafiosParaChallenge(plano: PlanoItem[]): OverbookingChallengeI
     .filter((p) => compararQtd(p.deficit, '0') > 0)
     .map((p) => ({
       produtoId: p.produtoId,
+      produtoCodigo: null,
+      produtoNome: null,
       disponivelAntes: p.disponivelAntes,
       quantidadeSolicitada: p.quantidadeSolicitada,
       overbookingGerado: p.deficit,
       mensagem: 'A venda poderá ser concluída, mas a gestão deverá tratar a falta.',
     }));
+}
+
+/** Completa código/nome do produto no 409. Sem match, os campos ficam null (UI resolve pelo catálogo). */
+export async function enriquecerDesafiosComProdutos(
+  tx: Tx,
+  desafios: OverbookingChallengeItem[],
+): Promise<OverbookingChallengeItem[]> {
+  if (desafios.length === 0) return desafios;
+  const ids = [...new Set(desafios.map((d) => d.produtoId))];
+  const linhas = await tx
+    .select({ id: produtos.id, codigo: produtos.codigo, nome: produtos.nome })
+    .from(produtos)
+    .where(inArray(produtos.id, ids));
+  const mapa = new Map(linhas.map((l) => [l.id, l]));
+  return desafios.map((d) => {
+    const p = mapa.get(d.produtoId);
+    return {
+      ...d,
+      produtoCodigo: p?.codigo ?? null,
+      produtoNome: p?.nome ?? null,
+    };
+  });
 }
 
 @Injectable()
@@ -402,7 +427,7 @@ export class PedidosService {
     const plano = await this.planejarSobLock(
       tx, operacaoExistente?.id ?? null, solicitados,
     );
-    const desafios = desafiosParaChallenge(plano);
+    const desafios = await enriquecerDesafiosComProdutos(tx, desafiosParaChallenge(plano));
     if (desafios.length && !confirmado) {
       throw new OverbookingChallengeException(desafios);
     }
@@ -501,7 +526,7 @@ export class PedidosService {
       observacoes: dto.observacoes,
     };
     const plano = await this.planejarSobLock(tx, pedido.operacaoId, [solicitado]);
-    const desafios = desafiosParaChallenge(plano);
+    const desafios = await enriquecerDesafiosComProdutos(tx, desafiosParaChallenge(plano));
     if (desafios.length && !confirmado) {
       throw new OverbookingChallengeException(desafios);
     }

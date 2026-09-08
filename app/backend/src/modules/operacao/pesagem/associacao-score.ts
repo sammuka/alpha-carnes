@@ -25,6 +25,7 @@ export interface CandidatoPedido {
   pedidoVendaItemId: string;
   produtoId: string;
   clienteId: string;
+  clienteNome: string;
   /** quantidade_pedida − quantidade_atendida (string NUMERIC). */
   saldoPendente: string;
   /** prioridade comercial (menor número = mais prioritário); null = sem prioridade. */

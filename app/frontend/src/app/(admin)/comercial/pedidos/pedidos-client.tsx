@@ -370,7 +370,6 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead>Pedido</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Representante</TableHead>
                 <TableHead>Rota</TableHead>
@@ -381,14 +380,14 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
             <TableBody>
               {carregando && (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-xs text-muted-foreground">
+                  <TableCell colSpan={5} className="h-24 text-center text-xs text-muted-foreground">
                     Carregando pedidos...
                   </TableCell>
                 </TableRow>
               )}
               {!carregando && pedidosFiltrados.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-xs text-muted-foreground">
+                  <TableCell colSpan={5} className="h-24 text-center text-xs text-muted-foreground">
                     Nenhum pedido encontrado.
                   </TableCell>
                 </TableRow>
@@ -403,9 +402,8 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
                     className="group cursor-pointer"
                     onClick={() => void abrirPedido(pedido.id)}
                   >
-                    <TableCellCode>{pedido.id.slice(0, 8).toUpperCase()}</TableCellCode>
                     <TableCell className="text-[13px] font-semibold text-foreground">
-                      {cliente?.nomeFantasia || cliente?.razaoSocial || pedido.clienteId}
+                      {cliente?.nomeFantasia || cliente?.razaoSocial || '—'}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {pedido.representanteNome || 'Sem representante'}

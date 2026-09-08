@@ -10,6 +10,7 @@ import { ehZero, formatarQtd, somarListaQtd, somarQtd } from '../../../common/cr
 import { EVENTOS } from '../../../realtime/events/eventos';
 import {
   desafiosParaChallenge,
+  enriquecerDesafiosComProdutos,
   PedidosService,
   type PedidoVendaItem,
   type PlanoItem,
@@ -64,7 +65,7 @@ export class AdendosService {
 
       // 2) O challenge é responsabilidade do CHAMADOR: planejarSobLock nunca lança.
       //    Este throw acontece antes de qualquer INSERT/UPDATE → DoD-81.
-      const desafios = desafiosParaChallenge([alocacao]);
+      const desafios = await enriquecerDesafiosComProdutos(tx, desafiosParaChallenge([alocacao]));
       if (desafios.length && !confirmado) {
         throw new OverbookingChallengeException(desafios);
       }

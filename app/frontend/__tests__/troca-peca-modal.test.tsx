@@ -106,8 +106,8 @@ describe('TrocaPecaFluxo (6.28)', () => {
       ok: true,
       json: async () => ({
         troca: { id: 't1', createdAt: '2026-07-31T12:00:00.000Z' },
-        pecaRetirada: { id: pecaRet.id, statusPeca: 'em_sobra' },
-        pecaInserida: { id: pecaIns.id, statusPeca: 'associada' },
+        pecaRetirada: { id: pecaRet.id, statusPeca: 'em_sobra', etiquetaAtual: 'TZ-000341' },
+        pecaInserida: { id: pecaIns.id, statusPeca: 'associada', etiquetaAtual: 'TZ-000362' },
         etiquetaInvalidada: { id: 'ei1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', motivoCancelamento: 'troca' },
         etiquetaEmitida: { id: 'ee1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', statusImpressao: 'impressa' },
       }),
@@ -144,8 +144,10 @@ describe('TrocaPecaFluxo (6.28)', () => {
       expect.objectContaining({ method: 'POST' }),
     ));
     await waitFor(() => expect(screen.getByText('Troca concluída')).toBeInTheDocument());
-    expect(screen.getByText('ei1aaaaa')).toBeInTheDocument();
-    expect(screen.getByText('ee1aaaaa')).toBeInTheDocument();
+    expect(screen.getAllByText('TZ-000341').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('TZ-000362').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('ei1aaaaa')).not.toBeInTheDocument();
+    expect(screen.queryByText('ee1aaaaa')).not.toBeInTheDocument();
     expect(onTrocaConcluida).toHaveBeenCalled();
   });
 });

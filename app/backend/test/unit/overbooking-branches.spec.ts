@@ -210,13 +210,26 @@ describe('OverbookingService — branches', () => {
 
           from: () => ({
 
-            where: () => ({
+            innerJoin: () => ({
 
-              orderBy: () => ({
+              innerJoin: () => ({
 
-                limit: () => ({
+                where: () => ({
 
-                  offset: () => Promise.resolve([{ id: 'p1', status: 'aberta' }]),
+                  orderBy: () => ({
+
+                    limit: () => ({
+
+                      offset: () => Promise.resolve([{
+                        pendencia: { id: 'p1', status: 'aberta' },
+                        clienteNome: 'Açougue Nova Era',
+                        produtoCodigo: 'TZ',
+                        produtoNome: 'Traseiro',
+                      }]),
+
+                    }),
+
+                  }),
 
                 }),
 
@@ -270,13 +283,21 @@ describe('OverbookingService — branches', () => {
 
           from: () => ({
 
-            where: () => ({
+            innerJoin: () => ({
 
-              orderBy: () => ({
+              innerJoin: () => ({
 
-                limit: () => ({
+                where: () => ({
 
-                  offset: () => Promise.resolve([]),
+                  orderBy: () => ({
+
+                    limit: () => ({
+
+                      offset: () => Promise.resolve([]),
+
+                    }),
+
+                  }),
 
                 }),
 

@@ -34,7 +34,8 @@ describe('QuadroComparativo', () => {
     expect(screen.getByText('Produto')).toBeInTheDocument();
     expect(screen.getByText('Pedido: qtd.')).toBeInTheDocument();
     expect(screen.getByText('Dif. peso')).toBeInTheDocument();
-    expect(screen.getByText('TZ')).toBeInTheDocument();
+    expect(screen.getByText('TZ — Traseiro')).toBeInTheDocument();
+    expect(screen.queryByText('ic-1')).not.toBeInTheDocument();
     expect(screen.getByText('-1')).toBeInTheDocument();
   });
 

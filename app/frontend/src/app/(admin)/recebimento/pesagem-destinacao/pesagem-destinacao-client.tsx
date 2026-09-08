@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ArrowLeftRight, Scale, Search } from 'lucide-react';
+import { rotuloProduto } from '@/lib/dominios';
 import { extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import {
@@ -101,7 +102,7 @@ function labelProduto(item: RecebimentoItem): string {
   if (item.produto) {
     return `${item.produto.codigo} — ${item.produto.descricao}`;
   }
-  return item.origemDescricao ?? item.produtoId.slice(0, 8);
+  return item.origemDescricao ?? rotuloProduto(item.produto);
 }
 
 function pesadoItem(item: RecebimentoItem): string {
@@ -260,7 +261,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
       const toOpcao = (p: Peca): PecaTrocaOpcao => ({
         id: p.id,
-        codigo: p.etiquetaAtual ?? p.id.slice(0, 8),
+        codigo: p.etiquetaAtual ?? '—',
         peso: p.pesoOriginal,
         etiqueta: p.etiquetaAtual,
       });
@@ -286,7 +287,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
             clienteNome: acao?.clientePedido ?? 'Cliente do pedido',
             produtoLabel: ic
               ? `${ic.codigo} — ${ic.descricao}`
-              : p.produtoBaseId.slice(0, 8),
+              : '—',
             pecasAssociadas: [],
           };
           porItem.set(key, ped);
@@ -740,7 +741,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                   <span className="text-[13px] font-semibold text-foreground">
                     Peça{' '}
                     <span className="font-data text-[11px] text-fg-secondary">
-                      {peca.id.slice(0, 8)}…
+                      {peca.etiquetaAtual ?? '—'}
                     </span>
                   </span>
                   <StatusPill
@@ -905,11 +906,10 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                           )}
                         </div>
                         <p className="font-medium truncate">
-                          Pedido {s.pedidoVendaId.slice(0, 8)}…
+                          {s.clienteNome ?? '—'}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
-                          Cliente {s.clienteId.slice(0, 8)}…
-                          {s.rotaPrevista ? ` · Rota ${s.rotaPrevista}` : ''}
+                          {s.rotaPrevista ? `Rota ${s.rotaPrevista}` : 'Sem rota'}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">{s.justificativa}</p>
                         <p className="mt-0.5 text-xs">

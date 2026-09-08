@@ -15,6 +15,7 @@ import {
   Search,
   XCircle,
 } from 'lucide-react';
+import { rotuloProduto } from '@/lib/dominios';
 import { extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import {
@@ -205,7 +206,7 @@ function labelProdutoItem(item: RecebimentoItem): string {
   if (item.produto) {
     return `${item.produto.codigo}${item.produto.descricao ? ` — ${item.produto.descricao}` : ''}`;
   }
-  return item.produtoId.slice(0, 8);
+  return rotuloProduto(item.produto);
 }
 
 export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] }) {
@@ -912,10 +913,12 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
 
           {quadro.length > 0 && (
             <QuadroComparativo
-              itens={quadro.map((q) => ({
+              itens={quadro.map((q) => {
+                const item = detalhe?.itens.find((i) => i.produtoId === q.produtoId);
+                return {
                 produtoId: q.produtoId,
-                codigo: null,
-                descricao: q.produtoId.slice(0, 8),
+                codigo: item?.produto?.codigo ?? null,
+                descricao: item?.produto?.descricao ?? item?.origemDescricao ?? '—',
                 qtdPedido: q.qtdPedido ?? '—',
                 qtdNf: q.qtdNf,
                 qtdApurada: q.qtdApurada,
@@ -927,7 +930,8 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                     ? String(Number(q.pesoApurado) - Number(q.pesoNf))
                     : null,
                 situacao: q.situacao,
-              }))}
+              };
+              })}
             />
           )}
 
@@ -1020,7 +1024,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                       onClick={() => setItemSelecionadoId(item.id)}
                     >
                       <TableCell className="text-[13px] font-semibold text-foreground">
-                        {item.produto?.codigo ?? item.produtoId.slice(0, 8)}
+                        {item.produto?.codigo ?? '—'}
                         {item.produto?.descricao ? ` — ${item.produto.descricao}` : ''}
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">{item.origemDescricao ?? '—'}</TableCell>
@@ -1317,10 +1321,12 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
           </DialogHeader>
           {quadro.length > 0 && (
             <QuadroComparativo
-              itens={quadro.map((q) => ({
+              itens={quadro.map((q) => {
+                const item = detalhe?.itens.find((i) => i.produtoId === q.produtoId);
+                return {
                 produtoId: q.produtoId,
-                codigo: null,
-                descricao: q.produtoId.slice(0, 8),
+                codigo: item?.produto?.codigo ?? null,
+                descricao: item?.produto?.descricao ?? item?.origemDescricao ?? '—',
                 qtdPedido: q.qtdPedido ?? '—',
                 qtdNf: q.qtdNf,
                 qtdApurada: q.qtdApurada,
@@ -1332,7 +1338,8 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                     ? String(Number(q.pesoApurado) - Number(q.pesoNf))
                     : null,
                 situacao: q.situacao,
-              }))}
+              };
+              })}
             />
           )}
           <FormField label="Observação da conferência" htmlFor="obs-conferencia">

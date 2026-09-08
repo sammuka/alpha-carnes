@@ -2,6 +2,8 @@ import { ConflictException } from '@nestjs/common';
 
 export interface OverbookingChallengeItem {
   produtoId: string;
+  produtoCodigo: string | null;
+  produtoNome: string | null;
   disponivelAntes: string;
   quantidadeSolicitada: string;
   overbookingGerado: string;

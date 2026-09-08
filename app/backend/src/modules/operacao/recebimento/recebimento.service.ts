@@ -830,8 +830,7 @@ export class RecebimentoService {
 
     return linhas.map((l) => {
       const meta = l.peca.capturaMeta as { operador?: string } | null;
-      const cliente =
-        l.clienteNome ?? l.clienteRazao ?? (l.peca.pedidoVendaId ? l.peca.pedidoVendaId.slice(0, 8) : null);
+      const cliente = l.clienteNome ?? l.clienteRazao ?? null;
       return {
         id: l.peca.id,
         hora: l.peca.dataHoraPesagem.toISOString(),

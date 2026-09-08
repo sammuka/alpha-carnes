@@ -323,7 +323,7 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
               <section>
                 <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Dados da peça</p>
                 <dl className="space-y-2">
-                  <div><dt className="text-muted-foreground">Código</dt><dd className="font-mono text-xs">{selecionada.pecaId}</dd></div>
+                  <div><dt className="text-muted-foreground">Código</dt><dd className="font-mono text-xs">{selecionada.codigo ?? '—'}</dd></div>
                   <div><dt className="text-muted-foreground">Produto</dt><dd>{selecionada.produtoCodigo} — {selecionada.produtoDescricao}</dd></div>
                   <div><dt className="text-muted-foreground">Peso</dt><dd>{selecionada.pesoOriginal} kg</dd></div>
                   <div><dt className="text-muted-foreground">Status</dt><dd>{rotuloDestinoPeca(selecionada.statusPeca)}</dd></div>
@@ -383,7 +383,7 @@ export function EtiquetasRecebimentoClient({ permissoes }: { permissoes: string[
                           {rotuloStatusDesossa(selecionada.statusPeca).texto}
                         </dd>
                       </div>
-                      <div><dt className="text-muted-foreground">Peça mãe</dt><dd className="font-mono text-xs">{selecionada.pecaId}</dd></div>
+                      <div><dt className="text-muted-foreground">Peça mãe</dt><dd className="font-mono text-xs">{selecionada.codigo ?? '—'}</dd></div>
                     </dl>
                   )}
                 </section>
