@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { alias } from 'drizzle-orm/pg-core';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
@@ -19,6 +19,7 @@ import {
   operacoes,
   pedidosVenda,
   produtos,
+  representantes,
   usuarios,
 } from '../../../database/schema';
 import { EVENTOS } from '../../../realtime/events/eventos';
@@ -27,6 +28,10 @@ import type {
   OcorrenciaPrecoDetalhe,
   OcorrenciaPrecoItem,
   OcorrenciaPrecoLista,
+  RelatorioQuery,
+  RelatorioAjustePrecoEnvelope,
+  RelatorioAjustePrecoItem,
+  RelatorioAjustePrecoPedido,
 } from './dto/ocorrencia-preco.dto';
 
 const usuarioFinalizacao = alias(usuarios, 'usuario_finalizacao');
@@ -209,5 +214,111 @@ export class OcorrenciasPrecoService {
     });
 
     return this.detalhar(id);
+  }
+
+  async relatorio(query: RelatorioQuery): Promise<RelatorioAjustePrecoEnvelope> {
+    const faixaCongeladaSql = sql`(
+      SELECT pvi.faixa_preco
+      FROM pedidos_venda_itens pvi
+      WHERE pvi.pedido_venda_id = ${ocorrenciasAjustePreco.pedidoVendaId}
+        AND pvi.deleted_at IS NULL
+      ORDER BY pvi.created_at ASC, pvi.id ASC
+      LIMIT 1
+    )`;
+
+    const filtros = [
+      sql`${operacoes.data} >= ${query.dataInicio}::date`,
+      sql`${operacoes.data} <= ${query.dataFim}::date`,
+      query.clienteId ? eq(ocorrenciasAjustePreco.clienteId, query.clienteId) : undefined,
+      query.representanteId ? eq(clientes.representanteId, query.representanteId) : undefined,
+      query.faixaPreco ? sql`${faixaCongeladaSql} = ${query.faixaPreco}` : undefined,
+      query.produtoId
+        ? sql`EXISTS (
+            SELECT 1 FROM ocorrencias_ajuste_preco_itens oapi
+            WHERE oapi.ocorrencia_id = ${ocorrenciasAjustePreco.id}
+              AND oapi.produto_id = ${query.produtoId}
+          )`
+        : undefined,
+    ].filter(Boolean);
+
+    const where = and(...filtros);
+    const { limit, offset } = calcularRange(query);
+
+    const [pagina, totalRow] = await Promise.all([
+      this.db.select({
+        ocorrenciaId: ocorrenciasAjustePreco.id,
+        pedidoVendaId: ocorrenciasAjustePreco.pedidoVendaId,
+        clienteNomeFantasia: clientes.nomeFantasia,
+        representanteNome: representantes.nome,
+        dataPedido: operacoes.data,
+        faixaPreco: sql<'A' | 'B' | 'C' | 'D'>`${faixaCongeladaSql}`.as('faixa_preco'),
+        quantidadeItensAjustados: ocorrenciasAjustePreco.quantidadeItensAjustados,
+        valorTotalAjustado: ocorrenciasAjustePreco.diferencaTotal,
+      })
+        .from(ocorrenciasAjustePreco)
+        .innerJoin(pedidosVenda, eq(ocorrenciasAjustePreco.pedidoVendaId, pedidosVenda.id))
+        .innerJoin(operacoes, eq(pedidosVenda.operacaoId, operacoes.id))
+        .innerJoin(clientes, eq(ocorrenciasAjustePreco.clienteId, clientes.id))
+        .leftJoin(representantes, eq(clientes.representanteId, representantes.id))
+        .where(where)
+        .orderBy(desc(operacoes.data), desc(ocorrenciasAjustePreco.dataHoraOcorrencia))
+        .limit(limit)
+        .offset(offset),
+      this.db.select({ total: sql<number>`count(*)::int` })
+        .from(ocorrenciasAjustePreco)
+        .innerJoin(pedidosVenda, eq(ocorrenciasAjustePreco.pedidoVendaId, pedidosVenda.id))
+        .innerJoin(operacoes, eq(pedidosVenda.operacaoId, operacoes.id))
+        .innerJoin(clientes, eq(ocorrenciasAjustePreco.clienteId, clientes.id))
+        .where(where),
+    ]);
+
+    const ocorrenciaIds = pagina.map((p) => p.ocorrenciaId);
+    const itensPorOcorrencia = new Map<string, RelatorioAjustePrecoItem[]>();
+
+    if (ocorrenciaIds.length > 0) {
+      const itensRows = await this.db.select({
+        ocorrenciaId: ocorrenciasAjustePrecoItens.ocorrenciaId,
+        produtoCodigo: produtos.codigo,
+        produtoNome: produtos.nome,
+        precoTabelaOriginal: ocorrenciasAjustePrecoItens.precoTabelaOriginal,
+        precoAplicado: ocorrenciasAjustePrecoItens.precoAplicado,
+        diferencaAbsoluta: ocorrenciasAjustePrecoItens.diferencaAbsoluta,
+        diferencaPercentual: ocorrenciasAjustePrecoItens.diferencaPercentual,
+        usuarioAjusteNome: usuarioAjuste.nome,
+      })
+        .from(ocorrenciasAjustePrecoItens)
+        .innerJoin(produtos, eq(ocorrenciasAjustePrecoItens.produtoId, produtos.id))
+        .leftJoin(usuarioAjuste, eq(usuarioAjuste.id, ocorrenciasAjustePrecoItens.usuarioAjusteId))
+        .where(inArray(ocorrenciasAjustePrecoItens.ocorrenciaId, ocorrenciaIds));
+
+      for (const row of itensRows) {
+        const item: RelatorioAjustePrecoItem = {
+          produtoCodigo: row.produtoCodigo,
+          produtoNome: row.produtoNome,
+          precoTabelaOriginal: row.precoTabelaOriginal != null ? String(row.precoTabelaOriginal) : null,
+          precoAplicado: String(row.precoAplicado),
+          diferencaAbsoluta: String(row.diferencaAbsoluta),
+          diferencaPercentual: row.diferencaPercentual != null ? String(row.diferencaPercentual) : null,
+          usuarioAjusteNome: row.usuarioAjusteNome,
+        };
+        const lista = itensPorOcorrencia.get(row.ocorrenciaId) ?? [];
+        lista.push(item);
+        itensPorOcorrencia.set(row.ocorrenciaId, lista);
+      }
+    }
+
+    const data: RelatorioAjustePrecoPedido[] = pagina.map((p) => ({
+      pedidoVendaId: p.pedidoVendaId,
+      pedidoNumero: p.pedidoVendaId,
+      clienteNomeFantasia: p.clienteNomeFantasia,
+      representanteNome: p.representanteNome,
+      dataPedido: p.dataPedido,
+      faixaPreco: p.faixaPreco,
+      quantidadeItensAjustados: p.quantidadeItensAjustados,
+      valorTotalAjustado: String(p.valorTotalAjustado),
+      itens: itensPorOcorrencia.get(p.ocorrenciaId) ?? [],
+    }));
+
+    return montarPaginado(data, totalRow[0]?.total ?? 0, query);
   }
 }

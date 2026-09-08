@@ -10,7 +10,9 @@ import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators
 import { OcorrenciasPrecoService } from './ocorrencias-preco.service';
 import {
   listarOcorrenciasPrecoQuerySchema,
+  relatorioQuerySchema,
   type ListarOcorrenciasPrecoQuery,
+  type RelatorioQuery,
 } from './dto/ocorrencia-preco.dto';
 
 @SkipThrottle()
@@ -23,6 +25,14 @@ export class OcorrenciasPrecoController {
   @RequirePermissoes('APROVACOES_LER')
   async listar(@Query(new ZodValidationPipe(listarOcorrenciasPrecoQuerySchema)) query: ListarOcorrenciasPrecoQuery) {
     return this.service.listar(query);
+  }
+
+  @Get('relatorio')
+  @RequirePermissoes('APROVACOES_LER')
+  async relatorio(
+    @Query(new ZodValidationPipe(relatorioQuerySchema)) query: RelatorioQuery,
+  ) {
+    return this.service.relatorio(query);
   }
 
   @Get(':id')
