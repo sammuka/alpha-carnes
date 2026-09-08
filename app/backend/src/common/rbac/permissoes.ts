@@ -97,6 +97,7 @@ export const PERMISSOES = {
   TABELA_PRECO_GERENCIAR: 'TABELA_PRECO_GERENCIAR',
   ESPELHO_COMERCIAL_LER: 'ESPELHO_COMERCIAL_LER',
   PEDIDO_RESERVA_LIBERAR: 'PEDIDO_RESERVA_LIBERAR',
+  OCORRENCIA_PRECO_CIENTE: 'OCORRENCIA_PRECO_CIENTE',
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -360,6 +361,8 @@ pushPermissoes('expedicao', 'ESPELHO_COMERCIAL_LER');
 
 pushPermissoes('administrador', 'SIF_LER', 'SIF_GERAR', 'APROVACOES_LER', 'APROVACOES_DECIDIR', 'APROVACOES_SOLICITAR');
 pushPermissoes('gestor',        'SIF_LER', 'SIF_GERAR', 'APROVACOES_LER', 'APROVACOES_DECIDIR', 'APROVACOES_SOLICITAR');
+pushPermissoes('administrador', 'OCORRENCIA_PRECO_CIENTE');
+pushPermissoes('gestor',        'OCORRENCIA_PRECO_CIENTE');
 pushPermissoes('faturamento',   'SIF_LER', 'SIF_GERAR', 'APROVACOES_SOLICITAR');
 pushPermissoes('diretoria',     'SIF_LER', 'APROVACOES_LER');
 pushPermissoes('recebimento_pesagem', 'APROVACOES_LER', 'APROVACOES_SOLICITAR');
@@ -477,4 +480,5 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   TABELA_PRECO_GERENCIAR: 'Criar, editar, copiar e publicar tabelas de preço',
   ESPELHO_COMERCIAL_LER: 'Consultar e exportar o espelho comercial',
   PEDIDO_RESERVA_LIBERAR: 'Liberar administrativamente a reserva de um rascunho (AD-06)',
+  OCORRENCIA_PRECO_CIENTE: 'Marcar como ciente uma ocorrência informativa de ajuste de preço',
 };

@@ -227,6 +227,11 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
     this.broadcast(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA, payload, payload.dataOperacao);
   }
 
+  @OnEvent(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CIENTE)
+  handleOcorrenciaAjustePrecoCiente(payload: OcorrenciaAjustePrecoPayload): void {
+    this.broadcast(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CIENTE, payload, payload.dataOperacao);
+  }
+
   @OnEvent(EVENTOS.PEDIDO_EM_RISCO)
   handlePedidoEmRisco(payload: PedidoEmRiscoPayload): void {
     this.broadcast(EVENTOS.PEDIDO_EM_RISCO, payload, payload.dataOperacao);

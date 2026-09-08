@@ -4,12 +4,13 @@ import { DisponibilidadeModule } from './disponibilidade/disponibilidade.module'
 import { OverbookingModule } from './overbooking/overbooking.module';
 import { PedidosModule } from './pedidos/pedidos.module';
 import { PrecosModule } from './precos/precos.module';
+import { OcorrenciasPrecoModule } from './ocorrencias-preco/ocorrencias-preco.module';
 
 // Agregador do domínio comercial (F3).
 @Module({
   imports: [
     ComprasProgramadasModule, DisponibilidadeModule, PedidosModule, OverbookingModule,
-    PrecosModule,
+    PrecosModule, OcorrenciasPrecoModule,
   ],
 })
 export class ComercialModule {}
