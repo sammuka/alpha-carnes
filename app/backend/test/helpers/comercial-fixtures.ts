@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
@@ -150,12 +150,32 @@ export async function criarCompraConfirmada(
   return compraId;
 }
 
-/** Cria Pedido ao Fornecedor a partir de compra confirmada e envia (status aguardando_recebimento). */
+/** Reusa o Pedido ao Fornecedor gerado na confirmação; fallback cria/envia se ainda não existir. */
 export async function criarPedidoFornecedorEnviado(
   app: INestApplication,
   comprasCookies: string,
   compraProgramadaId: string,
 ): Promise<string> {
+  const { db } = app.get<{ db: Db }>(DRIZZLE);
+  const [existente] = await db.select().from(schema.pedidosFornecedor).where(and(
+    eq(schema.pedidosFornecedor.compraProgramadaId, compraProgramadaId),
+    isNull(schema.pedidosFornecedor.deletedAt),
+    ne(schema.pedidosFornecedor.status, 'cancelado'),
+  ));
+  if (existente) {
+    if (existente.status === 'rascunho' || existente.status === 'enviado') {
+      const { default: request } = await import('supertest');
+      const enviado = await request(app.getHttpServer())
+        .post(`/operacao/pedidos-fornecedor/${existente.id}/enviar`)
+        .set('Cookie', comprasCookies)
+        .send();
+      if (enviado.status !== 200 && enviado.status !== 201) {
+        throw new Error(`Falha ao enviar PF: ${enviado.status} ${JSON.stringify(enviado.body)}`);
+      }
+    }
+    return existente.id;
+  }
+
   const { default: request } = await import('supertest');
   const pedido = await request(app.getHttpServer())
     .post('/operacao/pedidos-fornecedor')

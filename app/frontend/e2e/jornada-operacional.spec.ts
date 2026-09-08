@@ -700,19 +700,16 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
       `Pedido criado com status ${pedido.status}.`,
       'A UX atual ainda exige UUIDs; o relatório registra esse ponto para evolução posterior.',
     );
-    const pedidoFornecedor = await backend<{ id: string; numero: string }>(
+    const listaPf = await backend<{ data: Array<{ id: string; compraProgramadaId: string; numero: string }> }>(
       request,
       auth.cookieHeader,
-      'POST',
-      '/operacao/pedidos-fornecedor',
-      { compraProgramadaId: compra.compraProgramadaId },
+      'GET',
+      '/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100',
     );
-    await backend(
-      request,
-      auth.cookieHeader,
-      'POST',
-      `/operacao/pedidos-fornecedor/${pedidoFornecedor.id}/enviar`,
-    );
+    const pedidoFornecedor = listaPf.data.find((p) => p.compraProgramadaId === compra.compraProgramadaId);
+    if (!pedidoFornecedor) {
+      throw new Error('Pedido ao Fornecedor não materializado na confirmação');
+    }
 
     await page.goto(`${BASE_URL}/recebimento/recebimento-carga`);
     await page.getByTestId('btn-novo-recebimento').click();

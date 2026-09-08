@@ -2,8 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { CheckCircle, Plus, Save, Trash2 } from 'lucide-react';
+import { CheckCircle, Info, Plus, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ComboboxField } from '@/components/ui/combobox-field';
 import { DatePickerField } from '@/components/ui/date-picker-field';
@@ -21,7 +31,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { labelCodigoDescricao } from '@/lib/dominios';
+import { labelCodigoDescricao, rotuloProduto } from '@/lib/dominios';
 import { extrairCodigoErro, extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime } from '@/lib/realtime';
 import type {
@@ -79,8 +89,52 @@ function statusCompraVariant(status: string): StatusPillVariant {
   }
 }
 
+const AVISO_EDITAR_CONFIRMADA =
+  'Alterar uma compra confirmada recalcula imediatamente a disponibilidade virtual impactada.';
+
 function rotuloLote(numeroSequencial: number): string {
   return `Lote ${String(numeroSequencial).padStart(3, '0')}`;
+}
+
+function chaveDisponibilidade(item: DisponibilidadeDia): string {
+  return item.modo === 'compra' ? item.id : item.produtoId;
+}
+
+function somaQuantidadeDisponivel(itens: DisponibilidadeDia[]): string {
+  const total = itens.reduce((acc, item) => acc + Number(item.quantidadeDisponivel), 0);
+  return total.toFixed(3);
+}
+
+function rotuloItemDisponibilidade(
+  item: DisponibilidadeDia,
+  catalogo: CadastroItem[],
+): string {
+  const it = catalogo.find((p) => p.id === item.produtoId);
+  return rotuloProduto({ codigo: it?.codigo, nome: it?.nome, descricao: it?.descricao });
+}
+
+function ListaDisponibilidade({
+  itens,
+  vazio,
+  rotulo,
+}: {
+  itens: DisponibilidadeDia[];
+  vazio: string;
+  rotulo: (item: DisponibilidadeDia) => string;
+}) {
+  if (itens.length === 0) {
+    return <p className="text-xs text-muted-foreground">{vazio}</p>;
+  }
+  return (
+    <ul className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
+      {itens.map((d) => (
+        <li key={chaveDisponibilidade(d)} className="flex justify-between text-xs">
+          <span className="font-data text-[11px]">{rotulo(d)}</span>
+          <span className="font-data font-semibold text-primary">{d.quantidadeDisponivel} disp.</span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function nomeFornecedor(compra: Pick<CompraProgramada, 'fornecedorNomeFantasia' | 'fornecedorRazaoSocial'>): string {
@@ -117,8 +171,10 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const [disponibilidade, setDisponibilidade] = useState<DisponibilidadeDia[]>([]);
   const [fornecedores, setFornecedores] = useState<CadastroItem[]>([]);
   const [itensCompra, setItensCompra] = useState<CadastroItem[]>([]);
+  const [disponibilidadeTotal, setDisponibilidadeTotal] = useState<DisponibilidadeDia[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [avisoEditar, setAvisoEditar] = useState(false);
   const [modalEditar, setModalEditar] = useState(false);
   const [simulacoes, setSimulacoes] = useState<Map<string, SimulacaoDesdobramento>>(new Map());
   const rascunhoNovoRef = useRef(false);
@@ -197,13 +253,17 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   }, [aplicarDetalhe, compraIdUrl, dataOperacao, limparFormulario, podeLer]);
 
   const carregarDisponibilidade = useCallback(async () => {
-    if (!compra) {
-      setDisponibilidade([]);
-      return;
-    }
-    const res = await fetch(`/api/comercial/disponibilidade?compraProgramadaId=${compra.id}`, { cache: 'no-store' });
-    if (res.ok) setDisponibilidade((await res.json()) as DisponibilidadeDia[]);
-  }, [compra]);
+    const [resLote, resTotal] = await Promise.all([
+      compra
+        ? fetch(`/api/comercial/disponibilidade?compraProgramadaId=${compra.id}`, { cache: 'no-store' })
+        : Promise.resolve(null),
+      fetch(`/api/comercial/disponibilidade?dataOperacao=${encodeURIComponent(dataOperacao)}`, { cache: 'no-store' }),
+    ]);
+    if (resLote?.ok) setDisponibilidade((await resLote.json()) as DisponibilidadeDia[]);
+    else setDisponibilidade([]);
+    if (resTotal.ok) setDisponibilidadeTotal((await resTotal.json()) as DisponibilidadeDia[]);
+    else setDisponibilidadeTotal([]);
+  }, [compra, dataOperacao]);
 
   useEffect(() => {
     void carregarCadastros();
@@ -386,6 +446,11 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
             Novo pedido de compra
           </Button>
         )}
+        {podeGerenciar && compra?.status === 'confirmada' && (
+          <Button variant="secondary" onClick={() => setAvisoEditar(true)}>
+            Editar compra confirmada
+          </Button>
+        )}
         {podeGerenciar && editavel && (
           <>
             <Button variant="secondary" onClick={salvar} disabled={salvando}>
@@ -408,71 +473,8 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
         </div>
       )}
 
-      <p className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-muted-foreground">
-        Alterar uma compra confirmada recalcula imediatamente a disponibilidade virtual impactada.
-      </p>
-
-      {compra?.status === 'confirmada' && podeGerenciar && (
-        <div className="flex justify-end">
-          <Button variant="secondary" onClick={() => setModalEditar(true)}>Editar compra confirmada</Button>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 items-start gap-2.5 lg:grid-cols-[320px_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Lotes da operação</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 p-2">
-            {compras.length === 0 ? (
-              <div className="space-y-2 p-2">
-                <p>Nenhum pedido de compra para esta operação.</p>
-                {podeGerenciar && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      rascunhoNovoRef.current = true;
-                      limparFormulario();
-                      navegar(dataOperacao);
-                    }}
-                  >
-                    <Plus />
-                    Novo pedido de compra
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <ul className="flex flex-col gap-1">
-                {compras.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      type="button"
-                      className={`flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left text-xs ${
-                        compra?.id === item.id ? 'bg-primary-soft text-primary-fg' : 'hover:bg-surface-2'
-                      }`}
-                      onClick={() => {
-                        rascunhoNovoRef.current = false;
-                        navegar(dataOperacao, item.id);
-                        void carregarComprasDia(item.id);
-                      }}
-                    >
-                      <span className="font-data font-semibold">{rotuloLote(item.numeroSequencial)}</span>
-                      <span>{nomeFornecedor(item)}</span>
-                      <span className="flex items-center gap-2 text-muted-foreground">
-                        <StatusPill variant={statusCompraVariant(item.status)} label={ROTULO_COMPRA[item.status] ?? item.status} />
-                        <span className="font-data">{item.totalItens} itens</span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="grid grid-cols-1 items-start gap-2.5 xl:grid-cols-12">
-        <div className="space-y-2.5 xl:col-span-8">
+      <div className="grid grid-cols-1 items-start gap-2.5 lg:grid-cols-[1fr_320px]">
+        <div className="space-y-2.5">
           <Card>
             <CardContent className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2 xl:grid-cols-4">
               <FormField label="Data operacional" required htmlFor="data">
@@ -625,7 +627,59 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
           </Card>
         </div>
 
-        <div className="xl:col-span-4">
+        <div className="space-y-2.5">
+          <Card>
+            <CardHeader>
+              <CardTitle>Lotes da operação</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1 p-2">
+              {compras.length === 0 ? (
+                <div className="space-y-2 p-2">
+                  <p>Nenhum pedido de compra para esta operação.</p>
+                  {podeGerenciar && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        rascunhoNovoRef.current = true;
+                        limparFormulario();
+                        navegar(dataOperacao);
+                      }}
+                    >
+                      <Plus />
+                      Novo pedido de compra
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {compras.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        className={`flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left text-xs ${
+                          compra?.id === item.id ? 'bg-primary-soft text-primary-fg' : 'hover:bg-surface-2'
+                        }`}
+                        onClick={() => {
+                          rascunhoNovoRef.current = false;
+                          navegar(dataOperacao, item.id);
+                          void carregarComprasDia(item.id);
+                        }}
+                      >
+                        <span className="font-data font-semibold">{rotuloLote(item.numeroSequencial)}</span>
+                        <span>{nomeFornecedor(item)}</span>
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                          <StatusPill variant={statusCompraVariant(item.status)} label={ROTULO_COMPRA[item.status] ?? item.status} />
+                          <span className="font-data">{item.totalItens} itens</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Disponibilidade gerada</CardTitle>
@@ -669,24 +723,12 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                     );
                   })()
                 )
-              ) : disponibilidade.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  A disponibilidade aparecerá após confirmar a compra programada.
-                </p>
               ) : (
-                <ul className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
-                  {disponibilidade.map((d) => (
-                    <li key={d.modo === 'compra' ? d.id : d.produtoId} className="flex justify-between text-xs">
-                      <span className="font-data text-[11px]">
-                        {(() => {
-                          const it = itensCompra.find((p) => p.id === d.produtoId);
-                          return it ? labelCodigoDescricao(it.codigo, it.descricao ?? it.nome ?? '') : '—';
-                        })()}
-                      </span>
-                      <span className="font-data font-semibold text-primary">{d.quantidadeDisponivel} disp.</span>
-                    </li>
-                  ))}
-                </ul>
+                <ListaDisponibilidade
+                  itens={disponibilidade}
+                  vazio="A disponibilidade do lote aparecerá após confirmar a compra programada."
+                  rotulo={(item) => rotuloItemDisponibilidade(item, itensCompra)}
+                />
               )}
             </CardContent>
             {podeSimular && simulacoes.size > 0 && (
@@ -698,9 +740,43 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
               </CardFooter>
             )}
           </Card>
-        </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Disponibilidade total</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ListaDisponibilidade
+                itens={disponibilidadeTotal}
+                vazio="A somatória aparece quando houver lotes confirmados nesta operação."
+                rotulo={(item) => rotuloItemDisponibilidade(item, itensCompra)}
+              />
+            </CardContent>
+            {disponibilidadeTotal.length > 0 && (
+              <CardFooter className="justify-between">
+                <span className="text-xs text-muted-foreground">Todos os lotes</span>
+                <span className="font-data text-sm font-bold">{somaQuantidadeDisponivel(disponibilidadeTotal)} disp.</span>
+              </CardFooter>
+            )}
+          </Card>
         </div>
       </div>
+
+      <AlertDialog open={avisoEditar} onOpenChange={setAvisoEditar}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Info className="size-4 text-primary" />
+              Atenção
+            </AlertDialogTitle>
+            <AlertDialogDescription>{AVISO_EDITAR_CONFIRMADA}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => setModalEditar(true)}>Continuar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ComprasEditModal
         open={modalEditar}

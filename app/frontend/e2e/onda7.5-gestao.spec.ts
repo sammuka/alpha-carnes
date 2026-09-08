@@ -572,10 +572,12 @@ test.describe('Onda 7.5 — Gestão (correção/hardening)', () => {
   });
 
   test('aprovações: timeline de andamentos aparece após registrar', async ({ request }) => {
-    const pedidoPf = await backend<{ id: string }>(request, adminCookie, 'POST', '/operacao/pedidos-fornecedor', {
-      compraProgramadaId: dados.compraId,
-    });
-    await backend(request, adminCookie, 'POST', `/operacao/pedidos-fornecedor/${pedidoPf.id}/enviar`);
+    const listaPf = await backend<{ data: Array<{ id: string; compraProgramadaId: string }> }>(
+      request, adminCookie, 'GET',
+      '/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100',
+    );
+    const pedidoPf = listaPf.data.find((p) => p.compraProgramadaId === dados.compraId);
+    if (!pedidoPf) throw new Error('Pedido ao Fornecedor não materializado na confirmação');
     const receb = await backend<{ recebimento: { id: string } }>(request, adminCookie, 'POST', '/operacao/recebimentos', {
       pedidoFornecedorId: pedidoPf.id,
     });

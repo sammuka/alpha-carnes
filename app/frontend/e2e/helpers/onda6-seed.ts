@@ -211,14 +211,14 @@ export async function seedLoteParaConferencia(request: APIRequestContext): Promi
   }
   if (!compraId) throw new Error('Seed Onda 6: sem data livre para compra');
 
-  const pf = await api<{ id: string }>(
+  const listaPf = await api<{ data: Array<{ id: string; compraProgramadaId: string }> }>(
     request,
     cookieHeader,
-    'POST',
-    '/operacao/pedidos-fornecedor',
-    { compraProgramadaId: compraId },
+    'GET',
+    '/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100',
   );
-  await api(request, cookieHeader, 'POST', `/operacao/pedidos-fornecedor/${pf.id}/enviar`);
+  const pf = listaPf.data.find((p) => p.compraProgramadaId === compraId);
+  if (!pf) throw new Error('Seed Onda 6: Pedido ao Fornecedor não materializado na confirmação');
 
   const ini = await api<{ recebimento?: { id: string }; id?: string }>(
     request,

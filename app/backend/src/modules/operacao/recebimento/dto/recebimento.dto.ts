@@ -4,18 +4,29 @@ import { divergenciaInputSchema } from '../divergencia/dto/divergencia-recebimen
 const pesoNfSchema = z.number().nonnegative().max(9_999_999.999);
 const volumesNfSchema = z.number().nonnegative().max(9_999_999_999.999);
 
+const nfeNumeroOpcionalSchema = z
+  .string()
+  .trim()
+  .max(100)
+  .optional()
+  .transform((v) => (v ? v : undefined));
+
+const nfeChaveOpcionalSchema = z
+  .string()
+  .trim()
+  .optional()
+  .or(z.literal(''))
+  .transform((v) => (v === '' || v === undefined ? undefined : v))
+  .refine((v) => v === undefined || /^\d{44}$/.test(v), {
+    message: 'Chave da NF-e deve ter 44 dígitos',
+  });
+
 /** Abertura do lote de recebimento exclusivamente a partir do Pedido ao Fornecedor. */
 export const iniciarRecebimentoSchema = z.object({
   pedidoFornecedorId: z.string().uuid(),
-  nfeNumero: z.string().trim().min(1).max(100).optional(),
+  nfeNumero: nfeNumeroOpcionalSchema,
   nfeSerie: z.string().trim().max(20).optional(),
-  nfeChave: z
-    .string()
-    .trim()
-    .regex(/^\d{44}$/, 'Chave da NF-e deve ter 44 dígitos')
-    .optional()
-    .or(z.literal(''))
-    .transform((v) => (v === '' ? undefined : v)),
+  nfeChave: nfeChaveOpcionalSchema,
   nfeDataEmissao: z.string().date().optional(),
   romaneio: z.string().trim().max(100).optional(),
   nfePesoBruto: pesoNfSchema.optional(),
@@ -31,15 +42,9 @@ export const iniciarRecebimentoSchema = z.object({
 export type IniciarRecebimentoDto = z.infer<typeof iniciarRecebimentoSchema>;
 
 export const atualizarNfeSchema = z.object({
-  nfeNumero: z.string().trim().min(1).max(100).optional(),
+  nfeNumero: nfeNumeroOpcionalSchema,
   nfeSerie: z.string().trim().max(20).optional(),
-  nfeChave: z
-    .string()
-    .trim()
-    .regex(/^\d{44}$/)
-    .optional()
-    .or(z.literal(''))
-    .transform((v) => (v === '' ? undefined : v)),
+  nfeChave: nfeChaveOpcionalSchema,
   nfeDataEmissao: z.string().date().optional(),
   romaneio: z.string().trim().max(100).optional(),
   nfePesoBruto: pesoNfSchema.optional(),

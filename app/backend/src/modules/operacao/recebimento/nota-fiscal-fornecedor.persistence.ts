@@ -433,14 +433,14 @@ async function persistirNfCabecalhoUiNaTx(
 ): Promise<typeof notasFiscaisFornecedor.$inferSelect> {
   const { pedidoFornecedorId, recebimentoId, campos, usuarioId } = params;
 
-  if (!campos.nfeNumero?.trim()) {
-    throw new BadRequestException('nfeNumero é obrigatório para persistir NF estruturada');
-  }
-
-  const numero = campos.nfeNumero.trim();
   const { pedido } = await validarPedidoRecebimento(tx, pedidoFornecedorId, recebimentoId);
 
   const existente = await buscarNfParaAtualizarCabecalhoUi(tx, recebimentoId);
+  const numero = campos.nfeNumero?.trim() || existente?.numero;
+  if (!numero) {
+    throw new BadRequestException('nfeNumero é obrigatório para persistir NF estruturada');
+  }
+
   if (existente) {
     const patch = montarPatchCabecalhoUi(campos, existente);
     patch.numero = numero;

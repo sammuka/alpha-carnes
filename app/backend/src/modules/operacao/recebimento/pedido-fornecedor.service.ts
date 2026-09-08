@@ -29,6 +29,13 @@ import type {
 } from './dto/pedido-fornecedor.dto';
 
 type PedidoFornecedor = typeof pedidosFornecedor.$inferSelect;
+type CompraProgramada = typeof comprasProgramadas.$inferSelect;
+type Tx = NodePgDatabase<typeof schema>;
+
+export type MaterializacaoPedidoFornecedor = {
+  pedido: PedidoFornecedor;
+  criado: boolean;
+};
 
 export const STATUS_PEDIDO_FORNECEDOR_RECEBIVEL = [
   'enviado',
@@ -123,6 +130,112 @@ export class PedidoFornecedorService {
     );
   }
 
+  private async buscarAtivoPorCompra(
+    tx: Tx,
+    compraProgramadaId: string,
+  ): Promise<PedidoFornecedor | null> {
+    const [existente] = await tx.select().from(pedidosFornecedor).where(and(
+      eq(pedidosFornecedor.compraProgramadaId, compraProgramadaId),
+      isNull(pedidosFornecedor.deletedAt),
+      ne(pedidosFornecedor.status, 'cancelado'),
+    ));
+    return existente ?? null;
+  }
+
+  private async persistirNaTx(
+    tx: Tx,
+    compra: CompraProgramada,
+    usuarioId: string,
+    status: 'rascunho' | 'aguardando_recebimento',
+  ): Promise<PedidoFornecedor> {
+    const itens = await tx.select({
+      produtoId: disponibilidadesVirtuais.produtoId,
+      quantidadePrevista: disponibilidadesVirtuais.quantidadeTotalGerada,
+    }).from(disponibilidadesVirtuais)
+      .where(eq(disponibilidadesVirtuais.compraProgramadaId, compra.id));
+    if (!itens.length) {
+      throw new ConflictException('Compra confirmada sem disponibilidade gerada');
+    }
+
+    const numero = `PF-${compra.numeroInterno ?? compra.numeroSequencial}-${Date.now()}`;
+    const pedido = primeiroOuFalha(await tx.insert(pedidosFornecedor).values({
+      numero,
+      fornecedorId: compra.fornecedorId,
+      operacaoId: compra.operacaoId,
+      compraProgramadaId: compra.id,
+      status,
+    }).returning());
+
+    await tx.insert(pedidosFornecedorItens).values(
+      itens.map((item) => ({
+        pedidoFornecedorId: pedido.id,
+        produtoId: item.produtoId,
+        quantidadePrevista: item.quantidadePrevista,
+      })),
+    );
+
+    await this.auditoria.registrar(tx, {
+      tabela: 'pedidos_fornecedor',
+      registroId: pedido.id,
+      operacao: 'INSERT',
+      modulo: 'operacao',
+      usuarioId,
+      dadosAnteriores: {},
+      dadosNovos: pedido,
+    });
+
+    return pedido;
+  }
+
+  private async promoverParaAguardandoNaTx(
+    tx: Tx,
+    atual: PedidoFornecedor,
+    usuarioId: string,
+  ): Promise<PedidoFornecedor> {
+    const atualizado = primeiroOuFalha(await tx.update(pedidosFornecedor)
+      .set({ status: 'aguardando_recebimento', updatedAt: new Date() })
+      .where(eq(pedidosFornecedor.id, atual.id))
+      .returning());
+    await this.auditoria.registrar(tx, {
+      tabela: 'pedidos_fornecedor',
+      registroId: atual.id,
+      operacao: 'UPDATE',
+      modulo: 'operacao',
+      usuarioId,
+      dadosAnteriores: atual,
+      dadosNovos: atualizado,
+    });
+    return atualizado;
+  }
+
+  /**
+   * Garante um Pedido ao Fornecedor em `aguardando_recebimento` para a compra
+   * confirmada, na transação do caller. Idempotente: reusa o pedido ativo.
+   */
+  async materializarEnviadoNaTx(
+    tx: Tx,
+    compra: CompraProgramada,
+    usuarioId: string,
+  ): Promise<MaterializacaoPedidoFornecedor> {
+    if (!compra.operacaoId) {
+      throw new ConflictException('Compra confirmada sem operação associada');
+    }
+    const existente = await this.buscarAtivoPorCompra(tx, compra.id);
+    if (existente) {
+      if (existente.status === 'rascunho' || existente.status === 'enviado') {
+        return {
+          pedido: await this.promoverParaAguardandoNaTx(tx, existente, usuarioId),
+          criado: false,
+        };
+      }
+      return { pedido: existente, criado: false };
+    }
+    return {
+      pedido: await this.persistirNaTx(tx, compra, usuarioId, 'aguardando_recebimento'),
+      criado: true,
+    };
+  }
+
   async detalhar(id: string) {
     const pedido = await this.db.select().from(pedidosFornecedor)
       .where(and(eq(pedidosFornecedor.id, id), isNull(pedidosFornecedor.deletedAt)))
@@ -151,44 +264,11 @@ export class PedidoFornecedorService {
       if (!compra.operacaoId) {
         throw new ConflictException('Compra confirmada sem operação associada');
       }
-
-      const itens = await tx.select({
-        produtoId: disponibilidadesVirtuais.produtoId,
-        quantidadePrevista: disponibilidadesVirtuais.quantidadeTotalGerada,
-      }).from(disponibilidadesVirtuais)
-        .where(eq(disponibilidadesVirtuais.compraProgramadaId, compra.id));
-      if (!itens.length) {
-        throw new ConflictException('Compra confirmada sem disponibilidade gerada');
+      const existente = await this.buscarAtivoPorCompra(tx, compra.id);
+      if (existente) {
+        throw new ConflictException('Pedido ao fornecedor já existe para esta compra');
       }
-
-      const numero = `PF-${compra.numeroInterno}-${Date.now()}`;
-      const pedido = primeiroOuFalha(await tx.insert(pedidosFornecedor).values({
-        numero,
-        fornecedorId: compra.fornecedorId,
-        operacaoId: compra.operacaoId,
-        compraProgramadaId: compra.id,
-        status: 'rascunho',
-      }).returning());
-
-      await tx.insert(pedidosFornecedorItens).values(
-        itens.map((item) => ({
-          pedidoFornecedorId: pedido.id,
-          produtoId: item.produtoId,
-          quantidadePrevista: item.quantidadePrevista,
-        })),
-      );
-
-      await this.auditoria.registrar(tx, {
-        tabela: 'pedidos_fornecedor',
-        registroId: pedido.id,
-        operacao: 'INSERT',
-        modulo: 'operacao',
-        usuarioId,
-        dadosAnteriores: {},
-        dadosNovos: pedido,
-      });
-
-      return pedido;
+      return this.persistirNaTx(tx, compra, usuarioId, 'rascunho');
     });
 
     this.eventEmitter.emit(EVENTOS.PEDIDO_FORNECEDOR_CRIADO, {
@@ -205,23 +285,11 @@ export class PedidoFornecedorService {
         .where(and(eq(pedidosFornecedor.id, id), isNull(pedidosFornecedor.deletedAt)))
         .then((r) => r[0] ?? null);
       if (!atual) throw new NotFoundException('Pedido ao fornecedor não encontrado');
+      if (atual.status === 'aguardando_recebimento') return atual;
       if (atual.status !== 'rascunho' && atual.status !== 'enviado') {
         throw new ConflictException(`Pedido em status ${atual.status} não pode ser enviado`);
       }
-      const atualizado = primeiroOuFalha(await tx.update(pedidosFornecedor)
-        .set({ status: 'aguardando_recebimento', updatedAt: new Date() })
-        .where(eq(pedidosFornecedor.id, id))
-        .returning());
-      await this.auditoria.registrar(tx, {
-        tabela: 'pedidos_fornecedor',
-        registroId: id,
-        operacao: 'UPDATE',
-        modulo: 'operacao',
-        usuarioId,
-        dadosAnteriores: atual,
-        dadosNovos: atualizado,
-      });
-      return atualizado;
+      return this.promoverParaAguardandoNaTx(tx, atual, usuarioId);
     });
   }
 

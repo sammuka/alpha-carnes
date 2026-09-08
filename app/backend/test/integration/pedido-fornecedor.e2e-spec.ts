@@ -54,17 +54,17 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
 
   async function pedidoPronto(dataOperacao: string) {
     const { base, compraId } = await compraConfirmada(dataOperacao);
-    const pedido = await request(app.getHttpServer())
-      .post('/operacao/pedidos-fornecedor')
-      .set('Cookie', comprasCookies)
-      .send({ compraProgramadaId: compraId })
-      .expect(201);
-    await request(app.getHttpServer())
-      .post(`/operacao/pedidos-fornecedor/${pedido.body.id}/enviar`)
-      .set('Cookie', comprasCookies)
-      .send()
+    const lista = await request(app.getHttpServer())
+      .get('/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100')
+      .set('Cookie', recebimentoCookies)
       .expect(200);
-    return { base, compraId, pedidoId: pedido.body.id as string, operacaoId: pedido.body.operacaoId as string };
+    const pedido = (lista.body.data as Array<{
+      id: string;
+      operacaoId: string;
+      compraProgramadaId: string;
+    }>).find((p) => p.compraProgramadaId === compraId);
+    if (!pedido) throw new Error('Pedido ao Fornecedor não materializado na confirmação');
+    return { base, compraId, pedidoId: pedido.id, operacaoId: pedido.operacaoId };
   }
 
   it('recebimento sem PEDIDO_FORNECEDOR_GERENCIAR recebe 403', async () => {
@@ -79,22 +79,34 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
   it('cria pedido espelhando disponibilidade da compra confirmada', async () => {
     const { base, compraId } = await compraConfirmada('2026-08-01');
 
-    const res = await request(app.getHttpServer())
+    const lista = await request(app.getHttpServer())
+      .get('/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100')
+      .set('Cookie', recebimentoCookies)
+      .expect(200);
+    const resumo = (lista.body.data as Array<{
+      id: string;
+      status: string;
+      compraProgramadaId: string;
+      fornecedorId: string;
+    }>).find((p) => p.compraProgramadaId === compraId);
+    expect(resumo).toBeDefined();
+    expect(resumo?.status).toBe('aguardando_recebimento');
+    expect(resumo?.fornecedorId).toBe(base.fornecedorId);
+
+    const detalhe = await request(app.getHttpServer())
+      .get(`/operacao/pedidos-fornecedor/${resumo!.id}`)
+      .set('Cookie', recebimentoCookies)
+      .expect(200);
+    expect(detalhe.body.status).toBe('aguardando_recebimento');
+    expect(detalhe.body.compraProgramadaId).toBe(compraId);
+    expect(detalhe.body.itens.length).toBeGreaterThanOrEqual(1);
+    expect(detalhe.body.itens[0].produtoId).toBe(base.produtoId);
+
+    await request(app.getHttpServer())
       .post('/operacao/pedidos-fornecedor')
       .set('Cookie', comprasCookies)
       .send({ compraProgramadaId: compraId })
-      .expect(201);
-
-    expect(res.body.status).toBe('rascunho');
-    expect(res.body.compraProgramadaId).toBe(compraId);
-    expect(res.body.fornecedorId).toBe(base.fornecedorId);
-
-    const detalhe = await request(app.getHttpServer())
-      .get(`/operacao/pedidos-fornecedor/${res.body.id}`)
-      .set('Cookie', recebimentoCookies)
-      .expect(200);
-    expect(detalhe.body.itens.length).toBeGreaterThanOrEqual(1);
-    expect(detalhe.body.itens[0].produtoId).toBe(base.produtoId);
+      .expect(409);
 
     // compra não confirmada
     const rascunho = await request(app.getHttpServer())
@@ -116,17 +128,23 @@ describe('pedido-fornecedor (Pedido ao Fornecedor + NF)', () => {
   it('recebimento exige pedido enviado; permite N recebimentos e N NFs no mesmo recebimento', async () => {
     const { base, pedidoId, operacaoId } = await pedidoPronto('2026-08-03');
 
-    // sem enviar (novo rascunho)
+    // sem enviar (pedido rebaixado a rascunho)
     const { compraId: cRasc } = await compraConfirmada('2026-08-04');
-    const rasc = await request(app.getHttpServer())
-      .post('/operacao/pedidos-fornecedor')
-      .set('Cookie', comprasCookies)
-      .send({ compraProgramadaId: cRasc })
-      .expect(201);
+    const listaRasc = await request(app.getHttpServer())
+      .get('/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100')
+      .set('Cookie', recebimentoCookies)
+      .expect(200);
+    const rasc = (listaRasc.body.data as Array<{ id: string; compraProgramadaId: string }>)
+      .find((p) => p.compraProgramadaId === cRasc);
+    if (!rasc) throw new Error('Pedido ao Fornecedor da compra rascunho não encontrado');
+    const { db: dbRasc } = app.get(DRIZZLE);
+    await dbRasc.update(schema.pedidosFornecedor)
+      .set({ status: 'rascunho' })
+      .where(eq(schema.pedidosFornecedor.id, rasc.id));
     await request(app.getHttpServer())
       .post('/operacao/recebimentos')
       .set('Cookie', recebimentoCookies)
-      .send({ pedidoFornecedorId: rasc.body.id })
+      .send({ pedidoFornecedorId: rasc.id })
       .expect(409);
 
     const r1 = await request(app.getHttpServer())

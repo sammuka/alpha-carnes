@@ -360,7 +360,7 @@ export class RecebimentoService {
       });
 
       let nfId: string | null = null;
-      if (temCamposNfEstruturados(dto)) {
+      if (dto.nfeNumero?.trim()) {
         const nf = await persistirNfDeCamposUiNaTx(tx, this.auditoria, {
           pedidoFornecedorId: snapshot.pedido.id,
           recebimentoId: criado.id,
