@@ -886,7 +886,7 @@ export function PedidoEditor({
               id="produto-novo"
               items={produtosAusentes.map((produto) => ({
                 id: produto.id,
-                label: labelCodigoNome(produto.codigo, nomeProduto(produto)),
+                label: rotuloProduto(produto),
               }))}
               value={produtoNovo}
               onChange={setProdutoNovo}

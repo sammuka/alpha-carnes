@@ -31,7 +31,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { labelCodigoDescricao } from '@/lib/dominios';
+import { labelCodigoDescricao, rotuloProduto } from '@/lib/dominios';
 import { extrairCodigoErro, extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime } from '@/lib/realtime';
 import type {
@@ -105,12 +105,22 @@ function somaQuantidadeDisponivel(itens: DisponibilidadeDia[]): string {
   return total.toFixed(3);
 }
 
+function rotuloItemDisponibilidade(
+  item: DisponibilidadeDia,
+  catalogo: CadastroItem[],
+): string {
+  const it = catalogo.find((p) => p.id === item.produtoId);
+  return rotuloProduto({ codigo: it?.codigo, nome: it?.nome, descricao: it?.descricao });
+}
+
 function ListaDisponibilidade({
   itens,
   vazio,
+  rotulo,
 }: {
   itens: DisponibilidadeDia[];
   vazio: string;
+  rotulo: (item: DisponibilidadeDia) => string;
 }) {
   if (itens.length === 0) {
     return <p className="text-xs text-muted-foreground">{vazio}</p>;
@@ -119,7 +129,7 @@ function ListaDisponibilidade({
     <ul className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
       {itens.map((d) => (
         <li key={chaveDisponibilidade(d)} className="flex justify-between text-xs">
-          <span className="font-data text-[11px]">{d.produtoId.slice(0, 8)}…</span>
+          <span className="font-data text-[11px]">{rotulo(d)}</span>
           <span className="font-data font-semibold text-primary">{d.quantidadeDisponivel} disp.</span>
         </li>
       ))}
@@ -481,6 +491,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                 <ComboboxField
                   id="fornecedor"
                   items={fornecedores.map((f) => ({ id: f.id, label: f.razaoSocial ?? f.codigo ?? '—', sublabel: f.codigo }))}
+                  items={fornecedores.map((f) => ({ id: f.id, label: f.razaoSocial ?? f.codigo ?? '—', sublabel: f.codigo }))}
                   value={fornecedorId}
                   onChange={setFornecedorId}
                   placeholder="Selecione o fornecedor"
@@ -751,6 +762,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
               <ListaDisponibilidade
                 itens={disponibilidadeTotal}
                 vazio="A somatória aparece quando houver lotes confirmados nesta operação."
+                rotulo={(item) => rotuloItemDisponibilidade(item, itensCompra)}
               />
             </CardContent>
             {disponibilidadeTotal.length > 0 && (
