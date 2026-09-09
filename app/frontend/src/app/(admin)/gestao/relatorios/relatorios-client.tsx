@@ -25,6 +25,7 @@ import { StatusPill } from '@/components/ui/status-pill';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/cn';
 import { mensagemDeErro } from '@/lib/error-message';
+import { formatarPercentualDuasCasas, formatarPrecoBr } from '@/lib/formatacao-preco';
 import {
   buscarVersoes,
   gerarRelatorio,
@@ -349,7 +350,7 @@ function RelatoriosConteudo({ permissoes }: { permissoes: string[] }) {
                         'font-data',
                         pedido.valorTotalAjustado.startsWith('-') ? 'text-destructive' : 'text-success-fg',
                       )}>
-                        <strong>Valor total ajustado</strong> {pedido.valorTotalAjustado}
+                        <strong>Valor total ajustado</strong> {formatarPrecoBr(pedido.valorTotalAjustado)}
                       </span>
                     </div>
                   </summary>
@@ -357,29 +358,29 @@ function RelatoriosConteudo({ permissoes }: { permissoes: string[] }) {
                     {pedido.itens.some((item) => item.precoTabelaOriginal == null) && (
                       <p className="mb-2 text-xs text-muted-foreground">Sem preço de tabela para a data</p>
                     )}
-                    <table className="w-full text-xs">
+                    <table className="w-full border-separate border-spacing-x-3 border-spacing-y-0 text-xs">
                       <thead>
                         <tr className="border-b border-border text-left">
-                          <th className="py-1">Produto</th>
-                          <th className="py-1 text-right">Preço da tabela</th>
-                          <th className="py-1 text-right">Preço aplicado</th>
-                          <th className="py-1 text-right">Diferença</th>
-                          <th className="py-1 text-right">Diferença %</th>
-                          <th className="py-1">Ajustado por</th>
+                          <th className="py-1 pr-3">Produto</th>
+                          <th className="py-1 px-3 text-right">Preço da tabela</th>
+                          <th className="py-1 px-3 text-right">Preço aplicado</th>
+                          <th className="py-1 px-3 text-right">Diferença</th>
+                          <th className="py-1 px-3 text-right whitespace-nowrap">Diferença %</th>
+                          <th className="py-1 pl-4 whitespace-nowrap">Ajustado por</th>
                         </tr>
                       </thead>
                       <tbody>
                         {pedido.itens.map((item, indice) => (
                           <tr key={`${item.produtoCodigo}-${indice}`} className="border-b border-border">
-                            <td className="py-1">{item.produtoCodigo} {item.produtoNome}</td>
-                            <td className="py-1 text-right font-data">{item.precoTabelaOriginal ?? '—'}</td>
-                            <td className="py-1 text-right font-data">{item.precoAplicado}</td>
+                            <td className="py-1 pr-3">{item.produtoCodigo} {item.produtoNome}</td>
+                            <td className="py-1 px-3 text-right font-data whitespace-nowrap">{formatarPrecoBr(item.precoTabelaOriginal)}</td>
+                            <td className="py-1 px-3 text-right font-data whitespace-nowrap">{formatarPrecoBr(item.precoAplicado)}</td>
                             <td className={cn(
-                              'py-1 text-right font-data',
+                              'py-1 px-3 text-right font-data whitespace-nowrap',
                               item.diferencaAbsoluta.startsWith('-') ? 'text-destructive' : 'text-success-fg',
-                            )}>{item.diferencaAbsoluta}</td>
-                            <td className="py-1 text-right font-data">{item.diferencaPercentual ?? '—'}</td>
-                            <td className="py-1">{item.usuarioAjusteNome ?? '—'}</td>
+                            )}>{formatarPrecoBr(item.diferencaAbsoluta)}</td>
+                            <td className="py-1 px-3 text-right font-data whitespace-nowrap">{formatarPercentualDuasCasas(item.diferencaPercentual)}</td>
+                            <td className="py-1 pl-4 whitespace-nowrap">{item.usuarioAjusteNome ?? '—'}</td>
                           </tr>
                         ))}
                       </tbody>

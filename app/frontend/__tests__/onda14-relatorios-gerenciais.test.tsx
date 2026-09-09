@@ -187,6 +187,11 @@ describe('Onda 14 — Relatórios Gerenciais', () => {
     expect(within(tabela).getAllByRole('row').length).toBe(3);
     expect(within(tabela).getByText('Preço da tabela')).toBeInTheDocument();
     expect(within(tabela).getByText('Ajustado por')).toBeInTheDocument();
+    expect(within(tabela).getByText('Diferença %')).toBeInTheDocument();
+    expect(within(tabela).getByText('R$ 18,50')).toBeInTheDocument();
+    expect(within(tabela).getByText('R$ 17,00')).toBeInTheDocument();
+    expect(within(tabela).getByText('-8.11')).toBeInTheDocument();
+    expect(within(tabela).queryByText('-8.1081')).not.toBeInTheDocument();
   });
 
   it('item sem preço de tabela mostra —', async () => {

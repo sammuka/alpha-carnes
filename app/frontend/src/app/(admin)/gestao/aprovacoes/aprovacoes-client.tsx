@@ -34,6 +34,7 @@ import {
   type OcorrenciaPrecoLista,
 } from '@/lib/aprovacoes';
 import { mensagemDeErro } from '@/lib/error-message';
+import { formatarPercentualDuasCasas, formatarPrecoBr } from '@/lib/formatacao-preco';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 
 interface DetalheOcorrencia {
@@ -280,34 +281,34 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
                       'text-[13px] font-data',
                       ocorrenciaSel.bruto.diferencaTotal.startsWith('-') ? 'text-destructive' : 'text-success-fg',
                     )}>
-                      <strong>Diferença total:</strong> {ocorrenciaSel.bruto.diferencaTotal}
+                      <strong>Diferença total:</strong> {formatarPrecoBr(ocorrenciaSel.bruto.diferencaTotal)}
                     </p>
                     {detalhePreco?.itens.some((linha) => linha.precoTabelaOriginal == null) && (
                       <p className="text-xs text-muted-foreground">Sem preço de tabela para a data</p>
                     )}
-                    <table className="w-full text-xs">
+                    <table className="w-full border-separate border-spacing-x-3 border-spacing-y-0 text-xs">
                       <thead>
                         <tr className="border-b border-border text-left">
-                          <th className="py-1">Produto</th>
-                          <th className="py-1 text-right">Preço da tabela</th>
-                          <th className="py-1 text-right">Preço aplicado</th>
-                          <th className="py-1 text-right">Diferença</th>
-                          <th className="py-1 text-right">Diferença %</th>
-                          <th className="py-1">Ajustado por</th>
+                          <th className="py-1 pr-3">Produto</th>
+                          <th className="py-1 px-3 text-right">Preço da tabela</th>
+                          <th className="py-1 px-3 text-right">Preço aplicado</th>
+                          <th className="py-1 px-3 text-right">Diferença</th>
+                          <th className="py-1 px-3 text-right whitespace-nowrap">Diferença %</th>
+                          <th className="py-1 pl-4 whitespace-nowrap">Ajustado por</th>
                         </tr>
                       </thead>
                       <tbody>
                         {(detalhePreco?.itens ?? []).map((linha, indice) => (
                           <tr key={`${linha.produtoCodigo}-${indice}`} className="border-b border-border">
-                            <td className="py-1">{linha.produtoCodigo} {linha.produtoNome}</td>
-                            <td className="py-1 text-right font-data">{linha.precoTabelaOriginal ?? '—'}</td>
-                            <td className="py-1 text-right font-data">{linha.precoAplicado}</td>
+                            <td className="py-1 pr-3">{linha.produtoCodigo} {linha.produtoNome}</td>
+                            <td className="py-1 px-3 text-right font-data whitespace-nowrap">{formatarPrecoBr(linha.precoTabelaOriginal)}</td>
+                            <td className="py-1 px-3 text-right font-data whitespace-nowrap">{formatarPrecoBr(linha.precoAplicado)}</td>
                             <td className={cn(
-                              'py-1 text-right font-data',
+                              'py-1 px-3 text-right font-data whitespace-nowrap',
                               linha.diferencaAbsoluta.startsWith('-') ? 'text-destructive' : 'text-success-fg',
-                            )}>{linha.diferencaAbsoluta}</td>
-                            <td className="py-1 text-right font-data">{linha.diferencaPercentual ?? '—'}</td>
-                            <td className="py-1">{linha.usuarioAjusteNome ?? '—'}</td>
+                            )}>{formatarPrecoBr(linha.diferencaAbsoluta)}</td>
+                            <td className="py-1 px-3 text-right font-data whitespace-nowrap">{formatarPercentualDuasCasas(linha.diferencaPercentual)}</td>
+                            <td className="py-1 pl-4 whitespace-nowrap">{linha.usuarioAjusteNome ?? '—'}</td>
                           </tr>
                         ))}
                       </tbody>

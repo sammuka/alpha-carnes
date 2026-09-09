@@ -213,6 +213,8 @@ describe('Onda 14 — Fila Administrativa ocorrências de preço', () => {
     expect(screen.queryByText('R$ 0,00')).not.toBeInTheDocument();
     const tabela = screen.getByRole('table');
     expect(within(tabela).getAllByText('—').length).toBeGreaterThan(0);
+    expect(within(tabela).getByText('R$ 18,50')).toBeInTheDocument();
+    expect(within(tabela).getByText('-8.11')).toBeInTheDocument();
   });
 
   it('desconto e acréscimo diferenciados por sinal', async () => {
@@ -245,8 +247,10 @@ describe('Onda 14 — Fila Administrativa ocorrências de preço', () => {
     await waitFor(() => expect(cardPreco()).toBeInTheDocument());
     await userEvent.click(cardPreco());
     await waitFor(() => {
-      expect(screen.getByText('-2.00').className).toMatch(/text-destructive/);
-      expect(screen.getByText('2.00').className).toMatch(/text-success-fg/);
+      expect(screen.getByText('-R$ 2,00').className).toMatch(/text-destructive/);
+      expect(screen.getByText('R$ 2,00').className).toMatch(/text-success-fg/);
+      expect(screen.getByText('-20.00')).toBeInTheDocument();
+      expect(screen.getByText('20.00')).toBeInTheDocument();
     });
   });
 

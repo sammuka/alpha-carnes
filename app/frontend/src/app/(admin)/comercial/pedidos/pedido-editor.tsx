@@ -33,6 +33,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ModalAdendo } from './modal-adendo';
 import { ModalOverbooking } from './modal-overbooking';
 import { cn } from '@/lib/cn';
+import { formatarPrecoBr } from '@/lib/formatacao-preco';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 export interface ClientePedido {
@@ -118,13 +119,6 @@ function origemItem(item: PedidoVendaDetalhe['itens'][number]): 'Físico' | 'Vir
   const tipos = item.reservas?.map((reserva) => reserva.tipoConsumo ?? reserva.origem);
   if (tipos?.includes('fisico')) return 'Físico';
   return 'Virtual';
-}
-
-function formatarPtBr(valor: string): string {
-  const [inteiraBruta = '0', fracBruta = ''] = valor.split('.');
-  const inteira = (inteiraBruta.replace(/^0+(?=\d)/, '') || '0');
-  const cents = (fracBruta + '00').slice(0, 2);
-  return `${inteira},${cents}`;
 }
 
 function normalizarPrecoInput(bruto: string): string {
@@ -755,6 +749,9 @@ export function PedidoEditor({
               <TableBody>
                 {itensRenderizados.map((item) => {
                   const produto = produtos.find((entry) => entry.id === item.produtoId);
+                  const sufixoPreco = sufixoUnidadePreco(
+                    item.unidadePreco ?? produtos.find((produto) => produto.id === item.produtoId)?.unidadePreco,
+                  );
                   const nome = item.produto?.nome
                     ?? item.produto?.descricao
                     ?? nomeProduto(produto);
@@ -778,41 +775,43 @@ export function PedidoEditor({
                         />
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex justify-end">
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Input
-                                aria-label="Preço unitário"
-                                type="number"
-                                step="0.01"
-                                min={0}
-                                inputMode="decimal"
-                                adornLeft={<span className="text-[11px]">R$</span>}
-                                className={cn(
-                                  'h-8 w-28 text-right font-data',
-                                  item.precoAjustado && 'border-warning',
-                                )}
-                                value={precos[item.id] ?? item.precoAplicado ?? ''}
-                                disabled={!podeGerenciar || Boolean(pedido && !['rascunho', 'em_elaboracao_reserva_ativa', 'aguardando_confirmacao_overbooking'].includes(pedido.status))}
-                                readOnly={!podeGerenciar || pedido?.status === 'finalizado'}
-                                onChange={(event) => setPrecos((atuais) => ({
-                                  ...atuais,
-                                  [item.id]: normalizarPrecoInput(event.target.value),
-                                }))}
-                                onBlur={() => void persistirPreco(item)}
-                              />
+                              <div className="w-[9.5rem] shrink-0">
+                                <Input
+                                  aria-label="Preço unitário"
+                                  type="number"
+                                  step="0.01"
+                                  min={0}
+                                  inputMode="decimal"
+                                  adornLeft={<span className="text-[11px]">R$</span>}
+                                  adornRight={sufixoPreco ? (
+                                    <span className="text-[11px] font-normal">{sufixoPreco}</span>
+                                  ) : undefined}
+                                  className={cn(
+                                    'h-8 w-full text-right font-data',
+                                    item.precoAjustado && 'border-warning',
+                                  )}
+                                  value={precos[item.id] ?? item.precoAplicado ?? ''}
+                                  disabled={!podeGerenciar || Boolean(pedido && !['rascunho', 'em_elaboracao_reserva_ativa', 'aguardando_confirmacao_overbooking'].includes(pedido.status))}
+                                  readOnly={!podeGerenciar || pedido?.status === 'finalizado'}
+                                  onChange={(event) => setPrecos((atuais) => ({
+                                    ...atuais,
+                                    [item.id]: normalizarPrecoInput(event.target.value),
+                                  }))}
+                                  onBlur={() => void persistirPreco(item)}
+                                />
+                              </div>
                             </TooltipTrigger>
                             {item.precoAjustado && (
                               <TooltipContent>
                                 {item.precoTabelaOriginal == null
                                   ? 'Sem preço de tabela para esta data'
-                                  : `Valor da Tabela: R$ ${formatarPtBr(item.precoTabelaOriginal)}`}
+                                  : `Valor da Tabela: ${formatarPrecoBr(item.precoTabelaOriginal)}`}
                               </TooltipContent>
                             )}
                           </Tooltip>
-                          <span className="text-[11px] text-muted-foreground">
-                            {sufixoUnidadePreco(item.unidadePreco ?? produtos.find((produto) => produto.id === item.produtoId)?.unidadePreco)}
-                          </span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -860,7 +859,7 @@ export function PedidoEditor({
                     <span>{nome}</span>
                     <div className="flex items-center gap-1">
                       <span className="font-data">{item.quantidadePedida}</span>
-                      <span className="font-data">{`R$ ${formatarPtBr(item.precoAplicado)}`}</span>
+                      <span className="font-data">{formatarPrecoBr(item.precoAplicado)}</span>
                       <div className="flex justify-end">
                         <Button
                           type="button"
@@ -910,7 +909,7 @@ export function PedidoEditor({
             />
           </FormField>
           <FormField label="Preço unitário" htmlFor="preco-produto-novo">
-            <div className="flex items-center gap-1">
+            <div className="w-[9.5rem]">
               <Input
                 id="preco-produto-novo"
                 aria-label="Preço unitário do novo produto"
@@ -919,14 +918,14 @@ export function PedidoEditor({
                 min={0}
                 inputMode="decimal"
                 adornLeft={<span className="text-[11px]">R$</span>}
-                className="h-8 w-28 text-right font-data"
+                adornRight={sufixoUnidadePreco(unidadePrecoNovo) ? (
+                  <span className="text-[11px] font-normal">{sufixoUnidadePreco(unidadePrecoNovo)}</span>
+                ) : undefined}
+                className="h-8 w-full text-right font-data"
                 value={precoNovo}
                 disabled={!podeGerenciar}
                 onChange={(event) => setPrecoNovo(normalizarPrecoInput(event.target.value))}
               />
-              <span className="text-[11px] text-muted-foreground">
-                {sufixoUnidadePreco(unidadePrecoNovo)}
-              </span>
             </div>
           </FormField>
           <Button type="button" variant="secondary" disabled={!podeGerenciar || pendente || ehPrecoNaoPositivoUi(precoNovo)} onClick={() => void adicionarProduto()}>
