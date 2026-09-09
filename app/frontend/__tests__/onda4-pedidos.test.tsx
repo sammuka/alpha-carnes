@@ -124,21 +124,32 @@ function json(body: unknown, status = 200) {
   }));
 }
 
+async function abrirSeletorProduto() {
+  fireEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
+  return screen.findByPlaceholderText('Buscar produto...');
+}
+
+async function fecharSeletorProduto() {
+  const trigger = screen.getByRole('combobox', { name: 'Produto' });
+  if (trigger.getAttribute('aria-expanded') === 'true') {
+    fireEvent.click(trigger);
+  }
+  await waitFor(() => {
+    expect(screen.queryByPlaceholderText('Buscar produto...')).not.toBeInTheDocument();
+  });
+}
+
 async function selecionarProdutoComPreco(nomeOpcao: string | RegExp, opcoes?: { pularOperacao?: boolean }) {
   if (!opcoes?.pularOperacao) {
-    await userEvent.selectOptions(screen.getByLabelText('Operação'), operacaoDaApi.id);
+    fireEvent.change(screen.getByLabelText('Operação'), { target: { value: operacaoDaApi.id } });
   }
-  await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
-  await waitFor(() => expect(screen.getByPlaceholderText('Buscar produto...')).toBeInTheDocument());
-  await userEvent.click(await screen.findByText(nomeOpcao));
+  await abrirSeletorProduto();
+  fireEvent.click(await screen.findByText(nomeOpcao));
   const precoInput = screen.getByLabelText('Preço unitário do novo produto');
-  try {
-    await waitFor(() => {
-      expect(Number(precoInput.getAttribute('value'))).toBeGreaterThan(0);
-    }, { timeout: 2000 });
-  } catch {
-    fireEvent.change(precoInput, { target: { value: '18.50' } });
-  }
+  fireEvent.change(precoInput, { target: { value: '18.50' } });
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: 'Adicionar produto' })).toBeEnabled();
+  });
 }
 
 function instalarFetch() {
@@ -363,21 +374,20 @@ it('novo pedido remove item local e devolve o produto ao seletor sem chamar a AP
 
   const removido = screen.getByTestId('linha-nova-produto-novo');
   expect(within(removido).getByText(/NOVO — Produto novo/)).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
-  await waitFor(() => expect(screen.getByPlaceholderText('Buscar produto...')).toBeInTheDocument());
-  const command = screen.getByPlaceholderText('Buscar produto...').closest('[data-slot="command"]') as HTMLElement;
+  const buscaAusente = await abrirSeletorProduto();
+  const command = buscaAusente.closest('[data-slot="command"]') as HTMLElement;
   expect(within(command).queryByText(/NOVO — Produto novo/)).not.toBeInTheDocument();
-  await userEvent.keyboard('{Escape}');
+  await fecharSeletorProduto();
 
-  await userEvent.click(within(removido).getByRole('button', { name: /Remover NOVO — Produto novo/i }));
+  fireEvent.click(within(removido).getByRole('button', { name: /Remover NOVO — Produto novo/i }));
 
   expect(screen.queryByTestId('linha-nova-produto-novo')).not.toBeInTheDocument();
   expect(screen.getByTestId('linha-nova-item-comercial-estavel')).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('combobox', { name: 'Produto' }));
-  await waitFor(() => expect(screen.getByPlaceholderText('Buscar produto...')).toBeInTheDocument());
+  await abrirSeletorProduto();
   expect(await screen.findByText(/NOVO — Produto novo/)).toBeInTheDocument();
+  await fecharSeletorProduto();
 
-  await userEvent.click(screen.getByRole('button', { name: 'Salvar Rascunho' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar Rascunho' }));
 
   await waitFor(() => {
     const chamada = (global.fetch as jest.Mock).mock.calls.find(([url, init]) =>
