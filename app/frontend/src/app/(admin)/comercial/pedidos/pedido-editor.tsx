@@ -10,7 +10,7 @@ import type {
   PedidoVendaDetalhe,
 } from '@/lib/comercial';
 import type { Operacao } from '@/lib/gestao-operacoes';
-import { labelCodigoDescricao, labelCodigoNome, rotuloProduto, sufixoInativo } from '@/lib/dominios';
+import { labelCodigoNome, rotuloProduto, sufixoInativo } from '@/lib/dominios';
 import { extrairMensagemErro } from '@/lib/error-message';
 import { mascararCpfCnpj } from '@/lib/masks';
 import { AlertItem } from '@/components/ui/alert-item';

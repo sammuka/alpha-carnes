@@ -491,7 +491,6 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                 <ComboboxField
                   id="fornecedor"
                   items={fornecedores.map((f) => ({ id: f.id, label: f.razaoSocial ?? f.codigo ?? '—', sublabel: f.codigo }))}
-                  items={fornecedores.map((f) => ({ id: f.id, label: f.razaoSocial ?? f.codigo ?? '—', sublabel: f.codigo }))}
                   value={fornecedorId}
                   onChange={setFornecedorId}
                   placeholder="Selecione o fornecedor"
