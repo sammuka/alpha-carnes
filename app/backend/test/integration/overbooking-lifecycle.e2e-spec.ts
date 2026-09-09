@@ -9,7 +9,7 @@ import {
   createTestUser,
   loginCookies,
 } from '../helpers/test-app';
-import { seedComercialBase } from '../helpers/comercial-fixtures';
+import { seedComercialBase, publicarTabelaParaData } from '../helpers/comercial-fixtures';
 
 describe('overbooking-lifecycle', () => {
   let app: INestApplication;
@@ -46,6 +46,7 @@ describe('overbooking-lifecycle', () => {
       .post(`/comercial/compras-programadas/${criar.body.id}/confirmar`)
       .set('Cookie', comprasCookies)
       .send();
+    await publicarTabelaParaData(app, '2026-12-11', [base.produtoId]);
 
     const pedido = await request(app.getHttpServer())
       .post('/comercial/pedidos/confirmar-overbooking')
@@ -88,6 +89,7 @@ describe('overbooking-lifecycle', () => {
       .post(`/comercial/compras-programadas/${criar.body.id}/confirmar`)
       .set('Cookie', comprasCookies)
       .send();
+    await publicarTabelaParaData(app, '2026-12-10', [base.produtoId]);
 
     const pedido = await request(app.getHttpServer())
       .post('/comercial/pedidos/confirmar-overbooking')

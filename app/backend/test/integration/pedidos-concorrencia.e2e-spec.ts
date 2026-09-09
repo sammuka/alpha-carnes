@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
-import { seedComercialBase, lerDisponibilidade } from '../helpers/comercial-fixtures';
+import { seedComercialBase, lerDisponibilidade, publicarTabelaParaData } from '../helpers/comercial-fixtures';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { PedidosService } from '../../src/modules/comercial/pedidos/pedidos.service';
@@ -50,6 +50,7 @@ describe('Pedidos — concorrência anti-overbooking (AD-05)', () => {
       .post(`/comercial/compras-programadas/${compraId}/confirmar`)
       .set('Cookie', comprasCookies)
       .send();
+    await publicarTabelaParaData(app, dataOperacao, [base.produtoId]);
     return { base, compraId };
   }
 

@@ -9,7 +9,7 @@ import {
   createTestUser,
   loginCookies,
 } from '../helpers/test-app';
-import { seedComercialBase, lerDisponibilidade } from '../helpers/comercial-fixtures';
+import { seedComercialBase, lerDisponibilidade, publicarTabelaParaData } from '../helpers/comercial-fixtures';
 
 describe('overbooking-concorrencia', () => {
   let app: INestApplication;
@@ -44,12 +44,14 @@ describe('overbooking-concorrencia', () => {
       .post(`/comercial/compras-programadas/${compraId}/confirmar`)
       .set('Cookie', comprasCookies)
       .send();
+    await publicarTabelaParaData(app, dataOperacao, [base.produtoId]);
     return { base, compraId };
   }
 
   it('duas inclusões concorrentes do mesmo produtoId deixam uma linha', async () => {
     const { base, compraId } = await cenario('2026-12-01', 10);
     const outro = await seedComercialBase(app, { fator: 1 });
+    await publicarTabelaParaData(app, '2026-12-01', [base.produtoId, outro.produtoId]);
 
     const pedido = await request(app.getHttpServer())
       .post('/comercial/pedidos')

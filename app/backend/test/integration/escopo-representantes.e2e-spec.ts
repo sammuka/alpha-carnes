@@ -216,6 +216,7 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
         // CNPJ válido (dígito verificador) — senão o Zod responde 400 antes do escopo.
         documentoFiscal: '11222333000181',
         representanteId: repB,
+        faixaPreco: 'A',
       })
       .expect(404);
 
@@ -240,6 +241,7 @@ describe('escopo-representantes e2e (E5.1 Task 20)', () => {
         razaoSocial: 'Restaurável A',
         documentoFiscal: '11444777000161',
         representanteId: repA,
+        faixaPreco: 'A',
       })
       .expect(201);
     const clienteRestauravelId = criado.body.id as string;

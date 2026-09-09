@@ -265,6 +265,7 @@ describe('Cadastros F7 e2e (produtos, rotas, representantes)', () => {
           razaoSocial: 'Cliente Vinculado DoD83 LTDA',
           documentoFiscal: '11222333000181',
           representanteId,
+          faixaPreco: 'A',
         });
       expect(cliente.status).toBe(201);
 

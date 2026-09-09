@@ -66,7 +66,6 @@ describe('Onda 14 — endpoints ocorrências ajuste preço (ALP-84)', () => {
     for (let d = 1; d <= 20; d += 1) {
       const data = `2026-12-${String(d).padStart(2, '0')}`;
       await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: data, quantidade: 100 });
-      await publicarTabela(db, data, [{ produtoId: base.produtoId, precoA: '18.50' }]);
     }
 
     const compraA = await request(app.getHttpServer())
@@ -224,7 +223,7 @@ describe('Onda 14 — endpoints ocorrências ajuste preço (ALP-84)', () => {
 
   it('C7 detalhe diferencaPercentual null quando original null', async () => {
     const dataOp = '2026-12-25';
-    await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dataOp, quantidade: 50 });
+    await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dataOp, quantidade: 50, publicarTabela: false });
     const resPed = await request(app.getHttpServer())
       .post('/comercial/pedidos')
       .set('Cookie', comercialCookies)
@@ -312,5 +311,17 @@ describe('Onda 14 — endpoints ocorrências ajuste preço (ALP-84)', () => {
       .expect(200);
     const ids = (res.body.data as Array<{ id: string }>).map((r) => r.id);
     expect(ids).toContain(ocorrenciaId);
+  });
+
+  it('14.7b nenhum endpoint aprovar/rejeitar atinge a ocorrência', async () => {
+    const { ocorrenciaId } = await criarOcorrencia({ dataOperacao: '2026-12-09', patchPreco: '19.25' });
+    await request(app.getHttpServer())
+      .post(`/ocorrencias-preco/${ocorrenciaId}/aprovar`)
+      .set('Cookie', gestorCookies)
+      .expect(404);
+    await request(app.getHttpServer())
+      .post(`/ocorrencias-preco/${ocorrenciaId}/rejeitar`)
+      .set('Cookie', gestorCookies)
+      .expect(404);
   });
 });

@@ -6,7 +6,7 @@ import request from 'supertest';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
-import { seedComercialBase, lerDisponibilidade } from '../helpers/comercial-fixtures';
+import { seedComercialBase, lerDisponibilidade, publicarTabelaParaData } from '../helpers/comercial-fixtures';
 import { challengePayload } from '../helpers/overbooking-fixtures';
 import { EVENTOS } from '../../src/realtime/events/eventos';
 
@@ -61,6 +61,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
       .post(`/comercial/compras-programadas/${compraId}/confirmar`)
       .set('Cookie', comprasCookies)
       .send();
+    await publicarTabelaParaData(app, dataOperacao, [base.produtoId]);
     return { base, compraId };
   }
 
@@ -428,6 +429,7 @@ describe('Pedidos e2e (reserva atômica, parcial, liberação, rastreabilidade)'
         .set('Cookie', comprasCookies)
         .send();
       expect(conf.status).toBe(201);
+      await publicarTabelaParaData(app, data, [base.produtoId]);
       return criar.body.id as string;
     };
     await criarConfirmada(dia, 6);

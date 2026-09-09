@@ -6,32 +6,12 @@ import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import {
   clientes,
-  ocorrenciasAjustePreco,
   pedidosVendaItens,
-  tabelasPreco,
-  tabelasPrecoItens,
 } from '../../src/database/schema';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { seedComercialBase, criarCompraConfirmada } from '../helpers/comercial-fixtures';
 
 type Db = NodePgDatabase<typeof schema>;
-
-async function publicarTabela(
-  db: Db,
-  data: string,
-  itens: Array<{ produtoId: string; precoA: string }>,
-) {
-  const [tab] = await db.insert(tabelasPreco).values({ data, status: 'publicada' }).returning();
-  if (!tab) throw new Error('tabela');
-  await db.insert(tabelasPrecoItens).values(itens.map((i) => ({
-    tabelaPrecoId: tab.id,
-    produtoId: i.produtoId,
-    precoA: i.precoA,
-    precoB: i.precoA,
-    precoC: i.precoA,
-    precoD: i.precoA,
-  })));
-}
 
 describe('Onda 14 — GET /ocorrencias-preco/relatorio (ALP-85)', () => {
   let app: INestApplication;
@@ -56,7 +36,6 @@ describe('Onda 14 — GET /ocorrencias-preco/relatorio (ALP-85)', () => {
 
     base = await seedComercialBase(app);
     await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dataOp, quantidade: 100 });
-    await publicarTabela(db, dataOp, [{ produtoId: base.produtoId, precoA: '18.50' }]);
   }, 90_000);
 
   afterAll(async () => {
@@ -116,7 +95,7 @@ describe('Onda 14 — GET /ocorrencias-preco/relatorio (ALP-85)', () => {
 
   it('C7 diferencaPercentual null quando original null', async () => {
     const dataSemTabela = '2026-12-31';
-    await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dataSemTabela, quantidade: 50 });
+    await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dataSemTabela, quantidade: 50, publicarTabela: false });
     const resPed = await request(app.getHttpServer())
       .post('/comercial/pedidos')
       .set('Cookie', comercialCookies)
@@ -167,6 +146,29 @@ describe('Onda 14 — GET /ocorrencias-preco/relatorio (ALP-85)', () => {
       .set('Cookie', gestorCookies)
       .expect(200);
     expect(resC.body.data.some((p: { pedidoVendaId: string }) => p.pedidoVendaId === pedidoId)).toBe(false);
+  });
+
+  it('14.8 pedido sem ajuste ausente do relatório', async () => {
+    const resPed = await request(app.getHttpServer())
+      .post('/comercial/pedidos')
+      .set('Cookie', comercialCookies)
+      .send({
+        clienteId: base.clienteId,
+        dataOperacao: dataOp,
+        itens: [{ produtoId: base.produtoId, quantidadePedida: 1 }],
+      });
+    expect(resPed.status).toBe(201);
+    const pedidoId = resPed.body.id as string;
+    await request(app.getHttpServer())
+      .post(`/comercial/pedidos/${pedidoId}/finalizar`)
+      .set('Cookie', gestorCookies)
+      .expect(200);
+    const res = await request(app.getHttpServer())
+      .get(`/ocorrencias-preco/relatorio?dataInicio=${dataOp}&dataFim=${dataOp}`)
+      .set('Cookie', gestorCookies)
+      .expect(200);
+    expect((res.body.data as Array<{ pedidoVendaId: string }>)
+      .some((p) => p.pedidoVendaId === pedidoId)).toBe(false);
   });
 
   it('republicação de tabela não altera relatório', async () => {

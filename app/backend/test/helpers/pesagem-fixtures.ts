@@ -14,6 +14,7 @@ import {
   criarCompraConfirmada,
   criarPedidoFornecedorEnviado,
   iniciarRecebimentoViaPf,
+  publicarTabelaParaData,
 } from './comercial-fixtures';
 
 type Db = NodePgDatabase<typeof schema>;
@@ -93,6 +94,7 @@ export async function criarPedido(
   params: { compraId: string; clienteId: string; produtoId: string; dataOperacao: string; quantidade: number; prioridade?: number },
 ): Promise<{ pedidoId: string; pedidoItemId: string }> {
   const { default: request } = await import('supertest');
+  await publicarTabelaParaData(app, params.dataOperacao, [params.produtoId]);
   const body = {
     compraProgramadaId: params.compraId,
     clienteId: params.clienteId,

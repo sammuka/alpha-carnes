@@ -271,7 +271,7 @@ describe('Clientes e2e (CRUD + RBAC + validação + soft delete + auditoria)', (
       const res = await request(app.getHttpServer())
         .post('/clientes')
         .set('Cookie', adminCookies)
-        .send({ razaoSocial: 'Cliente Auto LTDA', documentoFiscal: gerarCnpjValido('500000200001') });
+        .send({ razaoSocial: 'Cliente Auto LTDA', documentoFiscal: gerarCnpjValido('500000200001'), faixaPreco: 'A' });
       expect(res.status).toBe(201);
       expect(res.body.codigo).toMatch(/^\d+$/);
     });
@@ -280,11 +280,11 @@ describe('Clientes e2e (CRUD + RBAC + validação + soft delete + auditoria)', (
       const a = await request(app.getHttpServer())
         .post('/clientes')
         .set('Cookie', adminCookies)
-        .send({ razaoSocial: 'Cliente Auto A', documentoFiscal: gerarCnpjValido('500000210001') });
+        .send({ razaoSocial: 'Cliente Auto A', documentoFiscal: gerarCnpjValido('500000210001'), faixaPreco: 'A' });
       const b = await request(app.getHttpServer())
         .post('/clientes')
         .set('Cookie', adminCookies)
-        .send({ razaoSocial: 'Cliente Auto B', documentoFiscal: gerarCnpjValido('500000220001') });
+        .send({ razaoSocial: 'Cliente Auto B', documentoFiscal: gerarCnpjValido('500000220001'), faixaPreco: 'A' });
       expect(a.status).toBe(201);
       expect(b.status).toBe(201);
       expect(a.body.codigo).toMatch(/^\d+$/);
@@ -296,7 +296,7 @@ describe('Clientes e2e (CRUD + RBAC + validação + soft delete + auditoria)', (
       const criar = await request(app.getHttpServer())
         .post('/clientes')
         .set('Cookie', adminCookies)
-        .send({ razaoSocial: 'Cliente Imutavel', documentoFiscal: gerarCnpjValido('500000230001') });
+        .send({ razaoSocial: 'Cliente Imutavel', documentoFiscal: gerarCnpjValido('500000230001'), faixaPreco: 'A' });
       expect(criar.status).toBe(201);
       const original = criar.body.codigo as string;
 

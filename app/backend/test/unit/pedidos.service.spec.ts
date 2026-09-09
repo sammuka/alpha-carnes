@@ -46,6 +46,7 @@ describe('PedidosService — emissão de evento pós-commit', () => {
       auditoria as never,
       emitter,
       {} as never,
+      {} as never,
     );
     return { service, emitSpy, ordem };
   }
@@ -110,7 +111,7 @@ describe('PedidosService — branches de conflito', () => {
   const emitter = new EventEmitter2();
 
   function service(db: object) {
-    return new PedidosService({ db } as never, auditoria as never, emitter, {} as never);
+    return new PedidosService({ db } as never, auditoria as never, emitter, {} as never, {} as never);
   }
 
   it('incluirItem mapeia unique violation para 409 de item duplicado', async () => {
@@ -124,7 +125,7 @@ describe('PedidosService — branches de conflito', () => {
     };
     await expect(service(db).incluirItem('p1', {
       produtoId: 'i1', quantidade: 1,
-    } as never, 'user-1')).rejects.toThrow('Item comercial já existe neste pedido');
+    } as never, 'user-1')).rejects.toThrow('Produto já existe neste pedido');
   });
 
   it('incluirItem propaga erro que não é duplicidade', async () => {
@@ -161,7 +162,7 @@ describe('PedidosService — aplicarAlocacaoNoItem', () => {
   const emitter = new EventEmitter2();
 
   function service() {
-    return new PedidosService({ db: {} } as never, auditoria as never, emitter, {} as never);
+    return new PedidosService({ db: {} } as never, auditoria as never, emitter, {} as never, {} as never);
   }
 
   const pedido = { id: 'p1', operacaoId: 'op1', clienteId: 'c1' } as never;

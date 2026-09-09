@@ -9,7 +9,7 @@ import {
   createTestUser,
   loginCookies,
 } from '../helpers/test-app';
-import { seedComercialBase, lerDisponibilidade } from '../helpers/comercial-fixtures';
+import { seedComercialBase, lerDisponibilidade, publicarTabelaParaData } from '../helpers/comercial-fixtures';
 import {
   challengePayload,
   observarSql,
@@ -54,6 +54,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
       .set('Cookie', comprasCookies)
       .send()
       .expect(201);
+    await publicarTabelaParaData(app, dataOperacao, [base.produtoId]);
     const disp = await lerDisponibilidade(app, base.produtoId);
     if (!disp) throw new Error('disponibilidade não gerada');
     return { base, compraId, disponibilidadeId: disp.id };
@@ -220,6 +221,7 @@ describe('pedidos-v11 (AD-05 challenge + lifecycle)', () => {
 
     // Segundo item comercial (mesmo saldo restante = 3)
     const base2 = await seedComercialBase(app, { fator: 1 });
+    await publicarTabelaParaData(app, '2026-11-06', [base2.produtoId]);
     // Reusa a disponibilidade do mesmo dia: inclui o mesmo produtoId → conflito.
     // Em vez disso, tenta incluir quantidade acima do saldo restante no MESMO item → 409 no challenge.
     // Plano: inclusão de NOVO item comercial. Criamos outro item na mesma compra via nova regra? Simplifica:

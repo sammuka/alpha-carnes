@@ -1,5 +1,5 @@
 import { INestApplication } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
 import { DRIZZLE } from '../../src/database/database.module';
@@ -27,17 +27,39 @@ async function publicarTabela(
   data: string,
   itens: Array<{ produtoId: string; precoA: string; precoB?: string; precoC?: string; precoD?: string }>,
 ) {
-  const [tab] = await db.insert(tabelasPreco).values({ data, status: 'publicada' }).returning();
-  if (!tab) throw new Error('tabela');
-  await db.insert(tabelasPrecoItens).values(itens.map((i) => ({
-    tabelaPrecoId: tab.id,
-    produtoId: i.produtoId,
-    precoA: i.precoA,
-    precoB: i.precoB ?? i.precoA,
-    precoC: i.precoC ?? i.precoA,
-    precoD: i.precoD ?? i.precoA,
-  })));
-  return tab.id;
+  const [existente] = await db.select().from(tabelasPreco)
+    .where(and(eq(tabelasPreco.data, data), isNull(tabelasPreco.deletedAt)))
+    .limit(1);
+  let tabelaId: string;
+  if (existente) {
+    if (existente.status !== 'publicada') {
+      await db.update(tabelasPreco).set({ status: 'publicada' }).where(eq(tabelasPreco.id, existente.id));
+    }
+    tabelaId = existente.id;
+  } else {
+    const [tab] = await db.insert(tabelasPreco).values({ data, status: 'publicada' }).returning();
+    if (!tab) throw new Error('tabela');
+    tabelaId = tab.id;
+  }
+  for (const i of itens) {
+    const valores = {
+      precoA: i.precoA,
+      precoB: i.precoB ?? i.precoA,
+      precoC: i.precoC ?? i.precoA,
+      precoD: i.precoD ?? i.precoA,
+    };
+    const [ja] = await db.select({ id: tabelasPrecoItens.id }).from(tabelasPrecoItens)
+      .where(and(
+        eq(tabelasPrecoItens.tabelaPrecoId, tabelaId),
+        eq(tabelasPrecoItens.produtoId, i.produtoId),
+      ));
+    if (ja) {
+      await db.update(tabelasPrecoItens).set(valores).where(eq(tabelasPrecoItens.id, ja.id));
+    } else {
+      await db.insert(tabelasPrecoItens).values({ tabelaPrecoId: tabelaId, produtoId: i.produtoId, ...valores });
+    }
+  }
+  return tabelaId;
 }
 
 describe('Onda 14 — preço no item do pedido (ALP-81)', () => {
@@ -159,7 +181,7 @@ describe('Onda 14 — preço no item do pedido (ALP-81)', () => {
 
   it('14.4b inclusão sem preço e sem tabela retorna 400', async () => {
     const dataSemTab = '2026-10-30';
-    await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dataSemTab, quantidade: 50 });
+    await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dataSemTab, quantidade: 50, publicarTabela: false });
     const res = await request(app.getHttpServer())
       .post('/comercial/pedidos')
       .set('Cookie', comercialCookies)
@@ -173,7 +195,7 @@ describe('Onda 14 — preço no item do pedido (ALP-81)', () => {
 
   it('C1 sem vigente persiste unidade do catálogo com preço manual', async () => {
     const dataSemTab = '2026-10-31';
-    await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dataSemTab, quantidade: 50 });
+    await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dataSemTab, quantidade: 50, publicarTabela: false });
     const res = await request(app.getHttpServer())
       .post('/comercial/pedidos')
       .set('Cookie', comercialCookies)

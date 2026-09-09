@@ -4,7 +4,7 @@ import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
-import { seedComercialBase, criarCompraConfirmada } from '../helpers/comercial-fixtures';
+import { seedComercialBase, criarCompraConfirmada, publicarTabelaParaData } from '../helpers/comercial-fixtures';
 import { PedidosService } from '../../src/modules/comercial/pedidos/pedidos.service';
 
 function uid(prefix: string): string {
@@ -56,6 +56,7 @@ describe('pedidos-onda4 (AD-03 unicidade + D31 herança)', () => {
       });
       compraIdPorData.set(dataOperacao, compraId);
     }
+    await publicarTabelaParaData(app, '2026-08-09', [base.produtoId]);
 
     dtoBase = {
       compraProgramadaId: compraIdPorData.get('2026-08-05')!,

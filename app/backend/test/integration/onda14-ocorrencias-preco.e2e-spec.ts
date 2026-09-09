@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
 import { DRIZZLE } from '../../src/database/database.module';
@@ -9,8 +9,6 @@ import {
   ocorrenciasAjustePreco,
   ocorrenciasAjustePrecoItens,
   pedidosVendaItens,
-  tabelasPreco,
-  tabelasPrecoItens,
 } from '../../src/database/schema';
 import { EVENTOS } from '../../src/realtime/events/eventos';
 import { RealtimeGateway } from '../../src/realtime/realtime.gateway';
@@ -18,23 +16,6 @@ import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpe
 import { seedComercialBase, criarCompraConfirmada } from '../helpers/comercial-fixtures';
 
 type Db = NodePgDatabase<typeof schema>;
-
-async function publicarTabela(
-  db: Db,
-  data: string,
-  itens: Array<{ produtoId: string; precoA: string }>,
-) {
-  const [tab] = await db.insert(tabelasPreco).values({ data, status: 'publicada' }).returning();
-  if (!tab) throw new Error('tabela');
-  await db.insert(tabelasPrecoItens).values(itens.map((i) => ({
-    tabelaPrecoId: tab.id,
-    produtoId: i.produtoId,
-    precoA: i.precoA,
-    precoB: i.precoA,
-    precoC: i.precoA,
-    precoD: i.precoA,
-  })));
-}
 
 describe('Onda 14 — ocorrências ajuste preço na finalização (ALP-83)', () => {
   let app: INestApplication;
@@ -61,7 +42,6 @@ describe('Onda 14 — ocorrências ajuste preço na finalização (ALP-83)', () 
     for (let d = 1; d <= 15; d += 1) {
       const data = `2026-12-${String(d).padStart(2, '0')}`;
       await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: data, quantidade: 100 });
-      await publicarTabela(db, data, [{ produtoId: base.produtoId, precoA: '18.50' }]);
     }
   }, 90_000);
 
@@ -75,7 +55,6 @@ describe('Onda 14 — ocorrências ajuste preço na finalização (ALP-83)', () 
     const dataOp = `2026-12-${String(seqData).padStart(2, '0')}`;
     if (seqData > 15) {
       await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dataOp, quantidade: 50 });
-      await publicarTabela(db, dataOp, [{ produtoId: base.produtoId, precoA: '18.50' }]);
     }
     const res = await request(app.getHttpServer())
       .post('/comercial/pedidos')
@@ -171,7 +150,7 @@ describe('Onda 14 — ocorrências ajuste preço na finalização (ALP-83)', () 
 
   it('C7 original NULL → diferenca_percentual null', async () => {
     const dataOp = '2026-12-20';
-    await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dataOp, quantidade: 50 });
+    await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: dataOp, quantidade: 50, publicarTabela: false });
     const res = await request(app.getHttpServer())
       .post('/comercial/pedidos')
       .set('Cookie', comercialCookies)
@@ -240,5 +219,62 @@ describe('Onda 14 — ocorrências ajuste preço na finalização (ALP-83)', () 
       expect.objectContaining({ dataOperacao: pedido.dataOperacao }),
     );
     broadcastSpy.mockRestore();
+  });
+
+  it('C5 finalização concorrente: uma 200, outra 409, uma ocorrência', async () => {
+    const pedido = await criarPedido();
+    const itemId = (await db.select({ id: pedidosVendaItens.id }).from(pedidosVendaItens)
+      .where(eq(pedidosVendaItens.pedidoVendaId, pedido.id)))[0]?.id;
+    await request(app.getHttpServer())
+      .patch(`/comercial/pedidos/${pedido.id}/itens/${itemId}/preco`)
+      .set('Cookie', comercialCookies)
+      .send({ precoAplicado: '21.00' });
+    const [a, b] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/comercial/pedidos/${pedido.id}/finalizar`)
+        .set('Cookie', gestorCookies),
+      request(app.getHttpServer())
+        .post(`/comercial/pedidos/${pedido.id}/finalizar`)
+        .set('Cookie', gestorCookies),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    const ocorrs = await db.select().from(ocorrenciasAjustePreco)
+      .where(eq(ocorrenciasAjustePreco.pedidoVendaId, pedido.id));
+    expect(ocorrs).toHaveLength(1);
+  });
+
+  it('C9 rollback da finalização → 0 ocorrência órfã e sem emit', async () => {
+    const { AuditoriaService } = await import('../../src/common/auditoria/auditoria.service');
+    const auditoria = app.get(AuditoriaService);
+    const original = auditoria.registrar.bind(auditoria);
+    const spy = jest.spyOn(auditoria, 'registrar').mockImplementation(async (tx, args) => {
+      if (args.tabela === 'ocorrencias_ajuste_preco') {
+        throw new Error('C9 abortar tx');
+      }
+      return original(tx, args);
+    });
+    const emitter = app.get(EventEmitter2);
+    const emitSpy = jest.spyOn(emitter, 'emit');
+    const pedido = await criarPedido();
+    const itemId = (await db.select({ id: pedidosVendaItens.id }).from(pedidosVendaItens)
+      .where(eq(pedidosVendaItens.pedidoVendaId, pedido.id)))[0]?.id;
+    await request(app.getHttpServer())
+      .patch(`/comercial/pedidos/${pedido.id}/itens/${itemId}/preco`)
+      .set('Cookie', comercialCookies)
+      .send({ precoAplicado: '22.00' });
+    emitSpy.mockClear();
+    const res = await request(app.getHttpServer())
+      .post(`/comercial/pedidos/${pedido.id}/finalizar`)
+      .set('Cookie', gestorCookies);
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    const ocorrs = await db.select().from(ocorrenciasAjustePreco)
+      .where(eq(ocorrenciasAjustePreco.pedidoVendaId, pedido.id));
+    expect(ocorrs).toHaveLength(0);
+    expect(emitSpy).not.toHaveBeenCalledWith(
+      EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA,
+      expect.anything(),
+    );
+    spy.mockRestore();
+    emitSpy.mockRestore();
   });
 });

@@ -68,7 +68,7 @@ describe('Perfis e2e — gestão de permissões em runtime (ADR-008)', () => {
     const negadoAntes = await request(app.getHttpServer())
       .post('/clientes')
       .set('Cookie', cookiesAntes)
-      .send({ codigo: 'CLI-PROP-1', razaoSocial: 'Prop', documentoFiscal: '11222333000181' });
+      .send({ codigo: 'CLI-PROP-1', razaoSocial: 'Prop', documentoFiscal: '11222333000181', faixaPreco: 'A' });
     expect(negadoAntes.status).toBe(403);
 
     // Concede CLIENTES_LER + CLIENTES_GERENCIAR ao perfil comercial.
@@ -82,7 +82,7 @@ describe('Perfis e2e — gestão de permissões em runtime (ADR-008)', () => {
     const aindaNegado = await request(app.getHttpServer())
       .post('/clientes')
       .set('Cookie', cookiesAntes)
-      .send({ codigo: 'CLI-PROP-2', razaoSocial: 'Prop', documentoFiscal: '04252011000110' });
+      .send({ codigo: 'CLI-PROP-2', razaoSocial: 'Prop', documentoFiscal: '04252011000110', faixaPreco: 'A' });
     expect(aindaNegado.status).toBe(403);
 
     // Novo login → novas permissões → acesso concedido.
@@ -90,7 +90,7 @@ describe('Perfis e2e — gestão de permissões em runtime (ADR-008)', () => {
     const permitidoDepois = await request(app.getHttpServer())
       .post('/clientes')
       .set('Cookie', cookiesDepois)
-      .send({ codigo: 'CLI-PROP-3', razaoSocial: 'Prop', documentoFiscal: '34028316000103' });
+      .send({ codigo: 'CLI-PROP-3', razaoSocial: 'Prop', documentoFiscal: '34028316000103', faixaPreco: 'A' });
     expect(permitidoDepois.status).toBe(201);
   });
 
@@ -105,7 +105,7 @@ describe('Perfis e2e — gestão de permissões em runtime (ADR-008)', () => {
     const permitido = await request(app.getHttpServer())
       .post('/clientes')
       .set('Cookie', cookiesComAcesso)
-      .send({ codigo: 'CLI-REV-1', razaoSocial: 'Rev', documentoFiscal: '33000167000101' });
+      .send({ codigo: 'CLI-REV-1', razaoSocial: 'Rev', documentoFiscal: '33000167000101', faixaPreco: 'A' });
     expect(permitido.status).toBe(201);
 
     // Remove a gerência (mantém só leitura).
@@ -119,7 +119,7 @@ describe('Perfis e2e — gestão de permissões em runtime (ADR-008)', () => {
     const negado = await request(app.getHttpServer())
       .post('/clientes')
       .set('Cookie', cookiesSemAcesso)
-      .send({ codigo: 'CLI-REV-2', razaoSocial: 'Rev', documentoFiscal: '60746948000112' });
+      .send({ codigo: 'CLI-REV-2', razaoSocial: 'Rev', documentoFiscal: '60746948000112', faixaPreco: 'A' });
     expect(negado.status).toBe(403);
   });
 });
