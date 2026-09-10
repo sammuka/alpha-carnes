@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
-import { seedComercialBase, lerDisponibilidade } from '../helpers/comercial-fixtures';
+import { seedComercialBase, lerDisponibilidade, publicarTabelaParaData } from '../helpers/comercial-fixtures';
 import { EVENTOS } from '../../src/realtime/events/eventos';
 
 describe('Compras — painel de impacto e edição confirmada', () => {
@@ -38,6 +38,7 @@ describe('Compras — painel de impacto e edição confirmada', () => {
       .post(`/comercial/compras-programadas/${compraId}/confirmar`)
       .set('Cookie', comprasCookies)
       .expect(201);
+    await publicarTabelaParaData(app, '2026-09-01', [base.produtoId]);
 
     const comercial = await createTestUser(app, { perfil: 'comercial' });
     const comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);

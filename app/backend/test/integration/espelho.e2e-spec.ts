@@ -72,11 +72,11 @@ describe('espelho comercial — Onda 4 (D19/D20)', () => {
 
     const [clienteA] = await db.insert(schema.clientes).values({
       codigo: 'CLI-ESP-A', razaoSocial: 'Cliente Espelho A', documentoFiscal: 'DOC-ESP-A',
-      rotaId: rota1.id, representanteId: rep1.id,
+      rotaId: rota1.id, representanteId: rep1.id, faixaPreco: 'A',
     }).returning();
     const [clienteB] = await db.insert(schema.clientes).values({
       codigo: 'CLI-ESP-B', razaoSocial: 'Cliente Espelho B', documentoFiscal: 'DOC-ESP-B',
-      rotaId: rota2.id, representanteId: rep2.id,
+      rotaId: rota2.id, representanteId: rep2.id, faixaPreco: 'A',
     }).returning();
     if (!clienteA || !clienteB) throw new Error('Falha ao semear clientes do espelho');
 

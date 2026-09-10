@@ -62,6 +62,17 @@ it('drawer traz codigo, nome, tipo/canal, contato, observacao e status', async (
   expect(await screen.findByText('Mercado 300')).toBeInTheDocument();
 });
 
+it('mascara telefone no campo contato conforme cadastro de clientes', async () => {
+  render(<RepresentantesClient podeGerenciar />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Novo Representante' }));
+  await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+  const contato = screen.getByLabelText(/Contato/);
+  fireEvent.change(contato, { target: { value: '11987654321' } });
+  expect(contato).toHaveValue('(11) 98765-4321');
+  fireEvent.change(contato, { target: { value: '1136540000' } });
+  expect(contato).toHaveValue('(11) 3654-0000');
+});
+
 it('nao existe campo de email, telefone, regiao, comissao ou data de admissao', async () => {
   render(<RepresentantesClient podeGerenciar />);
   fireEvent.click(await screen.findByText('Sabrina'));

@@ -723,12 +723,24 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
                     );
                   })()
                 )
+              ) : disponibilidade.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  A disponibilidade aparecerá após confirmar a compra programada.
+                </p>
               ) : (
-                <ListaDisponibilidade
-                  itens={disponibilidade}
-                  vazio="A disponibilidade do lote aparecerá após confirmar a compra programada."
-                  rotulo={(item) => rotuloItemDisponibilidade(item, itensCompra)}
-                />
+                <ul className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
+                  {disponibilidade.map((d) => (
+                    <li key={d.modo === 'compra' ? d.id : d.produtoId} className="flex justify-between text-xs">
+                      <span className="font-data text-[11px]">
+                        {(() => {
+                          const it = itensCompra.find((p) => p.id === d.produtoId);
+                          return it ? labelCodigoDescricao(it.codigo, it.descricao ?? it.nome ?? '') : '—';
+                        })()}
+                      </span>
+                      <span className="font-data font-semibold text-primary">{d.quantidadeDisponivel} disp.</span>
+                    </li>
+                  ))}
+                </ul>
               )}
             </CardContent>
             {podeSimular && simulacoes.size > 0 && (

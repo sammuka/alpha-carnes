@@ -150,6 +150,7 @@ describe('Faturamento F6a — e2e', () => {
           codigo: `CLI-SUB-${Date.now()}`,
           razaoSocial: 'Cliente Subitem Teste',
           documentoFiscal: cnpj,
+          faixaPreco: 'A',
           dadosFiscaisJson: {
             logradouro: 'Rua Teste', numero: '1', bairro: 'Centro',
             cidade: 'Osasco', uf: 'SP', cep: '06000000', codigo_ibge: '3534401',

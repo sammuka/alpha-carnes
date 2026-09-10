@@ -70,6 +70,7 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
       ajustes_estoque, entradas_itens,
       aprovacoes_operacionais, trocas_peca,
       etiquetas_impressoes, subitens, transformacoes, associacoes_peca_historico, pecas,
+      ocorrencias_ajuste_preco_itens, ocorrencias_ajuste_preco,
       ocorrencias_fornecedor_historico, ocorrencias_fornecedor,
       divergencias_recebimento, recebimentos_itens, recebimentos,
       adendos_pedido,

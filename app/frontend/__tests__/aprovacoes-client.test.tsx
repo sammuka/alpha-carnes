@@ -62,6 +62,12 @@ beforeEach(() => {
         }),
       });
     }
+    if (url.includes('/api/ocorrencias-preco')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ data: [], total: 0, page: 1, pageSize: 20 }),
+      });
+    }
     return Promise.resolve({ ok: true, json: async () => ({}) });
   }) as jest.Mock;
 });

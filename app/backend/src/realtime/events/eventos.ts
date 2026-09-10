@@ -57,6 +57,8 @@ export const EVENTOS = {
   ADENDO_REGISTRADO: 'adendo_registrado',
   RESERVA_LIBERADA_ADMIN: 'reserva_liberada_admin',
   TABELA_PRECO_PUBLICADA: 'tabela_preco_publicada',
+  OCORRENCIA_AJUSTE_PRECO_CRIADA: 'ocorrencia_ajuste_preco_criada',
+  OCORRENCIA_AJUSTE_PRECO_CIENTE: 'ocorrencia_ajuste_preco_ciente',
   // ── Onda 5 — Gestão ───────────────────────────────────────────────────────
   COMPRA_ALTERADA_IMPACTO: 'compra_programada_alterada_impacto',
   APROVACAO_REGISTRADA: 'aprovacao_operacional_registrada',
@@ -202,6 +204,13 @@ export interface OcorrenciaFornecedorPayload {
   fornecedorId: string;
   dataOperacao: string;
   status: string;
+}
+
+export interface OcorrenciaAjustePrecoPayload {
+  ocorrenciaId: string;
+  pedidoVendaId: string;
+  clienteId: string;
+  dataOperacao: string;
 }
 
 export interface PedidoEmRiscoPayload {
@@ -489,6 +498,8 @@ export interface PayloadPorEvento {
     justificativa: string;
   };
   tabela_preco_publicada: { tabelaPrecoId: string; data: string; autorId: string };
+  ocorrencia_ajuste_preco_criada: OcorrenciaAjustePrecoPayload;
+  ocorrencia_ajuste_preco_ciente: OcorrenciaAjustePrecoPayload;
   compra_programada_criada: CompraMutadaPayload;
   compra_programada_atualizada: CompraMutadaPayload;
   compra_programada_cancelada: CompraMutadaPayload;

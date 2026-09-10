@@ -1,6 +1,10 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { PedidosService } from '../../src/modules/comercial/pedidos/pedidos.service';
+import {
+  desafiosParaChallenge,
+  enriquecerDesafiosComProdutos,
+  PedidosService,
+} from '../../src/modules/comercial/pedidos/pedidos.service';
 
 function chain(rows: unknown[]) {
   const obj: Record<string, unknown> = {
@@ -22,9 +26,22 @@ describe('PedidosService — branches', () => {
   const emitter = new EventEmitter2();
   jest.spyOn(emitter, 'emit').mockReturnValue(true);
   const operacoesService = { encontrarAtivaPorData: jest.fn(), garantirOperacao: jest.fn() };
+  const precos = {
+    resolverPrecoVigente: jest.fn().mockResolvedValue({
+      preco: '18.50',
+      unidadePreco: 'kg',
+      tabelaPrecoId: 't1',
+    }),
+  };
 
   function makeService(db: Record<string, unknown>) {
-    return new PedidosService({ db } as never, auditoria as never, emitter, operacoesService as never);
+    return new PedidosService(
+      { db } as never,
+      auditoria as never,
+      emitter,
+      operacoesService as never,
+      precos as never,
+    );
   }
 
   beforeEach(() => jest.clearAllMocks());
@@ -155,7 +172,8 @@ describe('PedidosService — branches', () => {
       // 1ª: exigirClienteNoEscopo; 2ª: exigirUnicidadeAd03. rotaId omitido + cliente sem rota → sem SELECT extra.
       select: jest.fn()
         .mockImplementationOnce(() => chain([{ id: 'c1', representanteId: null, rotaId: null }]))
-        .mockImplementationOnce(() => chain([])),
+        .mockImplementationOnce(() => chain([]))
+        .mockImplementation(() => chain([{ faixaPreco: 'A', data: '2026-06-23' }])),
       insert: jest.fn(() => ({ values: () => ({ returning: jest.fn(async () => [pedidoInserido]) }) })),
     };
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
@@ -169,6 +187,7 @@ describe('PedidosService — branches', () => {
     const pedido = { id: 'p1', operacaoId: null, clienteId: 'c1' };
     const tx = {
       insert: jest.fn(() => ({ values: () => ({ returning: jest.fn(async () => [{ id: 'item1' }]) }) })),
+      select: jest.fn(() => chain([{ faixaPreco: 'A' }])),
     };
     const plano = [{
       produtoId: 'ic1',
@@ -186,7 +205,7 @@ describe('PedidosService — branches', () => {
         plano,
         'u1',
       ),
-    ).rejects.toThrow('Pedido sem operação não pode gerar overbooking');
+    ).rejects.toThrow('Pedido sem operação');
   });
 
   it('detalhar → 404 quando pedido some após escopo; heranca null quando select vazio', async () => {
@@ -250,5 +269,216 @@ describe('PedidosService — branches', () => {
     await expect(
       service.exigirItemDoPedido(tx as never, 'p1', 'ic-x', 'u1'),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('finalizar → 409 quando unique uq_ocorr_ajuste_preco_pedido (via cause)', async () => {
+    const db = {
+      transaction: jest.fn().mockRejectedValue({
+        cause: { code: '23505', constraint: 'uq_ocorr_ajuste_preco_pedido' },
+      }),
+    };
+    await expect(makeService(db).finalizar('p1', 'u1')).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('persistirItensPlanejados → 409 se cliente sem faixa de preço', async () => {
+    const pedido = { id: 'p1', operacaoId: 'op1', clienteId: 'c1' };
+    const tx = { select: jest.fn(() => chain([{ faixaPreco: null }])) };
+    const service = makeService({});
+    await expect(
+      service.persistirItensPlanejados(
+        tx as never,
+        pedido as never,
+        [{ produtoId: 'ic1', quantidade: 1 }],
+        [{ produtoId: 'ic1', quantidadeSolicitada: '1.000', disponivelAntes: '1.000', coberturas: [], deficit: '0.000' }],
+        'u1',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('desafiosParaChallenge e enriquecerDesafiosComProdutos cobrem filtro e match', async () => {
+    expect(desafiosParaChallenge([
+      { produtoId: 'p1', quantidadeSolicitada: '1', disponivelAntes: '1', coberturas: [], deficit: '0' },
+      { produtoId: 'p2', quantidadeSolicitada: '2', disponivelAntes: '0', coberturas: [], deficit: '2.000' },
+    ])).toHaveLength(1);
+
+    await expect(enriquecerDesafiosComProdutos({} as never, [])).resolves.toEqual([]);
+
+    const tx = {
+      select: jest.fn(() => chain([{ id: 'p2', codigo: 'TZ', nome: 'Traseiro' }])),
+    };
+    const enriquecido = await enriquecerDesafiosComProdutos(tx as never, [
+      { produtoId: 'p2', produtoCodigo: null, produtoNome: null, disponivelAntes: '0', quantidadeSolicitada: '2', overbookingGerado: '2', mensagem: 'x' },
+      { produtoId: 'p-miss', produtoCodigo: null, produtoNome: null, disponivelAntes: '0', quantidadeSolicitada: '1', overbookingGerado: '1', mensagem: 'x' },
+    ]);
+    expect(enriquecido[0]).toMatchObject({ produtoCodigo: 'TZ', produtoNome: 'Traseiro' });
+    expect(enriquecido[1]).toMatchObject({ produtoCodigo: null, produtoNome: null });
+  });
+
+  it('persistirItensPlanejados → 404 operação/produto; 400 preço; plano sem solicitado', async () => {
+    const pedido = { id: 'p1', operacaoId: 'op1', clienteId: 'c1' };
+    const service = makeService({});
+    const txOp = {
+      select: jest.fn()
+        .mockImplementationOnce(() => chain([{ faixaPreco: 'A' }]))
+        .mockImplementationOnce(() => chain([])),
+    };
+    await expect(
+      service.persistirItensPlanejados(txOp as never, pedido as never, [], [], 'u1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    const txProd = {
+      select: jest.fn()
+        .mockImplementationOnce(() => chain([{ faixaPreco: 'A' }]))
+        .mockImplementationOnce(() => chain([{ data: '2026-08-01' }]))
+        .mockImplementationOnce(() => chain([])),
+    };
+    await expect(
+      service.persistirItensPlanejados(
+        txProd as never,
+        pedido as never,
+        [{ produtoId: 'ic1', quantidade: 1 }],
+        [{ produtoId: 'ic1', quantidadeSolicitada: '1.000', disponivelAntes: '1.000', coberturas: [], deficit: '0.000' }],
+        'u1',
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    precos.resolverPrecoVigente.mockResolvedValueOnce(null);
+    const txPreco = {
+      select: jest.fn()
+        .mockImplementationOnce(() => chain([{ faixaPreco: 'A' }]))
+        .mockImplementationOnce(() => chain([{ data: '2026-08-01' }]))
+        .mockImplementationOnce(() => chain([{ codigo: 'TZ', nome: 'Traseiro', unidadePreco: 'kg' }])),
+    };
+    await expect(
+      service.persistirItensPlanejados(
+        txPreco as never,
+        pedido as never,
+        [{ produtoId: 'ic1', quantidade: 1 }],
+        [{ produtoId: 'ic1', quantidadeSolicitada: '1.000', disponivelAntes: '1.000', coberturas: [], deficit: '0.000' }],
+        'u1',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const txPlano = {
+      select: jest.fn()
+        .mockImplementationOnce(() => chain([{ faixaPreco: 'A' }]))
+        .mockImplementationOnce(() => chain([{ data: '2026-08-01' }])),
+    };
+    await expect(
+      service.persistirItensPlanejados(
+        txPlano as never,
+        pedido as never,
+        [],
+        [{ produtoId: 'ic1', quantidadeSolicitada: '1.000', disponivelAntes: '1.000', coberturas: [], deficit: '0.000' }],
+        'u1',
+      ),
+    ).rejects.toThrow('Plano sem item solicitado correspondente');
+  });
+
+  it('persistirItensPlanejados persiste item sem overbooking', async () => {
+    const pedido = { id: 'p1', operacaoId: 'op1', clienteId: 'c1' };
+    const item = { id: 'item1', produtoId: 'ic1' };
+    const tx = {
+      select: jest.fn()
+        .mockImplementationOnce(() => chain([{ faixaPreco: 'A' }]))
+        .mockImplementationOnce(() => chain([{ data: '2026-08-01' }]))
+        .mockImplementationOnce(() => chain([{ codigo: 'TZ', nome: 'Traseiro', unidadePreco: 'kg' }])),
+      execute: jest.fn().mockResolvedValue({ rows: [{ eq: false }] }),
+      insert: jest.fn(() => ({ values: () => ({ returning: async () => [item] }) })),
+    };
+    const result = await makeService({}).persistirItensPlanejados(
+      tx as never,
+      pedido as never,
+      [{ produtoId: 'ic1', quantidade: 1, precoAplicado: '18.50' }],
+      [{ produtoId: 'ic1', quantidadeSolicitada: '1.000', disponivelAntes: '1.000', coberturas: [], deficit: '0.000' }],
+      'u1',
+    );
+    expect(result.pedido).toEqual(pedido);
+    expect(result.eventos).toHaveLength(1);
+  });
+
+  it('finalizar → 409 overbooking pendente, item sem preço, e cria ocorrência', async () => {
+    const pedidoAberto = {
+      id: 'p1',
+      status: 'em_elaboracao_reserva_ativa',
+      deletedAt: null,
+      clienteId: 'c1',
+      operacaoId: 'op1',
+    };
+
+    const txOb = { select: jest.fn()
+      .mockImplementationOnce(() => chain([pedidoAberto]))
+      .mockImplementationOnce(() => chain([{ id: 'item-ob' }])) };
+    await expect(
+      makeService({ transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(txOb)) })
+        .finalizar('p1', 'u1'),
+    ).rejects.toThrow('OVERBOOKING_CONFIRMACAO_NECESSARIA');
+
+    const txSem = { select: jest.fn()
+      .mockImplementationOnce(() => chain([pedidoAberto]))
+      .mockImplementationOnce(() => chain([]))
+      .mockImplementationOnce(() => chain([{ id: 'i1', produtoId: 'p1' }])) };
+    await expect(
+      makeService({ transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(txSem)) })
+        .finalizar('p1', 'u1'),
+    ).rejects.toMatchObject({ response: { code: 'PEDIDO_ITEM_SEM_PRECO' } });
+
+    const finalizado = { ...pedidoAberto, status: 'finalizado' };
+    const ocorrencia = { id: 'oc1', pedidoVendaId: 'p1', clienteId: 'c1' };
+    const txOk = {
+      select: jest.fn()
+        .mockImplementationOnce(() => chain([pedidoAberto]))
+        .mockImplementationOnce(() => chain([]))
+        .mockImplementationOnce(() => chain([]))
+        .mockImplementationOnce(() => chain([
+          { id: 'i1', produtoId: 'pr1', precoTabelaOriginal: '18.50', precoAplicado: '17.00', usuarioAjusteId: 'u1' },
+          { id: 'i2', produtoId: 'pr2', precoTabelaOriginal: null, precoAplicado: '10.00', usuarioAjusteId: null },
+        ]))
+        .mockImplementationOnce(() => chain([])),
+      update: jest.fn(() => ({
+        set: () => ({ where: () => ({ returning: async () => [finalizado] }) }),
+      })),
+      insert: jest.fn()
+        .mockReturnValueOnce({ values: () => ({ returning: async () => [ocorrencia] }) })
+        .mockReturnValue({ values: () => Promise.resolve() }),
+    };
+    const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(txOk)) };
+    await expect(makeService(db).finalizar('p1', 'u1')).resolves.toEqual(finalizado);
+  });
+
+  it('finalizar → 409 unique constraint no próprio error (sem cause)', async () => {
+    const db = {
+      transaction: jest.fn().mockRejectedValue({
+        code: '23505',
+        constraint: 'uq_ocorr_ajuste_preco_pedido',
+      }),
+    };
+    await expect(makeService(db).finalizar('p1', 'u1')).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('detalhar mapeia nome de quem ajustou o preço', async () => {
+    const pedidoEscopo = { id: 'p1', clienteId: 'c1', status: 'em_elaboracao_reserva_ativa', deletedAt: null };
+    const pedido = {
+      id: 'p1',
+      clienteId: 'c1',
+      status: 'em_elaboracao_reserva_ativa',
+      itens: [
+        { id: 'i1', precoTabelaOriginal: '10.00', precoAplicado: '12.00', usuarioAjusteId: 'u-aj' },
+        { id: 'i2', precoTabelaOriginal: '10.00', precoAplicado: '10.00', usuarioAjusteId: null },
+      ],
+    };
+    const tx = {
+      select: jest.fn()
+        .mockImplementationOnce(() => chain([pedidoEscopo]))
+        .mockImplementationOnce(() => chain([{ id: 'u-aj', nome: 'Ajustador' }])),
+    };
+    const db = {
+      transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(tx)),
+      query: { pedidosVenda: { findFirst: jest.fn().mockResolvedValue(pedido) } },
+      select: jest.fn(() => chain([])),
+    };
+    const detalhe = await makeService(db).detalhar('p1', 'u1');
+    expect(detalhe.itens[0]).toMatchObject({ precoAjustado: true, usuarioAjusteNome: 'Ajustador' });
+    expect(detalhe.itens[1]).toMatchObject({ precoAjustado: false, usuarioAjusteNome: null });
   });
 });

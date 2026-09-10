@@ -145,6 +145,7 @@ O processo de revisão e merge que aplica esses gates está em [`framework-revis
 | 11 | Múltiplas compras programadas por operação (AD-14): N pedidos de compra no mesmo dia, disponibilidade como pool por `(operacao, item_comercial)`, cadeia física (pedido ao fornecedor, recebimento, NF, conferência tripla, `pecas.compra_programada_id`) permanece por lote | 0–10, DS v3 | idem |
 | 12 | domínio de campos UI (AD-13) | 0–11, DS v3 | idem |
 | 13 | Unificação do catálogo em Produtos — `itens_comerciais` e `itens_compra` extintos, FKs repontadas para `produtos.id`, cadastro único em `/cadastros/produtos` (AD-15) | 0–12 | idem |
+| 14 | Preço de tabela no pedido, ajuste manual, ocorrência informativa e relatório (AD-16) | 13 | idem |
 
 ```mermaid
 flowchart TD
@@ -164,6 +165,7 @@ flowchart TD
     DSv3 --> O11["Onda 11 Multiplas compras por operacao"]
     O11 --> O12["Onda 12 Dominio de campos UI"]
     O12 --> O13["Onda 13 Unificacao do catalogo em Produtos"]
+    O13 --> O14["Onda 14 Preco de tabela no pedido"]
 ```
 
 Estado corrente por onda: [`../execucao/EXECUCAO-STATUS.md`](../execucao/EXECUCAO-STATUS.md). Decisões que fecham pendências: [`../execucao/DECISOES.md`](../execucao/DECISOES.md) (AD-01: boi casado = 2 TZ + 2 DT + 2 PA; AD-02: fiscal = EISS Osasco).

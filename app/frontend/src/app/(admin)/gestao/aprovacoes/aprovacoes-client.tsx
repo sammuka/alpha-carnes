@@ -30,8 +30,12 @@ import {
   ROTULO_TIPO_APROVACAO,
   type AprovacaoOperacional,
   type OcorrenciaLista,
+  type OcorrenciaPrecoDetalhe,
+  type OcorrenciaPrecoLista,
 } from '@/lib/aprovacoes';
 import { mensagemDeErro } from '@/lib/error-message';
+import { formatarPercentualDuasCasas, formatarPrecoBr } from '@/lib/formatacao-preco';
+import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 
 interface DetalheOcorrencia {
   status: string;
@@ -44,19 +48,24 @@ function formatDataHora(iso: string): string {
   return new Date(iso).toLocaleString('pt-BR');
 }
 
+type ItemFila =
+  | { tipo: 'fornecedor'; id: string; titulo: string; status: string; dataHora: string; bruto: OcorrenciaLista }
+  | { tipo: 'preco'; id: string; titulo: string; status: string; dataHora: string; bruto: OcorrenciaPrecoLista };
+
 function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
   const searchParams = useSearchParams();
   const operacaoId = searchParams.get('operacaoId');
   const podeDecidir = permissoes.includes('APROVACOES_DECIDIR');
 
   const [aba, setAba] = useState<'ocorrencias' | 'operacionais'>('ocorrencias');
-  const [ocorrencias, setOcorrencias] = useState<OcorrenciaLista[]>([]);
+  const [ocorrencias, setOcorrencias] = useState<ItemFila[]>([]);
   const [operacionais, setOperacionais] = useState<AprovacaoOperacional[]>([]);
-  const [ocorrenciaSel, setOcorrenciaSel] = useState<OcorrenciaLista | null>(null);
+  const [ocorrenciaSel, setOcorrenciaSel] = useState<ItemFila | null>(null);
   const [aprovacaoSel, setAprovacaoSel] = useState<AprovacaoOperacional | null>(null);
   const [comparativo, setComparativo] = useState<{ itens: Parameters<typeof QuadroComparativo>[0]['itens'] } | null>(null);
   const [semComparativo, setSemComparativo] = useState(false);
   const [detalheOcorrencia, setDetalheOcorrencia] = useState<DetalheOcorrencia | null>(null);
+  const [detalhePreco, setDetalhePreco] = useState<OcorrenciaPrecoDetalhe | null>(null);
   const [andamento, setAndamento] = useState('');
   const [motivo, setMotivo] = useState('');
   const [modalDecisao, setModalDecisao] = useState<'aprovada' | 'rejeitada' | null>(null);
@@ -67,9 +76,34 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
     setErro(null);
     try {
       if (aba === 'ocorrencias') {
-        const res = await listarAprovacoes<OcorrenciaLista>({ operacaoId, aba: 'ocorrencias' });
-        setOcorrencias(res.data);
-        if (!ocorrenciaSel && res.data[0]) setOcorrenciaSel(res.data[0]);
+        const qsPreco = new URLSearchParams({ operacaoId });
+        const [resFornecedor, resPrecoHttp] = await Promise.all([
+          listarAprovacoes<OcorrenciaLista>({ operacaoId, aba: 'ocorrencias' }),
+          fetch(`/api/ocorrencias-preco?${qsPreco}`),
+        ]);
+        if (!resPrecoHttp.ok) throw new Error(await mensagemDeErro(resPrecoHttp));
+        const resPreco = await resPrecoHttp.json() as { data: OcorrenciaPrecoLista[] };
+        const fila: ItemFila[] = [
+          ...resFornecedor.data.map((o): ItemFila => ({
+            tipo: 'fornecedor',
+            id: o.id,
+            titulo: o.fornecedorNome,
+            status: o.status,
+            dataHora: o.dataAbertura,
+            bruto: o,
+          })),
+          ...resPreco.data.map((o): ItemFila => ({
+            tipo: 'preco',
+            id: o.id,
+            titulo: o.clienteNomeFantasia ?? '—',
+            status: o.status,
+            dataHora: o.dataHora,
+            bruto: o,
+          })),
+        ];
+        fila.sort((a, b) => new Date(b.dataHora).getTime() - new Date(a.dataHora).getTime());
+        setOcorrencias(fila);
+        if (!ocorrenciaSel && fila[0]) setOcorrenciaSel(fila[0]);
       } else {
         const res = await listarAprovacoes<AprovacaoOperacional>({ operacaoId, aba: 'operacionais' });
         setOperacionais(res.data);
@@ -83,11 +117,35 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
     void carregar();
   }, [carregar]);
 
-  const carregarDetalheOcorrencia = useCallback(async (id: string) => {
+  useEffect(() => {
+    const onMessage = (msg: RealtimeMensagem) => {
+      if (
+        msg.type === 'ocorrencia_ajuste_preco_criada'
+        || msg.type === 'ocorrencia_ajuste_preco_ciente'
+      ) {
+        void carregar();
+      }
+    };
+    return conectarRealtime({
+      rooms: ['dashboard'],
+      onMessage,
+      onReconnect: () => void carregar(),
+    });
+  }, [carregar]);
+
+  const carregarDetalheOcorrencia = useCallback(async (item: ItemFila) => {
     try {
-      const res = await fetch(`/api/operacao/ocorrencias-fornecedor/${id}`);
+      if (item.tipo === 'preco') {
+        const res = await fetch(`/api/ocorrencias-preco/${item.id}`);
+        if (!res.ok) throw new Error(await mensagemDeErro(res));
+        setDetalhePreco(await res.json() as OcorrenciaPrecoDetalhe);
+        setDetalheOcorrencia(null);
+        return;
+      }
+      const res = await fetch(`/api/operacao/ocorrencias-fornecedor/${item.id}`);
       if (!res.ok) throw new Error(await mensagemDeErro(res));
       setDetalheOcorrencia(await res.json() as DetalheOcorrencia);
+      setDetalhePreco(null);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao carregar detalhe da ocorrência');
     }
@@ -98,6 +156,14 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
       setComparativo(null);
       setSemComparativo(false);
       setDetalheOcorrencia(null);
+      setDetalhePreco(null);
+      return;
+    }
+    if (ocorrenciaSel.tipo === 'preco') {
+      setComparativo(null);
+      setSemComparativo(false);
+      setDetalheOcorrencia(null);
+      void carregarDetalheOcorrencia(ocorrenciaSel);
       return;
     }
     void buscarComparativo(ocorrenciaSel.id).then((c) => {
@@ -109,30 +175,42 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
         setComparativo(c as { itens: Parameters<typeof QuadroComparativo>[0]['itens'] });
       }
     });
-    void carregarDetalheOcorrencia(ocorrenciaSel.id);
+    void carregarDetalheOcorrencia(ocorrenciaSel);
   }, [ocorrenciaSel, carregarDetalheOcorrencia]);
 
   const enviarAndamento = async () => {
-    if (!ocorrenciaSel || !andamento.trim()) return;
+    if (!ocorrenciaSel || ocorrenciaSel.tipo !== 'fornecedor' || !andamento.trim()) return;
     try {
       await registrarAndamento(ocorrenciaSel.id, andamento.trim());
       setAndamento('');
       await carregar();
-      await carregarDetalheOcorrencia(ocorrenciaSel.id);
+      await carregarDetalheOcorrencia(ocorrenciaSel);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao registrar andamento');
     }
   };
 
   const concluir = async () => {
-    if (!ocorrenciaSel || !motivo.trim()) return;
+    if (!ocorrenciaSel || ocorrenciaSel.tipo !== 'fornecedor' || !motivo.trim()) return;
     try {
       await encerrarOcorrencia(ocorrenciaSel.id, motivo.trim());
       setMotivo('');
       await carregar();
-      await carregarDetalheOcorrencia(ocorrenciaSel.id);
+      await carregarDetalheOcorrencia(ocorrenciaSel);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Erro ao encerrar');
+    }
+  };
+
+  const marcarCiente = async () => {
+    if (!ocorrenciaSel || ocorrenciaSel.tipo !== 'preco') return;
+    try {
+      const res = await fetch(`/api/ocorrencias-preco/${ocorrenciaSel.id}/ciente`, { method: 'POST' });
+      if (!res.ok) throw new Error(await mensagemDeErro(res));
+      await carregar();
+      await carregarDetalheOcorrencia(ocorrenciaSel);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Erro ao marcar como ciente');
     }
   };
 
@@ -168,19 +246,22 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
           <div className="grid items-start gap-2.5 lg:grid-cols-[320px_1fr]">
             <Card>
               <div className="max-h-[560px] overflow-y-auto overflow-x-hidden">
-                {ocorrencias.map((o) => (
+                {ocorrencias.map((item) => (
                   <button
-                    key={o.id}
+                    key={`${item.tipo}-${item.id}`}
                     type="button"
-                    onClick={() => setOcorrenciaSel(o)}
+                    onClick={() => setOcorrenciaSel(item)}
                     className={cn(
                       'block w-full border-b border-border px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2',
-                      ocorrenciaSel?.id === o.id && 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]',
+                      ocorrenciaSel?.id === item.id && ocorrenciaSel.tipo === item.tipo && 'bg-primary-soft shadow-[inset_2px_0_0_var(--color-primary)]',
                     )}
                   >
                     <span className="flex items-center gap-2">
-                      <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">{o.fornecedorNome}</b>
-                      <StatusPill variant="pendente" label={ROTULO_STATUS_OCORRENCIA[o.status] ?? o.status} className="h-[17px] text-[10px]" />
+                      <span className="shrink-0 text-[10px] font-semibold uppercase text-muted-foreground">
+                        {item.tipo === 'preco' ? 'Preço' : 'Fornecedor'}
+                      </span>
+                      <b className="min-w-0 flex-1 truncate text-[13px] font-semibold">{item.titulo}</b>
+                      <StatusPill variant="pendente" label={ROTULO_STATUS_OCORRENCIA[item.status] ?? item.status} className="h-[17px] text-[10px]" />
                     </span>
                   </button>
                 ))}
@@ -188,13 +269,71 @@ function AprovacoesConteudo({ permissoes }: { permissoes: string[] }) {
             </Card>
 
             <div className="space-y-2.5">
-              {ocorrenciaSel && (
+              {ocorrenciaSel?.tipo === 'preco' ? (
+                <Card>
+                  <CardContent className="space-y-3">
+                    <p className="text-[13px]"><strong>Pedido:</strong> {ocorrenciaSel.bruto.pedidoNumero}</p>
+                    <p className="text-[13px]"><strong>Cliente:</strong> {ocorrenciaSel.bruto.clienteNomeFantasia ?? '—'}</p>
+                    <p className="text-[13px]"><strong>Data/hora:</strong> {formatDataHora(ocorrenciaSel.bruto.dataHora)}</p>
+                    <p className="text-[13px]"><strong>Finalizado por:</strong> {ocorrenciaSel.bruto.usuarioFinalizacaoNome ?? '—'}</p>
+                    <p className="text-[13px]"><strong>Itens ajustados:</strong> {ocorrenciaSel.bruto.quantidadeItensAjustados}</p>
+                    <p className={cn(
+                      'text-[13px] font-data',
+                      ocorrenciaSel.bruto.diferencaTotal.startsWith('-') ? 'text-destructive' : 'text-success-fg',
+                    )}>
+                      <strong>Diferença total:</strong> {formatarPrecoBr(ocorrenciaSel.bruto.diferencaTotal)}
+                    </p>
+                    {detalhePreco?.itens.some((linha) => linha.precoTabelaOriginal == null) && (
+                      <p className="text-xs text-muted-foreground">Sem preço de tabela para a data</p>
+                    )}
+                    <table className="w-full border-separate border-spacing-x-3 border-spacing-y-0 text-xs">
+                      <thead>
+                        <tr className="border-b border-border text-left">
+                          <th className="py-1 pr-3">Produto</th>
+                          <th className="py-1 px-3 text-right">Preço da tabela</th>
+                          <th className="py-1 px-3 text-right">Preço aplicado</th>
+                          <th className="py-1 px-3 text-right">Diferença</th>
+                          <th className="py-1 px-3 text-right whitespace-nowrap">Diferença %</th>
+                          <th className="py-1 pl-4 whitespace-nowrap">Ajustado por</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(detalhePreco?.itens ?? []).map((linha, indice) => (
+                          <tr key={`${linha.produtoCodigo}-${indice}`} className="border-b border-border">
+                            <td className="py-1 pr-3">{linha.produtoCodigo} {linha.produtoNome}</td>
+                            <td className="py-1 px-3 text-right font-data whitespace-nowrap">{formatarPrecoBr(linha.precoTabelaOriginal)}</td>
+                            <td className="py-1 px-3 text-right font-data whitespace-nowrap">{formatarPrecoBr(linha.precoAplicado)}</td>
+                            <td className={cn(
+                              'py-1 px-3 text-right font-data whitespace-nowrap',
+                              linha.diferencaAbsoluta.startsWith('-') ? 'text-destructive' : 'text-success-fg',
+                            )}>{formatarPrecoBr(linha.diferencaAbsoluta)}</td>
+                            <td className="py-1 px-3 text-right font-data whitespace-nowrap">{formatarPercentualDuasCasas(linha.diferencaPercentual)}</td>
+                            <td className="py-1 pl-4 whitespace-nowrap">{linha.usuarioAjusteNome ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {detalhePreco?.status === 'ciente' ? (
+                      <div className="flex items-start gap-2 rounded-lg border border-success-soft-border bg-success-soft p-3">
+                        <div>
+                          <p className="text-[13px] font-bold text-success-fg">Resultado</p>
+                          <p className="mt-0.5 text-[13px] text-success-fg">
+                            Ciente registrado por {detalhePreco.usuarioCienteNome ?? '—'} em {detalhePreco.dataHoraCiente ? formatDataHora(detalhePreco.dataHoraCiente) : '—'}
+                          </p>
+                        </div>
+                      </div>
+                    ) : permissoes.includes('OCORRENCIA_PRECO_CIENTE') && ocorrenciaSel.status === 'aberta' ? (
+                      <Button size="sm" onClick={() => void marcarCiente()}>Marcar como ciente</Button>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              ) : ocorrenciaSel && (
                 <>
                   <Card>
                     <CardContent className="space-y-3">
-                      <p className="text-[13px]"><strong>Fornecedor:</strong> {ocorrenciaSel.fornecedorNome}</p>
-                      <p className="text-[13px]"><strong>NF:</strong> {ocorrenciaSel.nfChave ?? '—'}</p>
-                      <p className="text-[13px]"><strong>Pedido/lote:</strong> {ocorrenciaSel.pedidoLote ?? '—'}</p>
+                      <p className="text-[13px]"><strong>Fornecedor:</strong> {ocorrenciaSel.bruto.fornecedorNome}</p>
+                      <p className="text-[13px]"><strong>NF:</strong> {ocorrenciaSel.bruto.nfChave ?? '—'}</p>
+                      <p className="text-[13px]"><strong>Pedido/lote:</strong> {ocorrenciaSel.bruto.pedidoLote ?? '—'}</p>
 
                       {detalheOcorrencia?.status === 'resolvida' ? (
                         <div className="flex items-start gap-2 rounded-lg border border-success-soft-border bg-success-soft p-3">

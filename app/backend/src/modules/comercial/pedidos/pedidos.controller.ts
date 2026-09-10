@@ -21,6 +21,7 @@ import { listarQuerySchema, type ListarQuery } from '../../../common/crud/pagina
 import { PedidosService } from './pedidos.service';
 import { AdendosService } from './adendos.service';
 import {
+  ajustarPrecoItemSchema,
   buscarPedidoAbertoSchema,
   cancelarPedidoSchema,
   confirmarCriacaoOverbookingSchema,
@@ -30,6 +31,7 @@ import {
   liberarReservaSchema,
   reduzirItemSchema,
   removerItemSchema,
+  type AjustarPrecoItemDto,
   type BuscarPedidoAbertoDto,
   type CancelarPedidoDto,
   type ConfirmarInclusaoOverbookingDto,
@@ -129,6 +131,17 @@ export class PedidosController {
   @RequirePermissoes('PEDIDO_FINALIZAR')
   async finalizar(@Param('id') id: string, @CurrentUser() user: CurrentUserPayload) {
     return this.service.finalizar(id, user.sub);
+  }
+
+  @Patch(':id/itens/:itemId/preco')
+  @RequirePermissoes('PEDIDOS_GERENCIAR')
+  async ajustarPreco(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body(new ZodValidationPipe(ajustarPrecoItemSchema)) dto: AjustarPrecoItemDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.ajustarPrecoItem(id, itemId, dto, user.sub);
   }
 
   @Patch(':id/itens/:itemId')

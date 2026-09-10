@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Plus, Save, Send, Trash2 } from 'lucide-react';
 import type {
   ComposicaoLotePedido,
@@ -32,6 +32,9 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { ModalAdendo } from './modal-adendo';
 import { ModalOverbooking } from './modal-overbooking';
+import { cn } from '@/lib/cn';
+import { formatarPrecoBr } from '@/lib/formatacao-preco';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 export interface ClientePedido {
   id: string;
@@ -52,6 +55,7 @@ export interface ProdutoPedido {
   status: string;
   descricao?: string;
   unidadeComercial?: string;
+  unidadePreco?: 'kg' | 'unidade';
 }
 
 export interface RotaPedido {
@@ -76,6 +80,9 @@ interface PedidoEditorProps {
 interface ItemNovo {
   produtoId: string;
   quantidadePedida: number;
+  precoAplicado: string;
+  precoTabelaOriginal: string | null;
+  unidadePreco: 'kg' | 'unidade' | null;
 }
 
 interface AdendoPendente {
@@ -114,6 +121,31 @@ function origemItem(item: PedidoVendaDetalhe['itens'][number]): 'Físico' | 'Vir
   return 'Virtual';
 }
 
+function normalizarPrecoInput(bruto: string): string {
+  const trimmed = bruto.trim().replace(',', '.');
+  if (trimmed === '') return '';
+  return trimmed;
+}
+
+function ehPrecoNaoPositivoUi(valor: string): boolean {
+  const trimmed = valor.trim();
+  if (trimmed === '' || !/^\d+(\.\d{1,2})?$/.test(trimmed)) return true;
+  return /^0+(\.0{1,2})?$/.test(trimmed);
+}
+
+function sufixoUnidadePreco(unidade: 'kg' | 'unidade' | null | undefined): string | null {
+  if (unidade === 'unidade') return '/un';
+  if (unidade === 'kg') return '/kg';
+  return null;
+}
+
+type LinhaVigente = {
+  produtoId: string;
+  preco: string | null;
+  unidadePreco: 'kg' | 'unidade' | null;
+  tabelaPrecoId: string | null;
+};
+
 export function PedidoEditor({
   pedido,
   clientes,
@@ -135,6 +167,12 @@ export function PedidoEditor({
   const [quantidadeNova, setQuantidadeNova] = useState('1');
   const [itensNovos, setItensNovos] = useState<ItemNovo[]>([]);
   const [quantidades, setQuantidades] = useState<Record<string, string>>({});
+  const [precos, setPrecos] = useState<Record<string, string>>({});
+  const [precoNovo, setPrecoNovo] = useState('0.00');
+  const [precoNovoTabela, setPrecoNovoTabela] = useState<string | null>(null);
+  const [unidadePrecoNovo, setUnidadePrecoNovo] = useState<'kg' | 'unidade' | null>(null);
+  const itensNovosRef = useRef(itensNovos);
+  itensNovosRef.current = itensNovos;
   const [erro, setErro] = useState('');
   const [pendente, setPendente] = useState(false);
   const [challenge, setChallenge] = useState<OverbookingChallenge | null>(null);
@@ -147,7 +185,80 @@ export function PedidoEditor({
     setQuantidades(Object.fromEntries(
       (pedido?.itens ?? []).map((item) => [item.id, String(Number(item.quantidadePedida))]),
     ));
+    setPrecos(Object.fromEntries(
+      (pedido?.itens ?? []).map((item) => [item.id, item.precoAplicado ?? '0.00']),
+    ));
   }, [pedido]);
+
+  function aplicarPrecoDoProdutoNovo(linha: LinhaVigente | undefined) {
+    setPrecoNovo(linha?.preco ?? '0.00');
+    setPrecoNovoTabela(linha?.preco ?? null);
+  }
+
+  useEffect(() => {
+    const produto = produtos.find((item) => item.id === produtoNovo);
+    setUnidadePrecoNovo(
+      produto?.unidadePreco === 'unidade' || produto?.unidadePreco === 'kg'
+        ? produto.unidadePreco
+        : null,
+    );
+  }, [produtoNovo, produtos]);
+
+  useEffect(() => {
+    if (!clienteId || !operacaoId || !produtoNovo) return;
+    let ativo = true;
+    const qs = new URLSearchParams({
+      clienteId,
+      operacaoId,
+      produtoIds: produtoNovo,
+    });
+    void fetch(`/api/precos/vigente?${qs.toString()}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((corpo: { data?: LinhaVigente[] } | null) => {
+        if (!ativo) return;
+        const doNovo = corpo?.data?.find((linha) => linha.produtoId === produtoNovo);
+        aplicarPrecoDoProdutoNovo(doNovo);
+      })
+      .catch(() => {
+        if (ativo) aplicarPrecoDoProdutoNovo(undefined);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [clienteId, operacaoId, produtoNovo]);
+
+  useEffect(() => {
+    if (pedido) return;
+    if (!clienteId || !operacaoId) return;
+    const ids = itensNovosRef.current.map((item) => item.produtoId);
+    if (ids.length === 0) return;
+    let ativo = true;
+    const qs = new URLSearchParams({
+      clienteId,
+      operacaoId,
+      produtoIds: ids.join(','),
+    });
+    void fetch(`/api/precos/vigente?${qs.toString()}`, { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((corpo: { data?: LinhaVigente[] } | null) => {
+        if (!ativo || !Array.isArray(corpo?.data)) return;
+        const mapa = new Map(corpo.data.map((linha) => [linha.produtoId, linha]));
+        setItensNovos((atuais) => atuais.map((item) => {
+          const hit = mapa.get(item.produtoId);
+          return {
+            ...item,
+            precoAplicado: hit?.preco ?? '0.00',
+            precoTabelaOriginal: hit?.preco ?? null,
+          };
+        }));
+      })
+      .catch(() => {
+        /* ausência de rede não inventa preço */
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [clienteId, operacaoId, pedido]);
 
   useEffect(() => {
     if (!pedido?.id) {
@@ -322,6 +433,21 @@ export function PedidoEditor({
     }
   }
 
+  async function persistirPreco(item: PedidoVendaDetalhe['itens'][number]) {
+    if (!pedido) return;
+    const bruto = normalizarPrecoInput(precos[item.id] ?? '');
+    if (ehPrecoNaoPositivoUi(bruto)) {
+      setErro('Informe um preço unitário maior que zero.');
+      return;
+    }
+    if (bruto === item.precoAplicado) return;
+    const ok = await mutar(`/api/comercial/pedidos/${pedido.id}/itens/${item.id}/preco`, {
+      method: 'PATCH',
+      body: JSON.stringify({ precoAplicado: bruto }),
+    });
+    if (ok) await recarregar();
+  }
+
   async function adicionarProduto() {
     const quantidade = Number(quantidadeNova);
     if (!produtoNovo || !Number.isFinite(quantidade) || quantidade <= 0) {
@@ -329,15 +455,29 @@ export function PedidoEditor({
       return;
     }
     if (!pedido) {
+      if (ehPrecoNaoPositivoUi(precoNovo)) {
+        setErro('Informe um preço unitário maior que zero para incluir o produto.');
+        return;
+      }
       setItensNovos((atuais) => [...atuais, {
         produtoId: produtoNovo,
         quantidadePedida: quantidade,
+        precoAplicado: precoNovo,
+        precoTabelaOriginal: precoNovoTabela,
+        unidadePreco: unidadePrecoNovo,
       }]);
       setProdutoNovo('');
       setQuantidadeNova('1');
+      setPrecoNovo('0.00');
+      setPrecoNovoTabela(null);
+      setUnidadePrecoNovo(null);
       return;
     }
-    const body = JSON.stringify({ produtoId: produtoNovo, quantidade });
+    if (ehPrecoNaoPositivoUi(precoNovo)) {
+      setErro('Informe um preço unitário maior que zero para incluir o produto.');
+      return;
+    }
+    const body = JSON.stringify({ produtoId: produtoNovo, quantidade, precoAplicado: precoNovo });
     const ok = await mutar(
       `/api/comercial/pedidos/${pedido.id}/itens`,
       { method: 'POST', body },
@@ -346,8 +486,15 @@ export function PedidoEditor({
     if (ok) {
       setProdutoNovo('');
       setQuantidadeNova('1');
+      setPrecoNovo('0.00');
+      setPrecoNovoTabela(null);
+      setUnidadePrecoNovo(null);
       await recarregar();
     }
+  }
+
+  function removerItemNovo(produtoId: string) {
+    setItensNovos((atuais) => atuais.filter((entry) => entry.produtoId !== produtoId));
   }
 
   function payloadNovo(salvarComoRascunho: boolean): CriarPedidoDto | null {
@@ -363,7 +510,11 @@ export function PedidoEditor({
       prioridade: Number(prioridade) || 0,
       observacoesGerais: observacoes || undefined,
       salvarComoRascunho,
-      itens: itensNovos,
+      itens: itensNovos.map((item) => ({
+        produtoId: item.produtoId,
+        quantidadePedida: item.quantidadePedida,
+        precoAplicado: item.precoAplicado,
+      })),
     };
   }
 
@@ -591,12 +742,16 @@ export function PedidoEditor({
                   <TableHead>Produto</TableHead>
                   <TableHead>Origem</TableHead>
                   <TableHead>Quantidade</TableHead>
+                  <TableHead className="text-right">Preço unitário</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {itensRenderizados.map((item) => {
                   const produto = produtos.find((entry) => entry.id === item.produtoId);
+                  const sufixoPreco = sufixoUnidadePreco(
+                    item.unidadePreco ?? produtos.find((produto) => produto.id === item.produtoId)?.unidadePreco,
+                  );
                   const nome = item.produto?.nome
                     ?? item.produto?.descricao
                     ?? nomeProduto(produto);
@@ -619,6 +774,46 @@ export function PedidoEditor({
                           }))}
                         />
                       </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="w-[9.5rem] shrink-0">
+                                <Input
+                                  aria-label="Preço unitário"
+                                  type="number"
+                                  step="0.01"
+                                  min={0}
+                                  inputMode="decimal"
+                                  adornLeft={<span className="text-[11px]">R$</span>}
+                                  adornRight={sufixoPreco ? (
+                                    <span className="text-[11px] font-normal">{sufixoPreco}</span>
+                                  ) : undefined}
+                                  className={cn(
+                                    'h-8 w-full text-right font-data',
+                                    item.precoAjustado && 'border-warning',
+                                  )}
+                                  value={precos[item.id] ?? item.precoAplicado ?? ''}
+                                  disabled={!podeGerenciar || Boolean(pedido && !['rascunho', 'em_elaboracao_reserva_ativa', 'aguardando_confirmacao_overbooking'].includes(pedido.status))}
+                                  readOnly={!podeGerenciar || pedido?.status === 'finalizado'}
+                                  onChange={(event) => setPrecos((atuais) => ({
+                                    ...atuais,
+                                    [item.id]: normalizarPrecoInput(event.target.value),
+                                  }))}
+                                  onBlur={() => void persistirPreco(item)}
+                                />
+                              </div>
+                            </TooltipTrigger>
+                            {item.precoAjustado && (
+                              <TooltipContent>
+                                {item.precoTabelaOriginal == null
+                                  ? 'Sem preço de tabela para esta data'
+                                  : `Valor da Tabela: ${formatarPrecoBr(item.precoTabelaOriginal)}`}
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-0.5">
                           <Button
@@ -638,7 +833,7 @@ export function PedidoEditor({
                             aria-label={`Remover ${nome}`}
                             onClick={() => void removerItem(item)}
                           >
-                            <Trash2 />
+                            <Trash2 className="text-destructive" />
                           </Button>
                         </div>
                       </TableCell>
@@ -653,12 +848,34 @@ export function PedidoEditor({
         {itensNovos.length > 0 && (
           <CardContent className="pt-0">
             <ul className="divide-y divide-border rounded-lg border border-border">
-              {itensNovos.map((item) => (
-                <li key={item.produtoId} className="flex items-center justify-between px-3 py-2 text-sm">
-                  <span>{nomeProduto(produtos.find((produto) => produto.id === item.produtoId))}</span>
-                  <span className="font-data">{item.quantidadePedida}</span>
-                </li>
-              ))}
+              {itensNovos.map((item) => {
+                const nome = nomeProduto(produtos.find((produto) => produto.id === item.produtoId));
+                return (
+                  <li
+                    key={item.produtoId}
+                    data-testid={`linha-nova-${item.produtoId}`}
+                    className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+                  >
+                    <span>{nome}</span>
+                    <div className="flex items-center gap-1">
+                      <span className="font-data">{item.quantidadePedida}</span>
+                      <span className="font-data">{formatarPrecoBr(item.precoAplicado)}</span>
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="iconSm"
+                          disabled={!podeGerenciar || pendente}
+                          aria-label={`Remover ${nome}`}
+                          onClick={() => removerItemNovo(item.produtoId)}
+                        >
+                          <Trash2 className="text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </CardContent>
         )}
@@ -691,7 +908,27 @@ export function PedidoEditor({
               onChange={(event) => setQuantidadeNova(event.target.value)}
             />
           </FormField>
-          <Button type="button" variant="secondary" disabled={!podeGerenciar || pendente} onClick={() => void adicionarProduto()}>
+          <FormField label="Preço unitário" htmlFor="preco-produto-novo">
+            <div className="w-[9.5rem]">
+              <Input
+                id="preco-produto-novo"
+                aria-label="Preço unitário do novo produto"
+                type="number"
+                step="0.01"
+                min={0}
+                inputMode="decimal"
+                adornLeft={<span className="text-[11px]">R$</span>}
+                adornRight={sufixoUnidadePreco(unidadePrecoNovo) ? (
+                  <span className="text-[11px] font-normal">{sufixoUnidadePreco(unidadePrecoNovo)}</span>
+                ) : undefined}
+                className="h-8 w-full text-right font-data"
+                value={precoNovo}
+                disabled={!podeGerenciar}
+                onChange={(event) => setPrecoNovo(normalizarPrecoInput(event.target.value))}
+              />
+            </div>
+          </FormField>
+          <Button type="button" variant="secondary" disabled={!podeGerenciar || pendente || ehPrecoNaoPositivoUi(precoNovo)} onClick={() => void adicionarProduto()}>
             <Plus />
             Adicionar produto
           </Button>

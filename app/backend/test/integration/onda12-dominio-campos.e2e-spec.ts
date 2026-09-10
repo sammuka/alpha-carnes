@@ -189,6 +189,7 @@ describe('Onda 12 — domínio de campos', () => {
     const cliente = await request(srv()).post('/clientes').set('Cookie', adminCookies).send({
       razaoSocial: 'Cliente UF',
       documentoFiscal: proximoCnpj(),
+      faixaPreco: 'A',
       dadosFiscaisJson: { uf: 'XX' },
     });
     expect(cliente.status).toBe(400);
@@ -202,6 +203,7 @@ describe('Onda 12 — domínio de campos', () => {
     const clienteOk = await request(srv()).post('/clientes').set('Cookie', adminCookies).send({
       razaoSocial: 'Cliente SP',
       documentoFiscal: proximoCnpj(),
+      faixaPreco: 'A',
       dadosFiscaisJson: { uf: 'SP' },
     });
     expect(clienteOk.status).toBe(201);
@@ -367,7 +369,7 @@ describe('Onda 12 — domínio de campos', () => {
     });
     expect(fornecedor.status).toBe(201);
     const cliente = await request(srv()).post('/clientes').set('Cookie', adminCookies).send({
-      razaoSocial: 'Cliente Pedido O12', documentoFiscal: proximoCnpj(),
+      razaoSocial: 'Cliente Pedido O12', documentoFiscal: proximoCnpj(), faixaPreco: 'A',
     });
     expect(cliente.status).toBe(201);
     const compraId = await criarCompraConfirmada(
@@ -821,6 +823,7 @@ describe('Onda 12 — domínio de campos', () => {
     const criar = await request(srv()).post('/clientes').set('Cookie', adminCookies).send({
       razaoSocial: uid('CliVinculo'),
       documentoFiscal: proximoCnpj(),
+      faixaPreco: 'A',
       representanteId: representante.id,
       rotaId: rota.body.id,
     });

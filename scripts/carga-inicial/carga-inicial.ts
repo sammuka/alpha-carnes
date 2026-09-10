@@ -86,12 +86,23 @@ async function importarClientes(db: Db, excluidos: Excluido[]): Promise<number> 
     }
     documentosUsados.add(doc);
 
+    const faixaLegado = (r as { faixa_preco?: unknown; Faixa_Preco?: unknown }).faixa_preco
+      ?? (r as { Faixa_Preco?: unknown }).Faixa_Preco;
+    let faixaPreco: 'A' | 'B' | 'C' | 'D' = 'A';
+    if (faixaLegado !== undefined && faixaLegado !== null && faixaLegado !== '') {
+      const faixa = String(faixaLegado).trim().toUpperCase();
+      if (!['A', 'B', 'C', 'D'].includes(faixa)) {
+        throw new Error(`carga-inicial: cliente ${codigoLegado} com faixa_preco inválida ("${String(faixaLegado)}")`);
+      }
+      faixaPreco = faixa as 'A' | 'B' | 'C' | 'D';
+    }
     await db.insert(clientes).values({
       codigo: codigoLegado,
       razaoSocial: nome,
       nomeFantasia: r.Marca?.trim() || null,
       documentoFiscal: doc,
       status: r.Ativo ? 'ativo' : 'inativo',
+      faixaPreco,
       dadosFiscaisJson: {
         logradouro: r.Endereco_Cliente ?? undefined,
         numero: r.Numero_Cliente ?? undefined,

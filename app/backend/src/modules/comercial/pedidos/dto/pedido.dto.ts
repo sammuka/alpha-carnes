@@ -1,6 +1,21 @@
 import { z } from 'zod';
 import { fkOpcionalSchema } from '../../../../common/dto/dominios.dto';
 
+const PRECO_APLICADO_REGEX = /^\d+(\.\d{1,2})?$/;
+const PRECO_ZERO_LIKE = /^0+(\.0{1,2})?$/;
+
+/** NUMERIC(15,2) como string. Sem Number(), sem coerce. */
+export function ehPrecoNaoPositivo(valor: string | null | undefined): boolean {
+  if (valor == null || valor.trim() === '') return true;
+  const s = valor.trim();
+  if (!PRECO_APLICADO_REGEX.test(s)) return true;
+  return PRECO_ZERO_LIKE.test(s);
+}
+
+export const precoAplicadoSchema = z.string()
+  .regex(PRECO_APLICADO_REGEX, 'precoAplicado deve ter no máximo 2 casas decimais')
+  .refine((s) => !PRECO_ZERO_LIKE.test(s), 'precoAplicado deve ser maior que zero');
+
 const quantidadeSchema = z
   .number()
   .positive('quantidade deve ser maior que zero')
@@ -10,6 +25,7 @@ const itemPedidoSchema = z.object({
   produtoId: z.string().uuid(),
   quantidadePedida: quantidadeSchema,
   observacoes: z.string().trim().max(500).optional(),
+  precoAplicado: precoAplicadoSchema.optional(),
 });
 
 const itensCriacaoPedidoSchema = z.array(itemPedidoSchema)
@@ -54,7 +70,13 @@ export const incluirItemSchema = z.object({
   produtoId: z.string().uuid(),
   quantidade: z.coerce.number().positive(),
   observacoes: z.string().max(1000).optional(),
+  precoAplicado: precoAplicadoSchema.optional(),
 }).strict();
+
+export const ajustarPrecoItemSchema = z.object({
+  precoAplicado: precoAplicadoSchema,
+}).strict();
+export type AjustarPrecoItemDto = z.infer<typeof ajustarPrecoItemSchema>;
 
 export const confirmarCriacaoOverbookingSchema = createPedidoSchema;
 export const confirmarInclusaoOverbookingSchema = incluirItemSchema;

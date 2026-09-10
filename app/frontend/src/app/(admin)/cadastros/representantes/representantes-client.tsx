@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Info } from 'lucide-react';
 import { CadastroTabelaDrawer } from '@/components/cadastros/cadastro-tabela-drawer';
 import { BadgeCount } from '@/components/ui/badge-count';
+import { mascararTelefone } from '@/lib/masks';
 import type { Representante } from '@/lib/representantes';
 import { ClientesVinculados } from './clientes-vinculados';
 import { UsuariosVinculados } from './usuarios-vinculados';
@@ -108,9 +109,9 @@ export function RepresentantesClient({ podeGerenciar }: { podeGerenciar: boolean
       ]}
       campos={[
         { nome: 'codigo', rotulo: 'Código', tipo: 'texto', obrigatorio: true, placeholder: 'REP-01', monoespacado: true, maxLength: 50 },
-        { nome: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, placeholder: 'Ex: Sabrina', maxLength: 200 },
-        { nome: 'tipoCanal', rotulo: 'Tipo / canal', tipo: 'texto', placeholder: 'Ex: Interno', maxLength: 100 },
-        { nome: 'contato', rotulo: 'Contato', tipo: 'texto', placeholder: 'Telefone e/ou e-mail', maxLength: 200 },
+        { nome: 'nome', rotulo: 'Nome', tipo: 'texto', obrigatorio: true, placeholder: 'Ex: Sabrina', maxLength: 60 },
+        { nome: 'tipoCanal', rotulo: 'Tipo / canal', tipo: 'texto', placeholder: 'Ex: Interno', maxLength: 10 },
+        { nome: 'contato', rotulo: 'Contato', tipo: 'texto', placeholder: '(11) 90000-0000', mascara: mascararTelefone },
         { nome: 'observacao', rotulo: 'Observação', tipo: 'textarea' },
       ]}
       formularioVazio={{ codigo: '', nome: '', tipoCanal: '', contato: '', observacao: '', status: 'ativo' }}

@@ -32,6 +32,7 @@ async function criarClienteComCnpj(app: INestApplication): Promise<string> {
       codigo: `CLI-FAT-${Date.now()}`,
       razaoSocial: 'Cliente Faturamento Teste',
       documentoFiscal: cnpj,
+      faixaPreco: 'A',
       dadosFiscaisJson: {
         logradouro: 'Rua Teste',
         numero: '100',

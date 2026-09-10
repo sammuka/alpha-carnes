@@ -25,6 +25,7 @@ import {
   type RecebimentoRegistradoPayload,
   type DivergenciaRecebimentoPayload,
   type OcorrenciaFornecedorPayload,
+  type OcorrenciaAjustePrecoPayload,
   type PedidoEmRiscoPayload,
   type PecaPesadaPayload,
   type PecaAssociadaPayload,
@@ -219,6 +220,16 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.OCORRENCIA_FORNECEDOR_ATUALIZADA)
   handleOcorrenciaAtualizada(payload: OcorrenciaFornecedorPayload): void {
     this.broadcast(EVENTOS.OCORRENCIA_FORNECEDOR_ATUALIZADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA)
+  handleOcorrenciaAjustePrecoCriada(payload: OcorrenciaAjustePrecoPayload): void {
+    this.broadcast(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CRIADA, payload, payload.dataOperacao);
+  }
+
+  @OnEvent(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CIENTE)
+  handleOcorrenciaAjustePrecoCiente(payload: OcorrenciaAjustePrecoPayload): void {
+    this.broadcast(EVENTOS.OCORRENCIA_AJUSTE_PRECO_CIENTE, payload, payload.dataOperacao);
   }
 
   @OnEvent(EVENTOS.PEDIDO_EM_RISCO)

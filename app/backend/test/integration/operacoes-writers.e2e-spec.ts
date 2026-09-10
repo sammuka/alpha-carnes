@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
-import { seedComercialBase, criarPedidoFornecedorEnviado } from '../helpers/comercial-fixtures';
+import { seedComercialBase, criarPedidoFornecedorEnviado, publicarTabelaParaData } from '../helpers/comercial-fixtures';
 import { inserirMotoristaFrota } from '../helpers/expedicao-fixtures';
 
 describe('operacoes-writers e2e', () => {
@@ -64,6 +64,7 @@ describe('operacoes-writers e2e', () => {
       .post(`/comercial/compras-programadas/${criar.body.id}/confirmar`)
       .set('Cookie', comprasCookies);
     expect(conf.status).toBe(201);
+    await publicarTabelaParaData(app, data, [base.produtoId]);
     return criar.body.id as string;
   }
 

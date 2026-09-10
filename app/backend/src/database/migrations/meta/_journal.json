@@ -260,6 +260,55 @@
       "when": 1788500704762,
       "tag": "0036_onda13_catalogo_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788757127335,
+      "tag": "0037_onda14_faixa_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788757136981,
+      "tag": "0038_onda14_faixa_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1788757152546,
+      "tag": "0039_onda14_faixa_contract",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788841200000,
+      "tag": "0040_onda14_item_preco_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788841201000,
+      "tag": "0041_onda14_item_preco_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1788841202000,
+      "tag": "0042_onda14_item_preco_contract",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1788841203000,
+      "tag": "0043_onda14_ocorrencias_preco",
+      "breakpoints": true
     }
   ]
 }

@@ -52,11 +52,12 @@ beforeEach(() => {
 });
 
 describe('RelatoriosClient', () => {
-  it('badge P8 presente, Gerar desabilitado em pendente_dados, histórico renderiza', async () => {
+  it('badge P8 presente na aba SIF, Gerar desabilitado em pendente_dados, histórico renderiza', async () => {
     render(<RelatoriosClient permissoes={['SIF_LER', 'SIF_GERAR']} />);
     await waitFor(() => {
       expect(screen.getByText('Mapa de recebimento')).toBeInTheDocument();
     });
+    expect(screen.getByText(/Modelos oficiais dos relatórios SIF/)).toBeInTheDocument();
     const btnGerar = screen.getAllByRole('button', { name: 'Gerar' })[0];
     expect(btnGerar).toBeDisabled();
     expect(screen.getAllByText('Provisório').length).toBeGreaterThan(0);

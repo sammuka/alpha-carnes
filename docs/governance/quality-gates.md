@@ -269,6 +269,16 @@ Cada onda tem plano tático próprio (padrão F4c) aprovado no **Portão 1**, cu
 - **O9:** UI fiel sobre o backend F5 existente; bipagem reusa contrato ADR-009.
 - **O10:** adapter EISS real atrás da mesma porta (fake segue no CI — Princípio V); flag RTC; checklist de liberação calculado bloqueando por requisito faltante (teste por requisito); trava de cancelamento pós-liberação.
 
+### Onda 14 — Preço de tabela no pedido (AD-16)
+DoD = mapa 1:1 deste plano (14.1–14.10 + C1–C10), derivado de ALP-55/ALP-61/AD-16:
+- Cliente sem `faixaPreco` não salva; backfill `'A'` + `NOT NULL` + CHECK A–D.
+- Resolvedor por data **exata** de `operacoes.data` (sem fallback); `null` é resposta legítima.
+- Item congela `tabela_preco_id`, `faixa_preco`, `unidade_preco`, `preco_tabela_original`, `preco_aplicado`; `preco_ajustado` derivado; `PATCH .../preco` sob `PEDIDOS_GERENCIAR` (403 sem ela). **Não existe** `PEDIDO_PRECO_AJUSTAR`.
+- Adendo herda preço; finalização com ≥1 ajuste cria exatamente 1 ocorrência `aberta`; sem ajuste, zero.
+- Ciência: `POST .../ciente` com `OCORRENCIA_PRECO_CIENTE`; rótulo `Marcar como ciente`; 409 `OCORRENCIA_JA_CIENTE`.
+- Relatório em aba de `/gestao/relatorios` (39 rotas intactas); fonte = ocorrência, nunca `tabelas_preco_itens`.
+- UI nova autorizada (AD-16); DS v3; sem accordion na fila; Badge P8 só na aba SIF.
+
 ## Como o gate decide
 
 ```mermaid

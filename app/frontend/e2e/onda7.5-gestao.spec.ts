@@ -227,6 +227,7 @@ async function prepararDados(api: APIRequestContext, adminCookie: string): Promi
     codigo: `O75CL${suffix}`,
     razaoSocial: `Cliente Onda75 ${suffix}`,
     documentoFiscal: docCliente,
+    faixaPreco: 'A',
   });
 
   await backend(api, adminCookie, 'POST', '/regras-desdobramento', {
@@ -311,6 +312,7 @@ async function criarPendenciaOverbooking(
     codigo: `O75CE${Date.now().toString(36).slice(-8)}`,
     razaoSocial: `Cliente Overbooking ${Date.now()}`,
     documentoFiscal: makeCpf(Date.now()),
+    faixaPreco: 'A',
   });
   const pedido = await backend<{ id: string }>(api, adminCookie, 'POST', '/comercial/pedidos/confirmar-overbooking', {
     compraProgramadaId: dados.compraId,
