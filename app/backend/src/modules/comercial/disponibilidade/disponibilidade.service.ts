@@ -308,7 +308,7 @@ export class DisponibilidadeService {
     tx: Tx,
     compra: CompraProgramada,
     usuarioId: string,
-  ): Promise<void> {
+  ): Promise<DisponibilidadeGerada[]> {
     const anteriores = await tx.select().from(disponibilidadesVirtuais)
       .where(eq(disponibilidadesVirtuais.compraProgramadaId, compra.id));
 
@@ -368,6 +368,12 @@ export class DisponibilidadeService {
         dadosNovos: linha,
       });
     }
+
+    return atualizadas.rows.map((linha) => ({
+      id: linha.id,
+      produtoId: linha.produto_id,
+      quantidadeTotalGerada: linha.quantidade_total_gerada,
+    }));
   }
 
   async listar(query: ListarDisponibilidadeQuery) {

@@ -3,11 +3,12 @@ import { AuthModule } from '../../auth/auth.module';
 import { OperacoesModule } from '../../operacoes/operacoes.module';
 import { RecebimentoModule } from '../../operacao/recebimento/recebimento.module';
 import { DisponibilidadeModule } from '../disponibilidade/disponibilidade.module';
+import { OverbookingModule } from '../overbooking/overbooking.module';
 import { ComprasProgramadasController } from './compras-programadas.controller';
 import { ComprasProgramadasService } from './compras-programadas.service';
 
 @Module({
-  imports: [AuthModule, DisponibilidadeModule, OperacoesModule, RecebimentoModule],
+  imports: [AuthModule, DisponibilidadeModule, OperacoesModule, OverbookingModule, RecebimentoModule],
   controllers: [ComprasProgramadasController],
   providers: [ComprasProgramadasService],
 })

@@ -272,10 +272,8 @@ describe('PesagemDestinacaoClient', () => {
       />,
     );
 
-    expect(await screen.findByText('Mais pesada')).toBeInTheDocument();
-    expect(screen.getByText('Mais gorda')).toBeInTheDocument();
-    expect(screen.getByText('Melhor acabamento')).toBeInTheDocument();
-
+    // ALP-97: chips de características (Mais pesada/Mais gorda/Melhor acabamento)
+    // foram removidos da tela de Pesagem e Destinação — não devem mais aparecer.
     const btn = await screen.findByRole('button', { name: 'Capturar Peso' });
     await waitFor(() => expect(btn).not.toBeDisabled());
     fireEvent.click(btn);

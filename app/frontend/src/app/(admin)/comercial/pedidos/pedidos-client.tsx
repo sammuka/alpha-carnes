@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Clock3, Plus, Search } from 'lucide-react';
 import type {
   AdendoPedido,
@@ -48,6 +48,13 @@ interface AuditoriaPedido {
   justificativa?: string | null;
   createdAt: string;
   usuarioNome?: string | null;
+}
+
+function formatarDataOperacao(data: string | null | undefined): string {
+  if (!data) return 'Sem data de operação';
+  const [ano, mes, dia] = data.split('-');
+  if (ano && mes && dia) return `${dia}/${mes}/${ano}`;
+  return data;
 }
 
 function varianteStatus(status: string): StatusPillVariant {
@@ -100,6 +107,7 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
   const [modoEditor, setModoEditor] = useState(false);
   const [busca, setBusca] = useState('');
   const [statusFiltro, setStatusFiltro] = useState('todos');
+  const [dataOperacaoFiltro, setDataOperacaoFiltro] = useState('todas');
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [adendos, setAdendos] = useState<AdendoPedido[]>([]);
@@ -191,6 +199,12 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
     });
   }, [carregarDetalhe, carregarLista, pedidoSelecionado]);
 
+  // ALP-87: datas de operação distintas presentes na visão atual, para o combo de filtro.
+  const datasOperacaoDisponiveis = useMemo(() => {
+    const datas = new Set(pedidos.map((pedido) => pedido.dataOperacao).filter((d): d is string => Boolean(d)));
+    return [...datas].sort((a, b) => b.localeCompare(a));
+  }, [pedidos]);
+
   const pedidosFiltrados = useMemo(() => {
     const termo = busca.trim().toLocaleLowerCase('pt-BR');
     return pedidos.filter((pedido) => {
@@ -199,9 +213,26 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
         || pedido.id.toLocaleLowerCase('pt-BR').includes(termo)
         || cliente?.razaoSocial.toLocaleLowerCase('pt-BR').includes(termo)
         || cliente?.nomeFantasia?.toLocaleLowerCase('pt-BR').includes(termo);
-      return correspondeBusca && (statusFiltro === 'todos' || pedido.status === statusFiltro);
+      const correspondeStatus = statusFiltro === 'todos' || pedido.status === statusFiltro;
+      const correspondeData = dataOperacaoFiltro === 'todas' || pedido.dataOperacao === dataOperacaoFiltro;
+      return correspondeBusca && correspondeStatus && correspondeData;
     });
-  }, [busca, clientes, pedidos, statusFiltro]);
+  }, [busca, clientes, dataOperacaoFiltro, pedidos, statusFiltro]);
+
+  // ALP-87: sem filtro de data acionado, o grid é agrupado em blocos por data de operação
+  // (mais recente primeiro), cada bloco com a data como cabeçalho.
+  const blocosPorData = useMemo(() => {
+    const mapa = new Map<string, PedidoVenda[]>();
+    for (const pedido of pedidosFiltrados) {
+      const chave = pedido.dataOperacao ?? '';
+      const lista = mapa.get(chave);
+      if (lista) lista.push(pedido);
+      else mapa.set(chave, [pedido]);
+    }
+    return [...mapa.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([data, itens]) => ({ data, itens }));
+  }, [pedidosFiltrados]);
 
   const contadores = {
     total: pedidos.length,
@@ -261,6 +292,9 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
           onBack={() => {
             setModoEditor(false);
             setPedidoSelecionado(null);
+            // ALP-89: qualquer edição (remoção de item, cancelamento) precisa refletir
+            // na listagem ao voltar, mesmo quando o fluxo específico não chamou onChanged.
+            void carregarLista();
           }}
           onChanged={atualizar}
         />
@@ -301,6 +335,18 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
         title="Pedidos de Venda"
         subtitle="Acompanhe reservas, overbooking e atendimento comercial"
       >
+        <SelectNative
+          aria-label="Filtrar por data de operação"
+          selectSize="sm"
+          className="w-[190px]"
+          value={dataOperacaoFiltro}
+          onChange={(event) => setDataOperacaoFiltro(event.target.value)}
+        >
+          <option value="todas">Todas as datas</option>
+          {datasOperacaoDisponiveis.map((data) => (
+            <option key={data} value={data}>{formatarDataOperacao(data)}</option>
+          ))}
+        </SelectNative>
         {podeGerenciar && (
           <Button
             type="button"
@@ -392,61 +438,70 @@ export function PedidosClient({ permissoes }: PedidosClientProps) {
                   </TableCell>
                 </TableRow>
               )}
-              {pedidosFiltrados.map((pedido) => {
-                const cliente = clientes.find((item) => item.id === pedido.clienteId);
-                const temReservaAtiva = pedido.status === 'rascunho'
-                  || pedido.status === 'em_elaboracao_reserva_ativa';
-                return (
-                  <TableRow
-                    key={pedido.id}
-                    className="group cursor-pointer"
-                    onClick={() => void abrirPedido(pedido.id)}
-                  >
-                    <TableCell className="text-[13px] font-semibold text-foreground">
-                      {cliente?.nomeFantasia || cliente?.razaoSocial || '—'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {pedido.representanteNome || 'Sem representante'}
-                    </TableCell>
-                    <TableCellCode>{pedido.rotaPrevista || pedido.rotaNome || '—'}</TableCellCode>
-                    <TableCell>
-                      <StatusPill
-                        variant={varianteStatus(pedido.status)}
-                        label={rotuloStatusPedido(pedido.status, temReservaAtiva)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          aria-label={`Abrir pedido ${pedido.id}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void abrirPedido(pedido.id);
-                          }}
-                        >
-                          Abrir
-                        </Button>
-                        {podeLiberar && pedido.status === 'rascunho' && (
-                          <Button
-                            type="button"
-                            variant="destructiveOutline"
-                            size="sm"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setLiberarPedidoId(pedido.id);
-                            }}
-                          >
-                            Liberar reserva
-                          </Button>
-                        )}
-                      </div>
+              {blocosPorData.map((bloco) => (
+                <Fragment key={bloco.data || 'sem-data'}>
+                  <TableRow className="bg-surface-2 hover:bg-surface-2">
+                    <TableCell colSpan={5} className="h-7 text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">
+                      {formatarDataOperacao(bloco.data)}
                     </TableCell>
                   </TableRow>
-                );
-              })}
+                  {bloco.itens.map((pedido) => {
+                    const cliente = clientes.find((item) => item.id === pedido.clienteId);
+                    const temReservaAtiva = pedido.status === 'rascunho'
+                      || pedido.status === 'em_elaboracao_reserva_ativa';
+                    return (
+                      <TableRow
+                        key={pedido.id}
+                        className="group cursor-pointer"
+                        onClick={() => void abrirPedido(pedido.id)}
+                      >
+                        <TableCell className="text-[13px] font-semibold text-foreground">
+                          {cliente?.nomeFantasia || cliente?.razaoSocial || '—'}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {pedido.representanteNome || 'Sem representante'}
+                        </TableCell>
+                        <TableCellCode>{pedido.rotaPrevista || pedido.rotaNome || '—'}</TableCellCode>
+                        <TableCell>
+                          <StatusPill
+                            variant={varianteStatus(pedido.status)}
+                            label={rotuloStatusPedido(pedido.status, temReservaAtiva)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              aria-label={`Abrir pedido ${pedido.id}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void abrirPedido(pedido.id);
+                              }}
+                            >
+                              Abrir
+                            </Button>
+                            {podeLiberar && pedido.status === 'rascunho' && (
+                              <Button
+                                type="button"
+                                variant="destructiveOutline"
+                                size="sm"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setLiberarPedidoId(pedido.id);
+                                }}
+                              >
+                                Liberar reserva
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </Fragment>
+              ))}
             </TableBody>
           </Table>
         </CardContent>

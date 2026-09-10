@@ -304,6 +304,9 @@ describe('AssociacaoService — branches de erro', () => {
       select: jest.fn(() => ({
         from: jest.fn(() => ({
           where: jest.fn(() => Promise.resolve([peca])),
+          innerJoin: jest.fn(() => ({
+            where: jest.fn(() => Promise.resolve([{ dataOperacao: '2026-09-09' }])),
+          })),
         })),
       })),
       update: jest.fn(() => ({
@@ -338,6 +341,9 @@ describe('AssociacaoService — branches de erro', () => {
       select: jest.fn(() => ({
         from: jest.fn(() => ({
           where: jest.fn(() => Promise.resolve([peca])),
+          innerJoin: jest.fn(() => ({
+            where: jest.fn(() => Promise.resolve([{ dataOperacao: '2026-09-09' }])),
+          })),
         })),
       })),
       update: jest.fn(() => ({
