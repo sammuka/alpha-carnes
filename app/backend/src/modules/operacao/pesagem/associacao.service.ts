@@ -259,10 +259,15 @@ export class AssociacaoService {
         dadosNovos: atualizada,
       });
 
-      return atualizada;
+      return { peca: atualizada, dataOperacao: await this.dataOperacaoDaPeca(tx, peca) };
     });
 
-    return resultado;
+    this.eventEmitter.emit(EVENTOS.FALTAS_DESOSSA_ATUALIZADAS, {
+      dataOperacao: resultado.dataOperacao,
+      motivo: `peca_destinada_${dto.destino}`,
+    });
+
+    return resultado.peca;
   }
 
   /**

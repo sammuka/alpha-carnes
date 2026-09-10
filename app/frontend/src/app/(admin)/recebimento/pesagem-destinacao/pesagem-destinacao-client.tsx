@@ -39,7 +39,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DeviceBadge } from '@/components/ui/device-badge';
 import { EmptyState } from '@/components/ui/empty-state';
-import { FilterChip } from '@/components/ui/filter-chip';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
@@ -155,12 +154,6 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
   const [motivo, setMotivo] = useState<MotivoCapturaManual>('dispositivo_indisponivel');
   const [motivoSobra, setMotivoSobra] = useState('');
   const [trocarLoteAberto, setTrocarLoteAberto] = useState(false);
-
-  const [caracteristicas, setCaracteristicas] = useState({
-    maisPesada: false,
-    maisGorda: false,
-    melhorAcabamento: false,
-  });
 
   const carregarRecebimentos = useCallback(async () => {
     const res = await fetch('/api/operacao/recebimentos?pageSize=30', { cache: 'no-store' });
@@ -362,6 +355,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     if (!q) return sugestao.compativeis;
     return sugestao.compativeis.filter(
       (s) =>
+        (s.clienteNome?.toLowerCase().includes(q) ?? false) ||
         s.clienteId.toLowerCase().includes(q) ||
         s.pedidoVendaId.toLowerCase().includes(q) ||
         s.justificativa.toLowerCase().includes(q) ||
@@ -398,21 +392,16 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
   const pesar = async (modo: 'automatico' | 'manual_assistido') => {
     if (!recebimentoId || !produtoBaseId) return;
-    const meta: Record<string, unknown> = {};
-    if (caracteristicas.maisPesada) meta.maisPesada = true;
-    if (caracteristicas.maisGorda) meta.maisGorda = true;
-    if (caracteristicas.melhorAcabamento) meta.melhorAcabamento = true;
 
     const body =
       modo === 'automatico'
-        ? { recebimentoId, produtoBaseId, modoCaptura: 'automatico', capturaMeta: meta }
+        ? { recebimentoId, produtoBaseId, modoCaptura: 'automatico' }
         : {
             recebimentoId,
             produtoBaseId,
             modoCaptura: 'manual_assistido',
             pesoManual: Number(pesoManual),
             motivo,
-            capturaMeta: meta,
           };
 
     const p = await chamar<Peca>('/api/operacao/pesagem/pecas', body);
@@ -447,7 +436,8 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     if (p) {
       setPeca(p);
       setSugestao(null);
-      await refreshLote();
+      setMotivoSobra('');
+      await Promise.all([refreshLote(), carregarFaltas()]);
     }
   };
 
@@ -466,10 +456,6 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     setSugestao(null);
     setBuscaPedido('');
     setTrocarLoteAberto(false);
-  };
-
-  const toggleCaracteristica = (key: keyof typeof caracteristicas) => {
-    setCaracteristicas((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const estornarAssociacao = async () => {
@@ -536,6 +522,14 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                 variant={statusRecebimentoVariant(detalhe.status)}
                 label={STATUS_RECEB_LABEL[detalhe.status]}
               />
+              {dataOperacao && (
+                <span className="text-xs text-muted-foreground">
+                  Operação{' '}
+                  <b className="font-data font-medium text-foreground">
+                    {formatDataOperacao(dataOperacao)}
+                  </b>
+                </span>
+              )}
               {detalhe.fornecedor?.razaoSocial && (
                 <span className="text-xs text-muted-foreground">
                   Fornecedor <b className="font-medium text-foreground">{detalhe.fornecedor.razaoSocial}</b>
@@ -647,35 +641,6 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
             <FormField label="Produto" htmlFor="produto-atual">
               <Input id="produto-atual" readOnly value={itemAtivo ? labelProduto(itemAtivo) : ''} />
-            </FormField>
-
-            <FormField
-              label={
-                <>
-                  Características <span className="font-normal normal-case text-fg-faint">(opcional)</span>
-                </>
-              }
-            >
-              <div className="flex flex-wrap gap-1.5">
-                <FilterChip
-                  active={caracteristicas.maisPesada}
-                  onClick={() => toggleCaracteristica('maisPesada')}
-                >
-                  Mais pesada
-                </FilterChip>
-                <FilterChip
-                  active={caracteristicas.maisGorda}
-                  onClick={() => toggleCaracteristica('maisGorda')}
-                >
-                  Mais gorda
-                </FilterChip>
-                <FilterChip
-                  active={caracteristicas.melhorAcabamento}
-                  onClick={() => toggleCaracteristica('melhorAcabamento')}
-                >
-                  Melhor acabamento
-                </FilterChip>
-              </div>
             </FormField>
 
             {podePesar && (
