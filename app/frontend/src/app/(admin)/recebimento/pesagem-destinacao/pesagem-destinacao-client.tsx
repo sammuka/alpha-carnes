@@ -99,10 +99,19 @@ function calcRestante(esperada: string, apurada: string | null | undefined): str
 }
 
 function labelProduto(item: RecebimentoItem): string {
-  if (item.produto) {
-    return `${item.produto.codigo} — ${item.produto.descricao}`;
+  const rotulo = rotuloProduto(item.produto);
+  if (rotulo !== '—') return rotulo;
+  return item.origemDescricao ?? rotulo;
+}
+
+function formatDataOperacao(data: string): string {
+  try {
+    const [ano, mes, dia] = data.split('-');
+    if (ano && mes && dia) return `${dia}/${mes}/${ano}`;
+    return data;
+  } catch {
+    return data;
   }
-  return item.origemDescricao ?? rotuloProduto(item.produto);
 }
 
 function pesadoItem(item: RecebimentoItem): string {
@@ -285,9 +294,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
             pedidoVendaId: p.pedidoVendaId,
             pedidoVendaItemId: key,
             clienteNome: acao?.clientePedido ?? 'Cliente do pedido',
-            produtoLabel: ic
-              ? `${ic.codigo} — ${ic.descricao}`
-              : '—',
+            produtoLabel: ic ? rotuloProduto(ic) : '—',
             pecasAssociadas: [],
           };
           porItem.set(key, ped);

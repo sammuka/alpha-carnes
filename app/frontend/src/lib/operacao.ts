@@ -56,7 +56,7 @@ export interface RecebimentoItem {
   pesoApurado?: string | null;
   statusApuracao: StatusApuracaoItem;
   observacoes: string | null;
-  produto?: { id: string; codigo: string; descricao: string };
+  produto?: { id: string; codigo: string; nome?: string; descricao?: string };
 }
 
 export interface DivergenciaRecebimento {
