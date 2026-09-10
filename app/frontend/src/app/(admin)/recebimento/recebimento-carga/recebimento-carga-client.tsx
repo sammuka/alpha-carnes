@@ -209,6 +209,30 @@ function labelProdutoItem(item: RecebimentoItem): string {
   return rotuloProduto(item.produto);
 }
 
+function formatDataOperacao(data: string | null | undefined): string {
+  if (!data) return '—';
+  const [ano, mes, dia] = data.split('-');
+  if (ano && mes && dia) return `${dia}/${mes}/${ano}`;
+  return data;
+}
+
+function hojeISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** ALP-92: prioriza pedidos da operação corrente sem esconder o backlog de dias anteriores. */
+function ordenarPedidosPorOperacaoAtual(
+  pedidos: PedidoFornecedorResumoRecebivel[],
+): PedidoFornecedorResumoRecebivel[] {
+  const hoje = hojeISO();
+  return [...pedidos].sort((a, b) => {
+    const aHoje = a.dataOperacao === hoje ? 0 : 1;
+    const bHoje = b.dataOperacao === hoje ? 0 : 1;
+    if (aHoje !== bHoje) return aHoje - bHoje;
+    return b.dataOperacao.localeCompare(a.dataOperacao);
+  });
+}
+
 export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] }) {
   const router = useRouter();
   const podeLer = permissoes.includes('RECEBIMENTO_LER');
@@ -222,6 +246,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   const [sheetNfeAberto, setSheetNfeAberto] = useState(false);
   const [pedidoFornecedorId, setPedidoFornecedorId] = useState('');
   const [previsao, setPrevisao] = useState<PrevisaoRecebimento | null>(null);
+  const [itensNfEditados, setItensNfEditados] = useState<Record<string, string>>({});
   const [formNfe, setFormNfe] = useState<FormNfe>(formNfeVazio);
   const [formMetadados, setFormMetadados] = useState<FormMetadados>(formMetadadosVazio);
   const [salvando, setSalvando] = useState(false);
@@ -282,13 +307,18 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   const carregarPrevisao = useCallback(async (id: string) => {
     setErro(null);
     setPrevisao(null);
+    setItensNfEditados({});
     const res = await fetch(`/api/operacao/recebimentos/previsao/${id}`, { cache: 'no-store' });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
       setErro(extrairMensagemErro(body, 'Erro ao carregar previsão'));
       return;
     }
-    setPrevisao(body as PrevisaoRecebimento);
+    const dados = body as PrevisaoRecebimento;
+    setPrevisao(dados);
+    setItensNfEditados(
+      Object.fromEntries(dados.itensOperacionais.map((item) => [item.produtoId, item.quantidadePrevista])),
+    );
   }, []);
 
   const carregarQuadro = useCallback(async (id: string) => {
@@ -424,15 +454,49 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
       body: JSON.stringify(payload),
     });
     const body = await res.json().catch(() => ({}));
-    setSalvando(false);
     if (!res.ok) {
+      setSalvando(false);
       setErro(extrairMensagemErro(body, 'Erro ao criar lote'));
       return;
     }
     const rec = (body as { recebimento: { id: string } }).recebimento;
+
+    // ALP-93: se o usuário digitou a NF, os valores por ele informados na grade passam a
+    // ser a referência (quantidadeDeclarada), substituindo o previsto do Pedido de Compra.
+    if (formNfe.nfeNumero.trim()) {
+      const itensNf = previsao.itensOperacionais.map((item) => ({
+        produtoId: item.produtoId,
+        quantidadeDeclarada: Number(itensNfEditados[item.produtoId] ?? item.quantidadePrevista),
+      }));
+      const resNf = await fetch(`/api/operacao/pedidos-fornecedor/${previsao.pedidoFornecedorId}/nf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numero: formNfe.nfeNumero.trim(),
+          serie: formNfe.nfeSerie || undefined,
+          chave: /^\d{44}$/.test(formNfe.nfeChave.trim()) ? formNfe.nfeChave.trim() : undefined,
+          dataEmissao: formNfe.nfeDataEmissao || undefined,
+          pesoTotalDeclarado: formNfe.nfePesoBruto ? Number(formNfe.nfePesoBruto) : undefined,
+          recebimentoId: rec.id,
+          confirmarSubstituicaoCabecalho: true,
+          itens: itensNf,
+        }),
+      });
+      if (!resNf.ok) {
+        const bodyNf = await resNf.json().catch(() => ({}));
+        setSalvando(false);
+        setErro(extrairMensagemErro(bodyNf, 'Lote criado, mas houve erro ao registrar os itens da NF'));
+        await carregarLista();
+        await carregarDetalhe(rec.id);
+        return;
+      }
+    }
+
+    setSalvando(false);
     setSheetAberto(false);
     setPedidoFornecedorId('');
     setPrevisao(null);
+    setItensNfEditados({});
     setFormNfe(formNfeVazio());
     await carregarLista();
     if (irParaBalanca) {
@@ -636,6 +700,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   const abrirNovo = () => {
     setPedidoFornecedorId('');
     setPrevisao(null);
+    setItensNfEditados({});
     setFormNfe(formNfeVazio());
     setErro(null);
     setSheetAberto(true);
@@ -1058,14 +1123,14 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
         </div>
       )}
 
-      <Sheet open={sheetAberto} onOpenChange={setSheetAberto}>
-        <SheetContent className="flex flex-col overflow-hidden p-0 sm:max-w-lg">
-          <SheetHeader className="border-b px-6 py-4">
-            <SheetTitle>Novo Recebimento de Carga</SheetTitle>
-            <SheetDescription className="sr-only">
-              Selecione o Pedido ao Fornecedor e informe os dados da chegada da carga.
-            </SheetDescription>
-          </SheetHeader>
+      <Dialog open={sheetAberto} onOpenChange={setSheetAberto}>
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-3xl">
+          <DialogHeader className="border-b px-6 py-4">
+            <DialogTitle>Novo Recebimento de Carga</DialogTitle>
+            <DialogDescription>
+              Selecione o Pedido ao Fornecedor e confira os itens antes de abrir o lote na balança.
+            </DialogDescription>
+          </DialogHeader>
           {erro && (
             <div role="alert" className="mx-6 mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
               {erro}
@@ -1073,35 +1138,54 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
           )}
 
           <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+            {/* Cabeçalho: pedido + dados que não mudam depois de criado o lote */}
             <section className="space-y-2.5" aria-labelledby="bloco-pedido-fornecedor">
               <p id="bloco-pedido-fornecedor" className="text-[11px] font-bold uppercase tracking-[0.05em] text-muted-foreground">
                 A — Pedido ao Fornecedor
               </p>
-              <FormField
-                label="Pedido ao fornecedor"
-                htmlFor="pedido-fornecedor"
-                help={!carregandoPedidos && pedidosRecebiveis.length === 0
-                  ? 'Nenhum Pedido ao Fornecedor aguardando recebimento.'
-                  : undefined}
-              >
-                <ComboboxField
-                  id="pedido-fornecedor"
-                  items={pedidosRecebiveis.map((pedido) => ({
-                    id: pedido.id,
-                    label: `${pedido.numero} — ${pedido.fornecedorNome}`,
-                    sublabel: pedido.numeroInternoCompra ?? undefined,
-                  }))}
-                  value={pedidoFornecedorId}
-                  onChange={setPedidoFornecedorId}
-                  placeholder="Selecione o pedido ao fornecedor"
-                  searchPlaceholder="Buscar pedido..."
-                  emptyText="Nenhum pedido encontrado."
-                />
-              </FormField>
+              <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                <FormField
+                  label="Pedido ao fornecedor"
+                  htmlFor="pedido-fornecedor"
+                  className="sm:col-span-2"
+                  help={!carregandoPedidos && pedidosRecebiveis.length === 0
+                    ? 'Nenhum Pedido ao Fornecedor aguardando recebimento.'
+                    : undefined}
+                >
+                  <ComboboxField
+                    id="pedido-fornecedor"
+                    items={ordenarPedidosPorOperacaoAtual(pedidosRecebiveis).map((pedido) => ({
+                      id: pedido.id,
+                      label: `${pedido.numero} — ${pedido.fornecedorNome}`,
+                      sublabel: [
+                        `Operação ${formatDataOperacao(pedido.dataOperacao)}`,
+                        pedido.numeroInternoCompra,
+                      ].filter(Boolean).join(' · '),
+                    }))}
+                    value={pedidoFornecedorId}
+                    onChange={setPedidoFornecedorId}
+                    placeholder="Selecione o pedido ao fornecedor"
+                    searchPlaceholder="Buscar pedido..."
+                    emptyText="Nenhum pedido encontrado."
+                  />
+                </FormField>
+                <FormField label="Doca / área" htmlFor="doca">
+                  <Input id="doca" value={formNfe.doca} onChange={(e) => setFormNfe((p) => ({ ...p, doca: e.target.value }))} />
+                </FormField>
+              </div>
 
               {previsao && (
-                <div className="space-y-2.5 rounded-md border border-border bg-surface-2 p-3 text-sm">
-                  <Badge variant="secondary">Itens carregados automaticamente</Badge>
+                <div className="space-y-1 rounded-md border border-border bg-surface-2 p-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">Itens carregados automaticamente</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Data de operação (recebimento):{' '}
+                      <b className="font-data font-semibold text-foreground">
+                        {formatDataOperacao(previsao.dataOperacao)}
+                      </b>
+                      {' '}— fixa para este pedido.
+                    </span>
+                  </div>
                   <p>
                     <span className="text-muted-foreground">Pedido:</span> {previsao.numeroPedidoFornecedor}
                   </p>
@@ -1119,45 +1203,61 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                       <span className="text-muted-foreground">Observações:</span> {previsao.observacoesCompra}
                     </p>
                   )}
-                  <div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="hover:bg-transparent">
-                          <TableHead>Produto</TableHead>
-                          <TableHead>Qtd prevista</TableHead>
-                          <TableHead>Unidade</TableHead>
-                          <TableHead>Balança</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {previsao.itensOperacionais.map((item) => (
-                          <TableRow key={item.produtoId}>
-                            <TableCell>{item.produtoCodigo} — {item.produtoDescricao}</TableCell>
-                            <TableCellNum>{item.quantidadePrevista}</TableCellNum>
-                            <TableCell>{item.unidade}</TableCell>
-                            <TableCell>{item.passaBalanca ? 'Sim' : 'Não — Entrada direta'}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Os itens esperados vêm do Pedido ao Fornecedor. Não é necessário redigitar a carga.
-                  </p>
                 </div>
               )}
-              <FormField label="Doca / área" htmlFor="doca">
-                <Input id="doca" value={formNfe.doca} onChange={(e) => setFormNfe((p) => ({ ...p, doca: e.target.value }))} />
-              </FormField>
             </section>
+
+            {/* Grid: itens do pedido de compra, com a Qtd NF editável (ALP-93) */}
+            {previsao && (
+              <section className="space-y-2" aria-labelledby="bloco-itens">
+                <p id="bloco-itens" className="text-[11px] font-bold uppercase tracking-[0.05em] text-muted-foreground">
+                  Itens do Pedido de Compra
+                </p>
+                <div className="overflow-hidden rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead>Produto</TableHead>
+                        <TableHead className="text-right">Qtd pedido</TableHead>
+                        <TableHead className="text-right">Qtd NF</TableHead>
+                        <TableHead>Unidade</TableHead>
+                        <TableHead>Balança</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {previsao.itensOperacionais.map((item) => (
+                        <TableRow key={item.produtoId}>
+                          <TableCell>{item.produtoCodigo} — {item.produtoDescricao}</TableCell>
+                          <TableCellNum>{item.quantidadePrevista}</TableCellNum>
+                          <TableCell className="text-right">
+                            <Input
+                              inputMode="decimal"
+                              className="ml-auto h-7 w-24 text-right"
+                              value={itensNfEditados[item.produtoId] ?? item.quantidadePrevista}
+                              onChange={(e) =>
+                                setItensNfEditados((prev) => ({ ...prev, [item.produtoId]: e.target.value }))
+                              }
+                              aria-label={`Quantidade da NF para ${item.produtoCodigo}`}
+                            />
+                          </TableCell>
+                          <TableCell>{item.unidade}</TableCell>
+                          <TableCell>{item.passaBalanca ? 'Sim' : 'Não — Entrada direta'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Os itens vêm do Pedido ao Fornecedor. Se a NF trouxer quantidade diferente, ajuste na coluna
+                  “Qtd NF” — o valor previsto passa a refletir o que foi informado. A conferência real de peso será
+                  feita na balança.
+                </p>
+              </section>
+            )}
 
             <section className="space-y-2.5" aria-labelledby="bloco-nota-fiscal">
               <p id="bloco-nota-fiscal" className="text-[11px] font-bold uppercase tracking-[0.05em] text-muted-foreground">
                 B — Nota Fiscal recebida
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Informe apenas os dados complementares da NF/romaneio. A conferência real de peças, pesos e quantidades
-                será feita na balança.
               </p>
               <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
                 <FormField label="Número da NF-e" htmlFor="nfeNumero" className="sm:col-span-2">
@@ -1166,7 +1266,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                 <FormField label="Série" htmlFor="nfeSerie">
                   <Input id="nfeSerie" value={formNfe.nfeSerie} onChange={(e) => setFormNfe((p) => ({ ...p, nfeSerie: e.target.value }))} />
                 </FormField>
-                <FormField label="Data emissão" htmlFor="nfeDataEmissao">
+                <FormField label="Data de emissão da NF-e" htmlFor="nfeDataEmissao" help="Diferente da data de operação — vem da nota fiscal do fornecedor.">
                   <Input id="nfeDataEmissao" type="date" value={formNfe.nfeDataEmissao} onChange={(e) => setFormNfe((p) => ({ ...p, nfeDataEmissao: e.target.value }))} />
                 </FormField>
                 <FormField label="Chave NF-e" htmlFor="nfeChave" className="sm:col-span-2">
@@ -1210,29 +1310,31 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
               </FormField>
             </section>
           </div>
-          <div className="flex flex-col gap-2 border-t border-border bg-background px-6 py-4">
+          <DialogFooter className="border-t border-border bg-background px-6 py-4 sm:justify-between">
             <Button variant="ghost" onClick={() => setSheetAberto(false)}>
               Cancelar
             </Button>
-            <Button
-              variant="secondary"
-              disabled={salvando || carregandoPedidos || !pedidoFornecedorId || !previsao?.itensOperacionais.length}
-              onClick={() => void criarLote(false)}
-              data-testid="btn-criar-lote"
-            >
-              Criar Lote
-            </Button>
-            <Button
-              disabled={salvando || carregandoPedidos || !pedidoFornecedorId || !previsao?.itensOperacionais.length}
-              onClick={() => void criarLote(true)}
-              data-testid="btn-criar-ir-balanca"
-            >
-              <ArrowRight />
-              Criar Lote e Ir para Balança
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                disabled={salvando || carregandoPedidos || !pedidoFornecedorId || !previsao?.itensOperacionais.length}
+                onClick={() => void criarLote(false)}
+                data-testid="btn-criar-lote"
+              >
+                Criar Lote
+              </Button>
+              <Button
+                disabled={salvando || carregandoPedidos || !pedidoFornecedorId || !previsao?.itensOperacionais.length}
+                onClick={() => void criarLote(true)}
+                data-testid="btn-criar-ir-balanca"
+              >
+                <ArrowRight />
+                Criar Lote e Ir para Balança
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={sheetNfeAberto} onOpenChange={setSheetNfeAberto}>
         <SheetContent className="sm:max-w-[520px]">
