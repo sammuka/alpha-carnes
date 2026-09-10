@@ -5,13 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, ne, notInArray, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import {
   compararQtd,
   ehZero,
   formatarQtd,
+  minimoQtd,
+  somarQtd,
   subtrairQtd,
 } from '../../../common/crud/decimal';
 import { montarPaginado, type Paginado } from '../../../common/crud/paginacao';
@@ -289,6 +291,167 @@ export class OverbookingService {
       },
     );
     return pendencia;
+  }
+
+  /**
+   * AD-17 — quando o pool de disponibilidade virtual de um produto/operação cresce
+   * (nova compra confirmada ou item de compra já confirmada ajustado para cima), abate
+   * automaticamente as pendências de overbooking abertas do mesmo produto/operação,
+   * mais antigas primeiro (FIFO), convertendo a reserva de overbooking em reserva
+   * virtual real na mesma proporção coberta. Idempotente e seguro sob concorrência:
+   * cada UPDATE de saldo é condicional (linha 1-a-1), e chamar sem saldo disponível
+   * é no-op. Eventos só devem ser emitidos pelo chamador após o commit (ADR-004).
+   */
+  async reconciliarComPool(
+    tx: Tx,
+    operacaoId: string,
+    produtoId: string,
+    usuarioId: string,
+  ): Promise<EventoDominio[]> {
+    const eventos: EventoDominio[] = [];
+    const pendentes = await tx.select().from(pendenciasOverbooking)
+      .where(and(
+        eq(pendenciasOverbooking.operacaoId, operacaoId),
+        eq(pendenciasOverbooking.produtoId, produtoId),
+        notInArray(pendenciasOverbooking.status, ['resolvida', 'cancelada']),
+        isNull(pendenciasOverbooking.deletedAt),
+      ))
+      .orderBy(asc(pendenciasOverbooking.createdAt))
+      .for('update');
+    if (pendentes.length === 0) return eventos;
+
+    const dataOperacao = await this.dataDaOperacao(tx, operacaoId);
+
+    for (const pendencia of pendentes) {
+      if (ehZero(pendencia.quantidadeDeficit)) continue;
+
+      const pool = await tx.execute<{ id: string; quantidade_disponivel: string }>(sql`
+        SELECT id, quantidade_disponivel
+        FROM disponibilidades_virtuais
+        WHERE operacao_id = ${operacaoId}
+          AND produto_id = ${produtoId}
+          AND quantidade_disponivel > 0
+        ORDER BY created_at, id
+        FOR UPDATE
+      `);
+      if (pool.rows.length === 0) break;
+
+      const overbookingReserva = await tx.select().from(reservasDisponibilidade)
+        .where(and(
+          eq(reservasDisponibilidade.pedidoVendaItemId, pendencia.pedidoVendaItemId),
+          eq(reservasDisponibilidade.tipoConsumo, 'overbooking'),
+          eq(reservasDisponibilidade.status, 'ativa'),
+        )).for('update').then((r) => r[0]);
+      if (!overbookingReserva) continue;
+
+      let restante = pendencia.quantidadeDeficit;
+      let quantidadeReconciliada = '0.000';
+      for (const row of pool.rows) {
+        if (ehZero(restante)) break;
+        const quantidade = minimoQtd(restante, row.quantidade_disponivel);
+        if (ehZero(quantidade)) continue;
+
+        const atualizada = await tx.execute<{
+          id: string; quantidade_reservada: string; quantidade_disponivel: string;
+        }>(sql`
+          UPDATE disponibilidades_virtuais
+          SET quantidade_reservada = quantidade_reservada + ${quantidade}::numeric,
+              quantidade_disponivel = quantidade_disponivel - ${quantidade}::numeric,
+              status = CASE
+                WHEN quantidade_disponivel - ${quantidade}::numeric = 0 THEN 'esgotada'
+                ELSE 'parcialmente_reservada' END
+          WHERE id = ${row.id} AND quantidade_disponivel >= ${quantidade}::numeric
+          RETURNING id, quantidade_reservada, quantidade_disponivel
+        `);
+        const linha = atualizada.rows[0];
+        if (!linha) continue; // saldo mudou por concorrência; próxima chamada reconcilia o resto
+
+        await tx.insert(reservasDisponibilidade).values({
+          disponibilidadeVirtualId: linha.id,
+          pedidoVendaItemId: pendencia.pedidoVendaItemId,
+          quantidadeReservada: quantidade,
+          tipoConsumo: 'virtual',
+          status: 'ativa',
+        });
+        eventos.push({
+          nome: EVENTOS.RESERVA_ATUALIZADA,
+          payload: {
+            disponibilidadeId: linha.id,
+            produtoId,
+            dataOperacao,
+            quantidadeReservada: linha.quantidade_reservada,
+            quantidadeDisponivel: linha.quantidade_disponivel,
+          },
+        });
+        restante = subtrairQtd(restante, quantidade);
+        quantidadeReconciliada = somarQtd(quantidadeReconciliada, quantidade);
+      }
+      if (ehZero(quantidadeReconciliada)) continue;
+
+      const saldoOverbooking = subtrairQtd(overbookingReserva.quantidadeReservada, quantidadeReconciliada);
+      await tx.update(reservasDisponibilidade)
+        .set(ehZero(saldoOverbooking) ? { status: 'liberada' } : { quantidadeReservada: saldoOverbooking })
+        .where(eq(reservasDisponibilidade.id, overbookingReserva.id));
+
+      await this.ajustarItemPedido(
+        tx, pendencia.pedidoVendaItemId, quantidadeReconciliada, `-${quantidadeReconciliada}`,
+      );
+
+      const deficitRestante = subtrairQtd(pendencia.quantidadeDeficit, quantidadeReconciliada);
+      const resolvida = ehZero(deficitRestante);
+      // chk_pend_ovb_deficit exige quantidade_deficit > 0 sempre: ao resolver, mantém o
+      // último valor positivo persistido (mesmo padrão de OverbookingService.decidir).
+      const [pendenciaAtualizada] = await tx.update(pendenciasOverbooking)
+        .set({
+          ...(resolvida ? {} : { quantidadeDeficit: deficitRestante }),
+          status: resolvida ? 'resolvida' : pendencia.status,
+          updatedAt: new Date(),
+        })
+        .where(eq(pendenciasOverbooking.id, pendencia.id))
+        .returning();
+      if (!pendenciaAtualizada) throw new NotFoundException('Pendência não encontrada na reconciliação');
+
+      await tx.insert(pendenciasOverbookingHistorico).values({
+        pendenciaId: pendencia.id,
+        acao: resolvida ? 'resolvida' : 'deficit_reduzido_automaticamente',
+        autorId: usuarioId,
+        detalheJson: {
+          motivo: 'Reconciliação automática overbooking → virtual (AD-17)',
+          quantidadeReconciliada,
+          deficitRestante,
+        },
+      });
+      await this.auditoria.registrar(tx, {
+        tabela: 'pendencias_overbooking',
+        registroId: pendencia.id,
+        operacao: 'UPDATE',
+        modulo: 'comercial',
+        usuarioId,
+        dadosAnteriores: pendencia,
+        dadosNovos: pendenciaAtualizada,
+        justificativa: 'Reconciliação automática overbooking → virtual (AD-17)',
+      });
+      eventos.push(resolvida
+        ? {
+          nome: EVENTOS.PENDENCIA_OVERBOOKING_RESOLVIDA,
+          payload: {
+            pendenciaId: pendenciaAtualizada.id,
+            operacaoId,
+            dataOperacao,
+            status: pendenciaAtualizada.status as 'resolvida' | 'cancelada',
+          },
+        }
+        : {
+          nome: EVENTOS.PENDENCIA_OVERBOOKING_ATUALIZADA,
+          payload: {
+            pendenciaId: pendenciaAtualizada.id,
+            operacaoId,
+            dataOperacao,
+            status: pendenciaAtualizada.status,
+          },
+        });
+    }
+    return eventos;
   }
 
   private async obterAtiva(id: string): Promise<Pendencia> {

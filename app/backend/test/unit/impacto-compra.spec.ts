@@ -18,6 +18,7 @@ describe('montarImpacto', () => {
       disponibilidadeService as never,
       operacoesService as never,
       { materializarEnviadoNaTx: jest.fn() } as never,
+      { reconciliarComPool: jest.fn().mockResolvedValue([]) } as never,
     );
   }
 

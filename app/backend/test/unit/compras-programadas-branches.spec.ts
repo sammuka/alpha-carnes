@@ -39,6 +39,7 @@ describe('ComprasProgramadasService — branches', () => {
       criado: true,
     }),
   };
+  const overbookingService = { reconciliarComPool: jest.fn().mockResolvedValue([]) };
 
   function makeService(dbOverrides: Record<string, unknown>) {
     return new ComprasProgramadasService(
@@ -48,6 +49,7 @@ describe('ComprasProgramadasService — branches', () => {
       disponibilidadeService as never,
       operacoesService as never,
       pedidoFornecedorService as never,
+      overbookingService as never,
     );
   }
 

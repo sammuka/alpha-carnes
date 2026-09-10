@@ -31,6 +31,8 @@ import {
   type DisponibilidadeGerada,
   type ItemImpacto,
 } from '../disponibilidade/disponibilidade.service';
+import { OverbookingService } from '../overbooking/overbooking.service';
+import type { EventoDominio } from '../pedidos/pedidos.service';
 import type {
   AtualizarItemCompraDto,
   CreateCompraProgramadaDto,
@@ -79,6 +81,7 @@ export class ComprasProgramadasService {
     private readonly disponibilidadeService: DisponibilidadeService,
     private readonly operacoes: OperacoesService,
     private readonly pedidoFornecedor: PedidoFornecedorService,
+    private readonly overbooking: OverbookingService,
   ) {}
 
   private get db() {
@@ -304,10 +307,22 @@ export class ComprasProgramadasService {
         dadosNovos: atualizado,
       });
 
-      if (confirmada) await this.disponibilidadeService.recalcularParaCompra(tx, compra, usuarioId);
+      const eventosReconciliacao: EventoDominio[] = [];
+      if (confirmada) {
+        const recalculadas = await this.disponibilidadeService.recalcularParaCompra(tx, compra, usuarioId);
+        // AD-17 — reconcilia automaticamente pendências de overbooking abertas dos
+        // produtos cujo saldo do pool pode ter aumentado com o ajuste de quantidade.
+        for (const produtoId of new Set(recalculadas.map((r) => r.produtoId))) {
+          eventosReconciliacao.push(
+            ...await this.overbooking.reconciliarComPool(tx, compra.operacaoId, produtoId, usuarioId),
+          );
+        }
+      }
 
       const itens = await this.disponibilidadeService.projetarImpacto(tx, compraId, new Map());
-      return { compra, item: atualizado, impacto: this.montarImpacto(compra, itens) };
+      return {
+        compra, item: atualizado, impacto: this.montarImpacto(compra, itens), eventosReconciliacao,
+      };
     });
 
     if (resultado.compra.status === 'confirmada') {
@@ -328,6 +343,9 @@ export class ComprasProgramadasService {
           deficitProjetado: i.deficitProjetado,
         })),
       });
+      for (const evento of resultado.eventosReconciliacao) {
+        this.eventEmitter.emit(evento.nome, evento.payload);
+      }
     }
     return { item: resultado.item, impacto: resultado.impacto };
   }
@@ -432,6 +450,7 @@ export class ComprasProgramadasService {
         return {
           jaConfirmada: true,
           disponibilidades: [] as DisponibilidadeGerada[],
+          eventosReconciliacao: [] as EventoDominio[],
           pedidoCriado: materializado.criado,
           pedido: materializado.pedido,
         };
@@ -449,12 +468,22 @@ export class ComprasProgramadasService {
         dadosNovos: confirmada,
       });
 
+      // AD-17 — nova disponibilidade pode cobrir pendências de overbooking já abertas
+      // no mesmo produto/operação (backlog de compras anteriores, AD-14).
+      const eventosReconciliacao: EventoDominio[] = [];
+      for (const produtoId of new Set(disponibilidades.map((d) => d.produtoId))) {
+        eventosReconciliacao.push(
+          ...await this.overbooking.reconciliarComPool(tx, confirmada.operacaoId, produtoId, usuarioId),
+        );
+      }
+
       const materializado = await this.pedidoFornecedor.materializarEnviadoNaTx(
         tx, confirmada, usuarioId,
       );
       return {
         jaConfirmada: false,
         disponibilidades,
+        eventosReconciliacao,
         pedidoCriado: materializado.criado,
         pedido: materializado.pedido,
       };
@@ -481,6 +510,9 @@ export class ComprasProgramadasService {
           quantidadeTotalGerada: d.quantidadeTotalGerada,
         })),
       });
+      for (const evento of resultado.eventosReconciliacao) {
+        this.eventEmitter.emit(evento.nome, evento.payload);
+      }
     }
     if (resultado.pedidoCriado) {
       this.eventEmitter.emit(EVENTOS.PEDIDO_FORNECEDOR_CRIADO, {

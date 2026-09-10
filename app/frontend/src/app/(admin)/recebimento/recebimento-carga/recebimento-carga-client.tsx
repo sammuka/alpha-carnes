@@ -54,7 +54,6 @@ import { SelectNative } from '@/components/ui/select-native';
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';

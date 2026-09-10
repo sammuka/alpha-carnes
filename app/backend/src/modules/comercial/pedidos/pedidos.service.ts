@@ -177,6 +177,8 @@ export class PedidosService {
           compraProgramadaId: pedidosVenda.compraProgramadaId,
           clienteId: pedidosVenda.clienteId,
           operacaoId: pedidosVenda.operacaoId,
+          // ALP-87: grid de Pedidos de Venda agrupa por data de operação.
+          dataOperacao: operacoes.data,
           dataEntrega: pedidosVenda.dataEntrega,
           rotaId: pedidosVenda.rotaId,
           rotaPrevista: pedidosVenda.rotaPrevista,
@@ -195,10 +197,11 @@ export class PedidosService {
         })
         .from(pedidosVenda)
         .innerJoin(clientes, eq(pedidosVenda.clienteId, clientes.id))
+        .innerJoin(operacoes, eq(operacoes.id, pedidosVenda.operacaoId))
         .leftJoin(representantes, eq(clientes.representanteId, representantes.id))
         .leftJoin(rotas, eq(clientes.rotaId, rotas.id))
         .where(where)
-        .orderBy(desc(pedidosVenda.createdAt))
+        .orderBy(desc(operacoes.data), desc(pedidosVenda.createdAt))
         .limit(limit)
         .offset(offset),
       this.db
@@ -1110,6 +1113,39 @@ export class PedidosService {
       dadosAnteriores: item,
       dadosNovos: { motivo },
     });
+
+    // ALP-89: sem nenhum item ativo, o pedido não representa mais reserva alguma
+    // (Disponibilidade Virtual já zerou); cancelá-lo evita "fantasma" na listagem.
+    const restantes = await tx.select({ id: pedidosVendaItens.id }).from(pedidosVendaItens)
+      .where(and(
+        eq(pedidosVendaItens.pedidoVendaId, pedidoId),
+        isNull(pedidosVendaItens.deletedAt),
+      )).limit(1);
+    if (restantes.length === 0) {
+      const pedidoAtual = await tx.select().from(pedidosVenda)
+        .where(eq(pedidosVenda.id, pedidoId)).then((r) => r[0]);
+      if (pedidoAtual && pedidoAtual.status !== 'cancelado') {
+        await this.cancelarPendenciasDoPedido(tx, pedidoId, usuarioId);
+        const cancelado = primeiroOuFalha(await tx.update(pedidosVenda)
+          .set({
+            status: 'cancelado',
+            motivoCancelamento: 'Todos os itens foram removidos',
+            updatedAt: new Date(),
+          })
+          .where(eq(pedidosVenda.id, pedidoId))
+          .returning());
+        await this.auditoria.registrar(tx, {
+          tabela: 'pedidos_venda',
+          registroId: pedidoId,
+          operacao: 'UPDATE',
+          modulo: 'comercial',
+          usuarioId,
+          justificativa: 'pedido.cancelado_sem_itens',
+          dadosAnteriores: pedidoAtual,
+          dadosNovos: cancelado,
+        });
+      }
+    }
   }
 
   async cancelarPedido(pedidoId: string, motivo: string, usuarioId: string): Promise<PedidoVenda> {
