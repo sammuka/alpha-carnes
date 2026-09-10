@@ -1,0 +1,14 @@
+Onda 14 T12 — cobertura dos services tocados
+Coleta: jest --coverage (collectCoverageFrom nos 4 arquivos) + padrão
+clientes.e2e-spec|clientes-onda4|clientes-codigo-auto|clientes-branches|precos|pedidos-|ocorrencias-preco|onda14-|overbooking|adendos.e2e
+HARDWARE_FAKE=1 NFSE_FAKE=1  maxWorkers=1
+2026-09-08  Test Suites: 24 passed / Tests: 250 passed  Time: 547.57 s
+
+File                           % Stmts  % Branch  % Funcs  % Lines
+clientes.service.ts              99.01     92.63      100     98.9
+ocorrencias-preco.service.ts       100       100      100      100
+pedidos.service.ts               93.73     85.54    94.87    95.74
+precos.service.ts                  100     98.27      100      100
+All files (4 services)           96.18        91    97.05    97.31
+
+Gate DoD: cada service ≥80% linha e branch.

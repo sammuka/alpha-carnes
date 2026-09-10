@@ -16,6 +16,10 @@ const documentoFiscalSchema = z
 
 const statusSchema = z.enum(['ativo', 'inativo']);
 
+export const FAIXAS_PRECO = ['A', 'B', 'C', 'D'] as const;
+export type FaixaPreco = (typeof FAIXAS_PRECO)[number];
+export const faixaPrecoSchema = z.enum(FAIXAS_PRECO);
+
 export const createClienteSchema = z.object({
   codigo: z.string().trim().min(1).max(50).optional(),
   razaoSocial: z.string().trim().min(1).max(200),
@@ -25,6 +29,7 @@ export const createClienteSchema = z.object({
   representanteId: fkOpcionalSchema,
   rotaId: fkOpcionalSchema,
   prioridade: z.enum(['normal', 'alta']).optional(),
+  faixaPreco: faixaPrecoSchema,
   preferenciasJson: preferenciasJsonSchema,
   dadosFiscaisJson: dadosFiscaisJsonSchema,
   dadosContatoJson: dadosContatoJsonSchema,

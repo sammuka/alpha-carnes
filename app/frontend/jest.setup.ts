@@ -1,5 +1,21 @@
 import '@testing-library/jest-dom';
 
+// nwsapi (motor de seletores do jsdom) resolve ':fullscreen' chamando de volta
+// Element.matches(':fullscreen') como "implementação nativa" — como jsdom não tem
+// uma implementação nativa real, essa chamada cai no próprio nwsapi e recursiona
+// infinitamente, travando o processo (100% CPU) sem nunca lançar um erro. Isso é
+// disparado ao fechar um Radix Popover/ComboboxField e checar o estado fechado em
+// seguida (ex.: FocusScope devolvendo o foco). jsdom nunca está em tela cheia, então
+// resolver o pseudo-seletor direto para `false` é sempre correto.
+if (typeof Element !== 'undefined' && typeof Element.prototype.matches === 'function') {
+  const matchesOriginal = Element.prototype.matches;
+  const RE_FULLSCREEN = /:(-webkit-|-moz-|-ms-)?full-?screen\b/i;
+  Element.prototype.matches = function (selector: string) {
+    if (typeof selector === 'string' && RE_FULLSCREEN.test(selector)) return false;
+    return matchesOriginal.call(this, selector);
+  };
+}
+
 // user-event: patch via moduleNameMapper → test-utils/patched-user-event.ts
 // jsdom não expõe Fetch API completa; NextRequest (BFF) exige Request/Headers.
 if (typeof globalThis.Headers === 'undefined') {

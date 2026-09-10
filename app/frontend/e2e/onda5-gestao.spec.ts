@@ -293,6 +293,7 @@ async function prepararDadosGestao(api: APIRequestContext, adminCookie: string):
     codigo: `O5CL${suffix}`,
     razaoSocial: `Cliente Onda5 ${suffix}`,
     documentoFiscal: docCliente,
+    faixaPreco: 'A',
   });
 
   await backend(api, adminCookie, 'POST', '/regras-desdobramento', {

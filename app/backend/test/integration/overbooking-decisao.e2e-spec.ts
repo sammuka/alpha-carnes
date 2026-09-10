@@ -9,7 +9,7 @@ import {
   createTestUser,
   loginCookies,
 } from '../helpers/test-app';
-import { lerDisponibilidade, seedComercialBase } from '../helpers/comercial-fixtures';
+import { lerDisponibilidade, seedComercialBase, publicarTabelaParaData } from '../helpers/comercial-fixtures';
 import { criarOutroCliente } from '../helpers/pesagem-fixtures';
 
 async function lerPendencia(app: INestApplication, id: string) {
@@ -67,6 +67,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
       .post(`/comercial/compras-programadas/${criar.body.id}/confirmar`)
       .set('Cookie', comprasCookies)
       .expect(201);
+    await publicarTabelaParaData(app, dataOperacao, [base.produtoId]);
     return { base, compraId: criar.body.id as string };
   }
 
@@ -85,8 +86,12 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
         clienteId: clienteId ?? base.clienteId,
         dataOperacao,
         itens: [{ produtoId: base.produtoId, quantidadePedida: quantidade }],
-      })
-      .expect(201);
+      });
+    if (pedido.status !== 201) {
+      throw new Error(
+        `criarPedidoOverbooking ${dataOperacao}: ${pedido.status} ${JSON.stringify(pedido.body)}`,
+      );
+    }
     const { db } = app.get(DRIZZLE);
     const [pend] = await db.select().from(schema.pendenciasOverbooking)
       .where(eq(schema.pendenciasOverbooking.pedidoVendaId, pedido.body.id));
@@ -310,6 +315,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
       .post(`/comercial/compras-programadas/${compraDestino.body.id}/confirmar`)
       .set('Cookie', comprasCookies)
       .expect(201);
+    await publicarTabelaParaData(app, '2026-12-10', [base.produtoId]);
 
     const cobertura = await request(app.getHttpServer())
       .get(`/comercial/overbooking/${pendenciaId}/cobertura`)
@@ -369,6 +375,7 @@ describe('overbooking-decisao (DoD 2 — cobertura e 3 caminhos)', () => {
       .post(`/comercial/compras-programadas/${compraDestino.body.id}/confirmar`)
       .set('Cookie', comprasCookies)
       .expect(201);
+    await publicarTabelaParaData(app, '2026-12-12', [base.produtoId]);
 
     const cobertura = await request(app.getHttpServer())
       .get(`/comercial/overbooking/${pendenciaId}/cobertura`)

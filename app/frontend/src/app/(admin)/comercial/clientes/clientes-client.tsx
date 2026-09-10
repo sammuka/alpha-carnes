@@ -101,6 +101,7 @@ interface Cliente {
   rotaId: string | null;
   rotaNome?: string | null;
   prioridade: 'normal' | 'alta' | null;
+  faixaPreco: 'A' | 'B' | 'C' | 'D' | '';
   dadosFiscaisJson: DadosFiscais;
   dadosContatoJson: DadosContato;
   preferenciasJson: Preferencias;
@@ -128,6 +129,7 @@ const CLIENTE_VAZIO: Cliente = {
   representanteId: null,
   rotaId: null,
   prioridade: 'normal',
+  faixaPreco: '',
   dadosFiscaisJson: {},
   dadosContatoJson: {},
   preferenciasJson: {},
@@ -140,7 +142,7 @@ type AbaClientes = 'gerais' | 'fiscais' | 'contatos' | 'preferencias';
 function abaDaChave(chave: string): AbaClientes {
   if (chave.startsWith('dadosFiscaisJson.')) return 'fiscais';
   if (chave.startsWith('dadosContatoJson.')) return 'contatos';
-  if (chave.startsWith('preferenciasJson.')) return 'preferencias';
+  if (chave === 'faixaPreco' || chave.startsWith('preferenciasJson.')) return 'preferencias';
   return 'gerais'; // razaoSocial, nomeFantasia, documentoFiscal, representanteId, rotaId, prioridade, status
 }
 
@@ -294,6 +296,7 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         representanteId: form.representanteId || null,
         rotaId: form.rotaId || null,
         prioridade: form.prioridade || undefined,
+        faixaPreco: form.faixaPreco || undefined,
         dadosFiscaisJson: {
           ...form.dadosFiscaisJson,
           uf: form.dadosFiscaisJson.uf || undefined,
@@ -756,6 +759,34 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
                         </span>
                       </div>
                       <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+                        <FormField
+                          label="Tabela de Preço"
+                          htmlFor="faixa-preco"
+                          error={erros['faixaPreco']}
+                        >
+                          <Select
+                            value={form.faixaPreco ?? ''}
+                            disabled={!podeGerenciar}
+                            onValueChange={(valor) => {
+                              limparCampo('faixaPreco');
+                              setForm((atual) => (atual ? { ...atual, faixaPreco: valor as 'A' | 'B' | 'C' | 'D' } : atual));
+                            }}
+                          >
+                            <SelectTrigger
+                              id="faixa-preco"
+                              aria-label="Tabela de Preço"
+                              aria-invalid={'faixaPreco' in erros || undefined}
+                            >
+                              <SelectValue placeholder="Selecionar" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="A">A</SelectItem>
+                              <SelectItem value="B">B</SelectItem>
+                              <SelectItem value="C">C</SelectItem>
+                              <SelectItem value="D">D</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormField>
                         <FormField
                           label="Faixa de Peso Mínima (kg)"
                           htmlFor="peso-minimo"

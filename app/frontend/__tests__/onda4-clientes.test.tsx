@@ -15,6 +15,7 @@ const cliente = {
   rotaId: 'rota-1',
   rotaNome: 'Rota Oeste',
   prioridade: 'alta',
+  faixaPreco: 'A',
   preferenciasJson: {
     faixaPesoMin: 10,
     faixaPesoMax: 25,

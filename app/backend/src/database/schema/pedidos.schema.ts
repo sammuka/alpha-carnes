@@ -7,6 +7,7 @@ import { disponibilidadesVirtuais } from './disponibilidades-virtuais.schema';
 import { operacoes } from './operacoes.schema';
 import { usuarios } from './auth.schema';
 import { rotas } from './rotas.schema';
+import { tabelasPreco } from './tabelas-preco.schema';
 
 // ── pedidos_venda ───────────────────────────────────────────────────────────
 // Pedido de venda do dia. Consome saldo virtual de uma única compra programada
@@ -59,6 +60,13 @@ export const pedidosVendaItens = pgTable(
     preferenciasAplicadasJson: jsonb('preferencias_aplicadas_json').notNull().default(sql`'{}'::jsonb`),
     status:                    text('status').notNull(),
     observacoes:               text('observacoes'),
+    tabelaPrecoId:             uuid('tabela_preco_id').references(() => tabelasPreco.id),
+    faixaPreco:                text('faixa_preco').notNull(),
+    unidadePreco:              text('unidade_preco').notNull(),
+    precoTabelaOriginal:       numeric('preco_tabela_original', { precision: 15, scale: 2 }),
+    precoAplicado:             numeric('preco_aplicado', { precision: 15, scale: 2 }).notNull(),
+    usuarioAjusteId:           uuid('usuario_ajuste_id').references(() => usuarios.id),
+    ajustadoEm:                timestamp('ajustado_em', { withTimezone: true }),
     createdAt:                 timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt:                 timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt:                 timestamp('deleted_at', { withTimezone: true }),
@@ -73,6 +81,9 @@ export const pedidosVendaItens = pgTable(
       'totalmente_reservado','aguardando_confirmacao_overbooking',
       'overbooking_confirmado','cancelado'
     )`),
+    check('chk_pedidos_itens_faixa_preco', sql`${t.faixaPreco} IN ('A','B','C','D')`),
+    check('chk_pedidos_itens_unidade_preco', sql`${t.unidadePreco} IN ('kg','unidade')`),
+    check('chk_pedidos_itens_preco_aplicado_positivo', sql`${t.precoAplicado} > 0`),
     uniqueIndex('uq_pedido_venda_produto_ativo')
       .on(t.pedidoVendaId, t.produtoId)
       .where(sql`${t.deletedAt} IS NULL`),

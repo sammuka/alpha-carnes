@@ -150,6 +150,7 @@ export async function seedCargaPronta(request: APIRequestContext): Promise<Cenar
     codigo: `O9CLI${suffix}`,
     razaoSocial: `Cliente Onda9 ${suffix}`,
     documentoFiscal: makeCpf(seedNum + 2),
+    faixaPreco: 'A',
   });
   const pedido = await api<{ id: string }>(request, cookieHeader, 'POST', '/comercial/pedidos', {
     compraProgramadaId: compraId,

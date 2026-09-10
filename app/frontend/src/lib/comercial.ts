@@ -156,6 +156,14 @@ export interface PedidoVendaItem {
   quantidadeOverbooking?: string;
   status: string;
   observacoes: string | null;
+  tabelaPrecoId?: string | null;
+  faixaPreco?: 'A' | 'B' | 'C' | 'D';
+  unidadePreco?: 'kg' | 'unidade';
+  precoTabelaOriginal?: string | null;
+  precoAplicado?: string;
+  precoAjustado?: boolean;
+  usuarioAjusteNome?: string | null;
+  ajustadoEm?: string | null;
 }
 
 export interface PedidoVendaDetalhe extends PedidoVenda {
@@ -195,7 +203,7 @@ export interface CriarPedidoDto {
   prioridade?: number;
   observacoesGerais?: string;
   salvarComoRascunho?: boolean;
-  itens: Array<{ produtoId: string; quantidadePedida: number; observacoes?: string }>;
+  itens: Array<{ produtoId: string; quantidadePedida: number; observacoes?: string; precoAplicado?: string }>;
 }
 
 export interface ResultadoPedido {

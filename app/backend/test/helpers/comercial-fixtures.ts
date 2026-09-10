@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { and, eq, isNull, ne } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
@@ -54,7 +54,7 @@ export async function seedComercialBase(
     .returning();
   const [cliente] = await db
     .insert(schema.clientes)
-    .values({ codigo: uid('CLI'), razaoSocial: 'Cliente F3', documentoFiscal: uid('DOCC') })
+    .values({ codigo: uid('CLI'), razaoSocial: 'Cliente F3', documentoFiscal: uid('DOCC'), faixaPreco: 'A' })
     .returning();
 
   if (!fornecedor || !produtoCompra || !produtoVenda || !cliente) {
@@ -125,7 +125,7 @@ export async function criarCompraConfirmada(
   app: INestApplication,
   comprasCookies: string,
   base: { fornecedorId: string; produtoCompraId: string },
-  opts: { dataOperacao: string; quantidade: number },
+  opts: { dataOperacao: string; quantidade: number; publicarTabela?: boolean },
 ): Promise<string> {
   const { default: request } = await import('supertest');
   const criar = await request(app.getHttpServer())
@@ -147,7 +147,94 @@ export async function criarCompraConfirmada(
   if (confirmar.status !== 201 && confirmar.status !== 200) {
     throw new Error(`Falha ao confirmar compra: ${confirmar.status} ${JSON.stringify(confirmar.body)}`);
   }
+  const { db } = app.get<{ db: Db }>(DRIZZLE);
+  const destinos = await db
+    .select({ produtoId: schema.disponibilidadesVirtuais.produtoId })
+    .from(schema.disponibilidadesVirtuais)
+    .where(eq(schema.disponibilidadesVirtuais.compraProgramadaId, compraId));
+  if (opts.publicarTabela !== false) {
+    await publicarTabelaParaData(
+      app,
+      opts.dataOperacao,
+      [...new Set(destinos.map((d) => d.produtoId))],
+    );
+  }
   return compraId;
+}
+
+/**
+ * Garante tabela `publicada` na data exata (AD-16), com preço > 0 em todos os
+ * produtos ativos para venda (ou só os ids passados). Idempotente.
+ */
+export async function publicarTabelaParaData(
+  app: INestApplication,
+  data: string,
+  produtoIds?: string[],
+  preco = '18.50',
+): Promise<void> {
+  const { db } = app.get<{ db: Db }>(DRIZZLE);
+  const candidatos = produtoIds && produtoIds.length > 0
+    ? produtoIds
+    : (await db
+        .select({ id: schema.produtos.id })
+        .from(schema.produtos)
+        .where(and(eq(schema.produtos.ativoVenda, true), isNull(schema.produtos.deletedAt)))
+      ).map((r) => r.id);
+  if (candidatos.length === 0) return;
+
+  const vivos = await db
+    .select({ id: schema.produtos.id })
+    .from(schema.produtos)
+    .where(and(
+      inArray(schema.produtos.id, candidatos),
+      eq(schema.produtos.ativoVenda, true),
+      isNull(schema.produtos.deletedAt),
+    ));
+  const ids = vivos.map((r) => r.id);
+  if (ids.length === 0) return;
+
+  const [existente] = await db
+    .select()
+    .from(schema.tabelasPreco)
+    .where(and(eq(schema.tabelasPreco.data, data), isNull(schema.tabelasPreco.deletedAt)))
+    .limit(1);
+  let tabelaId: string;
+  if (existente) {
+    if (existente.status !== 'publicada') {
+      await db
+        .update(schema.tabelasPreco)
+        .set({ status: 'publicada' })
+        .where(eq(schema.tabelasPreco.id, existente.id));
+    }
+    tabelaId = existente.id;
+  } else {
+    const [tab] = await db
+      .insert(schema.tabelasPreco)
+      .values({ data, status: 'publicada' })
+      .returning();
+    if (!tab) throw new Error('Falha ao publicar tabela de preço de fixture');
+    tabelaId = tab.id;
+  }
+
+  const ja = await db
+    .select({ produtoId: schema.tabelasPrecoItens.produtoId })
+    .from(schema.tabelasPrecoItens)
+    .where(eq(schema.tabelasPrecoItens.tabelaPrecoId, tabelaId));
+  const jaSet = new Set(ja.map((j) => j.produtoId));
+  const novos = ids.filter((id) => !jaSet.has(id));
+  if (novos.length === 0) return;
+  await db.insert(schema.tabelasPrecoItens).values(
+    novos.map((produtoId) => ({
+      tabelaPrecoId: tabelaId,
+      produtoId,
+      precoA: preco,
+      precoB: preco,
+      precoC: preco,
+      precoD: preco,
+    })),
+  ).onConflictDoNothing({
+    target: [schema.tabelasPrecoItens.tabelaPrecoId, schema.tabelasPrecoItens.produtoId],
+  });
 }
 
 /** Reusa o Pedido ao Fornecedor gerado na confirmação; fallback cria/envia se ainda não existir. */

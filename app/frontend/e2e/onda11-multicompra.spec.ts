@@ -253,6 +253,7 @@ async function prepararCenario(
     codigo: `O11CL${suffix}`,
     razaoSocial: clienteRazao,
     documentoFiscal: makeCpf(Number(suffix) + 22),
+    faixaPreco: 'A',
   });
   await backend(api, adminCookie, 'POST', '/regras-desdobramento', {
     produtoOrigemId: itemCompra.id,

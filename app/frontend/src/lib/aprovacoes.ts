@@ -26,6 +26,7 @@ export const ROTULO_STATUS_OCORRENCIA: Record<string, string> = {
   em_analise: 'Em tratativa',
   aguardando_fornecedor: 'Aguardando fornecedor',
   resolvida: 'Concluída',
+  ciente: 'Ciente',
 };
 
 export interface OcorrenciaLista {
@@ -40,6 +41,33 @@ export interface OcorrenciaLista {
   status: string;
   dataAbertura: string;
 }
+
+export type OcorrenciaPrecoLista = {
+  id: string;
+  pedidoNumero: string;
+  clienteNomeFantasia: string | null;
+  status: 'aberta' | 'ciente';
+  dataHora: string;
+  usuarioFinalizacaoNome: string | null;
+  quantidadeItensAjustados: number;
+  diferencaTotal: string;
+};
+
+export type OcorrenciaPrecoItem = {
+  produtoCodigo: string;
+  produtoNome: string;
+  precoTabelaOriginal: string | null;
+  precoAplicado: string;
+  diferencaAbsoluta: string;
+  diferencaPercentual: string | null;
+  usuarioAjusteNome: string | null;
+};
+
+export type OcorrenciaPrecoDetalhe = OcorrenciaPrecoLista & {
+  itens: OcorrenciaPrecoItem[];
+  usuarioCienteNome: string | null;
+  dataHoraCiente: string | null;
+};
 
 export interface AprovacaoOperacional {
   id: string;
