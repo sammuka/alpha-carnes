@@ -7,9 +7,13 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       output: {
-        manualChunks: {
-          diagrams: ['cytoscape', 'cytoscape-dagre', 'd3'],
-          content: ['marked', 'mermaid'],
+        manualChunks(id) {
+          if (id.includes('cytoscape') || id.includes('/d3/') || id.includes('/d3-')) {
+            return 'diagrams';
+          }
+          if (id.includes('marked') || id.includes('mermaid')) {
+            return 'content';
+          }
         },
       },
     },
