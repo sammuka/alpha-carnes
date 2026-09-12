@@ -8,6 +8,8 @@ function candidato(over: Partial<CandidatoPedido>): CandidatoPedido {
     clienteId: 'cli-1',
     clienteNome: 'Açougue Nova Era',
     saldoPendente: '5.000',
+    quantidadePedida: '5.000',
+    quantidadeAtendida: '0.000',
     prioridade: null,
     rotaPrevista: null,
     cobertaPeloLote: false,

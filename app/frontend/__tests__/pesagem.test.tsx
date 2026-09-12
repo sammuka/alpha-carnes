@@ -282,4 +282,69 @@ describe('PesagemDestinacaoClient', () => {
     await waitFor(() => expect(screen.getByText('pref. compatível')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Trocar Peça' })).toBeInTheDocument();
   });
+
+  it('marcar → Estoque/→ Desossa desabilita o radio de Pedidos compatíveis (exclusão mútua)', async () => {
+    const pecaPesada = {
+      id: 'pc2aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      recebimentoId,
+      pesoOriginal: '12.500',
+      modoCapturaPeso: 'automatico',
+      statusPeca: 'pesada',
+      etiquetaAtual: null,
+      pedidoVendaId: null,
+      pedidoVendaItemId: null,
+    };
+    const sugestaoResposta = {
+      pecaId: pecaPesada.id,
+      sugestao: null,
+      compativeis: [{
+        pedidoVendaId: 'pv2aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        pedidoVendaItemId: 'pvi2aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        produtoId,
+        clienteId: 'c2',
+        clienteNome: 'Cliente Dois',
+        saldoPendente: '3',
+        quantidadePedida: '5',
+        quantidadeAtendida: '2',
+        prioridade: 1,
+        rotaPrevista: null,
+        score: 1,
+        justificativa: 'ok',
+        prefCompativel: false,
+      }],
+    };
+
+    const fetchBase = global.fetch as jest.Mock;
+    mockFetch();
+    global.fetch = jest.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('/api/operacao/pesagem/pecas') && init?.method === 'POST') {
+        return { ok: true, json: async () => pecaPesada };
+      }
+      if (u.includes('/sugestao')) {
+        return { ok: true, json: async () => sugestaoResposta };
+      }
+      return fetchBase(url, init);
+    }) as unknown as typeof fetch;
+
+    render(
+      <PesagemDestinacaoClient
+        permissoes={['PESAGEM_GERENCIAR', 'ASSOCIACAO_GERENCIAR', 'ETIQUETA_GERENCIAR']}
+      />,
+    );
+
+    const btnCapturar = await screen.findByRole('button', { name: 'Capturar Peso' });
+    await waitFor(() => expect(btnCapturar).not.toBeDisabled());
+    fireEvent.click(btnCapturar);
+
+    const radio = await screen.findByRole('radio', { name: /Cliente Dois/i });
+    await waitFor(() => expect(radio).not.toBeDisabled());
+
+    const btnEstoque = screen.getByTestId('btn-destino-estoque');
+    fireEvent.click(btnEstoque);
+    await waitFor(() => expect(radio).toBeDisabled());
+
+    fireEvent.click(btnEstoque);
+    await waitFor(() => expect(radio).not.toBeDisabled());
+  });
 });

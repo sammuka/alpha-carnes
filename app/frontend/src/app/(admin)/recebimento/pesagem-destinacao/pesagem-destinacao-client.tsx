@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeftRight, Scale, Search } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, ClipboardList, Scale, Search, Tag } from 'lucide-react';
 import { rotuloProduto } from '@/lib/dominios';
 import { extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
@@ -38,10 +38,18 @@ import { BadgeCount } from '@/components/ui/badge-count';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DeviceBadge } from '@/components/ui/device-badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
+import { Progress } from '@/components/ui/progress';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { SelectNative } from '@/components/ui/select-native';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -56,7 +64,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { cn } from '@/lib/cn';
 
 const STATUS_RECEB_LABEL: Record<StatusRecebimento, string> = {
   pesagem_em_andamento: 'Pesagem em andamento',
@@ -95,6 +102,12 @@ function calcRestante(esperada: string, apurada: string | null | undefined): str
   if (Number.isNaN(e) || Number.isNaN(a)) return '—';
   const diff = Math.max(0, e - a);
   return diff.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+}
+
+function formatQtd(val: string | number | null | undefined): string {
+  const n = Number(val ?? 0);
+  if (Number.isNaN(n)) return '—';
+  return n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 }
 
 function labelProduto(item: RecebimentoItem): string {
@@ -154,6 +167,10 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
   const [motivo, setMotivo] = useState<MotivoCapturaManual>('dispositivo_indisponivel');
   const [motivoSobra, setMotivoSobra] = useState('');
   const [trocarLoteAberto, setTrocarLoteAberto] = useState(false);
+  const [destinoLocal, setDestinoLocal] = useState<'estoque' | 'desossa' | null>(null);
+  const [pedidoSelecionadoId, setPedidoSelecionadoId] = useState<string | null>(null);
+  const [acoesModalAberto, setAcoesModalAberto] = useState(false);
+  const [acumuladoModalAberto, setAcumuladoModalAberto] = useState(false);
 
   const carregarRecebimentos = useCallback(async () => {
     const res = await fetch('/api/operacao/recebimentos?pageSize=30', { cache: 'no-store' });
@@ -349,6 +366,29 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     return desconectar;
   }, [dataOperacao, recebimentoId, carregarStatus, refreshLote, carregarFaltas]);
 
+  // Nova peça pesada: começa sem nenhuma escolha de destino (radio de pedido ou toggle Estoque/Desossa).
+  useEffect(() => {
+    setDestinoLocal(null);
+    setPedidoSelecionadoId(null);
+  }, [peca?.id]);
+
+  // Pré-seleciona a sugestão principal no radio quando a sugestão chega (mesma prioridade de hoje).
+  useEffect(() => {
+    if (sugestao?.sugestao?.pedidoVendaItemId) {
+      setPedidoSelecionadoId(sugestao.sugestao.pedidoVendaItemId);
+    }
+  }, [sugestao]);
+
+  const escolherDestinoLocal = (valor: 'estoque' | 'desossa') => {
+    setDestinoLocal((atual) => (atual === valor ? null : valor));
+    setPedidoSelecionadoId(null);
+  };
+
+  const escolherPedido = (id: string) => {
+    setPedidoSelecionadoId(id);
+    setDestinoLocal(null);
+  };
+
   const compativeisFiltrados = useMemo(() => {
     if (!sugestao?.compativeis.length) return [];
     const q = buscaPedido.trim().toLowerCase();
@@ -414,8 +454,8 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     }
   };
 
-  const confirmarPedido = async (s: SugestaoScored) => {
-    if (!peca) return;
+  const confirmarPedido = async (s: SugestaoScored): Promise<Peca | null> => {
+    if (!peca) return null;
     const p = await chamar<Peca>(`/api/operacao/pesagem/pecas/${peca.id}/confirmar`, {
       pedidoVendaItemId: s.pedidoVendaItemId,
     });
@@ -424,10 +464,11 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
       setSugestao(null);
       await refreshLote();
     }
+    return p;
   };
 
-  const destinarSemCobertura = async (destino: 'sobra' | 'corte') => {
-    if (!peca) return;
+  const destinarSemCobertura = async (destino: 'sobra' | 'corte'): Promise<Peca | null> => {
+    if (!peca) return null;
     const body: Record<string, unknown> = { destino };
     if (destino === 'sobra') {
       body.motivo = motivoSobra || 'Destinação operacional para estoque';
@@ -439,15 +480,53 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
       setMotivoSobra('');
       await Promise.all([refreshLote(), carregarFaltas()]);
     }
+    return p;
   };
 
-  const emitirEtiqueta = async () => {
-    if (!peca) return;
-    const r = await chamar<{ peca: Peca }>(`/api/operacao/pesagem/pecas/${peca.id}/etiqueta`);
+  const emitirEtiqueta = async (pecaAtual?: Peca) => {
+    const alvo = pecaAtual ?? peca;
+    if (!alvo) return;
+    const r = await chamar<{ peca: Peca }>(`/api/operacao/pesagem/pecas/${alvo.id}/etiqueta`);
     if (r) {
       setPeca(r.peca);
       await refreshLote();
     }
+  };
+
+  /**
+   * Ação única do rodapé: resolve o destino escolhido (pedido via radio OU Estoque/Desossa via
+   * toggle — mutuamente exclusivos, ver `escolherDestinoLocal`/`escolherPedido`) e, na sequência,
+   * já emite a etiqueta. Reaproveita as mesmas chamadas de API que já existiam (confirmar/
+   * sem-cobertura + etiqueta), só que disparadas em 1 clique.
+   */
+  const confirmarEGerarEtiqueta = async () => {
+    if (!peca) return;
+
+    if (peca.statusPeca === 'pesada') {
+      let pecaDestinada: Peca | null = null;
+
+      if (pedidoSelecionadoId) {
+        const sugestaoEscolhida = sugestao?.compativeis.find(
+          (s) => s.pedidoVendaItemId === pedidoSelecionadoId,
+        );
+        if (!sugestaoEscolhida) return;
+        pecaDestinada = await confirmarPedido(sugestaoEscolhida);
+      } else if (destinoLocal === 'estoque') {
+        pecaDestinada = await destinarSemCobertura('sobra');
+      } else if (destinoLocal === 'desossa') {
+        pecaDestinada = await destinarSemCobertura('corte');
+      } else {
+        return;
+      }
+
+      if (!pecaDestinada) return;
+      await emitirEtiqueta(pecaDestinada);
+      setPedidoSelecionadoId(null);
+      setDestinoLocal(null);
+      return;
+    }
+
+    await emitirEtiqueta();
   };
 
   const trocarLote = (id: string) => {
@@ -488,6 +567,54 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     (peca.statusPeca === 'associada' ||
       peca.statusPeca === 'em_sobra' ||
       peca.statusPeca === 'para_corte');
+
+  const podeConfirmar = Boolean(
+    peca &&
+      !peca.etiquetaAtual &&
+      ((pecaProntaEtiqueta && podeEtiqueta) ||
+        (pecaAguardandoDestino && podeAssociar && (pedidoSelecionadoId || destinoLocal))),
+  );
+
+  /**
+   * Resumo do lote por destino, calculado no frontend a partir de `acoes` (1 linha por peça
+   * pesada no lote — ver GET /operacao/recebimentos/:id/acoes). Buckets usam os mesmos rótulos
+   * de `rotuloDestinoPeca` (lib/status-ui.ts); "Outros" agrupa status sem categoria de destino
+   * dedicada (análise/divergência/transformação) — não inventa categorias como "Condenação" ou
+   * "Ajustes", que não existem no domínio.
+   */
+  const acumuladoLote = useMemo(() => {
+    type BucketKey = 'associada' | 'em_sobra' | 'para_corte' | 'pesada' | 'outros';
+    const buckets: Record<BucketKey, { label: string; peso: number; qtd: number }> = {
+      associada: { label: 'Pedido', peso: 0, qtd: 0 },
+      em_sobra: { label: 'Estoque', peso: 0, qtd: 0 },
+      para_corte: { label: 'Desossa', peso: 0, qtd: 0 },
+      pesada: { label: 'Pendente', peso: 0, qtd: 0 },
+      outros: { label: 'Outros', peso: 0, qtd: 0 },
+    };
+    const chaveDoStatus = (status: string | null): BucketKey =>
+      status && status in buckets ? (status as BucketKey) : 'outros';
+    let pesoTotal = 0;
+    for (const a of acoes) {
+      const peso = Number(a.peso ?? 0);
+      const pesoValido = Number.isNaN(peso) ? 0 : peso;
+      pesoTotal += pesoValido;
+      const bucket = buckets[chaveDoStatus(a.statusPeca)];
+      bucket.peso += pesoValido;
+      bucket.qtd += 1;
+    }
+    const pecasTotais = acoes.length;
+    const pendentes = buckets.pesada.qtd;
+    const destinadas = pecasTotais - pendentes;
+    return {
+      pesoTotal,
+      pecasTotais,
+      destinadas,
+      pendentes,
+      percDestinadas: pecasTotais > 0 ? Math.round((destinadas / pecasTotais) * 100) : 0,
+      percPendentes: pecasTotais > 0 ? Math.round((pendentes / pecasTotais) * 100) : 0,
+      buckets: Object.values(buckets).filter((b) => b.qtd > 0),
+    };
+  }, [acoes]);
 
   return (
     <div className="space-y-3">
@@ -621,8 +748,10 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
         </Tabs>
       )}
 
-      {/* 3-column grid */}
-      <div className="grid items-start gap-2.5 xl:grid-cols-[340px_1fr_320px]">
+      {/* 2-column grid */}
+      <div className="grid items-start gap-2.5 xl:grid-cols-[340px_1fr]">
+        {/* Left column: Balança + Demandas desossa */}
+        <div className="space-y-2.5">
         {/* a) Scale panel */}
         <Card>
           <CardHeader>
@@ -663,6 +792,41 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                   </Button>
                 )}
               </div>
+            )}
+
+            {podeAssociar && (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={destinoLocal === 'estoque' ? 'default' : 'secondary'}
+                  size="sm"
+                  className="flex-1"
+                  aria-pressed={destinoLocal === 'estoque'}
+                  data-testid="btn-destino-estoque"
+                  onClick={() => escolherDestinoLocal('estoque')}
+                  disabled={!pecaAguardandoDestino || submitting}
+                >
+                  → Estoque
+                </Button>
+                <Button
+                  variant={destinoLocal === 'desossa' ? 'default' : 'secondary'}
+                  size="sm"
+                  className="flex-1"
+                  aria-pressed={destinoLocal === 'desossa'}
+                  data-testid="btn-destino-desossa"
+                  onClick={() => escolherDestinoLocal('desossa')}
+                  disabled={!pecaAguardandoDestino || submitting}
+                >
+                  → Desossa
+                </Button>
+              </div>
+            )}
+
+            {destinoLocal === 'estoque' && (
+              <Input
+                placeholder="Motivo (estoque)"
+                value={motivoSobra}
+                onChange={(e) => setMotivoSobra(e.target.value)}
+              />
             )}
 
             {manualAberto && podeManual && (
@@ -727,27 +891,6 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                   {formatPeso(peca.pesoOriginal)} kg
                 </p>
 
-                {pecaAguardandoDestino && podeAssociar && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => destinarSemCobertura('sobra')}
-                      disabled={submitting}
-                    >
-                      → Estoque
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => destinarSemCobertura('corte')}
-                      disabled={submitting}
-                    >
-                      → Desossa
-                    </Button>
-                  </div>
-                )}
-
                 {peca.statusPeca === 'associada' && podeEstornar && (
                   <div className="mt-3">
                     <Button
@@ -790,32 +933,57 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                     </div>
                   </div>
                 )}
-
-                {pecaAguardandoDestino && podeAssociar && (
-                  <Input
-                    className="mt-2"
-                    placeholder="Motivo (estoque)"
-                    value={motivoSobra}
-                    onChange={(e) => setMotivoSobra(e.target.value)}
-                  />
-                )}
-
-                {pecaProntaEtiqueta && podeEtiqueta && (
-                  <Button
-                    className="mt-3 w-full"
-                    size="sm"
-                    onClick={emitirEtiqueta}
-                    disabled={submitting || Boolean(peca.etiquetaAtual)}
-                  >
-                    {peca.etiquetaAtual ? `Etiqueta: ${peca.etiquetaAtual}` : 'Confirmar e imprimir etiqueta'}
-                  </Button>
-                )}
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* b) Compatible orders */}
+        {/* Demandas desossa — abaixo da Balança, formato compacto */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Demandas desossa</CardTitle>
+            <BadgeCount>{faltas.length}</BadgeCount>
+          </CardHeader>
+          <CardContent className="p-0">
+            {faltas.length === 0 ? (
+              <EmptyState title="Nenhuma demanda de desossa pendente." className="border-none" />
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Item</TableHead>
+                      <TableHead className="text-right">Qtde solic.</TableHead>
+                      <TableHead className="text-right">Qtde assoc.</TableHead>
+                      <TableHead className="text-right">Faltante</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {faltas.map((f) => {
+                      const solicitada = f.quantidadeFaltante + f.quantidadeEstoque;
+                      return (
+                        <TableRow key={f.produto.id}>
+                          <TableCell className="max-w-[130px] truncate text-[13px] font-semibold text-foreground">
+                            {f.produto.nome}
+                          </TableCell>
+                          <TableCellNum>{solicitada} un</TableCellNum>
+                          <TableCellNum>{f.quantidadeEstoque} un</TableCellNum>
+                          <TableCellNum className="text-destructive">{f.quantidadeFaltante} un</TableCellNum>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+                <p className="px-2.5 py-1.5 text-[11px] text-fg-faint">
+                  Origem: {faltas[0]?.origem} · regras provisórias por unidade
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+        </div>
+
+        {/* b) Compatible orders — coluna principal */}
         <Card>
           <CardHeader>
             <CardTitle>Pedidos compatíveis</CardTitle>
@@ -850,161 +1018,148 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
               <EmptyState title="Nenhum pedido compatível encontrado." />
             )}
 
-            <ul className="max-h-[420px] space-y-2 overflow-y-auto">
-              {compativeisFiltrados.map((s) => {
-                const principal = sugestao?.sugestao?.pedidoVendaItemId === s.pedidoVendaItemId;
-                return (
-                  <li
-                    key={s.pedidoVendaItemId}
-                    className={cn(
-                      'rounded-lg border p-3 text-sm',
-                      principal
-                        ? 'border-primary-soft-border bg-primary-soft'
-                        : 'border-border',
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="mb-1 flex flex-wrap items-center gap-2">
-                          {principal && (
-                            <BadgeCount className="bg-primary-soft text-primary-fg">
-                              Sugestão principal
-                            </BadgeCount>
-                          )}
-                          {s.prefCompativel && (
-                            <span className="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-                              pref. compatível
-                            </span>
-                          )}
-                        </div>
-                        <p className="font-medium truncate">
-                          {s.clienteNome ?? '—'}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {s.rotaPrevista ? `Rota ${s.rotaPrevista}` : 'Sem rota'}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">{s.justificativa}</p>
-                        <p className="mt-0.5 text-xs">
-                          Saldo pendente: {s.saldoPendente}
-                          {s.prioridade != null ? ` · Prioridade ${s.prioridade}` : ''}
-                        </p>
-                      </div>
-                      {podeAssociar && pecaAguardandoDestino && (
-                        <Button
-                          size="sm"
-                          variant={principal ? 'default' : 'secondary'}
-                          onClick={() => confirmarPedido(s)}
-                          disabled={submitting}
-                        >
-                          Vincular
-                        </Button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </CardContent>
-        </Card>
-
-        {/* c) Demandas desossa */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Demandas desossa</CardTitle>
-            <BadgeCount>{faltas.length}</BadgeCount>
-          </CardHeader>
-          <CardContent className="space-y-1.5">
-            {faltas.length === 0 ? (
-              <EmptyState title="Nenhuma demanda de desossa pendente." />
-            ) : (
+            {peca && sugestao && compativeisFiltrados.length > 0 && (
               <>
-                <ul className="max-h-[420px] space-y-1.5 overflow-y-auto">
-                  {faltas.map((f) => (
-                    <li
-                      key={f.produto.id}
-                      className="flex items-center gap-2.5 rounded-md border border-border px-2.5 py-2 text-xs"
-                    >
-                      <span className="w-9 shrink-0 font-data text-[13px] font-bold">
-                        {f.produto.codigo}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate font-semibold">{f.produto.nome}</span>
-                      <span className="whitespace-nowrap font-data text-[11px] text-muted-foreground">
-                        falt. {f.quantidadeFaltante} · est. {f.quantidadeEstoque}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <p className="pt-0.5 text-[11px] text-fg-faint">
-                  Origem: {faltas[0]?.origem} · regras provisórias por unidade
-                </p>
+                {destinoLocal && (
+                  <p className="rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs text-muted-foreground">
+                    Destino {destinoLocal === 'estoque' ? 'Estoque' : 'Desossa'} selecionado — desmarque para vincular a um pedido.
+                  </p>
+                )}
+                <RadioGroup
+                  className="contents"
+                  value={pedidoSelecionadoId ?? undefined}
+                  onValueChange={escolherPedido}
+                  disabled={!podeAssociar || !pecaAguardandoDestino || destinoLocal !== null || submitting}
+                >
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="w-8" />
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Pedido</TableHead>
+                        <TableHead>Item</TableHead>
+                        <TableHead className="text-right">Qtde solicitada</TableHead>
+                        <TableHead className="text-right">Qtde associada</TableHead>
+                        <TableHead className="text-right">Qtde faltante</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {compativeisFiltrados.map((s) => {
+                        const principal = sugestao?.sugestao?.pedidoVendaItemId === s.pedidoVendaItemId;
+                        const selecionado = pedidoSelecionadoId === s.pedidoVendaItemId;
+                        return (
+                          <TableRow
+                            key={s.pedidoVendaItemId}
+                            data-state={selecionado ? 'selected' : undefined}
+                          >
+                            <TableCell>
+                              <RadioGroupItem
+                                value={s.pedidoVendaItemId}
+                                id={`pedido-${s.pedidoVendaItemId}`}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <label htmlFor={`pedido-${s.pedidoVendaItemId}`} className="flex cursor-pointer flex-wrap items-center gap-1.5">
+                                <span className="font-medium">{s.clienteNome ?? '—'}</span>
+                                {principal && (
+                                  <BadgeCount className="bg-primary-soft text-primary-fg">
+                                    Sugestão
+                                  </BadgeCount>
+                                )}
+                                {s.prefCompativel && (
+                                  <span className="inline-block rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+                                    pref. compatível
+                                  </span>
+                                )}
+                              </label>
+                            </TableCell>
+                            <TableCellCode>{s.pedidoVendaId.slice(0, 8)}</TableCellCode>
+                            <TableCell className="max-w-[140px] truncate">
+                              {itemAtivo ? labelProduto(itemAtivo) : '—'}
+                            </TableCell>
+                            <TableCellNum>{formatQtd(s.quantidadePedida)}</TableCellNum>
+                            <TableCellNum>{formatQtd(s.quantidadeAtendida)}</TableCellNum>
+                            <TableCellNum className="text-destructive">{formatQtd(s.saldoPendente)}</TableCellNum>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </RadioGroup>
               </>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Bottom 2-col */}
-      <div className="grid gap-2.5 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Acumulado do lote</CardTitle>
-            <BadgeCount>{detalhe?.itens.length ?? 0}</BadgeCount>
-          </CardHeader>
-          <CardContent className="p-0">
-            {!detalhe?.itens.length ? (
-              <EmptyState title="Sem itens no lote." className="border-none" />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Produto</TableHead>
-                    <TableHead className="text-right">Previsto</TableHead>
-                    <TableHead className="text-right">Pesado</TableHead>
-                    <TableHead className="text-right">Restante</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {detalhe.itens.map((item) => {
-                    const apurado = pesadoItem(item);
-                    return (
-                      <TableRow key={item.id} className="group">
-                        <TableCell className="max-w-[180px] truncate text-[13px] font-semibold text-foreground">
-                          {labelProduto(item)}
-                        </TableCell>
-                        <TableCellNum>
-                          {item.quantidadeEsperada}
-                          {item.unidadeEsperada ? ` ${item.unidadeEsperada}` : ''}
-                        </TableCellNum>
-                        <TableCellNum>
-                          {apurado}
-                          {item.requerBalanca ? ' kg' : item.unidadeEsperada ? ` ${item.unidadeEsperada}` : ''}
-                        </TableCellNum>
-                        <TableCellNum>
-                          {calcRestante(item.quantidadeEsperada, apurado)}
-                        </TableCellNum>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-                <TableFooter>
-                  <TableRow>
-                    <TableCell>
-                      {detalhe.itens.length} produto{detalhe.itens.length !== 1 ? 's' : ''}
-                    </TableCell>
-                    <TableCell colSpan={3} />
-                  </TableRow>
-                </TableFooter>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+      {/* Rodapé de finalização */}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="lg"
+          className="h-auto flex-[2] flex-col items-start justify-center gap-0.5 py-2.5 text-left"
+          onClick={() => void confirmarEGerarEtiqueta()}
+          disabled={!podeConfirmar || submitting}
+        >
+          <span className="flex items-center gap-1.5 text-[13px] font-semibold">
+            <Tag className="size-4" />
+            {peca?.etiquetaAtual ? `Etiqueta: ${peca.etiquetaAtual}` : 'Confirmar e gerar etiqueta'}
+          </span>
+          {!peca?.etiquetaAtual && (
+            <span className="text-[11px] font-normal text-primary-foreground/80">
+              Finaliza a pesagem e associa a peça
+            </span>
+          )}
+        </Button>
+        <Button
+          variant="secondary"
+          size="lg"
+          className="flex-1"
+          onClick={() => setAcoesModalAberto(true)}
+        >
+          <ClipboardList />
+          Ver ações realizadas
+          <BadgeCount>{acoes.length}</BadgeCount>
+        </Button>
+        <Button
+          variant="secondary"
+          size="lg"
+          className="flex-1"
+          onClick={() => setAcumuladoModalAberto(true)}
+        >
+          <BarChart3 />
+          Ver acumulado do lote
+        </Button>
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Ações realizadas</CardTitle>
-            <BadgeCount>{acoes.length}</BadgeCount>
-          </CardHeader>
-          <CardContent className="p-0">
+      {podeAssociar && (
+        <div className="flex justify-end">
+          <Button variant="secondary" size="sm" onClick={() => setTrocaAberta(true)}>
+            <ArrowLeftRight />
+            Trocar Peça
+          </Button>
+        </div>
+      )}
+
+      <TrocaPecaFluxo
+        open={trocaAberta}
+        onFechar={() => setTrocaAberta(false)}
+        onTrocaConcluida={() => {
+          setTrocaAberta(false);
+          if (recebimentoId) void refreshLote();
+        }}
+        pedidos={pedidosTroca}
+        pecasDisponiveis={pecasDispTroca}
+      />
+
+      {acoesModalAberto && (
+        <Dialog open onOpenChange={(open) => !open && setAcoesModalAberto(false)}>
+          <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                Ações realizadas
+                <BadgeCount>{acoes.length}</BadgeCount>
+              </DialogTitle>
+            </DialogHeader>
             {acoes.length === 0 ? (
               <EmptyState title="Nenhuma ação registrada neste lote." className="border-none" />
             ) : (
@@ -1051,29 +1206,139 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                 </TableBody>
               </Table>
             )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {podeAssociar && (
-        <div className="flex justify-end">
-          <Button variant="secondary" size="sm" onClick={() => setTrocaAberta(true)}>
-            <ArrowLeftRight />
-            Trocar Peça
-          </Button>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
 
-      <TrocaPecaFluxo
-        open={trocaAberta}
-        onFechar={() => setTrocaAberta(false)}
-        onTrocaConcluida={() => {
-          setTrocaAberta(false);
-          if (recebimentoId) void refreshLote();
-        }}
-        pedidos={pedidosTroca}
-        pecasDisponiveis={pecasDispTroca}
-      />
+      {acumuladoModalAberto && (
+        <Dialog open onOpenChange={(open) => !open && setAcumuladoModalAberto(false)}>
+          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Acumulado do lote</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                <div className="rounded-lg border border-border bg-surface-2 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Peso total</p>
+                  <p className="font-data text-lg font-bold">{formatPeso(String(acumuladoLote.pesoTotal))} kg</p>
+                </div>
+                <div className="rounded-lg border border-border bg-surface-2 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Peças totais</p>
+                  <p className="font-data text-lg font-bold">{acumuladoLote.pecasTotais} un</p>
+                </div>
+                <div className="rounded-lg border border-border bg-surface-2 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Destinadas</p>
+                  <p className="font-data text-lg font-bold">
+                    {acumuladoLote.destinadas} un
+                    <span className="ml-1 text-xs font-normal text-muted-foreground">
+                      ({acumuladoLote.percDestinadas}%)
+                    </span>
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border bg-surface-2 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">Pendentes</p>
+                  <p className="font-data text-lg font-bold text-[var(--color-status-divergencia)]">
+                    {acumuladoLote.pendentes} un
+                    <span className="ml-1 text-xs font-normal text-muted-foreground">
+                      ({acumuladoLote.percPendentes}%)
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              {acumuladoLote.buckets.length > 0 && (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead>Destino</TableHead>
+                      <TableHead className="text-right">Peso (kg)</TableHead>
+                      <TableHead className="text-right">Qtd. peças</TableHead>
+                      <TableHead>% do total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {acumuladoLote.buckets.map((b) => {
+                      const pct = acumuladoLote.pesoTotal > 0
+                        ? Math.round((b.peso / acumuladoLote.pesoTotal) * 100)
+                        : 0;
+                      return (
+                        <TableRow key={b.label}>
+                          <TableCell className="font-semibold">{b.label}</TableCell>
+                          <TableCellNum>{formatPeso(String(b.peso))}</TableCellNum>
+                          <TableCellNum>{b.qtd}</TableCellNum>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Progress value={pct} className="h-1.5 w-24" />
+                              <span className="w-9 text-right text-xs tabular-nums text-muted-foreground">{pct}%</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell>Total</TableCell>
+                      <TableCellNum>{formatPeso(String(acumuladoLote.pesoTotal))}</TableCellNum>
+                      <TableCellNum>{acumuladoLote.pecasTotais}</TableCellNum>
+                      <TableCell>100%</TableCell>
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              )}
+
+              <div>
+                <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">Por produto</p>
+                {!detalhe?.itens.length ? (
+                  <EmptyState title="Sem itens no lote." className="border-none" />
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead>Produto</TableHead>
+                        <TableHead className="text-right">Previsto</TableHead>
+                        <TableHead className="text-right">Pesado</TableHead>
+                        <TableHead className="text-right">Restante</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {detalhe.itens.map((item) => {
+                        const apurado = pesadoItem(item);
+                        return (
+                          <TableRow key={item.id} className="group">
+                            <TableCell className="max-w-[180px] truncate text-[13px] font-semibold text-foreground">
+                              {labelProduto(item)}
+                            </TableCell>
+                            <TableCellNum>
+                              {item.quantidadeEsperada}
+                              {item.unidadeEsperada ? ` ${item.unidadeEsperada}` : ''}
+                            </TableCellNum>
+                            <TableCellNum>
+                              {apurado}
+                              {item.requerBalanca ? ' kg' : item.unidadeEsperada ? ` ${item.unidadeEsperada}` : ''}
+                            </TableCellNum>
+                            <TableCellNum>
+                              {calcRestante(item.quantidadeEsperada, apurado)}
+                            </TableCellNum>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell>
+                          {detalhe.itens.length} produto{detalhe.itens.length !== 1 ? 's' : ''}
+                        </TableCell>
+                        <TableCell colSpan={3} />
+                      </TableRow>
+                    </TableFooter>
+                  </Table>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

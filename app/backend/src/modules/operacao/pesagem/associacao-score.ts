@@ -28,6 +28,10 @@ export interface CandidatoPedido {
   clienteNome: string;
   /** quantidade_pedida − quantidade_atendida (string NUMERIC). */
   saldoPendente: string;
+  /** Total pedido no item (string NUMERIC) — para exibição na UI de pesagem. */
+  quantidadePedida: string;
+  /** Quantidade já atendida/associada no item (string NUMERIC) — para exibição na UI de pesagem. */
+  quantidadeAtendida: string;
   /** prioridade comercial (menor número = mais prioritário); null = sem prioridade. */
   prioridade: number | null;
   rotaPrevista: string | null;

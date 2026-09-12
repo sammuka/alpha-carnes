@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "appRoot": "D:\\Projetos\\alpha-carnes\\app\\frontend",
+  "framework": "nextjs",
+  "port": 8400,
+  "pid": 22720,
+  "recordedAt": "2026-09-12T00:44:02.690Z",
+  "artifacts": [
+    {
+      "kind": "patched",
+      "path": "src/app/layout.tsx",
+      "patch": "live-tag",
+      "markers": [
+        "impeccable-live-start",
+        "data-impeccable-csp-original"
+      ]
+    }
+  ]
+}

@@ -756,9 +756,12 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     const pecaResponse = page.waitForResponse((res) => res.url().includes('/api/operacao/pesagem/pecas') && res.request().method() === 'POST');
     await page.getByRole('button', { name: 'Capturar Peso' }).click();
     const peca = (await (await pecaResponse).json()) as { id: string };
-    await page.getByRole('button', { name: 'Vincular' }).click();
+    await expect(page.getByTestId('peca-status')).toContainText('pesada', { timeout: 10_000 });
+    // Vínculo com o pedido agora é feito pelo radio button da linha (sem botão "Vincular" por linha);
+    // a associação e a emissão da etiqueta acontecem juntas em "Confirmar e gerar etiqueta".
+    await page.getByRole('radio', { name: new RegExp(`Cliente ${runId}`) }).click();
+    await page.getByRole('button', { name: 'Confirmar e gerar etiqueta' }).click();
     await expect(page.getByTestId('peca-status')).toContainText('associada', { timeout: 10_000 });
-    await page.getByRole('button', { name: 'Confirmar e imprimir etiqueta' }).click();
     await expect(page.getByRole('button', { name: /Etiqueta: QR-/ })).toBeVisible({ timeout: 10_000 });
     await capture(
       page,
@@ -774,7 +777,10 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     await page.getByRole('button', { name: 'Capturar Peso' }).click();
     const pecaCorte = (await (await pecaCorteResponse).json()) as { id: string };
     await expect(page.getByTestId('peca-status')).toContainText('pesada', { timeout: 10_000 });
-    await page.getByTestId('peca-atual').getByRole('button', { name: 'Desossa' }).click();
+    // → Desossa agora é uma seleção (marca/desmarca); a chamada real (destinar + etiqueta)
+    // só acontece ao clicar em "Confirmar e gerar etiqueta".
+    await page.getByTestId('btn-destino-desossa').click();
+    await page.getByRole('button', { name: 'Confirmar e gerar etiqueta' }).click();
     await expect(page.getByTestId('peca-status')).toContainText('para_corte', { timeout: 10_000 });
     const pecaNoHandoff = await backend<PecaNoHandoff>(
       request,
@@ -789,7 +795,6 @@ test.describe('Jornada Operacional AlphaCarnes', () => {
     await expect(page).toHaveURL(
       new RegExp(`/recebimento/pesagem-destinacao\\?recebimentoId=${recebimentoId}`),
     );
-    await page.getByRole('button', { name: 'Confirmar e imprimir etiqueta' }).click();
     await capture(
       page,
       steps,

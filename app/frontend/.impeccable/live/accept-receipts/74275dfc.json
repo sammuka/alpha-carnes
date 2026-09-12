@@ -1,0 +1,11 @@
+{
+  "id": "74275dfc",
+  "operation": "discard",
+  "variantId": null,
+  "result": {
+    "handled": true,
+    "file": "src\\app\\(admin)\\recebimento\\pesagem-destinacao\\pesagem-destinacao-client.tsx",
+    "carbonize": false
+  },
+  "completedAt": "2026-09-12T01:12:51.536Z"
+}

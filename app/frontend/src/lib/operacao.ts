@@ -231,6 +231,10 @@ export interface SugestaoScored {
   clienteId: string;
   clienteNome?: string;
   saldoPendente: string;
+  /** Total solicitado no item do pedido (D22 — coluna "Qtde solicitada" em Pedidos compatíveis). */
+  quantidadePedida: string;
+  /** Total já atendido/associado no item do pedido (coluna "Qtde associada"). */
+  quantidadeAtendida: string;
   prioridade: number | null;
   rotaPrevista: string | null;
   score: number;

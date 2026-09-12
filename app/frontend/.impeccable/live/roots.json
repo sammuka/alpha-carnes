@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "appRoot": "D:\\Projetos\\alpha-carnes\\app\\frontend",
+  "repoRoot": "D:\\Projetos\\alpha-carnes",
+  "contextRoot": "D:\\Projetos\\alpha-carnes\\app\\frontend",
+  "sessionRoot": "D:\\Projetos\\alpha-carnes\\app\\frontend\\.impeccable\\live",
+  "productPath": "D:\\Projetos\\alpha-carnes\\app\\frontend\\PRODUCT.md",
+  "designPath": "D:\\Projetos\\alpha-carnes\\app\\frontend\\DESIGN.md",
+  "resolvedFrom": "cwd"
+}

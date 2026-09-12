@@ -77,6 +77,8 @@ export async function calcularCompativeisItem(
       clienteId: l.clienteId,
       clienteNome: l.clienteNome,
       saldoPendente: subtrairQtd(l.quantidadePedida, l.quantidadeAtendida),
+      quantidadePedida: l.quantidadePedida,
+      quantidadeAtendida: l.quantidadeAtendida,
       prioridade: l.prioridade,
       rotaPrevista: l.rotaPrevista,
       cobertaPeloLote: Boolean(l.cobertaPeloLote),
