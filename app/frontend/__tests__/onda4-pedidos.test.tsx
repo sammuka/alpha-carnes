@@ -148,7 +148,7 @@ async function selecionarProdutoComPreco(nomeOpcao: string | RegExp, opcoes?: { 
   const precoInput = screen.getByLabelText('Preço unitário do novo produto');
   fireEvent.change(precoInput, { target: { value: '18.50' } });
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: 'Adicionar produto' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Adicionar produto' })).toBeDisabled();
   });
 }
 
@@ -331,13 +331,11 @@ it('selecionar cliente herda representante e rota do cadastro no editor de pedid
 it('novo pedido usa operacaoId e dataOperacao da operação sem compraProgramadaId', async () => {
   render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
   await userEvent.click(await screen.findByRole('button', { name: 'Novo pedido' }));
-  await screen.findByRole('option', { name: `${operacaoDaApi.rotulo} — ${operacaoDaApi.data}` });
+  await screen.findByRole('option', { name: '28/07/2026' });
   await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
   await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
   fireEvent.change(screen.getByLabelText('Operação'), { target: { value: operacaoDaApi.id } });
   await selecionarProdutoComPreco(/Produto novo/);
-  fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
-  await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
   await userEvent.click(screen.getByRole('button', { name: 'Salvar Rascunho' }));
 
   await waitFor(() => {
@@ -359,18 +357,14 @@ it('novo pedido usa operacaoId e dataOperacao da operação sem compraProgramada
 it('novo pedido remove item local e devolve o produto ao seletor sem chamar a API', async () => {
   render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
   await userEvent.click(await screen.findByRole('button', { name: 'Novo pedido' }));
-  await screen.findByRole('option', { name: `${operacaoDaApi.rotulo} — ${operacaoDaApi.data}` });
+  await screen.findByRole('option', { name: '28/07/2026' });
   await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
   await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
   fireEvent.change(screen.getByLabelText('Operação'), { target: { value: operacaoDaApi.id } });
 
   await selecionarProdutoComPreco(/Produto novo/);
-  fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
-  await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
 
   await selecionarProdutoComPreco(/Picanha/);
-  fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '3' } });
-  await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
 
   const removido = screen.getByTestId('linha-nova-produto-novo');
   expect(within(removido).getByText(/NOVO — Produto novo/)).toBeInTheDocument();
@@ -396,7 +390,7 @@ it('novo pedido remove item local e devolve o produto ao seletor sem chamar a AP
     const payload = JSON.parse(String(chamada?.[1]?.body));
     expect(payload.itens).toEqual([{
       produtoId: 'item-comercial-estavel',
-      quantidadePedida: 3,
+      quantidadePedida: 1,
       precoAplicado: '18.50',
     }]);
   });
@@ -427,8 +421,6 @@ it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente par
   await userEvent.click(screen.getByRole('button', { name: 'Registrar adendo' }));
 
   await selecionarProdutoComPreco(/Produto novo/, { pularOperacao: true });
-  fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
-  await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
 
   await waitFor(() => {
     const chamadas = (global.fetch as jest.Mock).mock.calls;
@@ -469,7 +461,7 @@ it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente par
       '/api/comercial/pedidos/pedido-1/itens',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ produtoId: 'produto-novo', quantidade: 2, precoAplicado: '18.50' }),
+        body: JSON.stringify({ produtoId: 'produto-novo', quantidade: 1, precoAplicado: '18.50' }),
       }),
     ]);
     expect(chamadas.some(([url, init]) =>

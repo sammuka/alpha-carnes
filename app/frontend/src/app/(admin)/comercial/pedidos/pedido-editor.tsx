@@ -65,6 +65,11 @@ export interface RotaPedido {
   status: string;
 }
 
+function formatarDataOperacao(data: string): string {
+  const [ano, mes, dia] = data.split('-');
+  return ano && mes && dia ? `${dia}/${mes}/${ano}` : data;
+}
+
 interface PedidoEditorProps {
   pedido: PedidoVendaDetalhe | null;
   clientes: ClientePedido[];
@@ -171,6 +176,7 @@ export function PedidoEditor({
   const [precoNovo, setPrecoNovo] = useState('0.00');
   const [precoNovoTabela, setPrecoNovoTabela] = useState<string | null>(null);
   const [unidadePrecoNovo, setUnidadePrecoNovo] = useState<'kg' | 'unidade' | null>(null);
+  const autoIncluirProdutoRef = useRef<string | null>(null);
   const itensNovosRef = useRef(itensNovos);
   itensNovosRef.current = itensNovos;
   const [erro, setErro] = useState('');
@@ -493,6 +499,14 @@ export function PedidoEditor({
     }
   }
 
+  useEffect(() => {
+    if (!podeGerenciar || pendente || !produtoNovo) return;
+    if (ehPrecoNaoPositivoUi(precoNovo)) return;
+    if (autoIncluirProdutoRef.current === produtoNovo) return;
+    autoIncluirProdutoRef.current = produtoNovo;
+    void adicionarProduto();
+  }, [podeGerenciar, pendente, produtoNovo, precoNovo]);
+
   function removerItemNovo(produtoId: string) {
     setItensNovos((atuais) => atuais.filter((entry) => entry.produtoId !== produtoId));
   }
@@ -678,7 +692,7 @@ export function PedidoEditor({
               <option value="">Selecione</option>
               {operacoes.map((operacao) => (
                 <option key={operacao.id} value={operacao.id}>
-                  {operacao.rotulo} — {operacao.data}
+                  {formatarDataOperacao(operacao.data)}
                 </option>
               ))}
             </SelectNative>

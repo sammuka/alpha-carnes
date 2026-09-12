@@ -268,6 +268,10 @@ describe('ComprasClient', () => {
     expect(screen.getByLabelText(/Data operacional/i)).not.toBeDisabled();
     expect(__nav.replace).toHaveBeenCalledWith(expect.stringMatching(/dataOperacao=/));
     expect(__nav.replace.mock.calls.at(-1)?.[0]).not.toMatch(/compraId=/);
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Confirmar compra' })).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument();
   });
 
   it('mantém o DatePicker habilitado com compra selecionada', async () => {

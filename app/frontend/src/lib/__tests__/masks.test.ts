@@ -1,4 +1,11 @@
-import { mascararCep, mascararCpfCnpj, mascararPlaca, mascararTelefone } from '../masks';
+import {
+  mascararCep,
+  mascararCpfCnpj,
+  mascararPlaca,
+  mascararPesoKg,
+  mascararTelefone,
+  pesoKgParaNumero,
+} from '../masks';
 
 describe('mascararCpfCnpj', () => {
   it('formata CPF conforme digita', () => {
@@ -31,5 +38,21 @@ describe('mascararPlaca', () => {
   it('remove pontuação, sobe caixa e corta em 7', () => {
     expect(mascararPlaca('abc-1d23')).toBe('ABC1D23');
     expect(mascararPlaca('abc1234xy')).toBe('ABC1234');
+  });
+});
+
+describe('mascararPesoKg', () => {
+  it('aceita ponto ou vírgula e limita a 3 casas', () => {
+    expect(mascararPesoKg('12.5')).toBe('12,5');
+    expect(mascararPesoKg('12,5009')).toBe('12,500');
+  });
+  it('mantém inteiro sem vírgula enquanto digita', () => {
+    expect(mascararPesoKg('19')).toBe('19');
+  });
+});
+
+describe('pesoKgParaNumero', () => {
+  it('converte máscara pt-BR para number', () => {
+    expect(pesoKgParaNumero('12,500')).toBe(12.5);
   });
 });

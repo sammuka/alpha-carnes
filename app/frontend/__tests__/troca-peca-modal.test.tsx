@@ -91,13 +91,14 @@ describe('TrocaPecaFluxo (6.28)', () => {
     pedidoVendaItemId: 'pvi1aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
     clienteNome: 'Restaurante Grill',
     produtoLabel: 'TZ — Traseiro',
-    pecasAssociadas: [{ id: 'pr1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', codigo: 'TZ-000341', peso: '48.750' }],
+    produtoCodigo: 'TZ',
+    pecasAssociadas: [{ id: 'pr1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', codigo: 'TZ-000341', peso: '48.750', produtoCodigo: 'TZ' }],
   }];
   const pecasDisponiveis = [
-    { id: 'pi1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', codigo: 'TZ-000362', peso: '47.980' },
+    { id: 'pi1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', codigo: 'TZ-000362', peso: '47.980', produtoCodigo: 'TZ' },
   ];
 
-  it('conclui os 6 passos e exibe o resultado do backend', async () => {
+  it('confirma a troca em um único passo com substituição', async () => {
     const user = userEvent.setup();
     const onTrocaConcluida = jest.fn();
     const pecaRet = pedidos[0]!.pecasAssociadas[0]!;
@@ -124,30 +125,33 @@ describe('TrocaPecaFluxo (6.28)', () => {
     );
 
     await user.click(screen.getByText('Restaurante Grill'));
-    await user.click(screen.getByRole('button', { name: /Avançar/ }));
     await user.click(screen.getByText(/TZ-000341/));
-    await user.click(screen.getByRole('button', { name: /Avançar/ }));
     await user.click(screen.getByText(/TZ-000362/));
-    await user.click(screen.getByRole('button', { name: /Avançar/ }));
-    await user.click(screen.getByRole('button', { name: 'estoque' }));
-    await user.click(screen.getByRole('button', { name: /Avançar/ }));
-    await user.selectOptions(
-      screen.getByLabelText('Motivo da troca'),
-      'peca_mais_adequada',
-    );
-    expect(screen.getByText(ROTULOS_MOTIVO_TROCA_PECA.peca_mais_adequada)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Avançar/ }));
-    await user.click(screen.getByRole('button', { name: 'Confirmar Troca' }));
+    await user.selectOptions(screen.getByLabelText('Motivo da troca'), 'peca_mais_adequada');
+    await user.click(screen.getByRole('button', { name: 'Confirmar troca' }));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
       '/api/operacao/pesagem/trocas',
       expect.objectContaining({ method: 'POST' }),
     ));
     await waitFor(() => expect(screen.getByText('Troca concluída')).toBeInTheDocument());
-    expect(screen.getAllByText('TZ-000341').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('TZ-000362').length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText('ei1aaaaa')).not.toBeInTheDocument();
-    expect(screen.queryByText('ee1aaaaa')).not.toBeInTheDocument();
     expect(onTrocaConcluida).toHaveBeenCalled();
+  });
+
+  it('cancela sem enviar POST', async () => {
+    const user = userEvent.setup();
+    const onFechar = jest.fn();
+    global.fetch = jest.fn();
+    render(
+      <TrocaPecaFluxo
+        open
+        onFechar={onFechar}
+        pedidos={pedidos}
+        pecasDisponiveis={pecasDisponiveis}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(onFechar).toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

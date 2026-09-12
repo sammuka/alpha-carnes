@@ -1,0 +1,59 @@
+
+
+
+Geração de cadência com nomes simples, podem gerar confusão. Recomendo ajustar ou usar a data da operação para nortear melhor o filtro. GERAR APENAS COM DATA.
+
+
+
+
+Quando já existe uma primeira compra programada e se inicia uma segunda compra no botão, a tela está sem opção de ‘’Voltar’’ ou ‘’Cancelar’’, obrigando a clicar em outro menu e depois novamente no menu ‘’Compra’’.
+
+Padronizar tela de Fornecedores/Frigorificos com base na de Representantes
+
+
+Campos de Adicionar produto não exijam clicar em adicionar para serem considerados para o vinculo
+
+
+
+
+Troca de peças
+
+Então a tela ela ficaria assim, ela teria 2 partes, a parte esquerda remetendo ao pedido de origem, aonde vai ter os filtros de busca do cliente e peça de compra(TZ, DT, PA) e depois de selecionado vai trazer
+ Todas as peças do pedido daquele cliente, filtrando ao selecionar tipo da peça (TZ, DT, PA) para permitir selecionar a peça que deseja fazer a troca.
+ Do lado direito, teria mais um campo de busca de cliente para selecionar um possível cliente para realizar a troca e também teria um checkbox para marcar se haveria necessidade de fazer uma substituição ou não.
+ Pro caso de não de não ter uma troca um pra um.
+ É também seria selecionado, seria carregado e selecionado abaixo a peça que desejaria ser feita a troca.
+ E ao final desse processo seria gerado novas etiquetas.
+Assuma esses controles de 'X' para fechar a tela, cancelar que sairá sem efetivar nenhuma ação, e um botão de confirmar troca . seguindo o padrão da tela abaixo
+
+
+Inclusão de peso total das peças por tipo na chegada do caminhão, conferencia de nota. 
+
+
+23:35 e 23:41 - assunto
+
+
+
+
+-------------------------------------------
+
+Não está sendo possível destinar peças ao estoque e desossa QUANDO PESO É INFORMADO MANUALMENTE, pois o sistema está exigindo vinculo com pedido.
+
+Preenchimento de lista dos pedidos compatíveis deve ocorrer ao carregar da tela de pesagem e destinação e ao interagir entre as abas dos tipos de peças. Troca de lote tbm.
+
+Ao clicar em Digitar, não está sendo possível retomar a captura automática do peso.
+
+Remover o campo com label produto do componente balança. 
+
+Ao clicar em Digitar, zerar PESO ATUAL.
+
+Ao acionar o botão confirmar e gerar etiqueta, zerar o PESO ATUAL. 
+
+Inserir máscara de formatação numerica decimal de 3 casas no campo PESO ATUAL.
+
+No componente Demanda Desossa, considerar nomes simplificados (DT,TZ,PA,CB,etc)
+
+Os botão das modais Ver ações Realizadas e Ver acumulado Lote 
+
+
+

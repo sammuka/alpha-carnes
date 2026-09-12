@@ -35,3 +35,8 @@ export const semCoberturaSchema = z
     }
   });
 export type SemCoberturaDto = z.infer<typeof semCoberturaSchema>;
+
+export const listarCompativeisRecebimentoSchema = z.object({
+  produtoBaseId: z.string().uuid(),
+});
+export type ListarCompativeisRecebimentoDto = z.infer<typeof listarCompativeisRecebimentoSchema>;

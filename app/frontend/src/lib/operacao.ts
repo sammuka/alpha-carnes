@@ -515,7 +515,7 @@ export const ROTULOS_MOTIVO_ESTORNO: Record<MotivoEstorno, string> = {
 
 export interface ExecutarTrocaPayload {
   pecaRetiradaId: string;
-  pecaInseridaId: string;
+  pecaInseridaId?: string;
   pedidoVendaItemId: string;
   destinoRetirada: DestinoRetirada;
   motivo: MotivoTrocaPeca;

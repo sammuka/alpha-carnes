@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RbacGuard } from '../../../common/guards/rbac.guard';
@@ -11,9 +11,11 @@ import { EtiquetaService } from './etiqueta.service';
 import { registrarPesagemSchema, type RegistrarPesagemDto } from './dto/pesagem.dto';
 import {
   confirmarAssociacaoSchema,
+  listarCompativeisRecebimentoSchema,
   redirecionarSchema,
   semCoberturaSchema,
   type ConfirmarAssociacaoDto,
+  type ListarCompativeisRecebimentoDto,
   type RedirecionarDto,
   type SemCoberturaDto,
 } from './dto/associacao.dto';
@@ -60,6 +62,15 @@ export class PesagemController {
   @RequirePermissoes('PESAGEM_LER')
   listarPorRecebimento(@Param('recebimentoId') recebimentoId: string) {
     return this.pesagem.listarPorRecebimento(recebimentoId);
+  }
+
+  @Get('recebimentos/:recebimentoId/compativeis')
+  @RequirePermissoes('PESAGEM_LER')
+  listarCompativeisRecebimento(
+    @Param('recebimentoId') recebimentoId: string,
+    @Query(new ZodValidationPipe(listarCompativeisRecebimentoSchema)) query: ListarCompativeisRecebimentoDto,
+  ) {
+    return this.associacao.listarCompativeisDoRecebimento(recebimentoId, query.produtoBaseId);
   }
 
   // ── Associação sugestiva ──────────────────────────────────────────────────

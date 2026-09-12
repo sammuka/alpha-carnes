@@ -283,6 +283,9 @@ describe('RecebimentoCargaClient', () => {
           json: async () => ({ recebimento: { id: 'r-novo' }, jaIniciado: false }),
         };
       }
+      if (url.includes(`/api/operacao/pedidos-fornecedor/${pedido.id}/nf`) && init?.method === 'POST') {
+        return { ok: true, json: async () => ({ ok: true }) };
+      }
       if (url.includes('/api/operacao/recebimentos/r-novo')) {
         return { ok: true, json: async () => ({ ...recebimentoDetalhe, id: 'r-novo' }) };
       }
@@ -328,6 +331,13 @@ describe('RecebimentoCargaClient', () => {
     await user.click(pedidoCombobox);
     await user.click(await screen.findByRole('option', { name: /PF-0001/ }));
     await waitFor(() => expect(screen.getByText('TZ — Traseiro')).toBeInTheDocument());
+    expect(within(drawer).getByRole('columnheader', { name: 'Peso NF' })).toBeInTheDocument();
+    expect(within(drawer).getByRole('columnheader', { name: 'Qtd NF' })).toBeInTheDocument();
+    expect(within(drawer).queryByRole('columnheader', { name: 'Unidade' })).not.toBeInTheDocument();
+    expect(within(drawer).queryByRole('columnheader', { name: 'Balança' })).not.toBeInTheDocument();
+    fireEvent.change(within(drawer).getByLabelText('Peso da NF para TZ'), {
+      target: { value: '850,000' },
+    });
     fireEvent.change(within(blocoB!).getByLabelText(/Número da NF-e/), {
       target: { value: 'NF-123' },
     });
@@ -343,6 +353,18 @@ describe('RecebimentoCargaClient', () => {
     expect(body).toEqual(expect.objectContaining({ pedidoFornecedorId: pedido.id }));
     expect(body).not.toHaveProperty('compraProgramadaId');
     expect(body).not.toHaveProperty('iniciarConferencia');
+    const postNf = (global.fetch as jest.Mock).mock.calls.find(
+      ([url, init]) => String(url).includes('/nf') && init?.method === 'POST',
+    );
+    expect(postNf).toBeTruthy();
+    const bodyNf = JSON.parse(postNf[1].body);
+    expect(bodyNf.itens).toEqual([
+      expect.objectContaining({
+        produtoId: 'item-1',
+        quantidadeDeclarada: 20,
+        pesoDeclarado: 850,
+      }),
+    ]);
     await waitFor(() => expect(screen.queryByRole('dialog', {
       name: 'Novo Recebimento de Carga',
     })).not.toBeInTheDocument());

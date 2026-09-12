@@ -104,6 +104,12 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
     if (u.includes('/recebimentos?pageSize')) {
       return { ok: true, json: async () => ({ data: [recebimentoLista] }) };
     }
+    if (u.includes('/sugestao') || u.includes('/compativeis')) {
+      return {
+        ok: true,
+        json: async () => ({ pecaId: 'pc1aaaaaa', sugestao: null, compativeis: [] }),
+      };
+    }
     if (u.includes(`/recebimentos/${recebimentoId}`) && !u.includes('/acoes')) {
       return { ok: true, json: async () => recebimentoDetalhe };
     }
@@ -112,12 +118,6 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
     }
     if (u.includes('/desossa/faltas')) {
       return { ok: true, json: async () => [] };
-    }
-    if (u.includes('/sugestao')) {
-      return {
-        ok: true,
-        json: async () => ({ pecaId: 'pc1aaaaaa', sugestao: null, compativeis: [] }),
-      };
     }
     const found = Object.entries(overrides).find(([k]) => u.includes(k));
     if (found) return { ok: true, json: async () => found[1] };
@@ -158,6 +158,7 @@ describe('PesagemDestinacaoClient', () => {
       '/api/operacao/pesagem/pecas': {
         id: 'pc1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
         recebimentoId,
+        produtoBaseId: produtoId,
         pesoOriginal: '12.500',
         modoCapturaPeso: 'automatico',
         statusPeca: 'pesada',
@@ -186,6 +187,7 @@ describe('PesagemDestinacaoClient', () => {
     const pecaAssociada = {
       id: 'pc1aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
       recebimentoId,
+      produtoBaseId: produtoId,
       pesoOriginal: '12.500',
       modoCapturaPeso: 'automatico',
       statusPeca: 'associada',
@@ -287,6 +289,7 @@ describe('PesagemDestinacaoClient', () => {
     const pecaPesada = {
       id: 'pc2aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
       recebimentoId,
+      produtoBaseId: produtoId,
       pesoOriginal: '12.500',
       modoCapturaPeso: 'automatico',
       statusPeca: 'pesada',
@@ -346,5 +349,52 @@ describe('PesagemDestinacaoClient', () => {
 
     fireEvent.click(btnEstoque);
     await waitFor(() => expect(radio).not.toBeDisabled());
+  });
+
+  it('preenche Pedidos compatíveis ao carregar o lote sem pesar', async () => {
+    mockFetch();
+    const fetchBase = global.fetch as jest.Mock;
+    global.fetch = jest.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('/compativeis')) {
+        return {
+          ok: true,
+          json: async () => ({
+            pecaId: '',
+            sugestao: null,
+            compativeis: [{
+              pedidoVendaId: 'pv3aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+              pedidoVendaItemId: 'pvi3aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+              produtoId,
+              clienteId: 'c3',
+              clienteNome: 'Cliente Lote',
+              saldoPendente: '2',
+              quantidadePedida: '2',
+              quantidadeAtendida: '0',
+              prioridade: 1,
+              rotaPrevista: null,
+              score: 1,
+              justificativa: 'ok',
+            }],
+          }),
+        };
+      }
+      return fetchBase(url, init);
+    }) as unknown as typeof fetch;
+
+    render(<PesagemDestinacaoClient permissoes={['PESAGEM_LER']} />);
+    expect(await screen.findByText('Cliente Lote')).toBeInTheDocument();
+  });
+
+  it('Digitar zera o peso atual e Capturar Peso retoma o modo automático', async () => {
+    render(<PesagemDestinacaoClient permissoes={['PESAGEM_GERENCIAR', 'PESO_MANUAL']} />);
+    const capturar = await screen.findByRole('button', { name: 'Capturar Peso' });
+    await waitFor(() => expect(capturar).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Digitar' }));
+    expect(await screen.findByLabelText('Peso manual')).toHaveValue('');
+    expect(screen.getByText('0,000')).toBeInTheDocument();
+
+    fireEvent.click(capturar);
+    await waitFor(() => expect(screen.queryByLabelText('Peso manual')).not.toBeInTheDocument());
   });
 });

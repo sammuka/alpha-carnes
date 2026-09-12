@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { ArrowLeftRight, BarChart3, ClipboardList, Scale, Search, Tag } from 'lucide-react';
 import { rotuloProduto } from '@/lib/dominios';
 import { extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
+import { mascararPesoKg, pesoKgParaNumero } from '@/lib/masks';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import {
   MOTIVOS_CAPTURA_MANUAL,
@@ -237,6 +238,21 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     setSugestao(data as ResultadoSugestao);
   }, []);
 
+  const carregarCompativeisLote = useCallback(async (recId: string, produtoId: string) => {
+    const qs = new URLSearchParams({ produtoBaseId: produtoId });
+    const res = await fetch(
+      `/api/operacao/pesagem/recebimentos/${recId}/compativeis?${qs.toString()}`,
+      { cache: 'no-store' },
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setSugestao(null);
+      setErro(extrairMensagemErro(data, 'Falha ao carregar pedidos compatíveis'));
+      return;
+    }
+    setSugestao(data as ResultadoSugestao);
+  }, []);
+
   const refreshLote = useCallback(async () => {
     if (!recebimentoId) return;
     await Promise.all([carregarDetalhe(recebimentoId), carregarAcoes(recebimentoId)]);
@@ -283,6 +299,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
         codigo: p.etiquetaAtual ?? '—',
         peso: p.pesoOriginal,
         etiqueta: p.etiquetaAtual,
+        produtoCodigo: detalhe?.itens.find((i) => i.produtoId === p.produtoBaseId)?.produto?.codigo,
       });
 
       setPecasDispTroca(
@@ -305,6 +322,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
             pedidoVendaItemId: key,
             clienteNome: acao?.clientePedido ?? 'Cliente do pedido',
             produtoLabel: ic ? rotuloProduto(ic) : '—',
+            produtoCodigo: ic?.codigo ?? undefined,
             pecasAssociadas: [],
           };
           porItem.set(key, ped);
@@ -366,6 +384,22 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     return desconectar;
   }, [dataOperacao, recebimentoId, carregarStatus, refreshLote, carregarFaltas]);
 
+  useEffect(() => {
+    if (!recebimentoId || !produtoBaseId) return;
+    if (peca?.id && peca.produtoBaseId === produtoBaseId) {
+      void carregarSugestao(peca.id);
+      return;
+    }
+    void carregarCompativeisLote(recebimentoId, produtoBaseId);
+  }, [
+    recebimentoId,
+    produtoBaseId,
+    peca?.id,
+    peca?.produtoBaseId,
+    carregarSugestao,
+    carregarCompativeisLote,
+  ]);
+
   // Nova peça pesada: começa sem nenhuma escolha de destino (radio de pedido ou toggle Estoque/Desossa).
   useEffect(() => {
     setDestinoLocal(null);
@@ -390,7 +424,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
   };
 
   const compativeisFiltrados = useMemo(() => {
-    if (!sugestao?.compativeis.length) return [];
+    if (!sugestao?.compativeis?.length) return [];
     const q = buscaPedido.trim().toLowerCase();
     if (!q) return sugestao.compativeis;
     return sugestao.compativeis.filter(
@@ -403,7 +437,9 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     );
   }, [sugestao, buscaPedido]);
 
-  const pesoExibido = peca?.pesoOriginal ?? null;
+  const pesoExibido = manualAberto
+    ? (pesoManual ? String(pesoKgParaNumero(pesoManual)) : null)
+    : peca?.pesoOriginal ?? null;
   const balancaIndisponivel = dispositivos?.balanca.status !== 'disponivel';
   const itemAtivo = detalhe?.itens.find((i) => i.produtoId === produtoBaseId);
 
@@ -440,7 +476,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
             recebimentoId,
             produtoBaseId,
             modoCaptura: 'manual_assistido',
-            pesoManual: Number(pesoManual),
+            pesoManual: pesoKgParaNumero(pesoManual),
             motivo,
           };
 
@@ -521,12 +557,23 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
       if (!pecaDestinada) return;
       await emitirEtiqueta(pecaDestinada);
-      setPedidoSelecionadoId(null);
-      setDestinoLocal(null);
-      return;
+    } else {
+      await emitirEtiqueta();
     }
 
-    await emitirEtiqueta();
+    setPeca(null);
+    setSugestao(null);
+    setPesoManual('');
+    setManualAberto(false);
+    setPedidoSelecionadoId(null);
+    setDestinoLocal(null);
+  };
+
+  const alternarDigitar = () => {
+    setManualAberto((aberto) => {
+      if (!aberto) setPesoManual('');
+      return !aberto;
+    });
   };
 
   const trocarLote = (id: string) => {
@@ -699,7 +746,16 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
           ) : (
             <p className="text-sm text-muted-foreground">Nenhum lote selecionado.</p>
           )}
-          <div className="ml-auto">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setAcoesModalAberto(true)}>
+              <ClipboardList />
+              Ver ações realizadas
+              <BadgeCount>{acoes.length}</BadgeCount>
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setAcumuladoModalAberto(true)}>
+              <BarChart3 />
+              Ver acumulado do lote
+            </Button>
             {trocarLoteAberto ? (
               <div className="flex items-center gap-2">
                 <SelectNative
@@ -768,15 +824,14 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
               </p>
             </div>
 
-            <FormField label="Produto" htmlFor="produto-atual">
-              <Input id="produto-atual" readOnly value={itemAtivo ? labelProduto(itemAtivo) : ''} />
-            </FormField>
-
             {podePesar && (
               <div className="flex flex-wrap gap-2">
                 <Button
                   className="flex-1"
-                  onClick={() => pesar('automatico')}
+                  onClick={() => {
+                    if (manualAberto) setManualAberto(false);
+                    void pesar('automatico');
+                  }}
                   disabled={!recebimentoId || !produtoBaseId || submitting}
                 >
                   <Scale />
@@ -784,8 +839,9 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                 </Button>
                 {podeManual && (
                   <Button
-                    variant="secondary"
-                    onClick={() => setManualAberto((v) => !v)}
+                    variant={manualAberto ? 'default' : 'secondary'}
+                    aria-pressed={manualAberto}
+                    onClick={alternarDigitar}
                     disabled={submitting}
                   >
                     Digitar
@@ -838,7 +894,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                     placeholder="0,000"
                     adornRight="kg"
                     value={pesoManual}
-                    onChange={(e) => setPesoManual(e.target.value)}
+                    onChange={(e) => setPesoManual(mascararPesoKg(e.target.value))}
                   />
                 </FormField>
                 <SelectNative
@@ -964,7 +1020,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                       return (
                         <TableRow key={f.produto.id}>
                           <TableCell className="max-w-[130px] truncate text-[13px] font-semibold text-foreground">
-                            {f.produto.nome}
+                            {f.produto.codigo}
                           </TableCell>
                           <TableCellNum>{solicitada} un</TableCellNum>
                           <TableCellNum>{f.quantidadeEstoque} un</TableCellNum>
@@ -984,6 +1040,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
         </div>
 
         {/* b) Compatible orders — coluna principal */}
+        <div className="space-y-2.5">
         <Card>
           <CardHeader>
             <CardTitle>Pedidos compatíveis</CardTitle>
@@ -994,31 +1051,22 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                   placeholder="Buscar cliente"
                   value={buscaPedido}
                   onChange={(event) => setBuscaPedido(event.target.value)}
-                  disabled={!peca || !sugestao}
+                  disabled={!sugestao}
                   className="h-7 text-xs"
                 />
               </div>
             </CardAction>
           </CardHeader>
           <CardContent className="space-y-2.5">
-            {!peca && (
-              <EmptyState
-                icon={<Scale />}
-                title="Capture o peso para ver pedidos compatíveis"
-                description="A lista considera produto, faixa de peso e prioridade do cliente."
-                className="py-10"
-              />
-            )}
-
-            {peca && !sugestao && (
+            {!sugestao && (
               <EmptyState title="Carregando sugestões…" />
             )}
 
-            {peca && sugestao && compativeisFiltrados.length === 0 && (
+            {sugestao && compativeisFiltrados.length === 0 && (
               <EmptyState title="Nenhum pedido compatível encontrado." />
             )}
 
-            {peca && sugestao && compativeisFiltrados.length > 0 && (
+            {sugestao && compativeisFiltrados.length > 0 && (
               <>
                 {destinoLocal && (
                   <p className="rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-xs text-muted-foreground">
@@ -1090,55 +1138,32 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
             )}
           </CardContent>
         </Card>
-      </div>
-
-      {/* Rodapé de finalização */}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          size="lg"
-          className="h-auto flex-[2] flex-col items-start justify-center gap-0.5 py-2.5 text-left"
-          onClick={() => void confirmarEGerarEtiqueta()}
-          disabled={!podeConfirmar || submitting}
-        >
-          <span className="flex items-center gap-1.5 text-[13px] font-semibold">
-            <Tag className="size-4" />
-            {peca?.etiquetaAtual ? `Etiqueta: ${peca.etiquetaAtual}` : 'Confirmar e gerar etiqueta'}
-          </span>
-          {!peca?.etiquetaAtual && (
-            <span className="text-[11px] font-normal text-primary-foreground/80">
-              Finaliza a pesagem e associa a peça
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="lg"
+            className="h-auto min-w-0 flex-1 flex-col items-start justify-center gap-0.5 py-2.5 text-left"
+            onClick={() => void confirmarEGerarEtiqueta()}
+            disabled={!podeConfirmar || submitting}
+          >
+            <span className="flex items-center gap-1.5 text-[13px] font-semibold">
+              <Tag className="size-4" />
+              {peca?.etiquetaAtual ? `Etiqueta: ${peca.etiquetaAtual}` : 'Confirmar e gerar etiqueta'}
             </span>
-          )}
-        </Button>
-        <Button
-          variant="secondary"
-          size="lg"
-          className="flex-1"
-          onClick={() => setAcoesModalAberto(true)}
-        >
-          <ClipboardList />
-          Ver ações realizadas
-          <BadgeCount>{acoes.length}</BadgeCount>
-        </Button>
-        <Button
-          variant="secondary"
-          size="lg"
-          className="flex-1"
-          onClick={() => setAcumuladoModalAberto(true)}
-        >
-          <BarChart3 />
-          Ver acumulado do lote
-        </Button>
-      </div>
-
-      {podeAssociar && (
-        <div className="flex justify-end">
-          <Button variant="secondary" size="sm" onClick={() => setTrocaAberta(true)}>
-            <ArrowLeftRight />
-            Trocar Peça
+            {!peca?.etiquetaAtual && (
+              <span className="text-[11px] font-normal text-primary-foreground/80">
+                Finaliza a pesagem e associa a peça
+              </span>
+            )}
           </Button>
+          {podeAssociar && (
+            <Button variant="secondary" size="lg" onClick={() => setTrocaAberta(true)}>
+              <ArrowLeftRight />
+              Trocar Peça
+            </Button>
+          )}
         </div>
-      )}
+        </div>
+      </div>
 
       <TrocaPecaFluxo
         open={trocaAberta}

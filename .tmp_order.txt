@@ -1,0 +1,48 @@
+--- para 1 imgs=['image3.png'] ---
+
+--- para 3 imgs=[] ---
+Geração de cadência com nomes simples, podem gerar confusão. Recomendo ajustar ou usar a data da operação para nortear melhor o filtro. GERAR APENAS COM DATA.
+--- para 7 imgs=['image4.png'] ---
+
+--- para 8 imgs=[] ---
+Quando já existe uma primeira compra programada e se inicia uma segunda compra no botão, a tela está sem opção de ‘’Voltar’’ ou ‘’Cancelar’’, obrigando a clicar em outro menu e depois novamente no menu ‘’Compra’’.
+--- para 10 imgs=[] ---
+Padronizar tela de Fornecedores/Frigorificos com base na de Representantes
+--- para 12 imgs=['image2.png'] ---
+
+--- para 13 imgs=[] ---
+Campos de Adicionar produto não exijam clicar em adicionar para serem considerados para o vinculo
+--- para 18 imgs=[] ---
+Troca de peças
+--- para 20 imgs=[] ---
+Então a tela ela ficaria assim, ela teria 2 partes, a parte esquerda remetendo ao pedido de origem, aonde vai ter os filtros de busca do cliente e peça de compra(TZ, DT, PA) e depois de selecionado vai trazer Todas as peças do pedido daquele cliente, filtrando ao selecionar tipo da peça (TZ, DT, PA)
+--- para 21 imgs=[] ---
+Assuma esses controles de 'X' para fechar a tela, cancelar que sairá sem efetivar nenhuma ação, e um botão de confirmar troca . seguindo o padrão da tela abaixo
+--- para 24 imgs=[] ---
+Inclusão de peso total das peças por tipo na chegada do caminhão, conferencia de nota.
+--- para 25 imgs=['image1.png'] ---
+
+--- para 27 imgs=[] ---
+23:35 e 23:41 - assunto
+--- para 32 imgs=[] ---
+-------------------------------------------
+--- para 33 imgs=['image5.png'] ---
+
+--- para 34 imgs=[] ---
+Não está sendo possível destinar peças ao estoque e desossa QUANDO PESO É INFORMADO MANUALMENTE, pois o sistema está exigindo vinculo com pedido.
+--- para 36 imgs=[] ---
+Preenchimento de lista dos pedidos compatíveis deve ocorrer ao carregar da tela de pesagem e destinação e ao interagir entre as abas dos tipos de peças. Troca de lote tbm.
+--- para 38 imgs=[] ---
+Ao clicar em Digitar, não está sendo possível retomar a captura automática do peso.
+--- para 40 imgs=[] ---
+Remover o campo com label produto do componente balança.
+--- para 42 imgs=[] ---
+Ao clicar em Digitar, zerar PESO ATUAL.
+--- para 44 imgs=[] ---
+Ao acionar o botão confirmar e gerar etiqueta, zerar o PESO ATUAL.
+--- para 46 imgs=[] ---
+Inserir máscara de formatação numerica decimal de 3 casas no campo PESO ATUAL.
+--- para 48 imgs=[] ---
+No componente Demanda Desossa, considerar nomes simplificados (DT,TZ,PA,CB,etc)
+--- para 50 imgs=[] ---
+Os botão das modais Ver ações Realizadas e Ver acumulado Lote

@@ -391,7 +391,6 @@ it('trocar cliente remapeia precoAplicado de itensNovos a partir de corpo.data',
   await user.click(screen.getByRole('combobox', { name: 'Produto' }));
   await user.click(await screen.findByRole('option', { name: /TZ — Traseiro/i }));
   await waitFor(() => expect(screen.getByLabelText('Preço unitário do novo produto')).toHaveValue(18.5));
-  await user.click(screen.getByRole('button', { name: /Adicionar produto/i }));
   expect(await screen.findByText('R$ 18,50')).toBeInTheDocument();
   await user.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
   await user.click(await screen.findByRole('option', { name: /Mercado Novo/i }));

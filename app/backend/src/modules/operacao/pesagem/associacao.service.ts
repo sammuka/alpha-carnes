@@ -8,6 +8,7 @@ import { operacoes,
   associacoesPecaHistorico,
   comprasProgramadas,
   pecas,
+  pedidosFornecedor,
   pedidosVenda,
   pedidosVendaItens,
   recebimentos,
@@ -65,6 +66,36 @@ export class AssociacaoService {
     const peca = await this.buscarAtiva(this.db, pecaId);
     if (!peca) throw new NotFoundException('Peça não encontrada');
     return calcularCompativeisItem(this.db, await this.paramsCompativeis(this.db, peca));
+  }
+
+  /**
+   * Pedidos compatíveis do lote + produto, sem peça pesada.
+   * Usado ao carregar a tela, trocar aba de tipo e trocar lote.
+   * Ranking sem peso/características de captura (`peso: '0'`).
+   */
+  async listarCompativeisDoRecebimento(
+    recebimentoId: string,
+    produtoBaseId: string,
+  ): Promise<ResultadoSugestao> {
+    const contexto = await this.db
+      .select({
+        operacaoId: recebimentos.operacaoId,
+        compraProgramadaId: pedidosFornecedor.compraProgramadaId,
+      })
+      .from(recebimentos)
+      .innerJoin(pedidosFornecedor, eq(pedidosFornecedor.id, recebimentos.pedidoFornecedorId))
+      .where(and(eq(recebimentos.id, recebimentoId), isNull(recebimentos.deletedAt)))
+      .then((r) => r[0] ?? null);
+    if (!contexto) throw new NotFoundException('Recebimento não encontrado');
+
+    const compativeis = await calcularCompativeisItem(this.db, {
+      operacaoId: contexto.operacaoId,
+      compraProgramadaOrigemId: contexto.compraProgramadaId,
+      produtoId: produtoBaseId,
+      peso: '0',
+      caracteristicas: [],
+    });
+    return { pecaId: '', sugestao: compativeis[0] ?? null, compativeis };
   }
 
   /**

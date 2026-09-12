@@ -29,10 +29,10 @@ import type {
 export type Tx = NodePgDatabase<typeof schema>;
 type Operacao = typeof operacoes.$inferSelect;
 
-const DIAS_SEMANA_PT = [
-  'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira',
-  'quinta-feira', 'sexta-feira', 'sábado',
-] as const;
+function rotuloDataCadencia(data: string): string {
+  const [ano, mes, dia] = data.split('-');
+  return ano && mes && dia ? `${dia}/${mes}/${ano}` : data;
+}
 
 const TRANSICOES_OPERACAO: Record<StatusOperacao, readonly StatusOperacao[]> = {
   aberta: ['em_andamento'],
@@ -77,7 +77,7 @@ export class OperacoesService {
     // Em corrida, reconsulta a linha ativa após unique_violation (23505).
     try {
       const [criada] = await tx.insert(operacoes).values({
-        data, diaSemana, rotulo: `Operação de ${DIAS_SEMANA_PT[diaSemana]}`,
+        data, diaSemana, rotulo: rotuloDataCadencia(data),
         criadaPorId: usuarioId ?? null,
       }).returning({ id: operacoes.id, data: operacoes.data });
       if (criada) return { operacao: criada, criada: true };

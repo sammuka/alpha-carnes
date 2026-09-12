@@ -73,6 +73,53 @@ describe('AssociacaoService — branches de erro', () => {
     await expect(service.listarCompativeis('pec-x')).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('listarCompativeisDoRecebimento → NotFoundException se recebimento não existe', async () => {
+    const selectFn = jest.fn(() => ({
+      from: jest.fn(() => ({
+        innerJoin: jest.fn(() => ({
+          where: jest.fn(() => Promise.resolve([])),
+        })),
+      })),
+    }));
+    const service = new AssociacaoService(
+      { db: { select: selectFn } } as never,
+      auditoria as never,
+      emitter,
+      divergencias as never,
+      {} as never,
+    );
+    await expect(
+      service.listarCompativeisDoRecebimento('rec-x', 'prod-1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('listarCompativeisDoRecebimento → lista sem peça e com peso 0', async () => {
+    const selectFn = jest.fn(() => ({
+      from: jest.fn(() => ({
+        innerJoin: jest.fn(() => ({
+          where: jest.fn(() =>
+            Promise.resolve([{ operacaoId: 'op-1', compraProgramadaId: 'cp-1' }]),
+          ),
+        })),
+      })),
+    }));
+    calcularMock.mockResolvedValue([{ pedidoVendaItemId: 'pvi-1' } as never]);
+    const service = new AssociacaoService(
+      { db: { select: selectFn } } as never,
+      auditoria as never,
+      emitter,
+      divergencias as never,
+      {} as never,
+    );
+    const res = await service.listarCompativeisDoRecebimento('rec-1', 'prod-1');
+    expect(res.pecaId).toBe('');
+    expect(res.compativeis).toHaveLength(1);
+    expect(calcularMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ produtoId: 'prod-1', peso: '0' }),
+    );
+  });
+
   it('confirmar → ConflictException se peça já associada', async () => {
     const service = new AssociacaoService(
       { db: dbComPeca(pecaBase({ statusPeca: 'associada' })) } as never,

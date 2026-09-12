@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { rotuloProduto } from '@/lib/dominios';
 import { extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
+import { mascararPesoKg, pesoKgParaNumero } from '@/lib/masks';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import {
   TIPOS_DIVERGENCIA,
@@ -246,6 +247,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   const [pedidoFornecedorId, setPedidoFornecedorId] = useState('');
   const [previsao, setPrevisao] = useState<PrevisaoRecebimento | null>(null);
   const [itensNfEditados, setItensNfEditados] = useState<Record<string, string>>({});
+  const [pesosNfEditados, setPesosNfEditados] = useState<Record<string, string>>({});
   const [formNfe, setFormNfe] = useState<FormNfe>(formNfeVazio);
   const [formMetadados, setFormMetadados] = useState<FormMetadados>(formMetadadosVazio);
   const [salvando, setSalvando] = useState(false);
@@ -307,6 +309,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     setErro(null);
     setPrevisao(null);
     setItensNfEditados({});
+    setPesosNfEditados({});
     const res = await fetch(`/api/operacao/recebimentos/previsao/${id}`, { cache: 'no-store' });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -463,10 +466,15 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     // ALP-93: se o usuário digitou a NF, os valores por ele informados na grade passam a
     // ser a referência (quantidadeDeclarada), substituindo o previsto do Pedido de Compra.
     if (formNfe.nfeNumero.trim()) {
-      const itensNf = previsao.itensOperacionais.map((item) => ({
-        produtoId: item.produtoId,
-        quantidadeDeclarada: Number(itensNfEditados[item.produtoId] ?? item.quantidadePrevista),
-      }));
+      const itensNf = previsao.itensOperacionais.map((item) => {
+        const pesoInformado = pesosNfEditados[item.produtoId];
+        const pesoNumero = pesoInformado ? pesoKgParaNumero(pesoInformado) : NaN;
+        return {
+          produtoId: item.produtoId,
+          quantidadeDeclarada: Number(itensNfEditados[item.produtoId] ?? item.quantidadePrevista),
+          ...(Number.isFinite(pesoNumero) && pesoNumero > 0 ? { pesoDeclarado: pesoNumero } : {}),
+        };
+      });
       const resNf = await fetch(`/api/operacao/pedidos-fornecedor/${previsao.pedidoFornecedorId}/nf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -496,6 +504,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     setPedidoFornecedorId('');
     setPrevisao(null);
     setItensNfEditados({});
+    setPesosNfEditados({});
     setFormNfe(formNfeVazio());
     await carregarLista();
     if (irParaBalanca) {
@@ -700,6 +709,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     setPedidoFornecedorId('');
     setPrevisao(null);
     setItensNfEditados({});
+    setPesosNfEditados({});
     setFormNfe(formNfeVazio());
     setErro(null);
     setSheetAberto(true);
@@ -1218,9 +1228,8 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                       <TableRow className="hover:bg-transparent">
                         <TableHead>Produto</TableHead>
                         <TableHead className="text-right">Qtd pedido</TableHead>
+                        <TableHead className="text-right">Peso NF</TableHead>
                         <TableHead className="text-right">Qtd NF</TableHead>
-                        <TableHead>Unidade</TableHead>
-                        <TableHead>Balança</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1232,6 +1241,21 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                             <Input
                               inputMode="decimal"
                               className="ml-auto h-7 w-24 text-right"
+                              value={pesosNfEditados[item.produtoId] ?? ''}
+                              onChange={(e) =>
+                                setPesosNfEditados((prev) => ({
+                                  ...prev,
+                                  [item.produtoId]: mascararPesoKg(e.target.value),
+                                }))
+                              }
+                              aria-label={`Peso da NF para ${item.produtoCodigo}`}
+                              placeholder="0,000"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              inputMode="decimal"
+                              className="ml-auto h-7 w-24 text-right"
                               value={itensNfEditados[item.produtoId] ?? item.quantidadePrevista}
                               onChange={(e) =>
                                 setItensNfEditados((prev) => ({ ...prev, [item.produtoId]: e.target.value }))
@@ -1239,17 +1263,14 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                               aria-label={`Quantidade da NF para ${item.produtoCodigo}`}
                             />
                           </TableCell>
-                          <TableCell>{item.unidade}</TableCell>
-                          <TableCell>{item.passaBalanca ? 'Sim' : 'Não — Entrada direta'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Os itens vêm do Pedido ao Fornecedor. Se a NF trouxer quantidade diferente, ajuste na coluna
-                  “Qtd NF” — o valor previsto passa a refletir o que foi informado. A conferência real de peso será
-                  feita na balança.
+                  Os itens vêm do Pedido ao Fornecedor. Informe o peso da NF (kg, 3 casas) e, se a quantidade
+                  divergir, ajuste “Qtd NF”. A conferência real de peso será feita na balança.
                 </p>
               </section>
             )}
