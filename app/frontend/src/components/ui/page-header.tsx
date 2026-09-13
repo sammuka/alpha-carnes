@@ -6,16 +6,19 @@ interface PageHeaderProps {
   subtitle?: string;
   /** Exibe o indicador verde pulsante "tempo real". */
   live?: boolean;
+  /** Pill ou badge imediatamente após o subtítulo (ex.: status do registro). */
+  badge?: React.ReactNode;
   className?: string;
   /** Ações à direita (botões, selects, badges de dispositivo). */
   children?: React.ReactNode;
 }
 
-export function PageHeader({ title, subtitle, live, className, children }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, live, badge, className, children }: PageHeaderProps) {
   return (
     <div className={cn('mb-3 flex flex-wrap items-center gap-x-3 gap-y-2', className)}>
       <h1 className="text-lg font-bold tracking-[-0.015em] text-foreground">{title}</h1>
       {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+      {badge}
       {live && (
         <span className="inline-flex items-center gap-[5px] text-[11px] font-semibold text-success-fg">
           <span
