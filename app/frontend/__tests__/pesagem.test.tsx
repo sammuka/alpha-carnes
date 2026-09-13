@@ -342,6 +342,7 @@ describe('PesagemDestinacaoClient', () => {
 
     const radio = await screen.findByRole('radio', { name: /Cliente Dois/i });
     await waitFor(() => expect(radio).not.toBeDisabled());
+    expect(screen.getByLabelText('40% associado ao pedido')).toBeInTheDocument();
 
     const btnEstoque = screen.getByTestId('btn-destino-estoque');
     fireEvent.click(btnEstoque);
@@ -384,6 +385,8 @@ describe('PesagemDestinacaoClient', () => {
 
     render(<PesagemDestinacaoClient permissoes={['PESAGEM_LER']} />);
     expect(await screen.findByText('Cliente Lote')).toBeInTheDocument();
+    expect(screen.getByLabelText('0% associado ao pedido')).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Item' })).not.toBeInTheDocument();
   });
 
   it('Digitar zera o peso atual e Capturar Peso retoma o modo automático', async () => {

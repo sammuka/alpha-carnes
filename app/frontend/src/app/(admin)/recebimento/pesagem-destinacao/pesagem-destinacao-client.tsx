@@ -111,6 +111,14 @@ function formatQtd(val: string | number | null | undefined): string {
   return n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 }
 
+/** Peças já associadas em relação ao total previsto da peça naquele pedido. */
+function percentualPedido(atendida: string, pedida: string): number {
+  const total = Number(pedida);
+  const feito = Number(atendida);
+  if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(feito) || feito < 0) return 0;
+  return Math.round((feito / total) * 100);
+}
+
 function labelProduto(item: RecebimentoItem): string {
   const rotulo = rotuloProduto(item.produto);
   if (rotulo !== '—') return rotulo;
@@ -441,8 +449,6 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     ? (pesoManual ? String(pesoKgParaNumero(pesoManual)) : null)
     : peca?.pesoOriginal ?? null;
   const balancaIndisponivel = dispositivos?.balanca.status !== 'disponivel';
-  const itemAtivo = detalhe?.itens.find((i) => i.produtoId === produtoBaseId);
-
   async function chamar<T>(url: string, body?: unknown): Promise<T | null> {
     setErro(null);
     setSubmitting(true);
@@ -1085,16 +1091,17 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                         <TableHead className="w-8" />
                         <TableHead>Cliente</TableHead>
                         <TableHead>Pedido</TableHead>
-                        <TableHead>Item</TableHead>
                         <TableHead className="text-right">Qtde solicitada</TableHead>
                         <TableHead className="text-right">Qtde associada</TableHead>
                         <TableHead className="text-right">Qtde faltante</TableHead>
+                        <TableHead className="w-[140px]"><span className="sr-only">Progresso</span></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {compativeisFiltrados.map((s) => {
                         const principal = sugestao?.sugestao?.pedidoVendaItemId === s.pedidoVendaItemId;
                         const selecionado = pedidoSelecionadoId === s.pedidoVendaItemId;
+                        const pctPedido = percentualPedido(s.quantidadeAtendida, s.quantidadePedida);
                         return (
                           <TableRow
                             key={s.pedidoVendaItemId}
@@ -1122,12 +1129,15 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                               </label>
                             </TableCell>
                             <TableCellCode>{s.pedidoVendaId.slice(0, 8)}</TableCellCode>
-                            <TableCell className="max-w-[140px] truncate">
-                              {itemAtivo ? labelProduto(itemAtivo) : '—'}
-                            </TableCell>
                             <TableCellNum>{formatQtd(s.quantidadePedida)}</TableCellNum>
                             <TableCellNum>{formatQtd(s.quantidadeAtendida)}</TableCellNum>
                             <TableCellNum className="text-destructive">{formatQtd(s.saldoPendente)}</TableCellNum>
+                            <TableCell>
+                              <ProgressoBalancaBar
+                                valor={pctPedido}
+                                label={`${pctPedido}% associado ao pedido`}
+                              />
+                            </TableCell>
                           </TableRow>
                         );
                       })}

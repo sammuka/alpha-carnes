@@ -79,15 +79,39 @@ function CommandList({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.List>) {
+  const scrollerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    const onWheel = (event: WheelEvent) => {
+      if (!el.contains(event.target as Node)) return;
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const canScroll =
+        (event.deltaY < 0 && scrollTop > 0) ||
+        (event.deltaY > 0 && scrollTop + clientHeight < scrollHeight - 1);
+      if (canScroll) el.scrollTop += event.deltaY;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    window.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    return () => window.removeEventListener("wheel", onWheel, { capture: true });
+  }, []);
+
   return (
-    <CommandPrimitive.List
-      data-slot="command-list"
-      className={cn(
-        "max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto",
-        className,
-      )}
-      {...props}
-    />
+    <div
+      ref={scrollerRef}
+      data-slot="command-list-scroll"
+      className={cn("max-h-[300px] overflow-x-hidden overflow-y-auto overscroll-contain", className)}
+    >
+      <CommandPrimitive.List
+        data-slot="command-list"
+        className="max-h-none overflow-visible scroll-py-1"
+        {...props}
+      />
+    </div>
   );
 }
 
