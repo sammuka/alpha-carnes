@@ -808,7 +808,11 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                   </TableRow>
                 ) : (
                   listaFiltrada.map((r) => (
-                    <TableRow key={r.id} className="group">
+                    <TableRow
+                      key={r.id}
+                      className="group cursor-pointer"
+                      onClick={() => void carregarDetalhe(r.id)}
+                    >
                       <TableCellCode>#{r.codigoLote}</TableCellCode>
                       <TableCellCode>{r.numeroInternoCompra ?? '—'}</TableCellCode>
                       <TableCell className="text-[13px] font-semibold text-foreground">{r.fornecedorNome}</TableCell>
@@ -824,7 +828,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                       <TableCell className="w-[120px]">
                         <ProgressoBalancaBar valor={r.progressoBalanca} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(ev) => ev.stopPropagation()}>
                         <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                           <Button variant="ghost" size="sm" onClick={() => void carregarDetalhe(r.id)}>
                             Abrir

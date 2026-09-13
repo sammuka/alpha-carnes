@@ -26,7 +26,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableCellCode,
   TableCellNum,
   TableHead,
   TableHeader,
@@ -296,7 +295,7 @@ function AbaConsultaEstoque({
 
   const filtrados = itens.filter((i) => {
     const q = busca.toLowerCase();
-    if (q && ![i.codigo, i.produto.nome, i.origem, i.nfLote ?? ''].some((v) => v.toLowerCase().includes(q))) return false;
+    if (q && ![i.produto.nome, i.origem, i.nfLote ?? ''].some((v) => v.toLowerCase().includes(q))) return false;
     if (filtroProduto !== 'Todos' && i.produto.nome !== filtroProduto) return false;
     if (filtroStatus !== 'Todos' && i.statusRotulo !== filtroStatus) return false;
     if (filtroLocal !== 'Todos' && i.local.valor !== filtroLocal) return false;
@@ -334,7 +333,7 @@ function AbaConsultaEstoque({
                 adornLeft={<Search />}
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar por código, produto, origem ou NF/lote"
+                placeholder="Buscar por produto, origem ou NF/lote"
                 className="h-7 text-xs"
               />
             </div>
@@ -378,7 +377,6 @@ function AbaConsultaEstoque({
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead>Código</TableHead>
                   <TableHead>Produto</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead className="text-right">Qtd</TableHead>
@@ -399,10 +397,14 @@ function AbaConsultaEstoque({
                   const podeDestinar = item.statusRotulo === 'Disponível';
                   const podeReimprimir = item.tipo !== 'entrada';
                   return (
-                    <TableRow key={`${item.tipo}-${item.id}`} className="group">
-                      <TableCellCode>
+                    <TableRow
+                      key={`${item.tipo}-${item.id}`}
+                      className="group cursor-pointer"
+                      onClick={() => setDrawerHistorico(item)}
+                    >
+                      <TableCell className="text-[13px] font-semibold text-foreground">
                         <div className="flex items-center gap-1.5">
-                          {item.codigo}
+                          {item.produto.nome}
                           {item.estoqueAnterior && (
                             <span
                               title="Item recebido em dia anterior — consumido antes pela regra FIFO"
@@ -412,8 +414,7 @@ function AbaConsultaEstoque({
                             </span>
                           )}
                         </div>
-                      </TableCellCode>
-                      <TableCell className="text-[13px] font-semibold text-foreground">{item.produto.nome}</TableCell>
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {item.tipo === 'peca' ? 'Peça inteira' : item.tipo === 'subitem' ? 'Parte de desossa' : 'Caixa por unidade'}
                       </TableCell>
@@ -431,7 +432,7 @@ function AbaConsultaEstoque({
                         {item.caracteristicas.length > 0 ? item.caracteristicas.join(', ') : '—'}
                       </TableCell>
                       <TableCell className="max-w-[170px] truncate text-muted-foreground">{item.pedidoReservado ?? '—'}</TableCell>
-                      <TableCell>
+                      <TableCell onClick={(ev) => ev.stopPropagation()}>
                         <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                           {podeDestinar && (
                             <Button variant="secondary" size="sm" onClick={() => setModalDestinar(item)}>

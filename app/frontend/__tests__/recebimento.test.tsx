@@ -187,6 +187,20 @@ describe('RecebimentoCargaClient', () => {
     expect(screen.getByText('Itens previstos importados')).toBeInTheDocument();
   });
 
+  it('abre detalhe ao clicar na linha da lista', async () => {
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    fireEvent.click(await screen.findByText('Frigorífico Boi Forte'));
+    await waitFor(() => expect(screen.getByTestId('receb-status')).toBeInTheDocument());
+    expect(screen.getByTestId('receb-codigo')).toHaveTextContent('Lote 001');
+  });
+
+  it('Ir para Balança nao abre o detalhe', async () => {
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ir para Balança' }));
+    expect(pushMock).toHaveBeenCalledWith('/recebimento/pesagem-destinacao?recebimentoId=r1');
+    expect(screen.queryByTestId('receb-status')).not.toBeInTheDocument();
+  });
+
   it('exibe status Aguardando conferência final na lista', async () => {
     global.fetch = jest.fn(async (url: string) => {
       if (typeof url === 'string' && url.includes('/api/operacao/recebimentos?pageSize')) {
