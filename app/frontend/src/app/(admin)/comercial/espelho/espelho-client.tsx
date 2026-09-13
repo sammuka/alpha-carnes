@@ -199,8 +199,15 @@ export function EspelhoClient({ dataInicial = hojeISO() }: EspelhoClientProps) {
       </p>
 
       <Card>
-        <CardContent className="flex flex-wrap items-center gap-2 px-3 py-2">
-          <DatePickerField aria-label="Data operacional" value={data} onChange={setData} />
+        <CardContent className="flex flex-wrap items-end gap-2 px-3 py-2">
+          <FormField label="Data operacional" htmlFor="espelho-data">
+            <DatePickerField
+              id="espelho-data"
+              aria-label="Data operacional"
+              value={data}
+              onChange={setData}
+            />
+          </FormField>
           <FormField label="Vendedor / representante" htmlFor="espelho-representante" className="w-[200px]">
             <ComboboxField
               id="espelho-representante"
@@ -237,15 +244,15 @@ export function EspelhoClient({ dataInicial = hojeISO() }: EspelhoClientProps) {
               clearable
             />
           </FormField>
-          <div className="w-[240px]">
+          <FormField label="Cliente" htmlFor="espelho-cliente" className="w-[240px]">
             <Input
+              id="espelho-cliente"
               adornLeft={<Search />}
               value={busca}
               onChange={(event) => setBusca(event.target.value)}
               placeholder="Buscar cliente"
-              className="h-7 text-xs"
             />
-          </div>
+          </FormField>
           <Button type="button" variant="ghost" size="sm" onClick={limpar}>
             Limpar filtros
           </Button>

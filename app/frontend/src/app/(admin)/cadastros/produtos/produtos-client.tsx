@@ -412,7 +412,11 @@ export function ProdutosClient({ permissoes }: { permissoes: string[] }) {
                 </TableRow>
               ) : (
                 produtos.map((p) => (
-                  <TableRow key={p.id} className="group">
+                  <TableRow
+                    key={p.id}
+                    className="group cursor-pointer"
+                    onClick={() => abrirProduto(p)}
+                  >
                     <TableCellCode>{p.codigo}</TableCellCode>
                     <TableCell className="text-[13px] font-semibold text-foreground">{p.nome}</TableCell>
                     <TableCell className="text-muted-foreground">{p.nomeOperacional ?? '—'}</TableCell>
@@ -442,7 +446,7 @@ export function ProdutosClient({ permissoes }: { permissoes: string[] }) {
                         label={p.status === 'ativo' ? 'Ativo' : 'Inativo'}
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(ev) => ev.stopPropagation()}>
                       <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                         <Button variant="ghost" size="iconSm" title="Visualizar" onClick={() => abrirProduto(p, true)}>
                           <Eye />

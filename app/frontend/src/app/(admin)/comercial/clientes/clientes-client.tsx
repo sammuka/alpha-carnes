@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Building2, Info, Plus, Save, Search } from 'lucide-react';
 import { AlertItem } from '@/components/ui/alert-item';
 import { BadgeCount } from '@/components/ui/badge-count';
@@ -190,15 +190,21 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
     setRotas(((await resRotas.json()) as { data: RotaOpcao[] }).data);
   }, []);
 
+  const buscaSeq = useRef(0);
   const carregarLista = useCallback(async (termo = '') => {
+    const seq = ++buscaSeq.current;
     const qs = new URLSearchParams();
     if (termo) qs.set('search', termo);
     const response = await fetch(`/api/cadastros/clientes?${qs.toString()}`, { cache: 'no-store' });
     if (!response.ok) throw new Error(await mensagemDeErro(response, 'Erro ao carregar clientes'));
     const paginado = await response.json() as Paginado<Cliente>;
+    if (seq !== buscaSeq.current) return;
     setClientes(paginado.data);
     setTotalAtivos(paginado.totalAtivos ?? 0);
-    setSelecionadoId((atual) => atual ?? paginado.data[0]?.id ?? null);
+    setSelecionadoId((atual) => {
+      if (atual && paginado.data.some((cliente) => cliente.id === atual)) return atual;
+      return paginado.data[0]?.id ?? null;
+    });
   }, []);
 
   const carregarDetalhe = useCallback(async (id: string) => {
@@ -216,21 +222,38 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
 
   useEffect(() => {
     let ativo = true;
-    setCarregando(true);
-    Promise.all([carregarLista(), carregarOpcoes()])
-      .catch((falha: unknown) => {
-        if (ativo) setErro(falha instanceof Error ? falha.message : 'Erro ao carregar clientes');
-      })
-      .finally(() => {
-        if (ativo) setCarregando(false);
-      });
+    void carregarOpcoes().catch((falha: unknown) => {
+      if (ativo) setErro(falha instanceof Error ? falha.message : 'Erro ao carregar clientes');
+    });
     return () => {
       ativo = false;
     };
-  }, [carregarLista, carregarOpcoes]);
+  }, [carregarOpcoes]);
 
   useEffect(() => {
-    if (!selecionadoId || novo) return;
+    let ativo = true;
+    const timer = setTimeout(() => {
+      setErro(null);
+      void carregarLista(busca.trim())
+        .catch((falha: unknown) => {
+          if (ativo) setErro(falha instanceof Error ? falha.message : 'Erro ao buscar clientes');
+        })
+        .finally(() => {
+          if (ativo) setCarregando(false);
+        });
+    }, busca.trim() ? 300 : 0);
+    return () => {
+      ativo = false;
+      clearTimeout(timer);
+    };
+  }, [busca, carregarLista]);
+
+  useEffect(() => {
+    if (novo) return;
+    if (!selecionadoId) {
+      setForm(null);
+      return;
+    }
     void carregarDetalhe(selecionadoId).catch((falha: unknown) => {
       setErro(falha instanceof Error ? falha.message : 'Erro ao carregar cliente');
     });
@@ -254,21 +277,6 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
       ...atual,
       [campo]: { ...atual[campo], [chave]: valor },
     } : atual);
-  }
-
-  async function buscar(event: React.FormEvent) {
-    event.preventDefault();
-    setCarregando(true);
-    setErro(null);
-    setSelecionadoId(null);
-    setForm(null);
-    try {
-      await carregarLista(busca.trim());
-    } catch (falha) {
-      setErro(falha instanceof Error ? falha.message : 'Erro ao buscar clientes');
-    } finally {
-      setCarregando(false);
-    }
   }
 
   function iniciarNovo() {
@@ -400,7 +408,7 @@ export function ClientesClient({ podeGerenciar }: { podeGerenciar: boolean }) {
         {/* MASTER */}
         <Card>
           <CardContent className="flex gap-1.5 p-2.5 pb-1.5">
-            <form onSubmit={buscar} className="flex-1">
+            <form className="flex-1" onSubmit={(event) => event.preventDefault()}>
               <Input
                 value={busca}
                 onChange={(event) => setBusca(event.target.value)}

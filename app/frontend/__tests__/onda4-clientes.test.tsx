@@ -120,6 +120,17 @@ it('clientes usa Nome Fantasia/Marca e Buscar cliente (AD-13)', async () => {
   expect(screen.queryByLabelText('Código Interno')).not.toBeInTheDocument();
 });
 
+it('filtra clientes ao digitar, sem depender do Enter', async () => {
+  const user = userEvent.setup();
+  render(<ClientesClient podeGerenciar />);
+  const campo = await screen.findByPlaceholderText('Buscar cliente...');
+  await user.type(campo, 'Açougue');
+  await waitFor(() => {
+    const chamadas = (global.fetch as jest.Mock).mock.calls.map((c) => String(c[0]));
+    expect(chamadas.some((url) => url.includes('/api/cadastros/clientes?') && url.includes('search='))).toBe(true);
+  });
+});
+
 it('selects de representante e rota sao populados pela API de cadastros', async () => {
   render(<ClientesClient podeGerenciar />);
 
