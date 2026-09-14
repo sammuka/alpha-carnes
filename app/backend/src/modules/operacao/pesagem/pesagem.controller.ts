@@ -11,10 +11,12 @@ import { EtiquetaService } from './etiqueta.service';
 import { registrarPesagemSchema, type RegistrarPesagemDto } from './dto/pesagem.dto';
 import {
   confirmarAssociacaoSchema,
+  destinarRetiradaSchema,
   listarCompativeisRecebimentoSchema,
   redirecionarSchema,
   semCoberturaSchema,
   type ConfirmarAssociacaoDto,
+  type DestinarRetiradaDto,
   type ListarCompativeisRecebimentoDto,
   type RedirecionarDto,
   type SemCoberturaDto,
@@ -70,7 +72,11 @@ export class PesagemController {
     @Param('recebimentoId') recebimentoId: string,
     @Query(new ZodValidationPipe(listarCompativeisRecebimentoSchema)) query: ListarCompativeisRecebimentoDto,
   ) {
-    return this.associacao.listarCompativeisDoRecebimento(recebimentoId, query.produtoBaseId);
+    return this.associacao.listarCompativeisDoRecebimento(
+      recebimentoId,
+      query.produtoBaseId,
+      query.incluirCompletos,
+    );
   }
 
   // ── Associação sugestiva ──────────────────────────────────────────────────
@@ -104,6 +110,16 @@ export class PesagemController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.associacao.redirecionar(id, dto, user.sub);
+  }
+
+  @Post('pecas/:id/destinar-retirada')
+  @RequirePermissoes('ASSOCIACAO_GERENCIAR')
+  destinarRetirada(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(destinarRetiradaSchema)) dto: DestinarRetiradaDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.associacao.destinarRetirada(id, dto, user.sub);
   }
 
   @Post('pecas/:id/sem-cobertura')

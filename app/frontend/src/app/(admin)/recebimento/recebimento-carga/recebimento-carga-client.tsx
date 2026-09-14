@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -242,6 +242,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   const [pedidosRecebiveis, setPedidosRecebiveis] = useState<PedidoFornecedorResumoRecebivel[]>([]);
   const [carregandoPedidos, setCarregandoPedidos] = useState(false);
   const [busca, setBusca] = useState('');
+  const [dataOperacaoFiltro, setDataOperacaoFiltro] = useState('todas');
   const [sheetAberto, setSheetAberto] = useState(false);
   const [sheetNfeAberto, setSheetNfeAberto] = useState(false);
   const [pedidoFornecedorId, setPedidoFornecedorId] = useState('');
@@ -410,17 +411,39 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     return desconectar;
   }, [detalhe, recebimentoId, carregarDetalhe, carregarLista]);
 
-  const listaFiltrada = lista.filter((r) => {
-    if (!busca) return true;
-    const q = busca.toLowerCase();
-    return (
-      r.codigoLote.toLowerCase().includes(q) ||
-      (r.numeroInternoCompra?.toLowerCase().includes(q) ?? false) ||
-      r.fornecedorNome.toLowerCase().includes(q) ||
-      (r.nfeNumero?.toLowerCase().includes(q) ?? false) ||
-      (r.romaneio?.toLowerCase().includes(q) ?? false)
-    );
-  });
+  const datasOperacaoDisponiveis = useMemo(() => {
+    const datas = new Set(lista.map((r) => r.dataOperacao).filter((d): d is string => Boolean(d)));
+    return [...datas].sort((a, b) => b.localeCompare(a));
+  }, [lista]);
+
+  const listaFiltrada = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return lista.filter((r) => {
+      const correspondeData = dataOperacaoFiltro === 'todas' || r.dataOperacao === dataOperacaoFiltro;
+      if (!correspondeData) return false;
+      if (!q) return true;
+      return (
+        r.codigoLote.toLowerCase().includes(q) ||
+        (r.numeroInternoCompra?.toLowerCase().includes(q) ?? false) ||
+        r.fornecedorNome.toLowerCase().includes(q) ||
+        (r.nfeNumero?.toLowerCase().includes(q) ?? false) ||
+        (r.romaneio?.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [busca, dataOperacaoFiltro, lista]);
+
+  const blocosPorData = useMemo(() => {
+    const mapa = new Map<string, RecebimentoResumoEnriquecido[]>();
+    for (const item of listaFiltrada) {
+      const chave = item.dataOperacao ?? '';
+      const grupo = mapa.get(chave);
+      if (grupo) grupo.push(item);
+      else mapa.set(chave, [item]);
+    }
+    return [...mapa.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([data, itens]) => ({ data, itens }));
+  }, [listaFiltrada]);
 
   const montarPayload = (): IniciarRecebimentoPayload | null => {
     if (!pedidoFornecedorId) return null;
@@ -545,6 +568,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
 
   const salvarMetadados = async () => {
     if (!recebimentoId || !podeGerenciar) return;
+    if (detalhe && detalhe.status !== 'pesagem_em_andamento' && detalhe.status !== 'aguardando_conclusao_pesagem') {
+      return;
+    }
     setSalvando(true);
     setErro(null);
     const res = await fetch(`/api/operacao/recebimentos/${recebimentoId}/metadados`, {
@@ -742,6 +768,11 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     !STATUS_ENCERRADOS.includes(detalhe.status) &&
     Boolean(itemSelecionado);
 
+  const metadadosEditaveis =
+    podeGerenciar &&
+    detalhe != null &&
+    (detalhe.status === 'pesagem_em_andamento' || detalhe.status === 'aguardando_conclusao_pesagem');
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -749,6 +780,18 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
         subtitle="Abertura de lotes a partir do Pedido ao Fornecedor — conferência na balança"
         live={status === 'conectado'}
       >
+        <SelectNative
+          aria-label="Filtrar por data de operação"
+          selectSize="sm"
+          className="w-[190px]"
+          value={dataOperacaoFiltro}
+          onChange={(event) => setDataOperacaoFiltro(event.target.value)}
+        >
+          <option value="todas">Todas as datas</option>
+          {datasOperacaoDisponiveis.map((data) => (
+            <option key={data} value={data}>{formatDataOperacao(data)}</option>
+          ))}
+        </SelectNative>
         <Button variant="secondary" size="sm" onClick={() => void carregarLista()}>
           <RefreshCw />
           Atualizar
@@ -776,7 +819,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
               <div className="w-[240px]">
                 <Input
                   adornLeft={<Search />}
-                  placeholder="Buscar lote, PC, fornecedor, NF…"
+                  placeholder="Buscar lote, PC ou fornecedor…"
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
                   className="h-7 text-xs"
@@ -791,10 +834,6 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                   <TableHead>Lote</TableHead>
                   <TableHead>Pedido de Compra</TableHead>
                   <TableHead>Fornecedor</TableHead>
-                  <TableHead>NF-e</TableHead>
-                  <TableHead>Romaneio</TableHead>
-                  <TableHead>Tipo de carga</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Progresso</TableHead>
                   <TableHead />
                 </TableRow>
@@ -802,12 +841,19 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
               <TableBody>
                 {listaFiltrada.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center text-xs text-muted-foreground">
+                    <TableCell colSpan={5} className="h-24 text-center text-xs text-muted-foreground">
                       Nenhum recebimento registrado.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  listaFiltrada.map((r) => (
+                  blocosPorData.map((bloco) => (
+                    <Fragment key={bloco.data || 'sem-data'}>
+                      <TableRow className="bg-surface-2 hover:bg-surface-2">
+                        <TableCell colSpan={5} className="h-7 text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">
+                          {bloco.data ? formatDataOperacao(bloco.data) : 'Sem data de operação'}
+                        </TableCell>
+                      </TableRow>
+                      {bloco.itens.map((r) => (
                     <TableRow
                       key={r.id}
                       className="group cursor-pointer"
@@ -816,15 +862,6 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                       <TableCellCode>#{r.codigoLote}</TableCellCode>
                       <TableCellCode>{r.numeroInternoCompra ?? '—'}</TableCellCode>
                       <TableCell className="text-[13px] font-semibold text-foreground">{r.fornecedorNome}</TableCell>
-                      <TableCellCode>{r.nfeNumero ?? '—'}</TableCellCode>
-                      <TableCellCode>{r.romaneio ?? '—'}</TableCellCode>
-                      <TableCell className="text-muted-foreground">{r.tipoCarga ?? '—'}</TableCell>
-                      <TableCell>
-                        <StatusPill
-                          variant={statusRecebimentoVariant(r.status)}
-                          label={STATUS_RECEB_LABEL[r.status as StatusRecebimento] ?? r.status}
-                        />
-                      </TableCell>
                       <TableCell className="w-[120px]">
                         <ProgressoBalancaBar valor={r.progressoBalanca} />
                       </TableCell>
@@ -842,6 +879,8 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                         </div>
                       </TableCell>
                     </TableRow>
+                      ))}
+                    </Fragment>
                   ))
                 )}
               </TableBody>
@@ -1024,6 +1063,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                     id="meta-placa"
                     value={formMetadados.placaVeiculo}
                     onChange={(e) => setFormMetadados((p) => ({ ...p, placaVeiculo: e.target.value }))}
+                    disabled={!metadadosEditaveis}
                   />
                 </FormField>
                 <FormField label="Motorista" htmlFor="meta-motorista">
@@ -1031,6 +1071,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                     id="meta-motorista"
                     value={formMetadados.motorista}
                     onChange={(e) => setFormMetadados((p) => ({ ...p, motorista: e.target.value }))}
+                    disabled={!metadadosEditaveis}
                   />
                 </FormField>
                 <FormField label="Doca" htmlFor="meta-doca">
@@ -1038,6 +1079,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                     id="meta-doca"
                     value={formMetadados.doca}
                     onChange={(e) => setFormMetadados((p) => ({ ...p, doca: e.target.value }))}
+                    disabled={!metadadosEditaveis}
                   />
                 </FormField>
                 <FormField label="Observações" htmlFor="meta-obs" className="sm:col-span-2 lg:col-span-4">
@@ -1046,13 +1088,16 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                     rows={2}
                     value={formMetadados.observacoes}
                     onChange={(e) => setFormMetadados((p) => ({ ...p, observacoes: e.target.value }))}
+                    disabled={!metadadosEditaveis}
                   />
                 </FormField>
+                {metadadosEditaveis && (
                 <div>
                   <Button disabled={salvando} onClick={() => void salvarMetadados()} data-testid="btn-salvar-metadados">
                     Salvar metadados
                   </Button>
                 </div>
+                )}
               </CardContent>
             </Card>
           )}

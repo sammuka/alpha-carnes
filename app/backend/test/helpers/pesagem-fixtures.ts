@@ -125,6 +125,13 @@ export async function criarPedido(
   const det = await request(app.getHttpServer()).get(`/comercial/pedidos/${pedidoId}`).set('Cookie', comercialCookies);
   const pedidoItemId = (det.body.itens as Array<{ id: string }>)[0]?.id;
   if (!pedidoItemId) throw new Error('Pedido criado sem itens');
+  const fin = await request(app.getHttpServer())
+    .post(`/comercial/pedidos/${pedidoId}/finalizar`)
+    .set('Cookie', comercialCookies)
+    .send();
+  if (fin.status !== 200) {
+    throw new Error(`Falha ao finalizar pedido: ${fin.status} ${JSON.stringify(fin.body)}`);
+  }
   return { pedidoId, pedidoItemId };
 }
 

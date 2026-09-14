@@ -24,6 +24,7 @@ import {
   type StatusRecebimento,
   type SugestaoScored,
 } from '@/lib/operacao';
+import type { PedidoVendaDetalhe } from '@/lib/comercial';
 import {
   TrocaPecaFluxo,
   type PecaTrocaOpcao,
@@ -123,6 +124,12 @@ function labelProduto(item: RecebimentoItem): string {
   const rotulo = rotuloProduto(item.produto);
   if (rotulo !== '—') return rotulo;
   return item.origemDescricao ?? rotulo;
+}
+
+/** Conta peças do tipo já confirmadas e etiquetadas (não incrementa só com Capturar Peso). */
+function qtdePecasEtiquetadas(acoes: AcaoLote[], produtoCodigo: string | undefined): number {
+  if (!produtoCodigo) return 0;
+  return acoes.filter((a) => a.produtoCodigo === produtoCodigo && Boolean(a.etiqueta)).length;
 }
 
 function formatDataOperacao(data: string): string {
@@ -236,7 +243,8 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
   }, []);
 
   const carregarSugestao = useCallback(async (pecaId: string) => {
-    const res = await fetch(`/api/operacao/pesagem/pecas/${pecaId}/sugestao`, { cache: 'no-store' });
+    const qs = new URLSearchParams({ t: String(Date.now()) });
+    const res = await fetch(`/api/operacao/pesagem/pecas/${pecaId}/sugestao?${qs.toString()}`, { cache: 'no-store' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       setSugestao(null);
@@ -247,7 +255,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
   }, []);
 
   const carregarCompativeisLote = useCallback(async (recId: string, produtoId: string) => {
-    const qs = new URLSearchParams({ produtoBaseId: produtoId });
+    const qs = new URLSearchParams({ produtoBaseId: produtoId, t: String(Date.now()) });
     const res = await fetch(
       `/api/operacao/pesagem/recebimentos/${recId}/compativeis?${qs.toString()}`,
       { cache: 'no-store' },
@@ -260,6 +268,16 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     }
     setSugestao(data as ResultadoSugestao);
   }, []);
+
+  const recarregarPedidosVenda = useCallback(async () => {
+    if (peca?.id && peca.produtoBaseId === produtoBaseId) {
+      await carregarSugestao(peca.id);
+      return;
+    }
+    if (recebimentoId && produtoBaseId) {
+      await carregarCompativeisLote(recebimentoId, produtoBaseId);
+    }
+  }, [peca, produtoBaseId, recebimentoId, carregarSugestao, carregarCompativeisLote]);
 
   const refreshLote = useCallback(async () => {
     if (!recebimentoId) return;
@@ -283,32 +301,38 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     }
   }, [recebimentoId, carregarDetalhe, carregarAcoes]);
 
-  // Troca de Peça: monta pedidos/peças a partir do lote aberto (não deixa o modal com listas vazias).
+  // Troca de Peça: pedidos da operação (completos na origem, incompletos no destino) + peças do lote.
   useEffect(() => {
     if (!trocaAberta || !recebimentoId) return;
     let cancelado = false;
     void (async () => {
-      const res = await fetch(
+      const resPecas = await fetch(
         `/api/operacao/pesagem/recebimentos/${recebimentoId}/pecas`,
         { cache: 'no-store' },
       );
-      if (!res.ok || cancelado) {
+      if (!resPecas.ok || cancelado) {
         if (!cancelado) {
           setPedidosTroca([]);
           setPecasDispTroca([]);
         }
         return;
       }
-      const pecasLote = (await res.json()) as Peca[];
+      const pecasLote = (await resPecas.json()) as Peca[];
       if (cancelado) return;
 
-      const toOpcao = (p: Peca): PecaTrocaOpcao => ({
-        id: p.id,
-        codigo: p.etiquetaAtual ?? '—',
-        peso: p.pesoOriginal,
-        etiqueta: p.etiquetaAtual,
-        produtoCodigo: detalhe?.itens.find((i) => i.produtoId === p.produtoBaseId)?.produto?.codigo,
-      });
+      const toOpcao = (p: Peca): PecaTrocaOpcao => {
+        const itemDet = detalhe?.itens.find((i) => i.produtoId === p.produtoBaseId);
+        const acao = acoes.find((a) => a.etiqueta && a.etiqueta === p.etiquetaAtual);
+        return {
+          id: p.id,
+          codigo: p.etiquetaAtual ?? '—',
+          peso: p.pesoOriginal,
+          etiqueta: p.etiquetaAtual,
+          produtoCodigo: itemDet?.produto?.codigo,
+          produtoLabel: itemDet ? rotuloProduto(itemDet.produto) : undefined,
+          clienteNome: acao?.clientePedido ?? undefined,
+        };
+      };
 
       setPecasDispTroca(
         pecasLote
@@ -316,7 +340,43 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
           .map(toOpcao),
       );
 
+      const qtdUnidades = (valor: string | number | undefined): number => {
+        const n = Number(valor ?? 0);
+        if (!Number.isFinite(n) || n < 0) return 0;
+        return Math.round(n);
+      };
+
       const porItem = new Map<string, PedidoTrocaOpcao>();
+      const produtoIds = [...new Set((detalhe?.itens ?? []).map((i) => i.produtoId).filter(Boolean))];
+      const resultados = await Promise.all(
+        produtoIds.map(async (produtoId) => {
+          const qs = new URLSearchParams({ produtoBaseId: produtoId, incluirCompletos: 'true' });
+          const res = await fetch(
+            `/api/operacao/pesagem/recebimentos/${recebimentoId}/compativeis?${qs.toString()}`,
+            { cache: 'no-store' },
+          );
+          if (!res.ok) return [] as SugestaoScored[];
+          const data = (await res.json()) as ResultadoSugestao;
+          return data.compativeis ?? [];
+        }),
+      );
+      if (cancelado) return;
+
+      for (const c of resultados.flat()) {
+        const itemDet = detalhe?.itens.find((i) => i.produtoId === c.produtoId);
+        const ic = itemDet?.produto;
+        porItem.set(c.pedidoVendaItemId, {
+          pedidoVendaId: c.pedidoVendaId,
+          pedidoVendaItemId: c.pedidoVendaItemId,
+          clienteNome: c.clienteNome?.trim() || 'Cliente do pedido',
+          produtoLabel: ic ? rotuloProduto(ic) : '—',
+          produtoCodigo: ic?.codigo ?? undefined,
+          quantidadeJaVinculada: qtdUnidades(c.quantidadeAtendida),
+          quantidadeTotalAVincular: qtdUnidades(c.quantidadePedida),
+          pecasAssociadas: [],
+        });
+      }
+
       for (const p of pecasLote) {
         if (p.statusPeca !== 'associada' || !p.pedidoVendaItemId || !p.pedidoVendaId) continue;
         const key = p.pedidoVendaItemId;
@@ -331,12 +391,37 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
             clienteNome: acao?.clientePedido ?? 'Cliente do pedido',
             produtoLabel: ic ? rotuloProduto(ic) : '—',
             produtoCodigo: ic?.codigo ?? undefined,
+            quantidadeJaVinculada: 0,
+            quantidadeTotalAVincular: 0,
             pecasAssociadas: [],
           };
           porItem.set(key, ped);
         }
         ped.pecasAssociadas.push(toOpcao(p));
       }
+
+      const semTotais = [...porItem.values()].filter((ped) => ped.quantidadeTotalAVincular <= 0);
+      if (semTotais.length > 0) {
+        const pedidoIds = [...new Set(semTotais.map((ped) => ped.pedidoVendaId))];
+        const detalhesPedidos = await Promise.all(
+          pedidoIds.map(async (id) => {
+            const res = await fetch(`/api/comercial/pedidos/${id}`, { cache: 'no-store' });
+            if (!res.ok) return null;
+            return (await res.json()) as PedidoVendaDetalhe;
+          }),
+        );
+        if (cancelado) return;
+        const itemPorId = new Map(
+          detalhesPedidos.flatMap((det) => (det?.itens ?? []).map((item) => [item.id, item] as const)),
+        );
+        for (const ped of semTotais) {
+          const item = itemPorId.get(ped.pedidoVendaItemId);
+          if (!item) continue;
+          ped.quantidadeJaVinculada = qtdUnidades(item.quantidadeAtendida);
+          ped.quantidadeTotalAVincular = qtdUnidades(item.quantidadePedida);
+        }
+      }
+      if (cancelado) return;
       setPedidosTroca([...porItem.values()]);
     })();
     return () => {
@@ -371,12 +456,14 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
       if (
         msg.type === 'peca_pesada' ||
         msg.type === 'peca_associada' ||
-        msg.type === 'peca_redirecionada'
+        msg.type === 'peca_redirecionada' ||
+        msg.type === 'peca_trocada'
       ) {
         const payload = msg.payload as { recebimentoId?: string } | undefined;
         if (payload?.recebimentoId && payload.recebimentoId !== recebimentoId) return;
         void refreshLote();
         void carregarFaltas();
+        void recarregarPedidosVenda();
       }
     };
     const desconectar = conectarRealtime({
@@ -386,11 +473,12 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
         void carregarStatus();
         void refreshLote();
         void carregarFaltas();
+        void recarregarPedidosVenda();
       },
       onStatus: setStatusRt,
     });
     return desconectar;
-  }, [dataOperacao, recebimentoId, carregarStatus, refreshLote, carregarFaltas]);
+  }, [dataOperacao, recebimentoId, carregarStatus, refreshLote, carregarFaltas, recarregarPedidosVenda]);
 
   useEffect(() => {
     if (!recebimentoId || !produtoBaseId) return;
@@ -414,14 +502,28 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     setPedidoSelecionadoId(null);
   }, [peca?.id]);
 
-  // Pré-seleciona a sugestão principal no radio quando a sugestão chega (mesma prioridade de hoje).
+  const itemAtivo = detalhe?.itens.find((i) => i.produtoId === produtoBaseId);
+  const passaDesossa = itemAtivo?.produto?.passaDesossa === true;
+  const podeEstoque = itemAtivo?.produto?.podeEstoque !== false;
+
   useEffect(() => {
+    if ((!passaDesossa && destinoLocal === 'desossa') || (!podeEstoque && destinoLocal === 'estoque')) {
+      setDestinoLocal(null);
+    }
+  }, [passaDesossa, podeEstoque, destinoLocal]);
+
+  // Pré-seleciona a sugestão principal no radio quando a sugestão chega.
+  // Não sobrescreve Estoque/Desossa — esses destinos não exigem pedido de venda.
+  useEffect(() => {
+    if (destinoLocal) return;
     if (sugestao?.sugestao?.pedidoVendaItemId) {
       setPedidoSelecionadoId(sugestao.sugestao.pedidoVendaItemId);
     }
-  }, [sugestao]);
+  }, [sugestao, destinoLocal]);
 
   const escolherDestinoLocal = (valor: 'estoque' | 'desossa') => {
+    if (valor === 'desossa' && !passaDesossa) return;
+    if (valor === 'estoque' && !podeEstoque) return;
     setDestinoLocal((atual) => (atual === valor ? null : valor));
     setPedidoSelecionadoId(null);
   };
@@ -525,21 +627,22 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     return p;
   };
 
-  const emitirEtiqueta = async (pecaAtual?: Peca) => {
+  const emitirEtiqueta = async (pecaAtual?: Peca): Promise<boolean> => {
     const alvo = pecaAtual ?? peca;
-    if (!alvo) return;
+    if (!alvo) return false;
     const r = await chamar<{ peca: Peca }>(`/api/operacao/pesagem/pecas/${alvo.id}/etiqueta`);
     if (r) {
       setPeca(r.peca);
       await refreshLote();
+      return true;
     }
+    return false;
   };
 
   /**
-   * Ação única do rodapé: resolve o destino escolhido (pedido via radio OU Estoque/Desossa via
-   * toggle — mutuamente exclusivos, ver `escolherDestinoLocal`/`escolherPedido`) e, na sequência,
-   * já emite a etiqueta. Reaproveita as mesmas chamadas de API que já existiam (confirmar/
-   * sem-cobertura + etiqueta), só que disparadas em 1 clique.
+   * Ação única do rodapé: resolve o destino escolhido (Estoque/Desossa via toggle OU pedido via
+   * radio — mutuamente exclusivos) e, na sequência, emite a etiqueta. Estoque e Desossa não
+   * exigem vínculo com pedido de venda.
    */
   const confirmarEGerarEtiqueta = async () => {
     if (!peca) return;
@@ -547,24 +650,26 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
     if (peca.statusPeca === 'pesada') {
       let pecaDestinada: Peca | null = null;
 
-      if (pedidoSelecionadoId) {
+      if (destinoLocal === 'estoque') {
+        if (!podeEstoque) return;
+        pecaDestinada = await destinarSemCobertura('sobra');
+      } else if (destinoLocal === 'desossa') {
+        if (!passaDesossa) return;
+        pecaDestinada = await destinarSemCobertura('corte');
+      } else if (pedidoSelecionadoId) {
         const sugestaoEscolhida = sugestao?.compativeis.find(
           (s) => s.pedidoVendaItemId === pedidoSelecionadoId,
         );
         if (!sugestaoEscolhida) return;
         pecaDestinada = await confirmarPedido(sugestaoEscolhida);
-      } else if (destinoLocal === 'estoque') {
-        pecaDestinada = await destinarSemCobertura('sobra');
-      } else if (destinoLocal === 'desossa') {
-        pecaDestinada = await destinarSemCobertura('corte');
       } else {
         return;
       }
 
       if (!pecaDestinada) return;
-      await emitirEtiqueta(pecaDestinada);
-    } else {
-      await emitirEtiqueta();
+      if (!(await emitirEtiqueta(pecaDestinada))) return;
+    } else if (!(await emitirEtiqueta())) {
+      return;
     }
 
     setPeca(null);
@@ -801,8 +906,8 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
             {detalhe.itens.map((item) => (
               <TabsTrigger key={item.id} value={item.produtoId}>
                 {labelProduto(item)}
-                <BadgeCount>
-                  {acoes.filter((a) => a.produtoCodigo === item.produto?.codigo).length}
+                <BadgeCount data-testid={`contador-produto-${item.produto?.codigo ?? item.produtoId}`}>
+                  {qtdePecasEtiquetadas(acoes, item.produto?.codigo)}
                 </BadgeCount>
               </TabsTrigger>
             ))}
@@ -865,7 +970,8 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                   aria-pressed={destinoLocal === 'estoque'}
                   data-testid="btn-destino-estoque"
                   onClick={() => escolherDestinoLocal('estoque')}
-                  disabled={!pecaAguardandoDestino || submitting}
+                  disabled={!pecaAguardandoDestino || submitting || !podeEstoque}
+                  title={!podeEstoque ? 'Produto não permite estoque' : undefined}
                 >
                   → Estoque
                 </Button>
@@ -876,7 +982,8 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                   aria-pressed={destinoLocal === 'desossa'}
                   data-testid="btn-destino-desossa"
                   onClick={() => escolherDestinoLocal('desossa')}
-                  disabled={!pecaAguardandoDestino || submitting}
+                  disabled={!pecaAguardandoDestino || submitting || !passaDesossa}
+                  title={!passaDesossa ? 'Produto não passa pela desossa' : undefined}
                 >
                   → Desossa
                 </Button>
@@ -1049,7 +1156,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
         <div className="space-y-2.5">
         <Card>
           <CardHeader>
-            <CardTitle>Pedidos compatíveis</CardTitle>
+            <CardTitle>Pedidos de Venda</CardTitle>
             <CardAction>
               <div className="w-[220px]">
                 <Input
@@ -1069,7 +1176,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
             )}
 
             {sugestao && compativeisFiltrados.length === 0 && (
-              <EmptyState title="Nenhum pedido compatível encontrado." />
+              <EmptyState title="Nenhum pedido de venda encontrado." />
             )}
 
             {sugestao && compativeisFiltrados.length > 0 && (
@@ -1161,7 +1268,11 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
             </span>
             {!peca?.etiquetaAtual && (
               <span className="text-[11px] font-normal text-primary-foreground/80">
-                Finaliza a pesagem e associa a peça
+                {destinoLocal === 'estoque'
+                  ? 'Destina ao estoque e gera a etiqueta'
+                  : destinoLocal === 'desossa'
+                    ? 'Destina à desossa e gera a etiqueta'
+                    : 'Finaliza a pesagem e associa a peça'}
               </span>
             )}
           </Button>
@@ -1178,12 +1289,17 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
       <TrocaPecaFluxo
         open={trocaAberta}
         onFechar={() => setTrocaAberta(false)}
-        onTrocaConcluida={() => {
-          setTrocaAberta(false);
-          if (recebimentoId) void refreshLote();
+        onTrocaConcluida={async () => {
+          if (recebimentoId) await refreshLote();
+          await carregarFaltas();
+          await recarregarPedidosVenda();
         }}
         pedidos={pedidosTroca}
         pecasDisponiveis={pecasDispTroca}
+        tiposPeca={(detalhe?.itens ?? []).map((item) => ({
+          codigo: item.produto?.codigo ?? '',
+          label: labelProduto(item),
+        }))}
       />
 
       {acoesModalAberto && (

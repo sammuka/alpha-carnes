@@ -184,23 +184,36 @@ export interface PecaTrocaOpcao {
   peso: string;
   etiqueta?: string | null;
   produtoCodigo?: string;
+  produtoLabel?: string;
+  clienteNome?: string;
 }
 
 export interface PedidoTrocaOpcao {
   pedidoVendaId: string;
   pedidoVendaItemId: string;
+  /** Nome fantasia do cliente (nunca "Marca"). */
   clienteNome: string;
   produtoLabel: string;
   produtoCodigo?: string;
+  quantidadeJaVinculada: number;
+  quantidadeTotalAVincular: number;
   pecasAssociadas: PecaTrocaOpcao[];
+  /** Itens do mesmo pedido/produto agrupados na listagem (troca usa o item com saldo). */
+  itensGrupo?: Array<{ pedidoVendaItemId: string; quantidadeJaVinculada: number; quantidadeTotalAVincular: number }>;
+}
+
+export interface TipoPecaTroca {
+  codigo: string;
+  label: string;
 }
 
 export interface TrocaPecaFluxoProps {
   open: boolean;
   onFechar: () => void;
-  onTrocaConcluida?: () => void;
+  onTrocaConcluida?: () => void | Promise<void>;
   pedidos: PedidoTrocaOpcao[];
   pecasDisponiveis: PecaTrocaOpcao[];
+  tiposPeca?: TipoPecaTroca[];
 }
 
 export { TrocaPecaFluxo } from './troca-peca-fluxo';

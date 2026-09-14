@@ -82,7 +82,7 @@ const recebimentoDetalhe = {
       pesoTotalApurado: null,
       statusApuracao: 'aguardando',
       observacoes: null,
-      produto: { id: produtoId, codigo: 'TZ', descricao: 'Traseiro' },
+      produto: { id: produtoId, codigo: 'TZ', descricao: 'Traseiro', passaDesossa: true, podeEstoque: true },
     },
   ],
   divergencias: [],
@@ -93,6 +93,14 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
     const u = typeof url === 'string' ? url : '';
     const method = init?.method ?? 'GET';
 
+    if (method === 'POST' && u.includes('/sem-cobertura')) {
+      const found = overrides['sem-cobertura'];
+      return { ok: true, json: async () => found ?? {} };
+    }
+    if (method === 'POST' && (u.endsWith('/etiqueta') || u.includes('/etiqueta'))) {
+      const found = overrides['etiqueta'];
+      return { ok: true, json: async () => found ?? {} };
+    }
     if (method === 'POST' && u.includes('/pesagem/pecas') && !u.includes('/confirmar')) {
       const found = overrides['/api/operacao/pesagem/pecas'];
       return { ok: true, json: async () => found ?? {} };
@@ -110,11 +118,18 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
         json: async () => ({ pecaId: 'pc1aaaaaa', sugestao: null, compativeis: [] }),
       };
     }
-    if (u.includes(`/recebimentos/${recebimentoId}`) && !u.includes('/acoes')) {
-      return { ok: true, json: async () => recebimentoDetalhe };
+    if (
+      u.includes(`/recebimentos/${recebimentoId}`) &&
+      !u.includes('/acoes') &&
+      !u.includes('/pecas') &&
+      !u.includes('/compativeis')
+    ) {
+      const det = (overrides.detalhe as typeof recebimentoDetalhe | undefined) ?? recebimentoDetalhe;
+      return { ok: true, json: async () => det };
     }
     if (u.includes('/acoes')) {
-      return { ok: true, json: async () => [] };
+      const acoes = overrides.acoes;
+      return { ok: true, json: async () => (Array.isArray(acoes) ? acoes : []) };
     }
     if (u.includes('/desossa/faltas')) {
       return { ok: true, json: async () => [] };
@@ -399,5 +414,190 @@ describe('PesagemDestinacaoClient', () => {
 
     fireEvent.click(capturar);
     await waitFor(() => expect(screen.queryByLabelText('Peso manual')).not.toBeInTheDocument());
+  });
+
+  it('mantém → Desossa somente leitura se o produto não passa pela desossa', async () => {
+    const paId = 'i2aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const pecaPesada = {
+      id: 'pc2aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      recebimentoId,
+      produtoBaseId: paId,
+      pesoOriginal: '12.500',
+      modoCapturaPeso: 'automatico',
+      statusPeca: 'pesada',
+      etiquetaAtual: null,
+      pedidoVendaId: null,
+      pedidoVendaItemId: null,
+    };
+    mockFetch({
+      detalhe: {
+        ...recebimentoDetalhe,
+        itens: [
+          {
+            ...recebimentoDetalhe.itens[0],
+            id: 'ri2aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+            produtoId: paId,
+            origemDescricao: 'Ponta de Agulha',
+            produto: { id: paId, codigo: 'PA', descricao: 'Ponta de Agulha', passaDesossa: false, podeEstoque: true },
+          },
+        ],
+      },
+      '/api/operacao/pesagem/pecas': pecaPesada,
+    });
+
+    render(
+      <PesagemDestinacaoClient
+        permissoes={['PESAGEM_GERENCIAR', 'ASSOCIACAO_GERENCIAR', 'ETIQUETA_GERENCIAR']}
+      />,
+    );
+
+    const btnCapturar = await screen.findByRole('button', { name: 'Capturar Peso' });
+    await waitFor(() => expect(btnCapturar).not.toBeDisabled());
+    fireEvent.click(btnCapturar);
+
+    await waitFor(() => expect(screen.getByTestId('btn-destino-estoque')).not.toBeDisabled());
+    expect(screen.getByTestId('btn-destino-desossa')).toBeDisabled();
+  });
+
+  it('Estoque e Desossa confirmam o destino sem vincular pedido de venda', async () => {
+    const pecaPesada = {
+      id: 'pc3aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      recebimentoId,
+      produtoBaseId: produtoId,
+      pesoOriginal: '12.500',
+      modoCapturaPeso: 'automatico',
+      statusPeca: 'pesada',
+      etiquetaAtual: null,
+      pedidoVendaId: null,
+      pedidoVendaItemId: null,
+    };
+    const pecaEstoque = { ...pecaPesada, statusPeca: 'em_sobra' };
+    const pecaEtiquetada = { ...pecaEstoque, etiquetaAtual: 'QR-estoque' };
+    const pedidoItemId = 'pvi3aaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const posts: { url: string; body: unknown }[] = [];
+
+    mockFetch({
+      '/api/operacao/pesagem/pecas': pecaPesada,
+      'sem-cobertura': pecaEstoque,
+      etiqueta: { peca: pecaEtiquetada },
+    });
+    const fetchBase = global.fetch as jest.Mock;
+    global.fetch = jest.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if ((init?.method ?? 'GET') === 'POST') {
+        posts.push({ url: u, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      }
+      if (u.includes('/sugestao') || u.includes('/compativeis')) {
+        return {
+          ok: true,
+          json: async () => ({
+            pecaId: pecaPesada.id,
+            sugestao: {
+              pedidoVendaId: 'pv3aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+              pedidoVendaItemId: pedidoItemId,
+              produtoId,
+              clienteId: 'c3',
+              clienteNome: 'Cliente Três',
+              saldoPendente: '2',
+              prioridade: 1,
+              rotaPrevista: null,
+              score: 1,
+              justificativa: 'ok',
+              prefCompativel: true,
+            },
+            compativeis: [{
+              pedidoVendaId: 'pv3aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+              pedidoVendaItemId: pedidoItemId,
+              produtoId,
+              clienteId: 'c3',
+              clienteNome: 'Cliente Três',
+              saldoPendente: '2',
+              prioridade: 1,
+              rotaPrevista: null,
+              score: 1,
+              justificativa: 'ok',
+              prefCompativel: true,
+            }],
+          }),
+        };
+      }
+      return fetchBase(url, init);
+    }) as unknown as typeof fetch;
+
+    render(
+      <PesagemDestinacaoClient
+        permissoes={['PESAGEM_GERENCIAR', 'ASSOCIACAO_GERENCIAR', 'ETIQUETA_GERENCIAR']}
+      />,
+    );
+
+    const btnCapturar = await screen.findByRole('button', { name: 'Capturar Peso' });
+    await waitFor(() => expect(btnCapturar).not.toBeDisabled());
+    fireEvent.click(btnCapturar);
+
+    await waitFor(() => expect(screen.getByTestId('btn-destino-estoque')).not.toBeDisabled());
+    expect(screen.getByTestId('btn-destino-desossa')).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId('btn-destino-estoque'));
+
+    const confirmar = screen.getByRole('button', { name: /Confirmar e gerar etiqueta/ });
+    await waitFor(() => expect(confirmar).not.toBeDisabled());
+    fireEvent.click(confirmar);
+
+    await waitFor(() => {
+      expect(posts.some((p) => p.url.includes('/sem-cobertura') && (p.body as { destino?: string }).destino === 'sobra')).toBe(true);
+    });
+    expect(posts.some((p) => p.url.includes('/confirmar'))).toBe(false);
+    expect(posts.some((p) => p.url.includes('/etiqueta'))).toBe(true);
+  });
+
+  it('exibe Pedidos de Venda e só conta peças após Confirmar e gerar etiqueta', async () => {
+    mockFetch({
+      acoes: [
+        {
+          id: 'ac-pesada',
+          hora: '2026-06-08T10:00:00Z',
+          produtoCodigo: 'TZ',
+          produtoDescricao: 'Traseiro',
+          peso: '12.000',
+          destino: 'Aguardando destino',
+          clientePedido: null,
+          etiqueta: null,
+          operadorNome: null,
+          statusPeca: 'pesada',
+          acao: 'pesada',
+        },
+        {
+          id: 'ac-pedido',
+          hora: '2026-06-08T10:01:00Z',
+          produtoCodigo: 'TZ',
+          produtoDescricao: 'Traseiro',
+          peso: '12.500',
+          destino: 'Pedido',
+          clientePedido: 'Cliente',
+          etiqueta: 'QR-1',
+          operadorNome: null,
+          statusPeca: 'associada',
+          acao: 'associada',
+        },
+        {
+          id: 'ac-estoque',
+          hora: '2026-06-08T10:02:00Z',
+          produtoCodigo: 'TZ',
+          produtoDescricao: 'Traseiro',
+          peso: '11.800',
+          destino: 'Estoque',
+          clientePedido: null,
+          etiqueta: 'QR-2',
+          operadorNome: null,
+          statusPeca: 'em_sobra',
+          acao: 'em_sobra',
+        },
+      ],
+    });
+
+    render(<PesagemDestinacaoClient permissoes={['PESAGEM_LER', 'PESAGEM_GERENCIAR']} />);
+
+    expect(await screen.findByText('Pedidos de Venda')).toBeInTheDocument();
+    expect(screen.queryByText('Pedidos compatíveis')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('contador-produto-TZ')).toHaveTextContent('2'));
   });
 });

@@ -39,12 +39,20 @@ beforeEach(() => {
   global.fetch = jest.fn().mockResolvedValue(respostaLista()) as unknown as typeof fetch;
 });
 
-it('drawer de produto tem as 5 abas do prototipo', async () => {
+it('drawer de produto tem as abas Gerais, Comercial, Operacional e Fiscal', async () => {
   render(<ProdutosClient permissoes={['PRODUTOS_LER', 'PRODUTOS_GERENCIAR']} />);
   fireEvent.click(await screen.findByRole('button', { name: /Novo Produto/i }));
-  for (const aba of ['Gerais', 'Comercial', 'Operacional', 'Estoque', 'Fiscal']) {
+  for (const aba of ['Gerais', 'Comercial', 'Operacional', 'Fiscal']) {
     expect(screen.getByRole('tab', { name: aba })).toBeInTheDocument();
   }
+  expect(screen.queryByRole('tab', { name: 'Estoque' })).not.toBeInTheDocument();
+});
+
+it('Permite estoque fica na aba Operacional', async () => {
+  render(<ProdutosClient permissoes={['PRODUTOS_LER', 'PRODUTOS_GERENCIAR']} />);
+  fireEvent.click(await screen.findByRole('button', { name: /Novo Produto/i }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Operacional' }));
+  expect(screen.getByLabelText('Permite estoque')).toBeInTheDocument();
 });
 
 it('aba fiscal envia ncm dentro de atributosJson', async () => {

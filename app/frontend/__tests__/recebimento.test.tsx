@@ -171,7 +171,12 @@ describe('RecebimentoCargaClient', () => {
     await waitFor(() => expect(screen.getByText('PC-2091')).toBeInTheDocument());
     expect(screen.getByText(/Lote 001/)).toBeInTheDocument();
     expect(screen.getByText('Frigorífico Boi Forte')).toBeInTheDocument();
-    expect(screen.getByText('128934')).toBeInTheDocument();
+    expect(screen.getAllByText('07/06/2026').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('combobox', { name: 'Filtrar por data de operação' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'NF-e' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Romaneio' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Tipo de carga' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument();
   });
 
   it('abre detalhe readonly ao clicar Abrir', async () => {
@@ -185,6 +190,24 @@ describe('RecebimentoCargaClient', () => {
     expect(screen.getByTestId('item-item-1')).toBeInTheDocument();
     expect(screen.getByTestId('btn-concluir')).toBeInTheDocument();
     expect(screen.getByText('Itens previstos importados')).toBeInTheDocument();
+    expect(screen.getByLabelText('Placa')).toBeDisabled();
+    expect(screen.getByLabelText('Motorista')).toBeDisabled();
+    expect(screen.getByLabelText('Doca')).toBeDisabled();
+    expect(screen.getByLabelText('Observações')).toBeDisabled();
+    expect(screen.queryByTestId('btn-salvar-metadados')).not.toBeInTheDocument();
+  });
+
+  it('permite editar metadados operacionais só em pesagem em andamento', async () => {
+    mockFetchRecebimento({ status: 'pesagem_em_andamento' });
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    await waitFor(() => expect(screen.getByText('Abrir')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Abrir'));
+    await waitFor(() => expect(screen.getByTestId('receb-status')).toHaveTextContent('Pesagem em andamento'));
+    expect(screen.getByLabelText('Placa')).toBeEnabled();
+    expect(screen.getByLabelText('Motorista')).toBeEnabled();
+    expect(screen.getByLabelText('Doca')).toBeEnabled();
+    expect(screen.getByLabelText('Observações')).toBeEnabled();
+    expect(screen.getByTestId('btn-salvar-metadados')).toBeInTheDocument();
   });
 
   it('abre detalhe ao clicar na linha da lista', async () => {
@@ -201,16 +224,24 @@ describe('RecebimentoCargaClient', () => {
     expect(screen.queryByTestId('receb-status')).not.toBeInTheDocument();
   });
 
-  it('exibe status Aguardando conferência final na lista', async () => {
+  it('agrupa lotes por data de operação e filtra pelo combo', async () => {
+    const loteDois = {
+      ...recebimentoLista,
+      id: 'r2',
+      codigoLote: 'Lote 002',
+      numeroInternoCompra: 'PC-2092',
+      fornecedorNome: 'Frigorífico Outro',
+      dataOperacao: '2026-07-29',
+    };
     global.fetch = jest.fn(async (url: string) => {
       if (typeof url === 'string' && url.includes('/api/operacao/recebimentos?pageSize')) {
         return {
           ok: true,
           json: async () => ({
-            data: [{ ...recebimentoLista, status: 'aguardando_conferencia_final' }],
+            data: [recebimentoLista, loteDois],
             page: 1,
             pageSize: 50,
-            total: 1,
+            total: 2,
           }),
         };
       }
@@ -218,7 +249,12 @@ describe('RecebimentoCargaClient', () => {
     }) as unknown as typeof fetch;
 
     render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
-    await waitFor(() => expect(screen.getByText('Aguardando conferência final')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Frigorífico Outro')).toBeInTheDocument());
+    expect(screen.getAllByText('07/06/2026').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('29/07/2026').length).toBeGreaterThanOrEqual(1);
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filtrar por data de operação' }), '2026-07-29');
+    expect(screen.getByText('Frigorífico Outro')).toBeInTheDocument();
+    expect(screen.queryByText('Frigorífico Boi Forte')).not.toBeInTheDocument();
   });
 
   it('recarrega ao receber evento recebimento_registrado via WS', async () => {

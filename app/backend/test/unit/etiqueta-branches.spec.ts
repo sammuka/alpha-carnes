@@ -201,10 +201,48 @@ describe('EtiquetaService — branches', () => {
       await expect(service.emitir('pec-x', 'op-1')).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('emitir → ConflictException se peça não associada', async () => {
+    it('emitir → ConflictException se peça ainda não teve destino confirmado', async () => {
       const db = { select: jest.fn(() => chainRows([peca({ statusPeca: 'pesada' })])), transaction: jest.fn() };
       const { service } = makeService(db);
       await expect(service.emitir('pec-1', 'op-1')).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('emitir → sucesso para peça em estoque (em_sobra) sem pedido', async () => {
+      const p = peca({ statusPeca: 'em_sobra', etiquetaAtual: null, pedidoVendaId: null, pedidoVendaItemId: null });
+      const etiqueta = { id: 'et-1', estado: 'ativa' };
+      const tx = {
+        update: jest.fn(() => ({ set: jest.fn(() => ({ where: jest.fn().mockResolvedValue(undefined) })) })),
+        insert: jest.fn(() => ({
+          values: jest.fn(() => ({ returning: jest.fn(() => Promise.resolve([etiqueta])) })),
+        })),
+        select: jest.fn(() => chainRows([p])),
+      };
+      const db = {
+        select: jest.fn(() => chainRows([p])),
+        transaction: jest.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx)),
+      };
+      const { service } = makeService(db);
+      const res = await service.emitir('pec-1', 'op-1');
+      expect(res.etiqueta.id).toBe('et-1');
+    });
+
+    it('emitir → sucesso para peça na desossa (para_corte) sem pedido', async () => {
+      const p = peca({ statusPeca: 'para_corte', etiquetaAtual: null, pedidoVendaId: null, pedidoVendaItemId: null });
+      const etiqueta = { id: 'et-1', estado: 'ativa' };
+      const tx = {
+        update: jest.fn(() => ({ set: jest.fn(() => ({ where: jest.fn().mockResolvedValue(undefined) })) })),
+        insert: jest.fn(() => ({
+          values: jest.fn(() => ({ returning: jest.fn(() => Promise.resolve([etiqueta])) })),
+        })),
+        select: jest.fn(() => chainRows([p])),
+      };
+      const db = {
+        select: jest.fn(() => chainRows([p])),
+        transaction: jest.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx)),
+      };
+      const { service } = makeService(db);
+      const res = await service.emitir('pec-1', 'op-1');
+      expect(res.etiqueta.id).toBe('et-1');
     });
 
     it('emitir → sucesso com QR fallback', async () => {

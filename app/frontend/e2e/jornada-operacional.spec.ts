@@ -302,7 +302,7 @@ async function createProdutoViaUi(
   await page.goto(`${BASE_URL}/cadastros/produtos`);
   await page.getByRole('button', { name: 'Novo Produto' }).click();
   await expect(page.getByText('Novo Produto').first()).toBeVisible();
-  for (const tab of ['Gerais', 'Comercial', 'Operacional', 'Estoque', 'Fiscal'] as const) {
+  for (const tab of ['Gerais', 'Comercial', 'Operacional', 'Fiscal'] as const) {
     await expect(page.getByRole('tab', { name: tab })).toBeVisible();
   }
 
