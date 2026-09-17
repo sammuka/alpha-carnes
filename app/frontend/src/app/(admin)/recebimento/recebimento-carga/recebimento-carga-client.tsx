@@ -293,7 +293,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   const carregarPedidosRecebiveis = useCallback(async () => {
     setCarregandoPedidos(true);
     const res = await fetch(
-      '/api/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100',
+      '/api/operacao/pedidos-fornecedor?elegiveisRecebimento=true&operacaoStatus=em_andamento&pagina=1&limite=100',
       { cache: 'no-store' },
     );
     const body = await res.json().catch(() => ({}));

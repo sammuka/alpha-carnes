@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { PesagemDestinacaoClient } from '../src/app/(admin)/recebimento/pesagem-destinacao/pesagem-destinacao-client';
 
 jest.mock('next/navigation', () => ({
@@ -599,5 +599,64 @@ describe('PesagemDestinacaoClient', () => {
     expect(await screen.findByText('Pedidos de Venda')).toBeInTheDocument();
     expect(screen.queryByText('Pedidos compatíveis')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('contador-produto-TZ')).toHaveTextContent('2'));
+  });
+
+  it('Acumulado do lote agrupa unidade e peso por produto só com o código', async () => {
+    mockFetch({
+      detalhe: {
+        ...recebimentoDetalhe,
+        itens: [
+          {
+            ...recebimentoDetalhe.itens[0],
+            quantidadeEsperada: '5',
+            quantidadeRecebida: '0',
+            quantidadeApurada: '7',
+            pesoNf: '20.000',
+            pesoApurado: '8.000',
+            pesoTotalApurado: '8.000',
+          },
+          {
+            id: 'ri2aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+            produtoId: 'i2aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+            origemDescricao: 'Dianteiro',
+            quantidadeEsperada: '6',
+            quantidadeRecebida: '0',
+            quantidadeApurada: '2',
+            unidadeEsperada: 'Peça',
+            requerBalanca: true,
+            pesoNf: null,
+            pesoApurado: '11.000',
+            pesoTotalApurado: '11.000',
+            statusApuracao: 'aguardando',
+            observacoes: null,
+            produto: { id: 'i2aaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', codigo: 'DT', descricao: 'Dianteiro' },
+          },
+        ],
+      },
+    });
+
+    render(<PesagemDestinacaoClient permissoes={['PESAGEM_LER', 'PESAGEM_GERENCIAR']} />);
+    expect(await screen.findByRole('tab', { name: /TZ/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Ver acumulado do lote/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Acumulado do lote' });
+    expect(dialog).toHaveTextContent('TZ');
+    expect(dialog).not.toHaveTextContent('TZ — Traseiro');
+    expect(screen.getByRole('columnheader', { name: 'Previsto | Pesado | Restante (Unidade)' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Previsto | Pesado | Restante (Peso)' })).toBeInTheDocument();
+    expect(screen.getAllByRole('columnheader', { name: 'Previsto' })).toHaveLength(2);
+    expect(screen.getAllByRole('columnheader', { name: 'Pesado' })).toHaveLength(2);
+    expect(screen.getAllByRole('columnheader', { name: 'Restante' })).toHaveLength(2);
+
+    const linhas = within(dialog).getAllByRole('row');
+    const linhaTz = linhas.find((row) => within(row).queryByText('TZ'));
+    const linhaDt = linhas.find((row) => within(row).queryByText('DT'));
+    if (!linhaTz || !linhaDt) throw new Error('Linhas TZ/DT não encontradas no acumulado');
+    expect(within(linhaTz).getAllByRole('cell').map((c) => c.textContent)).toEqual([
+      'TZ', '5', '7', '-2', '20,000', '8,000', '12,000',
+    ]);
+    expect(within(linhaDt).getAllByRole('cell').map((c) => c.textContent)).toEqual([
+      'DT', '6', '2', '4', '—', '11,000', '—',
+    ]);
   });
 });

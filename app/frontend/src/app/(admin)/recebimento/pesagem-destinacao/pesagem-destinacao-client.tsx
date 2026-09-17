@@ -84,7 +84,7 @@ function rotuloLote(codigoLote: string, fornecedorNome?: string): string {
 }
 
 function formatPeso(val: string | null | undefined): string {
-  if (!val) return '0,000';
+  if (val === null || val === undefined || val === '') return '0,000';
   const n = Number(val);
   if (Number.isNaN(n)) return val;
   return n.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -98,18 +98,58 @@ function formatHora(iso: string): string {
   }
 }
 
-function calcRestante(esperada: string, apurada: string | null | undefined): string {
-  const e = Number(esperada);
-  const a = Number(apurada ?? 0);
-  if (Number.isNaN(e) || Number.isNaN(a)) return '—';
-  const diff = Math.max(0, e - a);
-  return diff.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
-}
-
 function formatQtd(val: string | number | null | undefined): string {
   const n = Number(val ?? 0);
   if (Number.isNaN(n)) return '—';
   return n.toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+}
+
+function unidadesPesadasItem(item: RecebimentoItem): string {
+  return item.quantidadeApurada ?? item.quantidadeRecebida ?? '0';
+}
+
+function pesoPesadoItem(item: RecebimentoItem): string {
+  return item.pesoApurado ?? item.pesoTotalApurado ?? '0';
+}
+
+function restanteNumerico(previsto: string | number, pesado: string | number): string {
+  const p = Number(previsto);
+  const a = Number(pesado);
+  if (Number.isNaN(p) || Number.isNaN(a)) return '—';
+  return formatQtd(p - a);
+}
+
+function previstoUnidade(item: RecebimentoItem): string {
+  return formatQtd(item.quantidadeEsperada);
+}
+
+function pesadoUnidade(item: RecebimentoItem): string {
+  return formatQtd(unidadesPesadasItem(item));
+}
+
+function restanteUnidade(item: RecebimentoItem): string {
+  return restanteNumerico(item.quantidadeEsperada, unidadesPesadasItem(item));
+}
+
+function previstoPeso(item: RecebimentoItem): string {
+  const previsto = item.pesoNf;
+  if (previsto === null || previsto === undefined || previsto === '') return '—';
+  const n = Number(previsto);
+  if (Number.isNaN(n)) return '—';
+  return formatPeso(previsto);
+}
+
+function pesadoPeso(item: RecebimentoItem): string {
+  return formatPeso(pesoPesadoItem(item));
+}
+
+function restantePeso(item: RecebimentoItem): string {
+  const previsto = item.pesoNf;
+  if (previsto === null || previsto === undefined || previsto === '') return '—';
+  const p = Number(previsto);
+  const a = Number(pesoPesadoItem(item));
+  if (Number.isNaN(p) || Number.isNaN(a)) return '—';
+  return formatPeso(String(p - a));
 }
 
 /** Peças já associadas em relação ao total previsto da peça naquele pedido. */
@@ -126,7 +166,10 @@ function labelProduto(item: RecebimentoItem): string {
   return item.origemDescricao ?? rotulo;
 }
 
-/** Conta peças do tipo já confirmadas e etiquetadas (não incrementa só com Capturar Peso). */
+function codigoProduto(item: RecebimentoItem): string {
+  return item.produto?.codigo?.trim() || '—';
+}
+
 function qtdePecasEtiquetadas(acoes: AcaoLote[], produtoCodigo: string | undefined): number {
   if (!produtoCodigo) return 0;
   return acoes.filter((a) => a.produtoCodigo === produtoCodigo && Boolean(a.etiqueta)).length;
@@ -140,11 +183,6 @@ function formatDataOperacao(data: string): string {
   } catch {
     return data;
   }
-}
-
-function pesadoItem(item: RecebimentoItem): string {
-  if (item.requerBalanca && item.pesoTotalApurado) return item.pesoTotalApurado;
-  return item.quantidadeApurada ?? item.quantidadeRecebida ?? '0';
 }
 
 export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }) {
@@ -189,7 +227,10 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
   const [acumuladoModalAberto, setAcumuladoModalAberto] = useState(false);
 
   const carregarRecebimentos = useCallback(async () => {
-    const res = await fetch('/api/operacao/recebimentos?pageSize=30', { cache: 'no-store' });
+    const res = await fetch(
+      '/api/operacao/recebimentos?pageSize=30&operacaoStatus=em_andamento',
+      { cache: 'no-store' },
+    );
     if (!res.ok) return;
     const pag = (await res.json()) as PaginadoRecebimento;
     const ativos = pag.data.filter((r) =>
@@ -431,7 +472,13 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
   useEffect(() => {
     const primeiro = recebimentos[0];
-    if (primeiro && !recebimentoId && !recebimentoIdQuery) {
+    if (!primeiro) return;
+    const selecionadoNaLista = recebimentos.some((r) => r.id === recebimentoId);
+    if (!recebimentoId && !recebimentoIdQuery) {
+      setRecebimentoId(primeiro.id);
+      return;
+    }
+    if (!recebimentoIdQuery && recebimentoId && !selecionadoNaLista) {
       setRecebimentoId(primeiro.id);
     }
   }, [recebimentos, recebimentoId, recebimentoIdQuery]);
@@ -1363,7 +1410,7 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
 
       {acumuladoModalAberto && (
         <Dialog open onOpenChange={(open) => !open && setAcumuladoModalAberto(false)}>
-          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+          <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-5xl">
             <DialogHeader>
               <DialogTitle>Acumulado do lote</DialogTitle>
             </DialogHeader>
@@ -1446,41 +1493,44 @@ export function PesagemDestinacaoClient({ permissoes }: { permissoes: string[] }
                   <Table>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
-                        <TableHead>Produto</TableHead>
-                        <TableHead className="text-right">Previsto</TableHead>
+                        <TableHead rowSpan={2} className="align-bottom">Produto</TableHead>
+                        <TableHead colSpan={3} className="border-l border-border text-center">
+                          Previsto | Pesado | Restante (Unidade)
+                        </TableHead>
+                        <TableHead colSpan={3} className="border-l border-border text-center">
+                          Previsto | Pesado | Restante (Peso)
+                        </TableHead>
+                      </TableRow>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="border-l border-border text-right">Previsto</TableHead>
+                        <TableHead className="text-right">Pesado</TableHead>
+                        <TableHead className="text-right">Restante</TableHead>
+                        <TableHead className="border-l border-border text-right">Previsto</TableHead>
                         <TableHead className="text-right">Pesado</TableHead>
                         <TableHead className="text-right">Restante</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {detalhe.itens.map((item) => {
-                        const apurado = pesadoItem(item);
-                        return (
-                          <TableRow key={item.id} className="group">
-                            <TableCell className="max-w-[180px] truncate text-[13px] font-semibold text-foreground">
-                              {labelProduto(item)}
-                            </TableCell>
-                            <TableCellNum>
-                              {item.quantidadeEsperada}
-                              {item.unidadeEsperada ? ` ${item.unidadeEsperada}` : ''}
-                            </TableCellNum>
-                            <TableCellNum>
-                              {apurado}
-                              {item.requerBalanca ? ' kg' : item.unidadeEsperada ? ` ${item.unidadeEsperada}` : ''}
-                            </TableCellNum>
-                            <TableCellNum>
-                              {calcRestante(item.quantidadeEsperada, apurado)}
-                            </TableCellNum>
-                          </TableRow>
-                        );
-                      })}
+                      {detalhe.itens.map((item) => (
+                        <TableRow key={item.id} className="group">
+                          <TableCell className="font-data text-[13px] font-semibold text-foreground">
+                            {codigoProduto(item)}
+                          </TableCell>
+                          <TableCellNum className="border-l border-border">{previstoUnidade(item)}</TableCellNum>
+                          <TableCellNum>{pesadoUnidade(item)}</TableCellNum>
+                          <TableCellNum>{restanteUnidade(item)}</TableCellNum>
+                          <TableCellNum className="border-l border-border">{previstoPeso(item)}</TableCellNum>
+                          <TableCellNum>{pesadoPeso(item)}</TableCellNum>
+                          <TableCellNum>{restantePeso(item)}</TableCellNum>
+                        </TableRow>
+                      ))}
                     </TableBody>
                     <TableFooter>
                       <TableRow>
                         <TableCell>
                           {detalhe.itens.length} produto{detalhe.itens.length !== 1 ? 's' : ''}
                         </TableCell>
-                        <TableCell colSpan={3} />
+                        <TableCell colSpan={6} />
                       </TableRow>
                     </TableFooter>
                   </Table>

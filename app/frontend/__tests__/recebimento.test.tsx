@@ -375,7 +375,7 @@ describe('RecebimentoCargaClient', () => {
     expect(within(blocoD!).getByLabelText('Observações internas')).toBeInTheDocument();
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
-      '/api/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100',
+      '/api/operacao/pedidos-fornecedor?elegiveisRecebimento=true&operacaoStatus=em_andamento&pagina=1&limite=100',
       { cache: 'no-store' },
     ));
     await user.click(pedidoCombobox);

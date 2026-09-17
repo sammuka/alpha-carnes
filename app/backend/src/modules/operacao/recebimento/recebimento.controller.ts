@@ -5,7 +5,6 @@ import { RbacGuard } from '../../../common/guards/rbac.guard';
 import { RequirePermissoes } from '../../../common/rbac/require-permissoes.decorator';
 import { ZodValidationPipe } from '../../../common/pipes/zod-validation.pipe';
 import { CurrentUser, type CurrentUserPayload } from '../../../common/decorators/current-user.decorator';
-import { listarQuerySchema, type ListarQuery } from '../../../common/crud/paginacao';
 import { DRIZZLE } from '../../../database/database.module';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../../database/schema';
@@ -24,6 +23,8 @@ import {
   type AtualizarNfeDto,
   type IniciarRecebimentoDto,
   type RegistrarItemDto,
+  listarRecebimentoQuerySchema,
+  type ListarRecebimentoQuery,
 } from './dto/recebimento.dto';
 
 @SkipThrottle()
@@ -42,7 +43,7 @@ export class RecebimentoController {
 
   @Get()
   @RequirePermissoes('RECEBIMENTO_LER')
-  async listar(@Query(new ZodValidationPipe(listarQuerySchema)) query: ListarQuery) {
+  async listar(@Query(new ZodValidationPipe(listarRecebimentoQuerySchema)) query: ListarRecebimentoQuery) {
     return this.service.listar(query);
   }
 

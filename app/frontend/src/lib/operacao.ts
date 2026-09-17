@@ -54,6 +54,8 @@ export interface RecebimentoItem {
   requerBalanca: boolean;
   pesoTotalApurado: string | null;
   pesoApurado?: string | null;
+  /** Peso declarado na NF por produto (campo Peso NF do novo recebimento). Ausente = não preenchido. */
+  pesoNf?: string | null;
   statusApuracao: StatusApuracaoItem;
   observacoes: string | null;
   produto?: {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { listarQuerySchema } from '../../../../common/crud/paginacao';
 import { divergenciaInputSchema } from '../divergencia/dto/divergencia-recebimento.dto';
 
 const pesoNfSchema = z.number().nonnegative().max(9_999_999.999);
@@ -82,3 +83,10 @@ export const registrarItemSchema = z.object({
 });
 
 export type RegistrarItemDto = z.infer<typeof registrarItemSchema>;
+
+/** Listagem de lotes — filtro opcional pelo status da operação (dia). */
+export const listarRecebimentoQuerySchema = listarQuerySchema.extend({
+  operacaoStatus: z.enum(['aberta', 'em_andamento', 'fechada']).optional(),
+});
+
+export type ListarRecebimentoQuery = z.infer<typeof listarRecebimentoQuerySchema>;
