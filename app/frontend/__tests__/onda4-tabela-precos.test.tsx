@@ -58,6 +58,8 @@ it('grade exibe colunas produto unidade e as quatro faixas A B C D', async () =>
   expect(screen.getByRole('columnheader', { name: 'Preço B' })).toBeInTheDocument();
   expect(screen.getByRole('columnheader', { name: 'Preço C' })).toBeInTheDocument();
   expect(screen.getByRole('columnheader', { name: 'Preço D' })).toBeInTheDocument();
+  expect(screen.getByText('Traseiro Bovino')).toBeInTheDocument();
+  expect(screen.queryByText('TZ — Traseiro Bovino')).not.toBeInTheDocument();
 });
 
 it('preco ausente renderiza campo vazio e nunca zero fabricado', async () => {

@@ -19,7 +19,12 @@ export const createCompraProgramadaSchema = z.object({
   referenciaExterna: z.string().trim().max(100).optional(),
   previsaoEntrega: z.string().datetime({ offset: true }).optional(),
   observacoes: z.string().trim().max(1000).optional(),
-  itens: z.array(itemProdutoSchema).min(1, 'compra precisa de ao menos um item'),
+  itens: z.array(itemProdutoSchema)
+    .min(1, 'compra precisa de ao menos um item')
+    .refine(
+      (itens) => new Set(itens.map((item) => item.produtoId)).size === itens.length,
+      { message: 'Item de compra não pode se repetir no pedido' },
+    ),
 }).strict();
 
 export type CreateCompraProgramadaDto = z.infer<typeof createCompraProgramadaSchema>;
@@ -42,6 +47,22 @@ export const updateCompraProgramadaSchema = z.object({
 }).strict();
 
 export type UpdateCompraProgramadaDto = z.infer<typeof updateCompraProgramadaSchema>;
+
+export const criarItemCompraSchema = itemProdutoSchema.extend({
+  confirmarDeficit: z.boolean().optional(),
+});
+export type CriarItemCompraDto = z.infer<typeof criarItemCompraSchema>;
+
+export const removerItemQuerySchema = z.preprocess(
+  (valor) => valor ?? {},
+  z.object({
+    confirmarDeficit: z
+      .union([z.literal('true'), z.literal('false'), z.boolean()])
+      .optional()
+      .transform((valor) => valor === true || valor === 'true'),
+  }),
+);
+export type RemoverItemQueryDto = z.infer<typeof removerItemQuerySchema>;
 
 /** `simulacao=<produtoId>:<qtd>,<produtoId>:<qtd>` — read-only, pré-salvamento. */
 export const impactoQuerySchema = z.object({

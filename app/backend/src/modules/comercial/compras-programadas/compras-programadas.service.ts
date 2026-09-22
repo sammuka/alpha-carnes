@@ -36,6 +36,7 @@ import type { EventoDominio } from '../pedidos/pedidos.service';
 import type {
   AtualizarItemCompraDto,
   CreateCompraProgramadaDto,
+  CriarItemCompraDto,
   ListarComprasProgramadasDto,
   UpdateCompraProgramadaDto,
 } from './dto/compra-programada.dto';
@@ -68,8 +69,6 @@ export interface ImpactoCompra {
   exigeConfirmacao: boolean;
   resumo: string;
 }
-
-const STATUS_EDITAVEL = ['rascunho', 'em_negociacao'];
 
 @Injectable()
 export class ComprasProgramadasService {
@@ -213,7 +212,7 @@ export class ComprasProgramadasService {
     const compraId = await this.db.transaction(async (tx) => {
       const anterior = await this.buscarAtiva(id, tx);
       if (!anterior) throw new NotFoundException('Compra programada não encontrada');
-      this.assertEditavel(anterior.status);
+      this.assertMutavel(anterior.status);
 
       const atualizada = primeiroOuFalha(
         await tx
@@ -224,7 +223,7 @@ export class ComprasProgramadasService {
             referenciaExterna: dto.referenciaExterna ?? anterior.referenciaExterna,
             previsaoEntrega: dto.previsaoEntrega ? new Date(dto.previsaoEntrega) : anterior.previsaoEntrega,
             observacoes: dto.observacoes ?? anterior.observacoes,
-            status: dto.status ?? anterior.status,
+            status: anterior.status === 'confirmada' ? anterior.status : (dto.status ?? anterior.status),
           })
           .where(eq(comprasProgramadas.id, id))
           .returning(),
@@ -242,12 +241,110 @@ export class ComprasProgramadasService {
       return atualizada.id;
     });
     const compra = await this.detalhar(compraId);
-    this.eventEmitter.emit(EVENTOS.COMPRA_ATUALIZADA, {
-      compraId: compra.id,
-      operacaoId: compra.operacaoId,
-      dataOperacao: compra.dataOperacao,
-      numeroSequencial: compra.numeroSequencial,
+    this.emitirAtualizada(compra);
+    return compra;
+  }
+
+  async incluirItem(compraId: string, dto: CriarItemCompraDto, usuarioId: string): Promise<CompraComItens> {
+    const mutacao = await this.db.transaction(async (tx) => {
+      const compra = await this.buscarAtivaSobLock(tx, compraId);
+      this.assertMutavel(compra.status);
+      await this.assertProdutoDisponivelNaCompra(tx, compraId, dto.produtoId);
+
+      const criado = primeiroOuFalha(
+        await tx
+          .insert(comprasProgramadasItens)
+          .values({
+            compraProgramadaId: compraId,
+            produtoId: dto.produtoId,
+            quantidadeComprada: String(dto.quantidadeComprada),
+            observacoes: dto.observacoes,
+          })
+          .returning(),
+      );
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'compras_programadas_itens',
+        registroId: criado.id,
+        operacao: 'INSERT',
+        modulo: 'comercial',
+        usuarioId,
+        dadosAnteriores: {},
+        dadosNovos: criado,
+      });
+
+      if (compra.status !== 'confirmada') {
+        return { compra, impacto: null as ImpactoCompra | null, eventosReconciliacao: [] as EventoDominio[] };
+      }
+      return this.finalizarMutacaoConfirmada(tx, compra, usuarioId);
     });
+    const compra = await this.detalhar(compraId);
+    this.emitirAtualizada(compra);
+    if (mutacao.compra.status === 'confirmada' && mutacao.impacto) {
+      this.emitirEventosImpacto(compra, mutacao.impacto, mutacao.eventosReconciliacao);
+    }
+    return compra;
+  }
+
+  async removerItem(
+    compraId: string,
+    itemId: string,
+    usuarioId: string,
+    confirmarDeficit = false,
+  ): Promise<CompraComItens> {
+    const mutacao = await this.db.transaction(async (tx) => {
+      const compra = await this.buscarAtivaSobLock(tx, compraId);
+      this.assertMutavel(compra.status);
+
+      const ativos = await tx
+        .select()
+        .from(comprasProgramadasItens)
+        .where(and(
+          eq(comprasProgramadasItens.compraProgramadaId, compraId),
+          isNull(comprasProgramadasItens.deletedAt),
+        ));
+      if (ativos.length <= 1) {
+        throw new ConflictException('Compra precisa de ao menos um item');
+      }
+
+      const item = ativos.find((linha) => linha.id === itemId);
+      if (!item) throw new NotFoundException('Item da compra não encontrado');
+
+      await tx
+        .update(comprasProgramadasItens)
+        .set({ deletedAt: new Date(), updatedAt: new Date() })
+        .where(eq(comprasProgramadasItens.id, itemId));
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'compras_programadas_itens',
+        registroId: itemId,
+        operacao: 'DELETE',
+        modulo: 'comercial',
+        usuarioId,
+        dadosAnteriores: item,
+        dadosNovos: { deletedAt: true },
+      });
+
+      if (compra.status !== 'confirmada') {
+        return { compra, impacto: null as ImpactoCompra | null, eventosReconciliacao: [] as EventoDominio[] };
+      }
+
+      const projetado = await this.disponibilidadeService.projetarImpacto(tx, compraId, new Map());
+      const impacto = this.montarImpacto(compra, projetado);
+      if (impacto.exigeConfirmacao && !confirmarDeficit) {
+        throw new ConflictException({
+          codigo: 'IMPACTO_CONFIRMACAO_NECESSARIA',
+          mensagem: 'A alteração projeta déficit; confirme para prosseguir.',
+          impacto,
+        });
+      }
+      return this.finalizarMutacaoConfirmada(tx, compra, usuarioId);
+    });
+    const compra = await this.detalhar(compraId);
+    this.emitirAtualizada(compra);
+    if (mutacao.compra.status === 'confirmada' && mutacao.impacto) {
+      this.emitirEventosImpacto(compra, mutacao.impacto, mutacao.eventosReconciliacao);
+    }
     return compra;
   }
 
@@ -331,21 +428,11 @@ export class ComprasProgramadasService {
         .from(operacoes)
         .where(eq(operacoes.id, resultado.compra.operacaoId));
       if (!linhaOperacao) throw new NotFoundException('Operação da compra não encontrada');
-      const dataOperacao = linhaOperacao.data;
-      this.eventEmitter.emit(EVENTOS.COMPRA_ALTERADA_IMPACTO, {
-        compraId: resultado.compra.id,
-        operacaoId: resultado.compra.operacaoId,
-        dataOperacao,
-        deficitTotal: resultado.impacto.deficitTotal,
-        itens: resultado.impacto.itens.map((i) => ({
-          produtoId: i.produtoId,
-          delta: i.delta,
-          deficitProjetado: i.deficitProjetado,
-        })),
-      });
-      for (const evento of resultado.eventosReconciliacao) {
-        this.eventEmitter.emit(evento.nome, evento.payload);
-      }
+      this.emitirEventosImpacto(
+        { id: resultado.compra.id, operacaoId: resultado.compra.operacaoId, dataOperacao: linhaOperacao.data },
+        resultado.impacto,
+        resultado.eventosReconciliacao,
+      );
     }
     return { item: resultado.item, impacto: resultado.impacto };
   }
@@ -561,9 +648,70 @@ export class ComprasProgramadasService {
     return compra;
   }
 
-  private assertEditavel(status: string): void {
-    if (!STATUS_EDITAVEL.includes(status)) {
-      throw new ConflictException('Compra confirmada ou cancelada é imutável');
+  private emitirAtualizada(compra: CompraComItens): void {
+    this.eventEmitter.emit(EVENTOS.COMPRA_ATUALIZADA, {
+      compraId: compra.id,
+      operacaoId: compra.operacaoId,
+      dataOperacao: compra.dataOperacao,
+      numeroSequencial: compra.numeroSequencial,
+    });
+  }
+
+  private async finalizarMutacaoConfirmada(
+    tx: Tx,
+    compra: CompraProgramadaDb,
+    usuarioId: string,
+  ): Promise<{ compra: CompraProgramadaDb; impacto: ImpactoCompra; eventosReconciliacao: EventoDominio[] }> {
+    const recalculadas = await this.disponibilidadeService.recalcularParaCompra(tx, compra, usuarioId);
+    const eventosReconciliacao: EventoDominio[] = [];
+    for (const produtoId of new Set(recalculadas.map((r) => r.produtoId))) {
+      eventosReconciliacao.push(
+        ...await this.overbooking.reconciliarComPool(tx, compra.operacaoId, produtoId, usuarioId),
+      );
+    }
+    const itens = await this.disponibilidadeService.projetarImpacto(tx, compra.id, new Map());
+    return { compra, impacto: this.montarImpacto(compra, itens), eventosReconciliacao };
+  }
+
+  private emitirEventosImpacto(
+    compra: { id: string; operacaoId: string; dataOperacao: string },
+    impacto: ImpactoCompra,
+    eventosReconciliacao: EventoDominio[],
+  ): void {
+    this.eventEmitter.emit(EVENTOS.COMPRA_ALTERADA_IMPACTO, {
+      compraId: compra.id,
+      operacaoId: compra.operacaoId,
+      dataOperacao: compra.dataOperacao,
+      deficitTotal: impacto.deficitTotal,
+      itens: impacto.itens.map((i) => ({
+        produtoId: i.produtoId,
+        delta: i.delta,
+        deficitProjetado: i.deficitProjetado,
+      })),
+    });
+    for (const evento of eventosReconciliacao) {
+      this.eventEmitter.emit(evento.nome, evento.payload);
+    }
+  }
+
+  private assertMutavel(status: string): void {
+    if (status === 'cancelada') {
+      throw new ConflictException('Compra cancelada não pode ser alterada');
+    }
+  }
+
+  private async assertProdutoDisponivelNaCompra(tx: Tx, compraId: string, produtoId: string): Promise<void> {
+    const [existente] = await tx
+      .select({ id: comprasProgramadasItens.id })
+      .from(comprasProgramadasItens)
+      .where(and(
+        eq(comprasProgramadasItens.compraProgramadaId, compraId),
+        eq(comprasProgramadasItens.produtoId, produtoId),
+        isNull(comprasProgramadasItens.deletedAt),
+      ))
+      .limit(1);
+    if (existente) {
+      throw new ConflictException('Item de compra não pode se repetir no pedido');
     }
   }
 

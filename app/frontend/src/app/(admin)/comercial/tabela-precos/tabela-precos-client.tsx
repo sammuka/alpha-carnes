@@ -366,7 +366,7 @@ export function TabelaPrecosClient({
                   {tabela.itens.map((item) => (
                     <TableRow key={item.produtoId}>
                       <TableCell className="text-[13px] font-semibold text-foreground">
-                        <span>{item.codigo} — {item.nome}</span>
+                        <span>{item.nome || '—'}</span>
                         {item.provisorio && (
                           <BadgeProvisorio codigo="P11" className="ml-2" />
                         )}

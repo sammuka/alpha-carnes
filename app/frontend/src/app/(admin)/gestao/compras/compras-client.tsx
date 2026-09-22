@@ -1,145 +1,44 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { CheckCircle, Info, Plus, Save, Trash2 } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
+import { BadgeCount } from '@/components/ui/badge-count';
 import { Button } from '@/components/ui/button';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { ComboboxField } from '@/components/ui/combobox-field';
-import { DatePickerField } from '@/components/ui/date-picker-field';
-import { FormField } from '@/components/ui/form-field';
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
 import { PageHeader } from '@/components/ui/page-header';
-import { StatusPill, type StatusPillVariant } from '@/components/ui/status-pill';
+import { SelectNative } from '@/components/ui/select-native';
+import { StatusPill } from '@/components/ui/status-pill';
 import {
   Table,
   TableBody,
   TableCell,
-  TableCellNum,
+  TableCellCode,
   TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Textarea } from '@/components/ui/textarea';
-import { labelCodigoDescricao, rotuloProduto } from '@/lib/dominios';
-import { extrairCodigoErro, extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
+import { extrairMensagemErro } from '@/lib/error-message';
 import { conectarRealtime } from '@/lib/realtime';
 import type {
   CompraProgramada,
   CompraProgramadaDetalhe,
-  ConfirmacaoCompraProgramada,
-  CriarCompraProgramadaDto,
   DisponibilidadeDia,
   Paginado,
 } from '@/lib/comercial';
-import { ComprasEditModal } from './compras-edit-modal';
-
-interface CadastroItem {
-  id: string;
-  codigo: string;
-  descricao?: string;
-  nome?: string;
-  razaoSocial?: string;
-}
-
-interface LinhaItem {
-  produtoId: string;
-  quantidadeComprada: string;
-  observacoes: string;
-}
-
-interface SimulacaoDesdobramento {
-  itens: Array<{ produtoId: string; descricao: string; fator: string; total: number }>;
-  totalPartes: number;
-}
-
-function hojeISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-const ROTULO_COMPRA: Record<string, string> = {
-  rascunho: 'Rascunho',
-  em_negociacao: 'Em negociação',
-  confirmada: 'Confirmada',
-  cancelada: 'Cancelada',
-};
-
-function statusCompraVariant(status: string): StatusPillVariant {
-  switch (status) {
-    case 'rascunho':
-      return 'pendente';
-    case 'em_negociacao':
-      return 'recebido';
-    case 'confirmada':
-      return 'expedido';
-    case 'cancelada':
-      return 'bloqueado';
-    default:
-      return 'pendente';
-  }
-}
-
-const AVISO_EDITAR_CONFIRMADA =
-  'Alterar uma compra confirmada recalcula imediatamente a disponibilidade virtual impactada.';
-
-function rotuloLote(numeroSequencial: number): string {
-  return `Lote ${String(numeroSequencial).padStart(3, '0')}`;
-}
-
-function chaveDisponibilidade(item: DisponibilidadeDia): string {
-  return item.modo === 'compra' ? item.id : item.produtoId;
-}
-
-function somaQuantidadeDisponivel(itens: DisponibilidadeDia[]): string {
-  const total = itens.reduce((acc, item) => acc + Number(item.quantidadeDisponivel), 0);
-  return total.toFixed(3);
-}
-
-function rotuloItemDisponibilidade(
-  item: DisponibilidadeDia,
-  catalogo: CadastroItem[],
-): string {
-  const it = catalogo.find((p) => p.id === item.produtoId);
-  return rotuloProduto({ codigo: it?.codigo, nome: it?.nome, descricao: it?.descricao });
-}
-
-function ListaDisponibilidade({
-  itens,
-  vazio,
-  rotulo,
-}: {
-  itens: DisponibilidadeDia[];
-  vazio: string;
-  rotulo: (item: DisponibilidadeDia) => string;
-}) {
-  if (itens.length === 0) {
-    return <p className="text-xs text-muted-foreground">{vazio}</p>;
-  }
-  return (
-    <ul className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
-      {itens.map((d) => (
-        <li key={chaveDisponibilidade(d)} className="flex justify-between text-xs">
-          <span className="font-data text-[11px]">{rotulo(d)}</span>
-          <span className="font-data font-semibold text-primary">{d.quantidadeDisponivel} disp.</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function nomeFornecedor(compra: Pick<CompraProgramada, 'fornecedorNomeFantasia' | 'fornecedorRazaoSocial'>): string {
-  return compra.fornecedorNomeFantasia ?? compra.fornecedorRazaoSocial ?? '—';
-}
+import { CompraEditor } from './compra-editor';
+import {
+  type CadastroItem,
+  formatarDataOperacao,
+  hojeISO,
+  nomeFornecedor,
+  ROTULO_COMPRA,
+  rotuloLote,
+  STATUS_COMPRA,
+  statusCompraVariant,
+} from './compras-shared';
 
 const EVENTOS_COMPRA = new Set([
   'compra_programada_criada',
@@ -150,6 +49,25 @@ const EVENTOS_COMPRA = new Set([
   'compra_programada_alterada_impacto',
 ]);
 
+async function lerJson<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const body = await response.text();
+    try {
+      throw new Error(extrairMensagemErro(JSON.parse(body), body));
+    } catch (error) {
+      if (error instanceof SyntaxError) throw new Error(body || `Falha HTTP ${response.status}`);
+      throw error;
+    }
+  }
+  return response.json() as Promise<T>;
+}
+
+function lotesDoDia(compras: CompraProgramada[], data: string): CompraProgramada[] {
+  return compras
+    .filter((compra) => compra.dataOperacao === data)
+    .sort((a, b) => a.numeroSequencial - b.numeroSequencial);
+}
+
 export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const podeLer = permissoes.includes('COMPRAS_PROGRAMADAS_LER');
   const podeGerenciar = permissoes.includes('COMPRAS_PROGRAMADAS_GERENCIAR');
@@ -158,30 +76,35 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const searchParams = useSearchParams();
   const dataDaUrl = searchParams.get('dataOperacao') ?? searchParams.get('data');
   const compraIdUrl = searchParams.get('compraId');
+  const novoUrl = searchParams.get('novo') === '1';
+
+  const [modo, setModo] = useState<'lista' | 'criar' | 'visualizar'>(
+    compraIdUrl ? 'visualizar' : novoUrl ? 'criar' : 'lista',
+  );
+  const [compras, setCompras] = useState<CompraProgramada[]>([]);
+  const [compra, setCompra] = useState<CompraProgramadaDetalhe | null>(null);
+  const [fornecedores, setFornecedores] = useState<CadastroItem[]>([]);
+  const [itensCompra, setItensCompra] = useState<CadastroItem[]>([]);
+  const [disponibilidade, setDisponibilidade] = useState<DisponibilidadeDia[]>([]);
+  const [disponibilidadeTotal, setDisponibilidadeTotal] = useState<DisponibilidadeDia[]>([]);
   const [dataOperacao, setDataOperacao] = useState(
     dataDaUrl && /^\d{4}-\d{2}-\d{2}$/.test(dataDaUrl) ? dataDaUrl : hojeISO(),
   );
-  const [fornecedorId, setFornecedorId] = useState('');
-  const [referenciaExterna, setReferenciaExterna] = useState('');
-  const [observacoes, setObservacoes] = useState('');
-  const [linhas, setLinhas] = useState<LinhaItem[]>([{ produtoId: '', quantidadeComprada: '', observacoes: '' }]);
+  const [busca, setBusca] = useState('');
+  const [statusFiltro, setStatusFiltro] = useState('todos');
+  const [dataOperacaoFiltro, setDataOperacaoFiltro] = useState(
+    dataDaUrl && /^\d{4}-\d{2}-\d{2}$/.test(dataDaUrl) ? dataDaUrl : 'todas',
+  );
+  const [erro, setErro] = useState('');
+  const [carregando, setCarregando] = useState(true);
 
-  const [compras, setCompras] = useState<CompraProgramada[]>([]);
-  const [compra, setCompra] = useState<CompraProgramadaDetalhe | null>(null);
-  const [disponibilidade, setDisponibilidade] = useState<DisponibilidadeDia[]>([]);
-  const [fornecedores, setFornecedores] = useState<CadastroItem[]>([]);
-  const [itensCompra, setItensCompra] = useState<CadastroItem[]>([]);
-  const [disponibilidadeTotal, setDisponibilidadeTotal] = useState<DisponibilidadeDia[]>([]);
-  const [erro, setErro] = useState<string | null>(null);
-  const [salvando, setSalvando] = useState(false);
-  const [avisoEditar, setAvisoEditar] = useState(false);
-  const [modalEditar, setModalEditar] = useState(false);
-  const [simulacoes, setSimulacoes] = useState<Map<string, SimulacaoDesdobramento>>(new Map());
-  const rascunhoNovoRef = useRef(false);
-  const compraAnteriorRef = useRef<string | null>(null);
-
-  const editavel = compra ? ['rascunho', 'em_negociacao'].includes(compra.status) : true;
-  const podeSimular = !compra || compra.status === 'rascunho';
+  const navegar = useCallback((data?: string, compraId?: string | null) => {
+    const qs = new URLSearchParams();
+    if (data) qs.set('dataOperacao', data);
+    if (compraId) qs.set('compraId', compraId);
+    const texto = qs.toString();
+    router.replace(texto ? `/gestao/compras?${texto}` : '/gestao/compras');
+  }, [router]);
 
   const carregarCadastros = useCallback(async () => {
     const [fRes, iRes] = await Promise.all([
@@ -198,85 +121,74 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
     }
   }, []);
 
-  const aplicarDetalhe = useCallback((det: CompraProgramadaDetalhe) => {
-    setCompra(det);
-    setFornecedorId(det.fornecedorId);
-    setReferenciaExterna(det.referenciaExterna ?? '');
-    setObservacoes(det.observacoes ?? '');
-    setLinhas(
-      det.itens.map((it) => ({
-        produtoId: it.produtoId,
-        quantidadeComprada: it.quantidadeComprada,
-        observacoes: it.observacoes ?? '',
-      })),
-    );
-  }, []);
-
-  const limparFormulario = useCallback(() => {
-    setCompra(null);
-    setFornecedorId('');
-    setReferenciaExterna('');
-    setObservacoes('');
-    setLinhas([{ produtoId: '', quantidadeComprada: '', observacoes: '' }]);
-    setDisponibilidade([]);
-  }, []);
-
-  const navegar = useCallback((data: string, compraId?: string | null) => {
-    const qs = new URLSearchParams({ dataOperacao: data });
-    if (compraId) qs.set('compraId', compraId);
-    router.replace(`?${qs.toString()}`);
-  }, [router]);
-
-  const carregarComprasDia = useCallback(async (selecionarId?: string | null) => {
+  const carregarLista = useCallback(async () => {
     if (!podeLer) return;
-    setErro(null);
-    const res = await fetch(
-      `/api/comercial/compras-programadas?dataOperacao=${dataOperacao}&pageSize=100`,
-      { cache: 'no-store' },
-    );
-    if (!res.ok) return;
-    const pag = (await res.json()) as Paginado<CompraProgramada>;
-    const lista = pag.data;
-    setCompras(lista);
-    if (rascunhoNovoRef.current && selecionarId == null && !compraIdUrl) {
-      return;
-    }
-    const alvoId = selecionarId ?? compraIdUrl;
-    const alvo = lista.find((c) => c.id === alvoId) ?? lista[0] ?? null;
-    if (!alvo) {
-      limparFormulario();
-      return;
-    }
-    const detRes = await fetch(`/api/comercial/compras-programadas/${alvo.id}`, { cache: 'no-store' });
-    if (detRes.ok) {
-      aplicarDetalhe((await detRes.json()) as CompraProgramadaDetalhe);
-    }
-  }, [aplicarDetalhe, compraIdUrl, dataOperacao, limparFormulario, podeLer]);
+    const res = await fetch('/api/comercial/compras-programadas?pageSize=100', { cache: 'no-store' });
+    const pag = await lerJson<Paginado<CompraProgramada>>(res);
+    setCompras(pag.data);
+    return pag.data;
+  }, [podeLer]);
 
-  const carregarDisponibilidade = useCallback(async () => {
+  const carregarDisponibilidade = useCallback(async (detalhe: CompraProgramadaDetalhe | null) => {
+    if (!detalhe) {
+      setDisponibilidade([]);
+      setDisponibilidadeTotal([]);
+      return;
+    }
     const [resLote, resTotal] = await Promise.all([
-      compra
-        ? fetch(`/api/comercial/disponibilidade?compraProgramadaId=${compra.id}`, { cache: 'no-store' })
-        : Promise.resolve(null),
-      fetch(`/api/comercial/disponibilidade?dataOperacao=${encodeURIComponent(dataOperacao)}`, { cache: 'no-store' }),
+      fetch(`/api/comercial/disponibilidade?compraProgramadaId=${detalhe.id}`, { cache: 'no-store' }),
+      fetch(`/api/comercial/disponibilidade?dataOperacao=${encodeURIComponent(detalhe.dataOperacao)}`, { cache: 'no-store' }),
     ]);
-    if (resLote?.ok) setDisponibilidade((await resLote.json()) as DisponibilidadeDia[]);
-    else setDisponibilidade([]);
-    if (resTotal.ok) setDisponibilidadeTotal((await resTotal.json()) as DisponibilidadeDia[]);
-    else setDisponibilidadeTotal([]);
-  }, [compra, dataOperacao]);
+    setDisponibilidade(resLote.ok ? (await resLote.json()) as DisponibilidadeDia[] : []);
+    setDisponibilidadeTotal(resTotal.ok ? (await resTotal.json()) as DisponibilidadeDia[] : []);
+  }, []);
+
+  const abrirCompra = useCallback(async (compraId: string, lista?: CompraProgramada[]) => {
+    const res = await fetch(`/api/comercial/compras-programadas/${compraId}`, { cache: 'no-store' });
+    const detalhe = await lerJson<CompraProgramadaDetalhe>(res);
+    setCompra(detalhe);
+    setDataOperacao(detalhe.dataOperacao);
+    setModo('visualizar');
+    navegar(detalhe.dataOperacao, detalhe.id);
+    await carregarDisponibilidade(detalhe);
+    return { detalhe, lista: lista ?? compras };
+  }, [carregarDisponibilidade, compras, navegar]);
+
+  const abrirPrimeiroLote = useCallback(async (data: string, lista?: CompraProgramada[]) => {
+    const origem = lista ?? compras;
+    const primeiro = lotesDoDia(origem, data)[0];
+    if (!primeiro) {
+      setCompra(null);
+      setDataOperacao(data);
+      setModo('visualizar');
+      setDisponibilidade([]);
+      setDisponibilidadeTotal([]);
+      navegar(data);
+      return;
+    }
+    await abrirCompra(primeiro.id, origem);
+  }, [abrirCompra, compras, navegar]);
+
+  const carregarTudo = useCallback(async () => {
+    setCarregando(true);
+    setErro('');
+    try {
+      const [, lista] = await Promise.all([carregarCadastros(), carregarLista()]);
+      if (compraIdUrl && lista) {
+        await abrirCompra(compraIdUrl, lista);
+      }
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : 'Falha ao carregar compras.');
+    } finally {
+      setCarregando(false);
+    }
+  }, [abrirCompra, carregarCadastros, carregarLista, compraIdUrl]);
 
   useEffect(() => {
-    void carregarCadastros();
-  }, [carregarCadastros]);
-
-  useEffect(() => {
-    void carregarComprasDia();
-  }, [carregarComprasDia]);
-
-  useEffect(() => {
-    void carregarDisponibilidade();
-  }, [carregarDisponibilidade]);
+    void carregarTudo();
+    // Deep-link só na montagem; recargas posteriores passam por onChanged / realtime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const operacaoIdRealtime = compra?.operacaoId ?? compras[0]?.operacaoId;
 
@@ -285,537 +197,272 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
     return conectarRealtime({
       rooms: [`operacao:${operacaoIdRealtime}`],
       onMessage: (msg) => {
-        if (EVENTOS_COMPRA.has(msg.type)) {
-          void carregarComprasDia(compra?.id);
-          void carregarDisponibilidade();
-        }
+        if (!EVENTOS_COMPRA.has(msg.type)) return;
+        void carregarLista();
+        if (compra) void abrirCompra(compra.id);
       },
       onReconnect: () => {
-        void carregarComprasDia(compra?.id);
-        void carregarDisponibilidade();
+        void carregarLista();
+        if (compra) void abrirCompra(compra.id);
       },
     });
-  }, [carregarComprasDia, carregarDisponibilidade, compra?.id, operacaoIdRealtime]);
+  }, [abrirCompra, carregarLista, compra, operacaoIdRealtime]);
 
-  useEffect(() => {
-    if (!podeSimular) return;
-    const candidatas = linhas.filter((l) => l.produtoId && Number(l.quantidadeComprada) > 0);
-    if (candidatas.length === 0) {
-      setSimulacoes(new Map());
-      return;
+  const datasOperacaoDisponiveis = useMemo(() => {
+    const datas = new Set(compras.map((item) => item.dataOperacao).filter(Boolean));
+    if (dataDaUrl && /^\d{4}-\d{2}-\d{2}$/.test(dataDaUrl)) datas.add(dataDaUrl);
+    return [...datas].sort((a, b) => b.localeCompare(a));
+  }, [compras, dataDaUrl]);
+
+  const comprasFiltradas = useMemo(() => {
+    const termo = busca.trim().toLocaleLowerCase('pt-BR');
+    return compras.filter((item) => {
+      const fornecedor = nomeFornecedor(item).toLocaleLowerCase('pt-BR');
+      const lote = rotuloLote(item.numeroSequencial).toLocaleLowerCase('pt-BR');
+      const referencia = (item.referenciaExterna ?? '').toLocaleLowerCase('pt-BR');
+      const correspondeBusca = !termo
+        || item.id.toLocaleLowerCase('pt-BR').includes(termo)
+        || fornecedor.includes(termo)
+        || lote.includes(termo)
+        || referencia.includes(termo);
+      const correspondeStatus = statusFiltro === 'todos' || item.status === statusFiltro;
+      const correspondeData = dataOperacaoFiltro === 'todas' || item.dataOperacao === dataOperacaoFiltro;
+      return correspondeBusca && correspondeStatus && correspondeData;
+    });
+  }, [busca, compras, dataOperacaoFiltro, statusFiltro]);
+
+  const blocosPorData = useMemo(() => {
+    const mapa = new Map<string, CompraProgramada[]>();
+    for (const item of comprasFiltradas) {
+      const chave = item.dataOperacao ?? '';
+      const lista = mapa.get(chave);
+      if (lista) lista.push(item);
+      else mapa.set(chave, [item]);
     }
-    const timer = setTimeout(() => {
-      void Promise.all(
-        candidatas.map((l) =>
-          fetch('/api/cadastros/regras-desdobramento/simular', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              produtoId: l.produtoId,
-              quantidade: Math.round(Number(l.quantidadeComprada)),
-            }),
-          })
-            .then((r) => (r.ok ? r.json() : null))
-            .then((s: SimulacaoDesdobramento | null) => [l.produtoId, s] as const),
-        ),
-      ).then((resultados) => {
-        const proximo = new Map<string, SimulacaoDesdobramento>();
-        for (const [id, s] of resultados) if (s) proximo.set(id, s);
-        setSimulacoes(proximo);
-      });
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [linhas, podeSimular]);
-
-  const salvar = async () => {
-    if (!podeGerenciar) return;
-    setSalvando(true);
-    setErro(null);
-    const itensValidos = linhas
-      .filter((l) => l.produtoId && Number(l.quantidadeComprada) > 0)
-      .map((l) => ({
-        produtoId: l.produtoId,
-        quantidadeComprada: Number(l.quantidadeComprada),
-        observacoes: l.observacoes || undefined,
+    return [...mapa.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([data, itens]) => ({
+        data,
+        itens: [...itens].sort((a, b) => a.numeroSequencial - b.numeroSequencial),
       }));
-    if (!fornecedorId || itensValidos.length === 0) {
-      setErro('Informe fornecedor e ao menos um item com quantidade.');
-      setSalvando(false);
-      return;
-    }
+  }, [comprasFiltradas]);
 
-    try {
-      if (compra) {
-        await fetch(`/api/comercial/compras-programadas/${compra.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fornecedorId, referenciaExterna, observacoes }),
-        });
-        for (const [idx, item] of compra.itens.entries()) {
-          const linha = itensValidos[idx];
-          if (linha) {
-            const res = await fetch(`/api/comercial/compras-programadas/${compra.id}/itens/${item.id}`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                quantidadeComprada: linha.quantidadeComprada,
-                observacoes: linha.observacoes,
-              }),
-            });
-            if (!res.ok) {
-              const body = await res.json().catch(() => ({}));
-              if (res.status === 409 && extrairCodigoErro(body) === 'IMPACTO_CONFIRMACAO_NECESSARIA') {
-                setModalEditar(true);
-                setErro('Alteração projeta déficit — use o painel de impacto para confirmar.');
-                setSalvando(false);
-                return;
-              }
-              setErro(extrairMensagemErro(body, 'Erro ao salvar item'));
-              setSalvando(false);
-              return;
-            }
-          }
-        }
-      } else {
-        const payload: CriarCompraProgramadaDto = {
-          dataOperacao,
-          fornecedorId,
-          referenciaExterna: referenciaExterna || undefined,
-          observacoes: observacoes || undefined,
-          itens: itensValidos,
-        };
-        const res = await fetch('/api/comercial/compras-programadas', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          setErro(await mensagemDeErro(res, 'Erro ao salvar compra'));
-          return;
-        }
-        const criada = (await res.json()) as CompraProgramadaDetalhe;
-        rascunhoNovoRef.current = false;
-        navegar(dataOperacao, criada.id);
-        await carregarComprasDia(criada.id);
-        return;
-      }
-      await carregarComprasDia(compra.id);
-    } catch {
-      setErro('Erro de conexão');
-    } finally {
-      setSalvando(false);
-    }
+  const contadores = {
+    total: compras.length,
+    rascunhos: compras.filter((item) => item.status === 'rascunho').length,
+    negociacao: compras.filter((item) => item.status === 'em_negociacao').length,
+    confirmadas: compras.filter((item) => item.status === 'confirmada').length,
   };
 
-  const confirmar = async () => {
-    if (!compra || !podeGerenciar) return;
-    setSalvando(true);
-    setErro(null);
-    const res = await fetch(`/api/comercial/compras-programadas/${compra.id}/confirmar`, { method: 'POST' });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setErro(extrairMensagemErro(body, 'Erro ao confirmar compra'));
-      setSalvando(false);
+  const lotes = useMemo(
+    () => lotesDoDia(compras, compra?.dataOperacao ?? dataOperacao),
+    [compra?.dataOperacao, compras, dataOperacao],
+  );
+
+  async function atualizar(compraId?: string) {
+    const lista = await carregarLista();
+    if (compraId) {
+      await abrirCompra(compraId, lista);
       return;
     }
-    const confirmacao = body as ConfirmacaoCompraProgramada;
-    setCompra(confirmacao.compra);
-    await carregarDisponibilidade();
-    setSalvando(false);
-  };
+    if (modo === 'visualizar') {
+      await abrirPrimeiroLote(dataOperacao, lista);
+    }
+  }
 
   if (!podeLer) {
     return <p className="text-sm text-destructive">Você não tem permissão para visualizar compras programadas.</p>;
   }
 
+  if (modo !== 'lista') {
+    return (
+      <CompraEditor
+        modo={modo === 'criar' ? 'criar' : 'visualizar'}
+        compra={modo === 'criar' ? null : compra}
+        lotes={lotes}
+        fornecedores={fornecedores}
+        itensCompra={itensCompra}
+        dataOperacao={modo === 'criar' ? (dataOperacaoFiltro !== 'todas' ? dataOperacaoFiltro : hojeISO()) : dataOperacao}
+        disponibilidade={disponibilidade}
+        disponibilidadeTotal={disponibilidadeTotal}
+        podeGerenciar={podeGerenciar}
+        onBack={() => {
+          setModo('lista');
+          setCompra(null);
+          setDisponibilidade([]);
+          setDisponibilidadeTotal([]);
+          navegar(dataOperacaoFiltro !== 'todas' ? dataOperacaoFiltro : undefined);
+          void carregarLista();
+        }}
+        onChanged={atualizar}
+        onSelectLote={(id) => void abrirCompra(id)}
+        onMudarData={(proxima) => {
+          setDataOperacao(proxima);
+          void (async () => {
+            const lista = await carregarLista();
+            await abrirPrimeiroLote(proxima, lista);
+          })();
+        }}
+        onNovo={() => {
+          setCompra(null);
+          setModo('criar');
+          navegar(dataOperacao);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-3">
       <PageHeader
-        title="Compra Programada (Pedido de Compra)"
-        subtitle="Planejamento de compra e geração de disponibilidade virtual"
+        title="Pedidos de Compra"
+        subtitle="Acompanhe rascunhos, lotes e disponibilidade virtual"
       >
+        <SelectNative
+          aria-label="Filtrar por data de operação"
+          selectSize="sm"
+          className="w-[190px]"
+          value={dataOperacaoFiltro}
+          onChange={(event) => setDataOperacaoFiltro(event.target.value)}
+        >
+          <option value="todas">Todas as datas</option>
+          {datasOperacaoDisponiveis.map((data) => (
+            <option key={data} value={data}>{formatarDataOperacao(data)}</option>
+          ))}
+        </SelectNative>
         {podeGerenciar && (
           <Button
-            variant="secondary"
+            type="button"
             onClick={() => {
-              compraAnteriorRef.current = compra?.id ?? compras[0]?.id ?? null;
-              rascunhoNovoRef.current = true;
-              limparFormulario();
-              navegar(dataOperacao);
+              setCompra(null);
+              setModo('criar');
+              navegar(dataOperacaoFiltro !== 'todas' ? dataOperacaoFiltro : hojeISO());
+              void carregarCadastros();
             }}
           >
             <Plus />
             Novo pedido de compra
           </Button>
         )}
-        {podeGerenciar && compra === null && compras.length > 0 && (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              rascunhoNovoRef.current = false;
-              const idRestaurar = compraAnteriorRef.current ?? compras[0]?.id;
-              if (!idRestaurar) return;
-              navegar(dataOperacao, idRestaurar);
-              void carregarComprasDia(idRestaurar);
-            }}
-          >
-            Cancelar
-          </Button>
-        )}
-        {podeGerenciar && compra?.status === 'confirmada' && (
-          <Button variant="secondary" onClick={() => setAvisoEditar(true)}>
-            Editar compra confirmada
-          </Button>
-        )}
-        {podeGerenciar && editavel && (
-          <>
-            <Button variant="secondary" onClick={salvar} disabled={salvando}>
-              <Save />
-              Salvar rascunho
-            </Button>
-            {compra && (
-              <Button onClick={confirmar} disabled={salvando}>
-                <CheckCircle />
-                Confirmar compra
-              </Button>
-            )}
-          </>
-        )}
       </PageHeader>
 
       {erro && (
-        <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+        <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
           {erro}
         </div>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-2.5 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-2.5">
-          <Card>
-            <CardContent className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2 xl:grid-cols-4">
-              <FormField label="Data operacional" required htmlFor="data">
-                <DatePickerField
-                  id="data"
-                  value={dataOperacao}
-                  onChange={(proxima) => {
-                    setDataOperacao(proxima);
-                    navegar(proxima);
-                  }}
-                />
-              </FormField>
-              <FormField label="Fornecedor" required className="sm:col-span-2" htmlFor="fornecedor">
-                <ComboboxField
-                  id="fornecedor"
-                  items={fornecedores.map((f) => ({ id: f.id, label: f.razaoSocial ?? f.codigo ?? '—', sublabel: f.codigo }))}
-                  value={fornecedorId}
-                  onChange={setFornecedorId}
-                  placeholder="Selecione o fornecedor"
-                  searchPlaceholder="Buscar fornecedor…"
-                  emptyText="Nenhum fornecedor encontrado."
-                  disabled={!editavel}
-                />
-              </FormField>
-              <FormField label="Referência externa" htmlFor="ref">
-                <Input
-                  id="ref"
-                  value={referenciaExterna}
-                  onChange={(e) => setReferenciaExterna(e.target.value)}
-                  disabled={!editavel}
-                />
-              </FormField>
-              <FormField label="Status">
-                <div className="flex h-8 items-center">
-                  <StatusPill
-                    variant={statusCompraVariant(compra?.status ?? 'rascunho')}
-                    label={ROTULO_COMPRA[compra?.status ?? 'rascunho'] ?? compra?.status ?? 'Rascunho'}
-                  />
-                </div>
-              </FormField>
-              <FormField label="Observações" className="sm:col-span-2 xl:col-span-4" htmlFor="obs">
-                <Textarea id="obs" value={observacoes} onChange={(e) => setObservacoes(e.target.value)} disabled={!editavel} />
-              </FormField>
-            </CardContent>
-          </Card>
+      <KpiStrip>
+        <Kpi label="Total de pedidos" value={contadores.total} hint="na visão atual" tone="default" />
+        <Kpi label="Rascunhos" value={contadores.rascunhos} hint="ainda não confirmados" tone="default" />
+        <Kpi label="Em negociação" value={contadores.negociacao} hint="exige acompanhamento" tone="alert" />
+        <Kpi label="Confirmados" value={contadores.confirmadas} hint="disponibilidade gerada" tone="ok" />
+      </KpiStrip>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Itens da compra</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead>Item de compra</TableHead>
-                    <TableHead className="text-right">Quantidade</TableHead>
-                    <TableHead>Observações</TableHead>
-                    <TableHead>Regra de Desdobramento</TableHead>
-                    <TableHead className="text-right">Previsão (kg)</TableHead>
-                    {editavel && <TableHead />}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {linhas.map((linha, idx) => {
-                    const simulacao = simulacoes.get(linha.produtoId);
-                    const regraDesdobramento = simulacao?.itens?.length
-                      ? simulacao.itens.map((i) => `${i.fator}× ${i.descricao}`).join(' + ')
-                      : '—';
-                    return (
-                      <TableRow key={idx} className="group">
-                        <TableCell>
-                          <label className="sr-only" htmlFor={`item-compra-${idx}`}>Item de compra</label>
-                          <ComboboxField
-                            id={`item-compra-${idx}`}
-                            items={itensCompra.map((it) => ({
-                              id: it.id,
-                              label: labelCodigoDescricao(it.codigo, it.descricao ?? it.nome ?? ''),
-                            }))}
-                            value={linha.produtoId}
-                            onChange={(id) =>
-                              setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, produtoId: id } : l)))
-                            }
-                            placeholder="Item"
-                            searchPlaceholder="Buscar item de compra..."
-                            emptyText="Nenhum item encontrado."
-                            disabled={!editavel}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            step="0.001"
-                            value={linha.quantidadeComprada}
-                            onChange={(e) =>
-                              setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, quantidadeComprada: e.target.value } : l)))
-                            }
-                            disabled={!editavel}
-                            className="h-7 w-24 text-right font-data"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={linha.observacoes}
-                            onChange={(e) =>
-                              setLinhas((p) => p.map((l, i) => (i === idx ? { ...l, observacoes: e.target.value } : l)))
-                            }
-                            disabled={!editavel}
-                            className="h-7"
-                          />
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{regraDesdobramento}</TableCell>
-                        <TableCellNum
-                          className="text-muted-foreground"
-                          title="Previsão de peso depende de cadastro de peso médio por item — pendente"
-                        >
-                          —
-                        </TableCellNum>
-                        {editavel && (
-                          <TableCell>
-                            <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
-                              <Button
-                                variant="ghost"
-                                size="iconSm"
-                                onClick={() => setLinhas((p) => p.filter((_, i) => i !== idx))}
-                                disabled={linhas.length <= 1}
-                              >
-                                <Trash2 className="text-destructive" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-            {editavel && podeGerenciar && (
-              <CardFooter>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setLinhas((p) => [...p, { produtoId: '', quantidadeComprada: '', observacoes: '' }])}
-                >
-                  <Plus />
-                  Adicionar item
-                </Button>
-              </CardFooter>
-            )}
-          </Card>
-        </div>
-
-        <div className="space-y-2.5">
-          <Card>
-            <CardHeader>
-              <CardTitle>Lotes da operação</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 p-2">
-              {compras.length === 0 ? (
-                <div className="space-y-2 p-2">
-                  <p>Nenhum pedido de compra para esta operação.</p>
-                  {podeGerenciar && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        rascunhoNovoRef.current = true;
-                        limparFormulario();
-                        navegar(dataOperacao);
-                      }}
-                    >
-                      <Plus />
-                      Novo pedido de compra
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <ul className="flex flex-col gap-1">
-                  {compras.map((item) => (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        className={`flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left text-xs ${
-                          compra?.id === item.id ? 'bg-primary-soft text-primary-fg' : 'hover:bg-surface-2'
-                        }`}
-                        onClick={() => {
-                          rascunhoNovoRef.current = false;
-                          navegar(dataOperacao, item.id);
-                          void carregarComprasDia(item.id);
-                        }}
-                      >
-                        <span className="font-data font-semibold">{rotuloLote(item.numeroSequencial)}</span>
-                        <span>{nomeFornecedor(item)}</span>
-                        <span className="flex items-center gap-2 text-muted-foreground">
-                          <StatusPill variant={statusCompraVariant(item.status)} label={ROTULO_COMPRA[item.status] ?? item.status} />
-                          <span className="font-data">{item.totalItens} itens</span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Disponibilidade gerada</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {podeSimular ? (
-                simulacoes.size === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    A disponibilidade estimada aparecerá conforme itens e quantidades forem informados.
-                  </p>
-                ) : (
-                  (() => {
-                    const agregado = new Map<string, { descricao: string; total: number }>();
-                    for (const sim of simulacoes.values()) {
-                      for (const item of sim.itens ?? []) {
-                        const atual = agregado.get(item.produtoId);
-                        agregado.set(item.produtoId, {
-                          descricao: item.descricao,
-                          total: (atual?.total ?? 0) + item.total,
-                        });
-                      }
-                    }
-                    const linhasAgregadas = [...agregado.values()];
-                    return (
-                      <>
-                        <p className="text-xs text-muted-foreground">
-                          A confirmação deste pedido irá gerar saldo para vendas nas seguintes proporções estimadas:
-                        </p>
-                        <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
-                          {linhasAgregadas.map((l) => (
-                            <div key={l.descricao} className="flex justify-between text-xs">
-                              <span className="font-medium">{l.descricao}</span>
-                              <span className="font-data font-bold text-primary">{l.total.toLocaleString('pt-BR')} peças</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="flex items-start gap-2 rounded-md bg-primary-soft p-3 text-xs text-primary-fg">
-                          <span>Os itens comerciais ficarão disponíveis para a equipe de vendas imediatamente após a confirmação da compra.</span>
-                        </div>
-                      </>
-                    );
-                  })()
-                )
-              ) : disponibilidade.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  A disponibilidade aparecerá após confirmar a compra programada.
-                </p>
-              ) : (
-                <ul className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
-                  {disponibilidade.map((d) => (
-                    <li key={d.modo === 'compra' ? d.id : d.produtoId} className="flex justify-between text-xs">
-                      <span className="font-data text-[11px]">
-                        {(() => {
-                          const it = itensCompra.find((p) => p.id === d.produtoId);
-                          return it ? labelCodigoDescricao(it.codigo, it.descricao ?? it.nome ?? '') : '—';
-                        })()}
-                      </span>
-                      <span className="font-data font-semibold text-primary">{d.quantidadeDisponivel} disp.</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-            {podeSimular && simulacoes.size > 0 && (
-              <CardFooter className="justify-between">
-                <span className="text-xs text-muted-foreground">Total Estimado</span>
-                <span className="font-data text-sm font-bold">
-                  {[...simulacoes.values()].reduce((acc, s) => acc + s.totalPartes, 0).toLocaleString('pt-BR')} partes
-                </span>
-              </CardFooter>
-            )}
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Disponibilidade total</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ListaDisponibilidade
-                itens={disponibilidadeTotal}
-                vazio="A somatória aparece quando houver lotes confirmados nesta operação."
-                rotulo={(item) => rotuloItemDisponibilidade(item, itensCompra)}
+      <Card>
+        <CardHeader>
+          <CardTitle>Pedidos</CardTitle>
+          <BadgeCount>{comprasFiltradas.length}</BadgeCount>
+          <CardAction>
+            <div className="w-[240px]">
+              <Input
+                value={busca}
+                onChange={(event) => setBusca(event.target.value)}
+                placeholder="Buscar pedido ou fornecedor..."
+                adornLeft={<Search />}
+                className="h-7 text-xs"
               />
-            </CardContent>
-            {disponibilidadeTotal.length > 0 && (
-              <CardFooter className="justify-between">
-                <span className="text-xs text-muted-foreground">Todos os lotes</span>
-                <span className="font-data text-sm font-bold">{somaQuantidadeDisponivel(disponibilidadeTotal)} disp.</span>
-              </CardFooter>
-            )}
-          </Card>
-        </div>
-      </div>
-
-      <AlertDialog open={avisoEditar} onOpenChange={setAvisoEditar}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <Info className="size-4 text-primary" />
-              Atenção
-            </AlertDialogTitle>
-            <AlertDialogDescription>{AVISO_EDITAR_CONFIRMADA}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => setModalEditar(true)}>Continuar</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <ComprasEditModal
-        open={modalEditar}
-        compra={compra?.status === 'confirmada' ? compra : null}
-        itensCompra={itensCompra}
-        onClose={() => setModalEditar(false)}
-        onSalvo={() => {
-          void carregarComprasDia(compra?.id);
-          void carregarDisponibilidade();
-        }}
-      />
+            </div>
+            <SelectNative
+              aria-label="Filtrar por status"
+              selectSize="sm"
+              className="w-[170px]"
+              value={statusFiltro}
+              onChange={(event) => setStatusFiltro(event.target.value)}
+            >
+              <option value="todos">Todos os status</option>
+              {STATUS_COMPRA.map((status) => (
+                <option key={status} value={status}>{ROTULO_COMPRA[status]}</option>
+              ))}
+            </SelectNative>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Fornecedor</TableHead>
+                <TableHead>Lote</TableHead>
+                <TableHead>Referência</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {carregando && (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center text-xs text-muted-foreground">
+                    Carregando pedidos...
+                  </TableCell>
+                </TableRow>
+              )}
+              {!carregando && comprasFiltradas.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center text-xs text-muted-foreground">
+                    Nenhum pedido encontrado.
+                  </TableCell>
+                </TableRow>
+              )}
+              {blocosPorData.map((bloco) => (
+                <Fragment key={bloco.data || 'sem-data'}>
+                  <TableRow className="bg-surface-2 hover:bg-surface-2">
+                    <TableCell colSpan={5} className="h-7 text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">
+                      {formatarDataOperacao(bloco.data)}
+                    </TableCell>
+                  </TableRow>
+                  {bloco.itens.map((item) => (
+                    <TableRow
+                      key={item.id}
+                      className="group cursor-pointer"
+                      onClick={() => void abrirCompra(item.id)}
+                    >
+                      <TableCell className="text-[13px] font-semibold text-foreground">
+                        {nomeFornecedor(item)}
+                      </TableCell>
+                      <TableCellCode>{rotuloLote(item.numeroSequencial)}</TableCellCode>
+                      <TableCell className="text-muted-foreground">
+                        {item.referenciaExterna || '—'}
+                      </TableCell>
+                      <TableCell>
+                        <StatusPill
+                          variant={statusCompraVariant(item.status)}
+                          label={ROTULO_COMPRA[item.status] ?? item.status}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Abrir pedido ${item.id}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void abrirCompra(item.id);
+                            }}
+                          >
+                            Abrir
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

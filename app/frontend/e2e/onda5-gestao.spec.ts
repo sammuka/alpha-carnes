@@ -73,7 +73,7 @@ const ROTAS_MENU: Array<{
 }> = [
   { href: '/gestao/dashboard', menuLabel: 'Painel Geral da Operação', titulo: /Painel Geral da Operação/i, screenshot: '01-dashboard.png' },
   { href: '/gestao/operacoes', menuLabel: 'Operações', titulo: /^Operações$/i, screenshot: '02-operacoes.png' },
-  { href: '/gestao/compras', menuLabel: 'Compras', titulo: /Compra Programada/i, screenshot: '03-compras.png' },
+  { href: '/gestao/compras', menuLabel: 'Compras', titulo: /Pedidos de Compra/i, screenshot: '03-compras.png' },
   { href: '/gestao/overbooking', menuLabel: 'Pendências de Overbooking', titulo: /Pendências de Overbooking/i, screenshot: '04-overbooking.png' },
   { href: '/gestao/aprovacoes', menuLabel: 'Aprovações & Ocorrências', titulo: /Aprovações/i, screenshot: '05-aprovacoes.png' },
   { href: '/gestao/relatorios', menuLabel: 'Relatórios & SIF', titulo: /Relatórios SIF/i, screenshot: '06-relatorios.png' },
@@ -668,9 +668,10 @@ test.describe('Onda 5 — Gestão (6 rotas)', () => {
       await page.getByRole('button', { name: 'Editar compra confirmada' }).click();
       await expect(page.getByText('Alterar uma compra confirmada recalcula imediatamente')).toBeVisible();
       await page.getByRole('button', { name: 'Continuar' }).click();
-      const dialog = page.getByRole('dialog', { name: 'Editar compra confirmada' });
-      await expect(dialog).toBeVisible();
-      const input = dialog.locator('input[type="number"]').first();
+      await expect(page.getByRole('button', { name: 'Adicionar item' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Salvar alterações' })).toBeVisible();
+      await expect(page.getByRole('dialog', { name: 'Editar compra confirmada' })).toHaveCount(0);
+      const input = page.locator('input[type="number"]').first();
       await expect(input).toBeVisible();
       const impacto = page.waitForResponse(
         (r) => r.url().includes('/impacto?') && r.ok(),
@@ -686,7 +687,7 @@ test.describe('Onda 5 — Gestão (6 rotas)', () => {
         '07-impacto-deficit',
         'Painel de impacto — déficit projetado',
         'Demonstrar recálculo pré-salvamento ao reduzir compra confirmada.',
-        'Abrir modal de edição e reduzir quantidade abaixo das reservas.',
+        'Entrar em modo edição na visualização e reduzir quantidade abaixo das reservas.',
         'Painel de impacto exibe déficit projetado antes de confirmar.',
       );
 

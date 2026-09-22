@@ -154,6 +154,7 @@ test.describe('Onda 12 — domínio de campos na UI', () => {
 
   test('DoD 12.4 compras e espelho pesquisáveis', async ({ page }) => {
     await page.goto('/gestao/compras', { waitUntil: 'load' });
+    await page.getByRole('button', { name: 'Novo pedido de compra' }).click();
     await expect(page.getByRole('combobox', { name: 'Fornecedor' })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Item de compra' })).toBeVisible();
     await shot(page, '06-compras.png');
@@ -305,7 +306,9 @@ test.describe('Onda 12 — domínio de campos na UI', () => {
         await page.getByRole('button', { name: 'Novo pedido' }).click();
         await expect(page.getByRole('heading', { name: 'Novo Pedido' })).toBeVisible();
       }],
-      ['/gestao/compras', 'Fornecedor', undefined],
+      ['/gestao/compras', 'Fornecedor', async () => {
+        await page.getByRole('button', { name: 'Novo pedido de compra' }).click();
+      }],
       ['/comercial/espelho', 'Rota', undefined],
       ['/cadastros/rotas', 'Representante padrão', async () => {
         await page.getByRole('button', { name: 'Novo' }).click();
@@ -437,6 +440,7 @@ test.describe('Onda 12 — domínio de campos na UI', () => {
     await page.keyboard.press('Escape');
 
     await page.goto('/gestao/compras', { waitUntil: 'load' });
+    await page.getByRole('button', { name: 'Novo pedido de compra' }).click();
     await abrirEFiltrar(page, 'Item de compra', suffix, 'Buscar item de compra...');
     await assertOpcao(page, inativo.itemCompra.label, false);
     await assertOpcao(page, ativo.itemCompra.label, true);

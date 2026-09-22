@@ -11,11 +11,15 @@ import {
   updateCompraProgramadaSchema,
   impactoQuerySchema,
   atualizarItemCompraSchema,
+  criarItemCompraSchema,
+  removerItemQuerySchema,
   listarComprasProgramadasSchema,
   type CreateCompraProgramadaDto,
   type UpdateCompraProgramadaDto,
   type ImpactoQueryDto,
   type AtualizarItemCompraDto,
+  type CriarItemCompraDto,
+  type RemoverItemQueryDto,
   type ListarComprasProgramadasDto,
 } from './dto/compra-programada.dto';
 
@@ -71,6 +75,16 @@ export class ComprasProgramadasController {
     return this.service.atualizar(id, dto, user.sub);
   }
 
+  @Post(':id/itens')
+  @RequirePermissoes('COMPRAS_PROGRAMADAS_GERENCIAR')
+  async incluirItem(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(criarItemCompraSchema)) dto: CriarItemCompraDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.incluirItem(id, dto, user.sub);
+  }
+
   @Patch(':id/itens/:itemId')
   @RequirePermissoes('COMPRAS_PROGRAMADAS_GERENCIAR')
   async atualizarItem(
@@ -80,6 +94,17 @@ export class ComprasProgramadasController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.service.atualizarItem(id, itemId, dto, user.sub);
+  }
+
+  @Delete(':id/itens/:itemId')
+  @RequirePermissoes('COMPRAS_PROGRAMADAS_GERENCIAR')
+  async removerItem(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Query(new ZodValidationPipe(removerItemQuerySchema)) query: RemoverItemQueryDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.service.removerItem(id, itemId, user.sub, query.confirmarDeficit ?? false);
   }
 
   @Post(':id/confirmar')

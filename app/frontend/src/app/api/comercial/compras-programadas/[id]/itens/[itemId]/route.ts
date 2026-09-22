@@ -10,3 +10,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     body: await req.text(),
   });
 }
+
+export async function DELETE(req: NextRequest, ctx: Ctx) {
+  const { id, itemId } = await ctx.params;
+  return repassar(`/comercial/compras-programadas/${id}/itens/${itemId}${req.nextUrl.search}`, {
+    method: 'DELETE',
+  });
+}

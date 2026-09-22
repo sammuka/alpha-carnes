@@ -291,7 +291,7 @@ export function OperacoesClient({ permissoes }: { permissoes: string[] }) {
                               Sem compra programada
                             </span>
                             <Link
-                              href={`/gestao/compras?data=${o.data}`}
+                              href={`/gestao/compras?dataOperacao=${o.data}&novo=1`}
                               className="whitespace-nowrap text-[10px] font-semibold text-primary underline-offset-2 hover:underline"
                             >
                               Registrar compra

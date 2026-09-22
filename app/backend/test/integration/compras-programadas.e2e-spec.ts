@@ -459,4 +459,73 @@ describe('Compras programadas e2e (CRUD + RBAC + edição de item)', () => {
     expect(spy.mock.calls.filter((c) => c[0] === EVENTOS.DISPONIBILIDADE_GERADA)).toHaveLength(0);
     spy.mockRestore();
   });
+
+  it('inclui e remove item em rascunho; permite mutar confirmada e recusa remover o último', async () => {
+    const criar = await request(app.getHttpServer())
+      .post('/comercial/compras-programadas')
+      .set('Cookie', comprasCookies)
+      .send(novaCompra({ dataOperacao: '2026-09-21' }));
+    expect(criar.status).toBe(201);
+    const compraId = criar.body.id as string;
+    const itemOriginal = criar.body.itens[0].id as string;
+
+    const incluir = await request(app.getHttpServer())
+      .post(`/comercial/compras-programadas/${compraId}/itens`)
+      .set('Cookie', comprasCookies)
+      .send({ produtoId: base.produtoId, quantidadeComprada: 3, observacoes: 'segundo item' });
+    expect(incluir.status).toBe(201);
+    expect(incluir.body.itens).toHaveLength(2);
+    const itemNovo = (incluir.body.itens as Array<{ id: string; produtoId: string }>)
+      .find((item) => item.produtoId === base.produtoId);
+    expect(itemNovo).toBeTruthy();
+
+    const remover = await request(app.getHttpServer())
+      .delete(`/comercial/compras-programadas/${compraId}/itens/${itemNovo!.id}`)
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(remover.status).toBe(200);
+    expect(remover.body.itens).toHaveLength(1);
+    expect(remover.body.itens[0].id).toBe(itemOriginal);
+
+    const ultimo = await request(app.getHttpServer())
+      .delete(`/comercial/compras-programadas/${compraId}/itens/${itemOriginal}`)
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(ultimo.status).toBe(409);
+
+    await request(app.getHttpServer())
+      .post(`/comercial/compras-programadas/${compraId}/confirmar`)
+      .set('Cookie', comprasCookies)
+      .expect(201);
+
+    const duplicarConfirmada = await request(app.getHttpServer())
+      .post(`/comercial/compras-programadas/${compraId}/itens`)
+      .set('Cookie', comprasCookies)
+      .send({ produtoId: base.produtoCompraId, quantidadeComprada: 1 });
+    expect(duplicarConfirmada.status).toBe(409);
+
+    const incluirConfirmada = await request(app.getHttpServer())
+      .post(`/comercial/compras-programadas/${compraId}/itens`)
+      .set('Cookie', comprasCookies)
+      .send({ produtoId: base.produtoId, quantidadeComprada: 1 });
+    expect(incluirConfirmada.status).toBe(201);
+    expect(incluirConfirmada.body.itens).toHaveLength(2);
+
+    const cabecalho = await request(app.getHttpServer())
+      .patch(`/comercial/compras-programadas/${compraId}`)
+      .set('Cookie', comprasCookies)
+      .send({ observacoes: 'ajuste em confirmada' });
+    expect(cabecalho.status).toBe(200);
+    expect(cabecalho.body.observacoes).toBe('ajuste em confirmada');
+
+    const itemExtra = (incluirConfirmada.body.itens as Array<{ id: string }>)
+      .find((item) => item.id !== itemOriginal);
+    expect(itemExtra).toBeTruthy();
+    const removerConfirmada = await request(app.getHttpServer())
+      .delete(`/comercial/compras-programadas/${compraId}/itens/${itemExtra!.id}`)
+      .set('Cookie', comprasCookies)
+      .send();
+    expect(removerConfirmada.status).toBe(200);
+    expect(removerConfirmada.body.itens).toHaveLength(1);
+  });
 });
