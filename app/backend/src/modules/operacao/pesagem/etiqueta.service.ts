@@ -259,7 +259,9 @@ export class EtiquetaService {
   }
 
   /**
-   * Emite a etiqueta da peça (RF-PS-23: só após confirmação da associação).
+   * Emite a etiqueta da peça (RF-PS-23: só após confirmação operacional do destino).
+   * Pedido (`associada`), estoque (`em_sobra`) e desossa (`para_corte`) são destinos
+   * confirmados — os dois últimos não exigem vínculo com pedido de venda.
    * REFINO 1: a etiqueta LÓGICA é o fato de negócio — atribui o QR à peça e grava
    * o registro de impressão SEMPRE, na transação. A impressão FÍSICA é best-effort
    * observável: impressora indisponível → status_impressao='falha_impressao' (não
@@ -268,8 +270,8 @@ export class EtiquetaService {
   async emitir(pecaId: string, operadorId: string): Promise<ResultadoEtiqueta> {
     const peca = await this.buscarAtiva(this.db, pecaId);
     if (!peca) throw new NotFoundException('Peça não encontrada');
-    if (peca.statusPeca !== 'associada') {
-      throw new ConflictException('Etiqueta só pode ser emitida após a confirmação da associação');
+    if (peca.statusPeca !== 'associada' && peca.statusPeca !== 'em_sobra' && peca.statusPeca !== 'para_corte') {
+      throw new ConflictException('Etiqueta só pode ser emitida após a confirmação do destino da peça');
     }
 
     const codigoEtiqueta = peca.etiquetaAtual ?? `QR-${peca.id}`;

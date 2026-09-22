@@ -309,6 +309,13 @@
       "when": 1788841203000,
       "tag": "0043_onda14_ocorrencias_preco",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1788841204000,
+      "tag": "0044_pesagem_encerrada",
+      "breakpoints": true
     }
   ]
 }

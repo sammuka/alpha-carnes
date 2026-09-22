@@ -53,16 +53,16 @@ describe('ConferenciaService (recebimento) — branches', () => {
   });
 
   it('concluirPesagem → lança 409 se não está em pesagem', async () => {
-    const atual = { id: 'r1', status: 'aguardando_conferencia_final', deletedAt: null };
+    const atual = { id: 'r1', status: 'pesagem_encerrada', deletedAt: null };
     const tx = { select: jest.fn(() => chain([atual])) };
     const db = { transaction: jest.fn((fn: (t: unknown) => Promise<unknown>) => fn(tx)) };
     const service = makeService(db);
     await expect(service.concluirPesagem('r1', 'u1')).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('concluirPesagem → sucesso avança para aguardando_conferencia_final', async () => {
+  it('concluirPesagem → sucesso avança para pesagem_encerrada', async () => {
     const atual = { id: 'r1', status: 'pesagem_em_andamento', deletedAt: null };
-    const atualizado = { id: 'r1', status: 'aguardando_conferencia_final' };
+    const atualizado = { id: 'r1', status: 'pesagem_encerrada' };
     const tx = {
       select: jest.fn(() => chain([atual])),
       update: jest.fn(() => ({
@@ -85,7 +85,7 @@ describe('ConferenciaService (recebimento) — branches', () => {
   });
 
   it('concluirConferencia → lança 409 se não há NF do fornecedor', async () => {
-    const atual = { id: 'r1', status: 'aguardando_conferencia_final', deletedAt: null };
+    const atual = { id: 'r1', status: 'pesagem_encerrada', deletedAt: null };
     let call = 0;
     const tx = {
       select: jest.fn(() => {

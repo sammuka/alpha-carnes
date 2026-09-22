@@ -84,7 +84,6 @@ export class PedidoFornecedorService {
         .where(and(
           eq(recebimentos.pedidoFornecedorId, pedidosFornecedor.id),
           isNull(recebimentos.deletedAt),
-          ne(recebimentos.status, 'cancelado'),
         )),
     );
     const where = modoRecebimento

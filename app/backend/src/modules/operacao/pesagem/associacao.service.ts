@@ -8,6 +8,7 @@ import { operacoes,
   associacoesPecaHistorico,
   comprasProgramadas,
   pecas,
+  pedidosFornecedor,
   pedidosVenda,
   pedidosVendaItens,
   recebimentos,
@@ -17,13 +18,17 @@ import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { DivergenciaRecebimentoService } from '../recebimento/divergencia/divergencia-recebimento.service';
-import type { SugestaoScored } from './associacao-score';
-import type { ConfirmarAssociacaoDto, RedirecionarDto, SemCoberturaDto } from './dto/associacao.dto';
+import { calcularScores, nomesPedidosConcluidos, type SugestaoScored } from './associacao-score';
+import type { ConfirmarAssociacaoDto, DestinarRetiradaDto, RedirecionarDto, SemCoberturaDto } from './dto/associacao.dto';
 import type { EstornarDto } from './dto/estorno.dto';
 import { EtiquetaService } from './etiqueta.service';
 import { pecaEmCargaFechada } from './carga-fechada';
 import { consumirSaldo, devolverSaldo } from './saldo';
-import { calcularCompativeisItem, caracteristicasDeCapturaMeta } from './compatibilidade';
+import {
+  calcularCompativeisItem,
+  caracteristicasDeCapturaMeta,
+  listarCandidatosPedidoDaOperacao,
+} from './compatibilidade';
 
 type Tx = NodePgDatabase<typeof schema>;
 type Peca = typeof pecas.$inferSelect;
@@ -32,6 +37,8 @@ export interface ResultadoSugestao {
   pecaId: string;
   sugestao: SugestaoScored | null;
   compativeis: SugestaoScored[];
+  /** Clientes com item do produto já sem saldo — a busca da tela usa para "Pedido concluído". */
+  concluidos: string[];
 }
 
 @Injectable()
@@ -56,8 +63,7 @@ export class AssociacaoService {
   async sugerir(pecaId: string): Promise<ResultadoSugestao> {
     const peca = await this.buscarAtiva(this.db, pecaId);
     if (!peca) throw new NotFoundException('Peça não encontrada');
-    const compativeis = await calcularCompativeisItem(this.db, await this.paramsCompativeis(this.db, peca));
-    return { pecaId, sugestao: compativeis[0] ?? null, compativeis };
+    return this.resultadoComConcluidos(pecaId, await this.paramsCompativeis(this.db, peca));
   }
 
   /** Só pedidos compatíveis e abertos com saldo (RF-PS-16/17). */
@@ -65,6 +71,51 @@ export class AssociacaoService {
     const peca = await this.buscarAtiva(this.db, pecaId);
     if (!peca) throw new NotFoundException('Peça não encontrada');
     return calcularCompativeisItem(this.db, await this.paramsCompativeis(this.db, peca));
+  }
+
+  /**
+   * Pedidos compatíveis do lote + produto, sem peça pesada.
+   * Usado ao carregar a tela, trocar aba de tipo e trocar lote.
+   * Ranking sem peso/características de captura (`peso: '0'`).
+   */
+  async listarCompativeisDoRecebimento(
+    recebimentoId: string,
+    produtoBaseId: string,
+    incluirCompletos = false,
+  ): Promise<ResultadoSugestao> {
+    const contexto = await this.db
+      .select({
+        operacaoId: recebimentos.operacaoId,
+        compraProgramadaId: pedidosFornecedor.compraProgramadaId,
+      })
+      .from(recebimentos)
+      .innerJoin(pedidosFornecedor, eq(pedidosFornecedor.id, recebimentos.pedidoFornecedorId))
+      .where(and(eq(recebimentos.id, recebimentoId), isNull(recebimentos.deletedAt)))
+      .then((r) => r[0] ?? null);
+    if (!contexto) throw new NotFoundException('Recebimento não encontrado');
+
+    const params = {
+      operacaoId: contexto.operacaoId,
+      compraProgramadaOrigemId: contexto.compraProgramadaId,
+      produtoId: produtoBaseId,
+    };
+
+    if (incluirCompletos) {
+      const candidatos = await listarCandidatosPedidoDaOperacao(this.db, params);
+      const compativeis: SugestaoScored[] = candidatos.map((c) => ({
+        ...c,
+        score: 0,
+        justificativa: '',
+        prefCompativel: false,
+      }));
+      return { pecaId: '', sugestao: null, compativeis, concluidos: nomesPedidosConcluidos(candidatos) };
+    }
+
+    return this.resultadoComConcluidos('', {
+      ...params,
+      peso: '0',
+      caracteristicas: [],
+    });
   }
 
   /**
@@ -136,7 +187,12 @@ export class AssociacaoService {
    */
   async redirecionar(pecaId: string, dto: RedirecionarDto, operadorId: string): Promise<Peca> {
     const resultado = await this.db.transaction(async (tx) => {
-      const peca = await this.buscarAtiva(tx, pecaId);
+      const peca = await tx
+        .select()
+        .from(pecas)
+        .where(and(eq(pecas.id, pecaId), isNull(pecas.deletedAt)))
+        .for('update')
+        .then((r) => r[0] ?? null);
       if (!peca) throw new NotFoundException('Peça não encontrada');
       if (peca.statusPeca !== 'associada' || !peca.pedidoVendaItemId) {
         throw new ConflictException('Só é possível redirecionar peça já associada');
@@ -144,14 +200,19 @@ export class AssociacaoService {
       if (peca.pedidoVendaItemId === dto.pedidoVendaItemId) {
         throw new ConflictException('Peça já está neste item do pedido');
       }
+      if (await pecaEmCargaFechada(tx, pecaId)) {
+        throw new ConflictException('Peça já está em carga fechada — troca bloqueada');
+      }
 
       const destino = await this.buscarItemCompativel(tx, peca, dto.pedidoVendaItemId);
 
       const consumido = await consumirSaldo(tx, dto.pedidoVendaItemId);
       if (!consumido) throw new ConflictException('Item de destino já está completo');
 
-      // Devolve a unidade ao item de origem (CHECK >= 0 é backstop).
-      await devolverSaldo(tx, peca.pedidoVendaItemId);
+      const devolvido = await devolverSaldo(tx, peca.pedidoVendaItemId);
+      if (!devolvido) {
+        throw new ConflictException('Não foi possível devolver o saldo do pedido de origem');
+      }
 
       const pedidoOrigemId = peca.pedidoVendaId;
       const atualizada = primeiroOuFalha(
@@ -187,9 +248,79 @@ export class AssociacaoService {
 
     this.eventEmitter.emit(EVENTOS.PECA_REDIRECIONADA, {
       pecaId,
+      recebimentoId: resultado.peca.recebimentoId,
       dataOperacao: resultado.dataOperacao,
       pedidoOrigemId: resultado.pedidoOrigemId,
       pedidoDestinoId: resultado.peca.pedidoVendaId!,
+    });
+
+    return resultado.peca;
+  }
+
+  /**
+   * Retira peça associada do pedido e destina a estoque (`em_sobra`) ou desossa (`para_corte`).
+   * Devolve o saldo do item de origem; a peça passa a contar no destino escolhido.
+   */
+  async destinarRetirada(pecaId: string, dto: DestinarRetiradaDto, operadorId: string): Promise<Peca> {
+    const resultado = await this.db.transaction(async (tx) => {
+      const peca = await tx
+        .select()
+        .from(pecas)
+        .where(and(eq(pecas.id, pecaId), isNull(pecas.deletedAt)))
+        .for('update')
+        .then((r) => r[0] ?? null);
+      if (!peca) throw new NotFoundException('Peça não encontrada');
+      if (peca.statusPeca !== 'associada' || !peca.pedidoVendaItemId) {
+        throw new ConflictException('Só é possível destinar peça associada a um pedido');
+      }
+      if (await pecaEmCargaFechada(tx, pecaId)) {
+        throw new ConflictException('Peça já está em carga fechada — destinação bloqueada');
+      }
+
+      const pedidoOrigemId = peca.pedidoVendaId;
+      const devolvido = await devolverSaldo(tx, peca.pedidoVendaItemId);
+      if (!devolvido) {
+        throw new ConflictException('Não foi possível devolver o saldo do pedido de origem');
+      }
+
+      const statusPeca = dto.destino === 'estoque' ? 'em_sobra' : 'para_corte';
+      const atualizada = primeiroOuFalha(
+        await tx
+          .update(pecas)
+          .set({
+            statusPeca,
+            pedidoVendaId: null,
+            pedidoVendaItemId: null,
+            observacoes: dto.observacoes ?? peca.observacoes,
+          })
+          .where(eq(pecas.id, pecaId))
+          .returning(),
+      );
+
+      await this.gravarHistorico(tx, {
+        pecaId,
+        acao: dto.destino === 'estoque' ? 'sobra' : 'corte',
+        pedidoOrigemId,
+        motivo: dto.observacoes ?? dto.motivo,
+        operadorId,
+      });
+
+      await this.auditoria.registrar(tx, {
+        tabela: 'pecas',
+        registroId: pecaId,
+        operacao: 'UPDATE',
+        modulo: 'operacao',
+        usuarioId: operadorId,
+        dadosAnteriores: peca,
+        dadosNovos: atualizada,
+      });
+
+      return { peca: atualizada, dataOperacao: await this.dataOperacaoDaPeca(tx, peca) };
+    });
+
+    this.eventEmitter.emit(EVENTOS.FALTAS_DESOSSA_ATUALIZADAS, {
+      dataOperacao: resultado.dataOperacao,
+      motivo: dto.destino === 'estoque' ? 'peca_destinada_sobra' : 'peca_destinada_corte',
     });
 
     return resultado.peca;
@@ -259,10 +390,15 @@ export class AssociacaoService {
         dadosNovos: atualizada,
       });
 
-      return atualizada;
+      return { peca: atualizada, dataOperacao: await this.dataOperacaoDaPeca(tx, peca) };
     });
 
-    return resultado;
+    this.eventEmitter.emit(EVENTOS.FALTAS_DESOSSA_ATUALIZADAS, {
+      dataOperacao: resultado.dataOperacao,
+      motivo: `peca_destinada_${dto.destino}`,
+    });
+
+    return resultado.peca;
   }
 
   /**
@@ -377,7 +513,9 @@ export class AssociacaoService {
       .then((r) => r[0] ?? null);
 
     if (!item || item.deletedAt) throw new NotFoundException('Item de pedido não encontrado');
-    if (item.statusPedido === 'cancelado') throw new ConflictException('Pedido cancelado não aceita associação');
+    if (item.statusPedido !== 'finalizado') {
+      throw new ConflictException('Somente pedido com status Finalizado aceita associação');
+    }
     if (item.produtoId !== peca.produtoBaseId) {
       throw new ConflictException('Item de pedido incompatível com a peça');
     }
@@ -460,6 +598,33 @@ export class AssociacaoService {
       .where(eq(recebimentos.id, peca.recebimentoId))
       .then((rows) => rows[0] ?? null);
     return r?.dataOperacao ?? '';
+  }
+
+  private async resultadoComConcluidos(
+    pecaId: string,
+    params: {
+      operacaoId: string;
+      compraProgramadaOrigemId: string;
+      produtoId: string;
+      peso: string;
+      caracteristicas?: string[];
+    },
+  ): Promise<ResultadoSugestao> {
+    const candidatos = await listarCandidatosPedidoDaOperacao(this.db, params);
+    const compativeis = calcularScores(
+      {
+        produtoBaseId: params.produtoId,
+        pesoOriginal: params.peso,
+        caracteristicas: params.caracteristicas,
+      },
+      candidatos,
+    );
+    return {
+      pecaId,
+      sugestao: compativeis[0] ?? null,
+      compativeis,
+      concluidos: nomesPedidosConcluidos(candidatos),
+    };
   }
 
   private async paramsCompativeis(tx: Tx, peca: Peca) {

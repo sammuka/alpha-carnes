@@ -2,13 +2,7 @@
 
 export const STATUS_RECEBIMENTO = [
   'pesagem_em_andamento',
-  'aguardando_conclusao_pesagem',
-  'aguardando_conferencia_final',
-  'conferido_sem_divergencia',
-  'conferido_com_divergencia',
-  'ocorrencia_administrativa_aberta',
-  'tratativa_administrativa_concluida',
-  'cancelado',
+  'pesagem_encerrada',
 ] as const;
 
 export type StatusRecebimento = (typeof STATUS_RECEBIMENTO)[number];
@@ -54,9 +48,18 @@ export interface RecebimentoItem {
   requerBalanca: boolean;
   pesoTotalApurado: string | null;
   pesoApurado?: string | null;
+  /** Peso declarado na NF por produto (campo Peso NF do novo recebimento). Ausente = não preenchido. */
+  pesoNf?: string | null;
   statusApuracao: StatusApuracaoItem;
   observacoes: string | null;
-  produto?: { id: string; codigo: string; descricao: string };
+  produto?: {
+    id: string;
+    codigo: string;
+    nome?: string;
+    descricao?: string;
+    passaDesossa?: boolean;
+    podeEstoque?: boolean;
+  };
 }
 
 export interface DivergenciaRecebimento {
@@ -231,6 +234,10 @@ export interface SugestaoScored {
   clienteId: string;
   clienteNome?: string;
   saldoPendente: string;
+  /** Total solicitado no item do pedido (D22 — coluna "Qtde solicitada" em Pedidos compatíveis). */
+  quantidadePedida: string;
+  /** Total já atendido/associado no item do pedido (coluna "Qtde associada"). */
+  quantidadeAtendida: string;
   prioridade: number | null;
   rotaPrevista: string | null;
   score: number;
@@ -243,6 +250,8 @@ export interface ResultadoSugestao {
   pecaId: string;
   sugestao: SugestaoScored | null;
   compativeis: SugestaoScored[];
+  /** Nome fantasia (ou razão social) de pedidos do produto que já não têm saldo. */
+  concluidos?: string[];
 }
 
 export interface AcaoLote {
@@ -511,7 +520,7 @@ export const ROTULOS_MOTIVO_ESTORNO: Record<MotivoEstorno, string> = {
 
 export interface ExecutarTrocaPayload {
   pecaRetiradaId: string;
-  pecaInseridaId: string;
+  pecaInseridaId?: string;
   pedidoVendaItemId: string;
   destinoRetirada: DestinoRetirada;
   motivo: MotivoTrocaPeca;

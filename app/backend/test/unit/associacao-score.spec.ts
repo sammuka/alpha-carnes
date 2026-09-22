@@ -1,4 +1,4 @@
-import { calcularScores, type CandidatoPedido } from '../../src/modules/operacao/pesagem/associacao-score';
+import { calcularScores, nomesPedidosConcluidos, type CandidatoPedido } from '../../src/modules/operacao/pesagem/associacao-score';
 
 function candidato(over: Partial<CandidatoPedido>): CandidatoPedido {
   return {
@@ -8,6 +8,8 @@ function candidato(over: Partial<CandidatoPedido>): CandidatoPedido {
     clienteId: 'cli-1',
     clienteNome: 'Açougue Nova Era',
     saldoPendente: '5.000',
+    quantidadePedida: '5.000',
+    quantidadeAtendida: '0.000',
     prioridade: null,
     rotaPrevista: null,
     cobertaPeloLote: false,
@@ -87,5 +89,13 @@ describe('associacao-score (motor de sugestão — função pura)', () => {
     expect(com[0]!.score).toBe((sem[0]!.score) + 5);
     expect(com[0]!.justificativa).toContain('reserva coberta pelo lote de origem');
     expect(sem[0]!.justificativa).not.toContain('reserva coberta pelo lote de origem');
+  });
+
+  it('nomesPedidosConcluidos lista só clientes sem saldo', () => {
+    expect(nomesPedidosConcluidos([
+      candidato({ clienteNome: ' VP Carnes ', saldoPendente: '0.000' }),
+      candidato({ clienteNome: 'Aberto', saldoPendente: '1.000', pedidoVendaItemId: 'pvi-2' }),
+      candidato({ clienteNome: '   ', saldoPendente: '0', pedidoVendaItemId: 'pvi-3' }),
+    ])).toEqual(['VP Carnes']);
   });
 });

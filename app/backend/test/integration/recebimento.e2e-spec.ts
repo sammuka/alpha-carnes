@@ -218,7 +218,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
 
     const permitido = await request(srv()).post(`/operacao/recebimentos/${recId}/concluir`).set('Cookie', recebimentoCookies).send();
     expect(permitido.status).toBe(201);
-    expect(permitido.body.recebimento.status).toBe('aguardando_conferencia_final');
+    expect(permitido.body.recebimento.status).toBe('pesagem_encerrada');
     expect(permitido.body.jaConcluido).toBe(false);
   });
 
@@ -561,7 +561,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
     expect(res.body.recebimento.status).toBe('pesagem_em_andamento');
   });
 
-  it('cancelar lote sem pesagem → cancelado', async () => {
+  it('cancelar lote sem pesagem → pesagem_encerrada', async () => {
     const base = await seedComercialBase(app, { fator: 1 });
     const compraId = await criarCompraConfirmada(app, comprasCookies, base, { dataOperacao: '2026-11-23', quantidade: 10 });
     const ini = await iniciarViaCompra(compraId);
@@ -569,7 +569,7 @@ describe('Recebimento e2e (vínculo, conferência, divergência, conclusão, imp
 
     const res = await request(srv()).post(`/operacao/recebimentos/${recId}/cancelar`).set('Cookie', recebimentoCookies);
     expect(res.status).toBe(201);
-    expect(res.body.recebimento.status).toBe('cancelado');
+    expect(res.body.recebimento.status).toBe('pesagem_encerrada');
   });
 
   it('iniciar sem pedidoFornecedorId → 400', async () => {

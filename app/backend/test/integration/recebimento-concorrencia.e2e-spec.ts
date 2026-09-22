@@ -57,7 +57,7 @@ describe('Recebimento — conclusão idempotente sob concorrência', () => {
 
     const efetivas = resultados.filter((r) => r.jaConcluido === false);
     expect(efetivas).toHaveLength(1);
-    expect(resultados.every((r) => r.recebimento.status === 'aguardando_conferencia_final')).toBe(true);
+    expect(resultados.every((r) => r.recebimento.status === 'pesagem_encerrada')).toBe(true);
   }, 60000);
 });
 

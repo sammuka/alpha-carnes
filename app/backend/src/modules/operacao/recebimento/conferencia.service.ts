@@ -204,7 +204,7 @@ export class ConferenciaService {
         throw new ConflictException('Recebimento não está em pesagem');
       }
       const atualizado = primeiroOuFalha(await tx.update(recebimentos)
-        .set({ status: 'aguardando_conferencia_final', updatedAt: new Date() })
+        .set({ status: 'pesagem_encerrada', updatedAt: new Date() })
         .where(eq(recebimentos.id, recebimentoId))
         .returning());
       await this.auditoria.registrar(tx, {
@@ -317,9 +317,7 @@ export class ConferenciaService {
         ocorrenciasAbertas.push(ocorrencia);
       }
 
-      const statusFinal = dto.resultado === 'sem_divergencia'
-        ? 'conferido_sem_divergencia'
-        : 'conferido_com_divergencia';
+      const statusFinal = 'pesagem_encerrada' as const;
       await tx.update(recebimentos)
         .set({
           status: statusFinal,

@@ -398,13 +398,8 @@ export class RecebimentoService {
     const { recebimento: atualizado, nfMeta } = await this.db.transaction(async (tx) => {
       const atual = await this.buscarAtivo(tx, recebimentoId);
       if (!atual) throw new NotFoundException('Recebimento não encontrado');
-      if ([
-        'aguardando_conferencia_final',
-        'conferido_sem_divergencia',
-        'conferido_com_divergencia',
-        'cancelado',
-      ].includes(atual.status)) {
-        throw new ConflictException('Recebimento finalizado ou cancelado não pode ser alterado');
+      if (atual.status === 'pesagem_encerrada') {
+        throw new ConflictException('Recebimento com pesagem encerrada não pode ser alterado');
       }
 
       const patch: Partial<typeof recebimentos.$inferInsert> = {};
@@ -462,11 +457,8 @@ export class RecebimentoService {
     return this.db.transaction(async (tx) => {
       const atual = await this.buscarAtivo(tx, recebimentoId);
       if (!atual) throw new NotFoundException('Recebimento não encontrado');
-      if (![
-        'pesagem_em_andamento',
-        'aguardando_conclusao_pesagem',
-      ].includes(atual.status)) {
-        throw new ConflictException('Somente lotes em aberto podem ser cancelados');
+      if (atual.status !== 'pesagem_em_andamento') {
+        throw new ConflictException('Somente lotes em pesagem podem ser cancelados');
       }
 
       const pecasCount = await tx
@@ -481,7 +473,7 @@ export class RecebimentoService {
       const cancelado = primeiroOuFalha(
         await tx
           .update(recebimentos)
-          .set({ status: 'cancelado' })
+          .set({ status: 'pesagem_encerrada', deletedAt: new Date() })
           .where(eq(recebimentos.id, recebimentoId))
           .returning(),
       );
@@ -504,15 +496,8 @@ export class RecebimentoService {
     const resultado = await this.db.transaction(async (tx) => {
       const recebimento = await this.buscarAtivo(tx, recebimentoId);
       if (!recebimento) throw new NotFoundException('Recebimento não encontrado');
-      if ([
-        'aguardando_conferencia_final',
-        'conferido_sem_divergencia',
-        'conferido_com_divergencia',
-        'ocorrencia_administrativa_aberta',
-        'tratativa_administrativa_concluida',
-        'cancelado',
-      ].includes(recebimento.status)) {
-        throw new ConflictException('Recebimento finalizado ou cancelado é imutável');
+      if (recebimento.status === 'pesagem_encerrada') {
+        throw new ConflictException('Recebimento com pesagem encerrada é imutável');
       }
       const ctx = await this.contextoOperacional(tx, recebimento);
 
@@ -668,15 +653,13 @@ export class RecebimentoService {
       const concluido = await tx
         .update(recebimentos)
         .set({
-          status: 'aguardando_conferencia_final',
+          status: 'pesagem_encerrada',
           usuarioConclusaoId: usuarioId,
           dataConclusao: sql`now()`,
         })
         .where(and(
           eq(recebimentos.id, recebimentoId),
-          ne(recebimentos.status, 'aguardando_conferencia_final'),
-          ne(recebimentos.status, 'conferido_sem_divergencia'),
-          ne(recebimentos.status, 'conferido_com_divergencia'),
+          ne(recebimentos.status, 'pesagem_encerrada'),
         ))
         .returning()
         .then((r) => r[0] ?? null);
@@ -732,8 +715,8 @@ export class RecebimentoService {
     return this.db.transaction(async (tx) => {
       const atual = await this.buscarAtivo(tx, recebimentoId);
       if (!atual) throw new NotFoundException('Recebimento não encontrado');
-      if (atual.status !== 'aguardando_conferencia_final') {
-        throw new ConflictException('Somente recebimentos aguardando conferência final podem ser suspensos');
+      if (atual.status !== 'pesagem_encerrada') {
+        throw new ConflictException('Somente recebimentos com pesagem encerrada podem ser suspensos');
       }
 
       const suspenso = primeiroOuFalha(
@@ -766,13 +749,8 @@ export class RecebimentoService {
     return this.db.transaction(async (tx) => {
       const atual = await this.buscarAtivo(tx, recebimentoId);
       if (!atual) throw new NotFoundException('Recebimento não encontrado');
-      if ([
-        'aguardando_conferencia_final',
-        'conferido_sem_divergencia',
-        'conferido_com_divergencia',
-        'cancelado',
-      ].includes(atual.status)) {
-        throw new ConflictException('Recebimento finalizado ou cancelado não pode ser alterado');
+      if (atual.status === 'pesagem_encerrada') {
+        throw new ConflictException('Recebimento com pesagem encerrada não pode ser alterado');
       }
 
       const patch: Partial<typeof recebimentos.$inferInsert> = {};

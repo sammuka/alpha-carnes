@@ -1,4 +1,8 @@
-import { calcularFaltasDesossa, parseQuantidade } from '../../src/modules/operacao/desossa/faltas.calc';
+import {
+  calcularFaltasDesossa,
+  filtrarDemandasDesossaExcluindoItensDoLote,
+  parseQuantidade,
+} from '../../src/modules/operacao/desossa/faltas.calc';
 
 describe('calcularFaltasDesossa', () => {
   const produtos = [
@@ -78,6 +82,33 @@ describe('calcularFaltasDesossa', () => {
 
     expect(resultado[0]?.produto.codigo).toBe('ALC');
     expect(resultado[1]?.produto.codigo).toBe('JAC');
+  });
+});
+
+describe('filtrarDemandasDesossaExcluindoItensDoLote', () => {
+  const base = [
+    {
+      produto: { id: 'p1', codigo: 'JAC', nome: 'Jacaré' },
+      quantidadeFaltante: 1,
+      quantidadeEstoque: 0,
+      origem: 'TZ',
+    },
+    {
+      produto: { id: 'p2', codigo: 'CB', nome: 'Coxão-bola' },
+      quantidadeFaltante: 2,
+      quantidadeEstoque: 0,
+      origem: 'TZ',
+    },
+  ];
+
+  it('remove demandas de itens já presentes no lote de compra', () => {
+    const filtrado = filtrarDemandasDesossaExcluindoItensDoLote(base, new Set(['JAC']));
+    expect(filtrado).toHaveLength(1);
+    expect(filtrado[0]?.produto.codigo).toBe('CB');
+  });
+
+  it('mantém todas as demandas quando o lote não informa códigos', () => {
+    expect(filtrarDemandasDesossaExcluindoItensDoLote(base, new Set())).toHaveLength(2);
   });
 });
 

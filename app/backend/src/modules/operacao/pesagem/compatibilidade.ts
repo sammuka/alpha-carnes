@@ -23,17 +23,20 @@ export function caracteristicasDeCapturaMeta(meta: unknown): string[] {
   return out;
 }
 
-/** Itens de pedidos da MESMA operação (AD-14), abertos, do mesmo item comercial, com saldo. */
-export async function calcularCompativeisItem(
+type ParamsCandidatosOperacao = {
+  operacaoId: string;
+  compraProgramadaOrigemId: string;
+  produtoId: string;
+};
+
+/**
+ * Itens de pedidos da MESMA operação (AD-14), finalizados, do mesmo item comercial.
+ * Inclui itens já completos (saldo 0) — a filtragem de saldo fica em `calcularScores`.
+ */
+export async function listarCandidatosPedidoDaOperacao(
   tx: Tx,
-  params: {
-    operacaoId: string;
-    compraProgramadaOrigemId: string;
-    produtoId: string;
-    peso: string;
-    caracteristicas?: string[];
-  },
-): Promise<SugestaoScored[]> {
+  params: ParamsCandidatosOperacao,
+): Promise<CandidatoPedido[]> {
   const linhas = await tx
     .select({
       pedidoVendaId: pedidosVenda.id,
@@ -63,12 +66,12 @@ export async function calcularCompativeisItem(
         eq(pedidosVenda.operacaoId, params.operacaoId),
         eq(pedidosVendaItens.produtoId, params.produtoId),
         isNull(pedidosVenda.deletedAt),
-        sql`${pedidosVenda.status} <> 'cancelado'`,
+        eq(pedidosVenda.status, 'finalizado'),
         sql`${pedidosVendaItens.status} <> 'cancelado'`,
       ),
     );
 
-  const candidatos: CandidatoPedido[] = linhas.map((l) => {
+  return linhas.map((l) => {
     const pref = (l.preferenciasCliente ?? {}) as Record<string, unknown>;
     return {
       pedidoVendaId: l.pedidoVendaId,
@@ -77,6 +80,8 @@ export async function calcularCompativeisItem(
       clienteId: l.clienteId,
       clienteNome: l.clienteNome,
       saldoPendente: subtrairQtd(l.quantidadePedida, l.quantidadeAtendida),
+      quantidadePedida: l.quantidadePedida,
+      quantidadeAtendida: l.quantidadeAtendida,
       prioridade: l.prioridade,
       rotaPrevista: l.rotaPrevista,
       cobertaPeloLote: Boolean(l.cobertaPeloLote),
@@ -90,7 +95,17 @@ export async function calcularCompativeisItem(
       },
     };
   });
+}
 
+/** Itens de pedidos da MESMA operação (AD-14), finalizados, do mesmo item comercial, com saldo. */
+export async function calcularCompativeisItem(
+  tx: Tx,
+  params: ParamsCandidatosOperacao & {
+    peso: string;
+    caracteristicas?: string[];
+  },
+): Promise<SugestaoScored[]> {
+  const candidatos = await listarCandidatosPedidoDaOperacao(tx, params);
   return calcularScores(
     {
       produtoBaseId: params.produtoId,

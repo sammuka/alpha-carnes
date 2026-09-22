@@ -200,7 +200,7 @@ describe('RecebimentoService — branches', () => {
 
   it('cancelar → pecasCount sem linha assume 0 e permite cancelar', async () => {
     const atual = { id: 'r1', status: 'pesagem_em_andamento', deletedAt: null };
-    const cancelado = { id: 'r1', status: 'cancelado' };
+    const cancelado = { id: 'r1', status: 'pesagem_encerrada' };
     let call = 0;
     const tx = {
       select: jest.fn(() => {

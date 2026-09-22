@@ -1,5 +1,5 @@
 /**
- * Seed HTTP da Onda 6 — monta lote em `aguardando_conferencia_final`
+ * Seed HTTP da Onda 6 — monta lote em `pesagem_encerrada`
  * (DoD 6.23), sem depender de E2E_ONDA6_SEED externo.
  *
  * Fluxo: compra → PF enviado → recebimento → registra itens sem divergência →

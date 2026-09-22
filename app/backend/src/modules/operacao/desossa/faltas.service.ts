@@ -8,11 +8,17 @@ import {
   pedidosVendaItens,
   pecas,
   produtos,
+  recebimentosItens,
   regrasTransformacao,
   regrasTransformacaoSaidas,
   subitens,
 } from '../../../database/schema';
-import { calcularFaltasDesossa, parseQuantidade, type FaltaDesossaItem } from './faltas.calc';
+import {
+  calcularFaltasDesossa,
+  filtrarDemandasDesossaExcluindoItensDoLote,
+  parseQuantidade,
+  type FaltaDesossaItem,
+} from './faltas.calc';
 
 @Injectable()
 export class FaltasService {
@@ -25,7 +31,21 @@ export class FaltasService {
     return this.drizzle.db;
   }
 
-  async listarFaltas(): Promise<FaltaDesossaItem[]> {
+  private async codigosProdutosNoLoteCompra(recebimentoId: string): Promise<Set<string>> {
+    const linhas = await this.db
+      .select({ codigo: produtos.codigo })
+      .from(recebimentosItens)
+      .innerJoin(produtos, eq(produtos.id, recebimentosItens.produtoId))
+      .where(
+        and(
+          eq(recebimentosItens.recebimentoId, recebimentoId),
+          isNull(produtos.deletedAt),
+        ),
+      );
+    return new Set(linhas.map((l) => l.codigo.trim().toUpperCase()));
+  }
+
+  async listarFaltas(recebimentoId?: string): Promise<FaltaDesossaItem[]> {
     const produtosSaida = await this.db
       .select({
         id: produtos.id,
@@ -144,11 +164,16 @@ export class FaltasService {
       }
     }
 
-    return calcularFaltasDesossa(
+    const faltas = calcularFaltasDesossa(
       produtosSaida,
       demandaPorProduto,
       estoquePorProduto,
       origemPorProdutoId,
     );
+
+    if (!recebimentoId) return faltas;
+
+    const codigosNoLote = await this.codigosProdutosNoLoteCompra(recebimentoId);
+    return filtrarDemandasDesossaExcluindoItensDoLote(faltas, codigosNoLote);
   }
 }

@@ -10,13 +10,7 @@ import { notasFiscaisFornecedor } from './notas-fiscais-fornecedor.schema';
 
 export const STATUS_RECEBIMENTO = [
   'pesagem_em_andamento',
-  'aguardando_conclusao_pesagem',
-  'aguardando_conferencia_final',
-  'conferido_sem_divergencia',
-  'conferido_com_divergencia',
-  'ocorrencia_administrativa_aberta',
-  'tratativa_administrativa_concluida',
-  'cancelado',
+  'pesagem_encerrada',
 ] as const;
 
 export const STATUS_APURACAO_ITEM = [
@@ -52,9 +46,7 @@ export const recebimentos = pgTable(
   },
   (t) => [
     check('chk_recebimentos_status', sql`${t.status} IN (
-      'pesagem_em_andamento','aguardando_conclusao_pesagem','aguardando_conferencia_final',
-      'conferido_sem_divergencia','conferido_com_divergencia',
-      'ocorrencia_administrativa_aberta','tratativa_administrativa_concluida','cancelado'
+      'pesagem_em_andamento','pesagem_encerrada'
     )`),
     index('idx_recebimentos_pedido_fornecedor').on(t.pedidoFornecedorId),
     index('idx_recebimentos_operacao').on(t.operacaoId),

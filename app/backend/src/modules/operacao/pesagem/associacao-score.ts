@@ -28,6 +28,10 @@ export interface CandidatoPedido {
   clienteNome: string;
   /** quantidade_pedida − quantidade_atendida (string NUMERIC). */
   saldoPendente: string;
+  /** Total pedido no item (string NUMERIC) — para exibição na UI de pesagem. */
+  quantidadePedida: string;
+  /** Quantidade já atendida/associada no item (string NUMERIC) — para exibição na UI de pesagem. */
+  quantidadeAtendida: string;
   /** prioridade comercial (menor número = mais prioritário); null = sem prioridade. */
   prioridade: number | null;
   rotaPrevista: string | null;
@@ -120,4 +124,15 @@ export function calcularScores(peca: PecaParaScore, candidatos: CandidatoPedido[
   });
 
   return scored;
+}
+
+/** Nomes de cliente (nome fantasia ou razão social) cujo item já não tem saldo. */
+export function nomesPedidosConcluidos(candidatos: CandidatoPedido[]): string[] {
+  const nomes = new Set<string>();
+  for (const candidato of candidatos) {
+    if (compararQtd(candidato.saldoPendente, '0') > 0) continue;
+    const nome = candidato.clienteNome.trim();
+    if (nome) nomes.add(nome);
+  }
+  return [...nomes];
 }

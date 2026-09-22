@@ -177,7 +177,7 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
   });
 
   it('atualizarNfe → 409 se finalizado', async () => {
-    const { db } = makeDb([[{ id: 'rec-1', status: 'conferido_sem_divergencia' }]]);
+    const { db } = makeDb([[{ id: 'rec-1', status: 'pesagem_encerrada' }]]);
     const { service } = makeService(db);
 
     await expect(service.atualizarNfe('rec-1', { romaneio: 'R' } as never, 'u1')).rejects.toThrow(ConflictException);
@@ -220,7 +220,7 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
   });
 
   it('cancelar → 409 se status não permite cancelamento', async () => {
-    const { db } = makeDb([[{ id: 'rec-1', status: 'conferido_sem_divergencia' }]]);
+    const { db } = makeDb([[{ id: 'rec-1', status: 'pesagem_encerrada' }]]);
     const { service } = makeService(db);
 
     await expect(service.cancelar('rec-1', 'u1')).rejects.toThrow(ConflictException);
@@ -233,14 +233,14 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
     await expect(service.cancelar('rec-1', 'u1')).rejects.toThrow(/pesagem registrada/i);
   });
 
-  it('cancelar → status cancelado quando lote aberto sem peças', async () => {
+  it('cancelar → status pesagem_encerrada quando lote aberto sem peças', async () => {
     const atual = { id: 'rec-1', status: 'pesagem_em_andamento' };
-    const cancelado = { ...atual, status: 'cancelado' };
+    const cancelado = { ...atual, status: 'pesagem_encerrada' };
     const { db } = makeDb([[atual], [{ total: 0 }]], [], cancelado);
     const { service, auditoria } = makeService(db);
 
     const res = await service.cancelar('rec-1', 'u1');
-    expect(res.status).toBe('cancelado');
+    expect(res.status).toBe('pesagem_encerrada');
     expect(auditoria.registrar).toHaveBeenCalled();
   });
 
@@ -273,14 +273,14 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
     await expect(service.suspender('rec-x', 'u1')).rejects.toThrow(NotFoundException);
   });
 
-  it('suspender → 409 se status não é aguardando_conferencia_final', async () => {
+  it('suspender → 409 se status não é pesagem_encerrada', async () => {
     const { db } = makeDb([[{ id: 'rec-1', status: 'pesagem_em_andamento' }]]);
     const { service } = makeService(db);
     await expect(service.suspender('rec-1', 'u1')).rejects.toThrow(ConflictException);
   });
 
   it('suspender → retorna recebimento em pesagem_em_andamento', async () => {
-    const atual = { id: 'rec-1', status: 'aguardando_conferencia_final' };
+    const atual = { id: 'rec-1', status: 'pesagem_encerrada' };
     const suspenso = { ...atual, status: 'pesagem_em_andamento' };
     const { db } = makeDb([[atual]], [], suspenso);
     const { service, auditoria } = makeService(db);
@@ -298,8 +298,8 @@ describe('RecebimentoService — fluxo simplificado (branches)', () => {
     );
   });
 
-  it('atualizarMetadados → 409 se cancelado', async () => {
-    const { db } = makeDb([[{ id: 'rec-1', status: 'cancelado' }]]);
+  it('atualizarMetadados → 409 se pesagem encerrada', async () => {
+    const { db } = makeDb([[{ id: 'rec-1', status: 'pesagem_encerrada' }]]);
     const { service } = makeService(db);
     await expect(service.atualizarMetadados('rec-1', { motorista: 'João' }, 'u1')).rejects.toThrow(
       ConflictException,

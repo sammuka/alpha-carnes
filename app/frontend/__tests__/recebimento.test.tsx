@@ -53,7 +53,7 @@ const recebimentoDetalhe = {
   pedidoFornecedorId: 'pf1',
   fornecedorId: 'f1',
   dataOperacao: '2026-06-07',
-  status: 'aguardando_conferencia_final' as const,
+  status: 'pesagem_encerrada' as const,
   tipoCarga: 'Boi',
   progressoBalanca: 58,
   nfeNumero: '128934',
@@ -179,7 +179,7 @@ describe('RecebimentoCargaClient', () => {
     await waitFor(() => expect(screen.getByText('Abrir')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Abrir'));
 
-    await waitFor(() => expect(screen.getByTestId('receb-status')).toHaveTextContent('Aguardando conferência final'));
+    await waitFor(() => expect(screen.getByTestId('receb-status')).toHaveTextContent('Pesagem encerrada'));
     expect(screen.getByTestId('receb-codigo')).toHaveTextContent('Lote 001');
     expect(screen.getByText('Lote 001')).toBeInTheDocument();
     expect(screen.getByTestId('item-item-1')).toBeInTheDocument();
@@ -187,13 +187,13 @@ describe('RecebimentoCargaClient', () => {
     expect(screen.getByText('Itens previstos importados')).toBeInTheDocument();
   });
 
-  it('exibe status Aguardando conferência final na lista', async () => {
+  it('exibe status Pesagem encerrada na lista', async () => {
     global.fetch = jest.fn(async (url: string) => {
       if (typeof url === 'string' && url.includes('/api/operacao/recebimentos?pageSize')) {
         return {
           ok: true,
           json: async () => ({
-            data: [{ ...recebimentoLista, status: 'aguardando_conferencia_final' }],
+            data: [{ ...recebimentoLista, status: 'pesagem_encerrada' }],
             page: 1,
             pageSize: 50,
             total: 1,
@@ -204,7 +204,7 @@ describe('RecebimentoCargaClient', () => {
     }) as unknown as typeof fetch;
 
     render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
-    await waitFor(() => expect(screen.getByText('Aguardando conferência final')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Pesagem encerrada')).toBeInTheDocument());
   });
 
   it('recarrega ao receber evento recebimento_registrado via WS', async () => {
@@ -449,16 +449,11 @@ describe('RecebimentoCargaClient', () => {
     const { STATUS_RECEB_LABEL } = await import(
       '../src/app/(admin)/recebimento/recebimento-carga/recebimento-carga-client'
     );
-    const seteStatus = new Set(Object.values(STATUS_RECEB_LABEL));
-    expect(seteStatus.size).toBe(7);
-    expect([...seteStatus]).toEqual(expect.arrayContaining([
+    const status = new Set(Object.values(STATUS_RECEB_LABEL));
+    expect(status.size).toBe(2);
+    expect([...status]).toEqual(expect.arrayContaining([
       'Pesagem em andamento',
-      'Aguardando conferência final',
-      'Conferido sem divergência',
-      'Conferido com divergência',
-      'Ocorrência administrativa aberta',
-      'Tratativa concluída',
-      'Cancelado',
+      'Pesagem encerrada',
     ]));
 
     mockFetchRecebimento();
@@ -468,7 +463,7 @@ describe('RecebimentoCargaClient', () => {
         return {
           ok: true,
           json: async () => ({
-            data: [{ ...recebimentoLista, status: 'aguardando_conferencia_final', progressoBalanca: 0 }],
+            data: [{ ...recebimentoLista, status: 'pesagem_encerrada', progressoBalanca: 0 }],
             page: 1, pageSize: 50, total: 1,
           }),
         };
@@ -490,8 +485,8 @@ describe('RecebimentoCargaClient', () => {
     fireEvent.click(screen.getByText('Abrir'));
     await waitFor(() => expect(screen.getByText('Quadro comparativo — Pedido × NF × Pesagem')).toBeInTheDocument());
     expect(screen.getByTestId('btn-concluir')).toBeInTheDocument();
-    expect(screen.getByTestId('btn-capturar-itens-nf')).toBeInTheDocument();
-    expect(screen.getByText('Cancelar lote')).toBeInTheDocument();
+    expect(screen.queryByTestId('btn-capturar-itens-nf')).not.toBeInTheDocument();
+    expect(screen.queryByText('Cancelar lote')).not.toBeInTheDocument();
     expect(screen.getByText('Entrada direta')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Novo recebimento' }));
     expect(screen.getByRole('dialog', { name: 'Novo Recebimento de Carga' })).toBeInTheDocument();

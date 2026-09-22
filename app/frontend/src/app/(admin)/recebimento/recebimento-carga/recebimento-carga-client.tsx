@@ -72,29 +72,17 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import type { Paginado } from '@/lib/comercial';
 
-/** 7 rótulos do protótipo (RecebimentoCarga.tsx StatusLote) + aguardando_conclusao_pesagem. */
 export const STATUS_RECEB_LABEL: Record<StatusRecebimento, string> = {
   pesagem_em_andamento: 'Pesagem em andamento',
-  aguardando_conclusao_pesagem: 'Pesagem em andamento',
-  aguardando_conferencia_final: 'Aguardando conferência final',
-  conferido_sem_divergencia: 'Conferido sem divergência',
-  conferido_com_divergencia: 'Conferido com divergência',
-  ocorrencia_administrativa_aberta: 'Ocorrência administrativa aberta',
-  tratativa_administrativa_concluida: 'Tratativa concluída',
-  cancelado: 'Cancelado',
+  pesagem_encerrada: 'Pesagem encerrada',
 };
 
 const STATUS_ABERTOS: StatusRecebimento[] = [
   'pesagem_em_andamento',
-  'aguardando_conclusao_pesagem',
-  'aguardando_conferencia_final',
 ];
 
 const STATUS_ENCERRADOS: StatusRecebimento[] = [
-  'conferido_sem_divergencia',
-  'conferido_com_divergencia',
-  'tratativa_administrativa_concluida',
-  'cancelado',
+  'pesagem_encerrada',
 ];
 
 const STATUS_ITEM_LABEL: Record<string, string> = {
@@ -652,10 +640,10 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     detalhe.progressoBalanca === 0;
 
   const podeFinalizar =
-    detalhe && podeGerenciar && detalhe.status === 'aguardando_conferencia_final';
+    detalhe && podeGerenciar && detalhe.status === 'pesagem_encerrada';
 
   const podeSuspender =
-    detalhe && podeGerenciar && detalhe.status === 'aguardando_conferencia_final';
+    detalhe && podeGerenciar && detalhe.status === 'pesagem_encerrada';
 
   const podeCapturarItensNf =
     podeGerenciar &&
@@ -979,7 +967,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
             </Card>
           )}
 
-          {detalhe.observacoes && STATUS_ENCERRADOS.includes(detalhe.status) && detalhe.status !== 'cancelado' && (
+          {detalhe.observacoes && STATUS_ENCERRADOS.includes(detalhe.status) && (
             <Card>
               <CardContent className="p-3">
                 <p className="text-xs text-muted-foreground">Observações</p>

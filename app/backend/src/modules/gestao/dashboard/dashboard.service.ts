@@ -109,8 +109,7 @@ export class DashboardService {
             AND po.status IN ('aberta','em_analise'))::text AS overbookings_abertos,
         (SELECT count(*)::int FROM recebimentos r
           WHERE r.operacao_id = ${operacao.id} AND r.deleted_at IS NULL
-            AND r.status IN ('pesagem_em_andamento','aguardando_conclusao_pesagem',
-                             'aguardando_conferencia_final'))::text AS recebimentos_aguardados,
+            AND r.status = 'pesagem_em_andamento')::text AS recebimentos_aguardados,
         (SELECT count(*)::int FROM divergencias_recebimento d
            JOIN recebimentos rd2 ON rd2.id = d.recebimento_id
           WHERE rd2.operacao_id = ${operacao.id}

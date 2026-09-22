@@ -49,3 +49,18 @@ export function calcularFaltasDesossa(
 
   return itens.sort((a, b) => b.quantidadeFaltante - a.quantidadeFaltante);
 }
+
+/**
+ * Demandas de desossa (envio de TZ) só se aplicam a derivados que não constam no lote de compra
+ * do recebimento em pesagem — itens já previstos no lote (ex.: JAC no pedido ao fornecedor) não
+ * geram necessidade adicional de TZ na peça.
+ */
+export function filtrarDemandasDesossaExcluindoItensDoLote(
+  itens: FaltaDesossaItem[],
+  codigosNoLoteCompra: ReadonlySet<string>,
+): FaltaDesossaItem[] {
+  if (codigosNoLoteCompra.size === 0) return itens;
+  return itens.filter(
+    (item) => !codigosNoLoteCompra.has(item.produto.codigo.trim().toUpperCase()),
+  );
+}

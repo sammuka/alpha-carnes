@@ -29,6 +29,10 @@ const simularDesossaSchema = z.object({
   quantidade: z.coerce.number().int().min(1).optional(),
 });
 
+const listarFaltasQuerySchema = z.object({
+  recebimentoId: z.string().uuid().optional(),
+});
+
 @SkipThrottle()
 @Controller('desossa')
 @UseGuards(JwtAuthGuard, RbacGuard)
@@ -56,8 +60,11 @@ export class DesossaController {
 
   @Get('faltas')
   @RequirePermissoes('DESOSSA_LER')
-  async listarFaltas() {
-    return this.faltas.listarFaltas();
+  async listarFaltas(
+    @Query(new ZodValidationPipe(listarFaltasQuerySchema))
+    query: z.infer<typeof listarFaltasQuerySchema>,
+  ) {
+    return this.faltas.listarFaltas(query.recebimentoId);
   }
 
   @Get('regras-transformacao')
