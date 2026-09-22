@@ -100,24 +100,14 @@ export async function criarCaminhaoComCargaFechada(
     { dataOperacao, quantidade: 5 },
   );
 
-  // Criar pedido de venda com o cliente de CNPJ válido
-  const pedidoRes = await request(app.getHttpServer())
-    .post('/comercial/pedidos')
-    .set('Cookie', cookies.comercial)
-    .send({
-      compraProgramadaId: cenario.compraId,
-      clienteId,
-      dataOperacao,
-      itens: [{ produtoId: cenario.produtoId, quantidadePedida: 2 }],
-    });
-  if (pedidoRes.status !== 201) {
-    throw new Error(`Falha ao criar pedido: ${JSON.stringify(pedidoRes.body)}`);
-  }
-  const pedidoVendaId = pedidoRes.body.id as string;
-  const detalheRes = await request(app.getHttpServer())
-    .get(`/comercial/pedidos/${pedidoVendaId}`)
-    .set('Cookie', cookies.comercial);
-  const pedidoItemId = (detalheRes.body.itens as Array<{ id: string }>)[0]!.id;
+  // Associação só aceita pedido finalizado; criarPedido publica a tabela e finaliza.
+  const { pedidoId: pedidoVendaId, pedidoItemId } = await criarPedido(app, cookies.comercial, {
+    compraId: cenario.compraId,
+    clienteId,
+    produtoId: cenario.produtoId,
+    dataOperacao,
+    quantidade: 2,
+  });
 
   // Pesar e associar uma peça ao pedido
   const pecaId = await pesarPeca(app, cookies.recebimento, {

@@ -191,7 +191,7 @@ export interface PecaTrocaOpcao {
 export interface PedidoTrocaOpcao {
   pedidoVendaId: string;
   pedidoVendaItemId: string;
-  /** Nome fantasia do cliente (nunca "Marca"). */
+  /** Nome fantasia do cliente. */
   clienteNome: string;
   produtoLabel: string;
   produtoCodigo?: string;

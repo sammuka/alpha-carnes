@@ -2,9 +2,10 @@
 useDefault = true
 
 [allowlist]
-description = "Placeholder literal conhecido; cache do graphify contém apenas hashes SHA-256 de conteúdo (sem segredos)"
+description = "Placeholder literal conhecido; cache do graphify contém apenas hashes SHA-256; sessões locais do Impeccable guardam UUID de token de ferramenta, não segredo de produção"
 stopwords = ['''change-me''']
 paths = [
   '''graphify-out/cache/.*''',
   '''app/backend/cov-output\.txt''',
+  '''app/frontend/\.impeccable/live/.*''',
 ]

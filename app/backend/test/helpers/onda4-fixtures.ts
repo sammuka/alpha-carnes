@@ -81,7 +81,7 @@ export async function montarCenarioMapa(
   // R — pedido em elaboração com reserva ativa (cliente 1).
   const { pedidoId, pedidoItemId } = await criarPedido(app, cookies, {
     compraId: compraProgramadaId, clienteId: base.clienteId, produtoId: base.produtoId,
-    dataOperacao, quantidade: 50,
+    dataOperacao, quantidade: 50, finalizar: false,
   });
 
   // C — mesma mecânica de reserva, pedido finalizado comercialmente (cliente 2).
@@ -90,20 +90,12 @@ export async function montarCenarioMapa(
     compraId: compraProgramadaId, clienteId: clienteFinalizado, produtoId: base.produtoId,
     dataOperacao, quantidade: 50,
   });
-  const { default: request } = await import('supertest');
-  const finalizar = await request(app.getHttpServer())
-    .post(`/comercial/pedidos/${pedidoIdFinalizado}/finalizar`)
-    .set('Cookie', cookies)
-    .send();
-  if (finalizar.status !== 200) {
-    throw new Error(`Falha ao finalizar pedido da fixture do mapa: ${finalizar.status} ${JSON.stringify(finalizar.body)}`);
-  }
 
   // O — reserva sem lastro (saldo virtual já exaurido por R + C = 100 = total da compra).
   const clienteOverbooking = await criarOutroCliente(app);
   await criarPedido(app, cookies, {
     compraId: compraProgramadaId, clienteId: clienteOverbooking, produtoId: base.produtoId,
-    dataOperacao, quantidade: 40,
+    dataOperacao, quantidade: 40, finalizar: false,
   });
 
   // E — carga fechada: dois itens vivos (peça conferida + subitem em carga) e um

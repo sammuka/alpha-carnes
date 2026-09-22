@@ -59,6 +59,19 @@ describe('RecebimentoService — branches', () => {
     expect(result.data).toEqual([]);
   });
 
+  it('listar → filtra por status da operação quando informado', async () => {
+    let call = 0;
+    const db = { select: jest.fn(() => chain(call++ === 0 ? [] : [{ total: 1 }])) };
+    const service = makeService(db);
+    const result = await service.listar({
+      page: 1,
+      pageSize: 20,
+      operacaoStatus: 'em_andamento',
+    } as never);
+    expect(result.total).toBe(1);
+    expect(result.data).toEqual([]);
+  });
+
   it('previsaoDoPedidoFornecedor → sem itens do snapshot não resolve metadados', async () => {
     const cabecalho = {
       pedido: {

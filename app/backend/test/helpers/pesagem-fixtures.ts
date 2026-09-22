@@ -91,7 +91,16 @@ export async function criarOutroCliente(app: INestApplication): Promise<string> 
 export async function criarPedido(
   app: INestApplication,
   comercialCookies: string,
-  params: { compraId: string; clienteId: string; produtoId: string; dataOperacao: string; quantidade: number; prioridade?: number },
+  params: {
+    compraId: string;
+    clienteId: string;
+    produtoId: string;
+    dataOperacao: string;
+    quantidade: number;
+    prioridade?: number;
+    /** Associação só aceita pedido finalizado. O mapa precisa de pedidos ainda em elaboração. */
+    finalizar?: boolean;
+  },
 ): Promise<{ pedidoId: string; pedidoItemId: string }> {
   const { default: request } = await import('supertest');
   await publicarTabelaParaData(app, params.dataOperacao, [params.produtoId]);
@@ -125,12 +134,14 @@ export async function criarPedido(
   const det = await request(app.getHttpServer()).get(`/comercial/pedidos/${pedidoId}`).set('Cookie', comercialCookies);
   const pedidoItemId = (det.body.itens as Array<{ id: string }>)[0]?.id;
   if (!pedidoItemId) throw new Error('Pedido criado sem itens');
-  const fin = await request(app.getHttpServer())
-    .post(`/comercial/pedidos/${pedidoId}/finalizar`)
-    .set('Cookie', comercialCookies)
-    .send();
-  if (fin.status !== 200) {
-    throw new Error(`Falha ao finalizar pedido: ${fin.status} ${JSON.stringify(fin.body)}`);
+  if (params.finalizar !== false) {
+    const fin = await request(app.getHttpServer())
+      .post(`/comercial/pedidos/${pedidoId}/finalizar`)
+      .set('Cookie', comercialCookies)
+      .send();
+    if (fin.status !== 200) {
+      throw new Error(`Falha ao finalizar pedido: ${fin.status} ${JSON.stringify(fin.body)}`);
+    }
   }
   return { pedidoId, pedidoItemId };
 }
