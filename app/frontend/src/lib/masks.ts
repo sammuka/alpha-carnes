@@ -39,3 +39,18 @@ export function mascararTelefone(valor: string): string {
 export function mascararPlaca(valor: string): string {
   return valor.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7);
 }
+
+/** Peso em kg com até 3 casas decimais (vírgula). Aceita colar `12.5` ou `12,500`. */
+export function mascararPesoKg(valor: string): string {
+  const normalizado = valor.replace('.', ',').replace(/[^\d,]/g, '');
+  const [inteiraBruta = '', ...fracoes] = normalizado.split(',');
+  const inteira = inteiraBruta.replace(/^0+(?=\d)/, '');
+  const frac = fracoes.join('').slice(0, 3);
+  if (normalizado.includes(',')) return `${inteira || '0'},${frac}`;
+  return inteira;
+}
+
+/** Converte máscara pt-BR (`12,500`) para número usado na API. */
+export function pesoKgParaNumero(valor: string): number {
+  return Number(valor.replace(',', '.'));
+}

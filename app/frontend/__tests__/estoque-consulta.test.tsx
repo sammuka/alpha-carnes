@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { EstoqueConsultaClient } from '../src/app/(admin)/estoque/consulta/estoque-consulta-client';
 import type { ItemEstoqueConsulta } from '../src/lib/estoque';
 
@@ -47,21 +47,25 @@ function mockFetchEstoque(itens: ItemEstoqueConsulta[]) {
     if (u.includes('/api/operacao/estoque/consulta')) {
       return { ok: true, json: async () => itens } as Response;
     }
+    if (u.includes('/historico')) {
+      return { ok: true, json: async () => [] } as Response;
+    }
     return { ok: true, json: async () => ({}) } as Response;
   }) as unknown as typeof fetch;
 }
 
 describe('EstoqueConsultaClient', () => {
-  it('renderiza as 13 colunas do protótipo na ordem e as 2 abas', async () => {
+  it('renderiza as colunas da consulta na ordem e as 2 abas', async () => {
     mockFetchEstoque([itemDisponivel]);
     render(<EstoqueConsultaClient permissoes={['ESTOQUE_LER', 'ESTOQUE_GERENCIAR']} />);
 
-    await waitFor(() => expect(screen.getByText('TZ-000347')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Frigorífico Boi Forte')).toBeInTheDocument());
 
-    const cabecalhos = ['Código', 'Produto', 'Tipo', 'Qtd', 'Peso (kg)', 'Origem/Frigorífico', 'NF/Lote', 'Entrada', 'Local', 'Status', 'Características', 'Pedido reservado'];
+    const cabecalhos = ['Produto', 'Tipo', 'Qtd', 'Peso (kg)', 'Origem/Frigorífico', 'NF/Lote', 'Entrada', 'Local', 'Status', 'Características', 'Pedido reservado'];
     for (const h of cabecalhos) {
       expect(screen.getByText(h)).toBeInTheDocument();
     }
+    expect(screen.queryByRole('columnheader', { name: 'Código' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Consulta de Estoque' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Sobras & Congelamento' })).toBeInTheDocument();
   });
@@ -70,7 +74,7 @@ describe('EstoqueConsultaClient', () => {
     mockFetchEstoque([itemDisponivel, itemAnterior]);
     render(<EstoqueConsultaClient permissoes={['ESTOQUE_LER', 'ESTOQUE_GERENCIAR']} />);
 
-    await waitFor(() => expect(screen.getByText('DT-000090')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText('TZ').length).toBeGreaterThan(0));
     expect(screen.getByText('Estoque anterior')).toBeInTheDocument();
     expect(screen.getAllByText('Estoque anterior')).toHaveLength(1);
   });
@@ -79,7 +83,38 @@ describe('EstoqueConsultaClient', () => {
     mockFetchEstoque([itemDisponivel, itemDestinado]);
     render(<EstoqueConsultaClient permissoes={['ESTOQUE_LER', 'ESTOQUE_GERENCIAR']} />);
 
-    await waitFor(() => expect(screen.getByText('PA-000119')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('#pv1052 — Açougue Nova Era')).toBeInTheDocument());
     expect(screen.getAllByRole('button', { name: 'Destinar' })).toHaveLength(1);
+  });
+
+  it('busca filtra por produto, origem e NF/lote, sem usar o código do item', async () => {
+    mockFetchEstoque([itemDisponivel]);
+    render(<EstoqueConsultaClient permissoes={['ESTOQUE_LER', 'ESTOQUE_GERENCIAR']} />);
+    await waitFor(() => expect(screen.getByText('NF 128934')).toBeInTheDocument());
+
+    const campo = screen.getByPlaceholderText('Buscar por produto, origem ou NF/lote');
+    fireEvent.change(campo, { target: { value: 'TZ-000347' } });
+    expect(screen.getByText('Nenhum item encontrado com os filtros selecionados.')).toBeInTheDocument();
+
+    fireEvent.change(campo, { target: { value: 'Boi Forte' } });
+    expect(screen.getByText('Frigorífico Boi Forte')).toBeInTheDocument();
+    expect(screen.getByText('NF 128934')).toBeInTheDocument();
+  });
+
+  it('clique na linha abre o historico do item', async () => {
+    mockFetchEstoque([itemDisponivel]);
+    render(<EstoqueConsultaClient permissoes={['ESTOQUE_LER', 'ESTOQUE_GERENCIAR']} />);
+    fireEvent.click(await screen.findByText('Frigorífico Boi Forte'));
+    expect(await screen.findByText('Histórico — TZ-000347')).toBeInTheDocument();
+    expect(screen.getByText('Dados do item')).toBeInTheDocument();
+  });
+
+  it('Destinar nao abre o historico', async () => {
+    mockFetchEstoque([itemDisponivel]);
+    render(<EstoqueConsultaClient permissoes={['ESTOQUE_LER', 'ESTOQUE_GERENCIAR']} />);
+    await screen.findByText('Frigorífico Boi Forte');
+    fireEvent.click(screen.getByRole('button', { name: 'Destinar' }));
+    expect(screen.getByText('Destinar item a pedido')).toBeInTheDocument();
+    expect(screen.queryByText('Histórico — TZ-000347')).not.toBeInTheDocument();
   });
 });

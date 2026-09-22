@@ -171,7 +171,12 @@ describe('RecebimentoCargaClient', () => {
     await waitFor(() => expect(screen.getByText('PC-2091')).toBeInTheDocument());
     expect(screen.getByText(/Lote 001/)).toBeInTheDocument();
     expect(screen.getByText('Frigorífico Boi Forte')).toBeInTheDocument();
-    expect(screen.getByText('128934')).toBeInTheDocument();
+    expect(screen.getAllByText('07/06/2026').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('combobox', { name: 'Filtrar por data de operação' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'NF-e' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Romaneio' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Tipo de carga' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument();
   });
 
   it('abre detalhe readonly ao clicar Abrir', async () => {
@@ -185,18 +190,58 @@ describe('RecebimentoCargaClient', () => {
     expect(screen.getByTestId('item-item-1')).toBeInTheDocument();
     expect(screen.getByTestId('btn-concluir')).toBeInTheDocument();
     expect(screen.getByText('Itens previstos importados')).toBeInTheDocument();
+    expect(screen.getByLabelText('Placa')).toBeDisabled();
+    expect(screen.getByLabelText('Motorista')).toBeDisabled();
+    expect(screen.getByLabelText('Doca')).toBeDisabled();
+    expect(screen.getByLabelText('Observações')).toBeDisabled();
+    expect(screen.queryByTestId('btn-salvar-metadados')).not.toBeInTheDocument();
   });
 
-  it('exibe status Aguardando conferência final na lista', async () => {
+  it('permite editar metadados operacionais só em pesagem em andamento', async () => {
+    mockFetchRecebimento({ status: 'pesagem_em_andamento' });
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    await waitFor(() => expect(screen.getByText('Abrir')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Abrir'));
+    await waitFor(() => expect(screen.getByTestId('receb-status')).toHaveTextContent('Pesagem em andamento'));
+    expect(screen.getByLabelText('Placa')).toBeEnabled();
+    expect(screen.getByLabelText('Motorista')).toBeEnabled();
+    expect(screen.getByLabelText('Doca')).toBeEnabled();
+    expect(screen.getByLabelText('Observações')).toBeEnabled();
+    expect(screen.getByTestId('btn-salvar-metadados')).toBeInTheDocument();
+  });
+
+  it('abre detalhe ao clicar na linha da lista', async () => {
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    fireEvent.click(await screen.findByText('Frigorífico Boi Forte'));
+    await waitFor(() => expect(screen.getByTestId('receb-status')).toBeInTheDocument());
+    expect(screen.getByTestId('receb-codigo')).toHaveTextContent('Lote 001');
+  });
+
+  it('Ir para Balança nao abre o detalhe', async () => {
+    render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ir para Balança' }));
+    expect(pushMock).toHaveBeenCalledWith('/recebimento/pesagem-destinacao?recebimentoId=r1');
+    expect(screen.queryByTestId('receb-status')).not.toBeInTheDocument();
+  });
+
+  it('agrupa lotes por data de operação e filtra pelo combo', async () => {
+    const loteDois = {
+      ...recebimentoLista,
+      id: 'r2',
+      codigoLote: 'Lote 002',
+      numeroInternoCompra: 'PC-2092',
+      fornecedorNome: 'Frigorífico Outro',
+      dataOperacao: '2026-07-29',
+    };
     global.fetch = jest.fn(async (url: string) => {
       if (typeof url === 'string' && url.includes('/api/operacao/recebimentos?pageSize')) {
         return {
           ok: true,
           json: async () => ({
-            data: [{ ...recebimentoLista, status: 'aguardando_conferencia_final' }],
+            data: [recebimentoLista, loteDois],
             page: 1,
             pageSize: 50,
-            total: 1,
+            total: 2,
           }),
         };
       }
@@ -204,7 +249,12 @@ describe('RecebimentoCargaClient', () => {
     }) as unknown as typeof fetch;
 
     render(<RecebimentoCargaClient permissoes={PERMISSOES} />);
-    await waitFor(() => expect(screen.getByText('Aguardando conferência final')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Frigorífico Outro')).toBeInTheDocument());
+    expect(screen.getAllByText('07/06/2026').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('29/07/2026').length).toBeGreaterThanOrEqual(1);
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filtrar por data de operação' }), '2026-07-29');
+    expect(screen.getByText('Frigorífico Outro')).toBeInTheDocument();
+    expect(screen.queryByText('Frigorífico Boi Forte')).not.toBeInTheDocument();
   });
 
   it('recarrega ao receber evento recebimento_registrado via WS', async () => {
@@ -283,6 +333,9 @@ describe('RecebimentoCargaClient', () => {
           json: async () => ({ recebimento: { id: 'r-novo' }, jaIniciado: false }),
         };
       }
+      if (url.includes(`/api/operacao/pedidos-fornecedor/${pedido.id}/nf`) && init?.method === 'POST') {
+        return { ok: true, json: async () => ({ ok: true }) };
+      }
       if (url.includes('/api/operacao/recebimentos/r-novo')) {
         return { ok: true, json: async () => ({ ...recebimentoDetalhe, id: 'r-novo' }) };
       }
@@ -322,12 +375,19 @@ describe('RecebimentoCargaClient', () => {
     expect(within(blocoD!).getByLabelText('Observações internas')).toBeInTheDocument();
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
-      '/api/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100',
+      '/api/operacao/pedidos-fornecedor?elegiveisRecebimento=true&operacaoStatus=em_andamento&pagina=1&limite=100',
       { cache: 'no-store' },
     ));
     await user.click(pedidoCombobox);
     await user.click(await screen.findByRole('option', { name: /PF-0001/ }));
     await waitFor(() => expect(screen.getByText('TZ — Traseiro')).toBeInTheDocument());
+    expect(within(drawer).getByRole('columnheader', { name: 'Peso NF' })).toBeInTheDocument();
+    expect(within(drawer).getByRole('columnheader', { name: 'Qtd NF' })).toBeInTheDocument();
+    expect(within(drawer).queryByRole('columnheader', { name: 'Unidade' })).not.toBeInTheDocument();
+    expect(within(drawer).queryByRole('columnheader', { name: 'Balança' })).not.toBeInTheDocument();
+    fireEvent.change(within(drawer).getByLabelText('Peso da NF para TZ'), {
+      target: { value: '850,000' },
+    });
     fireEvent.change(within(blocoB!).getByLabelText(/Número da NF-e/), {
       target: { value: 'NF-123' },
     });
@@ -343,6 +403,18 @@ describe('RecebimentoCargaClient', () => {
     expect(body).toEqual(expect.objectContaining({ pedidoFornecedorId: pedido.id }));
     expect(body).not.toHaveProperty('compraProgramadaId');
     expect(body).not.toHaveProperty('iniciarConferencia');
+    const postNf = (global.fetch as jest.Mock).mock.calls.find(
+      ([url, init]) => String(url).includes('/nf') && init?.method === 'POST',
+    );
+    expect(postNf).toBeTruthy();
+    const bodyNf = JSON.parse(postNf[1].body);
+    expect(bodyNf.itens).toEqual([
+      expect.objectContaining({
+        produtoId: 'item-1',
+        quantidadeDeclarada: 20,
+        pesoDeclarado: 850,
+      }),
+    ]);
     await waitFor(() => expect(screen.queryByRole('dialog', {
       name: 'Novo Recebimento de Carga',
     })).not.toBeInTheDocument());

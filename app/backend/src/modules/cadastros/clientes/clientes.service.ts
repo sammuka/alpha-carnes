@@ -56,9 +56,7 @@ export class ClientesService {
       filtros.push(
         or(
           ilike(clientes.razaoSocial, termo),
-          ilike(clientes.nomeFantasia, termo),
-          ilike(clientes.codigo, termo),
-          ilike(clientes.documentoFiscal, termo),
+          ilike(clientes.nomeFantasia, termo)
         ),
       );
     }

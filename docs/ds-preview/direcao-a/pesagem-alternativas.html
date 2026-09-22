@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alternativas · Resumo do lote — Pesagem &amp; Destinação — AlphaCarnes DS v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .peso-display {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 14px 16px 12px;
+    text-align: center;
+  }
+  .peso-display .lbl { font-size: var(--fs-10); font-weight: 700; letter-spacing: 0.14em; color: var(--fg-muted); text-transform: uppercase; }
+  .peso-display .val {
+    font-family: var(--font-data); font-variant-numeric: tabular-nums;
+    font-size: 36px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1;
+    color: var(--fg);
+  }
+  .peso-display .val small { font-size: var(--fs-13); font-weight: 600; color: var(--fg-muted); margin-left: 4px; }
+
+  /* Intro / cabecalho do documento de alternativas */
+  .intro {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card);
+    padding: 14px 16px; margin-bottom: 16px;
+  }
+  .intro h1 { font-size: var(--fs-18); font-weight: 700; letter-spacing: -0.015em; margin-bottom: 4px; }
+  .intro p { font-size: var(--fs-13); color: var(--fg-secondary); max-width: 760px; }
+  .intro .hint { margin-top: 8px; font-size: var(--fs-12); color: var(--fg-muted); }
+  .intro .hint b { color: var(--fg); }
+
+  .alt-block { margin-bottom: 28px; }
+  .alt-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .alt-head .n {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--primary); color: #fff; font-size: var(--fs-12); font-weight: 700; flex: none;
+  }
+  .alt-head h2 { font-size: var(--fs-16); font-weight: 700; }
+  .alt-head .axis { font-size: var(--fs-12); color: var(--fg-muted); }
+  .alt-stage {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-card);
+    padding: 16px;
+  }
+
+  /* Alternativa 1 — restrita: linha fina, sem moldura */
+  .resumo-v1 {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    border-top: 1px solid var(--border); padding-top: 12px;
+  }
+  .resumo-v1 .spacer { flex: 1; }
+
+  /* Alternativa 2 — barra em card */
+  .resumo-v2 {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-card);
+    box-shadow: var(--sh-1);
+    padding: 10px 12px;
+  }
+  .resumo-v2 .spacer { flex: 1; }
+  .resumo-v2 .btn-secondary { background: var(--surface); }
+
+  /* Alternativa 3 — elevada com previa inline */
+  .resumo-v3 {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card);
+    box-shadow: var(--sh-2);
+    padding: 10px 12px;
+  }
+  .resumo-v3 .left-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .resumo-v3-trigger {
+    display: flex; align-items: center; gap: 8px; min-width: 0;
+    border: 0; background: none; cursor: pointer; border-radius: var(--r-ctl);
+    padding: 6px 10px; text-align: left;
+  }
+  .resumo-v3-trigger:hover { background: var(--surface-3); }
+  .resumo-v3-trigger .ic { width: 16px; height: 16px; color: var(--primary); flex: none; }
+  .resumo-v3-trigger .title { display: block; font-size: var(--fs-13); font-weight: 700; }
+  .resumo-v3-trigger .preview { display: block; font-size: var(--fs-11); font-weight: 500; color: var(--fg-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Modais de conteudo (compartilhados pelas 3 alternativas) */
+  .modal.modal-wide { width: min(720px, calc(100vw - 48px)); }
+  .modal-head-tools { display: flex; align-items: center; gap: 8px; padding: 14px 16px 0; }
+  .modal-head-tools h3 { font-size: var(--fs-16); font-weight: 700; }
+  .modal-head-tools .spacer { flex: 1; }
+  .modal-search { width: 200px; }
+  .modal-body.flush { padding: 12px 16px 0; }
+  .modal-foot-between { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 16px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="logo">A</div>
+      <div><div class="name">AlphaCarnes</div><div class="tag">DISTRIBUIÇÃO DE CARNES</div></div>
+    </div>
+    <nav class="sb-nav">
+      <div class="sb-group"><button class="sb-group-label">Comercial <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Gestão <span>›</span></button></div>
+      <div class="sb-group">
+        <button class="sb-group-label">Recebimento &amp; Balança <span>⌄</span></button>
+        <a class="sb-item" href="#"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 9.4 7.55 4.24M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/></svg>Recebimento de Carga</a>
+        <a class="sb-item active" href="pesagem-alternativas.html"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1ZM7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>Pesagem e Destinação</a>
+        <a class="sb-item" href="#"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>Etiquetas</a>
+      </div>
+      <div class="sb-group"><button class="sb-group-label">Desossa <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Estoque <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Carga <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Faturamento <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Cadastros &amp; Regras <span>›</span></button></div>
+      <div class="sb-group"><button class="sb-group-label">Administração <span>›</span></button></div>
+    </nav>
+    <div class="sb-user">
+      <div class="avatar">A</div>
+      <div class="who"><b>Administrador</b><span>Administrador</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <nav class="crumbs">Recebimento &amp; Balança <span class="sep">/</span> <b>Pesagem e Destinação</b></nav>
+      <div class="meta">
+        <span>Usuário: <b>Administrador</b></span>
+        <span class="mono" style="font-size:var(--fs-11);">sex., 11 set 2026</span>
+        <div class="avatar">A</div>
+      </div>
+    </header>
+
+    <main class="page">
+      <div class="intro">
+        <h1>Alternativas — Resumo do lote (Acumulado / Ações realizadas)</h1>
+        <p>Ajuste solicitado pelo cliente: transformar os dois cards sempre visíveis "Acumulado do lote" e "Ações realizadas" em botões que abrem modais sob demanda, liberando espaço vertical na tela de Pesagem &amp; Destinação. Abaixo, 3 alternativas de como essa barra de ação pode aparecer — o conteúdo dos modais é o mesmo nas três, o que muda é a apresentação do gatilho.</p>
+        <div class="hint">Clique em <b>Ver ações realizadas</b> ou <b>Ver acumulado do lote</b> em qualquer alternativa para abrir o modal correspondente.</div>
+      </div>
+
+      <!-- Contexto do lote (fiel ao print de referência) -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-body" style="display:flex; align-items:center; gap:18px; padding:9px 12px; flex-wrap:wrap;">
+          <b style="font-size:var(--fs-14);">Lote 001</b>
+          <span class="pill pesado">Pesagem em andamento</span>
+          <span style="font-size:var(--fs-12); color:var(--fg-muted);">Operação <b style="color:var(--fg);">16/09/2026</b></span>
+          <span style="font-size:var(--fs-12); color:var(--fg-muted);">Fornecedor <b style="color:var(--fg);">FRIGORÍFICO DO GLÚTAO LTDA</b></span>
+          <span style="font-size:var(--fs-12); color:var(--fg-muted);">NF <b class="mono" style="color:var(--fg);">123456</b></span>
+          <span class="row" style="gap:6px;"><span style="font-size:var(--fs-11); color:var(--fg-muted);">Balança</span><span class="bar ok" style="width:70px;"><i style="width:100%"></i></span><span class="mono" style="font-size:var(--fs-11);">100%</span></span>
+          <button class="btn btn-secondary btn-sm ml-auto"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/></svg>Trocar lote</button>
+        </div>
+      </div>
+
+      <div class="tabs" style="margin-bottom:16px;" data-tab-group="prod">
+        <button class="tab active" data-tab="tz">TZ — Traseiro Bovino <span class="badge badge-count" style="margin-left:4px;">5</span></button>
+        <button class="tab" data-tab="dt">DT — Dianteiro Bovino</button>
+        <button class="tab" data-tab="pa">PA — Ponta de Agulha</button>
+      </div>
+
+      <!-- ===================== ALTERNATIVA 1 ===================== -->
+      <div class="alt-block">
+        <div class="alt-head">
+          <span class="n">1</span>
+          <h2>Restrita</h2>
+          <span class="axis">— linha fina sem moldura, abaixo da Balança; hierarquia mínima</span>
+        </div>
+        <div class="alt-stage">
+          <div class="card">
+            <div class="card-head"><h2>Balança</h2></div>
+            <div class="card-body stack" style="gap:10px;">
+              <div class="peso-display">
+                <div class="lbl">Peso atual</div>
+                <div class="val">0,000<small>kg</small></div>
+              </div>
+              <div class="row" style="gap:8px;">
+                <button class="btn btn-primary" style="flex:1;">Capturar peso</button>
+                <button class="btn btn-secondary">Digitar</button>
+              </div>
+            </div>
+            <div class="card-body" style="padding-top:0;">
+              <div class="resumo-v1">
+                <button class="btn btn-primary btn-sm" data-modal-open="#modal-confirmar">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>
+                  Confirmar e ganhar etiqueta
+                </button>
+                <span class="spacer"></span>
+                <button class="btn btn-secondary btn-sm" data-modal-open="#modal-acoes">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h4M9 11V7a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v13M9 11h6M9 22h6"/></svg>
+                  Ver ações realizadas
+                  <span class="badge badge-count">5</span>
+                </button>
+                <button class="btn btn-secondary btn-sm" data-modal-open="#modal-acumulado">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18" transform="rotate(45 12 12)"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                  Ver acumulado do lote
+                  <span class="badge badge-count">1</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== ALTERNATIVA 2 ===================== -->
+      <div class="alt-block">
+        <div class="alt-head">
+          <span class="n">2</span>
+          <h2>Barra em card</h2>
+          <span class="axis">— mesma barra dentro de um contêiner com fundo, borda e sombra; confirmar à esquerda, consultas à direita (mais próxima do print do cliente)</span>
+        </div>
+        <div class="alt-stage">
+          <div class="card">
+            <div class="card-head"><h2>Balança</h2></div>
+            <div class="card-body stack" style="gap:10px;">
+              <div class="peso-display">
+                <div class="lbl">Peso atual</div>
+                <div class="val">0,000<small>kg</small></div>
+              </div>
+              <div class="row" style="gap:8px;">
+                <button class="btn btn-primary" style="flex:1;">Capturar peso</button>
+                <button class="btn btn-secondary">Digitar</button>
+              </div>
+            </div>
+            <div class="card-body" style="padding-top:0;">
+              <div class="resumo-v2">
+                <button class="btn btn-primary btn-sm" data-modal-open="#modal-confirmar">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>
+                  Confirmar e ganhar etiqueta
+                </button>
+                <span class="spacer"></span>
+                <button class="btn btn-secondary btn-sm" data-modal-open="#modal-acoes">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h4M9 11V7a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v13M9 11h6M9 22h6"/></svg>
+                  Ver ações realizadas
+                  <span class="badge badge-count">5</span>
+                </button>
+                <button class="btn btn-secondary btn-sm" data-modal-open="#modal-acumulado">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18" transform="rotate(45 12 12)"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                  Ver acumulado do lote
+                  <span class="badge badge-count">1</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== ALTERNATIVA 3 ===================== -->
+      <div class="alt-block">
+        <div class="alt-head">
+          <span class="n">3</span>
+          <h2>Com prévia inline</h2>
+          <span class="axis">— cada gatilho mostra um resumo rápido antes de abrir o modal; barra elevada (shadow-2)</span>
+        </div>
+        <div class="alt-stage">
+          <div class="card">
+            <div class="card-head"><h2>Balança</h2></div>
+            <div class="card-body stack" style="gap:10px;">
+              <div class="peso-display">
+                <div class="lbl">Peso atual</div>
+                <div class="val">0,000<small>kg</small></div>
+              </div>
+              <div class="row" style="gap:8px;">
+                <button class="btn btn-primary" style="flex:1;">Capturar peso</button>
+                <button class="btn btn-secondary">Digitar</button>
+              </div>
+            </div>
+            <div class="card-body" style="padding-top:0;">
+              <div class="resumo-v3">
+                <div class="left-group">
+                  <button class="resumo-v3-trigger" data-modal-open="#modal-acumulado">
+                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                    <span><span class="title">Acumulado do lote</span><span class="preview">1 produto acompanhado</span></span>
+                  </button>
+                  <button class="resumo-v3-trigger" data-modal-open="#modal-acoes">
+                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h4M9 11V7a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v13M9 11h6M9 22h6"/></svg>
+                    <span><span class="title">Ações realizadas</span><span class="preview">5 registros · última às 20:28</span></span>
+                  </button>
+                </div>
+                <button class="btn btn-primary btn-sm" data-modal-open="#modal-confirmar">
+                  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>
+                  Confirmar e ganhar etiqueta
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ===================== MODAIS COMPARTILHADOS ===================== -->
+
+<!-- Ações realizadas -->
+<div class="modal-backdrop" id="modal-acoes">
+  <div class="modal modal-wide">
+    <div class="modal-head-tools">
+      <h3>Ações realizadas</h3>
+      <span class="badge badge-count">5</span>
+      <span class="spacer"></span>
+      <div class="input-wrap modal-search">
+        <span class="adorn left"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+        <input class="input input-sm" placeholder="Buscar..." style="padding-left:28px;">
+      </div>
+      <button class="btn btn-secondary btn-sm"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Exportar</button>
+      <button class="btn btn-ghost btn-icon btn-sm" data-modal-close aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body flush">
+      <div class="table-wrap" style="max-height:320px;">
+        <table class="dt">
+          <thead>
+            <tr><th>Hora</th><th>Produto</th><th class="num-cell">Peso</th><th>Destino</th><th>Cliente</th><th>Etiqueta</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="code">20:28</td><td class="main-cell">TZ · Traseiro Bovino</td><td class="num-cell">12,500 kg</td><td><span class="pill pendente">Aguardando destino</span></td><td class="sub-cell">—</td><td class="code">—</td></tr>
+            <tr><td class="code">20:24</td><td class="main-cell">TZ · Traseiro Bovino</td><td class="num-cell">12,500 kg</td><td><span class="pill pesado">Desossa</span></td><td class="sub-cell">Supermercado Alfa</td><td class="code">ADMIN-01</td></tr>
+            <tr><td class="code">20:23</td><td class="main-cell">TZ · Traseiro Bovino</td><td class="num-cell">12,500 kg</td><td><span class="pill pendente">Aguardando destino</span></td><td class="sub-cell">Restaurante Bom Sabor</td><td class="code">ADMIN-01</td></tr>
+            <tr><td class="code">20:23</td><td class="main-cell">TZ · Traseiro Bovino</td><td class="num-cell">12,500 kg</td><td><span class="pill pendente">Aguardando destino</span></td><td class="sub-cell">—</td><td class="code">—</td></tr>
+            <tr><td class="code">20:22</td><td class="main-cell">TZ · Traseiro Bovino</td><td class="num-cell">12,500 kg</td><td><span class="pill pesado">Desossa</span></td><td class="sub-cell">—</td><td class="code">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-foot-between">
+      <span class="text-muted" style="font-size:var(--fs-11);">5 ações neste lote</span>
+      <button class="btn btn-secondary btn-sm" data-modal-close>Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Acumulado do lote -->
+<div class="modal-backdrop" id="modal-acumulado">
+  <div class="modal modal-wide">
+    <div class="modal-head-tools">
+      <h3>Acumulado do lote</h3>
+      <span class="badge badge-count">1</span>
+      <span class="spacer"></span>
+      <div class="input-wrap modal-search">
+        <span class="adorn left"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+        <input class="input input-sm" placeholder="Buscar..." style="padding-left:28px;">
+      </div>
+      <button class="btn btn-secondary btn-sm"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Exportar</button>
+      <button class="btn btn-ghost btn-icon btn-sm" data-modal-close aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body flush">
+      <div class="table-wrap" style="max-height:320px;">
+        <table class="dt">
+          <thead>
+            <tr><th>Produto</th><th class="num-cell">Previsto</th><th class="num-cell">Pesado</th><th class="num-cell">Restante</th><th>% concluído</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="main-cell">TZ — Traseiro Bovino</td><td class="num-cell">2 unidade</td><td class="num-cell">2 unidade</td><td class="num-cell">0</td><td><span class="row" style="gap:6px;"><span class="bar ok" style="width:70px;"><i style="width:100%"></i></span><span class="mono" style="font-size:var(--fs-11);">100%</span></span></td></tr>
+          </tbody>
+          <tfoot>
+            <tr><td>1 produto</td><td class="num-cell">2 unidade</td><td class="num-cell">2 unidade</td><td class="num-cell">0</td><td></td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+    <div class="modal-foot-between">
+      <span class="text-muted" style="font-size:var(--fs-11);">1 produto acompanhado neste lote</span>
+      <button class="btn btn-secondary btn-sm" data-modal-close>Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmar e ganhar etiqueta (placeholder ilustrativo — ação já existe hoje em outro ponto do fluxo) -->
+<div class="modal-backdrop" id="modal-confirmar">
+  <div class="modal">
+    <div class="modal-head"><h3>Confirmar e ganhar etiqueta</h3></div>
+    <div class="modal-body">Ilustrativo: esta ação confirma a peça pesada e imprime a etiqueta. Requer uma peça capturada na balança.</div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary btn-sm" data-modal-close>Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script src="../shared/preview.js"></script>
+</body>
+</html>

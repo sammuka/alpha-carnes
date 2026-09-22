@@ -58,6 +58,40 @@ describe('Etiqueta + leitura QR e2e (RF-PS-23/24, ADR-009, REFINO 1)', () => {
     expect(res.status).toBe(409);
   });
 
+  it('emite etiqueta após destinar para estoque sem vínculo de pedido', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-09-27');
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
+    const dest = await request(srv())
+      .post(`/operacao/pesagem/pecas/${pecaId}/sem-cobertura`)
+      .set('Cookie', recebimentoCookies)
+      .send({ destino: 'sobra', motivo: 'estoque operacional' });
+    expect(dest.status).toBe(201);
+    expect(dest.body.pedidoVendaId).toBeNull();
+
+    const res = await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/etiqueta`).set('Cookie', recebimentoCookies).send();
+    expect(res.status).toBe(201);
+    expect(res.body.peca.statusPeca).toBe('em_sobra');
+    expect(res.body.peca.etiquetaAtual).toBeTruthy();
+  });
+
+  it('emite etiqueta após destinar para desossa sem vínculo de pedido', async () => {
+    const { default: request } = await import('supertest');
+    const c = await cenario('2026-09-28');
+    const pecaId = await pesarPeca(app, recebimentoCookies, { recebimentoId: c.recebimentoId, produtoBaseId: c.produtoId });
+    const dest = await request(srv())
+      .post(`/operacao/pesagem/pecas/${pecaId}/sem-cobertura`)
+      .set('Cookie', recebimentoCookies)
+      .send({ destino: 'corte' });
+    expect(dest.status).toBe(201);
+    expect(dest.body.pedidoVendaId).toBeNull();
+
+    const res = await request(srv()).post(`/operacao/pesagem/pecas/${pecaId}/etiqueta`).set('Cookie', recebimentoCookies).send();
+    expect(res.status).toBe(201);
+    expect(res.body.peca.statusPeca).toBe('para_corte');
+    expect(res.body.peca.etiquetaAtual).toBeTruthy();
+  });
+
   it('impressora disponível → emite etiqueta impressa e atribui QR à peça', async () => {
     const { default: request } = await import('supertest');
     const c = await cenario('2026-09-02');

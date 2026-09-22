@@ -20,10 +20,17 @@ export async function consumirSaldo(tx: Tx, pedidoVendaItemId: string): Promise<
   return r.length > 0;
 }
 
-/** Devolve 1 unidade ao item (CHECK >= 0 é backstop). */
-export async function devolverSaldo(tx: Tx, pedidoVendaItemId: string): Promise<void> {
-  await tx
+/** Devolve 1 unidade ao item. false = item já estava zerado (não havia saldo a devolver). */
+export async function devolverSaldo(tx: Tx, pedidoVendaItemId: string): Promise<boolean> {
+  const r = await tx
     .update(pedidosVendaItens)
     .set({ quantidadeAtendida: sql`${pedidosVendaItens.quantidadeAtendida} - 1` })
-    .where(eq(pedidosVendaItens.id, pedidoVendaItemId));
+    .where(
+      and(
+        eq(pedidosVendaItens.id, pedidoVendaItemId),
+        sql`${pedidosVendaItens.quantidadeAtendida} > 0`,
+      ),
+    )
+    .returning({ id: pedidosVendaItens.id });
+  return r.length > 0;
 }

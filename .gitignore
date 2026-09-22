@@ -56,3 +56,6 @@ graphify-out/.graphify_root
 
 # Seed de demonstração local (não faz parte da aplicação)
 scripts/seed-demo/
+
+# Sessões locais do Impeccable (token de ferramenta; não versionar)
+app/frontend/.impeccable/live/

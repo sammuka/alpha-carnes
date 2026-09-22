@@ -14,13 +14,24 @@ import { labelCodigoNome, rotuloProduto, sufixoInativo } from '@/lib/dominios';
 import { extrairMensagemErro } from '@/lib/error-message';
 import { mascararCpfCnpj } from '@/lib/masks';
 import { AlertItem } from '@/components/ui/alert-item';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ComboboxField } from '@/components/ui/combobox-field';
 import { FormField } from '@/components/ui/form-field';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { SelectNative } from '@/components/ui/select-native';
+import { StatusPill } from '@/components/ui/status-pill';
 import {
   Table,
   TableBody,
@@ -34,6 +45,8 @@ import { ModalAdendo } from './modal-adendo';
 import { ModalOverbooking } from './modal-overbooking';
 import { cn } from '@/lib/cn';
 import { formatarPrecoBr } from '@/lib/formatacao-preco';
+import { rotuloStatusPedido } from '@/lib/status-pedido';
+import { statusPedidoVariant } from '@/lib/status-ui';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 export interface ClientePedido {
@@ -63,6 +76,11 @@ export interface RotaPedido {
   codigo: string;
   nome: string;
   status: string;
+}
+
+function formatarDataOperacao(data: string): string {
+  const [ano, mes, dia] = data.split('-');
+  return ano && mes && dia ? `${dia}/${mes}/${ano}` : data;
 }
 
 interface PedidoEditorProps {
@@ -171,6 +189,7 @@ export function PedidoEditor({
   const [precoNovo, setPrecoNovo] = useState('0.00');
   const [precoNovoTabela, setPrecoNovoTabela] = useState<string | null>(null);
   const [unidadePrecoNovo, setUnidadePrecoNovo] = useState<'kg' | 'unidade' | null>(null);
+  const [acaoInclusaoPendente, setAcaoInclusaoPendente] = useState<'salvar-rascunho' | 'finalizar' | null>(null);
   const itensNovosRef = useRef(itensNovos);
   itensNovosRef.current = itensNovos;
   const [erro, setErro] = useState('');
@@ -493,6 +512,30 @@ export function PedidoEditor({
     }
   }
 
+  function produtoSelecionadoNaoIncluido() {
+    return produtoNovo.trim() !== '';
+  }
+
+  function solicitarAcao(acao: 'salvar-rascunho' | 'finalizar') {
+    if (produtoSelecionadoNaoIncluido()) {
+      setAcaoInclusaoPendente(acao);
+      return;
+    }
+    void executarAcao(acao);
+  }
+
+  async function executarAcao(acao: 'salvar-rascunho' | 'finalizar') {
+    if (acao === 'salvar-rascunho') {
+      if (!pedido) {
+        await salvarNovo(true);
+        return;
+      }
+      onBack();
+      return;
+    }
+    await finalizar();
+  }
+
   function removerItemNovo(produtoId: string) {
     setItensNovos((atuais) => atuais.filter((entry) => entry.produtoId !== produtoId));
   }
@@ -631,6 +674,8 @@ export function PedidoEditor({
   }
 
   const itensRenderizados = pedido?.itens ?? [];
+  const somenteLeitura = pedido?.status === 'finalizado';
+  const podeEditar = podeGerenciar && !somenteLeitura;
 
   return (
     <div className="space-y-3">
@@ -642,6 +687,15 @@ export function PedidoEditor({
           className="mb-0 flex-1"
           title={pedido ? 'Editar Pedido' : 'Novo Pedido'}
           subtitle={pedido ? `Pedido ${pedido.id}` : 'Monte o pedido e confira as reservas antes de finalizar.'}
+          badge={pedido ? (
+            <StatusPill
+              variant={statusPedidoVariant(pedido.status)}
+              label={rotuloStatusPedido(
+                pedido.status,
+                pedido.status === 'rascunho' || pedido.status === 'em_elaboracao_reserva_ativa',
+              )}
+            />
+          ) : undefined}
         />
       </div>
 
@@ -665,20 +719,20 @@ export function PedidoEditor({
               placeholder="Selecione"
               searchPlaceholder="Buscar cliente..."
               emptyText="Nenhum cliente encontrado."
-              disabled={Boolean(pedido) || !podeGerenciar}
+              disabled={Boolean(pedido) || !podeEditar}
             />
           </FormField>
           <FormField label="Operação" htmlFor="pedido-operacao">
             <SelectNative
               id="pedido-operacao"
               value={operacaoId}
-              disabled={Boolean(pedido) || !podeGerenciar}
+              disabled={Boolean(pedido) || !podeEditar}
               onChange={(event) => setOperacaoId(event.target.value)}
             >
               <option value="">Selecione</option>
               {operacoes.map((operacao) => (
                 <option key={operacao.id} value={operacao.id}>
-                  {operacao.rotulo} — {operacao.data}
+                  {formatarDataOperacao(operacao.data)}
                 </option>
               ))}
             </SelectNative>
@@ -703,7 +757,7 @@ export function PedidoEditor({
               placeholder="—"
               searchPlaceholder="Buscar rota..."
               emptyText="Nenhuma rota encontrada."
-              disabled={Boolean(pedido) || !podeGerenciar}
+              disabled={Boolean(pedido) || !podeEditar}
             />
           </FormField>
           <FormField label="Prioridade" htmlFor="pedido-prioridade">
@@ -714,7 +768,7 @@ export function PedidoEditor({
               max={100}
               className="w-full"
               value={prioridade}
-              readOnly={Boolean(pedido) || !podeGerenciar}
+              readOnly={Boolean(pedido) || !podeEditar}
               onChange={(event) => setPrioridade(event.target.value)}
             />
           </FormField>
@@ -722,7 +776,7 @@ export function PedidoEditor({
             <Textarea
               id="pedido-observacoes"
               value={observacoes}
-              readOnly={Boolean(pedido) || !podeGerenciar}
+              readOnly={Boolean(pedido) || !podeEditar}
               onChange={(event) => setObservacoes(event.target.value)}
             />
           </FormField>
@@ -734,8 +788,100 @@ export function PedidoEditor({
           <CardTitle>Itens do pedido</CardTitle>
           <CardDescription>A reserva é atualizada a cada ação da grade.</CardDescription>
         </CardHeader>
+        <CardContent className="space-y-3">
+          <div data-testid="form-incluir-produto" className="flex w-full items-end gap-2">
+            <FormField label="Produto" htmlFor="produto-novo" className="min-w-0 flex-1">
+              <ComboboxField
+                id="produto-novo"
+                items={produtosAusentes.map((produto) => ({
+                  id: produto.id,
+                  label: rotuloProduto(produto),
+                }))}
+                value={produtoNovo}
+                onChange={setProdutoNovo}
+                placeholder="Selecione"
+                searchPlaceholder="Buscar produto..."
+                emptyText="Nenhum produto encontrado."
+                disabled={!podeEditar}
+              />
+            </FormField>
+            <FormField label="Quantidade" htmlFor="quantidade-produto-novo" className="w-28 shrink-0">
+              <Input
+                id="quantidade-produto-novo"
+                type="number"
+                min={1}
+                step="1"
+                className="w-full text-right font-data"
+                value={quantidadeNova}
+                disabled={!podeEditar}
+                onChange={(event) => setQuantidadeNova(event.target.value)}
+              />
+            </FormField>
+            <FormField label="Preço unitário" htmlFor="preco-produto-novo" className="w-[9.5rem] shrink-0">
+              <Input
+                id="preco-produto-novo"
+                aria-label="Preço unitário do novo produto"
+                type="number"
+                step="0.01"
+                min={0}
+                inputMode="decimal"
+                adornLeft={<span className="text-[11px]">R$</span>}
+                adornRight={sufixoUnidadePreco(unidadePrecoNovo) ? (
+                  <span className="text-[11px] font-normal">{sufixoUnidadePreco(unidadePrecoNovo)}</span>
+                ) : undefined}
+                className="h-8 w-full text-right font-data"
+                value={precoNovo}
+                disabled={!podeEditar}
+                onChange={(event) => setPrecoNovo(normalizarPrecoInput(event.target.value))}
+              />
+            </FormField>
+            <Button type="button" variant="secondary" className="shrink-0" disabled={!podeEditar || pendente || !produtoNovo || ehPrecoNaoPositivoUi(precoNovo)} onClick={() => void adicionarProduto()}>
+              <Plus />
+              Adicionar produto
+            </Button>
+          </div>
+
+          {itensNovos.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.02em] text-fg-secondary">
+                Itens adicionados
+              </p>
+              <ul
+                data-testid="lista-itens-novos"
+                className="overflow-hidden rounded-lg border border-border-strong bg-surface-2 shadow-1"
+              >
+                {itensNovos.map((item) => {
+                  const nome = nomeProduto(produtos.find((produto) => produto.id === item.produtoId));
+                  return (
+                    <li
+                      key={item.produtoId}
+                      data-testid={`linha-nova-${item.produtoId}`}
+                      className="flex items-center justify-between gap-3 border-b border-border bg-card px-3 py-2.5 text-sm last:border-b-0"
+                    >
+                      <span className="min-w-0 truncate text-[13px] font-semibold text-foreground">{nome}</span>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span className="font-data text-fg-secondary">{item.quantidadePedida}</span>
+                        <span className="font-data font-semibold">{formatarPrecoBr(item.precoAplicado)}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="iconSm"
+                          disabled={!podeEditar || pendente}
+                          aria-label={`Remover ${nome}`}
+                          onClick={() => removerItemNovo(item.produtoId)}
+                        >
+                          <Trash2 className="text-destructive" />
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </CardContent>
         {itensRenderizados.length > 0 && (
-          <CardContent className="p-0">
+          <CardContent className="border-t border-border p-0">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -767,7 +913,7 @@ export function PedidoEditor({
                           step="0.001"
                           className="h-7 w-24 text-right font-data"
                           value={quantidades[item.id] ?? ''}
-                          disabled={!podeGerenciar}
+                          disabled={!podeEditar}
                           onChange={(event) => setQuantidades((atuais) => ({
                             ...atuais,
                             [item.id]: event.target.value,
@@ -794,8 +940,8 @@ export function PedidoEditor({
                                     item.precoAjustado && 'border-warning',
                                   )}
                                   value={precos[item.id] ?? item.precoAplicado ?? ''}
-                                  disabled={!podeGerenciar || Boolean(pedido && !['rascunho', 'em_elaboracao_reserva_ativa', 'aguardando_confirmacao_overbooking'].includes(pedido.status))}
-                                  readOnly={!podeGerenciar || pedido?.status === 'finalizado'}
+                                  disabled={!podeEditar || Boolean(pedido && !['rascunho', 'em_elaboracao_reserva_ativa', 'aguardando_confirmacao_overbooking'].includes(pedido.status))}
+                                  readOnly={!podeEditar}
                                   onChange={(event) => setPrecos((atuais) => ({
                                     ...atuais,
                                     [item.id]: normalizarPrecoInput(event.target.value),
@@ -820,7 +966,7 @@ export function PedidoEditor({
                             type="button"
                             variant="secondary"
                             size="sm"
-                            disabled={!podeGerenciar || pendente}
+                            disabled={!podeEditar || pendente}
                             onClick={() => void aplicarQuantidade(item)}
                           >
                             Aplicar quantidade
@@ -829,7 +975,7 @@ export function PedidoEditor({
                             type="button"
                             variant="ghost"
                             size="iconSm"
-                            disabled={!podeGerenciar || pendente}
+                            disabled={!podeEditar || pendente}
                             aria-label={`Remover ${nome}`}
                             onClick={() => void removerItem(item)}
                           >
@@ -844,95 +990,6 @@ export function PedidoEditor({
             </Table>
           </CardContent>
         )}
-
-        {itensNovos.length > 0 && (
-          <CardContent className="pt-0">
-            <ul className="divide-y divide-border rounded-lg border border-border">
-              {itensNovos.map((item) => {
-                const nome = nomeProduto(produtos.find((produto) => produto.id === item.produtoId));
-                return (
-                  <li
-                    key={item.produtoId}
-                    data-testid={`linha-nova-${item.produtoId}`}
-                    className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
-                  >
-                    <span>{nome}</span>
-                    <div className="flex items-center gap-1">
-                      <span className="font-data">{item.quantidadePedida}</span>
-                      <span className="font-data">{formatarPrecoBr(item.precoAplicado)}</span>
-                      <div className="flex justify-end">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="iconSm"
-                          disabled={!podeGerenciar || pendente}
-                          aria-label={`Remover ${nome}`}
-                          onClick={() => removerItemNovo(item.produtoId)}
-                        >
-                          <Trash2 className="text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </CardContent>
-        )}
-
-        <CardFooter className="flex-wrap items-end gap-2">
-          <FormField label="Produto" htmlFor="produto-novo" className="flex-1">
-            <ComboboxField
-              id="produto-novo"
-              items={produtosAusentes.map((produto) => ({
-                id: produto.id,
-                label: rotuloProduto(produto),
-              }))}
-              value={produtoNovo}
-              onChange={setProdutoNovo}
-              placeholder="Selecione"
-              searchPlaceholder="Buscar produto..."
-              emptyText="Nenhum produto encontrado."
-              disabled={!podeGerenciar}
-            />
-          </FormField>
-          <FormField label="Quantidade do novo produto" htmlFor="quantidade-produto-novo">
-            <Input
-              id="quantidade-produto-novo"
-              type="number"
-              min={0.001}
-              step="0.001"
-              className="w-28 text-right font-data"
-              value={quantidadeNova}
-              disabled={!podeGerenciar}
-              onChange={(event) => setQuantidadeNova(event.target.value)}
-            />
-          </FormField>
-          <FormField label="Preço unitário" htmlFor="preco-produto-novo">
-            <div className="w-[9.5rem]">
-              <Input
-                id="preco-produto-novo"
-                aria-label="Preço unitário do novo produto"
-                type="number"
-                step="0.01"
-                min={0}
-                inputMode="decimal"
-                adornLeft={<span className="text-[11px]">R$</span>}
-                adornRight={sufixoUnidadePreco(unidadePrecoNovo) ? (
-                  <span className="text-[11px] font-normal">{sufixoUnidadePreco(unidadePrecoNovo)}</span>
-                ) : undefined}
-                className="h-8 w-full text-right font-data"
-                value={precoNovo}
-                disabled={!podeGerenciar}
-                onChange={(event) => setPrecoNovo(normalizarPrecoInput(event.target.value))}
-              />
-            </div>
-          </FormField>
-          <Button type="button" variant="secondary" disabled={!podeGerenciar || pendente || ehPrecoNaoPositivoUi(precoNovo)} onClick={() => void adicionarProduto()}>
-            <Plus />
-            Adicionar produto
-          </Button>
-        </CardFooter>
       </Card>
 
       {pedido && (
@@ -960,24 +1017,52 @@ export function PedidoEditor({
       )}
 
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" onClick={onBack}>Cancelar</Button>
+        <Button type="button" variant="ghost" disabled={somenteLeitura} onClick={onBack}>Cancelar</Button>
         {!pedido && (
-          <Button type="button" variant="secondary" disabled={!podeGerenciar || pendente} onClick={() => void salvarNovo(true)}>
+          <Button type="button" variant="secondary" disabled={!podeEditar || pendente} onClick={() => solicitarAcao('salvar-rascunho')}>
             <Save />
             Salvar Rascunho
           </Button>
         )}
         {pedido?.status === 'rascunho' && (
-          <Button type="button" variant="secondary" disabled={!podeGerenciar || pendente} onClick={onBack}>
+          <Button type="button" variant="secondary" disabled={!podeEditar || pendente} onClick={() => solicitarAcao('salvar-rascunho')}>
             <Save />
             Salvar Rascunho
           </Button>
         )}
-        <Button type="button" disabled={!podeFinalizar || pendente} onClick={() => void finalizar()}>
+        <Button type="button" disabled={!podeFinalizar || pendente || somenteLeitura} onClick={() => solicitarAcao('finalizar')}>
           <Send />
           Finalizar Pedido
         </Button>
       </div>
+
+      <AlertDialog
+        open={acaoInclusaoPendente !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setAcaoInclusaoPendente(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Inclusão de produto não finalizada</AlertDialogTitle>
+            <AlertDialogDescription>
+              Existe um produto selecionado, mas a inclusão na lista não foi finalizada. Deseja prosseguir?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const acao = acaoInclusaoPendente;
+                setAcaoInclusaoPendente(null);
+                if (acao) void executarAcao(acao);
+              }}
+            >
+              Prosseguir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {challenge && (
         <ModalOverbooking

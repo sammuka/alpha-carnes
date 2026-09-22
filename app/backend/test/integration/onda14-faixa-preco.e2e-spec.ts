@@ -86,10 +86,11 @@ describe('Onda 14 — clientes.faixa_preco (ALP-78)', () => {
   });
 
   it('PATCH válido A→C persiste e detalhar/listar refletem', async () => {
+    const razaoSocial = `Cliente Faixa O14 ${Math.floor(performance.now() * 1000)}`;
     const criado = await request(app.getHttpServer())
       .post('/clientes')
       .set('Cookie', adminCookies)
-      .send(novoCliente({ faixaPreco: 'A' }));
+      .send(novoCliente({ faixaPreco: 'A', razaoSocial }));
     expect(criado.status).toBe(201);
     expect(criado.body.faixaPreco).toBe('A');
 
@@ -108,7 +109,7 @@ describe('Onda 14 — clientes.faixa_preco (ALP-78)', () => {
 
     const lista = await request(app.getHttpServer())
       .get('/clientes')
-      .query({ search: criado.body.codigo })
+      .query({ search: razaoSocial })
       .set('Cookie', adminCookies);
     expect(lista.status).toBe(200);
     const linha = (lista.body.data as Array<{ id: string; faixaPreco: string }>).find(

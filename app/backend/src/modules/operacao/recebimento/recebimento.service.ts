@@ -10,7 +10,7 @@ import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../../../database/database.module';
 import * as schema from '../../../database/schema';
-import { notasFiscaisFornecedor, operacoes,
+import { notasFiscaisFornecedor, notasFiscaisFornecedorItens, operacoes,
   clientes,
   comprasProgramadas,
   comprasProgramadasItens,
@@ -28,7 +28,6 @@ import {
   calcularRange,
   montarPaginado,
   primeiroOuFalha,
-  type ListarQuery,
   type Paginado,
 } from '../../../common/crud/paginacao';
 import { compararQtd, ehZero, formatarQtd, subtrairQtd } from '../../../common/crud/decimal';
@@ -36,7 +35,13 @@ import { EVENTOS } from '../../../realtime/events/eventos';
 import { DisponibilidadeService, type PedidoEmRisco } from '../../comercial/disponibilidade/disponibilidade.service';
 import { OperacoesService } from '../../operacoes/operacoes.service';
 import { DivergenciaRecebimentoService } from './divergencia/divergencia-recebimento.service';
-import type { AtualizarMetadadosLoteDto, AtualizarNfeDto, IniciarRecebimentoDto, RegistrarItemDto } from './dto/recebimento.dto';
+import type {
+  AtualizarMetadadosLoteDto,
+  AtualizarNfeDto,
+  IniciarRecebimentoDto,
+  ListarRecebimentoQuery,
+  RegistrarItemDto,
+} from './dto/recebimento.dto';
 import {
   calcularProgressoBalanca,
   contarPecasPorItem,
@@ -168,9 +173,12 @@ export class RecebimentoService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarQuery): Promise<Paginado<RecebimentoResumoEnriquecido>> {
+  async listar(query: ListarRecebimentoQuery): Promise<Paginado<RecebimentoResumoEnriquecido>> {
     const { limit, offset } = calcularRange(query);
-    const where = query.incluirRemovidos ? undefined : isNull(recebimentos.deletedAt);
+    const where = and(
+      query.incluirRemovidos ? undefined : isNull(recebimentos.deletedAt),
+      query.operacaoStatus ? eq(operacoes.status, query.operacaoStatus) : undefined,
+    );
 
     const [linhas, totalRow] = await Promise.all([
       this.db
@@ -199,7 +207,11 @@ export class RecebimentoService {
         .orderBy(desc(recebimentos.createdAt))
         .limit(limit)
         .offset(offset),
-      this.db.select({ total: sql<number>`count(*)::int` }).from(recebimentos).where(where),
+      this.db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(recebimentos)
+        .innerJoin(operacoes, eq(operacoes.id, recebimentos.operacaoId))
+        .where(where),
     ]);
 
     const enriquecidos: RecebimentoResumoEnriquecido[] = [];
@@ -270,6 +282,22 @@ export class RecebimentoService {
     const progressoBalanca = await this.calcularProgressoLote(id);
     const nfAtiva = await buscarNfAtivaDoRecebimento(this.db, id);
     const payloadNf = nfAtiva?.payloadJson as { volumes?: number; pesoLiquido?: number } | null;
+    const pesoNfPorProduto = new Map<string, string | null>();
+    if (nfAtiva) {
+      const nfItens = await this.db
+        .select({
+          produtoId: notasFiscaisFornecedorItens.produtoId,
+          pesoDeclarado: notasFiscaisFornecedorItens.pesoDeclarado,
+        })
+        .from(notasFiscaisFornecedorItens)
+        .where(and(
+          eq(notasFiscaisFornecedorItens.nfId, nfAtiva.id),
+          isNull(notasFiscaisFornecedorItens.deletedAt),
+        ));
+      for (const ni of nfItens) {
+        pesoNfPorProduto.set(ni.produtoId, ni.pesoDeclarado);
+      }
+    }
 
     const itensEnriquecidos = recebimento.itens.map((item) => {
       const apurado = pecasMap.get(item.produtoId);
@@ -281,6 +309,7 @@ export class RecebimentoService {
         ...item,
         quantidadeApurada: qtdApurada,
         pesoApurado: item.requerBalanca === false ? null : (apurado?.pesoTotal ?? item.pesoTotalApurado),
+        pesoNf: pesoNfPorProduto.get(item.produtoId) ?? null,
       };
     });
 

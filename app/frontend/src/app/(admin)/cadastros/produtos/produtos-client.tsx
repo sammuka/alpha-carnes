@@ -58,7 +58,7 @@ type FormProduto = CriarProdutoDto & {
   cestOpcional?: string;
 };
 
-type AbaProdutos = 'gerais' | 'comercial' | 'operacional' | 'estoque' | 'fiscal';
+type AbaProdutos = 'gerais' | 'comercial' | 'operacional' | 'fiscal';
 
 /** Chave de erro (path do Zod no backend) por campo do formulário. */
 const CHAVE_ERRO: Record<string, string> = {
@@ -73,10 +73,9 @@ const chaveDe = (campo: string) => CHAVE_ERRO[campo] ?? campo;
 function abaDaChave(chave: string): AbaProdutos {
   if (chave.startsWith('atributosJson.fiscal.')) return 'fiscal';
   if (['unidadePreco', 'ativoVenda', 'ativoCompra'].includes(chave)) return 'comercial';
-  if (chave === 'podeEstoque') return 'estoque';
   if (
     ['tipoOperacional', 'unidadePedido', 'exigePeso', 'passaBalanca', 'passaDesossa',
-     'origemTransformacao', 'saidaTransformacao', 'observacoesOperacionais'].includes(chave)
+     'origemTransformacao', 'saidaTransformacao', 'podeEstoque', 'observacoesOperacionais'].includes(chave)
   ) return 'operacional';
   return 'gerais'; // codigo, categoria, nome, nomeOperacional, status
 }
@@ -412,7 +411,11 @@ export function ProdutosClient({ permissoes }: { permissoes: string[] }) {
                 </TableRow>
               ) : (
                 produtos.map((p) => (
-                  <TableRow key={p.id} className="group">
+                  <TableRow
+                    key={p.id}
+                    className="group cursor-pointer"
+                    onClick={() => abrirProduto(p)}
+                  >
                     <TableCellCode>{p.codigo}</TableCellCode>
                     <TableCell className="text-[13px] font-semibold text-foreground">{p.nome}</TableCell>
                     <TableCell className="text-muted-foreground">{p.nomeOperacional ?? '—'}</TableCell>
@@ -442,7 +445,7 @@ export function ProdutosClient({ permissoes }: { permissoes: string[] }) {
                         label={p.status === 'ativo' ? 'Ativo' : 'Inativo'}
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(ev) => ev.stopPropagation()}>
                       <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                         <Button variant="ghost" size="iconSm" title="Visualizar" onClick={() => abrirProduto(p, true)}>
                           <Eye />
@@ -486,7 +489,6 @@ export function ProdutosClient({ permissoes }: { permissoes: string[] }) {
                 <TabsTrigger value="gerais" temErro={abasComErro.has('gerais')}>Gerais</TabsTrigger>
                 <TabsTrigger value="comercial" temErro={abasComErro.has('comercial')}>Comercial</TabsTrigger>
                 <TabsTrigger value="operacional" temErro={abasComErro.has('operacional')}>Operacional</TabsTrigger>
-                <TabsTrigger value="estoque" temErro={abasComErro.has('estoque')}>Estoque</TabsTrigger>
                 <TabsTrigger value="fiscal" temErro={abasComErro.has('fiscal')}>Fiscal</TabsTrigger>
               </TabsList>
 
@@ -627,6 +629,7 @@ export function ProdutosClient({ permissoes }: { permissoes: string[] }) {
                       ['exigePeso', 'Exige peso final para faturamento'],
                       ['passaBalanca', 'Passa pela balança principal'],
                       ['passaDesossa', 'Passa pela desossa'],
+                      ['podeEstoque', 'Permite estoque'],
                       ['origemTransformacao', 'É origem de transformação'],
                       ['saidaTransformacao', 'É derivado de transformação'],
                     ] as const
@@ -656,21 +659,6 @@ export function ProdutosClient({ permissoes }: { permissoes: string[] }) {
                     rows={3}
                   />
                 </FormField>
-              </TabsContent>
-
-              <TabsContent value="estoque" forceMount className="space-y-3 data-[state=inactive]:hidden">
-                <div className="flex items-center justify-between gap-4">
-                  <Label htmlFor="podeEstoque" className="font-normal normal-case">
-                    Permite estoque
-                  </Label>
-                  <Switch
-                    id="podeEstoque"
-                    checked={form.podeEstoque}
-                    disabled={somenteLeitura}
-                    aria-invalid={chaveDe('podeEstoque') in erros || undefined}
-                    onCheckedChange={(v) => setCampo('podeEstoque', v)}
-                  />
-                </div>
               </TabsContent>
 
               <TabsContent value="fiscal" forceMount className="space-y-3 data-[state=inactive]:hidden">

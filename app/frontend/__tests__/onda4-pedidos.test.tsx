@@ -147,6 +147,21 @@ async function selecionarProdutoComPreco(nomeOpcao: string | RegExp, opcoes?: { 
   fireEvent.click(await screen.findByText(nomeOpcao));
   const precoInput = screen.getByLabelText('Preço unitário do novo produto');
   fireEvent.change(precoInput, { target: { value: '18.50' } });
+  const incluir = screen.getByRole('button', { name: 'Adicionar produto' });
+  await waitFor(() => {
+    expect(incluir).toBeEnabled();
+  });
+  fireEvent.click(incluir);
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: 'Adicionar produto' })).toBeDisabled();
+  });
+}
+
+async function selecionarProdutoSemIncluir(nomeOpcao: string | RegExp) {
+  fireEvent.change(screen.getByLabelText('Operação'), { target: { value: operacaoDaApi.id } });
+  await abrirSeletorProduto();
+  fireEvent.click(await screen.findByText(nomeOpcao));
+  fireEvent.change(screen.getByLabelText('Preço unitário do novo produto'), { target: { value: '18.50' } });
   await waitFor(() => {
     expect(screen.getByRole('button', { name: 'Adicionar produto' })).toBeEnabled();
   });
@@ -331,13 +346,11 @@ it('selecionar cliente herda representante e rota do cadastro no editor de pedid
 it('novo pedido usa operacaoId e dataOperacao da operação sem compraProgramadaId', async () => {
   render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
   await userEvent.click(await screen.findByRole('button', { name: 'Novo pedido' }));
-  await screen.findByRole('option', { name: `${operacaoDaApi.rotulo} — ${operacaoDaApi.data}` });
+  await screen.findByRole('option', { name: '28/07/2026' });
   await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
   await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
   fireEvent.change(screen.getByLabelText('Operação'), { target: { value: operacaoDaApi.id } });
   await selecionarProdutoComPreco(/Produto novo/);
-  fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
-  await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
   await userEvent.click(screen.getByRole('button', { name: 'Salvar Rascunho' }));
 
   await waitFor(() => {
@@ -359,18 +372,22 @@ it('novo pedido usa operacaoId e dataOperacao da operação sem compraProgramada
 it('novo pedido remove item local e devolve o produto ao seletor sem chamar a API', async () => {
   render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
   await userEvent.click(await screen.findByRole('button', { name: 'Novo pedido' }));
-  await screen.findByRole('option', { name: `${operacaoDaApi.rotulo} — ${operacaoDaApi.data}` });
+  await screen.findByRole('option', { name: '28/07/2026' });
   await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
   await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
   fireEvent.change(screen.getByLabelText('Operação'), { target: { value: operacaoDaApi.id } });
 
+  expect(screen.getByLabelText('Quantidade')).toHaveAttribute('id', 'quantidade-produto-novo');
+  expect(screen.queryByLabelText('Quantidade do novo produto')).not.toBeInTheDocument();
+
   await selecionarProdutoComPreco(/Produto novo/);
-  fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
-  await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
 
   await selecionarProdutoComPreco(/Picanha/);
-  fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '3' } });
-  await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
+
+  const formulario = screen.getByTestId('form-incluir-produto');
+  const lista = screen.getByTestId('lista-itens-novos');
+  expect(formulario.compareDocumentPosition(lista) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+  expect(screen.getByText('Itens adicionados')).toBeInTheDocument();
 
   const removido = screen.getByTestId('linha-nova-produto-novo');
   expect(within(removido).getByText(/NOVO — Produto novo/)).toBeInTheDocument();
@@ -396,7 +413,7 @@ it('novo pedido remove item local e devolve o produto ao seletor sem chamar a AP
     const payload = JSON.parse(String(chamada?.[1]?.body));
     expect(payload.itens).toEqual([{
       produtoId: 'item-comercial-estavel',
-      quantidadePedida: 3,
+      quantidadePedida: 1,
       precoAplicado: '18.50',
     }]);
   });
@@ -408,6 +425,7 @@ it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente par
   render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
   await userEvent.click(await screen.findByRole('button', { name: /Abrir pedido pedido-1/ }));
   expect(await screen.findByText('Editar Pedido')).toBeInTheDocument();
+  expect(screen.getByText('Rascunho com reserva ativa')).toBeInTheDocument();
 
   const reduzido = screen.getByTestId('linha-item-reduzido');
   fireEvent.change(within(reduzido).getByLabelText('Quantidade'), { target: { value: '4' } });
@@ -427,8 +445,6 @@ it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente par
   await userEvent.click(screen.getByRole('button', { name: 'Registrar adendo' }));
 
   await selecionarProdutoComPreco(/Produto novo/, { pularOperacao: true });
-  fireEvent.change(screen.getByLabelText('Quantidade do novo produto'), { target: { value: '2' } });
-  await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
 
   await waitFor(() => {
     const chamadas = (global.fetch as jest.Mock).mock.calls;
@@ -469,12 +485,70 @@ it('edicao de rascunho traduz reducao zero remocao aumento e produto ausente par
       '/api/comercial/pedidos/pedido-1/itens',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ produtoId: 'produto-novo', quantidade: 2, precoAplicado: '18.50' }),
+        body: JSON.stringify({ produtoId: 'produto-novo', quantidade: 1, precoAplicado: '18.50' }),
       }),
     ]);
     expect(chamadas.some(([url, init]) =>
       url === '/api/comercial/pedidos/pedido-1/itens/item-zerado' && init?.method === 'PATCH')).toBe(false);
     expect(chamadas.some(([url, init]) =>
       url === '/api/comercial/pedidos/pedido-1' && init?.method === 'PATCH')).toBe(false);
+  });
+});
+
+async function abrirNovoPedidoComCliente() {
+  render(<PedidosClient permissoes={['PEDIDOS_LER', 'PEDIDOS_GERENCIAR']} />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Novo pedido' }));
+  await screen.findByRole('option', { name: '28/07/2026' });
+  await userEvent.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
+  await userEvent.click(await screen.findByRole('option', { name: /Açougue Central/i }));
+}
+
+it('só inclui o produto na lista ao acionar Adicionar produto', async () => {
+  await abrirNovoPedidoComCliente();
+  await selecionarProdutoSemIncluir(/Produto novo/);
+
+  expect(screen.queryByTestId('lista-itens-novos')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
+  expect(await screen.findByTestId('linha-nova-produto-novo')).toBeInTheDocument();
+});
+
+it('alerta inclusão pendente ao salvar rascunho e cancelar não persiste o pedido', async () => {
+  await abrirNovoPedidoComCliente();
+  await selecionarProdutoSemIncluir(/Produto novo/);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Salvar Rascunho' }));
+  const alerta = await screen.findByRole('alertdialog');
+  expect(within(alerta).getByText(/existe um produto selecionado/i)).toBeInTheDocument();
+  expect(within(alerta).getByText(/deseja prosseguir/i)).toBeInTheDocument();
+
+  fireEvent.click(within(alerta).getByRole('button', { name: 'Cancelar' }));
+  await waitFor(() => {
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+  expect(screen.getByRole('heading', { name: 'Novo Pedido' })).toBeInTheDocument();
+  expect((global.fetch as jest.Mock).mock.calls.some(([url, init]) =>
+    url === '/api/comercial/pedidos' && init?.method === 'POST')).toBe(false);
+});
+
+it('alerta inclusão pendente ao finalizar e ao prosseguir persiste só os itens já incluídos', async () => {
+  await abrirNovoPedidoComCliente();
+  await selecionarProdutoComPreco(/Picanha/);
+  await selecionarProdutoSemIncluir(/Produto novo/);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Finalizar Pedido' }));
+  const alerta = await screen.findByRole('alertdialog');
+  fireEvent.click(within(alerta).getByRole('button', { name: 'Prosseguir' }));
+
+  await waitFor(() => {
+    const chamada = (global.fetch as jest.Mock).mock.calls.find(([url, init]) =>
+      url === '/api/comercial/pedidos' && init?.method === 'POST');
+    expect(chamada).toBeDefined();
+    const payload = JSON.parse(String(chamada?.[1]?.body));
+    expect(payload.itens).toEqual([{
+      produtoId: 'item-comercial-estavel',
+      quantidadePedida: 1,
+      precoAplicado: '18.50',
+    }]);
+    expect(payload.salvarComoRascunho).toBe(false);
   });
 });

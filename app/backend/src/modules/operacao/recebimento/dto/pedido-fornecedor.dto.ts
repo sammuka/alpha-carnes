@@ -18,12 +18,14 @@ export const listarPedidosFornecedorSchema = z.union([
     operacaoId: z.string().uuid(),
     status: statusPedidoFornecedorSchema.optional(),
     elegiveisRecebimento: z.never().optional(),
+    operacaoStatus: z.never().optional(),
     ...paginaPedidoFornecedorSchema,
   }).strict(),
   z.object({
     elegiveisRecebimento: z.literal('true').transform(() => true as const),
     operacaoId: z.never().optional(),
     status: z.never().optional(),
+    operacaoStatus: z.enum(['aberta', 'em_andamento', 'fechada']).optional(),
     ...paginaPedidoFornecedorSchema,
   }).strict(),
 ]);

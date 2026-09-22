@@ -43,7 +43,7 @@ test.describe('Onda 8 — Estoque E2E', () => {
     // ── Consulta de Estoque: aparece como Disponível ─────────────────────
     await page.goto(`${BASE}/estoque/consulta`);
     await expect(page.getByRole('heading', { name: /Consulta de Estoque/ })).toBeVisible({ timeout: 15_000 });
-    await page.getByPlaceholder(/Buscar por código, produto, origem ou NF/i).fill(codigoBusca);
+    await page.getByPlaceholder(/Buscar por produto, origem ou NF/i).fill(codigoBusca);
     const linha = page.locator('tr', { hasText: `Fornecedor ${codigoBusca}` });
     await expect(linha).toBeVisible({ timeout: 15_000 });
     await expect(linha.getByText('Disponível')).toBeVisible();

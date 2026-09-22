@@ -86,30 +86,52 @@ describe('TrocaPecaModal (base visual)', () => {
 });
 
 describe('TrocaPecaFluxo (6.28)', () => {
-  const pedidos = [{
-    pedidoVendaId: 'pv1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-    pedidoVendaItemId: 'pvi1aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-    clienteNome: 'Restaurante Grill',
-    produtoLabel: 'TZ — Traseiro',
-    pecasAssociadas: [{ id: 'pr1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', codigo: 'TZ-000341', peso: '48.750' }],
-  }];
+  const pedidos = [
+    {
+      pedidoVendaId: 'pv1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      pedidoVendaItemId: 'pvi1aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      clienteNome: 'Restaurante Grill',
+      produtoLabel: 'TZ — Traseiro',
+      produtoCodigo: 'TZ',
+      quantidadeJaVinculada: 1,
+      quantidadeTotalAVincular: 1,
+      pecasAssociadas: [{ id: 'pr1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', codigo: 'TZ-000341', peso: '48.750', produtoCodigo: 'TZ' }],
+    },
+    {
+      pedidoVendaId: 'pv2aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      pedidoVendaItemId: 'pvi2aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      clienteNome: 'Cliente Entrada',
+      produtoLabel: 'TZ — Traseiro',
+      produtoCodigo: 'TZ',
+      quantidadeJaVinculada: 1,
+      quantidadeTotalAVincular: 3,
+      pecasAssociadas: [],
+    },
+    {
+      pedidoVendaId: 'pv3aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      pedidoVendaItemId: 'pvi3aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      clienteNome: 'Outro Cliente',
+      produtoLabel: 'TZ — Traseiro',
+      produtoCodigo: 'TZ',
+      quantidadeJaVinculada: 0,
+      quantidadeTotalAVincular: 2,
+      pecasAssociadas: [],
+    },
+  ];
   const pecasDisponiveis = [
-    { id: 'pi1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', codigo: 'TZ-000362', peso: '47.980' },
+    { id: 'pi1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', codigo: 'TZ-000362', peso: '47.980', produtoCodigo: 'TZ', clienteNome: 'Cliente Entrada' },
   ];
 
-  it('conclui os 6 passos e exibe o resultado do backend', async () => {
+  it('confirma a troca em um único passo com substituição', async () => {
     const user = userEvent.setup();
     const onTrocaConcluida = jest.fn();
     const pecaRet = pedidos[0]!.pecasAssociadas[0]!;
-    const pecaIns = pecasDisponiveis[0]!;
     global.fetch = jest.fn(async () => ({
       ok: true,
       json: async () => ({
-        troca: { id: 't1', createdAt: '2026-07-31T12:00:00.000Z' },
-        pecaRetirada: { id: pecaRet.id, statusPeca: 'em_sobra', etiquetaAtual: 'TZ-000341' },
-        pecaInserida: { id: pecaIns.id, statusPeca: 'associada', etiquetaAtual: 'TZ-000362' },
-        etiquetaInvalidada: { id: 'ei1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', motivoCancelamento: 'troca' },
-        etiquetaEmitida: { id: 'ee1aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', statusImpressao: 'impressa' },
+        id: pecaRet.id,
+        statusPeca: 'associada',
+        pedidoVendaItemId: pedidos[1]!.pedidoVendaItemId,
       }),
     })) as unknown as typeof fetch;
 
@@ -124,30 +146,169 @@ describe('TrocaPecaFluxo (6.28)', () => {
     );
 
     await user.click(screen.getByText('Restaurante Grill'));
-    await user.click(screen.getByRole('button', { name: /Avançar/ }));
     await user.click(screen.getByText(/TZ-000341/));
-    await user.click(screen.getByRole('button', { name: /Avançar/ }));
-    await user.click(screen.getByText(/TZ-000362/));
-    await user.click(screen.getByRole('button', { name: /Avançar/ }));
-    await user.click(screen.getByRole('button', { name: 'estoque' }));
-    await user.click(screen.getByRole('button', { name: /Avançar/ }));
-    await user.selectOptions(
-      screen.getByLabelText('Motivo da troca'),
-      'peca_mais_adequada',
-    );
-    expect(screen.getByText(ROTULOS_MOTIVO_TROCA_PECA.peca_mais_adequada)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Avançar/ }));
-    await user.click(screen.getByRole('button', { name: 'Confirmar Troca' }));
+    await user.click(screen.getByText('Cliente Entrada'));
+    await user.selectOptions(screen.getByLabelText('Motivo da troca'), 'peca_mais_adequada');
+    await user.click(screen.getByRole('button', { name: 'Confirmar Troca e gerar nova etiqueta' }));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
-      '/api/operacao/pesagem/trocas',
+      `/api/operacao/pesagem/pecas/${pecaRet.id}/redirecionar`,
       expect.objectContaining({ method: 'POST' }),
     ));
-    await waitFor(() => expect(screen.getByText('Troca concluída')).toBeInTheDocument());
-    expect(screen.getAllByText('TZ-000341').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('TZ-000362').length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText('ei1aaaaa')).not.toBeInTheDocument();
-    expect(screen.queryByText('ee1aaaaa')).not.toBeInTheDocument();
+    const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body as string) as {
+      pedidoVendaItemId: string;
+    };
+    expect(body.pedidoVendaItemId).toBe(pedidos[1]!.pedidoVendaItemId);
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+      `/api/operacao/pesagem/pecas/${pecaRet.id}/etiqueta`,
+      expect.objectContaining({ method: 'POST' }),
+    ));
+    await waitFor(() => expect(screen.getByText('Peça vinculada ao pedido de destino. Nova etiqueta gerada.')).toBeInTheDocument());
     expect(onTrocaConcluida).toHaveBeenCalled();
+  });
+
+  it('usa abas de tipo de peça e exige motivo; destino da retirada só sem substituição', async () => {
+    const user = userEvent.setup();
+    render(
+      <TrocaPecaFluxo
+        open
+        onFechar={jest.fn()}
+        pedidos={pedidos}
+        pecasDisponiveis={pecasDisponiveis}
+      />,
+    );
+    expect(screen.queryByRole('combobox', { name: 'Tipo da peça' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /TZ/ })).toBeInTheDocument();
+    expect(screen.getByLabelText('Pedidos de origem')).toHaveTextContent('Restaurante Grill');
+    expect(screen.getByLabelText('Pedidos de origem')).toHaveTextContent('1/1');
+    expect(screen.getByLabelText('Pedidos de origem')).not.toHaveTextContent('TZ — Traseiro');
+    expect(screen.getByLabelText('Pedidos de origem')).not.toHaveTextContent('48,750 kg');
+    await user.click(screen.getByText('Restaurante Grill'));
+    expect(screen.getByLabelText('Peças vinculadas')).toHaveTextContent('48,750 kg');
+    expect(screen.queryByLabelText('Destino da peça retirada')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Motivo da troca')).toBeInTheDocument();
+    await user.click(screen.getByLabelText('Necessita substituição'));
+    expect(screen.getByLabelText('Destino da peça retirada')).toBeInTheDocument();
+    expect(screen.getByLabelText('Motivo da troca')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Pedidos de destino')).not.toBeInTheDocument();
+  });
+
+  it('filtra o destino da troca pelo cliente', async () => {
+    const user = userEvent.setup();
+    render(
+      <TrocaPecaFluxo
+        open
+        onFechar={jest.fn()}
+        pedidos={pedidos}
+        pecasDisponiveis={pecasDisponiveis}
+      />,
+    );
+    expect(screen.getByLabelText('Pedidos de destino')).toHaveTextContent('Cliente Entrada');
+    expect(screen.getByLabelText('Pedidos de destino')).toHaveTextContent('Outro Cliente');
+    expect(screen.getByLabelText('Pedidos de destino')).not.toHaveTextContent('Restaurante Grill');
+    expect(screen.queryByText(/TZ-000362/)).not.toBeInTheDocument();
+    await user.type(screen.getAllByPlaceholderText('Nome do cliente')[1]!, 'Cliente Entrada');
+    expect(screen.getByLabelText('Pedidos de destino')).toHaveTextContent('Cliente Entrada');
+    expect(screen.getByLabelText('Pedidos de destino')).not.toHaveTextContent('Outro Cliente');
+  });
+
+  it('separa origem completa de destino incompleto sem misturar peça no pedido', () => {
+    render(
+      <TrocaPecaFluxo
+        open
+        onFechar={jest.fn()}
+        pedidos={pedidos}
+        pecasDisponiveis={pecasDisponiveis}
+      />,
+    );
+    expect(screen.getByLabelText('Pedidos de origem')).toHaveTextContent('Restaurante Grill');
+    expect(screen.getByLabelText('Pedidos de origem')).not.toHaveTextContent('Cliente Entrada');
+    expect(screen.getByLabelText('Pedidos de destino')).toHaveTextContent('1/3');
+    expect(screen.getByLabelText('Pedidos de destino')).toHaveTextContent('0/2');
+    expect(screen.queryByText(/TZ-000341/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Peças vinculadas')).toHaveTextContent('Selecione um pedido');
+  });
+
+  it('agrupa dois itens 1/1 do mesmo pedido como 2/2 em uma linha', () => {
+    const mesmos: typeof pedidos = [
+      {
+        ...pedidos[0]!,
+        pedidoVendaItemId: 'pvi-a-aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        quantidadeJaVinculada: 1,
+        quantidadeTotalAVincular: 1,
+      },
+      {
+        ...pedidos[0]!,
+        pedidoVendaItemId: 'pvi-b-aaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        quantidadeJaVinculada: 1,
+        quantidadeTotalAVincular: 1,
+        pecasAssociadas: [{ id: 'pr2aaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', codigo: 'TZ-000342', peso: '47.000', produtoCodigo: 'TZ' }],
+      },
+    ];
+    render(
+      <TrocaPecaFluxo open onFechar={jest.fn()} pedidos={mesmos} pecasDisponiveis={[]} />,
+    );
+    const origem = screen.getByLabelText('Pedidos de origem');
+    expect(origem).toHaveTextContent('Restaurante Grill');
+    expect(origem).toHaveTextContent('2/2');
+    expect(origem.querySelectorAll('button')).toHaveLength(1);
+    expect(origem.textContent).not.toMatch(/1\/1/);
+  });
+
+  it('destina a peça da origem ao estoque quando não há substituição', async () => {
+    const user = userEvent.setup();
+    const pecaRet = pedidos[0]!.pecasAssociadas[0]!;
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: pecaRet.id, statusPeca: 'em_sobra', pedidoVendaItemId: null }),
+    })) as unknown as typeof fetch;
+
+    render(
+      <TrocaPecaFluxo
+        open
+        onFechar={jest.fn()}
+        onTrocaConcluida={jest.fn()}
+        pedidos={pedidos}
+        pecasDisponiveis={pecasDisponiveis}
+      />,
+    );
+
+    await user.click(screen.getByText('Restaurante Grill'));
+    await user.click(screen.getByText(/TZ-000341/));
+    await user.click(screen.getByLabelText('Necessita substituição'));
+    await user.selectOptions(screen.getByLabelText('Destino da peça retirada'), 'desossa');
+    await user.selectOptions(screen.getByLabelText('Motivo da troca'), 'peca_mais_adequada');
+    await user.click(screen.getByRole('button', { name: 'Confirmar Troca e gerar nova etiqueta' }));
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+      `/api/operacao/pesagem/pecas/${pecaRet.id}/destinar-retirada`,
+      expect.objectContaining({ method: 'POST' }),
+    ));
+    const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body as string) as {
+      destino: string;
+    };
+    expect(body.destino).toBe('desossa');
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+      `/api/operacao/pesagem/pecas/${pecaRet.id}/etiqueta`,
+      expect.objectContaining({ method: 'POST' }),
+    ));
+    await waitFor(() => expect(screen.getByText('Peça destinada à desossa. Nova etiqueta gerada.')).toBeInTheDocument());
+  });
+
+  it('cancela sem enviar POST', async () => {
+    const user = userEvent.setup();
+    const onFechar = jest.fn();
+    global.fetch = jest.fn();
+    render(
+      <TrocaPecaFluxo
+        open
+        onFechar={onFechar}
+        pedidos={pedidos}
+        pecasDisponiveis={pecasDisponiveis}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(onFechar).toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

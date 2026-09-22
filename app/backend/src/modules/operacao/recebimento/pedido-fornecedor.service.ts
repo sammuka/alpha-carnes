@@ -76,7 +76,8 @@ export class PedidoFornecedorService {
   ): Promise<Paginado<PedidoFornecedor | PedidoFornecedorResumoRecebivel>> {
     const page = query.pagina;
     const pageSize = query.limite;
-    const modoRecebimento = 'elegiveisRecebimento' in query && query.elegiveisRecebimento === true;
+    const modoRecebimento = query.elegiveisRecebimento === true;
+    const operacaoStatus = modoRecebimento ? query.operacaoStatus : undefined;
     const semRecebimentoNaoCancelado = notExists(
       this.db
         .select({ um: sql`1` })
@@ -92,6 +93,7 @@ export class PedidoFornecedorService {
           inArray(pedidosFornecedor.status, STATUS_PEDIDO_FORNECEDOR_RECEBIVEL),
           isNull(pedidosFornecedor.deletedAt),
           semRecebimentoNaoCancelado,
+          operacaoStatus ? eq(operacoes.status, operacaoStatus) : undefined,
         )
       : and(
           eq(pedidosFornecedor.operacaoId, query.operacaoId),
@@ -121,7 +123,11 @@ export class PedidoFornecedorService {
         : this.db.select().from(pedidosFornecedor).where(where)
         .orderBy(desc(pedidosFornecedor.createdAt))
         .limit(pageSize).offset((page - 1) * pageSize),
-      this.db.select({ total: sql<number>`count(*)::int` }).from(pedidosFornecedor).where(where),
+      operacaoStatus
+        ? this.db.select({ total: sql<number>`count(*)::int` }).from(pedidosFornecedor)
+          .innerJoin(operacoes, eq(operacoes.id, pedidosFornecedor.operacaoId))
+          .where(where)
+        : this.db.select({ total: sql<number>`count(*)::int` }).from(pedidosFornecedor).where(where),
     ]);
     return montarPaginado<PedidoFornecedor | PedidoFornecedorResumoRecebivel>(
       linhas as unknown as Array<PedidoFornecedor | PedidoFornecedorResumoRecebivel>,

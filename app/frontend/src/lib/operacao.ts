@@ -54,9 +54,18 @@ export interface RecebimentoItem {
   requerBalanca: boolean;
   pesoTotalApurado: string | null;
   pesoApurado?: string | null;
+  /** Peso declarado na NF por produto (campo Peso NF do novo recebimento). Ausente = não preenchido. */
+  pesoNf?: string | null;
   statusApuracao: StatusApuracaoItem;
   observacoes: string | null;
-  produto?: { id: string; codigo: string; nome?: string; descricao?: string };
+  produto?: {
+    id: string;
+    codigo: string;
+    nome?: string;
+    descricao?: string;
+    passaDesossa?: boolean;
+    podeEstoque?: boolean;
+  };
 }
 
 export interface DivergenciaRecebimento {
@@ -231,6 +240,10 @@ export interface SugestaoScored {
   clienteId: string;
   clienteNome?: string;
   saldoPendente: string;
+  /** Total solicitado no item do pedido (D22 — coluna "Qtde solicitada" em Pedidos compatíveis). */
+  quantidadePedida: string;
+  /** Total já atendido/associado no item do pedido (coluna "Qtde associada"). */
+  quantidadeAtendida: string;
   prioridade: number | null;
   rotaPrevista: string | null;
   score: number;
@@ -511,7 +524,7 @@ export const ROTULOS_MOTIVO_ESTORNO: Record<MotivoEstorno, string> = {
 
 export interface ExecutarTrocaPayload {
   pecaRetiradaId: string;
-  pecaInseridaId: string;
+  pecaInseridaId?: string;
   pedidoVendaItemId: string;
   destinoRetirada: DestinoRetirada;
   motivo: MotivoTrocaPeca;

@@ -81,6 +81,32 @@ describe('DisponibilidadePage', () => {
             '!': 0,
           },
           saldoComercial: '40.000',
+        }, {
+          produtoId: 'item-zero',
+          codigo: 'BOI',
+          descricao: 'Boi Casado',
+          provisorio: true,
+          estados: {
+            F: '0.000',
+            V: '0.000',
+            R: '0.000',
+            C: '0.000',
+            D: '0.000',
+            O: '0.000',
+            E: '0.000',
+            '!': '0.000',
+          },
+          unidades: {
+            F: 0,
+            V: 0,
+            R: 0,
+            C: 0,
+            D: 0,
+            O: 0,
+            E: 0,
+            '!': 0,
+          },
+          saldoComercial: '0.000',
         }]);
       }
       return resposta({ message: `URL inesperada: ${url}` }, 500);
@@ -115,5 +141,18 @@ describe('DisponibilidadePage', () => {
     await waitFor(() =>
       expect(screen.getByTestId('disp-d1-disponivel')).toHaveTextContent('36.000'));
     expect(contarLista()).toBe(chamadasListaAntes);
+  });
+
+  it('oculta produtos sem valor no mapa e remove o botão limpar filtros', async () => {
+    render(<DisponibilidadePage />);
+
+    expect(await screen.findByText('Traseiro Bovino')).toBeInTheDocument();
+    expect(screen.getByText('Boi Casado')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Limpar filtros/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Mostrar apenas produtos com valor/i }));
+
+    expect(screen.getByText('Traseiro Bovino')).toBeInTheDocument();
+    expect(screen.queryByText('Boi Casado')).not.toBeInTheDocument();
   });
 });

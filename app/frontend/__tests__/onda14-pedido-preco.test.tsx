@@ -361,17 +361,32 @@ it('sem PEDIDOS_GERENCIAR o campo fica em leitura', async () => {
   expect(within(linha).getByLabelText('Preço unitário')).toBeDisabled();
 });
 
-it('pedido finalizado mantém destaque em leitura', async () => {
+it('pedido finalizado desabilita inclusão, grade e ações', async () => {
   renderEditor({
     pedido: pedidoBase({
       status: 'finalizado',
       itens: [itemBase({ precoAjustado: true, precoAplicado: '20.00', precoTabelaOriginal: '18.50' })],
     }),
+    podeFinalizar: true,
   });
+  expect(screen.getByRole('combobox', { name: 'Produto' })).toBeDisabled();
+  expect(screen.getByLabelText('Preço unitário do novo produto')).toBeDisabled();
+  expect(document.getElementById('quantidade-produto-novo')).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Adicionar produto' })).toBeDisabled();
+
   const linha = await screen.findByTestId('linha-item-1');
   const input = within(linha).getByLabelText('Preço unitário');
   expect(input).toHaveAttribute('readonly');
+  expect(input).toBeDisabled();
   expect(input.className).toContain('border-warning');
+  expect(within(linha).getByLabelText('Quantidade')).toBeDisabled();
+  expect(within(linha).getByRole('button', { name: 'Aplicar quantidade' })).toBeDisabled();
+  expect(within(linha).getByRole('button', { name: /Remover/ })).toBeDisabled();
+
+  expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Finalizar Pedido' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Voltar para pedidos' })).toBeEnabled();
+  expect(screen.getByText('Finalizado')).toBeInTheDocument();
 });
 
 it('trocar cliente remapeia precoAplicado de itensNovos a partir de corpo.data', async () => {
@@ -391,7 +406,7 @@ it('trocar cliente remapeia precoAplicado de itensNovos a partir de corpo.data',
   await user.click(screen.getByRole('combobox', { name: 'Produto' }));
   await user.click(await screen.findByRole('option', { name: /TZ — Traseiro/i }));
   await waitFor(() => expect(screen.getByLabelText('Preço unitário do novo produto')).toHaveValue(18.5));
-  await user.click(screen.getByRole('button', { name: /Adicionar produto/i }));
+  await user.click(screen.getByRole('button', { name: 'Adicionar produto' }));
   expect(await screen.findByText('R$ 18,50')).toBeInTheDocument();
   await user.click(screen.getByRole('combobox', { name: 'Buscar cliente' }));
   await user.click(await screen.findByRole('option', { name: /Mercado Novo/i }));

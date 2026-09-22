@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-11T21:40:00-03:00",
+  "title": "Design System: AlphaCarnes — DS v3 Evolução",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Azul Operacional",
+        "canonical": "#2D6BBE",
+        "tonalRamp": ["#0E2038", "#153355", "#1D4880", "#24589E", "#2D6BBE", "#5A8DD1", "#9BBBE5", "#E8F0FA"]
+      },
+      "neutral-bg": {
+        "role": "neutral",
+        "displayName": "Névoa Clara",
+        "canonical": "#F4F6F9",
+        "tonalRamp": ["#18202C", "#4A5A6E", "#6E7E92", "#93A1B3", "#C3CEDB", "#DDE4EC", "#EEF2F7", "#F4F6F9"]
+      },
+      "status-recebido": {
+        "role": "status",
+        "displayName": "Azul Institucional (Recebido)",
+        "canonical": "#1D5FAE"
+      },
+      "status-pesado": {
+        "role": "status",
+        "displayName": "Violeta Desossa (Pesado)",
+        "canonical": "#6636B8"
+      },
+      "status-expedido": {
+        "role": "status",
+        "displayName": "Verde Concluído (Expedido)",
+        "canonical": "#177A43"
+      },
+      "status-divergencia": {
+        "role": "status",
+        "displayName": "Âmbar Atenção (Divergência)",
+        "canonical": "#91620B"
+      },
+      "status-bloqueado": {
+        "role": "status",
+        "displayName": "Vermelho Bloqueio (Bloqueado)",
+        "canonical": "#B3362A"
+      },
+      "status-pendente": {
+        "role": "status",
+        "displayName": "Cinza Neutro (Pendente)",
+        "canonical": "#55657A"
+      },
+      "sidebar-gradient-start": {
+        "role": "identity",
+        "displayName": "Navy Profundo (início do gradiente da sidebar)",
+        "canonical": "#1E3A5F"
+      },
+      "sidebar-gradient-end": {
+        "role": "identity",
+        "displayName": "Azul-Marinho (fim do gradiente da sidebar)",
+        "canonical": "#1B4E9B"
+      }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Title", "purpose": "Título de página (h1), único por tela." },
+      "body": { "displayName": "Body", "purpose": "Base de toda a UI: rótulos, textos, formulários." },
+      "label": { "displayName": "Label", "purpose": "Cabeçalhos de tabela e rótulos de KPI, sempre uppercase." },
+      "data": { "displayName": "Data", "purpose": "KPIs, pesos, moeda, quantidades em coluna, códigos e datas tabulares. Nunca em rótulos ou texto corrido." }
+    },
+    "shadows": [
+      { "name": "shadow-1", "value": "0 1px 2px rgba(24, 32, 44, 0.06)", "purpose": "Repouso de cards e botões." },
+      { "name": "shadow-2", "value": "0 2px 6px rgba(24, 32, 44, 0.08), 0 1px 2px rgba(24, 32, 44, 0.05)", "purpose": "Popovers, dropdowns, menu da sidebar." },
+      { "name": "shadow-3", "value": "0 8px 24px rgba(24, 32, 44, 0.14), 0 2px 6px rgba(24, 32, 44, 0.08)", "purpose": "Modais e dialogs." }
+    ],
+    "motion": [
+      { "name": "transition-standard", "value": "color, border-color, box-shadow 100ms ease", "purpose": "Transição padrão de controles (hover/focus/active)." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Button Primary",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ação principal da tela; azul operacional sólido, altura fixa de 32px.",
+      "html": "<button class=\"ds-btn-primary\">Salvar</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border: none; border-radius: 6px; background: #2D6BBE; color: #FFFFFF; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 600; white-space: nowrap; box-shadow: 0 1px 2px rgba(24, 32, 44, 0.06); transition: background-color 100ms ease; cursor: pointer; } .ds-btn-primary:hover { background: #24589E; } .ds-btn-primary:active { background: #1D4880; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(45, 107, 190, 0.35); } .ds-btn-primary:disabled { opacity: 0.5; pointer-events: none; }"
+    },
+    {
+      "name": "Button Secondary",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Ação secundária; contorno neutro sobre fundo branco.",
+      "html": "<button class=\"ds-btn-secondary\">Cancelar</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid #C3CEDB; border-radius: 6px; background: #FFFFFF; color: #18202C; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 600; box-shadow: 0 1px 2px rgba(24, 32, 44, 0.06); transition: background-color 100ms ease, border-color 100ms ease; cursor: pointer; } .ds-btn-secondary:hover { background: #F8FAFC; border-color: #93A1B3; } .ds-btn-secondary:active { background: #EEF2F7; } .ds-btn-secondary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(45, 107, 190, 0.35); }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo de texto padrão, altura 32px, foco com anel azul.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Buscar cliente…\" />",
+      "css": ".ds-input { display: flex; height: 32px; width: 100%; min-width: 0; border-radius: 6px; border: 1px solid #C3CEDB; background: #FFFFFF; padding: 0 10px; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 13px; color: #18202C; outline: none; transition: border-color 100ms ease, box-shadow 100ms ease; } .ds-input::placeholder { color: #93A1B3; } .ds-input:hover:not(:focus):not(:disabled) { border-color: #93A1B3; } .ds-input:focus-visible { border-color: #2D6BBE; box-shadow: 0 0 0 3px rgba(45, 107, 190, 0.35); } .ds-input:disabled { background: #EEF2F7; color: #6E7E92; cursor: not-allowed; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Superfície de conteúdo padrão com cabeçalho de altura fixa.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-header\">Título do card</div><div class=\"ds-card-content\">Conteúdo do card.</div></div>",
+      "css": ".ds-card { display: flex; flex-direction: column; border-radius: 8px; border: 1px solid #DDE4EC; background: #FFFFFF; color: #18202C; box-shadow: 0 1px 2px rgba(24, 32, 44, 0.06); } .ds-card-header { display: flex; align-items: center; height: 38px; padding: 0 12px; border-bottom: 1px solid #DDE4EC; font-size: 13px; font-weight: 700; } .ds-card-content { padding: 12px; font-size: 13px; }"
+    },
+    {
+      "name": "Status Pill — Recebido",
+      "kind": "chip",
+      "refersTo": "status-pill-recebido",
+      "description": "Indicador de status operacional; uma cor dedicada por status do fluxo físico.",
+      "html": "<span class=\"ds-status-pill\"><span class=\"ds-status-dot\"></span>Recebido</span>",
+      "css": ".ds-status-pill { display: inline-flex; height: 20px; align-items: center; gap: 5px; white-space: nowrap; border-radius: 9999px; padding: 0 8px; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 600; background: #E7F0FB; color: #1D5FAE; } .ds-status-dot { width: 5px; height: 5px; border-radius: 9999px; background: #2F6FC4; flex-shrink: 0; }"
+    },
+    {
+      "name": "Badge Provisório",
+      "kind": "chip",
+      "refersTo": "badge-provisorio",
+      "description": "Marca decisões de produto ainda pendentes (Princípio VIII); remoção exige decisão registrada.",
+      "html": "<span class=\"ds-badge-provisorio\"><svg width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z\"/><line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/></svg>Provisório</span>",
+      "css": ".ds-badge-provisorio { display: inline-flex; height: 18px; align-items: center; gap: 4px; white-space: nowrap; border-radius: 4px; padding: 0 6px; border: 1px solid #F0DCAE; background: #FCF3DC; color: #91620B; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; }"
+    },
+    {
+      "name": "KPI Strip",
+      "kind": "custom",
+      "refersTo": "kpi-strip",
+      "description": "Faixa horizontal de indicadores com valores em mono tabular; divididos por bordas verticais finas.",
+      "html": "<div class=\"ds-kpi-strip\"><div class=\"ds-kpi\"><p class=\"ds-kpi-label\">Recebidos hoje</p><p class=\"ds-kpi-value\">128</p></div><div class=\"ds-kpi\"><p class=\"ds-kpi-label\">Em divergência</p><p class=\"ds-kpi-value ds-kpi-alert\">4</p></div></div>",
+      "css": ".ds-kpi-strip { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; overflow: hidden; border-radius: 8px; border: 1px solid #DDE4EC; background: #FFFFFF; } .ds-kpi { min-width: 0; border-left: 1px solid #DDE4EC; padding: 8px 12px 7px; } .ds-kpi:first-child { border-left: none; } .ds-kpi-label { font-size: 11px; font-weight: 500; color: #6E7E92; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ds-kpi-value { font-family: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', monospace; font-variant-numeric: tabular-nums; font-size: 20px; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; color: #18202C; } .ds-kpi-alert { color: #91620B; }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "filter-chip",
+      "description": "Chip de filtro selecionável, ativo/inativo.",
+      "html": "<button class=\"ds-filter-chip ds-filter-chip-active\">Em aberto</button>",
+      "css": ".ds-filter-chip { display: inline-flex; height: 28px; align-items: center; gap: 6px; white-space: nowrap; border-radius: 9999px; border: 1px solid #C3CEDB; background: #FFFFFF; color: #18202C; padding: 0 10px; font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; transition: background-color 100ms ease, border-color 100ms ease; } .ds-filter-chip:hover { border-color: #93A1B3; background: #F8FAFC; } .ds-filter-chip-active { border-color: #C4D8F0; background: #E8F0FA; color: #1D5FAE; font-weight: 600; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Evolução",
+    "overview": "A identidade original da AlphaCarnes — sidebar azul em gradiente, primária azul institucional, fundo claro — evoluiu, sem ser substituída, para suportar densidade operacional real: telas com 10 KPIs e 16 linhas de pedido cabendo em um viewport HD, colunas numéricas perfeitamente alinhadas, e um vocabulário completo de estados operacionais (recebido, pesado, expedido, divergência, bloqueado, pendente). Não é um redesign estético; é um refinamento funcional da mesma marca, aprovado pelo cliente em 2026-08-05 como referência visual canônica do produto (AD-07), substituindo o protótipo externo antigo nesse papel.\n\nA interface não tenta impressionar — ela tenta caber mais operação por centímetro de tela sem perder legibilidade. Números e dados sensíveis (peso, valor, código) sempre em mono tabular; tudo o mais (rótulos, títulos, texto corrido) em Inter. A paleta é discreta: azul de ação usado com parcimônia, e uma paleta de status separada e re-harmonizada carrega o significado operacional.",
+    "keyCharacteristics": [
+      "Densidade operacional não-negociável: alturas de controle fixas (32px padrão, 28px compacto, 36px linha de tabela).",
+      "Mono tabular (JetBrains Mono) exclusivamente para dados — nunca para rótulos ou texto corrido.",
+      "Quase plana: 3 níveis de sombra sutis, elevação como sinal discreto, não decoração.",
+      "Paleta de status operacional própria, distinta da paleta semântica genérica (sucesso/alerta/erro).",
+      "Sidebar em gradiente azul-marinho preservada da identidade original."
+    ],
+    "rules": [
+      { "name": "The Status-Is-Not-Semantic Rule", "body": "Cores de status operacional (StatusPill) nunca compartilham token com sucesso/alerta/erro genéricos, mesmo quando a cor \"parece\" a mesma família — são vocabulários diferentes (fluxo físico vs. resultado de ação).", "section": "colors" },
+      { "name": "The Data-Mono Rule", "body": "JetBrains Mono é usada exclusivamente para dados tabulares e códigos — nunca em rótulos, títulos ou texto corrido.", "section": "typography" },
+      { "name": "The One-Line Page Header Rule", "body": "Título, subtítulo e ações de página cabem em uma única linha flexível — nunca em duas linhas ou um bloco de cabeçalho alto.", "section": "layout" },
+      { "name": "The Flat-By-Default Rule", "body": "Elevação é sinal discreto de camada, nunca decoração. Nenhum componente novo recebe sombra além do token que corresponde à sua camada real (superfície, flutuante ou modal).", "section": "elevation" },
+      { "name": "The No New Radius Rule", "body": "rounded-xl (10px) é exclusivo de modais. Nenhum card novo usa rounded-xl; cards são sempre rounded-lg (8px).", "section": "shapes" }
+    ],
+    "dos": [
+      "Do usar JetBrains Mono exclusivamente para peso, moeda, quantidade em coluna, códigos e datas/horas em coluna de tabela.",
+      "Do manter todo controle interativo em 32px (padrão) ou 28px (compacto) — nunca introduzir uma terceira altura.",
+      "Do aplicar os seis estados completos (default, hover, focus-visible, active, disabled, erro) em todo controle novo.",
+      "Do usar a paleta de status operacional (StatusPill) só para o fluxo físico da mercadoria, nunca para resultado genérico de ação.",
+      "Do preservar o gradiente azul-marinho da sidebar — é o elemento mais reconhecível da identidade herdada."
+    ],
+    "donts": [
+      "Don't usar JetBrains Mono em rótulos, títulos ou texto corrido.",
+      "Don't aplicar rounded-xl (10px) fora de modais/dialogs.",
+      "Don't adicionar sombra além do token da camada real do componente; KPI strip e cards planos não ganham sombra extra.",
+      "Don't reaproveitar cores de status operacional para badges de sucesso/alerta/erro genéricos.",
+      "Don't dividir um cabeçalho de página em duas linhas — título, subtítulo e ações cabem em uma linha flexível."
+    ]
+  }
+}

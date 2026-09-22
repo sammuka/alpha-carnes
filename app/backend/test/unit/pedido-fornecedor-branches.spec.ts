@@ -88,6 +88,47 @@ describe('PedidoFornecedorService — branches', () => {
     expect(result.total).toBe(0);
   });
 
+  it('listar elegíveis filtra por status da operação quando informado', async () => {
+    const chain = {
+      innerJoin: jest.fn(),
+      where: jest.fn(),
+      orderBy: jest.fn(),
+      limit: jest.fn(),
+      offset: jest.fn(),
+    };
+    chain.innerJoin.mockReturnValue(chain);
+    chain.where.mockReturnValue(chain);
+    chain.orderBy.mockReturnValue(chain);
+    chain.limit.mockReturnValue(chain);
+    chain.offset.mockResolvedValue([{ id: 'pf-em-andamento' }]);
+    const db = {
+      select: jest.fn()
+        .mockReturnValueOnce({
+          from: () => ({
+            where: () => ({}),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: () => chain,
+        })
+        .mockReturnValueOnce({
+          from: () => ({
+            innerJoin: () => ({
+              where: () => Promise.resolve([{ total: 1 }]),
+            }),
+          }),
+        }),
+    };
+    const result = await service(db).listar({
+      elegiveisRecebimento: true,
+      operacaoStatus: 'em_andamento',
+      pagina: 1,
+      limite: 100,
+    });
+    expect(result.data).toHaveLength(1);
+    expect(result.total).toBe(1);
+  });
+
   it('criar 404 quando compra não existe', async () => {
     const db = {
       transaction: jest.fn(async (cb: (tx: object) => Promise<unknown>) => cb({

@@ -57,12 +57,7 @@ export class FaltasService {
         .where(
           and(
             isNull(pedidosVenda.deletedAt),
-            inArray(pedidosVenda.status, [
-              'em_elaboracao_reserva_ativa',
-              'aguardando_confirmacao_overbooking',
-              'finalizado',
-              'parcialmente_atendido',
-            ]),
+            eq(pedidosVenda.status, 'finalizado'),
             inArray(pedidosVendaItens.produtoId, produtoIds),
             sql`${pedidosVendaItens.status} <> 'cancelado'`,
             sql`${pedidosVendaItens.quantidadePedida} - ${pedidosVendaItens.quantidadeAtendida} > 0`,

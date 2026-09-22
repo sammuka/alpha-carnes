@@ -1,5 +1,5 @@
-import { CadastroFormPage } from '../../_components/cadastro-form-page';
+import { redirect } from 'next/navigation';
 
-export default async function NovoFornecedorPage() {
-  return <CadastroFormPage recurso="fornecedores" />;
+export default function NovoFornecedorPage() {
+  redirect('/cadastros/fornecedores');
 }

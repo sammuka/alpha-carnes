@@ -6,6 +6,11 @@ import { Loader2 } from 'lucide-react';
 import { SelectNative } from '@/components/ui/select-native';
 import { listarOperacoes, type Operacao } from '@/lib/gestao-operacoes';
 
+function formatarDataOperacao(data: string): string {
+  const [ano, mes, dia] = data.split('-');
+  return ano && mes && dia ? `${dia}/${mes}/${ano}` : data;
+}
+
 interface SeletorOperacaoProps {
   className?: string;
   onOperacaoChange?: (operacao: Operacao | null) => void;
@@ -94,7 +99,7 @@ export function SeletorOperacao({ className, onOperacaoChange }: SeletorOperacao
     >
       {operacoes.map((o) => (
         <option key={o.id} value={o.id}>
-          {o.rotulo}
+          {formatarDataOperacao(o.data)}
         </option>
       ))}
     </SelectNative>

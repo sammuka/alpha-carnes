@@ -51,7 +51,7 @@ describe('SeletorOperacao', () => {
       expect(screen.getByLabelText('Selecionar operação')).toBeInTheDocument();
     });
     expect(mockReplace).toHaveBeenCalledWith('?operacaoId=op-1', { scroll: false });
-    expect(screen.getByRole('option', { name: 'Operação de terça-feira' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '22/07/2026' })).toBeInTheDocument();
   });
 
   it('sincroniza troca via operacaoId na URL', async () => {

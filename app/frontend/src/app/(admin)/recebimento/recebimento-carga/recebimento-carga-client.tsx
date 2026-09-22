@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { rotuloProduto } from '@/lib/dominios';
 import { extrairMensagemErro, mensagemDeErro } from '@/lib/error-message';
+import { mascararPesoKg, pesoKgParaNumero } from '@/lib/masks';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import {
   TIPOS_DIVERGENCIA,
@@ -241,11 +242,13 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   const [pedidosRecebiveis, setPedidosRecebiveis] = useState<PedidoFornecedorResumoRecebivel[]>([]);
   const [carregandoPedidos, setCarregandoPedidos] = useState(false);
   const [busca, setBusca] = useState('');
+  const [dataOperacaoFiltro, setDataOperacaoFiltro] = useState('todas');
   const [sheetAberto, setSheetAberto] = useState(false);
   const [sheetNfeAberto, setSheetNfeAberto] = useState(false);
   const [pedidoFornecedorId, setPedidoFornecedorId] = useState('');
   const [previsao, setPrevisao] = useState<PrevisaoRecebimento | null>(null);
   const [itensNfEditados, setItensNfEditados] = useState<Record<string, string>>({});
+  const [pesosNfEditados, setPesosNfEditados] = useState<Record<string, string>>({});
   const [formNfe, setFormNfe] = useState<FormNfe>(formNfeVazio);
   const [formMetadados, setFormMetadados] = useState<FormMetadados>(formMetadadosVazio);
   const [salvando, setSalvando] = useState(false);
@@ -290,7 +293,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
   const carregarPedidosRecebiveis = useCallback(async () => {
     setCarregandoPedidos(true);
     const res = await fetch(
-      '/api/operacao/pedidos-fornecedor?elegiveisRecebimento=true&pagina=1&limite=100',
+      '/api/operacao/pedidos-fornecedor?elegiveisRecebimento=true&operacaoStatus=em_andamento&pagina=1&limite=100',
       { cache: 'no-store' },
     );
     const body = await res.json().catch(() => ({}));
@@ -307,6 +310,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     setErro(null);
     setPrevisao(null);
     setItensNfEditados({});
+    setPesosNfEditados({});
     const res = await fetch(`/api/operacao/recebimentos/previsao/${id}`, { cache: 'no-store' });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -407,17 +411,39 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     return desconectar;
   }, [detalhe, recebimentoId, carregarDetalhe, carregarLista]);
 
-  const listaFiltrada = lista.filter((r) => {
-    if (!busca) return true;
-    const q = busca.toLowerCase();
-    return (
-      r.codigoLote.toLowerCase().includes(q) ||
-      (r.numeroInternoCompra?.toLowerCase().includes(q) ?? false) ||
-      r.fornecedorNome.toLowerCase().includes(q) ||
-      (r.nfeNumero?.toLowerCase().includes(q) ?? false) ||
-      (r.romaneio?.toLowerCase().includes(q) ?? false)
-    );
-  });
+  const datasOperacaoDisponiveis = useMemo(() => {
+    const datas = new Set(lista.map((r) => r.dataOperacao).filter((d): d is string => Boolean(d)));
+    return [...datas].sort((a, b) => b.localeCompare(a));
+  }, [lista]);
+
+  const listaFiltrada = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return lista.filter((r) => {
+      const correspondeData = dataOperacaoFiltro === 'todas' || r.dataOperacao === dataOperacaoFiltro;
+      if (!correspondeData) return false;
+      if (!q) return true;
+      return (
+        r.codigoLote.toLowerCase().includes(q) ||
+        (r.numeroInternoCompra?.toLowerCase().includes(q) ?? false) ||
+        r.fornecedorNome.toLowerCase().includes(q) ||
+        (r.nfeNumero?.toLowerCase().includes(q) ?? false) ||
+        (r.romaneio?.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [busca, dataOperacaoFiltro, lista]);
+
+  const blocosPorData = useMemo(() => {
+    const mapa = new Map<string, RecebimentoResumoEnriquecido[]>();
+    for (const item of listaFiltrada) {
+      const chave = item.dataOperacao ?? '';
+      const grupo = mapa.get(chave);
+      if (grupo) grupo.push(item);
+      else mapa.set(chave, [item]);
+    }
+    return [...mapa.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([data, itens]) => ({ data, itens }));
+  }, [listaFiltrada]);
 
   const montarPayload = (): IniciarRecebimentoPayload | null => {
     if (!pedidoFornecedorId) return null;
@@ -463,10 +489,15 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     // ALP-93: se o usuário digitou a NF, os valores por ele informados na grade passam a
     // ser a referência (quantidadeDeclarada), substituindo o previsto do Pedido de Compra.
     if (formNfe.nfeNumero.trim()) {
-      const itensNf = previsao.itensOperacionais.map((item) => ({
-        produtoId: item.produtoId,
-        quantidadeDeclarada: Number(itensNfEditados[item.produtoId] ?? item.quantidadePrevista),
-      }));
+      const itensNf = previsao.itensOperacionais.map((item) => {
+        const pesoInformado = pesosNfEditados[item.produtoId];
+        const pesoNumero = pesoInformado ? pesoKgParaNumero(pesoInformado) : NaN;
+        return {
+          produtoId: item.produtoId,
+          quantidadeDeclarada: Number(itensNfEditados[item.produtoId] ?? item.quantidadePrevista),
+          ...(Number.isFinite(pesoNumero) && pesoNumero > 0 ? { pesoDeclarado: pesoNumero } : {}),
+        };
+      });
       const resNf = await fetch(`/api/operacao/pedidos-fornecedor/${previsao.pedidoFornecedorId}/nf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -496,6 +527,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     setPedidoFornecedorId('');
     setPrevisao(null);
     setItensNfEditados({});
+    setPesosNfEditados({});
     setFormNfe(formNfeVazio());
     await carregarLista();
     if (irParaBalanca) {
@@ -536,6 +568,9 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
 
   const salvarMetadados = async () => {
     if (!recebimentoId || !podeGerenciar) return;
+    if (detalhe && detalhe.status !== 'pesagem_em_andamento' && detalhe.status !== 'aguardando_conclusao_pesagem') {
+      return;
+    }
     setSalvando(true);
     setErro(null);
     const res = await fetch(`/api/operacao/recebimentos/${recebimentoId}/metadados`, {
@@ -700,6 +735,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     setPedidoFornecedorId('');
     setPrevisao(null);
     setItensNfEditados({});
+    setPesosNfEditados({});
     setFormNfe(formNfeVazio());
     setErro(null);
     setSheetAberto(true);
@@ -732,6 +768,11 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
     !STATUS_ENCERRADOS.includes(detalhe.status) &&
     Boolean(itemSelecionado);
 
+  const metadadosEditaveis =
+    podeGerenciar &&
+    detalhe != null &&
+    (detalhe.status === 'pesagem_em_andamento' || detalhe.status === 'aguardando_conclusao_pesagem');
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -739,6 +780,18 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
         subtitle="Abertura de lotes a partir do Pedido ao Fornecedor — conferência na balança"
         live={status === 'conectado'}
       >
+        <SelectNative
+          aria-label="Filtrar por data de operação"
+          selectSize="sm"
+          className="w-[190px]"
+          value={dataOperacaoFiltro}
+          onChange={(event) => setDataOperacaoFiltro(event.target.value)}
+        >
+          <option value="todas">Todas as datas</option>
+          {datasOperacaoDisponiveis.map((data) => (
+            <option key={data} value={data}>{formatDataOperacao(data)}</option>
+          ))}
+        </SelectNative>
         <Button variant="secondary" size="sm" onClick={() => void carregarLista()}>
           <RefreshCw />
           Atualizar
@@ -766,7 +819,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
               <div className="w-[240px]">
                 <Input
                   adornLeft={<Search />}
-                  placeholder="Buscar lote, PC, fornecedor, NF…"
+                  placeholder="Buscar lote, PC ou fornecedor…"
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
                   className="h-7 text-xs"
@@ -781,10 +834,6 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                   <TableHead>Lote</TableHead>
                   <TableHead>Pedido de Compra</TableHead>
                   <TableHead>Fornecedor</TableHead>
-                  <TableHead>NF-e</TableHead>
-                  <TableHead>Romaneio</TableHead>
-                  <TableHead>Tipo de carga</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Progresso</TableHead>
                   <TableHead />
                 </TableRow>
@@ -792,29 +841,31 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
               <TableBody>
                 {listaFiltrada.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="h-24 text-center text-xs text-muted-foreground">
+                    <TableCell colSpan={5} className="h-24 text-center text-xs text-muted-foreground">
                       Nenhum recebimento registrado.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  listaFiltrada.map((r) => (
-                    <TableRow key={r.id} className="group">
+                  blocosPorData.map((bloco) => (
+                    <Fragment key={bloco.data || 'sem-data'}>
+                      <TableRow className="bg-surface-2 hover:bg-surface-2">
+                        <TableCell colSpan={5} className="h-7 text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">
+                          {bloco.data ? formatDataOperacao(bloco.data) : 'Sem data de operação'}
+                        </TableCell>
+                      </TableRow>
+                      {bloco.itens.map((r) => (
+                    <TableRow
+                      key={r.id}
+                      className="group cursor-pointer"
+                      onClick={() => void carregarDetalhe(r.id)}
+                    >
                       <TableCellCode>#{r.codigoLote}</TableCellCode>
                       <TableCellCode>{r.numeroInternoCompra ?? '—'}</TableCellCode>
                       <TableCell className="text-[13px] font-semibold text-foreground">{r.fornecedorNome}</TableCell>
-                      <TableCellCode>{r.nfeNumero ?? '—'}</TableCellCode>
-                      <TableCellCode>{r.romaneio ?? '—'}</TableCellCode>
-                      <TableCell className="text-muted-foreground">{r.tipoCarga ?? '—'}</TableCell>
-                      <TableCell>
-                        <StatusPill
-                          variant={statusRecebimentoVariant(r.status)}
-                          label={STATUS_RECEB_LABEL[r.status as StatusRecebimento] ?? r.status}
-                        />
-                      </TableCell>
                       <TableCell className="w-[120px]">
                         <ProgressoBalancaBar valor={r.progressoBalanca} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(ev) => ev.stopPropagation()}>
                         <div className="flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                           <Button variant="ghost" size="sm" onClick={() => void carregarDetalhe(r.id)}>
                             Abrir
@@ -828,6 +879,8 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                         </div>
                       </TableCell>
                     </TableRow>
+                      ))}
+                    </Fragment>
                   ))
                 )}
               </TableBody>
@@ -1010,6 +1063,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                     id="meta-placa"
                     value={formMetadados.placaVeiculo}
                     onChange={(e) => setFormMetadados((p) => ({ ...p, placaVeiculo: e.target.value }))}
+                    disabled={!metadadosEditaveis}
                   />
                 </FormField>
                 <FormField label="Motorista" htmlFor="meta-motorista">
@@ -1017,6 +1071,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                     id="meta-motorista"
                     value={formMetadados.motorista}
                     onChange={(e) => setFormMetadados((p) => ({ ...p, motorista: e.target.value }))}
+                    disabled={!metadadosEditaveis}
                   />
                 </FormField>
                 <FormField label="Doca" htmlFor="meta-doca">
@@ -1024,6 +1079,7 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                     id="meta-doca"
                     value={formMetadados.doca}
                     onChange={(e) => setFormMetadados((p) => ({ ...p, doca: e.target.value }))}
+                    disabled={!metadadosEditaveis}
                   />
                 </FormField>
                 <FormField label="Observações" htmlFor="meta-obs" className="sm:col-span-2 lg:col-span-4">
@@ -1032,13 +1088,16 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                     rows={2}
                     value={formMetadados.observacoes}
                     onChange={(e) => setFormMetadados((p) => ({ ...p, observacoes: e.target.value }))}
+                    disabled={!metadadosEditaveis}
                   />
                 </FormField>
+                {metadadosEditaveis && (
                 <div>
                   <Button disabled={salvando} onClick={() => void salvarMetadados()} data-testid="btn-salvar-metadados">
                     Salvar metadados
                   </Button>
                 </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -1218,9 +1277,8 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                       <TableRow className="hover:bg-transparent">
                         <TableHead>Produto</TableHead>
                         <TableHead className="text-right">Qtd pedido</TableHead>
+                        <TableHead className="text-right">Peso NF</TableHead>
                         <TableHead className="text-right">Qtd NF</TableHead>
-                        <TableHead>Unidade</TableHead>
-                        <TableHead>Balança</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1232,6 +1290,21 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                             <Input
                               inputMode="decimal"
                               className="ml-auto h-7 w-24 text-right"
+                              value={pesosNfEditados[item.produtoId] ?? ''}
+                              onChange={(e) =>
+                                setPesosNfEditados((prev) => ({
+                                  ...prev,
+                                  [item.produtoId]: mascararPesoKg(e.target.value),
+                                }))
+                              }
+                              aria-label={`Peso da NF para ${item.produtoCodigo}`}
+                              placeholder="0,000"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              inputMode="decimal"
+                              className="ml-auto h-7 w-24 text-right"
                               value={itensNfEditados[item.produtoId] ?? item.quantidadePrevista}
                               onChange={(e) =>
                                 setItensNfEditados((prev) => ({ ...prev, [item.produtoId]: e.target.value }))
@@ -1239,17 +1312,14 @@ export function RecebimentoCargaClient({ permissoes }: { permissoes: string[] })
                               aria-label={`Quantidade da NF para ${item.produtoCodigo}`}
                             />
                           </TableCell>
-                          <TableCell>{item.unidade}</TableCell>
-                          <TableCell>{item.passaBalanca ? 'Sim' : 'Não — Entrada direta'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Os itens vêm do Pedido ao Fornecedor. Se a NF trouxer quantidade diferente, ajuste na coluna
-                  “Qtd NF” — o valor previsto passa a refletir o que foi informado. A conferência real de peso será
-                  feita na balança.
+                  Os itens vêm do Pedido ao Fornecedor. Informe o peso da NF (kg, 3 casas) e, se a quantidade
+                  divergir, ajuste “Qtd NF”. A conferência real de peso será feita na balança.
                 </p>
               </section>
             )}

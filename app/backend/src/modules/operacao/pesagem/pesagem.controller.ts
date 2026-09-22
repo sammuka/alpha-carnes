@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RbacGuard } from '../../../common/guards/rbac.guard';
@@ -11,9 +11,13 @@ import { EtiquetaService } from './etiqueta.service';
 import { registrarPesagemSchema, type RegistrarPesagemDto } from './dto/pesagem.dto';
 import {
   confirmarAssociacaoSchema,
+  destinarRetiradaSchema,
+  listarCompativeisRecebimentoSchema,
   redirecionarSchema,
   semCoberturaSchema,
   type ConfirmarAssociacaoDto,
+  type DestinarRetiradaDto,
+  type ListarCompativeisRecebimentoDto,
   type RedirecionarDto,
   type SemCoberturaDto,
 } from './dto/associacao.dto';
@@ -62,6 +66,19 @@ export class PesagemController {
     return this.pesagem.listarPorRecebimento(recebimentoId);
   }
 
+  @Get('recebimentos/:recebimentoId/compativeis')
+  @RequirePermissoes('PESAGEM_LER')
+  listarCompativeisRecebimento(
+    @Param('recebimentoId') recebimentoId: string,
+    @Query(new ZodValidationPipe(listarCompativeisRecebimentoSchema)) query: ListarCompativeisRecebimentoDto,
+  ) {
+    return this.associacao.listarCompativeisDoRecebimento(
+      recebimentoId,
+      query.produtoBaseId,
+      query.incluirCompletos,
+    );
+  }
+
   // ── Associação sugestiva ──────────────────────────────────────────────────
   @Get('pecas/:id/sugestao')
   @RequirePermissoes('PESAGEM_LER')
@@ -93,6 +110,16 @@ export class PesagemController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.associacao.redirecionar(id, dto, user.sub);
+  }
+
+  @Post('pecas/:id/destinar-retirada')
+  @RequirePermissoes('ASSOCIACAO_GERENCIAR')
+  destinarRetirada(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(destinarRetiradaSchema)) dto: DestinarRetiradaDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.associacao.destinarRetirada(id, dto, user.sub);
   }
 
   @Post('pecas/:id/sem-cobertura')

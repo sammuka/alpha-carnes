@@ -178,6 +178,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
   const [modalEditar, setModalEditar] = useState(false);
   const [simulacoes, setSimulacoes] = useState<Map<string, SimulacaoDesdobramento>>(new Map());
   const rascunhoNovoRef = useRef(false);
+  const compraAnteriorRef = useRef<string | null>(null);
 
   const editavel = compra ? ['rascunho', 'em_negociacao'].includes(compra.status) : true;
   const podeSimular = !compra || compra.status === 'rascunho';
@@ -437,6 +438,7 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
           <Button
             variant="secondary"
             onClick={() => {
+              compraAnteriorRef.current = compra?.id ?? compras[0]?.id ?? null;
               rascunhoNovoRef.current = true;
               limparFormulario();
               navegar(dataOperacao);
@@ -444,6 +446,20 @@ export function ComprasClient({ permissoes }: { permissoes: string[] }) {
           >
             <Plus />
             Novo pedido de compra
+          </Button>
+        )}
+        {podeGerenciar && compra === null && compras.length > 0 && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              rascunhoNovoRef.current = false;
+              const idRestaurar = compraAnteriorRef.current ?? compras[0]?.id;
+              if (!idRestaurar) return;
+              navegar(dataOperacao, idRestaurar);
+              void carregarComprasDia(idRestaurar);
+            }}
+          >
+            Cancelar
           </Button>
         )}
         {podeGerenciar && compra?.status === 'confirmada' && (

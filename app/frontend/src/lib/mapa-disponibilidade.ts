@@ -12,6 +12,13 @@ export interface MapaProduto {
   saldoComercial: string;
 }
 
+export function produtoTemValorNoMapa(produto: MapaProduto): boolean {
+  return Object.values(produto.estados).some((valor) => {
+    const quantidade = Number(valor);
+    return Number.isFinite(quantidade) && quantidade !== 0;
+  });
+}
+
 export interface DetalhePeca {
   id: string;
   etiqueta_atual: string | null;

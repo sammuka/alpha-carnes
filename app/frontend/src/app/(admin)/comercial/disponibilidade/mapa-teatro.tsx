@@ -31,11 +31,17 @@ interface MapaTeatroProps {
   produtos: MapaProduto[];
   selecionado?: { produtoId: string; estado: EstadoMapa } | null;
   onSelecionar: (produto: MapaProduto, estado: EstadoMapa) => void;
+  mensagemVazio?: string;
 }
 
-export function MapaTeatro({ produtos, selecionado, onSelecionar }: MapaTeatroProps) {
+export function MapaTeatro({
+  produtos,
+  selecionado,
+  onSelecionar,
+  mensagemVazio = 'Nenhum produto no catálogo para esta operação.',
+}: MapaTeatroProps) {
   if (produtos.length === 0) {
-    return <p className="p-6 text-sm text-muted-foreground">Nenhum produto no catálogo para esta operação.</p>;
+    return <p className="p-6 text-sm text-muted-foreground">{mensagemVazio}</p>;
   }
 
   return (

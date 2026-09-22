@@ -1,14 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Filter, Search } from 'lucide-react';
+import { AlertCircle, Search } from 'lucide-react';
 import type { DisponibilidadeDia } from '@/lib/comercial';
 import { extrairMensagemErro } from '@/lib/error-message';
-import type { DetalheMapa, EstadoMapa, MapaProduto } from '@/lib/mapa-disponibilidade';
+import {
+  produtoTemValorNoMapa,
+  type DetalheMapa,
+  type EstadoMapa,
+  type MapaProduto,
+} from '@/lib/mapa-disponibilidade';
 import { conectarRealtime, type RealtimeMensagem } from '@/lib/realtime';
 import { AlertItem } from '@/components/ui/alert-item';
-import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { DatePickerField } from '@/components/ui/date-picker-field';
 import { FilterChip } from '@/components/ui/filter-chip';
 import { Input } from '@/components/ui/input';
@@ -61,6 +66,7 @@ export default function DisponibilidadePage() {
   const [mapa, setMapa] = useState<MapaProduto[]>([]);
   const [operacaoId, setOperacaoId] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
+  const [apenasComValor, setApenasComValor] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [status, setStatus] = useState<'conectado' | 'desconectado'>('desconectado');
@@ -158,17 +164,32 @@ export default function DisponibilidadePage() {
     }
   }
 
+  const mapaVisivel = useMemo(
+    () => (apenasComValor ? mapa.filter(produtoTemValorNoMapa) : mapa),
+    [apenasComValor, mapa],
+  );
+
+  const produtoPainel = produtoDetalhe && mapaVisivel.some((item) => item.produtoId === produtoDetalhe.produtoId)
+    ? produtoDetalhe
+    : null;
+
   const filtradas = useMemo(() => {
-    if (!busca.trim()) return linhas;
+    const idsVisiveis = apenasComValor
+      ? new Set(mapaVisivel.map((item) => item.produtoId))
+      : null;
+    const porValor = idsVisiveis
+      ? linhas.filter((linha) => idsVisiveis.has(linha.produtoId))
+      : linhas;
+    if (!busca.trim()) return porValor;
     const termo = busca.toLocaleLowerCase('pt-BR');
-    return linhas.filter((linha) => {
+    return porValor.filter((linha) => {
       const produto = mapa.find((item) => item.produtoId === linha.produtoId);
       return linha.produtoId.toLocaleLowerCase('pt-BR').includes(termo)
         || linha.status.toLocaleLowerCase('pt-BR').includes(termo)
         || produto?.descricao.toLocaleLowerCase('pt-BR').includes(termo)
         || produto?.codigo.toLocaleLowerCase('pt-BR').includes(termo);
     });
-  }, [busca, linhas, mapa]);
+  }, [apenasComValor, busca, linhas, mapa, mapaVisivel]);
 
   const esgotados = linhas.filter((linha) => Number(linha.quantidadeDisponivel) <= 0);
   const resumo = {
@@ -194,13 +215,20 @@ export default function DisponibilidadePage() {
       </PageHeader>
 
       <Card>
-        <CardContent className="flex items-center gap-2 px-3 py-2">
+        <CardContent className="flex flex-wrap items-center gap-2 px-3 py-2">
           <span className="text-xs font-semibold">Data operacional</span>
           <DatePickerField id="data" value={dataOperacao} onChange={setDataOperacao} />
-          <Button type="button" variant="secondary" size="sm" onClick={() => setBusca('')}>
-            <Filter />
-            Limpar filtros
-          </Button>
+          <label
+            htmlFor="apenas-com-valor"
+            className="ml-1 flex cursor-pointer items-center gap-2 text-xs font-semibold"
+          >
+            <Checkbox
+              id="apenas-com-valor"
+              checked={apenasComValor}
+              onCheckedChange={(marcado) => setApenasComValor(marcado === true)}
+            />
+            Mostrar apenas produtos com valor
+          </label>
         </CardContent>
       </Card>
 
@@ -217,18 +245,21 @@ export default function DisponibilidadePage() {
               <p className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">Carregando mapa...</p>
             ) : (
               <MapaTeatro
-                produtos={mapa}
-                selecionado={produtoDetalhe && estadoDetalhe
-                  ? { produtoId: produtoDetalhe.produtoId, estado: estadoDetalhe }
+                produtos={mapaVisivel}
+                mensagemVazio={apenasComValor
+                  ? 'Nenhum produto com valor diferente de zero nesta operação.'
+                  : undefined}
+                selecionado={produtoPainel && estadoDetalhe
+                  ? { produtoId: produtoPainel.produtoId, estado: estadoDetalhe }
                   : null}
                 onSelecionar={(produto, estado) => void selecionarEstado(produto, estado)}
               />
             )}
           </div>
           <DetalheUnidade
-            produto={produtoDetalhe}
-            estado={estadoDetalhe}
-            unidades={unidadesDetalhe}
+            produto={produtoPainel}
+            estado={produtoPainel ? estadoDetalhe : null}
+            unidades={produtoPainel ? unidadesDetalhe : []}
             carregando={carregandoDetalhe}
           />
         </div>
