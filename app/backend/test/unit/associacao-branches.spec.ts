@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AssociacaoService } from '../../src/modules/operacao/pesagem/associacao.service';
 import { calcularCompativeisItem, listarCandidatosPedidoDaOperacao } from '../../src/modules/operacao/pesagem/compatibilidade';
 import { consumirSaldo, devolverSaldo } from '../../src/modules/operacao/pesagem/saldo';
+import { pecaEmCargaFechada } from '../../src/modules/operacao/pesagem/carga-fechada';
 
 jest.mock('../../src/modules/operacao/pesagem/compatibilidade', () => ({
   calcularCompativeisItem: jest.fn(),
@@ -23,6 +24,7 @@ const calcularMock = calcularCompativeisItem as jest.MockedFunction<typeof calcu
 const listarCandidatosMock = listarCandidatosPedidoDaOperacao as jest.MockedFunction<typeof listarCandidatosPedidoDaOperacao>;
 const consumirMock = consumirSaldo as jest.MockedFunction<typeof consumirSaldo>;
 const devolverMock = devolverSaldo as jest.MockedFunction<typeof devolverSaldo>;
+const cargaFechadaMock = pecaEmCargaFechada as jest.MockedFunction<typeof pecaEmCargaFechada>;
 
 function pecaBase(overrides: Record<string, unknown> = {}) {
   return {
@@ -73,6 +75,7 @@ describe('AssociacaoService — branches de erro', () => {
     listarCandidatosMock.mockResolvedValue([]);
     consumirMock.mockResolvedValue(true);
     devolverMock.mockResolvedValue(true);
+    cargaFechadaMock.mockResolvedValue(false);
   });
 
   it('sugerir → NotFoundException se peça não existe', async () => {
@@ -613,5 +616,104 @@ describe('AssociacaoService — branches de erro', () => {
     expect(res.statusPeca).toBe('para_corte');
     expect(res.pedidoVendaItemId).toBeNull();
     expect(devolverMock).toHaveBeenCalledWith(expect.anything(), 'pvi-1');
+  });
+
+  it('destinarRetirada → NotFoundException se a peça não existe', async () => {
+    const service = new AssociacaoService(
+      { db: dbComPeca(null) } as never,
+      auditoria as never,
+      emitter,
+      divergencias as never,
+      {} as never,
+    );
+    await expect(
+      service.destinarRetirada('pec-x', { destino: 'estoque', motivo: 'troca' }, 'op-1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('destinarRetirada → 409 se a peça não está associada', async () => {
+    const service = new AssociacaoService(
+      { db: dbComPeca(pecaBase({ statusPeca: 'pesada' })) } as never,
+      auditoria as never,
+      emitter,
+      divergencias as never,
+      {} as never,
+    );
+    await expect(
+      service.destinarRetirada('pec-1', { destino: 'estoque', motivo: 'troca' }, 'op-1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('destinarRetirada → 409 se a peça associada não tem item de pedido', async () => {
+    const service = new AssociacaoService(
+      { db: dbComPeca(pecaBase({ statusPeca: 'associada', pedidoVendaItemId: null })) } as never,
+      auditoria as never,
+      emitter,
+      divergencias as never,
+      {} as never,
+    );
+    await expect(
+      service.destinarRetirada('pec-1', { destino: 'estoque', motivo: 'troca' }, 'op-1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('destinarRetirada → 409 se a peça está em carga fechada', async () => {
+    cargaFechadaMock.mockResolvedValue(true);
+    const service = new AssociacaoService(
+      { db: dbComPeca(pecaBase({
+        statusPeca: 'associada',
+        pedidoVendaId: 'pv-1',
+        pedidoVendaItemId: 'pvi-1',
+      })) } as never,
+      auditoria as never,
+      emitter,
+      divergencias as never,
+      {} as never,
+    );
+    await expect(
+      service.destinarRetirada('pec-1', { destino: 'estoque', motivo: 'troca' }, 'op-1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(devolverMock).not.toHaveBeenCalled();
+  });
+
+  it('destinarRetirada → 409 se o saldo do item não pode ser devolvido', async () => {
+    devolverMock.mockResolvedValue(false);
+    const service = new AssociacaoService(
+      { db: dbComPeca(pecaBase({
+        statusPeca: 'associada',
+        pedidoVendaId: 'pv-1',
+        pedidoVendaItemId: 'pvi-1',
+      })) } as never,
+      auditoria as never,
+      emitter,
+      divergencias as never,
+      {} as never,
+    );
+    await expect(
+      service.destinarRetirada('pec-1', { destino: 'desossa', motivo: 'troca' }, 'op-1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('listarCompativeisDoRecebimento → sugestão nula quando não há candidatos', async () => {
+    const selectFn = jest.fn(() => ({
+      from: jest.fn(() => ({
+        innerJoin: jest.fn(() => ({
+          where: jest.fn(() =>
+            Promise.resolve([{ operacaoId: 'op-1', compraProgramadaId: 'cp-1' }]),
+          ),
+        })),
+      })),
+    }));
+    calcularMock.mockResolvedValue([]);
+    const service = new AssociacaoService(
+      { db: { select: selectFn } } as never,
+      auditoria as never,
+      emitter,
+      divergencias as never,
+      {} as never,
+    );
+    const res = await service.listarCompativeisDoRecebimento('rec-1', 'prod-1');
+    expect(res.sugestao).toBeNull();
+    expect(res.compativeis).toEqual([]);
   });
 });
