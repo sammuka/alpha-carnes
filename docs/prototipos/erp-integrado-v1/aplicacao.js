@@ -202,7 +202,113 @@ function renderAccept(sc){
  h+=qs.map((a,i)=>'<div class="rule-item"><strong>'+['Campos','Ações','Regras','Exceções'][i]+'</strong><br>'+escapeHtml(a)+'</div>').join('');
  h+='<div class="info-row warn">A seleção dos checkboxes serve apenas à revisão do protótipo: não registra aceite contratual. O aceite real depende de evidências CI, integração HML, UAT e responsável autorizado.</div>';return h;
 }
+
+function domainPanel(sc){
+const box=(title,body,actions='')=>'<section class="erp-card" style="margin-bottom:12px"><div class="erp-card-header"><h2>'+title+'</h2><span class="badge-proto">CENÁRIO DE HOMOLOGAÇÃO</span></div><div class="erp-card-body">'+body+(actions?'<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">'+actions.split('|').map(x=>'<button class="erp-btn" data-action="custom" data-caption="'+x+'">'+x+'</button>').join('')+'</div>':'')+'</div></section>';
+const input=(label,value,type='text')=>'<div class="erp-field"><label>'+label+'</label><input '+(type==='number'?'type="number" step="0.01"':'readonly')+' value="'+value+'"></div>';
+const tbl=(heads,rows)=>'<div class="table-shell"><table class="erp-table"><thead><tr>'+heads.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+row.map(x=>'<td>'+x+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+if(sc.epic==='E01'){
+const rows=[
+ ['191948 · revenda','5102','20','41,67%','12,00%','SP020450','51','06 / 06','000001'],
+ ['191948 · própria','5101','20','41,67%','12,00%','SP020450','53','06 / 06','000001'],
+ ['188305 · devolução','1202','20','41,67%','12,00%','SP020740','53','06 / 06','200003'],
+ ['189504 · subproduto','5102','20','0,00% BC=0','0,00%','SP020100','51','08 / 08','200036'],
+ ['191923 · devolução','5202','20','41,67%','12,00%','SP020450','51','06 / 06','000001']
+];
+return box('Matriz de enquadramentos — cinco variantes das quatro NF-e de referência',
+ tbl(['Cenário XML','CFOP','ICMS CST','Redução BC','ICMS','cBenef','IPI CST','PIS/COFINS','cClassTrib IBS/CBS'],rows)+
+ '<div class="info-row warn">Valores históricos de XML: apenas fixtures para testes, não tabelas normativas. A aprovação fiscal e as versões vigentes das NTs determinam a emissão real.</div><div class="field-grid">'+input('Competência de aplicação','2026-10-11')+input('Versão de norma/RTC','Pendente de validação')+input('Regra vencedora','por produto + operação + UF + vigência')+input('Revisor responsável','Contador / fiscal')+'</div>',
+ 'Simular cálculo fiscal|Comparar regras por vigência|Submeter classificação|Exportar memória de cálculo');
+}
+if(sc.epic==='E03'){
+return box('Conferência fiscal × compra × recebimento físico',
+ '<div class="approval-path"><div><b>01 · Compra negociada</b>Preço unitário contratado; quantidade/peso previstos por fornecedor.</div><div><b>02 · NF-e de entrada</b>XML validado por chave, CNPJ, item, NCM, total e tributação.</div><div><b>03 · Conferência do Richard</b>Pesagem física, peças recebidas, divergência e ocorrência aprovada.</div></div>'+
+ tbl(['Medida','Comprado','NF entrada','Pesagem física','Divergência'],[['Peso/kg','1.000,00','1.000,00','982,00','−18,00 kg'],['Preço/kg','R$ 24,50','R$ 24,50','—','0,00'],['Valor','R$ 24.500,00','R$ 24.500,00','—','Sujeito à negociação']])+
+ '<div class="info-row warn">Reclamação de diferença não é nota de devolução autorizada nem desconto financeiro já confirmado. AP permanece com obrigação documental até ajuste válido.</div>',
+ 'Abrir ocorrência de peso|Solicitar devolução referenciada|Vincular NF origem|Submeter abatimento ao fornecedor');
+}
+if(sc.epic==='E04'){
+ return box('Contas a pagar — obrigações, parcelas e pagamentos',
+ tbl(['Origem','Credor','Parcela','Vencimento','Valor','Situação'],[['NF fornecedor EX-001','Fornecedor exemplo','1/2','20/10/2026','R$ 12.250,00','Aguardando aprovação'],['NF fornecedor EX-001','Fornecedor exemplo','2/2','20/11/2026','R$ 12.250,00','Pendente'],['Despesa recorrente EX','Serviço exemplo','1/1','16/10/2026','R$ 890,00','Agendada']])+
+ '<div class="field-grid">'+input('Origem econômica','NF de entrada conferida')+input('Total do título','R$ 24.500,00')+input('Desconto solicitado','Pendente de aceite')+input('Status bancário','Nenhuma confirmação recebida')+'</div>'+
+ '<div class="info-row warn">DDA não confirma pagamento nem desconto. A baixa só ocorre após retorno inequívoco do banco e alocação ao título no E07.</div>',
+ 'Parcelar obrigação|Revisar divergência DDA|Criar agenda de pagamentos|Solicitar autorização dupla');
+}
+if(sc.epic==='E05'){
+ return box('Ciclo do recebível — NF-e → título → boleto → liquidação',
+ '<div class="approval-path"><div><b>01 · NF-e autorizada</b>Documento com chave e protocolo real, emitido após expedição.</div><div><b>02 · Cobrança registrada</b>Nosso número, banco, carteira, retorno de registro.</div><div><b>03 · Recebimento conciliado</b>Retorno de liquidação e extrato vinculados a um fato econômico.</div></div>'+
+ tbl(['Documento','Parcela','Vencimento','Boleto','Liquidação'],[['NFe-EX-0001','1/3','18/10/2026','Não registrado (simulado)','Pendente'],['NFe-EX-0001','2/3','18/11/2026','Aguardando banco','Pendente'],['NFe-EX-0001','3/3','18/12/2026','Sem instrução','Pendente']])+
+ '<div class="info-row warn">Um boleto exportado ou registrado não é título quitado. Arquivos e API entram no mesmo E07 para evitar baixa duplicada.</div>',
+ 'Simular parcelamento|Preparar cobrança|Consultar registro bancário|Abrir renegociação');
+}
+if(sc.epic==='E06'){
+ return box('Capacidades contratadas por banco e serviço',
+ tbl(['Banco','Conta (mascarada)','Cobrança API','Extrato API','Pagamentos','Fallback arquivo'],[
+ ['Bradesco','••••001','Pendente convênio','Pendente','Pendente','CNAB a homologar'],['Itaú','••••002','Pendente contrato','Pendente','Pendente','OFX/CNAB a homologar'],['Santander','••••003','Pendente ativação','Pendente','Pendente','CNAB 240 v8.5 a validar']])+
+ '<div class="approval-path"><div><b>Cadastro externo</b>Conta, contrato bancário e portal de aplicações.</div><div><b>E12 central</b>mTLS, client ID, OAuth, certificado e endpoint.</div><div><b>Adapter E06</b>Contrato homologado da capacidade, operação idempotente.</div></div><div class="info-row">Nenhuma API privada ou layout está presumido como habilitado na conta da AlphaCarnes. Configurações são tratadas em E12.</div>',
+ 'Solicitar contrato de API|Testar autenticação HML|Associar capacidade|Abrir fallback E11');
+}
+if(sc.epic==='E08'){
+ const vals=[['Semana 1','R$ 64.200','R$ 51.900','R$ 12.300'],['Semana 2','R$ 49.800','R$ 62.100','−R$ 12.300'],['Semana 3','R$ 80.350','R$ 46.900','R$ 33.450'],['Semana 4','R$ 55.200','R$ 50.000','R$ 5.200']];
+ return box('Fluxo de caixa — previsto × realizado × posição conciliada',
+ tbl(['Horizonte','Entradas previstas','Saídas previstas','Saldo líquido'],vals)+
+ '<div class="field-grid">'+input('Saldo de abertura','R$ 70.000,00 (exemplo)')+input('Saldo bancário reconciliado','Independente do saldo projetado')+input('Centro de custo','Todos')+input('Período de referência','Outubro/2026')+'</div>'+
+ '<div class="info-row">Transferências entre contas não constituem receita/despesa. Tarifas e estornos são eventos próprios, com trilha e período contábil.</div>',
+ 'Alterar horizonte de projeção|Analisar liquidez|Reconciliar contas|Registrar transferência entre contas');
+}
+if(sc.epic==='E10'){
+ return box('Integração com expedição — bloqueios completos',
+ '<div class="approval-path"><div><b>Operação</b>Pedido e preço Onda 14, peso final e peças confirmadas.</div><div><b>Emissão NF-e 55</b>Motor fiscal, certificado A1, protocolo de autorização SEFAZ.</div><div><b>Liberação</b>Seguro, conferência, autorização fiscal e demais verificações.</div></div>'+
+ tbl(['Gate','Estado de demonstração','Conduta'],[['Carga fechada','Conferida','Permitir pré-faturamento'],['Divergência crítica','Pendente de validação','Bloquear envio'],['NF-e autorizada','Não transmitida','Bloquear liberação'],['Seguro obrigatório','Aguardando registro','Bloquear liberação']])+
+ '<div class="info-row warn">Não reutilizar status da NFS-e municipal incipiente como autorização de NF-e estadual de mercadorias. Evento fiscal real controla a saída.</div>',
+ 'Revisar itens realmente carregados|Abrir validação SEFAZ|Abrir checklist de saída|Consultar ocorrências');
+}
+if(sc.id==='E11-V04'){
+ return box('Rastreabilidade de um fato econômico (exemplo)',
+ tbl(['Horário','Fonte','Referência externa','Valor','Resultado'],[['09:04','API Extrato','TX-DEMO-100','R$ 5.000,00','Observação anexada'],['09:06','CNAB Retorno','NOSSO-DEMO-100','R$ 5.000,00','Evento cobrança'],['10:00','OFX','FITID-DEMO-100','R$ 5.000,00','Observação associada'],['10:15','Conciliação E07','ALOC-DEMO-100','R$ 5.000,00','Uma baixa ilustrativa']])+
+ '<div class="info-row warn">A existência de três evidências não justifica três créditos, lançamentos ou baixas. Identidade fraca requer revisão.</div>',
+ 'Comparar hash da origem|Consultar evento canônico|Solicitar revisão de conflito');
+}
+if(sc.id==='E11-V05'){
+ return box('Política de continuidade operacional por capability',
+ tbl(['Serviço','API preferencial','Canal fallback','Ação se indisponível'],[['Extrato Bradesco','Não homologada','CNAB/OFX aprovado','Importar e reconciliar'],['Cobrança Itaú','Aguardando credenciais','CNAB retorno homologado','Consultar antes de remessa'],['Extrato Santander','Falha intermitente','CSV perfilado / CNAB','Ativar fallback com aprovação']])+
+ '<div class="info-row warn">Timeout na transmissão de pagamento não autoriza automaticamente nova instrução por arquivo. O estado externo deve ser consultado primeiro.</div>',
+ 'Aprovar fallback|Suspender capacidade|Reprocessar observações|Executar failback');
+}
+if(sc.id==='E12-V01'){
+ return box('Catálogo de serviços e estados de habilitação',
+ tbl(['Provedor','Serviço','Ambiente','Credencial','Status'],[['SEFAZ/SP','Autorização NF-e 55','HML','A1 ainda não associado','Aguardando validação'],['Ambiente Nacional','Distribuição DF-e','HML','A1 ainda não associado','Aguardando validação'],['Bradesco','Cobrança','HML','Contrato pendente','Bloqueado'],['Itaú','OAuth mTLS','HML','Certificado bancário pendente','Bloqueado'],['Santander','Cobrança/CNAB','HML','Convênio pendente','Bloqueado']])+
+ '<div class="info-row">Registro de endpoint aprovado por serviço/ambiente. URLs de destino exigem allowlist e validação contra SSRF; perfis de integração não contêm chave privada.</div>',
+ 'Cadastrar provedor|Criar perfil fiscal|Configurar banco|Solicitar homologação');
+}
+if(sc.id==='E12-V03'){
+ return box('Contrato bancário e aplicações OAuth/mTLS',
+ tbl(['Componente','Bradesco','Itaú','Santander'],[['Certificado cliente','Conforme produto','mTLS dinâmico','Conforme produto'],['Autenticação','Conforme API do convênio','OAuth2 / mTLS','Conforme Swagger privado'],['App/convênio','Registro portal','API Owner / contrato','Workspace conforme serviço'],['Contingência','Layout banco','Layout bancário','CNAB 240 v8.5 a validar']])+
+ '<div class="field-grid">'+input('Chave mestra de proteção','AWS KMS por identidade IAM')+input('Segredo API do cliente','Ciphertext no PostgreSQL')+input('Certificado por finalidade','Vínculo versionado')+input('Escopo de autorização','Por conta + capability + ambiente')+'</div>',
+ 'Gerar CSR controlado|Associar certificado mTLS|Testar OAuth HML|Habilitar serviço contratado');
+}
+if(sc.id==='E12-V04'){
+ return box('Catálogo SEFAZ — modelo 55 e Distribuição DF-e',
+ tbl(['Serviço oficial','Ambiente','Certificado','Verificação'],[['NFeAutorizacao4','HML','e-CNPJ A1','Status teste pendente'],['NFeConsultaProtocolo4','HML','e-CNPJ A1','Consulta pendente'],['NFeRecepcaoEvento4','HML','e-CNPJ A1','Evento em homologação'],['NFeInutilizacao4','HML','e-CNPJ A1','Vigência dependente'],['NFeDistribuicaoDFe','Nacional/HML','e-CNPJ A1','Checkpoint NSU necessário']])+
+ '<div class="info-row warn">Credenciamento estadual, homologação de série e versão NT/XSD são pré-condições separadas. Contingência somente no modo regulamentar permitido.</div>',
+ 'Testar status SEFAZ|Validar certificado emitente|Simular XSD|Solicitar ativação produção');
+}
+if(sc.id==='E12-V05'){
+ return box('Versionamento, diff e aprovação de referências externas',
+ tbl(['Referência','Versão pública pesquisada','Vigência/compatibilidade','Estado'],[['NT 2025.002 RTC','v1.52 (01/10/2026)','Validar com XSD aplicável','Staging'],['Pacote XSD NF-e','010f (31/08/2026)','Compatibilidade com NT v1.52 pendente','Bloqueado'],['EFD ICMS/IPI','Guia 3.2.4 (09/2026)','Por competência/regime','Pendente'],['CNAB Santander','H7815 v8.5 (02/2026)','Por carteira/convênio','Pendente'],['Tabela cBenef SP','Versão documentada (2026)','Contador confirma elegibilidade','Em revisão']])+
+ '<div class="info-row warn">Atualizar catálogo não muda regra tributária aprovada nem reprocessa NF-e emitida. Staging → diff → revisão → ativação por vigência.</div>',
+ 'Consultar fonte oficial|Comparar duas versões|Submeter homologação|Ativar após aprovação');
+}
+if(sc.id==='E12-V07'){
+ return box('Operações monitoradas e alertas de continuidade',
+ tbl(['Tipo','Criticidade','Ação recomendada','Responsável'],[['Vencimento e-CNPJ A1','Alta','Renovar antes de 60/30/15/7 dias','Administrativo'],['Itaú mTLS / CA','Alta','Conferir mudança da cadeia vigente','TI'],['SEFAZ timeout autorização','Crítica','Consultar chave/protocolo antes de reenviar','Fiscal'],['Job DF-e interrompido','Média','Retomar checkpoint NSU sem duplicar','Integrações'],['CNAB layout desconhecido','Alta','Quarentena e contrato com banco','Tesouraria']])+
+ '<div class="info-row">Todos os alertas preservam logs sem segredo e justificativa de quem executou a correção. Disponibilidade de API de terceiro não é garantida pelo ERP.</div>',
+ 'Reconhecer alerta|Abrir incidente|Pausar job|Reprocessar com idempotência');
+}
+return '';
+}
 function specialPanel(sc){
+ const domain = domainPanel(sc); if (domain) return domain;
  if(sc.id==='E12-V02')return '<div class="erp-card" style="margin-bottom:12px;border-color:var(--primary-soft-border)"><div class="erp-card-header"><h2>Assistente de certificado digital A1</h2><span class="badge-proto">UPLOAD DEMONSTRATIVO</span></div><div class="erp-card-body"><div class="status-track"><div class="active">1 · Identificação</div><div>2 · Arquivo e senha</div><div>3 · Validação</div><div>4 · Binding e aprovação</div></div><div class="info-row warn">Não importe certificados reais. Este protótipo não lê, valida, criptografa nem transmite o conteúdo do arquivo: captura somente nome e tamanho para demonstrar UX.</div><div class="field-grid"><div class="erp-field"><label>Tipo</label><select id="cert-kind"><option>e-CNPJ A1 — NF-e/DF-e</option><option>Certificado mTLS bancário</option><option>Certificado público de confiança</option></select></div><div class="erp-field"><label>Ambiente</label><input readonly value="'+S.env+'"></div><div class="erp-field"><label>Selecionar arquivo ilustrativo</label><input id="cert-file" type="file" accept=".pfx,.p12,.crt,.pem,.cer"></div><div class="erp-field"><label>Senha ilustrativa (não armazenar)</label><input id="cert-password" type="password" autocomplete="off" placeholder="Não use senha verdadeira"></div></div><div style="margin-top:10px;display:flex;gap:8px"><button class="erp-btn" data-action="cert-preview">Pré-validar arquivo</button><button class="erp-btn primary" data-action="cert-flow">Simular envio para revisão</button></div></div></div>';
  if(sc.id==='E11-V01'||sc.id==='E11-V02')return '<div class="erp-card" style="margin-bottom:12px;border-color:var(--primary-soft-border)"><div class="erp-card-header"><h2>Importação de extrato / retorno</h2><span class="badge-proto">SEM LEITURA DO CONTEÚDO REAL</span></div><div class="erp-card-body"><div class="field-grid"><div class="erp-field"><label>Instituição</label><select id="bank-name"><option>Bradesco</option><option>Itaú</option><option>Santander</option></select></div><div class="erp-field"><label>Serviço do arquivo</label><select id="bank-service"><option>Extrato bancário</option><option>Retorno cobrança</option><option>Remessa cobrança</option><option>Retorno pagamento</option></select></div><div class="erp-field"><label>Layout homologado</label><select id="bank-layout"><option>CNAB 240 — sob homologação</option><option>CNAB 400 — sob homologação</option><option>OFX — perfil autorizado</option><option>CSV — mapeamento validado</option></select></div><div class="erp-field"><label>Arquivo demonstrativo</label><input type="file" id="bank-file" accept=".txt,.ret,.rem,.ofx,.csv"></div></div><div class="info-row warn">Nenhum lote de arquivo é considerado conciliado pelo upload; o retorno exige validação, contrato/layout e correspondência com transação canônica.</div><button class="erp-btn primary" data-action="file-preview">Gerar prévia ilustrativa do lote</button></div></div>';
  if(sc.id==='E12-V06')return '<div class="erp-card" style="margin-bottom:12px"><div class="erp-card-header"><h2>Processamento agendado e retomada</h2></div><div class="erp-card-body"><div class="field-grid"><div class="erp-field"><label>Operação</label><select id="job-service"><option>Distribuição DF-e NSU</option><option>SEFAZ consulta protocolo</option><option>Sincronização extratos API</option><option>Importação de retorno CNAB</option><option>Alerta expiração certificado</option></select></div><div class="erp-field"><label>Frequência / timezone</label><input value="0 */3 * * * · America/Sao_Paulo" id="job-cron"></div><div class="erp-field"><label>Controle de concorrência</label><input readonly value="lease + fencing token + outbox"></div><div class="erp-field"><label>Checkpoint</label><input readonly value="NSU/transactionId versionado (fixture)"></div></div><button class="erp-btn" data-action="job-run" style="margin-top:10px">Simular agendamento / execução</button></div></div>';
