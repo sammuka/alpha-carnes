@@ -1,4 +1,4 @@
-/* Contrato granular das 61 telas da expansão. Chaves/IDs técnicos são APENAS valores internos; nunca renderizar no UI. */
+/* Modelo completo de componentes e fontes de dados. Nunca exibir valores internos na interface. */
 window.ALPHA_PROTO_COMPONENTS = {
   "version": "1.0",
   "rules": {
@@ -7,7 +7,9 @@ window.ALPHA_PROTO_COMPONENTS = {
     "neverFreeTextEnums": true,
     "approvalsByRBAC": true,
     "designSystem": "DS v3 Direção A",
-    "businessCodes": "CFOP, NCM, chave NF-e e número de documento exibidos apenas com contexto e necessidade operacional"
+    "businessCodes": "CFOP, NCM, chave NF-e e número de documento exibidos apenas com contexto e necessidade operacional",
+    "relationUX": "Lookup com pesquisa por nome; dependência e opção inativa desabilitada; seleção só de registros existentes e habilitados, IDs internos jamais visíveis.",
+    "internalReferences": "IDs presentes apenas na troca API/BD e nos valores de controles; nenhum identificador técnico exibido, copiado ou exportado na UI. Números de notas, CFOP e NSU apenas com contexto de negócio."
   },
   "fields": {
     "empresa": {
@@ -2279,7 +2281,13 @@ window.ALPHA_PROTO_COMPONENTS = {
     ]
   },
   "catalogs": {
-    "cest": [["CEST-A","CEST aplicável ao NCM selecionado (exemplo)","Versão da tabela oficial precisa de aprovação"]],
+    "cest": [
+      [
+        "CEST-A",
+        "CEST aplicável ao NCM selecionado (exemplo)",
+        "Versão da tabela oficial precisa de aprovação"
+      ]
+    ],
     "empresas": [
       [
         "A",
@@ -7886,6 +7894,137 @@ window.ALPHA_PROTO_COMPONENTS = {
         "concluído com evidência"
       ],
       "mobile": "datagrid vira cartões de negócio; formulário em coluna, ações críticas fixadas e nunca exige visualizar identificador de persistência"
+    }
+  },
+  "catalogRelationships": {
+    "estabelecimentos": {
+      "empresa": {
+        "A": [
+          "MAT"
+        ],
+        "B": [
+          "FIL"
+        ]
+      }
+    },
+    "contasBancarias": {
+      "banco": {
+        "237": [
+          "B1"
+        ],
+        "341": [
+          "B2"
+        ],
+        "033": [
+          "B3"
+        ]
+      },
+      "empresa": {
+        "A": [
+          "B1",
+          "B2"
+        ],
+        "B": [
+          "B3"
+        ]
+      }
+    },
+    "convenios": {
+      "contaBancaria": {
+        "B1": [
+          "V1"
+        ],
+        "B2": [
+          "V2"
+        ],
+        "B3": [
+          "V3"
+        ]
+      },
+      "banco": {
+        "237": [
+          "V1"
+        ],
+        "341": [
+          "V2"
+        ],
+        "033": [
+          "V3"
+        ]
+      }
+    },
+    "carteiras": {
+      "convenio": {
+        "V1": [
+          "K1"
+        ],
+        "V2": [
+          "K2"
+        ],
+        "V3": [
+          "K2"
+        ]
+      }
+    },
+    "certificados": {
+      "empresa": {
+        "A": [
+          "X1",
+          "X2"
+        ],
+        "B": [
+          "X1"
+        ]
+      }
+    },
+    "layouts": {
+      "banco": {
+        "237": [
+          "F1",
+          "F2",
+          "F3",
+          "F4"
+        ],
+        "341": [
+          "F2",
+          "F3",
+          "F4"
+        ],
+        "033": [
+          "F1",
+          "F3",
+          "F4"
+        ]
+      }
+    },
+    "integracoes": {
+      "provedor": {
+        "SEF": [
+          "I1"
+        ],
+        "DFE": [
+          "I2"
+        ],
+        "ITA": [
+          "I3"
+        ]
+      }
+    },
+    "jobs": {
+      "integracao": {
+        "I1": [
+          "J1",
+          "J3"
+        ],
+        "I2": [
+          "J1",
+          "J3"
+        ],
+        "I3": [
+          "J2",
+          "J3"
+        ]
+      }
     }
   }
 };
