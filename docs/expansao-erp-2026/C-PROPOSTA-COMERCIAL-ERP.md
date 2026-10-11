@@ -3,10 +3,10 @@
 **Contratante:** AlphaCarnes (razão social, CNPJ e responsável a confirmar) • **Proponente:** a definir nos dados contratuais • **Moeda:** BRL • **Validade:** a definir antes do envio formal.
 
 ## 1. Resumo executivo
-Esta proposta propõe a extensão modular do AlphaCarnes para **ERP fiscal estadual NF-e/SEFAZ-SP, financeiro, tesouraria, APIs bancárias Bradesco/Itaú/Santander, escrituração contábil integral, apuração e SPED legalmente aplicável**, preservando o núcleo operacional já em desenvolvimento. O software operacional não será indevidamente reprecificado como novo desenvolvimento.
+Esta proposta propõe a extensão modular do AlphaCarnes para **ERP fiscal estadual NF-e/SEFAZ-SP, financeiro, tesouraria, APIs bancárias Bradesco/Itaú/Santander **com fallback integrado CNAB/OFX/CSV**, escrituração contábil integral, apuração e SPED legalmente aplicável**, preservando o núcleo operacional já em desenvolvimento. O software operacional não será indevidamente reprecificado como novo desenvolvimento.
 Os termos técnicos e as inclusões/exclusões são definidos pelos anexos contratuais:
 - **Anexo A:** `A-ESCOPO-EXISTENTE-DEVELOP.md` (39 telas, 8 jornadas, implementações/parcialidades/legado, RNF e exclusões).
-- **Anexo B:** `B-ESCOPO-NOVOS-MODULOS-ERP.md` (10 épicos, 49 novas telas/funcionalidades, 8 jornadas, RNF e requisitos inversos).
+- **Anexo B:** `B-ESCOPO-NOVOS-MODULOS-ERP.md` (11 épicos, 49 superfícies existentes na expansão original + 5 adicionais do fallback = 54 telas/funcionalidades propostas, 8 jornadas e jornada de continuidade bancária E11; RNF e requisitos inversos). **Especificação vinculante E11:** `11-E11-FALLBACK-BANCARIO-ARQUIVOS.md` (12 tarefas, avaliação CROSS antes do código).
 - **Anexos de planejamento interno:** `00-INDICE-DECISOES-FONTES.md` e `10-BACKLOG-KIRO-TESTES.md`, após aprovação técnica.
 Em conflito documental, prevalece o contrato assinado, a matriz de escopo assinada, e depois os anexos versionados com SHA explícito; modificações posteriores não integram automaticamente o preço.
 
@@ -15,10 +15,11 @@ O levantamento operacional remonta a junho/2026. Na reunião com Karina em 25/09
 Escopo A é a linha-base e não constitui serviço novo contratado. Eventuais pendências no A devem ser examinadas frente à contratação anterior e classificadas como suporte, correção, entrega em andamento ou nova mudança aprovada. Escopo B é o objeto comercial desta proposta.
 
 ## 3. Objeto do contrato e forma de contratação
-Prestação de serviços de desenvolvimento, integração, documentação e homologação assistida dos épicos E01–E10 do Anexo B. Código-fonte e artefatos no repo AlphaCarnes, seguindo pipeline `feature/* → PR → develop` e gates. **Não inclui** obrigação de executar escrituração/assinar como contador nem serviços de bancos/SEFAZ. Cada operação externa depende de habilitação do cliente.
+Prestação de serviços de desenvolvimento, integração, documentação e homologação assistida dos épicos E01–E11 do Anexo B. Código-fonte e artefatos no repo AlphaCarnes, seguindo pipeline `feature/* → PR → develop` e gates. **Não inclui** obrigação de executar escrituração/assinar como contador nem serviços de bancos/SEFAZ. Cada operação externa depende de habilitação do cliente.
 Modelo comercial recomendado: **preço fixo por marcos homologáveis com critérios de mudança estritos**, e itens condicionais sob teto/orçamento separado (bancos, normativa SPED, migração histórica, integrações adicionais). Contratação parcial por marco deve ser tecnicamente viável sem reduzir completude dos entregáveis assumidos.
 
 ## 4. Matriz de entregas e pacote de investimento
+**P-11 é parte integrante desta proposta, não opcional fora do preço, e depende da análise CROSS E11-T00 antes de qualquer task que persista transações bancárias.**
 | Pacote | Entregáveis e escopo | Dependência | Preço (R$) | Prazo (semanas) |
 |---|---|---|---:|---:|
 | P-01 | **Mobilização e análise das dependências** — revisão inventário A, workshop com Karina/contador/Fabrício, dados e papéis, plano de contas inicial, credenciais, regime/UF e aprovações | aprovação das tarefas ALP e insumos | a orçar | a estimar |
@@ -31,6 +32,7 @@ Modelo comercial recomendado: **preço fixo por marcos homologáveis com critér
 | P-08 | **Conciliação e tesouraria** — ingestão extrato, matching, baixa/estorno, saldos, fluxo previsto/realizado, aplicações/tarifas | aprovação das tarefas ALP e insumos | a orçar | a estimar |
 | P-09 | **Contabilidade completa e SPED aplicável** — plano de contas, partidas dobradas, mapeamentos, razão/diário, DRE/BP, inventário e CMV, apuração, obrigações ECD/ECF/EFD conforme regime | aprovação das tarefas ALP e insumos | a orçar | a estimar |
 | P-10 | **Adaptação operação e homologação ponta a ponta** — adequações a pré-faturamento, recebimento e liberação, perfis, cenários críticos, performance, Playwright e testes com usuários | aprovação das tarefas ALP e insumos | a orçar | a estimar |
+| P-11 | **E11: Fallback de conciliação via arquivo (já incluído na ampliação)** — avaliação CROSS, modelos comuns, CNAB/OFX/CSV, importação, remessa/retorno habilitados, dedupe API × arquivo, exceções, contingência e homologação dos layouts de 3 bancos | T00 antes de E06/E07/E08 e desenvolvimento bancário; convênios e manuais por instituição | a orçar | a estimar |
 **Não atribuir preço/prazo sem dimensionamento por equipe, análise de convênios e política fiscal aprovada.** Se houver custo de terceiros, itemizá-lo fora dos honorários e confirmar recorrência.
 
 ## 5. Entregáveis detalhados, critério de aceite e evidência por fase
@@ -104,6 +106,14 @@ Modelo comercial recomendado: **preço fixo por marcos homologáveis com critér
 **Aceite formal:** roteiro de testes com casos positivos/negativos do Caderno B; log do CI oito jobs, evidência de assinatura, certificado/sandbox quando pertinente, demonstração de operação e aceite por escrito do usuário responsável. Homologação externa é marco separado de implementação local.
 **Limites explícitos:** requisitos inversos RI-B01 a RI-B17, sem customização de outro banco, nota modelo ou obrigação sem análise e aditivo.
 
+### P-11 — Fallback bancário e continuidade (E11: ESCOPO INCLUÍDO)
+**Descrição de escopo:** Implementação em conjunto com E06 (APIs e contas), E07 (matching), E08 (tesouraria), E04/E05 (títulos) e E09 (razão), com **modelo único de bank_transactions, observações e baixas**. Ingestão por arquivos **CNAB 240/400 para os serviços habilitados**, **OFX** e **CSV de extratos mediante perfil de importação homologado**, suporte a remessa/retorno quando os três bancos e convênios o disponibilizarem, prévia, validação, quarantine, versionamento, controle de saldos, fallback/failback e reprocessamento idempotente.
+**Avaliação CROSS obrigatória:** E11-T00 antes das tasks de integração bancária para delimitar versões de layout, serviços, chaves fortes de conciliação, serviço cobrado e owners dos modelos; obter aprovação de Karina/TI/Quality Owner. Nenhum segundo parser universal que ignore particularidades bancárias, ledger, título ou baixa paralela.
+**Entregáveis verificáveis:** relatório de matrizes bank×conta×serviço×layout×versão×canal, schema unificado, parsers habilitados e testes de contrato, cinco telas adicionais (inbox, prévia, conflito, proveniência, saúde), 16 cenários XB-01..XB-16 em [especificação E11](11-E11-FALLBACK-BANCARIO-ARQUIVOS.md), homologação com Karina/tesouraria; documentação manual de fallback e retorno à API.
+**Exclusões específicas:** layouts não homologados, conexão automática de transporte arquivo↔banco inexistente, pagamento efetivado só por geração de remessa, linhas de CSV como comprovação universal; CNAB 200 Bradesco ou serviços não previstos na matriz homologada exigem avaliação de extensão.
+**Regra comercial de não sobreposição:** **P-07 precifica adapters/API e catálogo de capabilities; P-08 precifica motor único de matching/baixa e visões de caixa; P-11 precifica apenas os componentes adicionais do canal arquivo, validação, UI e cross-testes.** Modelagem canônica, idempotência e regras financeiras compartilhadas são desenvolvidas uma vez, distribuídas em planilha sem duplicar horas entre P-07/P-08/P-11.
+**Gates:** aprovação de manuais e contratações bancárias; aceite separado para cada banco e serviço. Falta de API não impede utilização do canal arquivo homologado; falta de layout/convênio tampouco autoriza prometer suporte universal.
+
 ## 6. Precificação rastreável por esforço
 Para estimar de maneira auditável, obter produtividade da equipe e alocação por competência:
 - `H_d`: horas de discovery/validação, `H_f`: horas frontend, `H_b`: backend/migração, `H_i`: integrações SEFAZ/bancos, `H_q`: testes e segurança, `H_u`: UAT/implantação, `H_g`: arquitetura/governança/documentação.
@@ -123,7 +133,8 @@ Faixas de complexidade orientativas de cotação, **não estimativas**: baixa=CR
 | E08 Tesouraria | — | — | — | — | — | a estimar |
 | E09 Contábil/SPED | — | — | — | — | — | a estimar |
 | E10 Operação/UX | — | — | — | — | — | a estimar |
-**Proteção de escopo comercial:** custo de completar integração municipal EISS não está incorporado à NF-e 55; adaptações indispensáveis à saída estadual são E10. Funcionalidades efetivamente prontas de E10 devem ter desconto por reuso evidenciado, não ser orçadas como implementação do zero.
+| E11 Fallback arquivos bancários | — | — | — | — | — | a estimar |
+**Proteção de escopo comercial:** custo de completar integração municipal EISS não está incorporado à NF-e 55; adaptações indispensáveis à saída estadual são E10. Fallback de arquivos **incluído em E11**, com esforço líquido para evitar dupla cobrança com E06/E07/E08. Funcionalidades efetivamente prontas de E10 devem ter desconto por reuso evidenciado, não ser orçadas como implementação do zero.
 
 ## 7. Condições comerciais a deliberar
 - **Preço fechado:** apenas após preencher esforço e políticas fiscais e obter documentação de capacidades dos três bancos; sem preço global indicado neste rascunho.
@@ -143,7 +154,7 @@ Disponibilizar responsável fiscal/contador e patrocinador para aprovar decisõe
 Entregar especificações, código com testes, migrações rastreáveis, gates de CI, documentação OpenAPI, observabilidade, trilha auditável, manuais e UAT assistida; reportar claramente bloqueios externos, não falsificar testes de homologação nem presumir aprovação normativa ou bancária.
 
 ## 10. Exclusões e requisitos inversos com força de delimitação
-O fornecedor **não** está contratando: serviço profissional de contador/tributarista; retificação de anos fiscais anteriores; consultoria financeira operacional; operação permanente do ERP; credenciamento em bancos ou SEFAZ; pagamento de taxas, certificados, cloud, SMS, gateways; todas as APIs que os bancos não disponibilizam; CNAB como escopo base; outros documentos NFSe/NFCe/CTe/MDFe; aplicativo mobile nativo, hardware/driver físico, GPS ou ERP RH; disponibilidade de sistemas de terceiros; atualização normativa ilimitada sem manutenção. São vetados falsos comprovantes, baixas sem retorno, ocultação de receitas, operações fiscais sem documento e supressão do audit trail.
+O fornecedor **não** está contratando: serviço profissional de contador/tributarista; retificação de anos fiscais anteriores; consultoria financeira operacional; operação permanente do ERP; credenciamento em bancos ou SEFAZ; pagamento de taxas, certificados, cloud, SMS, gateways; todas as APIs que os bancos não disponibilizam; CNAB/OFX/CSV **fora dos formatos/layouts homologados do E11**; outros documentos NFSe/NFCe/CTe/MDFe; aplicativo mobile nativo, hardware/driver físico, GPS ou ERP RH; disponibilidade de sistemas de terceiros; atualização normativa ilimitada sem manutenção. São vetados falsos comprovantes, baixas sem retorno, ocultação de receitas, operações fiscais sem documento e supressão do audit trail.
 Cada exclusão pode originar **aditivo** mediante especificação, prazo, valor e critério de aceite; nunca incorporação tácita.
 
 ## 11. Matriz de aceite de negócio por responsável
@@ -156,7 +167,7 @@ Cada exclusão pode originar **aditivo** mediante especificação, prazo, valor 
 | Jornada de caminhão | Richard, Carla e logística | expedição encerrada, NF-e autorizada e saída segura |
 | Segurança/auditoria | TI e Quality Owner | segregação de perfis, logs, testes acesso e dados |
 ## 12. Riscos e alocação
-**Risco alto:** homologação de três APIs bancárias (capability distinta por instituição e por conta), aprovação de regimes tributários e legislação transitória IBS/CBS, autorização NF-e, obrigação contábil SPED e custo de migração de legado. Mitigação: gates externos por integração, mock/fake antes da homologação, calendário fiscal e revisão por contador, rollout controlado.
+**Risco alto:** homologação de três APIs bancárias **e dos layouts/convênios de arquivo previstos no E11** (capability distinta por instituição e por conta), aprovação de regimes tributários e legislação transitória IBS/CBS, autorização NF-e, obrigação contábil SPED e custo de migração de legado. Mitigação: gates externos por integração, mock/fake antes da homologação, calendário fiscal e revisão por contador, rollout controlado.
 **Risco médio:** aderência à Onda 14 em código com Linear defasado, modelo de custo de estoques e telas financeiras sem protótipo validado. Mitigação: mapear implementado × backlog, aprovar mock UX e regra contábil antes de worker.
 **Risco fora do controle do fornecedor:** lentidão e disponibilidade bancos/SEFAZ, revogação token, mudança interface bancária e legislação posterior; contrato de sustentação separado.
 
@@ -165,7 +176,7 @@ Cada exclusão pode originar **aditivo** mediante especificação, prazo, valor 
 - M1: fundação/RBAC/idempotência/auditoria.
 - M2: motor tributário e emissão NF-e SP **homologação**, não só fake.
 - M3: DF-e, AP e AR com casos de devolução e parcelamento.
-- M4: três bancos com capabilidades **documentadas por conta** e HML disponível; conciliação e fluxo de caixa.
+- M4: três bancos com capabilidades **documentadas por conta** e HML disponível quando aplicável; conciliação e fluxo de caixa no motor único, com **fallback CNAB/OFX/CSV homologado por conta e serviço**, testes API × arquivo sem duplicação.
 - M5: plano de contas e livros, fechamentos, fiscal/SPED aplicável com validação contador.
 - M6: E2E cross-modular e aceite operacional/documental, treinamento previsto e plano de rollout.
 **Condições comerciais e data de cada marco pendentes de preenchimento.**
