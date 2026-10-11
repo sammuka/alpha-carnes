@@ -59,3 +59,16 @@ html,body {min-height:100%;} body{font-family:var(--font-ui);font-size:13px}
 @media(max-width:1250px){.work-grid{grid-template-columns:1fr}.erp-content{padding:18px 16px}.field-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.erp-layout{grid-template-columns:1fr}.erp-sidebar{height:auto;max-height:240px;position:relative;overflow:auto}.erp-nav{max-height:170px;overflow:auto}.erp-top{position:relative;gap:5px;padding:8px;height:auto;flex-wrap:wrap}.erp-top .top-search{max-width:100%;width:100%}.hero-row{flex-direction:column}.hero-actions{justify-content:flex-start}.kpi-row{grid-template-columns:repeat(2,minmax(0,1fr))}.field-grid{grid-template-columns:1fr}.approval-path{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;scroll-behavior:auto!important;transition:none!important}}
+
+
+.view-value{min-height:34px;padding:8px 10px;border:1px solid var(--border);background:var(--surface-2);border-radius:6px;color:var(--fg);font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.view-secure{color:var(--fg-muted);letter-spacing:.02em}
+.subsection-caption{font-size:11px;font-weight:700;color:var(--fg-secondary);margin:12px 0 10px}
+.grid-sort{border:0;background:transparent;text-align:left;font-size:10px;font-weight:700;color:var(--fg-secondary);cursor:pointer;white-space:nowrap}
+.grid-sort:hover,.grid-sort:focus-visible{color:var(--primary);outline-offset:2px}
+.combo-shell{display:flex;align-items:stretch;gap:5px}.combo-shell select{flex:1;min-width:0;max-width:100%}.lookup-button{white-space:nowrap}
+.numeric-field{display:flex;align-items:center;border:1px solid var(--border-strong);border-radius:5px;overflow:hidden}.numeric-field input{border:0!important;border-radius:0;min-width:0;flex:1}.numeric-prefix{padding:7px 8px;color:var(--fg-muted);background:var(--surface-2);font-size:11px}
+.lookup-popup{position:fixed;inset:0;background:rgba(17,32,50,.4);display:grid;place-items:center;z-index:120;padding:14px}
+.lookup-card{width:min(490px,95vw);background:#fff;border-radius:9px;box-shadow:var(--sh-3);overflow:hidden}
+.lookup-search{height:36px;width:calc(100% - 24px);margin:12px;border:1px solid var(--border-strong);border-radius:5px;padding:7px}
+.lookup-options{max-height:315px;overflow:auto}.lookup-option{width:100%;padding:11px 14px;background:white;border:0;border-bottom:1px solid var(--border);text-align:left;cursor:pointer}.lookup-option:hover{background:var(--surface-2)}.lookup-option b{display:block;font-size:12px}.lookup-option small{display:block;color:var(--fg-muted);font-size:10px;margin-top:4px}.lookup-option[hidden]{display:none}
