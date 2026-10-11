@@ -565,6 +565,7 @@ Evento original → diferença peso, valor fiscal ou pagamento → abrir ocorrê
 **Contrato de implementação Kiro:** pasta `app/backend/src/modules/erp/integracao/` ou módulo especializado dentro do domínio, DTO Zod, service, repo Drizzle, migration, controller REST, BFF `/api/erp`, UI do design system e testes (unitário, integração Postgres, E2E) na mesma task/onda; adaptar nomes após detectar convenção de código, sem mudar regras acima.
 
 ## 4-A. E11 — Telas do fallback integrado por arquivos (5 telas)
+**Parecer CROSS já registrado:** [Avaliação de Arquitetura Bancária](12-AVALIACAO-CROSS-ARQUITETURA-BANCARIA.md) fixa modelo interno comum, ownership e dedupe; E11-T00 confirma contratos e layouts externos antes do código.
 **Condição de implementação:** tarefa E11-T00 conclui avaliação CROSS de E04–E09/E11, compatibilidade de layouts, identidade de transação e ownership único de schema antes das migrations bancárias. Detalhamento e 12 subtarefas: [E11 — Conciliação por arquivos e continuidade](11-E11-FALLBACK-BANCARIO-ARQUIVOS.md).
 
 | Tela | Campos e ações | Critério de negócio e inverso |
