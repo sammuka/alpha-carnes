@@ -28,6 +28,10 @@ Cada linha de execução E##-T## é uma issue Linear vinculada ao épico E##. Is
 ## Complemento E12 — certificados, endpoints e jobs sem .env externo
 E12 compartilha perfis/segredos/jobs para NF-e, DF-e, bancos, SPED e catálogos; Kiro deve evitar criação redundante nos E02/E06/E11. Não salvar segredo em parametros.valorJson; usar cofre com referências de DB e upload PFX A1 por tela, testes de validade/ICP-Brasil, rotação e batch independente de sessão. Implementar endpoints por base oficial verificada, bloquear versões normativas não aprovadas, e registrar snapshots de certificado/configuração por run. Consultar [Catálogo de fontes](20-CATALOGO-OFICIAL-INTEGRACOES-OUT-2026.md) e [Banco](21-FONTES-BANCARIAS-ONBOARDING-E-LAYOUTS.md).
 
+
+## Contrato UX obrigatório em cada task de interface
+[Protótipo integral](../prototipos/erp-integrado-v1/index.html) e [matriz de 658 linhas de componente](../prototipos/erp-integrado-v1/MATRIZ-UX-COMPONENTES-61-TELAS.md) são referencias do Portão 1/2 das 61 telas. Os trabalhadores Kiro **não** podem gerar CRUD genérico, tela parcial/MVP, deixar texto livre para cadastro/enum, expor GUID/ID de persistência, ou adicionar coluna genérica sem função. Exigir por issue: matriz de campos/tipos, filtro datagrid, lookup dependente, máscaras e picker, estado vazio/loading/erro/conflito, navegação entre telas, papel/RBAC, caso negativo e screenshot de aceite. Documentar o comportamento de cada combo e quais entidades existentes são reusadas; considerar o cadastro legado. O protótipo em si é demonstrativo: backend real e gates legais seguem obrigatórios.
+
 ## Template rigoroso de PR/Portão
 - **Antes:** provar SHA origin/develop e inspecionar código/contrato/dados existentes; abrir worktree `feature/erp-<id>`; selecionar um único subissue e plano autocontido.
 - **Modelo:** entes/tabelas, migração Drizzle, unicidade, invariantes matemáticas/legais, gateway fake determinístico, interface real isolada, RBAC e auditoria/outbox.
