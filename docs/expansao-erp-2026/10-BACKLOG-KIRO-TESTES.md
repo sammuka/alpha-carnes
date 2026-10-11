@@ -2,6 +2,7 @@
 **Contrato documental de implantação.** Este índice deriva dos Cadernos A/B/C. A branch `develop` é a base funcional; as especificações aguardam PR/revisão. Nenhum worker deve atuar sem Portão 1, papéis de AGENTS.md, revisão de ADR e protótipos para novas telas.
 
 ## Ordem técnica e paralelismo
+-1. **Gate E12-T00 / Fundação de Integrações (OBRIGATÓRIO):** revisar cross E01..E11, fonte oficial out/2026, DB/secret-store/UI/protótipo, aprovar ADR sem duplicar credenciais e jobs; [Contrato E12](23-CROSS-IMPACTO-E12-PLANO-KIRO.md), [Arquitetura](22-ARQUITETURA-INTEGRACOES-CERTIFICADOS-BATCH-CADASTROS.md). Precede adapters e batch reais; E11-T00 permanece necessário para dedupe bancário.
 0. **Gate E11-T00 CROSS OBRIGATÓRIO:** antes de codificar E06/E07/E08/E11, verificar develop, E04/E05/E09, manuais por banco, identificar modalidades e contratos API/CNAB/OFX/CSV por conta e serviço, definir schema/capabilities/ownership e aprovar ADR. Sem este gate, worker PARA.
 1. **Fundação E01-T01 + E09-T01 + E06-T01 + E11-T01:** estabelecimento/regime fiscal, plano de contas, contas e capabilities bancárias; centralizar RBAC, trilha e dados empresariais sem duplicar entidades.
 2. **E01-T02..T05:** operações/regras/simulação/aprovação com dados **fictícios anonimizados** das quatro NF-e fornecidas. Sem emissão real antes de parecer fiscal.
@@ -24,6 +25,9 @@ Cada linha de execução E##-T## é uma issue Linear vinculada ao épico E##. Is
 - E11 incluído na proposta: funcionalidades 5 telas, 12 tasks, teste de arquivos e combinação API + arquivo; casos de teste [XB-01..XB-16](11-E11-FALLBACK-BANCARIO-ARQUIVOS.md). Deve haver uma política de fallback/failback por capability.
 - Regras negativas: arquivo importado ≠ pagamento confirmado, remessa exportada ≠ boleto registrado, retorno de registro ≠ retorno de liquidação; somar observações não significa somar créditos; exigir revisão em conflitos.
 
+## Complemento E12 — certificados, endpoints e jobs sem .env externo
+E12 compartilha perfis/segredos/jobs para NF-e, DF-e, bancos, SPED e catálogos; Kiro deve evitar criação redundante nos E02/E06/E11. Não salvar segredo em parametros.valorJson; usar cofre com referências de DB e upload PFX A1 por tela, testes de validade/ICP-Brasil, rotação e batch independente de sessão. Implementar endpoints por base oficial verificada, bloquear versões normativas não aprovadas, e registrar snapshots de certificado/configuração por run. Consultar [Catálogo de fontes](20-CATALOGO-OFICIAL-INTEGRACOES-OUT-2026.md) e [Banco](21-FONTES-BANCARIAS-ONBOARDING-E-LAYOUTS.md).
+
 ## Template rigoroso de PR/Portão
 - **Antes:** provar SHA origin/develop e inspecionar código/contrato/dados existentes; abrir worktree `feature/erp-<id>`; selecionar um único subissue e plano autocontido.
 - **Modelo:** entes/tabelas, migração Drizzle, unicidade, invariantes matemáticas/legais, gateway fake determinístico, interface real isolada, RBAC e auditoria/outbox.
@@ -33,7 +37,7 @@ Cada linha de execução E##-T## é uma issue Linear vinculada ao épico E##. Is
 - **Evidência por issue:** commit/PR SHA, comparativo schema, Swagger/OpenAPI, casos feliz e negativo, relatório CI, parecer fiscal/bancário ou bloqueio externo, demonstração UAT.
 - **STOP obrigatório:** falta de URL/certificado/convênio, alíquota não aprovada, exigência de autorização não aplicável, dúvida sobre método de custo, ausência de protótipo, contradição com constituição, teste falhando após correção. Não presumir resposta.
 ## Mapa de escopo comercial
-O **Caderno A** representa o desenvolvimento original e aponta exclusões, pendências EISS e hardware. O **Caderno B** representa exclusivamente a ampliação de **54 telas/funcionalidades** (49 propostas originais + 5 superfícies de fallback) e **11 épicos** não equivalem a 10 PRs e podem exigir várias ondas por dependência. O **Caderno C** organiza pacotes de cobrança, aceite, custos de terceiros, exclusões e premissas. Um aceite no GitHub não significa homologação de banco, NF-e em produção ou fechamento contábil validado por contador.
+O **Caderno A** representa o desenvolvimento original e aponta exclusões, pendências EISS e hardware. O **Caderno B** representa exclusivamente a ampliação de **61 telas/funcionalidades** (49 propostas originais + 5 E11 + 7 E12) e **12 épicos** não equivalem a 10 PRs e podem exigir várias ondas por dependência. O **Caderno C** organiza pacotes de cobrança, aceite, custos de terceiros, exclusões e premissas. Um aceite no GitHub não significa homologação de banco, NF-e em produção ou fechamento contábil validado por contador.
 ## Matriz de não escopo comum
 Sem folha/eSocial própria; sem NFS-e geral, NFC-e, CT-e, MDF-e; sem outros bancos; sem operação de contabilidade terceirizada; sem retificação histórica ilimitada; sem credenciamento bancário fornecido pelo desenvolvedor; **arquivos bancários de layouts homologados estão incluídos no E11**; sem licença/hardware físico; sem garantias de SLA de terceiros; sem alterações normativas ilimitadas; sem faturamento fictício ou conciliação que oculte fluxos.
 ## Critérios de negociação antes de preço final
