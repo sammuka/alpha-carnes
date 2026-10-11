@@ -2170,16 +2170,20 @@ alteração de regra de transformação.
 | INA-02 | Motor fiscal por NCM, CFOP, ICMS, IPI, PIS, COFINS, IBS/CBS, benefícios e vigência | Caderno B E01 |
 | INA-03 | Importação de DF-e por NSU, manifestação e apuração de créditos | Caderno B E03 |
 | INA-04 | Contas a pagar/receber com títulos, parcelas e baixas de caixa | Caderno B E04/E05 |
-| INA-05 | APIs Bradesco, Itaú, Santander, DDA, cobrança, extrato, Pix e ordens de pagamento | Caderno B E06 |
-| INA-06 | Conciliação bancária, automatching, fluxo de caixa consolidado | Caderno B E07/E08 |
+| INA-05 | APIs Bradesco, Itaú, Santander, DDA, cobrança, extrato, Pix e ordens de pagamento | Caderno B E06; fallback bancário E11 |
+| INA-06 | Conciliação bancária, automatching, fluxo de caixa consolidado e importação de extratos/retornos CNAB, OFX ou CSV | Caderno B E07/E08/E11 |
 | INA-07 | Plano de contas, partidas dobradas, DRE, BP, diário, razão, fechamento, SPED | Caderno B E09 |
 | INA-08 | Equipamentos físicos, drivers de balança completos, impressoras, infraestrutura de rede, suporte presencial e treinamento ilimitado | projeto complementar/terceiros |
 | INA-09 | Roteirização dinâmica GPS, aplicativo nativo Android/iOS, marketplace e e-commerce | fora desta contratação |
 | INA-10 | Serviços de contador, advogado tributarista, homologações feitas por bancos/SEFAZ, certificados e taxas | terceiros sob responsabilidade do cliente |
 | INA-11 | Qualquer conta paralela, faturamento fictício, supressão de receita ou fraude tributária | expressamente proibido |
 | INA-12 | Integração com folha/eSocial, folha própria, folha de pagamento completa | depende de extensão contratual específica |
+| INA-13 | Remessa/retorno bancário por arquivos, importação de extrato bancário, deduplicação API × arquivo, fallback/failback e homologação bancária | **Novo escopo integrado E11 do Caderno B**, não parte da operação anterior |
+## 5-A. Não sobreposição de escopo financeiro/bancário
+O desenvolvimento operacional anterior **não contempla** importação de extrato por CNAB/OFX/CSV, remessa/retorno de cobrança, adaptadores bancários, matching interfontes nem conciliação financeira. O novo fallback por arquivos está **INCLUÍDO na ampliação do Caderno B E11**, concebido conjuntamente com E06/E07, não deve ser precificado como correção da NFS-e/EISS ou como uma segunda conciliação. Apenas importação de XML de fornecedor para recebimento e documentos de operação pertencem às suas respectivas jornadas, sem equivalência a arquivo bancário.
+
 ## 6. Critérios de faturabilidade e aceite comercial do Caderno A
 O preço originalmente pactuado, se existente, não é reestimado aqui. Separar: código concluído, testado mas não homologado, dívida técnica, homologação externa e funcionalidade nova. Toda renegociação de escopo será itemizada por delta contra este inventário, com evidência de código/PR, roteiro de UAT e aceite assinado.
 ### Anexos referenciais
 - `docs_v2/04_especificacao_telas_campos.md`, `docs/016-wireframes-fluxos-por-tela.md`, `docs/008-faturamento-emissao-nf-seguro-bloqueios-fiscais-e-liberacao-do-caminhao.md`.
-- Caderno B: `B-ESCOPO-NOVOS-MODULOS-ERP.md`; Proposta comercial: `C-PROPOSTA-COMERCIAL-ERP.md`.
+- Caderno B: `B-ESCOPO-NOVOS-MODULOS-ERP.md` com E11 integrado; E11 técnico: `11-E11-FALLBACK-BANCARIO-ARQUIVOS.md`; Proposta comercial: `C-PROPOSTA-COMERCIAL-ERP.md`.
