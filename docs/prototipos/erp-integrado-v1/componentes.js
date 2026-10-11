@@ -2279,6 +2279,7 @@ window.ALPHA_PROTO_COMPONENTS = {
     ]
   },
   "catalogs": {
+    "cest": [["CEST-A","CEST aplicável ao NCM selecionado (exemplo)","Versão da tabela oficial precisa de aprovação"]],
     "empresas": [
       [
         "A",
