@@ -1,0 +1,121 @@
+# AlphaCarnes — Avaliação criteriosa CROSS, decisão de escopo e tarefas Kiro para fundação de integrações
+**11/10/2026.** Análise feita *antes* da definição dos novos itens de backlog. Fontes: develop, Constitution, 39 rotas, banco parametros JSONB, E01..E11, portais oficiais e decisão explícita: sem .env para integrações, cadastros preferencialmente DB/UI, certificados A1 por upload, batch autônomo.
+## 1. Resultado da análise
+A funcionalidade solicitada toca **pelo menos 10 dos 11 épicos existentes**: E01 (catálogo fiscal), E02 (NF-e autorização e certificado), E03 (DF-e distribuição e manifestação), E04/E05 (pagamentos e cobrança/credential), E06 (três APIs), E07 (conciliação única), E08 (sincronização extratos), E09 (SPED/assinatura e tabelas), E11 (CNAB/OFX/CSV batch). E10 toca apenas indiretamente nos menus/permissões/monitor operacional. O atual /admin/parametros JSONB **não é cofre seguro**. A Constituição fixa a UI do protótipo e novo menu/tela precisa de autorização expressa e protótipo.
+**Alternativas:**
+- D1 — duplicar certificados/endpoints/jobs dentro de E02/E06/E11: REJEITADA (segredos repetidos, rotação e acesso inconsistentes, cobrança duplicada e suporte caro).
+- D2 — usar parametros JSONB e senha PFX no PostgreSQL: REJEITADA (auditoria copia valores antes/depois; vazamento e ausência de criptografia por campo).
+- D3 — cadastro de integração central, metadados no PostgreSQL, segredo no vault/KMS, batch por job definido no BD, endpoints controlados, UI admin e adaptações nos épicos de domínio: **RECOMENDADA**.
+**Decisão de produto declarada pelo usuário**: integrações autossuficientes e configuráveis pela aplicação, com certificado upload, API prioritária e fallback E11. **Decisões técnicas propostas e sujeitas ao gate de arquitetura:** D3, SecretsProvider conforme nuvem, nomes físicos tabelas, menu e cron; nenhum desvio de Constituição sem Quality Owner.
+## 2. Justificativa de ÉPICO exclusivo
+Criar **E12 — Plataforma de Integrações, Certificados, Credenciais e Automação Batch** no Linear ALP; **não** implementar certificados em E02 e de novo em E06. Epico cross com 13 tasks E12-T00..T12; adaptar tasks existentes para consumir interfaces. O E12 não cria segundo motor de conciliação, ledger, autorização SEFAZ ou backend contábil. Incluído no Caderno B e C; na precificação separar apenas plataforma compartilhada uma vez e estimar adapters de E02/E06/E11 sem duplicar.
+## 3. Matriz de responsabilidades
+| Epic | Responsabilidade mantém | Dependência nova E12 |
+|---|---|---|
+| E01 | regras por empresa/UF/vigência, cálculo tributo | dataset versionado/NT/cClassTrib/cBenef via E12; não baixar regra nova automaticamente |
+| E02 | XMLDsig, SEFAZ NF-e55 e eventos | CertificateVault e perfis endpoints por ambiente; batch consulta autorização e cert |
+| E03 | DF-e entrada/NSU e manifestação | certificado/DF-e WS e agendamento/checkpoint via E12 |
+| E04 | AP/pagamentos | perfil bancário capability e job bancário sem segredo em .env |
+| E05 | AR/boletos | credencial/certificado, callback e canal de cobrança |
+| E06 | API bank e contas/capabilities bancárias | certificados, secrets, endpoints, onboarding e oauth mTLS compartilhados E12 |
+| E07 | reconciliação, alocação e baixa | fonte normalizada e execução job; NÃO criar ledger E12 |
+| E08 | projeções/caixa | jobs de extrato e status, batch retomável e alarmes |
+| E09 | razão/SPED | XSD/leis por período e certificado/poderes, upload não concede procuração |
+| E10 | menu/UX | aprovar novas telas em protótipo e RBAC sem redesenhar as 39 anteriores |
+| E11 | CNAB/OFX/CSV, lotes, parsers e fallback | agendamento, credencial e layout via E12; sem criar outro parser de layout fiscal |
+## 4. Dependências blocking recomendadas
+- E12-T00 (ADR/Gate Prototipo) → E12-T01..T12, e ao início de E02 emissão real, E03 DF-e, E06 adapters, E09 transmissão SPED, E11 jobs de arquivo.
+- E12-T01+T02+T03 (schema+vault+cert) → E02 certificado real; E12-T07 → E06 auth/endpoint; E12-T09 → batch DF-e, conciliação de extratos e geração de retorno; E11-T00 continua bloqueando a parte bancária CROSS mesmo após E12-T00.
+- Início de política fiscal em E01 pode avançar sem segredo externo, mas ativação de schema/tabela conforme catálogo E12-T08. E04/E05 negócios independentes podem avançar, apenas camada bancária aguarda.
+- Governança: novos /admin/integracoes/* e menu exigem protótipo aprovado ou emenda Quality Owner à Constituição, como definido em AGENTS.md. Não exigir modificação histórica em docs/execucao/DECISOES.md pelo worker.
+## 5. Cadastros/telas da expansão
+**7 superfícies**: catálogo integrações; certificado upload/rotação; apps bancárias/credenciais; fiscal credenciamento/endpoints; datasets/versões oficiais; batch jobs/histórico; health/alertas. O caderno comercial B passa de **54 → 61 telas propostas** e **11 → 12 épicos**, assumindo tais páginas separadas como proposta sujeita a protótipo; podem ser abas/fluxos desde que funcionalidades sejam preservadas e orçamento não duplique.
+## 6. Documentos oficiais verificados
+[Catálogo fiscal/SPED](20-CATALOGO-OFICIAL-INTEGRACOES-OUT-2026.md) e [três bancos](21-FONTES-BANCARIAS-ONBOARDING-E-LAYOUTS.md). NT 2025.002 **v1.52** (01/10/2026), pacote XSD **010f** listado (31/08/2026), MOC 7.0, EFD ICMS/IPI **3.2.4** (set/2026), Itaú renovação CA/endpoints em 2026 e Santander H7815 CNAB240 **8.5** fev/2026. O acesso ao catálogo logado de API e sua habilitação é pendente, não inventar endpoints/payload.
+## 7. Riscos comerciais e segurança
+- CertificateVault seguro e agendamento batch são **plataforma nova compartilhada**: escopo e preço separados (E12/P-12), mas sem cobrar três vezes upload/credential por banco.
+- Segredos PFX/clientSecret privados NUNCA no Postgres parametrico JSONB nem em logs; metadados e ref opaco no BD; vault KMS obrigatório ou provider equivalente aprovado; identidade de serviço para batch.
+- `.env` continua **somente bootstrap de infra mínimo**, até migração com gates; proibir adicionar parâmetros bancários/fiscais. Autossuficiência técnica do ERP não substitui contratação bancária, certificação ICP-Brasil ou credenciamento externo.
+- Cert A1 ICP-Brasil é formato para batch; A3 necessita token/HSM e não é batch via upload. Cert mTLS bancário não é automaticamente e-CNPJ SEFAZ.
+- Atualização de NT/cClassTrib não altera documento autorizado nem tributo vigente sem aprovação. SSL CA de Itaú requer teste dentro do calendário.
+## 8. Backlog proposto — 13 tarefas, NÃO inventar decisões do Kiro
+### E12-T00 — Revisão CROSS e ADR formal antes de migrations
+**Implementação/autoria:** Inspecionar módulos em develop, constitution, DECISOES, ADR-002/006/011, parametros JSONB e autenticação BFF/JWT; mapear todos os consumidores E01/E02/E03/E04/E05/E06/E07/E08/E09/E11, traçar esquema único para perfis, segredos, certificados, catálogos e batch; validar fronteiras tenant, HML/PRD, modelo RLS/RBAC, uso do cofre de acordo com infraestrutura implantada; levantar dados externos por banco/SEFAZ/contador.
+**Critérios de aceite completos:** Entregar ADR com diagrama/ownership, lista do código impactado, DDL conceitual, referência para cada consumer, matriz tela→protótipo e riscos. Sem código antes do Portão 1; Quality Owner/TI aprova decisões fora da Constituição.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+
+### E12-T01 — Schema PostgreSQL com perfis, capabilities, versões e referências
+**Implementação/autoria:** Criar migrations Drizzle aditivas para external_providers/profiles/endpoints/capabilities/contracts/source_evidence/reference_dataset_versions com companyId e establishmentId, ambiente, vigência, versão, aprovado por e status. Separar dados seguros de secret refs; impossibilitar segredo no parametros genérico com DTO seguro e lint/verificação.
+**Critérios de aceite completos:** Testar duas contas, 3 bancos, 2 estabelecimentos e HML/PRD em paralelo, sem colisão e sem cross-tenant. Unique e FK; rollback/restore. Config bloqueada sem perfil/contrato e versões vigentes.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+
+### E12-T02 — SecretsProvider de backend com vault/KMS e workload identity
+**Implementação/autoria:** Definir interface saveEncryptedSecret, resolveForWorkload, rotateSecret, revokeBinding, auditMetadata; adaptador gerenciado cloud (IAM role + KMS + Secrets Manager ou equivalente) e fake determinístico do CI; backend não revela segredo em resposta HTTP, logs, auditoria, DLQ ou exceptions. Evitar static keys no .env.
+**Critérios de aceite completos:** Provar que aplicação reinicia sem BANK_/SEFAZ_/CERT_, segredos consultados por workload somente; 403 para outro serviço; DR via backup cofre e chave; sem fallback em texto claro ou parametros.valorJson.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+
+### E12-T03 — Upload e validação e-CNPJ A1 PFX/P12, PEM/KEY, rotação
+**Implementação/autoria:** Implementar POST multipart write-only com tamanho/MIME, parse PKCS#12 em sandbox backend, senha transitória, validar chave privada, cadeia ICP Brasil, subject/CNPJ alfanumérico, validade e keyUsage, armazenar encrypted key em vault e metadata no DB, thumbprint SHA256, teste assinar XML em ambiente fake/HML, binding por propósito e estabelecimento, rotação/revogação com dupla aprovação PRODUÇÃO.
+**Critérios de aceite completos:** Cobrir PFX certo/senha errada/chave errada/expirado/revogado/concorrência; nem resposta nem auditoria possuem senhas/privkey; alertas de expiração e teste quando ca bancária mudou; A3 rejeitado como upload para batch.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+
+### E12-T04 — Cadastro UI Catálogo integrações + RBAC e estados
+**Implementação/autoria:** Criar /admin/integracoes prototipada e aprovada, providers NF-e, DF-e, Bradesco, Itaú, Santander, SPED e referências com filtros/estabelecimento/ambiente/capability, CRUD versionado, dashboard status, recursos de habilitar/desabilitar, responsável e histórico. Não reutilizar generic parametros para segredos.
+**Critérios de aceite completos:** E2E CRUD/403/409/422, mudança HML não altera PROD, campo CNPJ aceita formato alfanumérico, duas contas podem coexistir; tela e menu conformes protótipo/Constituição.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+
+### E12-T05 — Tela certificados e credenciais, inclusive CSR mTLS bancário
+**Implementação/autoria:** Implementar /admin/integracoes/certificados e /aplicacoes: upload PFX/P12/CRT+KEY, senha write-only, public thumbprint/issuer/validity, finalidade, link a app/service/conta, rotação, testes TLS; CSR + upload certificado assinado caso Itaú exija; secrets write-only via backend; nunca GET privado.
+**Critérios de aceite completos:** Testes perfil upload/rotacionar/aprovar, ausência de segredo no body JSON e browser; não usar certificado SEFAZ como bank mTLS sem contrato. Ver template do protótipo.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+
+### E12-T06 — Cadastro fiscal por estabelecimento — SEFAZ endpoints, série e credenciamento
+**Implementação/autoria:** Por UI fiscal configurar empresa, IE/CRT/UF, credenciamento, ambiente HML/PRD, séries, cNF/numeração auditável, WS NFe Autorizacao/Ret/Consulta/Evento/Inutilizacao/Status, DF-e nacional, SVC-AN apenas via gate legal, certificado purpose NFE_MTLS/NFE_SIGN; editar endpoints validados da lista oficial, nunca URL livre.
+**Critérios de aceite completos:** HML autorização sintética com XSD vigente, consulta retorno e endpoint status; ambiente distinto, produção não ativa só por upload; não mexer em EISS histórico; erro CNPJ/assinatura bloqueia.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+
+### E12-T07 — Cadastro por banco: convênios, contas, capabilities e endpoints autenticados
+**Implementação/autoria:** Implementar perfis apps bancárias, carteira/contrato, status de API/arquivo, client ID, secretRef, cert binding, scopes, webhook, versão OpenAPI/capability e layout CNAB homologado por serviço; dar suporte UI aos portais externos e anexos/manuais, não tentar criar conta externa automaticamente.
+**Critérios de aceite completos:** 3 bancos, HML/PRD, cada produto suporta apenas operações aprovadas, um mesmo payment no API/file cai no motor E07. Itaú cadeia CA 2026 testada; Santander ocorrência CNAB por carteira; URL só da doc autenticada.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+
+### E12-T08 — Repositório oficial de referências fiscais e bancárias com staging/aprovação
+**Implementação/autoria:** Implementar DatasetVersion com download de domínio oficial allowlisted, hash, versão, vigência, diff, aprovador. Tabelas NF-e XSD 010f, NT 2025.002 v1.52/NT 2026.007/010, cClassTrib, cBenef, NCM/uTrib, municípios; bank OpenAPI/layoute e SPED 3.2.4. Não embutir XSD por URL dinâmica sem checar integridade.
+**Critérios de aceite completos:** Arquivo nova versão não substitui automaticamente regra/tributo de período anterior; fail closed se incompatibilidade entre NT e pacote schema; teste de regressão de XML histórico.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+
+### E12-T09 — Jobs batch por banco/fiscal/referência em PostgreSQL e backend worker
+**Implementação/autoria:** Persistir cron/interval/trigger, timezone, checkpoint, rate-limit, backoff, concurrency lease/fencing, outbox/inbox, idempotência por externalId/capability/empresa, versão de certificado pinned. Worker independente de sessão humano e de env BANK/SEFAZ/JOB; tarefas DF-e NSU, extrato, boleto pendente, importações E11, status NF, expiração e referências.
+**Critérios de aceite completos:** 2 workers concorrentes não duplicam evento, lease recupera após crash, credencial revogada suspende job, UI mostra erro e permite reexecução auditada, sem rede externa no CI.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+
+### E12-T10 — Console batch e observabilidade, testes seguros e políticas de fallback
+**Implementação/autoria:** Tela /admin/integracoes/jobs e painel health: próximo/último run, lote, erro, stats, registro auditoria, opção executar/reprocessar/pausar com RBAC; alerta expiração 60/30/15/7 dias, indisponibilidade banco/SEFAZ, versões catálogo e recuperação API→E11 file→API.
+**Critérios de aceite completos:** Retorno arquivo e API mesmo evento nunca duplica baixa/ledger; remessa exportada não equivale aceita; senhas indisponíveis em telemetria; Playwright screenshot e testes cross-fonte.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+
+### E12-T11 — Migração controlada de configurações e dependência .env
+**Implementação/autoria:** Inventariar env existentes em backend, frontend, compose, scripts, CI e secrets do deploy; não remover JWT/DATABASE_URL abruptamente. Migrar parâmetros externos futuros para banco e secret store; os segredos de bootstrap continuam em secret injection/IAM; normalizar backend frontend JWT sem circulação indevida; atualizar guides dev/onprem/cloud.
+**Critérios de aceite completos:** Application/batch usam HML/PRD via DB, sem nenhum BANK_, SEFAZ_, CERT_, CNAB_ ou JOB_ novo em env, CI docker dev continua funcional, rollback e backup restauráveis.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+
+### E12-T12 — Jornadas completas, gates e documentação de operação
+**Implementação/autoria:** Criar guias passo a passo para cliente cadastrar empresa/conta/banco e certificado via tela, homologar endpoints, programar batch e inspecionar retorno; vincular com E02 E03 E06 E07 E11 E09, emitir fake nfe/NSU/boletos/arquivos testando failback, RBAC, observabilidade, aprovação e custos.
+**Critérios de aceite completos:** UAT com Karina, TI, contador para os serviços habilitados; registrar evidência CI8 jobs, segurança e rotas; sem entrega fake jurídica/financeira. Provas de uploads e recuperação após restart.
+**Regra transversal:** backend NestJS como única autoridade, migrations Drizzle/PostgreSQL e RBAC; UI DS v3/protótipo aprovado; segredos write-only; logs auditáveis sem privados, testes unitários/integração PG18, Playwright e oito jobs CI; falha de banco/SEFAZ explícita, fake determinístico. **Inversos:** sem secret em parametros JSONB ou .env integrações, sem chave exportável, sem conclusão de homologação apenas por backend fake. Quando contrato externo não estiver disponível, STOP e registrar blocker.
+**Dependência:** E12-T00/Portão 1; consumer do quadro §3 e E11-T00 em interfaces bancárias.
+## 9. Definition of done final e aceite de negociação
+Cada task deve conter UI, DTO/service, schema/adapter, RBAC, auditoria, testes de falhas e restore, endpoints documentados, evidência de homologação conforme fonte externa. Integração habilitada pelo provedor fora do sistema é responsabilidade cliente/banco/SEFAZ, não atividade automática do software. A proposta C deve adicionar P-12 à matriz de estimativas; custos recorrentes de KMS/Secrets Manager/armazenamento/cloud e certificados/serviços bancários são despesas de terceiros, separadas.
+**Status:** parecer cross técnico completo, não execução. Os gate de UI, identidade workload e contratos de bancos exigem aprovação humana antes de código.
