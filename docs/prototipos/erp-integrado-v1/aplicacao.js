@@ -436,6 +436,7 @@ function openDrawer(sc,mode){
  if(!conf.sections.some(x=>x.fields.includes('justificativa')))h+='<div class="erp-field"><label for="review-justification">Motivo da alteração *</label><textarea name="justificativa" id="review-justification" rows="3" required placeholder="Por que este cadastro precisa ser criado/alterado?"></textarea></div>';
  h+='</form><div class="info-row warn">Cadastro demonstrativo em memória. Selecione empresas e entidades existentes pelo nome; não informe IDs internos, senhas verdadeiras ou certificados reais.</div>';
  layer.innerHTML='<div class="drawer-backdrop" data-close-layer="1"><aside class="drawer" role="dialog" aria-modal="true" aria-label="Formulário de '+escapeHtml(sc.title)+'"><div class="drawer-head"><div><span class="eyebrow">CADASTRO · '+escapeHtml(sc.group)+'</span><h2>'+escapeHtml(sc.title)+'</h2><p class="subtle">Formulário completo com tipos e origem de cada campo</p></div><button class="erp-btn" data-close-layer="1">Fechar</button></div><div class="drawer-body">'+h+'</div><div class="drawer-actions"><button class="erp-btn" data-close-layer="1">Cancelar</button><button class="erp-btn" data-action="validate-form">Verificar dados</button><button class="erp-btn primary" data-action="save-form">Salvar rascunho ilustrativo</button></div></aside></div>';
+ syncDependentSelectors();
 }
 function saveForm(validateOnly){
  const form=document.getElementById('editor-form'),sc=currentScreen();if(!form||!sc)return;
@@ -444,6 +445,7 @@ function saveForm(validateOnly){
    const input=form.elements.namedItem(m.key);if(!input||m.readOnly)continue;
    if(m.required&&!m.writeOnly&&!input.value.trim())errors.push(m.label+' é obrigatório.');
    if((m.type==='relation'||m.type==='enum')&&input.value){const options=m.type==='relation'?C.catalogs[m.source]:C.enums[m.source];if(!(options||[]).some(x=>x[0]===input.value))errors.push('Seleção inválida de '+m.label+'.');}
+   if(m.type==='relation'&&input.value&&!matchesParentCatalog(m.key,input.value))errors.push('Escolha incompatível com banco, empresa ou convênio em '+m.label+'.');
    if((m.type==='money'||m.type==='percent'||m.type==='decimal')&&input.value&&!/^\\d+(,\\d{1,3})?$/.test(input.value.trim()))errors.push(m.label+': use valor positivo com vírgula decimal.');
  }
  const reason=form.elements.namedItem('justificativa');if(reason&&!reason.value.trim())errors.push('Informe justificativa para auditoria.');
@@ -457,10 +459,35 @@ function saveForm(validateOnly){
  else if(rec){rec.name=text;rec.status='Em revisão';}
  addEvent(S.formMode==='new'?'Registro demonstrativo criado':'Alteração demonstrativa proposta',sc);layer.innerHTML='';render();toast('Dados demonstrativos salvos apenas nesta sessão. Nenhum documento ou integração externa foi alterado.');
 }
+
+function matchesParentCatalog(fieldKey,optionValue){
+ const m=C.fields[fieldKey],filters=C.catalogRelationships?.[m?.source];if(!filters)return true;
+ const form=document.getElementById('editor-form');if(!form)return true;
+ for(const [parent,byValue] of Object.entries(filters)){
+  const value=form.elements.namedItem(parent)?.value;
+  if(value && byValue[value] && !byValue[value].includes(optionValue))return false;
+ }
+ return true;
+}
+function syncDependentSelectors(changedKey=''){
+ const form=document.getElementById('editor-form');if(!form)return;
+ for(const el of form.querySelectorAll('select[data-choice="relation"]')){
+  const fieldKey=el.dataset.fieldKey,m=C.fields[fieldKey],parents=m.dependsOn||[];
+  if(changedKey&&parents.includes(changedKey))el.value='';
+  const unselected=parents.some(k=>form.elements.namedItem(k)&&!form.elements.namedItem(k).value);
+  const choices=[...el.options].slice(1);
+  choices.forEach(opt=>{const active=matchesParentCatalog(fieldKey,opt.value);opt.disabled=!active;opt.hidden=!active;});
+  el.disabled=unselected;
+  if(unselected)el.title='Selecione primeiro '+parents.filter(k=>form.elements.namedItem(k)).map(k=>C.fields[k]?.label||k).join(' e ');
+ }
+}
+
 function openLookup(key){
  const m=C.fields[key],opts=C.catalogs[m.source]||[];
  if(!opts.length){toast('Nenhum cadastro disponível para seleção. Consulte a área responsável.');return;}
- const popup=document.createElement('div');popup.className='lookup-popup';popup.innerHTML='<div class="lookup-card"><div class="erp-card-header"><h2>Selecionar '+escapeHtml(m.label)+'</h2><button class="erp-btn small" data-close-lookup="1">Fechar</button></div><input class="lookup-search" type="search" placeholder="Pesquisar pelo nome ou descrição" aria-label="Pesquisar cadastro"><div class="lookup-options">'+opts.map(o=>'<button class="lookup-option" data-lookup-select="'+escapeHtml(key)+'" data-choice="'+escapeHtml(o[0])+'"><b>'+escapeHtml(o[1])+'</b><small>'+escapeHtml(o[2]||'Cadastro ativo')+'</small></button>').join('')+'</div><div class="form-hint" style="padding:10px">A seleção utiliza uma referência interna invisível, nunca digitação de GUID.</div></div>';
+ const filtered=opts.filter(o=>matchesParentCatalog(key,o[0]));
+ if(!filtered.length){toast('Não há opções cadastradas para os filtros selecionados. Revise banco, conta, empresa e serviço.');return;}
+ const popup=document.createElement('div');popup.className='lookup-popup';popup.innerHTML='<div class="lookup-card"><div class="erp-card-header"><h2>Selecionar '+escapeHtml(m.label)+'</h2><button class="erp-btn small" data-close-lookup="1">Fechar</button></div><input class="lookup-search" type="search" placeholder="Pesquisar pelo nome ou descrição" aria-label="Pesquisar cadastro"><div class="lookup-options">'+filtered.map(o=>'<button class="lookup-option" data-lookup-select="'+escapeHtml(key)+'" data-choice="'+escapeHtml(o[0])+'"><b>'+escapeHtml(o[1])+'</b><small>'+escapeHtml(o[2]||'Cadastro ativo')+'</small></button>').join('')+'</div><div class="form-hint" style="padding:10px">A seleção utiliza uma referência interna invisível, nunca digitação de GUID.</div></div>';
  layer.appendChild(popup);popup.querySelector('.lookup-search').focus();
  popup.querySelector('[data-close-lookup]').onclick=()=>popup.remove();
  popup.querySelector('.lookup-search').oninput=(e)=>{const q=e.target.value.toLowerCase();popup.querySelectorAll('.lookup-option').forEach(el=>el.hidden=!el.textContent.toLowerCase().includes(q));};
@@ -494,7 +521,7 @@ document.addEventListener('change',e=>{
  if(e.target.id==='role'){S.role=e.target.value;S.page='inicio';render();return;}
  if(e.target.id==='env'){S.env=e.target.value;render();return;}
  if(e.target.id==='filter-status'){S.status=e.target.value;render();return;}
- if(e.target.matches('select[data-choice]')){const key=e.target.dataset.fieldKey;const dependents=layer.querySelectorAll('select[data-depends]');dependents.forEach(select=>{if(select!==e.target&&(select.dataset.depends||'').split(',').includes(key)){select.value='';select.disabled=!e.target.value;}});}
+ if(e.target.matches('select[data-choice]'))syncDependentSelectors(e.target.dataset.fieldKey);
 });
 document.addEventListener('input',e=>{
  if(e.target.id==='filter-records'){
