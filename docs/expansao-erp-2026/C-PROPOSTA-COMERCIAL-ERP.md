@@ -121,6 +121,10 @@ Modelo comercial recomendado: **preço fixo por marcos homologáveis com critér
 **Limitações de autossuficiência:** interface permite configurar e processar após obtenção das credenciais pelo cliente; não obtém habilitação SEFAZ/conta/convênio/procuração externa. Configuração de infraestrutura bootstrap mínima persiste como dependência técnica; credenciais de integração não podem estar no .env. A3 token/HSM não incluído no upload A1.
 **Entrega/UAT:** certificados A1 por UI e metadata segura, segredo em cofre, testes HML, jobs retoma após restart sem sessão nem env BANCO/SEFAZ, versão oficial e revisão humana; Portão 1 UI/segurança.
 
+
+### Anexo UX integral — obrigatório para orçamento e aceite
+Os valores de escopo P-01..P-12 devem dimensionar **campos, combos de cadastro, enums, datepickers, datagrids de negócio, ações e jornadas completas** conforme [Matriz UX de 61 telas](../prototipos/erp-integrado-v1/MATRIZ-UX-COMPONENTES-61-TELAS.md) e [Protótipos navegáveis](../prototipos/erp-integrado-v1/index.html), ratificados AD-18. Está vedado reduzir o escopo a CRUD MVP, texto livre em referência cadastrada ou uso de GUID na experiência. A definição de preço por tela considera casos negativos, rascunhos, auditoria, integração, navegação e testes de acessibilidade. A revisão final UX por todas as jornadas integra o aceite contratual; protótipos estáticos não comprovam funcionalidade de produção.
+
 ## 6. Precificação rastreável por esforço
 Para estimar de maneira auditável, obter produtividade da equipe e alocação por competência:
 - `H_d`: horas de discovery/validação, `H_f`: horas frontend, `H_b`: backend/migração, `H_i`: integrações SEFAZ/bancos, `H_q`: testes e segurança, `H_u`: UAT/implantação, `H_g`: arquitetura/governança/documentação.
