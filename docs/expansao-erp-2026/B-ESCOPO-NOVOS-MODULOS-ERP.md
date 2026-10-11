@@ -594,6 +594,12 @@ Evento original → diferença peso, valor fiscal ou pagamento → abrir ocorrê
 **Jornadas:** (1) upload A1 e-CNPJ→validar/assinar→habilitar SEFAZ/HML→emissão batch→autorizar; (2) cadastrar convênio e mTLS→HML banco→API prioritária ou arquivo E11→ledger único; (3) agendar NSU DF-e e validar catálogo RTC; (4) troca de certificado sem interrupção dos jobs.
 **Exclusões:** a contratação de certificado, conta bancária, convênio ou procuração governamental não pode ser criada magicamente pelo ERP: depende do titular e da autoridade externa. O ERP recebe credencial por tela e opera depois do credenciamento. Não exigir A3 para batch sem HSM/PKCS#11. Referências atuais e privadas estão nos docs 20/21, nunca inventar endpoint autenticado.
 
+
+
+## Requisito transversal de UX integral — AD-18, ratificação posterior
+A especificação de todas as **61 interfaces** foi detalhada em [Matriz UX — componentes, fontes e comportamento](../prototipos/erp-integrado-v1/MATRIZ-UX-COMPONENTES-61-TELAS.md) e implementada no [protótipo navegável](../prototipos/erp-integrado-v1/index.html). **Cada campo possui componente e origem obrigatórios (combo enum, seletor de cadastro/lookup, calendário, competência, máscara BRL, upload seguro, derivado somente leitura)**; cada tela dispõe de **datagrid de colunas próprias**, filtros, ordenação, navegação, fluxos negativos, ações e estados.
+Não renderizar GUID/UUID/IDs internos, números artificiais, nomenclatura de issue/épico ou nomes técnicos de banco na UI. Preferir nomes de cliente, produto, filial e banco, descrições de status e documentos de negócio. CFOP, NCM, chave NF-e, protocolo e nosso número são códigos **legais ou operacionais**, exibidos apenas com rótulo e contexto funcional quando a tarefa exigir. IDs internos são exclusivos de payload/API/BD, nunca digitados por usuários nem apresentados em datagrid, ficha, menu, histórico ou exportação padrão.
+**Nunca permitir texto livre** em campo que venha de cadastro prévio, enum, tabela tributária ou catálogo de endpoint. Seletores mostram nome + contexto, busca e vinculam FK invisível; limpar filho incompatível em cascatas banco→conta→convênio→carteira, empresa→estabelecimento, NCM→CEST, provedor→integração. O backend valida empresa/perfil/competência e versão. Tarefas Kiro precisam implementar **tudo** o que está nas matrizes específicas; CRUD genérico ou entrega MVP não satisfaz DoD/aceite.
 ## 5. Matriz de requisitos não funcionais (RNF)
 | ID | Categoria | Exigência de implementação e aceite |
 |---|---|---|
