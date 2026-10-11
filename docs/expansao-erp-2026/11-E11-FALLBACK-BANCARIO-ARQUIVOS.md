@@ -1,6 +1,8 @@
 # E11 — Fallback operacional de conciliação bancária por arquivos (API + arquivo)
 > **Nova decisão do Quality Owner em 11/10/2026.** Complementa E06 (conectores APIs), E07 (motor de conciliação), E08 (tesouraria), E04/E05 (títulos), E09 (razão). **A análise CROSS T00 é gate bloqueante antes de executar qualquer task técnica de E06/E07/E08/E11 que persista dados bancários ou programe retorno.**
 
+**Parecer de arquitetura CROSS já elaborado:** [12-AVALIACAO-CROSS-ARQUITETURA-BANCARIA.md](12-AVALIACAO-CROSS-ARQUITETURA-BANCARIA.md). As interfaces compartilhadas são recomendação técnica fechada neste parecer; o [gate ALP-160](https://linear.app/alphacarnes/issue/ALP-160) ainda valida contratos bancários externos antes de desenvolvimento.
+
 ## 1. Contrato aprovado
 - Canal **primário APIs** Bradesco, Itaú e Santander. Quando indisponível/não habilitado por serviço, habilitar **arquivos como fallback operacional**, por conta+convênio+serviço+versão de layout.
 - Entrada de extrato: **CNAB 240 conciliação quando serviço/segmento suportados, OFX, CSV aprovado**. Eventos de cobranças: **retorno CNAB 240/400 quando homologado**; saída **remessa CNAB 240/400 conforme banco/carteira** somente se contratada e homologada. Arquivo CNAB de pagamento/retorno apenas se capability e documento habilitados e aprovado em T00.
