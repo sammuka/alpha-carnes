@@ -3,6 +3,8 @@
 
 **Parecer de arquitetura CROSS já elaborado:** [12-AVALIACAO-CROSS-ARQUITETURA-BANCARIA.md](12-AVALIACAO-CROSS-ARQUITETURA-BANCARIA.md). As interfaces compartilhadas são recomendação técnica fechada neste parecer; o [gate ALP-160](https://linear.app/alphacarnes/issue/ALP-160) ainda valida contratos bancários externos antes de desenvolvimento.
 
+**Integrações transversais E12:** perfis, certificados, credenciais, endpoints e agendamentos batch pertencem à plataforma única [E12 Arquitetura](22-ARQUITETURA-INTEGRACOES-CERTIFICADOS-BATCH-CADASTROS.md). E11 conserva apenas layouts/parsers/lotes de arquivo e proveniência/matching E07. NÃO criar scheduler paralelo, cofre ou variáveis .env. Portão E12-T00/ALP-173 e E11-T00/ALP-160 independentes mas cumulativos, ambos antes de codificar integração.
+
 ## 1. Contrato aprovado
 - Canal **primário APIs** Bradesco, Itaú e Santander. Quando indisponível/não habilitado por serviço, habilitar **arquivos como fallback operacional**, por conta+convênio+serviço+versão de layout.
 - Entrada de extrato: **CNAB 240 conciliação quando serviço/segmento suportados, OFX, CSV aprovado**. Eventos de cobranças: **retorno CNAB 240/400 quando homologado**; saída **remessa CNAB 240/400 conforme banco/carteira** somente se contratada e homologada. Arquivo CNAB de pagamento/retorno apenas se capability e documento habilitados e aprovado em T00.
