@@ -1,7 +1,7 @@
 (function protoApp(){
 'use strict';
-const D=window.ALPHA_PROTO_DATA,app=document.getElementById('app'),layer=document.getElementById('layer'),toastContainer=document.getElementById('toast');
-if(!D||!Array.isArray(D.screens))throw new Error('Catálogo indisponível');
+const D=window.ALPHA_PROTO_DATA,C=window.ALPHA_PROTO_COMPONENTS,app=document.getElementById('app'),layer=document.getElementById('layer'),toastContainer=document.getElementById('toast');
+if(!D||!C||!Array.isArray(D.screens))throw new Error('Catálogo indisponível');
 const S={page:location.hash.slice(1)||'inicio',role:'administrador',env:'HML',tab:'Ficha e campos',row:0,search:'',status:'Todos',sidebar:new Set(['FISCAL','FINANCEIRO','BANCOS & TESOURARIA','CONTABILIDADE','ADMINISTRAÇÃO']),subnav:new Set(['E01','E02','E04','E07','E09','E11','E12']),records:{},events:[],formMode:null,action:null,journeyIndex:0,file:null,notice:''};
 const docBase='https://github.com/sammuka/alpha-carnes/blob/feature/erp-fiscal-financeiro-contabil-especificacoes-2026/docs/expansao-erp-2026/';
 const formTabNames=['Ficha e campos','Movimentações','Regras e validações','Exceções','Histórico','Integrações','Aceite e testes'];
@@ -92,7 +92,7 @@ function renderNav(){
      for(const ep of eps){
        const arr=n.filter(x=>x.epic===ep),open=S.subnav.has(ep);
        html+='<button class="nav-entry" data-toggle-epic="'+ep+'"><span class="prefix">'+ep+'</span>'+escapeHtml(epTitles[ep])+' <span style="margin-left:auto;opacity:.7">'+(open?'⌃':'⌄')+'</span></button>';
-       if(open)for(const it of arr)html+='<button class="nav-entry '+(S.page===it.id?'active':'')+'" data-go="'+it.id+'" style="padding-left:24px"><span class="prefix" style="min-width:0">'+it.id.split('-')[1]+'</span>'+escapeHtml(it.title)+'</button>';
+       if(open)for(const it of arr)html+='<button class="nav-entry '+(S.page===it.id?'active':'')+'" data-go="'+it.id+'" style="padding-left:24px"><span class="prefix" style="min-width:0">'+'•'+'</span>'+escapeHtml(it.title)+'</button>';
      }
    }
    html+='</div>';
@@ -135,31 +135,64 @@ function renderLegacy(){
  const route=S.page.replace('antiga:',''),x=D.existing.find(v=>v.route===route);
  return '<div class="hero-row"><div><span class="eyebrow">LINHA-BASE · DEVELOP</span><h1>'+escapeHtml(x?.title||route)+'</h1><p class="hero-sub">Tela da aplicação original; as 39 rotas existentes não são recriadas neste protótipo. Esta referência aponta para a implementação operacional, que deve permanecer integrada à expansão.</p></div><button class="erp-btn" data-go="inicio">Voltar</button></div><div class="erp-card"><div class="erp-card-body"><div class="info-row">Rota canônica: <b style="margin-left:5px">'+escapeHtml(route)+'</b>. A implementação e os testes pertencem à branch develop; não foi alterada neste trabalho.</div><a href="https://github.com/sammuka/alpha-carnes/blob/develop/app/frontend/src/lib/menu-v2.ts" target="_blank" class="erp-btn">Consultar catálogo existente ↗</a><button class="erp-btn" data-go="E10-T01">Ver adequações operacionais novas</button></div></div>';
 }
+function componentSpec(sc){return C?.screens?.[sc.id]||null;}
+function fieldVal(key,sc,rec,i=0){
+ const meta=C.fields[key]||{},cat=C.catalogs[meta.source];
+ if(meta.type==='relation'&&cat?.length)return cat[(i+S.row)%cat.length][1];
+ if(meta.type==='enum'){const a=C.enums[meta.source]||[];return a[(i+S.row)%a.length]?.[1]||'Não definido';}
+ if(meta.writeOnly)return 'Protegido — não exibido';
+ if(key==='status')return rec.status;
+ if(key==='dataVencimento'||key==='dataEmissao'||key==='vigenciaInicio'||key==='periodoInicio'||key==='dataTransacao')return '20/10/2026';
+ if(key==='vigenciaFim'||key==='periodoFim')return '31/12/2026';
+ if(key==='competencia')return 'Outubro de 2026';
+ if(key==='ambiente')return S.env==='PROD'?'Produção (simulada)':'Homologação (simulada)';
+ if(key==='cnpj')return 'CNPJ cadastrado (mascarado)';
+ if(key==='ie')return 'Inscrição estadual cadastrada';
+ if(meta.type==='money'||key==='valorLiquido'||key==='baseCalculo')return rec.value;
+ if(meta.type==='percent')return '12,00% (exemplo)';
+ if(meta.type==='decimal')return key.startsWith('peso')?'982,00 kg':'10,000';
+ if(meta.type==='readOnly')return key==='nNF'?'Conforme sequência fiscal':key==='nossoNumero'?'Gerado/confirmado pelo banco':'Obtido após confirmação externa';
+ if(meta.type==='date'||meta.type==='datetime')return '20/10/2026';
+ if(meta.type==='month')return 'Outubro de 2026';
+ if(key==='cron')return 'A cada três horas (exemplo)';
+ if(meta.type==='approvedEndpoint')return 'Serviço cadastrado e homologado';
+ if(meta.type==='file')return 'Nenhum arquivo enviado';
+ if(key==='razaoSocial')return 'AlphaCarnes — demonstração';
+ if(key==='justificativa')return 'Justificativa necessária para alteração';
+ return rec.name||'Não informado';
+}
 function renderTable(sc){
- let rows=S.records[sc.id].filter(x=>(S.status==='Todos'||x.status===S.status)&&(!S.search||[x.id,x.name,x.value,x.responsavel,x.status].join(' ').toLowerCase().includes(S.search.toLowerCase())));
- let h='<div class="toolbar"><input class="input" id="filter-records" value="'+escapeHtml(S.search)+'" placeholder="Buscar referência, responsável..." aria-label="Filtrar registros"><select class="select" id="filter-status"><option>Todos</option>'+stateTypes.map(x=>'<option '+(S.status===x?'selected':'')+'>'+x+'</option>').join('')+'</select><span class="spacer"></span><button class="erp-btn small" data-action="export">Exportar lista</button></div>';
- h+='<div class="table-shell"><table class="erp-table"><thead><tr><th>Referência</th><th>Descrição</th><th>Valor ilustrativo</th><th>Estado</th><th>Data</th></tr></thead><tbody>';
- if(!rows.length)h+='<tr><td colspan="5"><div class="empty">Nenhum registro encontrado para os filtros. Ajuste a pesquisa ou crie um exemplo.</div></td></tr>';
- for(const r of rows){const n=S.records[sc.id].indexOf(r);h+='<tr class="'+(S.row===n?'selected':'')+'" data-row="'+n+'" tabindex="0"><td class="mono">'+escapeHtml(r.id)+'</td><td>'+escapeHtml(r.name)+'</td><td class="mono">'+escapeHtml(r.value)+'</td><td>'+pill(r.status)+'</td><td class="mono">'+escapeHtml(r.date)+'</td></tr>';}
- h+='</tbody></table></div><div class="smallmuted" style="padding:11px 13px;border-top:1px solid var(--border)">Exibindo '+rows.length+' registros FICTÍCIOS. A busca, seleção e alterações são apenas locais; nenhum dado de produção foi importado.</div>';
+ const conf=componentSpec(sc),columns=conf.grid.columns,fields=C.fields,rows=S.records[sc.id].map((r,i)=>({...r,_index:i}));
+ const q=(S.search||'').toLowerCase().trim();
+ const matched=rows.filter(r=>(S.status==='Todos'||r.status===S.status)&&(!q||columns.some(k=>fieldVal(k,sc,r,r._index).toLowerCase().includes(q))||r.name.toLowerCase().includes(q)));
+ const sort=S.gridSort?.key||conf.grid.defaultSort,reverse=S.gridSort?.descending||false;
+ matched.sort((a,b)=>fieldVal(sort,sc,a,a._index).localeCompare(fieldVal(sort,sc,b,b._index),'pt-BR',{numeric:true})*(reverse?-1:1));
+ let h='<div class="toolbar"><input class="input" id="filter-records" placeholder="Pesquisar descrição ou referência de negócio" aria-label="Buscar registros da lista" value="'+escapeHtml(S.search)+'"><select class="select" id="filter-status" aria-label="Filtrar situação"><option>Todos</option>'+stateTypes.map(x=>'<option '+(S.status===x?'selected':'')+'>'+escapeHtml(x)+'</option>').join('')+'</select><span class="spacer"></span><button class="erp-btn small" data-action="export">Exportar visão</button></div>';
+ h+='<div class="table-shell"><table class="erp-table"><thead><tr>'+columns.map(key=>'<th><button type="button" class="grid-sort" data-sort="'+escapeHtml(key)+'" aria-label="Ordenar por '+escapeHtml(fields[key].label)+'">'+escapeHtml(fields[key].label)+(sort===key?(reverse?' ↓':' ↑'):' ⇵')+'</button></th>').join('')+'</tr></thead><tbody>';
+ if(!matched.length)h+='<tr><td colspan="'+columns.length+'"><div class="empty">Nenhum resultado para o período, filtro ou situação escolhidos. Limpe os filtros ou cadastre um novo registro.</div></td></tr>';
+ for(const r of matched){
+  h+='<tr tabindex="0" data-row="'+r._index+'" class="'+(S.row===r._index?'selected':'')+'">'+columns.map(key=>'<td title="'+escapeHtml(fieldVal(key,sc,r,r._index))+'">'+(key==='status'?pill(r.status):escapeHtml(fieldVal(key,sc,r,r._index)))+'</td>').join('')+'</tr>';
+ }
+ h+='</tbody></table></div><div class="smallmuted" style="padding:10px 13px;border-top:1px solid var(--border)">Exibindo '+matched.length+' de '+rows.length+' registros fictícios · Ordenação por coluna · Selecionar linha abre a ficha. Identificadores de banco de dados nunca são mostrados.</div>';
  return h;
 }
 function renderFicha(sc,rec){
- let fields=screenFields(sc);
- let h='<div class="section-label">Ficha do registro · '+escapeHtml(rec.id)+'</div><div class="field-grid">';
- fields.forEach((f,i)=>{const v=fakeValue(f,sc,rec,i);h+='<div class="erp-field"><label>'+escapeHtml(f)+'</label><input readonly value="'+escapeHtml(v)+'" aria-label="'+escapeHtml(f)+'" /></div>';});
- h+='</div><div class="divider"></div><div class="section-label">Dados de governança e vínculo</div><div class="field-grid">';
- [['Empresa','Empresa demonstração'],['Ambiente',S.env],['Responsável',rec.responsavel],['Documento de origem',rec.id],['Estado',rec.status],['Atualização','11/10/2026 (fictício)']].forEach(a=>{h+='<div class="erp-field"><label>'+escapeHtml(a[0])+'</label><input readonly value="'+escapeHtml(a[1])+'"></div>';});h+='</div>';
- h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:15px"><button class="erp-btn" data-action="edit">Editar / propor versão</button><button class="erp-btn" data-action="simulate">Simular validação</button><button class="erp-btn" data-action="history">Ver histórico</button></div>';
+ const conf=componentSpec(sc);
+ let h='<div class="section-label">Informações do registro selecionado</div>';
+ for(const section of conf.sections){
+  h+='<div class="subsection-caption">'+escapeHtml(section.title)+'</div><div class="field-grid">';
+  section.fields.forEach((key,i)=>{
+   const m=C.fields[key],val=fieldVal(key,sc,rec,i);
+   h+='<div class="erp-field"><label>'+escapeHtml(m.label)+'</label><div class="view-value '+(m.writeOnly?'view-secure':'')+'">'+escapeHtml(val)+'</div>'+(m.type==='relation'?'<span class="form-hint">Vinculado a cadastro existente; seleção obrigatória no formulário.</span>':m.type==='enum'?'<span class="form-hint">Valor pertencente ao conjunto de opções do domínio.</span>':'')+'</div>';
+  });
+  h+='</div><div class="divider"></div>';
+ }
+ h+='<div class="section-label">Trilha e responsabilização</div><div class="field-grid"><div class="erp-field"><label>Empresa</label><div class="view-value">AlphaCarnes Matriz</div></div><div class="erp-field"><label>Situação</label><div class="view-value">'+escapeHtml(rec.status)+'</div></div><div class="erp-field"><label>Responsável</label><div class="view-value">'+escapeHtml(rec.responsavel)+'</div></div><div class="erp-field"><label>Ambiente</label><div class="view-value">'+escapeHtml(S.env==='PROD'?'Produção (simulada)':'Homologação (simulada)')+'</div></div></div>';
+ h+='<div class="toolbar"><button class="erp-btn" data-action="edit">Editar versão</button><button class="erp-btn" data-action="simulate">Validar pré-condições</button><button class="erp-btn" data-action="history">Consultar histórico</button></div>';
  return h;
 }
 function renderMov(sc,rec){
- const label=sc.kind==='accounting'?'Partidas e competência':sc.kind==='nfe'?'Eventos SEFAZ':sc.kind==='reconciliation'?'Observações por fonte':sc.epic==='E11'?'Lotes e ocorrências bancárias':'Linha de movimentos';
- let h='<div class="section-label">'+label+' — '+escapeHtml(rec.id)+'</div><div class="status-track"><div class="active">01 · Preparação</div><div class="active">02 · Validação</div><div>03 · Aprovação</div><div>04 · Processamento</div></div>';
- h+='<div class="erp-card" style="margin-top:12px"><div class="erp-card-header"><h2>Eventos e contrapartidas (simulados)</h2></div><div class="table-shell"><table class="erp-table"><thead><tr><th>Evento</th><th>Origem</th><th>Referência</th><th>Efeito</th><th>Status</th></tr></thead><tbody>';
- [['CADASTRO','Operador','DOC-'+rec.id,'Nenhum lançamento','Registrado'],['VALIDAÇÃO','Serviço interno','REG-'+rec.id,'Aguardando revisão','Pendente'],['CONFIRMAÇÃO','Terceiro externo','—','Não transmitido','Bloqueado']].forEach(x=>{h+='<tr>'+x.map((v,i)=>'<td>'+ (i===4?pill(v):escapeHtml(v))+'</td>').join('')+'</tr>';});
- h+='</tbody></table></div></div><div class="info-row warn">Este protótipo não efetua autorização SEFAZ, liquidação bancária, escrituração, ou execução de jobs. Os estados finais exigem confirmação externa e gates reais.</div>';
- return h;
+ return '<div class="section-label">Etapas e evidências de negócio</div><div class="status-track"><div class="active">Preparação</div><div class="active">Verificação</div><div>Autorização</div><div>Conclusão</div></div><div class="erp-card" style="margin-top:12px"><div class="erp-card-header"><h2>Acontecimentos simulados</h2></div><div class="table-shell"><table class="erp-table"><thead><tr><th>Acontecimento</th><th>Origem</th><th>Efeito</th><th>Situação</th></tr></thead><tbody><tr><td>Dados cadastrados</td><td>Operador</td><td>Sem efeito contábil</td><td>'+pill('Aprovado')+'</td></tr><tr><td>Validação de regras</td><td>Motor de negócio</td><td>Aguarda revisão</td><td>'+pill('Em revisão')+'</td></tr><tr><td>Confirmação por serviço externo</td><td>SEFAZ / banco quando aplicável</td><td>Nenhuma transmissão efetuada</td><td>'+pill('Bloqueado')+'</td></tr></tbody></table></div></div><div class="info-row warn">Autorizações, liquidações e lançamentos são eventos de negócio distintos. A confirmação requer fonte externa confiável e auditoria; este protótipo não gera documentos oficiais.</div>';
 }
 function renderRules(sc){
  return '<div class="section-label">Regras de negócio documentadas</div><div class="rule-item">'+escapeHtml(sc.rules)+'</div><div class="rule-item">Identidade de negócio, competência, autorização backend, idempotência e auditoria sempre exigidas nas operações críticas.</div><div class="section-label" style="margin-top:18px">Caminho de aprovação</div><div class="approval-path"><div><b>01 · Autor</b>Registra documento, versão e justificativa.</div><div><b>02 · Revisor</b>Confere campos, normas, contratos e limites.</div><div><b>03 · Aprovação</b>Responsável segregado libera o serviço, quando habilitado.</div></div><div class="info-row">RBAC do backend é obrigatório. Visibilidade do menu não substitui controle de acesso ou alçada.</div>';
@@ -172,9 +205,9 @@ function renderExceptions(sc){
  return h;
 }
 function renderHistory(sc,rec){
- let events=[{title:'Versão de cadastro consultada',who:'Usuário de demonstração',date:'11/10/2026 10:02'},{title:'Registro selecionado para revisão',who:S.role,date:'11/10/2026 10:11'},{title:'Situação inicial do fixture',who:'Gerador de dados fictícios',date:'11/10/2026 09:00'}];
- S.events.filter(x=>x.id===rec.id).forEach(x=>events.unshift({title:x.action,who:x.who,date:x.date}));
- return '<div class="section-label">Histórico imutável (demonstração)</div><div class="timeline">'+events.map(e=>'<div class="event"><strong>'+escapeHtml(e.title)+'</strong><small>'+escapeHtml(e.date)+' • '+escapeHtml(e.who)+'</small></div>').join('')+'</div><div class="info-row">Eventos reais serão persistidos transacionalmente no backend e correlacionados por ator, origem, justificativa, versão e evento financeiro/fiscal.</div>';
+ const actions=S.events.filter(x=>x.id===rec.id).map(x=>({what:x.action,who:x.who,when:x.date}));
+ const events=[...actions,{what:'Informações selecionadas para conferência',who:'Equipe demonstrativa',when:'11/10/2026 10:11'},{what:'Cadastro de demonstração preparado',who:'Sistema de prototipação',when:'11/10/2026 09:00'}];
+ return '<div class="section-label">Histórico e justificativas</div><div class="timeline">'+events.map(x=>'<div class="event"><strong>'+escapeHtml(x.what)+'</strong><small>'+escapeHtml(x.when)+' • '+escapeHtml(x.who)+'</small></div>').join('')+'</div><div class="info-row">O sistema real preservará evento, ator, empresa, objeto e versão na auditoria. Identificadores técnicos, payloads sigilosos e GUIDs não serão apresentados nesta tela.</div>';
 }
 function integrationInfo(sc){
  const x=sc.epic,blocks=[];
@@ -334,7 +367,7 @@ function renderScreen(sc){
  else h+=renderAccept(sc);
  h+='</div></section></div>';
  h+='<div class="erp-card" style="margin-top:12px"><div class="erp-card-header"><h2>Ações do domínio — previstas no contrato completo</h2></div><div class="erp-card-body"><div style="display:flex;flex-wrap:wrap;gap:8px">'+actionNames(sc).map((x,i)=>'<button class="erp-btn '+(i===0?'primary':'')+'" data-action="custom" data-caption="'+escapeHtml(x)+'">'+escapeHtml(titleCase(x))+'</button>').join('')+'</div><div class="form-hint">Cada operação exige implementação com DTO, domínio backend, validações, estados, auditoria e testes. Neste protótipo o efeito é local e nunca é lançado em produção.</div></div></div>';
- h+='<p class="smallmuted" style="margin-top:12px">ID canônico de especificação: <span class="mono">'+sc.id+'</span> · '+escapeHtml(sc.source)+' · Referencial de engenharia: E12 para credenciais/secret-store/jobs e E11 para arquivos/conciliação.</p>';
+ h+='<p class="smallmuted" style="margin-top:12px">Ações apresentadas para conferência de UX. A implementação real exige aprovação de regras, integração homologada e auditoria.</p>';
  return h;
 }
 function render(){
@@ -371,31 +404,66 @@ function openWorkflow(sc){
  const actions=actionNames(sc);
  layer.innerHTML='<div class="drawer-backdrop" data-close-layer="1"><aside class="drawer" role="dialog" aria-modal="true" aria-label="Ações do processo"><div class="drawer-head"><div><span class="eyebrow">'+sc.id+'</span><h2>Ações e decisões do processo</h2><p class="subtle">Operações completas previstas no Caderno B</p></div><button class="erp-btn" data-close-layer="1">Fechar ×</button></div><div class="drawer-body"><div class="section-label">Comandos de negócio</div>'+actions.map((x,i)=>'<div class="rule-item"><b>'+String(i+1).padStart(2,'0')+' · '+escapeHtml(titleCase(x))+'</b><div class="smallmuted" style="margin:7px 0">Confirme permissões, validade, origem e efeitos fiscais/financeiros antes de registrar.</div><button class="erp-btn small" data-action="custom" data-caption="'+escapeHtml(x)+'">Abrir decisão →</button></div>').join('')+'<div class="section-label">Condicionantes de aceite</div><div class="rule-item">'+escapeHtml(sc.rules)+'</div><div class="rule-item error">'+escapeHtml(sc.exceptions)+'</div><div class="info-row warn">O protótipo não transmite nenhum documento nem efetua nenhuma transação financeira.</div></div></aside></div>';
 }
+function renderControl(m,val,mode){
+ let common='name="'+escapeHtml(m.key)+'" id="fld-'+escapeHtml(m.key)+'" data-field-key="'+escapeHtml(m.key)+'" aria-label="'+escapeHtml(m.label)+'"'+(m.required&&!m.readOnly&&!m.writeOnly?' required':'');
+ let t=m.type;
+ if(t==='relation'||t==='enum'){
+  const opt=t==='relation'?(C.catalogs[m.source]||[]):(C.enums[m.source]||[]);
+  return '<div class="combo-shell"><select '+common+' data-choice="'+t+'" data-depends="'+escapeHtml((m.dependsOn||[]).join(','))+'"><option value="">Selecione '+escapeHtml(m.label.toLowerCase())+'</option>'+opt.map(a=>'<option value="'+escapeHtml(a[0])+'" title="'+escapeHtml(a[2]||a[1])+'">'+escapeHtml(a[1])+'</option>').join('')+'</select>'+(t==='relation'?'<button type="button" class="erp-btn small lookup-button" data-lookup="'+escapeHtml(m.key)+'" title="Pesquisar cadastro pelo nome">Pesquisar</button>':'')+'</div><span class="form-hint">'+escapeHtml(t==='relation'?'Seleção vinculada ao cadastro; sem digitar identificadores.':m.validation)+'</span>';
+ }
+ if(m.readOnly)return '<div class="view-value" aria-label="'+escapeHtml(m.label)+'">'+escapeHtml(val)+'</div><span class="form-hint">Informação calculada ou confirmada pelo serviço.</span>';
+ if(t==='file')return '<input type="file" '+common+' accept=".pfx,.p12,.pem,.crt,.cer,.xml,.pdf,.csv,.ofx,.txt"><span class="form-hint">Somente arquivo fictício; conteúdo não é enviado nem processado.</span>';
+ if(t==='password')return '<input type="password" '+common+' autocomplete="new-password" placeholder="Não insira segredos reais"><span class="form-hint">Campo protegido, sem leitura posterior; jamais pré-preencher.</span>';
+ if(t==='date')return '<input type="date" '+common+' value="'+(mode==='edit'?'2026-10-20':'')+'">';
+ if(t==='datetime')return '<input type="datetime-local" '+common+'>';
+ if(t==='month')return '<input type="month" '+common+' value="'+(mode==='edit'?'2026-10':'')+'">';
+ if(t==='money'||t==='percent'||t==='decimal')return '<div class="numeric-field"><span class="numeric-prefix">'+(t==='money'?'R$':t==='percent'?'%':'kg')+'</span><input type="text" '+common+' inputmode="decimal" placeholder="'+(t==='percent'?'0,00':t==='money'?'0,00':'0,000')+'" data-numeric="'+t+'" autocomplete="off"></div><span class="form-hint">'+escapeHtml(m.validation)+'</span>';
+ if(t==='approvedEndpoint')return '<select '+common+'><option value="">Selecione serviço oficial aprovado</option><option value="nfe-aut">Autorização NF-e/SP (homologação)</option><option value="dfe-nsu">Distribuição DF-e (homologação)</option><option value="bank-app">Endpoint habilitado no banco (sob contrato)</option></select><span class="form-hint">URL permitida precisa constar no catálogo, não aceitar URL digitada.</span>';
+ if(t==='textarea')return '<textarea '+common+' rows="3" placeholder="Informe a justificativa ou observação operacional"></textarea>';
+ if(t==='cron')return '<select '+common+'><option value="">Selecione frequência</option><option value="HOURLY">A cada hora</option><option value="EVERY3H">A cada 3 horas</option><option value="DAILY">Diariamente</option><option value="MANUAL">Somente manual</option></select><span class="form-hint">O backend gera expressão cron e prévia de horários; não exigir sintaxe técnica do operador.</span>';
+ if(t==='integer')return '<input type="number" min="1" step="1" '+common+'>';
+ return '<input type="text" '+common+' maxlength="180" autocomplete="off" placeholder="Informe '+escapeHtml(m.label.toLowerCase())+'">';
+}
 function openDrawer(sc,mode){
  S.formMode=mode;
- const rec=S.records[sc.id][S.row]||S.records[sc.id][0];
- let fields=screenFields(sc),h='<form id="editor-form"><div class="field-grid">';
- fields.forEach((f,i)=>{const tp=typeFor(f);let input='';
- const common='name="field-'+i+'" aria-label="'+escapeHtml(f)+'"';
- if(tp==='select')input='<select '+common+'><option value="">Selecione</option><option>Rascunho</option><option>Em análise</option><option>HML</option><option>PROD</option><option>Não aplicável</option></select>';
- else if(tp==='file')input='<input type="file" '+common+' accept=".xml,.txt,.csv,.ofx,.pfx,.p12,.pem,.cer,.crt,.pdf">';
- else if(tp==='date')input='<input type="date" '+common+' value="'+(mode==='edit'?escapeHtml(rec.date):'')+'">';
- else if(tp==='password')input='<input type="password" '+common+' autocomplete="off" placeholder="Demonstração — nunca use segredo real">';
- else if(tp==='number')input='<input type="number" step="0.01" '+common+' placeholder="0,00 (exemplo)">';
- else input='<input type="text" '+common+' value="'+(mode==='edit'?escapeHtml(String(fakeValue(f,sc,rec,i)).replace(/"/g,'')):'')+'" placeholder="Informe '+escapeHtml(f)+'" '+(i<2?'required':'')+'>';
- h+='<div class="erp-field"><label>'+escapeHtml(f)+(i<2?' *':'')+'</label>'+input+'</div>';
- });h+='</div><div class="divider"></div><div class="section-label">Governança, versão e rastreabilidade</div><div class="field-grid"><div class="erp-field"><label>Justificativa da alteração</label><textarea name="justificativa" placeholder="Descreva o motivo e a evidência" required></textarea></div><div class="erp-field"><label>Ambiente</label><input readonly value="'+S.env+'"></div></div><div class="info-row warn">Salvamento apenas demonstrativo em memória. Segredos e certificados verdadeiros não devem ser informados. No sistema real, backend, KMS e aprovações protegerão a operação.</div></form>';
- layer.innerHTML='<div class="drawer-backdrop" data-close-layer="1"><aside class="drawer" role="dialog" aria-modal="true"><div class="drawer-head"><div><span class="eyebrow">'+sc.id+' · '+(mode==='edit'?'ALTERAR VERSÃO':'CRIAR REGISTRO')+'</span><h2>'+escapeHtml(sc.title)+'</h2><p class="subtle">Formulário gerado dos campos específicos do contrato funcional</p></div><button class="erp-btn" data-close-layer="1">Fechar ×</button></div><div class="drawer-body">'+h+'</div><div class="drawer-actions"><button class="erp-btn" data-close-layer="1">Cancelar</button><button class="erp-btn" data-action="validate-form">Validar campos</button><button class="erp-btn primary" data-action="save-form">Salvar rascunho ilustrativo</button></div></aside></div>';
+ const rec=S.records[sc.id][S.row]||S.records[sc.id][0],conf=componentSpec(sc);
+ let h='<form id="editor-form" autocomplete="off">';
+ for(const section of conf.sections){
+  h+='<div class="section-label">'+escapeHtml(section.title)+'</div><div class="field-grid">';
+  for(const key of section.fields){const m=C.fields[key],v=fieldVal(key,sc,rec);h+='<div class="erp-field '+(["justificativa","descricao"].includes(key)?'field-wide':'')+'"><label for="fld-'+escapeHtml(key)+'">'+escapeHtml(m.label)+(m.required&&!m.readOnly?' *':'')+'</label>'+renderControl(m,v,mode)+'</div>';}
+  h+='</div><div class="divider"></div>';
+ }
+ if(!conf.sections.some(x=>x.fields.includes('justificativa')))h+='<div class="erp-field"><label for="review-justification">Motivo da alteração *</label><textarea name="justificativa" id="review-justification" rows="3" required placeholder="Por que este cadastro precisa ser criado/alterado?"></textarea></div>';
+ h+='</form><div class="info-row warn">Cadastro demonstrativo em memória. Selecione empresas e entidades existentes pelo nome; não informe IDs internos, senhas verdadeiras ou certificados reais.</div>';
+ layer.innerHTML='<div class="drawer-backdrop" data-close-layer="1"><aside class="drawer" role="dialog" aria-modal="true" aria-label="Formulário de '+escapeHtml(sc.title)+'"><div class="drawer-head"><div><span class="eyebrow">CADASTRO · '+escapeHtml(sc.group)+'</span><h2>'+escapeHtml(sc.title)+'</h2><p class="subtle">Formulário completo com tipos e origem de cada campo</p></div><button class="erp-btn" data-close-layer="1">Fechar</button></div><div class="drawer-body">'+h+'</div><div class="drawer-actions"><button class="erp-btn" data-close-layer="1">Cancelar</button><button class="erp-btn" data-action="validate-form">Verificar dados</button><button class="erp-btn primary" data-action="save-form">Salvar rascunho ilustrativo</button></div></aside></div>';
 }
 function saveForm(validateOnly){
  const form=document.getElementById('editor-form'),sc=currentScreen();if(!form||!sc)return;
- if(!form.reportValidity()){toast('Preencha os campos obrigatórios e a justificativa.');return;}
- if(validateOnly){toast('Validação estrutural demonstrativa concluída; regras de backend/terceiros ainda não executadas.');return;}
- const fd=new FormData(form),rec=S.records[sc.id][S.row];
- if(S.formMode==='new'){S.records[sc.id].unshift({id:sc.id+'-EX-'+String(S.records[sc.id].length+1).padStart(3,'0'),name:String(fd.get('field-0')||'Novo exemplo'),status:'Pendente de validação',value:money(0),date:'2026-10-11',responsavel:S.role,origin:'Cadastro demonstrativo'});S.row=0;}
- else if(rec){rec.status='Em revisão';rec.name=String(fd.get('field-0')||rec.name).slice(0,80);}
- addEvent(S.formMode==='new'?'Criado rascunho demonstrativo':'Editada proposta demonstrativa',sc);
- layer.innerHTML='';render();toast('Rascunho demonstrativo atualizado em memória; nenhuma API ou banco foi alterado.');
+ const conf=componentSpec(sc),errors=[];
+ for(const m of conf.sections.flatMap(x=>x.fields).map(k=>C.fields[k])){
+   const input=form.elements.namedItem(m.key);if(!input||m.readOnly)continue;
+   if(m.required&&!m.writeOnly&&!input.value.trim())errors.push(m.label+' é obrigatório.');
+   if((m.type==='relation'||m.type==='enum')&&input.value){const options=m.type==='relation'?C.catalogs[m.source]:C.enums[m.source];if(!(options||[]).some(x=>x[0]===input.value))errors.push('Seleção inválida de '+m.label+'.');}
+   if((m.type==='money'||m.type==='percent'||m.type==='decimal')&&input.value&&!/^\\d+(,\\d{1,3})?$/.test(input.value.trim()))errors.push(m.label+': use valor positivo com vírgula decimal.');
+ }
+ const reason=form.elements.namedItem('justificativa');if(reason&&!reason.value.trim())errors.push('Informe justificativa para auditoria.');
+ if(errors.length){toast(errors[0]+' '+(errors.length>1?'Outras '+(errors.length-1)+' pendências.':''));const first=conf.sections.flatMap(x=>x.fields).map(k=>form.elements.namedItem(k)).find(x=>x?.required&&!x.value);first?.focus();return;}
+ if(validateOnly){toast('Campos e referências selecionadas estão coerentes no protótipo; regras reais ainda requerem backend.');return;}
+ const first=conf.sections[0].fields.find(key=>C.fields[key]?.type==="relation"||C.fields[key]?.type==="text")||conf.sections[0].fields[0];
+ const el=form.elements.namedItem(first);const cat=C.catalogs[C.fields[first]?.source];let text=el?.selectedOptions?.[0]?.textContent || el?.value||sc.title;
+ if(!text||text.toLowerCase().startsWith('selecione '))text=sc.title;
+ const rec=S.records[sc.id][S.row];
+ if(S.formMode==='new'){S.records[sc.id].unshift({id:'internal-'+Math.random().toString(36).slice(2),name:text,status:'Pendente de validação',value:'R$ 0,00',date:'2026-10-11',responsavel:S.role,origin:'Rascunho simulado'});S.row=0;}
+ else if(rec){rec.name=text;rec.status='Em revisão';}
+ addEvent(S.formMode==='new'?'Registro demonstrativo criado':'Alteração demonstrativa proposta',sc);layer.innerHTML='';render();toast('Dados demonstrativos salvos apenas nesta sessão. Nenhum documento ou integração externa foi alterado.');
+}
+function openLookup(key){
+ const m=C.fields[key],opts=C.catalogs[m.source]||[];
+ if(!opts.length){toast('Nenhum cadastro disponível para seleção. Consulte a área responsável.');return;}
+ const popup=document.createElement('div');popup.className='lookup-popup';popup.innerHTML='<div class="lookup-card"><div class="erp-card-header"><h2>Selecionar '+escapeHtml(m.label)+'</h2><button class="erp-btn small" data-close-lookup="1">Fechar</button></div><input class="lookup-search" type="search" placeholder="Pesquisar pelo nome ou descrição" aria-label="Pesquisar cadastro"><div class="lookup-options">'+opts.map(o=>'<button class="lookup-option" data-lookup-select="'+escapeHtml(key)+'" data-choice="'+escapeHtml(o[0])+'"><b>'+escapeHtml(o[1])+'</b><small>'+escapeHtml(o[2]||'Cadastro ativo')+'</small></button>').join('')+'</div><div class="form-hint" style="padding:10px">A seleção utiliza uma referência interna invisível, nunca digitação de GUID.</div></div>';
+ layer.appendChild(popup);popup.querySelector('.lookup-search').focus();
+ popup.querySelector('[data-close-lookup]').onclick=()=>popup.remove();
+ popup.querySelector('.lookup-search').oninput=(e)=>{const q=e.target.value.toLowerCase();popup.querySelectorAll('.lookup-option').forEach(el=>el.hidden=!el.textContent.toLowerCase().includes(q));};
 }
 function openConfirm(title,detail,ok='Confirmar (simulação)',restricted=false){
  layer.innerHTML='<div class="modal-backdrop-erp" data-close-layer="1"><section class="erp-modal" role="dialog" aria-modal="true"><span class="eyebrow">FLUXO DE APROVAÇÃO · SIMULADO</span><h2>'+escapeHtml(title)+'</h2><p>'+escapeHtml(detail)+'</p><div class="erp-field" style="margin-top:12px"><label>Justificativa / observação</label><textarea id="action-reason" placeholder="Registre a razão para a decisão demonstrativa"></textarea></div><div class="info-row warn">'+(restricted?'A ação está bloqueada enquanto falta validação externa; nenhum estado real será alterado.':'A confirmação somente registra evento de demonstração, sem integração real.')+'</div><div class="modal-btns"><button class="erp-btn" data-close-layer="1">Cancelar</button><button class="erp-btn primary" data-action="confirm" '+(restricted?'disabled':'')+'>'+escapeHtml(ok)+'</button></div></section></div>';
@@ -406,7 +474,10 @@ function confirmAction(){
  layer.innerHTML='';render();toast('Ação registrada apenas na simulação; nenhuma operação externa ou financeira foi executada.');
 }
 document.addEventListener('click',e=>{
- const b=e.target.closest('[data-go],[data-old],[data-toggle-group],[data-toggle-epic],[data-tab],[data-select-journey],[data-action],[data-close-layer],[data-row]');if(!b)return;
+ const b=e.target.closest('[data-go],[data-old],[data-toggle-group],[data-toggle-epic],[data-tab],[data-select-journey],[data-action],[data-close-layer],[data-row],[data-sort],[data-lookup],[data-lookup-select]');if(!b)return;
+ if(b.dataset.sort){if(!S.gridSort||S.gridSort.key!==b.dataset.sort)S.gridSort={key:b.dataset.sort,descending:false};else S.gridSort.descending=!S.gridSort.descending;render();return;}
+ if(b.dataset.lookup){openLookup(b.dataset.lookup);return;}
+ if(b.dataset.lookupSelect){const sel=layer.querySelector('#fld-'+b.dataset.lookupSelect);if(sel){sel.value=b.dataset.choice;sel.dispatchEvent(new Event('change',{bubbles:true}));}layer.querySelector('.lookup-popup')?.remove();return;}
  if(b.dataset.go){go(b.dataset.go);return;}
  if(b.dataset.old){go('antiga:'+b.dataset.old);return;}
  if(b.dataset.toggleGroup){const x=b.dataset.toggleGroup;S.sidebar.has(x)?S.sidebar.delete(x):S.sidebar.add(x);render();return;}
@@ -423,6 +494,7 @@ document.addEventListener('change',e=>{
  if(e.target.id==='role'){S.role=e.target.value;S.page='inicio';render();return;}
  if(e.target.id==='env'){S.env=e.target.value;render();return;}
  if(e.target.id==='filter-status'){S.status=e.target.value;render();return;}
+ if(e.target.matches('select[data-choice]')){const key=e.target.dataset.fieldKey;const dependents=layer.querySelectorAll('select[data-depends]');dependents.forEach(select=>{if(select!==e.target&&(select.dataset.depends||'').split(',').includes(key)){select.value='';select.disabled=!e.target.value;}});}
 });
 document.addEventListener('input',e=>{
  if(e.target.id==='filter-records'){
