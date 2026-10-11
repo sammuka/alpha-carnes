@@ -12,7 +12,9 @@
 7. **E07-T01..T04 + E08-T01..T04 + E11-T09..T11:** conciliação determinística única, proveniência API×arquivo, dedupe financeiro-contábil, tesouraria, fluxo caixa e testes cruzados por banco.
 8. **E09-T02..T09:** políticas de contabilização, livros, fechamentos, apuração e SPED realmente aplicável ao regime; UAT com contador e validador.
 9. **E10-T01..T04:** integrar todos os pontos operacionais com estados fiscais, telas e menu aprovados; não refazer compras/pedidos/pesagem.
-Cada linha de execução E##-T## é uma issue Linear vinculada ao épico E##. Issues base já criadas: **ALP-100..ALP-158** (10 pais e 49 subtarefas), a complementar por **novo épico E11 com 12 subtarefas**, todas no projeto ERP ALP. [Abrir projeto](https://linear.app/alphacarnes/project/alphacarnes-expansao-erp-fiscal-financeiro-e-contabil-1348f297d069).
+Cada linha de execução E##-T## é uma issue Linear vinculada ao épico E##. Issues base já criadas: **ALP-100..ALP-158** (10 pais e 49 subtarefas), **novo E11 ALP-159 + 12 subtarefas ALP-160..ALP-171, totalizando 11 épicos e 61 subtarefas**, todas no projeto ERP ALP. [Abrir projeto](https://linear.app/alphacarnes/project/alphacarnes-expansao-erp-fiscal-financeiro-e-contabil-1348f297d069).
+
+**O diagnóstico CROSS já foi documentado no [Parecer de Arquitetura](12-AVALIACAO-CROSS-ARQUITETURA-BANCARIA.md); faltam homologações por banco/conta no ALP-160.**
 
 ## Precondição transversal E11-T00 — análise CROSS anterior a qualquer implementação bancária
 - Validar interfaces E04/05 (títulos), E06 (API), E07 (conciliação), E08 (tesouraria), E09 (contabilidade), E11 (arquivos) com o mesmo modelo de bank_account, bank_transaction e ledger; nenhum módulo cria sua própria versão.
