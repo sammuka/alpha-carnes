@@ -1,8 +1,13 @@
 # AlphaCarnes — Arquitetura de integrações administráveis, certificados digitais e batch
 **Versão 1.0 — 11/10/2026, base develop SHA db9d8ac1760a01c262c57a9f824d2c8fcf18291b.** Parecer de arquitetura, sem alteração de código; novas telas necessitam aprovação do protótipo/Constituição e Portão 1.
 Fontes: [versões fiscais oficiais](20-CATALOGO-OFICIAL-INTEGRACOES-OUT-2026.md), [bancos](21-FONTES-BANCARIAS-ONBOARDING-E-LAYOUTS.md), [E11](11-E11-FALLBACK-BANCARIO-ARQUIVOS.md).
-**Decisão proposta:** uma fundação de integração usada pelos épicos E01/02/03/06/07/08/09/11. PostgreSQL guarda configurações e metadados versionados, cofre criptográfico guarda credenciais/chaves. Nenhuma credencial de banco/SEFAZ ou agenda de job operacional em .env.
+**Decisão RATIFICADA (AD-18):** fundação única E12 para E01/02/03/06/07/08/09/11. PostgreSQL guarda configurações, metadados **E SEGREDOS/CERTIFICADOS NA FORMA DE CIPHERTEXT AES-256-GCM**, gerada no NestJS. KEK mestra sob AWS KMS fora do banco, por IAM; envelope DEK cifrada armazenada com ciphertext. Nenhuma credencial de banco/SEFAZ ou agenda de job operacional em .env.
 
+
+
+## Decisão ratificada AD-18 (11/10/2026) — cofre no PostgreSQL e protótipos DS v3
+Não existe uma tabela de parâmetro genérico que funcione como cofre. **A criptografia ocorre no backend**, com ciphertext e DEK cifrada no PostgreSQL, enquanto a KEK reside no AWS KMS, independente do RDS. Esquema `integration_secret_versions`, contexto e algoritmos: [ADR-ERP-024](24-ADR-COFRE-POSTGRES-KMS-MENU-13-GRUPOS.md). Evitar Secrets Manager como repositório obrigatório por segredo; ele não foi selecionado. A aplicação pode consultar e usar a chave mediante identidade técnica autorizada sem expor valores na UI.
+**Referência visual vinculante de 7 interfaces E12:** [Protótipo navegável DS v3](../prototipos/erp-integrado-v1/index.html#E12-V01) e [Matriz tela a tela](../prototipos/erp-integrado-v1/MATRIZ-INTEGRAL-INTERFACES.md). UI completa com todas as abas, ações, exceções, evidências e erro: nenhuma redução a MVP é permitida nas tasks.
 
 ## 1. Diagnóstico cross com develop
 | Artefato | Achado comprovado | Mudança exigida |
@@ -22,7 +27,7 @@ Fontes: [versões fiscais oficiais](20-CATALOGO-OFICIAL-INTEGRACOES-OUT-2026.md)
 - external_endpoints: profileId, serviceOperation, baseUrl, SOAP action quando aplicável, version, officialSourceId, environment, approvedBy, effectiveFrom/to. Validação de domínio/host obrigatório e aprovação antes de PRODUÇÃO.
 - external_capabilities: profileId, capability, channel(API/FILE), currentContractVersion, status, fileLayoutRegistryId quando aplicável, rateLimit, enabledAt, testedAt.
 - external_credentials: profileId, credentialType(OAUTH_CLIENT,API_KEY,WEBHOOK_SIGN), clientId quando não sigiloso, secretRef opaco, expiry, lastRotatedAt, status e permissionScope.
-- external_certificates: companyId, purpose(NFE_SIGN,NFE_MTLS,BANK_MTLS,BANK_SIGN,SPED_SIGN,WEBHOOK_TLS,TRUST_CA), certificatePublic, thumbprintSHA256, serial, issuer, subject, subjectCnpj, notBefore, notAfter, keyAlgorithm, privateKeySecretRef, encryptedBlobRef, validationStatus, uploadedBy, approvedBy, revokedAt.
+- external_certificates: companyId, purpose(NFE_SIGN,NFE_MTLS,BANK_MTLS,BANK_SIGN,SPED_SIGN,WEBHOOK_TLS,TRUST_CA), certificatePublic, thumbprintSHA256, serial, issuer, subject, subjectCnpj, notBefore, notAfter, keyAlgorithm, encryptedSecretVersionId (FK BYTEA ciphertext, nonce, tag, encryptedDEK, kmsKeyArn, AAD/context), validationStatus, uploadedBy, approvedBy, revokedAt.
 - external_certificate_bindings: profileId, certificateId, purpose, approvedBy, validFrom/to, current; impedir sobreposição de dois certificados ativos no mesmo propósito/ambiente sem janela de rotação formal.
 - external_contracts: provider, service, company, accountId, convenioMasked, wallet, officialEvidenceRef, agreedCapabilities, validFrom/to e bankApproval.
 - external_reference_datasets: name, officialUrl, version, sourceTimestamp, checksum quando arquivo efetivamente baixado, effectiveFrom/to, status(STAGED/APPROVED/ACTIVE/RETIRED), approvedBy.
@@ -34,29 +39,36 @@ Fontes: [versões fiscais oficiais](20-CATALOGO-OFICIAL-INTEGRACOES-OUT-2026.md)
 
 ## 3. Telas e formulários completos propostos
 ### INT-UI-01 — Painel /admin/integracoes
+**Protótipo E12-V01:** [Abrir tela integral](../prototipos/erp-integrado-v1/index.html#E12-V01) · [Contrato de campos, regras e exceções](../prototipos/erp-integrado-v1/MATRIZ-INTEGRAL-INTERFACES.md).
 Cartões SEFAZ/SP, Distribuição DF-e, Bradesco/Itaú/Santander, SPED e catálogos oficiais. Colunas provedor, empresa/estabelecimento, tipo de serviço, capability, HML/PRD, convênio mascarado, endpoint e versão, certificado, estado, última execução, próximo agendamento, falha. Ações criar, editar, duplicar somente metadata, testar sem efeito, ativar com aprovação, suspender, abrir logs. Em HML/PRD uma mesma aplicação pode usar configurações distintas, não misturar.
 ### INT-UI-02 — Certificados /admin/integracoes/certificados
+**Protótipo E12-V02:** [Abrir tela integral](../prototipos/erp-integrado-v1/index.html#E12-V02) · [Contrato de campos, regras e exceções](../prototipos/erp-integrado-v1/MATRIZ-INTEGRAL-INTERFACES.md).
 Campos: empresa, estabelecimento, finalidade, provedor, ambiente, formato PFX/P12 ou PEM+KEY quando suportado, upload arquivo, senha de uso único, thumbprint, serial, issuer, sujeito/CNPJ, validade, cadeia, status, origem, aprovado por. Ações importar, validar, testar assinatura/mTLS em HML, associar, rotacionar, substituir, suspender e revogar binding; nunca GET privateKey, exportar senha ou reexpor arquivo.
 ### INT-UI-03 — Apps bancários e credenciais
+**Protótipo E12-V03:** [Abrir tela integral](../prototipos/erp-integrado-v1/index.html#E12-V03) · [Contrato de campos, regras e exceções](../prototipos/erp-integrado-v1/MATRIZ-INTEGRAL-INTERFACES.md).
 Selecionar banco, empresa, conta, convênio, carteira, applicationId/workspaceId conforme produto, scopes, endpoint aprovado, clientId, cliente secret apenas write-only, certificado associado, webhook callback, capacidade, limites e plano de fallback. Ações solicitar acesso externo, cadastrar dados fornecidos, testar token TLS, homologar, ativar com dupla aprovação, suspender e renovar. Segredos nunca pré-preenchidos no edit.
 ### INT-UI-04 — Serviços fiscais e catálogos
+**Protótipo E12-V04:** [Abrir tela integral](../prototipos/erp-integrado-v1/index.html#E12-V04) · [Contrato de campos, regras e exceções](../prototipos/erp-integrado-v1/MATRIZ-INTEGRAL-INTERFACES.md).
 Estabelecimento, CRT, IE, credenciamento, série/número, endpoints SEFAZ v4.00, DF-e ambiente nacional, certificado A1, esquemas/NT/benefícios e vigência. Ações validar cadastro, testar status, simular XSD, baixar tabela em staging, comparar diff e aprovar por contador. Atualização do portal nunca altera regras fiscais automaticamente.
 ### INT-UI-05 — Agenda /admin/integracoes/jobs
+**Protótipo E12-V05:** [Abrir tela integral](../prototipos/erp-integrado-v1/index.html#E12-V05) · [Contrato de campos, regras e exceções](../prototipos/erp-integrado-v1/MATRIZ-INTEGRAL-INTERFACES.md).
 Tabela por provedor/operação, conta/estabelecimento, origem API/arquivo, agendamento timezone, último/next run, configuração pinada, checkpoint NSU/extrato, número registros, erro/retry/DLQ. Ações executar agora, pausar, retomar, inspecionar, reprocessar com justificativa, exportar evidência; mudanças sensíveis sob RBAC.
 ### INT-UI-06 — Versões de documentação/contratos
+**Protótipo E12-V06:** [Abrir tela integral](../prototipos/erp-integrado-v1/index.html#E12-V06) · [Contrato de campos, regras e exceções](../prototipos/erp-integrado-v1/MATRIZ-INTEGRAL-INTERFACES.md).
 Fonte oficial, URL, versão, data publicação, SHA256 quando arquivo efetivamente baixado, data verificação, aprovador, ambiente/capability, histórico e data próxima revisão. Ações importar metadados, anexar manual PDF por canal autorizado e registrar diff; upload de manual não configura endpoint nem competência automaticamente.
 ### INT-UI-07 — Health/alertas
+**Protótipo E12-V07:** [Abrir tela integral](../prototipos/erp-integrado-v1/index.html#E12-V07) · [Contrato de campos, regras e exceções](../prototipos/erp-integrado-v1/MATRIZ-INTEGRAL-INTERFACES.md).
 Expiração certificados, API/mTLS, mudança CA (especial Itaú 2026), jobs atrasados, NSU gap, layouts desatualizados, webhook falhando, rate limits e failback. Alertas 60/30/15/7 dias configuráveis via DB; usuário vê somente metadados seguros.
 
 
 ## 4. Pipeline de upload e gestão de certificados (obrigatório)
 1. Usuário autorizado indica empresa, finalidade e ambiente, envia arquivo PFX/P12 + senha no mesmo POST multipart sob TLS, ou par CRT+KEY de integração bancária com permissão específica. A senha só é usada em memória transitória no backend, não vira .env, banco, logs, auditoria, webhook ou relatório.
 2. Validar magic/mimetype/tamanho/cadeia, formato PKCS12, senha, privada correspondente à pública, algoritmo e keyUsage/EKU do serviço, notBefore/notAfter, dados do titular e ICP-Brasil para emissão NF-e. Tratar revogação OCSP/CRL conforme viabilidade, erro de consulta não é aprovação. Validar CNPJ do grupo segundo regra NF-e vigente.
-3. Extrair a chave privada no processo isolado, criptografar chave e certificado em segredo via KMS/vault com identidade de workload (AWS Secrets Manager+KMS ou provedor equivalente). Preferir descartar senha após conversão para key pair criptografado. Caso reter PFX por política, PFX e senha em referências cifradas separadas, nunca em colunas genéricas.
-4. Persistir somente certificado público e metadados no PostgreSQL; upload não ativa integração de produção. Binding finalidade+empresa+ambiente e aceite fiscal/bancário.
+3. Extrair a chave privada em memória controlada e cifrar no NestJS com AES-256-GCM + DEK aleatória de 256 bits por versão, gerada/protegida por AWS KMS via IAM role. Registrar `BYTEA ciphertext`, nonce aleatória 12 bytes, auth tag 16 bytes, `encryptedDataKey`, ARN KMS e contexto autenticado no PostgreSQL (ver [ADR-ERP-024](24-ADR-COFRE-POSTGRES-KMS-MENU-13-GRUPOS.md)). Senha PFX descartada após parse, **não armazená-la** quando a chave pode ser mantida cifrada separadamente; não usar pgcrypto com chave privada enviada ao banco.
+4. Persistir certificado público, metadados **e binário privado exclusivamente como ciphertext verificado e key envelope** no PostgreSQL; upload não ativa integração de produção. Binding finalidade+empresa+ambiente e aceite fiscal/bancário.
 5. Teste assinatura XML com fake/homologação, teste TLS/auth banco sem operação financeira com efeito; zero download da chave privada, zero cabeçalhos/cookie com segredos.
 6. Rotação: upload nova versão, período sobreposto aprovado, jobs fixam versão de cert no início; não usar cert vencido/revogado em nova operação; notificação e paralisação segura.
-7. **A1** compatível com batch sem operador; A3 hardware/cartão exige dispositivo ou HSM/PKCS#11 (fora deste upload) e NÃO deve ser vendido como batch autônomo. Itaú pode usar certificado dinâmico mTLS gerado por CSR; disponibilizar fluxo CSR na UI se produto exigir, com chave privada sempre no cofre. Bradesco/Santander têm seus requisitos por produto; certificado NF-e pode ser distinto dos bancários.
+7. **A1** compatível com batch sem operador; A3 hardware/cartão exige dispositivo ou HSM/PKCS#11 (fora deste upload) e NÃO deve ser vendido como batch autônomo. Itaú pode usar certificado dinâmico mTLS gerado por CSR; disponibilizar fluxo CSR na UI se produto exigir, com chave privada cifrada no PostgreSQL e KEK no KMS. Bradesco/Santander têm seus requisitos por produto; certificado NF-e pode ser distinto dos bancários.
 8. Segurança: antivírus/política upload, validação estrita, limites, escopo tenant, proteção contra SSRF de endpoints, hostnames aprovados, criptografia em repouso e trânsito, backend role least privilege, trilha de auditoria apenas com metadata e backups de cofre testados.
 
 
@@ -87,4 +99,4 @@ RBAC novo: INTEGRACOES_VIEW, INTEGRACOES_CONFIG, INTEGRACOES_CERT_UPLOAD, INTEGR
 ## 8. DoD / requisitos inversos / gates
 **Testes:** upload PFX válido e inválido, certificado vencido/revogado, PFX senha errada, chave não correspondente, concorrência no binding, certificado trocado durante job, mTLS CA nova Itaú, job após restart sem env BANK/SEFAZ/CERT/JOB, retry após timeout sem duplicar documento, volume realista, RBAC 403, logs sem segredo, Playwright da jornada, CI fake sem banco real e homologação por ambiente.
 **Inversos:** segredos nunca em parametros.valorJson; sem download privkey; sem editar env para mudar banco, endpoints, cron, certificado; sem A3 como upload batch; sem autorização de produção só por teste técnico; sem dado fiscal atualizado automaticamente sem validação; sem atribuir a sandbox ações reais de produção; sem duplicar ledger bancário/contábil; sem promessa de emissão bancária sem convênio.
-**Pendência institucional:** portão de UI requer protótipo/decisão do Quality Owner; banco requer contrato e manuais autenticados; contador valida regime/NT; TI aprova secret-store/KMS e procedimentos de recuperação/backup. Esses gates não impedem o desenho do módulo comum.
+**Ratificação de UI e cofre:** [AD-18](../execucao/DECISOES.md) define [protótipo integral de 61 interfaces](../prototipos/erp-integrado-v1/MATRIZ-INTEGRAL-INTERFACES.md), [menu 13 grupos](24-ADR-COFRE-POSTGRES-KMS-MENU-13-GRUPOS.md), ciphertext PostgreSQL AES-256-GCM e KMS/IAM externo. Banco requer contrato e manuais autenticados; contador valida regime/NT; TI formaliza key policy, tenant isolation e backup/restore. Esses gates não impedem o desenho do módulo comum.
