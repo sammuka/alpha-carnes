@@ -5,3 +5,8 @@
 e62efaead549ee5f89d3b24d6b0b2114e2c94bf0:app/backend/test/unit/token.service.spec.ts:generic-api-key:8
 e62efaead549ee5f89d3b24d6b0b2114e2c94bf0:app/backend/test/unit/token.service.spec.ts:generic-api-key:53
 e62efaead549ee5f89d3b24d6b0b2114e2c94bf0:app/frontend/__tests__/middleware.test.ts:generic-api-key:31
+# Literal SQL de tipo de segredo em DDL conceitual do plano E12-T00 (nao e credencial).
+306d18bdf277b0cc5202253424117ab76a76ebeb:docs/superpowers/plans/2026-10-12-e12-t00-cross-adr-fundacao-integracoes.md:generic-api-key:317
+306d18bdf277b0cc5202253424117ab76a76ebeb:docs/superpowers/plans/2026-10-12-e12-t00-cross-adr-fundacao-integracoes.md:generic-api-key:815
+0b1c3462239b79c6d866f9e7642ee9abe74f7fba:docs/superpowers/plans/2026-10-12-e12-t00-cross-adr-fundacao-integracoes.md:generic-api-key:766
+0b1c3462239b79c6d866f9e7642ee9abe74f7fba:docs/superpowers/plans/2026-10-12-e12-t00-cross-adr-fundacao-integracoes.md:generic-api-key:787
