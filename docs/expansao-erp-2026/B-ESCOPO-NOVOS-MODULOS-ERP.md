@@ -621,7 +621,7 @@ Não renderizar GUID/UUID/IDs internos, números artificiais, nomenclatura de is
 | RNF-B16 | Auditoria e conservação | XML autorizado/eventos e lançamentos imutáveis com hash, vínculo da evidência, número de protocolo, usuário/data e plano de backup/retenção validado com contador. |
 | RNF-B17 | Convergência API/arquivo | Uma transação canônica por fato econômico; múltiplas observações com proveniência de API, webhook, CNAB, OFX e CSV; idempotência nos lotes/eventos/baixas. |
 | RNF-B18 | Continuidade operável | Fallback/failback por capability/conta homologada; prévia, quarentena, verificação de saldo, hash, retenção segura, conflitos para revisão; recuperação sem duplicação contábil. |
-| RNF-B19 | Proteção de segredos | Chave privada/PFX em cofre cifrado via vault/KMS e workload identity, metadados no BD; upload e rotação com segredo write-only. |
+| RNF-B19 | Proteção de segredos | Chave privada/PFX e credenciais armazenadas no PostgreSQL somente como ciphertext AES-256-GCM gerado no backend, com DEK cifrada junto e KEK não exportável no AWS KMS acessada por identidade IAM de workload ([ADR-ERP-024](24-ADR-COFRE-POSTGRES-KMS-MENU-13-GRUPOS.md)); sem Secrets Manager por certificado; upload e rotação com segredo write-only. |
 | RNF-B20 | Configuração | Serviços, URLs autorizadas, certificados, banco/convênios e agenda batch por UI/DB; .env somente bootstrap mínimo de infraestrutura. |
 | RNF-B21 | Batch | Identidade técnica, version pinning, lock/fencing, checkpoint, recuperação após crash, idempotência, eventos pós-commit. |
 | RNF-B22 | Regulatório | XSD/NT/tabelas e layouts bancários versionados, checksum e staging; ativação apenas com aprovação responsável. |
@@ -650,7 +650,7 @@ Não renderizar GUID/UUID/IDs internos, números artificiais, nomenclatura de is
 | RI-B20 | Bootstrap de conexão DB/identidade cloud é necessário; isso não autoriza .env de banco, certificado, SEFAZ ou jobs. |
 | RI-B21 | Upload A1 não emite procuração/e-CAC, credenciamento fiscal ou conta/convênio bancário e não habilita produção sozinho. |
 | RI-B22 | Proibido baixar atualização fiscal e ativar automaticamente sem aprovação ou usar URL não autorizada para SSRF; nunca exportar privateKey. |
-| RI-B23 | Certificados/serviços de terceiros, KMS/vault e cloud são contratados/operados por responsáveis próprios; discriminar custos na proposta C. |
+| RI-B23 | Certificados/serviços de terceiros, AWS KMS e cloud são contratados/operados por responsáveis próprios; discriminar custos na proposta C. |
 ## 7. Matriz de testes de aceitação transversal
 | Jornada/objeto | Cenário de sucesso | Negativo crítico | Evidência |
 |---|---|---|---|
@@ -667,7 +667,7 @@ Não renderizar GUID/UUID/IDs internos, números artificiais, nomenclatura de is
 | Remessa/retorno | arquivo remessa exportado sem confirmação | não registrar nem liquidar apenas por exportação | E11-T06 |
 | Fallback/failback | APIs intermitentes com arquivos sobrepostos | reconciliação e retomada sem duplicidade | E11-T08/T11 |
 ## 8. Dependências e marcos de implantação
-**Portão CROSS E12-T00 (antes de codificar configuração, segredos, certificados e jobs):** obter arquitetura central/protótipo/secret-store aprovados; E12-T01..T12 tornam os módulos externos autoadministráveis. **E11-T00 também permanece obrigatório para identidade bancária única.**
+**Portão CROSS E12-T00 (antes de codificar configuração, segredos, certificados e jobs):** obter arquitetura central/protótipo/cofre PostgreSQL+KMS (ADR-ERP-024) aprovados; E12-T01..T12 tornam os módulos externos autoadministráveis. **E11-T00 também permanece obrigatório para identidade bancária única.**
 **Portão CROSS E11-T00 (antes de E06/E07/E08/E11):** mapear banco/conta/serviço/layout e modelo compartilhado, obter decisão do Quality Owner conforme governança.
 **Fundação:** empresas, autenticação/segregação, catálogo fiscal, plano contas básico, bancos/capabilities, observações bancárias API/arquivo sobre a mesma transação canônica, outbox/idempotência. **Fiscal:** parametrização→simulação→NFe HML→NF entrada/devoluções. **Financeiro:** AP/AR→bancos APIs→conciliação→tesouraria. **Contábil:** mapeamentos→partidas→apuração→DRE/BP→SPED e fechamentos. **Operação:** adaptar telas já existentes, sem refazer pesagem/desossa e carga. Frentes podem caminhar em paralelo após contratos comuns.
 ## 9. Definição de pronto de cada linha para fins de precificação

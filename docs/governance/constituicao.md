@@ -1,6 +1,6 @@
 # Constituição do Projeto AlphaCarnes
 
-> **Versão:** 1.2.0 · **Status:** Vigente (emenda AD-18 ratificada pelo Quality Owner; revisão no PR documental) · **Ratificada em:** 2026-07-23 · **Emendada em:** 2026-10-11
+> **Versão:** 1.2.0 · **Status:** Vigente · **Ratificada em:** 2026-07-23 · **Emendada em:** 2026-10-11
 > Documento de princípios **inegociáveis** do projeto. Em conflito com qualquer outro documento, prática ou preferência, **esta constituição prevalece** — exceto instrução direta e explícita do Quality Owner, registrada como emenda.
 > Aplicada nos gates: todo plano (Portão 1) e todo PR (Portão 2) são auditados contra os princípios abaixo, citados por número. Ver [`pipeline-execucao.md`](pipeline-execucao.md).
 
@@ -87,8 +87,8 @@ O rito completo (Plano → Portão 1 → Implementação → Portão 2 → Merge
 |---|---|---|
 | 1.0.0 | 2026-07-23 | Ratificação inicial. Consolida RA-01..RA-06 (quality-gates), premissas do usuário (fidelidade ao protótipo como Princípio I; completude E2E como Princípio II) e convenções vigentes. Incorpora AD-01 (boi casado 2TZ+2DT+2PA) e AD-02 (fiscal = EISS Osasco) por referência. |
 | 1.1.0 | 2026-08-25 | MINOR — Princípio IX: autoriza o rótulo composto `Nome Fantasia/Marca` no cadastro de clientes (AD-13). “Marca” segue banida como entidade, rótulo isolado e termo de busca. |
-
+| 1.2.0 | 2026-10-11 | MINOR — Princípio I.1: menu 13 grupos + cofre PostgreSQL/KMS (AD-18) |
 
 ### Emenda AD-18 — 2026-10-11: 13 grupos, 61 interfaces de expansão e cofre PostgreSQL+KMS
-A instrução expressa do Quality Owner ratifica a extensão **sem modificar as 39 rotas operacionais da base**: os 9 grupos originais são mantidos em ordem relativa, somando-se quatro grupos `Fiscal`, `Financeiro`, `Bancos & Tesouraria`, `Contabilidade` nas posições definidas no [ADR-ERP-024](../expansao-erp-2026/24-ADR-COFRE-POSTGRES-KMS-MENU-13-GRUPOS.md). A plataforma E12 integra `Administração → Integrações`, com 7 views. O referencial de fidelidade visual continua sendo **DS v3 da AD-10**; o protótipo navegável da expansão, [61 interfaces](../prototipos/erp-integrado-v1/MATRIZ-INTEGRAL-INTERFACES.md), passa a integrar o contrato visual do Portão 1/2 das novas telas e **não autoriza UI mínima/MVP**.
+A instrução expressa do Quality Owner ratifica a extensão **sem modificar as 39 rotas operacionais da base**: os 9 grupos originais são mantidos em ordem relativa, somando-se quatro grupos `Fiscal`, `Financeiro`, `Bancos & Tesouraria`, `Contabilidade` nas posições definidas no [ADR-ERP-024](../expansao-erp-2026/24-ADR-COFRE-POSTGRES-KMS-MENU-13-GRUPOS.md). A plataforma E12 integra `Administração → Integrações`, com 7 views. O referencial de fidelidade visual continua sendo **DS v3 da AD-10**; o protótipo navegável da expansão, [61 interfaces](../prototipos/erp-integrado-v1/MATRIZ-INTEGRAL-INTERFACES.md), passa a integrar o contrato visual do Portão 1/2 das novas telas e **não autoriza UI mínima/MVP**. Para as 61 telas da expansão ERP, a referência de protótipo do Princípio I.3 é `docs/prototipos/erp-integrado-v1/` junto com o DS v3 (AD-10), conforme AD-18 (2); as 39 rotas operacionais seguem com sua referência anterior.
 O armazenamento de certificados/segredos é permitido no PostgreSQL apenas na forma **ciphertext AES-256-GCM gerada no backend**, com DEK cifrada e KEK externa no AWS KMS por IAM. Senha/chave privada jamais em `parametros.valorJson`, logs ou `.env`; batch lê configuração pelo DB com permissões técnicas, sem sessão do operador. AD-04 continua a fixar 11 perfis canônicos: as personas do protótipo são demonstrativas e exigem decisão separada antes de criarem seeds/perfis reais. A implementação continua obrigatoriamente sujeita aos portões, testes, PR e integração homologada.

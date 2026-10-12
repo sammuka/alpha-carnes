@@ -45,7 +45,7 @@ O monitor de contratos exibe `canal primário API → fallback FILE` somente ond
 - [CNAB cobrança Santander 240, H7815 v8.5, fevereiro/2026](https://cms.santander.com.br/sites/WPS/documentos/arq-layout-de-arquivos-download-cob240ptbr/26-02-25_131410_h7815_layout_cobran%C3%A7a_cnab_240_posi%C3%A7%C3%B5es_padr%C3%A3o_santander_multibanco_fev_2026_v.8.5_%28portugu%C3%AAs%29.pdf): layouts remessa/retorno e códigos de Pix boleto. **ATENÇÃO à parametrização de ocorrência de Pix**: retorno pode indicar `09 Baixa` ou `06 Liquidação` com códigos conforme convênio. Não assumir "baixa=recebido" sem contrato e tipo de ocorrência.
 ### Checklist operacional
 1. Cliente habilita API de Cobrança no Santander Developers e contrato operacional por conta/carteira. Criar workspace/aplicação por ambiente. Registrar identificação `workspaceId` somente se API habilitada e documentação indicar.
-2. Upload certificado privado na UI do AlphaCarnes e parte pública ao Santander quando necessário. Campos app/client ID, secrets, cert refs e token URLs via UI/secret-store; homologação com cert e sandbox por produto.
+2. Upload certificado privado na UI do AlphaCarnes e parte pública ao Santander quando necessário. Campos app/client ID, secrets, cert refs e token URLs via UI/cofre PostgreSQL+KMS; homologação com cert e sandbox por produto.
 3. Baixar versão **H7815 v8.5 fev/2026** se convênio aceita CNAB240; obter 400 atualizado do convênio se aplicável; validar arquivo com ferramenta banco.
 4. Para boleto SX/Pix, obter do banco códigos de ocorrência do convênio e obrigatoriedade segmento Y03; configurar `occurrence_map` versionado, não lógica fixa 09=baixa definitiva.
 5. Verificar extrato por API separadamente; não extrapolar do guia Cobrança para saldo/DDA/transferências.

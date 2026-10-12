@@ -3,7 +3,7 @@
 const D=window.ALPHA_PROTO_DATA,C=window.ALPHA_PROTO_COMPONENTS,app=document.getElementById('app'),layer=document.getElementById('layer'),toastContainer=document.getElementById('toast');
 if(!D||!C||!Array.isArray(D.screens))throw new Error('Catálogo indisponível');
 const S={page:location.hash.slice(1)||'inicio',role:'administrador',env:'HML',tab:'Ficha e campos',row:0,search:'',status:'Todos',sidebar:new Set(['FISCAL','FINANCEIRO','BANCOS & TESOURARIA','CONTABILIDADE','ADMINISTRAÇÃO']),subnav:new Set(['E01','E02','E04','E07','E09','E11','E12']),records:{},events:[],formMode:null,action:null,journeyIndex:0,file:null,notice:''};
-const docBase='https://github.com/sammuka/alpha-carnes/blob/feature/erp-fiscal-financeiro-contabil-especificacoes-2026/docs/expansao-erp-2026/';
+const docBase='https://github.com/sammuka/alpha-carnes/blob/develop/docs/expansao-erp-2026/';
 const formTabNames=['Ficha e campos','Movimentações','Regras e validações','Exceções','Histórico','Integrações','Aceite e testes'];
 const stateTypes=['Pendente de validação','Em revisão','Aprovado','Bloqueado','Concluído','Rejeitado'];
 const sampleEntities=['Operação demonstração A','Operação demonstração B','Operação demonstração C','Fornecedor exemplo','Cliente exemplo','Estabelecimento exemplo'];

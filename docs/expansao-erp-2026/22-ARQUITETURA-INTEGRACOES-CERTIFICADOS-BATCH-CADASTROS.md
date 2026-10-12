@@ -26,7 +26,7 @@ Não existe uma tabela de parâmetro genérico que funcione como cofre. **A crip
 - external_integration_profiles: id, companyId, establishmentId opcional, providerId, serviceCode, environment(HML/PRD), version, status(DRAFT/WAITING_EXTERNAL/HML_READY/HML_TESTED/PROD_REVIEW/ACTIVE/SUSPENDED/EXPIRED), bankAccountId opcional, contractId, certificateBindingId e createdBy/approvedBy.
 - external_endpoints: profileId, serviceOperation, baseUrl, SOAP action quando aplicável, version, officialSourceId, environment, approvedBy, effectiveFrom/to. Validação de domínio/host obrigatório e aprovação antes de PRODUÇÃO.
 - external_capabilities: profileId, capability, channel(API/FILE), currentContractVersion, status, fileLayoutRegistryId quando aplicável, rateLimit, enabledAt, testedAt.
-- external_credentials: profileId, credentialType(OAUTH_CLIENT,API_KEY,WEBHOOK_SIGN), clientId quando não sigiloso, secretRef opaco, expiry, lastRotatedAt, status e permissionScope.
+- external_credentials: profileId, credentialType(OAUTH_CLIENT,API_KEY,WEBHOOK_SIGN), clientId quando não sigiloso, secretVersionId (FK para `integration_secret_versions`, ciphertext AES-256-GCM no PostgreSQL), expiry, lastRotatedAt, status e permissionScope.
 - external_certificates: companyId, purpose(NFE_SIGN,NFE_MTLS,BANK_MTLS,BANK_SIGN,SPED_SIGN,WEBHOOK_TLS,TRUST_CA), certificatePublic, thumbprintSHA256, serial, issuer, subject, subjectCnpj, notBefore, notAfter, keyAlgorithm, encryptedSecretVersionId (FK BYTEA ciphertext, nonce, tag, encryptedDEK, kmsKeyArn, AAD/context), validationStatus, uploadedBy, approvedBy, revokedAt.
 - external_certificate_bindings: profileId, certificateId, purpose, approvedBy, validFrom/to, current; impedir sobreposição de dois certificados ativos no mesmo propósito/ambiente sem janela de rotação formal.
 - external_contracts: provider, service, company, accountId, convenioMasked, wallet, officialEvidenceRef, agreedCapabilities, validFrom/to e bankApproval.
@@ -83,7 +83,7 @@ Serviços: NF-e consulta/retorno pendente, DF-e distNSU/consChNFe e manifestaç�
 
 ## 6. O que se permite e proíbe em .env
 **Permitido bootstrap técnico inevitável**: conexão inicial PostgreSQL ou secrets de infraestrutura injetados pelo orquestrador, identidade workload para cofre (ideal IAM role sem chave estática), porta/log básico de processo; JWT atual requer plano de migração. A aplicação não consegue buscar a string de conexão dentro do DB antes de conectar ao próprio DB. Não remover .env existente abruptamente: migração por Portão e smoke tests.
-**Proibido adicionar**: SEFAZ_URL, BANK_API_URL, CNPJ fiscal, CFOP/cBenef, certificados/PFX paths/senhas, client_id/client_secret, scopes/tokens, convenios/carteiras, layout CNAB, jobs, timezone de negócio ou cron. Esses são dados de integração versionados e gerenciados na UI/DB/vault.
+**Proibido adicionar**: SEFAZ_URL, BANK_API_URL, CNPJ fiscal, CFOP/cBenef, certificados/PFX paths/senhas, client_id/client_secret, scopes/tokens, convenios/carteiras, layout CNAB, jobs, timezone de negócio ou cron. Esses são dados de integração versionados e gerenciados na UI/DB (segredos somente como ciphertext no cofre PostgreSQL+KMS).
 Coexistência temporária com env atual do backend/frontend é dívida técnica com plano de remoção controlada, não impedimento à configuração funcional por BD. Restaurar backup exige PostgreSQL+cofre+chaves de decriptação; não clonar PROD para HML.
 
 
@@ -93,7 +93,7 @@ Coexistência temporária com env atual do backend/frontend é dívida técnica 
 - POST credentials/create-or-rotate (write-only); GET credentials/status (mascarado).
 - GET/POST reference-datasets, POST reference-datasets/:id/importar|validar|aprovar|ativar.
 - GET/POST jobs, POST jobs/:id/executar|pausar|retomar, GET job-runs e POST job-runs/:id/reprocessar.
-RBAC novo: INTEGRACOES_VIEW, INTEGRACOES_CONFIG, INTEGRACOES_CERT_UPLOAD, INTEGRACOES_TEST, INTEGRACOES_APPROVE_PROD, INTEGRACOES_BATCH_EXEC, INTEGRACOES_VAULT_ROTATE; dupla aprovação PROD. 403 para usuário comum, não vazar secretRef nem certificados privados no JSON.
+RBAC novo: INTEGRACOES_VIEW, INTEGRACOES_CONFIG, INTEGRACOES_CERT_UPLOAD, INTEGRACOES_TEST, INTEGRACOES_APPROVE_PROD, INTEGRACOES_BATCH_EXEC, INTEGRACOES_VAULT_ROTATE; dupla aprovação PROD. 403 para usuário comum, não vazar secretVersionId, ciphertext nem certificados privados no JSON.
 
 
 ## 8. DoD / requisitos inversos / gates

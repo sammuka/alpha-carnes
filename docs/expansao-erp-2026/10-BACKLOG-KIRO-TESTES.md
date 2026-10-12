@@ -2,7 +2,7 @@
 **Contrato documental de implantação.** Este índice deriva dos Cadernos A/B/C. A branch `develop` é a base funcional; as especificações aguardam PR/revisão. Nenhum worker deve atuar sem Portão 1, papéis de AGENTS.md, revisão de ADR e protótipos para novas telas.
 
 ## Ordem técnica e paralelismo
--1. **Gate E12-T00 / Fundação de Integrações (OBRIGATÓRIO):** revisar cross E01..E11, fonte oficial out/2026, DB/secret-store/UI/protótipo, aprovar ADR sem duplicar credenciais e jobs; [Contrato E12](23-CROSS-IMPACTO-E12-PLANO-KIRO.md), [Arquitetura](22-ARQUITETURA-INTEGRACOES-CERTIFICADOS-BATCH-CADASTROS.md). Precede adapters e batch reais; E11-T00 permanece necessário para dedupe bancário.
+-1. **Gate E12-T00 / Fundação de Integrações (OBRIGATÓRIO):** revisar cross E01..E11, fonte oficial out/2026, DB/cofre PostgreSQL+KMS/UI/protótipo, aprovar ADR sem duplicar credenciais e jobs; [Contrato E12](23-CROSS-IMPACTO-E12-PLANO-KIRO.md), [Arquitetura](22-ARQUITETURA-INTEGRACOES-CERTIFICADOS-BATCH-CADASTROS.md). Precede adapters e batch reais; E11-T00 permanece necessário para dedupe bancário.
 0. **Gate E11-T00 CROSS OBRIGATÓRIO:** antes de codificar E06/E07/E08/E11, verificar develop, E04/E05/E09, manuais por banco, identificar modalidades e contratos API/CNAB/OFX/CSV por conta e serviço, definir schema/capabilities/ownership e aprovar ADR. Sem este gate, worker PARA.
 1. **Fundação E01-T01 + E09-T01 + E06-T01 + E11-T01:** estabelecimento/regime fiscal, plano de contas, contas e capabilities bancárias; centralizar RBAC, trilha e dados empresariais sem duplicar entidades.
 2. **E01-T02..T05:** operações/regras/simulação/aprovação com dados **fictícios anonimizados** das quatro NF-e fornecidas. Sem emissão real antes de parecer fiscal.
