@@ -23,7 +23,20 @@
 |---|---|---|---|
 | r1 | 2026-10-12 | `08cff0b4…` | versão inicial; Portão 1 = `ajustar` (veredito 2026-10-12T06:52:31Z) |
 | r2 | 2026-10-12 | `91a78240…` | resolve os 14 achados do Portão 1; Portão 1 = `ajustar` (veredito 2026-10-12T07:49:08Z, 11 achados) |
-| r3 | 2026-10-12 | (calculado pelo Monitor) | resolve os 11 achados do Portão 1 sobre a r2 e cria o contrato canônico de interface E12↔E11/E06 (§3.13), que o E11-T00 v2 adota literalmente |
+| r3 | 2026-10-12 | `9a6f65c6…` | resolve os 11 achados do Portão 1 sobre a r2 e cria o contrato canônico de interface E12↔E11/E06 (§3.13), que o E11-T00 v2 adota literalmente; Portão 1 = `ajustar` (veredito 2026-10-12T08:56:02Z, 5 achados) |
+| r4 | 2026-10-12 | (calculado pelo Monitor) | resolve os 5 achados do Portão 1 sobre a r3; §3.13 (contrato canônico) **inalterada byte a byte** |
+
+**Achados do Portão 1 sobre a r3 (veredito 2026-10-12T08:56:02Z) → correção na r4:**
+
+| Achado r3 | Correção | Seção corrigida |
+|---|---|---|
+| r3-1. `integration_job_idempotency_keys.first_run_id` e `integration_job_dead_letters.reprocess_run_id` com FK simples (cross-empresa/cross-job possível); `integration_job_runs` sem `UNIQUE (id, company_id)`/`(id, job_id)`; afirmação "todas as relações E12 por FK composta com `company_id`" falsa | `integration_job_runs` ganha `UNIQUE (id, company_id)` e `UNIQUE (id, job_id)`; chave de idempotência com FK `(first_run_id, company_id)` → `runs(id, company_id)`; DLQ ganha `job_id`/`company_id` com FKs `(job_id, company_id)` → jobs, `(run_id, job_id)` e `(reprocess_run_id, job_id)` → `runs(id, job_id)`, `reprocess_run_id <> run_id` e `REPROCESSED` ⇔ `reprocess_run_id` preenchido; §3.6 passa a listar também essas FKs e a enumerar, com motivo, as FKs simples remanescentes (alvo ou origem sem empresa); bloco "FKs e justificativas" da §4 reescrito; testes T09 | §3.6; §4 jobs e "FKs e justificativas"; §9 T09 |
+| r3-2. Pedido `JOB_ENABLE`/`DATASET_ACTIVATION` com `environment` HML (P2.HML=0) contorna o piso PROD ≥ 2: jobs/runs usavam `(approval_request_id, company_id)` e datasets `(id)` | Jobs, runs e trilha de checkpoint com linhagem: FK adicional `(approval_request_id, company_id, environment)`; CHECK `DATASET_ACTIVATION ⇒ environment='PROD'` em `integration_approval_requests` + coluna `approval_environment = 'PROD'` e FK `(approval_request_id, approval_environment)` → `(id, environment)` em datasets; regra de serviço `AprovacoesService.vincular` "ambiente do pedido = ambiente do objeto" com testes T01/T08/T09; ambiente do pedido de job sem linhagem (sem fonte) = parâmetro P7 (seed fail-closed `PROD`) + badge Provisório (H-16), testes variando P7 | §3.6; §3.12 P7; §4 approval_requests/datasets/jobs/runs; §7.2 H-16; §9 T01/T08/T09 |
+| r3-3. `CHECKPOINT_CHANGE ≥ 1` fixado em CHECK como "fonte", mas catalogo.js L1074, MATRIZ-INTEGRAL L520 e MATRIZ-UX L1510 dizem "alterar checkpoint com trilha" (só reprocesso é "sob aprovação"); teste fixava H-04 | Fixado só o que a fonte diz: trilha obrigatória (`integration_job_checkpoint_changes`, justificativa NOT NULL, valor anterior e novo, autor). Aprovação de checkpoint só por P2.CHECKPOINT provisório, **sem piso**: removido o `CHECKPOINT_CHANGE` do CHECK `>= 1` (o CHECK passa a valer só para `JOB_REPROCESS`); teste varia P2.CHECKPOINT ∈ {0, 1} | §3.9 passo 7a; §3.12 P2; §4 approval_requests e trilha; §6.1/§6.2 V06; §7.2 H-04; §9 T09 |
+| r3-4. `rg` indisponível na máquina do gate (Task 3 e F7) | Cada comando `rg` ganha o equivalente `Select-String` (pwsh) com o resultado esperado; conferido nesta revisão: `Get-ChildItem app/backend/src -Recurse -File \| Select-String -Pattern 'process\.env'` → 27 linhas, 10 arquivos | §3.11 F7; §8 Task 3; §9 T11 |
+| r3-5. Thumbprint preenchido no INSERT no fluxo PFX; a FK de 6 colunas exige thumbprint no segredo antes do certificado; sequências não descritas | §3.8.1 nova com as sequências PFX/PEM e CSR passo a passo (ordem dos INSERTs/UPDATE na mesma transação, CHECKs envolvidos, `expires_at` do segredo CSR nulo); coluna não sigilosa `public_key_sha256` em `integration_secret_versions` para casar o certificado emitido com a chave do CSR (extensão C8 (i)); regra de thumbprint da §3.6 corrigida; testes T03/T05 incluindo "certificado antes do thumbprint do segredo ⇒ violação de FK" | §2 C8; §3.6; §3.8.1 (nova); §4 `integration_secret_versions`; §9 T03/T05 |
+
+Nenhuma correção da r4 exigiu mudar §3.13: as tabelas alteradas (`integration_job_runs`, `integration_job_idempotency_keys`, `integration_job_dead_letters`, `integration_job_definitions`, `integration_approval_requests`, `integration_reference_datasets`, `integration_secret_versions`) só **ganham** colunas, UNIQUEs, FKs ou CHECKs; nenhum UNIQUE-alvo listado em §3.13.2 (`integration_reference_datasets UNIQUE (provider_id, dataset_code, version_label)`/`(id, provider_id)`, `integration_job_runs(id)` referenciado por FK simples do E11) foi removido ou renomeado. A nova tabela `integration_job_checkpoint_changes` é interna ao E12 e não é referenciada por E06/E11.
 
 **Achados do Portão 1 sobre a r2 (veredito 2026-10-12T07:49:08Z) → correção na r3:**
 
@@ -107,7 +120,7 @@ Recomendação: **Opção A.** Enquanto o #157 não mergear, este plano cita as 
 | C5 | "Worker independente" × "sem microserviços" | doc 22/23 × Constituição | Scheduler e worker rodam como módulo do mesmo processo NestJS. Réplicas são coordenadas por lease no PostgreSQL. Não há serviço novo nem variável de ambiente nova. |
 | C6 | Rota de protótipo `/admin/integracoes/e12-v0N` × proibição de código E## visível | catalogo.js × Caderno B UX | Proposta: slugs semânticos (§6.1). Mudança de rota é estrutura de navegação (Princípio I.6): decide **somente o Quality Owner** → **H-05**. |
 | C7 | BullMQ (ADR-006) × stack fixada sem Redis | ADR-006 × Constituição "Stack fixada"; ADR-011 adiou BullMQ | Jobs E12 usam lease/fencing em PostgreSQL. Nenhuma fila Redis é introduzida (exigiria ADR nova + emenda). |
-| C8 | DDL de `integration_secret_versions` deste plano × DDL ratificado | ADR-ERP-024 L12–33 (DDL), L35 ("DDL ilustra contrato; worker deve ajustar convenções reais (`uuidv7`, status, migration drizzle-kit…)"), Pipeline 3–4 (L39–40) | Nenhuma coluna ratificada é removida nem afrouxada; a r2 afrouxava (ciphertext/DEK/`kms_key_arn` nullable, status `DESTROYED`, sem `cert_thumbprint_sha256`/`approved_by`) e a r3 volta ao ratificado. Extensões registradas, todas por L35 ou por aperto de restrição: (a) `id DEFAULT uuidv7()` (convencoes-schema L12), com id gerado e enviado antes da cifragem; (b) FKs para `companies`, `usuarios`, `integration_vault_keys` e `integration_approval_requests`; (c) `created_at DEFAULT now()`; (d) colunas novas `secret_kind`, `vault_key_id`, `approval_request_id`; (e) CHECK de 32 bytes em `encryption_context_hash`, CHECKs de `secret_kind`×`purpose`×`cert_thumbprint_sha256` e de `approved_by` em PROD `ACTIVE`; (f) UNIQUEs adicionais sobre `id` (alvos de FK composta); (g) `kms_key_arn` de `LOCAL_FAKE` = literal `local-fake:<vault_key_id>` (mantém NOT NULL); (h) AAD inclui `secretVersionId` e `expiresAt` ("ID/vigência" do Pipeline 4), e `expires_at` fica imutável. Destruição criptográfica exigiria afrouxar NOT NULL do ADR → não é feita (H-12). |
+| C8 | DDL de `integration_secret_versions` deste plano × DDL ratificado | ADR-ERP-024 L12–33 (DDL), L35 ("DDL ilustra contrato; worker deve ajustar convenções reais (`uuidv7`, status, migration drizzle-kit…)"), Pipeline 3–4 (L39–40) | Nenhuma coluna ratificada é removida nem afrouxada; a r2 afrouxava (ciphertext/DEK/`kms_key_arn` nullable, status `DESTROYED`, sem `cert_thumbprint_sha256`/`approved_by`) e a r3 volta ao ratificado. Extensões registradas, todas por L35 ou por aperto de restrição: (a) `id DEFAULT uuidv7()` (convencoes-schema L12), com id gerado e enviado antes da cifragem; (b) FKs para `companies`, `usuarios`, `integration_vault_keys` e `integration_approval_requests`; (c) `created_at DEFAULT now()`; (d) colunas novas `secret_kind`, `vault_key_id`, `approval_request_id`; (e) CHECK de 32 bytes em `encryption_context_hash`, CHECKs de `secret_kind`×`purpose`×`cert_thumbprint_sha256` e de `approved_by` em PROD `ACTIVE`; (f) UNIQUEs adicionais sobre `id` (alvos de FK composta); (g) `kms_key_arn` de `LOCAL_FAKE` = literal `local-fake:<vault_key_id>` (mantém NOT NULL); (h) AAD inclui `secretVersionId` e `expiresAt` ("ID/vigência" do Pipeline 4), e `expires_at` fica imutável; (i) coluna não sigilosa `public_key_sha256` (SHA-256 do SubjectPublicKeyInfo DER da chave pública correspondente), obrigatória para `PRIVATE_KEY_PKCS8` e imutável, usada para casar o certificado emitido com a chave do CSR (§3.8.1). Destruição criptográfica exigiria afrouxar NOT NULL do ADR → não é feita (H-12). |
 | C9 | PK sem `DEFAULT` (r2, achado r1-5) × convenção de schema | `docs/data/convencoes-schema.md` L12 × plano r2 §3.8 | Convenção prevalece (Princípio X): `DEFAULT uuidv7()` em todas as PKs, inclusive `integration_secret_versions` e `bank_raw_payloads`. A integridade id↔AAD é garantida pelo serviço (§3.8 passos 1, 5 e decifragem), não pela ausência de DEFAULT. |
 | C10 | Pedidos A-01..A-10 do E11-T00 v1 (§12.1) × C4 e ownership deste plano | plano E11-T00 v1 §5.1/§12.1 × AD-18, doc 22 §1 | Respondidos item a item em §3.13.1. Onde há rejeição, o contrato canônico (§3.13.2) dá o nome substituto; o E11-T00 v2 adota §3.13 literalmente. |
 
@@ -178,6 +191,7 @@ flowchart LR
 | `integration_reference_datasets`, `integration_reference_artifacts` | E12 | E12 | E01 (ativação de regra é do E01), E02, E09, E11 |
 | `integration_approval_requests`, `integration_approval_votes` | E12 | E12 | V01..V07 |
 | `integration_job_definitions` | E12 | E12 | domínios registram tipos de operação |
+| `integration_job_checkpoint_changes` | E12 | E12 (V06, `BATCH_EXEC`) | V06 (trilha) |
 | `integration_job_runs`, `integration_job_dead_letters` | E12 | scheduler E12 | E12 saúde, E07, E08 (status) |
 | `integration_job_leases`, `integration_job_idempotency_keys` | E12 | scheduler E12 | — |
 | `integration_workload_grants` | E12 | E12 (com aprovação) | `SecretVault` |
@@ -195,7 +209,7 @@ Ficam **fora do E12** (não criar): empresas e estabelecimentos, IE, CRT (E01-T0
 | `credencial_rotacionada` | E12 | `admin-integracoes` | criar ou rotacionar segredo (só metadados) |
 | `catalogo_oficial_alterado` | E12 | `admin-integracoes` | staging, validação, aprovação, ativação |
 | `aprovacao_integracao_alterada` | E12 | `admin-integracoes` | abrir, votar, concluir pedido de aprovação |
-| `job_execucao_alterada` | E12 | `admin-integracoes` | transição de estado de run, entrada/saída de DLQ |
+| `job_execucao_alterada` | E12 | `admin-integracoes` | transição de estado de run, entrada/saída de DLQ, alteração de checkpoint (trilha `PENDING_APPROVAL`/`APPLIED`/`REJECTED`) |
 | `alerta_integracao_aberto` / `alerta_integracao_reconhecido` | E12 | `admin-integracoes` | janela de expiração da política, falha, CA trocada, gap NSU |
 
 Regras de entrega:
@@ -226,8 +240,13 @@ Regras de entrega:
 | job → linhagem | `(profile_lineage_id, company_id, environment)` → linhagens |
 | run → job | `(job_id, company_id)` → `integration_job_definitions(id, company_id)`; `(job_id, company_id, profile_lineage_id, environment)` → `integration_job_definitions(id, company_id, profile_lineage_id, environment)` |
 | run → pins | `(pinned_profile_id, profile_lineage_id, company_id, environment)` → `integration_profiles(id, lineage_id, company_id, environment)`; `(pinned_secret_version_id, company_id, environment)` → segredos; `(pinned_certificate_id, company_id, environment)` → `integration_certificates(id, company_id, environment)` |
-| objeto de empresa → pedido de aprovação | `(approval_request_id, company_id, environment)` → `integration_approval_requests(id, company_id, environment)` em perfis, segredos, bindings, credenciais e webhooks; `(approval_request_id, company_id)` em jobs e runs |
-| objeto global → pedido de aprovação | `(approval_request_id, environment)` → `integration_approval_requests(id, environment)` em hosts, chaves de cofre, bases públicas e grants; `approval_request_id` → `(id)` em datasets |
+| chave de idempotência → primeiro run (mesma empresa) | `(first_run_id, company_id)` → `integration_job_runs(id, company_id)` |
+| DLQ → job, run e run de reprocesso (mesmo job, mesma empresa) | `(job_id, company_id)` → `integration_job_definitions(id, company_id)`; `(run_id, job_id)` → `integration_job_runs(id, job_id)`; `(reprocess_run_id, job_id)` → `integration_job_runs(id, job_id)` |
+| trilha de checkpoint → job | `(job_id, company_id)` → `integration_job_definitions(id, company_id)`; `(job_id, company_id, profile_lineage_id, environment)` → `integration_job_definitions(id, company_id, profile_lineage_id, environment)` |
+| objeto de empresa → pedido de aprovação | `(approval_request_id, company_id, environment)` → `integration_approval_requests(id, company_id, environment)` em perfis, segredos, bindings, credenciais e webhooks; em jobs, runs e trilha de checkpoint, `(approval_request_id, company_id)` → `(id, company_id)` sempre **e** `(approval_request_id, company_id, environment)` → `(id, company_id, environment)`, que vale quando o objeto tem linhagem (MATCH SIMPLE: `environment` nulo só em objeto sem linhagem; ambiente do pedido nesse caso = P7, regra de serviço abaixo) |
+| objeto global → pedido de aprovação | `(approval_request_id, environment)` → `integration_approval_requests(id, environment)` em hosts, chaves de cofre, bases públicas e grants; em datasets, `(approval_request_id, approval_environment)` → `(id, environment)` com `approval_environment = 'PROD'` fixo por CHECK, e no pedido CHECK `subject_kind <> 'DATASET_ACTIVATION' OR environment = 'PROD'` |
+
+- **FKs simples remanescentes entre objetos E12 (motivo: o alvo ou a origem não tem `company_id`):** `integration_services.provider_id`, `integration_provider_hosts.provider_id`, `integration_reference_datasets.provider_id` e `integration_provider_hosts.source_dataset_id`/`integration_endpoints.official_source_dataset_id` → objetos globais (provedor, dataset); `integration_reference_artifacts.dataset_id` → dataset (global); `integration_approval_votes.request_id` → pedido (o voto não tem empresa própria; herda a do pedido); `integration_job_leases.job_id` → job (lease 1:1 sem empresa própria). Toda relação entre dois objetos E12 que **ambos** têm `company_id` é FK composta com `company_id` (tabela acima); referências a `usuarios(id)` e a `companies(id)` são FKs simples para tabelas de fora do E12.
 
 - **Relações que FK não expressa → validação de serviço com teste nomeado (§9):**
 
@@ -236,11 +255,15 @@ Regras de entrega:
 | certificado de estabelecimento B não vincula a perfil do estabelecimento A; escopo empresa (`establishment_id` nulo) vale para qualquer estabelecimento | `BindingService.validarEscopo` | T01 "rejeita certificado de estabelecimento B…"; "certificado de escopo empresa aceito…" |
 | `provider_id` do endpoint = provedor da linhagem | `EndpointsService.validar` | T01 "endpoint de outro provedor → 422" |
 | pedido de aprovação do objeto global tem `company_id` nulo; o `subject_kind` do pedido corresponde ao tipo do objeto e `subject_id` ao seu id | `AprovacoesService.vincular` | T01 "pedido de empresa usado em objeto global → 422"; "pedido de outro subject_kind → 422"; "pedido com subject inexistente → 422" |
+| ambiente do pedido = ambiente do objeto (verificado antes do INSERT/UPDATE, além das FKs); para job, run de reprocesso e trilha de checkpoint **sem linhagem**, ambiente do pedido = valor de P7 no momento da abertura | `AprovacoesService.vincular` | T01 "ambiente do pedido ≠ ambiente do objeto → 422 sem gravar (AprovacoesService.vincular)"; T08 "dataset só aceita pedido DATASET_ACTIVATION PROD…"; T09 "ambiente do pedido ≠ ambiente do job com linhagem → 422 sem gravar"; "P7=PROD: pedido HML para job sem linhagem → 422…"; "P7=HML: pedido HML para job sem linhagem aceito…" |
+| run apontado por `reprocess_run_id` tem `triggered_by='REPROCESS'` e foi criado depois do run da DLQ | `JobsService.reprocessar` | T09 "DLQ marcada REPROCESSED com run SCHEDULE → erro" |
+| alterar checkpoint sempre grava a trilha (justificativa, anterior, novo, autor); aprovação só quando o snapshot de P2.CHECKPOINT > 0; checkpoint do job só muda quando a trilha vai a `APPLIED` | `JobsService.alterarCheckpoint` | T09 "alterar checkpoint sem justificativa → 422 e nenhuma linha de trilha"; "P2.CHECKPOINT=0: …"; "P2.CHECKPOINT=1: …" |
 | aprovador ≠ solicitante | `AprovacoesService.votar` | T03 "voto do solicitante → 422" |
 | run de job com linhagem copia a linhagem e o ambiente do job; o segredo e o certificado fixados pertencem a credencial/binding da versão fixada | `JobsService.iniciarRun` | T09 "run sem linhagem de job com linhagem → erro"; "pin de certificado sem binding da versão → erro"; "pin de segredo sem credencial da versão → erro" |
 | capability FILE só `ENABLED` com layout `APPROVED` ligado; `HML_TESTED` com layout `HML_VALIDATED` ou `APPROVED` | `CapabilitiesService.habilitar` + `LayoutHomologadoPort` (E11) | T07 "FILE sem layout ligado → 422"; "FILE com layout DRAFT/HML_VALIDATED → ENABLED negado" |
 | linhagem `BANK` só ativa versão com ligação de conta ativa | `PerfisService.ativar` + `ContaBancariaVinculoPort` (E06) | T07 "linhagem BANK sem vínculo de conta → ativação 422" |
-| `cert_thumbprint_sha256` preenchido uma única vez (PENDING→ACTIVE) e colunas criptográficas/`expires_at` imutáveis | `SecretVault` (repositório sem UPDATE dessas colunas) | T02 "UPDATE de coluna criptográfica pelo repositório → erro"; "cert_thumbprint já preenchido não muda" |
+| `cert_thumbprint_sha256`: no fluxo PFX/PEM gravado no próprio INSERT do segredo; no fluxo CSR nasce nulo e é preenchido uma única vez (UPDATE `NULL → valor`, status `PENDING`) antes do INSERT do certificado (§3.8.1); nunca muda depois. Colunas criptográficas, `public_key_sha256` e `expires_at` imutáveis | `SecretVault` (repositório sem UPDATE dessas colunas; UPDATE de thumbprint condicionado a `cert_thumbprint_sha256 IS NULL AND status='PENDING'`) | T02 "UPDATE de coluna criptográfica pelo repositório → erro"; "cert_thumbprint já preenchido não muda"; T03 "certificado antes do thumbprint do segredo ⇒ violação de FK" |
+| no fluxo CSR, o certificado emitido só é aceito se o SHA-256 do seu SubjectPublicKeyInfo = `public_key_sha256` do segredo `PENDING` | `CertificadosService.importarEmitido` | T05 "certificado emitido com chave pública diferente da do CSR → 422 sem UPDATE nem INSERT" |
 
 - **Deployment × ambiente externo:** cada ambiente externo (`HML`, `PROD`) tem no máximo uma chave `ACTIVE` em `integration_vault_keys` por deployment (`uq_vault_key_active ON (environment)`), e segredos/payloads só usam a chave do próprio ambiente (FK acima). Se as duas linhas podem apontar para a mesma KEK física (com segregação só por contexto) ou devem apontar para KEKs distintas é decisão da TI (**H-02**), exercida pelo parâmetro P6 (§3.12), semeado fail-closed em `DISTINTA` com base em ADR-ERP-024 L44 ("segregação HML/PROD são mandatórios").
 - Restaurar o banco de produção em homologação é proibido (doc 22 §6). Teste de DR decifra com papel de recuperação autorizado.
@@ -285,6 +308,25 @@ Imutabilidade: `ciphertext`, `nonce`, `auth_tag`, `encrypted_data_key`, `vault_k
 
 Seleção do adapter, sem variável de ambiente nova: a linha `ACTIVE` de `integration_vault_keys` **do ambiente** define `provider` (`AWS_KMS` ou `LOCAL_FAKE`). O seed só insere `LOCAL_FAKE` (uma linha `HML` e uma `PROD`, `kms_key_arn = 'local-fake:<id>'`) quando `NODE_ENV !== 'production'`; o boot recusa linha `LOCAL_FAKE` quando `NODE_ENV === 'production'`; sem linha `ACTIVE` para o ambiente, toda operação de cofre nesse ambiente falha com erro explícito (produção fica assim até H-01/H-02). Ativar uma linha `AWS_KMS` exige pedido `VAULT_KEY` aprovado e respeita P6 (§3.12). `LOCAL_FAKE` usa uma KEK efêmera por linha, gerada em memória por processo; após restart, segredos dev antigos falham na decifragem com erro explícito ("reenvie o segredo"). Não existe KEK fake versionada no repositório. Testes de DR injetam uma KEK de teste mantida pelo próprio harness entre duas instâncias da aplicação.
 
+#### 3.8.1 Sequências de gravação de chave privada e certificado (achado r3-5)
+A FK de 6 colunas do certificado (`(private_key_secret_version_id, company_id, environment, purpose, private_key_secret_kind, thumbprint_sha256)` → `integration_secret_versions(id, company_id, environment, purpose, secret_kind, cert_thumbprint_sha256)`) só casa quando o segredo **já tem** `cert_thumbprint_sha256` igual ao `thumbprint_sha256` do certificado. As FKs são declaradas não deferíveis (padrão do PostgreSQL; o schema Drizzle não usa `DEFERRABLE` e o Princípio X proíbe SQL manual), portanto a ordem dentro da transação é obrigatória. `thumbprint_sha256` = SHA-256 do DER do certificado folha, hex minúsculo, nos dois lados. `public_key_sha256` = SHA-256 do SubjectPublicKeyInfo DER da chave pública. A AAD (§1 item 4) não contém thumbprint nem `public_key_sha256`, por isso o UPDATE de thumbprint do fluxo CSR não invalida o GCM.
+
+**Fluxo PFX/P12 e CRT+KEY (`origin` `PFX_UPLOAD`/`PEM_UPLOAD`):**
+1. Em memória: abrir o PFX com a senha transitória (ou ler CRT+KEY), validar (§9 T03: senha, par chave/certificado, validade, cadeia, CNPJ do titular, revogação conforme P3) e calcular `thumbprint_sha256` e `public_key_sha256`. Senha descartada.
+2. Fora de transação: passos 1–4 do pipeline de cifragem (§3.8) para a chave privada PKCS#8, com `expiresAt = not_after` do certificado.
+3. Uma transação curta, nesta ordem: (a) INSERT em `integration_secret_versions` com `secret_kind='PRIVATE_KEY_PKCS8'`, `status='PENDING'`, `cert_thumbprint_sha256` e `public_key_sha256` **já preenchidos no INSERT**; conferência do `RETURNING id` (passo 5 do §3.8); (b) INSERT em `integration_certificates` com `private_key_secret_version_id` = id do passo (a) e o mesmo `thumbprint_sha256`. Falha em (b) → rollback de (a).
+4. Ativação (`PENDING → ACTIVE` do segredo e binding) só pelo fluxo de aprovação (P2; PROD exige `approved_by`).
+
+**Fluxo CSR (`origin` `CSR_GENERATED`; H-09):**
+1. Em memória: gerar o par de chaves no backend e o CSR (público); calcular `public_key_sha256`.
+2. Fora de transação: pipeline de cifragem da chave privada com `expiresAt = null` (vencimento desconhecido antes da emissão; a vigência passa a ser `integration_certificates.not_after`; `expires_at` do segredo permanece nulo e imutável).
+3. Transação curta: INSERT em `integration_secret_versions` com `status='PENDING'`, `cert_thumbprint_sha256 = NULL` (permitido pelo CHECK `status = 'PENDING' OR cert_thumbprint_sha256 IS NOT NULL`) e `public_key_sha256` preenchido. Nenhum certificado é gravado. O CSR é devolvido para download (público); a chave privada nunca.
+4. Quando o certificado emitido pelo banco é enviado (`CertificadosService.importarEmitido`): em memória, validar como no fluxo PFX e exigir SHA-256(SPKI do certificado) = `public_key_sha256` do segredo `PENDING`; divergência → 422 sem gravar nada.
+5. Uma transação curta, nesta ordem: (a) `UPDATE integration_secret_versions SET cert_thumbprint_sha256 = $thumbprint WHERE id = $id AND cert_thumbprint_sha256 IS NULL AND status = 'PENDING'`, exigindo exatamente 1 linha afetada (0 → erro "chave já vinculada a certificado"); (b) INSERT em `integration_certificates` (`origin='CSR_GENERATED'`). Falha em (b) → rollback de (a).
+6. Ativação como no passo 4 do fluxo PFX.
+
+Inverter a ordem (INSERT do certificado antes de o segredo ter `cert_thumbprint_sha256`) viola a FK — comportamento esperado e testado (§9 T03).
+
 ### 3.9 Batch
 Estados do run: `QUEUED`, `LEASED`, `RUNNING`, `SUCCEEDED`, `RETRY_SCHEDULED`, `NEEDS_REVIEW`, `FAILED`, `CANCELLED`.
 
@@ -296,6 +338,7 @@ Fluxo:
 5. Backoff com jitter e respeito a `Retry-After`, conforme `retry_policy` do job.
 6. Checkpoint (NSU, cursor de extrato) avança na mesma transação do resultado. O handler do domínio recebe essa transação e grava nela os próprios efeitos e as próprias linhas de `domain_outbox_events` (§3.13.5).
 7. Esgotada a `retry_policy`, o run vai a `FAILED` e entra em `integration_job_dead_letters` (DLQ). `NEEDS_REVIEW` também entra na DLQ. Sair da DLQ exige reprocessamento com justificativa e aprovação (catalogo.js V06 "reprocessar sob aprovação"; quórum em §3.12 P2) ou descarte justificado.
+7a. Alterar checkpoint (catalogo.js L1074, MATRIZ-INTEGRAL L520, MATRIZ-UX L1510: "alterar checkpoint com trilha"). Fixo por fonte: **toda** alteração grava uma linha em `integration_job_checkpoint_changes` com checkpoint anterior, novo, justificativa não vazia e autor; sem trilha não há alteração. Não fixo por fonte: se a alteração também exige aprovação. Isso é P2.CHECKPOINT (§3.12), provisório e **sem piso**. Com snapshot `required_approvals = 0` a trilha nasce `APPLIED` e o checkpoint do job muda na mesma transação, sem pedido. Com `required_approvals > 0` a trilha nasce `PENDING_APPROVAL` com pedido `CHECKPOINT_CHANGE` (`subject_id` = id da trilha), e o checkpoint do job só muda quando o pedido atinge o quórum (trilha → `APPLIED`, na mesma transação do voto que completa o quórum). Rejeição → trilha `REJECTED`, checkpoint intacto. No máximo uma trilha `PENDING_APPROVAL` por job.
 8. Credencial revogada ou vencida suspende o job e gera alerta.
 9. Cada run tem `run_number` sequencial por job, exibido na UI no lugar do UUID.
 
@@ -315,13 +358,13 @@ Arquivos inspecionados em `db9d8ac`: `docs/architecture/adr/ADR-002-stack-fronte
 | F4 | WS autentica o cookie só no handshake; `podeAssinar` libera **qualquer** room a quem tem `DISPONIBILIDADE_LER`; socket não revalida `exp` | `realtime.gateway.ts` (447 linhas): `upgradeHandler` L99–109 (chama `autenticar` em L100), `autenticar` L125–134, `registrar` L136–149 (subscribe em L140–141), `podeAssinar(ws)` L151–154 (sem parâmetro de room), `broadcast` por `roomsDaData` L426–434 | Mapa room→permissão compartilhado (§3.13.6): `admin-integracoes` exige `INTEGRACOES_VIEW`; rooms legadas mantêm `DISPONIBILIDADE_LER`. `podeAssinar(ws, room)`. No `broadcastRoom` para room protegida, socket com `exp` vencido é desligado da room. E12 publica só em `admin-integracoes` (§3.5) | T04: testes listados em §9 T04 (realtime) |
 | F5 | O JWT não carrega empresa; `develop` não tem vínculo usuário↔empresa (só `usuarios_perfis`) | `token.service.ts` payload `{sub,nome,perfis,permissoes}`; `auth.schema.ts` L63–69 | A restrição "usuário X só administra a empresa Y" não tem fonte. O E12 consulta a porta `EmpresaAcessoPort`; a implementação padrão libera todas as empresas ativas e é marcada provisória (§3.12 P5, **H-15**) | T04: "porta restritiva (fake) → 403 em empresa não liberada" |
 | F6 | O middleware do Next só verifica a assinatura do JWT; não autoriza | `middleware.ts` `tokenValido` | Autorização é só no backend (Princípio III). Rotas BFF `/api/admin/integracoes/**` seguem `repassar`/`fetchBackend`; respostas de endpoints de segredo são `204` ou metadados | T04/T05: "BFF nunca devolve campo sigiloso" |
-| F7 | Integração EISS, seed e bootstrap leem `process.env` fora de `envSchema` | inventário completo em `db9d8ac` (`rg -n "process\.env" app/backend/src` → 27 linhas em 10 arquivos; tabela F7 abaixo) | É legado coberto por AD-02 + ADR-006/011 (EISS) e pelo bootstrap; o E12 **não** o altera. Migrar o segredo EISS para o cofre é decisão do QO → **H-14**. O teste de env usa a allowlist exata abaixo e falha em qualquer nome novo lido de `process.env` ou em leitura do objeto inteiro fora de `config/app.config.ts` | T02/T11: "conjunto de nomes lidos de `process.env` em `app/backend/src` ⊆ allowlist F7"; "objeto `process.env` inteiro só em `config/app.config.ts`" |
+| F7 | Integração EISS, seed e bootstrap leem `process.env` fora de `envSchema` | inventário completo em `db9d8ac` (`rg -n "process\.env" app/backend/src`; equivalente pwsh sem `rg`: `Get-ChildItem -Path app/backend/src -Recurse -File \| Select-String -Pattern 'process\.env'` → 27 linhas em 10 arquivos, conferido na r4; tabela F7 abaixo) | É legado coberto por AD-02 + ADR-006/011 (EISS) e pelo bootstrap; o E12 **não** o altera. Migrar o segredo EISS para o cofre é decisão do QO → **H-14**. O teste de env usa a allowlist exata abaixo e falha em qualquer nome novo lido de `process.env` ou em leitura do objeto inteiro fora de `config/app.config.ts` | T02/T11: "conjunto de nomes lidos de `process.env` em `app/backend/src` ⊆ allowlist F7"; "objeto `process.env` inteiro só em `config/app.config.ts`" |
 | F8 | ADR-011 fixou o padrão porta + DI token + fake determinístico, com seleção por `NFSE_FAKE` | ADR-011 §1–§4 | O cofre reusa o padrão (token `SECRET_VAULT`), mas seleciona o adapter por linha de banco (§3.8), sem flag nova | T02 |
 | F9 | ADR-006 previa fila BullMQ; ADR-011 a adiou; a stack não tem Redis | ADR-006 "Estrutura do serviço"; ADR-011 "Follow-up" | Scheduler E12 em PostgreSQL (C7). O retry de NFS-e continua no `FaturamentoService` (ADR-011) e não migra para jobs E12 neste épico | T09 |
 | F10 | `redigirSegredos()` do ADR-011 só conhece `chaveAutenticacao` | ADR-011 §5 | O E12 cria seu próprio redator (`redigirSegredosIntegracao`) para os DTOs E12, sem alterar `integracoes/nfse/*` | T02: "sentinela não aparece em auditoria, log, HTTP nem WS" |
 | F11 | ADR-002 fixa React Hook Form + Zod 4 + TanStack Query; cita Socket.io/EventSource, superado por ADR-004 (WS nativo) | ADR-002 "Decisão" | Campos sigilosos: input sem valor inicial, nunca no cache do TanStack Query, `reset` após envio. Tempo real só por `ws` nativo | T05: "após salvar, o segredo não está em `document.body.innerHTML` nem em resposta capturada" |
 
-**Tabela F7 — inventário completo de `process.env` em `app/backend/src` @ `db9d8ac`** (comando: `rg -n "process\.env" app/backend/src`; resultado esperado: 27 linhas, 10 arquivos)
+**Tabela F7 — inventário completo de `process.env` em `app/backend/src` @ `db9d8ac`** (comando: `rg -n "process\.env" app/backend/src`, ou em pwsh sem `rg`: `Get-ChildItem -Path app/backend/src -Recurse -File | Select-String -Pattern 'process\.env' | Measure-Object` → `Count` 27; arquivos distintos: `(Get-ChildItem -Path app/backend/src -Recurse -File | Select-String -Pattern 'process\.env' | Select-Object -ExpandProperty Path -Unique).Count` → 10; resultado esperado: 27 linhas, 10 arquivos)
 
 | Arquivo | Linhas | Nome(s) lido(s) | Natureza |
 |---|---|---|---|
@@ -347,13 +390,14 @@ Os itens abaixo dependem de decisão humana. Cada um vira uma chave em `parametr
 | ID | Chave | Valor semeado (critério) | O que é fixo por fonte | Onde aparece o badge | Pendência |
 |---|---|---|---|---|---|
 | P1 | `integracoes.rbac.alcadas` | `{valor: null}`: só a seed do administrador (§3.7) | nenhum perfil além do administrador recebe `INTEGRACOES_*` na seed | cabeçalho de V01..V07 | H-03 |
-| P2 | `integracoes.aprovacoes.quorum` | `{PROD: 2, HML: 0, REPROCESSAMENTO: 1, CHECKPOINT: 1}` (pisos das fontes: dupla aprovação PROD em ADR-ERP-024; "sob aprovação"/"com trilha" em catalogo.js V06) | aprovador ≠ solicitante; votos distintos; `PROD ≥ 2`; `REPROCESSAMENTO ≥ 1`; `CHECKPOINT ≥ 1`; valor abaixo do piso → 422 | diálogo de aprovação de V01..V06 | H-04 |
+| P2 | `integracoes.aprovacoes.quorum` | `{PROD: 2, HML: 0, REPROCESSAMENTO: 1, CHECKPOINT: 1}` (pisos das fontes: dupla aprovação PROD em ADR-ERP-024; "reprocessar sob aprovação" em catalogo.js V06. `CHECKPOINT: 1` **não tem fonte**: a fonte só exige trilha — catalogo.js L1074, MATRIZ-INTEGRAL L520, MATRIZ-UX L1510 "alterar checkpoint com trilha" —; o valor 1 é semeado fail-closed, Princípio VII) | aprovador ≠ solicitante; votos distintos; `PROD ≥ 2`; `REPROCESSAMENTO ≥ 1`; valor abaixo do piso → 422. `CHECKPOINT` **sem piso** (aceita 0); a trilha de checkpoint é obrigatória em qualquer valor (§3.9 passo 7a) | diálogo de aprovação de V01..V06; ação "alterar checkpoint" da V06 | H-04 |
 | P3 | `integracoes.certificados.revogacao_indisponivel` | `{valor: 'BLOQUEAR', opcoes: ['BLOQUEAR','REVISAO_MANUAL']}` (fail-closed, Princípio VII) | "erro de consulta não é aprovação" (doc 22 §4.2): nunca resulta em `VALID` | V02 (validação) | H-10 |
 | P4 | (retirado na r3) | — | sem destruição criptográfica: versões `RETIRED`/`REVOKED` permanecem cifradas e íntegras, porque destruir exigiria afrouxar o NOT NULL de `ciphertext`/`encrypted_data_key` do DDL ratificado (C8) | V02 e V03 mostram "retenção sem política definida" no histórico de versões, com badge Provisório | H-12 |
 | P5 | `integracoes.escopo_empresa` | `{valor: 'TODAS_ATIVAS'}` (comportamento atual de `develop`, sem vínculo usuário↔empresa) | validação de empresa no serviço sempre via `EmpresaAcessoPort` | cabeçalho de V01..V07 | H-15 |
 | P6 | `integracoes.cofre.kek_por_ambiente` | `{valor: 'DISTINTA', opcoes: ['DISTINTA','COMPARTILHADA_COM_CONTEXTO']}` (fail-closed; ADR-ERP-024 L44 "segregação HML/PROD são mandatórios") | uma chave `ACTIVE` por ambiente; segredo/payload só usa a chave do próprio ambiente (FK); contexto KMS sempre inclui `environment` | `/admin/parametros` e V07 (saúde do cofre) | H-02 |
+| P7 | `integracoes.jobs.ambiente_aprovacao_sem_linhagem` | `{valor: 'PROD', opcoes: ['PROD','HML']}` (sem fonte; fail-closed, Princípio VII: o job sem linhagem — `CERT_EXPIRY_SCAN`, `REFERENCE_CHECK`, `DOMAIN_OUTBOX_RELAY`, `BANK_RAW_RETENTION_PURGE` — não tem ambiente próprio (`environment` nulo, §4) e pode tocar objetos de PROD da empresa; `PROD` aplica o piso maior de P2) | job/run/trilha **com** linhagem: ambiente do pedido = ambiente da linhagem (FK, §3.6); o pedido de job sem linhagem sempre tem `company_id` da empresa do job | V06 (diálogo de habilitar job, reprocessar e alterar checkpoint de job sem linhagem) e `/admin/parametros` | H-16 |
 
-O snapshot do parâmetro é copiado para o registro no momento do uso (`integration_approval_requests.required_approvals`; `integration_certificates.revocation_policy_applied`), para que mudar o parâmetro depois não reescreva decisões passadas. P6 é lido na ativação de uma chave de cofre (pedido `VAULT_KEY`): com `DISTINTA`, ativar uma chave cujo `kms_key_arn` seja igual ao da chave `ACTIVE` do outro ambiente → 422; com `COMPARTILHADA_COM_CONTEXTO`, é aceito e a segregação é só por EncryptionContext. As chaves P1..P6 não casam os padrões de segredo rejeitados em `parametros` (§4).
+O snapshot do parâmetro é copiado para o registro no momento do uso (`integration_approval_requests.required_approvals`; `integration_certificates.revocation_policy_applied`), para que mudar o parâmetro depois não reescreva decisões passadas. P6 é lido na ativação de uma chave de cofre (pedido `VAULT_KEY`): com `DISTINTA`, ativar uma chave cujo `kms_key_arn` seja igual ao da chave `ACTIVE` do outro ambiente → 422; com `COMPARTILHADA_COM_CONTEXTO`, é aceito e a segregação é só por EncryptionContext. P7 é lido na abertura de pedido `JOB_ENABLE`, `JOB_REPROCESS` ou `CHECKPOINT_CHANGE` de job sem linhagem: o pedido nasce com `environment` = valor de P7 e o snapshot de P2 desse ambiente; pedido com outro ambiente → 422. As chaves P1..P3 e P5..P7 não casam os padrões de segredo rejeitados em `parametros` (§4).
 
 
 ### 3.13 Contrato de interface E12↔E11/E06 (canônico)
@@ -595,15 +639,16 @@ CREATE TABLE integration_approval_requests (
   company_id uuid REFERENCES companies(id),     -- NULL só para assuntos globais (CHECK abaixo)
   subject_kind text NOT NULL CHECK (subject_kind IN ('PROFILE_ACTIVATION','BINDING_CHANGE','CREDENTIAL_ACTIVATION','SECRET_ACTIVATION','WEBHOOK_ACTIVATION','JOB_ENABLE','JOB_REPROCESS','CHECKPOINT_CHANGE','DATASET_ACTIVATION','HOST_ALLOWLIST','VAULT_KEY','PUBLIC_BASE','WORKLOAD_GRANT')),
   subject_id uuid NOT NULL,                     -- polimórfico (justificado abaixo)
-  environment text NOT NULL CHECK (environment IN ('HML','PROD')),   -- DATASET_ACTIVATION usa 'PROD' (vale para todos os perfis)
+  environment text NOT NULL CHECK (environment IN ('HML','PROD')),   -- DATASET_ACTIVATION só 'PROD' (CHECK abaixo); job sem linhagem = P7
   requested_by uuid NOT NULL REFERENCES usuarios(id),
   required_approvals integer NOT NULL CHECK (required_approvals >= 0),   -- snapshot de P2
   justification text NOT NULL CHECK (length(justification) > 0),
   status text NOT NULL CHECK (status IN ('OPEN','APPROVED','REJECTED','CANCELLED')),
   created_at timestamptz NOT NULL DEFAULT now(), decided_at timestamptz,
   CHECK ((company_id IS NULL) = (subject_kind IN ('DATASET_ACTIVATION','HOST_ALLOWLIST','VAULT_KEY','PUBLIC_BASE','WORKLOAD_GRANT'))),
+  CHECK (subject_kind <> 'DATASET_ACTIVATION' OR environment = 'PROD'),   -- dataset vale para todos os perfis: sempre piso PROD (achado r3-2)
   CHECK (environment <> 'PROD' OR subject_kind IN ('JOB_REPROCESS','CHECKPOINT_CHANGE') OR required_approvals >= 2),
-  CHECK (subject_kind NOT IN ('JOB_REPROCESS','CHECKPOINT_CHANGE') OR required_approvals >= 1),
+  CHECK (subject_kind <> 'JOB_REPROCESS' OR required_approvals >= 1),     -- "reprocessar sob aprovação"; CHECKPOINT_CHANGE sem piso (P2, H-04)
   UNIQUE (id, company_id), UNIQUE (id, company_id, environment), UNIQUE (id, environment)   -- alvos das FKs de aprovação (§3.6)
 );
 CREATE UNIQUE INDEX uq_approval_open ON integration_approval_requests (subject_kind, subject_id) WHERE status = 'OPEN';
@@ -646,9 +691,11 @@ CREATE TABLE integration_reference_datasets (
   effective_from date, effective_to date,
   status text NOT NULL CHECK (status IN ('STAGED','VALIDATED','APPROVED','ACTIVE','RETIRED','REJECTED')),
   diff_summary jsonb NOT NULL DEFAULT '{}',     -- sem segredo
-  approval_request_id uuid REFERENCES integration_approval_requests(id),   -- pedido DATASET_ACTIVATION (global; company_id nulo validado no serviço)
+  approval_request_id uuid,                     -- pedido DATASET_ACTIVATION (global; company_id nulo garantido pelo CHECK do pedido)
+  approval_environment text NOT NULL DEFAULT 'PROD' CHECK (approval_environment = 'PROD'),   -- prende o pedido ao piso PROD (achado r3-2)
   next_review_at date,
   created_by uuid NOT NULL REFERENCES usuarios(id),
+  FOREIGN KEY (approval_request_id, approval_environment) REFERENCES integration_approval_requests(id, environment),
   UNIQUE (provider_id, dataset_code, version_label),   -- BANK_OPENAPI/BANK_CNAB_LAYOUT de bancos distintos coexistem
   UNIQUE (id, provider_id),                            -- alvo de bank_file_layouts (E11, §3.13.7)
   CHECK (effective_to IS NULL OR effective_from IS NULL OR effective_to >= effective_from)
@@ -749,7 +796,8 @@ CREATE TABLE integration_secret_versions (     -- ADR-ERP-024 L12–33 + extens�
   vault_key_id uuid NOT NULL,
   kms_key_arn text NOT NULL,                    -- ARN da KEK usada (cópia histórica, presa por FK à chave)
   encryption_context_hash bytea NOT NULL CHECK (octet_length(encryption_context_hash) = 32),
-  cert_thumbprint_sha256 text,                  -- ADR-ERP-024; obrigatório para chave privada fora de PENDING
+  cert_thumbprint_sha256 text,                  -- ADR-ERP-024; PFX/PEM: preenchido no INSERT; CSR: NULL até o UPDATE único (§3.8.1)
+  public_key_sha256 text,                       -- extensão C8 (i): SHA-256 do SPKI DER, não sigiloso; imutável
   status text NOT NULL CHECK (status IN ('PENDING','ACTIVE','RETIRED','REVOKED')),
   created_at timestamptz NOT NULL DEFAULT now(),
   expires_at timestamptz,                       -- entra na AAD ("vigência"); imutável
@@ -764,9 +812,10 @@ CREATE TABLE integration_secret_versions (     -- ADR-ERP-024 L12–33 + extens�
   UNIQUE (id, company_id, environment, purpose, secret_kind, cert_thumbprint_sha256),  -- alvo de integration_certificates
   CHECK (secret_kind <> 'PRIVATE_KEY_PKCS8' OR purpose IN ('NFE_SIGN','NFE_MTLS','BANK_MTLS','BANK_SIGN','SPED_SIGN','WEBHOOK_TLS')),
   CHECK (secret_kind = 'PRIVATE_KEY_PKCS8' OR cert_thumbprint_sha256 IS NULL),
+  CHECK ((secret_kind = 'PRIVATE_KEY_PKCS8') = (public_key_sha256 IS NOT NULL)),
   CHECK (secret_kind <> 'PRIVATE_KEY_PKCS8' OR status = 'PENDING' OR cert_thumbprint_sha256 IS NOT NULL),   -- CSR: chave nasce PENDING sem certificado
   CHECK (environment <> 'PROD' OR status <> 'ACTIVE' OR approved_by IS NOT NULL)                            -- dupla aprovação PROD (ADR-ERP-024 L42)
-);  -- colunas criptográficas e expires_at imutáveis; sem destruição (C8, H-12)
+);  -- colunas criptográficas, public_key_sha256 e expires_at imutáveis; sem destruição (C8, H-12); ordem INSERT/UPDATE com o certificado em §3.8.1
 
 -- ── Certificados e bindings ─────────────────────────────────────────────────
 CREATE TABLE integration_certificates (
@@ -885,10 +934,11 @@ CREATE TABLE integration_job_definitions (       -- "Agendamento"
   next_run_at timestamptz, checkpoint jsonb NOT NULL DEFAULT '{}',
   retry_policy jsonb NOT NULL, concurrency_key text NOT NULL,
   config_version integer NOT NULL, enabled boolean NOT NULL DEFAULT false,
-  approval_request_id uuid,
+  approval_request_id uuid,                     -- pedido JOB_ENABLE (checkpoint tem trilha própria; reprocesso fica no run)
   created_by uuid NOT NULL REFERENCES usuarios(id),
   FOREIGN KEY (profile_lineage_id, company_id, environment) REFERENCES integration_profile_lineages(id, company_id, environment),
   FOREIGN KEY (approval_request_id, company_id) REFERENCES integration_approval_requests(id, company_id),
+  FOREIGN KEY (approval_request_id, company_id, environment) REFERENCES integration_approval_requests(id, company_id, environment),   -- com linhagem; sem linhagem: P7 (serviço)
   CHECK ((profile_lineage_id IS NULL) = (environment IS NULL)),
   UNIQUE (company_id, operation, concurrency_key),
   UNIQUE (id, company_id),
@@ -921,9 +971,12 @@ CREATE TABLE integration_job_runs (
   FOREIGN KEY (pinned_secret_version_id, company_id, environment) REFERENCES integration_secret_versions(id, company_id, environment),
   FOREIGN KEY (pinned_certificate_id, company_id, environment) REFERENCES integration_certificates(id, company_id, environment),
   FOREIGN KEY (approval_request_id, company_id) REFERENCES integration_approval_requests(id, company_id),
+  FOREIGN KEY (approval_request_id, company_id, environment) REFERENCES integration_approval_requests(id, company_id, environment),   -- pedido JOB_REPROCESS do ambiente do run
   CHECK ((profile_lineage_id IS NULL) = (environment IS NULL)),
   CHECK (num_nonnulls(pinned_profile_id, pinned_secret_version_id, pinned_certificate_id) = 0 OR profile_lineage_id IS NOT NULL),
   UNIQUE (job_id, run_number),
+  UNIQUE (id, company_id),                      -- alvo de integration_job_idempotency_keys (achado r3-1)
+  UNIQUE (id, job_id),                          -- alvo de integration_job_dead_letters (achado r3-1)
   CHECK (triggered_by <> 'REPROCESS' OR (approval_request_id IS NOT NULL AND justification IS NOT NULL))
 );
 -- MATCH SIMPLE: as FKs com profile_lineage_id/environment só valem quando não nulos; o CHECK de pins obriga
@@ -931,14 +984,45 @@ CREATE TABLE integration_job_runs (
 
 CREATE TABLE integration_job_dead_letters (      -- DLQ (V06)
   id uuid PRIMARY KEY DEFAULT uuidv7(),
-  run_id uuid NOT NULL UNIQUE REFERENCES integration_job_runs(id),
+  job_id uuid NOT NULL,                         -- copiado do run
+  company_id uuid NOT NULL,                     -- copiado do run
+  run_id uuid NOT NULL UNIQUE,
   reason_code text NOT NULL, attempts integer NOT NULL,
   resolution text NOT NULL CHECK (resolution IN ('PENDING','REPROCESSED','DISCARDED')),
-  reprocess_run_id uuid REFERENCES integration_job_runs(id),
+  reprocess_run_id uuid,
   resolved_by uuid REFERENCES usuarios(id), resolution_justification text,
   created_at timestamptz NOT NULL DEFAULT now(), resolved_at timestamptz,
+  FOREIGN KEY (job_id, company_id) REFERENCES integration_job_definitions(id, company_id),
+  FOREIGN KEY (run_id, job_id) REFERENCES integration_job_runs(id, job_id),
+  FOREIGN KEY (reprocess_run_id, job_id) REFERENCES integration_job_runs(id, job_id),   -- reprocesso só no mesmo job (logo, mesma empresa)
+  CHECK (reprocess_run_id IS NULL OR reprocess_run_id <> run_id),
+  CHECK ((resolution = 'REPROCESSED') = (reprocess_run_id IS NOT NULL)),
   CHECK (resolution = 'PENDING' OR (resolved_by IS NOT NULL AND resolution_justification IS NOT NULL))
 );
+
+CREATE TABLE integration_job_checkpoint_changes (   -- trilha obrigatória de "alterar checkpoint com trilha" (catalogo.js L1074; achado r3-3)
+  id uuid PRIMARY KEY DEFAULT uuidv7(),
+  job_id uuid NOT NULL,
+  company_id uuid NOT NULL,                     -- copiado do job
+  profile_lineage_id uuid, environment text CHECK (environment IN ('HML','PROD')),   -- copiados do job
+  previous_checkpoint jsonb NOT NULL,
+  new_checkpoint jsonb NOT NULL,
+  justification text NOT NULL CHECK (length(justification) > 0),
+  requested_by uuid NOT NULL REFERENCES usuarios(id),
+  required_approvals integer NOT NULL CHECK (required_approvals >= 0),   -- snapshot de P2.CHECKPOINT; sem piso (H-04)
+  approval_request_id uuid,                     -- pedido CHECKPOINT_CHANGE (subject_id = id desta linha)
+  status text NOT NULL CHECK (status IN ('PENDING_APPROVAL','APPLIED','REJECTED','CANCELLED')),
+  created_at timestamptz NOT NULL DEFAULT now(), applied_at timestamptz,
+  FOREIGN KEY (job_id, company_id) REFERENCES integration_job_definitions(id, company_id),
+  FOREIGN KEY (job_id, company_id, profile_lineage_id, environment) REFERENCES integration_job_definitions(id, company_id, profile_lineage_id, environment),
+  FOREIGN KEY (approval_request_id, company_id) REFERENCES integration_approval_requests(id, company_id),
+  FOREIGN KEY (approval_request_id, company_id, environment) REFERENCES integration_approval_requests(id, company_id, environment),
+  CHECK ((profile_lineage_id IS NULL) = (environment IS NULL)),
+  CHECK ((required_approvals = 0) = (approval_request_id IS NULL)),      -- coerência com o snapshot, não piso
+  CHECK (required_approvals > 0 OR status = 'APPLIED'),                  -- sem aprovação exigida, a trilha nasce aplicada
+  CHECK ((status = 'APPLIED') = (applied_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX uq_checkpoint_change_pending ON integration_job_checkpoint_changes (job_id) WHERE status = 'PENDING_APPROVAL';
 
 CREATE TABLE integration_job_leases (
   job_id uuid PRIMARY KEY REFERENCES integration_job_definitions(id),
@@ -948,7 +1032,8 @@ CREATE TABLE integration_job_leases (
 CREATE TABLE integration_job_idempotency_keys (
   company_id uuid NOT NULL REFERENCES companies(id),
   capability text NOT NULL, operation text NOT NULL, external_key text NOT NULL,
-  first_run_id uuid NOT NULL REFERENCES integration_job_runs(id), created_at timestamptz NOT NULL DEFAULT now(),
+  first_run_id uuid NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY (first_run_id, company_id) REFERENCES integration_job_runs(id, company_id),   -- run da mesma empresa (achado r3-1)
   PRIMARY KEY (company_id, capability, operation, external_key)
 );
 
@@ -989,13 +1074,13 @@ CREATE UNIQUE INDEX uq_alert_open ON integration_alerts (subject_id, alert_kind,
 ```
 
 **FKs e justificativas (achados r1-3 e r2-4).**
-- Declaradas: todas as `*_by`/`requested_by`/`responsible_user_id`/`approver_id` → `usuarios(id)`; `official_source_dataset_id` e `source_dataset_id` → `integration_reference_datasets(id)`; `company_id`/`establishment_id` → E01 (D-E01); todas as relações entre objetos E12 por FK composta com `company_id`, `environment` e, onde há amarra de tipo, finalidade, tipo de segredo, tipo de credencial ou código de capability — lista exata em §3.6.
+- Declaradas: todas as `*_by`/`requested_by`/`responsible_user_id`/`approver_id` → `usuarios(id)`; `official_source_dataset_id` e `source_dataset_id` → `integration_reference_datasets(id)`; `company_id`/`establishment_id` → E01 (D-E01); toda relação entre dois objetos E12 que têm `company_id` por FK composta com `company_id` e, onde aplicável, `environment`, `job_id` e, onde há amarra de tipo, finalidade, tipo de segredo, tipo de credencial ou código de capability — lista exata em §3.6 (inclui, desde a r4, `first_run_id`, `run_id`/`reprocess_run_id` da DLQ e a trilha de checkpoint). FKs simples remanescentes entre objetos E12 só onde o alvo ou a origem não tem `company_id` (provedores, serviços, hosts, datasets, artefatos, votos, lease), enumeradas com motivo em §3.6.
 - Sem FK, por serem polimórficas: `integration_approval_requests.subject_id` e `integration_alerts.subject_id`. A integridade vem do lado inverso (cada objeto aprovável aponta `approval_request_id` → pedido, com FK composta por empresa/ambiente) e de `AprovacoesService`/`SaudeService`, que validam `subject_kind`/`subject_table` contra o objeto; testes e2e "pedido com subject inexistente → 422" e "pedido de outro subject_kind → 422". Alternativa rejeitada: uma coluna FK por tipo de assunto (13 colunas nullable), que viola "sem over-engineering".
 - Regras que FK não expressa: tabela "validação de serviço com teste nomeado" em §3.6.
 - Sem coluna no E12 por desenho (C4): conta, convênio, carteira (tabela de ligação do E06) e layout (tabela de ligação do E11), §3.13.3.
 
 **Restrições adicionais.**
-- `parametros` passa a rejeitar, no backend (E12-T01), chaves e valores com padrão de segredo: `password`, `senha`, `secret`, `token`, `private`, `pfx`, `client_secret` e conteúdo PEM/PKCS12. As chaves de §3.12 (P1..P3, P5, P6) não casam esses padrões.
+- `parametros` passa a rejeitar, no backend (E12-T01), chaves e valores com padrão de segredo: `password`, `senha`, `secret`, `token`, `private`, `pfx`, `client_secret` e conteúdo PEM/PKCS12. As chaves de §3.12 (P1..P3, P5..P7) não casam esses padrões.
 - `auditoria.dados_anteriores` e `auditoria.dados_novos` das tabelas E12 recebem só o DTO redigido. `ciphertext`, `nonce`, `auth_tag`, `encrypted_data_key`, `kms_key_arn`, `secret_version_id`, `callback_path` e `content` de artefato nunca entram na auditoria (artefato entra só por `sha256`).
 
 
@@ -1023,7 +1108,7 @@ CREATE UNIQUE INDEX uq_alert_open ON integration_alerts (subject_id, alert_kind,
 | `app/backend/src/database/schema/integracoes.schema.ts` (novo) | tabelas da §4 | E12-T01 |
 | `app/backend/src/database/migrations/` + `meta/_journal.json` | migration a partir de `0044`, via drizzle-kit | E12-T01 |
 | `app/backend/src/modules/parametros/parametros.service.ts` e `dto/parametro.dto.ts` | rejeição de chave e valor com padrão de segredo | E12-T01 |
-| `app/backend/src/database/seed.ts` | seed de provedores, serviços, hosts, `integration_alert_policies` {60,30,15,7}, linhas `LOCAL_FAKE` HML e PROD (só fora de produção), parâmetros P1..P3, P5, P6 e permissões | E12-T01/T02/T04 |
+| `app/backend/src/database/seed.ts` | seed de provedores, serviços, hosts, `integration_alert_policies` {60,30,15,7}, linhas `LOCAL_FAKE` HML e PROD (só fora de produção), parâmetros P1..P3, P5..P7 e permissões | E12-T01/T02/T04 |
 | `app/backend/src/common/auditoria/auditoria.service.ts` | sem mudança de API; E12 passa DTO redigido; teste de não vazamento | E12-T02 |
 | `app/backend/src/common/rbac/permissoes.ts` e `perfil-permissoes.snapshot.json` | 7 permissões `INTEGRACOES_*` + `DESCRICOES_PERMISSOES`; só `administrador` na seed (§3.7) | E12-T04 |
 | `app/backend/src/modules/auth/rbac.service.ts` | sem mudança; usado para reler permissões em ação sensível (F3) | E12-T03/T04 |
@@ -1050,7 +1135,7 @@ CREATE UNIQUE INDEX uq_alert_open ON integration_alerts (subject_id, alert_kind,
 | E12-V03 | Aplicações Bancárias e Credenciais | `#E12-V03` | L1020–1033; `aplicacao.js` L317 | L493–499 | L1420–1448 | `/admin/integracoes/aplicacoes-bancarias` | `INTEGRACOES_VIEW` | cadastrar/editar aplicação, webhook: `CONFIG`; gravar/rotacionar segredo: `VAULT_ROTATE`; gerar CSR: `CERT_UPLOAD`; testar token: `TEST`; homologar/ativar PROD: `APPROVE_PROD` |
 | E12-V04 | Configuração Fiscal e SEFAZ | `#E12-V04` | L1035–1048; `aplicacao.js` L323 | L501–507 | L1450–1475 | `/admin/integracoes/fiscal` | `INTEGRACOES_VIEW` | configurar emitente: `CONFIG`; status/consulta/simular XSD: `TEST`; habilitar PROD: `APPROVE_PROD` |
 | E12-V05 | Catálogos Oficiais e Versões | `#E12-V05` | L1050–1063, `kind: dataset`; `aplicacao.js` L329 | L509–515 | L1477–1500 | `/admin/integracoes/catalogos-oficiais` | `INTEGRACOES_VIEW` | staging/comparar/validar: `CONFIG`; aprovar ativação: `APPROVE_PROD` (aprovador designado conforme H-11) |
-| E12-V06 | Jobs Batch e Histórico de Execução | `#E12-V06` | L1065–1078, `kind: job`; `aplicacao.js` L347 | L517–523 | L1502–1525 | `/admin/integracoes/jobs` | `INTEGRACOES_VIEW` | criar/pausar/agendar/executar/reprocessar/alterar checkpoint: `BATCH_EXEC` (+ aprovação P2 para reprocessar e checkpoint) |
+| E12-V06 | Jobs Batch e Histórico de Execução | `#E12-V06` | L1065–1078, `kind: job`; `aplicacao.js` L347 | L517–523 | L1502–1525 | `/admin/integracoes/jobs` | `INTEGRACOES_VIEW` | criar/pausar/agendar/executar/reprocessar/alterar checkpoint: `BATCH_EXEC` (+ aprovação P2 para reprocessar; alterar checkpoint sempre com trilha e justificativa, aprovação só se P2.CHECKPOINT > 0) |
 | E12-V07 | Monitoramento e Alertas de Integrações | `#E12-V07` | L1080–1093, `kind: monitor`; `aplicacao.js` L335 | L525–531 | L1527–1549 | `/admin/integracoes/saude` | `INTEGRACOES_VIEW` | reconhecer alerta, pausar integração: `CONFIG`; consultar reprocessamento, emitir relatório: `VIEW` |
 
 `homeRoutes["ADMINISTRAÇÃO"] = "E12-V01"` (catalogo.js L1100). Rótulo do item de menu: **"Central de integrações"** (`epics.E12`, catalogo.js L1169–1174). Jornada J06 em `aplicacao.js` L124: V01→V02→V03→V04→V06→V07. Jornada J07 em L125: V05→E01-T03→E01-T04→E02-T05→E09-T05.
@@ -1134,7 +1219,7 @@ Legenda de escrita: **E** = editável na view; **D** = derivado/somente leitura;
 | Integração vinculada / Serviço contratado | `integration_job_definitions.profile_lineage_id` → linhagem | E12 | E |
 | Agendamento / Frequência / Fuso | `.operation`, `.schedule_type` + `.schedule_expr` (gerado), `.timezone` | E12 | E (frequência em opções amigáveis) |
 | De / Até | filtro sobre `integration_job_runs.started_at` | — | filtro |
-| Checkpoint | `.checkpoint` / `runs.input_checkpoint`/`output_checkpoint` | E12 | D na visão padrão; E só com aprovação `CHECKPOINT_CHANGE` |
+| Checkpoint | `.checkpoint` / `runs.input_checkpoint`/`output_checkpoint`; histórico em `integration_job_checkpoint_changes` | E12 | D na visão padrão; E pela ação "alterar checkpoint" com justificativa obrigatória (trilha); aprovação `CHECKPOINT_CHANGE` só se P2.CHECKPOINT > 0 |
 | Versão cert | `runs.pinned_certificate_id` → certificado | E12 | D |
 | Tentativas / worker / run / resultado / erro | `runs.attempt`, `.worker_holder`, `.run_number`, `.status`/`.total_processed`, `.error_code` | E12 | D |
 | DLQ | `integration_job_dead_letters` | E12 | E (reprocessar com aprovação ou descartar com justificativa) |
@@ -1170,7 +1255,7 @@ Legenda de escrita: **E** = editável na view; **D** = derivado/somente leitura;
 | H-01 | Como o runtime on-premises (docs 017/018) obtém identidade AWS para KMS sem chave estática em `.env` (por exemplo IAM Roles Anywhere ou execução em AWS). | TI + QO | adapter real do E12-T02 em produção | `LOCAL_FAKE` em CI/dev; produção falha explicitamente sem `integration_vault_keys` ACTIVE |
 | H-02 | Conta AWS, região, chave KMS por deployment, key policy, CloudTrail e alarmes; se as chaves `ACTIVE` de HML e PROD devem apontar para KEKs físicas distintas ou podem compartilhar a KEK com segregação só por EncryptionContext. | TI | E12-T02 real | uma chave `ACTIVE` por ambiente (fixo pela fonte, ADR-ERP-024 L44); distinção física = P6 (`DISTINTA`) + badge |
 | H-03 | Quais dos 11 perfis, além do administrador, recebem cada `INTEGRACOES_*`. | QO | atribuição a outros perfis | P1 + badge; seed só no administrador |
-| H-04 | Quórum de aprovação por assunto acima dos pisos das fontes (PROD ≥ 2, reprocesso/checkpoint ≥ 1). | QO | nenhuma task (parametrizado) | P2 + badge |
+| H-04 | Quórum de aprovação por assunto acima dos pisos das fontes (PROD ≥ 2, reprocesso ≥ 1) e se alterar checkpoint exige aprovação (a fonte só exige trilha; P2.CHECKPOINT sem piso). | QO | nenhuma task (parametrizado) | P2 + badge |
 | H-05 | Rotas semânticas da §6.1 no lugar de `/admin/integracoes/e12-v0N`. | **QO** | E12-T04 | sem rota até a decisão |
 | H-06 | Adoção de RLS e de papéis de banco separados. | TI | nenhuma task | RLS fora do escopo |
 | H-07 | Situação de credenciamento SEFAZ-SP, IE, CRT e séries por estabelecimento. | Titular/contador | ativação PROD do E12-T06 | evidência `DECLARADO` não ativa PROD |
@@ -1182,6 +1267,7 @@ Legenda de escrita: **E** = editável na view; **D** = derivado/somente leitura;
 | H-13 | Base pública HTTPS de callback por deployment (DNS, exposição do backend on-premises, TLS de entrada). | TI | ativação de webhook do E12-T07 | `integration_public_bases` vazia → webhook fica `PENDING` |
 | H-14 | Migrar ou não o segredo e as URLs EISS (`EISS_*` em `process.env`) para o cofre E12. | QO | nenhuma task do E12 | EISS intacto (AD-02, ADR-006/011) |
 | H-15 | Escopo de acesso usuário↔empresa (inexistente em `develop`). | QO | restrição por empresa | P5 (`TODAS_ATIVAS`) + badge; serviço sempre consulta `EmpresaAcessoPort` |
+| H-16 | Ambiente (HML ou PROD) do pedido de aprovação de job sem linhagem (`JOB_ENABLE`, `JOB_REPROCESS`, `CHECKPOINT_CHANGE`), que não tem ambiente próprio e não tem fonte. | QO | nenhuma task (parametrizado) | P7 (`PROD`, fail-closed) + badge |
 
 ### 7.3 Riscos
 | Risco | Mitigação |
@@ -1215,11 +1301,11 @@ Legenda de escrita: **E** = editável na view; **D** = derivado/somente leitura;
 - Demo: tabela de SHAs e hash do plano anexada ao relato do Executor.
 
 ### Task 2: Portão 1 por Monitor independente
-- Objetivo: nova instância de Monitor audita este plano (r3) contra a Constituição (I, II, III, IV, V, VI, VII, VIII, X), AD-04, AD-10, AD-18, AD-19, AD-20, confere §2–§9, o contrato §3.13 contra o plano E11-T00 e a tabela "Histórico de revisões" item a item.
+- Objetivo: nova instância de Monitor audita este plano (r4) contra a Constituição (I, II, III, IV, V, VI, VII, VIII, X), AD-04, AD-10, AD-18, AD-19, AD-20, confere §2–§9, o contrato §3.13 contra o plano E11-T00 e a tabela "Histórico de revisões" item a item.
 - Saída esperada: veredito anexado em `docs/execucao/GATE-VEREDITOS.md`, escrito só pelo Monitor, com `modelo solicitado=claude-opus-5.5; efetivo=não atestável nesta instalação (AD-20); esforço=não controlável`.
 - Commit (Executor, incluindo o arquivo do Monitor byte a byte, sem editar):
   - `git -C F:/Projetos/AlphaCarnes/.worktrees/e12-t00 add docs/execucao/GATE-VEREDITOS.md`
-  - `git -C F:/Projetos/AlphaCarnes/.worktrees/e12-t00 commit -m "chore(e12-t00): registra veredito Portao 1 (r3) do Monitor"`
+  - `git -C F:/Projetos/AlphaCarnes/.worktrees/e12-t00 commit -m "chore(e12-t00): registra veredito Portao 1 (r4) do Monitor"`
 - Se o veredito for `ajustar`: nova instância de Planner revisa o plano; o commit do plano revisado usa `docs(e12-t00): revisa plano tatico apos Portao 1 (r<N>)`.
 
 ### Task 3: Atualizar o branch após D-157 (Opção A, sem force-push)
@@ -1227,7 +1313,7 @@ Legenda de escrita: **E** = editável na view; **D** = derivado/somente leitura;
 - Comandos:
   - `git -C F:/Projetos/AlphaCarnes/.worktrees/e12-t00 fetch origin`
   - `git -C F:/Projetos/AlphaCarnes/.worktrees/e12-t00 merge --no-ff origin/develop -m "merge(e12-t00): integra develop com PR #157 no branch do gate CROSS"`
-  - `rg -n "AD-18|AD-19|AD-20" docs/execucao/DECISOES.md`
+  - `rg -n "AD-18|AD-19|AD-20" docs/execucao/DECISOES.md` (sem `rg`, em pwsh: `Select-String -Path docs/execucao/DECISOES.md -Pattern 'AD-18|AD-19|AD-20' | ForEach-Object { "$($_.LineNumber): $($_.Line)" }`; esperado: ao menos uma linha para cada uma das três ADs)
   - `Test-Path docs/expansao-erp-2026/24-ADR-COFRE-POSTGRES-KMS-MENU-13-GRUPOS.md`
   - `Test-Path docs/prototipos/erp-integrado-v1/catalogo.js`
 - Saída esperada: merge sem conflito; as três ADs presentes; links resolvem.
@@ -1254,10 +1340,10 @@ Regra para itens com pendência (§3.12): o teste **varia o parâmetro** e verif
 
 | Task | DoD | Teste obrigatório (1:1) |
 |---|---|---|
-| T01 schema | tabelas §4 via drizzle-kit, FKs compostas | `integracoes-schema.e2e-spec.ts`: "rejeita binding de certificado de outra empresa"; "rejeita credencial cujo segredo é de outra empresa"; "rejeita credencial HML em perfil PROD"; "rejeita credencial OAUTH_CLIENT com segredo API_KEY (FK de secret_kind)"; "rejeita certificado PROD com chave privada HML"; "rejeita certificado BANK_MTLS com chave privada de finalidade NFE_SIGN (FK de purpose)"; "rejeita certificado cujo thumbprint difere do cert_thumbprint_sha256 da chave"; "rejeita binding com finalidade diferente da do certificado"; "rejeita certificado de estabelecimento B em perfil do estabelecimento A (BindingService.validarEscopo)"; "certificado de escopo empresa aceito em perfil de estabelecimento"; "rejeita webhook cuja capability é de outra versão de perfil"; "rejeita webhook em capability que não é COBRANCA_WEBHOOK"; "rejeita webhook com credencial API_KEY ou de outra versão de perfil"; "rejeita objeto da empresa A com approval_request_id da empresa B"; "rejeita pedido global (VAULT_KEY, HOST_ALLOWLIST, DATASET_ACTIVATION, PUBLIC_BASE, WORKLOAD_GRANT) com company_id preenchido e pedido de empresa sem company_id (CHECK)"; "pedido de empresa usado em objeto global → 422 (AprovacoesService.vincular)"; "pedido de outro subject_kind → 422"; "pedido com subject inexistente → 422"; "endpoint de outro provedor que o da linhagem → 422"; "linhagem FISCAL duplicada no mesmo escopo → violação uq_lineage_scope"; "duas linhagens BANK do mesmo banco/serviço/ambiente com nomes distintos coexistem"; "duas linhagens BANK com o mesmo nome no escopo → violação uq_lineage_bank_name"; "linhagem com provider_kind diferente do kind do provedor → violação de FK"; "duas versões ACTIVE da mesma linhagem → violação uq_profile_active"; "duas empresas × 3 bancos × 2 estabelecimentos × HML/PROD coexistem"; "capability FILE com código de API (ou o inverso) → violação de CHECK"; "segredo HML com chave de cofre PROD → violação de FK"; "INSERT pelo repositório do cofre sem id não compila (tipo NovaVersaoCifrada) e o RETURNING id confere com a AAD"; "endpoint com host fora da allowlist → violação de FK"; "aprovacoes_operacionais e /gestao/aprovacoes sem alteração (snapshot de schema e suíte de aprovações verde)" |
+| T01 schema | tabelas §4 via drizzle-kit, FKs compostas | `integracoes-schema.e2e-spec.ts`: "rejeita binding de certificado de outra empresa"; "rejeita credencial cujo segredo é de outra empresa"; "rejeita credencial HML em perfil PROD"; "rejeita credencial OAUTH_CLIENT com segredo API_KEY (FK de secret_kind)"; "rejeita certificado PROD com chave privada HML"; "rejeita certificado BANK_MTLS com chave privada de finalidade NFE_SIGN (FK de purpose)"; "rejeita certificado cujo thumbprint difere do cert_thumbprint_sha256 da chave"; "rejeita binding com finalidade diferente da do certificado"; "rejeita certificado de estabelecimento B em perfil do estabelecimento A (BindingService.validarEscopo)"; "certificado de escopo empresa aceito em perfil de estabelecimento"; "rejeita webhook cuja capability é de outra versão de perfil"; "rejeita webhook em capability que não é COBRANCA_WEBHOOK"; "rejeita webhook com credencial API_KEY ou de outra versão de perfil"; "rejeita objeto da empresa A com approval_request_id da empresa B"; "rejeita pedido global (VAULT_KEY, HOST_ALLOWLIST, DATASET_ACTIVATION, PUBLIC_BASE, WORKLOAD_GRANT) com company_id preenchido e pedido de empresa sem company_id (CHECK)"; "pedido de empresa usado em objeto global → 422 (AprovacoesService.vincular)"; "pedido de outro subject_kind → 422"; "pedido com subject inexistente → 422"; "endpoint de outro provedor que o da linhagem → 422"; "linhagem FISCAL duplicada no mesmo escopo → violação uq_lineage_scope"; "duas linhagens BANK do mesmo banco/serviço/ambiente com nomes distintos coexistem"; "duas linhagens BANK com o mesmo nome no escopo → violação uq_lineage_bank_name"; "linhagem com provider_kind diferente do kind do provedor → violação de FK"; "duas versões ACTIVE da mesma linhagem → violação uq_profile_active"; "duas empresas × 3 bancos × 2 estabelecimentos × HML/PROD coexistem"; "capability FILE com código de API (ou o inverso) → violação de CHECK"; "segredo HML com chave de cofre PROD → violação de FK"; "INSERT pelo repositório do cofre sem id não compila (tipo NovaVersaoCifrada) e o RETURNING id confere com a AAD"; "endpoint com host fora da allowlist → violação de FK"; "job PROD com linhagem e pedido JOB_ENABLE HML → violação de FK (approval_request_id, company_id, environment)"; "run PROD de reprocesso com pedido JOB_REPROCESS HML → violação de FK"; "trilha de checkpoint de job PROD com pedido HML → violação de FK"; "pedido DATASET_ACTIVATION com environment HML → violação de CHECK"; "dataset com approval_environment diferente de PROD → violação de CHECK"; "ambiente do pedido ≠ ambiente do objeto → 422 sem gravar (AprovacoesService.vincular)"; "pedido JOB_REPROCESS com required_approvals=0 → violação de CHECK"; "pedido CHECKPOINT_CHANGE com required_approvals=0 aceito pelo CHECK (sem piso)"; "chave de idempotência com first_run_id de run de outra empresa → violação de FK"; "DLQ com run_id de outro job → violação de FK"; "DLQ com reprocess_run_id de run de outro job (ou de outra empresa) → violação de FK"; "DLQ REPROCESSED sem reprocess_run_id, ou com reprocess_run_id = run_id → violação de CHECK"; "aprovacoes_operacionais e /gestao/aprovacoes sem alteração (snapshot de schema e suíte de aprovações verde)" |
 | T01 versões | linhagem + versão imutável | `integracoes-versoes.e2e-spec.ts`: "editar versão submetida cria version+1 em DRAFT com filhos clonados"; "PATCH com row_version antigo → 409 com estado atual"; "ativar v2 aposenta v1 na mesma transação" |
 | T01 config bloqueada | sem perfil/evidência/dataset vigente | "capability sem evidência VERIFICADO → resolver() lança IntegracaoNaoHabilitada"; "endpoint sem dataset ACTIVE na data → resolver() falha explícito" |
-| T01 parametros | segredo rejeitado em `parametros` | `parametros-segredo.e2e-spec.ts`: "POST chave senha_pfx → 422"; "valor com PEM → 422"; "chaves P1..P3, P5, P6 aceitas" |
+| T01 parametros | segredo rejeitado em `parametros` | `parametros-segredo.e2e-spec.ts`: "POST chave senha_pfx → 422"; "valor com PEM → 422"; "chaves P1..P3, P5..P7 aceitas" |
 | T01 rollback | migration reversível | "down + up recria schema idêntico"; "pg_dump/restore do schema integracoes em banco limpo preserva FKs" |
 | T02 vault | envelope AES-256-GCM | `secret-vault.spec.ts`: "id gerado antes da cifragem entra na AAD e coincide com a linha"; "linha com id ou expires_at diferente da AAD → falha GCM explícita"; "EncryptionContext enviado ao KMS fake = {companyId, environment, service, purpose, secretVersion}"; "nonce distinto em duas cifragens do mesmo plaintext"; "AAD alterada → falha GCM"; "EncryptionContext de outro ambiente → falha"; "DEK em claro zerada após uso"; "rotação concorrente → uma versão vence, a outra recifra com nova AAD"; "UPDATE de coluna criptográfica ou expires_at pelo repositório → erro"; "cert_thumbprint_sha256 já preenchido não muda" |
 | T02 seleção | adapter e chave por ambiente | "sem chave ACTIVE para PROD → operação PROD falha explícita e operação HML segue"; "segunda chave ACTIVE no mesmo ambiente → violação uq_vault_key_active"; "LOCAL_FAKE com NODE_ENV=production → boot falha"; "seed com NODE_ENV=production não insere LOCAL_FAKE"; "seed dev insere LOCAL_FAKE HML e PROD com kms_key_arn local-fake:<id>"; "AWS_KMS ACTIVE sem pedido aprovado → violação de CHECK" |
@@ -1268,6 +1354,7 @@ Regra para itens com pendência (§3.12): o teste **varia o parâmetro** e verif
 | T02 DR | backup + KEK | "dump do banco restaurado em instância nova + papel de recuperação com a KEK do harness decifra a versão ACTIVE"; "sem a KEK → falha explícita, sem fallback" |
 | T02 não vazamento | auditoria e log | "sentinela de segredo não aparece em auditoria, log capturado, resposta HTTP, payload WS nem DLQ" |
 | T03 upload | PFX/P12, CRT+KEY | `certificados-upload.e2e-spec.ts`: "PFX válido → VALID, só metadados no body"; "senha errada → 422"; "chave não corresponde → 422"; "expirado → 422"; "revogado → REVOKED, não associável"; "CNPJ do titular divergente → 422"; "A3/sem chave → 422"; "nenhum GET devolve chave privada"; "upload não cria arquivo em os.tmpdir()" |
+| T03 sequência PFX/CSR (§3.8.1) | ordem segredo → certificado | `certificados-sequencia.e2e-spec.ts`: "PFX: segredo PENDING gravado com cert_thumbprint_sha256 e public_key_sha256 no INSERT e certificado na mesma transação, depois dele"; "certificado antes do thumbprint do segredo ⇒ violação de FK" (INSERT de certificado apontando para chave CSR PENDING com cert_thumbprint_sha256 nulo); "certificado com thumbprint diferente do gravado no segredo ⇒ violação de FK"; "falha no INSERT do certificado → rollback também do segredo (PFX) ou do UPDATE de thumbprint (CSR)"; "CSR: chave nasce PENDING com cert_thumbprint_sha256 nulo e expires_at nulo; nenhum certificado gravado"; "CSR: segundo UPDATE de thumbprint afeta 0 linhas → erro"; "segredo PRIVATE_KEY_PKCS8 sem public_key_sha256 → violação de CHECK"; "UPDATE de thumbprint não invalida a decifragem (AAD sem thumbprint)" |
 | T03 revogação (P3) | conduta parametrizada | "OCSP indisponível com P3=BLOQUEAR → 422"; "OCSP indisponível com P3=REVISAO_MANUAL → PENDING_CHECK, não associável"; "em nenhum valor de P3 a falha de consulta gera VALID"; "revocation_policy_applied guarda o valor usado" |
 | T03 rotação | sobreposição aprovada | "rotação concorrente → um CURRENT"; "job fixa pinned_certificate_id antigo durante o run"; "CA trocada → alerta CA_CHANGED" |
 | T03 aprovação (P2) | quórum parametrizado | "para P2.PROD ∈ {2,3}: ativação PROD exige exatamente esse número de votos APPROVE de usuários distintos"; "voto do solicitante → 422"; "P2.PROD=1 → 422 (piso ADR-ERP-024)"; "required_approvals guarda o snapshot; mudar P2 depois não altera pedido aberto"; "ação sensível com permissão removida no banco e token antigo → 403"; "pedido de integração não aparece em GET /gestao/aprovacoes nem gera evento aprovacao_registrada (não reuso de aprovacoes_operacionais)" |
@@ -1275,13 +1362,13 @@ Regra para itens com pendência (§3.12): o teste **varia o parâmetro** e verif
 | T04 UI catálogo | V01 fiel ao protótipo | Playwright `integracoes-catalogo.spec.ts`: estados da MATRIZ-UX (vazio, erro, conflito 409, sem acesso, serviço indisponível); 403 sem permissão; 422 de validação; "só INTEGRACOES_VIEW → ações desabilitadas com motivo"; "mudança HML não altera PROD"; "CNPJ alfanumérico aceito e exibido"; "duas contas coexistem"; "nenhum UUID/E## visível"; "rótulo do menu = Central de integrações" (após E10-T04) |
 | T04 badges (P1, P5) | Princípio VIII | "P1.provisorio=true → badge Provisório no cabeçalho; false → sem badge"; "P5 TODAS_ATIVAS → todas as empresas listadas; EmpresaAcessoPort fake restritiva → empresa não liberada responde 403" |
 | T04 realtime | room protegida | `integracoes-realtime.e2e-spec.ts`: "usuário só com DISPONIBILIDADE_LER assina admin-integracoes e não recebe eventos E12"; "usuário com INTEGRACOES_VIEW recebe integracao_perfil_alterado pós-commit"; "rollback da transação → nenhum evento"; "eventos E12 não chegam a dashboard, desossa nem operacao:<data>"; "rooms legadas (dashboard, desossa, operacao:<data>, faturamento:<id>) continuam exigindo DISPONIBILIDADE_LER (regressão)"; "socket com exp vencido é removido de admin-integracoes no broadcast"; "broadcastRoom para room fora de ROOMS_PROTEGIDAS → erro"; "toda room passada a broadcastRoom no código está em ROOMS_PROTEGIDAS"; "eventos E12 não geram linha em domain_outbox_events" |
-| T05 UI certificados/credenciais | V02/V03 | Playwright: "secret nunca pré-preenchido no edit"; "após salvar, segredo ausente de document.body.innerHTML e das respostas capturadas"; "CSR gera chave cifrada, nunca baixável"; "certificado NFE_SIGN não aparece na seleção BANK_MTLS"; BFF: "multipart com boundary intacto"; "corpo acima do limite → 413"; "nenhum log com bytes do corpo" |
+| T05 UI certificados/credenciais | V02/V03 | Playwright: "secret nunca pré-preenchido no edit"; "após salvar, segredo ausente de document.body.innerHTML e das respostas capturadas"; "CSR gera chave cifrada, nunca baixável"; "certificado emitido com chave pública diferente da do CSR → 422 sem UPDATE nem INSERT"; "certificado emitido com a chave do CSR → certificado CSR_GENERATED gravado e thumbprint preenchido no segredo"; "certificado NFE_SIGN não aparece na seleção BANK_MTLS"; BFF: "multipart com boundary intacto"; "corpo acima do limite → 413"; "nenhum log com bytes do corpo" |
 | T06 fiscal | V04 | "endpoint fora da allowlist → 422"; "PROD não ativa só por upload nem com evidência DECLARADO"; "status SEFAZ via fake HML"; "autorização sintética em fake HML valida contra o XSD ACTIVE na data"; "certificado de outro CNPJ → 422"; "erro de assinatura → bloqueio explícito"; "IE/CRT gravados via porta E01, sem coluna no E12"; "sem porta E02 → série indisponível e PROD bloqueado"; "git diff --stat db9d8ac -- app/backend/src/integracoes/nfse vazio e suíte NFS-e verde (EISS intacto)" |
 | T07 bancos | V03 + capabilities + webhooks + contrato §3.13 | "capability não habilitada → operação bloqueada"; "capability FILE com LayoutHomologadoPort fake APPROVED → ENABLED"; "FILE com layout HML_VALIDATED → ENABLED negado e HML_TESTED aceito"; "FILE com LayoutHomologadoPort null → 422"; "linhagem BANK sem vínculo de conta (ContaBancariaVinculoPort null) → ativação 422"; "linhagem BANK com vínculo fake → ativação aceita"; "mesmo evento API e arquivo → um único efeito E07 (fake)"; "trust CA Itaú: servidor TLS fake com CA nova falha antes da rotação e passa após upload TRUST_CA"; "Santander: layout de ocorrência da carteira A não é usado na carteira B (ligação E11)"; "endpoint bancário só com host vindo de dataset BANK_OPENAPI APPROVED"; "webhook com origem fora da allowlist → 403 + WEBHOOK_FAILING"; "assinatura inválida → 401, sem efeito"; "webhook não ativa com allowlist vazia ou sem base pública" |
-| T08 datasets | V05 | "BANK_OPENAPI com o mesmo version_label para Bradesco, Itaú e Santander coexiste"; "mesmo provedor + código + versão → violação de UNIQUE"; "nova versão não altera regra vigente"; "hash divergente → REJECTED"; "XSD incompatível com NT → fail closed"; "XML autorizado sob versão anterior continua validando contra o XSD vigente na data de emissão (regressão)"; "ativação PROD exige quórum P2" |
-| T09 jobs | lease/fencing/DLQ/pins | `jobs-lease.e2e-spec.ts`: "2 workers concorrentes → 1 execução"; "lease expirado recuperado após crash simulado"; "token obsoleto rejeitado"; "pin de versão de outra linhagem → violação de FK"; "pin de segredo ou certificado de outra empresa/ambiente → violação de FK"; "pin sem linhagem no run → violação de CHECK"; "run sem linhagem de job com linhagem → erro (JobsService.iniciarRun)"; "pin de certificado sem binding da versão → erro"; "pin de segredo sem credencial da versão → erro"; "credencial revogada → SUSPENDED + alerta"; "retry_policy esgotada → FAILED + DLQ"; "reprocessar da DLQ sem aprovação → 422; com aprovação P2 → novo run com triggered_by=REPROCESS"; "alterar checkpoint exige aprovação e grava trilha"; "rollback do resultado do run → nem checkpoint nem linha de outbox do domínio"; "DOMAIN_OUTBOX_RELAY de duas empresas: cada job publica só as linhas da própria empresa (handler fake)"; "timezone fora da lista IANA → 422"; "sem rede externa no CI" |
+| T08 datasets | V05 | "BANK_OPENAPI com o mesmo version_label para Bradesco, Itaú e Santander coexiste"; "mesmo provedor + código + versão → violação de UNIQUE"; "nova versão não altera regra vigente"; "hash divergente → REJECTED"; "XSD incompatível com NT → fail closed"; "XML autorizado sob versão anterior continua validando contra o XSD vigente na data de emissão (regressão)"; "ativação PROD exige quórum P2"; "dataset só aceita pedido DATASET_ACTIVATION PROD: abrir pedido HML → violação de CHECK; para P2.PROD ∈ {2,3} a ativação exige exatamente esse número de votos" |
+| T09 jobs | lease/fencing/DLQ/pins | `jobs-lease.e2e-spec.ts`: "2 workers concorrentes → 1 execução"; "lease expirado recuperado após crash simulado"; "token obsoleto rejeitado"; "pin de versão de outra linhagem → violação de FK"; "pin de segredo ou certificado de outra empresa/ambiente → violação de FK"; "pin sem linhagem no run → violação de CHECK"; "run sem linhagem de job com linhagem → erro (JobsService.iniciarRun)"; "pin de certificado sem binding da versão → erro"; "pin de segredo sem credencial da versão → erro"; "credencial revogada → SUSPENDED + alerta"; "retry_policy esgotada → FAILED + DLQ"; "reprocessar da DLQ sem aprovação → 422; com aprovação P2 → novo run com triggered_by=REPROCESS"; "DLQ marcada REPROCESSED com run SCHEDULE → erro (JobsService.reprocessar)"; "idempotência: first_run_id de run de outra empresa → violação de FK"; "JOB_ENABLE de job PROD com pedido HML → violação de FK"; "reprocesso de run PROD com pedido HML → violação de FK"; "ambiente do pedido ≠ ambiente do job com linhagem → 422 sem gravar"; "P7=PROD: pedido HML para job sem linhagem → 422; pedido PROD aceito com required_approvals = P2.PROD"; "P7=HML: pedido HML para job sem linhagem aceito; pedido PROD → 422"; "P7 com provisorio=true → badge Provisório na V06"; "alterar checkpoint sem justificativa → 422 e nenhuma linha de trilha"; "P2.CHECKPOINT=0: alteração aplicada na hora, trilha APPLIED com anterior, novo, justificativa e autor, sem pedido"; "P2.CHECKPOINT=1: trilha PENDING_APPROVAL + pedido CHECKPOINT_CHANGE; checkpoint do job intacto até 1 voto APPROVE de outro usuário, depois trilha APPLIED"; "segunda alteração com trilha PENDING_APPROVAL no mesmo job → violação uq_checkpoint_change_pending"; "pedido CHECKPOINT_CHANGE rejeitado → trilha REJECTED, checkpoint intacto"; "required_approvals da trilha guarda o snapshot; mudar P2.CHECKPOINT depois não altera trilha pendente"; "rollback do resultado do run → nem checkpoint nem linha de outbox do domínio"; "DOMAIN_OUTBOX_RELAY de duas empresas: cada job publica só as linhas da própria empresa (handler fake)"; "timezone fora da lista IANA → 422"; "sem rede externa no CI" |
 | T10 console/saúde | V06/V07 | Playwright: "reprocessar exige justificativa e auditoria"; "política {60,30,15,7} gera 4 alertas com relógio fake"; "política alterada para {45,10} gera só 45 e 10"; "alerta não duplica na mesma janela"; "reconhecer exige justificativa"; "UI atualiza por evento WS, sem polling"; "remessa exportada não aparece como aceita sem retorno"; "telemetria/log sem sentinela de segredo"; "API→arquivo→API: failover e failback sem duplicar efeito (fake)" |
-| T11 env | inventário | "lint de env falha ao introduzir prefixo proibido ou nome de process.env fora da allowlist F7"; "a busca por process.env em app/backend/src retorna as 27 linhas da tabela F7 enquanto nenhuma task alterar o legado"; "docker compose dev sobe"; "rollback da migration E12 e restore de backup em banco limpo funcionam" |
+| T11 env | inventário | "lint de env falha ao introduzir prefixo proibido ou nome de process.env fora da allowlist F7"; "a busca por process.env em app/backend/src retorna as 27 linhas da tabela F7 enquanto nenhuma task alterar o legado" (busca: `rg -n "process\.env" app/backend/src` ou, em pwsh sem `rg`, `Get-ChildItem -Path app/backend/src -Recurse -File \| Select-String -Pattern 'process\.env'`); "docker compose dev sobe"; "rollback da migration E12 e restore de backup em banco limpo funcionam" |
 | T12 jornadas | J06/J07 com fakes | Playwright J06 e J07 completas; "processo reiniciado no meio de um job retoma do checkpoint sem duplicar"; UAT com titulares registrado (H-07/H-08) |
 
 
@@ -1297,8 +1384,8 @@ Este gate é só documental. O rollback é reverter o commit do plano no branch 
 - Fonte da §10 ausente ou divergente do SHA lido.
 - O #157 não mergeado no momento de abrir o PR (Opção A).
 - Qualquer pedido para acrescentar variável de integração ao `.env`, gravar segredo em `parametros`, criar perfil canônico ou alterar as 39 rotas.
-- Pendência H-01..H-15 tratada como resolvida sem registro do responsável, ou badge Provisório removido sem AD em `DECISOES.md`.
-- Teste que fixa o resultado de uma pendência parametrizada (P1..P3, P5, P6) em vez de exercitar o parâmetro.
+- Pendência H-01..H-16 tratada como resolvida sem registro do responsável, ou badge Provisório removido sem AD em `DECISOES.md`.
+- Teste que fixa o resultado de uma pendência parametrizada (P1..P3, P5..P7) em vez de exercitar o parâmetro.
 - Plano de E06, E11, E04, E05 ou E09 que use nome de tabela, coluna, FK, porta, operação ou room de interface diferente do contrato §3.13, ou que acrescente coluna de conta/convênio/layout em tabela `integration_*`.
 - Qualquer necessidade de afrouxar coluna do DDL ratificado do ADR-ERP-024 (C8) sem AD do QO.
 - Divergência visual em relação ao protótipo ERP sem emenda.
