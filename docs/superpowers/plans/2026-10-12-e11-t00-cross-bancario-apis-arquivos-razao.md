@@ -11,7 +11,7 @@
 
 **Base pinada:** `origin/develop` @ `db9d8ac1760a01c262c57a9f824d2c8fcf18291b` (merge-base do branch). Última migration `0043_onda14_ocorrencias_preco` (journal idx 43, verificado); próximo índice livre `0044`, disputado com E12-T01 — a numeração real é recalculada pelo Planner de cada onda; o worker não renumera.
 
-**Worktree / branch:** `F:/Projetos/AlphaCarnes/.worktrees/e11-t00` · `feature/erp-e11-t00-cross-bancario` (local, não publicado; 2 commits acima de `db9d8ac`: `c9bed46`, `8f7153c`). Fontes da expansão lidas do checkout coordenador `F:/Projetos/AlphaCarnes` (branch `feature/erp-fiscal-financeiro-contabil-especificacoes-2026`, HEAD `302cdb5a270d73591e3c087a16fef7190101b4f7`, PR #157 não mergeado). Contrato E12 lido de `F:/Projetos/AlphaCarnes/.worktrees/e12-t00/docs/superpowers/plans/2026-10-12-e12-t00-cross-adr-fundacao-integracoes.md` r3, sha256 `9A6F65C615A7791D57F1FBBA5A0C90601545366F9067889412E23F0596185B86`.
+**Worktree / branch:** `F:/Projetos/AlphaCarnes/.worktrees/e11-t00` · `feature/erp-e11-t00-cross-bancario` (local, não publicado; 4 commits acima de `db9d8ac`, lidos por `git log --format='%h %s' db9d8ac..HEAD` em 2026-10-12: `c9bed46` plano r1, `8f7153c` veredito r1, `171f563` plano r2, `a2e2ff9` veredito r2; a revisão r3 deste arquivo fica não commitada até a Task 3). Fontes da expansão lidas do checkout coordenador `F:/Projetos/AlphaCarnes` (branch `feature/erp-fiscal-financeiro-contabil-especificacoes-2026`, HEAD `302cdb5a270d73591e3c087a16fef7190101b4f7`, PR #157 não mergeado). Contrato E12 lido de `F:/Projetos/AlphaCarnes/.worktrees/e12-t00/docs/superpowers/plans/2026-10-12-e12-t00-cross-adr-fundacao-integracoes.md` r3, sha256 `9A6F65C615A7791D57F1FBBA5A0C90601545366F9067889412E23F0596185B86`.
 
 **Linear:** ALP-160 (E11-T00). Cross: ALP-133..141 (E06/E07), ALP-142..154 (E08/E09), ALP-161..171 (E11-T01..T11). Gate irmão: ALP-173 (E12-T00).
 
@@ -22,7 +22,8 @@
 | Revisão | Data | Plano (sha256) | Motivo |
 |---|---|---|---|
 | r1 | 2026-10-12 | `ab26672291b9c13a…` (commit `c9bed46`) | versão inicial; Portão 1 = `ajustar` (veredito 2026-10-12T07:46:32Z, 13 achados; commit `8f7153c`) |
-| r2 | 2026-10-12 | (calculado pelo Monitor) | resolve os 13 achados e adota literalmente o contrato E12-T00 r3 §3.13 |
+| r2 | 2026-10-12 | `61b4f46a552a711d…` (commit `171f563`) | resolve os 13 achados e adota literalmente o contrato E12-T00 r3 §3.13; Portão 1 = `ajustar` (veredito 2026-10-12T08:55:30Z, 9 achados; commit `a2e2ff9`) |
+| r3 | 2026-10-12 | (calculado pelo Monitor) | resolve os 9 achados da r2 sem alterar o contrato canônico E12-T00 §3.13 (ligações, envelope, operações, portas e rooms idênticos) |
 
 **Achados do Portão 1 sobre a r1 → correção na r2:**
 
@@ -43,6 +44,20 @@
 | 13. Task 2 com saída incompleta; Task 3 duplicaria commit | Task 2 com a saída real completa (56 linhas) colada; Task 3 reconhece `c9bed46`/`8f7153c` e só commita a revisão r2 | §15 |
 
 Ajuste adicional, não apontado: Task 6 passa de `rebase` para `merge origin/develop` (mesma decisão do E12 r3, sem reescrever o commit de veredito `8f7153c`); permissão `BANCOS_PAYLOAD_BRUTO_LER` acrescentada porque o contrato §3.13.4 exige permissão E11 para `openPayload` com acesso USER; `bank_file_layouts.service` passa a usar os 5 literais FILE de capability (A-02) e S5 DDA por arquivo fica condicionado a emenda do CHECK do E12 (§6.2, §12.1).
+
+**Achados do Portão 1 sobre a r2 → correção na r3:**
+
+| Achado r2 | Correção | Seção corrigida |
+|---|---|---|
+| 1. BLOQUEANTE — `bank_tx_id` mistura namespaces; chave forte inédita vira `CONFIRMED` sem checar fato de outro canal (XB-01 pode gerar 2 fatos `CONFIRMED`) | `bank_tx_id` passa a valer só dentro de um **namespace de identidade** (`strong_key_namespace` / `bank_tx_id_namespace`); namespace compartilhado entre canais exige **atestação de equivalência entre canais** (P-19, `strong_key_equivalence_ref` no manifesto e no registro do contrato API E06); sem ela o namespace é local ao canal. Chave forte inédita com fato de outro canal na mesma conta, sem chave no mesmo namespace e com atributos fracos coincidentes ⇒ fato `CONFLICTED` + candidato + conflito `POSSIBLE_DUPLICATE_WEAK`, nunca `CONFIRMED`. Teste E11-T01 nomeado "FITID atestado ≠ id API ⇒ nenhum segundo CONFIRMED alocável" | §3.3; §3.4; §5.2 (layouts, observações, transações); §7.1 L3; §7.2 itens 1, 2 e 4; §11 XB-01a; §11.1 EX-A2; §13 P-19; §14; §16 E11-T01/E11-T02 |
+| 2. BLOQUEANTE — CHECK de `link_basis` impede ligar a observação de origem de `PENDING`; `PENDING` sem candidato não tem caminho para `CONFIRMED`; sem garantia PROD para `PENDING` | `link_basis` ganha `ORIGIN_WEAK` (origem sem chave forte, `decided_by`/`conflict_id` nulos por CHECK); todo fato nasce com `origin_observation_id NOT NULL` e FK com `environment='PROD'` (garantia estrutural também para `PENDING`/`CONFLICTED`); `PENDING` sem candidato abre `CONFIRMATION_REQUIRED` na mesma transação, com caminho explícito `RESOLVED_DISTINCT → CONFIRMED` / `RESOLVED_SAME → SUPERSEDED`; testes de rejeição nomeados | §5.2 (transações, conflitos, links); §5.2.1; §7.2 item 6; §16 E11-T01/E07-T04 |
+| 3. BLOQUEANTE — XB-03 só testava crédito sem chave; regra anti-duplicidade só cobria cobrança já alocada | regra simétrica R-CORR (§7.2.2): liquidação e crédito correlacionados por atributos fracos abrem `CORROBORATION_PENDING` com os dois sujeitos; enquanto um lado tiver alocação `ACTIVE` e a corroboração estiver aberta, o outro não aloca automaticamente, verificado sob lock dos dois lados; testes XB-03a..XB-03f com crédito `CONFIRMED` por `bank_tx_id` nas duas ordens de chegada e PRM-B01 `true`/`false`, mais o caso sem chave e o concorrente | §5.2 alocações; §7.1 L5; §7.2.2; §10 PRM-B01; §11 XB-03a..f; §16 E07-T03 |
+| 4. MENOR — `wallet` sem origem para API/webhook; igualdade de `occurrence_date` fixa semântica de P-20 | `wallet` derivada do convênio por FK composta `(bank_agreement_id, bank_account_id, company_id, wallet)` → `bank_agreements(id, bank_account_id, company_id, carteira)` (equivalente a CHECK de derivação; nenhum canal informa carteira); `occurrence_date` = data canônica escolhida pelo `canonical_date_field` do mapa de ocorrências P-20 por semântica; entrada sem esse campo ⇒ `UNMAPPED` | §5.2 cobrança; §5.3 E06-T01; §7.2.1 itens 2 e 5; §13 P-20 |
+| 5. MENOR — `updated_at`/`deleted_at` incoerentes com C14; PK composta em `domain_inbox_receipts` | classificação tabela a tabela em §5.0 (configuração / mutável restrita / append-only / append-only com vigência) com `updated_at`/`deleted_at` alinhados no DDL; `domain_inbox_receipts` passa a `id uuid DEFAULT uuidv7()` + `UNIQUE (consumer, event_id)` (semântica de dedupe inalterada) | §2 C14; §5.0; §5.2; §5.4; §7.1 L8 |
+| 6. MENOR — retirada de `transactionType` da chave diverge de doc 11 §2.1 e doc 12 §3 sem conflito registrado | conflito C15 registrado e resolvido por coerência com o critério de aceite XB-01/Exemplo A das mesmas fontes: "tipo" da chave = tipo do **identificador** (`strong_key_kind` + namespace), não `transaction_type` | §2 C15; §7.2 item 1 |
+| 7. MENOR — cabeçalho/Task 3/§18 diziam 2 commits | estado real `c9bed46`, `8f7153c`, `171f563`, `a2e2ff9` (saída de `git log db9d8ac..HEAD`) no cabeçalho, Tasks 3/4/6, §17 e rollback; mensagem do commit r3 fixada | cabeçalho; §15 Tasks 3, 4, 6; §17; §18 |
+| 8. MENOR — sem garantia PROD em períodos/candidatos/conflitos; lote `ACCEPTED`/`INGESTED` sem CHECK de `reviewed_by`; candidatos sem FK de conta; provedor do layout sem `kind='BANK'` | `environment` constante `PROD` + FKs com ambiente em `bank_statement_periods`, `bank_match_candidates`, `reconciliation_conflicts`; CHECK `reviewed_by` em lote; `bank_match_candidates.bank_account_id` com FKs compostas por conta; `bank_file_layouts.provider_kind` + FK `(provider_id, provider_kind)` → `integration_providers(id, kind)`; testes nomeados em §5.2.1 | §5.2; §5.2.1 |
+| 9. MENOR — FK `subject_import_batch_id` como referência adiante; matriz de custo só como P-18; P-17 ausente | FK inline (a tabela de lotes vem antes no DDL); §14.1 matriz de custo sem dupla precificação com uma linha por entregável e valor = P-18 explícita; P-17 registrado como número não atribuído | §5.2 conflitos; §5.2.1; §13; §14.1 |
 
 ---
 
@@ -74,7 +89,7 @@ Verificado nesta sessão (busca sobre `app/backend/src`, 65 `pgTable` em 33 arqu
 9. E12 é dono de provedores, perfis (linhagens e versões), endpoints, capabilities, evidências de habilitação, credenciais, certificados, cofre, jobs, checkpoints e alertas de integração (AD-18; doc 22 §1; E12 r3 §3.4/§3.13). E06 é dono de contas, convênios, carteiras e de `bank_integration_links`. E11 é dono de layouts, `bank_layout_capability_links`, lotes, payload bruto, observações/proveniência, remessas, política de roteamento e outbox de domínio. E07 é dono dos fatos canônicos, conflitos e alocações. E04/E05 donos de títulos/parcelas/baixas. E09 dono do razão.
 10. Dinheiro `NUMERIC(15,2)` trafegando como string (Princípio X prevalece sobre o "DECIMAL(18,2)" de RNF-B01 — §2 C7); datas `date`/`timestamptz`; status `TEXT + CHECK`; PK `uuid DEFAULT uuidv7()`.
 11. Dados de banco/titular **não são inventados**: célula sem evidência = `Pendente P-xx (dono)` (Princípio VII/VIII; doc 21 §7: "falta de produto significa `not_supported`, não simular").
-12. Observação de ambiente **HML** nunca vira fato financeiro: lote/observação HML para em `VALIDATED` e serve só para homologar layout/adapter (garantido por CHECK e por FK com `environment='PROD'` nas tabelas de vínculo, §5.2).
+12. Observação de ambiente **HML** nunca vira fato financeiro: lote/observação HML para em `VALIDATED` e serve só para homologar layout/adapter (garantido por CHECK e por FK com `environment='PROD'` nas tabelas de vínculo e na observação de origem de todo fato, evento, período, candidato e conflito, §5.2).
 13. A UI não exibe UUID, PK, `company_id`, código E##/ALP, nome técnico de tabela nem número completo de conta (Caderno B "Requisito transversal de UX"; MATRIZ-UX requisito inverso; RNF-B11).
 14. Nenhum efeito externo real, homologação ou produção é autorizado por este gate (AD-19 (3)).
 15. Migrations futuras só via `drizzle-kit generate`, aditivas, reversíveis, expand → backfill → contract (Princípio X).
@@ -96,7 +111,8 @@ Verificado nesta sessão (busca sobre `app/backend/src`, 65 `pgTable` em 33 arqu
 | C11 | Rotas do protótipo `/erp/bancos/e11-v0N` × proibição de código E## visível | catalogo.js L921/936/951/966/981 × Caderno B UX | Proposta de slugs semânticos na §8; decisão **somente do Quality Owner** (P-14). |
 | C12 | Valores do protótipo E11-V05 (ex.: "Extrato Bradesco · Não homologada") | aplicacao.js L305–310 × doc 21 | São **fictícios**; não alimentam o inventário da §6. |
 | C13 | CNAB 200/MT940 Bradesco | doc 12 §2.3/§6 × doc 21 §2.5 | Fora do pacote-base; só por aditivo após decisão P-05 do QO. |
-| C14 | `convencoes-schema.md` (checklist: `updated_at` e `deleted_at` em toda tabela de negócio) × Constituição Princípio IV ("histórias append-only nunca são reescritas") | `docs/data/convencoes-schema.md` × constituição | PK `DEFAULT uuidv7()`, `created_at DEFAULT now()` e índice em toda FK valem para todas as tabelas. Tabelas **append-only** (observações, links de observação, eventos de cobrança, outbox/inbox) não têm `deleted_at` nem `updated_at`: exclusão lógica ou física reescreveria a história; inativação é por `status`/`valid_to`, como nas ligações do E12 r3 §3.13.3. Tabelas de configuração (`bank_file_layouts`) têm `updated_at` e `deleted_at`. |
+| C14 | `convencoes-schema.md` (checklist: `updated_at` e `deleted_at` em toda tabela de negócio) × Constituição Princípio IV ("histórias append-only nunca são reescritas") | `docs/data/convencoes-schema.md` × constituição | PK `DEFAULT uuidv7()`, `created_at DEFAULT now()` e índice em toda FK valem para todas as tabelas (inclusive `domain_inbox_receipts`, sem PK composta). `updated_at` e `deleted_at` seguem a classe de cada tabela, fixada tabela a tabela em §5.0: **configuração** (`updated_at` + `deleted_at`); **mutável restrita** (só as colunas listadas mudam, por serviço auditado: `updated_at`, sem `deleted_at`); **append-only** (nenhum UPDATE/DELETE: sem `updated_at` e sem `deleted_at`); **append-only com vigência** (única mutação = preencher uma vez `valid_to`/`effective_to`, cujo valor registra o instante: sem `updated_at`, sem `deleted_at`). Nenhuma tabela financeira tem `deleted_at`: exclusão lógica reescreveria a história; inativação é por `status`/vigência, como nas ligações do E12 r3 §3.13.3 (que mantêm o `updated_at` literal do contrato). |
+| C15 | `transactionType` na chave forte | doc 11 §2.1 item 1 (L29: `empresaId + bankAccountId + transactionType + bankTransactionId/EndToEndId/FITID validado`) e doc 12 §3 (L20: `empresa+conta+tipo+identificador único bancário/EndToEndId validado`) × critério de aceite das mesmas fontes: doc 11 XB-01 (API + OFX do mesmo crédito → um fato) e doc 12 §3 Exemplo A (2 observações, 1 transação) | Não é decisão de produto: as duas fontes têm o mesmo nível e o próprio critério de aceite delas é inatingível se a classificação descritiva compuser a chave (a API pode classificar `PIX` e o OFX `OUTRO` o mesmo lançamento). "Tipo" da chave é lido como **tipo do identificador** (`strong_key_kind` `BANK_TX_ID`/`END_TO_END_ID` + `strong_key_namespace`, §7.2), que separa identificadores de natureza diferente sem fundir nem duplicar o lançamento; `transaction_type` é atributo descritivo do fato e divergência dele entre observações ligadas só aparece na proveniência (V04). Se o Monitor ou o QO lerem "tipo" como `transaction_type` → PARAR (XB-01 e Exemplo A ficariam em contradição com a chave). |
 
 
 ## 3. ADR-ERP-026 — Arquitetura bancária canônica API + arquivo (conteúdo normativo deste gate)
@@ -143,9 +159,11 @@ flowchart TB
   REV -- ACCEPTED --> PORT
   PORT --> OBS[(bank_source_observations\nappend-only · UNIQUE empresa+ambiente+conta+canal+chave)]
   OBS --> NUC{{NucleoCanonicoService · E07\nresolve chave forte normalizada}}
-  NUC -- bank_tx_id / end_to_end_id existente --> LINK[(link observação→fato existente)]
-  NUC -- chave forte nova --> TX[(bank_transactions\nCONFIRMED)]
-  NUC -- sem chave forte --> PEND[(bank_transactions PENDING\n+ bank_match_candidates\n+ reconciliation_conflicts)]
+  NUC -- chave forte existente no mesmo namespace --> LINK[(link observação→fato existente)]
+  NUC -- chave forte nova sem candidato de outro canal --> TX[(bank_transactions\nCONFIRMED)]
+  NUC -- chave forte nova com candidato de outro canal --> CONFL[(bank_transactions CONFLICTED\n+ candidato + POSSIBLE_DUPLICATE_WEAK)]
+  NUC -- sem chave forte --> PEND[(bank_transactions PENDING\n+ link ORIGIN_WEAK\n+ candidato ou CONFIRMATION_REQUIRED)]
+  CONFL -- decisão humana V03 --> TX
   NUC -- evento de cobrança --> COB[(bank_cobranca_events\nchave canônica entre canais)]
   NUC -- saldo --> PER[(bank_statement_periods)]
   LINK --> TX
@@ -171,15 +189,16 @@ sequenceDiagram
   participant N as NucleoCanonico E07
   participant M as Motor E07
   J->>A: run (versões pinadas)
-  A->>O: obs#1 canal=API, bank_tx_id=norm(id do lançamento), end_to_end_id=norm(E2E)
+  A->>O: obs#1 canal=API, namespace NS (registro do contrato API), bank_tx_id=norm(id do lançamento), end_to_end_id=norm(E2E)
   O->>N: resolver(obs#1)
-  N-->>N: chaves inéditas → bank_transactions T1 CONFIRMED + link + outbox (mesma transação)
+  N-->>N: chaves inéditas e nenhum candidato de outro canal → T1 CONFIRMED + link STRONG_KEY + outbox (mesma transação)
   N->>M: transacao_bancaria_confirmada (outbox → relay)
   M-->>M: alocação T1→parcela → baixa única → lançamento único (E07-T03/E09)
   U->>P: OFX D+1 (lote aprovado, revisor ≠ importador)
-  P->>O: obs#2 canal=OFX, FITID atestado no manifesto como BANK_TX_ID → bank_tx_id=norm(FITID)
+  P->>O: obs#2 canal=OFX, FITID mapeado no manifesto como BANK_TX_ID no namespace NS (equivalência com o id da API atestada, P-19)
   O->>N: resolver(obs#2)
-  N-->>N: bank_tx_id igual a T1, valor/direção/data iguais → link obs#2→T1; nenhum fato novo; nenhum outbox de baixa
+  N-->>N: mesmo namespace e bank_tx_id de T1, valor/direção/data iguais → link obs#2→T1; nenhum fato novo; nenhum outbox de baixa
+  Note over N: sem atestação de equivalência o FITID fica em namespace local do OFX → T2 CONFLICTED + candidato T1 + POSSIBLE_DUPLICATE_WEAK, T2 não aloca (§7.2 item 4d)
 ```
 
 ### 3.5 Consequências
@@ -249,6 +268,32 @@ Payloads levam valores como string, conta mascarada (últimos 4 dígitos) e IDs 
 
 Regras gerais (valem para todo bloco abaixo): PK `uuid DEFAULT uuidv7()` (`docs/data/convencoes-schema.md` L12); `created_at timestamptz NOT NULL DEFAULT now()`; índice em toda FK (convenção "Índices obrigatórios"; o worker declara `index()` no Drizzle); FKs compostas com colunas nulas usam `MATCH SIMPLE` (FK só vale quando todas as colunas estão preenchidas — é o comportamento desejado para `bank_agreement_id` opcional); `companies`/`establishments` são nomes conceituais (físico = E01-T01, D-E01). Onde o id participa de AAD (`bank_raw_payloads`), o backend obtém o valor por `SELECT uuidv7()` antes da cifragem e o envia explicitamente; a coluna mantém `DEFAULT uuidv7()` (mesma regra do E12 r3 para `integration_secret_versions`; o E12 r3 não mantém exceção sem DEFAULT).
 
+### 5.0 Classe de cada tabela (C14) — `updated_at`/`deleted_at` alinhados ao DDL abaixo
+
+| Tabela | Classe | `updated_at` | `deleted_at` | Única mutação permitida (serviço do owner, auditada) |
+|---|---|---|---|---|
+| `bank_file_layouts` | configuração | sim | sim | campos de manifesto só em `DRAFT`; depois só `status`, `active_to`, `approved_by` |
+| `bank_layout_capability_links` | ligação do contrato E12 r3 §3.13.3 (literal) | sim (literal do contrato) | não | `status`, `valid_to` |
+| `bank_raw_payloads` | append-only | não | não | nenhuma (expurgo: P-11; nunca UPDATE do envelope) |
+| `bank_import_batches` | mutável restrita | sim | não | `status`, `bank_file_layout_id` (uma vez), `validation_summary`, `rejection_reason`, `reviewed_by` |
+| `bank_source_observations` | append-only | não | não | nenhuma |
+| `bank_transactions` | mutável restrita | sim | não | `status`, `superseded_by_id`, `confirmed_by`/`confirmed_at`, preenchimento único de chave nula (§5.2) |
+| `reconciliation_conflicts` | mutável restrita | sim | não | `status`, `resolved_by`, `resolution_justification`, `resolved_at` |
+| `bank_transaction_observation_links` | append-only com vigência | não | não | preencher `valid_to` uma vez |
+| `bank_cobranca_events` | mutável restrita | sim | não | `status` |
+| `bank_cobranca_event_observations` | append-only | não | não | nenhuma |
+| `bank_economic_links` | append-only com vigência | não | não | preencher `valid_to` uma vez |
+| `bank_statement_periods` | mutável restrita | sim | não | saldos, `movements_sum`, observações de abertura/fechamento e `completeness`, recalculados pelo núcleo (valor anterior na auditoria) |
+| `bank_match_candidates` | mutável restrita | sim | não | `status`, `decided_by`, `decided_at` |
+| `reconciliation_allocations` | mutável restrita | sim | não | `status` `ACTIVE → REVERSED` |
+| `bank_remittance_batches` | mutável restrita | sim | não | `status`, `sha256`, `raw_payload_id`, `exported_by`, `approved_by`, `submission_*`, `ack_observation_id` |
+| `bank_remittance_items` | mutável restrita | sim | não | `item_status` |
+| `bank_channel_routing_policies` | mutável restrita | sim | não | `approved_by` (uma vez), `effective_to` (uma vez) |
+| `domain_outbox_events` | mutável restrita (técnica) | sim | não | `published_at`, `attempts`, `last_error_code` |
+| `domain_inbox_receipts` | append-only | não | não | nenhuma |
+
+Teste de convenção (E11-T01, unidade sobre o schema Drizzle): "tabela classificada append-only/append-only com vigência não declara `updated_at` nem `deleted_at`; tabela mutável restrita declara `updated_at` e não declara `deleted_at`".
+
 ### 5.1 Referências externas (não criar aqui; nomes literais do E12 r3 §3.13.2 e restrições de §3.13.7)
 ```sql
 -- E01-T01: companies(id); establishments(id, company_id) UNIQUE (id, company_id)
@@ -264,7 +309,7 @@ Regras gerais (valem para todo bloco abaixo): PK `uuid DEFAULT uuidv7()` (`docs/
 -- E06-T01: bank_accounts(id, company_id, provider_id NOT NULL REFERENCES integration_providers(id), agencia_mascarada, conta_mascarada, ...)
 --            UNIQUE (id, company_id), UNIQUE (id, company_id, provider_id)
 --          bank_agreements(id, company_id, bank_account_id, convenio, carteira, ...)
---            UNIQUE (id, company_id), UNIQUE (id, bank_account_id, company_id)
+--            UNIQUE (id, company_id), UNIQUE (id, bank_account_id, company_id), UNIQUE (id, bank_account_id, company_id, carteira)  -- último: §5.3
 --          bank_integration_links — DDL literal do E12 r3 §3.13.3 (reproduzida abaixo só para leitura; owner E06)
 -- E06-T02: bank_collection_instructions(id, company_id, bank_agreement_id, nosso_numero, status ...)  UNIQUE (id, company_id)
 -- E06-T04: bank_payment_instructions(id, company_id, bank_account_id, status ...)                    UNIQUE (id, company_id)
@@ -306,7 +351,8 @@ CREATE UNIQUE INDEX uq_bil_account_service_active ON bank_integration_links
 -- ── Layouts (E11-T02) ───────────────────────────────────────────────────────
 CREATE TABLE bank_file_layouts (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
-  provider_id uuid NOT NULL REFERENCES integration_providers(id),
+  provider_id uuid NOT NULL,
+  provider_kind text NOT NULL DEFAULT 'BANK' CHECK (provider_kind = 'BANK'),   -- layout só de instituição bancária
   scope text NOT NULL CHECK (scope IN ('PROVIDER','AGREEMENT')),   -- AGREEMENT: versão/ocorrências próprias do convênio
   company_id uuid REFERENCES companies(id),
   bank_agreement_id uuid,
@@ -316,10 +362,11 @@ CREATE TABLE bank_file_layouts (
   layout_version text NOT NULL,                        -- ex.: "H7815 v8.5 fev/2026" só após P-04
   encoding text NOT NULL, record_length integer,       -- NULL para OFX/CSV
   header_rules jsonb NOT NULL, segment_map jsonb NOT NULL, checksum_rules jsonb NOT NULL,
-  occurrence_map jsonb NOT NULL DEFAULT '{}',          -- código → semântica (P-20); por convênio quando scope='AGREEMENT'
+  occurrence_map jsonb NOT NULL DEFAULT '{}',          -- código → {semantic, canonical_date_field} (P-20); por convênio quando scope='AGREEMENT'
   csv_profile jsonb,                                   -- delimitador, decimal, data, timezone, sinal, colunas
-  strong_key_map jsonb NOT NULL DEFAULT '{}',          -- campo do layout → {kind: BANK_TX_ID|END_TO_END_ID, normalize: [...]} (§7.2); '{}' = nenhuma chave forte
+  strong_key_map jsonb NOT NULL DEFAULT '{}',          -- campo do layout → {kind: BANK_TX_ID|END_TO_END_ID, namespace, normalize: [...]} (§7.2); '{}' = nenhuma chave forte
   strong_key_evidence_ref text,                        -- referência da atestação de unicidade do banco (P-19), sem segredo
+  strong_key_equivalence_ref text,                     -- referência da atestação de equivalência entre canais (P-19): exigida quando algum namespace do mapa é compartilhado
   cobranca_key_normalization jsonb NOT NULL DEFAULT '{}', -- normalização de nossoNúmero (§7.2.1; P-20)
   reference_dataset_id uuid NOT NULL,
   validated_test_file_sha256 bytea CHECK (validated_test_file_sha256 IS NULL OR octet_length(validated_test_file_sha256)=32),
@@ -328,6 +375,7 @@ CREATE TABLE bank_file_layouts (
   approved_by uuid REFERENCES usuarios(id), created_by uuid NOT NULL REFERENCES usuarios(id),
   created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz,
   FOREIGN KEY (reference_dataset_id, provider_id) REFERENCES integration_reference_datasets (id, provider_id),   -- A-08
+  FOREIGN KEY (provider_id, provider_kind) REFERENCES integration_providers (id, kind),                         -- UNIQUE (id, kind) do E12 §4
   FOREIGN KEY (bank_agreement_id, company_id) REFERENCES bank_agreements (id, company_id),
   UNIQUE (id, provider_id),                                                                                     -- exigido pelo E12 r3 §3.13.7
   CHECK ((scope = 'AGREEMENT') = (bank_agreement_id IS NOT NULL)),
@@ -341,6 +389,10 @@ CREATE UNIQUE INDEX uq_layout_version ON bank_file_layouts
   WHERE deleted_at IS NULL;
 -- Serviço (E11-T02, com teste): provedor do convênio (bank_agreements→bank_accounts.provider_id) = provider_id do layout;
 -- layout APPROVED exige dataset APPROVED ou ACTIVE (A-08).
+-- Serviço (E11-T02, Zod, com teste): namespace de strong_key_map é 'LOCAL' (local ao canal: o núcleo grava 'LOCAL:<source_channel>',
+-- p.ex. 'LOCAL:OFX'; o índice único já inclui empresa e conta) ou 'SHARED:<rótulo da atestação>'; 'SHARED:*' exige
+-- strong_key_equivalence_ref não nulo; o rótulo vem da atestação P-19 (nunca escolhido pelo worker). occurrence_map: toda entrada
+-- declara semantic e canonical_date_field.
 
 -- ── Ligação capability FILE ↔ layout (E11-T02) — DDL literal do E12 r3 §3.13.3 ─
 CREATE TABLE bank_layout_capability_links (
@@ -422,9 +474,10 @@ CREATE TABLE bank_import_batches (
     REFERENCES integration_capabilities (id, company_id, environment, channel),   -- E12 r3 §3.13.3
   FOREIGN KEY (raw_payload_id, company_id, environment) REFERENCES bank_raw_payloads (id, company_id, environment),
   UNIQUE (company_id, environment, bank_account_id, service, sha256),           -- L1; XB-05/XB-14
-  UNIQUE (id, company_id, environment, bank_account_id),                        -- alvo da observação
-  UNIQUE (id, company_id),                                                      -- alvo de reconciliation_conflicts.subject_import_batch_id
+  UNIQUE (id, company_id, environment, bank_account_id),                        -- alvo da observação e de reconciliation_conflicts.subject_import_batch_id
+  UNIQUE (id, company_id),                                                      -- alvo genérico por empresa
   CHECK (reviewed_by IS NULL OR reviewed_by <> uploaded_by),                    -- segregação
+  CHECK (status NOT IN ('ACCEPTED','INGESTED') OR reviewed_by IS NOT NULL),     -- aceite só com revisor
   CHECK (environment = 'PROD' OR status NOT IN ('ACCEPTED','INGESTED'))         -- decisão 12
 );
 -- Serviço (E11-T07, com teste): capability FILE com status ENABLED (PROD) ou HML_TESTED (HML); capability pertence a linhagem
@@ -448,6 +501,7 @@ CREATE TABLE bank_source_observations (
   bank_tx_id text,                                     -- id do lançamento do banco, normalizado; FITID atestado entra aqui
   end_to_end_id text,                                  -- E2E Pix normalizado
   strong_key_source text CHECK (strong_key_source IN ('API_CONTRACT','MANIFEST_ATTESTED')),
+  strong_key_namespace text,                           -- namespace de bank_tx_id (§7.2 item 2): 'LOCAL:<source_channel>' ou 'SHARED:<rótulo>' atestado
   strong_key_source_field text,                        -- proveniência: 'FITID', nome do campo/coluna (nunca o valor bruto mascarado de outra coisa)
   -- referências de cobrança (canal-específicas; a chave canônica do evento fica em bank_cobranca_events)
   nosso_numero text, nosso_numero_canonical text, wallet text, occurrence_code text, occurrence_sequence_ref text,
@@ -467,11 +521,14 @@ CREATE TABLE bank_source_observations (
   UNIQUE (company_id, environment, bank_account_id, source_channel, source_event_key),   -- L2; replay idempotente
   UNIQUE (id, company_id), UNIQUE (id, company_id, bank_account_id),
   UNIQUE (id, company_id, environment, bank_account_id, source_channel),                 -- alvo dos links
+  UNIQUE (id, company_id, environment, bank_account_id),                                 -- alvo das origens/sujeitos PROD (fatos, eventos, períodos, candidatos, conflitos)
   CHECK ((strong_key_kind = 'NONE')          = (bank_tx_id IS NULL AND end_to_end_id IS NULL)),
   CHECK ((strong_key_kind = 'BANK_TX_ID')    = (bank_tx_id IS NOT NULL AND end_to_end_id IS NULL)),
   CHECK ((strong_key_kind = 'END_TO_END_ID') = (bank_tx_id IS NULL AND end_to_end_id IS NOT NULL)),
   CHECK ((strong_key_kind = 'BOTH')          = (bank_tx_id IS NOT NULL AND end_to_end_id IS NOT NULL)),
   CHECK ((strong_key_kind = 'NONE') = (strong_key_source IS NULL)),
+  CHECK ((bank_tx_id IS NULL) = (strong_key_namespace IS NULL)),
+  CHECK (strong_key_namespace IS NULL OR strong_key_namespace = 'LOCAL:' || source_channel OR strong_key_namespace LIKE 'SHARED:_%'),
   CHECK (bank_tx_id IS NULL OR (bank_tx_id = btrim(bank_tx_id) AND length(bank_tx_id) > 0)),
   CHECK (end_to_end_id IS NULL OR (end_to_end_id = btrim(end_to_end_id) AND length(end_to_end_id) > 0)),
   CHECK ((import_batch_id IS NULL) = (source_channel IN ('API','WEBHOOK'))),
@@ -487,39 +544,49 @@ CREATE TABLE bank_source_observations (
 CREATE TABLE bank_transactions (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   company_id uuid NOT NULL REFERENCES companies(id),
+  environment text NOT NULL DEFAULT 'PROD' CHECK (environment = 'PROD'),   -- garantia estrutural PROD, inclusive PENDING/CONFLICTED
   bank_account_id uuid NOT NULL,
-  transaction_type text NOT NULL CHECK (transaction_type IN ('PIX','TED','BOLETO_CREDITO','PAGAMENTO','TARIFA','TRANSFERENCIA','APLICACAO','RESGATE','ESTORNO','OUTRO')),  -- descritivo; NÃO compõe a chave forte
+  origin_observation_id uuid NOT NULL,                 -- observação que originou o fato (link STRONG_KEY ou ORIGIN_WEAK na mesma transação)
+  transaction_type text NOT NULL CHECK (transaction_type IN ('PIX','TED','BOLETO_CREDITO','PAGAMENTO','TARIFA','TRANSFERENCIA','APLICACAO','RESGATE','ESTORNO','OUTRO')),  -- descritivo; NÃO compõe a chave forte (C15)
   direction text NOT NULL CHECK (direction IN ('CREDIT','DEBIT')),
   amount numeric(15,2) NOT NULL CHECK (amount > 0),
   effective_date date NOT NULL,
-  bank_tx_id text, end_to_end_id text,                 -- chave forte canônica normalizada (§7.2); mesmas regras de forma da observação
+  bank_tx_id_namespace text, bank_tx_id text, end_to_end_id text,   -- chave forte canônica normalizada (§7.2); mesmas regras de forma da observação
   status text NOT NULL CHECK (status IN ('PENDING','CONFIRMED','CONFLICTED','REVERSED','SUPERSEDED')),
   superseded_by_id uuid, reverses_transaction_id uuid,
   confirmed_by uuid REFERENCES usuarios(id),          -- NULL quando confirmada por chave forte
   confirmed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (bank_account_id, company_id) REFERENCES bank_accounts (id, company_id),
+  FOREIGN KEY (origin_observation_id, company_id, environment, bank_account_id)
+    REFERENCES bank_source_observations (id, company_id, environment, bank_account_id),   -- observação HML nunca origina fato
   FOREIGN KEY (superseded_by_id, company_id, bank_account_id) REFERENCES bank_transactions (id, company_id, bank_account_id),
   FOREIGN KEY (reverses_transaction_id, company_id, bank_account_id) REFERENCES bank_transactions (id, company_id, bank_account_id),
   UNIQUE (id, company_id), UNIQUE (id, company_id, bank_account_id),
+  UNIQUE (origin_observation_id),                      -- uma observação origina no máximo um fato
   CHECK ((status = 'SUPERSEDED') = (superseded_by_id IS NOT NULL)),
+  CHECK ((bank_tx_id IS NULL) = (bank_tx_id_namespace IS NULL)),
   CHECK (bank_tx_id IS NULL OR (bank_tx_id = btrim(bank_tx_id) AND length(bank_tx_id) > 0)),
   CHECK (end_to_end_id IS NULL OR (end_to_end_id = btrim(end_to_end_id) AND length(end_to_end_id) > 0)),
-  CHECK (status <> 'CONFIRMED' OR bank_tx_id IS NOT NULL OR end_to_end_id IS NOT NULL OR confirmed_by IS NOT NULL)
+  CHECK (status <> 'PENDING' OR (bank_tx_id IS NULL AND end_to_end_id IS NULL)),       -- PENDING = sem chave forte
+  CHECK (status <> 'CONFIRMED' OR bank_tx_id IS NOT NULL OR end_to_end_id IS NOT NULL OR confirmed_by IS NOT NULL),
+  CHECK ((confirmed_by IS NULL) = (confirmed_at IS NULL))
 );
-CREATE UNIQUE INDEX uq_bank_tx_bank_id ON bank_transactions (company_id, bank_account_id, bank_tx_id)
+CREATE UNIQUE INDEX uq_bank_tx_bank_id ON bank_transactions (company_id, bank_account_id, bank_tx_id_namespace, bank_tx_id)
   WHERE bank_tx_id IS NOT NULL AND status <> 'SUPERSEDED';
 CREATE UNIQUE INDEX uq_bank_tx_e2e ON bank_transactions (company_id, bank_account_id, end_to_end_id)
   WHERE end_to_end_id IS NOT NULL AND status <> 'SUPERSEDED';
--- Mutação permitida em linha existente (serviço, auditada): status, superseded_by_id, confirmed_*; e preencher bank_tx_id/end_to_end_id
--- NULL com o valor de uma observação que casou pela outra chave (nunca trocar valor não nulo).
+-- Mutação permitida em linha existente (serviço, auditada): status, superseded_by_id, confirmed_*; e preencher bank_tx_id_namespace+bank_tx_id
+-- (juntos) ou end_to_end_id NULL com o valor de uma observação que casou pela outra chave (nunca trocar valor não nulo).
+-- Status CONFLICTED = fato criado por chave forte inédita sem prova de equivalência com fato de outro canal (§7.2 item 4d); nunca aloca.
 
 -- ── Conflitos (E07) ─────────────────────────────────────────────────────────
 CREATE TABLE reconciliation_conflicts (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   company_id uuid NOT NULL REFERENCES companies(id),
+  environment text NOT NULL DEFAULT 'PROD' CHECK (environment = 'PROD'),   -- conflito só de dado PROD; HML para no lote (rejection_reason)
   bank_account_id uuid NOT NULL,
-  conflict_kind text NOT NULL CHECK (conflict_kind IN ('POSSIBLE_DUPLICATE_WEAK','SOURCE_DISAGREEMENT','BALANCE_MISMATCH','CORROBORATION_PENDING','RECTIFICATION','ACCOUNT_MISMATCH','OVERLAPPING_PERIOD','UNMAPPED_OCCURRENCE','EXTERNAL_STATE_UNCERTAIN')),
+  conflict_kind text NOT NULL CHECK (conflict_kind IN ('POSSIBLE_DUPLICATE_WEAK','SOURCE_DISAGREEMENT','BALANCE_MISMATCH','CORROBORATION_PENDING','CONFIRMATION_REQUIRED','RECTIFICATION','ACCOUNT_MISMATCH','OVERLAPPING_PERIOD','UNMAPPED_OCCURRENCE','EXTERNAL_STATE_UNCERTAIN')),
   subject_transaction_id uuid, subject_cobranca_event_id uuid, subject_observation_id uuid,
   subject_import_batch_id uuid,                        -- ACCOUNT_MISMATCH de lote rejeitado (XB-13) não tem observação
   status text NOT NULL CHECK (status IN ('OPEN','IN_REVIEW','RESOLVED_SAME','RESOLVED_DISTINCT','RESOLVED_REJECTED')),
@@ -528,11 +595,16 @@ CREATE TABLE reconciliation_conflicts (
   created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (bank_account_id, company_id) REFERENCES bank_accounts (id, company_id),
   FOREIGN KEY (subject_transaction_id, company_id, bank_account_id) REFERENCES bank_transactions (id, company_id, bank_account_id),
-  FOREIGN KEY (subject_observation_id, company_id, bank_account_id) REFERENCES bank_source_observations (id, company_id, bank_account_id),
-  -- (subject_cobranca_event_id, company_id, bank_account_id) → bank_cobranca_events: declarada no Drizzle (referência adiante, mesma migration)
-  -- (subject_import_batch_id, company_id) → bank_import_batches(id, company_id): idem; bank_import_batches declara UNIQUE (id, company_id)
+  FOREIGN KEY (subject_observation_id, company_id, environment, bank_account_id)
+    REFERENCES bank_source_observations (id, company_id, environment, bank_account_id),
+  FOREIGN KEY (subject_import_batch_id, company_id, environment, bank_account_id)
+    REFERENCES bank_import_batches (id, company_id, environment, bank_account_id),          -- inline: a tabela de lotes vem antes
+  -- (subject_cobranca_event_id, company_id, bank_account_id) → bank_cobranca_events: declarada no Drizzle (referência adiante legítima:
+  -- bank_cobranca_events referencia esta tabela por distinct_conflict_id, ciclo resolvido na mesma migration)
   UNIQUE (id, company_id),
   CHECK (num_nonnulls(subject_transaction_id, subject_cobranca_event_id, subject_observation_id, subject_import_batch_id) >= 1),
+  CHECK (conflict_kind <> 'CONFIRMATION_REQUIRED' OR (subject_transaction_id IS NOT NULL AND status <> 'RESOLVED_REJECTED')),
+  CHECK (conflict_kind <> 'CORROBORATION_PENDING' OR (subject_transaction_id IS NOT NULL AND subject_cobranca_event_id IS NOT NULL)),
   CHECK (status IN ('OPEN','IN_REVIEW') OR (resolved_by IS NOT NULL AND resolution_justification IS NOT NULL))
 );
 
@@ -543,34 +615,49 @@ CREATE TABLE bank_transaction_observation_links (     -- E07; só observação P
   bank_account_id uuid NOT NULL,
   source_channel text NOT NULL,
   transaction_id uuid NOT NULL, observation_id uuid NOT NULL,
-  link_basis text NOT NULL CHECK (link_basis IN ('STRONG_KEY','HUMAN_DECISION','RECTIFICATION')),
+  link_basis text NOT NULL CHECK (link_basis IN ('STRONG_KEY','ORIGIN_WEAK','HUMAN_DECISION','RECTIFICATION')),
   decided_by uuid REFERENCES usuarios(id), conflict_id uuid,
   valid_from timestamptz NOT NULL DEFAULT now(), valid_to timestamptz,  -- única mutação: fechar valid_to por decisão auditada
+  created_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (transaction_id, company_id, bank_account_id) REFERENCES bank_transactions (id, company_id, bank_account_id),
   FOREIGN KEY (observation_id, company_id, environment, bank_account_id, source_channel)
     REFERENCES bank_source_observations (id, company_id, environment, bank_account_id, source_channel),
   FOREIGN KEY (conflict_id, company_id) REFERENCES reconciliation_conflicts (id, company_id),
-  CHECK (link_basis = 'STRONG_KEY' OR (decided_by IS NOT NULL AND conflict_id IS NOT NULL))
+  CHECK (link_basis NOT IN ('STRONG_KEY','ORIGIN_WEAK') OR (decided_by IS NULL AND conflict_id IS NULL)),   -- automáticos: sem decisor
+  CHECK (link_basis IN ('STRONG_KEY','ORIGIN_WEAK') OR (decided_by IS NOT NULL AND conflict_id IS NOT NULL))
 );
 CREATE UNIQUE INDEX uq_obs_link_active ON bank_transaction_observation_links (observation_id) WHERE valid_to IS NULL;
+-- ORIGIN_WEAK: ligação da observação de origem (strong_key_kind='NONE') ao fato PENDING que ela criou, na mesma transação
+-- (= bank_transactions.origin_observation_id). Serviço (E07/E11-T01, com teste): ORIGIN_WEAK só para observação sem chave forte
+-- e só para o fato cujo origin_observation_id é a própria observação; RESOLVED_SAME fecha valid_to do ORIGIN_WEAK e cria
+-- HUMAN_DECISION para o fato escolhido (o PENDING vira SUPERSEDED); a proveniência V04 mostra as duas linhas.
 
 -- ── Evento de cobrança (E07) — chave canônica entre canais (§7.2.1) ─────────
 CREATE TABLE bank_cobranca_events (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   company_id uuid NOT NULL REFERENCES companies(id),
+  environment text NOT NULL DEFAULT 'PROD' CHECK (environment = 'PROD'),
   bank_account_id uuid NOT NULL, bank_agreement_id uuid NOT NULL,
-  wallet text NOT NULL, nosso_numero_canonical text NOT NULL,
+  origin_observation_id uuid NOT NULL,                 -- observação que originou o evento (link STRONG_KEY na mesma transação)
+  wallet text NOT NULL,                                -- derivada do convênio (FK abaixo), nunca lida do canal
+  nosso_numero_canonical text NOT NULL,
   occurrence_semantic text NOT NULL CHECK (occurrence_semantic IN ('REGISTERED','REJECTED','LIQUIDATED','WRITTEN_OFF','CANCELLED','CHANGED','FEE','DISCOUNT_REBATE','PROTEST','UNMAPPED')),
-  occurrence_date date NOT NULL,
+  occurrence_date date NOT NULL,                       -- data canônica = campo canonical_date_field do mapa P-20 para a semântica (§7.2.1 item 2)
   amount_paid numeric(15,2), fee_amount numeric(15,2), credit_date date,
   distinct_seq smallint NOT NULL DEFAULT 0 CHECK (distinct_seq >= 0),   -- > 0 só por conflito RESOLVED_DISTINCT
   distinct_conflict_id uuid,
   status text NOT NULL CHECK (status IN ('RECORDED','CONFLICTED','REVERSED')),
   created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (bank_agreement_id, bank_account_id, company_id) REFERENCES bank_agreements (id, bank_account_id, company_id),
+  FOREIGN KEY (bank_agreement_id, bank_account_id, company_id, wallet)
+    REFERENCES bank_agreements (id, bank_account_id, company_id, carteira),          -- derivação da carteira (E06-T01 declara o UNIQUE, §5.3)
+  FOREIGN KEY (origin_observation_id, company_id, environment, bank_account_id)
+    REFERENCES bank_source_observations (id, company_id, environment, bank_account_id),
   FOREIGN KEY (distinct_conflict_id, company_id) REFERENCES reconciliation_conflicts (id, company_id),
   UNIQUE (id, company_id), UNIQUE (id, company_id, bank_account_id),
+  UNIQUE (origin_observation_id),
   CHECK ((distinct_seq = 0) = (distinct_conflict_id IS NULL)),
+  CHECK (wallet = btrim(wallet) AND length(wallet) > 0),
   CHECK (nosso_numero_canonical = btrim(nosso_numero_canonical) AND length(nosso_numero_canonical) > 0),
   CHECK (occurrence_semantic <> 'UNMAPPED' OR status = 'CONFLICTED')   -- ocorrência sem mapa nunca produz efeito
 );
@@ -625,38 +712,48 @@ CREATE UNIQUE INDEX uq_econ_link_cob ON bank_economic_links (cobranca_event_id) 
 CREATE TABLE bank_statement_periods (                 -- E07; só PROD
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   company_id uuid NOT NULL REFERENCES companies(id),
+  environment text NOT NULL DEFAULT 'PROD' CHECK (environment = 'PROD'),
   bank_account_id uuid NOT NULL,
   source_channel text NOT NULL CHECK (source_channel IN ('API','CNAB240','CNAB400','OFX','CSV')),
   period_start date NOT NULL, period_end date NOT NULL,
   opening_balance numeric(15,2), closing_balance numeric(15,2), movements_sum numeric(15,2) NOT NULL,
   opening_observation_id uuid, closing_observation_id uuid,
   completeness text NOT NULL CHECK (completeness IN ('PARTIAL','COMPLETE','INCONSISTENT')),
-  created_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (bank_account_id, company_id) REFERENCES bank_accounts (id, company_id),
-  FOREIGN KEY (opening_observation_id, company_id, bank_account_id) REFERENCES bank_source_observations (id, company_id, bank_account_id),
-  FOREIGN KEY (closing_observation_id, company_id, bank_account_id) REFERENCES bank_source_observations (id, company_id, bank_account_id),
+  FOREIGN KEY (opening_observation_id, company_id, environment, bank_account_id)
+    REFERENCES bank_source_observations (id, company_id, environment, bank_account_id),
+  FOREIGN KEY (closing_observation_id, company_id, environment, bank_account_id)
+    REFERENCES bank_source_observations (id, company_id, environment, bank_account_id),
   UNIQUE (company_id, bank_account_id, source_channel, period_start, period_end),
   CHECK (period_end >= period_start),
   CHECK (completeness <> 'COMPLETE' OR (opening_balance IS NOT NULL AND closing_balance IS NOT NULL
-         AND opening_balance + movements_sum = closing_balance))           -- XB-09
+         AND opening_observation_id IS NOT NULL AND closing_observation_id IS NOT NULL
+         AND opening_balance + movements_sum = closing_balance))           -- XB-09; COMPLETE só com saldos observados em PROD
 );
+-- PARTIAL/INCONSISTENT sem observação de saldo: o serviço só soma movimentos de bank_transactions (environment='PROD' por CHECK).
 
 CREATE TABLE bank_match_candidates (                  -- E07; chave fraca → só sugestão
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   company_id uuid NOT NULL REFERENCES companies(id),
+  environment text NOT NULL DEFAULT 'PROD' CHECK (environment = 'PROD'),
+  bank_account_id uuid NOT NULL,
   observation_id uuid NOT NULL,
   candidate_transaction_id uuid, candidate_cobranca_event_id uuid,
   conflict_id uuid,
   matched_fields text[] NOT NULL,                      -- explicação exibida em V03
   status text NOT NULL CHECK (status IN ('SUGGESTED','ACCEPTED','REJECTED')),
   decided_by uuid REFERENCES usuarios(id), decided_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  FOREIGN KEY (observation_id, company_id) REFERENCES bank_source_observations (id, company_id),
-  FOREIGN KEY (candidate_transaction_id, company_id) REFERENCES bank_transactions (id, company_id),
-  FOREIGN KEY (candidate_cobranca_event_id, company_id) REFERENCES bank_cobranca_events (id, company_id),
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY (bank_account_id, company_id) REFERENCES bank_accounts (id, company_id),
+  FOREIGN KEY (observation_id, company_id, environment, bank_account_id)
+    REFERENCES bank_source_observations (id, company_id, environment, bank_account_id),
+  FOREIGN KEY (candidate_transaction_id, company_id, bank_account_id) REFERENCES bank_transactions (id, company_id, bank_account_id),
+  FOREIGN KEY (candidate_cobranca_event_id, company_id, bank_account_id) REFERENCES bank_cobranca_events (id, company_id, bank_account_id),
   FOREIGN KEY (conflict_id, company_id) REFERENCES reconciliation_conflicts (id, company_id),
   CHECK (num_nonnulls(candidate_transaction_id, candidate_cobranca_event_id) = 1),
-  CHECK (status = 'SUGGESTED' OR decided_by IS NOT NULL)                    -- nunca aceito automaticamente
+  CHECK (conflict_id IS NOT NULL),                                          -- todo candidato pertence a um conflito decidível em V03
+  CHECK (status = 'SUGGESTED' OR (decided_by IS NOT NULL AND decided_at IS NOT NULL))   -- nunca aceito automaticamente
 );
 
 -- ── Alocação (E07-T02/T03; motor único) — após E04-T02/E05-T02 (D-E0405) ────
@@ -690,7 +787,9 @@ CREATE UNIQUE INDEX uq_alloc_active ON reconciliation_allocations
    COALESCE(payable_installment_id, receivable_installment_id), allocation_kind) WHERE status = 'ACTIVE';
 -- Σ(amount ACTIVE) ≤ valor da fonte: validado no serviço sob SELECT … FOR UPDATE da fonte (RNF-B03), com teste concorrente.
 -- Fonte só aloca se bank_transactions.status='CONFIRMED' ou cobrança LIQUIDATED (status RECORDED) com PRM-B01 = true.
--- Crédito com bank_economic_links ativo para cobrança já alocada NÃO recebe nova alocação (XB-02/Exemplo B).
+-- Regra simétrica R-CORR (§7.2.2): fonte com bank_economic_links ativo cuja contraparte tem alocação ACTIVE, ou sujeito de
+-- CORROBORATION_PENDING OPEN/IN_REVIEW cuja contraparte tem alocação ACTIVE, NÃO recebe alocação automática — vale para crédito
+-- e para liquidação, nas duas ordens de chegada; verificação sob FOR UPDATE das duas fontes em ordem de id.
 
 -- ── Remessa (E11-T06) — após E06-T02 ────────────────────────────────────────
 CREATE TABLE bank_remittance_batches (
@@ -754,7 +853,7 @@ CREATE TABLE bank_channel_routing_policies (
   contract_version_hash bytea NOT NULL CHECK (octet_length(contract_version_hash) = 32),
   effective_from timestamptz NOT NULL, effective_to timestamptz,
   changed_by uuid NOT NULL REFERENCES usuarios(id), approved_by uuid REFERENCES usuarios(id),
-  created_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
   FOREIGN KEY (bank_account_id, company_id) REFERENCES bank_accounts (id, company_id),
   FOREIGN KEY (bank_agreement_id, bank_account_id, company_id) REFERENCES bank_agreements (id, bank_account_id, company_id),
   FOREIGN KEY (api_capability_id, company_id, environment, api_capability_channel)
@@ -774,15 +873,21 @@ CREATE UNIQUE INDEX uq_routing_active ON bank_channel_routing_policies
 |---|---|---|---|
 | `bank_cobranca_events.collection_instruction_id` → `bank_collection_instructions(id, company_id)` | tabela E06-T02 é criada depois de E11-T01 | E06-T02, migration expand (coluna + FK juntas) | E06-T02 "evento de cobrança de instrução de outra empresa → violação de FK" |
 | `bank_remittance_items.payment_instruction_id` | depende de E06-T04 e P-06 | task que habilitar `REMESSA_PAGAMENTO` | EX-C (§11.1) |
-| `reconciliation_conflicts.subject_cobranca_event_id`/`subject_import_batch_id` | referência adiante na mesma migration | Drizzle `foreignKey()` (drizzle-kit gera a constraint) | E11-T01 "conflito sem nenhum sujeito → violação de CHECK" |
+| `reconciliation_conflicts.subject_cobranca_event_id` | referência adiante legítima (ciclo com `bank_cobranca_events.distinct_conflict_id`, mesma migration); `subject_import_batch_id` passou a FK inline | Drizzle `foreignKey()` (drizzle-kit gera a constraint) | E11-T01 "conflito sem nenhum sujeito → violação de CHECK"; "conflito com evento de cobrança de outra conta → violação de FK"; "conflito com lote HML → violação de FK (ambiente)" |
 | `bank_source_observations.job_run_id`: empresa/ambiente do run | contrato E12 r3 fixa FK simples para `integration_job_runs(id)` | `ObservacaoBancariaPort.registrar` compara `run.company_id`/`run.environment` | E11-T01 "observação com run de outra empresa → 422" |
 | layout × convênio × provedor; layout × capability; batch.service × capability | FK não cruza `bank_agreements→bank_accounts.provider_id` nem `integration_capabilities.capability` | `LayoutsService.vincular` (E11-T02), `UploadService` (E11-T07) | E11-T02 "layout de outro banco → 422"; E11-T07 "serviço do lote ≠ capability → 422" |
+| namespace `SHARED:*` × atestação de equivalência; `canonical_date_field` no mapa de ocorrências | conteúdo JSONB | `LayoutsService` (Zod, E11-T02); registro do contrato API (E06-T02/T03) | E11-T02 "`strong_key_map` com namespace SHARED sem `strong_key_equivalence_ref` → 422"; "entrada de `occurrence_map` sem `canonical_date_field` → 422" |
+| `ORIGIN_WEAK` só para observação sem chave forte e para o fato que ela originou | cruza `bank_source_observations.strong_key_kind` e `bank_transactions.origin_observation_id` | `NucleoCanonicoService` (E11-T01) | E11-T01 "link ORIGIN_WEAK de observação com chave forte → 422"; "link ORIGIN_WEAK com `decided_by` → violação de CHECK"; "link HUMAN_DECISION sem `conflict_id` → violação de CHECK" |
+| todo `PENDING`/`CONFLICTED` tem conflito aberto | invariante entre tabelas | `NucleoCanonicoService` na mesma transação; E07-T04 recusa fechamento com `PENDING`/`CONFLICTED` no período | E11-T01 "PENDING sem candidato ⇒ CONFIRMATION_REQUIRED na mesma transação"; E07-T04 "PENDING aberto bloqueia fechamento" |
+| garantia PROD de fatos, eventos, períodos, candidatos e conflitos | — (estrutural) | `environment='PROD'` por CHECK + FK com ambiente para a observação | E11-T01 "fato PENDING com observação de origem HML → violação de FK"; "candidato com observação HML → violação de FK"; "período com observação de saldo HML → violação de FK"; "evento de cobrança com origem HML → violação de FK" |
+| conta de candidato, provedor `BANK` do layout, revisor do lote | — (estrutural) | FKs compostas e CHECK de §5.2 | E07-T02 "candidato com fato de outra conta → violação de FK"; E11-T02 "layout de provedor FISCAL → violação de FK `(provider_id, provider_kind)`"; E11-T07 "lote ACCEPTED sem `reviewed_by` → violação de CHECK" |
+| carteira do evento de cobrança | — (estrutural) | FK `(bank_agreement_id, bank_account_id, company_id, wallet)` | E11-T04 "evento com carteira diferente da do convênio → violação de FK"; "observação com carteira informada ≠ convênio → `SOURCE_DISAGREEMENT`, sem evento" |
 | routing `service_family` × capability | idem | `RoteamentoService` (E11-T08) | E11-T08 "capability FILE de outra família → 422" |
-| Σ alocado ≤ fonte; Σ líquido do vínculo econômico | agregação | E07 sob lock | E07-T03 concorrência; EX-B1 |
+| Σ alocado ≤ fonte; Σ líquido do vínculo econômico; regra simétrica R-CORR | agregação / estado de dois agregados | E07 sob lock das duas fontes | E07-T03 concorrência; EX-B1; XB-03a..f |
 
 ### 5.3 Restrições exigidas das tabelas externas (contrato que os planos E01/E04/E05/E06/E09 devem honrar)
 - E01-T01: `establishments UNIQUE (id, company_id)` (D-E01; igual ao E12 r3).
-- E06-T01: `bank_accounts.provider_id NOT NULL REFERENCES integration_providers(id)`, `UNIQUE (id, company_id)`, `UNIQUE (id, company_id, provider_id)`; `bank_agreements UNIQUE (id, company_id)`, `UNIQUE (id, bank_account_id, company_id)` (E12 r3 §3.13.7); `bank_integration_links` com a DDL de §5.1 e `ContaBancariaVinculoPort`.
+- E06-T01: `bank_accounts.provider_id NOT NULL REFERENCES integration_providers(id)`, `UNIQUE (id, company_id)`, `UNIQUE (id, company_id, provider_id)`; `bank_agreements UNIQUE (id, company_id)`, `UNIQUE (id, bank_account_id, company_id)` (E12 r3 §3.13.7); acréscimo deste plano (não altera o contrato E12): `bank_agreements.carteira text NOT NULL` e `UNIQUE (id, bank_account_id, company_id, carteira)`, alvo da derivação de `bank_cobranca_events.wallet`; `bank_integration_links` com a DDL de §5.1 e `ContaBancariaVinculoPort`.
 - E06-T02/T04: `bank_collection_instructions UNIQUE (id, company_id)`; `bank_payment_instructions UNIQUE (id, company_id)`.
 - E04-T02/E05-T02: `payable_installments UNIQUE (id, company_id)`, `receivable_installments UNIQUE (id, company_id)`; saldo da parcela nunca negativo (CHECK + serviço sob lock).
 - Baixa AP/AR: `UNIQUE (source_economic_event_id, allocation_id)` onde `source_economic_event_id` = id da `bank_transactions` ou do `bank_cobranca_events` de origem; FK `(allocation_id, company_id)` → `reconciliation_allocations(id, company_id)`; estorno = linha compensatória com `reverses_settlement_id`, nunca DELETE/UPDATE de valor.
@@ -800,12 +905,15 @@ CREATE TABLE domain_outbox_events (
   payload jsonb NOT NULL,                              -- sem segredo/payload bruto; dinheiro em string
   occurred_at timestamptz NOT NULL DEFAULT now(), published_at timestamptz,
   attempts integer NOT NULL DEFAULT 0, last_error_code text,
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (event_type, aggregate_id, dedupe_key)
 );
 CREATE INDEX ix_outbox_pending ON domain_outbox_events (company_id, occurred_at) WHERE published_at IS NULL;
-CREATE TABLE domain_inbox_receipts (
+CREATE TABLE domain_inbox_receipts (                   -- append-only
+  id uuid PRIMARY KEY DEFAULT uuidv7(),                -- convenção L12; a deduplicação é o UNIQUE abaixo
   consumer text NOT NULL, event_id uuid NOT NULL REFERENCES domain_outbox_events(id),
-  processed_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (consumer, event_id)
+  processed_at timestamptz NOT NULL DEFAULT now(), created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (consumer, event_id)                          -- reentrega do mesmo evento ao mesmo consumidor → ON CONFLICT DO NOTHING
 );
 ```
 Regras (alinhadas ao E12 r3 §3.13.5): (1) a linha de outbox é gravada **na mesma transação** da mutação de negócio; (2) dispatcher pós-commit publica no `EventEmitter` e preenche `published_at`; (3) varredura periódica = operação `DOMAIN_OUTBOX_RELAY`, **uma** `integration_job_definitions` por empresa ativa (sem linhagem, `concurrency_key='DOMAIN_OUTBOX_RELAY'`, `schedule_type='INTERVAL'`, sem grant), registrada e agendada por E12-T09 com handler do E11-T01 que publica só as linhas da empresa do job; antes de E12-T09, varredura ao boot; (4) consumidor grava `domain_inbox_receipts` na transação do efeito → reentrega não duplica (inclui o consumidor E12 `integracoes.saude` de `canal_bancario_modo_alterado`); (5) eventos E12 **não** passam por este outbox; (6) eventos operacionais não financeiros já existentes continuam no padrão atual (`eventEmitter.emit` pós-commit), fora do escopo da expansão bancária.
@@ -887,36 +995,43 @@ Assinaturas da matriz (aceite ALP-160): TI — Pendente P-16; Karina/tesouraria 
 |---|---|---|---|
 | L1 Lote | `(company_id, environment, bank_account_id, service, sha256)` | `INSERT … ON CONFLICT DO NOTHING RETURNING`; repetição devolve o lote existente com HTTP 200 e zero movimentos novos | XB-05, XB-14, EX-D1 |
 | L2 Observação | `(company_id, environment, bank_account_id, source_channel, source_event_key)` | replay do mesmo arquivo/resposta não cria observação | XB-12 |
-| L3 Fato forte | `uq_bank_tx_bank_id` / `uq_bank_tx_e2e` (sem `transaction_type`) | observação com `bank_tx_id` ou `end_to_end_id` já existente na conta → só link | XB-01, XB-04, EX-A1 |
+| L3 Fato forte | `uq_bank_tx_bank_id` (empresa+conta+namespace+`bank_tx_id`) / `uq_bank_tx_e2e` (sem `transaction_type`) | observação com chave já existente no mesmo namespace (ou E2E) na conta → só link; chave inédita com candidato de outro canal → `CONFLICTED`, nunca segundo `CONFIRMED` | XB-01, XB-04, EX-A1, EX-A2 |
 | L4 Evento de cobrança | `uq_cob_event_unico` / `uq_cob_event_repetivel` + `uq_cob_obs_canal` | API/webhook + retorno CNAB do mesmo evento → um evento, uma observação por canal | XB-02 |
-| L5 Corroboração | `uq_econ_link_cob` + soma líquida | crédito do extrato ligado à liquidação já alocada não recebe nova alocação | XB-02, XB-03, EX-B1 |
+| L5 Corroboração | `uq_econ_link_cob` + soma líquida + regra simétrica R-CORR (§7.2.2) | enquanto liquidação e crédito correlacionados tiverem corroboração aberta (ou vínculo econômico ativo), o lado ainda não alocado não aloca automaticamente, em qualquer ordem de chegada | XB-02, XB-03a..f, EX-B1 |
 | L6 Alocação/baixa | `uq_alloc_active` + `UNIQUE(source_economic_event_id, allocation_id)` | baixa única; Σ alocado ≤ fonte sob lock | XB-10 |
 | L7 Razão | `UNIQUE(company_id, source_event_id, entry_type)` | um lançamento por evento e tipo | XB-01b, XB-10, EX-A1, EX-B1 |
-| L8 Outbox/inbox | `UNIQUE(event_type, aggregate_id, dedupe_key)` / `PK(consumer, event_id)` | reentrega não duplica efeito | fault injection |
+| L8 Outbox/inbox | `UNIQUE(event_type, aggregate_id, dedupe_key)` / `UNIQUE(consumer, event_id)` | reentrega não duplica efeito | fault injection |
 | L9 HTTP | `Idempotency-Key` nos POST críticos (RNF-B07): mesmo payload → resposta original; payload diferente → 409 | upload, aprovar lote, decidir conflito, exportar remessa, mudar modo | XB-14 |
 | L10 Remessa | `(company_id, environment, bank_agreement_id, service, sequence_number)` + bloqueio de instrução já exportada | nunca dois arquivos com a mesma instrução aberta | XB-07, XB-08, EX-C |
 
 ### 7.2 Identidade forte de lançamento (ordem do doc 11 §2.1; doc 12 §3 "identificador único bancário/EndToEndId validado")
-1. Chave forte canônica = `empresa + conta + bank_tx_id` **ou** `empresa + conta + end_to_end_id`, com valores **normalizados**. `transaction_type` não compõe a chave (API pode classificar como `PIX` e o OFX como `OUTRO` para o mesmo lançamento — XB-01).
-2. Origem da chave: API → só campos que o contrato OpenAPI registrado (dataset `BANK_OPENAPI`) atesta como únicos (`strong_key_source='API_CONTRACT'`); arquivo → só campos de `bank_file_layouts.strong_key_map` do manifesto `APPROVED` com `strong_key_evidence_ref` (`'MANIFEST_ATTESTED'`). **FITID atestado = ID bancário**: o manifesto mapeia `FITID → {kind: BANK_TX_ID}` só quando a atestação P-19 do banco afirmar que o FITID é o identificador do lançamento; sem atestação, `strong_key_kind='NONE'`. CHECKs garantem `kind ∈ {BANK_TX_ID, END_TO_END_ID, BOTH, NONE}` e `NONE ⇔ ambas as colunas NULL`.
-3. Normalização: operações de um conjunto fechado validado por Zod (`TRIM`, `UPPER`, `DIGITS_ONLY`, `STRIP_LEADING_ZEROS`), declaradas por campo no `strong_key_map` (arquivo) ou no registro do contrato API (E06); a escolha por banco/layout é evidência P-19, nunca suposição. Fixtures de teste usam manifesto sintético.
-4. Resolução no núcleo (uma transação): procura por `bank_tx_id` e por `end_to_end_id`. (a) Nenhum → novo fato `CONFIRMED`. (b) Um fato encontrado e `amount`/`direction`/`effective_date` iguais → link `STRONG_KEY`; coluna de chave nula do fato é preenchida com a da observação. (c) Encontrado com valor/direção/data diferente, ou as duas chaves apontam fatos diferentes → nenhum link; conflito `SOURCE_DISAGREEMENT` com `subject_observation_id` e `subject_transaction_id`.
-5. Documental = SHA-256 do lote; `lote+índice+tipo` = observação. Mesmo conteúdo com nome diferente = reimportação idempotente; arquivo diferente com os mesmos eventos = proveniência separada ligada ao mesmo fato pela chave forte.
-6. Sem chave forte: observação cria `bank_transactions` `PENDING` + `bank_match_candidates` (`matched_fields` explicados) + `reconciliation_conflicts` `POSSIBLE_DUPLICATE_WEAK` quando houver candidato. `PENDING` nunca aloca, nunca baixa, nunca lança. Decisão humana em V03: `RESOLVED_SAME` → link da observação ao fato existente (`HUMAN_DECISION`) e o `PENDING` vira `SUPERSEDED`; `RESOLVED_DISTINCT` → `PENDING` vira `CONFIRMED` com `confirmed_by`.
+1. Chave forte canônica = `empresa + conta + bank_tx_id_namespace + bank_tx_id` **ou** `empresa + conta + end_to_end_id`, com valores **normalizados**. `transaction_type` não compõe a chave (API pode classificar como `PIX` e o OFX como `OUTRO` para o mesmo lançamento — XB-01; conflito de fonte C15). O "tipo" das fontes é o tipo do identificador (`strong_key_kind` + namespace).
+2. Origem e namespace da chave: API → só campos que o contrato OpenAPI registrado (dataset `BANK_OPENAPI`) atesta como únicos (`strong_key_source='API_CONTRACT'`); arquivo → só campos de `bank_file_layouts.strong_key_map` do manifesto `APPROVED` com `strong_key_evidence_ref` (`'MANIFEST_ATTESTED'`). Unicidade dentro de um canal **não** prova identidade entre canais: todo `bank_tx_id` é gravado com um namespace — `LOCAL:<source_channel>` por padrão, ou `SHARED:<rótulo>` somente quando a **atestação de equivalência entre canais** (P-19: o banco atesta que o campo do arquivo, p.ex. o FITID, carrega o mesmo identificador que o campo da API) estiver referenciada em `bank_file_layouts.strong_key_equivalence_ref` **e** no registro do contrato API do E06 com o mesmo rótulo. Sem atestação de unicidade, `strong_key_kind='NONE'`; sem atestação de equivalência, o namespace é local e a chave só deduplica dentro do mesmo canal. `end_to_end_id` é o identificador do arranjo Pix e não tem namespace por canal; a atestação P-19 prova apenas que o campo do canal carrega o E2E. CHECKs garantem `kind ∈ {BANK_TX_ID, END_TO_END_ID, BOTH, NONE}`, `NONE ⇔ ambas as colunas NULL` e `bank_tx_id ⇔ namespace`.
+3. Normalização: operações de um conjunto fechado validado por Zod (`TRIM`, `UPPER`, `DIGITS_ONLY`, `STRIP_LEADING_ZEROS`), declaradas por campo no `strong_key_map` (arquivo) ou no registro do contrato API (E06); a escolha por banco/layout é evidência P-19, nunca suposição. Fixtures de teste usam manifesto sintético (inclusive o rótulo `SHARED:*` e a referência de equivalência, ambos fictícios e marcados como fixture).
+4. Resolução no núcleo (uma transação; busca por `(namespace, bank_tx_id)` e por `end_to_end_id` em `bank_transactions` não `SUPERSEDED` **e** em observações com link ativo, para achar o fato de uma chave que só existe na proveniência). (a) Nenhum fato pela chave **e** nenhum candidato de outro canal (item 4d) → novo fato `CONFIRMED` + link `STRONG_KEY` (origem). (b) Um fato encontrado e `amount`/`direction`/`effective_date` iguais → link `STRONG_KEY`; coluna de chave nula do fato é preenchida com a da observação. (c) Encontrado com valor/direção/data diferente, ou as duas chaves apontam fatos diferentes → nenhum link nem fato; conflito `SOURCE_DISAGREEMENT` com `subject_observation_id` e `subject_transaction_id`. (d) Nenhum fato pela chave, mas existe na mesma conta fato não `SUPERSEDED`/`REVERSED` de **outro** `source_channel` (pela observação de origem e pelos links ativos), sem chave no mesmo namespace (ou sem E2E, quando a observação traz E2E) e com `direction`, `amount` e `effective_date` iguais → novo fato **`CONFLICTED`** (com a chave da observação e link `STRONG_KEY` de origem) + `bank_match_candidates` (`candidate_transaction_id` = fato existente) + conflito `POSSIBLE_DUPLICATE_WEAK` (`subject_transaction_id` = o novo fato `CONFLICTED`, `subject_observation_id` = a observação; o fato existente fica no candidato); **nunca** `CONFIRMED`. Decisão em V03: `RESOLVED_SAME` → link `HUMAN_DECISION` da observação ao fato existente, link de origem fechado (`valid_to`) e fato `CONFLICTED` → `SUPERSEDED`; `RESOLVED_DISTINCT` → `CONFLICTED` → `CONFIRMED` com `confirmed_by`. Fato com chave no **mesmo** namespace e valor diferente nunca é candidato (identificadores distintos no mesmo namespace = lançamentos distintos).
+5. Documental = SHA-256 do lote; `lote+índice+tipo` = observação. Mesmo conteúdo com nome diferente = reimportação idempotente; arquivo diferente com os mesmos eventos = proveniência separada ligada ao mesmo fato pela chave forte do mesmo namespace.
+6. Sem chave forte: a observação cria `bank_transactions` `PENDING` (`origin_observation_id` = a observação) + link `ORIGIN_WEAK` (sem `decided_by`/`conflict_id`, CHECK) na mesma transação; se houver candidato → `bank_match_candidates` (`matched_fields` explicados) + conflito `POSSIBLE_DUPLICATE_WEAK`; se **não** houver candidato → conflito `CONFIRMATION_REQUIRED` com `subject_transaction_id` = o `PENDING` (nenhum `PENDING` fica sem item de decisão). `PENDING`/`CONFLICTED` nunca alocam, nunca baixam, nunca lançam e bloqueiam o fechamento do período (E07-T04). Caminho para `CONFIRMED`, explícito em V03: `RESOLVED_DISTINCT` (com justificativa e `BANCOS_CONFLITOS_DECIDIR`) → `PENDING` vira `CONFIRMED` com `confirmed_by`/`confirmed_at`; `RESOLVED_SAME` → link `HUMAN_DECISION` ao fato existente, `ORIGIN_WEAK` fechado e o `PENDING` vira `SUPERSEDED`; `RESOLVED_REJECTED` não existe para `CONFIRMATION_REQUIRED` (CHECK): observação errada se corrige por retificação (item 8). Fallback CNAB/CSV em PROD, portanto, sempre chega a `CONFIRMED` por decisão humana auditada; observação HML nunca chega a fato (FK de origem com `environment='PROD'`).
 7. **Proibido** colapsar por `valor+data` (XB-06/EX-D2) e proibido auto-aceitar candidato (CHECK em `bank_match_candidates`).
 8. Retificação: nova observação com `rectifies_observation_id`; abre conflito `RECTIFICATION`; o fato só muda por movimento compensatório (`ESTORNO`/`REVERSED`) decidido.
 
 #### 7.2.1 Chave canônica de evento de cobrança entre canais (XB-02)
 1. Chave = `empresa + convênio + carteira + nosso_numero_canonical + occurrence_semantic` (+ `occurrence_date` + `amount_paid` para semânticas repetíveis) + `distinct_seq`. `occurrence_code` e `occurrence_sequence_ref` diferem entre API e CNAB e ficam **só** na observação.
-2. `occurrence_semantic` vem do `occurrence_map` do layout (arquivo) ou do mapa do contrato API registrado (E06); código sem mapa → `UNMAPPED` + conflito `UNMAPPED_OCCURRENCE`, sem efeito.
+2. `occurrence_semantic` e `occurrence_date` vêm do `occurrence_map` do layout (arquivo) ou do mapa do contrato API registrado (E06): cada entrada declara `semantic` e `canonical_date_field` (qual campo do canal é a data canônica daquela semântica, p.ex. data da ocorrência ou data do crédito), ambos evidência P-20. Código sem mapa, ou entrada sem `canonical_date_field` → `UNMAPPED` + conflito `UNMAPPED_OCCURRENCE`, sem efeito. Este plano não fixa qual campo é a data canônica de nenhuma semântica. `wallet` do evento é sempre a `carteira` do convênio (FK composta de §5.2); `wallet` informada pelo canal fica só na observação e, se diferente da do convênio, gera `SOURCE_DISAGREEMENT` sem evento.
 3. `nosso_numero_canonical` = `nossoNumero` normalizado por `bank_file_layouts.cobranca_key_normalization` (arquivo) ou pelo registro do contrato API (E06), com o mesmo conjunto fechado de operações de §7.2 item 3; a regra por banco/convênio é evidência P-20.
 4. Semânticas únicas por título (`REGISTERED`, `LIQUIDATED`, `WRITTEN_OFF`, `CANCELLED`): no máximo um evento não `REVERSED` por chave. Repetíveis (`REJECTED`, `CHANGED`, `FEE`, `DISCOUNT_REBATE`, `PROTEST`, `UNMAPPED`): chave inclui data e valor (`NULLS NOT DISTINCT`).
-5. Link automático `STRONG_KEY` de uma observação a um evento existente só se: (a) o evento ainda não tem link `STRONG_KEY` do **mesmo** `source_channel` (`uq_cob_obs_canal`); (b) `amount_paid`, `fee_amount` (quando ambos informados) e `occurrence_date` coincidem. Falhou (a) ou (b) → nenhum link, evento `CONFLICTED`, conflito `SOURCE_DISAGREEMENT`; decisão `RESOLVED_DISTINCT` cria novo evento com `distinct_seq` seguinte e `distinct_conflict_id` (ex.: pagamento em duplicidade), `RESOLVED_SAME` cria link `HUMAN_DECISION`. Evento `CONFLICTED` nunca aloca.
+5. Link automático `STRONG_KEY` de uma observação a um evento existente só se: (a) o evento ainda não tem link `STRONG_KEY` do **mesmo** `source_channel` (`uq_cob_obs_canal`); (b) `amount_paid`, `fee_amount` (quando ambos informados) e `occurrence_date` canônica (item 2) coincidem. Falhou (a) ou (b) → nenhum link, evento `CONFLICTED`, conflito `SOURCE_DISAGREEMENT`; decisão `RESOLVED_DISTINCT` cria novo evento com `distinct_seq` seguinte e `distinct_conflict_id` (ex.: pagamento em duplicidade), `RESOLVED_SAME` cria link `HUMAN_DECISION`. Evento `CONFLICTED` nunca aloca.
+
+#### 7.2.2 Regra simétrica de corroboração liquidação × crédito (R-CORR; XB-02, XB-03, Exemplo B)
+1. Correlação: evento `LIQUIDATED` (`RECORDED`) e fato de crédito (`direction='CREDIT'`) da mesma conta. Correlação **forte** só quando ambos trazem o mesmo `end_to_end_id` (boleto Pix) atestado (P-19/P-20) → `bank_economic_links` `STRONG_KEY`, sujeito à soma líquida de §5.2. Qualquer outra correlação (valor bruto ou líquido igual ao crédito, `credit_date` do evento = `effective_date` do crédito, dentro da janela PRM-B07) é **fraca** → `bank_match_candidates` + conflito `CORROBORATION_PENDING` com `subject_transaction_id` = o crédito e `subject_cobranca_event_id` = a liquidação, criado pelo núcleo na transação do **segundo** a chegar, seja o evento ou o crédito, e mesmo quando o crédito é `CONFIRMED` por chave forte (`bank_tx_id`): chave forte do lançamento prova o lançamento, não o vínculo com o boleto.
+2. Bloqueio simétrico: uma fonte (crédito **ou** liquidação) não recebe alocação automática enquanto (a) for sujeito de `CORROBORATION_PENDING` `OPEN`/`IN_REVIEW` cuja outra fonte tem alocação `ACTIVE`, ou (b) tiver `bank_economic_links` ativo cuja contraparte tem alocação `ACTIVE`. O lado já alocado permanece; o outro espera decisão. Sem alocação ativa em nenhum dos lados, a fonte elegível aloca normalmente (crédito `CONFIRMED`; liquidação só com PRM-B01 = `true`), e a outra passa a ser bloqueada por (a).
+3. Concorrência: o motor E07 trava, em ordem crescente de id, a fonte a alocar e toda contraparte de conflito `CORROBORATION_PENDING` aberto ou de vínculo econômico ativo (`SELECT … FOR UPDATE`) antes de avaliar o item 2; duas alocações simultâneas dos dois lados resultam em no máximo uma `ACTIVE`.
+4. Decisão em V03: `RESOLVED_SAME` → `bank_economic_links` `HUMAN_DECISION` (o lado não alocado nunca aloca pelo item 2b); `RESOLVED_DISTINCT` → os dois ficam livres para alocação própria; alocação manual do lado bloqueado só depois da decisão.
+5. Invariante testada (§11): para qualquer ordem de chegada e qualquer valor de PRM-B01, um boleto liquidado gera no máximo uma baixa.
 
 ### 7.3 Concorrência, segurança e RBAC
 - Toda ingestão roda em uma transação: observação + link/fato + outbox. Chamada de rede (banco, KMS) fora da transação (doc 22 §5; E12 r3 §3.13.4). Efeito de domínio de job (E06/E11) é gravado pelo handler na transação do resultado do run aberta pelo E12, junto com o outbox do domínio e o checkpoint (E12 r3 §3.13.5).
 - Payload bruto: `PayloadBrutoService` faz `SELECT uuidv7()`, chama `SecretVault.sealPayload({companyId, environment, sourceKind, payloadId}, plaintext)` fora da transação e persiste a linha de §5.2. Leitura só por `SecretVault.openPayload`: WORKLOAD exige `integration_workload_grants (operation, 'BANK_RAW', 'BANK_RAW_PAYLOAD', environment)` não revogado — operações que abrem payload: `E11_RETORNO_IMPORT` (reparse do lote) e `BANK_FAILBACK_REPLAY` quando reprocessa resposta armazenada; USER exige `BANCOS_PAYLOAD_BRUTO_LER`, relida do banco (`RbacService.resolverPermissoes`). Padrão: negar. Nenhum segundo adapter KMS no E11.
-- Upload: streaming com limite (PRM-B03), MIME + conteúdo, AV (P-12), quarentena; conta/CNPJ/convênio divergente do declarado → `REJECTED` e conflito `ACCOUNT_MISMATCH` com `subject_import_batch_id` (XB-13).
+- Upload: streaming com limite (PRM-B03), MIME + conteúdo, AV (P-12), quarentena; conta/CNPJ/convênio divergente do declarado → `REJECTED` e, em PROD, conflito `ACCOUNT_MISMATCH` com `subject_import_batch_id` (XB-13); em HML só `rejection_reason` (conflitos são só PROD, §5.2).
 - Permissões propostas (atribuição a perfis = P-15 do QO; separadas visualização × ação): `BANCOS_ARQUIVOS_LER`, `BANCOS_ARQUIVOS_IMPORTAR`, `BANCOS_ARQUIVOS_REVISAR`, `BANCOS_CONFLITOS_DECIDIR`, `BANCOS_PROVENIENCIA_LER`, `BANCOS_PAYLOAD_BRUTO_LER`, `BANCOS_REMESSA_EXPORTAR`, `BANCOS_CANAIS_GERIR`. Importador ≠ revisor (CHECK); exportador ≠ aprovador (CHECK).
 - WebSocket (E12 r3 §3.13.6, literal): arquivo `app/backend/src/realtime/room-permissoes.ts` com `ROOMS_PROTEGIDAS` e `permissaoParaRoom`, criado pela primeira task entre E12-T04 e E11-T09 (a segunda acrescenta suas entradas). `bancos-arquivos` → `BANCOS_ARQUIVOS_LER`; `bancos-conciliacao` → `BANCOS_ARQUIVOS_LER`; `admin-integracoes` → `INTEGRACOES_VIEW` (E12); rooms legadas (`dashboard`, `desossa`, `operacao:<data>`, `faturamento:<id>`) e qualquer outra fora do mapa continuam com `DISPONIBILIDADE_LER` e só recebem o `broadcast` por `roomsDaData`. `podeAssinar(ws, room)`; `broadcastRoom` rejeita room fora do mapa e remove socket com `exp` vencido. Testes negativos obrigatórios (E11-T09).
 - Logs/auditoria: conta mascarada, sem payload bruto, sem segredo; teste sentinela.
@@ -964,7 +1079,7 @@ Aceite visual (todas): 7 abas, ficha, formulário, ações com justificativa, hi
 
 | ID | Parâmetro | Valores | Semântica de `null` (fail-closed, Princípio VII) | Pendência (dono) | Regra de teste |
 |---|---|---|---|---|---|
-| PRM-B01 | `bancos.baixaPorRetornoCobranca` | `true` / `false` | igual a `false`: liquidação por retorno não aloca; exige crédito em extrato ou decisão humana | P-07 (Karina + QO) | XB-03a com `true`, XB-03b com `false`; asserção = invariante (nenhuma segunda baixa), nunca qual é o padrão de negócio |
+| PRM-B01 | `bancos.baixaPorRetornoCobranca` | `true` / `false` | igual a `false`: liquidação por retorno não aloca; exige crédito em extrato ou decisão humana | P-07 (Karina + QO) | XB-03a..f com `true` e `false`; asserção = invariante (nenhuma segunda baixa, regra simétrica R-CORR), nunca qual é o padrão de negócio |
 | PRM-B02 | `bancos.alocacao.depositoMultiplosBoletos` | `true` / `false` | alocação/vínculo 1:N só manual | P-08 (Karina) | EX-B2 com os dois valores |
 | PRM-B03 | `bancos.upload.limiteBytes` | inteiro > 0 | upload rejeitado com mensagem "limite não configurado" | P-21 (TI) | teste com valor configurado no próprio teste + teste do `null` |
 | PRM-B04 | `bancos.retencao.arquivosBrutosDias` | inteiro > 0 | nenhum expurgo executa (`BANK_RAW_RETENTION_PURGE` `enabled=false`) | P-11 (QO + TI + contador) | expurgo nunca apaga observação |
@@ -980,11 +1095,16 @@ Convenção: backend `app/backend/test/integration/erp-bancos-*.e2e-spec.ts` (PG
 
 | Caso | Task dona do teste | Arquivo / nome do teste | Asserção |
 |---|---|---|---|
-| XB-01a | E11-T01 | `erp-bancos-canonico.e2e-spec.ts` › "API (bank_tx_id+E2E) + OFX com FITID atestado como BANK_TX_ID → 1 transação, 2 observações" | `count(bank_transactions)=1`, observações=2, links ativos=2 (`STRONG_KEY`), 1 linha `transacao_bancaria_confirmada` no outbox |
+| XB-01a | E11-T01 | `erp-bancos-canonico.e2e-spec.ts` › "API (bank_tx_id+E2E) + OFX com FITID atestado como BANK_TX_ID no mesmo namespace SHARED (equivalência atestada no manifesto sintético) → 1 transação, 2 observações" | `count(bank_transactions)=1`, observações=2, links ativos=2 (`STRONG_KEY`), 1 linha `transacao_bancaria_confirmada` no outbox |
+| XB-01c | E11-T01 | idem › "FITID atestado ≠ id API ⇒ nenhum segundo CONFIRMED alocável" | manifesto sintético com FITID atestado só como único (namespace `LOCAL:OFX`, sem equivalência); API cria T1 `CONFIRMED`; OFX do mesmo crédito cria T2 `CONFLICTED` + candidato `SUGGESTED` (T1) + `POSSIBLE_DUPLICATE_WEAK`; `count(status='CONFIRMED')=1`; comando de alocação sobre T2 → 422; `RESOLVED_SAME` → T2 `SUPERSEDED` e obs#2 ligada a T1 por `HUMAN_DECISION`; ordem inversa (OFX antes da API) com o mesmo resultado simétrico |
 | XB-01b | E11-T10 | `erp-bancos-conciliacao-integrada.e2e-spec.ts` › "XB-01 efeito: 1 alocação, 1 baixa, 1 lançamento" | alocações ACTIVE=1, baixas=1, lançamentos=1, Σdébito=Σcrédito |
 | XB-02 | E11-T04 | `erp-bancos-retorno-cobranca.e2e-spec.ts` › "webhook + CNAB retorno mesma liquidação (códigos de ocorrência distintos) → 1 evento" | `bank_cobranca_events`=1, `bank_cobranca_event_observations`=2 (canais distintos) |
-| XB-03a | E07-T03 | `erp-bancos-baixas.e2e-spec.ts` › "PRM-B01=true: liquidação aloca; crédito D+1 sem chave → candidato, nenhuma segunda baixa" | baixas=1, candidato `SUGGESTED`, alocações do crédito=0 |
-| XB-03b | E07-T03 | idem › "PRM-B01=false: liquidação não aloca; crédito D+1 sem chave → PENDING + candidato, zero baixa" | baixas=0, crédito `PENDING`, candidato `SUGGESTED` |
+| XB-03a | E07-T03 | `erp-bancos-baixas.e2e-spec.ts` › "PRM-B01=true, liquidação → crédito CONFIRMED por bank_tx_id: crédito não aloca" | liquidação aloca (baixas=1); crédito `CONFIRMED` chega depois → `CORROBORATION_PENDING` (crédito + liquidação) + candidato; alocação automática do crédito=0; baixas=1 |
+| XB-03b | E07-T03 | idem › "PRM-B01=true, crédito CONFIRMED por bank_tx_id → liquidação: liquidação não aloca" | crédito aloca (baixas=1); liquidação chega depois → `CORROBORATION_PENDING` + candidato; alocações da liquidação=0; baixas=1 |
+| XB-03c | E07-T03 | idem › "PRM-B01=false, liquidação → crédito CONFIRMED por bank_tx_id: uma baixa pelo crédito" | liquidação não aloca; crédito chega → `CORROBORATION_PENDING`; crédito aloca (nenhum lado tinha alocação); alocações da liquidação=0; baixas=1 |
+| XB-03d | E07-T03 | idem › "PRM-B01=false, crédito CONFIRMED por bank_tx_id → liquidação: nenhuma segunda baixa" | crédito aloca; liquidação chega → `CORROBORATION_PENDING`; alocações da liquidação=0; baixas=1 |
+| XB-03e | E07-T03 | idem › "crédito D+1 sem chave, PRM-B01 true e false: PENDING + candidato, nenhuma segunda baixa" | `true`: baixas=1 (liquidação), crédito `PENDING`, candidato `SUGGESTED`; `false`: baixas=0, crédito `PENDING`, candidato `SUGGESTED` |
+| XB-03f | E07-T03 | idem › "alocação concorrente dos dois lados com corroboração aberta → no máximo uma ACTIVE" | `Promise.all` de alocação do crédito e da liquidação (PRM-B01=true) → uma `ACTIVE`, a outra 409; baixas=1; `RESOLVED_SAME` posterior → vínculo econômico `HUMAN_DECISION` e o lado não alocado continua sem alocação |
 | XB-04 | E11-T05 | `erp-bancos-multicanal.e2e-spec.ts` › "CNAB+OFX+CSV mesmo evento, nomes distintos → 1 fato, 3 blobs" | 3 lotes, 3 payloads, 1 transação forte |
 | XB-05 | E11-T07 | `erp-bancos-upload.e2e-spec.ts` › "mesmo arquivo 2x → 200 com lote existente, zero movimentos" | status 200, mesmo id, observações inalteradas |
 | XB-06 | E07-T02 | `erp-bancos-matching.e2e-spec.ts` › "dois arquivos, mesmo valor/data, transações reais distintas → não colapsa" | 2 transações `PENDING`, 0 `SUPERSEDED` sem decisão |
@@ -1004,7 +1124,7 @@ Convenção: backend `app/backend/test/integration/erp-bancos-*.e2e-spec.ts` (PG
 | Exemplo (doc 12 §3) | Teste | Task dona | Arquivo / nome | Asserção |
 |---|---|---|---|---|
 | A — API crédito R$ 5.000 + OFX D+1 com FITID comprovado | EX-A1 | E11-T10 | `erp-bancos-conciliacao-integrada.e2e-spec.ts` › "Exemplo A: 2 observações, 1 transação, 1 alocação, 1 baixa, 1 lançamento" | contagens exatas 2/1/1/1/1 |
-| A — "IDs sem vínculo inequívoco → conflito para revisão" | EX-A2 | E11-T01 | `erp-bancos-canonico.e2e-spec.ts` › "Exemplo A: OFX sem FITID atestado ou com valor divergente → conflito, nenhum link automático" | link `STRONG_KEY` da obs#2 = 0; conflito `SOURCE_DISAGREEMENT` (valor divergente) ou candidato + `POSSIBLE_DUPLICATE_WEAK` (sem atestação) |
+| A — "IDs sem vínculo inequívoco → conflito para revisão" | EX-A2 | E11-T01 | `erp-bancos-canonico.e2e-spec.ts` › "Exemplo A: OFX sem FITID atestado, com FITID sem equivalência ou com valor divergente → conflito, nenhum link automático" | link `STRONG_KEY` da obs#2 a T1 = 0; `count(status='CONFIRMED')=1`; conflito `SOURCE_DISAGREEMENT` (valor divergente no mesmo namespace), ou T2 `CONFLICTED` + candidato + `POSSIBLE_DUPLICATE_WEAK` (FITID sem equivalência, XB-01c), ou T2 `PENDING` + link `ORIGIN_WEAK` + candidato + `POSSIBLE_DUPLICATE_WEAK` (sem atestação) |
 | B — retorno liquidado + extrato API com crédito líquido (total − tarifa) | EX-B1 | E11-T10 | idem › "Exemplo B: crédito líquido não gera receita nova; tarifa separada; data de crédito e abatimento conferidos" | títulos/receitas novos=0; baixa=1 pelo valor bruto; lançamento de tarifa próprio = `fee_amount`; vínculo econômico com Σ líquido = crédito; `credit_date` do evento = `effective_date` do crédito (divergência → `CORROBORATION_PENDING`); Σdébito=Σcrédito; executado com PRM-B01 `true` e `false` |
 | B — vários boletos num depósito → alocação 1:N autorizada | EX-B2 | E07-T03 | `erp-bancos-baixas.e2e-spec.ts` › "Exemplo B 1:N com PRM-B02 configurado" | `true`: um crédito vinculado a 2 eventos, 2 baixas, nenhuma duplicada; `false`: vínculo só por decisão humana (sem link automático) |
 | C — remessa de pagamento exportada e não comprovada | EX-C | task que habilitar `REMESSA_PAGAMENTO` (extensão de E11-T06 após E06-T04 e P-06); equivalente API em E06-T04 | `erp-bancos-remessa-pagamento.e2e-spec.ts` › "Exemplo C: SUBMITTED_EXTERNAL sem retorno não baixa e bloqueia reenvio" | título AP não baixado; nova instrução da mesma obrigação → 409 até retorno/extrato/consulta; E06-T04 "pago só após `PAYMENT_EVENT` confirmado" |
@@ -1062,9 +1182,10 @@ Itens que dependem de emenda futura do E12 (não são conflito com fonte superio
 | P-14 | Rotas semânticas da §8 no lugar de `/erp/bancos/e11-v0N` | Quality Owner | — | E11-T09 |
 | P-15 | Atribuição das 8 permissões `BANCOS_*` aos 11 perfis (AD-04) | Quality Owner | permissões criadas sem atribuição a perfis até a decisão; teste usa usuário com permissão concedida no próprio teste | seed de E11-T07 |
 | P-16 | Assinatura da matriz §6.3 por TI, Karina/tesouraria e responsável bancário de cada banco | os três signatários | — | Done do ALP-160 |
-| P-18 | Impacto comercial no Caderno C por layout/banco/serviço homologado | Quality Owner | — | orçamento fechado por variante |
-| P-19 | Atestação de unicidade de identificadores (FITID = id do lançamento, id de lançamento API, E2E) e regra de normalização por banco/layout | responsável bancário + Karina | `strong_key_map='{}'` (chave `NONE`) | `strong_key_map`/`strong_key_evidence_ref` dos manifestos |
-| P-20 | Mapa de ocorrências por convênio (ex.: Santander 06/09 Pix, segmento Y03) e normalização de `nossoNumero` entre API e arquivo | responsável bancário | ocorrência `UNMAPPED` sem efeito | `occurrence_map`, `cobranca_key_normalization` |
+| P-17 | Número não atribuído (lacuna herdada da r1; mantida para não renumerar P-18..P-21 já citados em vereditos anteriores). Nenhuma pendência usa este número | — | — | nada |
+| P-18 | Impacto comercial no Caderno C por layout/banco/serviço homologado; valores da matriz de custo da §14.1 | Quality Owner | — | orçamento fechado por variante |
+| P-19 | Atestação de unicidade de identificadores (FITID = id do lançamento, id de lançamento API, E2E) e regra de normalização por banco/layout; **atestação de equivalência entre canais** (o campo do arquivo carrega o mesmo identificador que o campo da API) com o rótulo do namespace `SHARED:*` | responsável bancário + Karina | `strong_key_map='{}'` (chave `NONE`); com unicidade e sem equivalência, namespace `LOCAL:<canal>` (fatos de canais diferentes nunca se fundem automaticamente) | `strong_key_map`/`strong_key_evidence_ref`/`strong_key_equivalence_ref` dos manifestos e registro do contrato API (E06) |
+| P-20 | Mapa de ocorrências por convênio (ex.: Santander 06/09 Pix, segmento Y03), **campo de data canônica por semântica** (`canonical_date_field`) e normalização de `nossoNumero` entre API e arquivo | responsável bancário | ocorrência `UNMAPPED` sem efeito (inclusive entrada sem `canonical_date_field`) | `occurrence_map`, `cobranca_key_normalization` |
 | P-21 | Limite de tamanho de upload | TI | PRM-B03 + badge | E11-T07 |
 | H-01 (E12) | Identidade AWS/KMS no runtime on-premises | TI + QO | `LOCAL_FAKE` no CI | cifra real de `bank_raw_payloads` |
 | P6/H-02 (E12) | KEK física distinta ou compartilhada entre HML e PROD | TI | parâmetro P6 do E12 (seed `DISTINTA`) | ativação de chave PROD; payload segue a chave `ACTIVE` do ambiente |
@@ -1074,7 +1195,7 @@ Itens que dependem de emenda futura do E12 (não são conflito com fonte superio
 | Risco | Mitigação |
 |---|---|
 | Duplicidade de baixa entre API, retorno e extrato | camadas L3–L7; `bank_economic_links`; XB-01/02/04/12, EX-A1, EX-B1 |
-| Chave forte mal atestada (FITID não único) | `strong_key_map` só com evidência P-19; divergência de valor/data → conflito, não link (§7.2 item 4c) |
+| Chave forte mal atestada (FITID não único) ou sem equivalência entre canais | `strong_key_map` só com evidência P-19; namespace `LOCAL:<canal>` sem atestação de equivalência; chave inédita com candidato de outro canal → `CONFLICTED`, nunca segundo `CONFIRMED` (§7.2 item 4d); divergência de valor/data → conflito, não link (4c) |
 | Fusão indevida de eventos de cobrança (pagamento em duplicidade) | uma observação `STRONG_KEY` por canal e evento; comparação de valor/data; `distinct_seq` por decisão humana |
 | Auto-match por valor/data | CHECK em `bank_match_candidates`; `PENDING` não aloca; XB-06, EX-D2 |
 | Retorno de registro tratado como dinheiro | `occurrence_semantic` separado; só `LIQUIDATED` + PRM-B01 aloca; XB-02/03 |
@@ -1086,6 +1207,25 @@ Itens que dependem de emenda futura do E12 (não são conflito com fonte superio
 | Saldo parcial tomado como final | `completeness`; fechamento só `COMPLETE`; XB-09 |
 | Escopo comercial por variante | P-18; RI-B09 |
 | Dependência serial longa (D-157 → D-E12 → D-E01 → D-E06) | ordem explícita §16; E04/E05 modelam em paralelo sem banco |
+
+### 14.1 Matriz de custo sem dupla precificação (doc 12 §8) — valores = Pendente P-18 (Quality Owner)
+Regra estrutural (não comercial): cada entregável tem **uma** linha e **uma** task dona, a mesma da §4/§16; nenhum entregável aparece em dois épicos. Este plano não atribui valor, esforço nem preço; o QO preenche a coluna de valor ao responder P-18 (nova instância Planner transcreve).
+
+| Entregável | Task dona (única linha de custo) | Não é precificado também em | Valor |
+|---|---|---|---|
+| Núcleo canônico, observações, outbox de domínio | E11-T01 | E07 (owner de domínio, sem migration própria do núcleo) | Pendente P-18 |
+| Registro de layouts + ligação capability↔layout | E11-T02 | E12-T07 (só a porta) | Pendente P-18 |
+| Parser por banco × layout × versão homologada (CNAB 240 extrato, retorno de cobrança, OFX/CSV) | E11-T03 / E11-T04 / E11-T05, uma linha por célula `DISPONIBILIZADO` da §6.3 | E06 | Pendente P-18 |
+| Adapter API por banco × serviço | E06-T02 / E06-T03 / E06-T04, uma linha por célula da §6.3 | E11 | Pendente P-18 |
+| Contas, convênios e `bank_integration_links` | E06-T01 | E12-T07 | Pendente P-18 |
+| Remessa de cobrança (e de pagamento, se P-06) | E11-T06 (+ extensão `REMESSA_PAGAMENTO`) | E06-T02/T04 | Pendente P-18 |
+| Upload/quarentena/revisão | E11-T07 | — | Pendente P-18 |
+| Roteamento de canal e failback | E11-T08 | E12 (só alerta `FAILBACK_ACTIVE`) | Pendente P-18 |
+| Matching, alocação, baixa, fechamento | E07-T01..T04 | E11-T10 (só testes integrados) | Pendente P-18 |
+| Painéis E11-V01..V05 | E11-T09 | — | Pendente P-18 |
+| Conciliação integrada (prova ponta a ponta) | E11-T10 | E07 | Pendente P-18 |
+| Homologação cruzada 3 bancos | E11-T11 | E06 | Pendente P-18 |
+| Variantes fora do pacote-base (CNAB 200/MT940, DDA por arquivo) | aditivo (P-05 / emenda E12) | pacote-base | Pendente P-18 |
 
 
 ## 15. Tasks desta onda (E11-T00, documental)
@@ -1099,7 +1239,7 @@ Shell canônico: `pwsh`. `rg` não está no PATH desta instalação (verificado:
   - Saída esperada: `db9d8ac1760a01c262c57a9f824d2c8fcf18291b`. Divergente → PARAR (§19).
 - Passo 2 — escopo do diff:
   - `git -C F:/Projetos/AlphaCarnes/.worktrees/e11-t00 diff --name-only db9d8ac1760a01c262c57a9f824d2c8fcf18291b`
-  - Saída esperada (exatamente estas duas linhas; a primeira vem do commit de veredito `8f7153c`):
+  - Saída esperada (exatamente estas duas linhas; a primeira vem dos commits de veredito `8f7153c` e `a2e2ff9`):
     ```
     docs/execucao/GATE-VEREDITOS.md
     docs/superpowers/plans/2026-10-12-e11-t00-cross-bancario-apis-arquivos-razao.md
@@ -1200,20 +1340,22 @@ Shell canônico: `pwsh`. `rg` não está no PATH desta instalação (verificado:
 ### Task 3: Commit documental da revisão (Executor)
 - Estado reconhecido (`git -C F:/Projetos/AlphaCarnes/.worktrees/e11-t00 log --format='%h %s' db9d8ac..HEAD`, lido nesta sessão):
   ```
+  a2e2ff9 chore(e11-t00): registra veredito Portao 1 r2 (ajustar) do Monitor
+  171f563 docs(e11-t00): revisao v2 do plano apos Portao 1 r1 (alinhado ao contrato E12 v3)
   8f7153c chore(e11-t00): registra veredito Portao 1 r1 (ajustar) do Monitor
   c9bed46 docs(e11-t00): plano tatico + ADR-ERP-026 do gate CROSS bancario (documental)
   ```
-  `c9bed46` já é o commit documental da r1 e **não** é refeito nem reescrito; `8f7153c` contém só a linha do veredito (byte a byte do Monitor).
-- Se `git -C F:/Projetos/AlphaCarnes/.worktrees/e11-t00 status --short` mostrar ` M docs/superpowers/plans/2026-10-12-e11-t00-cross-bancario-apis-arquivos-razao.md` (revisão r2 deste Planner):
+  `c9bed46` (plano r1) e `171f563` (plano r2) são os commits documentais já feitos e **não** são refeitos nem reescritos; `8f7153c` e `a2e2ff9` contêm só as linhas de veredito (byte a byte do Monitor).
+- Se `git -C F:/Projetos/AlphaCarnes/.worktrees/e11-t00 status --short` mostrar ` M docs/superpowers/plans/2026-10-12-e11-t00-cross-bancario-apis-arquivos-razao.md` (revisão r3 deste Planner):
   - `git -C F:/Projetos/AlphaCarnes/.worktrees/e11-t00 add docs/superpowers/plans/2026-10-12-e11-t00-cross-bancario-apis-arquivos-razao.md`
-  - `git -C F:/Projetos/AlphaCarnes/.worktrees/e11-t00 commit -m "docs(e11-t00): revisa plano tatico r2 (Portao 1 r1 ajustar; contrato E12 r3 §3.13)"`
+  - `git -C F:/Projetos/AlphaCarnes/.worktrees/e11-t00 commit -m "docs(e11-t00): revisao v3 do plano apos Portao 1 r2 (contrato E12 §3.13 inalterado)"`
   - Saída esperada: `1 file changed`. Se o status mostrar outro arquivo → PARAR.
 - Se o status estiver vazio (revisão já commitada): nenhum commit. Sem push nesta task.
 
 ### Task 4: Portão 1 por Monitor independente (nova instância)
 - O Monitor audita contra Constituição I–X, AD-04/10/15/18/19/20, doc 11 §4 E11-T00, doc 12 §8 e o contrato E12 r3 §3.13; reexecuta Tasks 1–2; forma conclusão antes de ler veredito anterior.
 - Saída esperada: linha em `docs/execucao/GATE-VEREDITOS.md` escrita **pelo Monitor** com `modelo solicitado=claude-opus-5.5; efetivo=não atestável nesta instalação (AD-20); esforço=não controlável`.
-- `ajustar` → nova instância Planner revisa este arquivo. Commit do veredito pelo Executor, byte a byte: `git commit -m "chore(e11-t00): registra veredito Portao 1 r2 do Monitor"`.
+- `ajustar` → nova instância Planner revisa este arquivo. Commit do veredito pelo Executor, byte a byte: `git commit -m "chore(e11-t00): registra veredito Portao 1 r3 do Monitor"`.
 
 ### Task 5: Encaminhar pendências humanas (Coordenador → donos)
 - Enviar §13 (P-01..P-21) e o bloco de assinaturas §6.3 aos donos; respostas voltam a **nova instância Planner**, que atualiza §6.3 (nunca o Worker). Decisões de produto (P-05, P-07, P-10, P-14, P-15, P-18) entram em `DECISOES.md` somente se fornecidas explicitamente pelo QO.
@@ -1221,7 +1363,7 @@ Shell canônico: `pwsh`. `rg` não está no PATH desta instalação (verificado:
 
 ### Task 6: Atualizar com `develop` após D-157 e D-E12
 - Pré-condição: #157 mergeado e plano E12-T00 aprovado em Portão 1.
-- `git -C F:/Projetos/AlphaCarnes/.worktrees/e11-t00 fetch origin`; `git -C F:/Projetos/AlphaCarnes/.worktrees/e11-t00 merge --no-ff origin/develop -m "chore(e11-t00): integra origin/develop"` (merge, não rebase: não reescreve `c9bed46`/`8f7153c` nem exige force-push).
+- `git -C F:/Projetos/AlphaCarnes/.worktrees/e11-t00 fetch origin`; `git -C F:/Projetos/AlphaCarnes/.worktrees/e11-t00 merge --no-ff origin/develop -m "chore(e11-t00): integra origin/develop"` (merge, não rebase: não reescreve `c9bed46`/`8f7153c`/`171f563`/`a2e2ff9` nem o commit r3, e não exige force-push).
 - Conflito de merge em qualquer arquivo → PARAR (não resolver por escolha de lado).
 - `Select-String -Path F:/Projetos/AlphaCarnes/.worktrees/e11-t00/docs/execucao/DECISOES.md -Pattern 'AD-18|AD-19|AD-20'` → três linhas ou mais.
 - Conferir no plano E12-T00 aprovado que §3.13 é idêntica à r3 nos nomes usados aqui. Divergência → PARAR, nova instância Planner.
@@ -1241,21 +1383,21 @@ Ordem: E11-T01 (após ALP-160 Done, D-E12, D-E01, D-E06) → E11-T02 → E11-T07
 |---|---|---|
 | E06-T01 contas/convênios/ligação | conta e convênio por empresa; `bank_integration_links`; `ContaBancariaVinculoPort`; capabilities exibidas do E12, não gravadas | `erp-bancos-contas.e2e-spec.ts`: "conta de outra empresa rejeitada por FK composta"; "segunda conta ativa na mesma linhagem → violação `uq_bil_lineage_active`"; "mesma conta+convênio+serviço+ambiente em duas linhagens ativas → violação `uq_bil_account_service_active`"; "duas contas do mesmo banco e serviço em duas linhagens → aceito"; "conta de outro banco que o da linhagem → violação de FK"; "tela não grava capability (403/rota inexistente)"; "número de conta mascarado em resposta e auditoria"; Playwright "cascata banco→conta→convênio limpa filho incompatível" |
 | E06-T02 cobrança API | instrução idempotente; timeout → consulta; FK de `collection_instruction_id` em eventos (expand) | "mesma Idempotency-Key + payload igual → resposta original"; "payload diferente → 409"; "timeout fake → estado `EXTERNAL_STATE_UNCERTAIN`, zero reenvio"; "webhook duplicado → 1 evento"; "evento de cobrança de instrução de outra empresa → violação de FK" |
-| E06-T03 extrato/saldo/DDA | sync por job E12 com checkpoint; efeito na transação do resultado do run | "lacuna de checkpoint → conflito"; "capability não habilitada → job não executa"; "DDA só com capability DDA"; "rollback do resultado do run → nenhuma observação, outbox nem checkpoint" |
+| E06-T03 extrato/saldo/DDA | sync por job E12 com checkpoint; efeito na transação do resultado do run | "lacuna de checkpoint → conflito"; "capability não habilitada → job não executa"; "DDA só com capability DDA"; "id de lançamento da API gravado em `LOCAL:API`, salvo atestação de equivalência registrada no contrato API com o mesmo rótulo `SHARED:*` do manifesto"; "rollback do resultado do run → nenhuma observação, outbox nem checkpoint" |
 | E06-T04 pagamentos | dupla aprovação; estado final pelo banco | "aprovador = solicitante → 422"; "pago só após `PAYMENT_EVENT` confirmado" (EX-C, canal API); "falha de autenticação → erro explícito, sem sucesso" |
 | E06-T05 console APIs | segredos redigidos, reprocesso idempotente | "sentinela de segredo ausente em log/resposta/WS"; "reprocessar exige justificativa e não duplica observação" |
 | E07-T01 painel conciliação | consolidado por conta/período só de fatos canônicos | "PENDING não aparece como conciliável"; "um lançamento não liquida duas obrigações sem rateio explícito" |
-| E07-T02 matching | auto só chave forte; resto sugestão | XB-06; EX-D2; "candidato nunca ACCEPTED sem decided_by (CHECK)" |
-| E07-T03 baixas/estornos | baixa única, estorno compensatório | XB-03a, XB-03b, XB-10, XB-11, EX-B2; "Σ alocado > fonte sob 2 requisições concorrentes → uma falha 409"; "alocação com AP e AR ao mesmo tempo → violação de CHECK"; "parcela de outra empresa → violação de FK"; "evento de cobrança CONFLICTED não aloca"; "período contábil fechado rejeita lançamento" |
-| E07-T04 fechamento | só com saldo `COMPLETE` e zero conflito com `freezes_closing` | "conflito aberto bloqueia fechamento"; "reabertura exige trilha"; XB-09 |
-| E11-T01 canônico + outbox | tabelas §5.2/§5.4, outbox na mesma transação, handler `DOMAIN_OUTBOX_RELAY`, envelope via `SecretVault` | XB-01a; EX-A2; "falha após INSERT de observação → rollback total, sem outbox órfão" (fault injection); "observação HML não cria fato (FK `environment='PROD'` nos links)"; "observação com run de outra empresa → 422"; "BOTH sem uma das colunas → violação de CHECK"; "duas chaves apontando fatos diferentes → SOURCE_DISAGREEMENT"; "conflito sem sujeito → violação de CHECK"; "UPDATE em observação rejeitado pelo serviço"; contrato E12 r3 §3.13.8: "`sealPayload` + `openPayload` com grant → plaintext idêntico", "sem grant → erro sem chamar Decrypt", "AAD com `plaintextSha256` alterado → falha GCM", "payload HML com chave PROD → violação de FK", "`DOMAIN_OUTBOX_RELAY` de duas empresas publica só as linhas de cada uma", "rollback do resultado do run → nenhuma linha de outbox nem checkpoint"; "down + up recria schema idêntico" |
-| E11-T02 layouts + ligação | detecção por cabeçalho + convênio; manifesto aprovado; `bank_layout_capability_links`; `LayoutHomologadoPort` | XB-15; "arquivo `.ret` renomeado `.ofx` detectado pelo conteúdo ou rejeitado"; "layout DRAFT → 422"; "CRLF/charset/registro truncado/trailer com soma errada → bloqueio"; "layout de outro banco → 422"; "layout AGREEMENT ligado a convênio diferente → 422"; "`strong_key_map` sem evidência → violação de CHECK"; "layout APPROVED com dataset STAGED → 422"; contrato E12 r3 §3.13.8: "ligação de capability API → violação de FK (canal)", "aposentar layout com capability ENABLED → capability SUSPENDED na mesma transação" |
-| E11-T03 CNAB 240 extrato | saldos e totais; parcial nunca final | XB-09; "frequências sobrepostas → `OVERLAPPING_PERIOD`"; "snapshot D+1 parcial → `PARTIAL`" |
-| E11-T04 retorno cobrança | semântica por `occurrence_map`; chave canônica entre canais | XB-02; "ocorrência não mapeada → `UNMAPPED` + conflito, sem efeito"; "registro aceito não aloca"; "retorno após API não cria segundo boleto nem título"; "duas liquidações do mesmo nossoNúmero no mesmo canal → conflito, não link"; "liquidação API × CNAB com valor divergente → CONFLICTED" |
+| E07-T02 matching | auto só chave forte; resto sugestão | XB-06; EX-D2; "candidato nunca ACCEPTED sem decided_by (CHECK)"; "candidato sem conflito → violação de CHECK"; "candidato com fato de outra conta → violação de FK"; "candidato com observação HML → violação de FK" |
+| E07-T03 baixas/estornos | baixa única, estorno compensatório, regra simétrica R-CORR | XB-03a, XB-03b, XB-03c, XB-03d, XB-03e, XB-03f, XB-10, XB-11, EX-B2; "Σ alocado > fonte sob 2 requisições concorrentes → uma falha 409"; "alocação com AP e AR ao mesmo tempo → violação de CHECK"; "parcela de outra empresa → violação de FK"; "evento de cobrança CONFLICTED não aloca"; "período contábil fechado rejeita lançamento" |
+| E07-T04 fechamento | só com saldo `COMPLETE` e zero conflito com `freezes_closing` | "conflito aberto bloqueia fechamento"; "PENDING aberto bloqueia fechamento"; "CONFLICTED aberto bloqueia fechamento"; "reabertura exige trilha"; XB-09 |
+| E11-T01 canônico + outbox | tabelas §5.2/§5.4, outbox na mesma transação, handler `DOMAIN_OUTBOX_RELAY`, envelope via `SecretVault` | XB-01a; XB-01c "FITID atestado ≠ id API ⇒ nenhum segundo CONFIRMED alocável"; EX-A2; "falha após INSERT de observação → rollback total, sem outbox órfão" (fault injection); "observação HML não cria fato (FK `environment='PROD'` nos links e na origem)"; "fato PENDING com observação de origem HML → violação de FK"; "CSV PROD sem chave → PENDING + link ORIGIN_WEAK, visível na proveniência"; "PENDING sem candidato ⇒ CONFIRMATION_REQUIRED na mesma transação"; "CONFIRMATION_REQUIRED RESOLVED_DISTINCT ⇒ CONFIRMED com confirmed_by"; "CONFIRMATION_REQUIRED RESOLVED_REJECTED → violação de CHECK"; "link ORIGIN_WEAK com decided_by → violação de CHECK"; "link ORIGIN_WEAK de observação com chave forte → 422"; "link HUMAN_DECISION sem conflict_id → violação de CHECK"; "PENDING com bank_tx_id → violação de CHECK"; "bank_tx_id sem namespace → violação de CHECK"; "namespace LOCAL de outro canal → violação de CHECK"; "mesmo FITID LOCAL:OFX em segundo arquivo → link ao fato existente"; "observação com run de outra empresa → 422"; "BOTH sem uma das colunas → violação de CHECK"; "duas chaves apontando fatos diferentes → SOURCE_DISAGREEMENT"; "conflito sem sujeito → violação de CHECK"; "UPDATE em observação rejeitado pelo serviço"; teste de convenção de §5.0; contrato E12 r3 §3.13.8: "`sealPayload` + `openPayload` com grant → plaintext idêntico", "sem grant → erro sem chamar Decrypt", "AAD com `plaintextSha256` alterado → falha GCM", "payload HML com chave PROD → violação de FK", "`DOMAIN_OUTBOX_RELAY` de duas empresas publica só as linhas de cada uma", "rollback do resultado do run → nenhuma linha de outbox nem checkpoint"; "down + up recria schema idêntico" |
+| E11-T02 layouts + ligação | detecção por cabeçalho + convênio; manifesto aprovado; `bank_layout_capability_links`; `LayoutHomologadoPort` | XB-15; "arquivo `.ret` renomeado `.ofx` detectado pelo conteúdo ou rejeitado"; "layout DRAFT → 422"; "CRLF/charset/registro truncado/trailer com soma errada → bloqueio"; "layout de outro banco → 422"; "layout AGREEMENT ligado a convênio diferente → 422"; "`strong_key_map` sem evidência → violação de CHECK"; "`strong_key_map` com namespace SHARED sem `strong_key_equivalence_ref` → 422"; "entrada de `occurrence_map` sem `canonical_date_field` → 422"; "layout de provedor FISCAL → violação de FK `(provider_id, provider_kind)`"; "layout APPROVED com dataset STAGED → 422"; contrato E12 r3 §3.13.8: "ligação de capability API → violação de FK (canal)", "aposentar layout com capability ENABLED → capability SUSPENDED na mesma transação" |
+| E11-T03 CNAB 240 extrato | saldos e totais; parcial nunca final | XB-09; "frequências sobrepostas → `OVERLAPPING_PERIOD`"; "snapshot D+1 parcial → `PARTIAL`"; "COMPLETE sem observação de saldo → violação de CHECK"; "período com observação de saldo HML → violação de FK" |
+| E11-T04 retorno cobrança | semântica por `occurrence_map`; chave canônica entre canais | XB-02; "ocorrência não mapeada → `UNMAPPED` + conflito, sem efeito"; "registro aceito não aloca"; "retorno após API não cria segundo boleto nem título"; "duas liquidações do mesmo nossoNúmero no mesmo canal → conflito, não link"; "liquidação API × CNAB com valor divergente → CONFLICTED"; "evento com carteira diferente da do convênio → violação de FK"; "observação com carteira informada ≠ convênio → `SOURCE_DISAGREEMENT`, sem evento"; "evento de cobrança com origem HML → violação de FK" |
 | E11-T05 OFX/CSV | perfil explícito; ID forte só se atestado | XB-04; "1.234,56 × 1,234.56"; "timezone e centavos"; "CSV sem ID nunca auto-baixa"; "blob cifrado e SHA mantido" |
 | E11-T06 remessa | gerar ≠ enviar ≠ aceito | XB-07, XB-08; "sequencial duplicado → 409"; "aceite só por `ack_observation_id`"; "serviço não habilitado → 422"; "remessa HML não passa de EXPORTED (CHECK)" |
 | Extensão `REMESSA_PAGAMENTO` (após E06-T04 e P-06) | itens de pagamento por expand | EX-C |
-| E11-T07 upload/quarentena | pipeline e segregação | XB-05, XB-13, XB-14, EX-D1; "revisor = importador → 422"; "limite não configurado → rejeição explícita (PRM-B03 null)"; "restart entre ACCEPTED e INGESTED retoma sem duplicar"; "serviço do lote ≠ capability → 422"; "capability FILE de outra empresa → violação de FK" |
+| E11-T07 upload/quarentena | pipeline e segregação | XB-05, XB-13, XB-14, EX-D1; "revisor = importador → 422"; "lote ACCEPTED sem `reviewed_by` → violação de CHECK"; "XB-13 em HML → lote REJECTED sem conflito"; "limite não configurado → rejeição explícita (PRM-B03 null)"; "restart entre ACCEPTED e INGESTED retoma sem duplicar"; "serviço do lote ≠ capability → 422"; "capability FILE de outra empresa → violação de FK" |
 | E11-T08 roteamento | modo por capability com auditoria; operação `BANK_FAILBACK_REPLAY` | XB-12; "uma falha isolada não muda modo"; "FILE_ALLOWED sem capability FILE ENABLED → 422"; "capability FILE de outra família → 422"; "mudar modo não altera lançamento conciliado"; "consumidor `integracoes.saude` recebe `canal_bancario_modo_alterado` uma vez (inbox)" |
 | E11-T09 painéis | 5 views fiéis ao protótipo; `room-permissoes.ts` | Playwright `erp-bancos-arquivos.spec.ts`: 9 estados por view; "perfil sem permissão → 403 e room WS negada"; "nenhum UUID/E## visível"; "dados sigilosos ausentes em prévia não autorizada"; "UI atualiza por evento WS, sem polling"; contrato E12 r3 §3.13.6: "toda room passada a `broadcastRoom` no código está em `ROOMS_PROTEGIDAS`"; "socket com `exp` vencido não recebe broadcast de `bancos-conciliacao`" |
 | E11-T10 conciliação integrada | motor único AR/AP/tesouraria/razão | XB-01b; EX-A1; EX-B1; "API + CNAB mesmo txId, retorno + extrato, OFX + API, correção bancária e inversão → um título baixado e partidas equilibradas" |
@@ -1264,10 +1406,10 @@ Ordem: E11-T01 (após ALP-160 Done, D-E12, D-E01, D-E06) → E11-T02 → E11-T07
 Regra de teste para parâmetros provisórios (§10): testes configuram o parâmetro dentro do próprio teste e afirmam invariantes; nenhum teste fixa o valor de negócio ainda pendente.
 
 ## 17. Referências lidas
-Coordenador @ `302cdb5`: `docs/governance/constituicao.md` v1.2.0 (Princípios IV, VII, VIII, X); `docs/execucao/DECISOES.md` AD-04/AD-09/AD-10/AD-15/AD-18/AD-19/AD-20; `docs/data/convencoes-schema.md` (L12 PK `UUID DEFAULT uuidv7()`; colunas obrigatórias; índices em FK); `docs/expansao-erp-2026/10-…`, `11-…` (§4 E11-T00, E11-T06/T07, §5 XB L155–172), `12-…` (§3 Exemplos A–D, §8), `21-…`, `22-…`, `23-…`, `24-…`, `B-ESCOPO-NOVOS-MODULOS-ERP.md`; `docs/prototipos/erp-integrado-v1/{catalogo.js,aplicacao.js,componentes.js,MATRIZ-INTEGRAL-INTERFACES.md,MATRIZ-UX-COMPONENTES-61-TELAS.md}`. Worktree e12-t00: plano E12-T00 r3 (sha256 `9A6F65C6…`), §3.13 inteira e DDL §4 de `integration_providers`, `integration_profile_lineages`, `integration_profiles`, `integration_reference_datasets`, `integration_capabilities`, `integration_vault_keys`, `integration_job_definitions`, `integration_job_runs`, `integration_workload_grants`, `integration_alerts`. Worktree e11-t00 @ `db9d8ac` + `c9bed46` + `8f7153c`: `docs/execucao/GATE-VEREDITOS.md` L160 (veredito r1); `app/backend/src/{app.module.ts, realtime/realtime.gateway.ts, database/schema/*, database/migrations/meta/_journal.json, modules/*, integracoes/nfse/*}`, `common/rbac/permissoes.ts`.
+Coordenador @ `302cdb5`: `docs/governance/constituicao.md` v1.2.0 (Princípios IV, VII, VIII, X); `docs/execucao/DECISOES.md` AD-04/AD-09/AD-10/AD-15/AD-18/AD-19/AD-20; `docs/data/convencoes-schema.md` (L12 PK `UUID DEFAULT uuidv7()`; colunas obrigatórias; índices em FK); `docs/expansao-erp-2026/10-…`, `11-…` (§2.1 item 1 L29, §4 E11-T00, E11-T06/T07, §5 XB L155–172), `12-…` (§3 L17–28 com a chave de transação L20 e Exemplos A–D, §8 L54–60), `21-…`, `22-…`, `23-…`, `24-…`, `B-ESCOPO-NOVOS-MODULOS-ERP.md`; `docs/prototipos/erp-integrado-v1/{catalogo.js,aplicacao.js,componentes.js,MATRIZ-INTEGRAL-INTERFACES.md,MATRIZ-UX-COMPONENTES-61-TELAS.md}`. Worktree e12-t00: plano E12-T00 r3 (sha256 `9A6F65C6…`), §3.13 inteira e DDL §4 de `integration_providers`, `integration_profile_lineages`, `integration_profiles`, `integration_reference_datasets`, `integration_capabilities`, `integration_vault_keys`, `integration_job_definitions`, `integration_job_runs`, `integration_workload_grants`, `integration_alerts`. Worktree e11-t00 @ `db9d8ac` + `c9bed46` + `8f7153c` + `171f563` + `a2e2ff9`: `docs/execucao/GATE-VEREDITOS.md` L160 (veredito r1) e L161 (veredito r2); `app/backend/src/{app.module.ts, realtime/realtime.gateway.ts, database/schema/*, database/migrations/meta/_journal.json, modules/*, integracoes/nfse/*}`, `common/rbac/permissoes.ts`.
 
 ## 18. Rollback
-Gate só documental: `git revert <sha>` dos commits documentais no branch (`c9bed46` e o commit da Task 3), sem efeito em schema ou dados. Fases futuras: cada migration com down script (Princípio X); observações, decisões, lançamentos e payloads cifrados nunca são apagados por rollback de aplicação — reversão de efeito financeiro é sempre movimento compensatório.
+Gate só documental: `git revert <sha>` dos commits documentais do plano no branch — `c9bed46` (r1), `171f563` (r2) e o commit r3 da Task 3, do mais novo ao mais antigo —, sem efeito em schema ou dados; os commits de veredito `8f7153c`/`a2e2ff9` não são revertidos pelo Executor (o registro de veredito pertence ao Monitor). Fases futuras: cada migration com down script (Princípio X); observações, decisões, lançamentos e payloads cifrados nunca são apagados por rollback de aplicação — reversão de efeito financeiro é sempre movimento compensatório.
 
 ## 19. Critérios de parada (qualquer um → PARAR e reportar)
 - `merge-base` ≠ `db9d8ac` ou diff com arquivo além deste plano e de `docs/execucao/GATE-VEREDITOS.md`.
