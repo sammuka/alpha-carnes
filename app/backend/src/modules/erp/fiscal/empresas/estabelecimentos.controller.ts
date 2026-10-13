@@ -7,7 +7,14 @@ import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 import { RbacGuard } from '../../../../common/guards/rbac.guard';
 import { ZodValidationPipe } from '../../../../common/pipes/zod-validation.pipe';
 import { RequirePermissoes } from '../../../../common/rbac/require-permissoes.decorator';
+import { AlteracoesService } from './alteracoes.service';
 import { EstabelecimentosService } from './estabelecimentos.service';
+import {
+  createAlteracaoSchema,
+  updateAlteracaoSchema,
+  type CreateAlteracaoDto,
+  type UpdateAlteracaoDto,
+} from './dto/alteracao.dto';
 import {
   acaoDecisaoSchema,
   removerSchema,
@@ -30,7 +37,10 @@ import {
 @Controller('fiscal/estabelecimentos')
 @UseGuards(JwtAuthGuard, RbacGuard)
 export class EstabelecimentosController {
-  constructor(private readonly estabelecimentos: EstabelecimentosService) {}
+  constructor(
+    private readonly estabelecimentos: EstabelecimentosService,
+    private readonly alteracoes: AlteracoesService,
+  ) {}
 
   @Get()
   @RequirePermissoes('FISCAL_EMPRESAS_LER')
@@ -145,6 +155,75 @@ export class EstabelecimentosController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.estabelecimentos.suspender(id, dto, user.sub);
+  }
+
+  @Post(':id/alteracoes')
+  @HttpCode(201)
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  criarAlteracao(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Body(new ZodValidationPipe(createAlteracaoSchema)) dto: CreateAlteracaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.alteracoes.criar(id, dto, user.sub);
+  }
+
+  @Patch(':id/alteracoes/:altId')
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  editarAlteracao(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Param('altId', new ZodValidationPipe(uuidParamSchema)) altId: string,
+    @Body(new ZodValidationPipe(updateAlteracaoSchema)) dto: UpdateAlteracaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.alteracoes.atualizar(id, altId, dto, user.sub);
+  }
+
+  @Post(':id/alteracoes/:altId/submeter')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  submeterAlteracao(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Param('altId', new ZodValidationPipe(uuidParamSchema)) altId: string,
+    @Body(new ZodValidationPipe(acaoDecisaoSchema)) dto: AcaoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.alteracoes.submeter(id, altId, dto, user.sub);
+  }
+
+  @Post(':id/alteracoes/:altId/aprovar')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_EMPRESAS_APROVAR')
+  aprovarAlteracao(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Param('altId', new ZodValidationPipe(uuidParamSchema)) altId: string,
+    @Body(new ZodValidationPipe(acaoDecisaoSchema)) dto: AcaoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.alteracoes.aprovar(id, altId, dto, user.sub);
+  }
+
+  @Post(':id/alteracoes/:altId/rejeitar')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_EMPRESAS_APROVAR')
+  rejeitarAlteracao(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Param('altId', new ZodValidationPipe(uuidParamSchema)) altId: string,
+    @Body(new ZodValidationPipe(acaoDecisaoSchema)) dto: AcaoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.alteracoes.rejeitar(id, altId, dto, user.sub);
+  }
+
+  @Delete(':id/alteracoes/:altId')
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  descartarAlteracao(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Param('altId', new ZodValidationPipe(uuidParamSchema)) altId: string,
+    @Body(new ZodValidationPipe(removerSchema)) dto: RemoverDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.alteracoes.descartar(id, altId, dto, user.sub);
   }
 
   @Delete(':id')
