@@ -1,0 +1,159 @@
+import {
+  Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, UseGuards,
+} from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
+import { CurrentUser, type CurrentUserPayload } from '../../../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { RbacGuard } from '../../../../common/guards/rbac.guard';
+import { ZodValidationPipe } from '../../../../common/pipes/zod-validation.pipe';
+import { RequirePermissoes } from '../../../../common/rbac/require-permissoes.decorator';
+import { EstabelecimentosService } from './estabelecimentos.service';
+import {
+  acaoDecisaoSchema,
+  removerSchema,
+  uuidParamSchema,
+  type AcaoDecisaoDto,
+  type RemoverDto,
+} from './dto/comum.dto';
+import {
+  createEstabelecimentoSchema,
+  listarEstabelecimentosQuerySchema,
+  substituirCnaesSchema,
+  updateEstabelecimentoSchema,
+  type CreateEstabelecimentoDto,
+  type ListarEstabelecimentosQuery,
+  type SubstituirCnaesDto,
+  type UpdateEstabelecimentoDto,
+} from './dto/estabelecimento.dto';
+
+@SkipThrottle()
+@Controller('fiscal/estabelecimentos')
+@UseGuards(JwtAuthGuard, RbacGuard)
+export class EstabelecimentosController {
+  constructor(private readonly estabelecimentos: EstabelecimentosService) {}
+
+  @Get()
+  @RequirePermissoes('FISCAL_EMPRESAS_LER')
+  listar(@Query(new ZodValidationPipe(listarEstabelecimentosQuerySchema)) query: ListarEstabelecimentosQuery) {
+    return this.estabelecimentos.listar(query);
+  }
+
+  @Get('contagens')
+  @RequirePermissoes('FISCAL_EMPRESAS_LER')
+  contagens(@Query(new ZodValidationPipe(listarEstabelecimentosQuerySchema)) query: ListarEstabelecimentosQuery) {
+    return this.estabelecimentos.contagens(query);
+  }
+
+  @Get(':id/historico')
+  @RequirePermissoes('FISCAL_EMPRESAS_LER')
+  historico(@Param('id', new ZodValidationPipe(uuidParamSchema)) id: string) {
+    return this.estabelecimentos.historico(id);
+  }
+
+  @Get(':id/pre-condicoes')
+  @RequirePermissoes('FISCAL_EMPRESAS_LER')
+  preCondicoes(@Param('id', new ZodValidationPipe(uuidParamSchema)) id: string) {
+    return this.estabelecimentos.preCondicoes(id);
+  }
+
+  @Get(':id')
+  @RequirePermissoes('FISCAL_EMPRESAS_LER')
+  detalhar(@Param('id', new ZodValidationPipe(uuidParamSchema)) id: string) {
+    return this.estabelecimentos.detalhar(id);
+  }
+
+  @Post()
+  @HttpCode(201)
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  criar(
+    @Body(new ZodValidationPipe(createEstabelecimentoSchema)) dto: CreateEstabelecimentoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.estabelecimentos.criar(dto, user.sub);
+  }
+
+  @Patch(':id')
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  atualizar(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Body(new ZodValidationPipe(updateEstabelecimentoSchema)) dto: UpdateEstabelecimentoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.estabelecimentos.atualizar(id, dto, user.sub);
+  }
+
+  @Put(':id/cnaes')
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  cnaes(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Body(new ZodValidationPipe(substituirCnaesSchema)) dto: SubstituirCnaesDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.estabelecimentos.substituirListaCnaes(id, dto, user.sub);
+  }
+
+  @Post(':id/submeter')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  submeter(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Body(new ZodValidationPipe(acaoDecisaoSchema)) dto: AcaoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.estabelecimentos.submeter(id, dto, user.sub);
+  }
+
+  @Post(':id/reativar')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  reativar(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Body(new ZodValidationPipe(acaoDecisaoSchema)) dto: AcaoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.estabelecimentos.reativar(id, dto, user.sub);
+  }
+
+  @Post(':id/aprovar')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_EMPRESAS_APROVAR')
+  aprovar(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Body(new ZodValidationPipe(acaoDecisaoSchema)) dto: AcaoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.estabelecimentos.aprovar(id, dto, user.sub);
+  }
+
+  @Post(':id/rejeitar')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_EMPRESAS_APROVAR')
+  rejeitar(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Body(new ZodValidationPipe(acaoDecisaoSchema)) dto: AcaoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.estabelecimentos.rejeitar(id, dto, user.sub);
+  }
+
+  @Post(':id/suspender')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_EMPRESAS_APROVAR')
+  suspender(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Body(new ZodValidationPipe(acaoDecisaoSchema)) dto: AcaoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.estabelecimentos.suspender(id, dto, user.sub);
+  }
+
+  @Delete(':id')
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  remover(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Body(new ZodValidationPipe(removerSchema)) dto: RemoverDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.estabelecimentos.remover(id, dto, user.sub);
+  }
+}
