@@ -10,6 +10,17 @@
 |---|---|---|---|
 | r1 | 2026-10-13 | planner | versão inicial; rota, menu e Playwright adiados para E01-T01b (H-E01-01); Município/CNAE/Certificado sem coluna (H-E01-04) |
 | r2 | 2026-10-13 | planner (nova instância) | Portão 1 r1 `bloqueado` (3 BLOQUEANTES + 6 MENORES) e decisão do Quality Owner AD-24 (1)–(3) |
+| r3 | 2026-10-13 | planner (nova instância) | Portão 1 r2 `ajustar` (2 BLOQUEANTES + 5 MENORES); ajuste cirúrgico (AD-22 (7)): nenhum outro ponto do plano muda |
+
+| Achado r2 | Correção r3 |
+|---|---|
+| B1 `PerfisService.catalogo()` lança "Permissões sem módulo no catálogo" para `FISCAL_EMPRESAS_*` | `app/backend/src/modules/perfis/perfis.service.ts` entra na §12 e na Task 3: novo módulo `Fiscal` (prefixo `FISCAL_`) em `MODULOS`, após `Expedição e Faturamento`; descrições das 3 permissões em `DESCRICOES_PERMISSOES`; teste de `GET /perfis/catalogo` com o módulo `Fiscal` e as 3 permissões (§9, §13, Task 3) |
+| B2 `e2e/shell-ds.spec.ts` fixa 9 grupos do administrador | `shell-ds.spec.ts` entra na lista de testes de contagem da §9, na §12 e na Task 13: `GRUPOS` com `'FISCAL'` na 8ª posição (após `FATURAMENTO`) e título do teste para 10 grupos |
+| MENOR 1 comentário de cabeçalho de `menu-v2.ts` | §9: o comentário passa a dizer que item com `permissao` também é filtrado pela permissão |
+| MENOR 2 erros do `PUT /cnaes` por estado | §6 (linha "substituir CNAEs") e §13: APPROVED → 409 `ALTERACAO_EXIGIDA`; REVIEW/SUSPENDED → 409 `TRANSICAO_INVALIDA`; teste em `e01-t01-cnaes` |
+| MENOR 3 alteração aberta remanescente ao remover estabelecimento | §6 (linha "remover") e §13: soft delete da alteração aberta e dos CNAEs propostos na mesma transação; teste em `e01-t01-alteracoes` |
+| MENOR 4 `municipio_ibge_codigo` | §5: `varchar(7)` (a coluna guarda o código IBGE de 7 dígitos; o CHECK de formato permanece) |
+| MENOR 5 menu FISCAL atribuído sem a permissão | §9 e §13: teste em `menu-v2` e `menu-rbac` — rota `/fiscal/empresas` em `menus_visiveis` sem `FISCAL_EMPRESAS_LER` não exibe o item nem o grupo |
 
 | Achado r1 | Correção r2 |
 |---|---|
@@ -201,7 +212,7 @@ export const estabelecimentos = pgTable('estabelecimentos', {
   inscricaoEstadual:     varchar('inscricao_estadual', { length: 20 }).notNull(),
   inscricaoMunicipal:    varchar('inscricao_municipal', { length: 20 }).notNull(),
   uf:                    varchar('uf', { length: 2 }).notNull(),
-  municipioIbgeCodigo:   text('municipio_ibge_codigo'),        // reservado (AD-24 (2)); gravado a partir do E12-T08
+  municipioIbgeCodigo:   varchar('municipio_ibge_codigo', { length: 7 }),  // reservado (AD-24 (2)); gravado a partir do E12-T08
   situacao:              text('situacao').notNull().default('DRAFT'),
   justificativaSituacao: text('justificativa_situacao'),
   ...decisaoCols,
@@ -374,13 +385,13 @@ Estabelecimento (`EstabelecimentosService`):
 |---|---|---|---|
 | criar | — → DRAFT | GERENCIAR | empresa não removida; DV; raiz = `empresas.cnpj_raiz` (422 `CNPJ_RAIZ_DIVERGENTE`); CNPJ único (409 `CNPJ_DUPLICADO`, `23505` de `uq_estabelecimentos_cnpj`); `cnaes` opcional no corpo, validado como em "substituir CNAEs" |
 | editar (nome, IE, IM, UF) | DRAFT→DRAFT; REJECTED→DRAFT | GERENCIAR | `versao` (409 `CONFLITO_CONCORRENTE`); APPROVED → 409 `ALTERACAO_EXIGIDA` (usar alteração); REVIEW/SUSPENDED → 409 `TRANSICAO_INVALIDA`; DTO `.strict()` rejeita `empresaId`/`cnpj`/`municipioIbgeCodigo` |
-| substituir CNAEs | DRAFT/REJECTED → DRAFT | GERENCIAR | ver "CNAE" abaixo; incrementa `estabelecimentos.versao` |
+| substituir CNAEs | DRAFT/REJECTED → DRAFT | GERENCIAR | ver "CNAE" abaixo; incrementa `estabelecimentos.versao`; APPROVED → 409 `ALTERACAO_EXIGIDA` (usar alteração); REVIEW/SUSPENDED → 409 `TRANSICAO_INVALIDA`; nenhuma escrita nesses casos |
 | submeter | DRAFT → REVIEW | GERENCIAR | grava `submetido_por_id` |
 | aprovar | REVIEW → APPROVED | APROVAR | segregação (422 `SEGREGACAO_FUNCAO`); exatamente 1 CNAE principal vigente (422 `CNAE_PRINCIPAL_AUSENTE`); Município/Certificado não exigidos (D23); grava `decidido_*`; limpa `justificativa_situacao` |
 | rejeitar | REVIEW → REJECTED | APROVAR | segregação; `justificativa_situacao` |
 | suspender | APPROVED → SUSPENDED | APROVAR | `justificativa_situacao` |
 | reativar | SUSPENDED → REVIEW | GERENCIAR | `submetido_por_id` = solicitante |
-| remover | DRAFT/REJECTED → soft delete | GERENCIAR | sem regime `REVIEW`/`APPROVED` (409 `ESTABELECIMENTO_COM_REGIME_ATIVO`); regimes `DRAFT`/`REJECTED` e CNAEs recebem `deleted_at` na mesma transação |
+| remover | DRAFT/REJECTED → soft delete | GERENCIAR | sem regime `REVIEW`/`APPROVED` (409 `ESTABELECIMENTO_COM_REGIME_ATIVO`); regimes `DRAFT`/`REJECTED` e CNAEs recebem `deleted_at` na mesma transação; alteração aberta remanescente (`DRAFT`/`REVIEW`, criada quando o estabelecimento era `APPROVED`) e seus CNAEs propostos também recebem `deleted_at` na mesma transação (auditoria `DELETE` por linha), de modo que não resta alteração aberta de estabelecimento removido |
 
 CNAE (função `substituirCnaes(tx, alvo, lista)` em `cnaes.service.ts`, usada no rascunho e na aplicação da
 alteração):
@@ -506,6 +517,16 @@ estabelecimentos, CNAEs, alterações e regimes", "Aprovar, rejeitar e suspender
 fiscais"); `pushPermissoes('administrador', …)` com comentário AD-04/AD-18 (5)/H-E01-02. Fora de
 `LEITURA_CADASTROS`.
 
+Catálogo de permissões (B1): `DESCRICOES_PERMISSOES` é `Record<Permissao, string>` e
+`PerfisService.catalogo()` (`app/backend/src/modules/perfis/perfis.service.ts`, `MODULOS` em L58–L85) lança
+`Permissões sem módulo no catálogo` para permissão sem prefixo mapeado, o que quebraria `GET /perfis/catalogo` e a
+tela `/admin/perfis`. Em `MODULOS` entra `{ modulo: 'Fiscal', prefixos: ['FISCAL_'] }` depois de `Expedição e
+Faturamento`; nenhum prefixo existente é alterado. Teste novo em `perfis-menus.e2e-spec.ts`: `GET /perfis/catalogo`
+devolve o módulo `Fiscal` com exatamente `FISCAL_EMPRESAS_APROVAR`, `FISCAL_EMPRESAS_GERENCIAR` e
+`FISCAL_EMPRESAS_LER`, cada uma com a descrição de `DESCRICOES_PERMISSOES`; o teste existente "catalogo de permissoes
+cobre todo o mapa de descricoes" e `test/unit/onda3-cadastros-branches.spec.ts` (L772, `service.catalogo()`)
+continuam passando sem afrouxar.
+
 Parâmetro (`database/seed.ts` `PARAMETROS_SEED`): `{ chave: 'fiscal.empresas_perfis_autorizados', descricao:
 'Perfis com acesso ao cadastro fiscal de empresas', valorJson: { grupo: 'Fiscal', tipo: 'info', titulo: 'Perfis do
 cadastro fiscal de empresas', texto: 'Somente administrador até decisão sobre os demais perfis.', valor:
@@ -526,21 +547,31 @@ Menu (AD-24 (1), D19) — 39 rotas originais intactas, total 39 + 1 = 40:
   estabelecimentos e regime', iconKey: 'Landmark', permissao: 'FISCAL_EMPRESAS_LER' }] }`.
   `filtrarMenuPorMenusVisiveis(menusVisiveis, permissoes: string[] = [])`: item com `permissao` só aparece se a
   permissão estiver em `permissoes` (fail-closed); itens sem `permissao` inalterados. `(admin)/layout.tsx` passa
-  `user.permissoes`. `rotaDeEntrada` inalterada (ROTA_ENTRADA_POR_PERFIL não muda).
+  `user.permissoes`. `rotaDeEntrada` inalterada (ROTA_ENTRADA_POR_PERFIL não muda). O comentário de cabeçalho do
+  arquivo (hoje "Permissão de API é assunto do backend (RbacGuard) e não filtra menu") é reescrito: a visibilidade
+  continua vindo de `perfis.menus_visiveis`, e item que declara `permissao` só aparece se o usuário também a tiver;
+  os demais itens não são filtrados por permissão (MENOR 1).
 - `components/ui/app-sidebar.tsx`: importa `Landmark` de `lucide-react` e registra em `ICON_MAP`.
 - Testes que fixam contagem (atualizar, sem afrouxar):
   - `frontend/__tests__/menu-v2.test.ts`: `GRUPOS` com `'FISCAL'` na 8ª posição (10 grupos; ordem relativa dos 9
     originais preservada); `ITENS_PROTOTIPO` (39) intacto + `ITENS_ERP = [['FISCAL', 'Empresas, estabelecimentos e
     regime', '/fiscal/empresas']]`; asserções: itens sem FISCAL `toEqual(ITENS_PROTOTIPO)` e `toHaveLength(39)`;
-    total `toHaveLength(40)`; teste de `page.tsx` cobre a rota nova.
+    total `toHaveLength(40)`; teste de `page.tsx` cobre a rota nova; caso novo (MENOR 5): perfil cujo
+    `menusVisiveis` contém `/fiscal/empresas` (atribuído em `/admin/perfis`) e cujas `permissoes` não contêm
+    `FISCAL_EMPRESAS_LER` → `filtrarMenuPorMenusVisiveis` não devolve o item nem o grupo `FISCAL`.
   - `frontend/__tests__/menu-rbac.test.ts`: `MATRIZ_RASTREABILIDADE` (39, v1.1) intacta + `MATRIZ_ERP =
     { '/fiscal/empresas': ['administrador'] }` (fonte AD-24 (1) + D11); `menusDaMatriz` usa a união; "39 rotas"
     passa a conferir `ROTAS_CANONICAS` sem `/fiscal/` = chaves da v1.1 (39) e total 40; 126 → `126 + 1 = 127`;
     `TODOS` com `'FISCAL'` após `'FATURAMENTO'`; `GRUPOS_ESPERADOS.gestor` = `TODOS` sem `'FISCAL'`;
     `rotasVisiveis(perfil)` passa `PERMISSOES_POR_PERFIL[perfil]`; novos casos "item com permissão some sem a
-    permissão" e "administrador vê FISCAL".
+    permissão", "administrador vê FISCAL" e (MENOR 5) "menu FISCAL atribuído a um perfil sem `FISCAL_EMPRESAS_LER`
+    não aparece".
   - `backend/test/integration/perfis-menus.e2e-spec.ts` L78–L79: `MENUS_OPERACIONAIS` 39 e `MENUS_CANONICOS`/
-    `res.body.menus` 40.
+    `res.body.menus` 40; caso novo do módulo `Fiscal` no catálogo (B1, parágrafo "Catálogo de permissões").
+  - `frontend/e2e/shell-ds.spec.ts` (B2): `GRUPOS` (L28–L38) ganha `'FISCAL'` na 8ª posição, entre `'FATURAMENTO'`
+    e `'CADASTROS & REGRAS'` (ordem dos 9 originais preservada); o título do teste de L86 passa de "menu do
+    administrador tem os 9 grupos na ordem do prototipo" para "menu do administrador tem os 10 grupos na ordem do
+    prototipo" (a asserção `toEqual(GRUPOS)` não é afrouxada). Executado na Task 13.
 
 ## 10. Página e componentes DS v3
 
@@ -617,7 +648,7 @@ Backend (`app/backend/`): `src/database/schema/fiscal-empresas.schema.ts` (novo)
 `src/database/migrations/<gerada>.sql` + `meta/*`; `src/database/migrations/ROLLBACK.md` (seção E01-T01);
 `src/database/seed.ts` (parâmetro); `src/common/validators/{cnpj-alfanumerico,cnae}.ts` (novos);
 `src/common/rbac/{permissoes.ts,menus-canonicos.ts,perfil-permissoes.snapshot.json,perfil-menus.snapshot.json}`;
-`src/modules/perfis/dto/perfil.dto.ts`; `src/modules/erp/fiscal/empresas/**` (module, `empresas.controller.ts`,
+`src/modules/perfis/dto/perfil.dto.ts`; `src/modules/perfis/perfis.service.ts` (módulo `Fiscal` em `catalogo()`); `src/modules/erp/fiscal/empresas/**` (module, `empresas.controller.ts`,
 `estabelecimentos.controller.ts`, `empresas.service.ts`, `estabelecimentos.service.ts`, `cnaes.service.ts`,
 `alteracoes.service.ts`, `regimes.service.ts`, `regimes-vigencia.ts`, `exportacao-csv.ts`, `dto/*.ts`);
 `src/app.module.ts`; `src/realtime/{room-permissoes.ts,realtime.gateway.ts,realtime.hub.ts,events/eventos.ts}`;
@@ -628,7 +659,7 @@ Backend (`app/backend/`): `src/database/schema/fiscal-empresas.schema.ts` (novo)
 Frontend (`app/frontend/`): `src/app/(admin)/fiscal/empresas/page.tsx`; `src/app/(admin)/layout.tsx`;
 `src/lib/{fiscal-empresas.ts,menu-v2.ts}`; `src/components/ui/app-sidebar.tsx`; `src/components/fiscal/empresas/*.tsx`;
 `src/app/api/erp/fiscal/**/route.ts`; `__tests__/{fiscal-empresas-lib,bff-e01-t01,empresas-estabelecimentos-client,
-menu-v2,menu-rbac}.test.ts(x)`; `e2e/e01-t01-empresas.spec.ts`; `e2e/capture-e01-t01-evidencias.spec.ts`;
+menu-v2,menu-rbac}.test.ts(x)`; `e2e/e01-t01-empresas.spec.ts`; `e2e/shell-ds.spec.ts`; `e2e/capture-e01-t01-evidencias.spec.ts`;
 `e2e/helpers/e01-t01-seed.ts`. Evidências: `docs/evidencias/e01-t01/*.png`.
 Proibido tocar fora desta lista.
 
@@ -640,17 +671,18 @@ Proibido tocar fora desta lista.
 | DoD (1) CRUD/ações (Caderno B L57) | e01-t01-empresas · "empresa: criar, editar, listar, remover"; "estabelecimento DRAFT→REVIEW→APPROVED→SUSPENDED→REVIEW"; "rejeitar e editar volta a DRAFT"; e01-t01-regimes · "criar, editar, submeter, aprovar, rejeitar, remover" |
 | DoD (2) campos e validações | cnpj-alfanumerico · vetores numéricos, vetor alfanumérico oficial RFB (Task 0), minúsculas; fiscal-empresas-dto · "IE/IM normalizados", "UF inválida", "CRT 5", "fim < início", "strict rejeita empresaId/cnpj/municipioIbgeCodigo", "justificativa vazia"; e01-t01-empresas · "raiz divergente → 422", "CNPJ duplicado → 409", "raiz duplicada → 409" |
 | CNAE formato (AD-24 (3)) | cnae · "`6201-5/01` e `6201501` → `6201501`", "6 ou 8 dígitos, letras → inválido", "mascararCnae"; fiscal-empresas-dto · "código fora do formato → 400" |
-| CNAE duplicidade e principal único | e01-t01-cnaes · "código repetido → 422 CNAE_DUPLICADO"; "dois principais → 422 CNAE_PRINCIPAL_UNICO"; "aprovar sem principal → 422 CNAE_PRINCIPAL_AUSENTE"; "trocar principal na mesma lista → 200"; e01-t01-migrations · "uq_estab_cnaes_principal e uq_estab_cnaes_codigo parciais (pg_indexes)"; "INSERT direto de 2º principal → 23505" |
+| CNAE duplicidade e principal único | e01-t01-cnaes · "código repetido → 422 CNAE_DUPLICADO"; "dois principais → 422 CNAE_PRINCIPAL_UNICO"; "aprovar sem principal → 422 CNAE_PRINCIPAL_AUSENTE"; "trocar principal na mesma lista → 200"; "PUT cnaes com estabelecimento APPROVED → 409 ALTERACAO_EXIGIDA, REVIEW → 409 TRANSICAO_INVALIDA, SUSPENDED → 409 TRANSICAO_INVALIDA, sem escrita em estabelecimento_cnaes nem em auditoria" (MENOR 2); e01-t01-migrations · "uq_estab_cnaes_principal e uq_estab_cnaes_codigo parciais (pg_indexes)"; "INSERT direto de 2º principal → 23505" |
 | CNAE 403 e histórico | e01-t01-cnaes · "gestor → 403 em PUT cnaes"; "substituição grava DELETE/INSERT na auditoria com usuário e justificativa; linha removida mantém deleted_at"; "histórico lista objeto cnae com usuarioNome"; "nenhuma chamada HTTP externa (fetch espionado)" |
 | Município/Certificado provisórios (AD-24 (2)) | e01-t01-empresas · "aprova com municipio_ibge_codigo nulo"; "pré-condições MUNICIPIO_INFORMADO/CERTIFICADO_VINCULADO provisoria=true"; client · "campos com selo Provisório e sem bloqueio"; e01-t01-migrations · "coluna municipio_ibge_codigo nullable; nenhuma coluna certificado" |
-| B3 alteração pendente | e01-t01-alteracoes · "PATCH em APPROVED → 409 ALTERACAO_EXIGIDA"; "criar alteração: estabelecimento continua APPROVED com valores antigos"; "dadosFiscaisVigentes durante REVIEW = valores aprovados"; "aprovar aplica nome/IE/IM/UF e CNAEs e incrementa versao"; "rejeitar mantém linha e CNAEs aprovados idênticos (comparação campo a campo)"; "segunda alteração aberta → 409 ALTERACAO_EM_ABERTO"; "versao_base desatualizada → 409 ALTERACAO_DESATUALIZADA"; "segregação → 422"; "gestor → 403" |
+| B3 alteração pendente | e01-t01-alteracoes · "PATCH em APPROVED → 409 ALTERACAO_EXIGIDA"; "criar alteração: estabelecimento continua APPROVED com valores antigos"; "dadosFiscaisVigentes durante REVIEW = valores aprovados"; "aprovar aplica nome/IE/IM/UF e CNAEs e incrementa versao"; "rejeitar mantém linha e CNAEs aprovados idênticos (comparação campo a campo)"; "segunda alteração aberta → 409 ALTERACAO_EM_ABERTO"; "versao_base desatualizada → 409 ALTERACAO_DESATUALIZADA"; "segregação → 422"; "gestor → 403"; "remover estabelecimento (APPROVED → SUSPENDED → REVIEW → REJECTED) com alteração DRAFT/REVIEW aberta: alteração e CNAEs propostos ficam com deleted_at na mesma transação, 1 auditoria DELETE por linha, e nenhuma alteração aberta resta (uq_estab_alteracoes_aberta livre)" (MENOR 3) |
 | DoD (3) recarregar | e01-t01-empresas · "GET detalhe após cada transição devolve situação, responsável, CNAEs e regime persistidos" |
 | DoD (4) autorização | e01-t01-empresas · "gestor sem FISCAL_* → 403 em toda rota"; "mesmo usuário aprova → 422 SEGREGACAO_FUNCAO"; "segundo administrador → 200"; perfil-permissoes-snapshot |
 | DoD (5) falha externa | não se aplica: sem serviço externo (certificado/catálogos fora; CNAE sem consulta) |
 | DoD (6) auditoria/reversão | e01-t01-empresas · "cada mutação grava 1 auditoria"; "histórico sem nome de tabela nem id"; "aprovado não removível → 409; suspender é a reversão" |
 | DoD (7) Playwright e acessibilidade | e01-t01-empresas.spec · jornada, 403, teclado e nomes acessíveis (Task 13); capture-e01-t01-evidencias.spec (Task 14) |
 | DoD (8) interoperabilidade | e01-t01-empresas · "dadosFiscaisVigentes null sem aprovação; valor com cnaePrincipal"; "empresaAtiva/listarEmpresasAtivasIds"; suítes completas verdes |
-| Menu 39 + 1 (AD-24 (1)) | menu-v2 · "10 grupos com FISCAL na 8ª posição", "39 itens originais idênticos", "40 no total", "page.tsx existe"; menu-rbac · "matriz v1.1 + ERP = 127", "gestor sem FISCAL", "item com permissão some sem permissão"; perfis-menus.e2e · 39/40 |
+| Menu 39 + 1 (AD-24 (1)) | menu-v2 · "10 grupos com FISCAL na 8ª posição", "39 itens originais idênticos", "40 no total", "page.tsx existe"; menu-rbac · "matriz v1.1 + ERP = 127", "gestor sem FISCAL", "item com permissão some sem permissão", "menu FISCAL atribuído sem FISCAL_EMPRESAS_LER não aparece" (MENOR 5); perfis-menus.e2e · 39/40; shell-ds.spec (Playwright) · "menu do administrador tem os 10 grupos na ordem do prototipo" com `FISCAL` na 8ª posição (B2) |
+| Catálogo de permissões (B1) | perfis-menus.e2e · "GET /perfis/catalogo devolve o módulo Fiscal com FISCAL_EMPRESAS_APROVAR, FISCAL_EMPRESAS_GERENCIAR e FISCAL_EMPRESAS_LER e suas descrições" e "catalogo de permissoes cobre todo o mapa de descricoes" (existente, verde); onda3-cadastros-branches.spec · `service.catalogo()` sem lançar (existente, verde) |
 | Regra: sem identificação | fiscal-empresas-dto · "sem CNPJ/razão social"; e01-t01-migrations · "CHECKs de formato e preenchimento" |
 | Regra: regime sobreposto (L55) | regimes-vigencia · livre/troca/sobreposto/limites; e01-t01-regimes · "sobreposição com REVIEW → 409"; "APPROVED com fim futuro interceptado → 409 REGIME_SOBREPOSTO e vigencia_fim inalterada" (MENOR 5) |
 | Negativo: troca (L56) | e01-t01-regimes · "sem confirmação → 409 sem mutação"; "confirmada e aprovada fecha anterior em D−1 na mesma transação"; "estabelecimento não aprovado → 422" |
@@ -721,18 +753,19 @@ erro; testes passam. `ROLLBACK.md`: seção "E01-T01" com as seis tabelas e §16
 `feat(e01-t01): schema fiscal de empresas, estabelecimentos, CNAEs, alterações e regimes (expand-only)`.
 
 ### Task 3 — Permissões, parâmetro, menu canônico e snapshots
-Files: `permissoes.ts`, `menus-canonicos.ts`, os dois snapshots, `perfil.dto.ts`, `seed.ts`,
-`perfis-menus.e2e-spec.ts`.
+Files: `permissoes.ts`, `menus-canonicos.ts`, os dois snapshots, `perfil.dto.ts`, `perfis.service.ts` (módulo
+`Fiscal` em `catalogo()`, B1), `seed.ts`, `perfis-menus.e2e-spec.ts`.
 ```powershell
 Set-Location app/backend
 npx tsx scripts/gerar-snapshot-perfis.ts
 git diff -U0 -- src/common/rbac/perfil-menus.snapshot.json src/common/rbac/perfil-permissoes.snapshot.json
 git diff -U0 -- src/common/rbac/menus-canonicos.ts | Select-String "^-\s+'/"
-npx jest test/unit/perfil-permissoes-snapshot.spec.ts test/integration/perfis-menus.e2e-spec.ts
+npx jest test/unit/perfil-permissoes-snapshot.spec.ts test/unit/onda3-cadastros-branches.spec.ts test/integration/perfis-menus.e2e-spec.ts
 npm run db:seed
 ```
 Esperado: diffs dos snapshots só sob `administrador` (+ `/fiscal/empresas`, + três permissões); `Select-String` sem
-saída (nenhuma das 39 rotas removida); testes passam; seed sem erro. Commit:
+saída (nenhuma das 39 rotas removida); testes passam, inclusive o caso novo de `GET /perfis/catalogo` com o módulo
+`Fiscal` e o `onda3-cadastros-branches.spec.ts` sem alteração; seed sem erro. Commit:
 `feat(e01-t01): permissões FISCAL_EMPRESAS_*, rota /fiscal/empresas no menu canônico e parâmetro H-E01-02`.
 
 ### Task 4 — DTOs Zod
@@ -758,6 +791,8 @@ Commit: `feat(e01-t01): API de empresas, estabelecimentos e CNAEs com aprovaçã
 
 ### Task 6 — Alteração pendente (B3)
 Files: `alteracoes.service.ts`, rotas em `estabelecimentos.controller.ts`, `e01-t01-alteracoes.e2e-spec.ts`.
+O `remover` de `estabelecimentos.service.ts` passa a soft-deletar também a alteração aberta e seus CNAEs propostos na
+mesma transação (MENOR 3, §6); caso coberto em `e01-t01-alteracoes.e2e-spec.ts`.
 ```powershell
 Set-Location app/backend; npx jest test/integration/e01-t01-alteracoes.e2e-spec.ts
 ```
@@ -820,7 +855,8 @@ Commit: `feat(e01-t01): página /fiscal/empresas DS v3 e grupo Fiscal no menu`.
 ### Task 13 — Playwright: jornada e acessibilidade
 Files: `e2e/helpers/e01-t01-seed.ts` (padrão `onda10-seed.ts`: `request.fetch` ao backend; cria um segundo
 administrador e um usuário `gestor` pela API de usuários; CNPJs com DV válido gerados pelo validador da Task 1),
-`e2e/e01-t01-empresas.spec.ts`. Stack: backend em `:4001` com seed; frontend pelo `webServer` do
+`e2e/e01-t01-empresas.spec.ts`; `e2e/shell-ds.spec.ts` ajustado conforme §9 (B2: `GRUPOS` com `'FISCAL'` na 8ª posição e título do
+teste para 10 grupos). Stack: backend em `:4001` com seed; frontend pelo `webServer` do
 `playwright.config.ts`.
 - Jornada (admin A): menu FISCAL → "Empresas, estabelecimentos e regime"; nova empresa; estabelecimento com CNAE
   principal digitado `6201-5/01` e secundário `6202300`; submeter. Admin B: aprovar. A: regime CRT 3; B: aprova.
@@ -834,7 +870,7 @@ administrador e um usuário `gestor` pela API de usuários; CNPJs com DV válido
   teclado (Tab até a linha, Enter seleciona, foco visível); drawers/diálogos fecham com Escape e devolvem o foco;
   `innerText` do `body` sem UUID (`/[0-9a-f]{8}-[0-9a-f]{4}-/i`) e sem código `/E\d{2}-T\d{2}/`.
 ```powershell
-Set-Location app/frontend; npx playwright test e2e/e01-t01-empresas.spec.ts
+Set-Location app/frontend; npx playwright test e2e/e01-t01-empresas.spec.ts e2e/shell-ds.spec.ts
 ```
 Esperado: todos os testes passam (saída anexada ao PR; Playwright não é job do `ci.yml`, o Monitor reexecuta).
 Commit: `test(e01-t01): Playwright de jornada, autorização e acessibilidade`.
