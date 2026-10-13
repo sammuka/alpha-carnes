@@ -45,9 +45,25 @@ Falha de qualquer pré-condição retorna `bloqueado`.
 6. **Pin**
    - Releia `headRefOid` ao terminar. SHA diferente invalida toda a rodada.
 
-Em dúvida, use `ajustar`. Segurança, violação não negociável ou decisão de produto ausente usa
-`bloqueado` no veredito. Na saída estruturada do ciclo, decisão de produto ausente mapeia
-obrigatoriamente para `requires-human`; os demais bloqueios mapeiam para `blocked`.
+Em dúvida sobre a **severidade**, classifique como BLOQUEANTE. Segurança, violação não negociável
+ou decisão de produto ausente usa `bloqueado` no veredito. Na saída estruturada do ciclo, decisão
+de produto ausente mapeia obrigatoriamente para `requires-human`; os demais bloqueios mapeiam
+para `blocked`.
+
+## Proporcionalidade (AD-22)
+
+- `aprovado` = zero BLOQUEANTE; MENORES vão no feedback como itens obrigatórios.
+- Da 2ª rodada em diante, audite o delta desde o head anterior e a resolução dos achados; achado
+  novo fora do delta só conta se for BLOQUEANTE. Teto de 3 rodadas antes de escalar ao QO.
+- **PR só de documentação**: o Portão 2 é CI 8/8 no head + diff igual ao plano/escopo aprovado +
+  ausência de segredo. Não há Portão A.
+- **Fatia de baixo risco**: Portão 2 completo; não há Portão A.
+- **Fatia de alto risco**: Portão 2 completo e, depois, Portão A por outro Monitor novo.
+- **Coordenação neutra**: commits posteriores que só acrescentam linhas em
+  `docs/execucao/GATE-VEREDITOS.md` ou alteram `docs/execucao/EXECUCAO-STATUS.md` não invalidam
+  a aprovação, se o resto da árvore for idêntico ao head aprovado (`git diff --name-only
+  <aprovado> <novo>` só com esses dois arquivos) e os oito jobs passarem no novo SHA.
+- Repositório já público: `visibility-ci.ps1` não se aplica; mudar visibilidade está fora da AD-21.
 
 ## Registro
 
@@ -62,4 +78,4 @@ Escape células, libere o lock em `finally` e remova somente o worktree de audit
 ## Saída
 
 Retorne onda, PR, plano/hash, head auditado, veredito, verificações, feedback e linha anexada.
-Só `aprovado` libera revisão adversarial ou merge.
+Só `aprovado` libera o próximo passo: Portão A (alto risco) ou merge (baixo risco e documental).

@@ -28,7 +28,17 @@ Nenhum passo pula o anterior. Implementar sem Portão 1 aprovado ou mergear sem 
 Regras de conduta herdadas do SiriusComex (vinculantes):
 - O Worker segue o plano **literalmente**. Se um `old_string` não casa, um teste falha após 1 correção, ou o plano não cobre o caso: **parar e reportar** — não improvisar.
 - O Monitor **roda ele mesmo** os comandos de verificação (`gh pr checks`, diff, greps dos critérios de aceite, execução local quando preciso). Relato do worker é hipótese, não evidência.
-- Em dúvida entre `aprovado` e `ajustar` → `ajustar`.
+- Severidade (AD-22): **BLOQUEANTE** viola invariante (integridade, dinheiro, segredo, segurança,
+  regra de fonte, decisão de produto) ou torna o plano/PR inexecutável e impede `aprovado`;
+  **MENOR** é imprecisão resolvível sem decidir regra, não impede `aprovado` e vira item
+  obrigatório do Worker ou do próximo plano. Em dúvida sobre a severidade → BLOQUEANTE.
+- Rodadas (AD-22): da 2ª em diante o Monitor novo audita o delta desde a rodada anterior e a
+  resolução dos achados; achado novo fora do delta só conta se for BLOQUEANTE. Teto de 3 rodadas
+  por portão; na 4ª o coordenador escala ao Quality Owner.
+- Classe de risco (AD-22): o plano declara `alto` ou `baixo`; o Portão 1 confirma. Alto risco =
+  dinheiro, baixa, conciliação, razão, cofre/certificado/segredo, fiscal, RBAC/autorização ou
+  migração de dados. PR só de documentação não tem Portão A; baixo risco tem revisão crítica por
+  commit + Portão 2; alto risco tem também Portão A.
 
 ## 3. Portão 1 — Gate de plano
 
@@ -73,7 +83,7 @@ Toda escrita nesses arquivos usa [`.codex/scripts/lock.ps1`](../../.codex/script
 
 ## 6. Formato obrigatório do plano tático de onda
 
-Padrão consolidado no plano F4c (`docs/superpowers/plans/2026-06-07-f4c-corte-transformacao.md`) e exigido no Portão 1:
+Padrão consolidado no plano F4c (`docs/superpowers/plans/2026-06-07-f4c-corte-transformacao.md`) e exigido no Portão 1. Regras adicionais (AD-22): um plano cobre **uma fatia E2E** (UI → API → PostgreSQL → eventos) e declara a classe de risco; gate CROSS contém só decisões, contratos e ownership (alvo 300–500 linhas); o pin é o sha256 do **blob git** do plano; o plano não afirma estado volátil (HEAD, head de PR, contagem de commits, "última linha") nem faz auto-verificação por contagem de SHAs — estado é lido por comando no momento do uso.
 
 ```markdown
 # Onda <N> — <Nome> — Plano de Implementação
