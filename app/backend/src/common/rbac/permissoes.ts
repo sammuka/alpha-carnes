@@ -98,6 +98,9 @@ export const PERMISSOES = {
   ESPELHO_COMERCIAL_LER: 'ESPELHO_COMERCIAL_LER',
   PEDIDO_RESERVA_LIBERAR: 'PEDIDO_RESERVA_LIBERAR',
   OCORRENCIA_PRECO_CIENTE: 'OCORRENCIA_PRECO_CIENTE',
+  FISCAL_EMPRESAS_LER: 'FISCAL_EMPRESAS_LER',
+  FISCAL_EMPRESAS_GERENCIAR: 'FISCAL_EMPRESAS_GERENCIAR',
+  FISCAL_EMPRESAS_APROVAR: 'FISCAL_EMPRESAS_APROVAR',
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -404,6 +407,11 @@ pushPermissoes('administrador', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR');
 pushPermissoes('logistica', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR'); // D10.9 — doc 04 §7.3/§7.4
 pushPermissoes('diretoria', 'FATURAMENTO_LER');
 
+// E01-T01 — cadastro fiscal de empresas/estabelecimentos/regime: só administrador (AD-04; AD-18 (5)
+// personas não viram perfis). Demais perfis dependem da decisão H-E01-02 (parâmetro
+// fiscal.empresas_perfis_autorizados + badge Provisório); edição runtime em /admin/perfis.
+pushPermissoes('administrador', 'FISCAL_EMPRESAS_LER', 'FISCAL_EMPRESAS_GERENCIAR', 'FISCAL_EMPRESAS_APROVAR');
+
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   USUARIOS_GERENCIAR: 'Criar e editar usuários',
@@ -481,4 +489,8 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   ESPELHO_COMERCIAL_LER: 'Consultar e exportar o espelho comercial',
   PEDIDO_RESERVA_LIBERAR: 'Liberar administrativamente a reserva de um rascunho (AD-06)',
   OCORRENCIA_PRECO_CIENTE: 'Marcar como ciente uma ocorrência informativa de ajuste de preço',
+  FISCAL_EMPRESAS_LER: 'Consultar empresas, estabelecimentos, CNAEs e regimes',
+  FISCAL_EMPRESAS_GERENCIAR:
+    'Cadastrar, editar, submeter e remover empresas, estabelecimentos, CNAEs, alterações e regimes',
+  FISCAL_EMPRESAS_APROVAR: 'Aprovar, rejeitar e suspender cadastros, alterações e regimes fiscais',
 };

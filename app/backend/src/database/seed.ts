@@ -294,6 +294,19 @@ const PARAMETROS_SEED = [
       pendencia: 'D10.2',
     },
   },
+  {
+    chave: 'fiscal.empresas_perfis_autorizados',
+    descricao: 'Perfis com acesso ao cadastro fiscal de empresas',
+    valorJson: {
+      grupo: 'Fiscal',
+      tipo: 'info',
+      titulo: 'Perfis do cadastro fiscal de empresas',
+      texto: 'Somente administrador até decisão sobre os demais perfis.',
+      valor: ['administrador'],
+      provisorio: true,
+      pendencia: 'H-E01-02',
+    },
+  },
 ] as const;
 
 export async function seedParametros(db: Db): Promise<void> {
