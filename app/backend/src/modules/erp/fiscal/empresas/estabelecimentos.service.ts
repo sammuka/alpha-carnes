@@ -21,6 +21,7 @@ import {
   type AcaoCadastroFiscal,
 } from '../../../../realtime/events/eventos';
 import { substituirCnaes } from './cnaes.service';
+import { montarCsvEstabelecimentos } from './exportacao-csv';
 import type { AcaoDecisaoDto, RemoverDto } from './dto/comum.dto';
 import type {
   CreateEstabelecimentoDto,
@@ -121,6 +122,49 @@ export class EstabelecimentosService {
       };
     });
     return montarPaginado(data, Number((total.rows[0] as { total?: number } | undefined)?.total ?? 0), query);
+  }
+
+  async exportar(query: ListarEstabelecimentosQuery): Promise<string> {
+    await this.validarFiltroEmpresa(query.empresaId, query.estabelecimentoId);
+    const where = this.whereLista(query);
+    const linhas = await this.db.execute(sql`
+      SELECT e.nome, e.cnpj, e.uf, e.situacao,
+             emp.razao_social AS "razaoSocial",
+             regime.crt AS "regimeCrt"
+      FROM estabelecimentos e
+      INNER JOIN empresas emp ON emp.id = e.empresa_id AND emp.deleted_at IS NULL
+      LEFT JOIN LATERAL (
+        SELECT r.crt
+        FROM regimes_tributarios r
+        WHERE r.estabelecimento_id = e.id
+          AND r.deleted_at IS NULL
+          AND r.situacao = 'APPROVED'
+          AND r.vigencia_inicio <= (now() AT TIME ZONE 'America/Sao_Paulo')::date
+          AND (r.vigencia_fim IS NULL OR r.vigencia_fim >= (now() AT TIME ZONE 'America/Sao_Paulo')::date)
+        ORDER BY r.vigencia_inicio DESC
+        LIMIT 1
+      ) regime ON true
+      WHERE ${where}
+      ORDER BY e.nome ASC
+    `);
+    return montarCsvEstabelecimentos(linhas.rows.map((raw) => {
+      const linha = raw as {
+        nome: string;
+        cnpj: string;
+        uf: string;
+        situacao: string;
+        razaoSocial: string;
+        regimeCrt: string | null;
+      };
+      return {
+        nome: linha.nome,
+        cnpj: linha.cnpj,
+        crt: linha.regimeCrt,
+        uf: linha.uf,
+        situacao: linha.situacao,
+        empresa: linha.razaoSocial,
+      };
+    }));
   }
 
   async contagens(query: ListarEstabelecimentosQuery) {

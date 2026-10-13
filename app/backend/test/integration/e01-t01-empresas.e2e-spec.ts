@@ -394,5 +394,51 @@ describe('E01-T01 empresas e estabelecimentos', () => {
     ]);
     const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
     expect(await servico.dadosFiscaisVigentes(db, estab.body.id, hoje)).toBeNull();
+    const submetido = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: estab.body.versao, justificativa: MOTIVO });
+    const aprovado = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: submetido.body.versao, justificativa: MOTIVO });
+    expect(aprovado.status).toBe(200);
+    const regime = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/regimes`)
+      .set('Cookie', adminA)
+      .send({ crt: '3', vigenciaInicio: '2020-01-01', justificativa: MOTIVO });
+    const regimeSubmetido = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/regimes/${regime.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: regime.body.versao, justificativa: MOTIVO });
+    const regimeAprovado = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/regimes/${regime.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: regimeSubmetido.body.versao, justificativa: MOTIVO });
+    expect(regimeAprovado.status).toBe(200);
+    expect(await servico.dadosFiscaisVigentes(db, estab.body.id, hoje)).toEqual({
+      cnpj: estab.body.cnpj,
+      inscricaoEstadual: '123456789',
+      uf: 'SP',
+      crt: '3',
+      cnaePrincipal: '6201501',
+    });
+  });
+
+  it('exportação CSV com rótulos, separador e sem id', async () => {
+    const cnpj = cnpjDe('12ABC3620001');
+    const empresa = await criarEmpresa(adminA, '12ABC362', 'Alpha Exportacao Fiscal');
+    await criarEstab(adminA, empresa.body.id, cnpj);
+    const res = await request(app.getHttpServer())
+      .get(`/fiscal/estabelecimentos/exportacao?search=${cnpj}`)
+      .set('Cookie', adminA);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.text.charCodeAt(0)).toBe(0xfeff);
+    expect(res.text).toContain('Estabelecimento;CNPJ;Regime tributário;Estado;Situação;Empresa');
+    expect(res.text).toContain(cnpj);
+    expect(res.text).toContain('Alpha Exportacao Fiscal');
+    expect(res.text).toContain('Rascunho');
+    expect(res.text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
   });
 });

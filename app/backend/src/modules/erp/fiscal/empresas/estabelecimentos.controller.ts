@@ -1,6 +1,7 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, UseGuards,
+  Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, Res, UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser, type CurrentUserPayload } from '../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
@@ -62,6 +63,20 @@ export class EstabelecimentosController {
   @RequirePermissoes('FISCAL_EMPRESAS_LER')
   contagens(@Query(new ZodValidationPipe(listarEstabelecimentosQuerySchema)) query: ListarEstabelecimentosQuery) {
     return this.estabelecimentos.contagens(query);
+  }
+
+  @Get('exportacao')
+  @RequirePermissoes('FISCAL_EMPRESAS_LER')
+  async exportacao(
+    @Query(new ZodValidationPipe(listarEstabelecimentosQuerySchema)) query: ListarEstabelecimentosQuery,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.estabelecimentos.exportar(query);
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="estabelecimentos.csv"',
+    });
+    return csv;
   }
 
   @Get(':id/historico')
