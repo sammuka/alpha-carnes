@@ -45,10 +45,28 @@ Leia o plano inteiro e verifique:
 5. **Consistência**
    - Tabelas, endpoints, eventos e tipos batem com o plano mestre e ondas aprovadas.
 
-Em dúvida, use `ajustar`. Registre `bloqueado` no veredito para decisão de produto ausente,
-dependência não satisfeita ou violação não negociável. Na saída estruturada do ciclo, decisão de
-produto ausente mapeia obrigatoriamente para `requires-human`; os demais bloqueios mapeiam para
-`blocked`.
+Em dúvida sobre a **severidade**, classifique como BLOQUEANTE. Registre `bloqueado` no veredito
+para decisão de produto ausente, dependência não satisfeita ou violação não negociável. Na saída
+estruturada do ciclo, decisão de produto ausente mapeia obrigatoriamente para `requires-human`;
+os demais bloqueios mapeiam para `blocked`.
+
+## Severidade, rodadas e classe de risco (AD-22)
+
+- **BLOQUEANTE**: viola invariante (integridade, dinheiro, segredo, segurança, regra de fonte,
+  decisão de produto) ou torna o plano inexecutável. Impede `aprovado`.
+- **MENOR**: imprecisão resolvível sem decidir regra. **Não** impede `aprovado`; vai no feedback
+  como item obrigatório do Worker (ou do próximo plano).
+- `aprovado` = zero BLOQUEANTE. `ajustar` = ao menos um BLOQUEANTE corrigível.
+- Da 2ª rodada em diante: leia o veredito anterior **depois** de formar a conclusão sobre o
+  delta (`git diff <sha-anterior>..<sha-atual> -- <plano>`) e audite a resolução dos achados.
+  Achado novo fora do delta só conta se for BLOQUEANTE.
+- Teto de 3 rodadas por portão. Na 4ª, o coordenador escala ao Quality Owner com o histórico.
+- Pin: sha256 do blob git do plano (`git show <sha>:<plano>` em arquivo temporário +
+  `Get-FileHash`), nunca do arquivo em disco (autocrlf).
+- Confirme a classe de risco declarada no plano (`alto` ou `baixo`). Plano sem classe, ou com
+  classe incompatível com o escopo, é BLOQUEANTE.
+- Reprove como BLOQUEANTE plano que afirme estado volátil (HEAD, head de PR, contagem de
+  commits, "última linha") como fato ou que use contagens de SHAs como verificação.
 
 ## Registro
 
@@ -62,10 +80,11 @@ Anexe exatamente uma linha a `GATE-VEREDITOS.md`, preserve o histórico e libere
 `finally`:
 
 ```text
-| <timestamp UTC> | onda<N> | 1 | aprovado|ajustar|bloqueado | plano=<path>; sha256=<hash>; comandos=<resumo> | <feedback numerado e acionável> |
+| <timestamp UTC> | onda<N> | 1 | aprovado|ajustar|bloqueado | plano=<path>; sha256(blob)=<hash>; risco=alto|baixo; modelo solicitado=<id>; efetivo=<id ou nao atestavel>; comandos=<resumo> | <BLOQUEANTES numerados; MENORES numerados como itens obrigatórios> |
 ```
 
-Escape `|` e quebras de linha dentro das células. Nunca aprove “com ressalvas”.
+Escape `|` e quebras de linha dentro das células. `aprovado` com MENORES listados é válido
+(AD-22); `aprovado` com BLOQUEANTE pendente nunca é.
 
 ## Saída
 

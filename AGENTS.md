@@ -61,7 +61,10 @@ estado ou veredito.
 
 Regras:
 
-- Use uma nova instância `monitor` para cada Portão 1, Portão 2 e revisão adversarial.
+- Use uma nova instância `monitor` para cada Portão 1, Portão 2 e revisão adversarial. Da 2ª
+  rodada em diante, a instância nova recebe o veredito anterior e audita o delta (AD-22).
+- Modelo por tarefa (AD-22): `claude-opus-5.5` para Monitores de código e Portões 2/A e para
+  Planner de alto risco; `claude-sonnet-5.5` admitido para ajuste textual de plano e coordenação.
 - O Monitor forma sua conclusão antes de ler um veredito anterior da mesma rodada.
 - Correção de plano volta a uma nova instância `planner`; correção de código volta ao `worker`.
 - Somente o `monitor` altera o conteúdo de `GATE-VEREDITOS.md`. O Executor pode incluí-lo
@@ -76,10 +79,16 @@ Regras:
 2. `$gate-plano` delega o Portão 1 a um Monitor independente.
 3. `$disparar-onda` usa Executor + Worker para implementar em worktree isolado.
 4. `$gate-pr` delega o Portão 2 a novo Monitor.
-5. No modo autônomo, outro Monitor faz a revisão adversarial e registra Portão `A`.
-6. Executor só mergeia o SHA aprovado por Portão 2 e Portão A.
+5. Em fatia de **alto risco** (dinheiro, baixa, conciliação, razão, cofre/certificado/segredo,
+   fiscal, RBAC, migração de dados), outro Monitor faz a revisão adversarial e registra Portão `A`.
+   Fatia de baixo risco e PR só de documentação não têm Portão A (AD-22).
+6. Executor só mergeia o SHA aprovado pelos portões exigidos pela classe de risco. Acréscimos
+   posteriores só em `GATE-VEREDITOS.md`/`EXECUCAO-STATUS.md` não invalidam a aprovação (AD-22).
 
-Nenhuma etapa pula a anterior. Em dúvida entre `aprovado` e `ajustar`, use `ajustar`.
+Nenhuma etapa pula a anterior. Achado BLOQUEANTE impede aprovação; achado MENOR não impede e
+vira item obrigatório da próxima etapa. Da 2ª rodada em diante a revisão é por delta, com teto
+de 3 rodadas por portão antes de escalar ao Quality Owner (AD-22). Em dúvida sobre a
+**severidade**, classifique como BLOQUEANTE.
 
 ## Comandos de validação
 
