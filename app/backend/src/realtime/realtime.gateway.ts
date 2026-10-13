@@ -9,10 +9,9 @@ import { OnEvent } from '@nestjs/event-emitter';
 import type { IncomingMessage, Server } from 'http';
 import type { Duplex } from 'stream';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { TokenService } from '../modules/auth/token.service';
-import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
-import { PERMISSOES } from '../common/rbac/permissoes';
+import { TokenService, type AccessTokenPayload } from '../modules/auth/token.service';
 import { RealtimeHub } from './realtime.hub';
+import { permissaoParaRoom, ROOMS_PROTEGIDAS } from './room-permissoes';
 import {
   EVENTOS,
   roomsDaData,
@@ -58,10 +57,11 @@ import {
   type AjusteEstoqueCriadoPayload,
   type AjusteEstoqueDecididoPayload,
   type CargaItemDivergentePayload,
+  type CadastroFiscalAlteradoPayload,
 } from './events/eventos';
 
-/** Socket autenticado: carrega o payload do usuário validado no handshake. */
-type AuthSocket = WebSocket & { user?: CurrentUserPayload };
+/** Socket autenticado: carrega o access token validado no handshake, inclusive `exp`. */
+type AuthSocket = WebSocket & { user?: AccessTokenPayload };
 
 interface MensagemCliente {
   type: string;
@@ -123,7 +123,7 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   }
 
   /** Valida o cookie access_token do handshake; retorna o payload ou null. */
-  private autenticar(req: IncomingMessage): CurrentUserPayload | null {
+  private autenticar(req: IncomingMessage): AccessTokenPayload | null {
     try {
       const token = lerCookie(req.headers.cookie, 'access_token');
       if (!token) return null;
@@ -138,7 +138,7 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
       try {
         const msg = JSON.parse(raw.toString()) as MensagemCliente;
         if (msg.type === 'subscribe' && typeof msg.room === 'string') {
-          if (this.podeAssinar(ws)) this.hub.join(ws, msg.room);
+          if (this.podeAssinar(ws, msg.room)) this.hub.join(ws, msg.room);
         }
       } catch {
         // mensagem malformada — ignora silenciosamente (não derruba a conexão)
@@ -148,9 +148,48 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
     ws.on('error', () => this.hub.leaveAll(ws));
   }
 
-  /** Assinatura de rooms de operação exige a permissão de leitura de disponibilidade. */
-  private podeAssinar(ws: AuthSocket): boolean {
-    return ws.user?.permissoes?.includes(PERMISSOES.DISPONIBILIDADE_LER) ?? false;
+  /** A room protegida exige a permissão do mapa; as demais continuam com disponibilidade. */
+  private podeAssinar(ws: AuthSocket, room: string): boolean {
+    return ws.user?.permissoes?.includes(permissaoParaRoom(room)) ?? false;
+  }
+
+  /**
+   * Publica só em room registrada. Remove da room, antes do envio, o socket
+   * cujo access token já expirou.
+   */
+  broadcastRoom(room: string, evento: string, payload: unknown): void {
+    if (!(room in ROOMS_PROTEGIDAS)) {
+      throw new Error(`Room não registrada: ${room}`);
+    }
+    const agora = Date.now();
+    for (const socket of this.hub.membros(room)) {
+      const exp = (socket as AuthSocket).user?.exp;
+      if (exp !== undefined && exp * 1000 <= agora) this.hub.remover(socket, room);
+    }
+    this.hub.broadcast(room, evento, payload);
+  }
+
+  @OnEvent(EVENTOS.EMPRESA_FISCAL_ALTERADA)
+  handleEmpresaFiscalAlterada(payload: CadastroFiscalAlteradoPayload): void {
+    this.publicarFiscal(EVENTOS.EMPRESA_FISCAL_ALTERADA, payload);
+  }
+
+  @OnEvent(EVENTOS.ESTABELECIMENTO_FISCAL_ALTERADO)
+  handleEstabelecimentoFiscalAlterado(payload: CadastroFiscalAlteradoPayload): void {
+    this.publicarFiscal(EVENTOS.ESTABELECIMENTO_FISCAL_ALTERADO, payload);
+  }
+
+  @OnEvent(EVENTOS.REGIME_TRIBUTARIO_ALTERADO)
+  handleRegimeTributarioAlterado(payload: CadastroFiscalAlteradoPayload): void {
+    this.publicarFiscal(EVENTOS.REGIME_TRIBUTARIO_ALTERADO, payload);
+  }
+
+  private publicarFiscal(evento: string, payload: CadastroFiscalAlteradoPayload): void {
+    try {
+      this.broadcastRoom('fiscal-empresas', evento, payload);
+    } catch (err) {
+      this.logger.error(`Falha ao fazer broadcast de ${evento}`, err as Error);
+    }
   }
 
   // ── Eventos de domínio → broadcast (defensivo) ────────────────────────────
