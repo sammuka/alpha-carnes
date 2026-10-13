@@ -47,6 +47,16 @@ Não crie worktree sibling fora do repositório.
 - Se o diff tocar `landing/**`, aguarde Vercel; caso contrário, reporte apenas os oito jobs CI.
 - Não faça merge nem edite `docs/execucao/`.
 
+## Revisão crítica por commit e paralelismo (AD-22)
+
+- Depois de cada entrega ou correção do Worker, o coordenador aciona um Monitor crítico novo
+  (`claude-opus-5.5`) sobre o SHA exato. MENORES viram itens do Worker; só BLOQUEANTE impede
+  avançar. Da 2ª rodada em diante a revisão é por delta.
+- Fatias sem dependência entre si podem rodar ao mesmo tempo, cada uma em seu worktree
+  (`.worktrees/<fatia>`), com lista explícita de paths exclusivos. Nenhum path compartilhado
+  entre fatias simultâneas; contratos compartilhados precisam estar mergeados antes.
+- Executor e tarefas de coordenação podem usar `claude-sonnet-5.5`.
+
 ## Retorno ao Executor
 
 Com PR válido, o Executor, sob lock `coordination`, muda somente a linha para
