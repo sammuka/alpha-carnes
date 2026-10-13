@@ -9,12 +9,21 @@ import { ZodValidationPipe } from '../../../../common/pipes/zod-validation.pipe'
 import { RequirePermissoes } from '../../../../common/rbac/require-permissoes.decorator';
 import { AlteracoesService } from './alteracoes.service';
 import { EstabelecimentosService } from './estabelecimentos.service';
+import { RegimesService } from './regimes.service';
 import {
   createAlteracaoSchema,
   updateAlteracaoSchema,
   type CreateAlteracaoDto,
   type UpdateAlteracaoDto,
 } from './dto/alteracao.dto';
+import {
+  createRegimeSchema,
+  submeterRegimeSchema,
+  updateRegimeSchema,
+  type CreateRegimeDto,
+  type SubmeterRegimeDto,
+  type UpdateRegimeDto,
+} from './dto/regime.dto';
 import {
   acaoDecisaoSchema,
   removerSchema,
@@ -40,6 +49,7 @@ export class EstabelecimentosController {
   constructor(
     private readonly estabelecimentos: EstabelecimentosService,
     private readonly alteracoes: AlteracoesService,
+    private readonly regimes: RegimesService,
   ) {}
 
   @Get()
@@ -224,6 +234,75 @@ export class EstabelecimentosController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.alteracoes.descartar(id, altId, dto, user.sub);
+  }
+
+  @Post(':id/regimes')
+  @HttpCode(201)
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  criarRegime(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Body(new ZodValidationPipe(createRegimeSchema)) dto: CreateRegimeDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.regimes.criar(id, dto, user.sub);
+  }
+
+  @Patch(':id/regimes/:regimeId')
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  editarRegime(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Param('regimeId', new ZodValidationPipe(uuidParamSchema)) regimeId: string,
+    @Body(new ZodValidationPipe(updateRegimeSchema)) dto: UpdateRegimeDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.regimes.atualizar(id, regimeId, dto, user.sub);
+  }
+
+  @Post(':id/regimes/:regimeId/submeter')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  submeterRegime(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Param('regimeId', new ZodValidationPipe(uuidParamSchema)) regimeId: string,
+    @Body(new ZodValidationPipe(submeterRegimeSchema)) dto: SubmeterRegimeDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.regimes.submeter(id, regimeId, dto, user.sub);
+  }
+
+  @Post(':id/regimes/:regimeId/aprovar')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_EMPRESAS_APROVAR')
+  aprovarRegime(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Param('regimeId', new ZodValidationPipe(uuidParamSchema)) regimeId: string,
+    @Body(new ZodValidationPipe(acaoDecisaoSchema)) dto: AcaoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.regimes.aprovar(id, regimeId, dto, user.sub);
+  }
+
+  @Post(':id/regimes/:regimeId/rejeitar')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_EMPRESAS_APROVAR')
+  rejeitarRegime(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Param('regimeId', new ZodValidationPipe(uuidParamSchema)) regimeId: string,
+    @Body(new ZodValidationPipe(acaoDecisaoSchema)) dto: AcaoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.regimes.rejeitar(id, regimeId, dto, user.sub);
+  }
+
+  @Delete(':id/regimes/:regimeId')
+  @RequirePermissoes('FISCAL_EMPRESAS_GERENCIAR')
+  removerRegime(
+    @Param('id', new ZodValidationPipe(uuidParamSchema)) id: string,
+    @Param('regimeId', new ZodValidationPipe(uuidParamSchema)) regimeId: string,
+    @Body(new ZodValidationPipe(removerSchema)) dto: RemoverDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.regimes.remover(id, regimeId, dto, user.sub);
   }
 
   @Delete(':id')
