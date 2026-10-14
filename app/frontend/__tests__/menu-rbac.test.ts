@@ -19,6 +19,7 @@ const PERMISSOES_POR_PERFIL = JSON.parse(
 /**
  * Coluna "Perfis RBAC" da matriz de rastreabilidade v1.1 (linhas 3–41), transcrita rota a rota.
  * É a fonte contra a qual `menus_visiveis` é conferido: são as mesmas 126 atribuições.
+ * O item do ERP (AD-24 (1)) fica em `MATRIZ_ERP`, para não alterar esta transcrição.
  */
 const MATRIZ_RASTREABILIDADE: Record<string, string[]> = {
   '/comercial/clientes': ['comercial', 'gestor', 'administrador', 'faturamento'],
@@ -62,6 +63,14 @@ const MATRIZ_RASTREABILIDADE: Record<string, string[]> = {
   '/admin/auditoria': ['administrador', 'diretoria', 'gestor'],
 };
 
+/** Rota do ERP integrado: fonte AD-24 (1) + D11 (permissões FISCAL_EMPRESAS_* só no administrador). */
+const MATRIZ_ERP: Record<string, string[]> = {
+  '/fiscal/empresas': ['administrador'],
+};
+
+/** Matriz v1.1 (39 rotas, 126 atribuições) + ERP (1 rota, 1 atribuição) = 40 rotas, 127. */
+const MATRIZ_COMPLETA: Record<string, string[]> = { ...MATRIZ_RASTREABILIDADE, ...MATRIZ_ERP };
+
 /** Decisão 25 da Onda 2 — as 26 rotas que o gate de grupo retirava do menu. Devem estar visíveis. */
 const PERDAS_HERDADAS: Record<string, string[]> = {
   compras: ['/recebimento/recebimento-carga'],
@@ -94,11 +103,11 @@ const EXTRAS_HERDADOS: Record<string, string[]> = {
  */
 const TODOS = [
   'COMERCIAL', 'GESTÃO', 'RECEBIMENTO & BALANÇA', 'DESOSSA', 'ESTOQUE',
-  'CARGA', 'FATURAMENTO', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
+  'CARGA', 'FATURAMENTO', 'FISCAL', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
 ];
 const GRUPOS_ESPERADOS: Record<string, string[]> = {
   administrador: TODOS,
-  gestor: TODOS,
+  gestor: TODOS.filter((titulo) => titulo !== 'FISCAL'),
   compras: ['GESTÃO', 'RECEBIMENTO & BALANÇA', 'CADASTROS & REGRAS'],
   comercial: ['COMERCIAL', 'GESTÃO', 'DESOSSA'],
   recebimento_pesagem: ['GESTÃO', 'RECEBIMENTO & BALANÇA', 'ESTOQUE'],
@@ -146,16 +155,25 @@ function esperadoDe(tabela: Record<string, string[]>, perfil: string): string[] 
 
 /** Matriz invertida: rota→perfis vira perfil→rotas. */
 function menusDaMatriz(perfil: string): string[] {
-  return Object.entries(MATRIZ_RASTREABILIDADE)
+  return Object.entries(MATRIZ_COMPLETA)
     .filter(([, perfis]) => perfis.includes(perfil))
     .map(([href]) => href)
     .sort();
 }
 
+function permissoesDe(perfil: string): string[] {
+  const permissoes = PERMISSOES_POR_PERFIL[perfil];
+  if (!permissoes) throw new Error(`perfil ausente no snapshot de permissoes: ${perfil}`);
+  return permissoes;
+}
+
+/** Grupos do menu do perfil, com as permissões reais do snapshot (como o layout faz). */
+function gruposVisiveis(perfil: string) {
+  return filtrarMenuPorMenusVisiveis(menusDe(perfil), permissoesDe(perfil));
+}
+
 function rotasVisiveis(perfil: string): string[] {
-  return filtrarMenuPorMenusVisiveis(menusDe(perfil)).flatMap((grupo) =>
-    grupo.items.map((item) => item.href),
-  );
+  return gruposVisiveis(perfil).flatMap((grupo) => grupo.items.map((item) => item.href));
 }
 
 describe('menu por menus_visiveis — reconciliação com a matriz', () => {
@@ -164,19 +182,24 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     expect(PERFIS).toHaveLength(11);
   });
 
-  it('a matriz transcrita cobre exatamente as 39 rotas do menu (AD-15)', () => {
-    expect(Object.keys(MATRIZ_RASTREABILIDADE).sort()).toEqual([...ROTAS_CANONICAS].sort());
-    expect(ROTAS_CANONICAS).toHaveLength(39);
+  it('a matriz transcrita cobre exatamente as 39 rotas da v1.1 e o menu soma a rota do ERP (AD-15, AD-24)', () => {
+    const semFiscal = ROTAS_CANONICAS.filter((href) => !href.startsWith('/fiscal/'));
+    expect(Object.keys(MATRIZ_RASTREABILIDADE).sort()).toEqual([...semFiscal].sort());
+    expect(semFiscal).toHaveLength(39);
+    expect(Object.keys(MATRIZ_COMPLETA).sort()).toEqual([...ROTAS_CANONICAS].sort());
+    expect(ROTAS_CANONICAS).toHaveLength(40);
   });
 
   it.each(PERFIS)('menus_visiveis do perfil sao exatamente os da matriz: %s', (perfil) => {
     expect([...menusDe(perfil)].sort()).toEqual(menusDaMatriz(perfil));
   });
 
-  it('a matriz soma 126 atribuicoes perfil x rota (AD-15 revogou 2 rotas da AD-11)', () => {
+  it('a matriz soma 126 atribuicoes da v1.1 + 1 do ERP = 127 (AD-15 revogou 2 rotas da AD-11)', () => {
     const total = PERFIS.reduce((soma, perfil) => soma + menusDe(perfil).length, 0);
-    expect(total).toBe(126);
+    expect(total).toBe(126 + 1);
     expect(Object.values(MATRIZ_RASTREABILIDADE).reduce((s, p) => s + p.length, 0)).toBe(126);
+    expect(Object.values(MATRIZ_ERP).reduce((s, p) => s + p.length, 0)).toBe(1);
+    expect(Object.values(MATRIZ_COMPLETA).reduce((s, p) => s + p.length, 0)).toBe(127);
   });
 
   it('zero perdas: nenhuma rota da matriz fica fora do menu do perfil', () => {
@@ -190,7 +213,7 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
   it('zero extras: nenhum item visivel sem atribuicao na matriz', () => {
     const extras = PERFIS.flatMap((perfil) =>
       rotasVisiveis(perfil)
-        .filter((href) => !(MATRIZ_RASTREABILIDADE[href] ?? []).includes(perfil))
+        .filter((href) => !(MATRIZ_COMPLETA[href] ?? []).includes(perfil))
         .map((href) => `${perfil}:${href}`),
     );
     expect(extras).toEqual([]);
@@ -222,7 +245,34 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     const esperado = esperadoDe(GRUPOS_ESPERADOS, perfil);
     // A tabela do plano precisa estar na ordem canônica; senão o toEqual abaixo vira loteria.
     expect(esperado).toEqual(TODOS.filter((titulo) => esperado.includes(titulo)));
-    expect(filtrarMenuPorMenusVisiveis(menusDe(perfil)).map((g) => g.title)).toEqual(esperado);
+    expect(gruposVisiveis(perfil).map((g) => g.title)).toEqual(esperado);
+  });
+
+  it('item com permissao some sem a permissao (fail-closed)', () => {
+    const menusAdmin = menusDe('administrador');
+    const semLer = permissoesDe('administrador').filter((p) => p !== 'FISCAL_EMPRESAS_LER');
+    const grupos = filtrarMenuPorMenusVisiveis(menusAdmin, semLer).map((g) => g.title);
+    expect(grupos).not.toContain('FISCAL');
+    expect(grupos).toEqual(TODOS.filter((titulo) => titulo !== 'FISCAL'));
+    expect(filtrarMenuPorMenusVisiveis(menusAdmin).map((g) => g.title)).not.toContain('FISCAL');
+  });
+
+  it('administrador ve FISCAL; nenhum outro perfil ve', () => {
+    expect(rotasVisiveis('administrador')).toContain('/fiscal/empresas');
+    expect(gruposVisiveis('administrador').map((g) => g.title)).toContain('FISCAL');
+    for (const perfil of PERFIS.filter((p) => p !== 'administrador')) {
+      expect(rotasVisiveis(perfil)).not.toContain('/fiscal/empresas');
+    }
+  });
+
+  it('menu FISCAL atribuido a perfil sem FISCAL_EMPRESAS_LER nao aparece', () => {
+    // Perfil criado em /admin/perfis com o menu marcado, mas sem a permissão de leitura fiscal.
+    const grupos = filtrarMenuPorMenusVisiveis(
+      [...menusDe('gestor'), '/fiscal/empresas'],
+      permissoesDe('gestor'),
+    );
+    expect(permissoesDe('gestor')).not.toContain('FISCAL_EMPRESAS_LER');
+    expect(grupos.map((g) => g.title)).not.toContain('FISCAL');
   });
 
   it.each(PERFIS)('rota de entrada bate com a funcao primaria do perfil: %s', (perfil) => {
@@ -262,12 +312,12 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
   });
 
   it('gestor ve ADMINISTRAÇÃO apenas com Auditoria', () => {
-    const admin = filtrarMenuPorMenusVisiveis(menusDe('gestor')).find((g) => g.title === 'ADMINISTRAÇÃO');
+    const admin = gruposVisiveis('gestor').find((g) => g.title === 'ADMINISTRAÇÃO');
     expect(admin?.items.map((i) => i.href)).toEqual(['/admin/auditoria']);
   });
 
   it('todo grupo do MENU_V2 aparece para ao menos um perfil', () => {
-    const titulos = new Set(PERFIS.flatMap((p) => filtrarMenuPorMenusVisiveis(menusDe(p)).map((g) => g.title)));
+    const titulos = new Set(PERFIS.flatMap((p) => gruposVisiveis(p).map((g) => g.title)));
     expect([...titulos].sort()).toEqual(MENU_V2.map((g) => g.title).sort());
   });
 
@@ -276,8 +326,8 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     for (const perfil of PERFIS) {
       expect(rotasVisiveis(perfil).sort()).toEqual(menusDaMatriz(perfil));
     }
-    expect(ROTAS_CANONICAS).toHaveLength(39);
-    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(126);
+    expect(ROTAS_CANONICAS).toHaveLength(40);
+    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(126 + 1);
 
     // E as permissões novas chegaram ao snapshot, nos perfis de D21.
     const novas = [

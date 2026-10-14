@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { MENU_V2 } from '../src/lib/menu-v2';
+import { MENU_V2, filtrarMenuPorMenusVisiveis } from '../src/lib/menu-v2';
 import { CADASTROS } from '../src/lib/cadastros-config';
 
 const GRUPOS = [
@@ -11,6 +11,7 @@ const GRUPOS = [
   'ESTOQUE',
   'CARGA',
   'FATURAMENTO',
+  'FISCAL',
   'CADASTROS & REGRAS',
   'ADMINISTRAÇÃO',
 ];
@@ -58,15 +59,42 @@ const ITENS_PROTOTIPO: [string, string, string][] = [
   ['ADMINISTRAÇÃO', 'Auditoria', '/admin/auditoria'],
 ];
 
+/** Itens do ERP integrado (AD-24 (1)): grupo FISCAL criado na 8ª posição, fora do protótipo v1.1. */
+const ITENS_ERP: [string, string, string][] = [
+  ['FISCAL', 'Empresas, estabelecimentos e regime', '/fiscal/empresas'],
+];
+
 describe('menu canônico v2', () => {
-  it('MENU_V2 tem os 9 grupos na ordem do prototipo', () => {
+  it('MENU_V2 tem os 10 grupos, com FISCAL na 8ª posição', () => {
     expect(MENU_V2.map((g) => g.title)).toEqual(GRUPOS);
+    expect(MENU_V2[7]?.title).toBe('FISCAL');
+    expect(MENU_V2).toHaveLength(10);
   });
 
-  it('MENU_V2 tem os 39 itens com rotulo e rota do prototipo (AD-15)', () => {
+  it('MENU_V2 mantém os 39 itens com rotulo e rota do prototipo (AD-15) e soma o item do ERP', () => {
     const atual = MENU_V2.flatMap((g) => g.items.map((i) => [g.title, i.label, i.href]));
-    expect(atual).toEqual(ITENS_PROTOTIPO);
-    expect(atual).toHaveLength(39);
+    const semFiscal = atual.filter(([grupo]) => grupo !== 'FISCAL');
+    expect(semFiscal).toEqual(ITENS_PROTOTIPO);
+    expect(semFiscal).toHaveLength(39);
+    expect(atual.filter(([grupo]) => grupo === 'FISCAL')).toEqual(ITENS_ERP);
+    expect(atual).toHaveLength(40);
+  });
+
+  it('o item FISCAL declara a permissão FISCAL_EMPRESAS_LER e o ícone Landmark', () => {
+    const item = MENU_V2.find((g) => g.title === 'FISCAL')?.items[0];
+    expect(item?.permissao).toBe('FISCAL_EMPRESAS_LER');
+    expect(item?.iconKey).toBe('Landmark');
+  });
+
+  it('menu atribuído sem a permissão FISCAL_EMPRESAS_LER não devolve o item nem o grupo FISCAL', () => {
+    const visiveis = ['/fiscal/empresas', '/comercial/clientes'];
+    const semPermissao = filtrarMenuPorMenusVisiveis(visiveis, ['CLIENTES_LER']);
+    expect(semPermissao.map((g) => g.title)).toEqual(['COMERCIAL']);
+    expect(semPermissao.flatMap((g) => g.items.map((i) => i.href))).not.toContain('/fiscal/empresas');
+    // Sem o segundo argumento o filtro também é fail-closed.
+    expect(filtrarMenuPorMenusVisiveis(visiveis).map((g) => g.title)).toEqual(['COMERCIAL']);
+    const comPermissao = filtrarMenuPorMenusVisiveis(visiveis, ['FISCAL_EMPRESAS_LER']);
+    expect(comPermissao.map((g) => g.title)).toEqual(['COMERCIAL', 'FISCAL']);
   });
 
   it('MENU_V2 nao tem rota duplicada e todo item declara icone', () => {
@@ -89,5 +117,9 @@ describe('menu canônico v2', () => {
         return !(recurso && recursoGenerico && recurso in CADASTROS);
       });
     expect(semRota).toEqual([]);
+  });
+
+  it('a rota nova /fiscal/empresas tem page.tsx dedicada', () => {
+    expect(existsSync(join('src', 'app', '(admin)', 'fiscal', 'empresas', 'page.tsx'))).toBe(true);
   });
 });
