@@ -101,6 +101,8 @@ export const PERMISSOES = {
   FISCAL_EMPRESAS_LER: 'FISCAL_EMPRESAS_LER',
   FISCAL_EMPRESAS_GERENCIAR: 'FISCAL_EMPRESAS_GERENCIAR',
   FISCAL_EMPRESAS_APROVAR: 'FISCAL_EMPRESAS_APROVAR',
+  FISCAL_ENQUADRAMENTOS_LER: 'FISCAL_ENQUADRAMENTOS_LER',
+  FISCAL_ENQUADRAMENTOS_GERENCIAR: 'FISCAL_ENQUADRAMENTOS_GERENCIAR',
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -411,6 +413,9 @@ pushPermissoes('diretoria', 'FATURAMENTO_LER');
 // personas não viram perfis). Demais perfis dependem da decisão H-E01-02 (parâmetro
 // fiscal.empresas_perfis_autorizados + badge Provisório); edição runtime em /admin/perfis.
 pushPermissoes('administrador', 'FISCAL_EMPRESAS_LER', 'FISCAL_EMPRESAS_GERENCIAR', 'FISCAL_EMPRESAS_APROVAR');
+// E01-T02 — operações fiscais e enquadramentos: só administrador (AD-04; AD-18 (5);
+// personas não viram perfis). Demais perfis = H-E01-12. Sem FISCAL_ENQUADRAMENTOS_APROVAR.
+pushPermissoes('administrador', 'FISCAL_ENQUADRAMENTOS_LER', 'FISCAL_ENQUADRAMENTOS_GERENCIAR');
 
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
@@ -493,4 +498,7 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   FISCAL_EMPRESAS_GERENCIAR:
     'Cadastrar, editar, submeter e remover empresas, estabelecimentos, CNAEs, alterações e regimes',
   FISCAL_EMPRESAS_APROVAR: 'Aprovar, rejeitar e suspender cadastros, alterações e regimes fiscais',
+  FISCAL_ENQUADRAMENTOS_LER: 'Consultar operações fiscais, enquadramentos, CFOP e NCM manuais',
+  FISCAL_ENQUADRAMENTOS_GERENCIAR:
+    'Cadastrar, editar, duplicar, inativar, reativar e remover enquadramentos e códigos manuais de CFOP e NCM',
 };

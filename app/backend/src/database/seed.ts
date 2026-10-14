@@ -307,6 +307,19 @@ const PARAMETROS_SEED = [
       pendencia: 'H-E01-02',
     },
   },
+  {
+    chave: 'fiscal.enquadramentos_perfis_autorizados',
+    descricao: 'Perfis com acesso a operações fiscais e enquadramentos',
+    valorJson: {
+      grupo: 'Fiscal',
+      tipo: 'info',
+      titulo: 'Perfis de operações fiscais e enquadramentos',
+      texto: 'Somente administrador até decisão sobre os demais perfis.',
+      valor: ['administrador'],
+      provisorio: true,
+      pendencia: 'H-E01-12',
+    },
+  },
 ] as const;
 
 export async function seedParametros(db: Db): Promise<void> {
