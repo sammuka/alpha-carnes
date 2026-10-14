@@ -11,6 +11,15 @@
 | Rev. | Data | Autor | Motivo |
 |---|---|---|---|
 | r1 | 2026-10-14 | planner | versão inicial da fatia E01-T02 (ALP-111) |
+| r2 | 2026-10-14 | planner (nova instância) | Portão 1 r1 `ajustar` (5 achados); ajuste cirúrgico: nenhum outro ponto do plano muda |
+
+| Achado r1 | Correção r2 |
+|---|---|
+| D6, §4, §7, §10, o CSV da Task 10 e a Task 13 abreviam os pares e os rótulos do protótipo; a Task 13 seleciona Normal; o botão do drawer está "Salvar" | Pares de `componentes.js` L1746–L1800 em D6 e nos rótulos de §4, §7, §10, CSV e Task 13. A Task 13 seleciona Operação normal. O botão é Salvar rascunho; a remoção autorizada tira só a palavra ilustrativo |
+| O schema literal do §5 não indexa `empresa_id` | `index('idx_enquadramentos_empresa').on(t.empresaId)` no padrão da T01 e de `docs/data/convencoes-schema.md` |
+| `renderFicha` mostra Empresa; o GET detalhe e a ficha não devolvem o nome | `empresaNome` no GET detalhe do §7 e na trilha do §10, ao lado de Situação e Responsável. Ambiente continua de fora |
+| A aba Regras omite o caminho de aprovação; as três exceções genéricas de `renderExceptions` não estão na remoção autorizada | Caminho de aprovação em leitura, com `BadgeProvisorio` H-E01-11, sem permissão `APROVAR` e sem botão de aprovar. §4 autoriza retirar as três exceções injetadas. A aba fica com os dois fluxos do Caderno |
+| A Task 6 nomeia um GET que não altera `atributos_json` | A Task 6 repete o nome do mapa §13: "POST não altera produtos.atributos_json, operacoes nem estabelecimentos" |
 
 **Goal:** persistir o enquadramento fiscal — vínculo temporal de um estabelecimento já aprovado a uma operação
 comercial existente, CFOP, tpNF, finNFe, abrangência, tipo de produto, produto, NCM, CEST, cliente, vigência e
@@ -96,7 +105,7 @@ Cinco entradas que a spec deixa fáceis de errar, e o teste que as prende:
 | D3 | Estabelecimento só `APPROVED` e `deleted_at IS NULL`, da T01. `empresa_id` é copiado da linha travada, nunca do cliente | Pedido da fatia; MATRIZ-UX L7 e L58; `fiscal-empresas.schema.ts` `uq_estabelecimentos_id_empresa` |
 | D4 | Produto e cliente são os cadastros atuais (`produtos`, `clientes`), só `status = 'ativo'` e não removidos. O NCM/CFOP/CEST de `produtos.atributos_json` não é catálogo e não preenche o enquadramento | Pedido da fatia; `produtos.schema.ts`; `produto.dto.ts` L31–L39; MATRIZ-UX L65 e L68 |
 | D5 | "Contribuinte" do resumo do Caderno é o campo Cliente do contrato de tela. Não há enum `indIEDest` | Caderno B L63 ação "relacionar produto e cliente"; MATRIZ-UX L68; componentes.js L298–L308. Indicador de contribuinte ICMS não está no contrato de campos |
-| D6 | tpNF `0` Entrada, `1` Saída. finNFe `1` Normal, `2` Complementar, `3` Ajuste, `4` Devolução. Abrangência `INTERNA`/`INTER`/`EXT`. Tipo de produto `PROPRIA`/`REVENDA`/`SUB` | componentes.js L1746–L1800 |
+| D6 | tpNF `0` Entrada, `1` Saída. finNFe `1` Operação normal, `2` NF-e complementar, `3` NF-e de ajuste, `4` Devolução. Abrangência `INTERNA` Dentro do estado, `INTER` Outro estado, `EXT` Exterior. Tipo de produto `PROPRIA` Produção própria, `REVENDA` Revenda, `SUB` Subproduto | componentes.js L1746–L1800 |
 | D7 | CFOP e NCM são catálogos manuais vazios (código + descrição), no espírito do CNAE da T01: formato e duplicidade, sem Receita, sem IBGE e sem semear a tabela nacional. CEST é texto de 7 dígitos no enquadramento, sem tabela | Pedido da fatia; AD-24 (3) como analogia de formato, não como catálogo; componentes.js L226–L296 e L2666–L2698 (fixtures, não semente) |
 | D8 | Critério temporal obrigatório: `vigencia_inicio` obrigatória, `vigencia_fim` opcional e `>= início`. A consulta exige `data`. Não existem colunas comercial/fiscal/efetiva (H-E01-10) | Caderno B L65; MATRIZ-UX L69–L70; componentes.js L154–L176 (`vigenciaFim.required: false`) |
 | D9 | CFOP sozinho nunca escolhe perfil. A consulta e o POST exigem a chave inteira. Não existe rota "por CFOP" | Caderno B L65 |
@@ -141,24 +150,27 @@ Cinco entradas que a spec deixa fáceis de errar, e o teste que as prende:
 | Elemento | Fonte (arquivo:linha) | Implementação real |
 |---|---|---|
 | Metadados | catalogo.js L194–L207 | título "Operações fiscais e enquadramentos"; subtítulo = ações do catálogo + "Acesso típico" com `BadgeProvisorio codigo="H-E01-12"` |
-| Campos do formulário | componentes.js L2982–L3001 | Estabelecimento, Operação, Tipo da nota, Finalidade, CFOP, Abrangência, Origem do produto, Produto, NCM, CEST, Cliente, Início, Fim. Prioridade entra fora dessa lista, com selo (C3) |
+| Campos do formulário | componentes.js L2982–L3001 | Estabelecimento, Operação, Tipo da nota, Finalidade, Operação fiscal (CFOP), Abrangência da operação, Origem do produto, Produto, Classificação fiscal (NCM), Substituição tributária (CEST), Cliente, Início de vigência, Fim de vigência. Finalidade, Abrangência da operação e Origem do produto mostram os pares de D6. Prioridade entra fora dessa lista, com selo (C3) |
 | Enums | componentes.js L1746–L1800 | D6 |
-| Grid | componentes.js L3004–L3036; MATRIZ-UX L49 | Operação · CFOP · Início de vigência · Estabelecimento · Tipo da nota · Finalidade. Ordenação default Operação. 20/página server-side. Sem coluna técnica |
-| Filtros | componentes.js L3038–L3043 | Estabelecimento, CFOP, Produto, Cliente |
+| Grid | componentes.js L3004–L3036; MATRIZ-UX L49 | Operação · Operação fiscal (CFOP) · Início de vigência · Estabelecimento · Tipo da nota · Finalidade. Ordenação default Operação. 20/página server-side. Sem coluna técnica |
+| Filtros | componentes.js L3038–L3043 | Estabelecimento, Operação fiscal (CFOP), Produto, Cliente |
 | Ações do processo | catalogo.js L204; aplicacao.js `actionNames` L40–L43 e `openWorkflow` L403–L405 | Cadastrar operação, Duplicar perfil, Relacionar produto e cliente, Controlar prioridade |
-| Ficha, 7 abas, trilha | aplicacao.js `renderFicha` L179–L192, `renderMov` L194, `renderRules` L197, `renderExceptions` L200–L205, `renderHistory` L207–L210, `integrationInfo` L212–L218, `renderAccept` L220–L236 | §10. Código, situação, responsável, criação e alteração ficam na ficha (Caderno B L63), não no grid |
+| Ficha, 7 abas, trilha | aplicacao.js `renderFicha` L179–L192, `renderMov` L194, `renderRules` L197, `renderExceptions` L200–L205, `renderHistory` L207–L210, `integrationInfo` L212–L218, `renderAccept` L220–L236 | §10. Código, situação, responsável, criação e alteração ficam na ficha (Caderno B L63), não no grid. `renderFicha` L190 mostra Empresa na trilha, ao lado de Situação e Responsável. Ambiente fica de fora |
 | Drawer | aplicacao.js `openDrawer` L427–L438, `renderControl` L407–L425, `saveForm` L441 | §10. Justificativa obrigatória mesmo sem o campo na seção (L436) |
 | Lookup | aplicacao.js `openLookup` L485–L493 | combos existentes; vazio = "Nenhum cadastro disponível para seleção. Consulte a área responsável." |
 | Cascata | aplicacao.js `syncDependentSelectors` L472–L482 | não há pai Empresa no formulário (C11). Trocar estabelecimento não limpa produto/cliente (eles não têm `dependsOn`) |
-| Exceções | catalogo.js L206; aplicacao.js L200–L203 | "Empate de enquadramento" e "Operação sem regra aprovada" como erros reais da consulta |
+| Exceções | catalogo.js L206; aplicacao.js L200–L203 | "Empate de enquadramento" e "Operação sem regra aprovada", os dois fluxos do Caderno. As três exceções genéricas que L201 injeta quando o catálogo não tem ponto e vírgula não entram (remoção abaixo) |
 
 Remoções autorizadas (Princípio I.2(a)/(b)), conferidas no Portão 2: selo "DADOS FICTÍCIOS"; pill "Fixture de
 teste"; rodapé "registros fictícios"; eyebrow com código de épico e "Caderno B §E01-T02"; KPI "Ambiente em tela";
 botões "Abrir ocorrência" e "Simular erro de validação" (L398–L400); painel de CST/alíquota do épico E01
 (L243–L254) e os botões "Simular cálculo fiscal", "Comparar regras por vigência", "Submeter classificação" e
-"Exportar memória de cálculo" (C12); "ilustrativo" e "Cadastro demonstrativo em memória" (L437); checkboxes da
-aba Aceite (viram leitura). Botões de Integrações para telas inexistentes (L218) desabilitados com
-`title="Destino ainda não disponível"`.
+"Exportar memória de cálculo" (C12); a palavra "ilustrativo" do botão "Salvar rascunho ilustrativo" (L438), que
+permanece "Salvar rascunho"; "Cadastro demonstrativo em memória" (L437); as três exceções genéricas que
+`renderExceptions` L201 injeta quando o catálogo não tem ponto e vírgula — "Referência externa não homologada",
+"Transação duplicada ou já processada", "Documento em competência fechada" — a aba fica com os dois fluxos do
+Caderno (empate de enquadramento e operação sem regra aprovada); checkboxes da aba Aceite (viram leitura).
+Botões de Integrações para telas inexistentes (L218) desabilitados com `title="Destino ainda não disponível"`.
 
 ## 5. Modelo de dados (`app/backend/src/database/schema/fiscal-enquadramentos.schema.ts`)
 
@@ -265,6 +277,7 @@ export const enquadramentosFiscais = pgTable('enquadramentos_fiscais', {
   check('enquadramentos_versao_positiva_check', sql`${t.versao} >= 1`),
   check('enquadramentos_inativa_justificativa_check', sql`${t.situacao} <> 'INATIVA' OR ${t.justificativaSituacao} IS NOT NULL`),
   uniqueIndex('uq_enquadramentos_codigo').on(t.codigo).where(sql`${t.deletedAt} IS NULL`),
+  index('idx_enquadramentos_empresa').on(t.empresaId),
   index('idx_enquadramentos_estabelecimento').on(t.estabelecimentoId),
   index('idx_enquadramentos_operacao').on(t.operacaoId),
   index('idx_enquadramentos_cfop').on(t.cfopId),
@@ -369,10 +382,10 @@ NCM não removidos (`CFOP_INDISPONIVEL`, `NCM_INDISPONIVEL`).
 | POST `/fiscal/cfops` | GERENCIAR | {codigo 4 dígitos, descricao, justificativa} | 201 |
 | GET `/fiscal/ncms` | LER | igual | igual |
 | POST `/fiscal/ncms` | GERENCIAR | {codigo normalizado 8 dígitos, descricao, justificativa} | 201 |
-| GET `/fiscal/enquadramentos` | LER | {estabelecimentoId?, cfopId?, produtoId?, clienteId?, search?, sort ∈ operacao·cfop·vigenciaInicio·estabelecimento·tpNF·finNFe, dir, page, pageSize=20} | paginado com rótulos (operação = `rotulo` + data, CFOP = código, estabelecimento = nome, tpNF/finNFe = rótulos D6). Sem UUID no objeto de célula |
+| GET `/fiscal/enquadramentos` | LER | {estabelecimentoId?, cfopId?, produtoId?, clienteId?, search?, sort ∈ operacao·cfop·vigenciaInicio·estabelecimento·tpNF·finNFe, dir, page, pageSize=20} | paginado com rótulos de coluna Operação, Operação fiscal (CFOP) = código, Início de vigência, Estabelecimento = nome, Tipo da nota, Finalidade. Células de enum usam os pares de D6 (finNFe: Operação normal, NF-e complementar, NF-e de ajuste, Devolução). Sem UUID no objeto de célula |
 | GET `/fiscal/enquadramentos/contagens` | LER | mesmo filtro | {total, ativas, inativas} |
 | GET `/fiscal/enquadramentos/exportacao` | LER | mesmo filtro | `text/csv; charset=utf-8`, `;`, BOM, rótulos, sem ids |
-| GET `/fiscal/enquadramentos/:id` | LER | uuid | detalhe com rótulos, `codigo`, situação, responsável (nome), `criadoEm`, `atualizadoEm`, `origemCodigo` (código da origem, ou null), prioridade. O `id` não é campo de tela |
+| GET `/fiscal/enquadramentos/:id` | LER | uuid | detalhe com os rótulos visíveis do §4 e os pares de D6, `codigo`, `empresaNome` (nome de negócio da empresa do estabelecimento travado — `empresas.razao_social` —, sem UUID), situação, responsável (nome), `criadoEm`, `atualizadoEm`, `origemCodigo` (código da origem, ou null), prioridade. `empresaNome` fica ao lado de Situação e Responsável. Ambiente não entra. O `id` não é campo de tela |
 | GET `/fiscal/enquadramentos/:id/historico` | LER | uuid | {operacao, situacaoAnterior, situacaoNova, usuarioNome, criadoEm, justificativa, resumo, versao}. Sem nome de tabela e sem id |
 | GET `/fiscal/enquadramentos/:id/pre-condicoes` | LER | uuid | itens `{codigo, atendida, provisoria}` abaixo |
 | POST `/fiscal/enquadramentos` | GERENCIAR | {estabelecimentoId, operacaoId, tpNf, finNfe, cfopId, abrangencia, tipoProduto, produtoId, ncmId, cest, clienteId, vigenciaInicio, vigenciaFim?, prioridade ≥ 1, justificativa} | 201 |
@@ -468,38 +481,45 @@ Componentes em `components/fiscal/enquadramentos/`: `enquadramentos-client.tsx`,
   diálogo da linha selecionada; relacionar produto e cliente → foco nos dois combos do drawer; controlar
   prioridade → campo Prioridade do drawer).
 - KPIs: "Enquadramentos", "Ativos", "Inativos".
-- "Registros e consultas": busca; filtros Estabelecimento, CFOP, Produto e Cliente (combos dos BFF existentes e
+- "Registros e consultas": busca; filtros Estabelecimento, Operação fiscal (CFOP), Produto e Cliente (combos dos BFF existentes e
   dos GET novos de CFOP); "Exportar visão"; grid §4; clique/Enter seleciona; paginação server-side; filtros e
   ordenação em `sessionStorage` na chave `fiscal.enquadramentos.lista`; vazio com o texto de `renderTable` L172
   ("Nenhum resultado para o período, filtro ou situação escolhidos. Limpe os filtros ou cadastre um novo registro.").
 - "Detalhamento e execução" — 7 abas:
   1. Ficha e campos: os 13 campos do formulário mais Código, Situação ("Ativa"/"Inativa"), Responsável,
      Criado em, Alterado em, "Duplicado do código …" quando houver origem, Prioridade com
-     `BadgeProvisorio codigo="H-E01-06"`. Selos também em CFOP, NCM (`H-E01-08`), CEST (`H-E01-09`) e vigência
-     (`H-E01-10`). "Trilha e responsabilização". Botões "Editar versão", "Validar pré-condições", "Consultar
-     histórico". Validar pré-condições mostra atendida/pendente/provisória; provisória não bloqueia. O botão
-     não chama simulação.
+     `BadgeProvisorio codigo="H-E01-06"`. Selos também em Operação fiscal (CFOP), Classificação fiscal (NCM)
+     (`H-E01-08`), Substituição tributária (CEST) (`H-E01-09`) e vigência (`H-E01-10`). "Trilha e
+     responsabilização" mostra Empresa (`empresaNome`, nome de negócio da empresa do estabelecimento travado,
+     sem UUID), Situação e Responsável, lado a lado. Ambiente fica de fora. Botões "Editar versão", "Validar
+     pré-condições", "Consultar histórico". Validar pré-condições mostra atendida/pendente/provisória;
+     provisória não bloqueia. O botão não chama simulação.
   2. Movimentações: trilha Preparação → Verificação → Autorização → Conclusão em leitura (o protótipo não
      transmite). Ações reais da linha: Duplicar, Inativar ou Reativar, Remover, conforme situação e
      `podeGerenciar`.
   3. Regras e validações: texto do catálogo L205 ("perfil nunca usa CFOP global como único determinante;
      critério temporal obrigatório") + "A prioridade é registrada e não escolhe enquadramento" + "Esta tela não
-     calcula tributo".
+     calcula tributo". Em leitura, o caminho de aprovação de `renderRules` L198: "01 · Autor" registra documento,
+     versão e justificativa; "02 · Revisor" confere campos, normas, contratos e limites; "03 · Aprovação" —
+     responsável segregado libera o serviço, quando habilitado. O bloco leva `BadgeProvisorio codigo="H-E01-11"`.
+     Não há permissão `APROVAR` e não há botão de aprovar.
   4. Exceções: dois blocos reais — "Empate de enquadramento" e "Operação sem regra aprovada" — com a mensagem
-     do último 422 da consulta, se houver. Sem botão de ocorrência fictícia.
+     do último 422 da consulta, se houver. Sem as três exceções genéricas do §4 e sem botão de ocorrência fictícia.
   5. Histórico: linha do tempo (ação, quando, quem, justificativa, resumo, versão).
   6. Integrações: blocos de `integrationInfo` para E01 (L214); botões desabilitados (§4).
   7. Aceite e testes: os oito critérios de L223–L231 em leitura, mais a frase de L236 de que checkbox não é
      aceite.
 - Drawer (L427–L438): combos Estabelecimento (somente aprovados; rótulo = nome), Operação (rótulo + data
-  `dd/MM/yyyy`, nunca UUID), Tipo da nota, Finalidade, CFOP (código + descrição; "Novo código" abre
-  `codigo-fiscal-dialog` e só então seleciona), Abrangência, Origem do produto, Produto (nome), NCM (igual ao
-  CFOP), CEST (máscara 7 dígitos), Cliente (nome fantasia ou razão social — o rótulo do campo é "Cliente"),
-  Início, Fim, Prioridade (inteiro ≥ 1, selo H-E01-06), "Motivo da alteração *". "Cancelar", "Verificar dados"
-  (só valida o formulário local, sem POST), "Salvar". Erros por campo via `useErrosCampo` /
-  `extrairErrosPorCampo` (AD-12). 409 `ENQUADRAMENTO_SOBREPOSTO` mostra o código e a vigência do conflito.
-  Sair com pendência pede confirmação.
-- Diálogo duplicar: Início, Fim, Prioridade (preenchida com a da origem), Motivo. 409 mostra o conflito e não
+  `dd/MM/yyyy`, nunca UUID), Tipo da nota, Finalidade (Operação normal, NF-e complementar, NF-e de ajuste,
+  Devolução), Operação fiscal (CFOP) (código + descrição; "Novo código" abre `codigo-fiscal-dialog` e só então
+  seleciona), Abrangência da operação (Dentro do estado, Outro estado, Exterior), Origem do produto (Produção
+  própria, Revenda, Subproduto), Produto (nome), Classificação fiscal (NCM) (igual ao diálogo de Operação fiscal
+  (CFOP)), Substituição tributária (CEST) (máscara 7 dígitos), Cliente (nome fantasia ou razão social — o rótulo
+  do campo é "Cliente"), Início de vigência, Fim de vigência, Prioridade (inteiro ≥ 1, selo H-E01-06), "Motivo da
+  alteração *". "Cancelar", "Verificar dados" (só valida o formulário local, sem POST), "Salvar rascunho". Erros
+  por campo via `useErrosCampo` / `extrairErrosPorCampo` (AD-12). 409 `ENQUADRAMENTO_SOBREPOSTO` mostra o código
+  e a vigência do conflito. Sair com pendência pede confirmação.
+- Diálogo duplicar: Início de vigência, Fim de vigência, Prioridade (preenchida com a da origem), Motivo. 409 mostra o conflito e não
   fecha como sucesso.
 - Diálogo de código: Código, Descrição, Motivo, aviso "Cadastro manual. A tabela oficial completa não está
   carregada; confira o código na documentação fiscal." Sem lista pronta de CFOP ou NCM.
@@ -512,8 +532,10 @@ Componentes em `components/fiscal/enquadramentos/`: `enquadramentos-client.tsx`,
   aprovação; o selo H-E01-11 ocupa esse lugar na ficha), concluído (toast "Enquadramento salvo.").
 - Tempo real: `conectarRealtime({ rooms: ['fiscal-enquadramentos'], onMessage, onReconnect })` refaz lista e
   detalhe. Sem polling.
-- `lib/fiscal-enquadramentos.ts`: `ROTULOS_TP_NF`, `ROTULOS_FIN_NFE`, `ROTULOS_ABRANGENCIA`,
-  `ROTULOS_TIPO_PRODUTO`, `ROTULOS_SITUACAO_ENQUADRAMENTO`, `normalizarNcm` (remove `.` e espaços),
+- `lib/fiscal-enquadramentos.ts`: `ROTULOS_TP_NF` (`0` Entrada, `1` Saída), `ROTULOS_FIN_NFE` (`1` Operação normal,
+  `2` NF-e complementar, `3` NF-e de ajuste, `4` Devolução), `ROTULOS_ABRANGENCIA` (`INTERNA` Dentro do estado,
+  `INTER` Outro estado, `EXT` Exterior), `ROTULOS_TIPO_PRODUTO` (`PROPRIA` Produção própria, `REVENDA` Revenda,
+  `SUB` Subproduto), `ROTULOS_SITUACAO_ENQUADRAMENTO`, `normalizarNcm` (remove `.` e espaços),
   `normalizarCest` (só dígitos), cliente HTTP do BFF. Não exportar função que calcule tributo.
 
 Combos de apoio (não criar BFF novo): `GET /api/erp/fiscal/estabelecimentos?situacao=APPROVED`,
@@ -721,7 +743,7 @@ Files: `enquadramentos.service.ts`, `enquadramentos.controller.ts` (sem a rota `
 O teste cria empresa/estabelecimento pela API da T01 (dois administradores: um submete, outro aprova) e cria
 operação, produto e cliente pelas APIs já existentes. Casos obrigatórios do §13: CRUD, duplicar, sobreposição
 com prioridade diferente, estabelecimento `DRAFT` e `SUSPENDED`, produto inativo, cliente inativo, operação
-removida, auditoria, histórico sem UUID, GET que não altera `atributos_json` nem a operação.
+removida, auditoria, histórico sem UUID, "POST não altera produtos.atributos_json, operacoes nem estabelecimentos".
 
 ```powershell
 Set-Location app/backend
@@ -788,8 +810,9 @@ Commit: `feat(e01-t02): room fiscal-enquadramentos protegida por permissão`.
 ### Task 10 — Exportação, histórico e pré-condições
 
 Files: `exportacao-csv.ts`, rotas e casos em `e01-t02-enquadramentos.e2e-spec.ts`. CSV com as colunas Código,
-Operação, CFOP, Início de vigência, Estabelecimento, Tipo da nota, Finalidade, Situação, Responsável, Produto,
-Cliente, NCM, CEST, Prioridade, Abrangência, Origem do produto. Pré-condições do §7, inclusive as provisórias
+Operação, Operação fiscal (CFOP), Início de vigência, Estabelecimento, Tipo da nota, Finalidade, Situação,
+Responsável, Produto, Cliente, Classificação fiscal (NCM), Substituição tributária (CEST), Prioridade,
+Abrangência da operação, Origem do produto. Pré-condições do §7, inclusive as provisórias
 com `atendida: false`.
 
 ```powershell
@@ -836,8 +859,8 @@ desta fatia — números de formato, não uma tabela oficial), `e2e/e01-t02-enqu
 
 - Jornada (admin): menu FISCAL → "Operações fiscais e enquadramentos"; novo CFOP e novo NCM pelo diálogo, com
   o aviso de tabela oficial ausente; novo enquadramento com os combos (estabelecimento aprovado, operação,
-  produto, cliente), tpNF Saída, finNFe Normal, abrangência Dentro do estado, origem Revenda, CEST `1708700`,
-  vigência e prioridade `1`; a ficha mostra o código numérico e os selos provisórios. Duplicar com início
+  produto, cliente), Tipo da nota Saída, Finalidade Operação normal, Abrangência da operação Dentro do estado,
+  Origem do produto Revenda, Substituição tributária (CEST) `1708700`, Início de vigência e prioridade `1`; a ficha mostra o código numérico e os selos provisórios. Duplicar com início
   posterior → segunda linha. Duplicar com a mesma vigência → mensagem de sobreposição e uma linha a mais não
   aparece. Inativar a primeira → situação Inativa. Validar pré-condições da linha inativa mostra a ausência de
   regra aprovada, sem alíquota na tela.
