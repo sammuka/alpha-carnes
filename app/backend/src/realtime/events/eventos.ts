@@ -85,6 +85,8 @@ export const EVENTOS = {
   EMPRESA_FISCAL_ALTERADA: 'empresa_fiscal_alterada',
   ESTABELECIMENTO_FISCAL_ALTERADO: 'estabelecimento_fiscal_alterado',
   REGIME_TRIBUTARIO_ALTERADO: 'regime_tributario_alterado',
+  // ── E01-T02 — Enquadramento fiscal (room `fiscal-enquadramentos`, Task 9) ──
+  ENQUADRAMENTO_FISCAL_ALTERADO: 'enquadramento_fiscal_alterado',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -479,6 +481,28 @@ export interface CadastroFiscalAlteradoPayload {
   situacao?: string;
 }
 
+export type AcaoEnquadramentoFiscal =
+  | 'criado'
+  | 'atualizado'
+  | 'duplicado'
+  | 'inativado'
+  | 'reativado'
+  | 'removido'
+  | 'cfop_criado'
+  | 'ncm_criado';
+
+/**
+ * Catálogo manual (cfop_criado/ncm_criado) não tem empresa nem estabelecimento.
+ * Mutação de enquadramento preenche os três identificadores.
+ */
+export interface EnquadramentoFiscalAlteradoPayload {
+  enquadramentoId: string;
+  estabelecimentoId?: string;
+  empresaId?: string;
+  acao: AcaoEnquadramentoFiscal;
+  situacao?: string;
+}
+
 /** Contratos tipados dos eventos Onda 1 (PayloadPorEvento). */
 export interface PayloadPorEvento {
   reserva_disponibilidade_atualizada: ReservaAtualizadaPayload;
@@ -559,4 +583,5 @@ export interface PayloadPorEvento {
   empresa_fiscal_alterada: CadastroFiscalAlteradoPayload;
   estabelecimento_fiscal_alterado: CadastroFiscalAlteradoPayload;
   regime_tributario_alterado: CadastroFiscalAlteradoPayload;
+  enquadramento_fiscal_alterado: EnquadramentoFiscalAlteradoPayload;
 }
