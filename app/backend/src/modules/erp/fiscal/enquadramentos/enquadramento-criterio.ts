@@ -19,6 +19,20 @@ export type ChaveEnquadramento = {
   clienteId: string;
 };
 
+export type Candidato = { codigo: string; prioridade: number };
+
+export type Classificacao =
+  | { tipo: 'ausente' }
+  | { tipo: 'unico'; codigo: string }
+  | { tipo: 'empate'; codigos: string[] };
+
+/** H-E01-07: não lê prioridade e não elege vencedor. */
+export function classificarEnquadramentos(candidatos: readonly Candidato[]): Classificacao {
+  if (candidatos.length === 0) return { tipo: 'ausente' };
+  if (candidatos.length === 1) return { tipo: 'unico', codigo: candidatos[0]!.codigo };
+  return { tipo: 'empate', codigos: candidatos.map((c) => c.codigo) };
+}
+
 export function mesmaChave(a: ChaveEnquadramento, b: ChaveEnquadramento): boolean {
   return a.operacaoId === b.operacaoId
     && a.tpNf === b.tpNf

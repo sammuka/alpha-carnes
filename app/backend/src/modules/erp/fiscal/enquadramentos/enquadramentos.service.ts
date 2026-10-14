@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, asc, desc, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../../common/auditoria/auditoria.service';
@@ -20,6 +20,7 @@ import {
   usuarios,
 } from '../../../../database/schema';
 import { EVENTOS, type AcaoEnquadramentoFiscal } from '../../../../realtime/events/eventos';
+import type { ConsultaEnquadramentoDto } from './dto/consulta.dto';
 import type {
   AcaoSituacaoDto,
   CreateEnquadramentoDto,
@@ -29,6 +30,7 @@ import type {
   UpdateEnquadramentoDto,
 } from './dto/enquadramento.dto';
 import {
+  classificarEnquadramentos,
   mesmaChave,
   intervalosSobrepoem,
   type ChaveEnquadramento,
@@ -436,6 +438,66 @@ export class EnquadramentosService {
     });
     this.emitir('reativado', linha);
     return this.detalhar(linha.id);
+  }
+
+  async consultar(dto: ConsultaEnquadramentoDto) {
+    const linhas = await this.db
+      .select({
+        codigo: enquadramentosFiscais.codigo,
+        prioridade: enquadramentosFiscais.prioridade,
+        vigenciaInicio: enquadramentosFiscais.vigenciaInicio,
+        vigenciaFim: enquadramentosFiscais.vigenciaFim,
+      })
+      .from(enquadramentosFiscais)
+      .where(and(
+        eq(enquadramentosFiscais.estabelecimentoId, dto.estabelecimentoId),
+        eq(enquadramentosFiscais.situacao, 'ATIVA'),
+        isNull(enquadramentosFiscais.deletedAt),
+        eq(enquadramentosFiscais.operacaoId, dto.operacaoId),
+        eq(enquadramentosFiscais.tpNf, dto.tpNf),
+        eq(enquadramentosFiscais.finNfe, dto.finNfe),
+        eq(enquadramentosFiscais.cfopId, dto.cfopId),
+        eq(enquadramentosFiscais.abrangencia, dto.abrangencia),
+        eq(enquadramentosFiscais.tipoProduto, dto.tipoProduto),
+        eq(enquadramentosFiscais.produtoId, dto.produtoId),
+        eq(enquadramentosFiscais.ncmId, dto.ncmId),
+        eq(enquadramentosFiscais.cest, dto.cest),
+        eq(enquadramentosFiscais.clienteId, dto.clienteId),
+        lte(enquadramentosFiscais.vigenciaInicio, dto.data),
+        or(
+          isNull(enquadramentosFiscais.vigenciaFim),
+          gte(enquadramentosFiscais.vigenciaFim, dto.data),
+        ),
+      ))
+      .orderBy(asc(enquadramentosFiscais.codigo));
+
+    const classificacao = classificarEnquadramentos(linhas);
+    if (classificacao.tipo === 'empate') {
+      regraViolada(
+        'EMPATE_ENQUADRAMENTO',
+        'Há mais de um enquadramento vigente para este critério. Nenhum foi escolhido.',
+        { candidatos: linhas.map((linha) => ({ codigo: linha.codigo, prioridade: linha.prioridade })) },
+      );
+    }
+    if (classificacao.tipo === 'unico') {
+      const linha = linhas[0]!;
+      regraViolada(
+        'REGRA_APROVADA_AUSENTE',
+        'O enquadramento foi localizado, mas o tributo não é resolvido nesta tela.',
+        {
+          enquadramentoLocalizado: {
+            codigo: linha.codigo,
+            vigenciaInicio: linha.vigenciaInicio,
+            vigenciaFim: linha.vigenciaFim,
+          },
+        },
+      );
+    }
+    regraViolada(
+      'REGRA_APROVADA_AUSENTE',
+      'Nenhum enquadramento vigente cobre o critério e não há regra tributária aprovada.',
+      { enquadramentoLocalizado: null },
+    );
   }
 
   async remover(id: string, dto: RemoverEnquadramentoDto, usuarioId: string) {

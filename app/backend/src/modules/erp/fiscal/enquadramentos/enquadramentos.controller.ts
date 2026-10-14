@@ -9,6 +9,10 @@ import { ZodValidationPipe } from '../../../../common/pipes/zod-validation.pipe'
 import { RequirePermissoes } from '../../../../common/rbac/require-permissoes.decorator';
 import { EnquadramentosService } from './enquadramentos.service';
 import {
+  consultaEnquadramentoSchema,
+  type ConsultaEnquadramentoDto,
+} from './dto/consulta.dto';
+import {
   acaoSituacaoSchema,
   createEnquadramentoSchema,
   duplicarEnquadramentoSchema,
@@ -52,6 +56,12 @@ export class EnquadramentosController {
   @RequirePermissoes('FISCAL_ENQUADRAMENTOS_LER')
   detalhar(@Param('id', new ZodValidationPipe(idParamSchema)) id: string) {
     return this.enquadramentos.detalhar(id);
+  }
+
+  @Post('enquadramentos/consulta')
+  @RequirePermissoes('FISCAL_ENQUADRAMENTOS_LER')
+  consultar(@Body(new ZodValidationPipe(consultaEnquadramentoSchema)) dto: ConsultaEnquadramentoDto) {
+    return this.enquadramentos.consultar(dto);
   }
 
   @Post('enquadramentos')

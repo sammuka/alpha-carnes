@@ -476,6 +476,50 @@ describe('E01-T02 enquadramentos fiscais', () => {
     expect(res.status).toBe(404);
   });
 
+  it('inativar é a reversão e a consulta deixa de localizar', async () => {
+    const base = await baseAprovada();
+    const criado = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', adminA)
+      .send(corpo(base));
+    expect(criado.status).toBe(201);
+    const criterio = {
+      estabelecimentoId: base.estabelecimentoId,
+      data: '2026-06-15',
+      operacaoId: base.operacaoId,
+      tpNf: '1',
+      finNfe: '1',
+      cfopId: base.cfopId,
+      abrangencia: 'INTERNA',
+      tipoProduto: 'REVENDA',
+      produtoId: base.produtoId,
+      ncmId: base.ncmId,
+      cest: '1708700',
+      clienteId: base.clienteId,
+    };
+    const localizado = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos/consulta')
+      .set('Cookie', adminA)
+      .send(criterio);
+    expect(localizado.status).toBe(422);
+    expect(codigoDe(localizado.body)).toBe('REGRA_APROVADA_AUSENTE');
+    expect(localizado.body.message.enquadramentoLocalizado.codigo).toBe(criado.body.codigo);
+
+    const inativo = await request(app.getHttpServer())
+      .post(`/fiscal/enquadramentos/${criado.body.id}/inativar`)
+      .set('Cookie', adminA)
+      .send({ versao: criado.body.versao, justificativa: MOTIVO });
+    expect(inativo.status).toBe(200);
+
+    const depois = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos/consulta')
+      .set('Cookie', adminA)
+      .send(criterio);
+    expect(depois.status).toBe(422);
+    expect(codigoDe(depois.body)).toBe('REGRA_APROVADA_AUSENTE');
+    expect(depois.body.message.enquadramentoLocalizado).toBeNull();
+  });
+
   it('sem vigenciaInicio → 400', async () => {
     const base = await baseAprovada();
     const corpoSem = corpo(base);
