@@ -167,3 +167,24 @@ Rollback:
   remover o schema e gerar a migration de remoção com `drizzle-kit generate` (nunca SQL manual). Com linhas:
   não remover; as tabelas ficam inertes e abre-se decisão do Quality Owner.
 - Seed: chave `fiscal.empresas_perfis_autorizados` e permissões `FISCAL_EMPRESAS_*` saem só junto do revert.
+
+## E01-T02 — enquadramentos fiscais e catálogos manuais de CFOP e NCM
+
+Migration gerada por `drizzle-kit generate --name e01_t02_enquadramentos`, sem SQL manual.
+Somente `CREATE TABLE`, `CREATE [UNIQUE] INDEX` e `ALTER TABLE <tabela nova> ADD CONSTRAINT` sobre as
+três tabelas novas, nesta ordem de remoção:
+
+- `enquadramentos_fiscais`
+- `ncms`
+- `cfops`
+
+Não há `INSERT` de semente de CFOP ou NCM. Não há colunas de data comercial, fiscal ou efetiva.
+
+Rollback:
+
+- Código: revert dos commits da fatia por PR (sem force-push).
+- Banco: só tabelas folha. Dev/CI sem dados: remover o schema e gerar a migration de remoção com
+  `drizzle-kit generate` (nunca SQL manual), na ordem `enquadramentos_fiscais`, `ncms`, `cfops`.
+  Com linhas: não remover; as tabelas ficam inertes e abre-se decisão do Quality Owner.
+- Seed: a chave `fiscal.enquadramentos_perfis_autorizados` e as permissões `FISCAL_ENQUADRAMENTOS_*`
+  saem só junto do revert.
