@@ -62,6 +62,7 @@ const ITENS_PROTOTIPO: [string, string, string][] = [
 /** Itens do ERP integrado (AD-24 (1)): grupo FISCAL criado na 8ª posição, fora do protótipo v1.1. */
 const ITENS_ERP: [string, string, string][] = [
   ['FISCAL', 'Empresas, estabelecimentos e regime', '/fiscal/empresas'],
+  ['FISCAL', 'Operações fiscais e enquadramentos', '/fiscal/enquadramentos'],
 ];
 
 describe('menu canônico v2', () => {
@@ -77,7 +78,7 @@ describe('menu canônico v2', () => {
     expect(semFiscal).toEqual(ITENS_PROTOTIPO);
     expect(semFiscal).toHaveLength(39);
     expect(atual.filter(([grupo]) => grupo === 'FISCAL')).toEqual(ITENS_ERP);
-    expect(atual).toHaveLength(40);
+    expect(atual).toHaveLength(41);
   });
 
   it('o item FISCAL declara a permissão FISCAL_EMPRESAS_LER e o ícone Landmark', () => {
@@ -95,6 +96,14 @@ describe('menu canônico v2', () => {
     expect(filtrarMenuPorMenusVisiveis(visiveis).map((g) => g.title)).toEqual(['COMERCIAL']);
     const comPermissao = filtrarMenuPorMenusVisiveis(visiveis, ['FISCAL_EMPRESAS_LER']);
     expect(comPermissao.map((g) => g.title)).toEqual(['COMERCIAL', 'FISCAL']);
+  });
+
+  it('menusVisiveis com as duas rotas fiscais e só FISCAL_EMPRESAS_LER esconde enquadramentos', () => {
+    const visiveis = ['/fiscal/empresas', '/fiscal/enquadramentos'];
+    const grupos = filtrarMenuPorMenusVisiveis(visiveis, ['FISCAL_EMPRESAS_LER']);
+    const hrefs = grupos.flatMap((g) => g.items.map((i) => i.href));
+    expect(hrefs).toContain('/fiscal/empresas');
+    expect(hrefs).not.toContain('/fiscal/enquadramentos');
   });
 
   it('MENU_V2 nao tem rota duplicada e todo item declara icone', () => {
