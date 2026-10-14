@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, UseGuards,
+  Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards,
 } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser, type CurrentUserPayload } from '../../../../common/decorators/current-user.decorator';
