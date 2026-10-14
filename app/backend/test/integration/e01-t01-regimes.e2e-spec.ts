@@ -250,4 +250,123 @@ describe('E01-T01 regimes tributários', () => {
       .send({ versao: regime.body.versao, justificativa: MOTIVO });
     expect(alheio.status).toBe(404);
   });
+
+  it('criação em suspenso, vigência inválida, omissão de CRT e transições inválidas', async () => {
+    const suspensoBase = await estabelecimento('42ABC001', true);
+    const suspenso = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${suspensoBase.id}/suspender`)
+      .set('Cookie', adminB)
+      .send({ versao: suspensoBase.versao, justificativa: MOTIVO });
+    expect(suspenso.status).toBe(200);
+    const noSuspenso = await criarRegime(suspensoBase.id, '2026-01-01', '2026-12-31');
+    expect(noSuspenso.status).toBe(409);
+    expect(codigoDe(noSuspenso.body)).toBe('TRANSICAO_INVALIDA');
+
+    const estab = await estabelecimento('42ABC002', true);
+    const criado = await criarRegime(estab.id, '2026-01-01', '2026-06-30');
+    expect(criado.status).toBe(201);
+    const semCrt = await request(app.getHttpServer())
+      .patch(`/fiscal/estabelecimentos/${estab.id}/regimes/${criado.body.id}`)
+      .set('Cookie', adminA)
+      .send({ vigenciaInicio: '2026-01-02', versao: criado.body.versao, justificativa: MOTIVO });
+    expect(semCrt.status).toBe(200);
+    expect(semCrt.body.crt).toBe('3');
+    const vigencia = await request(app.getHttpServer())
+      .patch(`/fiscal/estabelecimentos/${estab.id}/regimes/${criado.body.id}`)
+      .set('Cookie', adminA)
+      .send({ vigenciaInicio: '2026-07-01', versao: semCrt.body.versao, justificativa: MOTIVO });
+    expect(vigencia.status).toBe(422);
+    expect(codigoDe(vigencia.body)).toBe('VIGENCIA_INVALIDA');
+    const versao = await request(app.getHttpServer())
+      .patch(`/fiscal/estabelecimentos/${estab.id}/regimes/${criado.body.id}`)
+      .set('Cookie', adminA)
+      .send({ crt: '1', versao: semCrt.body.versao + 5, justificativa: MOTIVO });
+    expect(versao.status).toBe(409);
+    expect(codigoDe(versao.body)).toBe('CONFLITO_CONCORRENTE');
+    const aprovarCedo = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${criado.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: semCrt.body.versao, justificativa: MOTIVO });
+    expect(aprovarCedo.status).toBe(409);
+    expect(codigoDe(aprovarCedo.body)).toBe('TRANSICAO_INVALIDA');
+    const rejeitarCedo = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${criado.body.id}/rejeitar`)
+      .set('Cookie', adminB)
+      .send({ versao: semCrt.body.versao, justificativa: MOTIVO });
+    expect(rejeitarCedo.status).toBe(409);
+    expect(codigoDe(rejeitarCedo.body)).toBe('TRANSICAO_INVALIDA');
+    const submetido = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${criado.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: semCrt.body.versao, justificativa: MOTIVO });
+    expect(submetido.status).toBe(200);
+    const deNovo = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${criado.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: submetido.body.versao, justificativa: MOTIVO });
+    expect(deNovo.status).toBe(409);
+    expect(codigoDe(deNovo.body)).toBe('TRANSICAO_INVALIDA');
+    const editado = await request(app.getHttpServer())
+      .patch(`/fiscal/estabelecimentos/${estab.id}/regimes/${criado.body.id}`)
+      .set('Cookie', adminA)
+      .send({ crt: '2', versao: submetido.body.versao, justificativa: MOTIVO });
+    expect(editado.status).toBe(409);
+    expect(codigoDe(editado.body)).toBe('TRANSICAO_INVALIDA');
+    const rejeitado = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${criado.body.id}/rejeitar`)
+      .set('Cookie', adminB)
+      .send({ versao: submetido.body.versao, justificativa: MOTIVO });
+    expect(rejeitado.status).toBe(200);
+    const reeditado = await request(app.getHttpServer())
+      .patch(`/fiscal/estabelecimentos/${estab.id}/regimes/${criado.body.id}`)
+      .set('Cookie', adminA)
+      .send({ versao: rejeitado.body.versao, justificativa: MOTIVO });
+    expect(reeditado.status).toBe(200);
+    expect(reeditado.body.situacao).toBe('DRAFT');
+    expect(reeditado.body.crt).toBe('3');
+  });
+
+  it('remover regime em revisão e aprovar período que passou a sobrepor', async () => {
+    const estab = await estabelecimento('42ABC003', true);
+    const revisao = await criarRegime(estab.id, '2027-01-01', '2027-06-30');
+    const submetido = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${revisao.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: revisao.body.versao, justificativa: MOTIVO });
+    expect(submetido.status).toBe(200);
+    const removido = await request(app.getHttpServer())
+      .delete(`/fiscal/estabelecimentos/${estab.id}/regimes/${revisao.body.id}`)
+      .set('Cookie', adminA)
+      .send({ justificativa: MOTIVO });
+    expect(removido.status).toBe(409);
+    expect(codigoDe(removido.body)).toBe('TRANSICAO_INVALIDA');
+
+    const atual = await criarRegime(estab.id, '2026-01-01', '2026-06-30');
+    const submetidoAtual = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${atual.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: atual.body.versao, justificativa: MOTIVO });
+    const aprovado = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${atual.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: submetidoAtual.body.versao, justificativa: MOTIVO });
+    expect(aprovado.status).toBe(200);
+    const novo = await criarRegime(estab.id, '2026-07-01', '2026-12-31');
+    const submetidoNovo = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${novo.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: novo.body.versao, justificativa: MOTIVO });
+    expect(submetidoNovo.status).toBe(200);
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    await db.update(schema.regimesTributarios)
+      .set({ vigenciaFim: '2026-12-31' })
+      .where(eq(schema.regimesTributarios.id, atual.body.id));
+    const conflito = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${novo.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: submetidoNovo.body.versao, justificativa: MOTIVO });
+    expect(conflito.status).toBe(409);
+    expect(codigoDe(conflito.body)).toBe('REGIME_SOBREPOSTO');
+    expect((await lerFim(novo.body.id))?.situacao).toBe('REVIEW');
+  });
 });

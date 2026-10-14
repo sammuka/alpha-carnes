@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { validarCnpjAlfanumerico } from '../../src/common/validators/cnpj-alfanumerico';
 import { DRIZZLE } from '../../src/database/database.module';
@@ -440,5 +440,397 @@ describe('E01-T01 empresas e estabelecimentos', () => {
     expect(res.text).toContain('Alpha Exportacao Fiscal');
     expect(res.text).toContain('Rascunho');
     expect(res.text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
+  });
+
+  it('lista empresas sem filtro e trata total nulo da contagem como zero', async () => {
+    const criada = await criarEmpresa(adminA, '71ABC001', 'Alpha Sem Filtro');
+    expect(criada.status).toBe(201);
+    const semFiltro = await request(app.getHttpServer()).get('/fiscal/empresas').set('Cookie', adminA);
+    expect(semFiltro.status).toBe(200);
+    expect(semFiltro.body.data.some((linha: { id: string }) => linha.id === criada.body.id)).toBe(true);
+    const emBranco = await request(app.getHttpServer()).get('/fiscal/empresas?search=%20%20').set('Cookie', adminA);
+    expect(emBranco.status).toBe(200);
+
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const original = db.select.bind(db);
+    const spy = jest.spyOn(db, 'select');
+    spy.mockImplementationOnce(((...args: never[]) => {
+      const builder = original(...args);
+      const fromOriginal = builder.from.bind(builder);
+      builder.from = ((...fromArgs: never[]) => {
+        const selecionado = fromOriginal(...fromArgs);
+        selecionado.where = (() => Promise.resolve([{ total: null }])) as typeof selecionado.where;
+        return selecionado;
+      }) as typeof builder.from;
+      return builder;
+    }) as typeof db.select);
+    try {
+      const service = app.get(EmpresasService);
+      const pagina = await service.listar({ page: 1, pageSize: 20 });
+      expect(pagina.total).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('versão divergente, empresa inexistente e empresa com estabelecimento', async () => {
+    const criada = await criarEmpresa(adminA, '71ABC002');
+    expect(criada.status).toBe(201);
+    const versao = await request(app.getHttpServer())
+      .patch(`/fiscal/empresas/${criada.body.id}`)
+      .set('Cookie', adminA)
+      .send({ razaoSocial: 'Alpha Versao', versao: criada.body.versao + 4, justificativa: MOTIVO });
+    expect(versao.status).toBe(409);
+    expect(codigoDe(versao.body)).toBe('CONFLITO_CONCORRENTE');
+    const ausente = await request(app.getHttpServer())
+      .patch('/fiscal/empresas/00000000-0000-4000-8000-000000000099')
+      .set('Cookie', adminA)
+      .send({ razaoSocial: 'Ninguem', versao: 1, justificativa: MOTIVO });
+    expect(ausente.status).toBe(404);
+    const estab = await criarEstab(adminA, criada.body.id, cnpjDe('71ABC0020001'));
+    expect(estab.status).toBe(201);
+    const removida = await request(app.getHttpServer())
+      .delete(`/fiscal/empresas/${criada.body.id}`)
+      .set('Cookie', adminA)
+      .send({ justificativa: MOTIVO });
+    expect(removida.status).toBe(409);
+    expect(codigoDe(removida.body)).toBe('EMPRESA_COM_ESTABELECIMENTOS');
+  });
+
+  it('criar com usuário inexistente relança erro que não é a raiz duplicada', async () => {
+    const service = app.get(EmpresasService);
+    await expect(service.criar(
+      { razaoSocial: 'Sem Usuario Fiscal', cnpjRaiz: '71ABC003', justificativa: MOTIVO },
+      '00000000-0000-4000-8000-000000000099',
+    )).rejects.toThrow();
+  });
+
+  it('returning vazio em gravar, atualizar e remover empresa', async () => {
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    await db.execute(sql.raw(`
+      CREATE OR REPLACE FUNCTION e01_cov_pular_empresa()
+      RETURNS trigger LANGUAGE plpgsql AS $fn$
+      BEGIN
+        IF TG_OP = 'INSERT' AND NEW.razao_social = 'FALHA GRAVAR' THEN
+          RETURN NULL;
+        END IF;
+        IF TG_OP = 'UPDATE' AND NEW.razao_social = 'FALHA ATUALIZAR' THEN
+          RETURN NULL;
+        END IF;
+        IF TG_OP = 'UPDATE' AND NEW.deleted_at IS NOT NULL AND OLD.razao_social = 'FALHA REMOVER' THEN
+          RETURN NULL;
+        END IF;
+        RETURN NEW;
+      END;
+      $fn$
+    `));
+    await db.execute(sql.raw('DROP TRIGGER IF EXISTS e01_cov_pular_empresa ON empresas'));
+    await db.execute(sql.raw(`
+      CREATE TRIGGER e01_cov_pular_empresa
+      BEFORE INSERT OR UPDATE ON empresas
+      FOR EACH ROW EXECUTE FUNCTION e01_cov_pular_empresa()
+    `));
+    try {
+      const gravar = await criarEmpresa(adminA, '71ABC004', 'FALHA GRAVAR');
+      expect(gravar.status).toBe(500);
+      const criada = await criarEmpresa(adminA, '71ABC005', 'Alpha Atualizavel');
+      expect(criada.status).toBe(201);
+      const atualizar = await request(app.getHttpServer())
+        .patch(`/fiscal/empresas/${criada.body.id}`)
+        .set('Cookie', adminA)
+        .send({ razaoSocial: 'FALHA ATUALIZAR', versao: criada.body.versao, justificativa: MOTIVO });
+      expect(atualizar.status).toBe(409);
+      expect(codigoDe(atualizar.body)).toBe('CONFLITO_CONCORRENTE');
+      const removivel = await criarEmpresa(adminA, '71ABC006', 'FALHA REMOVER');
+      expect(removivel.status).toBe(201);
+      const remover = await request(app.getHttpServer())
+        .delete(`/fiscal/empresas/${removivel.body.id}`)
+        .set('Cookie', adminA)
+        .send({ justificativa: MOTIVO });
+      expect(remover.status).toBe(500);
+    } finally {
+      await db.execute(sql.raw('DROP TRIGGER IF EXISTS e01_cov_pular_empresa ON empresas'));
+      await db.execute(sql.raw('DROP FUNCTION IF EXISTS e01_cov_pular_empresa()'));
+    }
+  });
+
+  async function aprovarEstab(raiz: string) {
+    const empresa = await criarEmpresa(adminA, raiz);
+    expect(empresa.status).toBe(201);
+    const estab = await criarEstab(adminA, empresa.body.id, cnpjDe(`${raiz}0001`), [
+      { codigo: '6201501', descricao: 'Desenvolvimento', tipo: 'PRINCIPAL' },
+    ]);
+    expect(estab.status).toBe(201);
+    const submetido = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: estab.body.versao, justificativa: MOTIVO });
+    const aprovado = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: submetido.body.versao, justificativa: MOTIVO });
+    expect(aprovado.status).toBe(200);
+    return { empresaId: empresa.body.id as string, estab: aprovado.body as { id: string; versao: number; cnpj: string } };
+  }
+
+  it('lista e contagens de estabelecimentos com e sem filtro', async () => {
+    const semRegime = await criarEmpresa(adminA, '71ABC010', 'Alpha Lista Fiscal');
+    const rascunho = await criarEstab(adminA, semRegime.body.id, cnpjDe('71ABC0100001'));
+    expect(rascunho.status).toBe(201);
+    const { empresaId, estab } = await aprovarEstab('71ABC011');
+    const regime = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes`)
+      .set('Cookie', adminA)
+      .send({ crt: '3', vigenciaInicio: '2020-01-01', justificativa: MOTIVO });
+    expect(regime.status).toBe(201);
+    const regimeSubmetido = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${regime.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: regime.body.versao, justificativa: MOTIVO });
+    const regimeAprovado = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${regime.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: regimeSubmetido.body.versao, justificativa: MOTIVO });
+    expect(regimeAprovado.status).toBe(200);
+
+    const asc = await request(app.getHttpServer())
+      .get('/fiscal/estabelecimentos?dir=asc&sort=estabelecimento')
+      .set('Cookie', adminA);
+    expect(asc.status).toBe(200);
+    expect(asc.body.data.some((linha: { regime: unknown }) => linha.regime === null)).toBe(true);
+    expect(asc.body.data.some((linha: { regime: { crt?: string } | null }) => linha.regime?.crt === '3')).toBe(true);
+
+    const desc = await request(app.getHttpServer())
+      .get(`/fiscal/estabelecimentos?empresaId=${empresaId}&estabelecimentoId=${estab.id}&situacao=APPROVED&search=%25Filial%5F&dir=desc&sort=uf`)
+      .set('Cookie', adminA);
+    expect(desc.status).toBe(200);
+    expect(desc.body.data).toEqual([expect.objectContaining({ id: estab.id, situacao: 'APPROVED' })]);
+
+    const contagens = await request(app.getHttpServer())
+      .get(`/fiscal/estabelecimentos/contagens?empresaId=${semRegime.body.id}&situacao=DRAFT`)
+      .set('Cookie', adminA);
+    expect(contagens.status).toBe(200);
+    expect(contagens.body.total).toBeGreaterThanOrEqual(1);
+    expect(contagens.body).toEqual(expect.objectContaining({
+      emRevisao: expect.any(Number),
+      suspensos: expect.any(Number),
+    }));
+
+    const alheio = await request(app.getHttpServer())
+      .get(`/fiscal/estabelecimentos?empresaId=${empresaId}&estabelecimentoId=00000000-0000-4000-8000-000000000099`)
+      .set('Cookie', adminA);
+    expect(alheio.status).toBe(404);
+  });
+
+  it('edição omite nome, bloqueia revisão e empresa ausente', async () => {
+    const empresa = await criarEmpresa(adminA, '71ABC012');
+    const estab = await criarEstab(adminA, empresa.body.id, cnpjDe('71ABC0120001'), [
+      { codigo: '6201501', descricao: 'Desenvolvimento', tipo: 'PRINCIPAL' },
+    ]);
+    const omitido = await request(app.getHttpServer())
+      .patch(`/fiscal/estabelecimentos/${estab.body.id}`)
+      .set('Cookie', adminA)
+      .send({ versao: estab.body.versao, justificativa: MOTIVO });
+    expect(omitido.status).toBe(200);
+    expect(omitido.body.nome).toBe('Filial Osasco');
+    const submetido = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: omitido.body.versao, justificativa: MOTIVO });
+    const bloqueado = await request(app.getHttpServer())
+      .patch(`/fiscal/estabelecimentos/${estab.body.id}`)
+      .set('Cookie', adminA)
+      .send({ nome: 'Durante revisao', versao: submetido.body.versao, justificativa: MOTIVO });
+    expect(bloqueado.status).toBe(409);
+    expect(codigoDe(bloqueado.body)).toBe('TRANSICAO_INVALIDA');
+    const fantasma = await request(app.getHttpServer())
+      .post('/fiscal/estabelecimentos')
+      .set('Cookie', adminA)
+      .send({
+        empresaId: '00000000-0000-4000-8000-000000000099',
+        nome: 'Filial Osasco',
+        cnpj: cnpjDe('71ABC0130001'),
+        inscricaoEstadual: '123456789',
+        inscricaoMunicipal: '98765',
+        uf: 'SP',
+        justificativa: MOTIVO,
+      });
+    expect(fantasma.status).toBe(404);
+    const ausente = await request(app.getHttpServer())
+      .get('/fiscal/estabelecimentos/00000000-0000-4000-8000-000000000098')
+      .set('Cookie', adminA);
+    expect(ausente.status).toBe(404);
+  });
+
+  it('histórico cobre alteração, CNAE proposto, regime e auditoria sem usuário', async () => {
+    const { estab } = await aprovarEstab('71ABC014');
+    const alteracao = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/alteracoes`)
+      .set('Cookie', adminA)
+      .send({
+        nome: 'Filial Barueri',
+        inscricaoEstadual: '555444333',
+        inscricaoMunicipal: '111222333',
+        uf: 'RJ',
+        cnaes: [
+          { codigo: '6202300', descricao: 'Outros', tipo: 'PRINCIPAL' },
+          { codigo: '6201501', descricao: 'Desenvolvimento', tipo: 'SECUNDARIA' },
+        ],
+        versao: estab.versao,
+        justificativa: MOTIVO,
+      });
+    expect(alteracao.status).toBe(201);
+    const regime = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes`)
+      .set('Cookie', adminA)
+      .send({ crt: '1', vigenciaInicio: '2026-01-01', vigenciaFim: '2026-12-31', justificativa: MOTIVO });
+    expect(regime.status).toBe(201);
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    await db.insert(schema.auditoria).values({
+      tabela: 'estabelecimentos',
+      registroId: estab.id,
+      operacao: 'UPDATE',
+      usuarioId: null,
+      justificativa: MOTIVO,
+    });
+    const historico = await request(app.getHttpServer())
+      .get(`/fiscal/estabelecimentos/${estab.id}/historico`)
+      .set('Cookie', adminA);
+    expect(historico.status).toBe(200);
+    expect(historico.body.some((linha: { objeto: string }) => linha.objeto === 'alteracao')).toBe(true);
+    expect(historico.body.some((linha: { objeto: string }) => linha.objeto === 'regime')).toBe(true);
+    expect(historico.body.some((linha: { usuarioNome: string }) => linha.usuarioNome === '')).toBe(true);
+  });
+
+  it('pré-condições avaliam regime aprovado, futuro, encerrado e rascunho', async () => {
+    const empresa = await criarEmpresa(adminA, '71ABC015');
+    const estab = await criarEstab(adminA, empresa.body.id, cnpjDe('71ABC0150001'), [
+      { codigo: '6201501', descricao: 'Desenvolvimento', tipo: 'PRINCIPAL' },
+    ]);
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const [linha] = await db.select().from(schema.estabelecimentos).where(eq(schema.estabelecimentos.id, estab.body.id));
+    const cenarios = [
+      { situacao: 'DRAFT' as const, vigenciaInicio: '2020-01-01', vigenciaFim: null, decidido: false },
+      { situacao: 'APPROVED' as const, vigenciaInicio: '2999-01-01', vigenciaFim: null, decidido: true },
+      { situacao: 'APPROVED' as const, vigenciaInicio: '2000-01-01', vigenciaFim: '2000-12-31', decidido: true },
+      { situacao: 'APPROVED' as const, vigenciaInicio: '2020-01-01', vigenciaFim: null, decidido: true },
+      { situacao: 'APPROVED' as const, vigenciaInicio: '2020-01-01', vigenciaFim: '2999-12-31', decidido: true },
+    ];
+    for (const cenario of cenarios) {
+      await db.update(schema.regimesTributarios)
+        .set({ deletedAt: new Date() })
+        .where(eq(schema.regimesTributarios.estabelecimentoId, estab.body.id));
+      await db.insert(schema.regimesTributarios).values({
+        estabelecimentoId: estab.body.id,
+        empresaId: linha!.empresaId,
+        crt: '3',
+        vigenciaInicio: cenario.vigenciaInicio,
+        vigenciaFim: cenario.vigenciaFim,
+        situacao: cenario.situacao,
+        justificativa: MOTIVO,
+        decididoPorId: cenario.decidido ? linha!.criadoPorId : null,
+        decididoEm: cenario.decidido ? new Date() : null,
+        criadoPorId: linha!.criadoPorId,
+        atualizadoPorId: linha!.atualizadoPorId,
+      });
+      const res = await request(app.getHttpServer())
+        .get(`/fiscal/estabelecimentos/${estab.body.id}/pre-condicoes`)
+        .set('Cookie', adminA);
+      expect(res.status).toBe(200);
+      expect(res.body.find((item: { codigo: string }) => item.codigo === 'REGIME_VIGENTE_APROVADO')).toEqual(
+        expect.objectContaining({ atendida: cenario.situacao === 'APPROVED' && cenario.vigenciaInicio === '2020-01-01' }),
+      );
+    }
+  });
+
+  it('dados fiscais nulos sem regime vigente e sem CNAE principal', async () => {
+    const { estab } = await aprovarEstab('71ABC016');
+    const servico = app.get(EstabelecimentosService);
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    expect(await servico.dadosFiscaisVigentes(db, estab.id, hoje)).toBeNull();
+    const [linha] = await db.select().from(schema.estabelecimentos).where(eq(schema.estabelecimentos.id, estab.id));
+    await db.insert(schema.regimesTributarios).values({
+      estabelecimentoId: estab.id,
+      empresaId: linha!.empresaId,
+      crt: '3',
+      vigenciaInicio: '2020-01-01',
+      situacao: 'APPROVED',
+      justificativa: MOTIVO,
+      decididoPorId: linha!.criadoPorId,
+      decididoEm: new Date(),
+      criadoPorId: linha!.criadoPorId,
+      atualizadoPorId: linha!.atualizadoPorId,
+    });
+    await db.update(schema.estabelecimentoCnaes)
+      .set({ deletedAt: new Date() })
+      .where(eq(schema.estabelecimentoCnaes.estabelecimentoId, estab.id));
+    expect(await servico.dadosFiscaisVigentes(db, estab.id, hoje)).toBeNull();
+  });
+
+  it('remoção bloqueia regime em revisão ou aprovado e apaga regime rascunho', async () => {
+    const empresa = await criarEmpresa(adminA, '71ABC017');
+    const rascunho = await criarEstab(adminA, empresa.body.id, cnpjDe('71ABC0170001'));
+    const regimeRascunho = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${rascunho.body.id}/regimes`)
+      .set('Cookie', adminA)
+      .send({ crt: '3', vigenciaInicio: '2026-01-01', vigenciaFim: '2026-06-30', justificativa: MOTIVO });
+    expect(regimeRascunho.status).toBe(201);
+    const removido = await request(app.getHttpServer())
+      .delete(`/fiscal/estabelecimentos/${rascunho.body.id}`)
+      .set('Cookie', adminA)
+      .send({ justificativa: MOTIVO });
+    expect(removido.status).toBe(200);
+
+    const empresaRevisao = await criarEmpresa(adminA, '71ABC018');
+    const emRevisao = await criarEstab(adminA, empresaRevisao.body.id, cnpjDe('71ABC0180001'));
+    const regimeRevisao = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${emRevisao.body.id}/regimes`)
+      .set('Cookie', adminA)
+      .send({ crt: '3', vigenciaInicio: '2026-01-01', justificativa: MOTIVO });
+    const submetido = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${emRevisao.body.id}/regimes/${regimeRevisao.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: regimeRevisao.body.versao, justificativa: MOTIVO });
+    expect(submetido.status).toBe(200);
+    const bloqueado = await request(app.getHttpServer())
+      .delete(`/fiscal/estabelecimentos/${emRevisao.body.id}`)
+      .set('Cookie', adminA)
+      .send({ justificativa: MOTIVO });
+    expect(bloqueado.status).toBe(409);
+    expect(codigoDe(bloqueado.body)).toBe('ESTABELECIMENTO_COM_REGIME_ATIVO');
+
+    const { estab } = await aprovarEstab('71ABC019');
+    const regime = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes`)
+      .set('Cookie', adminA)
+      .send({ crt: '3', vigenciaInicio: '2020-01-01', justificativa: MOTIVO });
+    const regimeSubmetido = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${regime.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: regime.body.versao, justificativa: MOTIVO });
+    await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/regimes/${regime.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: regimeSubmetido.body.versao, justificativa: MOTIVO });
+    const suspenso = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/suspender`)
+      .set('Cookie', adminB)
+      .send({ versao: estab.versao, justificativa: MOTIVO });
+    const reativado = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/reativar`)
+      .set('Cookie', adminA)
+      .send({ versao: suspenso.body.versao, justificativa: MOTIVO });
+    const rejeitado = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/rejeitar`)
+      .set('Cookie', adminB)
+      .send({ versao: reativado.body.versao, justificativa: MOTIVO });
+    expect(rejeitado.status).toBe(200);
+    const comAprovado = await request(app.getHttpServer())
+      .delete(`/fiscal/estabelecimentos/${estab.id}`)
+      .set('Cookie', adminA)
+      .send({ justificativa: MOTIVO });
+    expect(comAprovado.status).toBe(409);
+    expect(codigoDe(comAprovado.body)).toBe('ESTABELECIMENTO_COM_REGIME_ATIVO');
   });
 });

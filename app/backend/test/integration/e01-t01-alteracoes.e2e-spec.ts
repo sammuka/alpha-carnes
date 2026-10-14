@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { validarCnpjAlfanumerico } from '../../src/common/validators/cnpj-alfanumerico';
 import { DRIZZLE } from '../../src/database/database.module';
@@ -364,5 +364,228 @@ describe('E01-T01 alterações pendentes', () => {
         inArray(schema.auditoria.registroId, ids),
       ));
     expect(deletes).toHaveLength(ids.length);
+  });
+
+  async function rascunho(raiz: string) {
+    const empresa = await request(app.getHttpServer())
+      .post('/fiscal/empresas')
+      .set('Cookie', adminA)
+      .send({ razaoSocial: 'Alpha Carnes LTDA', cnpjRaiz: raiz, justificativa: MOTIVO });
+    expect(empresa.status).toBe(201);
+    const estab = await request(app.getHttpServer())
+      .post('/fiscal/estabelecimentos')
+      .set('Cookie', adminA)
+      .send({
+        empresaId: empresa.body.id,
+        nome: 'Filial Osasco',
+        cnpj: cnpjDe(`${raiz}0001`),
+        inscricaoEstadual: '123456789',
+        inscricaoMunicipal: '98765',
+        uf: 'SP',
+        cnaes: CNAE_ORIGINAL,
+        justificativa: MOTIVO,
+      });
+    expect(estab.status).toBe(201);
+    return estab.body as { id: string; versao: number };
+  }
+
+  it('alteração em rascunho relança transição inválida', async () => {
+    const estab = await rascunho('32ABC001');
+    const criada = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/alteracoes`)
+      .set('Cookie', adminA)
+      .send(proposta(estab.versao));
+    expect(criada.status).toBe(409);
+    expect(codigoDe(criada.body)).toBe('TRANSICAO_INVALIDA');
+  });
+
+  it('edição omite campos, informa campos e troca só parte dos CNAEs', async () => {
+    const estab = await aprovarEstabelecimento('32ABC002');
+    const criada = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/alteracoes`)
+      .set('Cookie', adminA)
+      .send(proposta(estab.versao, {
+        cnaes: [
+          { codigo: '6201501', descricao: 'Desenvolvimento', tipo: 'PRINCIPAL' },
+          { codigo: '6202300', descricao: 'Outros', tipo: 'SECUNDARIA' },
+        ],
+      }));
+    expect(criada.status).toBe(201);
+    const omitida = await request(app.getHttpServer())
+      .patch(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${criada.body.id}`)
+      .set('Cookie', adminA)
+      .send({ versao: criada.body.versao, justificativa: MOTIVO });
+    expect(omitida.status).toBe(200);
+    expect(omitida.body.nome).toBe('Filial Barueri');
+    expect(omitida.body.uf).toBe('RJ');
+    expect(omitida.body.cnaes).toHaveLength(2);
+    const trocada = await request(app.getHttpServer())
+      .patch(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${criada.body.id}`)
+      .set('Cookie', adminA)
+      .send({
+        nome: 'Filial Campinas',
+        inscricaoEstadual: '999888777',
+        inscricaoMunicipal: '444555666',
+        uf: 'MG',
+        cnaes: [
+          { codigo: '6201501', descricao: 'Desenvolvimento', tipo: 'PRINCIPAL' },
+          { codigo: '6203100', descricao: 'Novo ramo', tipo: 'SECUNDARIA' },
+        ],
+        versao: omitida.body.versao,
+        justificativa: MOTIVO,
+      });
+    expect(trocada.status).toBe(200);
+    expect(trocada.body.nome).toBe('Filial Campinas');
+    expect(trocada.body.uf).toBe('MG');
+    expect(trocada.body.cnaes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ codigo: '6201501', tipo: 'PRINCIPAL' }),
+      expect.objectContaining({ codigo: '6203100', tipo: 'SECUNDARIA' }),
+    ]));
+    expect(trocada.body.cnaes).toHaveLength(2);
+    const versao = await request(app.getHttpServer())
+      .patch(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${criada.body.id}`)
+      .set('Cookie', adminA)
+      .send({ nome: 'Outra', versao: trocada.body.versao + 3, justificativa: MOTIVO });
+    expect(versao.status).toBe(409);
+    expect(codigoDe(versao.body)).toBe('CONFLITO_CONCORRENTE');
+  });
+
+  it('transição inválida em editar, submeter, aprovar, rejeitar e descartar', async () => {
+    const estab = await aprovarEstabelecimento('32ABC003');
+    const criada = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/alteracoes`)
+      .set('Cookie', adminA)
+      .send(proposta(estab.versao));
+    expect(criada.status).toBe(201);
+    const aprovarCedo = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${criada.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: criada.body.versao, justificativa: MOTIVO });
+    expect(aprovarCedo.status).toBe(409);
+    expect(codigoDe(aprovarCedo.body)).toBe('TRANSICAO_INVALIDA');
+    const rejeitarCedo = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${criada.body.id}/rejeitar`)
+      .set('Cookie', adminB)
+      .send({ versao: criada.body.versao, justificativa: MOTIVO });
+    expect(rejeitarCedo.status).toBe(409);
+    expect(codigoDe(rejeitarCedo.body)).toBe('TRANSICAO_INVALIDA');
+    const submetida = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${criada.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: criada.body.versao, justificativa: MOTIVO });
+    expect(submetida.status).toBe(200);
+    const deNovo = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${criada.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: submetida.body.versao, justificativa: MOTIVO });
+    expect(deNovo.status).toBe(409);
+    expect(codigoDe(deNovo.body)).toBe('TRANSICAO_INVALIDA');
+    const editada = await request(app.getHttpServer())
+      .patch(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${criada.body.id}`)
+      .set('Cookie', adminA)
+      .send({ nome: 'Na revisao', versao: submetida.body.versao, justificativa: MOTIVO });
+    expect(editada.status).toBe(409);
+    expect(codigoDe(editada.body)).toBe('TRANSICAO_INVALIDA');
+    const descartada = await request(app.getHttpServer())
+      .delete(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${criada.body.id}`)
+      .set('Cookie', adminA)
+      .send({ justificativa: MOTIVO });
+    expect(descartada.status).toBe(409);
+    expect(codigoDe(descartada.body)).toBe('TRANSICAO_INVALIDA');
+  });
+
+  it('submeter sem CNAE principal, descartar rascunho e id inexistente', async () => {
+    const estab = await aprovarEstabelecimento('32ABC004');
+    const semPrincipal = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/alteracoes`)
+      .set('Cookie', adminA)
+      .send(proposta(estab.versao, { cnaes: [] }));
+    expect(semPrincipal.status).toBe(201);
+    const submetida = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${semPrincipal.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: semPrincipal.body.versao, justificativa: MOTIVO });
+    expect(submetida.status).toBe(422);
+    expect(codigoDe(submetida.body)).toBe('CNAE_PRINCIPAL_AUSENTE');
+    const descartada = await request(app.getHttpServer())
+      .delete(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${semPrincipal.body.id}`)
+      .set('Cookie', adminA)
+      .send({ justificativa: MOTIVO });
+    expect(descartada.status).toBe(200);
+    expect(descartada.body.id).toBe(semPrincipal.body.id);
+    const ausente = await request(app.getHttpServer())
+      .patch(`/fiscal/estabelecimentos/${estab.id}/alteracoes/00000000-0000-4000-8000-000000000099`)
+      .set('Cookie', adminA)
+      .send({ nome: 'Ninguem', versao: 1, justificativa: MOTIVO });
+    expect(ausente.status).toBe(404);
+  });
+
+  it('returning vazio ao gravar, atualizar e descartar alteração', async () => {
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    await db.execute(sql.raw(`
+      CREATE OR REPLACE FUNCTION e01_cov_pular_alteracao()
+      RETURNS trigger LANGUAGE plpgsql AS $fn$
+      BEGIN
+        IF TG_OP = 'INSERT' AND NEW.nome = 'FALHA GRAVAR' THEN
+          RETURN NULL;
+        END IF;
+        IF TG_OP = 'UPDATE' AND NEW.nome = 'FALHA ATUALIZAR' THEN
+          RETURN NULL;
+        END IF;
+        IF TG_OP = 'UPDATE' AND OLD.nome = 'FALHA DESCARTAR' AND NEW.deleted_at IS NOT NULL THEN
+          RETURN NULL;
+        END IF;
+        IF TG_OP = 'UPDATE' AND OLD.nome = 'FALHA SUBMETER' AND NEW.situacao = 'REVIEW' THEN
+          RETURN NULL;
+        END IF;
+        RETURN NEW;
+      END;
+      $fn$
+    `));
+    await db.execute(sql.raw('DROP TRIGGER IF EXISTS e01_cov_pular_alteracao ON estabelecimento_alteracoes'));
+    await db.execute(sql.raw(`
+      CREATE TRIGGER e01_cov_pular_alteracao
+      BEFORE INSERT OR UPDATE ON estabelecimento_alteracoes
+      FOR EACH ROW EXECUTE FUNCTION e01_cov_pular_alteracao()
+    `));
+    try {
+      const estab = await aprovarEstabelecimento('32ABC005');
+      const gravar = await request(app.getHttpServer())
+        .post(`/fiscal/estabelecimentos/${estab.id}/alteracoes`)
+        .set('Cookie', adminA)
+        .send(proposta(estab.versao, { nome: 'FALHA GRAVAR' }));
+      expect(gravar.status).toBe(500);
+      const criada = await request(app.getHttpServer())
+        .post(`/fiscal/estabelecimentos/${estab.id}/alteracoes`)
+        .set('Cookie', adminA)
+        .send(proposta(estab.versao, { nome: 'FALHA ATUALIZAR' }));
+      expect(criada.status).toBe(201);
+      const atualizar = await request(app.getHttpServer())
+        .patch(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${criada.body.id}`)
+        .set('Cookie', adminA)
+        .send({ nome: 'FALHA ATUALIZAR', versao: criada.body.versao, justificativa: MOTIVO });
+      expect(atualizar.status).toBe(409);
+      expect(codigoDe(atualizar.body)).toBe('CONFLITO_CONCORRENTE');
+      const descartada = await request(app.getHttpServer())
+        .delete(`/fiscal/estabelecimentos/${estab.id}/alteracoes/${criada.body.id}`)
+        .set('Cookie', adminA)
+        .send({ justificativa: MOTIVO });
+      expect(descartada.status).toBe(500);
+      const outro = await aprovarEstabelecimento('32ABC006');
+      const submissao = await request(app.getHttpServer())
+        .post(`/fiscal/estabelecimentos/${outro.id}/alteracoes`)
+        .set('Cookie', adminA)
+        .send(proposta(outro.versao, { nome: 'FALHA SUBMETER' }));
+      expect(submissao.status).toBe(201);
+      const submetida = await request(app.getHttpServer())
+        .post(`/fiscal/estabelecimentos/${outro.id}/alteracoes/${submissao.body.id}/submeter`)
+        .set('Cookie', adminA)
+        .send({ versao: submissao.body.versao, justificativa: MOTIVO });
+      expect(submetida.status).toBe(409);
+      expect(codigoDe(submetida.body)).toBe('CONFLITO_CONCORRENTE');
+    } finally {
+      await db.execute(sql.raw('DROP TRIGGER IF EXISTS e01_cov_pular_alteracao ON estabelecimento_alteracoes'));
+      await db.execute(sql.raw('DROP FUNCTION IF EXISTS e01_cov_pular_alteracao()'));
+    }
   });
 });
