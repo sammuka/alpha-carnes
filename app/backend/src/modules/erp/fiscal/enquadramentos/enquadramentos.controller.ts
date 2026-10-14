@@ -1,6 +1,7 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards,
+  Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Res, UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser, type CurrentUserPayload } from '../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
@@ -40,6 +41,20 @@ export class EnquadramentosController {
     return this.enquadramentos.contagens(query);
   }
 
+  @Get('enquadramentos/exportacao')
+  @RequirePermissoes('FISCAL_ENQUADRAMENTOS_LER')
+  async exportacao(
+    @Query(new ZodValidationPipe(listarEnquadramentosQuerySchema)) query: ListarEnquadramentosQuery,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.enquadramentos.exportar(query);
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="enquadramentos.csv"',
+    });
+    return csv;
+  }
+
   @Get('enquadramentos')
   @RequirePermissoes('FISCAL_ENQUADRAMENTOS_LER')
   listar(@Query(new ZodValidationPipe(listarEnquadramentosQuerySchema)) query: ListarEnquadramentosQuery) {
@@ -50,6 +65,12 @@ export class EnquadramentosController {
   @RequirePermissoes('FISCAL_ENQUADRAMENTOS_LER')
   historico(@Param('id', new ZodValidationPipe(idParamSchema)) id: string) {
     return this.enquadramentos.historico(id);
+  }
+
+  @Get('enquadramentos/:id/pre-condicoes')
+  @RequirePermissoes('FISCAL_ENQUADRAMENTOS_LER')
+  preCondicoes(@Param('id', new ZodValidationPipe(idParamSchema)) id: string) {
+    return this.enquadramentos.preCondicoes(id);
   }
 
   @Get('enquadramentos/:id')

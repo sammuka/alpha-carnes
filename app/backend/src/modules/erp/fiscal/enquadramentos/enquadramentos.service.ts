@@ -36,6 +36,7 @@ import {
   type ChaveEnquadramento,
   type Intervalo,
 } from './enquadramento-criterio';
+import { montarCsvEnquadramentos } from './exportacao-csv';
 import {
   conflito,
   conflitoConcorrente,
@@ -179,6 +180,92 @@ export class EnquadramentosService {
       .innerJoin(clientes, eq(clientes.id, enquadramentosFiscais.clienteId))
       .where(where);
     return { total: linha?.total ?? 0, ativas: linha?.ativas ?? 0, inativas: linha?.inativas ?? 0 };
+  }
+
+  async exportar(query: ListarEnquadramentosQuery): Promise<string> {
+    const where = this.whereLista(query);
+    const linhas = await this.db
+      .select({
+        codigo: enquadramentosFiscais.codigo,
+        operacao: operacoes.rotulo,
+        cfop: cfops.codigo,
+        vigenciaInicio: enquadramentosFiscais.vigenciaInicio,
+        vigenciaFim: enquadramentosFiscais.vigenciaFim,
+        estabelecimento: estabelecimentos.nome,
+        tpNf: enquadramentosFiscais.tpNf,
+        finNfe: enquadramentosFiscais.finNfe,
+        situacao: enquadramentosFiscais.situacao,
+        responsavel: usuarios.nome,
+        produto: produtos.nome,
+        clienteNomeFantasia: clientes.nomeFantasia,
+        clienteRazao: clientes.razaoSocial,
+        ncm: ncms.codigo,
+        cest: enquadramentosFiscais.cest,
+        prioridade: enquadramentosFiscais.prioridade,
+        abrangencia: enquadramentosFiscais.abrangencia,
+        tipoProduto: enquadramentosFiscais.tipoProduto,
+      })
+      .from(enquadramentosFiscais)
+      .innerJoin(operacoes, eq(operacoes.id, enquadramentosFiscais.operacaoId))
+      .innerJoin(estabelecimentos, eq(estabelecimentos.id, enquadramentosFiscais.estabelecimentoId))
+      .innerJoin(cfops, eq(cfops.id, enquadramentosFiscais.cfopId))
+      .innerJoin(produtos, eq(produtos.id, enquadramentosFiscais.produtoId))
+      .innerJoin(ncms, eq(ncms.id, enquadramentosFiscais.ncmId))
+      .innerJoin(clientes, eq(clientes.id, enquadramentosFiscais.clienteId))
+      .innerJoin(usuarios, eq(usuarios.id, enquadramentosFiscais.atualizadoPorId))
+      .where(where)
+      .orderBy(asc(operacoes.rotulo), asc(enquadramentosFiscais.codigo));
+    return montarCsvEnquadramentos(linhas.map((linha) => ({
+      codigo: linha.codigo,
+      operacao: linha.operacao,
+      cfop: linha.cfop,
+      vigenciaInicio: linha.vigenciaInicio,
+      vigenciaFim: linha.vigenciaFim,
+      estabelecimento: linha.estabelecimento,
+      tpNf: linha.tpNf,
+      finNfe: linha.finNfe,
+      situacao: linha.situacao,
+      responsavel: linha.responsavel,
+      produto: linha.produto,
+      cliente: linha.clienteNomeFantasia?.trim() || linha.clienteRazao,
+      ncm: linha.ncm,
+      cest: linha.cest,
+      prioridade: linha.prioridade,
+      abrangencia: linha.abrangencia,
+      tipoProduto: linha.tipoProduto,
+    })));
+  }
+
+  async preCondicoes(id: string) {
+    const linha = await this.obter(this.db, id);
+    const [estab] = await this.db
+      .select({ situacao: estabelecimentos.situacao })
+      .from(estabelecimentos)
+      .where(eq(estabelecimentos.id, linha.estabelecimentoId));
+    const chaveCompleta = [
+      linha.estabelecimentoId,
+      linha.operacaoId,
+      linha.tpNf,
+      linha.finNfe,
+      linha.cfopId,
+      linha.abrangencia,
+      linha.tipoProduto,
+      linha.produtoId,
+      linha.ncmId,
+      linha.cest,
+      linha.clienteId,
+    ].every((valor) => valor.trim() !== '');
+    return [
+      { codigo: 'ESTABELECIMENTO_APROVADO', atendida: estab?.situacao === 'APPROVED', provisoria: false },
+      { codigo: 'VIGENCIA_INFORMADA', atendida: linha.vigenciaInicio.trim() !== '', provisoria: false },
+      { codigo: 'CHAVE_COMPLETA', atendida: chaveCompleta, provisoria: false },
+      { codigo: 'PRIORIDADE_SEMANTICA', atendida: false, provisoria: true },
+      { codigo: 'DESEMPATE_DEFINIDO', atendida: false, provisoria: true },
+      { codigo: 'TABELA_OFICIAL_CFOP_NCM', atendida: false, provisoria: true },
+      { codigo: 'CEST_VINCULADO_AO_NCM', atendida: false, provisoria: true },
+      { codigo: 'DATAS_COMERCIAL_FISCAL_EFETIVA', atendida: false, provisoria: true },
+      { codigo: 'DUPLA_APROVACAO', atendida: false, provisoria: true },
+    ];
   }
 
   async detalhar(id: string) {

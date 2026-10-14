@@ -453,6 +453,7 @@ describe('E01-T02 enquadramentos fiscais', () => {
     const rotas: Array<[string, string]> = [
       ['get', '/fiscal/enquadramentos'],
       ['get', '/fiscal/enquadramentos/contagens'],
+      ['get', '/fiscal/enquadramentos/exportacao'],
       ['post', '/fiscal/enquadramentos'],
       ['get', `/fiscal/enquadramentos/${UUID}`],
       ['patch', `/fiscal/enquadramentos/${UUID}`],
@@ -461,6 +462,7 @@ describe('E01-T02 enquadramentos fiscais', () => {
       ['post', `/fiscal/enquadramentos/${UUID}/reativar`],
       ['delete', `/fiscal/enquadramentos/${UUID}`],
       ['get', `/fiscal/enquadramentos/${UUID}/historico`],
+      ['get', `/fiscal/enquadramentos/${UUID}/pre-condicoes`],
     ];
     for (const [metodo, rota] of rotas) {
       const res = await request(app.getHttpServer())[metodo as 'get'](rota).set('Cookie', gestor).send({ justificativa: MOTIVO });
@@ -518,6 +520,85 @@ describe('E01-T02 enquadramentos fiscais', () => {
     expect(depois.status).toBe(422);
     expect(codigoDe(depois.body)).toBe('REGRA_APROVADA_AUSENTE');
     expect(depois.body.message.enquadramentoLocalizado).toBeNull();
+  });
+
+  it('exportação CSV com rótulos do plano, BOM e sem id', async () => {
+    const base = await baseAprovada();
+    const criado = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', adminA)
+      .send(corpo(base));
+    expect(criado.status).toBe(201);
+    const res = await request(app.getHttpServer())
+      .get(`/fiscal/enquadramentos/exportacao?estabelecimentoId=${base.estabelecimentoId}`)
+      .set('Cookie', adminA);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.headers['content-disposition']).toContain('attachment');
+    expect(res.text.charCodeAt(0)).toBe(0xfeff);
+    const cabecalho = [
+      'Código',
+      'Operação',
+      'Operação fiscal (CFOP)',
+      'Início de vigência',
+      'Fim de vigência',
+      'Estabelecimento',
+      'Tipo da nota',
+      'Finalidade',
+      'Situação',
+      'Responsável',
+      'Produto',
+      'Cliente',
+      'Classificação fiscal (NCM)',
+      'Substituição tributária (CEST)',
+      'Prioridade',
+      'Abrangência da operação',
+      'Origem do produto',
+    ].join(';');
+    expect(res.text).toContain(cabecalho);
+    expect(res.text).toContain(criado.body.codigo);
+    expect(res.text).toContain(base.rotulo);
+    expect(res.text).toContain(base.cfopCodigo);
+    expect(res.text).toContain('2026-01-01');
+    expect(res.text).toContain('2026-12-31');
+    expect(res.text).toContain('Filial Osasco');
+    expect(res.text).toContain('Saída');
+    expect(res.text).toContain('Operação normal');
+    expect(res.text).toContain('Ativa');
+    expect(res.text).toContain('Test administrador');
+    expect(res.text).toContain('Acém');
+    expect(res.text).toContain('Açougue Central');
+    expect(res.text).toContain('1708700');
+    expect(res.text).toContain('Dentro do estado');
+    expect(res.text).toContain('Revenda');
+    expect(res.text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
+    expect(res.text).not.toMatch(/Marca/);
+  });
+
+  it('DUPLA_APROVACAO provisoria=true e atendida=false', async () => {
+    const base = await baseAprovada();
+    const criado = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', adminA)
+      .send(corpo(base));
+    expect(criado.status).toBe(201);
+    const res = await request(app.getHttpServer())
+      .get(`/fiscal/enquadramentos/${criado.body.id}/pre-condicoes`)
+      .set('Cookie', adminA);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(expect.arrayContaining([
+      { codigo: 'ESTABELECIMENTO_APROVADO', atendida: true, provisoria: false },
+      { codigo: 'VIGENCIA_INFORMADA', atendida: true, provisoria: false },
+      { codigo: 'CHAVE_COMPLETA', atendida: true, provisoria: false },
+      { codigo: 'PRIORIDADE_SEMANTICA', atendida: false, provisoria: true },
+      { codigo: 'DESEMPATE_DEFINIDO', atendida: false, provisoria: true },
+      { codigo: 'TABELA_OFICIAL_CFOP_NCM', atendida: false, provisoria: true },
+      { codigo: 'CEST_VINCULADO_AO_NCM', atendida: false, provisoria: true },
+      { codigo: 'DATAS_COMERCIAL_FISCAL_EFETIVA', atendida: false, provisoria: true },
+      { codigo: 'DUPLA_APROVACAO', atendida: false, provisoria: true },
+    ]));
+    const dupla = res.body.find((item: { codigo: string }) => item.codigo === 'DUPLA_APROVACAO');
+    expect(dupla).toEqual({ codigo: 'DUPLA_APROVACAO', atendida: false, provisoria: true });
   });
 
   it('sem vigenciaInicio → 400', async () => {
