@@ -10,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useRetornoFoco } from './use-retorno-foco';
 
 interface ConfirmarSaidaDialogProps {
   aberto: boolean;
@@ -19,9 +20,10 @@ interface ConfirmarSaidaDialogProps {
 
 /** Sair de um formulário com dados não salvos exige confirmação. */
 export function ConfirmarSaidaDialog({ aberto, onAbertoChange, onDescartar }: ConfirmarSaidaDialogProps) {
+  const retornoFoco = useRetornoFoco(aberto);
   return (
     <AlertDialog open={aberto} onOpenChange={onAbertoChange}>
-      <AlertDialogContent>
+      <AlertDialogContent onCloseAutoFocus={retornoFoco}>
         <AlertDialogHeader>
           <AlertDialogTitle>Descartar alterações?</AlertDialogTitle>
           <AlertDialogDescription>Há dados preenchidos que ainda não foram salvos.</AlertDialogDescription>

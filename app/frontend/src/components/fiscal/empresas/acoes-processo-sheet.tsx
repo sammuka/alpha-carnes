@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { SecaoRotulo } from './aba-ficha';
+import { useRetornoFoco } from './use-retorno-foco';
 
 export interface ComandoProcesso {
   titulo: string;
@@ -24,9 +25,10 @@ const CONDICIONANTES = [
 
 /** "Ações do processo ▾": comandos de negócio do cadastro fiscal, com as condicionantes de aceite. */
 export function AcoesProcessoSheet({ aberto, onFechar, comandos }: AcoesProcessoSheetProps) {
+  const retornoFoco = useRetornoFoco(aberto);
   return (
     <Sheet open={aberto} onOpenChange={(a) => { if (!a) onFechar(); }}>
-      <SheetContent className="gap-0 p-0 sm:max-w-[480px]">
+      <SheetContent onCloseAutoFocus={retornoFoco} className="gap-0 p-0 sm:max-w-[480px]">
         <SheetHeader className="border-b border-border p-4">
           <SheetTitle className="text-[16px] font-bold">Ações e decisões do processo</SheetTitle>
           <SheetDescription className="text-xs">Operações previstas para empresas, estabelecimentos e regime</SheetDescription>

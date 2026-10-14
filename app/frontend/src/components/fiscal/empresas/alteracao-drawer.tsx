@@ -27,6 +27,7 @@ import {
   type ErrosCnaes,
 } from './cnaes-editor';
 import { ConfirmarSaidaDialog } from './confirmar-saida-dialog';
+import { useRetornoFoco } from './use-retorno-foco';
 
 interface AlteracaoDrawerProps {
   aberto: boolean;
@@ -52,6 +53,7 @@ function cnaesDe(lista: CnaeItem[]): CnaeItem[] {
 
 /** Proposta de alteração de um estabelecimento aprovado (o aprovado nunca é editado no lugar). */
 export function AlteracaoDrawer({ aberto, onFechar, estabelecimento: atual, onSalvo, onConflito }: AlteracaoDrawerProps) {
+  const retornoFoco = useRetornoFoco(aberto);
   // Instantâneo do cadastro no momento em que o drawer abre: uma atualização em tempo real não apaga o
   // que o usuário digitou nem troca a versão sobre a qual a proposta foi escrita.
   const [estabelecimento, setEstabelecimento] = useState(atual);
@@ -163,7 +165,7 @@ export function AlteracaoDrawer({ aberto, onFechar, estabelecimento: atual, onSa
   return (
     <>
       <Sheet open={aberto} onOpenChange={(aberta) => { if (!aberta) tentarFechar(); }}>
-        <SheetContent className="gap-0 p-0 sm:max-w-[600px]">
+        <SheetContent onCloseAutoFocus={retornoFoco} className="gap-0 p-0 sm:max-w-[600px]">
           <SheetHeader className="border-b border-border p-4">
             <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-primary">Cadastro · Fiscal</span>
             <SheetTitle className="text-[16px] font-bold">Alteração do estabelecimento</SheetTitle>

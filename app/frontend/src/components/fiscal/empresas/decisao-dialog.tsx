@@ -23,6 +23,7 @@ import {
   rotuloRegime,
   type RegimeVigente,
 } from '@/lib/fiscal-empresas';
+import { useRetornoFoco } from './use-retorno-foco';
 
 /** Descreve uma decisão que exige justificativa: submeter, aprovar, rejeitar, suspender, remover… */
 export interface DecisaoPendente {
@@ -57,11 +58,13 @@ function descreverConflito(dados: Record<string, unknown>): string | null {
 }
 
 export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: DecisaoDialogProps) {
+  const retornoFoco = useRetornoFoco(decisao !== null);
   const [justificativa, setJustificativa] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [erroCampo, setErroCampo] = useState<string | null>(null);
   const [processando, setProcessando] = useState(false);
   const [desafio, setDesafio] = useState<DesafioTroca | null>(null);
+  const retornoFocoTroca = useRetornoFoco(desafio !== null);
 
   useEffect(() => {
     setJustificativa('');
@@ -104,7 +107,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
   return (
     <>
       <Dialog open={decisao !== null} onOpenChange={(aberto) => { if (!aberto && !processando) onFechar(); }}>
-        <DialogContent>
+        <DialogContent onCloseAutoFocus={retornoFoco}>
           <DialogHeader>
             <DialogTitle>{decisao?.titulo}</DialogTitle>
             <DialogDescription>{decisao?.detalhe}</DialogDescription>
@@ -148,7 +151,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
 
       {/* Challenge 409: a troca de regime só segue com confirmação explícita. */}
       <AlertDialog open={desafio !== null} onOpenChange={(aberto) => { if (!aberto) setDesafio(null); }}>
-        <AlertDialogContent>
+        <AlertDialogContent onCloseAutoFocus={retornoFocoTroca}>
           <AlertDialogHeader>
             <AlertDialogTitle>Troca de regime tributário</AlertDialogTitle>
             <AlertDialogDescription>

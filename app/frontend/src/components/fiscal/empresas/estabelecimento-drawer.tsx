@@ -33,6 +33,7 @@ import {
   type ErrosCnaes,
 } from './cnaes-editor';
 import { EmpresaDialog } from './empresa-dialog';
+import { useRetornoFoco } from './use-retorno-foco';
 
 interface EstabelecimentoDrawerProps {
   aberto: boolean;
@@ -62,6 +63,7 @@ export function EstabelecimentoDrawer({
   onSalvo,
   onConflito,
 }: EstabelecimentoDrawerProps) {
+  const retornoFoco = useRetornoFoco(aberto);
   const [empresaId, setEmpresaId] = useState('');
   const [cnpj, setCnpj] = useState('');
   const [dados, setDados] = useState<DadosFiscais>(DADOS_VAZIOS);
@@ -205,7 +207,7 @@ export function EstabelecimentoDrawer({
   return (
     <>
       <Sheet open={aberto} onOpenChange={(aberta) => { if (!aberta) tentarFechar(); }}>
-        <SheetContent className="gap-0 p-0 sm:max-w-[600px]">
+        <SheetContent onCloseAutoFocus={retornoFoco} className="gap-0 p-0 sm:max-w-[600px]">
           <SheetHeader className="border-b border-border p-4">
             <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-primary">Cadastro · Fiscal</span>
             <SheetTitle className="text-[16px] font-bold">Empresas, estabelecimentos e regime</SheetTitle>

@@ -17,6 +17,7 @@ import {
   type CodigoCrt,
   type RegimeVersao,
 } from '@/lib/fiscal-empresas';
+import { useRetornoFoco } from './use-retorno-foco';
 
 interface RegimeDialogProps {
   aberto: boolean;
@@ -39,6 +40,7 @@ export function RegimeDialog({
   onSalvo,
   onConflito,
 }: RegimeDialogProps) {
+  const retornoFoco = useRetornoFoco(aberto);
   const [crt, setCrt] = useState<CodigoCrt | ''>('');
   const [inicio, setInicio] = useState('');
   const [fim, setFim] = useState('');
@@ -100,7 +102,7 @@ export function RegimeDialog({
 
   return (
     <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={retornoFoco}>
         <DialogHeader>
           <DialogTitle>{regime ? 'Editar versão de regime' : 'Nova versão de regime'}</DialogTitle>
           <DialogDescription>{nomeEstabelecimento}</DialogDescription>

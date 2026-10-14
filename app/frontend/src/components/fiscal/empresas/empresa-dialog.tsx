@@ -15,6 +15,7 @@ import {
   normalizarCnpj,
   type Empresa,
 } from '@/lib/fiscal-empresas';
+import { useRetornoFoco } from './use-retorno-foco';
 
 interface EmpresaDialogProps {
   aberto: boolean;
@@ -36,6 +37,7 @@ function mascararRaiz(valor: string): string {
 }
 
 export function EmpresaDialog({ aberto, onFechar, empresa, onSalvo, onConflito }: EmpresaDialogProps) {
+  const retornoFoco = useRetornoFoco(aberto);
   const [razaoSocial, setRazaoSocial] = useState('');
   const [cnpjRaiz, setCnpjRaiz] = useState('');
   const [justificativa, setJustificativa] = useState('');
@@ -91,7 +93,7 @@ export function EmpresaDialog({ aberto, onFechar, empresa, onSalvo, onConflito }
 
   return (
     <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={retornoFoco}>
         <DialogHeader>
           <DialogTitle>{editando ? 'Editar empresa' : 'Nova empresa'}</DialogTitle>
         </DialogHeader>
