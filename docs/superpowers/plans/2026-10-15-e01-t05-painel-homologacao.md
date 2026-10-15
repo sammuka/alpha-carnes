@@ -12,6 +12,7 @@
 | Rev. | Data | Autor | Motivo |
 |---|---|---|---|
 | r1 | 2026-10-15 | planner | versão inicial da fatia E01-T05 |
+| r2 | 2026-10-15 | planner | Portão 1 r1 pediu ajuste no commit `f056b2e`: literais do hero e da toolbar, botão da ficha, asserção das colunas e da tag `0048`, handler do BFF e um só literal de cenário |
 
 **Goal:** homologar a publicação de uma versão de regra que a T03 já sabe submeter e aprovar — revisar o diff,
 aprovar ou rejeitar, publicar e auditar — exigindo ao menos um cenário de regressão já calculado na T04, na
@@ -164,7 +165,7 @@ Cinco entradas que a spec deixa fáceis de errar, e o teste que as prende:
 
 | # | Conflito | Resolução |
 |---|---|---|
-| C1 | Caderno B L93 e catalogo.js L248 ("identificador regra, autor, motivo, legislação, cenários aprovados, vigência") × dicionário e MATRIZ-UX L143–L150 | Os rótulos visíveis são os da seção 4, copiados do dicionário. "Usuário" mostra o autor da submissão (D4). "Descrição" guarda o motivo da revisão (D5). Vigência é o par início/fim da regra. "Cenários aprovados" é o bloco da ficha com esse texto literal, listando os vínculos (D11). "Legislação" não tem rótulo no dicionário nem coluna na regra: não se cria campo (seção 18) |
+| C1 | Caderno B L93 e catalogo.js L248 ("identificador regra, autor, motivo, legislação, cenários aprovados, vigência") × dicionário e MATRIZ-UX L143–L150 | Os rótulos visíveis são os da seção 4, copiados do dicionário. "Usuário" mostra o autor da submissão (D4). "Descrição" guarda o motivo da revisão (D5). Vigência é o par início/fim da regra. O bloco da ficha usa o literal "cenários aprovados", os mesmos caracteres de catalogo.js L248, e lista os vínculos (D11). `aplicacao.js` L235 imprime `sc.fields` com `escapeHtml` e não chama `titleCase` (L14 só capitaliza ação e exceção). Não se escreve "Cenários aprovados". "Legislação" não tem rótulo no dicionário nem coluna na regra: não se cria campo (seção 18) |
 | C2 | Caderno B L95 "separar datas comercial/fiscal/efetiva" × matriz só início e fim | D5 e H-E01-10. A homologação não tem coluna de data de vigência. Selo Provisório junto das duas datas da regra |
 | C3 | Caderno B L96 "validação 422" × AD-12 (Zod é 400) | D15 |
 | C4 | DoD genérico "dupla aprovação quando exigida" e o silêncio sobre o número do quórum × "aprovador diferente do autor" | D9. Uma pessoa, `SEGREGACAO_FUNCAO`. H-E01-11 segue aberto |
@@ -185,17 +186,19 @@ Cinco entradas que a spec deixa fáceis de errar, e o teste que as prende:
 
 | Elemento | Fonte (arquivo:linha) | Implementação real |
 |---|---|---|
-| Metadados | catalogo.js L240–L252 | título "Painel de alterações e homologação de regras"; subtítulo "Revisar diff, aprovar/rejeitar, publicar e auditar" + "Acesso típico" com `BadgeProvisorio codigo="H-E01-12"` |
+| Metadados | catalogo.js L240–L252; aplicacao.js L356 | título "Painel de alterações e homologação de regras". O subtítulo visível começa em minúscula, o valor de `sc.actions` (catalogo.js L249): "revisar diff, aprovar/rejeitar, publicar e auditar". L356 concatena um ponto e o texto "Acesso típico: ". O selo é `BadgeProvisorio codigo="H-E01-12"`. A persona "contador e auditor" (catalogo.js L247) não é impressa como perfil |
+| Hero | aplicacao.js L356 | "Exportar"; "+ Novo registro" (`data-action="new"`, só `podeGerenciar`; L388 abre o drawer); "Ações do processo ▾" |
+| Toolbar da grade | aplicacao.js L170 | busca, filtro de situação e o botão "Exportar visão". "Exportar" do hero e "Exportar visão" baixam o mesmo CSV da seção 7 |
 | Campos | componentes.js L3243–L3260 e o dicionário | os oito rótulos abaixo. Empresa não é campo da ficha; entra só na trilha |
 | Grid | componentes.js L3262–L3278; MATRIZ-UX L134 | Enquadramento fiscal · Início de vigência · Situação · Usuário · Responsável pela aprovação · Descrição. Ordenação default Enquadramento fiscal. 20 por página, server-side. Sem coluna técnica |
 | Filtros | componentes.js L3295–L3297; MATRIZ-UX L135 | Situação. A busca da lista permanece (placeholder "Pesquisar descrição ou referência de negócio") |
 | Ações | catalogo.js L249; aplicacao.js L14 e L40–L43 | "Revisar diff", "Aprovar/rejeitar", "Publicar e auditar" (`titleCase` só na primeira letra de cada token separado por vírgula) |
-| Primária | componentes.js L3304 | "Cadastrar / revisar" abre o drawer |
+| Primária do spec | componentes.js L3304 | `actions.primary` é "Cadastrar / revisar". Essa string não é botão do hero nem da toolbar: `renderScreen` não a pinta. Quem abre o drawer é "+ Novo registro" (aplicacao.js L356 e L388) |
 | Sete abas | aplicacao.js L7 | Ficha e campos, Movimentações, Regras e validações, Exceções, Histórico, Integrações, Aceite e testes |
-| Ficha | aplicacao.js L179–L192 | seções "Dados principais" e "Segurança, auditoria e aprovação". Trilha: Empresa (`empresas.razao_social` via enquadramento da regra), Situação, Responsável (nome de `atualizado_por_id`). Ambiente fica de fora |
+| Ficha | aplicacao.js L179–L192 | seções "Dados principais" e "Segurança, auditoria e aprovação". Trilha: Empresa (`empresas.razao_social` via enquadramento da regra), Situação, Responsável (nome de `atualizado_por_id`). Ambiente fica de fora. De L191 entram "Validar pré-condições" e "Consultar histórico". "Editar versão" está na lista de remoções desta seção |
 | Drawer | aplicacao.js L427–L438 e L451 | "Cancelar", "Verificar dados", "Salvar rascunho" (sai só a palavra ilustrativo). O clique grava `EM_REVISAO`. Não há situação rascunho (D7). Justificativa 3–500. O rótulo do campo é "Justificativa auditável", porque a ficha inclui a chave (componentes.js L3258). O fallback "Motivo da alteração" de aplicacao.js L436 não se aplica |
 | Exceções | catalogo.js L251; aplicacao.js L201 | um bloco: "Atualização normativa em meio à operação". As três frases injetadas não entram (C9) |
-| Cenários | catalogo.js L248 | bloco "cenários aprovados", texto literal em minúsculas como no catálogo, listando código e versão da memória e o rótulo da competência já definido na T04 ("Outubro de 2026"). Sem UUID |
+| Cenários | catalogo.js L248; aplicacao.js L221 e L235 | bloco cujo texto visível é exatamente "cenários aprovados". L235 faz `escapeHtml(sc.fields)` e não aplica `titleCase`. O botão do bloco usa esse literal, sem abreviar para "cenários" e sem capitalizar a inicial. Lista código e versão da memória e o rótulo da competência já definido na T04 ("Outubro de 2026"). Sem UUID |
 
 Rótulos literais, copiados do dicionário. Não abreviar.
 
@@ -233,8 +236,10 @@ teste"; rodapé "registros fictícios"; eyebrow com código de épico e "Caderno
 tela"; botões "Abrir ocorrência" e "Simular erro de validação"; as três exceções injetadas por aplicacao.js
 L201 (C9); a palavra "ilustrativo" do botão, que permanece "Salvar rascunho"; "Cadastro demonstrativo em
 memória"; o `<select>` de situação com os seis `stateTypes` de aplicacao.js L8; checkboxes da aba Aceite
-(viram leitura). Botões de Integrações para telas inexistentes (aplicacao.js L218) desabilitados com
-`title="Destino ainda não disponível"`.
+(viram leitura); botão "Editar versão" (aplicacao.js L191, `data-action="edit"`). `actionMain` L388 manda
+esse clique a `openDrawer(sc,'edit')` e `saveForm` L459 só altera a fixture em memória. A seção 7 não tem
+`PATCH`; abrir a revisão é "+ Novo registro". Botões de Integrações para telas inexistentes (aplicacao.js L218)
+desabilitados com `title="Destino ainda não disponível"`.
 
 Ao escolher o enquadramento no drawer, o cliente chama o GET já existente `/api/erp/fiscal/regras/:id` e
 preenche Usuário, Início de vigência e Fim de vigência em leitura. Se o operador não manda `regraId`, o
@@ -482,15 +487,17 @@ DS existente: `PageHeader`, `KpiStrip`/`Kpi`, `Table`, `Tabs`, `ComboboxField`, 
 `StatusPill`, `EmptyState`, `Skeleton`, `BadgeProvisorio`, `sonner`, `Button`. Sem hex avulso. Nenhum
 `variant="outline"`.
 
-- Hero: título "Painel de alterações e homologação de regras"; subtítulo da seção 4 e o selo H-E01-12;
-  "Exportar visão"; "Cadastrar / revisar" (só `podeGerenciar`); "Ações do processo ▾" com os três comandos.
+- Hero: título "Painel de alterações e homologação de regras"; subtítulo "revisar diff, aprovar/rejeitar, publicar e auditar."
+  e, em seguida, "Acesso típico" com o selo H-E01-12. A persona "contador e auditor" não aparece. Botões
+  "Exportar" (a visão da grade), "+ Novo registro" (só `podeGerenciar`, abre o drawer) e "Ações do processo ▾"
+  com os três comandos. Não há botão "Cadastrar / revisar".
 - KPIs: "Em revisão", "Aprovadas", "Rejeitadas", "Publicadas".
-- Lista: busca; filtro Situação; grade da seção 4; clique ou Enter seleciona; paginação server-side; filtros
+- Lista: busca; filtro Situação; "Exportar visão"; grade da seção 4; clique ou Enter seleciona; paginação server-side; filtros
   e ordenação em `sessionStorage` na chave `fiscal.homologacoes.lista`; vazio com o texto de aplicacao.js
   L172 ("Nenhum resultado para o período, filtro ou situação escolhidos. Limpe os filtros ou cadastre um novo registro.").
 - Ficha: os oito rótulos, Código, Versão, Criado em, Alterado em, bloco "cenários aprovados". Selo
   `H-E01-10` junto de Início de vigência e Fim de vigência. Trilha da seção 4. Botões "Validar pré-condições"
-  e "Consultar histórico".
+  e "Consultar histórico". Não há "Editar versão": a remoção da seção 4 cita aplicacao.js L191.
 - Movimentações: trilha em leitura Preparação → Verificação → Autorização → Conclusão. Ações reais conforme
   D8 e a permissão. "Aprovar/rejeitar" abre `decisao-dialog` com os botões "Aprovar" e "Rejeitar" e o campo
   "Justificativa auditável". "Publicar e auditar" pede a mesma justificativa. "Revisar diff" abre o diálogo
@@ -506,7 +513,7 @@ DS existente: `PageHeader`, `KpiStrip`/`Kpi`, `Table`, `Tabs`, `ComboboxField`, 
   vigência, Fim de vigência e Situação em leitura. "Responsável pela aprovação" vazio. "Cancelar" e
   "Verificar dados" com `variant="secondary"`. "Salvar rascunho" com a variante default. Erros por campo via
   `useErrosCampo` / `extrairErrosPorCampo` (AD-12). Sair com pendência pede confirmação.
-- Diálogo do cenário: lista memórias `CALCULADA` da versão, texto `{codigo} · versão {numeroVersao} · {competenciaRotulo}`. O botão do bloco é "cenários aprovados".
+- Diálogo do cenário: lista memórias `CALCULADA` da versão, texto `{codigo} · versão {numeroVersao} · {competenciaRotulo}`. O botão do bloco é "cenários aprovados", o literal de catalogo.js L248, sem capitalizar a inicial.
 - Estados: inicial, carregando (skeleton), sem registros, validação inválida, sem acesso (página), conflito
   concorrente (409 `CONFLITO_CONCORRENTE`), serviço indisponível ("Tentar novamente"), revisão pendente
   (situação Em revisão, com o selo H-E01-11), concluído (toast "Homologação publicada.").
@@ -551,7 +558,7 @@ Frontend (`app/frontend/`):
 - Criar: `src/lib/fiscal-homologacoes.ts`.
 - Criar BFF: `src/app/api/erp/fiscal/homologacoes/route.ts`, `contagens/route.ts`, `exportacao/route.ts`, `[id]/route.ts`, `[id]/diff/route.ts`, `[id]/[acao]/route.ts`.
 - Modificar: `src/lib/menu-v2.ts`, `__tests__/menu-v2.test.ts`, `__tests__/menu-rbac.test.ts`.
-- Criar testes: `__tests__/homologacoes-client.test.tsx`, `__tests__/fiscal-homologacoes-lib.test.ts`.
+- Criar testes: `__tests__/bff-e01-t05.test.ts`, `__tests__/homologacoes-client.test.tsx`, `__tests__/fiscal-homologacoes-lib.test.ts`.
 - Criar: `e2e/e01-t05-homologacao.spec.ts`, `e2e/helpers/e01-t05-seed.ts`, `e2e/capture-e01-t05-evidencias.spec.ts`.
 - Criar PNG: `docs/evidencias/e01-t05/`.
 
@@ -606,7 +613,7 @@ it('homologação não cria data comercial nem percentual', async () => {
     WHERE table_name = 'homologacoes_regras'
   `);
   const nomes = cols.rows.map((r) => r.column_name);
-  expect(nomes).not.toEqual(expect.arrayContaining(['data_comercial', 'data_fiscal', 'data_efetiva', 'p_red_bc', 'p_icms']));
+  expect(nomes).toEqual(expect.not.arrayContaining(['data_comercial', 'data_fiscal', 'data_efetiva', 'p_red_bc', 'p_icms']));
   const escala = await db.execute(sql`
     SELECT column_name, numeric_precision, numeric_scale
     FROM information_schema.columns
@@ -630,7 +637,16 @@ it('sem FK para nota', async () => {
 });
 ```
 
-O teste também conta as migrations do journal e espera a tag `0048_e01_t05_homologacoes_regras` como última.
+No mesmo spec, com `readFileSync` de `node:fs` e `join` de `node:path`. O processo roda em `app/backend`:
+
+```ts
+it('a última tag do journal é 0048_e01_t05_homologacoes_regras', () => {
+  const journal = JSON.parse(
+    readFileSync(join(process.cwd(), 'src/database/migrations/meta/_journal.json'), 'utf8'),
+  ) as { entries: Array<{ tag: string }> };
+  expect(journal.entries.at(-1)?.tag).toBe('0048_e01_t05_homologacoes_regras');
+});
+```
 
 ```powershell
 Set-Location app/backend
@@ -983,10 +999,240 @@ Falha de domínio não pode notificar a tela, e o quórum continua provisório.
 
 ### Task 8 — BFF `/api/erp/fiscal/homologacoes`
 
-**Files:** as rotas da seção 12. Allowlist de `[acao]`: GET `historico` e `pre-condicoes`; POST `cenarios`, `aprovar`, `rejeitar`, `publicar`. Qualquer outra ação → 404 sem chamar o Nest. O diff tem rota própria, fora da allowlist de ação, para não colidir com o comparar de regras.
+**Files:** as rotas da seção 12 e `__tests__/bff-e01-t05.test.ts`. Molde de `app/frontend/src/app/api/erp/fiscal/regras/[id]/[acao]/route.ts`. O diff segue `regras/[id]/comparar/route.ts`, em arquivo próprio. A exportação segue `regras/exportacao/route.ts`: `repassar` fixa `Content-Type: application/json` (`lib/bff.ts` L20) e estragaria o CSV.
+
+`src/app/api/erp/fiscal/homologacoes/route.ts`:
+
+```ts
+import type { NextRequest } from 'next/server';
+import { repassar } from '@/lib/bff';
+
+export function GET(req: NextRequest) {
+  return repassar(`/fiscal/homologacoes${req.nextUrl.search}`);
+}
+
+export async function POST(req: NextRequest) {
+  return repassar('/fiscal/homologacoes', { method: 'POST', body: await req.text() });
+}
+```
+
+`src/app/api/erp/fiscal/homologacoes/contagens/route.ts`:
+
+```ts
+import type { NextRequest } from 'next/server';
+import { repassar } from '@/lib/bff';
+
+export function GET(req: NextRequest) {
+  return repassar(`/fiscal/homologacoes/contagens${req.nextUrl.search}`);
+}
+```
+
+`src/app/api/erp/fiscal/homologacoes/exportacao/route.ts`:
+
+```ts
+import { NextResponse, type NextRequest } from 'next/server';
+import { apiFetch } from '@/lib/api';
+
+export async function GET(req: NextRequest) {
+  const resposta = await apiFetch(`/fiscal/homologacoes/exportacao${req.nextUrl.search}`, { method: 'GET' });
+  const bytes = await resposta.arrayBuffer();
+  const headers = new Headers();
+  const tipo = resposta.headers.get('content-type');
+  if (tipo) headers.set('Content-Type', tipo);
+  const disposicao = resposta.headers.get('content-disposition');
+  if (disposicao) headers.set('Content-Disposition', disposicao);
+  return new NextResponse(bytes, { status: resposta.status, headers });
+}
+```
+
+`src/app/api/erp/fiscal/homologacoes/[id]/route.ts`:
+
+```ts
+import type { NextRequest } from 'next/server';
+import { repassar } from '@/lib/bff';
+
+type Ctx = { params: Promise<{ id: string }> };
+
+export async function GET(_req: NextRequest, ctx: Ctx) {
+  const { id } = await ctx.params;
+  return repassar(`/fiscal/homologacoes/${encodeURIComponent(id)}`);
+}
+```
+
+`src/app/api/erp/fiscal/homologacoes/[id]/diff/route.ts`:
+
+```ts
+import type { NextRequest } from 'next/server';
+import { repassar } from '@/lib/bff';
+
+type Ctx = { params: Promise<{ id: string }> };
+
+export async function GET(_req: NextRequest, ctx: Ctx) {
+  const { id } = await ctx.params;
+  return repassar(`/fiscal/homologacoes/${encodeURIComponent(id)}/diff`);
+}
+```
+
+`src/app/api/erp/fiscal/homologacoes/[id]/[acao]/route.ts`. GET só `historico` e `pre-condicoes`. POST só `cenarios`, `aprovar`, `rejeitar` e `publicar`. Qualquer outra ação, inclusive `diff`, `submeter` e `auditar`, responde 404 e não chama o Nest:
+
+```ts
+import { NextResponse, type NextRequest } from 'next/server';
+import { repassar } from '@/lib/bff';
+
+const POSTS = new Set(['cenarios', 'aprovar', 'rejeitar', 'publicar']);
+const GETS = new Set(['historico', 'pre-condicoes']);
+
+type Ctx = { params: Promise<{ id: string; acao: string }> };
+
+export async function GET(_req: NextRequest, ctx: Ctx) {
+  const { id, acao } = await ctx.params;
+  if (!GETS.has(acao)) return new NextResponse(null, { status: 404 });
+  return repassar(`/fiscal/homologacoes/${encodeURIComponent(id)}/${acao}`);
+}
+
+export async function POST(req: NextRequest, ctx: Ctx) {
+  const { id, acao } = await ctx.params;
+  if (!POSTS.has(acao)) return new NextResponse(null, { status: 404 });
+  return repassar(`/fiscal/homologacoes/${encodeURIComponent(id)}/${acao}`, {
+    method: 'POST',
+    body: await req.text(),
+  });
+}
+```
+
+`__tests__/bff-e01-t05.test.ts`:
+
+```ts
+/** @jest-environment node */
+
+import type { NextRequest } from 'next/server';
+import { apiFetch } from '@/lib/api';
+import * as lista from '../src/app/api/erp/fiscal/homologacoes/route';
+import * as contagens from '../src/app/api/erp/fiscal/homologacoes/contagens/route';
+import * as exportacao from '../src/app/api/erp/fiscal/homologacoes/exportacao/route';
+import * as detalhe from '../src/app/api/erp/fiscal/homologacoes/[id]/route';
+import * as diff from '../src/app/api/erp/fiscal/homologacoes/[id]/diff/route';
+import * as acao from '../src/app/api/erp/fiscal/homologacoes/[id]/[acao]/route';
+
+jest.mock('@/lib/api', () => ({ apiFetch: jest.fn() }));
+
+const apiFetchMock = jest.mocked(apiFetch);
+const CORPO = JSON.stringify({ versao: 1, justificativa: 'Motivo da alteração' });
+
+function req(url: string, corpo: string = CORPO): NextRequest {
+  return {
+    nextUrl: new URL(url),
+    text: jest.fn().mockResolvedValue(corpo),
+  } as unknown as NextRequest;
+}
+
+function ctx<T extends Record<string, string>>(params: T) {
+  return { params: Promise.resolve(params) };
+}
+
+function json(status: number, corpo: unknown): Response {
+  return new Response(JSON.stringify(corpo), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+beforeEach(() => {
+  apiFetchMock.mockReset();
+  apiFetchMock.mockImplementation(async () => json(200, { ok: true }));
+});
+
+describe('BFF /api/erp/fiscal/homologacoes (E01-T05)', () => {
+  it('repassa lista, detalhe, diff e mutações', async () => {
+    await lista.GET(req('http://localhost/api/erp/fiscal/homologacoes?search=acem&page=2'));
+    expect(apiFetchMock).toHaveBeenLastCalledWith('/fiscal/homologacoes?search=acem&page=2', { method: 'GET' });
+
+    await lista.POST(req('http://localhost/x'));
+    expect(apiFetchMock).toHaveBeenLastCalledWith('/fiscal/homologacoes', { method: 'POST', body: CORPO });
+
+    await contagens.GET(req('http://localhost/x?situacao=EM_REVISAO'));
+    expect(apiFetchMock).toHaveBeenLastCalledWith('/fiscal/homologacoes/contagens?situacao=EM_REVISAO', { method: 'GET' });
+
+    await detalhe.GET(req('http://localhost/x'), ctx({ id: 'h1' }));
+    expect(apiFetchMock).toHaveBeenLastCalledWith('/fiscal/homologacoes/h1', { method: 'GET' });
+
+    await diff.GET(req('http://localhost/x'), ctx({ id: 'h1' }));
+    expect(apiFetchMock).toHaveBeenLastCalledWith('/fiscal/homologacoes/h1/diff', { method: 'GET' });
+  });
+
+  it('repassa 409 e 422', async () => {
+    const aberto = {
+      message: 'Já existe homologação em aberto ou publicada para esta versão.',
+      codigo: 'HOMOLOGACAO_ABERTA',
+    };
+    apiFetchMock.mockImplementation(async () => json(409, aberto));
+    const r409 = await lista.POST(req('http://localhost/x'));
+    expect(r409.status).toBe(409);
+    expect(await r409.json()).toEqual(aberto);
+
+    const semCenario = {
+      message: 'A publicação exige ao menos um cenário de regressão.',
+      codigo: 'CENARIO_REGRESSAO_AUSENTE',
+    };
+    apiFetchMock.mockImplementation(async () => json(422, semCenario));
+    const r422 = await acao.POST(req('http://localhost/x'), ctx({ id: 'h1', acao: 'publicar' }));
+    expect(apiFetchMock).toHaveBeenLastCalledWith('/fiscal/homologacoes/h1/publicar', { method: 'POST', body: CORPO });
+    expect(r422.status).toBe(422);
+    expect(await r422.json()).toEqual(semCenario);
+  });
+
+  it('CSV mantém text/csv', async () => {
+    const csv = '\uFEFFEnquadramento fiscal;Início de vigência;Situação;Usuário;Responsável pela aprovação;Descrição\r\n12;2026-01-01;Em revisão;Maria;;Revisão\r\n';
+    apiFetchMock.mockImplementation(async () => new Response(csv, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="homologacoes.csv"',
+      },
+    }));
+    const resposta = await exportacao.GET(req('http://localhost/x?situacao=EM_REVISAO'));
+    expect(apiFetchMock).toHaveBeenLastCalledWith('/fiscal/homologacoes/exportacao?situacao=EM_REVISAO', { method: 'GET' });
+    expect(resposta.status).toBe(200);
+    expect(resposta.headers.get('content-type')).toBe('text/csv; charset=utf-8');
+    expect(Buffer.from(await resposta.arrayBuffer()).toString('utf8')).toBe(csv);
+  });
+
+  it('ação fora da allowlist → 404 sem backend', async () => {
+    for (const nome of ['cenarios', 'aprovar', 'rejeitar', 'publicar']) {
+      await acao.POST(req('http://localhost/x'), ctx({ id: 'h1', acao: nome }));
+      expect(apiFetchMock).toHaveBeenLastCalledWith(`/fiscal/homologacoes/h1/${nome}`, { method: 'POST', body: CORPO });
+    }
+    for (const nome of ['historico', 'pre-condicoes']) {
+      await acao.GET(req('http://localhost/x'), ctx({ id: 'h1', acao: nome }));
+      expect(apiFetchMock).toHaveBeenLastCalledWith(`/fiscal/homologacoes/h1/${nome}`, { method: 'GET' });
+    }
+
+    apiFetchMock.mockClear();
+    const fora: Array<Promise<Response>> = [
+      acao.POST(req('http://localhost/x'), ctx({ id: 'h1', acao: 'historico' })),
+      acao.POST(req('http://localhost/x'), ctx({ id: 'h1', acao: 'submeter' })),
+      acao.POST(req('http://localhost/x'), ctx({ id: 'h1', acao: 'auditar' })),
+      acao.GET(req('http://localhost/x'), ctx({ id: 'h1', acao: 'aprovar' })),
+      acao.GET(req('http://localhost/x'), ctx({ id: 'h1', acao: 'diff' })),
+      acao.POST(req('http://localhost/x'), ctx({ id: 'h1', acao: 'diff' })),
+    ];
+    for (const resposta of await Promise.all(fora)) {
+      expect(resposta.status).toBe(404);
+    }
+    expect(apiFetchMock).not.toHaveBeenCalled();
+  });
+});
+```
 
 ```powershell
-git add app/frontend/src/app/api/erp/fiscal/homologacoes
+Set-Location app/frontend
+npx jest __tests__/bff-e01-t05.test.ts
+```
+
+Esperado: PASS.
+
+```powershell
+git add app/frontend/src/app/api/erp/fiscal/homologacoes app/frontend/__tests__/bff-e01-t05.test.ts
 git commit -m @"
 feat(e01-t05): BFF /api/erp/fiscal/homologacoes
 
@@ -997,7 +1243,7 @@ Encaminha lista, detalhe, diff, cenário, decisão, publicação, CSV e históri
 A página não conversa direto com o Nest; o BFF conserva o status 400, 403, 409 e 422.
 
 ### Impacto:
-Ação fora da lista responde 404 sem chegar ao backend.
+Ação fora da lista responde 404 sem chegar ao backend. O diff fica em rota própria.
 "@
 ```
 
@@ -1007,25 +1253,99 @@ Ação fora da lista responde 404 sem chegar ao backend.
 
 Esta task substitui o `h1` do `page.tsx` pelo cliente. Não altera a frase de permissão nem o `redirect`.
 
-O arquivo de teste importa `readFileSync` e `readdirSync` de `node:fs` e `join` de `node:path`.
+O arquivo de teste importa `readFileSync` e `readdirSync` de `node:fs`, `join` de `node:path`, `render` e `screen` de `@testing-library/react` e `userEvent` de `@testing-library/user-event`.
 
 Review Focus 5:
 
 ```tsx
-it('rótulos literais do protótipo', () => {
-  render(<HomologacaoDrawer aberto regras={[]} />);
+const ID = '0199aabb-ccdd-7eee-8fff-001122334455';
+const REGRA_ID = '0199bbcc-ddee-7fff-8000-112233445566';
+
+const LINHA = {
+  id: ID,
+  enquadramento: '12',
+  vigenciaInicio: '2026-01-01',
+  situacao: 'Em revisão',
+  usuario: 'Maria Souza',
+  aprovador: '',
+  descricao: 'Revisão da versão aprovada para publicação.',
+};
+
+const DETALHE = {
+  id: ID,
+  regraId: REGRA_ID,
+  codigo: '81',
+  numeroVersao: 1,
+  enquadramento: '12',
+  vigenciaInicio: '2026-01-01',
+  vigenciaFim: '2026-12-31',
+  situacao: 'Em revisão',
+  usuario: 'Maria Souza',
+  aprovador: '',
+  descricao: 'Revisão da versão aprovada para publicação.',
+  empresa: 'Alpha Carnes Ltda',
+  criadoEm: '2026-10-15T12:00:00.000Z',
+  atualizadoEm: '2026-10-15T12:00:00.000Z',
+  cenarios: [{ codigo: '71', numeroVersao: 1, competenciaRotulo: 'Outubro de 2026' }],
+};
+
+beforeEach(() => {
+  window.sessionStorage.clear();
+  global.fetch = jest.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(entrada), 'http://localhost');
+    const caminho = url.pathname;
+    const metodo = init?.method ?? 'GET';
+    const headers = { 'Content-Type': 'application/json' };
+    if (metodo === 'GET' && caminho === `/api/erp/fiscal/homologacoes/${ID}`) {
+      return new Response(JSON.stringify(DETALHE), { status: 200, headers });
+    }
+    if (metodo === 'GET' && caminho.startsWith('/api/erp/fiscal/homologacoes/contagens')) {
+      return new Response(JSON.stringify({ total: 1, emRevisao: 1, aprovadas: 0, rejeitadas: 0, publicadas: 0 }), { status: 200, headers });
+    }
+    if (metodo === 'GET' && caminho.startsWith('/api/erp/fiscal/homologacoes') && !caminho.includes(ID)) {
+      return new Response(JSON.stringify({ data: [LINHA], total: 1, page: 1, pageSize: 20 }), { status: 200, headers });
+    }
+    return new Response(JSON.stringify({ data: [] }), { status: 200, headers });
+  }) as unknown as typeof fetch;
+});
+
+it('rótulos literais do protótipo', async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  const { container } = render(<HomologacoesClient podeGerenciar podeAprovar />);
+  expect(screen.getByRole('button', { name: 'Exportar' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '+ Novo registro' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Ações do processo ▾' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Exportar visão' })).toBeInTheDocument();
+  expect(screen.getByText(/revisar diff, aprovar\/rejeitar, publicar e auditar\./)).toBeInTheDocument();
+  expect(screen.queryByText(/Revisar diff, aprovar\/rejeitar, publicar e auditar/)).not.toBeInTheDocument();
+  expect(screen.getByText(/Acesso típico/)).toBeInTheDocument();
+  expect(container.textContent ?? '').toContain('H-E01-12');
+  expect(screen.queryByRole('button', { name: 'Cadastrar / revisar' })).not.toBeInTheDocument();
+  expect(screen.queryByText('contador e auditor')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Editar versão' })).not.toBeInTheDocument();
+
+  const celula = await screen.findByText('Revisão da versão aprovada para publicação.');
+  celula.closest('tr')!.focus();
+  await user.keyboard('{Enter}');
+  expect(await screen.findByRole('button', { name: 'cenários aprovados' })).toBeInTheDocument();
+  expect(screen.queryByText('Cenários aprovados')).not.toBeInTheDocument();
+  expect(container.textContent ?? '').not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
+  expect(container.textContent ?? '').not.toContain(ID);
+  expect(container.textContent ?? '').not.toContain(REGRA_ID);
+
+  await user.click(screen.getByRole('button', { name: '+ Novo registro' }));
   expect(screen.getByLabelText('Enquadramento fiscal')).toBeInTheDocument();
   expect(screen.getByLabelText('Descrição')).toBeInTheDocument();
   expect(screen.getByLabelText('Justificativa auditável')).toBeInTheDocument();
-  expect(screen.getByText('Início de vigência')).toBeInTheDocument();
-  expect(screen.getByText('Fim de vigência')).toBeInTheDocument();
-  expect(screen.getByText('Usuário')).toBeInTheDocument();
-  expect(screen.getByText('Responsável pela aprovação')).toBeInTheDocument();
-  expect(screen.getByText('Situação')).toBeInTheDocument();
+  expect(screen.getAllByText('Início de vigência').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Fim de vigência').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Usuário').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Responsável pela aprovação').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Situação').length).toBeGreaterThan(0);
   expect(screen.getByRole('button', { name: 'Cancelar' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Verificar dados' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Salvar rascunho' })).toBeInTheDocument();
-  const texto = document.body.textContent ?? '';
+  const texto = container.textContent ?? '';
   expect(texto).not.toMatch(/E01-T05/);
   expect(texto).not.toMatch(/Marca/);
   expect(texto).not.toMatch(/identificador regra/i);
@@ -1044,10 +1364,12 @@ it('não usa a variante outline', () => {
 
 Cancelar e Verificar dados recebem `variant="secondary"`. Rejeitar recebe `variant="destructive"`.
 
-O teste do cliente também cobre: lista vazia com a frase da seção 10; alerta do 422 `SEGREGACAO_FUNCAO`;
-alerta do 422 `CENARIO_REGRESSAO_AUSENTE`; alerta do 409 `CONFLITO_CONCORRENTE`; grade sem uuid; bloco
-"cenários aprovados"; selos `H-E01-10`, `H-E01-11` e `H-E01-12`; botões "Revisar diff", "Aprovar/rejeitar"
-e "Publicar e auditar"; ausência de "Abrir ocorrência" e de "Simular erro de validação".
+O `it` acima já afirma o hero, a toolbar, o subtítulo em minúscula, "Acesso típico", o selo H-E01-12,
+a ausência de "Cadastrar / revisar", da persona e de "Editar versão", o botão "cenários aprovados" e a
+ausência de UUID no texto visível, com `id` e `regraId` presentes no JSON do mock. O mesmo arquivo também
+cobre: lista vazia com a frase da seção 10; alerta do 422 `SEGREGACAO_FUNCAO`; alerta do 422
+`CENARIO_REGRESSAO_AUSENTE`; alerta do 409 `CONFLITO_CONCORRENTE`; selos `H-E01-10` e `H-E01-11`; botões
+"Revisar diff", "Aprovar/rejeitar" e "Publicar e auditar"; ausência de "Abrir ocorrência" e de "Simular erro de validação".
 
 A lib não exporta função de cálculo. O fonte não contém `parseFloat` nem `Number(`.
 
@@ -1055,6 +1377,8 @@ A lib não exporta função de cálculo. O fonte não contém `parseFloat` nem `
 Set-Location app/frontend
 npx jest __tests__/homologacoes-client.test.tsx __tests__/fiscal-homologacoes-lib.test.ts __tests__/menu-v2.test.ts
 ```
+
+Esperado: PASS.
 
 ```powershell
 git add app/frontend/src/app/(admin)/fiscal/homologacao/page.tsx app/frontend/src/components/fiscal/homologacoes app/frontend/src/lib/fiscal-homologacoes.ts app/frontend/__tests__/homologacoes-client.test.tsx app/frontend/__tests__/fiscal-homologacoes-lib.test.ts
@@ -1098,9 +1422,9 @@ Frontend: o `webServer` de `playwright.config.ts` (`npx next dev --webpack --por
 Jornada, com o segundo administrador (não é quem submeteu a regra):
 
 1. Menu FISCAL → "Painel de alterações e homologação de regras". Os quatro itens anteriores do grupo continuam visíveis.
-2. "Cadastrar / revisar": Enquadramento fiscal da versão aprovada, Descrição "Revisão da versão aprovada para publicação.", Justificativa auditável "Abertura da revisão desta versão." O clique é no botão "Salvar rascunho" e grava Em revisão.
+2. "+ Novo registro": Enquadramento fiscal da versão aprovada, Descrição "Revisão da versão aprovada para publicação.", Justificativa auditável "Abertura da revisão desta versão." O clique é no botão "Salvar rascunho" e grava Em revisão. Não há botão "Cadastrar / revisar".
 3. "Revisar diff" mostra "Alíquota (%)" com o valor da regra. A ficha mostra Início de vigência, Fim de vigência, Usuário e os selos H-E01-10, H-E01-11 e H-E01-12.
-4. "cenários aprovados" vincula a memória do seed. "Aprovar/rejeitar" → "Aprovar", com justificativa "Decisão de usuário diferente de quem submeteu." A situação passa a Aprovada e Responsável pela aprovação mostra o nome do segundo administrador.
+4. O botão "cenários aprovados" vincula a memória do seed. "Aprovar/rejeitar" → "Aprovar", com justificativa "Decisão de usuário diferente de quem submeteu." A situação passa a Aprovada e Responsável pela aprovação mostra o nome do segundo administrador.
 5. "Publicar e auditar" grava Publicada. O histórico mostra "Alteração publicada".
 6. Repetir a publicação não cria outra linha e mostra o alerta de transição inválida.
 7. Com o autor da submissão, "Aprovar" mostra "A aprovação deve ser feita por usuário diferente de quem submeteu."
@@ -1250,5 +1574,5 @@ decisão de produto: esta fatia usa `0048` e não pula número.
 - Lacunas: cada task traz o teste, o comando e a saída esperada. Nenhuma task delega o código a outra.
 - Tipos: `criarHomologacaoSchema` e `vincularCenarioSchema` são `z.object` próprios. O par da decisão é o objeto plano `camposDecisao`, não um schema derivado. Situação do schema é só o conjunto de D7. `comparar` continua com a assinatura `(id, com)` da T03. O 201 devolve `id` e `regraId`; a tela não os imprime.
 - Review Focus: as cinco entradas têm teste na Task 5 (1), na Task 6 (2 e 3), na Task 1 (3), na Task 3 (4) e na Task 9 (5).
-- Rótulos conferidos em componentes.js L155, L167, L179, L311, L419, L515, L527 e L539, e nos dez rótulos de `regras.service.ts` L178–L189. Nenhum foi abreviado.
+- Rótulos conferidos em componentes.js L155, L167, L179, L311, L419, L515, L527 e L539, e nos dez rótulos de `regras.service.ts` L178–L189. Nenhum foi abreviado. Hero em aplicacao.js L356 ("Exportar", "+ Novo registro", "Ações do processo ▾"); toolbar em L170 ("Exportar visão"); subtítulo é `sc.actions` em minúscula (catalogo.js L249). "Cadastrar / revisar" (componentes.js L3304) não é botão. "Editar versão" (aplicacao.js L191) está nas remoções da seção 4. O bloco de cenário usa "cenários aprovados", o texto que L235 imprime sem `titleCase`.
 - Placeholder: não há "TBD", "TODO", "a definir" nem tarefa que mande copiar outra task.
