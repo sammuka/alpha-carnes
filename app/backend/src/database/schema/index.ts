@@ -32,3 +32,4 @@ export * from './relatorios-sif.schema';
 export * from './aprovacoes-operacionais.schema';
 export * from './estoque.schema';
 export * from './contabilidade-plano.schema';
+export * from './contabilidade-politicas.schema';
