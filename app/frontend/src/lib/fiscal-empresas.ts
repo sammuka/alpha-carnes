@@ -206,6 +206,26 @@ export function mascararCnpjAlfanumerico(valor: string): string {
   return saida;
 }
 
+function digitoVerificadorCnpj(base: string): number {
+  let soma = 0;
+  let peso = 2;
+  for (let i = base.length - 1; i >= 0; i--) {
+    soma += (base.charCodeAt(i) - 48) * peso;
+    peso = peso === 9 ? 2 : peso + 1;
+  }
+  const resto = soma % 11;
+  return resto < 2 ? 0 : 11 - resto;
+}
+
+/** Mesma regra do backend (CNPJ alfanumérico, IN RFB 2.229/2024): 12 posições [0-9A-Z] + 2 dígitos, módulo 11. */
+export function validarCnpjAlfanumerico(valor: string): boolean {
+  const cnpj = normalizarCnpj(valor);
+  if (!/^[0-9A-Z]{12}[0-9]{2}$/.test(cnpj) || /^(.)\1{13}$/.test(cnpj)) return false;
+  const dv1 = digitoVerificadorCnpj(cnpj.slice(0, 12));
+  const dv2 = digitoVerificadorCnpj(cnpj.slice(0, 12) + String(dv1));
+  return cnpj[12] === String(dv1) && cnpj[13] === String(dv2);
+}
+
 /** CNAE guardado só com os 7 dígitos. */
 export function normalizarCnae(valor: string): string {
   return valor.replace(/\D/g, '').slice(0, 7);
@@ -289,6 +309,10 @@ export function ehConflitoConcorrente(erro: unknown): boolean {
 }
 
 export function mensagemDoErroFiscal(erro: unknown): string {
+  // Validação por campo: só o texto das mensagens, sem o prefixo técnico "cnpj:" do caminho do campo.
+  if (erro instanceof ErroFiscal && erro.status === 400 && Object.keys(erro.porCampo).length > 0) {
+    return Object.values(erro.porCampo).join('. ');
+  }
   return erro instanceof Error ? erro.message : 'Falha na operação.';
 }
 
