@@ -26,7 +26,19 @@ export {
 };
 
 const MOTIVO = 'Seed E2E E01-T03';
-const BANCO = 'alphacarnes_e01_t03';
+const SUFIXO_DE_TESTE = /(_test|_e2e|_e01_t\d+)$/;
+
+/** Banco do E2E vem de DATABASE_URL; nome sem sufixo de teste é recusado para nunca tocar dado real. */
+function bancoDeTeste(): { banco: string; usuario: string } {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error('DATABASE_URL é obrigatória para liberar os códigos da jornada.');
+  const alvo = new URL(url);
+  const banco = decodeURIComponent(alvo.pathname.replace(/^\//, ''));
+  if (!SUFIXO_DE_TESTE.test(banco)) {
+    throw new Error(`Banco "${banco}" não tem sufixo de teste (_test, _e2e ou _e01_tNN); recusado.`);
+  }
+  return { banco, usuario: decodeURIComponent(alvo.username) || 'alphacarnes' };
+}
 
 export const CODIGO_BENEFICIO = 'SP020450';
 export const DESC_BENEFICIO = 'Redução de base — São Paulo (SP020450)';
@@ -165,9 +177,15 @@ export function liberarCodigosDaJornada(): void {
     `UPDATE beneficios_fiscais SET deleted_at = now() WHERE codigo = '${CODIGO_BENEFICIO}' AND deleted_at IS NULL;`,
     `UPDATE classificacoes_ibs_cbs SET deleted_at = now() WHERE codigo = '${CODIGO_CLASSIFICACAO}' AND deleted_at IS NULL;`,
   ].join(' ');
+  executarSqlDeTeste(sql);
+}
+
+/** psql no contêiner do Postgres, sempre no banco de teste derivado de DATABASE_URL. */
+export function executarSqlDeTeste(sql: string): void {
+  const { banco, usuario } = bancoDeTeste();
   execFileSync('docker', [
-    'exec', 'alphacarnes-postgres-1',
-    'psql', '-U', 'alphacarnes', '-d', BANCO,
+    'exec', process.env.E2E_PG_CONTAINER ?? 'alphacarnes-postgres-1',
+    'psql', '-U', usuario, '-d', banco,
     '-v', 'ON_ERROR_STOP=1', '-c', sql,
   ], { stdio: 'pipe' });
 }
