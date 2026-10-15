@@ -7,6 +7,7 @@ import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { centrosCusto, contasContabeis, contaVersoes } from '../../src/database/schema/contabilidade-plano.schema';
 import { PlanoContasService } from '../../src/modules/contabilidade/plano/plano.service';
+import { AuditoriaService } from '../../src/common/auditoria/auditoria.service';
 import { ultimaVersaoDecidida } from '../../src/modules/contabilidade/plano/vigencia';
 import type { CriarContaDto, EditarContaDto } from '../../src/modules/contabilidade/plano/dto/plano.dto';
 import type { ContaApresentada } from '../../src/modules/contabilidade/plano/plano.service';
@@ -719,5 +720,64 @@ describe('Plano de contas', () => {
     expect(resultado.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     const recusada = resultado.find((r) => r.status === 'rejected') as PromiseRejectedResult;
     expect(recusada.reason).toMatchObject({ status: 422, response: { message: 'Ciclo na hierarquia da conta' } });
+  });
+
+  async function contaComRascunhoAberto(emRevisao = false) {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    await service.versionar('1', comoEdicao(v1, { nome: 'Caixa v2', justificativa: 'abre v2' }), userId);
+    if (emRevisao) {
+      await service.revisarCompetencia('1', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa v2' }, userId);
+    }
+  }
+  const versaoBruta = async (numero: number) =>
+    (await db.execute(sql`
+      select v.id, v.situacao, v.deleted_at from conta_versoes v join contas_contabeis c on c.id = v.conta_id
+       where c.codigo = '1' and v.numero = ${numero}`)).rows[0] as { id: string; situacao: string; deleted_at: Date | null };
+
+  it('bloquear com rascunho aberto descarta o rascunho e suspende a aprovada', async () => {
+    await contaComRascunhoAberto();
+    const res = await request(srv()).post('/contabilidade/plano/1/bloquear').set('Cookie', adminCookies)
+      .send({ numero: 2, justificativa: 'encerra a conta' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ numero: 1, situacao: 'SUSPENDED' });
+    expect((await versaoBruta(2)).deleted_at).not.toBeNull();
+    expect((await versaoBruta(1)).situacao).toBe('SUSPENDED');
+    const trilha = (await db.execute(sql`
+      select operacao, justificativa, created_at from auditoria
+       where tabela = 'conta_versoes'
+         and created_at = (select max(created_at) from auditoria where tabela = 'conta_versoes')
+       order by id`)).rows as { operacao: string; justificativa: string; created_at: Date }[];
+    expect(trilha.map((linha) => linha.operacao)).toEqual(['DELETE', 'UPDATE']);
+    expect(trilha[0]!.justificativa).toMatch(/^Rascunho descartado pelo bloqueio da conta\. encerra a conta$/);
+  });
+
+  it('revisão aberta também é descartada pelo bloqueio', async () => {
+    await contaComRascunhoAberto(true);
+    await service.bloquear('1', { numero: 2, justificativa: 'encerra' }, userId);
+    expect((await versaoBruta(2)).deleted_at).not.toBeNull();
+    expect((await service.obter('1')).situacao).toBe('SUSPENDED');
+  });
+
+  it('guarda: número desatualizado segue 409 e não descarta', async () => {
+    await contaComRascunhoAberto();
+    await expect(service.bloquear('1', { numero: 1, justificativa: 'velho' }, userId))
+      .rejects.toMatchObject({ status: 409, response: { message: 'conflito concorrente' } });
+    expect((await versaoBruta(2)).deleted_at).toBeNull();
+    expect((await versaoBruta(1)).situacao).toBe('APPROVED');
+  });
+
+  it('falha da auditoria desfaz o descarte', async () => {
+    await contaComRascunhoAberto();
+    const auditoriaSvc = app.get(AuditoriaService);
+    const original = auditoriaSvc.registrar.bind(auditoriaSvc);
+    const espiao = jest.spyOn(auditoriaSvc, 'registrar')
+      .mockImplementationOnce(original)
+      .mockRejectedValueOnce(new Error('falha injetada'));
+    await expect(service.bloquear('1', { numero: 2, justificativa: 'encerra' }, userId)).rejects.toThrow('falha injetada');
+    espiao.mockRestore();
+    expect((await versaoBruta(2)).deleted_at).toBeNull();
+    expect((await versaoBruta(1)).situacao).toBe('APPROVED');
   });
 });

@@ -469,7 +469,7 @@ export class PlanoContasService {
     if (maior !== numero) throw new ConflictException('conflito concorrente');
     const atual = versoes.find((v) => v.numero === numero);
     if (!atual) throw new NotFoundException('Conta não encontrada');
-    return { conta, atual };
+    return { conta, atual, versoes };
   }
 
   private mudouClassificacao(
@@ -541,18 +541,32 @@ export class PlanoContasService {
   }
 
   private async bloquearNaTx(tx: Tx, codigo: string, numero: number, justificativa: string, usuarioId: string) {
-    const { atual } = await this.travar(tx, codigo, numero);
+    const { atual, versoes } = await this.travar(tx, codigo, numero);
     if (atual.situacao === 'SUSPENDED') throw new ConflictException('conta desativada');
-    if (atual.situacao !== 'APPROVED') throw new RegraContabilException('Situação não permite esta transição');
+    const aberta = atual.situacao === 'DRAFT' || atual.situacao === 'REVIEW' ? atual : null;
+    const alvo = aberta
+      ? versoes.filter((v) => v.numero < aberta.numero).sort((a, b) => b.numero - a.numero)[0]
+      : atual;
+    if (!alvo || alvo.situacao !== 'APPROVED') throw new RegraContabilException('Situação não permite esta transição');
     if (!justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
+    if (aberta) {
+      // AD-25 item 3: o rascunho aberto é encerrado na mesma transação do bloqueio.
+      const descartada = primeiroOuFalha(await tx.update(contaVersoes).set({ deletedAt: sql`now()` })
+        .where(eq(contaVersoes.id, aberta.id)).returning());
+      await this.auditoria.registrar(tx, {
+        tabela: 'conta_versoes', registroId: aberta.id, operacao: 'DELETE',
+        modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: aberta, dadosNovos: descartada,
+        justificativa: `Rascunho descartado pelo bloqueio da conta. ${justificativa}`,
+      });
+    }
     const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
       situacao: 'SUSPENDED',
       justificativa,
       responsavelId: usuarioId,
-    }).where(eq(contaVersoes.id, atual.id)).returning());
+    }).where(eq(contaVersoes.id, alvo.id)).returning());
     await this.auditoria.registrar(tx, {
       tabela: 'conta_versoes', registroId: nova.id, operacao: 'UPDATE',
-      modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: atual, dadosNovos: nova,
+      modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: alvo, dadosNovos: nova,
       justificativa,
     });
     return nova;
