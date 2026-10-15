@@ -145,3 +145,25 @@ UPDATE "etiquetas_impressoes" SET "estado" = 'ativa'
  WHERE "estado" = 'emitida' AND "reimpressao" = false
    AND "status_impressao" = 'impressa';
 ```
+
+## E01-T01 — `0044_e01_t01_empresas_estabelecimentos` (expand-only)
+
+Migration gerada por `drizzle-kit generate --name e01_t01_empresas_estabelecimentos`, sem SQL manual.
+Somente `CREATE TABLE`, `CREATE [UNIQUE] INDEX` e `ALTER TABLE <tabela nova> ADD CONSTRAINT` sobre as
+seis tabelas novas:
+
+- `empresas`
+- `estabelecimentos` (`UNIQUE (id, empresa_id)` não parcial — D-E01)
+- `estabelecimento_cnaes`
+- `estabelecimento_alteracoes`
+- `estabelecimento_alteracao_cnaes`
+- `regimes_tributarios`
+
+Rollback:
+
+- Código: revert dos commits da fatia por PR (sem force-push); o revert devolve `MENUS_CANONICOS` às 39
+  rotas e o próximo seed reconcilia `menus_visiveis`.
+- Banco: só tabelas folha (nenhuma FK externa aponta para elas até E12-T01/E06-T01). Dev/CI sem dados:
+  remover o schema e gerar a migration de remoção com `drizzle-kit generate` (nunca SQL manual). Com linhas:
+  não remover; as tabelas ficam inertes e abre-se decisão do Quality Owner.
+- Seed: chave `fiscal.empresas_perfis_autorizados` e permissões `FISCAL_EMPRESAS_*` saem só junto do revert.

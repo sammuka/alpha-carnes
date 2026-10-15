@@ -81,6 +81,10 @@ export const EVENTOS = {
   // ── Onda 10 — Faturamento / Seguro / Liberação ─────────────────────────────
   SEGURO_ATUALIZADO: 'seguro_atualizado',
   CAMINHAO_LIBERADO: 'caminhao_liberado',
+  // ── E01-T01 — Cadastro fiscal (room protegida `fiscal-empresas`) ───────────
+  EMPRESA_FISCAL_ALTERADA: 'empresa_fiscal_alterada',
+  ESTABELECIMENTO_FISCAL_ALTERADO: 'estabelecimento_fiscal_alterado',
+  REGIME_TRIBUTARIO_ALTERADO: 'regime_tributario_alterado',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -449,6 +453,32 @@ export interface CaminhaoLiberadoPayload {
   dataOperacao: string;
 }
 
+// ── E01-T01 — Cadastro fiscal ─────────────────────────────────────────────
+
+export type AcaoCadastroFiscal =
+  | 'criado'
+  | 'atualizado'
+  | 'cnaes_atualizados'
+  | 'submetido'
+  | 'aprovado'
+  | 'rejeitado'
+  | 'suspenso'
+  | 'reativado'
+  | 'removido'
+  | 'alteracao_criada'
+  | 'alteracao_submetida'
+  | 'alteracao_aprovada'
+  | 'alteracao_rejeitada'
+  | 'alteracao_descartada';
+
+export interface CadastroFiscalAlteradoPayload {
+  empresaId: string;
+  estabelecimentoId?: string;
+  regimeId?: string;
+  acao: AcaoCadastroFiscal;
+  situacao?: string;
+}
+
 /** Contratos tipados dos eventos Onda 1 (PayloadPorEvento). */
 export interface PayloadPorEvento {
   reserva_disponibilidade_atualizada: ReservaAtualizadaPayload;
@@ -525,4 +555,8 @@ export interface PayloadPorEvento {
   // ── Onda 10 — Faturamento / Seguro / Liberação ─────────────────────────────
   seguro_atualizado: SeguroAtualizadoPayload;
   caminhao_liberado: CaminhaoLiberadoPayload;
+  // ── E01-T01 — Cadastro fiscal ─────────────────────────────────────────────
+  empresa_fiscal_alterada: CadastroFiscalAlteradoPayload;
+  estabelecimento_fiscal_alterado: CadastroFiscalAlteradoPayload;
+  regime_tributario_alterado: CadastroFiscalAlteradoPayload;
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MENUS_CANONICOS } from '../../../common/rbac/menus-canonicos';
 
 export const definirPermissoesSchema = z.object({
   permissoes: z.array(z.string().min(1)).max(100),
@@ -7,7 +8,7 @@ export const definirPermissoesSchema = z.object({
 export type DefinirPermissoesDto = z.infer<typeof definirPermissoesSchema>;
 
 export const definirMenusSchema = z.object({
-  menus: z.array(z.string().trim().min(1)).max(39),
+  menus: z.array(z.string().trim().min(1)).max(MENUS_CANONICOS.length),
 });
 
 export type DefinirMenusDto = z.infer<typeof definirMenusSchema>;

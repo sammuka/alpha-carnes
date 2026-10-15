@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
-import { MENUS_CANONICOS, MENUS_VISIVEIS_POR_PERFIL } from '../../src/common/rbac/menus-canonicos';
+import { MENUS_CANONICOS, MENUS_OPERACIONAIS, MENUS_VISIVEIS_POR_PERFIL } from '../../src/common/rbac/menus-canonicos';
 import { DESCRICOES_PERMISSOES } from '../../src/common/rbac/permissoes';
 import { DRIZZLE } from '../../src/database/database.module';
 
@@ -75,7 +75,20 @@ describe('Perfis — menus visíveis e catálogo', () => {
       .flatMap((g: { permissoes: { codigo: string }[] }) => g.permissoes.map((p) => p.codigo))
       .sort();
     expect(codigos).toEqual(Object.keys(DESCRICOES_PERMISSOES).sort());
-    expect(MENUS_CANONICOS).toHaveLength(39);
-    expect(res.body.menus).toHaveLength(39);
+    expect(MENUS_OPERACIONAIS).toHaveLength(39);
+    expect(MENUS_CANONICOS).toHaveLength(40);
+    expect(res.body.menus).toHaveLength(40);
+  });
+
+  it('GET /perfis/catalogo devolve o módulo Fiscal com FISCAL_EMPRESAS_APROVAR, FISCAL_EMPRESAS_GERENCIAR e FISCAL_EMPRESAS_LER e suas descrições', async () => {
+    const res = await request(srv()).get('/perfis/catalogo').set('Cookie', adminCookies);
+    expect(res.status).toBe(200);
+    const fiscal = res.body.grupos.find((g: { modulo: string }) => g.modulo === 'Fiscal');
+    expect(fiscal).toBeDefined();
+    expect(fiscal.permissoes).toEqual([
+      { codigo: 'FISCAL_EMPRESAS_APROVAR', descricao: DESCRICOES_PERMISSOES.FISCAL_EMPRESAS_APROVAR },
+      { codigo: 'FISCAL_EMPRESAS_GERENCIAR', descricao: DESCRICOES_PERMISSOES.FISCAL_EMPRESAS_GERENCIAR },
+      { codigo: 'FISCAL_EMPRESAS_LER', descricao: DESCRICOES_PERMISSOES.FISCAL_EMPRESAS_LER },
+    ]);
   });
 });

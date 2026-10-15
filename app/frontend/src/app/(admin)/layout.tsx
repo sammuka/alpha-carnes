@@ -10,7 +10,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const user = await getMe();
   if (!user) redirect('/login');
 
-  const sections = filtrarMenuPorMenusVisiveis(user.menusVisiveis);
+  const sections = filtrarMenuPorMenusVisiveis(user.menusVisiveis, user.permissoes);
 
   const sidebarUser: SidebarUser = {
     nome: user.nome,

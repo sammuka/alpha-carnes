@@ -27,6 +27,20 @@ export class RealtimeHub {
     set.add(socket);
   }
 
+  /** Cópia dos sockets da room. Vazio se a room não existe. */
+  membros(room: string): readonly RealtimeSocket[] {
+    const set = this.rooms.get(room);
+    return set ? [...set] : [];
+  }
+
+  /** Remove o socket de uma room e apaga a room quando ela esvazia. */
+  remover(socket: RealtimeSocket, room: string): void {
+    const set = this.rooms.get(room);
+    if (!set) return;
+    set.delete(socket);
+    if (set.size === 0) this.rooms.delete(room);
+  }
+
   leaveAll(socket: RealtimeSocket): void {
     for (const [room, set] of this.rooms) {
       set.delete(socket);

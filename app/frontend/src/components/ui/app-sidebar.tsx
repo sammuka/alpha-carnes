@@ -38,6 +38,7 @@ import {
   ScrollText,
   AlertTriangle,
   CalendarRange,
+  Landmark,
   LogOut,
   type LucideIcon,
 } from 'lucide-react';
@@ -106,6 +107,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   ScrollText,
   AlertTriangle,
   CalendarRange,
+  Landmark,
 };
 
 const LARGURA_PADRAO = 232;

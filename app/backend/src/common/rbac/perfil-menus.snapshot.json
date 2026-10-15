@@ -30,6 +30,7 @@
     "/faturamento/notas-xml",
     "/faturamento/pre-faturamento",
     "/faturamento/seguro-manual",
+    "/fiscal/empresas",
     "/gestao/aprovacoes",
     "/gestao/compras",
     "/gestao/dashboard",

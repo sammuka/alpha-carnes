@@ -60,6 +60,8 @@ export async function cleanupDb(app: INestApplication): Promise<void> {
   const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
   await db.execute(sql`
     TRUNCATE TABLE
+      estabelecimento_alteracao_cnaes, estabelecimento_alteracoes, estabelecimento_cnaes,
+      regimes_tributarios, estabelecimentos, empresas,
       auditoria,
       conclusoes_conferencia_nfs, conclusoes_conferencia,
       notas_fiscais, faturamentos,

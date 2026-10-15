@@ -34,6 +34,7 @@ const GRUPOS = [
   'ESTOQUE',
   'CARGA',
   'FATURAMENTO',
+  'FISCAL',
   'CADASTROS & REGRAS',
   'ADMINISTRAÇÃO',
 ];
@@ -83,11 +84,11 @@ test.describe('Shell + DS da Onda 2', () => {
     expect(gradiente).toContain('rgb(27, 78, 155)');
   });
 
-  test('menu do administrador tem os 9 grupos na ordem do prototipo', async ({ page, request, baseURL }) => {
+  test('menu do administrador tem os 10 grupos na ordem do prototipo', async ({ page, request, baseURL }) => {
     await loginAdmin(page, request, baseURL!);
     await page.goto('/gestao/dashboard');
     const aside = page.getByRole('complementary', { name: 'Navegação principal' });
-    const titulos = await aside.locator('button[aria-expanded]').allInnerTexts();
+    const titulos = await aside.locator('button[aria-expanded][aria-controls]').allInnerTexts();
     expect(titulos.map((t) => t.trim())).toEqual(GRUPOS);
   });
 
