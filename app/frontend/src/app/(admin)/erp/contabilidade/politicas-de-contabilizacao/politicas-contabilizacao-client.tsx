@@ -190,7 +190,7 @@ export function PoliticasContabilizacaoClient({
       if (rascunho.busca) setBusca(rascunho.busca);
       if (rascunho.filtroCompetencia) setFiltroCompetencia(rascunho.filtroCompetencia);
       if (rascunho.filtroSituacao) setFiltroSituacao(rascunho.filtroSituacao);
-      if (COLUNAS.some((coluna) => coluna.ordenar === rascunho.ordenar)) setOrdenar(rascunho.ordenar!);
+      if (rascunho.ordenar && COLUNAS.some((coluna) => coluna.ordenar === rascunho.ordenar)) setOrdenar(rascunho.ordenar!);
       if (rascunho.direcao === 'asc' || rascunho.direcao === 'desc') setDirecao(rascunho.direcao);
     } catch {
       sessionStorage.setItem(CHAVE_RASCUNHO, '');

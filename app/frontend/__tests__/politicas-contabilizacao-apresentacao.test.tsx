@@ -370,3 +370,13 @@ it('sem política na lista, Confirmar mostra aviso e não chama o servidor', asy
   expect(await screen.findByText('Selecione uma política na lista.')).toBeInTheDocument();
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+it('rascunho sem ordenar mantém a ordenação padrão por competência ao restaurar', async () => {
+  sessionStorage.setItem('politicas-de-contabilizacao', JSON.stringify({ busca: 'x' }));
+  const fetchMock = jest.fn().mockResolvedValue(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 1 }));
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  expect(await screen.findByRole('cell', { name: 'Tarifa' })).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock).toHaveBeenCalledWith('/api/contabilidade/politicas?pagina=1&q=x&competencia=&situacao=&ordenar=competencia&direcao=asc');
+});
