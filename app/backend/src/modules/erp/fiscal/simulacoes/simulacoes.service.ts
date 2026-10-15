@@ -125,7 +125,7 @@ export class SimulacoesFiscaisService {
       .innerJoin(enquadramentosFiscais, eq(enquadramentosFiscais.id, simulacoesFiscais.enquadramentoId))
       .innerJoin(regrasTributarias, eq(regrasTributarias.id, simulacoesFiscais.regraId))
       .where(this.whereLista(query))
-      .orderBy(asc(nomeCliente));
+      .orderBy(asc(nomeCliente), asc(simulacoesFiscais.id));
     return montarCsvGrade(linhas.map((linha) => ({
       cliente: linha.cliente,
       produto: linha.produto,
@@ -178,7 +178,7 @@ export class SimulacoesFiscaisService {
       .innerJoin(enquadramentosFiscais, eq(enquadramentosFiscais.id, simulacoesFiscais.enquadramentoId))
       .innerJoin(regrasTributarias, eq(regrasTributarias.id, simulacoesFiscais.regraId))
       .where(where)
-      .orderBy(query.dir === 'desc' ? desc(ordem) : asc(ordem))
+      .orderBy(query.dir === 'desc' ? desc(ordem) : asc(ordem), asc(simulacoesFiscais.id))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
     return montarPaginado(linhas.map((linha) => ({
@@ -292,7 +292,7 @@ export class SimulacoesFiscaisService {
       .from(schema.auditoria)
       .leftJoin(autor, eq(autor.id, schema.auditoria.usuarioId))
       .where(and(eq(schema.auditoria.tabela, 'simulacoes_fiscais'), inArray(schema.auditoria.registroId, ids)))
-      .orderBy(schema.auditoria.createdAt);
+      .orderBy(schema.auditoria.createdAt, schema.auditoria.id);
     return linhas.map((linha) => {
       const novos = (linha.dadosNovos ?? {}) as Record<string, unknown>;
       const anteriores = (linha.dadosAnteriores ?? {}) as Record<string, unknown>;
@@ -489,29 +489,29 @@ export class SimulacoesFiscaisService {
     const [estabelecimento] = await tx.select({
       situacao: estabelecimentos.situacao,
       deletedAt: estabelecimentos.deletedAt,
-    }).from(estabelecimentos).where(eq(estabelecimentos.id, dto.estabelecimentoId));
+    }).from(estabelecimentos).where(eq(estabelecimentos.id, dto.estabelecimentoId)).for('share');
     if (!estabelecimento || estabelecimento.deletedAt || estabelecimento.situacao !== 'APPROVED') {
       regraViolada('ESTABELECIMENTO_INDISPONIVEL', 'O estabelecimento selecionado não está aprovado.');
     }
     const [cliente] = await tx.select({
       status: clientes.status,
       deletedAt: clientes.deletedAt,
-    }).from(clientes).where(eq(clientes.id, dto.clienteId));
+    }).from(clientes).where(eq(clientes.id, dto.clienteId)).for('share');
     if (!cliente || cliente.deletedAt || cliente.status !== 'ativo') {
       regraViolada('CLIENTE_INDISPONIVEL', 'O cliente selecionado não está ativo.');
     }
     const [produto] = await tx.select({
       status: produtos.status,
       deletedAt: produtos.deletedAt,
-    }).from(produtos).where(eq(produtos.id, dto.produtoId));
+    }).from(produtos).where(eq(produtos.id, dto.produtoId)).for('share');
     if (!produto || produto.deletedAt || produto.status !== 'ativo') {
       regraViolada('PRODUTO_INDISPONIVEL', 'O produto selecionado não está ativo.');
     }
-    const [ncm] = await tx.select({ deletedAt: ncms.deletedAt }).from(ncms).where(eq(ncms.id, dto.ncmId));
+    const [ncm] = await tx.select({ deletedAt: ncms.deletedAt }).from(ncms).where(eq(ncms.id, dto.ncmId)).for('share');
     if (!ncm || ncm.deletedAt) {
       regraViolada('NCM_INDISPONIVEL', 'A classificação fiscal (NCM) selecionada não está ativa.');
     }
-    const [operacao] = await tx.select({ deletedAt: operacoes.deletedAt }).from(operacoes).where(eq(operacoes.id, dto.operacaoId));
+    const [operacao] = await tx.select({ deletedAt: operacoes.deletedAt }).from(operacoes).where(eq(operacoes.id, dto.operacaoId)).for('share');
     if (!operacao || operacao.deletedAt) {
       regraViolada('OPERACAO_INDISPONIVEL', 'A operação selecionada não está disponível.');
     }
@@ -524,7 +524,7 @@ export class SimulacoesFiscaisService {
       isNull(regrasTributarias.deletedAt),
       sql`${regrasTributarias.vigenciaInicio} <= ${dia}`,
       sql`(${regrasTributarias.vigenciaFim} IS NULL OR ${regrasTributarias.vigenciaFim} >= ${dia})`,
-    ));
+    )).for('share');
     if (regras.length === 0) {
       regraViolada(
         'FALTA_REFERENCIA_LEGAL',
