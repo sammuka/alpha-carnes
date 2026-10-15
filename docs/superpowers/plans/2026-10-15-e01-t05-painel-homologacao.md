@@ -13,6 +13,7 @@
 |---|---|---|---|
 | r1 | 2026-10-15 | planner | versão inicial da fatia E01-T05 |
 | r2 | 2026-10-15 | planner | Portão 1 r1 pediu ajuste no commit `f056b2e`: literais do hero e da toolbar, botão da ficha, asserção das colunas e da tag `0048`, handler do BFF e um só literal de cenário |
+| r3 | 2026-10-15 | planner (nova instância) | Portão 1 r2 `ajustar` (2 achados na Task 1); laço `not.toContain` e cast `::int`. Nenhum outro ponto do plano muda |
 
 **Goal:** homologar a publicação de uma versão de regra que a T03 já sabe submeter e aprovar — revisar o diff,
 aprovar ou rejeitar, publicar e auditar — exigindo ao menos um cenário de regressão já calculado na T04, na
@@ -613,9 +614,11 @@ it('homologação não cria data comercial nem percentual', async () => {
     WHERE table_name = 'homologacoes_regras'
   `);
   const nomes = cols.rows.map((r) => r.column_name);
-  expect(nomes).toEqual(expect.not.arrayContaining(['data_comercial', 'data_fiscal', 'data_efetiva', 'p_red_bc', 'p_icms']));
+  for (const proibida of ['data_comercial', 'data_fiscal', 'data_efetiva', 'p_red_bc', 'p_icms']) {
+    expect(nomes).not.toContain(proibida);
+  }
   const escala = await db.execute(sql`
-    SELECT column_name, numeric_precision, numeric_scale
+    SELECT column_name, numeric_precision::int AS numeric_precision, numeric_scale::int AS numeric_scale
     FROM information_schema.columns
     WHERE table_name = 'regras_tributarias' AND column_name IN ('p_red_bc', 'p_icms')
   `);
