@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 
@@ -121,6 +121,28 @@ async function lerMensagem(resposta: Response): Promise<string> {
   }
 }
 
+const NAO_CONFIRMADO = 'O servidor não confirmou a operação. Atualize a tela e confira a situação.';
+
+async function lerCorpo(resposta: Response): Promise<unknown> {
+  const texto = await resposta.text();
+  if (!texto) return null;
+  try {
+    return JSON.parse(texto) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function ehPolitica(corpo: unknown): corpo is PoliticaApresentada {
+  if (!corpo || typeof corpo !== 'object') return false;
+  const { codigo, situacao, numero } = corpo as Record<string, unknown>;
+  return typeof codigo === 'string' && typeof situacao === 'string' && typeof numero === 'number';
+}
+
+function rotuloSituacao(situacao: string): string {
+  return SITUACOES.find(([valor]) => valor === situacao)?.[1] ?? situacao;
+}
+
 function celula(linha: PoliticaApresentada, rotulo: string): string {
   if (rotulo === 'Competência') return linha.competenciaRotulo;
   if (rotulo === 'Situação') return linha.situacaoRotulo;
@@ -156,6 +178,8 @@ export function PoliticasContabilizacaoClient({
   const [filtroSituacao, setFiltroSituacao] = useState('');
   const [ordenar, setOrdenar] = useState<string>('competencia');
   const [direcao, setDirecao] = useState<'asc' | 'desc'>('asc');
+  const [enviando, setEnviando] = useState(false);
+  const sequenciaModal = useRef(0);
 
   useEffect(() => {
     const cru = sessionStorage.getItem(CHAVE_RASCUNHO);
@@ -239,6 +263,7 @@ export function PoliticasContabilizacaoClient({
   }
 
   function abrirModal(acao: 'simular' | 'aprovar') {
+    sequenciaModal.current += 1;
     setValorTexto('');
     setJustificativaModal('');
     setAviso('');
@@ -257,43 +282,75 @@ export function PoliticasContabilizacaoClient({
       setAviso('Valor é obrigatório.');
       return;
     }
-    const emLote = marcadas.length > 1;
-    const resposta = emLote
-      ? await fetch('/api/contabilidade/politicas/lote', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          acao,
-          codigos: marcadas,
-          justificativa: justificativaModal,
-          numeroPorCodigo: Object.fromEntries(
-            linhas.filter((linha) => marcadas.includes(linha.codigo)).map((linha) => [linha.codigo, linha.numero]),
-          ),
-          ...(acao === 'simular' ? { valor } : {}),
-        }),
-      })
-      : await fetch(`/api/contabilidade/politicas/${encodeURIComponent(atual!.codigo)}/${acao}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(acao === 'simular'
-          ? { numero: atual!.numero, valor, justificativa: justificativaModal }
-          : { numero: atual!.numero, justificativa: justificativaModal }),
-      });
-    if (!resposta.ok) {
-      setAviso(await lerMensagem(resposta));
+    if (acao === 'simular' && /^0+\.00$/.test(valor)) {
+      setAviso('Valor deve ser maior que zero.');
       return;
     }
-    setModal(null);
-    setValorTexto('');
-    setJustificativaModal('');
-    if (acao === 'aprovar') {
-      const codigos = emLote ? marcadas : [atual!.codigo];
-      setLinhas((lista) => lista.map((linha) => (
-        codigos.includes(linha.codigo)
-          ? { ...linha, situacao: 'APPROVED', situacaoRotulo: 'Aprovado' }
-          : linha
-      )));
-      setAviso('concluído com evidência');
+    const emLote = marcadas.length > 1;
+    const token = sequenciaModal.current;
+    setEnviando(true);
+    try {
+      const resposta = emLote
+        ? await fetch('/api/contabilidade/politicas/lote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            acao,
+            codigos: marcadas,
+            justificativa: justificativaModal,
+            numeroPorCodigo: Object.fromEntries(
+              linhas.filter((linha) => marcadas.includes(linha.codigo)).map((linha) => [linha.codigo, linha.numero]),
+            ),
+            ...(acao === 'simular' ? { valor } : {}),
+          }),
+        })
+        : await fetch(`/api/contabilidade/politicas/${encodeURIComponent(atual!.codigo)}/${acao}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(acao === 'simular'
+            ? { numero: atual!.numero, valor, justificativa: justificativaModal }
+            : { numero: atual!.numero, justificativa: justificativaModal }),
+        });
+      if (!resposta.ok) {
+        setAviso(await lerMensagem(resposta));
+        return;
+      }
+      const corpo = await lerCorpo(resposta);
+      if (emLote) {
+        const efeitos = Array.isArray(corpo) ? corpo as { codigo?: unknown; acao?: unknown; situacao?: unknown }[] : null;
+        const confere = efeitos !== null
+          && efeitos.length === marcadas.length
+          && efeitos.every((efeito) => typeof efeito.codigo === 'string' && marcadas.includes(efeito.codigo)
+            && efeito.acao === acao && typeof efeito.situacao === 'string'
+            && (acao !== 'aprovar' || efeito.situacao === 'APPROVED'));
+        if (!confere) {
+          setAviso(NAO_CONFIRMADO);
+          return;
+        }
+        if (acao === 'aprovar') {
+          const situacoes = new Map(efeitos.map((efeito) => [String(efeito.codigo), String(efeito.situacao)]));
+          setLinhas((lista) => lista.map((item) => {
+            const situacao = situacoes.get(item.codigo);
+            return situacao ? { ...item, situacao, situacaoRotulo: rotuloSituacao(situacao) } : item;
+          }));
+        }
+      } else {
+        if (!ehPolitica(corpo) || corpo.codigo !== atual!.codigo || (acao === 'aprovar' && corpo.situacao !== 'APPROVED')) {
+          setAviso(NAO_CONFIRMADO);
+          return;
+        }
+        setLinhas((lista) => lista.map((item) => (item.codigo === corpo.codigo ? corpo : item)));
+      }
+      if (sequenciaModal.current === token) {
+        setModal(null);
+        setValorTexto('');
+        setJustificativaModal('');
+      }
+      setAviso(acao === 'aprovar' ? 'concluído com evidência' : '');
+    } catch {
+      setAviso('Não foi possível concluir a operação. Tente novamente.');
+    } finally {
+      setEnviando(false);
     }
   }
 
@@ -485,9 +542,7 @@ export function PoliticasContabilizacaoClient({
         </table>
       ) : null}
       {aba === 'Regras e validações' ? <p>origem imutável, não lançar sem mapeamento correto, balanceamento exato</p> : null}
-      {aba === 'Exceções'
-        ? EXCECOES.map((item) => <p key={item}><b>Bloqueio / exceção:</b> {item}.</p>)
-        : <p><b>Bloqueio / exceção:</b> {EXCECOES[0]}.</p>}
+      {aba === 'Exceções' ? EXCECOES.map((item) => <p key={item}><b>Bloqueio / exceção:</b> {item}.</p>) : null}
       {aba === 'Histórico' ? (
         <ul>
           {historico.map((evento) => (
@@ -595,7 +650,7 @@ export function PoliticasContabilizacaoClient({
               <input aria-label="Valor" value={valorTexto} onChange={(evento) => setValorTexto(evento.target.value)} />
             </label>
           ) : null}
-          <Button type="button" onClick={() => void confirmarLoteOuAcao(modal)}>Confirmar</Button>
+          <Button type="button" disabled={enviando} onClick={() => void confirmarLoteOuAcao(modal)}>Confirmar</Button>
         </section>
       ) : null}
     </>

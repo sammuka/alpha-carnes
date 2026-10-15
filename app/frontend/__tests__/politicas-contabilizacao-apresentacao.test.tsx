@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   PoliticasContabilizacaoClient,
@@ -79,7 +79,11 @@ it('desembrulha o envelope e mostra aprovador diferente do autor', async () => {
 
 it('com duas linhas marcadas, Simular evento e Aprovar regra chamam o lote', async () => {
   const user = userEvent.setup();
-  const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '' });
+  const efeitos = (acao: string, situacao: string) => JSON.stringify([
+    { codigo: 'LIQUIDACAO-2026-10', acao, situacao },
+    { codigo: 'TARIFA-2026-10', acao, situacao },
+  ]);
+  const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200, text: async () => efeitos('simular', 'DRAFT') });
   global.fetch = fetchMock as unknown as typeof fetch;
   render(<PoliticasContabilizacaoClient inicial={[
     linha('LIQUIDACAO-2026-10', 'Liquidação'),
@@ -105,6 +109,7 @@ it('com duas linhas marcadas, Simular evento e Aprovar regra chamam o lote', asy
     }),
   }));
   fetchMock.mockClear();
+  fetchMock.mockResolvedValue({ ok: true, status: 200, text: async () => efeitos('aprovar', 'APPROVED') });
   await user.click(screen.getByRole('button', { name: 'Aprovar regra' }));
   await user.type(screen.getByLabelText('Justificativa / observação'), 'aprova o lote');
   await user.click(screen.getByRole('button', { name: 'Confirmar' }));
@@ -131,4 +136,138 @@ it('não marca o 21º código', async () => {
   }
   expect(screen.getAllByRole('checkbox', { checked: true })).toHaveLength(20);
   expect(screen.getByRole('checkbox', { name: 'Selecionar Registro 21' })).not.toBeChecked();
+});
+
+function adiavel() {
+  let resolver!: (valor: unknown) => void;
+  const promessa = new Promise((resolve) => { resolver = resolve; });
+  return { promessa, resolver };
+}
+
+function corpoOk(corpo: unknown) {
+  return { ok: true, status: 201, text: async () => JSON.stringify(corpo) };
+}
+
+async function abrirAprovar(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Aprovar regra' }));
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'outra pessoa aprova');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+}
+
+it('a resposta da simulação não fecha o modal de aprovação aberto depois', async () => {
+  const user = userEvent.setup();
+  const simulacao = adiavel();
+  global.fetch = jest.fn().mockReturnValueOnce(simulacao.promessa) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await user.click(screen.getByRole('button', { name: 'Simular evento' }));
+  await user.type(screen.getByLabelText('Valor'), '10,10');
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'simula');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  await user.click(screen.getByRole('button', { name: 'Aprovar regra' }));
+  expect(screen.queryByLabelText('Valor')).not.toBeInTheDocument();
+  await act(async () => {
+    simulacao.resolver(corpoOk({ ...linha('LIQUIDACAO-2026-10', 'Liquidação'), simulacaoValor: '10.10', simulacaoDebito: '10.10', simulacaoCredito: '10.10' }));
+  });
+  expect(screen.getByLabelText('Justificativa / observação')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Confirmar' })).toBeEnabled();
+});
+
+it('Confirmar fica desabilitado enquanto a requisição está em voo', async () => {
+  const user = userEvent.setup();
+  const simulacao = adiavel();
+  const fetchMock = jest.fn().mockReturnValueOnce(simulacao.promessa);
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await user.click(screen.getByRole('button', { name: 'Simular evento' }));
+  await user.type(screen.getByLabelText('Valor'), '10,10');
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'simula');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
+  await act(async () => { simulacao.resolver(corpoOk(linha('LIQUIDACAO-2026-10', 'Liquidação'))); });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it('200 sem a situação aprovada não mostra Aprovado nem concluído com evidência', async () => {
+  const user = userEvent.setup();
+  global.fetch = jest.fn().mockResolvedValue(corpoOk(linha('LIQUIDACAO-2026-10', 'Liquidação'))) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await abrirAprovar(user);
+  expect(await screen.findByText(/O servidor não confirmou a operação/)).toBeInTheDocument();
+  expect(screen.queryByRole('cell', { name: 'Aprovado' })).not.toBeInTheDocument();
+  expect(screen.queryByText('concluído com evidência')).not.toBeInTheDocument();
+});
+
+it('200 sem corpo não mostra sucesso', async () => {
+  const user = userEvent.setup();
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 201, text: async () => '' }) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await abrirAprovar(user);
+  expect(await screen.findByText(/O servidor não confirmou a operação/)).toBeInTheDocument();
+  expect(screen.queryByRole('cell', { name: 'Aprovado' })).not.toBeInTheDocument();
+});
+
+it('422 do backend mostra o texto interno e nenhum sucesso', async () => {
+  const user = userEvent.setup();
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: false,
+    status: 422,
+    text: async () => JSON.stringify({ statusCode: 422, message: { message: 'aprovador diferente do autor', codigo: 'LIQUIDACAO-2026-10' } }),
+  }) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await abrirAprovar(user);
+  expect(await screen.findByText('aprovador diferente do autor')).toBeInTheDocument();
+  expect(screen.queryByRole('cell', { name: 'Aprovado' })).not.toBeInTheDocument();
+  expect(screen.queryByText('concluído com evidência')).not.toBeInTheDocument();
+});
+
+it('o corpo aprovado do backend atualiza a linha e só então mostra o sucesso', async () => {
+  const user = userEvent.setup();
+  global.fetch = jest.fn().mockResolvedValue(corpoOk({
+    ...linha('LIQUIDACAO-2026-10', 'Liquidação'), situacao: 'APPROVED', situacaoRotulo: 'Aprovado', aprovadorNome: 'Outra pessoa',
+  })) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await abrirAprovar(user);
+  expect(await screen.findByRole('cell', { name: 'Aprovado' })).toBeInTheDocument();
+  expect(screen.getByText('concluído com evidência')).toBeInTheDocument();
+});
+
+it('lote aprovado só mostra sucesso se todos os efeitos voltam aprovados', async () => {
+  const user = userEvent.setup();
+  global.fetch = jest.fn().mockResolvedValue(corpoOk([
+    { codigo: 'LIQUIDACAO-2026-10', acao: 'aprovar', situacao: 'APPROVED' },
+  ])) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[
+    linha('LIQUIDACAO-2026-10', 'Liquidação'),
+    linha('TARIFA-2026-10', 'Tarifa'),
+  ]} />);
+  await user.click(screen.getByRole('checkbox', { name: 'Selecionar Liquidação' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Selecionar Tarifa' }));
+  await abrirAprovar(user);
+  expect(await screen.findByText(/O servidor não confirmou a operação/)).toBeInTheDocument();
+  expect(screen.queryByText('concluído com evidência')).not.toBeInTheDocument();
+});
+
+it('valor 0,00 é recusado na tela antes de chamar o servidor', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn();
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await user.click(screen.getByRole('button', { name: 'Simular evento' }));
+  await user.type(screen.getByLabelText('Valor'), '0,00');
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'simula');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  expect(await screen.findByText('Valor deve ser maior que zero.')).toBeInTheDocument();
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it('o bloco Bloqueio / exceção existe só na aba Exceções', async () => {
+  const user = userEvent.setup();
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  expect(screen.queryByText(/Bloqueio \/ exceção/)).not.toBeInTheDocument();
+  await user.click(screen.getByRole('tab', { name: 'Regras e validações' }));
+  expect(screen.queryByText(/Bloqueio \/ exceção/)).not.toBeInTheDocument();
+  await user.click(screen.getByRole('tab', { name: 'Exceções' }));
+  expect(screen.getAllByText(/Bloqueio \/ exceção/)).toHaveLength(2);
+  expect(screen.getByText(/Mapeamento ausente/)).toBeInTheDocument();
+  expect(screen.getByText(/Evento duplicado/)).toBeInTheDocument();
 });
