@@ -337,7 +337,7 @@ describe('E01-T01 empresas e estabelecimentos', () => {
   });
 
   it('quem submeteu pode suspender estabelecimento aprovado por outro (sem segregação)', async () => {
-    const empresa = await criarEmpresa(adminA, '12ABC399');
+    const empresa = await criarEmpresa(adminA, '12ABC399', 'Zeta Suspensão LTDA');
     const estab = await criarEstab(adminA, empresa.body.id, cnpjDe('12ABC3990001'), [
       { codigo: '6201501', descricao: 'Desenvolvimento', tipo: 'PRINCIPAL' },
     ]);
