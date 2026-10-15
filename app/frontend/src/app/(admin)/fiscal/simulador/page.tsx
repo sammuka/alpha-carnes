@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { SimulacoesClient } from '@/components/fiscal/simulacoes/simulacoes-client';
 import { getMe } from '@/lib/auth';
 
 export default async function SimuladorPage() {
@@ -11,5 +12,5 @@ export default async function SimuladorPage() {
       </p>
     );
   }
-  return <h1>Simulador fiscal e memória de cálculo</h1>;
+  return <SimulacoesClient podeGerenciar={user.permissoes.includes('FISCAL_SIMULACOES_GERENCIAR')} />;
 }
