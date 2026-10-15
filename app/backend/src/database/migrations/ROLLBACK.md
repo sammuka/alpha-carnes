@@ -234,3 +234,16 @@ Rollback:
 - Seed: a chave `fiscal.simulacoes_perfis_autorizados`, as permissões `FISCAL_SIMULACOES_*` e o item de menu
   saem só junto do revert. As chaves `fiscal.regras_perfis_autorizados` e
   `fiscal.enquadramentos_perfis_autorizados` ficam.
+
+## E01-T05 — painel de homologação de regras tributárias
+
+```sql
+DROP TABLE IF EXISTS cenarios_regressao;
+DROP TABLE IF EXISTS homologacoes_regras;
+```
+
+Não derrubar `simulacoes_fiscais`, `regras_tributarias`, `classificacoes_ibs_cbs`, `beneficios_fiscais`,
+`enquadramentos_fiscais`, `cfops`, `ncms`, `estabelecimentos` nem `empresas`. Reverter o parâmetro
+`fiscal.homologacoes_perfis_autorizados`, as três permissões e o item de menu no mesmo revert da fatia.
+Os parâmetros `fiscal.simulacoes_perfis_autorizados`, `fiscal.regras_perfis_autorizados` e
+`fiscal.enquadramentos_perfis_autorizados` ficam.
