@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EnquadramentosClient } from '../src/components/fiscal/enquadramentos/enquadramentos-client';
 import { conectarRealtime } from '../src/lib/realtime';
@@ -83,10 +83,14 @@ function envelope(status: number, corpo: Record<string, unknown>): Response {
 let lista = [LINHA];
 let proximoSalvar: Response | null = null;
 let proximaConsulta: Response | null = null;
+let falharProdutos = false;
 
 function padrao(metodo: string, caminho: string): Response {
   if (caminho.startsWith('/api/admin/parametros')) {
     return json(200, { valorJson: { provisorio: true, pendencia: 'H-E01-12' } });
+  }
+  if (metodo === 'GET' && caminho.startsWith('/api/erp/fiscal/enquadramentos/exportacao')) {
+    return { ok: true, status: 200, blob: async () => new Blob(['csv']) } as unknown as Response;
   }
   if (metodo === 'GET' && caminho.startsWith('/api/erp/fiscal/enquadramentos/contagens')) {
     return json(200, { total: lista.length, ativas: lista.length, inativas: 0 });
@@ -110,6 +114,7 @@ function padrao(metodo: string, caminho: string): Response {
     return json(200, { data: [{ id: OP, rotulo: 'Compra e venda outubro', data: '2026-10-01', status: 'aberta' }] });
   }
   if (caminho.startsWith('/api/cadastros/produtos')) {
+    if (falharProdutos) return json(500, { message: 'Falha.' });
     return json(200, { data: [{ id: PROD, nome: 'Acém', status: 'ativo', deletedAt: null }] });
   }
   if (caminho.startsWith('/api/cadastros/clientes')) {
@@ -128,6 +133,7 @@ beforeEach(() => {
   lista = [LINHA];
   proximoSalvar = null;
   proximaConsulta = null;
+  falharProdutos = false;
   window.sessionStorage.clear();
   (conectarRealtime as jest.Mock).mockClear();
   global.fetch = jest.fn(async (entrada: string, init?: RequestInit) => {
@@ -219,5 +225,31 @@ describe('EnquadramentosClient', () => {
     expect(container.textContent).not.toMatch(/cst|aliquota|alíquota|icms|ipi|pis|cofins|ibs|cbs/i);
     expect(container.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
     expect(container.textContent).not.toMatch(/Marca/);
+  });
+
+  it('falha ao carregar as opções dos filtros mostra erro e permite tentar de novo', async () => {
+    falharProdutos = true;
+    const { user } = renderizar();
+    const aviso = await screen.findByText(/Não foi possível carregar as opções dos filtros/);
+    expect(aviso).toBeInTheDocument();
+    falharProdutos = false;
+    await user.click(screen.getByRole('button', { name: 'Recarregar opções' }));
+    await waitFor(() => expect(screen.queryByText(/Não foi possível carregar as opções dos filtros/)).not.toBeInTheDocument());
+  });
+
+  it.each(['Exportar', 'Exportar visão'])('%s repassa a busca da tela e baixa o arquivo', async (rotulo) => {
+    const criar = jest.fn(() => 'blob:csv');
+    const revogar = jest.fn();
+    Object.assign(URL, { createObjectURL: criar, revokeObjectURL: revogar });
+    const cliques = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const { user } = renderizar();
+    await screen.findByText('Compra e venda outubro', { selector: 'td' });
+    await user.type(screen.getByLabelText('Buscar'), 'acem');
+    await user.click(screen.getByRole('button', { name: rotulo }));
+    await waitFor(() => expect(cliques).toHaveBeenCalledTimes(1));
+    const urls = (global.fetch as jest.Mock).mock.calls.map(([url]) => String(url));
+    expect(urls.some((url) => url.startsWith('/api/erp/fiscal/enquadramentos/exportacao') && url.includes('search=acem'))).toBe(true);
+    expect(criar).toHaveBeenCalled();
+    cliques.mockRestore();
   });
 });

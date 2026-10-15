@@ -67,6 +67,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   const [codigoTipo, setCodigoTipo] = useState<'cfops' | 'ncms' | null>(null);
   const [selecaoCodigo, setSelecaoCodigo] = useState<SelecaoCodigo | null>(null);
   const [recarga, setRecarga] = useState(0);
+  const [erroCatalogos, setErroCatalogos] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -101,7 +102,8 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
       enquadramentosApi.opcoesCodigo('ncms'),
     ]).then(([estabelecimentos, operacoes, produtos, clientes, cfops, ncms]) => {
       setCatalogos({ estabelecimentos, operacoes, produtos, clientes, cfops, ncms });
-    }).catch(() => undefined);
+      setErroCatalogos(false);
+    }).catch(() => setErroCatalogos(true));
   }, [recarga]);
 
   useEffect(() => {
@@ -111,6 +113,20 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
       onReconnect: () => setRecarga((n) => n + 1),
     });
   }, []);
+
+  async function exportar() {
+    try {
+      const blob = await enquadramentosApi.exportar(filtros);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'enquadramentos-fiscais.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (erro) {
+      toast.error(erro instanceof Error ? erro.message : 'Falha ao exportar.');
+    }
+  }
 
   async function selecionar(id: string) {
     setSelecionadoId(id);
@@ -212,7 +228,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         badge={<BadgeProvisorio codigo="H-E01-12" />}
         live
       >
-        <Button type="button" variant="secondary" onClick={() => void enquadramentosApi.exportar(filtros)}>Exportar</Button>
+        <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar</Button>
         {podeGerenciar && (
           <Button type="button" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>+ Novo registro</Button>
         )}
@@ -239,13 +255,19 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
           value={filtros.search}
           onChange={(e) => setFiltros((atual) => ({ ...atual, search: e.target.value, page: 1 }))}
         />
+        {erroCatalogos && (
+          <div role="alert" className="flex items-center gap-2 text-sm">
+            <p>Não foi possível carregar as opções dos filtros.</p>
+            <Button type="button" variant="secondary" onClick={() => setRecarga((n) => n + 1)}>Recarregar opções</Button>
+          </div>
+        )}
         <div className="grid gap-2 md:grid-cols-4">
           {combo('Estabelecimento', 'filtro-estab', catalogos.estabelecimentos, filtros.estabelecimentoId, 'estabelecimentoId')}
           {combo('Operação fiscal (CFOP)', 'filtro-cfop', catalogos.cfops, filtros.cfopId, 'cfopId')}
           {combo('Produto', 'filtro-prod', catalogos.produtos, filtros.produtoId, 'produtoId')}
           {combo('Cliente', 'filtro-cli', catalogos.clientes, filtros.clienteId, 'clienteId')}
         </div>
-        <Button type="button" variant="secondary" onClick={() => void enquadramentosApi.exportar(filtros)}>Exportar visão</Button>
+        <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar visão</Button>
         {carregando && <Skeleton className="h-24" />}
         {erroLista && (
           <div role="alert" className="grid gap-2">
