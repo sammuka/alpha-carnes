@@ -170,6 +170,33 @@ export class PlanoContasService {
     }).from(centrosCusto).where(isNull(centrosCusto.deletedAt)).orderBy(asc(centrosCusto.codigo));
   }
 
+  async listarContasAnaliticasVigentes(): Promise<{ codigo: string; nome: string }[]> {
+    const hoje = sql`(now() at time zone 'America/Sao_Paulo')::date`;
+    const linhas = await this.db.select({
+      codigo: contasContabeis.codigo,
+      nome: contaVersoes.nome,
+      numero: contaVersoes.numero,
+    }).from(contasContabeis)
+      .innerJoin(contaVersoes, and(
+        eq(contaVersoes.contaId, contasContabeis.id),
+        eq(contaVersoes.situacao, 'APPROVED'),
+        eq(contaVersoes.classificacao, 'analitica'),
+        isNull(contaVersoes.deletedAt),
+        sql`${contaVersoes.vigenciaInicio} <= ${hoje}`,
+        sql`(${contaVersoes.vigenciaFim} is null or ${contaVersoes.vigenciaFim} >= ${hoje})`,
+      ))
+      .where(isNull(contasContabeis.deletedAt))
+      .orderBy(asc(contasContabeis.codigo), desc(contaVersoes.numero));
+    const vistas = new Set<string>();
+    const saida: { codigo: string; nome: string }[] = [];
+    for (const linha of linhas) {
+      if (vistas.has(linha.codigo)) continue;
+      vistas.add(linha.codigo);
+      saida.push({ codigo: linha.codigo, nome: linha.nome });
+    }
+    return saida;
+  }
+
   async exportarCsv(query: ListarPlanoQuery): Promise<string> {
     const { itens } = await this.listar(query);
     const cabecalho = ['Conta contábil', 'Situação', 'Natureza da conta', 'Centro de custo', 'Início de vigência', 'Fim de vigência'];

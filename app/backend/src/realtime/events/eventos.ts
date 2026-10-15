@@ -89,6 +89,7 @@ export const EVENTOS = {
   PLANO_CONTA_BLOQUEADA: 'plano_conta_bloqueada',
   PLANO_CONTA_MAPEADA: 'plano_conta_mapeada',
   CENTRO_CUSTO_CRIADO: 'centro_custo_criado',
+  POLITICA_CONFIGURADA: 'politica_configurada',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
