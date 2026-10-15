@@ -76,11 +76,11 @@ describe('Perfis — menus visíveis e catálogo', () => {
       .sort();
     expect(codigos).toEqual(Object.keys(DESCRICOES_PERMISSOES).sort());
     expect(MENUS_OPERACIONAIS).toHaveLength(39);
-    expect(MENUS_CANONICOS).toHaveLength(43);
-    expect(res.body.menus).toHaveLength(43);
+    expect(MENUS_CANONICOS).toHaveLength(44);
+    expect(res.body.menus).toHaveLength(44);
   });
 
-  it('GET /perfis/catalogo devolve o módulo Fiscal com as dez permissões e suas descrições', async () => {
+  it('GET /perfis/catalogo devolve o módulo Fiscal com as treze permissões e suas descrições', async () => {
     const res = await request(srv()).get('/perfis/catalogo').set('Cookie', adminCookies);
     expect(res.status).toBe(200);
     const fiscal = res.body.grupos.find((g: { modulo: string }) => g.modulo === 'Fiscal');
@@ -91,6 +91,9 @@ describe('Perfis — menus visíveis e catálogo', () => {
       { codigo: 'FISCAL_EMPRESAS_LER', descricao: DESCRICOES_PERMISSOES.FISCAL_EMPRESAS_LER },
       { codigo: 'FISCAL_ENQUADRAMENTOS_GERENCIAR', descricao: DESCRICOES_PERMISSOES.FISCAL_ENQUADRAMENTOS_GERENCIAR },
       { codigo: 'FISCAL_ENQUADRAMENTOS_LER', descricao: DESCRICOES_PERMISSOES.FISCAL_ENQUADRAMENTOS_LER },
+      { codigo: 'FISCAL_HOMOLOGACOES_APROVAR', descricao: DESCRICOES_PERMISSOES.FISCAL_HOMOLOGACOES_APROVAR },
+      { codigo: 'FISCAL_HOMOLOGACOES_GERENCIAR', descricao: DESCRICOES_PERMISSOES.FISCAL_HOMOLOGACOES_GERENCIAR },
+      { codigo: 'FISCAL_HOMOLOGACOES_LER', descricao: DESCRICOES_PERMISSOES.FISCAL_HOMOLOGACOES_LER },
       { codigo: 'FISCAL_REGRAS_APROVAR', descricao: DESCRICOES_PERMISSOES.FISCAL_REGRAS_APROVAR },
       { codigo: 'FISCAL_REGRAS_GERENCIAR', descricao: DESCRICOES_PERMISSOES.FISCAL_REGRAS_GERENCIAR },
       { codigo: 'FISCAL_REGRAS_LER', descricao: DESCRICOES_PERMISSOES.FISCAL_REGRAS_LER },

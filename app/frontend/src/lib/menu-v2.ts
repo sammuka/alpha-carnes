@@ -109,6 +109,12 @@ export const MENU_V2: MenuGroupDef[] = [
         iconKey: 'PieChart',
         permissao: 'FISCAL_SIMULACOES_LER',
       },
+      {
+        href: '/fiscal/homologacao',
+        label: 'Painel de alterações e homologação de regras',
+        iconKey: 'ClipboardCheck',
+        permissao: 'FISCAL_HOMOLOGACOES_LER',
+      },
     ],
   },
   {
