@@ -477,6 +477,35 @@ describe('E01-T04 simulações fiscais', () => {
     };
   }
 
+  it('versão nova de outro enquadramento não grava', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const outra = await aprovarRegra(await cenario());
+    const origem = await simular(admin, corpoDe(aprovada.base));
+    expect(origem.status).toBe(201);
+    const res = await request(app.getHttpServer())
+      .post(`/fiscal/simulacoes/${origem.body.id}/versoes`)
+      .set('Cookie', admin)
+      .send({ ...corpoDe(aprovada.base), enquadramentoId: outra.base.enquadramentoId, versao: origem.body.versao });
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('LINHAGEM_ENQUADRAMENTO_FIXO');
+    const n = await db().execute(sql`SELECT COUNT(*)::int AS n FROM simulacoes_fiscais WHERE codigo = ${origem.body.codigo} AND numero_versao = 2`);
+    expect(n.rows[0]).toMatchObject({ n: 0 });
+  });
+
+  it('competência 2027-01 na versão nova não grava a versão 2', async () => {
+    const aprovada = await aprovarRegra(await cenario({ fim: '2027-12-31' }));
+    const origem = await simular(admin, corpoDe(aprovada.base));
+    expect(origem.status).toBe(201);
+    const res = await request(app.getHttpServer())
+      .post(`/fiscal/simulacoes/${origem.body.id}/versoes`)
+      .set('Cookie', admin)
+      .send({ ...corpoDe(aprovada.base), competencia: '2027-01', versao: origem.body.versao });
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('FALTA_REFERENCIA_LEGAL');
+    const n = await db().execute(sql`SELECT COUNT(*)::int AS n FROM simulacoes_fiscais WHERE codigo = ${origem.body.codigo} AND numero_versao = 2`);
+    expect(n.rows[0]).toMatchObject({ n: 0 });
+  });
+
   it('consulta a regra gravada', async () => {
     const aprovada = await aprovarRegra(await cenario());
     const [regra] = await db().select({ pIcms: schema.regrasTributarias.pIcms }).from(schema.regrasTributarias).where(eq(schema.regrasTributarias.id, aprovada.regraId));

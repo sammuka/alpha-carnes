@@ -22,12 +22,14 @@ import { beneficiosFiscais, classificacoesIbsCbs } from '../../../../database/sc
 import {
   conflitoConcorrente,
   ehViolacaoUnica,
+  exigirVersao,
   regraViolada,
   type Tx,
 } from '../empresas/fiscal-comum';
+import { formatarPercentualPtBr } from '../regras/percentual';
 import { travarEnquadramento } from '../regras/regras.service';
-import { calcularMemoria, formatarDinheiroPtBr, rotuloCompetencia } from './decimal-memoria';
-import type { CriarSimulacaoDto, ListarSimulacoesQuery } from './dto/simulacao.dto';
+import { calcularMemoria, formatarDinheiroPtBr, formatarEscalaPtBr, rotuloCompetencia } from './decimal-memoria';
+import type { CriarSimulacaoDto, ListarSimulacoesQuery, NovaVersaoDto } from './dto/simulacao.dto';
 import { montarExplicacao } from './explicacao';
 
 type Db = NodePgDatabase<typeof schema>;
@@ -207,23 +209,7 @@ export class SimulacoesFiscaisService {
 
   async simular(dto: CriarSimulacaoDto, usuarioId: string) {
     const gravada = await this.db.transaction(async (tx) => {
-      const enquadramento = await travarEnquadramento(tx, dto.enquadramentoId);
-      this.conferirFks(enquadramento, dto);
-      await this.conferirCadastros(tx, dto);
-      const dia = diaCompetencia(dto.competencia);
-      if (!cobre(enquadramento.vigenciaInicio, enquadramento.vigenciaFim, dia)) {
-        regraViolada('ENQUADRAMENTO_INDISPONIVEL', 'O enquadramento fiscal não cobre esta competência.');
-      }
-      const regra = await this.resolverRegra(tx, dto.enquadramentoId, dia);
-      const memoria = calcularMemoria({
-        valor: dto.valor,
-        desconto: dto.desconto,
-        pRedBc: razao4(regra.pRedBc),
-        pIcms: razao4(regra.pIcms),
-      });
-      if (!memoria) {
-        regraViolada('DESCONTO_MAIOR_QUE_VALOR', 'O desconto não pode ser maior que o valor.');
-      }
+      const { regra, memoria } = await this.resolverMemoria(tx, dto);
       const linha = await this.inserirComCodigo(tx, {
         numeroVersao: 1,
         estabelecimentoId: dto.estabelecimentoId,
@@ -251,6 +237,105 @@ export class SimulacoesFiscaisService {
       return linha;
     });
     return this.detalhar(gravada.id);
+  }
+
+  async novaVersao(id: string, dto: NovaVersaoDto, usuarioId: string) {
+    const gravada = await this.db.transaction(async (tx) => {
+      const origem = await this.obterBloqueado(tx, id);
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('simulacoes_fiscais.versao.' || ${origem.codigo}))`);
+      exigirVersao(origem.versao, dto.versao);
+      if (dto.enquadramentoId !== origem.enquadramentoId) {
+        regraViolada('LINHAGEM_ENQUADRAMENTO_FIXO', 'A versão nova permanece no mesmo enquadramento fiscal.');
+      }
+      const { regra, memoria } = await this.resolverMemoria(tx, dto);
+      const gerado = await tx.execute(sql`
+        SELECT COALESCE(MAX(numero_versao), 0)::int AS n
+        FROM simulacoes_fiscais
+        WHERE codigo = ${origem.codigo} AND deleted_at IS NULL
+      `);
+      const numeroVersao = Number((gerado.rows[0] as { n: number }).n) + 1;
+      try {
+        const [linha] = await tx.insert(simulacoesFiscais).values({
+          codigo: origem.codigo,
+          numeroVersao,
+          origemVersaoId: origem.id,
+          estabelecimentoId: dto.estabelecimentoId,
+          operacaoId: dto.operacaoId,
+          clienteId: dto.clienteId,
+          produtoId: dto.produtoId,
+          ncmId: dto.ncmId,
+          quantidade: dto.quantidade,
+          pesoNf: dto.pesoNf,
+          valor: dto.valor,
+          desconto: dto.desconto,
+          competencia: dto.competencia,
+          enquadramentoId: dto.enquadramentoId,
+          regraId: regra.id,
+          valorLiquido: memoria.valorLiquido,
+          baseTributavel: memoria.baseTributavel,
+          icms: memoria.icms,
+          baseDifereBruto: memoria.baseDifereBruto,
+          situacao: 'CALCULADA',
+          justificativa: dto.justificativa,
+          criadoPorId: usuarioId,
+          atualizadoPorId: usuarioId,
+        }).returning();
+        if (!linha) throw new Error('Falha ao gravar simulação');
+        await this.auditar(
+          tx,
+          linha,
+          null,
+          usuarioId,
+          dto.justificativa,
+          `Versão nova do código ${origem.codigo}`,
+          'INSERT',
+        );
+        return linha;
+      } catch (err) {
+        if (ehViolacaoUnica(err, 'uq_simulacoes_codigo_versao')) conflitoConcorrente();
+        throw err;
+      }
+    });
+    return this.detalhar(gravada.id);
+  }
+
+  async comparar(id: string, com: string) {
+    const antes = await this.carregar(this.db, id);
+    const depois = await this.carregar(this.db, com);
+    if (antes.codigo !== depois.codigo) {
+      regraViolada('SIMULACOES_DISTINTAS', 'A comparação exige duas versões da mesma simulação.');
+    }
+    const textoAntes = textoComparavel(antes);
+    const textoDepois = textoComparavel(depois);
+    return {
+      codigo: antes.codigo,
+      numeroVersaoAntes: antes.numeroVersao,
+      numeroVersaoDepois: depois.numeroVersao,
+      diferencas: ORDEM_COMPARACAO
+        .filter((campo) => textoAntes[campo] !== textoDepois[campo])
+        .map((campo) => ({ campo, antes: textoAntes[campo], depois: textoDepois[campo] })),
+    };
+  }
+
+  private async resolverMemoria(tx: Tx, dto: CriarSimulacaoDto) {
+    const enquadramento = await travarEnquadramento(tx, dto.enquadramentoId);
+    this.conferirFks(enquadramento, dto);
+    await this.conferirCadastros(tx, dto);
+    const dia = diaCompetencia(dto.competencia);
+    if (!cobre(enquadramento.vigenciaInicio, enquadramento.vigenciaFim, dia)) {
+      regraViolada('ENQUADRAMENTO_INDISPONIVEL', 'O enquadramento fiscal não cobre esta competência.');
+    }
+    const regra = await this.resolverRegra(tx, dto.enquadramentoId, dia);
+    const memoria = calcularMemoria({
+      valor: dto.valor,
+      desconto: dto.desconto,
+      pRedBc: razao4(regra.pRedBc),
+      pIcms: razao4(regra.pIcms),
+    });
+    if (!memoria) {
+      regraViolada('DESCONTO_MAIOR_QUE_VALOR', 'O desconto não pode ser maior que o valor.');
+    }
+    return { regra, memoria };
   }
 
   private whereLista(query: ListarSimulacoesQuery) {
@@ -377,6 +462,15 @@ export class SimulacoesFiscaisService {
     return linha;
   }
 
+  private async obterBloqueado(tx: Tx, id: string): Promise<Linha> {
+    const [linha] = await tx.select().from(simulacoesFiscais).where(and(
+      eq(simulacoesFiscais.id, id),
+      isNull(simulacoesFiscais.deletedAt),
+    )).for('update');
+    if (!linha) throw new NotFoundException('Simulação fiscal não encontrada');
+    return linha;
+  }
+
   private async carregar(tx: Tx, id: string) {
     const responsavel = alias(usuarios, 'simulacao_responsavel');
     const [linha] = await tx.select({
@@ -496,4 +590,64 @@ export class SimulacoesFiscaisService {
 
 function formatarLista(valor: string): string {
   return formatarDinheiroPtBr(canonDinheiro(valor));
+}
+
+const ORDEM_COMPARACAO = [
+  'Cliente',
+  'Produto',
+  'Estabelecimento',
+  'Operação',
+  'Classificação fiscal (NCM)',
+  'Quantidade',
+  'Peso informado na nota (kg)',
+  'Valor',
+  'Desconto',
+  'Competência',
+  'Enquadramento fiscal',
+  'Valor líquido (calculado)',
+  'Base tributável (calculada)',
+  'Alíquota (%)',
+  'ICMS',
+  'Código da regra',
+  'Versão da regra',
+] as const;
+
+function textoComparavel(linha: {
+  cliente: string;
+  produto: string;
+  estabelecimento: string;
+  operacao: string;
+  ncm: string;
+  quantidade: string;
+  pesoNf: string;
+  valor: string;
+  desconto: string;
+  competencia: string;
+  enquadramento: string;
+  valorLiquido: string;
+  baseTributavel: string;
+  pIcms: string;
+  icms: string;
+  regraCodigo: string;
+  regraNumeroVersao: number;
+}): Record<(typeof ORDEM_COMPARACAO)[number], string> {
+  return {
+    Cliente: linha.cliente,
+    Produto: linha.produto,
+    Estabelecimento: linha.estabelecimento,
+    Operação: linha.operacao,
+    'Classificação fiscal (NCM)': linha.ncm,
+    Quantidade: formatarEscalaPtBr(canonEscala(linha.quantidade)),
+    'Peso informado na nota (kg)': formatarEscalaPtBr(canonEscala(linha.pesoNf)),
+    Valor: formatarDinheiroPtBr(canonDinheiro(linha.valor)),
+    Desconto: formatarDinheiroPtBr(canonDinheiro(linha.desconto)),
+    Competência: rotuloCompetencia(linha.competencia),
+    'Enquadramento fiscal': linha.enquadramento,
+    'Valor líquido (calculado)': formatarDinheiroPtBr(canonDinheiro(linha.valorLiquido)),
+    'Base tributável (calculada)': formatarDinheiroPtBr(canonDinheiro(linha.baseTributavel)),
+    'Alíquota (%)': formatarPercentualPtBr(razao4(linha.pIcms)),
+    ICMS: formatarDinheiroPtBr(canonDinheiro(linha.icms)),
+    'Código da regra': linha.regraCodigo,
+    'Versão da regra': String(linha.regraNumeroVersao),
+  };
 }

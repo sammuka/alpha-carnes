@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { z } from 'zod';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser, type CurrentUserPayload } from '../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
@@ -9,10 +10,14 @@ import { uuidSchema } from './dto/comum.dto';
 import {
   criarSimulacaoSchema,
   listarSimulacoesSchema,
+  novaVersaoSchema,
   type CriarSimulacaoDto,
   type ListarSimulacoesQuery,
+  type NovaVersaoDto,
 } from './dto/simulacao.dto';
 import { SimulacoesFiscaisService } from './simulacoes.service';
+
+const compararQuerySchema = z.object({ com: uuidSchema });
 
 @SkipThrottle()
 @Controller('fiscal')
@@ -24,6 +29,15 @@ export class SimulacoesController {
   @RequirePermissoes('FISCAL_SIMULACOES_LER')
   listar(@Query(new ZodValidationPipe(listarSimulacoesSchema)) query: ListarSimulacoesQuery) {
     return this.simulacoes.listar(query);
+  }
+
+  @Get('simulacoes/:id/comparar')
+  @RequirePermissoes('FISCAL_SIMULACOES_LER')
+  comparar(
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Query(new ZodValidationPipe(compararQuerySchema)) query: { com: string },
+  ) {
+    return this.simulacoes.comparar(id, query.com);
   }
 
   @Get('simulacoes/:id/explicacao')
@@ -52,5 +66,16 @@ export class SimulacoesController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.simulacoes.simular(dto, user.sub);
+  }
+
+  @Post('simulacoes/:id/versoes')
+  @HttpCode(201)
+  @RequirePermissoes('FISCAL_SIMULACOES_GERENCIAR')
+  versoes(
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Body(new ZodValidationPipe(novaVersaoSchema)) dto: NovaVersaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.simulacoes.novaVersao(id, dto, user.sub);
   }
 }
