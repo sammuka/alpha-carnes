@@ -103,6 +103,12 @@ export const MENU_V2: MenuGroupDef[] = [
         iconKey: 'FileSpreadsheet',
         permissao: 'FISCAL_REGRAS_LER',
       },
+      {
+        href: '/fiscal/simulador',
+        label: 'Simulador fiscal e memória de cálculo',
+        iconKey: 'PieChart',
+        permissao: 'FISCAL_SIMULACOES_LER',
+      },
     ],
   },
   {

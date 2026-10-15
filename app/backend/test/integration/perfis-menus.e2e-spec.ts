@@ -76,11 +76,11 @@ describe('Perfis — menus visíveis e catálogo', () => {
       .sort();
     expect(codigos).toEqual(Object.keys(DESCRICOES_PERMISSOES).sort());
     expect(MENUS_OPERACIONAIS).toHaveLength(39);
-    expect(MENUS_CANONICOS).toHaveLength(42);
-    expect(res.body.menus).toHaveLength(42);
+    expect(MENUS_CANONICOS).toHaveLength(43);
+    expect(res.body.menus).toHaveLength(43);
   });
 
-  it('GET /perfis/catalogo devolve o módulo Fiscal com as oito permissões e suas descrições', async () => {
+  it('GET /perfis/catalogo devolve o módulo Fiscal com as dez permissões e suas descrições', async () => {
     const res = await request(srv()).get('/perfis/catalogo').set('Cookie', adminCookies);
     expect(res.status).toBe(200);
     const fiscal = res.body.grupos.find((g: { modulo: string }) => g.modulo === 'Fiscal');
@@ -94,6 +94,8 @@ describe('Perfis — menus visíveis e catálogo', () => {
       { codigo: 'FISCAL_REGRAS_APROVAR', descricao: DESCRICOES_PERMISSOES.FISCAL_REGRAS_APROVAR },
       { codigo: 'FISCAL_REGRAS_GERENCIAR', descricao: DESCRICOES_PERMISSOES.FISCAL_REGRAS_GERENCIAR },
       { codigo: 'FISCAL_REGRAS_LER', descricao: DESCRICOES_PERMISSOES.FISCAL_REGRAS_LER },
+      { codigo: 'FISCAL_SIMULACOES_GERENCIAR', descricao: DESCRICOES_PERMISSOES.FISCAL_SIMULACOES_GERENCIAR },
+      { codigo: 'FISCAL_SIMULACOES_LER', descricao: DESCRICOES_PERMISSOES.FISCAL_SIMULACOES_LER },
     ]);
   });
 });

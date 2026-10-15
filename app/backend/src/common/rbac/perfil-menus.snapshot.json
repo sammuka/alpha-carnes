@@ -33,6 +33,7 @@
     "/fiscal/empresas",
     "/fiscal/enquadramentos",
     "/fiscal/regras",
+    "/fiscal/simulador",
     "/gestao/aprovacoes",
     "/gestao/compras",
     "/gestao/dashboard",
