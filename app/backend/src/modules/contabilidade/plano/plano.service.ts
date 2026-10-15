@@ -28,6 +28,7 @@ import {
   dataCalendarioValida,
 } from './dto/plano.dto';
 import { RegraContabilException } from './regra-contabil.exception';
+import { ultimaVersaoDecidida } from './vigencia';
 
 type Banco = NodePgDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Banco['transaction']>[0]>[0];
@@ -240,16 +241,19 @@ export class PlanoContasService {
     const [pai] = await tx.select().from(contasContabeis)
       .where(and(eq(contasContabeis.codigo, contaPaiCodigo), isNull(contasContabeis.deletedAt))).limit(1);
     if (!pai) throw new RegraContabilException('Conta pai não encontrada');
-    const [vigente] = await tx.select().from(contaVersoes).where(and(
-      eq(contaVersoes.contaId, pai.id),
-      eq(contaVersoes.situacao, 'APPROVED'),
-      isNull(contaVersoes.deletedAt),
-    )).orderBy(desc(contaVersoes.numero)).limit(1);
-    if (!vigente) throw new RegraContabilException('Conta pai não está ativa');
-    if (vigente.classificacao === 'analitica') {
+    await this.exigirPaiVigente(tx, pai.id);
+    return pai.id;
+  }
+
+  /** Versão vigente do pai, ou 422. Suspensa: `conta desativada`. Nunca decidida: `Conta pai não está ativa`. */
+  private async exigirPaiVigente(tx: Tx, paiId: string) {
+    const decidida = await ultimaVersaoDecidida(tx, paiId);
+    if (!decidida) throw new RegraContabilException('Conta pai não está ativa');
+    if (decidida.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
+    if (decidida.classificacao === 'analitica') {
       throw new RegraContabilException('Conta pai analítica não é nível hierárquico válido');
     }
-    return pai.id;
+    return decidida;
   }
 
   async editar(codigo: string, dto: EditarContaDto, usuarioId: string) {
@@ -550,14 +554,7 @@ export class PlanoContasService {
       if (cursor === contaId) return true;
       if (vistos.has(cursor)) return true;
       vistos.add(cursor);
-      const [versao] = await tx.select({ contaPaiId: contaVersoes.contaPaiId }).from(contaVersoes)
-        .where(and(
-          eq(contaVersoes.contaId, cursor),
-          eq(contaVersoes.situacao, 'APPROVED'),
-          isNull(contaVersoes.deletedAt),
-        ))
-        .orderBy(desc(contaVersoes.numero))
-        .limit(1);
+      const versao = await ultimaVersaoDecidida(tx, cursor);
       cursor = versao?.contaPaiId ?? null;
     }
     return false;

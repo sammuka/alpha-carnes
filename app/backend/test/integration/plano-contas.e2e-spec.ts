@@ -7,6 +7,7 @@ import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { centrosCusto, contasContabeis, contaVersoes } from '../../src/database/schema/contabilidade-plano.schema';
 import { PlanoContasService } from '../../src/modules/contabilidade/plano/plano.service';
+import { ultimaVersaoDecidida } from '../../src/modules/contabilidade/plano/vigencia';
 import type { CriarContaDto, EditarContaDto } from '../../src/modules/contabilidade/plano/dto/plano.dto';
 import type { ContaApresentada } from '../../src/modules/contabilidade/plano/plano.service';
 
@@ -607,5 +608,50 @@ describe('Plano de contas', () => {
       expect(res.status).toBe(422);
       expect(res.body.message.message).toBe('conflito concorrente');
     });
+  });
+
+  async function contaComV2Suspensa() {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    await service.versionar('1', comoEdicao(v1, { justificativa: 'abre v2' }), userId);
+    await service.revisarCompetencia('1', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa v2' }, userId);
+    await service.aprovar('1', { numero: 2, justificativa: 'aprova v2' }, userId);
+    await service.bloquear('1', { numero: 2, justificativa: 'bloqueia v2' }, userId);
+  }
+
+  it('conta com v1 aprovada e v2 suspensa não é pai válido', async () => {
+    await contaComV2Suspensa();
+    const [conta] = await db.select().from(contasContabeis).where(eq(contasContabeis.codigo, '1'));
+    expect(await ultimaVersaoDecidida(db, conta!.id)).toMatchObject({ numero: 2, situacao: 'SUSPENDED' });
+    const filha = dtoBase({ codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1' });
+    await expect(service.criar(filha, userId)).rejects.toMatchObject({
+      status: 422, response: { message: 'conta desativada' },
+    });
+    expect(await service.validar(filha, userId)).toEqual({ valido: false, mensagens: ['conta desativada'] });
+    const lista = await service.listar({ pagina: 1, q: '1.1', situacao: '', ordenar: 'contaContabil', direcao: 'asc' });
+    expect(lista.total).toBe(0);
+  });
+
+  it('guarda: versão nova aprovada supera a anterior como pai', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '0', classificacao: 'sintetica' }), userId);
+    await promover('0');
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    await service.versionar('1', comoEdicao(v1, { classificacao: 'analitica', contaPaiCodigo: '0', justificativa: 'vira analítica' }), userId);
+    await service.revisarCompetencia('1', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    await service.aprovar('1', { numero: 2, justificativa: 'aprova' }, userId);
+    await expect(service.criar(dtoBase({ codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1' }), userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'Conta pai analítica não é nível hierárquico válido' } });
+  });
+
+  it('guarda: revisão aberta não derruba a vigência da versão aprovada', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    await service.versionar('1', comoEdicao(v1, { justificativa: 'abre v2' }), userId);
+    await expect(service.criar(dtoBase({ codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1' }), userId))
+      .resolves.toMatchObject({ codigo: '1.1', contaPaiCodigo: '1' });
   });
 });
