@@ -1,10 +1,10 @@
 import { RegraPoliticaException } from './regra-politica.exception';
 
-export function centavos(valor: string): bigint {
+export function centavos(valor: string, codigo: string): bigint {
   const casado = /^(\d{1,13})\.(\d{2})$/.exec(valor);
   const inteiro = casado?.[1];
   const fracao = casado?.[2];
-  if (!inteiro || !fracao) throw new RegraPoliticaException('mapeamento ausente', '');
+  if (!inteiro || !fracao) throw new RegraPoliticaException('valor monetário inválido', codigo);
   return BigInt(inteiro) * 100n + BigInt(fracao);
 }
 
@@ -23,7 +23,7 @@ export function balancear(
   let debito = 0n;
   let credito = 0n;
   for (const linha of linhas) {
-    const valor = centavos(linha.valor);
+    const valor = centavos(linha.valor, codigo);
     if (linha.lado === 'D') debito += valor;
     else credito += valor;
   }

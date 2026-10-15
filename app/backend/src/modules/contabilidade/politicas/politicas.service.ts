@@ -389,17 +389,6 @@ export class PoliticasContabilizacaoService {
     return `\uFEFF${corpo}`;
   }
 
-  async executar(
-    acao: 'editar' | 'simular' | 'aprovar',
-    codigo: string,
-    dto: EditarPoliticaDto | SimularPoliticaDto | AprovarPoliticaDto,
-    usuarioId: string,
-  ) {
-    if (acao === 'editar') return this.editar(codigo, dto as EditarPoliticaDto, usuarioId);
-    if (acao === 'simular') return this.simular(codigo, dto as SimularPoliticaDto, usuarioId);
-    return this.aprovar(codigo, dto as AprovarPoliticaDto, usuarioId);
-  }
-
   async listar(query: ListarPoliticasQuery): Promise<{ itens: PoliticaApresentada[]; total: number }> {
     const filtro = this.filtro(query);
     const coluna = this.colunaOrdem(query.ordenar);

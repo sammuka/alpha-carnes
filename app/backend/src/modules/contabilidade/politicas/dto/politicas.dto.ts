@@ -2,8 +2,16 @@ import { z } from 'zod';
 
 const codigo = z.string().trim().min(1).max(32);
 const motivo = z.string().trim().min(1).max(2000);
-const dataIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const competencia = z.string().regex(/^\d{4}-\d{2}$/);
+function dataNoCalendario(valor: string): boolean {
+  const [ano, mes, dia] = valor.split('-').map(Number);
+  if (!ano || !mes || !dia) return false;
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  return data.getUTCFullYear() === ano && data.getUTCMonth() === mes - 1 && data.getUTCDate() === dia;
+}
+
+const dataIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(dataNoCalendario, 'Data inexistente no calendário.');
+const competencia = z.string().regex(/^\d{4}-\d{2}$/)
+  .refine((valor) => dataNoCalendario(`${valor}-01`), 'Competência inexistente no calendário.');
 const tipoEvento = z.enum(['LIQUIDACAO', 'REGISTRO', 'CANCELAMENTO', 'ESTORNO', 'TARIFA']);
 
 export const configurarSchema = z.object({
@@ -55,7 +63,7 @@ export const loteSchema = loteBase.superRefine((dto, ctx) => {
 });
 
 export const listarPoliticasSchema = z.object({
-  pagina: z.coerce.number().int().min(1).default(1),
+  pagina: z.coerce.number().int().min(1).max(100000).default(1),
   q: z.string().trim().max(180).default(''),
   situacao: z.enum(['', 'DRAFT', 'REVIEW', 'APPROVED', 'REJECTED', 'SUSPENDED']).default(''),
   competencia: z.union([z.literal(''), competencia]).default(''),

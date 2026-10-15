@@ -273,4 +273,148 @@ describe('Políticas de contabilização', () => {
       requestId: 'unknown',
     });
   });
+
+describe('entrada inválida responde 400 e não grava', () => {
+  const corpo = {
+    tipoEvento: 'LIQUIDACAO',
+    competencia: '2026-10',
+    contaDebitoCodigo: '1.1.01',
+    contaCreditoCodigo: '2.1.01',
+    centroCodigo: 'CT1',
+    vigenciaInicio: '2026-10-01',
+    justificativa: 'tenta',
+  };
+  const post = (rota: string, enviado: object) =>
+    request(srv()).post(rota).set('Cookie', adminCookies).send(enviado);
+  const get = (rota: string) => request(srv()).get(rota).set('Cookie', adminCookies);
+
+  const invalidosDeOrigem: [string, Record<string, unknown>][] = [
+    ['competência com mês 13', { competencia: '2026-13' }],
+    ['competência com mês 00', { competencia: '2026-00' }],
+    ['competência com ano 0000', { competencia: '0000-05' }],
+    ['vigência em 30 de fevereiro', { vigenciaInicio: '2026-02-30' }],
+    ['vigência com mês 13', { vigenciaInicio: '2026-13-01' }],
+    ['vigência com ano 0000', { vigenciaInicio: '0000-01-01' }],
+  ];
+
+  it.each(invalidosDeOrigem)('configurar recusa %s', async (_rotulo, parcial) => {
+    await prepararContasAnaliticas();
+    const res = await post('/contabilidade/politicas', { ...corpo, ...parcial });
+    expect(res.status).toBe(400);
+    expect(res.body.statusCode).toBe(400);
+    expect(await db.select().from(politicasContabilizacao)).toHaveLength(0);
+  });
+
+  it.each(invalidosDeOrigem)('validar recusa %s', async (_rotulo, parcial) => {
+    await prepararContasAnaliticas();
+    const res = await post('/contabilidade/politicas/validar', { ...corpo, ...parcial });
+    expect(res.status).toBe(400);
+  });
+
+  // Guarda: o enum do DTO já recusa hoje. Passa antes e depois e trava a regressão; não prova reprodução.
+  it('guarda: configurar e validar recusam tipo fora do enum', async () => {
+    await prepararContasAnaliticas();
+    for (const rota of ['/contabilidade/politicas', '/contabilidade/politicas/validar']) {
+      expect((await post(rota, { ...corpo, tipoEvento: 'COMPRA' })).status).toBe(400);
+    }
+    expect(await db.select().from(politicasContabilizacao)).toHaveLength(0);
+  });
+
+  it.each([
+    ['competência com mês 13', { competencia: '2026-13' }],
+    ['vigência em 30 de fevereiro', { vigenciaInicio: '2026-02-30' }],
+    ['número zero', { numero: 0 }],
+    ['número negativo', { numero: -1 }],
+    ['número fracionário', { numero: 1.5 }],
+    ['justificativa vazia', { justificativa: '   ' }],
+  ])('editar recusa %s', async (_rotulo, parcial) => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    const res = await post(`/contabilidade/politicas/${politica.codigo}/editar`, {
+      numero: 1,
+      contaDebitoCodigo: '1.1.01',
+      contaCreditoCodigo: '2.1.01',
+      centroCodigo: 'CT1',
+      vigenciaInicio: '2026-10-01',
+      justificativa: 'edita',
+      ...parcial,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it.each([
+    ['negativo', '-1.00'],
+    ['três casas decimais', '1.005'],
+    ['uma casa decimal', '10.5'],
+    ['sem casas decimais', '10'],
+    ['vírgula no lugar do ponto', '10,50'],
+    ['14 dígitos inteiros', '12345678901234.00'],
+    ['texto', 'abc'],
+    ['vazio', ''],
+  ])('simular recusa valor %s e não grava simulação', async (_rotulo, valor) => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    const res = await post(`/contabilidade/politicas/${politica.codigo}/simular`, {
+      numero: 1,
+      valor,
+      justificativa: 'simula',
+    });
+    expect(res.status).toBe(400);
+    expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+  });
+
+  it.each([
+    ['número zero', { numero: 0 }],
+    ['número texto', { numero: 'um' }],
+    ['justificativa ausente', { justificativa: undefined }],
+  ])('aprovar recusa %s', async (_rotulo, parcial) => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    const res = await post(`/contabilidade/politicas/${politica.codigo}/aprovar`, {
+      numero: 1,
+      justificativa: 'aprova',
+      ...parcial,
+    });
+    expect(res.status).toBe(400);
+    expect((await service.obter(politica.codigo)).situacao).toBe('DRAFT');
+  });
+
+  // Guarda: o ZodValidationPipe do lote (controller L61-L65) já responde 400 hoje.
+  it('guarda: lote recusa valor monetário inválido e não grava simulação', async () => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    const res = await post('/contabilidade/politicas/lote', {
+      acao: 'simular',
+      codigos: [politica.codigo],
+      justificativa: 'simula',
+      numeroPorCodigo: { [politica.codigo]: 1 },
+      valor: '1.005',
+    });
+    expect(res.status).toBe(400);
+    expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+  });
+
+  it.each([
+    ['competência com mês 13', '?competencia=2026-13'],
+    ['página maior que o teto', '?pagina=99999999999'],
+  ])('listar e exportar recusam %s', async (_rotulo, consulta) => {
+    expect((await get(`/contabilidade/politicas${consulta}`)).status).toBe(400);
+    expect((await get(`/contabilidade/politicas/exportar${consulta}`)).status).toBe(400);
+  });
+
+  // Guardas: página 0 (min(1)) e os enums de situação e ordenação já respondem 400 hoje.
+  it.each([
+    ['página zero', '?pagina=0'],
+    ['situação fora do enum', '?situacao=APROVADA'],
+    ['ordenação fora do enum', '?ordenar=senha'],
+  ])('guarda: listar e exportar recusam %s', async (_rotulo, consulta) => {
+    expect((await get(`/contabilidade/politicas${consulta}`)).status).toBe(400);
+    expect((await get(`/contabilidade/politicas/exportar${consulta}`)).status).toBe(400);
+  });
+
+  it('guarda: ação inexistente continua 404', async () => {
+    const res = await post('/contabilidade/politicas/LIQUIDACAO-2026-10/destruir', { numero: 1, justificativa: 'x' });
+    expect(res.status).toBe(404);
+  });
+});
 });
