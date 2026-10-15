@@ -1,5 +1,9 @@
 import { INestApplication } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import request from 'supertest';
+import { DRIZZLE } from '../../src/database/database.module';
+import * as schema from '../../src/database/schema';
 import { validarCnpjAlfanumerico } from '../../src/common/validators/cnpj-alfanumerico';
 import { cleanupDb, createTestApp, createTestUser, joinSetCookie } from '../helpers/test-app';
 
@@ -175,5 +179,51 @@ describe('E01-T02 concorrência', () => {
         .send({ ...editavel, prioridade: 3, versao: criado.body.versao }),
     ]);
     expect(statusDe(respostas)).toEqual([200, 409]);
+  });
+
+  it.each([
+    ['produtos', 'produtoId', 'PRODUTO_INATIVO'],
+    ['clientes', 'clienteId', 'CLIENTE_INATIVO'],
+    ['operacoes', 'operacaoId', 'OPERACAO_INDISPONIVEL'],
+    ['cfops', 'cfopId', 'CFOP_INDISPONIVEL'],
+    ['ncms', 'ncmId', 'NCM_INDISPONIVEL'],
+  ] as const)('remoção de %s não commitada trava o POST, que então recusa (%s)', async (tabela, campo, codigo) => {
+    const base = await baseAprovada();
+    const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+    let liberar = (): void => undefined;
+    const segura = new Promise<void>((resolve) => { liberar = resolve; });
+    let travou = (): void => undefined;
+    const pronto = new Promise<void>((resolve) => { travou = resolve; });
+    const remocao = db.transaction(async (tx) => {
+      await tx.execute(sql`UPDATE ${sql.identifier(tabela)} SET deleted_at = now() WHERE id = ${base[campo]}`);
+      travou();
+      await segura;
+    });
+    await pronto;
+    const post = request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', adminA)
+      .send(corpo(base))
+      .then((res) => res);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    liberar();
+    await remocao;
+    const res = await post;
+    expect(res.status).toBe(422);
+    expect(JSON.stringify(res.body)).toContain(codigo);
+    const total = await db.execute(sql`SELECT count(*)::int AS n FROM enquadramentos_fiscais WHERE estabelecimento_id = ${base.estabelecimentoId}`);
+    expect((total.rows[0] as { n: number }).n).toBe(0);
+  });
+
+  it('DELETE do produto em paralelo com POST nunca dá 500 e a decisão é serializada', async () => {
+    for (let i = 0; i < 5; i += 1) {
+      const base = await baseAprovada();
+      const [post, del] = await Promise.all([
+        request(app.getHttpServer()).post('/fiscal/enquadramentos').set('Cookie', adminA).send(corpo(base)),
+        request(app.getHttpServer()).delete(`/produtos/${base.produtoId}`).set('Cookie', adminA),
+      ]);
+      expect(del.status).toBe(200);
+      expect([201, 422]).toContain(post.status);
+    }
   });
 });
