@@ -1,7 +1,7 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/pg-core';
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { alias, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../../common/auditoria/auditoria.service';
 import { montarPaginado } from '../../../../common/crud/paginacao';
@@ -74,10 +74,46 @@ export class RegrasTributariasService {
   }
 
   private whereLista(query: ListarRegrasQuery) {
+    const filtro = query.search?.trim();
+    const termo = filtro ? `%${filtro.replace(/[%_]/g, '')}%` : undefined;
     return and(
       isNull(regrasTributarias.deletedAt),
       query.cfopId ? eq(enquadramentosFiscais.cfopId, query.cfopId) : undefined,
+      termo
+        ? sql`(
+            ${enquadramentosFiscais.codigo} ILIKE ${termo}
+            OR ${cfops.codigo} ILIKE ${termo}
+            OR ${operacoes.rotulo} ILIKE ${termo}
+            OR ${beneficiosFiscais.codigo} ILIKE ${termo}
+            OR ${beneficiosFiscais.descricao} ILIKE ${termo}
+            OR ${classificacoesIbsCbs.codigo} ILIKE ${termo}
+            OR ${classificacoesIbsCbs.descricao} ILIKE ${termo}
+          )`
+        : undefined,
     );
+  }
+
+  /** Código numérico vira texto: compara tamanho antes do texto (ordem natural) e desempata por versão e id. */
+  private ordem(query: ListarRegrasQuery) {
+    const sentido = query.dir === 'desc' ? desc : asc;
+    const tamanho = (coluna: AnyPgColumn) => sql`length(${coluna})`;
+    const principal = {
+      enquadramento: [tamanho(enquadramentosFiscais.codigo), enquadramentosFiscais.codigo],
+      cfop: [cfops.codigo],
+      cBenef: [beneficiosFiscais.codigo],
+      cClassTrib: [classificacoesIbsCbs.codigo],
+      operacao: [operacoes.rotulo],
+      icmsCst: [regrasTributarias.icmsCst],
+    }[query.sort];
+    return [
+      ...principal.map((coluna) => sentido(coluna)),
+      asc(tamanho(enquadramentosFiscais.codigo)),
+      asc(enquadramentosFiscais.codigo),
+      asc(tamanho(regrasTributarias.codigo)),
+      asc(regrasTributarias.codigo),
+      asc(regrasTributarias.numeroVersao),
+      asc(regrasTributarias.id),
+    ];
   }
 
   async listar(query: ListarRegrasQuery) {
@@ -86,6 +122,10 @@ export class RegrasTributariasService {
       .select({ total: sql<number>`count(*)::int` })
       .from(regrasTributarias)
       .innerJoin(enquadramentosFiscais, eq(enquadramentosFiscais.id, regrasTributarias.enquadramentoId))
+      .innerJoin(cfops, eq(cfops.id, enquadramentosFiscais.cfopId))
+      .innerJoin(operacoes, eq(operacoes.id, enquadramentosFiscais.operacaoId))
+      .innerJoin(beneficiosFiscais, eq(beneficiosFiscais.id, regrasTributarias.beneficioFiscalId))
+      .innerJoin(classificacoesIbsCbs, eq(classificacoesIbsCbs.id, regrasTributarias.classificacaoIbsCbsId))
       .where(where);
     const linhas = await this.db
       .select({
@@ -104,7 +144,7 @@ export class RegrasTributariasService {
       .innerJoin(beneficiosFiscais, eq(beneficiosFiscais.id, regrasTributarias.beneficioFiscalId))
       .innerJoin(classificacoesIbsCbs, eq(classificacoesIbsCbs.id, regrasTributarias.classificacaoIbsCbsId))
       .where(where)
-      .orderBy(enquadramentosFiscais.codigo)
+      .orderBy(...this.ordem(query))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
     const data = linhas.map((linha) => ({
@@ -208,6 +248,10 @@ export class RegrasTributariasService {
       })
       .from(regrasTributarias)
       .innerJoin(enquadramentosFiscais, eq(enquadramentosFiscais.id, regrasTributarias.enquadramentoId))
+      .innerJoin(cfops, eq(cfops.id, enquadramentosFiscais.cfopId))
+      .innerJoin(operacoes, eq(operacoes.id, enquadramentosFiscais.operacaoId))
+      .innerJoin(beneficiosFiscais, eq(beneficiosFiscais.id, regrasTributarias.beneficioFiscalId))
+      .innerJoin(classificacoesIbsCbs, eq(classificacoesIbsCbs.id, regrasTributarias.classificacaoIbsCbsId))
       .where(this.whereLista(query));
     return {
       total: linha?.total ?? 0,
@@ -235,7 +279,7 @@ export class RegrasTributariasService {
       .innerJoin(beneficiosFiscais, eq(beneficiosFiscais.id, regrasTributarias.beneficioFiscalId))
       .innerJoin(classificacoesIbsCbs, eq(classificacoesIbsCbs.id, regrasTributarias.classificacaoIbsCbsId))
       .where(this.whereLista(query))
-      .orderBy(enquadramentosFiscais.codigo);
+      .orderBy(...this.ordem(query));
     return montarCsvRegras(linhas);
   }
 
@@ -290,7 +334,7 @@ export class RegrasTributariasService {
       .from(schema.auditoria)
       .leftJoin(autor, eq(autor.id, schema.auditoria.usuarioId))
       .where(and(eq(schema.auditoria.tabela, 'regras_tributarias'), inArray(schema.auditoria.registroId, ids)))
-      .orderBy(schema.auditoria.createdAt);
+      .orderBy(asc(schema.auditoria.createdAt), asc(schema.auditoria.id));
     return linhas.map((linha) => {
       const novos = (linha.dadosNovos ?? {}) as Record<string, unknown>;
       const anteriores = (linha.dadosAnteriores ?? {}) as Record<string, unknown>;
@@ -343,6 +387,9 @@ export class RegrasTributariasService {
       const atual = await this.obterBloqueado(tx, id);
       recusarEdicao(atual.situacao as SituacaoRegra);
       exigirVersao(atual.versao, dto.versao);
+      if ((atual.origemVersaoId || atual.numeroVersao > 1) && dto.enquadramentoId !== atual.enquadramentoId) {
+        regraViolada('LINHAGEM_ENQUADRAMENTO_FIXO', 'A versão nova permanece no mesmo enquadramento fiscal.');
+      }
       const enquadramento = await travarEnquadramento(tx, dto.enquadramentoId);
       this.exigirOperacaoDoEnquadramento(enquadramento, dto);
       await this.exigirCatalogos(tx, dto.beneficioFiscalId, dto.classificacaoIbsCbsId);
@@ -376,15 +423,7 @@ export class RegrasTributariasService {
       const origem = await this.obterBloqueado(tx, id);
       recusarAcao(origem.situacao as SituacaoRegra, 'adicionarVersao');
       exigirVersao(origem.versao, dto.versao);
-      if (dto.enquadramentoId !== origem.enquadramentoId) {
-        regraViolada('LINHAGEM_ENQUADRAMENTO_FIXO', 'A versão nova permanece no mesmo enquadramento fiscal.');
-      }
-      await travarEnquadramento(tx, origem.enquadramentoId);
-      this.exigirOperacaoDoEnquadramento(
-        await travarEnquadramento(tx, origem.enquadramentoId),
-        dto,
-      );
-      await this.exigirCatalogos(tx, dto.beneficioFiscalId, dto.classificacaoIbsCbsId);
+      // 409 de versão aberta antes de qualquer 422: a linhagem decide primeiro (M9).
       const aberta = await tx.select({ id: regrasTributarias.id }).from(regrasTributarias).where(and(
         eq(regrasTributarias.codigo, origem.codigo),
         isNull(regrasTributarias.deletedAt),
@@ -393,6 +432,11 @@ export class RegrasTributariasService {
       if (aberta.length > 0) {
         conflito('VERSAO_ABERTA', 'Já existe versão em rascunho ou submetida para este código.');
       }
+      if (dto.enquadramentoId !== origem.enquadramentoId) {
+        regraViolada('LINHAGEM_ENQUADRAMENTO_FIXO', 'A versão nova permanece no mesmo enquadramento fiscal.');
+      }
+      this.exigirOperacaoDoEnquadramento(await travarEnquadramento(tx, origem.enquadramentoId), dto);
+      await this.exigirCatalogos(tx, dto.beneficioFiscalId, dto.classificacaoIbsCbsId);
       try {
         const [linha] = await tx.insert(regrasTributarias).values({
           codigo: origem.codigo,
@@ -433,6 +477,8 @@ export class RegrasTributariasService {
       const atual = await this.obterBloqueado(tx, id);
       recusarAcao(atual.situacao as SituacaoRegra, 'submeter');
       exigirVersao(atual.versao, dto.versao);
+      // Mesma trava do aprovar: serializa com inativar, remover e mudança de chave do enquadramento (B6).
+      await travarEnquadramento(tx, atual.enquadramentoId);
       const [linha] = await tx.update(regrasTributarias).set({
         situacao: 'SUBMETIDA',
         submetidoPorId: usuarioId,

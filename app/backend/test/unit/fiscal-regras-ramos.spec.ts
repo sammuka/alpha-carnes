@@ -207,18 +207,18 @@ describe('ramos dos services de regras tributárias', () => {
         icmsCst: '20',
       }] },
     ]);
-    const pagina = await service.listar({ page: 1, pageSize: 20, cfopId: CFOP } as ListarRegrasQuery);
+    const pagina = await service.listar({ page: 1, pageSize: 20, sort: 'enquadramento', dir: 'asc', cfopId: CFOP } as ListarRegrasQuery);
     expect(pagina.total).toBe(1);
     expect(pagina.data[0]?.tratamentoIcms).toBe('Redução de base');
 
     const vazio = regras([{ valor: [] }, { valor: [] }]);
-    const semTotal = await vazio.listar({ page: 1, pageSize: 20 } as ListarRegrasQuery);
+    const semTotal = await vazio.listar({ page: 1, pageSize: 20, sort: 'enquadramento', dir: 'asc' } as ListarRegrasQuery);
     expect(semTotal.total).toBe(0);
   });
 
   it('contagens zeradas quando a consulta não devolve linha', async () => {
     const service = regras([{ valor: [] }]);
-    await expect(service.contagens({ page: 1, pageSize: 20 } as ListarRegrasQuery)).resolves.toEqual({
+    await expect(service.contagens({ page: 1, pageSize: 20, sort: 'enquadramento', dir: 'asc' } as ListarRegrasQuery)).resolves.toEqual({
       total: 0,
       rascunhos: 0,
       submetidas: 0,
@@ -302,15 +302,11 @@ describe('ramos dos services de regras tributárias', () => {
   it('versão nova recusa outro enquadramento e versão já aberta', async () => {
     const origem = linha({ situacao: 'APROVADA' });
     const pedido = { ...dto, versao: 3, enquadramentoId: OUTRO } as NovaVersaoDto;
-    await expect(regras([{ valor: [origem] }]).adicionarVersao(REGRA, pedido, USUARIO))
+    await expect(regras([{ valor: [origem] }, { valor: [] }]).adicionarVersao(REGRA, pedido, USUARIO))
       .rejects.toMatchObject({ response: { codigo: 'LINHAGEM_ENQUADRAMENTO_FIXO' } });
 
     const aberta = regras([
       { valor: [origem] },
-      { valor: [enquadramentoAtivo] },
-      { valor: [enquadramentoAtivo] },
-      { valor: [{ id: BEN }] },
-      { valor: [{ id: CLS }] },
       { valor: [{ id: OUTRO }] },
     ]);
     await expect(aberta.adicionarVersao(REGRA, { ...dto, versao: 3 } as NovaVersaoDto, USUARIO))
@@ -322,11 +318,10 @@ describe('ramos dos services de regras tributárias', () => {
     const pedido = { ...dto, versao: 3 } as NovaVersaoDto;
     const ateCatalogo = (): Passo[] => [
       { valor: [origem] },
-      { valor: [enquadramentoAtivo] },
+      { valor: [] },
       { valor: [enquadramentoAtivo] },
       { valor: [{ id: BEN }] },
       { valor: [{ id: CLS }] },
-      { valor: [] },
     ];
 
     expect(await codigo(regras([
