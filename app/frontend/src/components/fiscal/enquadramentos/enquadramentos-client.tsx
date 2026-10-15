@@ -32,7 +32,7 @@ import {
 import { AbasDetalhe } from './abas-detalhe';
 import { CodigoFiscalDialog } from './codigo-fiscal-dialog';
 import { DuplicarDialog } from './duplicar-dialog';
-import { EnquadramentoDrawer, type Catalogos } from './enquadramento-drawer';
+import { EnquadramentoDrawer, type Catalogos, type SelecaoCodigo } from './enquadramento-drawer';
 
 const CATALOGOS_VAZIOS: Catalogos = {
   estabelecimentos: [], operacoes: [], produtos: [], clientes: [], cfops: [], ncms: [],
@@ -65,6 +65,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   const [duplicar, setDuplicar] = useState(false);
   const [erroDuplicar, setErroDuplicar] = useState<string | null>(null);
   const [codigoTipo, setCodigoTipo] = useState<'cfops' | 'ncms' | null>(null);
+  const [selecaoCodigo, setSelecaoCodigo] = useState<SelecaoCodigo | null>(null);
   const [recarga, setRecarga] = useState(0);
 
   const carregar = useCallback(async () => {
@@ -211,15 +212,15 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
       >
         <Button type="button" variant="secondary" onClick={() => void enquadramentosApi.exportar(filtros)}>Exportar</Button>
         {podeGerenciar && (
-          <Button type="button" onClick={() => { setErroDrawer(null); setDrawer(true); }}>+ Novo registro</Button>
+          <Button type="button" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>+ Novo registro</Button>
         )}
         <details>
           <summary className="cursor-pointer text-sm">Ações do processo</summary>
           <div className="mt-2 grid gap-1">
-            <Button type="button" variant="secondary" onClick={() => { setErroDrawer(null); setDrawer(true); }}>Cadastrar operação</Button>
+            <Button type="button" variant="secondary" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>Cadastrar operação</Button>
             <Button type="button" variant="secondary" onClick={() => detalhe && setDuplicar(true)}>Duplicar perfil</Button>
-            <Button type="button" variant="secondary" onClick={() => { setErroDrawer(null); setDrawer(true); }}>Relacionar produto e cliente</Button>
-            <Button type="button" variant="secondary" onClick={() => { setErroDrawer(null); setDrawer(true); }}>Controlar prioridade</Button>
+            <Button type="button" variant="secondary" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>Relacionar produto e cliente</Button>
+            <Button type="button" variant="secondary" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>Controlar prioridade</Button>
           </div>
         </details>
       </PageHeader>
@@ -308,6 +309,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         detalhe={selecionadoId ? detalhe : null}
         catalogos={catalogos}
         erro={erroDrawer}
+        selecaoCodigo={selecaoCodigo}
         onFechar={() => setDrawer(false)}
         onSalvar={salvar}
         onErro={setErroDrawer}
@@ -317,7 +319,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         aberto={duplicar}
         prioridadeOrigem={detalhe?.prioridade ?? 1}
         erro={erroDuplicar}
-        onFechar={() => setDuplicar(false)}
+        onFechar={() => { setDuplicar(false); setErroDuplicar(null); }}
         onConfirmar={(corpo) => {
           if (!detalhe) return;
           void enquadramentosApi.duplicar(detalhe.id, { ...corpo, vigenciaFim: corpo.vigenciaFim || undefined, versao: detalhe.versao })
@@ -329,9 +331,14 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         aberto={codigoTipo !== null}
         tipo={codigoTipo}
         onFechar={() => setCodigoTipo(null)}
-        onConfirmar={(corpo) => {
+        onConfirmar={async (corpo) => {
           if (!codigoTipo) return;
-          void enquadramentosApi.criarCodigo(codigoTipo, corpo).then(() => setCodigoTipo(null)).catch(() => undefined);
+          const tipo = codigoTipo;
+          const criado = await enquadramentosApi.criarCodigo(tipo, corpo);
+          const opcoes = await enquadramentosApi.opcoesCodigo(tipo);
+          setCatalogos((atual) => ({ ...atual, [tipo]: opcoes }));
+          setSelecaoCodigo({ tipo, id: criado.id });
+          setCodigoTipo(null);
         }}
       />
     </div>
