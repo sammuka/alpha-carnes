@@ -89,6 +89,8 @@ export const EVENTOS = {
   ENQUADRAMENTO_FISCAL_ALTERADO: 'enquadramento_fiscal_alterado',
   // ── E01-T03 — Regras tributárias (room `fiscal-regras`) ──
   REGRA_TRIBUTARIA_ALTERADA: 'regra_tributaria_alterada',
+  // ── E01-T04 — Simulador fiscal (room `fiscal-simulacoes`) ──
+  SIMULACAO_FISCAL_ALTERADA: 'simulacao_fiscal_alterada',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -516,6 +518,13 @@ export type AcaoRegraTributaria =
   | 'classificacao_criada';
 
 /** Sem percentual, CST ou id de nota. Catálogo manual reusa `regraId` como id da linha criada. */
+export interface SimulacaoFiscalAlteradaPayload {
+  simulacaoId: string;
+  codigo: string;
+  numeroVersao: number;
+  acao: 'simulada' | 'versao_adicionada';
+}
+
 export interface RegraTributariaAlteradaPayload {
   regraId: string;
   enquadramentoId: string;
@@ -607,4 +616,5 @@ export interface PayloadPorEvento {
   regime_tributario_alterado: CadastroFiscalAlteradoPayload;
   enquadramento_fiscal_alterado: EnquadramentoFiscalAlteradoPayload;
   regra_tributaria_alterada: RegraTributariaAlteradaPayload;
+  simulacao_fiscal_alterada: SimulacaoFiscalAlteradaPayload;
 }

@@ -1,10 +1,12 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../../common/auditoria/auditoria.service';
 import { montarPaginado } from '../../../../common/crud/paginacao';
 import { DRIZZLE } from '../../../../database/database.module';
+import { EVENTOS } from '../../../../realtime/events/eventos';
 import * as schema from '../../../../database/schema';
 import {
   clientes,
@@ -20,6 +22,7 @@ import {
 } from '../../../../database/schema';
 import { beneficiosFiscais, classificacoesIbsCbs } from '../../../../database/schema/fiscal-regras.schema';
 import {
+  conflito,
   conflitoConcorrente,
   ehViolacaoUnica,
   exigirVersao,
@@ -73,6 +76,7 @@ export class SimulacoesFiscaisService {
   constructor(
     @Inject(DRIZZLE) private readonly drizzle: { db: Db },
     private readonly auditoria: AuditoriaService,
+    private readonly eventos: EventEmitter2,
   ) {}
 
   private get db(): Db {
@@ -236,6 +240,7 @@ export class SimulacoesFiscaisService {
       await this.auditar(tx, linha, null, usuarioId, dto.justificativa, 'Simulação calculada', 'INSERT');
       return linha;
     });
+    this.emitir('simulada', gravada);
     return this.detalhar(gravada.id);
   }
 
@@ -296,7 +301,13 @@ export class SimulacoesFiscaisService {
         throw err;
       }
     });
+    this.emitir('versao_adicionada', gravada);
     return this.detalhar(gravada.id);
+  }
+
+  async recusarAlteracao(id: string): Promise<never> {
+    await this.obter(this.db, id);
+    conflito('VERSAO_IMUTAVEL', 'A memória calculada não pode ser alterada. Inclua uma versão nova.');
   }
 
   async comparar(id: string, com: string) {
@@ -557,6 +568,15 @@ export class SimulacoesFiscaisService {
       criadoEm: linha.criadoEm,
       atualizadoEm: linha.atualizadoEm,
     };
+  }
+
+  private emitir(acao: 'simulada' | 'versao_adicionada', linha: Pick<Linha, 'id' | 'codigo' | 'numeroVersao'>) {
+    this.eventos.emit(EVENTOS.SIMULACAO_FISCAL_ALTERADA, {
+      simulacaoId: linha.id,
+      codigo: linha.codigo,
+      numeroVersao: linha.numeroVersao,
+      acao,
+    });
   }
 
   private async auditar(
