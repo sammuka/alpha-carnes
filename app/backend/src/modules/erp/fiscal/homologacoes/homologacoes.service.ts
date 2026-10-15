@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, asc, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../../common/auditoria/auditoria.service';
@@ -37,7 +37,7 @@ import { recusarDecisao, type SituacaoHomologacao } from './homologacao-transica
 import { formatarPercentualPtBr } from '../regras/percentual';
 import { RegrasTributariasService } from '../regras/regras.service';
 import { rotuloCompetencia } from '../simulacoes/decimal-memoria';
-import type { CriarHomologacaoDto, ListarHomologacoesQuery } from './dto/homologacao.dto';
+import type { CriarHomologacaoDto, ListarHomologacoesQuery, VincularCenarioDto } from './dto/homologacao.dto';
 
 type Db = NodePgDatabase<typeof schema>;
 type Linha = typeof homologacoesRegras.$inferSelect;
@@ -234,6 +234,48 @@ export class HomologacoesService {
     return this.regras.comparar(regra.origemVersaoId, regra.id);
   }
 
+  async historico(id: string) {
+    await this.obter(this.db, id);
+    const cenarios = await this.db
+      .select({ id: cenariosRegressao.id })
+      .from(cenariosRegressao)
+      .where(eq(cenariosRegressao.homologacaoId, id));
+    const autor = alias(usuarios, 'homologacao_historico_autor');
+    const idsCenario = cenarios.map((cenario) => cenario.id);
+    const linhas = await this.db
+      .select({
+        operacao: schema.auditoria.operacao,
+        usuarioNome: autor.nome,
+        criadoEm: schema.auditoria.createdAt,
+        justificativa: schema.auditoria.justificativa,
+        dadosNovos: schema.auditoria.dadosNovos,
+        dadosAnteriores: schema.auditoria.dadosAnteriores,
+      })
+      .from(schema.auditoria)
+      .leftJoin(autor, eq(autor.id, schema.auditoria.usuarioId))
+      .where(or(
+        and(eq(schema.auditoria.tabela, 'homologacoes_regras'), eq(schema.auditoria.registroId, id)),
+        idsCenario.length > 0
+          ? and(eq(schema.auditoria.tabela, 'cenarios_regressao'), inArray(schema.auditoria.registroId, idsCenario))
+          : undefined,
+      ))
+      .orderBy(schema.auditoria.createdAt);
+    return linhas.map((linha) => {
+      const novos = (linha.dadosNovos ?? {}) as Record<string, unknown>;
+      const anteriores = (linha.dadosAnteriores ?? {}) as Record<string, unknown>;
+      return {
+        operacao: linha.operacao,
+        situacaoAnterior: anteriores.situacao ?? null,
+        situacaoNova: novos.situacao ?? null,
+        usuarioNome: linha.usuarioNome,
+        criadoEm: linha.criadoEm,
+        justificativa: linha.justificativa,
+        resumo: novos.resumo ?? null,
+        versao: novos.versao ?? null,
+      };
+    });
+  }
+
   async abrir(dto: CriarHomologacaoDto, usuarioId: string) {
     const resultado = await this.db.transaction(async (tx) => {
       const gravado = await this.aplicarAbrir(tx, dto, usuarioId);
@@ -250,6 +292,26 @@ export class HomologacoesService {
 
   async rejeitar(id: string, dto: CorpoDecisaoDto, usuarioId: string) {
     return this.decidir(id, dto, usuarioId, 'rejeitar');
+  }
+
+  async vincular(id: string, dto: VincularCenarioDto, usuarioId: string) {
+    const resultado = await this.db.transaction(async (tx) => {
+      const gravado = await this.aplicarVinculo(tx, id, dto, usuarioId);
+      await this.auditoria.registrar(tx, gravado.auditoria);
+      return gravado;
+    });
+    this.eventos.emit(EVENTO, resultado.payload);
+    return this.detalhar(id);
+  }
+
+  async publicar(id: string, dto: CorpoDecisaoDto, usuarioId: string) {
+    const resultado = await this.db.transaction(async (tx) => {
+      const gravado = await this.aplicarPublicacao(tx, id, dto, usuarioId);
+      await this.auditoria.registrar(tx, gravado.auditoria);
+      return gravado;
+    });
+    this.eventos.emit(EVENTO, resultado.payload);
+    return this.detalhar(id);
   }
 
   private async decidir(id: string, dto: CorpoDecisaoDto, usuarioId: string, acao: 'aprovar' | 'rejeitar') {
@@ -362,6 +424,105 @@ export class HomologacoesService {
         usuarioId,
         dadosAnteriores: { situacao: atual.situacao, versao: atual.versao },
         dadosNovos: { situacao: linha.situacao, versao: linha.versao, resumo },
+        justificativa: dto.justificativa,
+      },
+    };
+  }
+
+  private async aplicarVinculo(tx: Tx, id: string, dto: VincularCenarioDto, usuarioId: string) {
+    const atual = await this.obterBloqueado(tx, id);
+    recusarDecisao(atual.situacao as SituacaoHomologacao, 'vincular');
+    exigirVersao(atual.versao, dto.versao);
+    const [simulacao] = await tx
+      .select()
+      .from(simulacoesFiscais)
+      .where(and(eq(simulacoesFiscais.id, dto.simulacaoId), isNull(simulacoesFiscais.deletedAt)));
+    if (!simulacao || simulacao.situacao !== 'CALCULADA' || simulacao.regraId !== atual.regraId) {
+      regraViolada(
+        'CENARIO_REGRA_DIVERGENTE',
+        'O cenário de regressão precisa ser uma memória calculada desta versão da regra.',
+      );
+    }
+    const agora = new Date();
+    const [cenario] = await tx.insert(cenariosRegressao).values({
+      homologacaoId: atual.id,
+      simulacaoId: simulacao.id,
+      criadoPorId: usuarioId,
+      atualizadoPorId: usuarioId,
+    }).returning();
+    if (!cenario) throw new Error('Falha ao gravar cenário de regressão');
+    const [linha] = await tx.update(homologacoesRegras).set({
+      justificativa: dto.justificativa,
+      versao: atual.versao + 1,
+      atualizadoPorId: usuarioId,
+      updatedAt: agora,
+    }).where(eq(homologacoesRegras.id, id)).returning();
+    if (!linha) throw new NotFoundException('Homologação não encontrada');
+    return {
+      payload: {
+        homologacaoId: linha.id,
+        regraId: linha.regraId,
+        codigo: linha.codigo,
+        acao: 'cenario_vinculado' as const,
+        situacao: linha.situacao,
+      },
+      auditoria: {
+        tabela: 'cenarios_regressao',
+        registroId: cenario.id,
+        operacao: 'INSERT' as const,
+        modulo: MODULO,
+        usuarioId,
+        dadosAnteriores: {},
+        dadosNovos: { resumo: 'Cenário de regressão vinculado', versao: cenario.versao },
+        justificativa: dto.justificativa,
+      },
+    };
+  }
+
+  private async aplicarPublicacao(tx: Tx, id: string, dto: CorpoDecisaoDto, usuarioId: string) {
+    const atual = await this.obterBloqueado(tx, id);
+    recusarDecisao(atual.situacao as SituacaoHomologacao, 'publicar');
+    exigirVersao(atual.versao, dto.versao);
+    const [regra] = await tx
+      .select({ submetidoPorId: regrasTributarias.submetidoPorId })
+      .from(regrasTributarias)
+      .where(eq(regrasTributarias.id, atual.regraId));
+    if (!regra) throw new NotFoundException('Regra tributária não encontrada');
+    exigirSegregacao(regra.submetidoPorId, usuarioId);
+    const vinculos = await tx
+      .select({ id: cenariosRegressao.id })
+      .from(cenariosRegressao)
+      .where(and(eq(cenariosRegressao.homologacaoId, id), isNull(cenariosRegressao.deletedAt)));
+    if (vinculos.length === 0) {
+      regraViolada('CENARIO_REGRESSAO_AUSENTE', 'A publicação exige ao menos um cenário de regressão.');
+    }
+    const agora = new Date();
+    const [linha] = await tx.update(homologacoesRegras).set({
+      situacao: 'PUBLICADA',
+      publicadoPorId: usuarioId,
+      publicadoEm: agora,
+      justificativa: dto.justificativa,
+      versao: atual.versao + 1,
+      atualizadoPorId: usuarioId,
+      updatedAt: agora,
+    }).where(eq(homologacoesRegras.id, id)).returning();
+    if (!linha) throw new NotFoundException('Homologação não encontrada');
+    return {
+      payload: {
+        homologacaoId: linha.id,
+        regraId: linha.regraId,
+        codigo: linha.codigo,
+        acao: 'publicada' as const,
+        situacao: linha.situacao,
+      },
+      auditoria: {
+        tabela: 'homologacoes_regras',
+        registroId: linha.id,
+        operacao: 'UPDATE' as const,
+        modulo: MODULO,
+        usuarioId,
+        dadosAnteriores: { situacao: atual.situacao, versao: atual.versao },
+        dadosNovos: { situacao: linha.situacao, versao: linha.versao, resumo: 'Alteração publicada' },
         justificativa: dto.justificativa,
       },
     };

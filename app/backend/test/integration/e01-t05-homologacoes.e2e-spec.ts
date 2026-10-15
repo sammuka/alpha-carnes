@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { INestApplication } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import request from 'supertest';
@@ -209,8 +211,12 @@ describe('E01-T05 homologações de regras', () => {
       .send({ codigo: String(200000 + seq).padStart(6, '0'), descricao: `Classificação ${cnpjRaiz}`, justificativa: MOTIVO });
     expect(classificacao.status).toBe(201);
     return {
-      enquadramentoId: enquadramento.body.id as string,
+      estabelecimentoId: aprovado.body.id as string,
       operacaoId: operacao.body.id as string,
+      clienteId: cliente.body.id as string,
+      produtoId: produto.body.id as string,
+      ncmId: ncm.body.id as string,
+      enquadramentoId: enquadramento.body.id as string,
       cfopId: cfop.body.id as string,
       beneficioFiscalId: beneficio.body.id as string,
       classificacaoIbsCbsId: classificacao.body.id as string,
@@ -457,6 +463,115 @@ describe('E01-T05 homologações de regras', () => {
     const aberta = await abrir(admin, regraId);
     const res = await decidir('aprovar', gerenciar, aberta.body.id as string, 1, 'Tentativa sem a permissão de aprovar.');
     expect(res.status).toBe(403);
+  });
+
+  async function homologacaoAprovada() {
+    const aprovada = await regraAprovada();
+    const aberta = await abrir(admin, aprovada.regraId);
+    expect(aberta.status).toBe(201);
+    const decidida = await decidir('aprovar', adminB, aberta.body.id as string, 1, 'Homologação conferida por outro usuário.');
+    expect(decidida.status).toBe(200);
+    return { id: aberta.body.id as string, regraId: aprovada.regraId, base: aprovada.base, versao: decidida.body.versao as number };
+  }
+
+  async function simular(base: Awaited<ReturnType<typeof baseFiscal>>) {
+    const res = await request(app.getHttpServer()).post('/fiscal/simulacoes').set('Cookie', admin).send({
+      estabelecimentoId: base.estabelecimentoId,
+      operacaoId: base.operacaoId,
+      clienteId: base.clienteId,
+      produtoId: base.produtoId,
+      ncmId: base.ncmId,
+      quantidade: '10,000',
+      pesoNf: '982,000',
+      valor: '1.000,00',
+      desconto: '0,00',
+      competencia: '2026-10',
+      enquadramentoId: base.enquadramentoId,
+      justificativa: 'Motivo da alteração desta simulação.',
+    });
+    expect(res.status).toBe(201);
+    return res.body.id as string;
+  }
+
+  function vincular(cookies: string, id: string, simulacaoId: string, versao: number, justificativa: string) {
+    return request(app.getHttpServer())
+      .post(`/fiscal/homologacoes/${id}/cenarios`)
+      .set('Cookie', cookies)
+      .send({ simulacaoId, versao, justificativa });
+  }
+
+  function publicar(cookies: string, id: string, versao: number, justificativa: string) {
+    return request(app.getHttpServer())
+      .post(`/fiscal/homologacoes/${id}/publicar`)
+      .set('Cookie', cookies)
+      .send({ versao, justificativa });
+  }
+
+  async function contarNotas() {
+    const notas = await db().execute(sql`SELECT COUNT(*)::int AS n FROM notas_fiscais`);
+    const fornecedor = await db().execute(sql`SELECT COUNT(*)::int AS n FROM notas_fiscais_fornecedor`);
+    return {
+      notas: Number((notas.rows[0] as { n: number }).n),
+      fornecedor: Number((fornecedor.rows[0] as { n: number }).n),
+    };
+  }
+
+  it('publicar sem cenário não publica', async () => {
+    const { id } = await homologacaoAprovada();
+    eventos.mockClear();
+    const res = await publicar(adminB, id, 2, 'Publicação sem memória de regressão.');
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('CENARIO_REGRESSAO_AUSENTE');
+    expect(mensagemDe(res.body)).toBe('A publicação exige ao menos um cenário de regressão.');
+    const detalhe = await request(app.getHttpServer()).get(`/fiscal/homologacoes/${id}`).set('Cookie', adminB);
+    expect(detalhe.body.situacao).toBe('Aprovada');
+    expect(contarEventos()).toBe(0);
+  });
+
+  it('cenário de outra regra não vincula', async () => {
+    await db().execute(sql`DELETE FROM cenarios_regressao`);
+    const { id, versao } = await homologacaoAprovada();
+    const outra = await regraAprovada();
+    const memoriaDeOutraVersao = await simular(outra.base);
+    const res = await vincular(adminB, id, memoriaDeOutraVersao, versao, 'Memória de outra versão.');
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('CENARIO_REGRA_DIVERGENTE');
+    const n = await db().execute(sql`SELECT COUNT(*)::int AS n FROM cenarios_regressao`);
+    expect(n.rows[0]).toMatchObject({ n: 0 });
+  });
+
+  it('publicar não muda a regra nem grava nota', async () => {
+    const { id, regraId, base, versao } = await homologacaoAprovada();
+    const simulacaoId = await simular(base);
+    const vinculado = await vincular(adminB, id, simulacaoId, versao, 'Vínculo da memória desta versão.');
+    expect(vinculado.status).toBe(201);
+    const antesNotas = await contarNotas();
+    const antesRegra = await lerRegra(regraId);
+    const antesAuditoria = await contarAuditoria(id);
+    const res = await publicar(adminB, id, vinculado.body.versao as number, 'Publicação com a memória desta versão.');
+    expect(res.status).toBe(200);
+    expect(res.body.situacao).toBe('Publicada');
+    expect(await contarNotas()).toEqual(antesNotas);
+    const regra = await lerRegra(regraId);
+    expect(regra.situacao).toBe(antesRegra.situacao);
+    expect(regra.updatedAt).toBe(antesRegra.updatedAt);
+    expect(JSON.stringify(res.body)).not.toMatch(/xml|protocolo|danfe|"chave"/i);
+    expect(await contarAuditoria(id)).toBe(antesAuditoria + 1);
+    const historico = await request(app.getHttpServer()).get(`/fiscal/homologacoes/${id}/historico`).set('Cookie', adminB);
+    expect(historico.status).toBe(200);
+    const texto = JSON.stringify(historico.body);
+    expect(texto).toContain('Alteração publicada');
+    expect(texto).not.toContain('homologacoes_regras');
+    expect(texto).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
+    const deNovo = await publicar(adminB, id, res.body.versao as number, 'Segunda publicação da mesma revisão.');
+    expect(deNovo.status).toBe(409);
+    expect(codigoDe(deNovo.body)).toBe('TRANSICAO_INVALIDA');
+  });
+
+  it('o serviço não chama global.fetch', () => {
+    const fonte = readFileSync(join('src/modules/erp/fiscal/homologacoes/homologacoes.service.ts'), 'utf8');
+    expect(fonte).not.toMatch(/global\.fetch/);
+    expect(fonte).not.toMatch(/\bfetch\(/);
   });
 
   it('quem só tem leitura não abre revisão', async () => {

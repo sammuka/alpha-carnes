@@ -11,9 +11,11 @@ import {
   corpoDecisaoSchema,
   criarHomologacaoSchema,
   listarHomologacoesSchema,
+  vincularCenarioSchema,
   type CorpoDecisaoDto,
   type CriarHomologacaoDto,
   type ListarHomologacoesQuery,
+  type VincularCenarioDto,
 } from './dto/homologacao.dto';
 import { HomologacoesService } from './homologacoes.service';
 
@@ -49,6 +51,12 @@ export class HomologacoesController {
     return this.homologacoes.listar(query);
   }
 
+  @Get(':id/historico')
+  @RequirePermissoes('FISCAL_HOMOLOGACOES_LER')
+  historico(@Param('id', new ZodValidationPipe(uuidSchema)) id: string) {
+    return this.homologacoes.historico(id);
+  }
+
   @Get(':id/diff')
   @RequirePermissoes('FISCAL_HOMOLOGACOES_LER')
   diff(@Param('id', new ZodValidationPipe(uuidSchema)) id: string) {
@@ -59,6 +67,28 @@ export class HomologacoesController {
   @RequirePermissoes('FISCAL_HOMOLOGACOES_LER')
   detalhar(@Param('id', new ZodValidationPipe(uuidSchema)) id: string) {
     return this.homologacoes.detalhar(id);
+  }
+
+  @Post(':id/cenarios')
+  @HttpCode(201)
+  @RequirePermissoes('FISCAL_HOMOLOGACOES_GERENCIAR')
+  cenarios(
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Body(new ZodValidationPipe(vincularCenarioSchema)) dto: VincularCenarioDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.homologacoes.vincular(id, dto, user.sub);
+  }
+
+  @Post(':id/publicar')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_HOMOLOGACOES_APROVAR')
+  publicar(
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Body(new ZodValidationPipe(corpoDecisaoSchema)) dto: CorpoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.homologacoes.publicar(id, dto, user.sub);
   }
 
   @Post(':id/aprovar')
