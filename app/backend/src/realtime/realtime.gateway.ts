@@ -61,6 +61,7 @@ import {
   type EnquadramentoFiscalAlteradoPayload,
   type RegraTributariaAlteradaPayload,
   type SimulacaoFiscalAlteradaPayload,
+  type HomologacaoRegraAlteradaPayload,
 } from './events/eventos';
 
 /** Socket autenticado: carrega o access token validado no handshake, inclusive `exp`. */
@@ -219,6 +220,15 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
       this.broadcastRoom('fiscal-simulacoes', EVENTOS.SIMULACAO_FISCAL_ALTERADA, payload);
     } catch (err) {
       this.logger.error(`Falha ao fazer broadcast de ${EVENTOS.SIMULACAO_FISCAL_ALTERADA}`, err as Error);
+    }
+  }
+
+  @OnEvent(EVENTOS.HOMOLOGACAO_REGRA_ALTERADA)
+  handleHomologacaoRegraAlterada(payload: HomologacaoRegraAlteradaPayload): void {
+    try {
+      this.broadcastRoom('fiscal-homologacoes', EVENTOS.HOMOLOGACAO_REGRA_ALTERADA, payload);
+    } catch (err) {
+      this.logger.error(`Falha ao fazer broadcast de ${EVENTOS.HOMOLOGACAO_REGRA_ALTERADA}`, err as Error);
     }
   }
 

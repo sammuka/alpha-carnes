@@ -51,6 +51,12 @@ export class HomologacoesController {
     return this.homologacoes.listar(query);
   }
 
+  @Get(':id/pre-condicoes')
+  @RequirePermissoes('FISCAL_HOMOLOGACOES_LER')
+  preCondicoes(@Param('id', new ZodValidationPipe(uuidSchema)) id: string) {
+    return this.homologacoes.preCondicoes(id);
+  }
+
   @Get(':id/historico')
   @RequirePermissoes('FISCAL_HOMOLOGACOES_LER')
   historico(@Param('id', new ZodValidationPipe(uuidSchema)) id: string) {

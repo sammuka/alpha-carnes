@@ -574,6 +574,58 @@ describe('E01-T05 homologações de regras', () => {
     expect(fonte).not.toMatch(/\bfetch\(/);
   });
 
+  it('duas aprovações simultâneas: uma 200 e uma 409', async () => {
+    const { regraId } = await regraAprovada();
+    const aberta = await abrir(admin, regraId);
+    expect(aberta.status).toBe(201);
+    const antes = contarEventos();
+    const respostas = await Promise.all([
+      decidir('aprovar', adminB, aberta.body.id as string, 1, 'Decisão simultânea da revisão.'),
+      decidir('aprovar', adminB, aberta.body.id as string, 1, 'Decisão simultânea da revisão.'),
+    ]);
+    expect(respostas.map((resposta) => resposta.status).sort()).toEqual([200, 409]);
+    const conflito = respostas.find((resposta) => resposta.status === 409);
+    expect(codigoDe(conflito?.body ?? {})).toBe('CONFLITO_CONCORRENTE');
+    expect(contarEventos()).toBe(antes + 1);
+    const emitidos = eventos.mock.calls.filter((chamada) => chamada[0] === 'homologacao_regra_alterada');
+    const payload = emitidos.at(-1)?.[1] as Record<string, unknown>;
+    expect(payload.acao).toBe('aprovada');
+    expect(JSON.stringify(payload)).not.toMatch(/p_icms|xml/);
+  });
+
+  it('422 e 409 não emitem', async () => {
+    const { regraId } = await regraAprovada();
+    const aberta = await abrir(admin, regraId);
+    expect(aberta.status).toBe(201);
+    const antes = contarEventos();
+    const segregacao = await decidir('aprovar', admin, aberta.body.id as string, 1, 'Autor não decide a própria submissão.');
+    expect(segregacao.status).toBe(422);
+    const versao = await decidir('aprovar', adminB, aberta.body.id as string, 9, 'Versão que outro usuário já alterou.');
+    expect(versao.status).toBe(409);
+    expect(contarEventos()).toBe(antes);
+  });
+
+  it('pré-condições provisórias e cenário só depois do vínculo', async () => {
+    const { id, base, versao } = await homologacaoAprovada();
+    const antes = await request(app.getHttpServer()).get(`/fiscal/homologacoes/${id}/pre-condicoes`).set('Cookie', adminB);
+    expect(antes.status).toBe(200);
+    const porCodigo = (codigo: string) => (antes.body as Array<{ codigo: string; atendida: boolean; provisoria: boolean; texto?: string }>)
+      .find((item) => item.codigo === codigo);
+    expect(porCodigo('DUPLA_APROVACAO')).toMatchObject({
+      atendida: false,
+      provisoria: true,
+      texto: 'Um aprovador diferente de quem submeteu a regra registra a decisão. O quórum numérico permanece provisório.',
+    });
+    expect(porCodigo('DATAS_COMERCIAL_FISCAL_EFETIVA')).toMatchObject({ atendida: false, provisoria: true });
+    expect(porCodigo('CENARIO_REGRESSAO')?.atendida).toBe(false);
+    const simulacaoId = await simular(base);
+    const vinculado = await vincular(adminB, id, simulacaoId, versao, 'Vínculo para a pré-condição de regressão.');
+    expect(vinculado.status).toBe(201);
+    const depois = await request(app.getHttpServer()).get(`/fiscal/homologacoes/${id}/pre-condicoes`).set('Cookie', adminB);
+    const cenario = (depois.body as Array<{ codigo: string; atendida: boolean }>).find((item) => item.codigo === 'CENARIO_REGRESSAO');
+    expect(cenario?.atendida).toBe(true);
+  });
+
   it('quem só tem leitura não abre revisão', async () => {
     const { regraId } = await regraAprovada();
     const res = await abrir(leitor, regraId);

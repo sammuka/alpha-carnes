@@ -37,6 +37,7 @@ import { recusarDecisao, type SituacaoHomologacao } from './homologacao-transica
 import { formatarPercentualPtBr } from '../regras/percentual';
 import { RegrasTributariasService } from '../regras/regras.service';
 import { rotuloCompetencia } from '../simulacoes/decimal-memoria';
+import { EVENTOS } from '../../../../realtime/events/eventos';
 import type { CriarHomologacaoDto, ListarHomologacoesQuery, VincularCenarioDto } from './dto/homologacao.dto';
 
 type Db = NodePgDatabase<typeof schema>;
@@ -44,7 +45,6 @@ type Linha = typeof homologacoesRegras.$inferSelect;
 type Situacao = keyof typeof ROTULOS_SITUACAO_HOMOLOGACAO;
 
 const MODULO = 'fiscal.homologacoes';
-const EVENTO = 'homologacao_regra_alterada';
 const MSG_ABERTA = 'Já existe homologação em aberto ou publicada para esta versão.';
 
 function razao(valor: string): string {
@@ -234,6 +234,39 @@ export class HomologacoesService {
     return this.regras.comparar(regra.origemVersaoId, regra.id);
   }
 
+  async preCondicoes(id: string) {
+    const homologacao = await this.obter(this.db, id);
+    const [regra] = await this.db
+      .select({
+        situacao: regrasTributarias.situacao,
+        deletedAt: regrasTributarias.deletedAt,
+        submetidoPorId: regrasTributarias.submetidoPorId,
+      })
+      .from(regrasTributarias)
+      .where(eq(regrasTributarias.id, homologacao.regraId));
+    const vinculos = await this.db
+      .select({ id: cenariosRegressao.id })
+      .from(cenariosRegressao)
+      .where(and(eq(cenariosRegressao.homologacaoId, id), isNull(cenariosRegressao.deletedAt)));
+    return [
+      {
+        codigo: 'REGRA_APROVADA',
+        atendida: regra?.situacao === 'APROVADA' && regra.deletedAt == null,
+        provisoria: false,
+      },
+      { codigo: 'AUTOR_IDENTIFICADO', atendida: Boolean(regra?.submetidoPorId), provisoria: false },
+      { codigo: 'CENARIO_REGRESSAO', atendida: vinculos.length > 0, provisoria: false },
+      { codigo: 'DATAS_COMERCIAL_FISCAL_EFETIVA', atendida: false, provisoria: true },
+      {
+        codigo: 'DUPLA_APROVACAO',
+        atendida: false,
+        provisoria: true,
+        texto: 'Um aprovador diferente de quem submeteu a regra registra a decisão. O quórum numérico permanece provisório.',
+      },
+      { codigo: 'PERFIS_ALEM_ADMINISTRADOR', atendida: false, provisoria: true },
+    ];
+  }
+
   async historico(id: string) {
     await this.obter(this.db, id);
     const cenarios = await this.db
@@ -282,7 +315,7 @@ export class HomologacoesService {
       await this.auditoria.registrar(tx, gravado.auditoria);
       return gravado;
     });
-    this.eventos.emit(EVENTO, resultado.payload);
+    this.eventos.emit(EVENTOS.HOMOLOGACAO_REGRA_ALTERADA, resultado.payload);
     return resultado.corpo;
   }
 
@@ -300,7 +333,7 @@ export class HomologacoesService {
       await this.auditoria.registrar(tx, gravado.auditoria);
       return gravado;
     });
-    this.eventos.emit(EVENTO, resultado.payload);
+    this.eventos.emit(EVENTOS.HOMOLOGACAO_REGRA_ALTERADA, resultado.payload);
     return this.detalhar(id);
   }
 
@@ -310,7 +343,7 @@ export class HomologacoesService {
       await this.auditoria.registrar(tx, gravado.auditoria);
       return gravado;
     });
-    this.eventos.emit(EVENTO, resultado.payload);
+    this.eventos.emit(EVENTOS.HOMOLOGACAO_REGRA_ALTERADA, resultado.payload);
     return this.detalhar(id);
   }
 
@@ -320,7 +353,7 @@ export class HomologacoesService {
       await this.auditoria.registrar(tx, gravado.auditoria);
       return gravado;
     });
-    this.eventos.emit(EVENTO, resultado.payload);
+    this.eventos.emit(EVENTOS.HOMOLOGACAO_REGRA_ALTERADA, resultado.payload);
     return this.detalhar(id);
   }
 
@@ -387,8 +420,8 @@ export class HomologacoesService {
     acao: 'aprovar' | 'rejeitar',
   ) {
     const atual = await this.obterBloqueado(tx, id);
-    recusarDecisao(atual.situacao as SituacaoHomologacao, acao);
     exigirVersao(atual.versao, dto.versao);
+    recusarDecisao(atual.situacao as SituacaoHomologacao, acao);
     const [regra] = await tx
       .select({ submetidoPorId: regrasTributarias.submetidoPorId })
       .from(regrasTributarias)
@@ -431,8 +464,8 @@ export class HomologacoesService {
 
   private async aplicarVinculo(tx: Tx, id: string, dto: VincularCenarioDto, usuarioId: string) {
     const atual = await this.obterBloqueado(tx, id);
-    recusarDecisao(atual.situacao as SituacaoHomologacao, 'vincular');
     exigirVersao(atual.versao, dto.versao);
+    recusarDecisao(atual.situacao as SituacaoHomologacao, 'vincular');
     const [simulacao] = await tx
       .select()
       .from(simulacoesFiscais)
@@ -481,8 +514,8 @@ export class HomologacoesService {
 
   private async aplicarPublicacao(tx: Tx, id: string, dto: CorpoDecisaoDto, usuarioId: string) {
     const atual = await this.obterBloqueado(tx, id);
-    recusarDecisao(atual.situacao as SituacaoHomologacao, 'publicar');
     exigirVersao(atual.versao, dto.versao);
+    recusarDecisao(atual.situacao as SituacaoHomologacao, 'publicar');
     const [regra] = await tx
       .select({ submetidoPorId: regrasTributarias.submetidoPorId })
       .from(regrasTributarias)

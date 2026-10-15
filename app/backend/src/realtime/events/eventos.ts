@@ -91,6 +91,8 @@ export const EVENTOS = {
   REGRA_TRIBUTARIA_ALTERADA: 'regra_tributaria_alterada',
   // ── E01-T04 — Simulador fiscal (room `fiscal-simulacoes`) ──
   SIMULACAO_FISCAL_ALTERADA: 'simulacao_fiscal_alterada',
+  // ── E01-T05 — Homologação de regras (room `fiscal-homologacoes`) ──
+  HOMOLOGACAO_REGRA_ALTERADA: 'homologacao_regra_alterada',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -525,6 +527,14 @@ export interface SimulacaoFiscalAlteradaPayload {
   acao: 'simulada' | 'versao_adicionada';
 }
 
+export interface HomologacaoRegraAlteradaPayload {
+  homologacaoId: string;
+  regraId: string;
+  codigo: string;
+  acao: 'revisao_aberta' | 'cenario_vinculado' | 'aprovada' | 'rejeitada' | 'publicada';
+  situacao: string;
+}
+
 export interface RegraTributariaAlteradaPayload {
   regraId: string;
   enquadramentoId: string;
@@ -617,4 +627,5 @@ export interface PayloadPorEvento {
   enquadramento_fiscal_alterado: EnquadramentoFiscalAlteradoPayload;
   regra_tributaria_alterada: RegraTributariaAlteradaPayload;
   simulacao_fiscal_alterada: SimulacaoFiscalAlteradaPayload;
+  homologacao_regra_alterada: HomologacaoRegraAlteradaPayload;
 }
