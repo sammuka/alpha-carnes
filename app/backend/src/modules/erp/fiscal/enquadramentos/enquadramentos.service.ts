@@ -53,6 +53,9 @@ type Linha = typeof enquadramentosFiscais.$inferSelect;
 
 const MODULO = 'fiscal.enquadramentos';
 
+/** `codigo` é texto numérico (CHECK `^[1-9][0-9]{0,17}$`): ordena como número, "9" antes de "10". */
+const codigoNumerico = sql`${enquadramentosFiscais.codigo}::bigint`;
+
 const ROTULOS_TP_NF: Record<string, string> = { '0': 'Entrada', '1': 'Saída' };
 const ROTULOS_FIN_NFE: Record<string, string> = {
   '1': 'Operação normal',
@@ -146,7 +149,7 @@ export class EnquadramentosService {
       .innerJoin(produtos, eq(produtos.id, enquadramentosFiscais.produtoId))
       .innerJoin(clientes, eq(clientes.id, enquadramentosFiscais.clienteId))
       .where(where)
-      .orderBy(ordem, asc(enquadramentosFiscais.codigo))
+      .orderBy(ordem, asc(codigoNumerico))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
     const data = linhas.map((linha) => ({
@@ -214,7 +217,7 @@ export class EnquadramentosService {
       .innerJoin(clientes, eq(clientes.id, enquadramentosFiscais.clienteId))
       .innerJoin(usuarios, eq(usuarios.id, enquadramentosFiscais.atualizadoPorId))
       .where(where)
-      .orderBy(asc(operacoes.rotulo), asc(enquadramentosFiscais.codigo));
+      .orderBy(asc(operacoes.rotulo), asc(codigoNumerico));
     return montarCsvEnquadramentos(linhas.map((linha) => ({
       codigo: linha.codigo,
       operacao: linha.operacao,
@@ -372,7 +375,7 @@ export class EnquadramentosService {
       .from(auditoria)
       .leftJoin(usuarios, eq(usuarios.id, auditoria.usuarioId))
       .where(and(eq(auditoria.tabela, 'enquadramentos_fiscais'), eq(auditoria.registroId, id)))
-      .orderBy(asc(auditoria.createdAt));
+      .orderBy(asc(auditoria.createdAt), asc(auditoria.id));
     const resposta = [];
     for (const linha of linhas) {
       const anterior = (linha.dadosAnteriores ?? {}) as { situacao?: string; versao?: number; cfopId?: string };
@@ -556,7 +559,7 @@ export class EnquadramentosService {
           gte(enquadramentosFiscais.vigenciaFim, dto.data),
         ),
       ))
-      .orderBy(asc(enquadramentosFiscais.codigo));
+      .orderBy(asc(codigoNumerico));
 
     const classificacao = classificarEnquadramentos(linhas);
     if (classificacao.tipo === 'empate') {
@@ -638,21 +641,21 @@ export class EnquadramentosService {
   }
 
   private async exigirPreCondicoes(tx: Tx, chave: ChaveEnquadramento) {
-    const [operacao] = await tx.select({ deletedAt: operacoes.deletedAt }).from(operacoes).where(eq(operacoes.id, chave.operacaoId));
+    const [operacao] = await tx.select({ deletedAt: operacoes.deletedAt }).from(operacoes).where(eq(operacoes.id, chave.operacaoId)).for('share');
     if (!operacao || operacao.deletedAt) {
       regraViolada('OPERACAO_INDISPONIVEL', 'Operação indisponível.');
     }
-    const [produto] = await tx.select({ status: produtos.status, deletedAt: produtos.deletedAt }).from(produtos).where(eq(produtos.id, chave.produtoId));
+    const [produto] = await tx.select({ status: produtos.status, deletedAt: produtos.deletedAt }).from(produtos).where(eq(produtos.id, chave.produtoId)).for('share');
     if (!produto || produto.deletedAt || produto.status !== 'ativo') {
       regraViolada('PRODUTO_INATIVO', 'Produto inativo ou removido.');
     }
-    const [cliente] = await tx.select({ status: clientes.status, deletedAt: clientes.deletedAt }).from(clientes).where(eq(clientes.id, chave.clienteId));
+    const [cliente] = await tx.select({ status: clientes.status, deletedAt: clientes.deletedAt }).from(clientes).where(eq(clientes.id, chave.clienteId)).for('share');
     if (!cliente || cliente.deletedAt || cliente.status !== 'ativo') {
       regraViolada('CLIENTE_INATIVO', 'Cliente inativo ou removido.');
     }
-    const [cfop] = await tx.select({ deletedAt: cfops.deletedAt }).from(cfops).where(eq(cfops.id, chave.cfopId));
+    const [cfop] = await tx.select({ deletedAt: cfops.deletedAt }).from(cfops).where(eq(cfops.id, chave.cfopId)).for('share');
     if (!cfop || cfop.deletedAt) regraViolada('CFOP_INDISPONIVEL', 'CFOP indisponível.');
-    const [ncm] = await tx.select({ deletedAt: ncms.deletedAt }).from(ncms).where(eq(ncms.id, chave.ncmId));
+    const [ncm] = await tx.select({ deletedAt: ncms.deletedAt }).from(ncms).where(eq(ncms.id, chave.ncmId)).for('share');
     if (!ncm || ncm.deletedAt) regraViolada('NCM_INDISPONIVEL', 'NCM indisponível.');
   }
 

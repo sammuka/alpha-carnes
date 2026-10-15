@@ -650,4 +650,26 @@ describe('E01-T02 enquadramentos fiscais', () => {
     expect(res.text).toContain(`;'${nome};`);
     expect(res.text).not.toContain(`;${nome};`);
   });
+
+  it('listagem e exportação ordenam o código como número ("700000000001" antes de "1000000000001")', async () => {
+    const base = await baseAprovada();
+    const criado = await request(app.getHttpServer()).post('/fiscal/enquadramentos').set('Cookie', adminA).send(corpo(base));
+    expect(criado.status).toBe(201);
+    for (const codigo of ['1000000000001', '700000000001']) {
+      await db().execute(sql`INSERT INTO enquadramentos_fiscais (codigo, empresa_id, estabelecimento_id, operacao_id, tp_nf, fin_nfe, cfop_id, abrangencia, tipo_produto, produto_id, ncm_id, cest, cliente_id, vigencia_inicio, vigencia_fim, prioridade, situacao, criado_por_id, atualizado_por_id)
+        SELECT ${codigo}, empresa_id, estabelecimento_id, operacao_id, tp_nf, fin_nfe, cfop_id, abrangencia, tipo_produto, produto_id, ncm_id, cest, cliente_id, vigencia_inicio, vigencia_fim, 99, 'ATIVA', criado_por_id, atualizado_por_id
+        FROM enquadramentos_fiscais WHERE id = ${criado.body.id}`);
+    }
+    const lista = await request(app.getHttpServer())
+      .get(`/fiscal/enquadramentos?estabelecimentoId=${base.estabelecimentoId}`)
+      .set('Cookie', adminA);
+    expect(lista.status).toBe(200);
+    const ordem = (lista.body.data as { codigo: string }[]).map((linha) => linha.codigo).filter((c) => c.length > 6);
+    expect(ordem).toEqual(['700000000001', '1000000000001']);
+    const csv = await request(app.getHttpServer())
+      .get(`/fiscal/enquadramentos/exportacao?estabelecimentoId=${base.estabelecimentoId}`)
+      .set('Cookie', adminA);
+    expect(csv.text.indexOf('700000000001')).toBeGreaterThan(0);
+    expect(csv.text.indexOf('700000000001')).toBeLessThan(csv.text.indexOf('1000000000001'));
+  });
 });
