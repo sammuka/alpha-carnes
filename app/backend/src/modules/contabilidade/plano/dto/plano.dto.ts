@@ -11,7 +11,7 @@ export const criarCentroSchema = z.object({
   justificativa: motivo,
 });
 
-export const criarContaSchema = z.object({
+const criarContaCampos = z.object({
   codigo,
   nome: texto180,
   classificacao: z.enum(['sintetica', 'analitica']),
@@ -22,7 +22,12 @@ export const criarContaSchema = z.object({
   vigenciaInicio: dataIso,
   vigenciaFim: dataIso.nullable(),
   justificativa: motivo,
-}).refine((d) => d.vigenciaFim === null || d.vigenciaFim >= d.vigenciaInicio, {
+});
+
+const vigenciaCoerente = (d: { vigenciaInicio: string; vigenciaFim: string | null }) =>
+  d.vigenciaFim === null || d.vigenciaFim >= d.vigenciaInicio;
+
+export const criarContaSchema = criarContaCampos.refine(vigenciaCoerente, {
   message: 'Fim de vigência anterior ao início de vigência',
 });
 
@@ -34,8 +39,10 @@ export const listarPlanoSchema = z.object({
   direcao: z.enum(['asc', 'desc']).default('asc'),
 });
 
-export const editarSchema = criarContaSchema.omit({ codigo: true }).extend({
+export const editarSchema = criarContaCampos.omit({ codigo: true }).extend({
   numero: z.number().int().positive(),
+}).refine(vigenciaCoerente, {
+  message: 'Fim de vigência anterior ao início de vigência',
 });
 
 export const revisarSchema = z.object({

@@ -1,7 +1,8 @@
 import { INestApplication } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { createTestApp, cleanupDb, createTestUser } from '../helpers/test-app';
+import request from 'supertest';
+import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { centrosCusto, contasContabeis, contaVersoes } from '../../src/database/schema/contabilidade-plano.schema';
@@ -30,17 +31,24 @@ describe('Plano de contas', () => {
   let adminId: string;
   let userId: string;
   let service: PlanoContasService;
+  let adminCookies: string;
+  let comercialCookies: string;
 
   beforeAll(async () => {
     app = await createTestApp();
     db = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE).db;
     const admin = await createTestUser(app, { perfil: 'administrador' });
+    const comercial = await createTestUser(app, { perfil: 'comercial' });
     const [usuario] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.email, admin.adminEmail));
     if (!usuario) throw new Error('admin ausente');
     adminId = usuario.id;
     userId = usuario.id;
     service = app.get(PlanoContasService);
+    adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
+    comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
   });
+
+  const srv = () => app.getHttpServer();
 
   beforeEach(async () => {
     await db.execute(sql`delete from conta_versoes`);
@@ -259,5 +267,16 @@ describe('Plano de contas', () => {
       response: { message: 'Ciclo na hierarquia da conta' },
     });
     expect((await service.obter('1')).numero).toBe(1);
+  });
+
+  it('nega o plano a um perfil que não é administrador', async () => {
+    const res = await request(srv()).get('/contabilidade/plano').set('Cookie', comercialCookies);
+    expect(res.status).toBe(403);
+  });
+
+  it('não devolve uuid na listagem', async () => {
+    const res = await request(srv()).get('/contabilidade/plano').set('Cookie', adminCookies);
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
   });
 });

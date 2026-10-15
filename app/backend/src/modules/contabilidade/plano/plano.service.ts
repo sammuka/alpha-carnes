@@ -14,15 +14,16 @@ import {
 } from '../../../database/schema';
 import * as schema from '../../../database/schema';
 import { EVENTOS } from '../../../realtime/events/eventos';
-import type {
-  CriarCentroDto,
-  CriarContaDto,
-  DecidirContaDto,
-  EditarContaDto,
-  ListarPlanoQuery,
-  LoteDto,
-  MapearContaDto,
-  RevisarCompetenciaDto,
+import {
+  acaoSchema,
+  type CriarCentroDto,
+  type CriarContaDto,
+  type DecidirContaDto,
+  type EditarContaDto,
+  type ListarPlanoQuery,
+  type LoteDto,
+  type MapearContaDto,
+  type RevisarCompetenciaDto,
 } from './dto/plano.dto';
 import { RegraContabilException } from './regra-contabil.exception';
 
@@ -159,6 +160,44 @@ export class PlanoContasService {
     const linha = linhas[0];
     if (!linha) throw new NotFoundException('Conta não encontrada');
     return this.apresentar(linha);
+  }
+
+  async listarCentrosAtivos() {
+    return this.db.select({
+      codigo: centrosCusto.codigo,
+      nome: centrosCusto.nome,
+    }).from(centrosCusto).where(isNull(centrosCusto.deletedAt)).orderBy(asc(centrosCusto.codigo));
+  }
+
+  async exportarCsv(query: ListarPlanoQuery): Promise<string> {
+    const { itens } = await this.listar(query);
+    const cabecalho = ['Conta contábil', 'Situação', 'Natureza da conta', 'Centro de custo', 'Início de vigência', 'Fim de vigência'];
+    const linhas = itens.map((item) => [
+      item.nome,
+      item.situacaoRotulo,
+      item.naturezaRotulo,
+      item.centroNome,
+      item.vigenciaInicio,
+      item.vigenciaFim ?? '—',
+    ]);
+    const escapar = (valor: string) => (/[",;\n]/.test(valor) ? `"${valor.replace(/"/g, '""')}"` : valor);
+    const corpo = [cabecalho, ...linhas].map((linha) => linha.map(escapar).join(';')).join('\n');
+    return `\uFEFF${corpo}`;
+  }
+
+  async executar(
+    acao: keyof typeof acaoSchema,
+    codigo: string,
+    dto: EditarContaDto | RevisarCompetenciaDto | DecidirContaDto | MapearContaDto,
+    usuarioId: string,
+  ) {
+    if (acao === 'editar') return this.editar(codigo, dto as EditarContaDto, usuarioId);
+    if (acao === 'versionar') return this.versionar(codigo, dto as EditarContaDto, usuarioId);
+    if (acao === 'revisar-competencia') return this.revisarCompetencia(codigo, dto as RevisarCompetenciaDto, usuarioId);
+    if (acao === 'aprovar') return this.aprovar(codigo, dto as DecidirContaDto, usuarioId);
+    if (acao === 'bloquear') return this.bloquear(codigo, dto as DecidirContaDto, usuarioId);
+    if (acao === 'mapear') return this.mapear(codigo, dto as MapearContaDto, usuarioId);
+    throw new NotFoundException();
   }
 
   apresentar(linha: LinhaPlano): ContaApresentada {
