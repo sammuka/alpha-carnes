@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { normalizarNcm, validarNcm } from '../../../../../common/validators/ncm';
-import { justificativaSchema } from './comum.dto';
+import { descricaoSchema, justificativaSchema } from './comum.dto';
 import { listarCodigoFiscalQuerySchema } from './cfop.dto';
 
 export const codigoNcmSchema = z
@@ -10,7 +10,7 @@ export const codigoNcmSchema = z
 
 export const createNcmSchema = z.object({
   codigo: codigoNcmSchema,
-  descricao: z.string().trim().min(1).max(255),
+  descricao: descricaoSchema,
   justificativa: justificativaSchema,
 }).strict();
 export type CreateNcmDto = z.infer<typeof createNcmSchema>;

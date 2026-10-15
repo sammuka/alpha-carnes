@@ -6,7 +6,7 @@ import {
   TIPOS_PRODUTO_FISCAL,
   TP_NF,
 } from '../../../../../database/schema/fiscal-enquadramentos.schema';
-import { justificativaSchema, uuidSchema, versaoSchema } from './comum.dto';
+import { buscaSchema, dataSchema, justificativaSchema, uuidSchema, versaoSchema } from './comum.dto';
 
 export const cestSchema = z
   .string()
@@ -40,8 +40,8 @@ const camposChave = {
 export const createEnquadramentoSchema = z.object({
   estabelecimentoId: uuidSchema,
   ...camposChave,
-  vigenciaInicio: z.iso.date(),
-  vigenciaFim: z.iso.date().optional(),
+  vigenciaInicio: dataSchema,
+  vigenciaFim: dataSchema.optional(),
   prioridade: z.number().int().min(1),
   justificativa: justificativaSchema,
 }).strict().superRefine(vigenciaOrdenada);
@@ -50,8 +50,8 @@ export type CreateEnquadramentoDto = z.infer<typeof createEnquadramentoSchema>;
 /** Rejeita `codigo`, `empresaId` e `estabelecimentoId` (D15, D3). */
 export const updateEnquadramentoSchema = z.object({
   ...camposChave,
-  vigenciaInicio: z.iso.date(),
-  vigenciaFim: z.iso.date().optional(),
+  vigenciaInicio: dataSchema,
+  vigenciaFim: dataSchema.optional(),
   prioridade: z.number().int().min(1),
   versao: versaoSchema,
   justificativa: justificativaSchema,
@@ -59,8 +59,8 @@ export const updateEnquadramentoSchema = z.object({
 export type UpdateEnquadramentoDto = z.infer<typeof updateEnquadramentoSchema>;
 
 export const duplicarEnquadramentoSchema = z.object({
-  vigenciaInicio: z.iso.date(),
-  vigenciaFim: z.iso.date().optional(),
+  vigenciaInicio: dataSchema,
+  vigenciaFim: dataSchema.optional(),
   prioridade: z.number().int().min(1).optional(),
   versao: versaoSchema,
   justificativa: justificativaSchema,
@@ -87,7 +87,7 @@ export const listarEnquadramentosQuerySchema = z.object({
   cfopId: uuidSchema.optional(),
   produtoId: uuidSchema.optional(),
   clienteId: uuidSchema.optional(),
-  search: z.string().trim().optional(),
+  search: buscaSchema,
   sort: z.enum(SORT_ENQUADRAMENTO).default('operacao'),
   dir: z.enum(['asc', 'desc']).default('asc'),
   page: z.coerce.number().int().min(1).default(1),

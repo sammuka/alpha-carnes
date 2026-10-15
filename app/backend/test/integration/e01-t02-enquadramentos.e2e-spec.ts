@@ -117,7 +117,7 @@ describe('E01-T02 enquadramentos fiscais', () => {
     return aprovado.body as { id: string; versao: number; situacao: string };
   }
 
-  async function baseAprovada() {
+  async function baseAprovada(nomeProduto = 'Acém') {
     const cnpjRaiz = raiz();
     const empresa = await criarEmpresa(adminA, cnpjRaiz);
     const estab = await criarEstab(adminA, empresa.id, cnpjDe(`${cnpjRaiz}0001`));
@@ -133,7 +133,7 @@ describe('E01-T02 enquadramentos fiscais', () => {
       .set('Cookie', adminA)
       .send({
         codigo: `P-${cnpjRaiz}`,
-        nome: 'Acém',
+        nome: nomeProduto,
         unidadePedido: 'kg',
         atributosJson: { fiscal: { ncm: '99999999', cfop: '9999' } },
       });
@@ -610,5 +610,44 @@ describe('E01-T02 enquadramentos fiscais', () => {
       .set('Cookie', adminA)
       .send(corpoSem);
     expect(res.status).toBe(400);
+  });
+
+  it.each(['0000-01-01', '1899-12-31'])('vigenciaInicio %s → 400 e nenhuma linha', async (data) => {
+    const base = await baseAprovada();
+    const res = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', adminA)
+      .send(corpo(base, { vigenciaInicio: data, vigenciaFim: undefined }));
+    expect(res.status).toBe(400);
+    const fim = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', adminA)
+      .send(corpo(base, { vigenciaFim: data }));
+    expect(fim.status).toBe(400);
+    expect(await linhasDo(base.estabelecimentoId)).toBe(0);
+  });
+
+  it('justificativa com NUL → 400', async () => {
+    const base = await baseAprovada();
+    const res = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', adminA)
+      .send(corpo(base, { justificativa: 'motivo\u0000x' }));
+    expect(res.status).toBe(400);
+  });
+
+  it.each(['=1+1', '+1', '-1', '@SOMA(A1)'])('exportação CSV neutraliza fórmula %s no nome do produto', async (nome) => {
+    const base = await baseAprovada(nome);
+    const criado = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', adminA)
+      .send(corpo(base));
+    expect(criado.status).toBe(201);
+    const res = await request(app.getHttpServer())
+      .get(`/fiscal/enquadramentos/exportacao?estabelecimentoId=${base.estabelecimentoId}`)
+      .set('Cookie', adminA);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(`;'${nome};`);
+    expect(res.text).not.toContain(`;${nome};`);
   });
 });

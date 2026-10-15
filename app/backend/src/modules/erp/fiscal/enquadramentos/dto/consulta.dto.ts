@@ -5,13 +5,13 @@ import {
   TIPOS_PRODUTO_FISCAL,
   TP_NF,
 } from '../../../../../database/schema/fiscal-enquadramentos.schema';
-import { uuidSchema } from './comum.dto';
+import { dataSchema, uuidSchema } from './comum.dto';
 import { cestSchema } from './enquadramento.dto';
 
 /** Chave inteira + data. Corpo parcial (só CFOP) não escolhe perfil (D9). */
 export const consultaEnquadramentoSchema = z.object({
   estabelecimentoId: uuidSchema,
-  data: z.iso.date(),
+  data: dataSchema,
   operacaoId: uuidSchema,
   tpNf: z.enum(TP_NF),
   finNfe: z.enum(FIN_NFE),

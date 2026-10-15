@@ -1,9 +1,10 @@
 import { consultaEnquadramentoSchema } from '../../src/modules/erp/fiscal/enquadramentos/dto/consulta.dto';
 import {
   createEnquadramentoSchema,
+  listarEnquadramentosQuerySchema,
   updateEnquadramentoSchema,
 } from '../../src/modules/erp/fiscal/enquadramentos/dto/enquadramento.dto';
-import { createCfopSchema } from '../../src/modules/erp/fiscal/enquadramentos/dto/cfop.dto';
+import { createCfopSchema, listarCodigoFiscalQuerySchema } from '../../src/modules/erp/fiscal/enquadramentos/dto/cfop.dto';
 import { createNcmSchema } from '../../src/modules/erp/fiscal/enquadramentos/dto/ncm.dto';
 
 const UUID = '0199a1b2-c3d4-7e5f-8a6b-7c8d9e0f1a2b';
@@ -105,5 +106,27 @@ describe('DTOs de enquadramento, CFOP e NCM', () => {
       descricao: 'Venda',
       justificativa: 'Cadastro manual',
     }).success).toBe(false);
+  });
+});
+
+describe('B1 — datas e NUL', () => {
+  it.each(['0000-01-01', '1899-12-31'])('vigenciaInicio %s é recusada', (data) => {
+    expect(createEnquadramentoSchema.safeParse(base({ vigenciaInicio: data })).success).toBe(false);
+    expect(createEnquadramentoSchema.safeParse(base({ vigenciaFim: data })).success).toBe(false);
+    const { vigenciaInicio: _i, prioridade: _p, justificativa: _j, ...chave } = base();
+    expect(consultaEnquadramentoSchema.safeParse({ ...chave, data: '2026-01-01' }).success).toBe(true);
+    expect(consultaEnquadramentoSchema.safeParse({ ...chave, data }).success).toBe(false);
+  });
+
+  it('1900-01-01 é aceita', () => {
+    expect(createEnquadramentoSchema.safeParse(base({ vigenciaInicio: '1900-01-01' })).success).toBe(true);
+  });
+
+  it('NUL na justificativa, descrição e busca é recusado', () => {
+    expect(createEnquadramentoSchema.safeParse(base({ justificativa: 'abc\u0000def' })).success).toBe(false);
+    expect(createCfopSchema.safeParse({ codigo: '5101', descricao: 'a\u0000b', justificativa: 'abcd' }).success).toBe(false);
+    expect(createNcmSchema.safeParse({ codigo: '02013000', descricao: 'ok', justificativa: 'a\u0000bcd' }).success).toBe(false);
+    expect(listarEnquadramentosQuerySchema.safeParse({ search: 'a\u0000b' }).success).toBe(false);
+    expect(listarCodigoFiscalQuerySchema.safeParse({ search: 'a\u0000b' }).success).toBe(false);
   });
 });
