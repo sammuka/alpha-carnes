@@ -337,6 +337,13 @@
       "when": 1792054042058,
       "tag": "0047_e01_t04_simulacoes_fiscais",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792071879097,
+      "tag": "0048_e01_t05_homologacoes_regras",
+      "breakpoints": true
     }
   ]
 }
