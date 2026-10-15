@@ -7,7 +7,8 @@ import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { centrosCusto, contasContabeis, contaVersoes } from '../../src/database/schema/contabilidade-plano.schema';
 import { PlanoContasService } from '../../src/modules/contabilidade/plano/plano.service';
-import type { CriarContaDto } from '../../src/modules/contabilidade/plano/dto/plano.dto';
+import type { CriarContaDto, EditarContaDto } from '../../src/modules/contabilidade/plano/dto/plano.dto';
+import type { ContaApresentada } from '../../src/modules/contabilidade/plano/plano.service';
 
 function dtoBase(parcial: Partial<CriarContaDto>): CriarContaDto {
   return {
@@ -272,6 +273,292 @@ describe('Plano de contas', () => {
   it('nega o plano a um perfil que não é administrador', async () => {
     const res = await request(srv()).get('/contabilidade/plano').set('Cookie', comercialCookies);
     expect(res.status).toBe(403);
+  });
+
+  function comoEdicao(conta: ContaApresentada, extra: Partial<EditarContaDto> = {}): EditarContaDto {
+    return {
+      nome: conta.nome,
+      classificacao: conta.classificacao as EditarContaDto['classificacao'],
+      natureza: conta.natureza as EditarContaDto['natureza'],
+      grupo: conta.grupo,
+      contaPaiCodigo: conta.contaPaiCodigo,
+      centroCodigo: conta.centroCodigo,
+      vigenciaInicio: conta.vigenciaInicio,
+      vigenciaFim: conta.vigenciaFim,
+      numero: conta.numero,
+      justificativa: 'ajusta o rascunho',
+      ...extra,
+    };
+  }
+
+  it('lista centros, exporta csv e ordena a consulta', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({
+      codigo: '1',
+      nome: 'Caixa "A";',
+      vigenciaFim: '2026-12-31',
+    }), userId);
+    await service.criar(dtoBase({ codigo: '2', nome: 'Bancos', vigenciaFim: null }), userId);
+    const centros = await service.listarCentrosAtivos();
+    expect(centros.map((centro) => centro.codigo)).toEqual(['CT1']);
+    const csv = await service.exportarCsv({
+      pagina: 1, q: 'Caixa', situacao: 'DRAFT', ordenar: 'contaContabil', direcao: 'asc',
+    });
+    expect(csv.startsWith('\uFEFF')).toBe(true);
+    expect(csv).toContain('"Caixa ""A"";"');
+    expect(csv).toContain('2026-12-31');
+    const completo = await service.exportarCsv({
+      pagina: 1, q: '', situacao: '', ordenar: 'contaContabil', direcao: 'asc',
+    });
+    expect(completo).toContain('—');
+    const consulta = { pagina: 1, q: '', situacao: '' as const, direcao: 'desc' as const };
+    for (const ordenar of ['naturezaConta', 'centroCusto', 'vigenciaInicio', 'vigenciaFim'] as const) {
+      const lista = await service.listar({ ...consulta, ordenar });
+      expect(lista.total).toBe(2);
+    }
+  });
+
+  it('executa cada ação e recusa ação desconhecida', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const rascunho = await service.obter('1');
+    const editada = await service.executar('editar', '1', comoEdicao(rascunho, { nome: 'Grupo editado' }), userId);
+    expect(editada.nome).toBe('Grupo editado');
+    await service.executar('revisar-competencia', '1', {
+      numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: '2026-12-31', justificativa: 'revisa',
+    }, userId);
+    await service.executar('aprovar', '1', { numero: 1, justificativa: 'aprova' }, userId);
+    await service.criar(dtoBase({
+      codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1',
+    }), userId);
+    await service.executar('revisar-competencia', '1.1', {
+      numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa filha',
+    }, userId);
+    const filha = await service.executar('aprovar', '1.1', { numero: 1, justificativa: 'aprova filha' }, userId);
+    const mapeada = await service.executar('mapear', '1.1', {
+      numero: filha.numero, centroCodigo: 'CT1', justificativa: 'mapeia',
+    }, userId);
+    expect(mapeada.situacao).toBe('APPROVED');
+    const nova = await service.executar('versionar', '1', comoEdicao(await service.obter('1'), {
+      nome: 'Grupo versão 2', justificativa: 'abre versão',
+    }), userId);
+    expect(nova.numero).toBe(2);
+    expect(nova.situacao).toBe('DRAFT');
+    const bloqueada = await service.executar('bloquear', '1.1', {
+      numero: filha.numero, justificativa: 'bloqueia',
+    }, userId);
+    expect(bloqueada.situacao).toBe('SUSPENDED');
+    await expect(service.executar('inexistente' as 'editar', '1', comoEdicao(rascunho), userId))
+      .rejects.toMatchObject({ status: 404 });
+  });
+
+  it('recusa edição fora do rascunho e grava a edição válida', async () => {
+    const conta = await contaAprovadaAnalitica();
+    await expect(service.editar(conta.codigo, comoEdicao(conta, { grupo: 'Outro grupo' }), userId))
+      .rejects.toMatchObject({ status: 422 });
+    await expect(service.editar(conta.codigo, comoEdicao(conta, { classificacao: 'sintetica' }), userId))
+      .rejects.toMatchObject({ status: 422 });
+    await service.criarCentro({ codigo: 'CT2', nome: 'Administrativo', justificativa: 'segundo centro' }, userId);
+    await expect(service.editar(conta.codigo, comoEdicao(conta, { centroCodigo: 'CT2' }), userId))
+      .rejects.toMatchObject({ status: 422 });
+    await expect(service.editar(conta.codigo, comoEdicao(conta), userId))
+      .rejects.toMatchObject({ response: { message: 'mudança de classificação após fechamento' }, status: 422 });
+    await service.bloquear(conta.codigo, { numero: conta.numero, justificativa: 'bloqueia' }, userId);
+    const suspensa = await service.obter(conta.codigo);
+    await expect(service.editar(suspensa.codigo, comoEdicao(suspensa), userId))
+      .rejects.toMatchObject({ response: { message: 'conta desativada' }, status: 422 });
+    await service.criar(dtoBase({ codigo: '9', nome: 'Rascunho' }), userId);
+    const rascunho = await service.obter('9');
+    await expect(service.editar('9', comoEdicao(rascunho, { justificativa: '   ' }), userId))
+      .rejects.toMatchObject({ status: 422 });
+    const salva = await service.editar('9', comoEdicao(rascunho, { nome: 'Rascunho ajustado' }), userId);
+    expect(salva.nome).toBe('Rascunho ajustado');
+    await expect(service.editar('ausente', comoEdicao(rascunho), userId)).rejects.toMatchObject({ status: 404 });
+    await expect(service.editar('9', comoEdicao(salva, { numero: 99 }), userId))
+      .rejects.toMatchObject({ status: 409, response: { message: 'conflito concorrente' } });
+    await db.insert(contasContabeis).values({ codigo: 'VAZIA' });
+    await expect(service.editar('VAZIA', comoEdicao(rascunho, { numero: 0 }), userId))
+      .rejects.toMatchObject({ status: 404 });
+  });
+
+  it('versiona conta aprovada e recusa rascunho, revisão e rejeição', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    await promover('1');
+    await service.criar(dtoBase({ codigo: '1.1', classificacao: 'sintetica', contaPaiCodigo: '1' }), userId);
+    const filha = await promover('1.1');
+    const nova = await service.versionar('1.1', comoEdicao(filha, { nome: 'Filha versão 2' }), userId);
+    expect(nova.numero).toBe(2);
+    expect(nova.situacao).toBe('DRAFT');
+    await expect(service.versionar('1.1', comoEdicao(nova), userId))
+      .rejects.toMatchObject({ status: 409, response: { message: 'Versão em aberto já existe' } });
+    await service.criar(dtoBase({ codigo: '3', classificacao: 'sintetica' }), userId);
+    await service.revisarCompetencia('3', {
+      numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa',
+    }, userId);
+    const emRevisao = await service.obter('3');
+    await expect(service.versionar('3', comoEdicao(emRevisao), userId))
+      .rejects.toMatchObject({ status: 409 });
+    await db.execute(sql`
+      update conta_versoes v set situacao = 'REJECTED'
+        from contas_contabeis c
+       where v.conta_id = c.id and c.codigo = '1' and v.deleted_at is null
+    `);
+    const rejeitada = await service.obter('1');
+    await expect(service.versionar('1', comoEdicao(rejeitada), userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'conta desativada' } });
+  });
+
+  it('recusa ciclo quando o pai aponta para um ancestral já visto', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: 'A', classificacao: 'sintetica' }), userId);
+    await promover('A');
+    await service.criar(dtoBase({ codigo: 'B', classificacao: 'sintetica', contaPaiCodigo: 'A' }), userId);
+    await promover('B');
+    await service.criar(dtoBase({ codigo: 'C', classificacao: 'sintetica', contaPaiCodigo: 'A' }), userId);
+    const conta = await promover('C');
+    await db.execute(sql`
+      update conta_versoes v
+         set conta_pai_id = (select id from contas_contabeis where codigo = 'B')
+        from contas_contabeis c
+       where v.conta_id = c.id and c.codigo = 'A' and v.situacao = 'APPROVED'
+    `);
+    await expect(service.versionar('C', comoEdicao(conta, { contaPaiCodigo: 'A' }), userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'Ciclo na hierarquia da conta' } });
+  });
+
+  it('mapeia conta analítica aprovada e recusa rascunho ou centro diferente', async () => {
+    const conta = await contaAprovadaAnalitica();
+    const mapeada = await service.mapear(conta.codigo, {
+      numero: conta.numero, centroCodigo: conta.centroCodigo, justificativa: 'mapeia',
+    }, userId);
+    expect(mapeada.situacao).toBe('APPROVED');
+    await service.criar(dtoBase({
+      codigo: '8', classificacao: 'analitica', contaPaiCodigo: '1',
+    }), userId);
+    const rascunho = await service.obter('8');
+    await expect(service.mapear('8', {
+      numero: rascunho.numero, centroCodigo: 'CT1', justificativa: 'cedo',
+    }, userId)).rejects.toMatchObject({ status: 422, response: { message: 'Conta ainda não aprovada' } });
+    await service.criarCentro({ codigo: 'CT2', nome: 'Administrativo', justificativa: 'segundo centro' }, userId);
+    await expect(service.mapear(conta.codigo, {
+      numero: conta.numero, centroCodigo: 'CT2', justificativa: 'troca centro',
+    }, userId)).rejects.toMatchObject({ status: 422, response: { message: 'mudança de classificação após fechamento' } });
+  });
+
+  it('aplica lote e devolve a conta que falhou', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const revisado = await service.lote({
+      acao: 'revisar-competencia',
+      codigos: ['1'],
+      justificativa: 'revisa em lote',
+      numeroPorCodigo: { '1': 1 },
+    }, userId);
+    expect(revisado).toHaveLength(1);
+    const aprovado = await service.lote({
+      acao: 'aprovar', codigos: ['1'], justificativa: 'aprova em lote', numeroPorCodigo: { '1': 1 },
+    }, userId);
+    expect(aprovado).toHaveLength(1);
+    await service.criar(dtoBase({ codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1' }), userId);
+    await service.revisarCompetencia('1.1', {
+      numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa',
+    }, userId);
+    await service.aprovar('1.1', { numero: 1, justificativa: 'aprova' }, userId);
+    const bloqueado = await service.lote({
+      acao: 'bloquear', codigos: ['1.1'], justificativa: 'bloqueia em lote', numeroPorCodigo: { '1.1': 1 },
+    }, userId);
+    expect(bloqueado).toHaveLength(1);
+    await expect(service.lote({
+      acao: 'bloquear', codigos: ['1'], justificativa: 'sem numero', numeroPorCodigo: {},
+    }, userId)).rejects.toMatchObject({
+      status: 422,
+      response: { message: 'conflito concorrente', codigo: '1' },
+    });
+    await service.criar(dtoBase({ codigo: '4' }), userId);
+    await expect(service.lote({
+      acao: 'revisar-competencia', codigos: ['4'], justificativa: '   ', numeroPorCodigo: { '4': 1 },
+    }, userId)).rejects.toMatchObject({ status: 422 });
+  });
+
+  it('valida o rascunho sem gravar e acumula as mensagens', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    const ok = await service.validar(dtoBase({ codigo: '1' }), userId);
+    expect(ok).toEqual({ valido: true, mensagens: [] });
+    const semCentro = await service.validar(dtoBase({ codigo: '2', centroCodigo: 'NAO' }), userId);
+    expect(semCentro.valido).toBe(false);
+    expect(semCentro.mensagens).toContain('Centro de custo não encontrado');
+    const semPai = await service.validar(dtoBase({
+      codigo: '3', classificacao: 'analitica', contaPaiCodigo: null,
+    }), userId);
+    expect(semPai.mensagens).toContain('Conta pai não encontrada');
+    await service.criar(dtoBase({ codigo: '1' }), userId);
+    const repetida = await service.validar(dtoBase({ codigo: '1' }), userId);
+    expect(repetida.mensagens).toContain('Já existe conta com este código');
+  });
+
+  it('consulta o histórico e os bloqueios de transição', async () => {
+    await expect(service.historico('ausente')).rejects.toMatchObject({ status: 404 });
+    await db.insert(contasContabeis).values({ codigo: 'SEM' });
+    expect(await service.historico('SEM')).toEqual([]);
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    const criada = await service.criar(dtoBase({ codigo: '1' }), userId);
+    const [versao] = await db.select({ id: contaVersoes.id }).from(contaVersoes)
+      .innerJoin(contasContabeis, eq(contasContabeis.id, contaVersoes.contaId))
+      .where(eq(contasContabeis.codigo, '1'));
+    if (!versao) throw new Error('versão ausente');
+    await db.insert(schema.auditoria).values({
+      tabela: 'conta_versoes',
+      registroId: versao.id,
+      operacao: 'ACAO_MANUAL',
+      usuarioId: null,
+      justificativa: null,
+    });
+    const linhas = await service.historico('1');
+    expect(linhas.some((linha) => linha.quem === '' && linha.justificativa === '')).toBe(true);
+    expect(linhas.some((linha) => linha.quem !== '')).toBe(true);
+    await expect(service.revisarCompetencia('1', {
+      numero: criada.numero, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: '   ',
+    }, userId)).rejects.toMatchObject({ status: 422 });
+    await service.revisarCompetencia('1', {
+      numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa',
+    }, userId);
+    await expect(service.aprovar('1', { numero: 1, justificativa: '   ' }, userId))
+      .rejects.toMatchObject({ status: 422 });
+    await expect(service.aprovar('1', { numero: 1, justificativa: 'aprova' }, userId)).resolves.toMatchObject({
+      situacao: 'APPROVED',
+    });
+    await expect(service.aprovar('1', { numero: 1, justificativa: 'de novo' }, userId))
+      .rejects.toMatchObject({ status: 422 });
+    await expect(service.bloquear('1', { numero: 1, justificativa: '   ' }, userId))
+      .rejects.toMatchObject({ status: 422 });
+    await service.bloquear('1', { numero: 1, justificativa: 'bloqueia' }, userId);
+    await expect(service.bloquear('1', { numero: 1, justificativa: 'outra vez' }, userId))
+      .rejects.toMatchObject({ status: 409, response: { message: 'conta desativada' } });
+    await expect(service.revisarCompetencia('1', {
+      numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa suspensa',
+    }, userId)).rejects.toMatchObject({ status: 422, response: { message: 'conta desativada' } });
+    await service.criar(dtoBase({ codigo: '5' }), userId);
+    await db.execute(sql`
+      update conta_versoes v set situacao = 'REJECTED'
+        from contas_contabeis c
+       where v.conta_id = c.id and c.codigo = '5'
+    `);
+    await expect(service.revisarCompetencia('5', {
+      numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'reabre',
+    }, userId)).resolves.toMatchObject({ situacao: 'REVIEW' });
+    await service.criar(dtoBase({ codigo: '6' }), userId);
+    await db.execute(sql`
+      update conta_versoes v set situacao = 'APPROVED'
+        from contas_contabeis c
+       where v.conta_id = c.id and c.codigo = '6'
+    `);
+    await expect(service.revisarCompetencia('6', {
+      numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'tarde',
+    }, userId)).rejects.toMatchObject({ status: 422, response: { message: 'Situação não permite esta transição' } });
+    await expect(service.bloquear('5', { numero: 1, justificativa: 'nao aprovada' }, userId))
+      .rejects.toMatchObject({ status: 422 });
+    await expect(service.obter('ausente')).rejects.toMatchObject({ status: 404 });
   });
 
   it('não devolve uuid na listagem', async () => {
