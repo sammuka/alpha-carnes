@@ -7,6 +7,7 @@
 | Rev. | Data | Autor | Motivo |
 |---|---|---|---|
 | r1 | 2026-10-15 | planner | versão inicial da fatia E09-T02 |
+| r2 | 2026-10-15 | planner | Portão 1 r1 (`c52c27b`) pediu ajustar: envelope do `AllExceptionsFilter`, vigência só na ficha, Situação fora da ordenação, lote na seleção múltipla e o spec de serviço fora da Task 3 |
 
 **Goal:** Entregar a tela Políticas de contabilização (`/erp/contabilidade/politicas-de-contabilizacao`) em que o administrador configura o mapeamento de débito e crédito de um evento fonte, simula o evento com balanceamento exato e aprova a regra com outra pessoa, sem gravar diário, razão ou partida.
 
@@ -33,7 +34,7 @@
 - Dinheiro é `NUMERIC(15,2)`, transportado como string `^\d{1,13}\.\d{2}$`. Proibido `number`, `parseFloat` e float na soma. A comparação usa centavos em `bigint`.
 - Datas desta fatia: `competencia` (`date`, dia 01) e `vigencia_inicio` (`date`). H-E01-10 continua aberta: não criar `data_comercial`, `data_fiscal` nem `data_efetiva`. `created_at` / `updated_at` / `deleted_at` são `timestamptz`.
 - Status em `TEXT` + `CHECK`, PK `uuid` com `DEFAULT uuidv7()`, soft delete, índice em toda FK (`docs/data/convencoes-schema.md`).
-- Regras críticas só no NestJS. Zod do DTO recusa forma (HTTP 400 pelo `ZodValidationPipe`, que não muda). Regra de negócio recusa HTTP 422 e conflito recusa HTTP 409, os dois com corpo `{ message, codigo }`. `codigo` é o código de negócio da política, nunca um UUID.
+- Regras críticas só no NestJS. Zod do DTO recusa forma (HTTP 400 pelo `ZodValidationPipe`, que não muda). Regra de negócio recusa HTTP 422 e conflito recusa HTTP 409. A `HttpException` carrega `{ message, codigo }`. O `AllExceptionsFilter` (`app/backend/src/common/filters/all-exceptions.filter.ts` L47–L53), registrado por `createTestApp`, responde `{ statusCode, message: { message, codigo }, timestamp, path, requestId }`. O teste de serviço afirma `response` da exceção. O teste HTTP afirma o envelope. `codigo` é o código de negócio da política, nunca um UUID.
 - Zod 4: não chamar `.omit()` num schema que já tem `.refine()`. O objeto base fica sem refine; o refine entra só no schema exportado.
 - Evento de domínio só depois do commit (Princípio VI). Falha não grava sucesso parcial (Princípio VII).
 - `Button` do DS (`app/frontend/src/components/ui/button.tsx`) não tem `outline`. Ação principal usa a variante default. As demais usam `variant="secondary"`.
@@ -131,7 +132,7 @@ Concorrência: o corpo envia `numero`. A transação faz `SELECT ... FOR UPDATE`
 
 Motivo vazio no service: 422 `{ message: 'Informe justificativa para auditoria.', codigo }` (`aplicacao.js` L451). No modal, a tela impede o POST e mostra `Informe justificativa para demonstrar a decisão auditável.` (`aplicacao.js` L499).
 
-Lote (`componentes.js` L5951) aceita `simular` ou `aprovar`, no máximo 20 códigos, numa transação só. A primeira falha desfaz o lote e devolve 422 ou 409 da primeira política, com o código de negócio no campo `codigo`.
+Lote (`componentes.js` L5951 `multiSelect: true`; matriz UX L952, “Seleção múltipla por alçada e ação em lote auditada”) aceita `simular` ou `aprovar`, no máximo 20 códigos, numa transação só. A primeira falha desfaz o lote e devolve 422 ou 409 da primeira política, com o código de negócio no campo `codigo`. Na tela, uma linha marcada chama a rota da ação. Com mais de uma linha marcada, `Simular evento` e `Aprovar regra` chamam `POST /api/contabilidade/politicas/lote`. Simular em lote envia `valor`. Sem `valor`, o POST não sai e a tela mostra `Valor é obrigatório.` (`aplicacao.js` L446, rótulo do campo mais ` é obrigatório.`; o rótulo é `Valor` em `componentes.js` L455).
 
 ### D5 — Fiscal, empresa, período e as três datas não existem nesta ponta
 
@@ -147,7 +148,7 @@ H-E01-10: o texto “separar datas comercial/fiscal/efetiva” do Caderno B L449
 
 Abas, nesta ordem (`aplicacao.js` L7): `Ficha e campos`, `Movimentações`, `Regras e validações`, `Exceções`, `Histórico`, `Integrações`, `Aceite e testes`.
 
-- Ficha e campos: campos D2 da versão mais recente, `Versão` com o número e a trilha `Responsável` com o nome do usuário (`aplicacao.js` L190). Sem UUID e sem o código de negócio cru.
+- Ficha e campos: campos D2 da versão mais recente, `Versão` com o número e a trilha `Responsável` com o nome do usuário (`aplicacao.js` L190). Sem UUID e sem o código de negócio cru. `Início de vigência` aparece só na ficha, em `dd/MM/yyyy`, como `fieldVal` (`aplicacao.js` L145 devolve `20/10/2026` para `vigenciaInicio`). A grade não tem essa coluna (`componentes.js` L5934–L5941).
 - Movimentações: cabeçalhos `Acontecimento`, `Origem`, `Efeito`, `Situação` (`aplicacao.js` L195). Linhas reais da auditoria da política. Sem as três linhas fictícias de SEFAZ/banco.
 - Regras e validações: o texto literal `origem imutável, não lançar sem mapeamento correto, balanceamento exato` (`catalogo.js` L745).
 - Exceções: `aplicacao.js` L201 parte em `;`. A frase do Caderno não tem `;`, então o runtime do protótipo cairia no acréscimo genérico. Esses três genéricos não estão no Caderno B L450 nem em `catalogo.js` L746. A aba mostra dois blocos `Bloqueio / exceção:` (`aplicacao.js` L203) com `titleCase` de cada item separado por vírgula: `Mapeamento ausente` e `Evento duplicado`. A mensagem HTTP permanece a do Caderno, em minúsculas.
@@ -165,7 +166,7 @@ Sai da UI, por Princípio I.2(a): `DADOS FICTÍCIOS`, `PROTÓTIPO`, `SIMULAR PER
 
 Voltar restaura filtro, ordenação, página e rascunho do formulário a partir de `sessionStorage` chave `politicas-de-contabilizacao`. A chave é interna: nenhum JSX, grade, toast, aba ou atributo visível a imprime. Se o rascunho difere do último salvo, `window.confirm` com o texto `Há alterações não salvas. Deseja sair?`. Cancelar permanece na ficha.
 
-Competência na grade: mês por extenso em pt-BR com a primeira letra maiúscula e o ano, no formato do `fieldVal` de `aplicacao.js` L147 (`Outubro de 2026`). Início de vigência na grade: `dd/MM/yyyy`.
+Competência na grade: mês por extenso em pt-BR com a primeira letra maiúscula e o ano, no formato do `fieldVal` de `aplicacao.js` L147 (`Outubro de 2026`).
 
 ### D7 — RBAC e menu
 
@@ -800,9 +801,11 @@ async configurar(dto: ConfigurarPoliticaDto, usuarioId: string) {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: o Jest do Step 2 mais `npx jest src/modules/contabilidade/politicas/politicas.service.spec.ts --runInBand`.
+Run: o Jest do Step 2, em `app/backend`.
 
-Expected: PASS.
+Expected: PASS dos três `it` de configurar e editar.
+
+`politicas.service.spec.ts` não existe neste passo. O arquivo nasce na Task 4, com centavos, balanceamento, simulação e aprovação. Quem espera PASS desse spec é o Step 4 da Task 4.
 
 - [ ] **Step 5: Commit**
 
@@ -961,12 +964,18 @@ export const aprovarSchema = z.object({
   justificativa: motivo,
 });
 
-export const loteSchema = z.object({
+const loteBase = z.object({
   acao: z.enum(['simular', 'aprovar']),
   codigos: z.array(codigo).min(1).max(20),
   justificativa: motivo,
   numeroPorCodigo: z.record(z.string(), z.number().int().positive()),
   valor: dinheiro.optional(),
+});
+
+export const loteSchema = loteBase.superRefine((dto, ctx) => {
+  if (dto.acao === 'simular' && !dto.valor) {
+    ctx.addIssue({ code: 'custom', path: ['valor'], message: 'Valor é obrigatório.' });
+  }
 });
 ```
 
@@ -974,7 +983,7 @@ export const loteSchema = z.object({
 
 `aprovar` trava a versão, exige `DRAFT`, exige `usuarioId !== versao.responsavelId` (senão 422 `aprovador diferente do autor`), exige uma `politica_simulacoes` não excluída daquele `politicaId` + `versaoNumero` (senão 422 `mapeamento ausente`), grava `APPROVED` e `aprovadorId`, audita, e só depois emite `POLITICA_APROVADA`. Não insere lançamento.
 
-`validar` executa as checagens de conta, centro e origem e devolve `{ valido, mensagens }` sem `insert` nem `update`. `historico` lê `auditoria` das versões e devolve só `quando`, `quem`, `acontecimento`, `justificativa`. `lote` usa uma transação: a primeira falha desfaz o lote. `exportarCsv` responde `text/csv; charset=utf-8` com BOM `\uFEFF` e cabeçalho `Competência;Situação;Conta de débito;Conta de crédito;Centro de custo;Tipo de ocorrência`. Células são rótulos. Sem coluna de id.
+`validar` executa as checagens de conta, centro e origem e devolve `{ valido, mensagens }` sem `insert` nem `update`. `historico` lê `auditoria` das versões e devolve só `quando`, `quem`, `acontecimento`, `justificativa`. `lote` usa uma transação: a primeira falha desfaz o lote. `simular` em lote exige `valor` (`loteSchema`); `aprovar` em lote não envia `valor`. `exportarCsv` responde `text/csv; charset=utf-8` com BOM `\uFEFF` e cabeçalho `Competência;Situação;Conta de débito;Conta de crédito;Centro de custo;Tipo de ocorrência`. Células são rótulos. Sem coluna de id.
 
 Em `eventos.ts`:
 
@@ -1088,7 +1097,13 @@ it('devolve 422 com message e codigo quando o mapeamento não existe', async () 
     justificativa: 'tenta',
   });
   expect(res.status).toBe(422);
-  expect(res.body).toEqual({ message: 'mapeamento ausente', codigo: 'LIQUIDACAO-2026-10' });
+  expect(res.body).toEqual({
+    statusCode: 422,
+    message: { message: 'mapeamento ausente', codigo: 'LIQUIDACAO-2026-10' },
+    timestamp: expect.any(String),
+    path: '/contabilidade/politicas',
+    requestId: 'unknown',
+  });
 });
 ```
 
@@ -1172,7 +1187,7 @@ Cada route do BFF usa `repassar`. A rota `[codigo]/[acao]` repassa `POST /contab
 
 Run: `npx jest test/integration/politicas-contabilizacao.e2e-spec.ts --runInBand` em `app/backend`.
 
-Expected: PASS. Comercial recebe 403. O JSON do administrador não contém UUID. O 422 traz `message` e `codigo`.
+Expected: PASS. Comercial recebe 403. O JSON do administrador não contém UUID. O 422 traz o envelope do `AllExceptionsFilter`: `message` é o objeto `{ message: 'mapeamento ausente', codigo: 'LIQUIDACAO-2026-10' }`, `requestId` é `unknown` quando o teste não manda `x-request-id`, e `path` é `/contabilidade/politicas`.
 
 - [ ] **Step 5: Commit**
 
@@ -1207,7 +1222,35 @@ Perfil comercial recebe 403. O administrador recebe rótulos e o código de neg�
 
 ```ts
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { PoliticasContabilizacaoClient } from '../src/app/(admin)/erp/contabilidade/politicas-de-contabilizacao/politicas-contabilizacao-client';
+
+function linha(codigo: string, tipoEventoRotulo: string): PoliticaApresentada {
+  return {
+    codigo,
+    tipoEvento: 'LIQUIDACAO',
+    tipoEventoRotulo,
+    competencia: '2026-10-01',
+    competenciaRotulo: 'Outubro de 2026',
+    contaDebitoCodigo: '1.1.01',
+    contaDebitoNome: 'Caixa e bancos',
+    contaCreditoCodigo: '2.1.01',
+    contaCreditoNome: 'Fornecedores',
+    centroCodigo: 'CT1',
+    centroNome: 'Operação industrial',
+    vigenciaInicio: '2026-10-01',
+    situacao: 'DRAFT',
+    situacaoRotulo: 'Rascunho',
+    numero: 1,
+    responsavelNome: 'Administrador',
+    aprovadorNome: null,
+    criadoEm: '2026-10-15T10:00:00.000Z',
+    alteradoEm: '2026-10-15T10:00:00.000Z',
+    simulacaoValor: null,
+    simulacaoDebito: null,
+    simulacaoCredito: null,
+  };
+}
 
 it('mostra os rótulos da grade e esconde uuid, enum cru e a palavra Marca', () => {
   render(<PoliticasContabilizacaoClient inicial={[{
@@ -1240,6 +1283,12 @@ it('mostra os rótulos da grade e esconde uuid, enum cru e a palavra Marca', () 
   expect(screen.getByRole('button', { name: 'Configurar mappings' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Simular evento' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Aprovar regra' })).toBeInTheDocument();
+  expect(screen.getByRole('checkbox', { name: 'Selecionar Liquidação' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Ordenar por Situação' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('columnheader', { name: 'Início de vigência' })).not.toBeInTheDocument();
+  for (const rotulo of ['Competência', 'Conta de débito', 'Conta de crédito', 'Centro de custo', 'Tipo de ocorrência']) {
+    expect(screen.getByRole('button', { name: `Ordenar por ${rotulo}` })).toBeInTheDocument();
+  }
   expect(screen.getByText('Provisório')).toBeInTheDocument();
   expect(screen.getByText('Enquadramento fiscal')).toBeInTheDocument();
   const texto = document.body.textContent ?? '';
@@ -1248,6 +1297,83 @@ it('mostra os rótulos da grade e esconde uuid, enum cru e a palavra Marca', () 
   expect(texto).not.toMatch(/E09/);
   expect(texto).not.toMatch(/e09-t02/i);
   expect(texto).not.toMatch(/LIQUIDACAO/);
+});
+
+it('desembrulha o envelope e mostra aprovador diferente do autor', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn().mockResolvedValue({
+    ok: false,
+    status: 422,
+    text: async () => JSON.stringify({
+      statusCode: 422,
+      message: { message: 'aprovador diferente do autor', codigo: 'LIQUIDACAO-2026-10' },
+      timestamp: '2026-10-15T00:00:00.000Z',
+      path: '/contabilidade/politicas/LIQUIDACAO-2026-10/aprovar',
+      requestId: 'unknown',
+    }),
+  });
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await user.click(screen.getByRole('button', { name: 'Aprovar regra' }));
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'o autor tenta aprovar');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  expect(await screen.findByText('aprovador diferente do autor')).toBeInTheDocument();
+});
+
+it('com duas linhas marcadas, Simular evento e Aprovar regra chamam o lote', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '' });
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[
+    linha('LIQUIDACAO-2026-10', 'Liquidação'),
+    linha('TARIFA-2026-10', 'Tarifa'),
+  ]} />);
+  await user.click(screen.getByRole('checkbox', { name: 'Selecionar Liquidação' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Selecionar Tarifa' }));
+  await user.click(screen.getByRole('button', { name: 'Simular evento' }));
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'simula o lote');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  expect(screen.getByText('Valor é obrigatório.')).toBeInTheDocument();
+  expect(fetchMock).not.toHaveBeenCalled();
+  await user.type(screen.getByLabelText('Valor'), '10,10');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  expect(fetchMock).toHaveBeenCalledWith('/api/contabilidade/politicas/lote', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({
+      acao: 'simular',
+      codigos: ['LIQUIDACAO-2026-10', 'TARIFA-2026-10'],
+      justificativa: 'simula o lote',
+      numeroPorCodigo: { 'LIQUIDACAO-2026-10': 1, 'TARIFA-2026-10': 1 },
+      valor: '10.10',
+    }),
+  }));
+  fetchMock.mockClear();
+  await user.click(screen.getByRole('button', { name: 'Aprovar regra' }));
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'aprova o lote');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  expect(fetchMock).toHaveBeenCalledWith('/api/contabilidade/politicas/lote', expect.objectContaining({
+    method: 'POST',
+    body: JSON.stringify({
+      acao: 'aprovar',
+      codigos: ['LIQUIDACAO-2026-10', 'TARIFA-2026-10'],
+      justificativa: 'aprova o lote',
+      numeroPorCodigo: { 'LIQUIDACAO-2026-10': 1, 'TARIFA-2026-10': 1 },
+    }),
+  }));
+});
+
+it('não marca o 21º código', async () => {
+  const user = userEvent.setup();
+  const linhas = Array.from({ length: 21 }, (_, indice) => linha(
+    `REGISTRO-2026-${String(indice + 1).padStart(2, '0')}`,
+    `Registro ${indice + 1}`,
+  ));
+  render(<PoliticasContabilizacaoClient inicial={linhas} />);
+  for (const item of linhas) {
+    await user.click(screen.getByRole('checkbox', { name: `Selecionar ${item.tipoEventoRotulo}` }));
+  }
+  expect(screen.getAllByRole('checkbox', { checked: true })).toHaveLength(20);
+  expect(screen.getByRole('checkbox', { name: 'Selecionar Registro 21' })).not.toBeChecked();
 });
 ```
 
@@ -1264,16 +1390,55 @@ Expected: FAIL com módulo ausente.
 O client implementa D2, D4 e D6. A chave `politicas-de-contabilizacao` só entra em `sessionStorage.getItem` / `setItem`.
 
 ```tsx
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 
 const CHAVE_RASCUNHO = 'politicas-de-contabilizacao';
 const ABAS = ['Ficha e campos', 'Movimentações', 'Regras e validações', 'Exceções', 'Histórico', 'Integrações', 'Aceite e testes'] as const;
 const EXCECOES = ['Mapeamento ausente', 'Evento duplicado'];
-const COLUNAS = ['Competência', 'Situação', 'Conta de débito', 'Conta de crédito', 'Centro de custo', 'Tipo de ocorrência'];
+const COLUNAS: { rotulo: string; ordenar?: 'competencia' | 'contaDebito' | 'contaCredito' | 'centroCusto' | 'tipoEvento' }[] = [
+  { rotulo: 'Competência', ordenar: 'competencia' },
+  { rotulo: 'Situação' },
+  { rotulo: 'Conta de débito', ordenar: 'contaDebito' },
+  { rotulo: 'Conta de crédito', ordenar: 'contaCredito' },
+  { rotulo: 'Centro de custo', ordenar: 'centroCusto' },
+  { rotulo: 'Tipo de ocorrência', ordenar: 'tipoEvento' },
+];
+
+function textoMensagem(message: unknown): string {
+  if (typeof message === 'string') return message;
+  if (Array.isArray(message)) return message.map(String).join(' ');
+  if (message && typeof message === 'object' && 'message' in message) {
+    return textoMensagem((message as { message: unknown }).message);
+  }
+  return '';
+}
+
+async function lerMensagem(resposta: Response): Promise<string> {
+  const texto = await resposta.text();
+  if (!texto) return '';
+  try {
+    const corpo = JSON.parse(texto) as { message?: unknown };
+    return textoMensagem(corpo.message);
+  } catch {
+    return texto;
+  }
+}
 
 export function PoliticasContabilizacaoClient({ inicial, semAcesso = false }: { inicial: PoliticaApresentada[]; semAcesso?: boolean }) {
+  const [marcadas, setMarcadas] = useState<string[]>([]);
+  const [linhas] = useState(inicial);
   if (semAcesso) return <p>Acesso não permitido</p>;
+
+  function alternar(codigo: string) {
+    setMarcadas((atual) => {
+      if (atual.includes(codigo)) return atual.filter((item) => item !== codigo);
+      if (atual.length >= 20) return atual;
+      return [...atual, codigo];
+    });
+  }
+
   return (
     <>
       <h1>Políticas de contabilização</h1>
@@ -1286,11 +1451,30 @@ export function PoliticasContabilizacaoClient({ inicial, semAcesso = false }: { 
       <table>
         <thead>
           <tr>
-            {COLUNAS.map((rotulo) => (
-              <th key={rotulo}><button type="button" aria-label={`Ordenar por ${rotulo}`}>{rotulo}</button></th>
+            <th><span className="sr-only">Selecionar</span></th>
+            {COLUNAS.map((coluna) => (
+              <th key={coluna.rotulo}>
+                {coluna.ordenar
+                  ? <button type="button" aria-label={`Ordenar por ${coluna.rotulo}`}>{coluna.rotulo}</button>
+                  : coluna.rotulo}
+              </th>
             ))}
           </tr>
         </thead>
+        <tbody>
+          {linhas.map((linha) => (
+            <tr key={linha.codigo}>
+              <td>
+                <input
+                  type="checkbox"
+                  aria-label={`Selecionar ${linha.tipoEventoRotulo}`}
+                  checked={marcadas.includes(linha.codigo)}
+                  onChange={() => alternar(linha.codigo)}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
       </table>
       <div role="tablist">
         {ABAS.map((nome) => (
@@ -1305,19 +1489,74 @@ export function PoliticasContabilizacaoClient({ inicial, semAcesso = false }: { 
 }
 ```
 
-O snippet acima é o contrato dos rótulos que o teste enxerga. A implementação completa acrescenta, sem trocar esses textos:
+`renderTable` (`aplicacao.js` L164–L177) não desenha checkbox, mesmo com `multiSelect: true`. O rótulo do controle é `Selecionar` mais o nome de negócio da linha. Nesta tela esse nome é `tipoEventoRotulo` (a célula do enum; exemplo `Selecionar Liquidação`). Não é coluna visível nova: o cabeçalho `Selecionar` usa `className="sr-only"`, a mesma classe de `plano-contas-client.tsx`. O código de negócio não entra no `aria-label`. `Situação` fica texto, porque `sortable` (`componentes.js` L5942–L5948) e `listarPoliticasSchema.ordenar` não têm `situacao`. O botão `Ordenar por` fica nas outras cinco.
+
+O snippet acima é o contrato da grade que o teste enxerga. A implementação completa acrescenta, sem trocar esses textos:
+
+`dataBr`, `valorApi` e `confirmarLoteOuAcao` ficam dentro do client. `marcadas` é o estado dos códigos. `linhas` é a lista em tela, iniciada com `inicial`. Ao abrir o modal, `Valor` e `Justificativa / observação` começam vazios e só um `Confirmar` fica visível. No sucesso o modal fecha, para o `type` seguinte não concatenar no campo anterior.
+
+```tsx
+function dataBr(iso: string | null): string {
+  if (!iso) return '—';
+  const [ano, mes, dia] = iso.slice(0, 10).split('-');
+  if (!ano || !mes || !dia) return '—';
+  return `${dia}/${mes}/${ano}`;
+}
+
+function valorApi(texto: string): string {
+  const casado = /^(\d{1,13}),(\d{2})$/.exec(texto.trim());
+  return casado ? `${casado[1]}.${casado[2]}` : '';
+}
+
+async function confirmarLoteOuAcao(acao: 'simular' | 'aprovar', textoValor: string, justificativa: string, selecionada: PoliticaApresentada) {
+  const valor = valorApi(textoValor);
+  if (acao === 'simular' && !valor) {
+    setAviso('Valor é obrigatório.');
+    return;
+  }
+  const emLote = marcadas.length > 1;
+  const resposta = emLote
+    ? await fetch('/api/contabilidade/politicas/lote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        acao,
+        codigos: marcadas,
+        justificativa,
+        numeroPorCodigo: Object.fromEntries(
+          linhas.filter((linha) => marcadas.includes(linha.codigo)).map((linha) => [linha.codigo, linha.numero]),
+        ),
+        ...(acao === 'simular' ? { valor } : {}),
+      }),
+    })
+    : await fetch(`/api/contabilidade/politicas/${encodeURIComponent(selecionada.codigo)}/${acao}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(acao === 'simular'
+        ? { numero: selecionada.numero, valor, justificativa }
+        : { numero: selecionada.numero, justificativa }),
+    });
+  if (!resposta.ok) {
+    setAviso(await lerMensagem(resposta));
+    return;
+  }
+  setModal(null);
+  if (acao === 'aprovar') setAviso('concluído com evidência');
+}
+```
 
 - `Configurar mappings` e `+ Novo registro` abrem o drawer `Dados principais` e o POST vai para `/api/contabilidade/politicas`. O botão de confirmar o drawer repete `Configurar mappings`. Não usar `Salvar rascunho ilustrativo` nem `Criar`.
 - `Editar versão` faz `POST /api/contabilidade/politicas/{codigo}/editar`.
-- `Simular evento` abre o modal com `Valor` e `Justificativa / observação`. O valor pt-BR `10,10` sai no JSON como `"10.10"`. O POST é `.../simular`.
-- `Aprovar regra` abre o modal só com `Justificativa / observação` e faz `POST .../aprovar`.
+- Uma linha marcada, ou nenhuma além da linha aberta: `Simular evento` abre o modal com `Valor` e `Justificativa / observação`. O valor pt-BR `10,10` sai no JSON como `"10.10"`. O POST é `.../simular`. `Aprovar regra` abre o modal só com `Justificativa / observação` e faz `POST .../aprovar`.
+- Duas ou mais linhas marcadas: os mesmos botões chamam `confirmarLoteOuAcao`. O corpo vai para `POST /api/contabilidade/politicas/lote`. Simular sem valor não chama `fetch` e mostra `Valor é obrigatório.`. Aprovar em lote não envia `valor`. O cartão mobile (`max-width: 800px`) repete o mesmo checkbox, com o mesmo `aria-label`.
 - `Ações do processo` abre o drawer com os três comandos e `Abrir decisão →`. Cada um dispara a mesma ação do botão de mesmo rótulo. Não fundir os três num botão só.
 - Drawer: label `Justificativa auditável`. Não renderizar `Motivo da alteração`.
 - `Verificar dados` chama `POST /api/contabilidade/politicas/validar`.
 - Filtro `aria-label="Filtrar competência"` (`input type="month"`) e `aria-label="Filtrar situação"` com `Todos`, `Rascunho`, `Aguardando revisão`, `Aprovado`, `Rejeitado`, `Suspenso`.
 - Busca `aria-label="Buscar registros da lista"`.
 - Lookup `Pesquisar`. Lista vazia: toast `Nenhum cadastro disponível para seleção. Consulte a área responsável.`
-- 403 mostra `Acesso não permitido`. 409 mostra `message` (`evento duplicado` ou `conflito concorrente`). 422 mostra `message` (`mapeamento ausente`, `origem imutável`, `balanceamento exato`, `aprovador diferente do autor`). Depois de aprovar, toast `concluído com evidência`.
+- 403 mostra `Acesso não permitido`. 409 e 422 passam `message` em `lerMensagem` / `textoMensagem` e mostram o texto interno (`evento duplicado`, `conflito concorrente`, `mapeamento ausente`, `origem imutável`, `balanceamento exato`, `aprovador diferente do autor`). O Playwright da Task 7 procura esse texto, não o objeto do filtro. Depois de aprovar, toast `concluído com evidência`.
+- Na ficha, `Início de vigência` usa `dataBr` (`01/10/2026` para `2026-10-01`). A grade não tem essa coluna.
 - Aba Regras e validações: `origem imutável, não lançar sem mapeamento correto, balanceamento exato`.
 - Aba Exceções: `Mapeamento ausente` e `Evento duplicado`.
 - Aba Integrações: `Esta tela não chama serviço externo.`
@@ -1493,8 +1732,9 @@ A fonte não decide os pontos abaixo. O plano não inventa a regra de produto; d
 
 - Caderno B L448: configurar, simular e aprovar estão nas tasks 3, 4 e 6. Revisar competência não vira botão (D1).
 - Caderno B L449: origem imutável está na Task 3; mapeamento ausente e balanceamento exato estão na Task 4; as três datas não viram coluna (D5).
-- Caderno B L450: evento duplicado está na Task 3; mapeamento ausente está nas tasks 3 e 4. HTTP 422/409 usam `{ message, codigo }`.
-- Matriz UX L949–L971: grade, filtros, abas e estados estão na Task 6. O estado de serviço externo não é fabricado (D6). `Enquadramento fiscal` fica visível e sem FK.
+- Caderno B L450: evento duplicado está na Task 3; mapeamento ausente está nas tasks 3 e 4. A exceção carrega `{ message, codigo }`. O teste HTTP da Task 5 afirma o envelope do `AllExceptionsFilter`. A Task 6 mostra o texto interno com `textoMensagem`.
+- Matriz UX L949–L971: grade, filtros, abas, estados e a seleção múltipla com lote estão na Task 6. `Situação` não tem botão de ordenar. `Início de vigência` fica na ficha, em `dd/MM/yyyy`, e não é coluna. O estado de serviço externo não é fabricado (D6). `Enquadramento fiscal` fica visível e sem FK.
+- `politicas.service.spec.ts` nasce na Task 4. O Step 4 da Task 3 roda só o e2e de configurar e editar.
 - Enum `tipoEvento` (`componentes.js` L2168–L2189) e enum `status` (L1688–L1708) estão no CHECK da Task 2 e nos rótulos da Task 6.
 - Review Focus 1–5 têm teste nas tasks 3 e 4.
 - `apresentar` da Task 3 é o contrato que as tasks 5 e 6 consomem, com os mesmos nomes de campo.
