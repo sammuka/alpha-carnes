@@ -371,7 +371,8 @@ export class EstabelecimentosService {
         const [empresa] = await tx
           .select()
           .from(empresas)
-          .where(and(eq(empresas.id, dto.empresaId), isNull(empresas.deletedAt)));
+          .where(and(eq(empresas.id, dto.empresaId), isNull(empresas.deletedAt)))
+          .for('update'); // serializa com remover empresa (a FK só toma KEY SHARE)
         if (!empresa) throw new NotFoundException('Empresa não encontrada');
         if (dto.cnpj.slice(0, 8) !== empresa.cnpjRaiz) {
           regraViolada('CNPJ_RAIZ_DIVERGENTE', 'A raiz do CNPJ do estabelecimento difere da empresa.');
