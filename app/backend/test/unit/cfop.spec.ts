@@ -32,6 +32,16 @@ describe('CFOP/CEST/NCM — lixo não é normalizado para válido (M3)', () => {
     expect(validarCest(normalizarCest('17.087.00'))).toBe(true);
   });
 
+  it.each(['51\n02', '51\t02', '51 02'])('CFOP com espaço não comum %j é recusado', (valor) => {
+    expect(validarCfop(normalizarCfop(valor))).toBe(false);
+  });
+
+  it('CEST e NCM com quebra de linha ou tabulação são recusados', () => {
+    expect(validarCest(normalizarCest('17087\n00'))).toBe(false);
+    expect(validarNcm(normalizarNcm('0201\t3000'))).toBe(false);
+    expect(validarNcm(normalizarNcm('0201 30 00'))).toBe(true);
+  });
+
   it('NCM com letras é recusado', () => {
     expect(validarNcm(normalizarNcm('abc02013000x'))).toBe(false);
   });

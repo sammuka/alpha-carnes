@@ -5,9 +5,9 @@
 
 const FORMATO_NCM = /^[0-9]{8}$/;
 
-/** Remove `.`, espaço e `-`. */
+/** Remove só `.`, espaço comum e `-`. */
 export function normalizarNcm(valor: string): string {
-  return valor.replace(/[.\s-]/g, '');
+  return valor.replace(/[. -]/g, '');
 }
 
 /** `true` se o valor (já normalizado) tem exatamente 8 dígitos. */

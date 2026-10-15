@@ -107,6 +107,12 @@ describe('DTOs de enquadramento, CFOP e NCM', () => {
       justificativa: 'Cadastro manual',
     }).success).toBe(false);
   });
+
+  it('CFOP, NCM e CEST com quebra de linha ou tabulação são recusados', () => {
+    expect(createCfopSchema.safeParse({ codigo: '51\n02', descricao: 'Venda', justificativa: 'Cadastro manual' }).success).toBe(false);
+    expect(createNcmSchema.safeParse({ codigo: '0201\t3000', descricao: 'Carne', justificativa: 'Cadastro manual' }).success).toBe(false);
+    expect(createEnquadramentoSchema.safeParse(base({ cest: '17087\n00' })).success).toBe(false);
+  });
 });
 
 describe('B1 — datas e NUL', () => {

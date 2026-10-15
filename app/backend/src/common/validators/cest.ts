@@ -7,7 +7,7 @@ const FORMATO_CEST = /^[0-9]{7}$/;
 
 /** Remove só a máscara (`.`, espaço e `-`); qualquer outro caractere fica e reprova em `validar*`. */
 export function normalizarCest(valor: string): string {
-  return valor.replace(/[.\s-]/g, '');
+  return valor.replace(/[. -]/g, '');
 }
 
 /** `true` se o valor (já normalizado) tem exatamente 7 dígitos. */
