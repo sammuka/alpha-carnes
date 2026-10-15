@@ -8,6 +8,7 @@ export default async function PoliticasContabilizacaoPage() {
   const resposta = await GET(new NextRequest('http://interno/api/contabilidade/politicas?pagina=1'));
   if (resposta.status === 403) return <PoliticasContabilizacaoClient inicial={[]} semAcesso />;
   if (!resposta.ok) return <PoliticasContabilizacaoClient inicial={[]} />;
-  const corpo = await resposta.json() as { itens?: PoliticaApresentada[] };
-  return <PoliticasContabilizacaoClient inicial={corpo.itens ?? []} />;
+  const corpo = await resposta.json() as { itens?: PoliticaApresentada[]; total?: number };
+  const itens = corpo.itens ?? [];
+  return <PoliticasContabilizacaoClient inicial={itens} totalInicial={corpo.total ?? itens.length} />;
 }

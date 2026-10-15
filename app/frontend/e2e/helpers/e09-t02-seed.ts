@@ -73,3 +73,19 @@ export async function criarPlanoDaJornada(request: APIRequestContext): Promise<P
   }
   return plano;
 }
+
+/** Cria `quantidade` políticas de Liquidação, cada uma numa competência sorteada, sobre as contas do plano da jornada. */
+export async function criarPoliticas(request: APIRequestContext, plano: PlanoDaJornada, quantidade: number): Promise<void> {
+  const { cookieHeader } = await loginBackend(request);
+  for (let i = 0; i < quantidade; i += 1) {
+    await postar(request, cookieHeader, '/contabilidade/politicas', {
+      tipoEvento: 'LIQUIDACAO',
+      competencia: competenciaUnica(),
+      contaDebitoCodigo: `A${plano.sufixo}.1`,
+      contaCreditoCodigo: `P${plano.sufixo}.1`,
+      centroCodigo: plano.centroCodigo,
+      vigenciaInicio: ontemIso(),
+      justificativa: 'cria política para paginar',
+    });
+  }
+}

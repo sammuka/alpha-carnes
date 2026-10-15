@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { competenciaUnica, criarPlanoDaJornada, type PlanoDaJornada } from './helpers/e09-t02-seed';
+import { competenciaUnica, criarPlanoDaJornada, criarPoliticas, type PlanoDaJornada } from './helpers/e09-t02-seed';
 import { ADMIN_EMAIL, loginBackend } from './helpers/onda6-seed';
 
 const SENHA_DA_JORNADA = 'senha-da-jornada';
@@ -154,5 +154,43 @@ test('competência repetida mostra evento duplicado e não grava a segunda', asy
   await configurarPolitica(page, competencia);
   await expect(page.getByText('evento duplicado', { exact: true })).toBeVisible();
   expect((await politicaPelaApi(page, competencia))?.codigo).toBe(`LIQUIDACAO-${competencia}`);
+  await admin.close();
+});
+
+test('com mais de 20 políticas a página 2 é alcançada pela tela e a posição sobrevive ao reload', async ({ browser, baseURL, playwright }) => {
+  const api = await playwright.request.newContext();
+  let propria: PlanoDaJornada;
+  try {
+    propria = await criarPlanoDaJornada(api);
+    await criarPoliticas(api, propria, 21);
+  } finally {
+    await api.dispose();
+  }
+  const admin = await browser.newContext({ baseURL });
+  const page = await admin.newPage();
+  await login(page, ADMIN_EMAIL, senhaAdmin, baseURL!);
+  await page.goto('/erp/contabilidade/politicas-de-contabilizacao');
+  const linhas = page.locator('.politicas-grade tbody tr');
+  const listaDaBusca = (pagina: string) => page.waitForResponse((resposta) => {
+    const url = new URL(resposta.url());
+    return resposta.request().method() === 'GET' && url.pathname === '/api/contabilidade/politicas'
+      && url.searchParams.get('pagina') === pagina && url.searchParams.get('q') === propria.debitoNome;
+  });
+  const primeira = listaDaBusca('1');
+  await page.getByLabel('Buscar registros da lista').fill(propria.debitoNome);
+  expect((await primeira).ok()).toBeTruthy();
+  await expect(linhas).toHaveCount(20);
+  await expect(page.getByText('Página 1 de 2', { exact: true })).toBeVisible();
+  await expect(page.getByText('Exibindo 20 de 21', { exact: true })).toBeVisible();
+
+  const segunda = listaDaBusca('2');
+  await page.getByRole('link', { name: 'Próxima página' }).click();
+  expect((await segunda).ok()).toBeTruthy();
+  await expect(linhas).toHaveCount(1);
+  await expect(page.getByText('Página 2 de 2', { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByText('Página 2 de 2', { exact: true })).toBeVisible();
+  await expect(linhas).toHaveCount(1);
   await admin.close();
 });

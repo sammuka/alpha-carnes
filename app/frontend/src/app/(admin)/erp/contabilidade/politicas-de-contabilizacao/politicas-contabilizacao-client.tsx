@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Pagination, PaginationContent, PaginationItem, PaginationLink } from '@/components/ui/pagination';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 
 const CHAVE_RASCUNHO = 'politicas-de-contabilizacao';
+const POR_PAGINA = 20; // mesmo valor de PAGINA em politicas.service.ts
 const ABAS = ['Ficha e campos', 'Movimentações', 'Regras e validações', 'Exceções', 'Histórico', 'Integrações', 'Aceite e testes'] as const;
 const EXCECOES = ['Mapeamento ausente', 'Evento duplicado'];
 const ACEITE = [
@@ -154,9 +156,11 @@ function celula(linha: PoliticaApresentada, rotulo: string): string {
 
 export function PoliticasContabilizacaoClient({
   inicial,
+  totalInicial = inicial.length,
   semAcesso = false,
 }: {
   inicial: PoliticaApresentada[];
+  totalInicial?: number;
   semAcesso?: boolean;
 }) {
   const [marcadas, setMarcadas] = useState<string[]>([]);
@@ -179,27 +183,31 @@ export function PoliticasContabilizacaoClient({
   const [ordenar, setOrdenar] = useState<string>('competencia');
   const [direcao, setDirecao] = useState<'asc' | 'desc'>('asc');
   const [enviando, setEnviando] = useState(false);
+  const [pagina, setPagina] = useState(1);
+  const [total, setTotal] = useState(totalInicial);
+  const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
   const sequenciaModal = useRef(0);
 
   useEffect(() => {
     const cru = sessionStorage.getItem(CHAVE_RASCUNHO);
     if (!cru) return;
     try {
-      const rascunho = JSON.parse(cru) as { form?: Formulario; busca?: string; filtroCompetencia?: string; filtroSituacao?: string; ordenar?: string; direcao?: string };
+      const rascunho = JSON.parse(cru) as { form?: Formulario; busca?: string; filtroCompetencia?: string; filtroSituacao?: string; ordenar?: string; direcao?: string; pagina?: number };
       if (rascunho.form) setForm(rascunho.form);
       if (rascunho.busca) setBusca(rascunho.busca);
       if (rascunho.filtroCompetencia) setFiltroCompetencia(rascunho.filtroCompetencia);
       if (rascunho.filtroSituacao) setFiltroSituacao(rascunho.filtroSituacao);
       if (rascunho.ordenar && COLUNAS.some((coluna) => coluna.ordenar === rascunho.ordenar)) setOrdenar(rascunho.ordenar!);
       if (rascunho.direcao === 'asc' || rascunho.direcao === 'desc') setDirecao(rascunho.direcao);
+      if (Number.isInteger(rascunho.pagina) && rascunho.pagina! >= 2 && rascunho.pagina! <= 100000) setPagina(rascunho.pagina!);
     } catch {
       sessionStorage.setItem(CHAVE_RASCUNHO, '');
     }
   }, []);
 
   useEffect(() => {
-    sessionStorage.setItem(CHAVE_RASCUNHO, JSON.stringify({ form, busca, filtroCompetencia, filtroSituacao, ordenar, direcao }));
-  }, [form, busca, filtroCompetencia, filtroSituacao, ordenar, direcao]);
+    sessionStorage.setItem(CHAVE_RASCUNHO, JSON.stringify({ form, busca, filtroCompetencia, filtroSituacao, ordenar, direcao, pagina }));
+  }, [form, busca, filtroCompetencia, filtroSituacao, ordenar, direcao, pagina]);
 
   const ultimaConsulta = useRef(new URLSearchParams({
     pagina: '1', q: '', competencia: '', situacao: '', ordenar: 'competencia', direcao: 'asc',
@@ -208,7 +216,7 @@ export function PoliticasContabilizacaoClient({
 
   useEffect(() => {
     const consulta = new URLSearchParams({
-      pagina: '1', q: busca, competencia: filtroCompetencia, situacao: filtroSituacao, ordenar, direcao,
+      pagina: String(pagina), q: busca, competencia: filtroCompetencia, situacao: filtroSituacao, ordenar, direcao,
     }).toString();
     // Compara com a última consulta feita (inicialmente, a da lista que o servidor entregou): não consulta ao montar
     // nem na segunda montagem simulada do StrictMode, e consulta uma vez só depois da restauração do sessionStorage.
@@ -224,20 +232,24 @@ export function PoliticasContabilizacaoClient({
           setAviso(await lerMensagem(resposta));
           return;
         }
-        const corpo = await lerCorpo(resposta) as { itens?: PoliticaApresentada[] } | null;
+        const corpo = await lerCorpo(resposta) as { itens?: PoliticaApresentada[]; total?: number } | null;
         if (minha !== sequenciaLista.current) return;
         if (!corpo || !Array.isArray(corpo.itens)) {
           setAviso(NAO_CONFIRMADO);
           return;
         }
+        const novoTotal = typeof corpo.total === 'number' ? corpo.total : corpo.itens.length;
         setLinhas(corpo.itens);
+        setTotal(novoTotal);
         setMarcadas([]);
         setAviso('');
+        const ultima = Math.max(1, Math.ceil(novoTotal / POR_PAGINA));
+        if (pagina > ultima) setPagina(ultima);
       } catch {
         if (minha === sequenciaLista.current) setAviso('Não foi possível atualizar a lista. Tente novamente.');
       }
     })();
-  }, [busca, filtroCompetencia, filtroSituacao, ordenar, direcao]);
+  }, [busca, filtroCompetencia, filtroSituacao, ordenar, direcao, pagina]);
   // ponytail: uma requisição por tecla, sem debounce; a guarda de sequência descarta resposta antiga. Adicionar debounce de 250 ms se o servidor sentir.
 
   if (semAcesso) {
@@ -461,6 +473,7 @@ export function PoliticasContabilizacaoClient({
     const proxima = ordenar === campo && direcao === 'asc' ? 'desc' : 'asc';
     setOrdenar(campo);
     setDirecao(proxima);
+    setPagina(1);
   }
 
   const contasVisiveis = contas.filter((conta) => conta.nome.toLowerCase().includes(busca.toLowerCase()) || !busca);
@@ -485,9 +498,9 @@ export function PoliticasContabilizacaoClient({
       <Button type="button" variant="secondary" onClick={() => setDrawer('processo')}>Ações do processo</Button>
       <Button type="button" variant="secondary" onClick={voltar}>Voltar</Button>
       <div>
-        <input aria-label="Buscar registros da lista" placeholder="Pesquisar descrição ou referência de negócio" value={busca} onChange={(evento) => setBusca(evento.target.value)} />
-        <input aria-label="Filtrar competência" type="month" value={filtroCompetencia} onChange={(evento) => setFiltroCompetencia(evento.target.value)} />
-        <select aria-label="Filtrar situação" value={filtroSituacao} onChange={(evento) => setFiltroSituacao(evento.target.value)}>
+        <input aria-label="Buscar registros da lista" placeholder="Pesquisar descrição ou referência de negócio" value={busca} onChange={(evento) => { setBusca(evento.target.value); setPagina(1); }} />
+        <input aria-label="Filtrar competência" type="month" value={filtroCompetencia} onChange={(evento) => { setFiltroCompetencia(evento.target.value); setPagina(1); }} />
+        <select aria-label="Filtrar situação" value={filtroSituacao} onChange={(evento) => { setFiltroSituacao(evento.target.value); setPagina(1); }}>
           {SITUACOES.map(([valor, rotulo]) => <option key={rotulo} value={valor}>{rotulo}</option>)}
         </select>
         <Button type="button" variant="secondary" onClick={() => void fetch(`/api/contabilidade/politicas/exportar?pagina=1&q=${encodeURIComponent(busca)}&competencia=${filtroCompetencia}&situacao=${filtroSituacao}`)}>Exportar visão</Button>
@@ -543,6 +556,30 @@ export function PoliticasContabilizacaoClient({
           </article>
         ))}
       </div>
+      <p>Exibindo {linhas.length} de {total}</p>
+      <Pagination aria-label="Paginação da lista">
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationLink
+              href="#"
+              size="default"
+              aria-label="Página anterior"
+              aria-disabled={pagina <= 1}
+              onClick={(evento) => { evento.preventDefault(); if (pagina > 1) setPagina(pagina - 1); }}
+            >Anterior</PaginationLink>
+          </PaginationItem>
+          <PaginationItem><span>Página {pagina} de {totalPaginas}</span></PaginationItem>
+          <PaginationItem>
+            <PaginationLink
+              href="#"
+              size="default"
+              aria-label="Próxima página"
+              aria-disabled={pagina >= totalPaginas}
+              onClick={(evento) => { evento.preventDefault(); if (pagina < totalPaginas) setPagina(pagina + 1); }}
+            >Próxima</PaginationLink>
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>
       <div role="tablist">
         {ABAS.map((nome) => (
           <button key={nome} type="button" role="tab" aria-selected={aba === nome} onClick={() => void abrirHistorico(nome)}>{nome}</button>

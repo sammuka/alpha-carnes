@@ -380,3 +380,114 @@ it('rascunho sem ordenar mantém a ordenação padrão por competência ao resta
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(fetchMock).toHaveBeenCalledWith('/api/contabilidade/politicas?pagina=1&q=x&competencia=&situacao=&ordenar=competencia&direcao=asc');
 });
+
+function muitas(quantidade: number) {
+  return Array.from({ length: quantidade }, (_, i) => linha(`LIQUIDACAO-2026-${i}`, `Liquidação ${i}`));
+}
+const URL_PAGINA_2 = '/api/contabilidade/politicas?pagina=2&q=&competencia=&situacao=&ordenar=competencia&direcao=asc';
+
+it('mostra a posição na lista e desabilita Anterior na primeira página', () => {
+  render(<PoliticasContabilizacaoClient inicial={muitas(20)} totalInicial={45} />);
+  expect(screen.getByText('Página 1 de 3')).toBeInTheDocument();
+  expect(screen.getByText('Exibindo 20 de 45')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Página anterior' })).toHaveAttribute('aria-disabled', 'true');
+  expect(screen.getByRole('link', { name: 'Próxima página' })).toHaveAttribute('aria-disabled', 'false');
+});
+
+it('Próxima página consulta pagina=2 e Anterior volta para a 1', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn()
+    .mockResolvedValueOnce(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 45 }))
+    .mockResolvedValueOnce(corpoOk({ itens: muitas(20), total: 45 }));
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={muitas(20)} totalInicial={45} />);
+  await user.click(screen.getByRole('link', { name: 'Próxima página' }));
+  expect(await screen.findByText('Página 2 de 3')).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenNthCalledWith(1, URL_PAGINA_2);
+  expect(screen.getByRole('cell', { name: 'Tarifa' })).toBeInTheDocument();
+  await user.click(screen.getByRole('link', { name: 'Página anterior' }));
+  expect(await screen.findByText('Página 1 de 3')).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenNthCalledWith(2, expect.stringContaining('pagina=1'));
+});
+
+it('não passa da última página', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn().mockResolvedValue(corpoOk({ itens: muitas(5), total: 25 }));
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={muitas(20)} totalInicial={25} />);
+  await user.click(screen.getByRole('link', { name: 'Próxima página' }));
+  expect(await screen.findByText('Página 2 de 2')).toBeInTheDocument();
+  await user.click(screen.getByRole('link', { name: 'Próxima página' }));
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it('clique no link desabilitado não dispara requisição', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn();
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={muitas(20)} totalInicial={45} />);
+  await user.click(screen.getByRole('link', { name: 'Página anterior' }));
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(screen.getByText('Página 1 de 3')).toBeInTheDocument();
+});
+
+it.each([
+  ['a busca', async (user: ReturnType<typeof userEvent.setup>) => { await user.type(screen.getByLabelText('Buscar registros da lista'), 'x'); }, 'q=x'],
+  ['a situação', async (user: ReturnType<typeof userEvent.setup>) => { await user.selectOptions(screen.getByLabelText('Filtrar situação'), 'DRAFT'); }, 'situacao=DRAFT'],
+  ['a ordenação', async (user: ReturnType<typeof userEvent.setup>) => { await user.click(screen.getByRole('button', { name: 'Ordenar por Conta de débito' })); }, 'ordenar=contaDebito'],
+])('mudar %s volta à página 1', async (_rotulo, agir, trecho) => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn().mockResolvedValue(corpoOk({ itens: muitas(20), total: 45 }));
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={muitas(20)} totalInicial={45} />);
+  await user.click(screen.getByRole('link', { name: 'Próxima página' }));
+  expect(await screen.findByText('Página 2 de 3')).toBeInTheDocument();
+  await agir(user);
+  await waitFor(() => expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining(`pagina=1&`)));
+  expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining(trecho));
+  expect(await screen.findByText('Página 1 de 3')).toBeInTheDocument();
+});
+
+it('descarta a resposta antiga da página 2 quando o usuário já voltou para a 1', async () => {
+  const user = userEvent.setup();
+  const lenta = adiavel();
+  global.fetch = jest.fn()
+    .mockReturnValueOnce(lenta.promessa)
+    .mockResolvedValueOnce(corpoOk({ itens: muitas(20), total: 45 })) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={muitas(20)} totalInicial={45} />);
+  await user.click(screen.getByRole('link', { name: 'Próxima página' }));
+  await user.click(screen.getByRole('link', { name: 'Página anterior' }));
+  expect(await screen.findByText('Página 1 de 3')).toBeInTheDocument();
+  await act(async () => { lenta.resolver(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 45 })); });
+  expect(screen.queryByRole('cell', { name: 'Tarifa' })).not.toBeInTheDocument();
+  expect(screen.getByText('Página 1 de 3')).toBeInTheDocument();
+});
+
+it('restaura a página do sessionStorage com uma única consulta', async () => {
+  sessionStorage.setItem('politicas-de-contabilizacao', JSON.stringify({ pagina: 2 }));
+  const fetchMock = jest.fn().mockResolvedValue(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 45 }));
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={muitas(20)} totalInicial={45} />);
+  expect(await screen.findByText('Página 2 de 3')).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock).toHaveBeenCalledWith(URL_PAGINA_2);
+});
+
+it('página restaurada além do total volta para a última página existente', async () => {
+  sessionStorage.setItem('politicas-de-contabilizacao', JSON.stringify({ pagina: 9 }));
+  const fetchMock = jest.fn()
+    .mockResolvedValueOnce(corpoOk({ itens: [], total: 25 }))
+    .mockResolvedValueOnce(corpoOk({ itens: muitas(5), total: 25 }));
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={muitas(20)} totalInicial={25} />);
+  expect(await screen.findByText('Página 2 de 2')).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenLastCalledWith(URL_PAGINA_2);
+});
+
+// Reproduz o StrictMode do Next em dev: a restauração roda duas vezes e a segunda lê o padrão gravado pelo efeito de gravação.
+it('sob StrictMode a página 2 restaurada do sessionStorage não volta para a 1', async () => {
+  sessionStorage.setItem('politicas-de-contabilizacao', JSON.stringify({ pagina: 2 }));
+  global.fetch = jest.fn().mockResolvedValue(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 45 })) as unknown as typeof fetch;
+  render(<StrictMode><PoliticasContabilizacaoClient inicial={muitas(20)} totalInicial={45} /></StrictMode>);
+  expect(await screen.findByText('Página 2 de 3')).toBeInTheDocument();
+});
