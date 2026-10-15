@@ -8,6 +8,7 @@
 |---|---|---|---|
 | r1 | 2026-10-15 | planner | versão inicial da fatia E09-T01 |
 | r2 | 2026-10-15 | planner (nova instância) | Portão 1 r1 `ajustar` (6 achados; veredito `aa2b94b`, plano r1 `f0043b6`); ajuste cirúrgico: nenhum outro ponto do plano muda |
+| r3 | 2026-10-15 | planner (nova instância) | revisão crítica independente sobre o código implementado até `93599bb` (B1 a B4, M1 a M3, M5, M6) e AD-25 item 3; só acrescenta a seção "Correções da revisão crítica (r3)" (Tasks 8 a 17, classe de risco alto); as Tasks 1 a 7 já implementadas não mudam |
 
 | Achado r1 | Correção r2 |
 |---|---|
@@ -1716,6 +1717,1314 @@ O spec usa o administrador semeado. Não chama SEFAZ, banco nem EISS.
 "@
 ```
 
+## Correções da revisão crítica (r3)
+
+**Classe de risco desta seção: ALTO** (AD-22 item 6). O delta altera regra de transição de conta contábil, descarte auditado de versão, validação de entrada HTTP, exportação CSV e (condicionalmente) migration. Rito: revisão crítica por commit, Portão 2 e Portão A. A seção não cria permissão, perfil, menu nem tabela; a única migration é a renumeração condicional da Task 17.
+
+**Origem.** Revisão crítica preliminar independente de 2026-10-15 sobre o código implementado até `93599bb` (achados B1 a B4; menores M1, M2, M3, M5, M6) e AD-25 item 3 (`docs/execucao/DECISOES.md`). A Task 13 cobre também um achado do planner (A1: `lote` devolve linhas cruas com UUID). As linhas citadas são as do código lido na revisão e deslocam a cada task.
+
+**Ordem.** As Tasks 8 a 16 são independentes, com duas exceções: a Task 10 usa `ultimaVersaoDecidida` criada na Task 9, e o `it` de rótulos da Task 12 exige o descarte da Task 11. A Task 17 só roda quando o coordenador indicar. Um commit por task; cada teste novo falha antes e passa depois, salvo os `it` marcados "guarda", que passam antes e depois e travam a regra contra correção excessiva.
+
+**Convenções dos testes.** Todos entram em `app/backend/test/integration/plano-contas.e2e-spec.ts`, dentro do `describe` existente (que limpa as três tabelas no `beforeEach`, L54 a L58), salvo onde a task disser outro arquivo. Reutilizar `dtoBase`, `promover`, `comoEdicao`, `contaAprovadaSintetica`, `contaAprovadaAnalitica` e `contarVersoes` do arquivo. Chamada HTTP: `request(srv()).post(url).set('Cookie', adminCookies).send(corpo)`. O `AllExceptionsFilter` responde `{ statusCode, message: <corpo da exceção>, ... }`, então a mensagem de regra está em `res.body.message.message`. Comando de teste do backend, sempre em `app/backend`: `npx jest test/integration/plano-contas.e2e-spec.ts --runInBand`.
+
+### Mapa achado, task e teste (DoD 1:1)
+
+| Achado | Task | `it` que falha antes e passa depois |
+|---|---|---|
+| B3 `ZodError` vira 500, data inexistente, `constructor`/`toString` | 8 | `entrada HTTP inválida` (it.each de 9 entradas, 400), `ação herdada %s responde 404`, `lote com código herdado do protótipo responde 422 conflito`; unit `dataCalendarioValida` |
+| B2 conta suspensa segue vigente | 9 | `conta com v1 aprovada e v2 suspensa não é pai válido` |
+| B1 ciclo pelo `editar` e na aprovação | 10 | `editar recusa ciclo e pai próprio sem gravar`, `aprovar revalida o ciclo...`, `duas aprovações cruzadas não fecham ciclo` |
+| AD-25 item 3 bloquear encerra o rascunho | 11 | `bloquear com rascunho aberto descarta...`, `revisão aberta também é descartada...`, `falha da auditoria desfaz o descarte` |
+| M5 mensagem do editar e histórico cru | 12 | `editar fora do rascunho recusa com transição inválida`, `histórico rotula e ordena...` |
+| M3 lote sem evento, A1 UUID no lote | 13 | `lote emite o evento de cada conta só depois do commit`, `lote não devolve uuid` |
+| M1 CSV paginado, M2 fórmula | 14 | `csv exporta a visão inteira...`, `csv neutraliza célula que começa como fórmula` |
+| M6 centro sem lock | 15 | `dez criações simultâneas do mesmo centro...` |
+| B4 `limparPlano` fixo e destrutivo | 16 | jest `e09-t01-limpar-plano.test.ts` |
+| Renumeração 0048 para 0049 | 17 | jest `e09-t01-migration-meta.spec.ts` |
+
+### Decisões do delta
+
+- **Vigência (B2).** O plano já fixa o pai como "uma versão `APPROVED`, não suspensa" (D3) e a Task 4 recusa pai suspenso. Regra aplicada: a versão vigente é a de maior `numero` entre as `APPROVED` e `SUSPENDED` não excluídas, e a conta só é vigente se ela for `APPROVED`. Aprovar versão nova supera a anterior (maior número decidido). `DRAFT`, `REVIEW` e `REJECTED` não decidem nada: revisão em aberto não derruba a versão aprovada. Difere da leitura literal "a versão mais recente da conta precisa ser `APPROVED`" só quando há rascunho aberto sobre uma aprovada; a leitura literal impediria criar filhas durante qualquer revisão, o que D3 não pede.
+- **Mensagem do pai suspenso.** Review Focus 1 pede `conta desativada`. Pai sem nenhuma versão decidida mantém `Conta pai não está ativa` (teste existente L134 a L145).
+- **Consulta compartilhável.** `ultimaVersaoDecidida(executor, contaId)` fica em `plano/vigencia.ts`, sem dependência de Nest. A E09-T02 pode importá-la se decidir em plano próprio; esta seção não toca arquivo da T02.
+- **Bloqueio com rascunho (AD-25 item 3).** O token de concorrência continua sendo o maior `numero` não excluído (D4), que é o número que a grade mostra. Logo `bloquear` com o número da versão aberta é aceito e número desatualizado segue 409. "Rascunho aberto" cobre `DRAFT` e `REVIEW`, as duas situações que `versionar` chama de "Versão em aberto" (`plano.service.ts` L319 a L321): deixar `REVIEW` viva permitiria aprová-la depois do bloqueio e reativar a conta. Sem versão `APPROVED` imediatamente anterior à aberta, responde 422 `Situação não permite esta transição` e nada é descartado.
+- **Estado do descarte.** O `chk_conta_versoes_situacao` (`contabilidade-plano.schema.ts` L63) não tem estado de descarte. Usa-se soft delete (`deleted_at`) na versão aberta, conforme `docs/data/convencoes-schema.md`, e auditoria `operacao = 'DELETE'` (permitida por `chk_auditoria_operacao`, `auditoria.schema.ts` L21) na mesma transação do bloqueio. Sem status novo e sem migration.
+- **CSV.** A visão exportada é o filtro inteiro, sem paginação. Célula que começa por `=`, `+`, `-`, `@`, tab ou CR recebe o prefixo `'` (CSV injection).
+- **B3 e o pipe.** `ZodValidationPipe` (`common/pipes/zod-validation.pipe.ts`) responde 400. A rota de ação instancia o pipe com o schema da ação depois de provar a ação com `Object.hasOwn`. A API desta fatia não tem campo de competência `AAAA-MM`: a competência é `vigenciaInicio` e `vigenciaFim` (`AAAA-MM-DD`); `2026-13-01` e `2026-02-31` são os casos do achado.
+
+### Pendências registradas (sem task nesta seção)
+
+- **P-r3-1, tempo real na tela.** A room `contabilidade-plano` tem emissores no backend (`realtime.gateway.ts` L430 a L463) e nenhum consumidor no frontend. As Tasks 5 e 6 deste plano não exigem atualização em tempo real da tela; `plano-contas-client.tsx` só recarrega após a própria ação. Fica como pendência para o coordenador abrir issue. A Task 13 garante apenas que o evento sai no lote.
+- **P-r3-2, combo de conta pai.** `plano-contas-client.tsx` L632 monta o combo com `contas` (a página corrente de 20 linhas) filtrando `sintetica` e `APPROVED` da versão mais recente. Pai em outra página, ou com revisão aberta, não aparece. A autoridade é o backend (Tasks 9 e 10 recusam com 422). Corrigir exige endpoint novo de opções; fica como pendência.
+
+### Critérios de parada do delta
+
+Parar e devolver ao coordenador, sem commitar, se:
+
+1. Um teste novo (não marcado "guarda") passar antes da correção: o teste não prova nada, reescrever.
+2. Qualquer teste existente quebrar fora das asserções que este delta altera de propósito: `plano-contas.e2e-spec.ts` L364 a L365 (Task 12) e a forma do retorno de `lote` (Task 13).
+3. A correção exigir migration (só a Task 17 tem) ou alterar `CHECK`.
+4. O diff tocar arquivo fora da lista da task, `docs/execucao/` ou arquivo da E09-T02.
+5. `npm run test:cov` em `app/backend` ficar abaixo de 80% em linhas ou ramos.
+6. Na Task 17: o `drizzle-kit generate` emitir prefixo diferente de `0049`, ou o SQL gerado diferir do original além dos três `CREATE TRIGGER`.
+
+### Rollback do delta
+
+- Cada task é um commit: `git revert <sha-da-task>` (nunca `reset` nem force push). A Task 17 reverte conforme o próprio rollback, ao final dela.
+- As Tasks 8 a 16 não mudam esquema: reverter o código restaura o comportamento anterior sem passo de banco.
+- Task 11: versões descartadas permanecem com `deleted_at` preenchido depois do revert. Compensação manual, só com autorização do coordenador e conta a conta: `update conta_versoes set deleted_at = null where id = '<registro_id da auditoria DELETE>'`, depois de conferir que a conta segue `SUSPENDED` na versão anterior.
+- Task 16: o `TRUNCATE ... CASCADE` roda só em banco de teste; reverter restaura a limpeza antiga.
+
+---
+
+## Task 8: Entrada HTTP inválida responde 400 ou 404, não 500 (B3)
+
+**Files:**
+- Modify: `app/backend/src/modules/contabilidade/plano/dto/plano.dto.ts` (L6 `dataIso`)
+- Modify: `app/backend/src/modules/contabilidade/plano/plano.controller.ts` (L76 a L87)
+- Modify: `app/backend/src/modules/contabilidade/plano/plano.service.ts` (L288, L387, L491)
+- Modify: `app/backend/src/modules/contabilidade/plano/plano.service.spec.ts`
+- Modify: `app/backend/test/integration/plano-contas.e2e-spec.ts`
+
+Causas lidas: `plano.controller.ts` L84 faz `acaoSchema[acao]` (lê o protótipo: `constructor` e `toString` são truthy) e L86 `schema.parse(corpo)` (lança `ZodError`, que o `AllExceptionsFilter` trata como 500 por não ser `HttpException`). `plano.dto.ts` L6 valida data só por regex. `plano.service.ts` L288 e L491 repetem a regex. L387 lê `numeroPorCodigo[codigo]` com código herdado do protótipo.
+
+- [ ] **Step 1: Write the failing tests**
+
+Em `plano.service.spec.ts` (trocar o import da primeira linha por `import { criarContaSchema, dataCalendarioValida } from './dto/plano.dto';`):
+
+```ts
+describe('dataCalendarioValida', () => {
+  it.each(['2026-02-31', '2026-13-01', '2026-00-10', '2026-04-31', '2025-02-29', '0000-01-01', '2026-1-01', ''])(
+    'recusa %s',
+    (valor) => expect(dataCalendarioValida(valor)).toBe(false),
+  );
+  it.each(['2026-02-28', '2028-02-29', '2026-12-31'])('aceita %s', (valor) => expect(dataCalendarioValida(valor)).toBe(true));
+  it('o schema de criação recusa data inexistente', () => {
+    const base = {
+      codigo: '1', nome: 'Caixa', classificacao: 'sintetica', natureza: 'ATIVO', grupo: 'Circulante',
+      contaPaiCodigo: null, centroCodigo: 'CT1', vigenciaFim: null, justificativa: 'abertura',
+    };
+    expect(criarContaSchema.safeParse({ ...base, vigenciaInicio: '2026-02-31' }).success).toBe(false);
+    expect(criarContaSchema.safeParse({ ...base, vigenciaInicio: '2026-10-01' }).success).toBe(true);
+  });
+});
+```
+
+Em `plano-contas.e2e-spec.ts`, antes do `});` final do `describe` principal:
+
+```ts
+  describe('entrada HTTP inválida', () => {
+    const post = (url: string, corpo: unknown) =>
+      request(srv()).post(url).set('Cookie', adminCookies).send(corpo as object);
+    const contasGravadas = async () =>
+      Number((await db.execute(sql`select count(*)::int as total from contas_contabeis`)).rows[0].total);
+    const valida = {
+      codigo: '1', nome: 'Caixa', classificacao: 'sintetica', natureza: 'ATIVO', grupo: 'Circulante',
+      contaPaiCodigo: null, centroCodigo: 'CT1', vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'abertura',
+    };
+
+    it.each([
+      ['numero não numérico', '/contabilidade/plano/1/aprovar', { numero: 'x', justificativa: 'ok' }],
+      ['justificativa só de espaços', '/contabilidade/plano/1/aprovar', { numero: 1, justificativa: '   ' }],
+      ['corpo vazio', '/contabilidade/plano/1/bloquear', {}],
+      ['início inexistente', '/contabilidade/plano/1/revisar-competencia',
+        { numero: 1, vigenciaInicio: '2026-02-31', vigenciaFim: null, justificativa: 'ok' }],
+      ['mês 13', '/contabilidade/plano/1/revisar-competencia',
+        { numero: 1, vigenciaInicio: '2026-13-01', vigenciaFim: null, justificativa: 'ok' }],
+      ['fim inexistente', '/contabilidade/plano/1/revisar-competencia',
+        { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: '2026-04-31', justificativa: 'ok' }],
+      ['criar com início inexistente', '/contabilidade/plano', { ...valida, vigenciaInicio: '2026-02-31' }],
+      ['criar com mês 13', '/contabilidade/plano', { ...valida, vigenciaInicio: '2026-13-01' }],
+      ['validar com fim inexistente', '/contabilidade/plano/validar', { ...valida, vigenciaFim: '2026-02-30' }],
+    ])('%s responde 400 e não grava', async (_nome, url, corpo) => {
+      const res = await post(url, corpo);
+      expect(res.status).toBe(400);
+      expect(await contasGravadas()).toBe(0);
+    });
+
+    it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])('ação herdada %s responde 404', async (acao) => {
+      expect((await post(`/contabilidade/plano/1/${acao}`, {})).status).toBe(404);
+    });
+
+    it('lote com código herdado do protótipo responde 422 conflito', async () => {
+      const res = await post('/contabilidade/plano/lote', {
+        acao: 'bloquear', codigos: ['constructor'], justificativa: 'ok', numeroPorCodigo: {},
+      });
+      expect(res.status).toBe(422);
+      expect(res.body.message.message).toBe('conflito concorrente');
+    });
+  });
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Em `app/backend`: `npx jest src/modules/contabilidade/plano/plano.service.spec.ts test/integration/plano-contas.e2e-spec.ts --runInBand`.
+
+Expected: FAIL. `dataCalendarioValida` não existe; as entradas inválidas chegam como 500 (ou 200 em `validar`); `constructor` e `toString` dão 500; o lote com `constructor` dá 404.
+
+- [ ] **Step 3: Write minimal implementation**
+
+`plano.dto.ts`, substituir L6:
+
+```ts
+export function dataCalendarioValida(valor: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const [ano, mes, dia] = valor.split('-').map(Number) as [number, number, number];
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  return data.getUTCFullYear() === ano && data.getUTCMonth() === mes - 1 && data.getUTCDate() === dia;
+}
+
+const dataIso = z.string().refine(dataCalendarioValida, { message: 'Data inexistente no calendário' });
+```
+
+(Anos 0000 a 0099 são recusados porque `Date.UTC` os remapeia para 19xx; vigência contábil não os usa.)
+
+`plano.controller.ts`, substituir o método `acao` (L76 a L87):
+
+```ts
+  @Post('plano/:codigo/:acao')
+  @RequirePermissoes('CONTABILIDADE_PLANO_GERENCIAR')
+  acao(
+    @Param('codigo') codigo: string,
+    @Param('acao') acao: string,
+    @Body() corpo: unknown,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    if (!Object.hasOwn(acaoSchema, acao)) throw new NotFoundException();
+    const nome = acao as keyof typeof acaoSchema;
+    const dto = new ZodValidationPipe(acaoSchema[nome]).transform(corpo);
+    return this.plano.executar(nome, codigo, dto, user.sub);
+  }
+```
+
+`plano.service.ts`: importar `dataCalendarioValida` de `./dto/plano.dto`; em L288 trocar `!/^\d{4}-\d{2}-\d{2}$/.test(dto.vigenciaInicio)` por `!dataCalendarioValida(dto.vigenciaInicio)`; em L491 trocar `!/^\d{4}-\d{2}-\d{2}$/.test(inicio)` por `!dataCalendarioValida(inicio)`; em L387 trocar a leitura por:
+
+```ts
+          const numero = Object.hasOwn(dto.numeroPorCodigo, codigo) ? dto.numeroPorCodigo[codigo] : undefined;
+```
+
+- [ ] **Step 4: Run to verify it passes**
+
+Mesmo comando do Step 2. Expected: PASS, incluindo o `it` existente L232 a L242 (`vigenciaInicio: ''` segue 422 pelo service).
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/plano app/backend/test/integration/plano-contas.e2e-spec.ts
+git commit -m @"
+fix(e09-t01): valida entrada HTTP do plano de contas com 400 e 404
+
+### Descrição Detalhada:
+A rota de ação prova a ação com Object.hasOwn e valida o corpo com o ZodValidationPipe. A data de vigência é validada no calendário (dataCalendarioValida) e o lote lê numeroPorCodigo só por chave própria.
+
+### Motivo da Mudança:
+schema.parse lançava ZodError e as ações constructor e toString liam o protótipo; ambos chegavam como 500. Datas como 2026-02-31 chegavam ao PostgreSQL.
+
+### Impacto:
+Entrada inválida responde 400 (forma) ou 404 (ação). Regra de negócio segue 422. Sem migration.
+"@
+```
+
+---
+
+## Task 9: Conta suspensa deixa de ser vigente (B2)
+
+**Files:**
+- Create: `app/backend/src/modules/contabilidade/plano/vigencia.ts`
+- Modify: `app/backend/src/modules/contabilidade/plano/plano.service.ts` (`paiValido` L234 a L252; `ciclo` L545 a L563)
+- Modify: `app/backend/test/integration/plano-contas.e2e-spec.ts`
+
+Causa lida: `paiValido` (L242 a L247) busca "alguma versão `APPROVED`" da conta pai; com v1 `APPROVED` e v2 `SUSPENDED`, a v1 satisfaz a busca e a conta suspensa serve de pai. `ciclo` (L552 a L559) tem a mesma busca. O combo da tela não é autoridade (pendência P-r3-2).
+
+- [ ] **Step 1: Write the failing tests**
+
+Importar `ultimaVersaoDecidida` de `'../../src/modules/contabilidade/plano/vigencia'`. Dentro do `describe`:
+
+```ts
+  async function contaComV2Suspensa() {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    await service.versionar('1', comoEdicao(v1, { justificativa: 'abre v2' }), userId);
+    await service.revisarCompetencia('1', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa v2' }, userId);
+    await service.aprovar('1', { numero: 2, justificativa: 'aprova v2' }, userId);
+    await service.bloquear('1', { numero: 2, justificativa: 'bloqueia v2' }, userId);
+  }
+
+  it('conta com v1 aprovada e v2 suspensa não é pai válido', async () => {
+    await contaComV2Suspensa();
+    const [conta] = await db.select().from(contasContabeis).where(eq(contasContabeis.codigo, '1'));
+    expect(await ultimaVersaoDecidida(db, conta!.id)).toMatchObject({ numero: 2, situacao: 'SUSPENDED' });
+    const filha = dtoBase({ codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1' });
+    await expect(service.criar(filha, userId)).rejects.toMatchObject({
+      status: 422, response: { message: 'conta desativada' },
+    });
+    expect(await service.validar(filha, userId)).toEqual({ valido: false, mensagens: ['conta desativada'] });
+    const lista = await service.listar({ pagina: 1, q: '1.1', situacao: '', ordenar: 'contaContabil', direcao: 'asc' });
+    expect(lista.total).toBe(0);
+  });
+
+  it('guarda: versão nova aprovada supera a anterior como pai', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '0', classificacao: 'sintetica' }), userId);
+    await promover('0');
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    await service.versionar('1', comoEdicao(v1, { classificacao: 'analitica', contaPaiCodigo: '0', justificativa: 'vira analítica' }), userId);
+    await service.revisarCompetencia('1', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    await service.aprovar('1', { numero: 2, justificativa: 'aprova' }, userId);
+    await expect(service.criar(dtoBase({ codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1' }), userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'Conta pai analítica não é nível hierárquico válido' } });
+  });
+
+  it('guarda: revisão aberta não derruba a vigência da versão aprovada', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    await service.versionar('1', comoEdicao(v1, { justificativa: 'abre v2' }), userId);
+    await expect(service.criar(dtoBase({ codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1' }), userId))
+      .resolves.toMatchObject({ codigo: '1.1', contaPaiCodigo: '1' });
+  });
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` em `app/backend`.
+
+Expected: FAIL por módulo `vigencia` ausente; com o arquivo criado vazio, o primeiro `it` falha porque `criar` com pai suspenso resolve em vez de rejeitar. Os dois `it` "guarda" passam com o código atual.
+
+- [ ] **Step 3: Write minimal implementation**
+
+`plano/vigencia.ts`:
+
+```ts
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import type * as schema from '../../../database/schema';
+import { contaVersoes } from '../../../database/schema';
+
+type Executor = Pick<NodePgDatabase<typeof schema>, 'select'>;
+
+/**
+ * Última versão com decisão (APPROVED ou SUSPENDED) de uma conta, não excluída.
+ * Regra de vigência: a conta só está vigente se esta versão for APPROVED.
+ * DRAFT, REVIEW e REJECTED não decidem nada: revisão em aberto não derruba a versão aprovada.
+ */
+export async function ultimaVersaoDecidida(executor: Executor, contaId: string) {
+  const [versao] = await executor.select().from(contaVersoes).where(and(
+    eq(contaVersoes.contaId, contaId),
+    inArray(contaVersoes.situacao, ['APPROVED', 'SUSPENDED']),
+    isNull(contaVersoes.deletedAt),
+  )).orderBy(desc(contaVersoes.numero)).limit(1);
+  return versao ?? null;
+}
+```
+
+`plano.service.ts`: importar `ultimaVersaoDecidida` de `./vigencia`. Método privado novo, ao lado de `paiValido`:
+
+```ts
+  /** Versão vigente do pai, ou 422. Suspensa: `conta desativada`. Nunca decidida: `Conta pai não está ativa`. */
+  private async exigirPaiVigente(tx: Tx, paiId: string) {
+    const decidida = await ultimaVersaoDecidida(tx, paiId);
+    if (!decidida) throw new RegraContabilException('Conta pai não está ativa');
+    if (decidida.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
+    if (decidida.classificacao === 'analitica') {
+      throw new RegraContabilException('Conta pai analítica não é nível hierárquico válido');
+    }
+    return decidida;
+  }
+```
+
+Em `paiValido`, substituir L242 a L250 (o `select` de `vigente` e os dois `if`) por `await this.exigirPaiVigente(tx, pai.id);`, mantendo `return pai.id;`.
+
+Em `ciclo`, substituir o `select` de L552 a L560 por:
+
+```ts
+      const versao = await ultimaVersaoDecidida(tx, cursor);
+      cursor = versao?.contaPaiId ?? null;
+```
+
+A conta suspensa mantém a aresta de pai no caminhamento, então o ciclo continua detectável. Remover do import de `drizzle-orm` o que ficar sem uso.
+
+- [ ] **Step 4: Run to verify it passes**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand`. Expected: PASS, incluindo L134 a L145 (`Conta pai não está ativa`), L255 a L271 e L412 a L428 (ciclo).
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/plano app/backend/test/integration/plano-contas.e2e-spec.ts
+git commit -m @"
+fix(e09-t01): conta suspensa deixa de ser pai vigente
+
+### Descrição Detalhada:
+Cria ultimaVersaoDecidida (maior numero entre APPROVED e SUSPENDED) e a usa em paiValido e no caminhamento de ciclo. Pai cuja última decisão é SUSPENDED responde 422 conta desativada.
+
+### Motivo da Mudança:
+Com v1 aprovada e v2 suspensa, a busca por qualquer versão APPROVED mantinha a conta como pai válido.
+
+### Impacto:
+Revisão em aberto (DRAFT ou REVIEW) não derruba a versão aprovada. A consulta é reutilizável pela E09-T02 sem tocar arquivo dela. Sem migration.
+"@
+```
+
+---
+
+## Task 10: Ciclo e pai inválido barrados no editar e na aprovação (B1)
+
+**Files:**
+- Modify: `app/backend/src/modules/contabilidade/plano/plano.service.ts` (`editar` L254 a L285; `versionar` L323 a L333; `aprovarNaTx` L509 a L525)
+- Modify: `app/backend/test/integration/plano-contas.e2e-spec.ts`
+
+Causa lida: `editar` chama `paiValido` (L269) mas nunca `ciclo`; só `versionar` (L324) chama. Reprodução: conta 1 aprovada, conta 2 filha de 1; versionar 1 sem pai; `editar` v2 com `contaPaiCodigo: "2"` responde 201 e revisar e aprovar passam. A aprovação (L509 a L525) também não revalida a hierarquia, que pode mudar entre o rascunho e a aprovação. O pai analítico já é recusado no `editar` por `paiValido`; o `it` correspondente é "guarda".
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+  const contarAuditoriaVersoes = async () =>
+    Number((await db.execute(sql`select count(*)::int as total from auditoria where tabela = 'conta_versoes'`)).rows[0].total);
+
+  it('editar recusa ciclo e pai próprio sem gravar', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    await service.criar(dtoBase({ codigo: '2', classificacao: 'sintetica', contaPaiCodigo: '1' }), userId);
+    await promover('2');
+    const v2 = await service.versionar('1', comoEdicao(v1, { contaPaiCodigo: null, justificativa: 'abre v2' }), userId);
+    const auditoriasAntes = await contarAuditoriaVersoes();
+    for (const pai of ['2', '1']) {
+      const res = await request(srv()).post('/contabilidade/plano/1/editar').set('Cookie', adminCookies)
+        .send(comoEdicao(v2, { contaPaiCodigo: pai }));
+      expect(res.status).toBe(422);
+      expect(res.body.message.message).toBe('Ciclo na hierarquia da conta');
+    }
+    expect((await service.obter('1')).contaPaiCodigo).toBeNull();
+    expect(await contarAuditoriaVersoes()).toBe(auditoriasAntes);
+  });
+
+  it('guarda: editar recusa pai analítico', async () => {
+    const analitica = await contaAprovadaAnalitica();
+    await service.criar(dtoBase({ codigo: '7', classificacao: 'sintetica' }), userId);
+    const rascunho = await service.obter('7');
+    await expect(service.editar('7', comoEdicao(rascunho, { contaPaiCodigo: analitica.codigo }), userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'Conta pai analítica não é nível hierárquico válido' } });
+  });
+
+  it('aprovar revalida o ciclo que a hierarquia criou depois do rascunho', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    await service.criar(dtoBase({ codigo: '3', classificacao: 'sintetica' }), userId);
+    const t1 = await promover('3');
+    await service.versionar('1', comoEdicao(v1, { contaPaiCodigo: '3', justificativa: '1 sob 3' }), userId);
+    await service.revisarCompetencia('1', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    await service.versionar('3', comoEdicao(t1, { contaPaiCodigo: '1', justificativa: '3 sob 1' }), userId);
+    await service.revisarCompetencia('3', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    await service.aprovar('3', { numero: 2, justificativa: 'aprova 3 sob 1' }, userId);
+    await expect(service.aprovar('1', { numero: 2, justificativa: 'aprova 1 sob 3' }, userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'Ciclo na hierarquia da conta' } });
+    expect((await service.obter('1')).situacao).toBe('REVIEW');
+  });
+
+  it('duas aprovações cruzadas não fecham ciclo', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    for (const codigo of ['A', 'B']) {
+      await service.criar(dtoBase({ codigo, classificacao: 'sintetica' }), userId);
+    }
+    const a = await promover('A');
+    const b = await promover('B');
+    await service.versionar('A', comoEdicao(a, { contaPaiCodigo: 'B', justificativa: 'A sob B' }), userId);
+    await service.versionar('B', comoEdicao(b, { contaPaiCodigo: 'A', justificativa: 'B sob A' }), userId);
+    for (const codigo of ['A', 'B']) {
+      await service.revisarCompetencia(codigo, { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    }
+    const resultado = await Promise.allSettled([
+      service.aprovar('A', { numero: 2, justificativa: 'aprova A' }, userId),
+      service.aprovar('B', { numero: 2, justificativa: 'aprova B' }, userId),
+    ]);
+    expect(resultado.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const recusada = resultado.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    expect(recusada.reason).toMatchObject({ status: 422, response: { message: 'Ciclo na hierarquia da conta' } });
+  });
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` em `app/backend`.
+
+Expected: FAIL em `editar recusa ciclo` (responde 201), em `aprovar revalida o ciclo` (a aprovação passa) e em `duas aprovações cruzadas` (as duas resolvem). O `it` "guarda" passa.
+
+- [ ] **Step 3: Write minimal implementation**
+
+`plano.service.ts`. Métodos privados novos, ao lado de `paiValido`:
+
+```ts
+  private async recusarCiclo(tx: Tx, contaId: string, paiId: string | null) {
+    if (paiId && await this.ciclo(tx, contaId, paiId)) {
+      throw new RegraContabilException('Ciclo na hierarquia da conta');
+    }
+  }
+
+  /** Pai de uma versão nova ou editada: existe, é vigente e sintético, e não fecha ciclo. */
+  private async paiDaVersao(tx: Tx, contaId: string, classificacao: 'sintetica' | 'analitica', contaPaiCodigo: string | null) {
+    const paiId = await this.paiValido(tx, classificacao, contaPaiCodigo);
+    await this.recusarCiclo(tx, contaId, paiId);
+    return paiId;
+  }
+```
+
+`editar`: antes do `update` (L264), calcular `const paiId = await this.paiDaVersao(tx, atual.contaId, dto.classificacao, dto.contaPaiCodigo);` e usar `contaPaiId: paiId` no `.set({...})` no lugar da chamada de L269.
+
+`versionar`: substituir L323 a L333 (a chamada de `paiValido` e o `if (paiId && await this.ciclo(...))` com o `select` de `paiVersao` e a mensagem condicional, cujo ramo "analítica" é morto porque `paiValido` já recusa pai analítico) por:
+
+```ts
+      const paiId = await this.paiDaVersao(tx, conta.id, dto.classificacao, dto.contaPaiCodigo);
+```
+
+`aprovarNaTx`: depois do `if (!justificativa.trim())` (L513) e antes do `update`:
+
+```ts
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:hierarquia'}))`);
+    if (atual.contaPaiId) {
+      await this.exigirPaiVigente(tx, atual.contaPaiId);
+      await this.recusarCiclo(tx, atual.contaId, atual.contaPaiId);
+    } else if (atual.classificacao === 'analitica') {
+      throw new RegraContabilException('Conta pai não encontrada');
+    }
+```
+
+O lock transacional serializa aprovações: a segunda aprovação cruzada lê, depois do lock, a aresta que a primeira acabou de aprovar. Lock global por limitação conhecida (aprovação é ação rara; trocar por lock por raiz só se houver contenção medida).
+
+- [ ] **Step 4: Run to verify it passes**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand`. Expected: PASS, incluindo L255 a L271, L384 a L410 e L412 a L428.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/plano app/backend/test/integration/plano-contas.e2e-spec.ts
+git commit -m @"
+fix(e09-t01): barra ciclo e pai inválido no editar e na aprovação
+
+### Descrição Detalhada:
+editar e versionar passam por paiDaVersao (pai existente, vigente, sintético e sem ciclo). A aprovação revalida pai e ciclo sob advisory lock transacional da hierarquia.
+
+### Motivo da Mudança:
+editar não chamava ciclo(); a hierarquia podia mudar entre o rascunho e a aprovação, e duas aprovações cruzadas fechavam ciclo.
+
+### Impacto:
+Ciclo e pai inválido respondem 422 sem gravar. Aprovações de contas passam a ser serializadas. Sem migration.
+"@
+```
+
+---
+
+## Task 11: Bloquear conta com rascunho aberto descarta o rascunho (AD-25 item 3)
+
+**Files:**
+- Modify: `app/backend/src/modules/contabilidade/plano/plano.service.ts` (`travar` L452 a L464; `bloquearNaTx` L527 a L543)
+- Modify: `app/backend/test/integration/plano-contas.e2e-spec.ts`
+
+Estado lido: `travar` (L459 a L460) exige `numero` igual ao maior; com v1 `APPROVED` e v2 `DRAFT`, `bloquear` com `numero 1` responde 409 e com `numero 2` responde 422 (L530). Decisões do delta: o token é o maior número; `DRAFT` e `REVIEW` abertas são descartadas por `deleted_at` com auditoria `DELETE`, na transação do bloqueio.
+
+- [ ] **Step 1: Write the failing tests**
+
+Importar `AuditoriaService` de `'../../src/common/auditoria/auditoria.service'`.
+
+```ts
+  async function contaComRascunhoAberto(emRevisao = false) {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    await service.versionar('1', comoEdicao(v1, { nome: 'Caixa v2', justificativa: 'abre v2' }), userId);
+    if (emRevisao) {
+      await service.revisarCompetencia('1', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa v2' }, userId);
+    }
+  }
+  const versaoBruta = async (numero: number) =>
+    (await db.execute(sql`
+      select v.id, v.situacao, v.deleted_at from conta_versoes v join contas_contabeis c on c.id = v.conta_id
+       where c.codigo = '1' and v.numero = ${numero}`)).rows[0] as { id: string; situacao: string; deleted_at: Date | null };
+
+  it('bloquear com rascunho aberto descarta o rascunho e suspende a aprovada', async () => {
+    await contaComRascunhoAberto();
+    const res = await request(srv()).post('/contabilidade/plano/1/bloquear').set('Cookie', adminCookies)
+      .send({ numero: 2, justificativa: 'encerra a conta' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ numero: 1, situacao: 'SUSPENDED' });
+    expect((await versaoBruta(2)).deleted_at).not.toBeNull();
+    expect((await versaoBruta(1)).situacao).toBe('SUSPENDED');
+    const trilha = (await db.execute(sql`
+      select operacao, justificativa, created_at from auditoria
+       where tabela = 'conta_versoes'
+         and created_at = (select max(created_at) from auditoria where tabela = 'conta_versoes')
+       order by id`)).rows as { operacao: string; justificativa: string; created_at: Date }[];
+    expect(trilha.map((linha) => linha.operacao)).toEqual(['DELETE', 'UPDATE']);
+    expect(trilha[0]!.justificativa).toMatch(/^Rascunho descartado pelo bloqueio da conta\. encerra a conta$/);
+  });
+
+  it('revisão aberta também é descartada pelo bloqueio', async () => {
+    await contaComRascunhoAberto(true);
+    await service.bloquear('1', { numero: 2, justificativa: 'encerra' }, userId);
+    expect((await versaoBruta(2)).deleted_at).not.toBeNull();
+    expect((await service.obter('1')).situacao).toBe('SUSPENDED');
+  });
+
+  it('guarda: número desatualizado segue 409 e não descarta', async () => {
+    await contaComRascunhoAberto();
+    await expect(service.bloquear('1', { numero: 1, justificativa: 'velho' }, userId))
+      .rejects.toMatchObject({ status: 409, response: { message: 'conflito concorrente' } });
+    expect((await versaoBruta(2)).deleted_at).toBeNull();
+    expect((await versaoBruta(1)).situacao).toBe('APPROVED');
+  });
+
+  it('falha da auditoria desfaz o descarte', async () => {
+    await contaComRascunhoAberto();
+    const auditoriaSvc = app.get(AuditoriaService);
+    const original = auditoriaSvc.registrar.bind(auditoriaSvc);
+    const espiao = jest.spyOn(auditoriaSvc, 'registrar')
+      .mockImplementationOnce(original)
+      .mockRejectedValueOnce(new Error('falha injetada'));
+    await expect(service.bloquear('1', { numero: 2, justificativa: 'encerra' }, userId)).rejects.toThrow('falha injetada');
+    espiao.mockRestore();
+    expect((await versaoBruta(2)).deleted_at).toBeNull();
+    expect((await versaoBruta(1)).situacao).toBe('APPROVED');
+  });
+```
+
+(As duas linhas da trilha compartilham `created_at` porque `defaultNow()` devolve o instante da transação; o bloqueio é a última transação do teste.)
+
+- [ ] **Step 2: Run to verify failure**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` em `app/backend`.
+
+Expected: FAIL nos três primeiros `it` que usam `numero: 2` (resposta 422, versão 2 não descartada). O `it` "guarda" passa.
+
+- [ ] **Step 3: Write minimal implementation**
+
+`travar` passa a devolver as versões: trocar `return { conta, atual };` por `return { conta, atual, versoes };`.
+
+Substituir `bloquearNaTx` (L527 a L543):
+
+```ts
+  private async bloquearNaTx(tx: Tx, codigo: string, numero: number, justificativa: string, usuarioId: string) {
+    const { atual, versoes } = await this.travar(tx, codigo, numero);
+    if (atual.situacao === 'SUSPENDED') throw new ConflictException('conta desativada');
+    const aberta = atual.situacao === 'DRAFT' || atual.situacao === 'REVIEW' ? atual : null;
+    const alvo = aberta
+      ? versoes.filter((v) => v.numero < aberta.numero).sort((a, b) => b.numero - a.numero)[0]
+      : atual;
+    if (!alvo || alvo.situacao !== 'APPROVED') throw new RegraContabilException('Situação não permite esta transição');
+    if (!justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
+    if (aberta) {
+      // AD-25 item 3: o rascunho aberto é encerrado na mesma transação do bloqueio.
+      const descartada = primeiroOuFalha(await tx.update(contaVersoes).set({ deletedAt: sql`now()` })
+        .where(eq(contaVersoes.id, aberta.id)).returning());
+      await this.auditoria.registrar(tx, {
+        tabela: 'conta_versoes', registroId: aberta.id, operacao: 'DELETE',
+        modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: aberta, dadosNovos: descartada,
+        justificativa: `Rascunho descartado pelo bloqueio da conta. ${justificativa}`,
+      });
+    }
+    const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
+      situacao: 'SUSPENDED',
+      justificativa,
+      responsavelId: usuarioId,
+    }).where(eq(contaVersoes.id, alvo.id)).returning());
+    await this.auditoria.registrar(tx, {
+      tabela: 'conta_versoes', registroId: nova.id, operacao: 'UPDATE',
+      modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: alvo, dadosNovos: nova,
+      justificativa,
+    });
+    return nova;
+  }
+```
+
+O `lote` com `bloquear` herda o comportamento porque chama `bloquearNaTx`.
+
+- [ ] **Step 4: Run to verify it passes**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand`. Expected: PASS, incluindo L500 a L562 (bloquear duas vezes segue 409 `conta desativada`; `bloquear('5')` em `REVIEW` sem versão anterior aprovada segue 422).
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/plano app/backend/test/integration/plano-contas.e2e-spec.ts
+git commit -m @"
+feat(e09-t01): bloquear conta encerra o rascunho aberto (AD-25)
+
+### Descrição Detalhada:
+bloquearNaTx aceita o maior numero quando a versão aberta (DRAFT ou REVIEW) está sobre uma versão APPROVED, descarta a aberta por deleted_at com auditoria DELETE e suspende a aprovada na mesma transação.
+
+### Motivo da Mudança:
+AD-25 item 3: o rascunho não deve impedir o bloqueio. Sem estado de descarte no CHECK, usa-se o soft delete da convenção do repositório.
+
+### Impacto:
+Sem migration. Falha em qualquer etapa desfaz descarte e bloqueio. O lote de bloqueio herda a regra.
+"@
+```
+
+---
+
+## Task 12: Mensagem de transição inválida no editar e histórico rotulado (M5)
+
+**Files:**
+- Modify: `app/backend/src/modules/contabilidade/plano/plano.service.ts` (`editar` L262; `historico` L425 a L450)
+- Modify: `app/backend/test/integration/plano-contas.e2e-spec.ts` (L364 a L365 e dois `it` novos)
+
+Causa lida: L262 usa `mudança de classificação após fechamento` para toda situação diferente de `DRAFT`, inclusive `REVIEW` e `REJECTED`. `historico` (L432 a L449) devolve `auditoria.operacao` crua (`INSERT`, `UPDATE`).
+
+- [ ] **Step 1: Write the failing tests**
+
+Alterar a asserção de L364 a L365 (editar versão `APPROVED` sem mudar classificação não é mudança de classificação; o caminho é `Versionar`):
+
+```ts
+    await expect(service.editar(conta.codigo, comoEdicao(conta), userId))
+      .rejects.toMatchObject({ response: { message: 'Situação não permite esta transição' }, status: 422 });
+```
+
+`it` novos:
+
+```ts
+  it('editar fora do rascunho recusa com transição inválida', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    await service.revisarCompetencia('1', { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    const emRevisao = await service.obter('1');
+    await expect(service.editar('1', comoEdicao(emRevisao), userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'Situação não permite esta transição' } });
+    await db.execute(sql`update conta_versoes set situacao = 'REJECTED' where deleted_at is null`);
+    await expect(service.editar('1', comoEdicao(emRevisao), userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'Situação não permite esta transição' } });
+  });
+
+  it('histórico rotula e ordena os acontecimentos', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    const v2 = await service.versionar('1', comoEdicao(v1, { justificativa: 'abre v2' }), userId);
+    await service.editar('1', comoEdicao(v2, { nome: 'Caixa v2 ajustada' }), userId);
+    await service.bloquear('1', { numero: 2, justificativa: 'encerra' }, userId);
+    const linhas = await service.historico('1');
+    expect(linhas.map((linha) => linha.acontecimento)).toEqual([
+      'Conta criada', 'Enviada para revisão', 'Aprovada', 'Nova versão criada',
+      'Rascunho editado', 'Rascunho descartado', 'Bloqueada',
+    ]);
+  });
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` em `app/backend`.
+
+Expected: FAIL nos dois `it` novos (mensagem antiga; rótulos `INSERT`/`UPDATE`/`DELETE`) e na asserção alterada de L364. O `it` do histórico depende do descarte da Task 11.
+
+- [ ] **Step 3: Write minimal implementation**
+
+`editar`: L262 passa a ser
+
+```ts
+      if (atual.situacao !== 'DRAFT') throw new RegraContabilException('Situação não permite esta transição');
+```
+
+O ramo de L259 a L261 (`APPROVED` com natureza, grupo, classificação ou centro diferentes) mantém `mudança de classificação após fechamento` (Review Focus 2).
+
+`historico`: o `select` ganha `novos: auditoria.dadosNovos`; o `orderBy` vira `.orderBy(asc(auditoria.createdAt), asc(auditoria.id))` (desempate por uuidv7, porque descarte e bloqueio compartilham o instante da transação); o `map` usa:
+
+```ts
+      acontecimento: rotularAcontecimento(linha.acontecimento, linha.novos),
+```
+
+No fim do arquivo, ao lado de `textoDe`:
+
+```ts
+function rotularAcontecimento(operacao: string, novos: unknown): string {
+  const dados = (novos ?? {}) as { situacao?: string; numero?: number };
+  if (operacao === 'INSERT') return (dados.numero ?? 1) > 1 ? 'Nova versão criada' : 'Conta criada';
+  if (operacao === 'DELETE') return 'Rascunho descartado';
+  if (operacao === 'ACAO_MANUAL') return 'Lançamentos mapeados';
+  if (dados.situacao === 'REVIEW') return 'Enviada para revisão';
+  if (dados.situacao === 'APPROVED') return 'Aprovada';
+  if (dados.situacao === 'SUSPENDED') return 'Bloqueada';
+  return 'Rascunho editado';
+}
+```
+
+O campo da resposta continua `acontecimento`; o React já o renderiza (`plano-contas-client.tsx` L573 e L587).
+
+- [ ] **Step 4: Run to verify it passes**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand`. Expected: PASS, incluindo L500 a L562 (a linha de auditoria manual sem dados vira `Lançamentos mapeados`; o `it` só confere `quem` e `justificativa`).
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/plano app/backend/test/integration/plano-contas.e2e-spec.ts
+git commit -m @"
+fix(e09-t01): corrige a mensagem do editar e rotula o histórico
+
+### Descrição Detalhada:
+editar fora do rascunho responde Situação não permite esta transição; a mensagem de classificação fica só para versão aprovada com campo de classificação alterado. O histórico traduz operação e situação em rótulos e desempata por id.
+
+### Motivo da Mudança:
+Editar em REVIEW devolvia a mensagem de fechamento, e a aba Histórico mostrava INSERT e UPDATE crus.
+
+### Impacto:
+Altera a asserção de editar versão aprovada sem mudança (L364 a L365) para a mensagem correta. Sem migration.
+"@
+```
+
+---
+
+## Task 13: Lote emite evento pós-commit e não devolve UUID (M3 e A1)
+
+**Files:**
+- Modify: `app/backend/src/modules/contabilidade/plano/plano.service.ts` (`lote` L382 a L403; emissões em L295, L303 e L311)
+- Modify: `app/backend/test/integration/plano-contas.e2e-spec.ts`
+
+Causas lidas: `lote` não chama `eventEmitter.emit`, ao contrário das ações individuais (L295, L303, L311). `lote` devolve `saida`, as linhas cruas de `conta_versoes` (`id`, `contaId`, `centroCustoId`, `responsavelId`), contra D9. A tela não consome a room (pendência P-r3-1); o evento sai no backend como nas outras ações.
+
+- [ ] **Step 1: Write the failing tests**
+
+Importar `EventEmitter2` de `'@nestjs/event-emitter'` e `EVENTOS` de `'../../src/realtime/events/eventos'`.
+
+```ts
+  it('lote emite o evento de cada conta só depois do commit', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    for (const codigo of ['A', 'B']) {
+      await service.criar(dtoBase({ codigo, classificacao: 'sintetica' }), userId);
+      await service.revisarCompetencia(codigo, { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    }
+    const emitir = jest.spyOn(app.get(EventEmitter2), 'emit');
+    await service.lote({ acao: 'aprovar', codigos: ['A', 'B'], justificativa: 'aprova em lote', numeroPorCodigo: { A: 1, B: 1 } }, userId);
+    const aprovadas = emitir.mock.calls.filter(([evento]) => evento === EVENTOS.PLANO_CONTA_APROVADA);
+    expect(aprovadas.map(([, payload]) => payload)).toEqual([
+      { codigo: 'A', acao: 'aprovar', situacao: 'APPROVED' },
+      { codigo: 'B', acao: 'aprovar', situacao: 'APPROVED' },
+    ]);
+    emitir.mockClear();
+    await service.criar(dtoBase({ codigo: 'C', classificacao: 'sintetica' }), userId);
+    await service.revisarCompetencia('C', { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    await expect(service.lote({
+      acao: 'bloquear', codigos: ['A', 'C'], justificativa: 'falha no segundo', numeroPorCodigo: { A: 1, C: 1 },
+    }, userId)).rejects.toMatchObject({ status: 422 });
+    expect(emitir.mock.calls.filter(([evento]) => evento === EVENTOS.PLANO_CONTA_BLOQUEADA)).toHaveLength(0);
+    expect((await service.obter('A')).situacao).toBe('APPROVED');
+    emitir.mockRestore();
+  });
+
+  it('lote não devolve uuid', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: 'A', classificacao: 'sintetica' }), userId);
+    await service.revisarCompetencia('A', { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    const res = await request(srv()).post('/contabilidade/plano/lote').set('Cookie', adminCookies)
+      .send({ acao: 'aprovar', codigos: ['A'], justificativa: 'aprova', numeroPorCodigo: { A: 1 } });
+    expect(res.status).toBe(201);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toMatchObject({ codigo: 'A', situacao: 'APPROVED' });
+    expect(JSON.stringify(res.body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+  });
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` em `app/backend`.
+
+Expected: FAIL: nenhum evento emitido pelo lote e o corpo traz `id` e `contaId` em UUID.
+
+- [ ] **Step 3: Write minimal implementation**
+
+No topo do service, junto às constantes:
+
+```ts
+const EVENTO_DA_ACAO = {
+  'revisar-competencia': { evento: EVENTOS.PLANO_CONTA_REVISADA, acao: 'revisar', situacao: 'REVIEW' },
+  aprovar: { evento: EVENTOS.PLANO_CONTA_APROVADA, acao: 'aprovar', situacao: 'APPROVED' },
+  bloquear: { evento: EVENTOS.PLANO_CONTA_BLOQUEADA, acao: 'bloquear', situacao: 'SUSPENDED' },
+} as const;
+```
+
+Método privado:
+
+```ts
+  private emitirAcao(chave: keyof typeof EVENTO_DA_ACAO, codigo: string) {
+    const { evento, acao, situacao } = EVENTO_DA_ACAO[chave];
+    this.eventEmitter.emit(evento, { codigo, acao, situacao });
+  }
+```
+
+`revisarCompetencia`, `aprovar` e `bloquear` trocam seus `this.eventEmitter.emit(...)` por `this.emitirAcao('revisar-competencia' | 'aprovar' | 'bloquear', codigo)`; o payload é idêntico ao atual.
+
+`lote`:
+
+```ts
+  async lote(dto: LoteDto, usuarioId: string) {
+    await this.db.transaction(async (tx) => {
+      for (const codigo of dto.codigos) {
+        try {
+          const numero = Object.hasOwn(dto.numeroPorCodigo, codigo) ? dto.numeroPorCodigo[codigo] : undefined;
+          if (numero === undefined) throw new RegraContabilException('conflito concorrente');
+          if (dto.acao === 'bloquear') await this.bloquearNaTx(tx, codigo, numero, dto.justificativa, usuarioId);
+          if (dto.acao === 'aprovar') await this.aprovarNaTx(tx, codigo, numero, dto.justificativa, usuarioId);
+          if (dto.acao === 'revisar-competencia') await this.revisarNaTx(tx, codigo, numero, dto.justificativa, usuarioId);
+        } catch (erro) {
+          if (erro instanceof HttpException) {
+            throw new HttpException({ message: textoDe(erro), codigo }, erro.getStatus());
+          }
+          throw erro;
+        }
+      }
+    });
+    for (const codigo of dto.codigos) this.emitirAcao(dto.acao, codigo);
+    return Promise.all(dto.codigos.map((codigo) => this.obter(codigo)));
+  }
+```
+
+Os `it` de lote existentes (L449 a L482) só conferem `toHaveLength(1)` e as falhas, e continuam válidos.
+
+- [ ] **Step 4: Run to verify it passes**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand`. Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/plano app/backend/test/integration/plano-contas.e2e-spec.ts
+git commit -m @"
+fix(e09-t01): lote emite evento pós-commit e devolve contas apresentadas
+
+### Descrição Detalhada:
+O lote emite, depois da transação, o mesmo evento das ações individuais (mapa EVENTO_DA_ACAO compartilhado) e devolve ContaApresentada por código em vez das linhas cruas.
+
+### Motivo da Mudança:
+O lote gravava sem avisar a room contabilidade-plano e vazava id, contaId e demais UUIDs (D9).
+
+### Impacto:
+A resposta do lote passa a ser a lista de contas apresentadas. Lote que falha não emite nada. Sem migration.
+"@
+```
+
+---
+
+## Task 14: CSV da visão inteira e sem injeção de fórmula (M1 e M2)
+
+**Files:**
+- Modify: `app/backend/src/modules/contabilidade/plano/plano.service.ts` (`exportarCsv` L173 a L187)
+- Modify: `app/backend/test/integration/plano-contas.e2e-spec.ts`
+
+Causas lidas: `exportarCsv` chama `this.listar(query)` (L174), que pagina em `PAGINA = 20` (L55): 29 contas exportam 20 linhas. `escapar` (L184) só cita `"`, `;` e quebra de linha e não neutraliza `=`, `+`, `-`, `@`, tab nem CR no início da célula. Não há helper de CSV nesta árvore (o `exportacao-csv.ts` fiscal vive em outro ramo): implementação local mínima.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+  it('csv exporta a visão inteira, não a página', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    for (let i = 1; i <= 29; i += 1) {
+      await service.criar(dtoBase({ codigo: String(i).padStart(2, '0'), nome: `Conta ${i}` }), userId);
+    }
+    const csv = await service.exportarCsv({ pagina: 2, q: '', situacao: '', ordenar: 'contaContabil', direcao: 'asc' });
+    expect(csv.replace('\uFEFF', '').split('\n')).toHaveLength(30);
+    const filtrado = await service.exportarCsv({ pagina: 1, q: 'Conta 2', situacao: 'DRAFT', ordenar: 'contaContabil', direcao: 'asc' });
+    expect(filtrado.replace('\uFEFF', '').split('\n')).toHaveLength(12);
+  });
+
+  it('csv neutraliza célula que começa como fórmula', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    const nomes = ['=1+1', '+SUM(A1)', '-2', '@cmd', '\t=tab', '=HYPERLINK("http://x")'];
+    for (const [i, nome] of nomes.entries()) {
+      await service.criar(dtoBase({ codigo: `F${i}`, nome }), userId);
+    }
+    const csv = await service.exportarCsv({ pagina: 1, q: '', situacao: '', ordenar: 'contaContabil', direcao: 'asc' });
+    const linhas = csv.replace('\uFEFF', '').split('\n');
+    for (const inicio of ["'=1+1;", "'+SUM(A1);", "'-2;", "'@cmd;"]) {
+      expect(linhas.some((linha) => linha.startsWith(inicio))).toBe(true);
+    }
+    expect(csv).toContain(`"'\t=tab"`);
+    expect(csv).toContain(`"'=HYPERLINK(""http://x"")"`);
+  });
+```
+
+Contagem do filtro: `Conta 2` e `Conta 20` a `Conta 29` são 11 contas, mais o cabeçalho, 12 linhas.
+
+- [ ] **Step 2: Run to verify failure**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` em `app/backend`.
+
+Expected: FAIL: 21 linhas (cabeçalho e 20) em vez de 30; fórmulas sem prefixo.
+
+- [ ] **Step 3: Write minimal implementation**
+
+```ts
+  async exportarCsv(query: ListarPlanoQuery): Promise<string> {
+    const { linhas: bruto } = await this.consultar(query, false);
+    const itens = bruto.map((linha) => this.apresentar(linha));
+    const cabecalho = ['Conta contábil', 'Situação', 'Natureza da conta', 'Centro de custo', 'Início de vigência', 'Fim de vigência'];
+    const linhas = itens.map((item) => [
+      item.nome,
+      item.situacaoRotulo,
+      item.naturezaRotulo,
+      item.centroNome,
+      item.vigenciaInicio,
+      item.vigenciaFim ?? '—',
+    ]);
+    // Célula que o Excel ou o Calc leria como fórmula ganha o prefixo ' (CSV injection).
+    const neutralizar = (valor: string) => (/^[=+\-@\t\r]/.test(valor) ? `'${valor}` : valor);
+    const escapar = (valor: string) => {
+      const seguro = neutralizar(valor);
+      return /[",;\r\n\t]/.test(seguro) ? `"${seguro.replace(/"/g, '""')}"` : seguro;
+    };
+    const corpo = [cabecalho, ...linhas].map((linha) => linha.map(escapar).join(';')).join('\n');
+    return `\uFEFF${corpo}`;
+  }
+```
+
+O `it` existente L294 a L319 (`"Caixa ""A"";"`, `2026-12-31`, `—`) segue válido.
+
+- [ ] **Step 4: Run to verify it passes**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand`. Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/plano app/backend/test/integration/plano-contas.e2e-spec.ts
+git commit -m @"
+fix(e09-t01): exporta o CSV da visão inteira e neutraliza fórmula
+
+### Descrição Detalhada:
+exportarCsv consulta sem paginação e prefixa com apóstrofo a célula iniciada por =, +, -, @, tab ou CR antes de citar.
+
+### Motivo da Mudança:
+O CSV de 29 contas saía com 20 linhas e o nome da conta podia executar fórmula no Excel.
+
+### Impacto:
+O arquivo passa a ter todas as linhas do filtro. Sem migration.
+"@
+```
+
+---
+
+## Task 15: Criação simultânea do mesmo centro responde 409 (M6)
+
+**Files:**
+- Modify: `app/backend/src/modules/contabilidade/plano/plano.service.ts` (`criarCentro` L130 a L148)
+- Modify: `app/backend/test/integration/plano-contas.e2e-spec.ts`
+
+Causa lida: `criarCentro` verifica duplicidade com `select` (L132 a L134) sem o advisory lock que `criar` usa (L93). Duas criações concorrentes passam no `select` e a segunda quebra no índice `uq_centros_custo_codigo` com erro de banco (500).
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+  it('dez criações simultâneas do mesmo centro: uma grava, nove respondem 409', async () => {
+    const resultados = await Promise.allSettled(
+      Array.from({ length: 10 }, () => service.criarCentro({ codigo: 'CTX', nome: 'Concorrente', justificativa: 'corrida' }, userId)),
+    );
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    for (const r of resultados.filter((x): x is PromiseRejectedResult => x.status === 'rejected')) {
+      expect(r.reason).toMatchObject({ status: 409, response: { message: 'Já existe centro de custo com este código' } });
+    }
+    expect((await service.listarCentrosAtivos()).filter((c) => c.codigo === 'CTX')).toHaveLength(1);
+  });
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` em `app/backend`.
+
+Expected: FAIL: as rejeições são violações do índice único, sem `status` 409.
+
+- [ ] **Step 3: Write minimal implementation**
+
+No início da transação de `criarCentro`, antes do `select` de duplicidade:
+
+```ts
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:centro:' + dto.codigo}))`);
+```
+
+- [ ] **Step 4: Run to verify it passes**
+
+`npx jest test/integration/plano-contas.e2e-spec.ts --runInBand`. Expected: PASS, incluindo L156 a L162.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/plano app/backend/test/integration/plano-contas.e2e-spec.ts
+git commit -m @"
+fix(e09-t01): serializa a criação de centro de custo por código
+
+### Descrição Detalhada:
+criarCentro toma o mesmo advisory lock transacional por código que criar usa para a conta.
+
+### Motivo da Mudança:
+Duas criações simultâneas do mesmo código chegavam ao índice único e respondiam 500.
+
+### Impacto:
+A segunda criação responde 409. Sem migration.
+"@
+```
+
+---
+
+## Task 16: Limpeza do e2e derivada do ambiente, não de banco fixo (B4)
+
+**Files:**
+- Create: `app/frontend/e2e/limpar-plano.ts`
+- Modify: `app/frontend/e2e/e09-t01-plano-contas.spec.ts` (L1 e L9 a L27; import novo)
+- Create: `app/frontend/__tests__/e09-t01-limpar-plano.test.ts`
+
+Causa lida: `e2e/e09-t01-plano-contas.spec.ts` L9 a L27 roda `docker exec ... psql -d alphacarnes_e09_t01 -c "delete from conta_versoes; ..."`. O nome do banco é fixo, o `delete` é irrestrito e a ordem ignora tabelas da T02 que referenciem as da T01. Não existe API de exclusão (soft delete), então a limpeza continua por SQL, mas só em banco de teste e derivada do `DATABASE_URL`.
+
+- [ ] **Step 1: Write the failing test**
+
+`app/frontend/__tests__/e09-t01-limpar-plano.test.ts`:
+
+```ts
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { comandoLimpezaPlano } from '../e2e/limpar-plano';
+
+describe('limpeza do e2e do plano de contas', () => {
+  const env = (url?: string) => ({ DATABASE_URL: url }) as NodeJS.ProcessEnv;
+  const lerE2e = (arquivo: string) => readFileSync(join(__dirname, '..', 'e2e', arquivo), 'utf8');
+
+  it('deriva usuário e banco do DATABASE_URL', () => {
+    const { args } = comandoLimpezaPlano(env('postgres://alphacarnes:senha@localhost:15433/alphacarnes_e09_t01'));
+    expect(args).toEqual(expect.arrayContaining(['-U', 'alphacarnes', '-d', 'alphacarnes_e09_t01']));
+    const outro = comandoLimpezaPlano(env('postgres://u:p@localhost:15433/alphacarnes_e09_t02'));
+    expect(outro.args).toEqual(expect.arrayContaining(['-d', 'alphacarnes_e09_t02']));
+  });
+
+  it('trunca as três tabelas em cascata, cobrindo tabelas da T02 se existirem', () => {
+    const { args } = comandoLimpezaPlano(env('postgres://u:p@h:1/alphacarnes_e2e'));
+    expect(args.at(-1)).toBe('TRUNCATE conta_versoes, contas_contabeis, centros_custo CASCADE;');
+  });
+
+  it.each([undefined, '', 'postgres://u:p@h:1/alphacarnes', 'postgres://u:p@h:1/producao'])('recusa %s', (url) => {
+    expect(() => comandoLimpezaPlano(env(url))).toThrow();
+  });
+
+  it('nem o helper nem o spec carregam o nome de banco fixo nem delete irrestrito', () => {
+    expect(lerE2e('limpar-plano.ts')).not.toContain('alphacarnes_e09_t01');
+    expect(lerE2e('e09-t01-plano-contas.spec.ts')).not.toContain('alphacarnes_e09_t01');
+    expect(lerE2e('e09-t01-plano-contas.spec.ts')).not.toContain('delete from');
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+`npx jest __tests__/e09-t01-limpar-plano.test.ts` em `app/frontend`.
+
+Expected: FAIL: `../e2e/limpar-plano` não existe.
+
+- [ ] **Step 3: Write minimal implementation**
+
+`app/frontend/e2e/limpar-plano.ts`:
+
+```ts
+import { execFileSync } from 'node:child_process';
+
+/** Só bancos de teste: sufixo _e2e, _test ou _eNN_tNN (um banco por fatia). */
+const BANCO_DE_TESTE = /_(e2e|test|e\d{2}_t\d{2})$/;
+
+export function comandoLimpezaPlano(env: NodeJS.ProcessEnv = process.env): { container: string; args: string[] } {
+  const bruto = env.DATABASE_URL;
+  if (!bruto) throw new Error('DATABASE_URL ausente: o e2e do plano de contas não limpa banco sem saber qual.');
+  const url = new URL(bruto);
+  const banco = decodeURIComponent(url.pathname.replace(/^\//, ''));
+  const usuario = decodeURIComponent(url.username);
+  if (!usuario) throw new Error('DATABASE_URL sem usuário.');
+  if (!BANCO_DE_TESTE.test(banco)) {
+    throw new Error(`Banco "${banco}" não é de teste (sufixo _e2e, _test ou _eNN_tNN). Limpeza recusada.`);
+  }
+  const container = env.E2E_POSTGRES_CONTAINER ?? 'alphacarnes-postgres-1';
+  return {
+    container,
+    // CASCADE esvazia também as tabelas que referenciem estas (política da T02, quando existir) sem nomeá-las.
+    args: ['exec', container, 'psql', '-U', usuario, '-d', banco, '-v', 'ON_ERROR_STOP=1', '-c',
+      'TRUNCATE conta_versoes, contas_contabeis, centros_custo CASCADE;'],
+  };
+}
+
+export function limparPlano() {
+  execFileSync('docker', comandoLimpezaPlano().args, { stdio: 'pipe' });
+}
+```
+
+No spec Playwright: remover `import { execFileSync } from 'node:child_process';` (L1), remover a função `limparPlano` (L9 a L27) e acrescentar `import { limparPlano } from './limpar-plano';`. Nenhum outro trecho do spec muda.
+
+- [ ] **Step 4: Run to verify it passes**
+
+`npx jest __tests__/e09-t01-limpar-plano.test.ts` em `app/frontend`. Expected: PASS. Depois, com a pilha local no ar como na Task 7, `npx playwright test e2e/e09-t01-plano-contas.spec.ts`. Expected: PASS, com o `DATABASE_URL` do `.env` da raiz do worktree apontando para o banco de teste da fatia.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/frontend/e2e/limpar-plano.ts app/frontend/e2e/e09-t01-plano-contas.spec.ts app/frontend/__tests__/e09-t01-limpar-plano.test.ts
+git commit -m @"
+test(e09-t01): deriva o banco da limpeza do e2e do DATABASE_URL
+
+### Descrição Detalhada:
+Extrai limparPlano para e2e/limpar-plano.ts, que lê usuário e banco do DATABASE_URL, recusa banco sem sufixo de teste e usa TRUNCATE em cascata das três tabelas.
+
+### Motivo da Mudança:
+O spec apagava linhas de um banco de nome fixo, sem proteção e sem considerar tabelas da T02 que referenciem as da T01.
+
+### Impacto:
+O e2e falha cedo se apontar para banco que não é de teste. Não quebra quando a T02 não existe na branch.
+"@
+```
+
+---
+
+## Task 17: Renumeração da migration para 0049 (condicional)
+
+**Pré-condição explícita.** Executar somente quando o coordenador indicar. A condição é `origin/develop` conter as migrations `0044` a `0048` da trilha E01, a última sendo `0048_e01_t05_homologacoes_regras`. Verificação, em `F:/Projetos/AlphaCarnes/.worktrees/e09-t01`:
+
+```powershell
+git fetch origin
+git ls-tree --name-only origin/develop app/backend/src/database/migrations/ | ForEach-Object { Split-Path $_ -Leaf } | Where-Object { $_ -match '^004[4-8]_.*\.sql$' }
+```
+
+Saída esperada: cinco linhas, de `0044_...sql` a `0048_e01_t05_homologacoes_regras.sql`. Qualquer outro resultado: parar e devolver ao coordenador.
+
+**Files:**
+- Merge: `git merge origin/develop` (normal, sem rebase)
+- Delete: `app/backend/src/database/migrations/0048_e09_t01_plano_contas.sql`
+- Create (gerado): `app/backend/src/database/migrations/0049_e09_t01_plano_contas.sql` e `meta/0049_snapshot.json`
+- Modify (gerado): `app/backend/src/database/migrations/meta/_journal.json`
+- Create: `app/backend/test/unit/e09-t01-migration-meta.spec.ts`
+
+Estado lido: o ramo tem `0048_e09_t01_plano_contas.sql` (65 linhas: três `CREATE TABLE`, sete índices, três `CREATE TRIGGER`), `meta/0048_snapshot.json` e a entrada `idx 44` com a tag `0048_e09_t01_plano_contas` no journal. No `origin/develop` o prefixo `0048` e o `idx` seguem a E01; o merge conflita em `meta/_journal.json` e `meta/0048_snapshot.json`. O teste segue o precedente `test/unit/onda11-migrations-meta.spec.ts`.
+
+- [ ] **Step 1: Write the failing test**
+
+`app/backend/test/unit/e09-t01-migration-meta.spec.ts`:
+
+```ts
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+
+const MIGRATIONS = path.resolve(__dirname, '../../src/database/migrations');
+const META = path.join(MIGRATIONS, 'meta');
+
+interface Journal { entries: { idx: number; tag: string }[] }
+
+describe('migration do plano de contas (E09-T01)', () => {
+  const journal = JSON.parse(readFileSync(path.join(META, '_journal.json'), 'utf8')) as Journal;
+
+  it('o journal tem a tag 0049_e09_t01_plano_contas uma única vez e nenhuma 0048_e09', () => {
+    const tags = journal.entries.map((e) => e.tag);
+    expect(tags.filter((t) => t === '0049_e09_t01_plano_contas')).toHaveLength(1);
+    expect(tags.some((t) => t.startsWith('0048_e09'))).toBe(false);
+    expect(tags).toContain('0048_e01_t05_homologacoes_regras');
+  });
+
+  it('idx do journal é crescente e sem repetição, e a tag 0049 é a última', () => {
+    const idxs = journal.entries.map((e) => e.idx);
+    expect(idxs).toEqual([...new Set(idxs)].sort((a, b) => a - b));
+    expect(journal.entries.at(-1)?.tag).toBe('0049_e09_t01_plano_contas');
+  });
+
+  it('arquivos coincidem com a tag e o SQL mantém tabelas e triggers', () => {
+    expect(readdirSync(MIGRATIONS).some((f) => f.startsWith('0048_e09'))).toBe(false);
+    expect(existsSync(path.join(META, '0049_snapshot.json'))).toBe(true);
+    const sql = readFileSync(path.join(MIGRATIONS, '0049_e09_t01_plano_contas.sql'), 'utf8');
+    for (const tabela of ['centros_custo', 'contas_contabeis', 'conta_versoes']) {
+      expect(sql).toContain(`CREATE TABLE "${tabela}"`);
+      expect(sql).toContain(`CREATE TRIGGER trg_${tabela}_updated_at`);
+    }
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+`npx jest test/unit/e09-t01-migration-meta.spec.ts` em `app/backend`. Expected: FAIL: a tag atual é `0048_e09_t01_plano_contas`.
+
+- [ ] **Step 3: Merge, remover a 0048 e regenerar como 0049**
+
+```powershell
+Set-Location F:/Projetos/AlphaCarnes/.worktrees/e09-t01
+$antes = git rev-parse HEAD
+git show "${antes}:app/backend/src/database/migrations/0048_e09_t01_plano_contas.sql" | Set-Content "$env:TEMP/e09-0048-original.sql"
+git merge origin/develop
+```
+
+Conflitos esperados e resolução (`--theirs` é o `origin/develop` durante o merge):
+
+```powershell
+git checkout --theirs app/backend/src/database/migrations/meta/_journal.json app/backend/src/database/migrations/meta/0048_snapshot.json
+git add app/backend/src/database/migrations/meta/_journal.json app/backend/src/database/migrations/meta/0048_snapshot.json
+git rm -f app/backend/src/database/migrations/0048_e09_t01_plano_contas.sql
+if (Select-String -Path app/backend/src/database/migrations/meta/_journal.json -Pattern 'e09' -Quiet) { throw 'journal ainda cita e09' }
+```
+
+Conflito em outro arquivo: resolver apenas mantendo as duas versões quando o arquivo for lista aditiva (`schema/index.ts`, `app.module.ts`, `permissoes.ts`, `menus-canonicos.ts`, `eventos.ts`); parar se o conflito exigir escolher entre duas regras. Depois: `git commit --no-edit`.
+
+Gerar com o drizzle-kit (o diff é entre o último snapshot do develop e `contabilidade-plano.schema.ts`):
+
+```powershell
+Set-Location app/backend
+npx drizzle-kit generate --name e09_t01_plano_contas
+Get-ChildItem src/database/migrations -Filter '*_e09_t01_plano_contas.sql' | Select-Object -ExpandProperty Name
+```
+
+Critério de parada: o nome impresso tem de ser exatamente `0049_e09_t01_plano_contas.sql`, e a última entrada do journal tem de ter a tag `0049_e09_t01_plano_contas`. Se o prefixo for outro (por exemplo `0048` ou `0050`), parar sem renomear à mão: `git checkout -- src/database/migrations/meta/_journal.json`, apagar só os dois arquivos gerados (o `.sql` e o snapshot novo) e devolver ao coordenador, porque outra trilha ocupou o ordinal.
+
+Comparar o SQL e repor os triggers (o drizzle-kit não os emite):
+
+```powershell
+git diff --no-index --ignore-all-space "$env:TEMP/e09-0048-original.sql" src/database/migrations/0049_e09_t01_plano_contas.sql
+```
+
+A única diferença aceitável são os três `CREATE TRIGGER` ausentes no arquivo novo; qualquer diferença em tabela, coluna, índice ou `CHECK` é parada. Se faltarem só os triggers, acrescentar ao final de `0049_e09_t01_plano_contas.sql` o bloco idêntico ao final do original:
+
+```powershell
+$original = Get-Content "$env:TEMP/e09-0048-original.sql" -Raw
+$bloco = $original.Substring($original.IndexOf('CREATE TRIGGER trg_centros_custo_updated_at'))
+Add-Content src/database/migrations/0049_e09_t01_plano_contas.sql ("`n" + $bloco)
+```
+
+Conferir a cadeia do snapshot e aplicar em banco vazio e descartável (distinto do banco da fatia):
+
+```powershell
+node -e "const m='./src/database/migrations/meta/';const a=require(m+'0048_snapshot.json'),b=require(m+'0049_snapshot.json');if(b.prevId!==a.id)process.exit(1)"
+docker exec alphacarnes-postgres-1 psql -U alphacarnes -d postgres -c "CREATE DATABASE alphacarnes_e09_t01_mig"
+$env:DATABASE_URL = 'postgres://alphacarnes:alphacarnes@localhost:15433/alphacarnes_e09_t01_mig'
+npm run db:migrate
+docker exec alphacarnes-postgres-1 psql -U alphacarnes -d alphacarnes_e09_t01_mig -c "select to_regclass('public.conta_versoes'), to_regclass('public.centros_custo'), to_regclass('public.contas_contabeis')"
+docker exec alphacarnes-postgres-1 psql -U alphacarnes -d postgres -c "DROP DATABASE alphacarnes_e09_t01_mig"
+```
+
+Expected: `db:migrate` com código 0 e as três tabelas existentes.
+
+- [ ] **Step 4: Run to verify it passes**
+
+Em `app/backend`: `npx jest test/unit/e09-t01-migration-meta.spec.ts`, `npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` e `npm run test:cov` (gate de 80%). Expected: PASS nos três.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/database/migrations app/backend/test/unit/e09-t01-migration-meta.spec.ts
+git commit -m @"
+chore(e09-t01): renumera a migration do plano de contas para 0049
+
+### Descrição Detalhada:
+Após o merge de origin/develop (migrations 0044 a 0048 da E01), remove a 0048_e09_t01 e seu snapshot e regenera como 0049_e09_t01_plano_contas com o drizzle-kit, mantendo o SQL equivalente e os três triggers set_updated_at.
+
+### Motivo da Mudança:
+O ordinal 0048 passou a pertencer à E01 (0048_e01_t05_homologacoes_regras). O teste de meta confere a tag, o idx e os arquivos.
+
+### Impacto:
+Banco novo aplica a 0049 sem diferença de esquema. Quem já aplicou a 0048 da E09 em banco local recria o banco de teste da fatia.
+"@
+```
+
+**Rollback da Task 17.** Antes do `git commit --no-edit` do merge: `git merge --abort`. Depois do commit e sem push, com autorização do coordenador: `git reset --hard $antes`. Com push feito: `git revert -m 1 <sha-do-merge>` e commit corretivo, nunca force push.
+
+---
+
 ## Fora desta fatia
 
 - E09-T02 políticas de contabilização, E09-T03 diário/razão/lançamentos, E09-T04 demonstrações, E09-T05 apuração, E09-T06 CMV, E09-T07 SPED, E09-T08 fechamento, E09-T09 exportação contábil ampla.
@@ -1731,3 +3040,5 @@ O spec usa o administrador semeado. Não chama SEFAZ, banco nem EISS.
 - Enums de `componentes.js` L1688–L1708 e L1866–L1886 estão no CHECK da Task 2 e nos rótulos da Task 6.
 - Review Focus 1–5 têm teste na Task 4, e o foco 3 tem teste na Task 3.
 - `apresentar` da Task 3 é o contrato que a Task 5 e a Task 6 consomem, com os mesmos nomes de campo.
+- r3: cada achado B1 a B4, cada menor M1 a M3, M5, M6 e AD-25 item 3 tem task e teste no mapa da seção "Correções da revisão crítica (r3)". Não há migration nas Tasks 8 a 16. A Task 17 é condicional e só roda por indicação do coordenador.
+- r3: nenhuma task toca `docs/execucao/` nem arquivo da E09-T02. As pendências P-r3-1 e P-r3-2 não têm task e estão registradas na seção.
