@@ -474,7 +474,7 @@ describe('E01-T01 empresas e estabelecimentos', () => {
     expect(res.headers['content-type']).toContain('text/csv');
     expect(res.text.charCodeAt(0)).toBe(0xfeff);
     expect(res.text).toContain('Estabelecimento;CNPJ;Regime tributário;Estado;Situação;Empresa');
-    expect(res.text).toContain(cnpj);
+    expect(res.text).toContain(`${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`);
     expect(res.text).toContain('Alpha Exportacao Fiscal');
     expect(res.text).toContain('Rascunho');
     expect(res.text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);

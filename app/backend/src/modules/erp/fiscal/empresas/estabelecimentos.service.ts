@@ -177,12 +177,9 @@ export class EstabelecimentosService {
         count(*) FILTER (WHERE e.situacao = 'SUSPENDED')::int AS suspensos,
         (
           SELECT count(*)::int FROM estabelecimento_alteracoes a
-          WHERE a.deleted_at IS NULL AND a.situacao = 'REVIEW'
-            AND a.estabelecimento_id IN (
-              SELECT e2.id FROM estabelecimentos e2
-              INNER JOIN empresas emp2 ON emp2.id = e2.empresa_id AND emp2.deleted_at IS NULL
-              WHERE e2.deleted_at IS NULL
-            )
+          INNER JOIN estabelecimentos e ON e.id = a.estabelecimento_id
+          INNER JOIN empresas emp ON emp.id = e.empresa_id AND emp.deleted_at IS NULL
+          WHERE a.deleted_at IS NULL AND a.situacao = 'REVIEW' AND ${where}
         ) AS "emRevisaoAlteracao"
       FROM estabelecimentos e
       INNER JOIN empresas emp ON emp.id = e.empresa_id AND emp.deleted_at IS NULL
@@ -722,12 +719,14 @@ export class EstabelecimentosService {
 
   private whereLista(query: ListarEstabelecimentosQuery) {
     const like = query.search ? `%${query.search.replace(/[%_]/g, '')}%` : null;
+    // CNPJ é gravado sem máscara: a busca pelo formato exibido na grade (12.345.678/0001-95) remove . / - e espaços.
+    const cnpjTermo = query.search ? query.search.replace(/[%_./\-\s]/g, '') : '';
     return sql`
       e.deleted_at IS NULL
       ${query.empresaId ? sql`AND e.empresa_id = ${query.empresaId}` : sql``}
       ${query.estabelecimentoId ? sql`AND e.id = ${query.estabelecimentoId}` : sql``}
       ${query.situacao ? sql`AND e.situacao = ${query.situacao}` : sql``}
-      ${like ? sql`AND (e.nome ILIKE ${like} OR e.cnpj ILIKE ${like} OR emp.razao_social ILIKE ${like})` : sql``}
+      ${like ? sql`AND (e.nome ILIKE ${like} ${cnpjTermo ? sql`OR e.cnpj ILIKE ${`%${cnpjTermo}%`}` : sql``} OR emp.razao_social ILIKE ${like})` : sql``}
     `;
   }
 

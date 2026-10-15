@@ -9,15 +9,19 @@ export interface IntervaloRegime {
 
 export type ClassificacaoRegime =
   | { tipo: 'livre' }
-  | { tipo: 'troca'; regimeAtual: IntervaloRegime; fimProposto: string }
+  | { tipo: 'troca'; regimeAtual: IntervaloRegime; fimProposto: string; semRegimeAPartirDe: string | null }
   | { tipo: 'sobreposto'; conflito: Pick<IntervaloRegime, 'crt' | 'vigenciaInicio' | 'vigenciaFim' | 'situacao'> };
+
+function deslocarDia(iso: string, dias: number): string {
+  const [ano, mes, dia] = iso.split('-').map(Number);
+  const data = new Date(Date.UTC(ano!, (mes ?? 1) - 1, dia));
+  data.setUTCDate(data.getUTCDate() + dias);
+  return data.toISOString().slice(0, 10);
+}
 
 /** Dia civil anterior, em UTC, sobre `YYYY-MM-DD`. */
 export function diaAnterior(iso: string): string {
-  const [ano, mes, dia] = iso.split('-').map(Number);
-  const data = new Date(Date.UTC(ano!, (mes ?? 1) - 1, dia));
-  data.setUTCDate(data.getUTCDate() - 1);
-  return data.toISOString().slice(0, 10);
+  return deslocarDia(iso, -1);
 }
 
 function fimEfetivo(fim: string | null): string {
@@ -53,7 +57,13 @@ export function classificarSobreposicao(
     && unico.vigenciaFim === null
     && unico.vigenciaInicio < nova.vigenciaInicio
   ) {
-    return { tipo: 'troca', regimeAtual: unico, fimProposto: diaAnterior(nova.vigenciaInicio) };
+    return {
+      tipo: 'troca',
+      regimeAtual: unico,
+      fimProposto: diaAnterior(nova.vigenciaInicio),
+      // Regra D8 inalterada: a anterior fecha em D−1 mesmo que a nova tenha fim; depois dele fica sem regime.
+      semRegimeAPartirDe: nova.vigenciaFim && nova.vigenciaFim < '9999-12-31' ? deslocarDia(nova.vigenciaFim, 1) : null,
+    };
   }
   const conflito = unico ?? cruzados[0]!;
   return {

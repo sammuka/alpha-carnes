@@ -70,7 +70,7 @@ export class AlteracoesService {
           })
           .returning();
         if (!linha) throw new Error('Falha ao gravar alteração');
-        await this.auditar(tx, 'INSERT', linha, linha, usuarioId, dto.justificativa);
+        await this.auditar(tx, 'INSERT', null, linha, usuarioId, dto.justificativa);
         await this.substituirPropostos(tx, linha.id, dto.cnaes, usuarioId, dto.justificativa);
         return linha;
       });
@@ -406,18 +406,18 @@ export class AlteracoesService {
   private async auditar(
     tx: Tx,
     operacao: 'INSERT' | 'UPDATE' | 'DELETE' | 'ACAO_MANUAL',
-    anterior: Alteracao,
+    anterior: Alteracao | null,
     novo: Alteracao,
     usuarioId: string,
     justificativa: string,
   ) {
     await this.auditoria.registrar(tx, {
       tabela: 'estabelecimento_alteracoes',
-      registroId: anterior.id,
+      registroId: novo.id,
       operacao,
       modulo: MODULO_AUDITORIA,
       usuarioId,
-      dadosAnteriores: anterior,
+      dadosAnteriores: anterior ?? undefined,
       dadosNovos: novo,
       justificativa,
     });

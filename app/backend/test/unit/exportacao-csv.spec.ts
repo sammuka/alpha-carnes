@@ -15,3 +15,11 @@ describe('montarCsvEstabelecimentos', () => {
     expect(montarCsvEstabelecimentos([base])).toContain('\r\nFilial;');
   });
 });
+
+describe('CNPJ no CSV', () => {
+  it('exporta com a máscara da tela para o Excel não perder zeros nem usar notação científica', () => {
+    const csv = (cnpj: string) => montarCsvEstabelecimentos([{ ...base, cnpj }]).split('\r\n')[1]?.split(';')[1];
+    expect(csv('00123456000195')).toBe('00.123.456/0001-95');
+    expect(csv('12345E78000195')).toBe('12.345.E78/0001-95');
+  });
+});

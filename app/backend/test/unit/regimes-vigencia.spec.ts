@@ -36,6 +36,7 @@ describe('regimes-vigencia', () => {
       tipo: 'troca',
       regimeAtual: atual,
       fimProposto: '2026-05-31',
+      semRegimeAPartirDe: '2027-01-01',
     });
   });
 
@@ -51,5 +52,19 @@ describe('regimes-vigencia', () => {
     const resultado = classificarSobreposicao({ vigenciaInicio: '2026-06-01', vigenciaFim: '2026-08-01' }, [atual]);
     expect(resultado.tipo).toBe('sobreposto');
     if (resultado.tipo === 'sobreposto') expect(resultado.conflito.vigenciaFim).toBe('2026-12-31');
+  });
+});
+
+describe('troca com nova versão já fechada', () => {
+  it('informa o primeiro dia sem regime sem mudar o fim proposto', () => {
+    const atual = regime({ vigenciaInicio: '2020-01-01' });
+    const r = classificarSobreposicao({ vigenciaInicio: '2026-10-01', vigenciaFim: '2026-12-31' }, [atual]);
+    expect(r).toMatchObject({ tipo: 'troca', fimProposto: '2026-09-30', semRegimeAPartirDe: '2027-01-01' });
+  });
+
+  it('nova versão aberta não deixa período descoberto', () => {
+    const atual = regime({ vigenciaInicio: '2020-01-01' });
+    expect(classificarSobreposicao({ vigenciaInicio: '2026-10-01', vigenciaFim: null }, [atual]))
+      .toMatchObject({ tipo: 'troca', semRegimeAPartirDe: null });
   });
 });

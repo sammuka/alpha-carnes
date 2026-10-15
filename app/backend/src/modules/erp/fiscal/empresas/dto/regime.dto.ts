@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { CODIGOS_CRT } from '../../../../../database/schema/fiscal-empresas.schema';
 import { acaoDecisaoSchema, justificativaSchema, versaoSchema } from './comum.dto';
 
-const dataIsoSchema = z.iso.date();
+/** Ano >= 1900: o PostgreSQL rejeita ano 0000 (500); datas fiscais anteriores a 1900 não existem. */
+const dataIsoSchema = z.iso.date().refine((data) => data >= '1900-01-01', { message: 'Data deve ser a partir de 1900.' });
 
 const MENSAGEM_VIGENCIA = 'Fim de vigência deve ser igual ou posterior ao início.';
 
