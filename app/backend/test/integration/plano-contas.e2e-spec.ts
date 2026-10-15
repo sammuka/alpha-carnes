@@ -10,7 +10,7 @@ import { PlanoContasService } from '../../src/modules/contabilidade/plano/plano.
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditoriaService } from '../../src/common/auditoria/auditoria.service';
 import { EVENTOS } from '../../src/realtime/events/eventos';
-import { ultimaVersaoDecidida } from '../../src/modules/contabilidade/plano/vigencia';
+import { LIMITE_OPCOES_PAI, ultimaVersaoDecidida } from '../../src/modules/contabilidade/plano/vigencia';
 import type { CriarContaDto, EditarContaDto } from '../../src/modules/contabilidade/plano/dto/plano.dto';
 import type { ContaApresentada } from '../../src/modules/contabilidade/plano/plano.service';
 
@@ -880,5 +880,108 @@ describe('Plano de contas', () => {
       expect(r.reason).toMatchObject({ status: 409, response: { message: 'Já existe centro de custo com este código' } });
     }
     expect((await service.listarCentrosAtivos()).filter((c) => c.codigo === 'CTX')).toHaveLength(1);
+  });
+
+  describe('opções de conta pai', () => {
+    const opcoes = (qs = '', cookies = adminCookies) =>
+      request(srv()).get(`/contabilidade/plano/opcoes-pai${qs}`).set('Cookie', cookies);
+    const codigosDe = (res: request.Response) => (res.body.itens as { codigo: string }[]).map((i) => i.codigo);
+    const grade = (pagina: number, extra: { q?: string; situacao?: '' | 'DRAFT' } = {}) =>
+      service.listar({ pagina, q: extra.q ?? '', situacao: extra.situacao ?? '', ordenar: 'contaContabil', direcao: 'asc' });
+
+    async function sinteticasAprovadas(quantidade: number) {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      for (let i = 1; i <= quantidade; i += 1) {
+        const n = String(i).padStart(2, '0');
+        await service.criar(dtoBase({ codigo: `C${n}`, nome: `Conta ${n}`, classificacao: 'sintetica' }), userId);
+        await aprovarDireto(`C${n}`);
+      }
+    }
+
+    it('pai fora da página 1 da grade aparece e a criação com ele funciona', async () => {
+      await sinteticasAprovadas(25);
+      const primeira = await grade(1);
+      const segunda = await grade(2);
+      expect(primeira.total).toBe(25);
+      expect(primeira.itens).toHaveLength(20);
+      const foraDaPagina = segunda.itens[0]!.codigo;
+      expect(primeira.itens.map((i) => i.codigo)).not.toContain(foraDaPagina);
+
+      const res = await opcoes();
+      expect(res.status).toBe(200);
+      expect(res.body.truncado).toBe(false);
+      expect(codigosDe(res)).toHaveLength(25);
+      expect(codigosDe(res)).toContain(foraDaPagina);
+
+      const criada = await request(srv()).post('/contabilidade/plano').set('Cookie', adminCookies)
+        .send(dtoBase({ codigo: 'FILHA', nome: 'Filha', classificacao: 'analitica', contaPaiCodigo: foraDaPagina }));
+      expect(criada.status).toBe(201);
+      expect(criada.body.contaPaiCodigo).toBe(foraDaPagina);
+    });
+
+    it('o filtro e a busca da grade não reduzem as opções', async () => {
+      await sinteticasAprovadas(3);
+      const filtrada = await grade(1, { q: 'zzz', situacao: 'DRAFT' });
+      expect(filtrada.total).toBe(0);
+      expect(codigosDe(await opcoes())).toEqual(['C01', 'C02', 'C03']);
+    });
+
+    it('pai aprovado com v2 em rascunho aparece, com o nome da versão vigente', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      await service.criar(dtoBase({ codigo: '1', nome: 'Caixa e bancos', classificacao: 'sintetica' }), userId);
+      const v1 = await promover('1');
+      await service.versionar('1', comoEdicao(v1, { nome: 'Caixa novo', justificativa: 'abre v2' }), userId);
+      expect((await opcoes()).body.itens).toEqual([{ codigo: '1', nome: 'Caixa e bancos' }]);
+    });
+
+    it('pai com v1 aprovada e v2 suspensa não aparece', async () => {
+      await contaComV2Suspensa();
+      const res = await opcoes();
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ itens: [], truncado: false });
+    });
+
+    it('só entram sintéticas cuja última versão decidida é aprovada, igual a ultimaVersaoDecidida', async () => {
+      await contaAprovadaAnalitica();
+      await service.criar(dtoBase({ codigo: '2', nome: 'Só rascunho', classificacao: 'sintetica' }), userId);
+      await service.criar(dtoBase({ codigo: '3', nome: 'Com revisão aberta', classificacao: 'sintetica' }), userId);
+      const v1 = await promover('3');
+      await service.versionar('3', comoEdicao(v1, { justificativa: 'abre v2' }), userId);
+      await service.revisarCompetencia('3', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa v2' }, userId);
+
+      const esperados: string[] = [];
+      for (const conta of await db.select().from(contasContabeis)) {
+        const decidida = await ultimaVersaoDecidida(db, conta.id);
+        if (decidida?.situacao === 'APPROVED' && decidida.classificacao === 'sintetica') esperados.push(conta.codigo);
+      }
+      expect(esperados.sort()).toEqual(['1', '3']);
+      expect(codigosDe(await opcoes())).toEqual(esperados.sort());
+    });
+
+    it('busca por código ou nome sem caixa, e % é literal', async () => {
+      await sinteticasAprovadas(3);
+      expect(codigosDe(await opcoes('?q=conta%2002'))).toEqual(['C02']);
+      expect(codigosDe(await opcoes('?q=c03'))).toEqual(['C03']);
+      expect((await opcoes('?q=%25')).body.itens).toEqual([]);
+    });
+
+    it('passando do teto responde truncado e a busca devolve a conta fora dele', async () => {
+      await sinteticasAprovadas(LIMITE_OPCOES_PAI + 1);
+      const res = await opcoes();
+      expect(res.body.itens).toHaveLength(LIMITE_OPCOES_PAI);
+      expect(res.body.truncado).toBe(true);
+      const ultima = `C${LIMITE_OPCOES_PAI + 1}`;
+      expect(codigosDe(await opcoes(`?q=${ultima}`))).toEqual([ultima]);
+      expect((await opcoes(`?q=${ultima}`)).body.truncado).toBe(false);
+    });
+
+    it('exige a permissão de leitura e não devolve identificador', async () => {
+      await sinteticasAprovadas(2);
+      expect((await opcoes('', comercialCookies)).status).toBe(403);
+      expect((await request(srv()).get('/contabilidade/plano/opcoes-pai')).status).toBe(401);
+      const res = await opcoes();
+      for (const item of res.body.itens as object[]) expect(Object.keys(item).sort()).toEqual(['codigo', 'nome']);
+      expect(JSON.stringify(res.body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    });
   });
 });

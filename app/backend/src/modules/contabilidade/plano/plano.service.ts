@@ -22,13 +22,14 @@ import {
   type DecidirContaDto,
   type EditarContaDto,
   type ListarPlanoQuery,
+  type OpcoesPaiQuery,
   type LoteDto,
   type MapearContaDto,
   type RevisarCompetenciaDto,
   dataCalendarioValida,
 } from './dto/plano.dto';
 import { RegraContabilException } from './regra-contabil.exception';
-import { ultimaVersaoDecidida } from './vigencia';
+import { LIMITE_OPCOES_PAI, opcoesPaiVigentes, ultimaVersaoDecidida } from './vigencia';
 
 type Banco = NodePgDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Banco['transaction']>[0]>[0];
@@ -177,6 +178,11 @@ export class PlanoContasService {
       codigo: centrosCusto.codigo,
       nome: centrosCusto.nome,
     }).from(centrosCusto).where(isNull(centrosCusto.deletedAt)).orderBy(asc(centrosCusto.codigo));
+  }
+
+  async listarOpcoesPai(query: OpcoesPaiQuery) {
+    const linhas = await opcoesPaiVigentes(this.db, query.q, LIMITE_OPCOES_PAI + 1);
+    return { itens: linhas.slice(0, LIMITE_OPCOES_PAI), truncado: linhas.length > LIMITE_OPCOES_PAI };
   }
 
   async exportarCsv(query: ListarPlanoQuery): Promise<string> {

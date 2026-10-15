@@ -46,6 +46,9 @@ export const listarPlanoSchema = z.object({
   direcao: z.enum(['asc', 'desc']).default('asc'),
 });
 
+export const opcoesPaiSchema = z.object({ q: z.string().trim().max(180).default('') });
+export type OpcoesPaiQuery = z.infer<typeof opcoesPaiSchema>;
+
 export const editarSchema = criarContaCampos.omit({ codigo: true }).extend({
   numero: z.number().int().positive(),
 }).refine(vigenciaCoerente, {

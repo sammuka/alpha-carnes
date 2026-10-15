@@ -70,7 +70,7 @@ async function preencherInicioVigencia(page: Page, iso: string) {
 
 async function criarCentro(page: Page) {
   await page.getByRole('button', { name: '+ Novo registro', exact: true }).click();
-  await page.getByRole('button', { name: 'Pesquisar', exact: true }).click();
+  await page.getByRole('button', { name: 'Pesquisar centro de custo', exact: true }).click();
   await expect(page.getByText('Nenhum cadastro disponível para seleção. Consulte a área responsável.').first()).toBeVisible();
   await page.getByLabel('Código', { exact: true }).first().fill('CT-E2E');
   await page.getByLabel('Centro de custo', { exact: true }).first().fill('Operação industrial');
@@ -90,7 +90,12 @@ async function criarConta(
   await page.getByLabel('Natureza da conta', { exact: true }).selectOption({ label: 'Ativo' });
   await page.getByLabel('Grupo', { exact: true }).fill('Circulante');
   if (dados.pai) {
-    await page.getByPlaceholder('Selecione conta contábil').selectOption({ label: 'Grupo do ativo' });
+    await page.getByRole('button', { name: 'Pesquisar conta contábil', exact: true }).click();
+    const lookup = page.getByRole('dialog', { name: 'Selecionar Conta contábil', exact: true });
+    await lookup.getByLabel('Pesquisar cadastro', { exact: true }).fill('Grupo do ativo');
+    await lookup.getByRole('button', { name: /Grupo do ativo/ }).click();
+    await expect(lookup).toBeHidden();
+    await expect(page.getByPlaceholder('Selecione conta contábil').locator('option:checked')).toHaveText('Grupo do ativo');
   }
   await page.getByLabel('Centro de custo', { exact: true }).last().selectOption({ label: 'Operação industrial' });
   await preencherInicioVigencia(page, '2026-10-01');

@@ -10,10 +10,12 @@ import {
   criarCentroSchema,
   criarContaSchema,
   listarPlanoSchema,
+  opcoesPaiSchema,
   loteSchema,
   type CriarCentroDto,
   type CriarContaDto,
   type ListarPlanoQuery,
+  type OpcoesPaiQuery,
   type LoteDto,
 } from './dto/plano.dto';
 import { PlanoContasService } from './plano.service';
@@ -65,6 +67,12 @@ export class PlanoContasController {
   @RequirePermissoes('CONTABILIDADE_PLANO_GERENCIAR')
   lote(@Body(new ZodValidationPipe(loteSchema)) dto: LoteDto, @CurrentUser() user: CurrentUserPayload) {
     return this.plano.lote(dto, user.sub);
+  }
+
+  @Get('plano/opcoes-pai')
+  @RequirePermissoes('CONTABILIDADE_PLANO_LER')
+  opcoesPai(@Query(new ZodValidationPipe(opcoesPaiSchema)) query: OpcoesPaiQuery) {
+    return this.plano.listarOpcoesPai(query);
   }
 
   @Get('plano/:codigo/historico')
