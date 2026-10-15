@@ -31,6 +31,7 @@ import { AbasDetalhe } from './abas-detalhe';
 import { CenarioDialog } from './cenario-dialog';
 import { DecisaoDialog } from './decisao-dialog';
 import { DiffDialog } from './diff-dialog';
+import { useRetornoFoco } from '../empresas/use-retorno-foco';
 import { HomologacaoDrawer } from './homologacao-drawer';
 
 function lerFiltros(): FiltrosLista {
@@ -63,6 +64,7 @@ export function HomologacoesClient({ podeGerenciar, podeAprovar }: { podeGerenci
   const [justificativaPublicacao, setJustificativaPublicacao] = useState('Publicação com a memória desta versão.');
   const [cenarioAberto, setCenarioAberto] = useState(false);
   const [recarga, setRecarga] = useState(0);
+  const retornoPublicar = useRetornoFoco(publicarAberto);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -284,7 +286,7 @@ export function HomologacoesClient({ podeGerenciar, podeAprovar }: { podeGerenci
       <DecisaoDialog aberto={decisaoAberta} erro={alerta} onFechar={() => setDecisaoAberta(false)} onAprovar={(justificativa) => void decidir('aprovar', justificativa)} onRejeitar={(justificativa) => void decidir('rejeitar', justificativa)} />
       <CenarioDialog aberto={cenarioAberto} enquadramento={detalhe?.enquadramento ?? ''} erro={alerta} onFechar={() => setCenarioAberto(false)} onVincular={(id, justificativa) => void vincular(id, justificativa)} />
       <Dialog open={publicarAberto} onOpenChange={(aberto) => { if (!aberto) setPublicarAberto(false); }}>
-        <DialogContent>
+        <DialogContent onCloseAutoFocus={retornoPublicar}>
           <DialogHeader>
             <DialogTitle>Publicar e auditar</DialogTitle>
           </DialogHeader>

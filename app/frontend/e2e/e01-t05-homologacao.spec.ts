@@ -140,6 +140,7 @@ test.describe('E01-T05 Painel de alterações e homologação de regras', () => 
     await diff.getByRole('button', { name: 'Cancelar' }).focus();
     await page.keyboard.press('Escape');
     await expect(diff).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Revisar diff' }), 'foco volta ao controle que abriu o diálogo').toBeFocused();
 
     await ficha.getByRole('button', { name: 'cenários aprovados' }).click();
     const cenario = page.getByRole('dialog', { name: 'cenários aprovados' });
@@ -174,13 +175,21 @@ test.describe('E01-T05 Painel de alterações e homologação de regras', () => 
     await page.getByRole('dialog', { name: 'Publicar e auditar' }).getByRole('button', { name: 'Publicar' }).click();
     await expect(page.getByRole('alert').filter({ hasText: 'Ação não permitida na situação atual.' })).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Publicar e auditar' }), 'foco volta ao controle que abriu o diálogo').toBeFocused();
     await expect(page.getByRole('row', { name: DESCRICAO })).toHaveCount(antes);
 
+    // Recarrega para esvaziar a seleção: só o Enter na linha pode reabrir a ficha.
+    await page.reload();
+    await expect(page.getByRole('heading', { name: PAINEL, level: 1 })).toBeVisible();
+    await expect(page.getByRole('row').nth(1)).toBeVisible({ timeout: 30_000 });
+    await expect(ficha).toHaveCount(0);
     const busca = page.getByLabel('Pesquisar descrição ou referência de negócio');
     await busca.focus();
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
+    await expect(page.getByRole('row').nth(1)).toBeFocused();
+    await expect(ficha).toHaveCount(0);
     await page.keyboard.press('Enter');
     await expect(ficha).toBeVisible();
     await expectControlesComNome(page.locator('body'));
