@@ -175,3 +175,73 @@ describe('lookup de conta pai (padrão Pesquisar do protótipo)', () => {
     expect(screen.queryByText('Não foi possível carregar as contas. Tente novamente.')).not.toBeInTheDocument();
   });
 });
+
+describe('lookup de conta pai: teclado e edição', () => {
+  it('Tab e Shift+Tab ciclam dentro do popup sem escapar para o drawer', async () => {
+    mockFetch({ itens: [{ codigo: 'P1', nome: 'Primeira' }, { codigo: 'P2', nome: 'Segunda' }] });
+    render(<PlanoContasClient inicial={[]} />);
+    const popup = await abrirPesquisaPai();
+    await within(popup).findByRole('button', { name: /Segunda/ });
+    const fechar = within(popup).getByRole('button', { name: 'Fechar' });
+    const ultima = within(popup).getByRole('button', { name: /Segunda/ });
+    ultima.focus();
+    await userEvent.tab();
+    expect(fechar).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    expect(ultima).toHaveFocus();
+  });
+
+  it('Escape fecha o popup mesmo com o foco fora dele e devolve o foco ao botão Pesquisar', async () => {
+    mockFetch({ itens: [] });
+    render(<PlanoContasClient inicial={[]} />);
+    await abrirDrawer();
+    const botao = screen.getByRole('button', { name: 'Pesquisar conta contábil' });
+    await abrirPesquisaPai(true);
+    (document.activeElement as HTMLElement).blur();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Selecionar Conta contábil' })).not.toBeInTheDocument();
+    expect(botao).toHaveFocus();
+  });
+
+  it('o clique no scrim não fecha o popup', async () => {
+    mockFetch({ itens: [] });
+    render(<PlanoContasClient inicial={[]} />);
+    const popup = await abrirPesquisaPai();
+    await userEvent.click(popup);
+    expect(screen.getByRole('dialog', { name: 'Selecionar Conta contábil' })).toBeInTheDocument();
+  });
+
+  it('editar conta com pai presente na grade mostra o nome do pai no select', async () => {
+    mockFetch({ itens: [] });
+    const filha = { ...linha('C1', 'Filha'), contaPaiCodigo: 'P1' };
+    render(<PlanoContasClient inicial={[filha, linha('P1', 'Conta pai')]} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar versão' }));
+    expect(await screen.findByRole('option', { name: 'Conta pai' })).toBeInTheDocument();
+  });
+
+  it('editar conta cujo pai não está na grade busca o nome por opcoes-pai?q=<codigo>', async () => {
+    const { chamadas } = mockFetch({ itens: [{ codigo: 'P90', nome: 'Pai remoto' }, { codigo: 'P9', nome: 'Outro' }] });
+    render(<PlanoContasClient inicial={[{ ...linha('C1', 'Filha'), contaPaiCodigo: 'P90' }]} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Editar versão' }));
+    expect(await screen.findByRole('option', { name: 'Pai remoto' })).toBeInTheDocument();
+    expect(chamadas).toContain('/api/contabilidade/plano/opcoes-pai?q=P90');
+  });
+
+  it('reabrir o popup limpa as opções antigas até a nova resposta', async () => {
+    let n = 0;
+    let liberar: (r: Response) => void = () => undefined;
+    mockFetch(() => {
+      n += 1;
+      if (n === 1) return Promise.resolve(resposta({ itens: [{ codigo: 'A1', nome: 'Antiga' }] }));
+      return new Promise<Response>((r) => { liberar = r; });
+    });
+    render(<PlanoContasClient inicial={[]} />);
+    const popup = await abrirPesquisaPai();
+    expect(await within(popup).findByRole('button', { name: /Antiga/ })).toBeInTheDocument();
+    await userEvent.click(within(popup).getByRole('button', { name: 'Fechar' }));
+    const reaberto = await abrirPesquisaPai(true);
+    expect(within(reaberto).queryByRole('button', { name: /Antiga/ })).not.toBeInTheDocument();
+    liberar(resposta({ itens: [{ codigo: 'N1', nome: 'Nova' }] }));
+    expect(await within(reaberto).findByRole('button', { name: /Nova/ })).toBeInTheDocument();
+  });
+});
