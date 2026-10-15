@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../../common/auditoria/auditoria.service';
 import { montarPaginado } from '../../../../common/crud/paginacao';
@@ -177,12 +177,9 @@ export class EstabelecimentosService {
         count(*) FILTER (WHERE e.situacao = 'SUSPENDED')::int AS suspensos,
         (
           SELECT count(*)::int FROM estabelecimento_alteracoes a
-          WHERE a.deleted_at IS NULL AND a.situacao = 'REVIEW'
-            AND a.estabelecimento_id IN (
-              SELECT e2.id FROM estabelecimentos e2
-              INNER JOIN empresas emp2 ON emp2.id = e2.empresa_id AND emp2.deleted_at IS NULL
-              WHERE e2.deleted_at IS NULL
-            )
+          INNER JOIN estabelecimentos e ON e.id = a.estabelecimento_id
+          INNER JOIN empresas emp ON emp.id = e.empresa_id AND emp.deleted_at IS NULL
+          WHERE a.deleted_at IS NULL AND a.situacao = 'REVIEW' AND ${where}
         ) AS "emRevisaoAlteracao"
       FROM estabelecimentos e
       INNER JOIN empresas emp ON emp.id = e.empresa_id AND emp.deleted_at IS NULL
@@ -331,7 +328,8 @@ export class EstabelecimentosService {
       })
       .from(auditoria)
       .leftJoin(usuarios, eq(usuarios.id, auditoria.usuarioId))
-      .where(or(...condicoes));
+      .where(or(...condicoes))
+      .orderBy(desc(auditoria.createdAt), desc(auditoria.id));
     return linhas.map((linha) => {
       const antes = linha.dadosAnteriores as { situacao?: string };
       const depois = linha.dadosNovos as { situacao?: string };
@@ -371,7 +369,8 @@ export class EstabelecimentosService {
         const [empresa] = await tx
           .select()
           .from(empresas)
-          .where(and(eq(empresas.id, dto.empresaId), isNull(empresas.deletedAt)));
+          .where(and(eq(empresas.id, dto.empresaId), isNull(empresas.deletedAt)))
+          .for('update'); // serializa com remover empresa (a FK só toma KEY SHARE)
         if (!empresa) throw new NotFoundException('Empresa não encontrada');
         if (dto.cnpj.slice(0, 8) !== empresa.cnpjRaiz) {
           regraViolada('CNPJ_RAIZ_DIVERGENTE', 'A raiz do CNPJ do estabelecimento difere da empresa.');
@@ -530,7 +529,7 @@ export class EstabelecimentosService {
       justificativaSituacao: dto.justificativa,
       decididoPorId: usuarioId,
       decididoEm: new Date(),
-    }, true);
+    });
   }
 
   async reativar(id: string, dto: AcaoDecisaoDto, usuarioId: string) {
@@ -720,12 +719,14 @@ export class EstabelecimentosService {
 
   private whereLista(query: ListarEstabelecimentosQuery) {
     const like = query.search ? `%${query.search.replace(/[%_]/g, '')}%` : null;
+    // CNPJ é gravado sem máscara: a busca pelo formato exibido na grade (12.345.678/0001-95) remove . / - e espaços.
+    const cnpjTermo = query.search ? query.search.replace(/[%_./\-\s]/g, '') : '';
     return sql`
       e.deleted_at IS NULL
       ${query.empresaId ? sql`AND e.empresa_id = ${query.empresaId}` : sql``}
       ${query.estabelecimentoId ? sql`AND e.id = ${query.estabelecimentoId}` : sql``}
       ${query.situacao ? sql`AND e.situacao = ${query.situacao}` : sql``}
-      ${like ? sql`AND (e.nome ILIKE ${like} OR e.cnpj ILIKE ${like} OR emp.razao_social ILIKE ${like})` : sql``}
+      ${like ? sql`AND (e.nome ILIKE ${like} ${cnpjTermo ? sql`OR e.cnpj ILIKE ${`%${cnpjTermo}%`}` : sql``} OR emp.razao_social ILIKE ${like})` : sql``}
     `;
   }
 

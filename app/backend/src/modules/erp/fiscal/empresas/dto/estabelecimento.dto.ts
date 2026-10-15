@@ -3,9 +3,13 @@ import { normalizarCnpj, validarCnpjAlfanumerico } from '../../../../../common/v
 import { SITUACOES_ESTABELECIMENTO } from '../../../../../database/schema/fiscal-empresas.schema';
 import { listaCnaesSchema } from './cnae.dto';
 import {
+  CNPJ_ENTRADA_ASCII,
   inscricaoSchema,
   justificativaSchema,
+  MENSAGEM_CNPJ_ASCII,
+  MENSAGEM_NULO,
   nomeEstabelecimentoSchema,
+  semNulo,
   ufSchema,
   versaoSchema,
 } from './comum.dto';
@@ -13,6 +17,7 @@ import {
 /** CNPJ alfanumérico com DV (D3). */
 export const cnpjSchema = z
   .string()
+  .regex(CNPJ_ENTRADA_ASCII, MENSAGEM_CNPJ_ASCII)
   .transform(normalizarCnpj)
   .refine(validarCnpjAlfanumerico, { message: 'CNPJ inválido: confira os dígitos verificadores.' });
 
@@ -22,7 +27,7 @@ export const listarEstabelecimentosQuerySchema = z.object({
   empresaId: z.string().uuid().optional(),
   estabelecimentoId: z.string().uuid().optional(),
   situacao: z.enum(SITUACOES_ESTABELECIMENTO).optional(),
-  search: z.string().trim().optional(),
+  search: z.string().trim().refine(semNulo, MENSAGEM_NULO).optional(),
   sort: z.enum(ORDENACOES_ESTABELECIMENTO).default('estabelecimento'),
   dir: z.enum(['asc', 'desc']).default('asc'),
   page: z.coerce.number().int().min(1).default(1),

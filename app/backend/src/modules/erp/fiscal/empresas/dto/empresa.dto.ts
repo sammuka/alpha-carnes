@@ -1,17 +1,25 @@
 import { z } from 'zod';
 import { normalizarCnpj } from '../../../../../common/validators/cnpj-alfanumerico';
-import { justificativaSchema, versaoSchema } from './comum.dto';
+import {
+  CNPJ_ENTRADA_ASCII,
+  justificativaSchema,
+  MENSAGEM_CNPJ_ASCII,
+  MENSAGEM_NULO,
+  semNulo,
+  versaoSchema,
+} from './comum.dto';
 
 /** CNPJ raiz alfanumérico (D3): normalizado, `^[0-9A-Z]{8}$`. */
 export const cnpjRaizSchema = z
   .string()
+  .regex(CNPJ_ENTRADA_ASCII, MENSAGEM_CNPJ_ASCII)
   .transform(normalizarCnpj)
   .pipe(z.string().regex(/^[0-9A-Z]{8}$/, 'CNPJ raiz deve ter 8 letras ou dígitos.'));
 
-const razaoSocialSchema = z.string().trim().min(1).max(150);
+const razaoSocialSchema = z.string().trim().min(1).max(150).refine(semNulo, MENSAGEM_NULO);
 
 export const listarEmpresasQuerySchema = z.object({
-  search: z.string().trim().optional(),
+  search: z.string().trim().refine(semNulo, MENSAGEM_NULO).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

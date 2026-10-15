@@ -309,6 +309,23 @@ describe('E01-T01 empresas e estabelecimentos', () => {
     ]));
   });
 
+  it('histórico em ordem determinística: mais recente primeiro', async () => {
+    const empresa = await criarEmpresa(adminA, '12ABC398', 'Zeta Histórico LTDA');
+    const estab = await criarEstab(adminA, empresa.body.id, cnpjDe('12ABC3980001'), [
+      { codigo: '6201501', descricao: 'Desenvolvimento', tipo: 'PRINCIPAL' },
+    ]);
+    await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: estab.body.versao, justificativa: MOTIVO });
+    const res = await request(app.getHttpServer())
+      .get(`/fiscal/estabelecimentos/${estab.body.id}/historico`)
+      .set('Cookie', adminA);
+    const instantes = res.body.map((linha: { criadoEm: string }) => linha.criadoEm);
+    expect(instantes.length).toBeGreaterThan(2);
+    expect(instantes).toEqual([...instantes].sort().reverse());
+  });
+
   it('aprovado não removível → 409; suspender é a reversão', async () => {
     const cnpj = cnpjDe('12ABC3560001');
     const empresa = await criarEmpresa(adminA, '12ABC356');
@@ -331,6 +348,27 @@ describe('E01-T01 empresas e estabelecimentos', () => {
     const suspenso = await request(app.getHttpServer())
       .post(`/fiscal/estabelecimentos/${estab.body.id}/suspender`)
       .set('Cookie', adminB)
+      .send({ versao: aprovado.body.versao, justificativa: MOTIVO });
+    expect(suspenso.status).toBe(200);
+    expect(suspenso.body.situacao).toBe('SUSPENDED');
+  });
+
+  it('quem submeteu pode suspender estabelecimento aprovado por outro (sem segregação)', async () => {
+    const empresa = await criarEmpresa(adminA, '12ABC399', 'Zeta Suspensão LTDA');
+    const estab = await criarEstab(adminA, empresa.body.id, cnpjDe('12ABC3990001'), [
+      { codigo: '6201501', descricao: 'Desenvolvimento', tipo: 'PRINCIPAL' },
+    ]);
+    const submetido = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: estab.body.versao, justificativa: MOTIVO });
+    const aprovado = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: submetido.body.versao, justificativa: MOTIVO });
+    const suspenso = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/suspender`)
+      .set('Cookie', adminA)
       .send({ versao: aprovado.body.versao, justificativa: MOTIVO });
     expect(suspenso.status).toBe(200);
     expect(suspenso.body.situacao).toBe('SUSPENDED');
@@ -436,7 +474,7 @@ describe('E01-T01 empresas e estabelecimentos', () => {
     expect(res.headers['content-type']).toContain('text/csv');
     expect(res.text.charCodeAt(0)).toBe(0xfeff);
     expect(res.text).toContain('Estabelecimento;CNPJ;Regime tributário;Estado;Situação;Empresa');
-    expect(res.text).toContain(cnpj);
+    expect(res.text).toContain(`${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`);
     expect(res.text).toContain('Alpha Exportacao Fiscal');
     expect(res.text).toContain('Rascunho');
     expect(res.text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);

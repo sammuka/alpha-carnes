@@ -13,6 +13,7 @@ import {
   normalizarCnae,
   normalizarCnpj,
   rotuloAcaoHistorico,
+  validarCnpjAlfanumerico,
 } from '../src/lib/fiscal-empresas';
 import { CHAVE_FILTROS, lerFiltrosSalvos, salvarFiltros, temFiltroAtivo } from '../src/lib/fiscal-empresas-filtros';
 
@@ -102,7 +103,7 @@ describe('cliente HTTP do BFF', () => {
   it('mapeia os códigos de erro para as mensagens fixas do contrato', async () => {
     const casos: Array<[string, string]> = [
       ['SEGREGACAO_FUNCAO', 'A aprovação deve ser feita por usuário diferente de quem submeteu.'],
-      ['ALTERACAO_DESATUALIZADA', 'O cadastro mudou depois desta proposta. Descarte e crie uma nova.'],
+      ['ALTERACAO_DESATUALIZADA', 'O cadastro mudou depois desta proposta. Descarte o rascunho ou rejeite a revisão e crie uma nova.'],
       ['CONFLITO_CONCORRENTE', 'O registro foi alterado por outro usuário. Recarregue para continuar.'],
     ];
     for (const [codigo, mensagem] of casos) {
@@ -165,5 +166,25 @@ describe('filtros da sessão', () => {
     expect(lerFiltrosSalvos()).toEqual(FILTROS_PADRAO);
     window.sessionStorage.setItem(CHAVE_FILTROS, '{quebrado');
     expect(lerFiltrosSalvos()).toEqual(FILTROS_PADRAO);
+  });
+});
+
+describe('validarCnpjAlfanumerico e mensagem de campo', () => {
+  it('confere o DV como o backend (numérico, alfanumérico, máscara) e recusa DV errado', () => {
+    expect(validarCnpjAlfanumerico('12345678000195')).toBe(true);
+    expect(validarCnpjAlfanumerico('12.ABC.345/01DE-35')).toBe(true);
+    expect(validarCnpjAlfanumerico('12345678000100')).toBe(false);
+    expect(validarCnpjAlfanumerico('11111111111111')).toBe(false);
+    expect(validarCnpjAlfanumerico('1234567800019')).toBe(false);
+  });
+
+  it('erro 400 por campo mostra só o texto, sem o prefixo técnico do campo', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    fetchMock.mockResolvedValue(
+      resposta(400, { message: { message: 'Validação falhou', errors: [{ path: ['cnpj'], message: 'CNPJ inválido: confira os dígitos verificadores.' }] } }),
+    );
+    const erro = await fiscalApi.obter('x').catch((e: unknown) => e);
+    expect(mensagemDoErroFiscal(erro)).toBe('CNPJ inválido: confira os dígitos verificadores.');
   });
 });

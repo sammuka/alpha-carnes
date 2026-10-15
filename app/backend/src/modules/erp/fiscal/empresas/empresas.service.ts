@@ -136,7 +136,7 @@ export class EmpresasService {
 
   async remover(id: string, dto: RemoverDto, usuarioId: string) {
     const removida = await this.db.transaction(async (tx) => {
-      const anterior = await this.obter(tx, id);
+      const anterior = await this.obter(tx, id, true);
       const [vinculo] = await tx
         .select({ id: estabelecimentos.id })
         .from(estabelecimentos)
@@ -205,11 +205,13 @@ export class EmpresasService {
     return linhas.map((linha) => linha.id);
   }
 
-  private async obter(tx: Tx, id: string) {
-    const [linha] = await tx
+  private async obter(tx: Tx, id: string, travar = false) {
+    const consulta = tx
       .select()
       .from(empresas)
       .where(and(eq(empresas.id, id), isNull(empresas.deletedAt)));
+    // FOR UPDATE serializa remover × criar estabelecimento (a FK só toma KEY SHARE).
+    const [linha] = await (travar ? consulta.for('update') : consulta);
     if (!linha) throw new NotFoundException('Empresa não encontrada');
     return linha;
   }

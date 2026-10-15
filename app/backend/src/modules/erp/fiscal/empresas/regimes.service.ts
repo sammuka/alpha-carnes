@@ -56,7 +56,7 @@ export class RegimesService {
         })
         .returning();
       if (!linha) throw new Error('Falha ao gravar regime');
-      await this.auditar(tx, 'INSERT', linha, linha, usuarioId, dto.justificativa);
+      await this.auditar(tx, 'INSERT', null, linha, usuarioId, dto.justificativa);
       return linha;
     });
     this.emitir(criado, 'criado');
@@ -129,6 +129,7 @@ export class RegimesService {
               vigenciaInicio: classificacao.regimeAtual.vigenciaInicio,
             },
             fimProposto: classificacao.fimProposto,
+            semRegimeAPartirDe: classificacao.semRegimeAPartirDe,
           },
         );
       }
@@ -323,18 +324,18 @@ export class RegimesService {
   private async auditar(
     tx: Tx,
     operacao: 'INSERT' | 'UPDATE' | 'DELETE' | 'ACAO_MANUAL',
-    anterior: Regime,
+    anterior: Regime | null,
     novo: Regime,
     usuarioId: string,
     justificativa: string,
   ) {
     await this.auditoria.registrar(tx, {
       tabela: 'regimes_tributarios',
-      registroId: anterior.id,
+      registroId: novo.id,
       operacao,
       modulo: MODULO_AUDITORIA,
       usuarioId,
-      dadosAnteriores: anterior,
+      dadosAnteriores: anterior ?? undefined,
       dadosNovos: novo,
       justificativa,
     });
