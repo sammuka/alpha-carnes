@@ -256,6 +256,19 @@ export class PlanoContasService {
     return decidida;
   }
 
+  private async recusarCiclo(tx: Tx, contaId: string, paiId: string | null) {
+    if (paiId && await this.ciclo(tx, contaId, paiId)) {
+      throw new RegraContabilException('Ciclo na hierarquia da conta');
+    }
+  }
+
+  /** Pai de uma versão nova ou editada: existe, é vigente e sintético, e não fecha ciclo. */
+  private async paiDaVersao(tx: Tx, contaId: string, classificacao: 'sintetica' | 'analitica', contaPaiCodigo: string | null) {
+    const paiId = await this.paiValido(tx, classificacao, contaPaiCodigo);
+    await this.recusarCiclo(tx, contaId, paiId);
+    return paiId;
+  }
+
   async editar(codigo: string, dto: EditarContaDto, usuarioId: string) {
     const salva = await this.db.transaction(async (tx) => {
       const { atual } = await this.travar(tx, codigo, dto.numero);
@@ -266,12 +279,13 @@ export class PlanoContasService {
       }
       if (atual.situacao !== 'DRAFT') throw new RegraContabilException('mudança de classificação após fechamento');
       if (!dto.justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
+      const paiId = await this.paiDaVersao(tx, atual.contaId, dto.classificacao, dto.contaPaiCodigo);
       const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
         nome: dto.nome,
         classificacao: dto.classificacao,
         natureza: dto.natureza,
         grupo: dto.grupo,
-        contaPaiId: await this.paiValido(tx, dto.classificacao, dto.contaPaiCodigo),
+        contaPaiId: paiId,
         centroCustoId: centro.id,
         vigenciaInicio: dto.vigenciaInicio,
         vigenciaFim: dto.vigenciaFim,
@@ -325,17 +339,7 @@ export class PlanoContasService {
         throw new ConflictException('Versão em aberto já existe');
       }
       if (atual.situacao !== 'APPROVED') throw new RegraContabilException('conta desativada');
-      const paiId = await this.paiValido(tx, dto.classificacao, dto.contaPaiCodigo);
-      if (paiId && await this.ciclo(tx, conta.id, paiId)) {
-        const [paiVersao] = await tx.select().from(contaVersoes)
-          .where(and(eq(contaVersoes.contaId, paiId), eq(contaVersoes.situacao, 'APPROVED'), isNull(contaVersoes.deletedAt)))
-          .limit(1);
-        throw new RegraContabilException(
-          paiVersao?.classificacao === 'analitica'
-            ? 'Conta pai analítica não é nível hierárquico válido'
-            : 'Ciclo na hierarquia da conta',
-        );
-      }
+      const paiId = await this.paiDaVersao(tx, conta.id, dto.classificacao, dto.contaPaiCodigo);
       const centro = await this.centroAtivo(tx, dto.centroCodigo);
       const nova = primeiroOuFalha(await tx.insert(contaVersoes).values({
         contaId: conta.id,
@@ -516,6 +520,13 @@ export class PlanoContasService {
     if (atual.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
     if (atual.situacao !== 'REVIEW') throw new RegraContabilException('Situação não permite esta transição');
     if (!justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:hierarquia'}))`);
+    if (atual.contaPaiId) {
+      await this.exigirPaiVigente(tx, atual.contaPaiId);
+      await this.recusarCiclo(tx, atual.contaId, atual.contaPaiId);
+    } else if (atual.classificacao === 'analitica') {
+      throw new RegraContabilException('Conta pai não encontrada');
+    }
     const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
       situacao: 'APPROVED',
       justificativa,

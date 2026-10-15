@@ -654,4 +654,70 @@ describe('Plano de contas', () => {
     await expect(service.criar(dtoBase({ codigo: '1.1', classificacao: 'analitica', contaPaiCodigo: '1' }), userId))
       .resolves.toMatchObject({ codigo: '1.1', contaPaiCodigo: '1' });
   });
+
+  const contarAuditoriaVersoes = async () =>
+    Number((await db.execute(sql`select count(*)::int as total from auditoria where tabela = 'conta_versoes'`)).rows[0].total);
+
+  it('editar recusa ciclo e pai próprio sem gravar', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    await service.criar(dtoBase({ codigo: '2', classificacao: 'sintetica', contaPaiCodigo: '1' }), userId);
+    await promover('2');
+    const v2 = await service.versionar('1', comoEdicao(v1, { contaPaiCodigo: null, justificativa: 'abre v2' }), userId);
+    const auditoriasAntes = await contarAuditoriaVersoes();
+    for (const pai of ['2', '1']) {
+      const res = await request(srv()).post('/contabilidade/plano/1/editar').set('Cookie', adminCookies)
+        .send(comoEdicao(v2, { contaPaiCodigo: pai }));
+      expect(res.status).toBe(422);
+      expect(res.body.message.message).toBe('Ciclo na hierarquia da conta');
+    }
+    expect((await service.obter('1')).contaPaiCodigo).toBeNull();
+    expect(await contarAuditoriaVersoes()).toBe(auditoriasAntes);
+  });
+
+  it('guarda: editar recusa pai analítico', async () => {
+    const analitica = await contaAprovadaAnalitica();
+    await service.criar(dtoBase({ codigo: '7', classificacao: 'sintetica' }), userId);
+    const rascunho = await service.obter('7');
+    await expect(service.editar('7', comoEdicao(rascunho, { contaPaiCodigo: analitica.codigo }), userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'Conta pai analítica não é nível hierárquico válido' } });
+  });
+
+  it('aprovar revalida o ciclo que a hierarquia criou depois do rascunho', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    await service.criar(dtoBase({ codigo: '3', classificacao: 'sintetica' }), userId);
+    const t1 = await promover('3');
+    await service.versionar('1', comoEdicao(v1, { contaPaiCodigo: '3', justificativa: '1 sob 3' }), userId);
+    await service.revisarCompetencia('1', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    await service.versionar('3', comoEdicao(t1, { contaPaiCodigo: '1', justificativa: '3 sob 1' }), userId);
+    await service.revisarCompetencia('3', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    await service.aprovar('3', { numero: 2, justificativa: 'aprova 3 sob 1' }, userId);
+    await expect(service.aprovar('1', { numero: 2, justificativa: 'aprova 1 sob 3' }, userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'Ciclo na hierarquia da conta' } });
+    expect((await service.obter('1')).situacao).toBe('REVIEW');
+  });
+
+  it('duas aprovações cruzadas não fecham ciclo', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    for (const codigo of ['A', 'B']) {
+      await service.criar(dtoBase({ codigo, classificacao: 'sintetica' }), userId);
+    }
+    const a = await promover('A');
+    const b = await promover('B');
+    await service.versionar('A', comoEdicao(a, { contaPaiCodigo: 'B', justificativa: 'A sob B' }), userId);
+    await service.versionar('B', comoEdicao(b, { contaPaiCodigo: 'A', justificativa: 'B sob A' }), userId);
+    for (const codigo of ['A', 'B']) {
+      await service.revisarCompetencia(codigo, { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    }
+    const resultado = await Promise.allSettled([
+      service.aprovar('A', { numero: 2, justificativa: 'aprova A' }, userId),
+      service.aprovar('B', { numero: 2, justificativa: 'aprova B' }, userId),
+    ]);
+    expect(resultado.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const recusada = resultado.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    expect(recusada.reason).toMatchObject({ status: 422, response: { message: 'Ciclo na hierarquia da conta' } });
+  });
 });
