@@ -1,30 +1,10 @@
-import { execFileSync } from 'node:child_process';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { limparPlano } from './limpar-plano';
 
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@alphacarnes.local';
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'Admin@CiTest123456';
 const COMERCIAL_EMAIL = 'comercial.e09.t01@alphacarnes.local';
 const COMERCIAL_SENHA = 'Comercial@E09t01';
-
-function limparPlano() {
-  execFileSync(
-    'docker',
-    [
-      'exec',
-      'alphacarnes-postgres-1',
-      'psql',
-      '-U',
-      'alphacarnes',
-      '-d',
-      'alphacarnes_e09_t01',
-      '-v',
-      'ON_ERROR_STOP=1',
-      '-c',
-      'delete from conta_versoes; delete from contas_contabeis; delete from centros_custo;',
-    ],
-    { stdio: 'pipe' },
-  );
-}
 
 async function cookiesDoLogin(
   contexto: BrowserContext,
