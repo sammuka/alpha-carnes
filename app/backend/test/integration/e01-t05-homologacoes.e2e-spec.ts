@@ -706,16 +706,19 @@ describe('E01-T05 homologações de regras', () => {
     expect(res.status).toBe(200);
   }
 
-  it('regra aposentada depois da abertura não aprova, não rejeita, não vincula e não publica', async () => {
+  it('regra aposentada depois da abertura não aprova, não vincula e não publica, mas permite rejeitar', async () => {
     const aprovada = await regraAprovada();
     const aberta = await abrir(admin, aprovada.regraId);
     expect(aberta.status).toBe(201);
     await aposentarRegra(aprovada.regraId, aprovada.versao);
-    for (const acao of ['aprovar', 'rejeitar'] as const) {
-      const res = await decidir(acao, adminB, aberta.body.id as string, 1, 'Decisão sobre regra aposentada.');
-      expect(res.status).toBe(422);
-      expect(codigoDe(res.body)).toBe('REGRA_NAO_APROVADA');
-    }
+    const aprovacao = await decidir('aprovar', adminB, aberta.body.id as string, 1, 'Decisão sobre regra aposentada.');
+    expect(aprovacao.status).toBe(422);
+    expect(codigoDe(aprovacao.body)).toBe('REGRA_NAO_APROVADA');
+    // AD-28: rejeitar continua permitido para encerrar a homologação sem regra vigente.
+    const rejeicao = await decidir('rejeitar', adminB, aberta.body.id as string, 1, 'Encerrada: a regra foi aposentada.');
+    expect(rejeicao.status).toBe(200);
+    expect(rejeicao.body.situacao).toBe('Rejeitada');
+    expect(await contarAuditoria(aberta.body.id as string)).toBe(2);
     const outra = await homologacaoAprovada();
     const simulacaoId = await simular(outra.base);
     const vinculado = await vincular(adminB, outra.id, simulacaoId, outra.versao, 'Vínculo antes de aposentar.');

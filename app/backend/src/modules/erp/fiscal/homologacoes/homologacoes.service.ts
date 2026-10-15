@@ -418,7 +418,8 @@ export class HomologacoesService {
     const atual = await this.obterBloqueado(tx, id);
     exigirVersao(atual.versao, dto.versao);
     recusarDecisao(atual.situacao as SituacaoHomologacao, acao);
-    const regra = await this.travarRegraAprovada(tx, atual.regraId);
+    // AD-28: rejeitar encerra a homologação mesmo sem regra vigente; aprovar exige regra APROVADA.
+    const regra = await this.travarRegraAprovada(tx, atual.regraId, acao === 'aprovar');
     exigirSegregacao(regra.submetidoPorId, usuarioId);
     const agora = new Date();
     const resumo = acao === 'aprovar' ? 'Alteração aprovada' : 'Alteração rejeitada';
@@ -586,11 +587,11 @@ export class HomologacoesService {
   }
 
   /** Lê a regra com FOR SHARE: aposentar (FOR UPDATE) espera esta transação e vice-versa. */
-  private async travarRegraAprovada(tx: Tx, regraId: string) {
+  private async travarRegraAprovada(tx: Tx, regraId: string, exigirAprovada = true) {
     const [regra] = await tx.select().from(regrasTributarias)
       .where(eq(regrasTributarias.id, regraId)).for('share');
     if (!regra) throw new NotFoundException('Regra tributária não encontrada');
-    if (regra.situacao !== 'APROVADA' || regra.deletedAt) {
+    if (exigirAprovada && (regra.situacao !== 'APROVADA' || regra.deletedAt)) {
       regraViolada('REGRA_NAO_APROVADA', 'A homologação exige uma versão de regra já aprovada.');
     }
     return regra;

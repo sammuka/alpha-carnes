@@ -60,6 +60,7 @@ describe('fiscal-homologacoes ramos defensivos (corrida entre leitura e escrita)
     const apagada = { ...regraOk, deletedAt: new Date() };
     for (const regra of [aposentada, apagada]) {
       await expect(servico.aplicarDecisao(stubTx([[{ ...aprovada, situacao: 'EM_REVISAO' }], [regra]]), 'h', dto, 'u2', 'aprovar')).rejects.toMatchObject({ status: 422 });
+      await expect(servico.aplicarDecisao(stubTx([[{ ...aprovada, situacao: 'EM_REVISAO' }], [regra], []]), 'h', dto, 'u2', 'rejeitar')).rejects.toThrow('Homologação não encontrada');
       await expect(servico.aplicarVinculo(stubTx([[aprovada], [regra]]), 'h', { ...dto, simulacaoId: 's' }, 'u2')).rejects.toMatchObject({ status: 422 });
       await expect(servico.aplicarPublicacao(stubTx([[aprovada], [regra]]), 'h', dto, 'u2')).rejects.toMatchObject({ status: 422 });
     }
