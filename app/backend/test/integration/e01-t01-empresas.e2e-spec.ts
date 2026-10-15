@@ -336,6 +336,27 @@ describe('E01-T01 empresas e estabelecimentos', () => {
     expect(suspenso.body.situacao).toBe('SUSPENDED');
   });
 
+  it('quem submeteu pode suspender estabelecimento aprovado por outro (sem segregação)', async () => {
+    const empresa = await criarEmpresa(adminA, '12ABC399');
+    const estab = await criarEstab(adminA, empresa.body.id, cnpjDe('12ABC3990001'), [
+      { codigo: '6201501', descricao: 'Desenvolvimento', tipo: 'PRINCIPAL' },
+    ]);
+    const submetido = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: estab.body.versao, justificativa: MOTIVO });
+    const aprovado = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/aprovar`)
+      .set('Cookie', adminB)
+      .send({ versao: submetido.body.versao, justificativa: MOTIVO });
+    const suspenso = await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/suspender`)
+      .set('Cookie', adminA)
+      .send({ versao: aprovado.body.versao, justificativa: MOTIVO });
+    expect(suspenso.status).toBe(200);
+    expect(suspenso.body.situacao).toBe('SUSPENDED');
+  });
+
   it('filtro de outra empresa → 422', async () => {
     const a = await criarEmpresa(adminA, '12ABC357');
     const b = await criarEmpresa(adminA, '12ABC358');

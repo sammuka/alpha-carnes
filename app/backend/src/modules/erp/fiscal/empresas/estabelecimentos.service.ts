@@ -531,7 +531,7 @@ export class EstabelecimentosService {
       justificativaSituacao: dto.justificativa,
       decididoPorId: usuarioId,
       decididoEm: new Date(),
-    }, true);
+    });
   }
 
   async reativar(id: string, dto: AcaoDecisaoDto, usuarioId: string) {
