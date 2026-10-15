@@ -470,17 +470,20 @@ export class HomologacoesService {
       );
     }
     const agora = new Date();
-    const [cenario] = await tx.insert(cenariosRegressao).values({
-      homologacaoId: atual.id,
-      simulacaoId: simulacao.id,
-      criadoPorId: usuarioId,
-      atualizadoPorId: usuarioId,
-    }).returning().catch((err: unknown) => {
+    let cenario: typeof cenariosRegressao.$inferSelect | undefined;
+    try {
+      [cenario] = await tx.insert(cenariosRegressao).values({
+        homologacaoId: atual.id,
+        simulacaoId: simulacao.id,
+        criadoPorId: usuarioId,
+        atualizadoPorId: usuarioId,
+      }).returning();
+    } catch (err) {
       if (ehViolacaoUnica(err, 'uq_cenarios_homologacao_simulacao')) {
         conflito('CENARIO_JA_VINCULADO', 'Este cenário já está vinculado a esta homologação.');
       }
       throw err;
-    });
+    }
     if (!cenario) throw new Error('Falha ao gravar cenário de regressão');
     const [linha] = await tx.update(homologacoesRegras).set({
       justificativa: dto.justificativa,

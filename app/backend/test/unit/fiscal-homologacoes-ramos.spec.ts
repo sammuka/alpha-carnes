@@ -24,6 +24,7 @@ describe('fiscal-homologacoes ramos defensivos (corrida entre leitura e escrita)
   const servico = new HomologacoesService({ db: {} }, {}, {}, {}) as Record<string, (...args: unknown[]) => Promise<unknown>>;
   const dto = { versao: 1, justificativa: 'Decisão de usuário diferente de quem submeteu.' };
   const aprovada = { id: 'h', regraId: 'r', versao: 1, situacao: 'APROVADA', codigo: '1' };
+  const regraOk = { situacao: 'APROVADA', deletedAt: null, submetidoPorId: 'u1' };
 
   function stubTx(respostas: unknown[][], erroInsert?: unknown) {
     const cadeia: Record<string, unknown> = {};
@@ -40,18 +41,35 @@ describe('fiscal-homologacoes ramos defensivos (corrida entre leitura e escrita)
 
   it('decisão sem regra ou sem linha atualizada vira 404', async () => {
     await expect(servico.aplicarDecisao(stubTx([[{ ...aprovada, situacao: 'EM_REVISAO' }], []]), 'h', dto, 'u2', 'aprovar')).rejects.toThrow('Regra tributária não encontrada');
-    await expect(servico.aplicarDecisao(stubTx([[{ ...aprovada, situacao: 'EM_REVISAO' }], [{ submetidoPorId: 'u1' }], []]), 'h', dto, 'u2', 'aprovar')).rejects.toThrow('Homologação não encontrada');
+    await expect(servico.aplicarDecisao(stubTx([[{ ...aprovada, situacao: 'EM_REVISAO' }], [regraOk], []]), 'h', dto, 'u2', 'aprovar')).rejects.toThrow('Homologação não encontrada');
   });
 
   it('vínculo sem cenário gravado ou sem linha atualizada falha', async () => {
     const simulacao = { id: 's', situacao: 'CALCULADA', regraId: 'r' };
-    await expect(servico.aplicarVinculo(stubTx([[aprovada], [simulacao], []]), 'h', { ...dto, simulacaoId: 's' }, 'u2')).rejects.toThrow('Falha ao gravar cenário');
-    await expect(servico.aplicarVinculo(stubTx([[aprovada], [simulacao], [{ id: 'c' }], []]), 'h', { ...dto, simulacaoId: 's' }, 'u2')).rejects.toThrow('Homologação não encontrada');
+    await expect(servico.aplicarVinculo(stubTx([[aprovada], [regraOk], [simulacao], []]), 'h', { ...dto, simulacaoId: 's' }, 'u2')).rejects.toThrow('Falha ao gravar cenário');
+    await expect(servico.aplicarVinculo(stubTx([[aprovada], [regraOk], [simulacao], [{ id: 'c' }], []]), 'h', { ...dto, simulacaoId: 's' }, 'u2')).rejects.toThrow('Homologação não encontrada');
   });
 
   it('publicação sem regra ou sem linha atualizada vira 404', async () => {
     await expect(servico.aplicarPublicacao(stubTx([[aprovada], []]), 'h', dto, 'u2')).rejects.toThrow('Regra tributária não encontrada');
-    await expect(servico.aplicarPublicacao(stubTx([[aprovada], [{ submetidoPorId: 'u1' }], [{ id: 'c' }], []]), 'h', dto, 'u2')).rejects.toThrow('Homologação não encontrada');
+    await expect(servico.aplicarPublicacao(stubTx([[aprovada], [regraOk], [{ id: 'c' }], []]), 'h', dto, 'u2')).rejects.toThrow('Homologação não encontrada');
+  });
+
+  it('regra aposentada ou apagada recusa decisão, vínculo e publicação com 422', async () => {
+    const aposentada = { ...regraOk, situacao: 'APOSENTADA' };
+    const apagada = { ...regraOk, deletedAt: new Date() };
+    for (const regra of [aposentada, apagada]) {
+      await expect(servico.aplicarDecisao(stubTx([[{ ...aprovada, situacao: 'EM_REVISAO' }], [regra]]), 'h', dto, 'u2', 'aprovar')).rejects.toMatchObject({ status: 422 });
+      await expect(servico.aplicarVinculo(stubTx([[aprovada], [regra]]), 'h', { ...dto, simulacaoId: 's' }, 'u2')).rejects.toMatchObject({ status: 422 });
+      await expect(servico.aplicarPublicacao(stubTx([[aprovada], [regra]]), 'h', dto, 'u2')).rejects.toMatchObject({ status: 422 });
+    }
+  });
+
+  it('violação única do cenário vira 409 e outro erro do insert é repassado', async () => {
+    const simulacao = { id: 's', situacao: 'CALCULADA', regraId: 'r' };
+    const duplicado = { code: '23505', constraint: 'uq_cenarios_homologacao_simulacao' };
+    await expect(servico.aplicarVinculo(stubTx([[aprovada], [regraOk], [simulacao]], duplicado), 'h', { ...dto, simulacaoId: 's' }, 'u2')).rejects.toMatchObject({ status: 409 });
+    await expect(servico.aplicarVinculo(stubTx([[aprovada], [regraOk], [simulacao]], new Error('falha')), 'h', { ...dto, simulacaoId: 's' }, 'u2')).rejects.toThrow('falha');
   });
 
   it('inserção sem linha devolvida repassa o erro; código duplicado duas vezes é conflito', async () => {
