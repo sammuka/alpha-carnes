@@ -93,7 +93,8 @@ async function criarOperacao(
 function codigoNumerico(digitos: number, reservados: string[]): string {
   for (let tentativa = 0; tentativa < 20; tentativa += 1) {
     const base = String(Date.now() + tentativa * 97).slice(-(digitos));
-    const codigo = base.padStart(digitos, '1').slice(0, digitos);
+    // O primeiro dígito do epoch em ms muda só a cada ~2,7 h: zero inicial vira 1 em vez de falhar a janela inteira.
+    const codigo = base.padStart(digitos, '1').slice(0, digitos).replace(/^0/, '1');
     if (!reservados.includes(codigo) && !codigo.startsWith('0')) return codigo;
   }
   throw new Error('Não foi possível gerar código fiscal de apoio');
