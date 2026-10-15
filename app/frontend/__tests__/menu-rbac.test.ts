@@ -17,6 +17,8 @@ const PERMISSOES_POR_PERFIL = JSON.parse(
 ) as Record<string, string[]>;
 
 const ROTA_PLANO = '/erp/contabilidade/plano-de-contas';
+const ROTA_POLITICAS = '/erp/contabilidade/politicas-de-contabilizacao';
+const ROTAS_FORA_DA_OPERACAO = [ROTA_PLANO, ROTA_POLITICAS];
 
 /**
  * Coluna "Perfis RBAC" da matriz de rastreabilidade v1.1 (linhas 3–41), transcrita rota a rota.
@@ -63,6 +65,7 @@ const MATRIZ_RASTREABILIDADE: Record<string, string[]> = {
   '/admin/parametros': ['administrador'],
   '/admin/auditoria': ['administrador', 'diretoria', 'gestor'],
   [ROTA_PLANO]: ['administrador'],
+  [ROTA_POLITICAS]: ['administrador'],
 };
 
 /** Decisão 25 da Onda 2 — as 26 rotas que o gate de grupo retirava do menu. Devem estar visíveis. */
@@ -170,24 +173,25 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     expect(PERFIS).toHaveLength(11);
   });
 
-  it('a matriz transcrita cobre as 39 rotas operacionais e a rota nova', () => {
+  it('a matriz transcrita cobre as 39 rotas operacionais e as duas rotas de contabilidade', () => {
     const chaves = Object.keys(MATRIZ_RASTREABILIDADE);
-    expect(chaves.filter((href) => href !== ROTA_PLANO).sort()).toEqual(
-      [...ROTAS_CANONICAS].filter((href) => href !== ROTA_PLANO).sort(),
+    const operacionais = chaves.filter((href) => !ROTAS_FORA_DA_OPERACAO.includes(href));
+    expect(operacionais.sort()).toEqual(
+      [...ROTAS_CANONICAS].filter((href) => !ROTAS_FORA_DA_OPERACAO.includes(href)).sort(),
     );
-    expect(chaves.filter((href) => href !== ROTA_PLANO)).toHaveLength(39);
+    expect(operacionais).toHaveLength(39);
     expect([...ROTAS_CANONICAS].sort()).toEqual(chaves.sort());
-    expect(ROTAS_CANONICAS).toHaveLength(40);
+    expect(ROTAS_CANONICAS).toHaveLength(41);
   });
 
   it.each(PERFIS)('menus_visiveis do perfil sao exatamente os da matriz: %s', (perfil) => {
     expect([...menusDe(perfil)].sort()).toEqual(menusDaMatriz(perfil));
   });
 
-  it('a matriz soma 127 atribuicoes perfil x rota', () => {
+  it('a matriz soma 128 atribuicoes perfil x rota', () => {
     const total = PERFIS.reduce((soma, perfil) => soma + menusDe(perfil).length, 0);
-    expect(total).toBe(127);
-    expect(Object.values(MATRIZ_RASTREABILIDADE).reduce((s, p) => s + p.length, 0)).toBe(127);
+    expect(total).toBe(128);
+    expect(Object.values(MATRIZ_RASTREABILIDADE).reduce((s, p) => s + p.length, 0)).toBe(128);
   });
 
   it('zero perdas: nenhuma rota da matriz fica fora do menu do perfil', () => {
@@ -287,14 +291,23 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     for (const perfil of PERFIS) {
       expect(rotasVisiveis(perfil).sort()).toEqual(menusDaMatriz(perfil));
     }
-    expect(ROTAS_CANONICAS).toHaveLength(40);
-    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(127);
+    expect(ROTAS_CANONICAS).toHaveLength(41);
+    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(128);
 
     const chavesPlano = ['CONTABILIDADE_PLANO_LER', 'CONTABILIDADE_PLANO_GERENCIAR'];
     expect(PERMISSOES_POR_PERFIL.administrador).toEqual(expect.arrayContaining(chavesPlano));
     for (const perfil of PERFIS) {
       if (perfil === 'administrador') continue;
       for (const chave of chavesPlano) {
+        expect(PERMISSOES_POR_PERFIL[perfil]).not.toContain(chave);
+      }
+    }
+
+    const chavesPolitica = ['CONTABILIDADE_POLITICA_LER', 'CONTABILIDADE_POLITICA_GERENCIAR'];
+    expect(PERMISSOES_POR_PERFIL.administrador).toEqual(expect.arrayContaining(chavesPolitica));
+    for (const perfil of PERFIS) {
+      if (perfil === 'administrador') continue;
+      for (const chave of chavesPolitica) {
         expect(PERMISSOES_POR_PERFIL[perfil]).not.toContain(chave);
       }
     }

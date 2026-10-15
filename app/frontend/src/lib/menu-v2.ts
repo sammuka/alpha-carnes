@@ -87,6 +87,11 @@ export const MENU_V2: MenuGroupDef[] = [
         label: 'Plano de contas e centros de custo',
         iconKey: 'FileText',
       },
+      {
+        href: '/erp/contabilidade/politicas-de-contabilizacao',
+        label: 'Políticas de contabilização',
+        iconKey: 'FileText',
+      },
     ],
   },
   {

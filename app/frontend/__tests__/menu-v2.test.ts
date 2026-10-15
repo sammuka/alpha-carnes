@@ -56,16 +56,22 @@ describe('menu canônico v2', () => {
     expect(MENU_V2.map((g) => g.title)).toEqual(GRUPOS);
   });
 
-  it('preserva as 39 rotas e acrescenta só o plano de contas', () => {
+  const ROTAS_CONTABILIDADE = [
+    '/erp/contabilidade/plano-de-contas',
+    '/erp/contabilidade/politicas-de-contabilizacao',
+  ];
+
+  it('preserva as 39 rotas e acrescenta plano e políticas', () => {
     const atual = MENU_V2.flatMap((g) => g.items.map((i) => [g.title, i.label, i.href]));
-    const operacionais = atual.filter(([, , href]) => href !== '/erp/contabilidade/plano-de-contas');
+    const operacionais = atual.filter(([, , href]) => !ROTAS_CONTABILIDADE.includes(String(href)));
     expect(operacionais).toEqual(ITENS_PROTOTIPO);
     expect(operacionais).toHaveLength(39);
-    expect(atual).toHaveLength(40);
+    expect(atual).toHaveLength(41);
+    expect(atual.filter(([grupo]) => grupo === 'CONTABILIDADE').map(([, , href]) => href)).toEqual(ROTAS_CONTABILIDADE);
     expect(atual).toContainEqual([
       'CONTABILIDADE',
-      'Plano de contas e centros de custo',
-      '/erp/contabilidade/plano-de-contas',
+      'Políticas de contabilização',
+      '/erp/contabilidade/politicas-de-contabilizacao',
     ]);
     expect(atual.some(([, , href]) => /e\d{2}-t\d{2}/i.test(String(href)))).toBe(false);
   });

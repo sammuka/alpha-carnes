@@ -100,6 +100,8 @@ export const PERMISSOES = {
   OCORRENCIA_PRECO_CIENTE: 'OCORRENCIA_PRECO_CIENTE',
   CONTABILIDADE_PLANO_LER: 'CONTABILIDADE_PLANO_LER',
   CONTABILIDADE_PLANO_GERENCIAR: 'CONTABILIDADE_PLANO_GERENCIAR',
+  CONTABILIDADE_POLITICA_LER: 'CONTABILIDADE_POLITICA_LER',
+  CONTABILIDADE_POLITICA_GERENCIAR: 'CONTABILIDADE_POLITICA_GERENCIAR',
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -406,6 +408,7 @@ pushPermissoes('administrador', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR');
 pushPermissoes('logistica', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR'); // D10.9 — doc 04 §7.3/§7.4
 pushPermissoes('diretoria', 'FATURAMENTO_LER');
 pushPermissoes('administrador', 'CONTABILIDADE_PLANO_LER', 'CONTABILIDADE_PLANO_GERENCIAR');
+pushPermissoes('administrador', 'CONTABILIDADE_POLITICA_LER', 'CONTABILIDADE_POLITICA_GERENCIAR');
 
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
@@ -486,4 +489,6 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   OCORRENCIA_PRECO_CIENTE: 'Marcar como ciente uma ocorrência informativa de ajuste de preço',
   CONTABILIDADE_PLANO_LER: 'Consultar plano de contas e centros de custo',
   CONTABILIDADE_PLANO_GERENCIAR: 'Criar, versionar, revisar, aprovar, bloquear e mapear o plano de contas',
+  CONTABILIDADE_POLITICA_LER: 'Consultar políticas de contabilização',
+  CONTABILIDADE_POLITICA_GERENCIAR: 'Configurar mappings, simular evento e aprovar regra',
 };
