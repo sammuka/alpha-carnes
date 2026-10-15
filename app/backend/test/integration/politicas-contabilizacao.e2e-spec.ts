@@ -540,4 +540,26 @@ describe('entrada inválida responde 400 e não grava', () => {
       expect(aprovada.situacao).toBe('APPROVED');
     });
   });
+
+  async function politicaComExclusaoLogica() {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    await db.execute(sql`update politicas_contabilizacao set deleted_at = now() where codigo = ${politica.codigo}`);
+    return politica;
+  }
+
+  it('obter e histórico ignoram a política com exclusão lógica', async () => {
+    const politica = await politicaComExclusaoLogica();
+    await expect(service.obter(politica.codigo)).rejects.toMatchObject({ status: 404 });
+    await expect(service.historico(politica.codigo)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('listar, total e exportar ignoram a política com exclusão lógica', async () => {
+    await politicaComExclusaoLogica();
+    const consulta = { pagina: 1, q: '', situacao: '', competencia: '', ordenar: 'competencia', direcao: 'asc' } as const;
+    const lista = await service.listar(consulta);
+    expect(lista.total).toBe(0);
+    expect(lista.itens).toHaveLength(0);
+    expect(await service.exportarCsv(consulta)).not.toContain('Liquidação');
+  });
 });

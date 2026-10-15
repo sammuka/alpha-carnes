@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
@@ -394,7 +394,7 @@ export class PoliticasContabilizacaoService {
     const filtro = this.filtro(query);
     const coluna = this.colunaOrdem(query.ordenar);
     const ordem = query.direcao === 'desc' ? desc(coluna) : asc(coluna);
-    const linhas = await this.consulta().where(filtro).orderBy(ordem).limit(PAGINA).offset((query.pagina - 1) * PAGINA);
+    const linhas = await this.consulta(filtro).orderBy(ordem).limit(PAGINA).offset((query.pagina - 1) * PAGINA);
     const [contagem] = await this.db.select({ total: sql<number>`count(*)::int` })
       .from(politicasContabilizacao)
       .innerJoin(politicaVersoes, and(
@@ -411,10 +411,7 @@ export class PoliticasContabilizacaoService {
   }
 
   async obter(codigo: string): Promise<PoliticaApresentada> {
-    const [linha] = await this.consulta().where(and(
-      eq(politicasContabilizacao.codigo, codigo),
-      isNull(politicasContabilizacao.deletedAt),
-    )).limit(1);
+    const [linha] = await this.consulta(eq(politicasContabilizacao.codigo, codigo)).limit(1);
     if (!linha) throw new NotFoundException('Política não encontrada');
     return this.apresentar(linha);
   }
@@ -454,7 +451,7 @@ export class PoliticasContabilizacaoService {
     return { contas, centros };
   }
 
-  private consulta() {
+  private consulta(extra?: SQL) {
     const aprovador = alias(usuarios, 'aprovador_politica');
     return this.db.select({
       codigo: politicasContabilizacao.codigo,
@@ -487,7 +484,8 @@ export class PoliticasContabilizacaoService {
       ))
       .innerJoin(centrosCusto, eq(centrosCusto.id, politicaVersoes.centroCustoId))
       .innerJoin(usuarios, eq(usuarios.id, politicaVersoes.responsavelId))
-      .leftJoin(aprovador, eq(aprovador.id, politicaVersoes.aprovadorId));
+      .leftJoin(aprovador, eq(aprovador.id, politicaVersoes.aprovadorId))
+      .where(and(isNull(politicasContabilizacao.deletedAt), extra));
   }
 
   private filtro(query: ListarPoliticasQuery) {
