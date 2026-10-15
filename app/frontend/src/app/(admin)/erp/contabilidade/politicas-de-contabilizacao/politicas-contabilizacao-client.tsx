@@ -485,7 +485,9 @@ export function PoliticasContabilizacaoClient({
         </table>
       ) : null}
       {aba === 'Regras e validações' ? <p>origem imutável, não lançar sem mapeamento correto, balanceamento exato</p> : null}
-      {aba === 'Exceções' ? EXCECOES.map((item) => <p key={item}><b>Bloqueio / exceção:</b> {item}.</p>) : null}
+      {aba === 'Exceções'
+        ? EXCECOES.map((item) => <p key={item}><b>Bloqueio / exceção:</b> {item}.</p>)
+        : <p><b>Bloqueio / exceção:</b> {EXCECOES[0]}.</p>}
       {aba === 'Histórico' ? (
         <ul>
           {historico.map((evento) => (
@@ -503,7 +505,6 @@ export function PoliticasContabilizacaoClient({
       ) : null}
       <p>Enquadramento fiscal</p>
       <p>—</p>
-      <p><b>Bloqueio / exceção:</b> {EXCECOES[0]}.</p>
 
       {drawer === 'criar' || drawer === 'editar' ? (
         <section>

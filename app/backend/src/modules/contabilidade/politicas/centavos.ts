@@ -2,8 +2,10 @@ import { RegraPoliticaException } from './regra-politica.exception';
 
 export function centavos(valor: string): bigint {
   const casado = /^(\d{1,13})\.(\d{2})$/.exec(valor);
-  if (!casado) throw new RegraPoliticaException('mapeamento ausente', '');
-  return BigInt(casado[1]) * 100n + BigInt(casado[2]);
+  const inteiro = casado?.[1];
+  const fracao = casado?.[2];
+  if (!inteiro || !fracao) throw new RegraPoliticaException('mapeamento ausente', '');
+  return BigInt(inteiro) * 100n + BigInt(fracao);
 }
 
 export function formatarCentavos(total: bigint): string {

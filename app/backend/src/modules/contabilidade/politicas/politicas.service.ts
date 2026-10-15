@@ -156,8 +156,9 @@ function mesDe(competencia: string) {
 
 function competenciaRotulo(competencia: string) {
   const [ano, mes] = mesDe(competencia).split('-').map(Number);
+  if (ano === undefined || mes === undefined) return competencia;
   const nome = new Intl.DateTimeFormat('pt-BR', { month: 'long', timeZone: 'UTC' })
-    .format(new Date(Date.UTC(ano, (mes ?? 1) - 1, 1)));
+    .format(new Date(Date.UTC(ano, mes - 1, 1)));
   return `${nome.charAt(0).toUpperCase()}${nome.slice(1)} de ${ano}`;
 }
 
@@ -203,7 +204,8 @@ export class PoliticasContabilizacaoService {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:politica:' + codigo}))`);
       const duplicada = await tx.select({ codigo: politicasContabilizacao.codigo }).from(politicasContabilizacao)
         .where(and(eq(politicasContabilizacao.codigo, codigo), isNull(politicasContabilizacao.deletedAt))).limit(1);
-      if (duplicada.length > 0) throw new ConflitoPoliticaException('evento duplicado', duplicada[0].codigo);
+      const [existente] = duplicada;
+      if (existente) throw new ConflitoPoliticaException('evento duplicado', existente.codigo);
       const debito = await this.contaAnaliticaVigente(tx, dto.contaDebitoCodigo, codigo);
       const credito = await this.contaAnaliticaVigente(tx, dto.contaCreditoCodigo, codigo);
       const centro = await this.centroExistente(tx, dto.centroCodigo, codigo);
@@ -495,8 +497,7 @@ export class PoliticasContabilizacaoService {
       ))
       .innerJoin(centrosCusto, eq(centrosCusto.id, politicaVersoes.centroCustoId))
       .innerJoin(usuarios, eq(usuarios.id, politicaVersoes.responsavelId))
-      .leftJoin(aprovador, eq(aprovador.id, politicaVersoes.aprovadorId))
-      .where(isNull(politicasContabilizacao.deletedAt));
+      .leftJoin(aprovador, eq(aprovador.id, politicaVersoes.aprovadorId));
   }
 
   private filtro(query: ListarPoliticasQuery) {
