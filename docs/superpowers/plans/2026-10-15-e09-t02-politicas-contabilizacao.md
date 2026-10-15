@@ -8,6 +8,7 @@
 |---|---|---|---|
 | r1 | 2026-10-15 | planner | versão inicial da fatia E09-T02 |
 | r2 | 2026-10-15 | planner | Portão 1 r1 (`c52c27b`) pediu ajustar: envelope do `AllExceptionsFilter`, vigência só na ficha, Situação fora da ordenação, lote na seleção múltipla e o spec de serviço fora da Task 3 |
+| r3 | 2026-10-15 | planner | revisão crítica preliminar independente (head `c4f99ee`, ramo `ebb40ed`): B2 conta suspensa aceita, B3 `ZodError` virando 500 e competência/valor inválidos, B7/AD-25 simulação 0,00, B8 Playwright (corrida do modal, sucesso sem confirmação do backend, dados fixos), `deletedAt` removido de `consulta()` e bloco de exceção fora da aba. Tasks 8–15 e seção "Correções da revisão crítica (r3)"; AD-25 (1), o vínculo de (2) e M7 registrados sem mudança |
 
 **Goal:** Entregar a tela Políticas de contabilização (`/erp/contabilidade/politicas-de-contabilizacao`) em que o administrador configura o mapeamento de débito e crédito de um evento fonte, simula o evento com balanceamento exato e aprova a regra com outra pessoa, sem gravar diário, razão ou partida.
 
@@ -1705,6 +1706,1539 @@ O spec usa dois usuários do perfil administrador. Não chama SEFAZ, banco nem E
 "@
 ```
 
+## Correções da revisão crítica (r3)
+
+Origem: revisão crítica preliminar independente de 2026-10-15 (head `c4f99ee`; o ramo está em `ebb40ed`, que só acrescenta o AD-25 em `docs/execucao/DECISOES.md`). Os números de linha abaixo são os do ramo atual e valem só para os arquivos da E09-T02. As Tasks 1–7 acima estão implementadas até `c4f99ee` e não são reescritas; as Tasks 8–15 corrigem por cima delas. Onde uma Task 1–7 contradiz uma Task 8–15, vale a Task 8–15 (em especial: o bloco `Bloqueio / exceção:` fora das abas da Task 6, L1484, e a recusa de `0.00` que a Task 4 e a seção "Decisões em aberto" item 6 diziam não existir).
+
+### Decisões aplicadas (AD-25) e pontos que não geram mudança
+
+- **AD-25 (1), segregação por autor original:** `aprovarNaTx` (`politicas.service.ts` L575) compara o aprovador só com `responsavelId` da versão. Quem editou pode aprovar, desde que não seja o autor. **Não gera mudança.** As Tasks 8–15 não alteram esse `if`, e nenhum teste novo exige "editor diferente do aprovador".
+- **AD-25 (2), vínculo da simulação à versão:** `aprovarNaTx` (L578–L584) aceita qualquer simulação da mesma `versaoNumero`; editar sem trocar o número não invalida a simulação. **Não gera mudança** no vínculo. A parte "valor simulado maior que 0,00" **gera mudança** (Task 10).
+- **M7, mesma conta em débito e crédito:** o plano permite (Decisões em aberto item 6, primeira metade). Nada é recusado. Fica registrado aqui; nenhum teste novo.
+- **Migration para um CHECK `valor > 0`:** **não há migration nova.** O CHECK atual `chk_politica_simulacoes_balance` (`contabilidade-politicas.schema.ts` L69) aceita `0.00`. A Task 10 fecha o caminho no DTO (400), no serviço (422, também para o lote) e no `aprovarNaTx` (ignora simulação com valor zero já gravada). Todo escritor da tabela passa pelo serviço, e um CHECK novo falharia ou exigiria `NOT VALID` em bancos que já tenham `0.00`. Se o Portão 1 ou o Portão 2 exigir o CHECK, ele vira uma migration `0051` depois da renumeração da Task 15, e a colisão de numeração com a trilha E01 é do coordenador. Nenhum worker cria essa migration por conta própria.
+
+### Pré-condição: dependência da E09-T01 corrigida
+
+A E09-T01 tem uma r3 em paralelo (outro Planner). A E09-T02 só começa a Task 8 depois que o coordenador integrar essa r3 na branch por **merge normal** (`git merge --no-ff <ref-informado-pelo-coordenador>`; confirmar com `git merge-base --is-ancestor <sha-informado> HEAD`). Sem rebase, sem cherry-pick, sem editar `app/backend/src/modules/contabilidade/plano/**`, `contabilidade-plano.schema.ts` nem o spec da T01 (`app/frontend/e2e/e09-t01-plano-contas.spec.ts`).
+
+O que a T02 usa da T01:
+
+- A regra "conta vigente" é a da T01 corrigida: **a versão em vigor é a de maior `numero` entre as versões já decididas (`APPROVED` ou `SUSPENDED`)**, e a conta só serve se essa versão for `APPROVED`, `analitica` e dentro da vigência. Uma versão `DRAFT`, `REVIEW` ou `REJECTED` mais nova não derruba a versão em vigor. A Task 9 implementa essa regra em `contaAnaliticaVigente` (arquivo da T02). `GET /contabilidade/politicas/opcoes` continua vindo de `PlanoContasService.listarContasAnaliticasVigentes` (`plano.service.ts` L173–L198, arquivo da T01): a T02 não duplica a consulta.
+- O helper de teste `prepararContasAnaliticas` (`politicas-contabilizacao.e2e-spec.ts` L106–L120) chama `PlanoContasService.criar`/`criarCentro`. Se o merge mudar essas assinaturas, o worker ajusta só o helper de teste da T02.
+- O seed HTTP da Task 14 usa os contratos `POST /contabilidade/centros-custo`, `POST /contabilidade/plano`, `POST /contabilidade/plano/:codigo/revisar-competencia` e `.../aprovar` (`plano.dto.ts` L9–L27, L51–L60). Se a T01 corrigida mudar um desses contratos, o worker ajusta só `app/frontend/e2e/helpers/e09-t02-seed.ts`.
+
+**Parada na pré-condição:** (a) o merge da T01 r3 não está na branch; (b) depois do merge, `opcoes` ainda lista uma conta cuja versão mais recente decidida está `SUSPENDED` (defeito da T01: reportar ao coordenador, não corrigir aqui); (c) o merge exige editar arquivo da T01 para a T02 compilar.
+
+### Achados cobertos, com evidência no código atual
+
+| Achado | Evidência atual | Task |
+|---|---|---|
+| B3 — `ZodError` vira 500 | `politicas.controller.ts` L81–L83 usa `schema.parse(corpo)`; `dto/politicas.dto.ts` L6 aceita `2026-13`; L5 aceita `2026-02-30`; `listarPoliticasSchema` L58 sem teto de `pagina`; `centavos.ts` L7 devolve `mapeamento ausente` com `codigo` vazio para valor monetário inválido | 8 |
+| B2 (lado T02) — conta suspensa ainda vale | `politicas.service.ts` L616–L631 aceita qualquer versão `APPROVED`, mesmo com versão mais nova `SUSPENDED` | 9 |
+| B7 / AD-25 (2) — simulação `0.00` destrava a aprovação | `dto/politicas.dto.ts` L30 e L34; `politicas.service.ts` L547–L557 e L578–L584 | 10 |
+| Processo — filtro `deletedAt` removido em `c4f99ee` | `politicas.service.ts` L467–L501 (`consulta()` sem `where`; antes: `.where(isNull(politicasContabilizacao.deletedAt))`) | 11 |
+| B8 (a) corrida do modal, B8 (c) sucesso exibido sem confirmação, processo `Bloqueio / exceção` | `politicas-contabilizacao-client.tsx` L286 (`setModal(null)` incondicional), L289–L297 (atualização otimista de `Aprovado` e do aviso sem ler o corpo), L488–L490 (bloco fora da aba) | 12 |
+| B8 (b) determinismo — filtro e busca não consultam o servidor | `politicas-contabilizacao-client.tsx` L154–L158 (estado) e L388–L393 (controles) só alimentam o CSV; a lista é sempre `inicial` (`page.tsx` L9) | 13 |
+| B8 (b) determinismo — Playwright com dados fixos | `e2e/e09-t02-politicas-contabilizacao.spec.ts` L3–L4 e L28–L31 (e-mail fixo do segundo administrador), L42–L47 (`CT1`), L91–L94 (códigos e nomes de conta), L127, L163 e L165 (competências fixas), L133–L136 (clica sem esperar a resposta) | 14 |
+| Renumeração | `meta/_journal.json` entrada `idx` 45, tag `0049_e09_t02_politicas_contabilizacao` | 15 |
+
+Observações fora do escopo que a revisão não pediu e que ficam para o coordenador decidir (nenhuma Task as implementa): a paginação de 20 linhas não tem controle na tela (Global Constraints, "Paginação server-side"); os botões `Exportar` e `Exportar visão` (`politicas-contabilizacao-client.tsx` L380 e L393) fazem `fetch` e descartam a resposta, então nada é baixado.
+
+### Anomalia do Playwright (B8 c): hipóteses e como a Task 14 decide
+
+O screenshot de falha mostrou `Aprovado` e `concluído com evidência` com o banco em `DRAFT` e sem auditoria de aprovar. No código atual essas duas strings só aparecem depois de `resposta.ok` verdadeiro (`politicas-contabilizacao-client.tsx` L282–L296), e o BFF repassa o status do backend sem alterar (`app/frontend/src/lib/bff.ts` L11–L22). Portanto, ou (H1) a tela falou com um backend/banco diferente do que foi inspecionado — `playwright.config.ts` L54 usa `reuseExistingServer: !process.env.CI` e o `BACKEND_INTERNAL_URL` padrão é `http://127.0.0.1:4001`, então um Next ou backend já em pé em outra worktree é reaproveitado sem aviso —, ou (H2) o backend respondeu 2xx sem efeito, o que o código lido não permite, ou (H3) a leitura do screenshot confundiu a opção `Aprovado` do filtro de situação (`politicas-contabilizacao-client.tsx` L39) com a célula. A Task 12 faz o cliente nunca exibir sucesso sem o corpo confirmar (`situacao === 'APPROVED'`). A Task 14 prova no próprio spec, pela API por trás do BFF, que a tela e o banco consultado são o mesmo sistema, e registra qual hipótese ocorreu.
+
+### Critérios de parada do delta
+
+Parar e reportar ao coordenador, sem contornar:
+
+1. Qualquer teste "falha antes" desta seção passar antes da correção (a reprodução está errada). Exceção declarada: Task 11, que é característica de comportamento e usa mutação.
+2. Necessidade de editar arquivo fora da T02 (pasta `plano/`, schema do plano, `e09-t01-*`, `docs/execucao/`).
+3. Cobertura do backend abaixo de 80% de linha ou de branch; snapshot de RBAC de outro slug que não `administrador` mudando; rota operacional mudando de ordem.
+4. Mensagem ou `codigo` dos Review Focus 1–5 mudando de texto.
+5. Qualquer Task 8–14 exigir migration (a exceção é a Task 15).
+6. Playwright da Task 14 vermelho depois da Task 13 sem causa isolada. Não se acrescenta `retries`, `sleep` nem limpeza de banco para passar.
+7. Prefixo de migration divergente na Task 15, ou drizzle-kit gerando DDL fora das três tabelas da T02.
+
+### Rollback do delta
+
+Cada Task é um commit. Reverter na ordem inversa (`git revert <sha>`), um a um: 15, 14, 13, 12, 11, 10, 9, 8. As Tasks 8–14 não têm migration nem dado: o revert devolve só código e teste. A Task 15 só é revertida com `git revert` do commit dela, e só vale em banco descartável (ver Step 6 da Task 15). Nenhuma Task usa `git reset --hard`, `git push` nem `--force`.
+
+### Verificação do delta (antes do Portão 2)
+
+```powershell
+Set-Location app/backend
+npm run lint
+npm run type-check
+npm run test:cov
+Set-Location ../frontend
+npm run lint
+npm run type-check
+npm test
+npx playwright test e2e/e09-t02-politicas-contabilizacao.spec.ts
+```
+
+Esperado: tudo verde, cobertura do backend ≥ 80% de linha e de branch, Playwright com os dois testes passando em duas execuções seguidas no mesmo banco (a segunda prova que não há estado residual). O Portão 2 e o Portão A seguem a classe de risco alto: revisão crítica por commit.
+
+## Task 8: Entrada inválida responde 400, nunca 500 (B3)
+
+**Files:**
+- Modify: `app/backend/src/modules/contabilidade/politicas/dto/politicas.dto.ts` (L5–L6, L30, L58)
+- Modify: `app/backend/src/modules/contabilidade/politicas/politicas.controller.ts` (L73–L85 e imports L1, L8–L21)
+- Modify: `app/backend/src/modules/contabilidade/politicas/centavos.ts` (L3–L9, L26)
+- Modify: `app/backend/src/modules/contabilidade/politicas/politicas.service.ts` (remove `executar`, L392–L401)
+- Test: `app/backend/test/integration/politicas-contabilizacao.e2e-spec.ts`, `app/backend/src/modules/contabilidade/politicas/politicas.service.spec.ts`
+
+**Interfaces:**
+- Consumes: `ZodValidationPipe` de `app/backend/src/common/pipes/zod-validation.pipe.ts` (responde 400 com `{ message: 'Validação falhou', errors }`), o mesmo pipe que `listar`, `exportar`, `configurar`, `validar` e `lote` já usam.
+- Produces: as três rotas de ação (`editar`, `simular`, `aprovar`) validadas pelo pipe; `centavos(valor, codigo)` com a mensagem `valor monetário inválido`; `competencia` e `dataIso` com calendário.
+
+- [ ] **Step 1: Write the failing tests**
+
+Em `politicas-contabilizacao.e2e-spec.ts`, depois do último `it` (L257–L271), dentro do mesmo `describe`:
+
+```ts
+describe('entrada inválida responde 400 e não grava', () => {
+  const corpo = {
+    tipoEvento: 'LIQUIDACAO',
+    competencia: '2026-10',
+    contaDebitoCodigo: '1.1.01',
+    contaCreditoCodigo: '2.1.01',
+    centroCodigo: 'CT1',
+    vigenciaInicio: '2026-10-01',
+    justificativa: 'tenta',
+  };
+  const post = (rota: string, enviado: object) =>
+    request(srv()).post(rota).set('Cookie', adminCookies).send(enviado);
+  const get = (rota: string) => request(srv()).get(rota).set('Cookie', adminCookies);
+
+  const invalidosDeOrigem: [string, Record<string, unknown>][] = [
+    ['competência com mês 13', { competencia: '2026-13' }],
+    ['competência com mês 00', { competencia: '2026-00' }],
+    ['competência com ano 0000', { competencia: '0000-05' }],
+    ['vigência em 30 de fevereiro', { vigenciaInicio: '2026-02-30' }],
+    ['vigência com mês 13', { vigenciaInicio: '2026-13-01' }],
+    ['vigência com ano 0000', { vigenciaInicio: '0000-01-01' }],
+    ['tipo fora do enum', { tipoEvento: 'COMPRA' }],
+  ];
+
+  it.each(invalidosDeOrigem)('configurar recusa %s', async (_rotulo, parcial) => {
+    await prepararContasAnaliticas();
+    const res = await post('/contabilidade/politicas', { ...corpo, ...parcial });
+    expect(res.status).toBe(400);
+    expect(res.body.statusCode).toBe(400);
+    expect(await db.select().from(politicasContabilizacao)).toHaveLength(0);
+  });
+
+  it.each(invalidosDeOrigem)('validar recusa %s', async (_rotulo, parcial) => {
+    await prepararContasAnaliticas();
+    const res = await post('/contabilidade/politicas/validar', { ...corpo, ...parcial });
+    expect(res.status).toBe(400);
+  });
+
+  it.each([
+    ['competência com mês 13', { competencia: '2026-13' }],
+    ['vigência em 30 de fevereiro', { vigenciaInicio: '2026-02-30' }],
+    ['número zero', { numero: 0 }],
+    ['número negativo', { numero: -1 }],
+    ['número fracionário', { numero: 1.5 }],
+    ['justificativa vazia', { justificativa: '   ' }],
+  ])('editar recusa %s', async (_rotulo, parcial) => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    const res = await post(`/contabilidade/politicas/${politica.codigo}/editar`, {
+      numero: 1,
+      contaDebitoCodigo: '1.1.01',
+      contaCreditoCodigo: '2.1.01',
+      centroCodigo: 'CT1',
+      vigenciaInicio: '2026-10-01',
+      justificativa: 'edita',
+      ...parcial,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it.each([
+    ['negativo', '-1.00'],
+    ['três casas decimais', '1.005'],
+    ['uma casa decimal', '10.5'],
+    ['sem casas decimais', '10'],
+    ['vírgula no lugar do ponto', '10,50'],
+    ['14 dígitos inteiros', '12345678901234.00'],
+    ['texto', 'abc'],
+    ['vazio', ''],
+  ])('simular recusa valor %s e não grava simulação', async (_rotulo, valor) => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    const res = await post(`/contabilidade/politicas/${politica.codigo}/simular`, {
+      numero: 1,
+      valor,
+      justificativa: 'simula',
+    });
+    expect(res.status).toBe(400);
+    expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+  });
+
+  it.each([
+    ['número zero', { numero: 0 }],
+    ['número texto', { numero: 'um' }],
+    ['justificativa ausente', { justificativa: undefined }],
+  ])('aprovar recusa %s', async (_rotulo, parcial) => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    const res = await post(`/contabilidade/politicas/${politica.codigo}/aprovar`, {
+      numero: 1,
+      justificativa: 'aprova',
+      ...parcial,
+    });
+    expect(res.status).toBe(400);
+    expect((await service.obter(politica.codigo)).situacao).toBe('DRAFT');
+  });
+
+  it('lote recusa valor monetário inválido e não grava simulação', async () => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    const res = await post('/contabilidade/politicas/lote', {
+      acao: 'simular',
+      codigos: [politica.codigo],
+      justificativa: 'simula',
+      numeroPorCodigo: { [politica.codigo]: 1 },
+      valor: '1.005',
+    });
+    expect(res.status).toBe(400);
+    expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+  });
+
+  it.each([
+    ['competência com mês 13', '?competencia=2026-13'],
+    ['página zero', '?pagina=0'],
+    ['página maior que o teto', '?pagina=100000000000000000000'],
+    ['situação fora do enum', '?situacao=APROVADA'],
+    ['ordenação fora do enum', '?ordenar=senha'],
+  ])('listar e exportar recusam %s', async (_rotulo, consulta) => {
+    expect((await get(`/contabilidade/politicas${consulta}`)).status).toBe(400);
+    expect((await get(`/contabilidade/politicas/exportar${consulta}`)).status).toBe(400);
+  });
+
+  it('ação inexistente continua 404', async () => {
+    const res = await post('/contabilidade/politicas/LIQUIDACAO-2026-10/destruir', { numero: 1, justificativa: 'x' });
+    expect(res.status).toBe(404);
+  });
+});
+```
+
+Em `politicas.service.spec.ts`, no `describe('centavos da política')`:
+
+```ts
+it.each(['-1.00', '1.005', '10.5', '10', '10,50', '12345678901234.00', 'abc', ''])(
+  'recusa %p como valor monetário inválido, com o código da política',
+  (valor) => {
+    try {
+      centavos(valor, 'LIQUIDACAO-2026-10');
+      throw new Error('deveria recusar');
+    } catch (erro) {
+      expect(erro).toMatchObject({
+        status: 422,
+        response: { message: 'valor monetário inválido', codigo: 'LIQUIDACAO-2026-10' },
+      });
+    }
+  },
+);
+```
+
+E nas duas chamadas existentes do mesmo arquivo (L5–L6), passar o segundo argumento: `centavos('0.10', 'X')`, `centavos('0.20', 'X')`, `centavos('0.30', 'X')`.
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```powershell
+Set-Location app/backend
+npx jest test/integration/politicas-contabilizacao.e2e-spec.ts src/modules/contabilidade/politicas/politicas.service.spec.ts --runInBand
+```
+
+Expected: FAIL. Antes da correção, `editar`, `simular` e `aprovar` respondem 500 (o `ZodError` do `schema.parse` do controller L83 não é `HttpException`), `2026-13` e `2026-02-30` passam pelo regex e chegam ao Postgres (500 na gravação), `?pagina=1e20` vira `OFFSET` fora do intervalo (500), `centavos` devolve `mapeamento ausente` com `codigo` vazio e o spec novo não compila por causa do segundo argumento. A rota `destruir` já responde 404 e fica verde (guarda de regressão). Se algum caso `it.each` de 400 passar antes da correção, parar (critério 1).
+
+- [ ] **Step 3: Write minimal implementation**
+
+`dto/politicas.dto.ts` (substitui L5–L6, L30 e a linha `pagina` de L58):
+
+```ts
+function dataNoCalendario(valor: string): boolean {
+  const [ano, mes, dia] = valor.split('-').map(Number);
+  if (!ano || !mes || !dia) return false;
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  return data.getUTCFullYear() === ano && data.getUTCMonth() === mes - 1 && data.getUTCDate() === dia;
+}
+
+const dataIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(dataNoCalendario, 'Data inexistente no calendário.');
+const competencia = z.string().regex(/^\d{4}-\d{2}$/)
+  .refine((valor) => dataNoCalendario(`${valor}-01`), 'Competência inexistente no calendário.');
+```
+
+O `dinheiro` (L30) permanece `z.string().regex(/^\d{1,13}\.\d{2}$/)`. `listarPoliticasSchema` L58 passa a `pagina: z.coerce.number().int().min(1).max(100000).default(1)`. Nenhum `.omit()` é chamado em schema com `.refine()` nesta mudança (os `refine` ficam nos campos, não nos objetos).
+
+`politicas.controller.ts`: apagar `NotFoundException` do import (L1), os tipos e schemas que o método genérico usava só se ficarem sem uso, e trocar o método `acao` (L73–L85) por três rotas explícitas. Rotas de um segmento (`validar`, `lote`) e a rota GET `:codigo/historico` não conflitam. Uma ação desconhecida cai no 404 padrão do Nest.
+
+```ts
+@Post(':codigo/editar')
+@RequirePermissoes('CONTABILIDADE_POLITICA_GERENCIAR')
+editar(
+  @Param('codigo') codigo: string,
+  @Body(new ZodValidationPipe(editarSchema)) dto: EditarPoliticaDto,
+  @CurrentUser() user: CurrentUserPayload,
+) {
+  return this.politicas.editar(codigo, dto, user.sub);
+}
+
+@Post(':codigo/simular')
+@RequirePermissoes('CONTABILIDADE_POLITICA_GERENCIAR')
+simular(
+  @Param('codigo') codigo: string,
+  @Body(new ZodValidationPipe(simularSchema)) dto: SimularPoliticaDto,
+  @CurrentUser() user: CurrentUserPayload,
+) {
+  return this.politicas.simular(codigo, dto, user.sub);
+}
+
+@Post(':codigo/aprovar')
+@RequirePermissoes('CONTABILIDADE_POLITICA_GERENCIAR')
+aprovar(
+  @Param('codigo') codigo: string,
+  @Body(new ZodValidationPipe(aprovarSchema)) dto: AprovarPoliticaDto,
+  @CurrentUser() user: CurrentUserPayload,
+) {
+  return this.politicas.aprovar(codigo, dto, user.sub);
+}
+```
+
+`politicas.service.ts`: apagar `executar` (L392–L401), que fica sem chamador. Antes, `Select-String -Path app/backend -Pattern "politicas.executar|PoliticasContabilizacaoService.*executar" -Recurse` deve achar só o controller antigo (o `executar` do `plano.service.ts` e o de pesagem são de outros módulos e ficam).
+
+`centavos.ts`:
+
+```ts
+export function centavos(valor: string, codigo: string): bigint {
+  const casado = /^(\d{1,13})\.(\d{2})$/.exec(valor);
+  const inteiro = casado?.[1];
+  const fracao = casado?.[2];
+  if (!inteiro || !fracao) throw new RegraPoliticaException('valor monetário inválido', codigo);
+  return BigInt(inteiro) * 100n + BigInt(fracao);
+}
+```
+
+e L26 vira `const valor = centavos(linha.valor, codigo);`.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+```powershell
+npx jest test/integration/politicas-contabilizacao.e2e-spec.ts src/modules/contabilidade/politicas/politicas.service.spec.ts --runInBand
+npm run lint
+npm run type-check
+```
+
+Expected: PASS, sem aviso de import sem uso. Conferir com `npm run test:cov` que linha e branch continuam ≥ 80%.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/politicas app/backend/test/integration/politicas-contabilizacao.e2e-spec.ts
+git commit -m @"
+fix(contabilidade): valida a entrada das políticas pelo pipe e recusa com 400
+
+### Descrição Detalhada:
+As ações editar, simular e aprovar passam a ser rotas próprias com ZodValidationPipe, no lugar do schema.parse que lançava ZodError e virava 500. A competência e a data de vigência são conferidas no calendário, a página da listagem tem teto, e o valor monetário inválido devolve a mensagem valor monetário inválido com o código da política.
+
+### Motivo da Mudança:
+A revisão crítica (B3) reproduziu 500 para competência 2026-13, valor -1.00, 1.005, 10.5 e 14 dígitos inteiros, e a mensagem mapeamento ausente com código vazio para valor monetário inválido (M8).
+
+### Impacto:
+Forma inválida responde 400 antes de abrir transação; regra de negócio continua 422 e conflito 409. Nenhuma migration. O método executar do serviço foi removido por ficar sem chamador. O 404 de ação inexistente é mantido.
+"@
+```
+
+## Task 9: Conta suspensa não mapeia (B2, lado T02)
+
+**Files:**
+- Modify: `app/backend/src/modules/contabilidade/politicas/politicas.service.ts` (`contaAnaliticaVigente`, L616–L631)
+- Test: `app/backend/test/integration/politicas-contabilizacao.e2e-spec.ts`
+
+**Interfaces:**
+- Consumes: a regra "versão em vigor" da E09-T01 corrigida (ver Pré-condição) e o `GET /contabilidade/politicas/opcoes`, que continua delegando a `PlanoContasService.listarContasAnaliticasVigentes` (arquivo da T01, não editado aqui).
+- Produces: `contaAnaliticaVigente` recusa com 422 `mapeamento ausente` uma conta cuja versão em vigor é `SUSPENDED`, em `configurar`, `editar`, `validar` e `simular`.
+
+- [ ] **Step 1: Write the failing tests**
+
+No mesmo arquivo de integração, junto dos helpers (L90–L125):
+
+```ts
+async function novaVersaoDaConta(codigo: string, numero: number, situacao: 'SUSPENDED' | 'DRAFT' | 'REVIEW' | 'REJECTED') {
+  await db.execute(sql`
+    insert into conta_versoes (conta_id, numero, nome, classificacao, natureza, grupo, conta_pai_id,
+                               centro_custo_id, vigencia_inicio, vigencia_fim, situacao, justificativa, responsavel_id)
+    select v.conta_id, ${numero}, v.nome, v.classificacao, v.natureza, v.grupo, v.conta_pai_id,
+           v.centro_custo_id, v.vigencia_inicio, v.vigencia_fim, ${situacao}, 'caso de teste', v.responsavel_id
+      from conta_versoes v
+      join contas_contabeis c on c.id = v.conta_id
+     where c.codigo = ${codigo} and v.numero = 1
+  `);
+}
+```
+
+```ts
+describe('conta cuja versão em vigor está suspensa', () => {
+  it('configurar recusa a conta com 422 e não grava a política', async () => {
+    await prepararContasAnaliticas();
+    await novaVersaoDaConta('1.1.01', 2, 'SUSPENDED');
+    const res = await request(srv()).post('/contabilidade/politicas').set('Cookie', adminCookies).send(dtoConfigurar());
+    expect(res.status).toBe(422);
+    expect(res.body.message).toEqual({ message: 'mapeamento ausente', codigo: 'LIQUIDACAO-2026-10' });
+    expect(await db.select().from(politicasContabilizacao)).toHaveLength(0);
+  });
+
+  it('a conta suspensa não aparece nas opções do combo', async () => {
+    await prepararContasAnaliticas();
+    await novaVersaoDaConta('1.1.01', 2, 'SUSPENDED');
+    const res = await request(srv()).get('/contabilidade/politicas/opcoes').set('Cookie', adminCookies);
+    expect(res.status).toBe(200);
+    const codigos = (res.body.contas as { codigo: string }[]).map((conta) => conta.codigo);
+    expect(codigos).not.toContain('1.1.01');
+    expect(codigos).toContain('2.1.01');
+  });
+
+  it('simular recusa quando a conta foi suspensa depois da configuração', async () => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    await novaVersaoDaConta('1.1.01', 2, 'SUSPENDED');
+    await expect(service.simular(politica.codigo, { numero: 1, valor: '10.00', justificativa: 'simula' }, autorId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'mapeamento ausente', codigo: politica.codigo } });
+    expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+  });
+
+  it.each(['DRAFT', 'REVIEW', 'REJECTED'] as const)(
+    'uma versão %s mais nova não derruba a conta em vigor',
+    async (situacao) => {
+      await prepararContasAnaliticas();
+      await novaVersaoDaConta('1.1.01', 2, situacao);
+      const politica = await service.configurar(dtoConfigurar(), autorId);
+      expect(politica.situacao).toBe('DRAFT');
+    },
+  );
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```powershell
+Set-Location app/backend
+npx jest test/integration/politicas-contabilizacao.e2e-spec.ts -t "versão em vigor está suspensa" --runInBand
+```
+
+Expected: FAIL em `configurar` (201 em vez de 422, porque `contaAnaliticaVigente` acha a v1 `APPROVED`) e em `simular` (grava a simulação). O teste de opções falha só se a T01 integrada ainda lista a conta suspensa: nesse caso é o critério de parada (b) da pré-condição, não um defeito a corrigir aqui. Os três casos `DRAFT`/`REVIEW`/`REJECTED` passam antes e depois (guarda do significado de "em vigor").
+
+- [ ] **Step 3: Write minimal implementation**
+
+`politicas.service.ts`, no `innerJoin` de `contaAnaliticaVigente` (L618–L625), acrescentar a condição da versão em vigor e remover o `orderBy`/`limit` que só escolhia entre versões antigas:
+
+```ts
+.innerJoin(contaVersoes, and(
+  eq(contaVersoes.contaId, contasContabeis.id),
+  isNull(contaVersoes.deletedAt),
+  sql`${contaVersoes.numero} = (
+    select max(v2.numero) from conta_versoes v2
+    where v2.conta_id = ${contasContabeis.id}
+      and v2.deleted_at is null
+      and v2.situacao in ('APPROVED', 'SUSPENDED')
+  )`,
+  eq(contaVersoes.situacao, 'APPROVED'),
+  eq(contaVersoes.classificacao, 'analitica'),
+  sql`${contaVersoes.vigenciaInicio} <= ${HOJE}`,
+  sql`(${contaVersoes.vigenciaFim} is null or ${contaVersoes.vigenciaFim} >= ${HOJE})`,
+))
+.where(and(eq(contasContabeis.codigo, codigoConta), isNull(contasContabeis.deletedAt)))
+.limit(1);
+```
+
+Remover `desc` do import de `drizzle-orm` só se `listar` (L406) deixar de usá-lo; ele é usado, então o import fica.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+```powershell
+npx jest test/integration/politicas-contabilizacao.e2e-spec.ts --runInBand
+npm run lint
+npm run type-check
+```
+
+Expected: PASS. Se o teste das opções ainda falhar, parar (critério da pré-condição, item b).
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/politicas/politicas.service.ts app/backend/test/integration/politicas-contabilizacao.e2e-spec.ts
+git commit -m @"
+fix(contabilidade): recusa conta suspensa no mapeamento da política
+
+### Descrição Detalhada:
+contaAnaliticaVigente passa a olhar a versão em vigor da conta, a de maior número entre as versões aprovadas ou suspensas, e só aceita a conta se essa versão estiver aprovada, analítica e vigente. Versão em rascunho, em revisão ou rejeitada, mais nova, não derruba a conta em vigor.
+
+### Motivo da Mudança:
+A revisão crítica (B2) mostrou uma conta com v1 aprovada e v2 suspensa listada nas opções e aceita em POST de política (201), enquanto mapear a mesma conta na tela do plano dava 422.
+
+### Impacto:
+Configurar, editar, validar e simular passam a dar 422 mapeamento ausente para conta suspensa, sem gravar. As opções do combo vêm do serviço do plano já corrigido pela E09-T01 e não são duplicadas aqui. Nenhuma migration.
+"@
+```
+
+## Task 10: Simulação exige valor maior que 0,00 (B7, AD-25 item 2)
+
+**Files:**
+- Modify: `app/backend/src/modules/contabilidade/politicas/dto/politicas.dto.ts` (L30–L36, L48)
+- Modify: `app/backend/src/modules/contabilidade/politicas/politicas.service.ts` (`simularNaTx` L527–L568, `aprovarNaTx` L578–L584)
+- Test: `app/backend/test/integration/politicas-contabilizacao.e2e-spec.ts`
+
+**Interfaces:**
+- Consumes: `centavos(valor, codigo)` da Task 8.
+- Produces: `dinheiroPositivo` (DTO), 422 `valor deve ser maior que zero` no serviço, e `aprovarNaTx` que só conta simulação com `valor > 0`. Sem migration (ver Decisões aplicadas).
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+describe('valor simulado maior que zero', () => {
+  async function politicaPronta() {
+    await prepararContasAnaliticas();
+    return service.configurar(dtoConfigurar(), autorId);
+  }
+
+  it.each(['0.00', '0000000000000.00'])('HTTP recusa %s com 400 e não grava', async (valor) => {
+    const politica = await politicaPronta();
+    const res = await request(srv()).post(`/contabilidade/politicas/${politica.codigo}/simular`)
+      .set('Cookie', adminCookies).send({ numero: 1, valor, justificativa: 'simula' });
+    expect(res.status).toBe(400);
+    expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+  });
+
+  it('o serviço recusa 0.00 com 422, para quem chama sem passar pelo DTO', async () => {
+    const politica = await politicaPronta();
+    await expect(service.simular(politica.codigo, { numero: 1, valor: '0.00', justificativa: 'simula' }, autorId))
+      .rejects.toMatchObject({
+        status: 422,
+        response: { message: 'valor deve ser maior que zero', codigo: politica.codigo },
+      });
+    expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+  });
+
+  it('o lote recusa 0.00 e desfaz tudo', async () => {
+    const politica = await politicaPronta();
+    const res = await request(srv()).post('/contabilidade/politicas/lote').set('Cookie', adminCookies).send({
+      acao: 'simular',
+      codigos: [politica.codigo],
+      justificativa: 'simula',
+      numeroPorCodigo: { [politica.codigo]: 1 },
+      valor: '0.00',
+    });
+    expect(res.status).toBe(400);
+    expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+  });
+
+  it('uma simulação 0.00 já gravada não destrava a aprovação', async () => {
+    const politica = await politicaPronta();
+    await db.execute(sql`
+      insert into politica_simulacoes (politica_id, versao_numero, valor, debito, credito)
+      select p.id, 1, 0, 0, 0 from politicas_contabilizacao p where p.codigo = ${politica.codigo}
+    `);
+    await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'mapeamento ausente', codigo: politica.codigo } });
+    expect((await service.obter(politica.codigo)).situacao).toBe('DRAFT');
+  });
+
+  it('0.01 é o menor valor aceito e permite a aprovação por outra pessoa', async () => {
+    const politica = await politicaPronta();
+    await service.simular(politica.codigo, { numero: 1, valor: '0.01', justificativa: 'simula' }, autorId);
+    const aprovada = await service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId);
+    expect(aprovada.situacao).toBe('APPROVED');
+  });
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```powershell
+Set-Location app/backend
+npx jest test/integration/politicas-contabilizacao.e2e-spec.ts -t "valor simulado maior que zero" --runInBand
+```
+
+Expected: FAIL nos quatro primeiros (HTTP e serviço aceitam `0.00`; o lote grava; a simulação zerada destrava `aprovar`). O quinto (`0.01`) passa antes e depois.
+
+- [ ] **Step 3: Write minimal implementation**
+
+`dto/politicas.dto.ts`: abaixo de `dinheiro` (L30) acrescentar
+
+```ts
+export const dinheiroPositivo = dinheiro.refine((valor) => /[1-9]/.test(valor), 'Valor deve ser maior que zero.');
+```
+
+e usar `valor: dinheiroPositivo` em `simularSchema` (L34) e `valor: dinheiroPositivo.optional()` em `loteBase` (L48).
+
+`politicas.service.ts`, em `simularNaTx`, logo depois da conferência da justificativa (L528):
+
+```ts
+if (centavos(dto.valor, codigo) <= 0n) throw new RegraPoliticaException('valor deve ser maior que zero', codigo);
+```
+
+(importar `centavos` junto de `balancear`, L22). Em `aprovarNaTx`, a busca da simulação (L578–L583) ganha a condição:
+
+```ts
+.where(and(
+  eq(politicaSimulacoes.politicaId, versao.politicaId),
+  eq(politicaSimulacoes.versaoNumero, versao.numero),
+  sql`${politicaSimulacoes.valor} > 0`,
+  isNull(politicaSimulacoes.deletedAt),
+)).limit(1);
+```
+
+Registrar a mudança de decisão no texto do plano já foi feito na seção "Decisões em aberto" item 6 (edição desta revisão).
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+```powershell
+npx jest test/integration/politicas-contabilizacao.e2e-spec.ts --runInBand
+npm run lint
+npm run type-check
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/politicas app/backend/test/integration/politicas-contabilizacao.e2e-spec.ts
+git commit -m @"
+fix(contabilidade): exige valor simulado maior que zero na política
+
+### Descrição Detalhada:
+O DTO de simulação e o de lote recusam 0.00 com 400. O serviço recusa 0.00 com 422 valor deve ser maior que zero e a aprovação ignora simulação gravada com valor zero.
+
+### Motivo da Mudança:
+A revisão crítica (B7) e o AD-25 item 2: uma simulação de 0,00 balanceava e destravava a aprovação da regra sem ter simulado nada.
+
+### Impacto:
+Sem migration: o CHECK de balanceamento continua aceitando zero, e a defesa fica no DTO, no serviço e na aprovação, que cobre linhas zeradas já gravadas. O vínculo da simulação ao número da versão não muda.
+"@
+```
+
+## Task 11: Filtro de exclusão lógica volta a `consulta()` (processo)
+
+**Files:**
+- Modify: `app/backend/src/modules/contabilidade/politicas/politicas.service.ts` (`listar` L407, `obter` L424–L427, `consulta` L467–L501)
+- Test: `app/backend/test/integration/politicas-contabilizacao.e2e-spec.ts`
+
+**Interfaces:**
+- Consumes: Drizzle `SQL`.
+- Produces: `consulta(extra?: SQL)`, que sempre aplica `politicas_contabilizacao.deleted_at is null`. O commit `c4f99ee` (rotulado `test`) removeu o `.where(isNull(...))` de `consulta()` porque o builder do Drizzle não aceita um segundo `.where` encadeado pelos chamadores. A defesa volta por parâmetro, sem encadear dois `where`.
+
+- [ ] **Step 1: Write the characterization test**
+
+```ts
+it('política com exclusão lógica não aparece em listar, obter, exportar nem histórico', async () => {
+  await prepararContasAnaliticas();
+  const politica = await service.configurar(dtoConfigurar(), autorId);
+  await db.execute(sql`update politicas_contabilizacao set deleted_at = now() where codigo = ${politica.codigo}`);
+  const consulta = { pagina: 1, q: '', situacao: '', competencia: '', ordenar: 'competencia', direcao: 'asc' } as const;
+  expect((await service.listar(consulta)).total).toBe(0);
+  expect((await service.listar(consulta)).itens).toHaveLength(0);
+  await expect(service.obter(politica.codigo)).rejects.toMatchObject({ status: 404 });
+  await expect(service.historico(politica.codigo)).rejects.toMatchObject({ status: 404 });
+  expect(await service.exportarCsv(consulta)).not.toContain('Liquidação');
+});
+```
+
+- [ ] **Step 2: Run the test (característica, não falha antes)**
+
+```powershell
+Set-Location app/backend
+npx jest test/integration/politicas-contabilizacao.e2e-spec.ts -t "exclusão lógica" --runInBand
+```
+
+Expected: PASS antes da mudança, porque os dois chamadores de `consulta()` hoje repetem o filtro (`filtro()` L504 e `obter` L426). Esta Task é uma defesa por construção e é a única exceção ao critério 1: o teste fixa o comportamento, e o Step 4 prova que ele pega a regressão por mutação.
+
+- [ ] **Step 3: Write minimal implementation**
+
+`politicas.service.ts`: importar `type SQL` de `drizzle-orm`, mudar a assinatura e terminar a cadeia da consulta com `where`:
+
+```ts
+private consulta(extra?: SQL) {
+  const aprovador = alias(usuarios, 'aprovador_politica');
+  return this.db.select({ /* campos inalterados, L470–L488 */ })
+    .from(politicasContabilizacao)
+    .innerJoin(/* inalterado, L490–L497 */)
+    .innerJoin(centrosCusto, eq(centrosCusto.id, politicaVersoes.centroCustoId))
+    .innerJoin(usuarios, eq(usuarios.id, politicaVersoes.responsavelId))
+    .leftJoin(aprovador, eq(aprovador.id, politicaVersoes.aprovadorId))
+    .where(and(isNull(politicasContabilizacao.deletedAt), extra));
+}
+```
+
+`listar` (L407) passa a `await this.consulta(this.filtro(query)).orderBy(ordem).limit(PAGINA).offset((query.pagina - 1) * PAGINA)`, e `obter` (L424) a `await this.consulta(eq(politicasContabilizacao.codigo, codigo)).limit(1)`. `filtro()` e a contagem de `listar` (L408–L419) ficam como estão: a contagem tem o filtro dela.
+
+- [ ] **Step 4: Prove the guard by mutation, then run everything**
+
+Remover temporariamente `isNull(politicasContabilizacao.deletedAt),` do `where` de `consulta()` **e** de `filtro()` (L504). O teste do Step 1 deve falhar (`obter` acha a política apagada). Restaurar as duas linhas e rodar:
+
+```powershell
+npx jest test/integration/politicas-contabilizacao.e2e-spec.ts --runInBand
+npm run lint
+npm run type-check
+git diff --stat
+```
+
+Expected: PASS; `git diff --stat` mostra só `politicas.service.ts` e o spec, sem sobra da mutação.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/politicas/politicas.service.ts app/backend/test/integration/politicas-contabilizacao.e2e-spec.ts
+git commit -m @"
+fix(contabilidade): restaura o filtro de exclusão lógica em consulta das políticas
+
+### Descrição Detalhada:
+consulta passa a receber o filtro do chamador e sempre aplica deleted_at is null na política, no lugar do where encadeado que o commit c4f99ee removeu. listar e obter passam o filtro por parâmetro.
+
+### Motivo da Mudança:
+O commit c4f99ee, rotulado test, mexeu em código de produção e tirou a defesa de exclusão lógica de consulta. A convenção do projeto proíbe expor linha com deleted_at.
+
+### Impacto:
+Sem mudança de comportamento hoje, porque os dois chamadores repetiam o filtro. O teste de característica fixa isso e foi provado por mutação. Nenhuma migration.
+"@
+```
+
+## Task 12: Tela confirma pelo backend, modal sem corrida e bloco de exceção na aba (B8 a, B8 c, processo)
+
+**Files:**
+- Modify: `app/frontend/src/app/(admin)/erp/contabilidade/politicas-de-contabilizacao/politicas-contabilizacao-client.tsx` (L3, L99–L122, L140–L146, L241–L298, L488–L490, L598)
+- Modify: `app/frontend/__tests__/politicas-contabilizacao-apresentacao.test.tsx` (teste de lote em L80+ passa a devolver corpo JSON)
+
+**Interfaces:**
+- Consumes: o corpo que o backend já devolve em `editar`/`simular`/`aprovar` (`obter(codigo)`, `PoliticaApresentada`) e em `lote` (`{ codigo, acao, situacao }[]`, `politicas.service.ts` L348–L374).
+- Produces: uma tela que só exibe `Aprovado` e `concluído com evidência` depois que o corpo da resposta confirma `situacao === 'APPROVED'`; um modal que só fecha se ainda for o da requisição; `Confirmar` desabilitado durante o envio.
+- Fidelidade ao protótipo: `aplicacao.js` L364 chama `renderExceptions` só quando a aba é `Exceções`, e L200–L203 desenha os blocos `Bloqueio / exceção:` ali. O bloco que `c4f99ee` moveu (e que a Task 6 L1484 deixava fora das abas) **sai das outras abas**: aparece só dentro de `Exceções`, onde a Task 6 já pedia dois blocos (D6, "Exceções").
+
+- [ ] **Step 1: Write the failing tests**
+
+Em `politicas-contabilizacao-apresentacao.test.tsx` (imports: `act`, `within` de `@testing-library/react`):
+
+```tsx
+function adiavel() {
+  let resolver!: (valor: unknown) => void;
+  const promessa = new Promise((resolve) => { resolver = resolve; });
+  return { promessa, resolver };
+}
+
+function corpoOk(corpo: unknown) {
+  return { ok: true, status: 201, text: async () => JSON.stringify(corpo) };
+}
+
+async function abrirAprovar(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Aprovar regra' }));
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'outra pessoa aprova');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+}
+
+it('a resposta da simulação não fecha o modal de aprovação aberto depois', async () => {
+  const user = userEvent.setup();
+  const simulacao = adiavel();
+  global.fetch = jest.fn().mockReturnValueOnce(simulacao.promessa) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await user.click(screen.getByRole('button', { name: 'Simular evento' }));
+  await user.type(screen.getByLabelText('Valor'), '10,10');
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'simula');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  await user.click(screen.getByRole('button', { name: 'Aprovar regra' }));
+  expect(screen.queryByLabelText('Valor')).not.toBeInTheDocument();
+  await act(async () => {
+    simulacao.resolver(corpoOk({ ...linha('LIQUIDACAO-2026-10', 'Liquidação'), simulacaoValor: '10.10', simulacaoDebito: '10.10', simulacaoCredito: '10.10' }));
+  });
+  expect(screen.getByLabelText('Justificativa / observação')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Confirmar' })).toBeEnabled();
+});
+
+it('Confirmar fica desabilitado enquanto a requisição está em voo', async () => {
+  const user = userEvent.setup();
+  const simulacao = adiavel();
+  const fetchMock = jest.fn().mockReturnValueOnce(simulacao.promessa);
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await user.click(screen.getByRole('button', { name: 'Simular evento' }));
+  await user.type(screen.getByLabelText('Valor'), '10,10');
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'simula');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
+  await act(async () => { simulacao.resolver(corpoOk(linha('LIQUIDACAO-2026-10', 'Liquidação'))); });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it('200 sem a situação aprovada não mostra Aprovado nem concluído com evidência', async () => {
+  const user = userEvent.setup();
+  global.fetch = jest.fn().mockResolvedValue(corpoOk(linha('LIQUIDACAO-2026-10', 'Liquidação'))) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await abrirAprovar(user);
+  expect(await screen.findByText(/O servidor não confirmou a operação/)).toBeInTheDocument();
+  expect(screen.queryByRole('cell', { name: 'Aprovado' })).not.toBeInTheDocument();
+  expect(screen.queryByText('concluído com evidência')).not.toBeInTheDocument();
+});
+
+it('200 sem corpo não mostra sucesso', async () => {
+  const user = userEvent.setup();
+  global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 201, text: async () => '' }) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await abrirAprovar(user);
+  expect(await screen.findByText(/O servidor não confirmou a operação/)).toBeInTheDocument();
+  expect(screen.queryByRole('cell', { name: 'Aprovado' })).not.toBeInTheDocument();
+});
+
+it('422 do backend mostra o texto interno e nenhum sucesso', async () => {
+  const user = userEvent.setup();
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: false,
+    status: 422,
+    text: async () => JSON.stringify({ statusCode: 422, message: { message: 'aprovador diferente do autor', codigo: 'LIQUIDACAO-2026-10' } }),
+  }) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await abrirAprovar(user);
+  expect(await screen.findByText('aprovador diferente do autor')).toBeInTheDocument();
+  expect(screen.queryByRole('cell', { name: 'Aprovado' })).not.toBeInTheDocument();
+  expect(screen.queryByText('concluído com evidência')).not.toBeInTheDocument();
+});
+
+it('o corpo aprovado do backend atualiza a linha e só então mostra o sucesso', async () => {
+  const user = userEvent.setup();
+  global.fetch = jest.fn().mockResolvedValue(corpoOk({
+    ...linha('LIQUIDACAO-2026-10', 'Liquidação'), situacao: 'APPROVED', situacaoRotulo: 'Aprovado', aprovadorNome: 'Outra pessoa',
+  })) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await abrirAprovar(user);
+  expect(await screen.findByRole('cell', { name: 'Aprovado' })).toBeInTheDocument();
+  expect(screen.getByText('concluído com evidência')).toBeInTheDocument();
+});
+
+it('lote aprovado só mostra sucesso se todos os efeitos voltam aprovados', async () => {
+  const user = userEvent.setup();
+  global.fetch = jest.fn().mockResolvedValue(corpoOk([
+    { codigo: 'LIQUIDACAO-2026-10', acao: 'aprovar', situacao: 'APPROVED' },
+  ])) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[
+    linha('LIQUIDACAO-2026-10', 'Liquidação'),
+    linha('TARIFA-2026-10', 'Tarifa'),
+  ]} />);
+  await user.click(screen.getByRole('checkbox', { name: 'Selecionar Liquidação' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Selecionar Tarifa' }));
+  await abrirAprovar(user);
+  expect(await screen.findByText(/O servidor não confirmou a operação/)).toBeInTheDocument();
+  expect(screen.queryByText('concluído com evidência')).not.toBeInTheDocument();
+});
+
+it('valor 0,00 é recusado na tela antes de chamar o servidor', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn();
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await user.click(screen.getByRole('button', { name: 'Simular evento' }));
+  await user.type(screen.getByLabelText('Valor'), '0,00');
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'simula');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  expect(await screen.findByText('Valor deve ser maior que zero.')).toBeInTheDocument();
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it('o bloco Bloqueio / exceção existe só na aba Exceções', async () => {
+  const user = userEvent.setup();
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  expect(screen.queryByText(/Bloqueio \/ exceção/)).not.toBeInTheDocument();
+  await user.click(screen.getByRole('tab', { name: 'Regras e validações' }));
+  expect(screen.queryByText(/Bloqueio \/ exceção/)).not.toBeInTheDocument();
+  await user.click(screen.getByRole('tab', { name: 'Exceções' }));
+  expect(screen.getAllByText(/Bloqueio \/ exceção/)).toHaveLength(2);
+  expect(screen.getByText(/Mapeamento ausente/)).toBeInTheDocument();
+  expect(screen.getByText(/Evento duplicado/)).toBeInTheDocument();
+});
+```
+
+No teste existente "com duas linhas marcadas..." (L80+), o mock `text: async () => ''` passa a devolver, para o lote, um JSON de efeitos coerente com a ação testada (`simular` → `[{ codigo, acao: 'simular', situacao: 'DRAFT' }, ...]`; `aprovar` → `situacao: 'APPROVED'`), e as asserções de chamada ao `/lote` permanecem.
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```powershell
+Set-Location app/frontend
+npx jest __tests__/politicas-contabilizacao-apresentacao.test.tsx --runInBand
+```
+
+Expected: FAIL em: corrida do modal (hoje `setModal(null)` L286 fecha o modal de aprovação), `Confirmar` habilitado em voo, 200 sem aprovação (hoje L291–L296 mostra `Aprovado` e o aviso), 200 sem corpo, lote parcial, `0,00` (hoje chama o servidor) e o bloco fora da aba (hoje L490). Os testes de 422 e de corpo aprovado passam antes e depois (guardas). Se o de 200 sem aprovação passar antes, parar (critério 1).
+
+- [ ] **Step 3: Write minimal implementation**
+
+No topo: `import { useEffect, useRef, useState } from 'react';`. Constante e auxiliares junto de `lerMensagem` (L113–L122):
+
+```tsx
+const NAO_CONFIRMADO = 'O servidor não confirmou a operação. Atualize a tela e confira a situação.';
+
+async function lerCorpo(resposta: Response): Promise<unknown> {
+  const texto = await resposta.text();
+  if (!texto) return null;
+  try {
+    return JSON.parse(texto) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function ehPolitica(corpo: unknown): corpo is PoliticaApresentada {
+  if (!corpo || typeof corpo !== 'object') return false;
+  const { codigo, situacao, numero } = corpo as Record<string, unknown>;
+  return typeof codigo === 'string' && typeof situacao === 'string' && typeof numero === 'number';
+}
+
+function rotuloSituacao(situacao: string): string {
+  return SITUACOES.find(([valor]) => valor === situacao)?.[1] ?? situacao;
+}
+```
+
+Estado (após L146): `const [enviando, setEnviando] = useState(false);` e `const sequenciaModal = useRef(0);` (antes do `if (semAcesso)`, L178, para manter a ordem dos hooks). `abrirModal` (L241) começa com `sequenciaModal.current += 1;`.
+
+`confirmarLoteOuAcao` (L248–L298): manter as validações; acrescentar, depois da de `Valor é obrigatório.`, `if (acao === 'simular' && /^0+\.00$/.test(valor)) { setAviso('Valor deve ser maior que zero.'); return; }`. Depois, envolver o envio:
+
+```tsx
+const emLote = marcadas.length > 1;
+const token = sequenciaModal.current;
+setEnviando(true);
+try {
+  const resposta = /* os dois fetch existentes, L261–L281, sem mudança */;
+  if (!resposta.ok) {
+    setAviso(await lerMensagem(resposta));
+    return;
+  }
+  const corpo = await lerCorpo(resposta);
+  if (emLote) {
+    const efeitos = Array.isArray(corpo) ? corpo as { codigo?: unknown; acao?: unknown; situacao?: unknown }[] : null;
+    const confere = efeitos !== null
+      && efeitos.length === marcadas.length
+      && efeitos.every((efeito) => typeof efeito.codigo === 'string' && marcadas.includes(efeito.codigo)
+        && efeito.acao === acao && typeof efeito.situacao === 'string'
+        && (acao !== 'aprovar' || efeito.situacao === 'APPROVED'));
+    if (!confere) {
+      setAviso(NAO_CONFIRMADO);
+      return;
+    }
+    if (acao === 'aprovar') {
+      const situacoes = new Map(efeitos.map((efeito) => [String(efeito.codigo), String(efeito.situacao)]));
+      setLinhas((lista) => lista.map((item) => {
+        const situacao = situacoes.get(item.codigo);
+        return situacao ? { ...item, situacao, situacaoRotulo: rotuloSituacao(situacao) } : item;
+      }));
+    }
+  } else {
+    if (!ehPolitica(corpo) || corpo.codigo !== atual!.codigo || (acao === 'aprovar' && corpo.situacao !== 'APPROVED')) {
+      setAviso(NAO_CONFIRMADO);
+      return;
+    }
+    setLinhas((lista) => lista.map((item) => (item.codigo === corpo.codigo ? corpo : item)));
+  }
+  if (sequenciaModal.current === token) {
+    setModal(null);
+    setValorTexto('');
+    setJustificativaModal('');
+  }
+  setAviso(acao === 'aprovar' ? 'concluído com evidência' : '');
+} catch {
+  setAviso('Não foi possível concluir a operação. Tente novamente.');
+} finally {
+  setEnviando(false);
+}
+```
+
+`Confirmar` (L598): `<Button type="button" disabled={enviando} onClick={...}>Confirmar</Button>`. L488–L490 vira `{aba === 'Exceções' ? EXCECOES.map((item) => <p key={item}><b>Bloqueio / exceção:</b> {item}.</p>) : null}`. Nenhuma palavra, rótulo ou ordem de botão muda.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+```powershell
+npx jest __tests__/politicas-contabilizacao-apresentacao.test.tsx --runInBand
+npm run lint
+npm run type-check
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add "app/frontend/src/app/(admin)/erp/contabilidade/politicas-de-contabilizacao/politicas-contabilizacao-client.tsx" app/frontend/__tests__/politicas-contabilizacao-apresentacao.test.tsx
+git commit -m @"
+fix(contabilidade): a tela das políticas só mostra sucesso confirmado pelo backend
+
+### Descrição Detalhada:
+Simular, aprovar e o lote passam a ler o corpo da resposta: a linha é substituída pelo que o backend devolveu e Aprovado e concluído com evidência só aparecem se a situação voltar APPROVED. O modal só fecha se ainda for o da requisição, Confirmar fica desabilitado durante o envio e 0,00 é recusado na tela. O bloco Bloqueio / exceção volta a existir apenas na aba Exceções, como no protótipo.
+
+### Motivo da Mudança:
+A revisão crítica (B8) achou a corrida em que a resposta da simulação fechava o modal de aprovação aberto depois, e uma tela que exibia Aprovado por atualização otimista sem confirmação (RA-05/06). O commit c4f99ee, rotulado test, também moveu o bloco de exceção para fora da aba, contra aplicacao.js L364.
+
+### Impacto:
+Resposta 2xx sem corpo válido mostra O servidor não confirmou a operação em vez de sucesso. Nenhum rótulo, botão ou rota muda.
+"@
+```
+
+## Task 13: A lista da tela consulta o servidor (necessária ao B8 b)
+
+**Files:**
+- Modify: `app/frontend/src/app/(admin)/erp/contabilidade/politicas-de-contabilizacao/politicas-contabilizacao-client.tsx` (hooks antes de L178)
+- Modify: `app/frontend/__tests__/politicas-contabilizacao-apresentacao.test.tsx`
+
+**Interfaces:**
+- Consumes: `GET /api/contabilidade/politicas?pagina&q&competencia&situacao&ordenar&direcao` (BFF `route.ts` L4–L6, backend `listarPoliticasSchema` L57–L64), que já filtra e ordena no servidor. Os valores de `ordenar` que a tela guarda (`competencia`, `contaDebito`, `contaCredito`, `centroCusto`, `tipoEvento`) são os mesmos do backend.
+- Produces: busca, filtro de competência, filtro de situação e ordenação que de fato recarregam a lista (Matriz UX L952, "persistência de filtro/ordenação"). Sem isso, o Playwright da Task 14 não acha a linha própria da execução quando o banco já tem mais de 20 políticas. Se o coordenador retirar esta Task, a Task 14 não pode ser executada como escrita (parar).
+
+- [ ] **Step 1: Write the failing tests**
+
+O rascunho da tela vai para `sessionStorage` (L174–L176) e o jsdom o mantém entre testes do mesmo arquivo; como agora restaurar a busca dispara a consulta, o arquivo ganha `beforeEach(() => sessionStorage.clear());`.
+
+```tsx
+it('digitar na busca recarrega a lista pelo servidor com os filtros atuais', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn().mockResolvedValue(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 1 }));
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  expect(fetchMock).not.toHaveBeenCalled();
+  await user.type(screen.getByLabelText('Buscar registros da lista'), 'x');
+  expect(await screen.findByRole('cell', { name: 'Tarifa' })).toBeInTheDocument();
+  expect(screen.queryByRole('cell', { name: 'Liquidação' })).not.toBeInTheDocument();
+  expect(fetchMock).toHaveBeenLastCalledWith(
+    '/api/contabilidade/politicas?pagina=1&q=x&competencia=&situacao=&ordenar=competencia&direcao=asc',
+  );
+});
+
+it('ordenar por uma coluna recarrega a lista', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn().mockResolvedValue(corpoOk({ itens: [], total: 0 }));
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await user.click(screen.getByRole('button', { name: 'Ordenar por Conta de débito' }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('ordenar=contaDebito&direcao=asc')));
+});
+
+it('uma resposta antiga não sobrescreve a consulta mais nova', async () => {
+  const user = userEvent.setup();
+  const lenta = adiavel();
+  global.fetch = jest.fn()
+    .mockReturnValueOnce(lenta.promessa)
+    .mockResolvedValueOnce(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 1 })) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[]} />);
+  await user.type(screen.getByLabelText('Buscar registros da lista'), 'ab');
+  expect(await screen.findByRole('cell', { name: 'Tarifa' })).toBeInTheDocument();
+  await act(async () => { lenta.resolver(corpoOk({ itens: [linha('LIQUIDACAO-2026-10', 'Liquidação')], total: 1 })); });
+  expect(screen.queryByRole('cell', { name: 'Liquidação' })).not.toBeInTheDocument();
+});
+
+it('falha ao recarregar mostra a mensagem e não apaga a lista', async () => {
+  const user = userEvent.setup();
+  global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 400, text: async () => JSON.stringify({ message: 'Validação falhou' }) }) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await user.type(screen.getByLabelText('Buscar registros da lista'), 'x');
+  expect(await screen.findByText('Validação falhou')).toBeInTheDocument();
+  expect(screen.getByRole('cell', { name: 'Liquidação' })).toBeInTheDocument();
+});
+```
+
+(`waitFor` entra no import de `@testing-library/react`.)
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+```powershell
+Set-Location app/frontend
+npx jest __tests__/politicas-contabilizacao-apresentacao.test.tsx --runInBand
+```
+
+Expected: FAIL nos quatro: hoje busca, filtros e ordenação só mudam estado local e a lista é sempre a `inicial` (L154–L158).
+
+- [ ] **Step 3: Write minimal implementation**
+
+Antes do `if (semAcesso)` (L178), junto dos outros `useEffect`:
+
+```tsx
+const primeiraRenderizacao = useRef(true);
+const sequenciaLista = useRef(0);
+
+useEffect(() => {
+  if (primeiraRenderizacao.current) {
+    primeiraRenderizacao.current = false;
+    return;
+  }
+  sequenciaLista.current += 1;
+  const minha = sequenciaLista.current;
+  const consulta = new URLSearchParams({
+    pagina: '1', q: busca, competencia: filtroCompetencia, situacao: filtroSituacao, ordenar, direcao,
+  });
+  void (async () => {
+    try {
+      const resposta = await fetch(`/api/contabilidade/politicas?${consulta.toString()}`);
+      if (minha !== sequenciaLista.current) return;
+      if (!resposta.ok) {
+        setAviso(await lerMensagem(resposta));
+        return;
+      }
+      const corpo = await lerCorpo(resposta) as { itens?: PoliticaApresentada[] } | null;
+      if (minha !== sequenciaLista.current) return;
+      if (!corpo || !Array.isArray(corpo.itens)) {
+        setAviso(NAO_CONFIRMADO);
+        return;
+      }
+      setLinhas(corpo.itens);
+      setMarcadas([]);
+      setAviso('');
+    } catch {
+      if (minha === sequenciaLista.current) setAviso('Não foi possível atualizar a lista. Tente novamente.');
+    }
+  })();
+}, [busca, filtroCompetencia, filtroSituacao, ordenar, direcao]);
+```
+
+`// ponytail: uma requisição por tecla, sem debounce; a guarda de sequência descarta resposta antiga. Adicionar debounce de 250 ms se o servidor sentir.`
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+```powershell
+npx jest __tests__/politicas-contabilizacao-apresentacao.test.tsx --runInBand
+npm run lint
+npm run type-check
+```
+
+Expected: PASS, incluindo os testes da Task 12.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add "app/frontend/src/app/(admin)/erp/contabilidade/politicas-de-contabilizacao/politicas-contabilizacao-client.tsx" app/frontend/__tests__/politicas-contabilizacao-apresentacao.test.tsx
+git commit -m @"
+fix(contabilidade): busca, filtros e ordenação das políticas consultam o servidor
+
+### Descrição Detalhada:
+Mudar a busca, a competência, a situação ou a ordenação recarrega a lista por GET no BFF com os mesmos parâmetros do backend. Uma guarda de sequência descarta resposta antiga e uma falha mostra a mensagem sem apagar a lista.
+
+### Motivo da Mudança:
+Os controles só alteravam estado local e alimentavam o CSV, então a grade era sempre a primeira página inicial. Sem consulta ao servidor, o Playwright não acha a linha criada na própria execução quando o banco já acumula mais de 20 políticas.
+
+### Impacto:
+Sem mudança de rótulo, rota ou contrato. A paginação de 20 linhas continua sem controle na tela e fica fora desta revisão.
+"@
+```
+
+## Task 14: Playwright determinístico e que prova o sistema que a tela usa (B8 b, B8 c)
+
+**Files:**
+- Create: `app/frontend/e2e/helpers/e09-t02-seed.ts`
+- Modify (reescreve): `app/frontend/e2e/e09-t02-politicas-contabilizacao.spec.ts`
+
+**Interfaces:**
+- Consumes: `BACKEND_URL` e `loginBackend` de `app/frontend/e2e/helpers/onda6-seed.ts` (mesmo padrão de `onda10-seed.ts`), os contratos HTTP do plano da T01 (ver Pré-condição) e a tela das Tasks 12 e 13.
+- Produces: um spec que cria os próprios dados por execução (sufixo único, competências sorteadas, e-mail único), não depende de nome de banco, de `docker exec`, de `delete` nem da ordem entre testes, e que confere o estado pela API por trás do BFF. É proibido neste spec: `execFileSync`, `docker`, `psql`, `retries`, `waitForTimeout`.
+
+- [ ] **Step 1: Reproduce the failure of the current spec (e investigar a anomalia)**
+
+Pré-voo, em PowerShell, antes de qualquer execução (registra a causa da anomalia B8 c):
+
+```powershell
+Get-NetTCPConnection -State Listen -LocalPort 3100,4001 -ErrorAction SilentlyContinue | Select-Object LocalPort, OwningProcess
+docker compose ps
+Set-Location app/frontend
+$env:E2E_FRONTEND_URL; $env:BACKEND_INTERNAL_URL
+```
+
+Se já houver Next na 3100 ou backend na 4001 vindos de **outra** worktree ou de imagem antiga, parar esses processos e subir os desta worktree (`docker compose up --build -d`); `reuseExistingServer` só é seguro com o servidor desta worktree. Para saber em qual banco o backend em execução escreve, ler a `DATABASE_URL` do processo (`docker compose exec backend printenv DATABASE_URL`, ou o `.env` da raiz desta worktree) e usar esse valor em `psql`; nunca um nome de banco escrito à mão.
+
+```powershell
+npx playwright test e2e/e09-t02-politicas-contabilizacao.spec.ts --trace on
+npx playwright test e2e/e09-t02-politicas-contabilizacao.spec.ts --trace on
+```
+
+Expected: a segunda execução FALHA no spec atual, porque o centro `CT1`, as contas `1`, `1.1.01`, `2`, `2.1.01`, o e-mail do segundo administrador e as competências `2026-10`/`2026-11` já existem do primeiro run (`e2e/e09-t02-politicas-contabilizacao.spec.ts` L28–L31, L42–L47, L91–L94, L127, L163, L165). Guardar o trace. Do trace de qualquer falha em que `Aprovado` ou `concluído com evidência` apareça, extrair o status e o corpo da resposta de `aprovar` e a `DATABASE_URL` conferida; isso decide entre H1, H2 e H3. Se a anomalia não reaparecer, registrar "não reproduzida" com a evidência da execução limpa; não inventar causa.
+
+- [ ] **Step 2: Write the new spec and helper**
+
+`app/frontend/e2e/helpers/e09-t02-seed.ts`:
+
+```ts
+import { randomInt } from 'node:crypto';
+import type { APIRequestContext } from '@playwright/test';
+import { BACKEND_URL, loginBackend } from './onda6-seed';
+
+export interface PlanoDaJornada {
+  sufixo: string;
+  centroCodigo: string;
+  centroNome: string;
+  debitoNome: string;
+  creditoNome: string;
+}
+
+const competenciasUsadas = new Set<string>();
+
+/** Competência futura sorteada (ano 3000–8999), única dentro da execução. */
+export function competenciaUnica(): string {
+  for (;;) {
+    const candidata = `${randomInt(3000, 9000)}-${String(randomInt(1, 13)).padStart(2, '0')}`;
+    if (!competenciasUsadas.has(candidata)) {
+      competenciasUsadas.add(candidata);
+      return candidata;
+    }
+  }
+}
+
+function ontemIso(): string {
+  const data = new Date();
+  data.setUTCDate(data.getUTCDate() - 1);
+  return data.toISOString().slice(0, 10);
+}
+
+async function postar(request: APIRequestContext, cookie: string, rota: string, corpo: unknown) {
+  const resposta = await request.post(`${BACKEND_URL}${rota}`, {
+    headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    data: corpo,
+  });
+  if (!resposta.ok()) throw new Error(`POST ${rota} -> ${resposta.status()}: ${await resposta.text()}`);
+}
+
+export async function criarPlanoDaJornada(request: APIRequestContext): Promise<PlanoDaJornada> {
+  const { cookieHeader } = await loginBackend(request);
+  const sufixo = `${Date.now().toString(36)}${randomInt(46656).toString(36)}`;
+  const vigenciaInicio = ontemIso();
+  const centroCodigo = `CT${sufixo}`;
+  const plano: PlanoDaJornada = {
+    sufixo,
+    centroCodigo,
+    centroNome: `Operação industrial ${sufixo}`,
+    debitoNome: `Caixa e bancos ${sufixo}`,
+    creditoNome: `Fornecedores ${sufixo}`,
+  };
+  await postar(request, cookieHeader, '/contabilidade/centros-custo', {
+    codigo: centroCodigo, nome: plano.centroNome, justificativa: 'abre o centro da jornada',
+  });
+  const contas = [
+    { codigo: `A${sufixo}`, nome: `Grupo do ativo ${sufixo}`, classificacao: 'sintetica', natureza: 'ATIVO', pai: null },
+    { codigo: `A${sufixo}.1`, nome: plano.debitoNome, classificacao: 'analitica', natureza: 'ATIVO', pai: `A${sufixo}` },
+    { codigo: `P${sufixo}`, nome: `Grupo do passivo ${sufixo}`, classificacao: 'sintetica', natureza: 'PASSIVO', pai: null },
+    { codigo: `P${sufixo}.1`, nome: plano.creditoNome, classificacao: 'analitica', natureza: 'PASSIVO', pai: `P${sufixo}` },
+  ];
+  for (const conta of contas) {
+    await postar(request, cookieHeader, '/contabilidade/plano', {
+      codigo: conta.codigo, nome: conta.nome, classificacao: conta.classificacao, natureza: conta.natureza,
+      grupo: 'Circulante', contaPaiCodigo: conta.pai, centroCodigo, vigenciaInicio, vigenciaFim: null,
+      justificativa: 'abre a conta da jornada',
+    });
+    await postar(request, cookieHeader, `/contabilidade/plano/${conta.codigo}/revisar-competencia`, {
+      numero: 1, vigenciaInicio, vigenciaFim: null, justificativa: 'revisa a competência',
+    });
+    await postar(request, cookieHeader, `/contabilidade/plano/${conta.codigo}/aprovar`, {
+      numero: 1, justificativa: 'aprova a conta da jornada',
+    });
+  }
+  return plano;
+}
+```
+
+`app/frontend/e2e/e09-t02-politicas-contabilizacao.spec.ts` (substitui o arquivo; `login` de L8–L23 fica igual):
+
+```ts
+import { expect, test, type Page } from '@playwright/test';
+import { competenciaUnica, criarPlanoDaJornada, type PlanoDaJornada } from './helpers/e09-t02-seed';
+
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@alphacarnes.local';
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'Admin@CiTest123456';
+const SENHA_DA_JORNADA = 'senha-da-jornada';
+
+test.describe.configure({ mode: 'serial', timeout: 600_000 });
+
+let plano: PlanoDaJornada;
+
+test.beforeAll(async ({ playwright }) => {
+  const api = await playwright.request.newContext();
+  try {
+    plano = await criarPlanoDaJornada(api);
+  } finally {
+    await api.dispose();
+  }
+});
+
+const ONTEM = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+
+async function login(page: Page, email: string, password: string, baseURL: string) {
+  const resposta = await page.request.post('/api/auth/login', {
+    data: { email, password },
+    headers: { 'Content-Type': 'application/json' },
+  });
+  expect(resposta.ok(), `login falhou: ${resposta.status()}`).toBeTruthy();
+  const cookies = resposta
+    .headersArray()
+    .filter((header) => header.name.toLowerCase() === 'set-cookie')
+    .map((header) => {
+      const [nomeValor] = header.value.split(';');
+      const igual = nomeValor.indexOf('=');
+      return { name: nomeValor.slice(0, igual), value: nomeValor.slice(igual + 1), url: baseURL };
+    });
+  await page.context().addCookies(cookies);
+}
+
+interface ItemApi { codigo: string; situacao: string; aprovadorNome: string | null; simulacaoValor: string | null }
+
+async function politicaPelaApi(page: Page, competencia: string): Promise<ItemApi | undefined> {
+  const resposta = await page.request.get(`/api/contabilidade/politicas?pagina=1&q=${encodeURIComponent(plano.debitoNome)}`);
+  expect(resposta.ok(), `GET politicas: ${resposta.status()}`).toBeTruthy();
+  const corpo = await resposta.json() as { itens: ItemApi[] };
+  return corpo.itens.find((item) => item.codigo === `LIQUIDACAO-${competencia}`);
+}
+
+function postDaAcao(page: Page, acao: 'simular' | 'aprovar') {
+  return page.waitForResponse((resposta) => resposta.request().method() === 'POST'
+    && new RegExp(`/api/contabilidade/politicas/[^/]+/${acao}$`).test(new URL(resposta.url()).pathname));
+}
+
+async function configurarPolitica(page: Page, competencia: string) {
+  await page.getByRole('button', { name: 'Configurar mappings' }).first().click();
+  const debito = page.getByLabel('Conta de débito', { exact: true });
+  await expect(debito.locator('option', { hasText: plano.debitoNome })).toHaveCount(1);
+  await debito.selectOption({ label: plano.debitoNome });
+  await page.getByLabel('Conta de crédito', { exact: true }).selectOption({ label: plano.creditoNome });
+  await page.getByLabel('Centro de custo', { exact: true }).selectOption({ label: plano.centroNome });
+  await page.getByLabel('Tipo de ocorrência', { exact: true }).selectOption({ label: 'Liquidação' });
+  await page.getByLabel('Competência', { exact: true }).fill(competencia);
+  await page.getByLabel('Início de vigência', { exact: true }).fill(ONTEM);
+  await page.getByLabel('Justificativa auditável', { exact: true }).fill('abre a regra');
+  await page.getByRole('button', { name: 'Configurar mappings' }).last().click();
+}
+
+test('administrador configura, simula e outra pessoa aprova', async ({ browser, baseURL }) => {
+  const competencia = competenciaUnica();
+  const admin = await browser.newContext({ baseURL });
+  const page = await admin.newPage();
+  await login(page, ADMIN_EMAIL, ADMIN_PASSWORD, baseURL!);
+
+  // O seed foi feito direto no backend; o BFF da tela precisa enxergar o mesmo sistema.
+  const opcoes = await page.request.get('/api/contabilidade/politicas/opcoes');
+  expect(opcoes.ok()).toBeTruthy();
+  expect(JSON.stringify(await opcoes.json()), 'a tela e o seed falam com backends diferentes').toContain(plano.debitoNome);
+
+  await page.goto('/erp/contabilidade/politicas-de-contabilizacao');
+  await expect(page).not.toHaveURL(/e\d{2}-t\d{2}/i);
+  await expect(page.getByRole('heading', { name: 'Políticas de contabilização' })).toBeVisible();
+  await expect(page.getByText('Provisório')).toBeVisible();
+  await configurarPolitica(page, competencia);
+  await expect(page.getByRole('cell', { name: 'Liquidação', exact: true })).toBeVisible();
+  await expect(page.getByText('LIQUIDACAO')).toHaveCount(0);
+
+  const simulada = postDaAcao(page, 'simular');
+  await page.getByRole('button', { name: 'Simular evento' }).click();
+  await page.getByLabel('Valor', { exact: true }).fill('10,10');
+  await page.getByLabel('Justificativa / observação', { exact: true }).fill('simula o evento');
+  await page.getByRole('button', { name: 'Confirmar' }).click();
+  expect((await simulada).ok()).toBeTruthy();
+  expect((await politicaPelaApi(page, competencia))?.simulacaoValor).toBe('10.10');
+
+  const negada = postDaAcao(page, 'aprovar');
+  await page.getByRole('button', { name: 'Aprovar regra' }).click();
+  await page.getByLabel('Justificativa / observação', { exact: true }).fill('o autor tenta aprovar');
+  await page.getByRole('button', { name: 'Confirmar' }).click();
+  expect((await negada).status()).toBe(422);
+  await expect(page.getByText('aprovador diferente do autor', { exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Aprovado', exact: true })).toHaveCount(0);
+  await expect(page.getByText('concluído com evidência', { exact: true })).toHaveCount(0);
+  expect((await politicaPelaApi(page, competencia))?.situacao).toBe('DRAFT');
+
+  await page.getByRole('tab', { name: 'Regras e validações' }).click();
+  await expect(page.getByText('origem imutável, não lançar sem mapeamento correto, balanceamento exato')).toBeVisible();
+  await page.getByRole('tab', { name: 'Exceções' }).click();
+  await expect(page.locator('p', { hasText: /^Bloqueio \/ exceção: Mapeamento ausente\.$/ })).toHaveCount(1);
+  await expect(page.locator('p', { hasText: /^Bloqueio \/ exceção: Evento duplicado\.$/ })).toHaveCount(1);
+
+  const emailOutra = `contador.${plano.sufixo}@alphacarnes.local`;
+  const criado = await page.request.post('/api/admin/usuarios', {
+    data: { nome: 'Contador provisório', email: emailOutra, password: SENHA_DA_JORNADA, perfis: ['administrador'] },
+  });
+  expect(criado.ok(), `criar administrador: ${criado.status()}`).toBeTruthy();
+  const outra = await browser.newContext({ baseURL });
+  const paginaOutra = await outra.newPage();
+  await login(paginaOutra, emailOutra, SENHA_DA_JORNADA, baseURL!);
+  await paginaOutra.goto('/erp/contabilidade/politicas-de-contabilizacao');
+  await paginaOutra.getByLabel('Buscar registros da lista').fill(plano.debitoNome);
+  await paginaOutra.getByRole('cell', { name: 'Liquidação', exact: true }).click();
+  const aprovada = postDaAcao(paginaOutra, 'aprovar');
+  await paginaOutra.getByRole('button', { name: 'Aprovar regra' }).click();
+  await paginaOutra.getByLabel('Justificativa / observação', { exact: true }).fill('outra pessoa aprova');
+  await paginaOutra.getByRole('button', { name: 'Confirmar' }).click();
+  expect((await aprovada).ok()).toBeTruthy();
+  await expect(paginaOutra.getByRole('cell', { name: 'Aprovado', exact: true })).toBeVisible();
+  await expect(paginaOutra.getByText('concluído com evidência', { exact: true })).toBeVisible();
+  const confirmada = await politicaPelaApi(paginaOutra, competencia);
+  expect(confirmada?.situacao).toBe('APPROVED');
+  expect(confirmada?.aprovadorNome).toBe('Contador provisório');
+  await paginaOutra.reload();
+  await paginaOutra.getByLabel('Buscar registros da lista').fill(plano.debitoNome);
+  await expect(paginaOutra.getByRole('cell', { name: 'Aprovado', exact: true })).toBeVisible();
+  await admin.close();
+  await outra.close();
+});
+
+test('competência repetida mostra evento duplicado e não grava a segunda', async ({ browser, baseURL }) => {
+  const competencia = competenciaUnica();
+  const admin = await browser.newContext({ baseURL });
+  const page = await admin.newPage();
+  await login(page, ADMIN_EMAIL, ADMIN_PASSWORD, baseURL!);
+  await page.goto('/erp/contabilidade/politicas-de-contabilizacao');
+  await configurarPolitica(page, competencia);
+  await expect(page.getByRole('heading', { name: 'Dados principais' })).toBeHidden();
+  await configurarPolitica(page, competencia);
+  await expect(page.getByText('evento duplicado', { exact: true })).toBeVisible();
+  expect((await politicaPelaApi(page, competencia))?.codigo).toBe(`LIQUIDACAO-${competencia}`);
+  await admin.close();
+});
+```
+
+- [ ] **Step 3: Adjust only unstable selectors**
+
+Ajustar só seletores que o componente renderizado exija (por exemplo, o `Confirmar` do modal), sem trocar rótulo da fonte. Não adicionar `retries`, `waitForTimeout`, `docker`, `psql` nem `delete`.
+
+- [ ] **Step 4: Run test to verify it passes, duas vezes seguidas**
+
+```powershell
+npx playwright test e2e/e09-t02-politicas-contabilizacao.spec.ts
+npx playwright test e2e/e09-t02-politicas-contabilizacao.spec.ts
+```
+
+Expected: 2 passed nas duas execuções, no mesmo banco, sem limpeza entre elas. Em seguida `npm test` e `npm run lint` em `app/frontend`.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/frontend/e2e/helpers/e09-t02-seed.ts app/frontend/e2e/e09-t02-politicas-contabilizacao.spec.ts
+git commit -m @"
+test(contabilidade): torna determinística a jornada das políticas e confere o estado pela API
+
+### Descrição Detalhada:
+O spec cria o próprio plano de contas por HTTP com sufixo único, sorteia as competências, usa e-mail único para o segundo administrador, espera cada resposta de simular e aprovar antes de seguir e confere situação, simulação e aprovador pela API por trás do BFF. Um teste compara a tela com o backend do seed e o outro cobre o evento duplicado sem depender do primeiro.
+
+### Motivo da Mudança:
+O Playwright da T02 não ficou verde por dados fixos entre execuções, clique antes da resposta e dependência entre testes. A anomalia de Aprovado exibido com o banco em DRAFT precisa de prova de que a tela e o banco consultado são o mesmo sistema. Causa da anomalia, conforme a evidência do Step 1 (o worker mantém só a frase verdadeira e apaga as outras duas): H1, a tela falou com um Next ou backend reaproveitado de outra worktree, com banco diferente do inspecionado; H3, a leitura do screenshot confundiu a opção Aprovado do filtro com a célula; ou não reproduzida na execução limpa.
+
+### Impacto:
+Só testes e helper de teste. Sem docker exec, sem nome de banco fixo, sem limpeza de dados. Duas execuções seguidas no mesmo banco passam.
+"@
+```
+
+## Task 15: Renumeração da migration da T02 (executar só quando o coordenador indicar)
+
+**Pré-condição explícita.** Esta Task **não** roda com as Tasks 8–14. Só roda quando o coordenador disser, e só depois de: (1) a E09-T01 renumerada para `0049` e a trilha E01 (`0044`..`0048`) estarem integradas na branch por merge normal; (2) nenhum desvio de prefixo no `_journal.json`. Verificação:
+
+```powershell
+Set-Location app/backend
+(Get-Content src/database/migrations/meta/_journal.json -Raw | ConvertFrom-Json).entries | Select-Object -Last 8 idx, tag | Format-Table
+```
+
+Expected: entradas `0044` a `0048` da trilha E01, depois uma entrada `0049_*` da E09-T01 (tag que contém `e09_t01`), e por último `0049_e09_t02_politicas_contabilizacao`. **Parada:** se o último prefixo da T01 não for `0049`, se a trilha E01 não terminar em `0048`, ou se existir um prefixo `0050` já ocupado, parar e devolver ao coordenador. Não renumerar a T01 nem a E01 aqui. O merge pode ter produzido conflito add/add em `meta/0049_snapshot.json` e em `_journal.json` (a T01 renumerada e a T02 antiga disputam o `0049`): a resolução ficou com o coordenador e deixa nesses dois arquivos a versão da T01; esta Task só começa com o merge concluído.
+
+**Files:**
+- Delete: `app/backend/src/database/migrations/0049_e09_t02_politicas_contabilizacao.sql`, `app/backend/src/database/migrations/meta/0049_snapshot.json` **da T02** (o `0049_snapshot.json` que existir depois do merge pode ser o da T01: conferir pelo conteúdo, `git log --follow`, antes de apagar)
+- Modify: `app/backend/src/database/migrations/meta/_journal.json` (remove só a entrada da T02)
+- Create (gerados): `0050_e09_t02_politicas_contabilizacao.sql`, `meta/0050_snapshot.json`
+- Create: `app/backend/test/unit/e09-t02-migration-tag.spec.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+import * as fs from 'fs';
+import * as path from 'path';
+
+const MIGRATIONS = path.resolve(__dirname, '../../src/database/migrations');
+const META = path.join(MIGRATIONS, 'meta');
+
+type Journal = { entries: { idx: number; tag: string }[] };
+type Snapshot = { id: string; prevId: string };
+
+const ler = <T>(arquivo: string): T => JSON.parse(fs.readFileSync(arquivo, 'utf8')) as T;
+
+describe('E09-T02: migration das políticas de contabilização', () => {
+  const journal = ler<Journal>(path.join(META, '_journal.json'));
+  const politica = journal.entries.filter((entrada) => entrada.tag.includes('e09_t02'));
+  const plano = journal.entries.filter((entrada) => entrada.tag.includes('e09_t01'));
+
+  it('tem uma única entrada, com a tag 0050, logo depois da T01', () => {
+    expect(politica).toHaveLength(1);
+    expect(politica[0]?.tag).toBe('0050_e09_t02_politicas_contabilizacao');
+    expect(plano).toHaveLength(1);
+    expect(plano[0]?.tag.startsWith('0049_')).toBe(true);
+    expect(politica[0]!.idx).toBe(plano[0]!.idx + 1);
+  });
+
+  it('os arquivos existem com o prefixo novo e o antigo sumiu', () => {
+    expect(fs.existsSync(path.join(MIGRATIONS, '0050_e09_t02_politicas_contabilizacao.sql'))).toBe(true);
+    expect(fs.existsSync(path.join(META, '0050_snapshot.json'))).toBe(true);
+    expect(fs.existsSync(path.join(MIGRATIONS, '0049_e09_t02_politicas_contabilizacao.sql'))).toBe(false);
+  });
+
+  it('o snapshot 0050 encadeia no snapshot 0049 da T01', () => {
+    const t01 = ler<Snapshot>(path.join(META, '0049_snapshot.json'));
+    const t02 = ler<Snapshot>(path.join(META, '0050_snapshot.json'));
+    expect(t02.prevId).toBe(t01.id);
+  });
+
+  it('cria só as três tabelas da política', () => {
+    const sql = fs.readFileSync(path.join(MIGRATIONS, '0050_e09_t02_politicas_contabilizacao.sql'), 'utf8');
+    const criadas = [...sql.matchAll(/CREATE TABLE "([a-z_]+)"/g)].map((m) => m[1]).sort();
+    expect(criadas).toEqual(['politica_simulacoes', 'politica_versoes', 'politicas_contabilizacao']);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+```powershell
+npx jest test/unit/e09-t02-migration-tag.spec.ts --runInBand
+```
+
+Expected: FAIL (a tag ainda é `0049_e09_t02_...`).
+
+- [ ] **Step 3: Write minimal implementation**
+
+1. Guardar o SQL atual para comparar: `git show HEAD:app/backend/src/database/migrations/0049_e09_t02_politicas_contabilizacao.sql > $env:TEMP/t02-antigo.sql` (pasta fora do repositório).
+2. `git rm` do `.sql` da T02 e do snapshot que pertence a ela; editar o `_journal.json` removendo **somente** a entrada `0049_e09_t02_politicas_contabilizacao`.
+3. Regenerar: `npx drizzle-kit generate --name e09_t02_politicas_contabilizacao` em `app/backend`. Conferir que nasceram `0050_e09_t02_politicas_contabilizacao.sql` e `meta/0050_snapshot.json` e que a tag do journal é exatamente essa. Se o prefixo gerado for outro: **parar** (critério 7); não renomear à mão.
+4. Comparar o SQL novo com `t02-antigo.sql`: só pode diferir em comentários e ordem de statements. DDL fora das três tabelas da T02, ou qualquer `ALTER` de tabela da T01/E01, é desvio da base: **parar**.
+5. Se o generate não emitir os três `CREATE TRIGGER ... set_updated_at()` da D8, acrescentá-los ao final do arquivo novo, iguais aos da D8.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Em um Postgres 18 descartável (nunca um banco com dados que importem):
+
+```powershell
+docker compose up -d postgres
+npm run db:migrate
+npx jest test/unit/e09-t02-migration-tag.spec.ts test/integration/politicas-contabilizacao.e2e-spec.ts --runInBand
+npm run test:cov
+```
+
+Expected: `db:migrate` aplica do zero sem erro, os testes passam, cobertura ≥ 80%.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/database/migrations app/backend/test/unit/e09-t02-migration-tag.spec.ts
+git commit -m @"
+chore(contabilidade): renumera a migration das políticas para 0050
+
+### Descrição Detalhada:
+A migration da T02 sai de 0049 e é regenerada pelo drizzle-kit como 0050_e09_t02_politicas_contabilizacao, depois da 0049 da E09-T01 renumerada e da trilha E01 0044 a 0048. Um teste confere a tag, o encadeamento dos snapshots e que só as três tabelas da política são criadas.
+
+### Motivo da Mudança:
+A E09-T01 passou a ocupar o 0049 na integração com a trilha E01.
+
+### Impacto:
+Vale para bancos descartáveis (local, CI, e2e) que ainda não aplicaram a 0049 da T02. O DDL é o mesmo.
+"@
+```
+
+- [ ] **Step 6: Rollback e restrição de banco**
+
+O `drizzle-kit` registra a migration aplicada por hash e data (`when`), não por tag; a entrada regenerada tem `when` novo. Um banco que já aplicou a `0049_e09_t02` antiga tentaria criar as tabelas de novo e falharia com "relation already exists". Por isso a Task só vale se nenhum banco persistente aplicou a antiga. **Parada:** se o coordenador ou o ambiente indicar um banco compartilhado ou de homologação com a `0049` da T02 aplicada, não executar a Task; devolver ao coordenador, que decide entre recriar o banco ou uma migration de reconciliação. Rollback da Task: `git revert` do commit dela (volta a `0049_e09_t02`), seguido de recriar o banco descartável.
+
 ## Fora desta fatia
 
 - E09-T03 diário, razão e lançamentos. Não criar `lancamentos_contabeis`, `diario_contabil`, `razao_contabil` nem `partidas_contabeis`.
@@ -1726,7 +3260,7 @@ A fonte não decide os pontos abaixo. O plano não inventa a regra de produto; d
 3. **H-E01-11.** O DoD L451 diz “dupla aprovação quando exigida”. `aplicacao.js` L198 desenha Autor, Revisor e Aprovação, sem número. O plano exige uma pessoa diferente do autor e não grava segundo voto nem quórum. Se a aprovação exigir um revisor além dessa pessoa, a fonte não diz quantos.
 4. **Eventos fora do enum.** O Caderno diz “evento fonte” e não lista os eventos. O protótipo fecha o combo em Liquidação, Registro de cobrança, Cancelamento, Estorno e Tarifa. O plano usa só esse enum. Eventos da operação de carnes não estão nomeados.
 5. **Versão 2 de uma regra aprovada.** O dado “versão” existe. A lista de ações não tem “versionar”. O plano só edita rascunho e não abre a versão seguinte. Como nasce a versão 2 fica para o Quality Owner.
-6. **A mesma conta nos dois lados e o valor zero.** A fonte não proíbe débito e crédito na mesma conta, nem proíbe `0.00` quando as somas são iguais. O plano não acrescenta essas recusas. Um valor mínimo, ou a exigência de contas diferentes, seria decisão nova.
+6. **A mesma conta nos dois lados (M7) e o valor zero.** A fonte não proíbe débito e crédito na mesma conta, e o plano não acrescenta essa recusa. Quanto ao valor zero, a r3 **supera** a primeira versão desta frase: o AD-25 item 2 (2026-10-15, Quality Owner) exige valor simulado maior que 0,00, aplicado na Task 10. Exigir contas diferentes continuaria sendo decisão nova.
 
 ## Self-review
 
