@@ -53,7 +53,7 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
   const [historico, setHistorico] = useState<EventoHistorico[]>([]);
   const [preCondicoes, setPreCondicoes] = useState<PreCondicao[]>([]);
   const [alerta, setAlerta] = useState<string | null>(null);
-  const [motivoAcao, setMotivoAcao] = useState('Ação registrada no editor de regras.');
+  const [motivoAcao, setMotivoAcao] = useState('');
   const [drawer, setDrawer] = useState(false);
   const [editando, setEditando] = useState(false);
   const [enquadramentos, setEnquadramentos] = useState<OpcaoCombo[]>([]);
@@ -67,6 +67,8 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
   const [compararAberto, setCompararAberto] = useState(false);
   const [diferencas, setDiferencas] = useState<Diferenca[]>([]);
   const [recarga, setRecarga] = useState(0);
+  const [erroOpcoes, setErroOpcoes] = useState<string | null>(null);
+  const [recargaOpcoes, setRecargaOpcoes] = useState(0);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -97,8 +99,11 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
       setCfops(codigos);
       setBeneficios(bens);
       setClassificacoes(classes);
-    }).catch(() => undefined);
-  }, [recarga]);
+      setErroOpcoes(null);
+    }).catch((erro: unknown) => {
+      setErroOpcoes(erro instanceof Error && erro.message ? `Não foi possível carregar os catálogos do formulário. ${erro.message}` : 'Não foi possível carregar os catálogos do formulário.');
+    });
+  }, [recarga, recargaOpcoes]);
   useEffect(() => conectarRealtime({
     rooms: ['fiscal-regras'],
     onMessage: () => setRecarga((n) => n + 1),
@@ -133,8 +138,13 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
   async function acao(nome: 'submeter' | 'aprovar' | 'aposentar') {
     if (!detalhe) return;
     setAlerta(null);
+    const motivo = motivoAcao.trim();
+    if (motivo.length < 3 || motivo.length > 500) {
+      setAlerta('Informe o motivo da ação (3 a 500 caracteres).');
+      return;
+    }
     try {
-      const atualizado = await regrasApi[nome](detalhe.id, { versao: detalhe.versao, justificativa: motivoAcao.trim() });
+      const atualizado = await regrasApi[nome](detalhe.id, { versao: detalhe.versao, justificativa: motivo });
       setDetalhe(atualizado);
       setRecarga((n) => n + 1);
       toast.success('Regra tributária salva.');
@@ -150,28 +160,14 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
     setRecarga((n) => n + 1);
   }
 
-  async function preencherEnquadramento(id: string) {
-    if (!id) return;
-    try {
-      const ficha = await opcoesDe(`/enquadramentos/${id}`, () => '');
-      void ficha;
-      const detalheEnq = await fetch(`/api/erp/fiscal/enquadramentos/${id}`).then((res) => res.json()) as { operacaoId?: string; cfopId?: string };
-      if (detalheEnq.operacaoId || detalheEnq.cfopId) {
-        setDetalhe((atual) => atual);
-      }
-    } catch {
-      // o servidor recusa a divergência no POST
-    }
-  }
-
-  return (
+    return (
     <div className="grid gap-4">
       <PageHeader
         title="Editor de regras tributárias"
         subtitle="Criar rascunho, adicionar versão, comparar, submeter, aprovar e aposentar. Acesso típico"
         badge={<BadgeProvisorio codigo="H-E01-12" />}
       >
-        <Button type="button" variant="secondary" onClick={() => { window.location.href = '/api/erp/fiscal/regras/exportacao'; }}>Exportar</Button>
+        <Button type="button" variant="secondary" onClick={() => { window.location.href = regrasApi.urlExportacao(filtros); }}>Exportar</Button>
         {podeGerenciar && <Button type="button" onClick={() => { setEditando(false); setDrawer(true); }}>+ Novo registro</Button>}
         <details>
           <summary className="cursor-pointer text-sm">Ações do processo</summary>
@@ -197,8 +193,13 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
           <option value="">Operação fiscal (CFOP)</option>
           {cfops.map((opcao) => <option key={opcao.id} value={opcao.id}>{opcao.rotulo}</option>)}
         </select>
-        <Button type="button" variant="secondary" onClick={() => { window.location.href = '/api/erp/fiscal/regras/exportacao'; }}>Exportar visão</Button>
+        <Button type="button" variant="secondary" onClick={() => { window.location.href = regrasApi.urlExportacao(filtros); }}>Exportar visão</Button>
       </div>
+      {erroOpcoes && (
+        <p role="alert" className="text-sm text-destructive">
+          {erroOpcoes} <Button type="button" variant="secondary" onClick={() => setRecargaOpcoes((n) => n + 1)}>Tentar carregar catálogos novamente</Button>
+        </p>
+      )}
       {erroLista && (
         <p role="alert" className="text-sm text-destructive">
           {erroLista} <Button type="button" variant="secondary" onClick={() => setRecarga((n) => n + 1)}>Tentar novamente</Button>
@@ -255,7 +256,6 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
         onFechar={() => setDrawer(false)}
         onSalvar={salvar}
         onNovoCodigo={setCodigoTipo}
-        onEnquadramento={(id) => { void preencherEnquadramento(id); }}
       />
       <CodigoTributarioDialog aberto={codigoTipo !== null} tipo={codigoTipo} onFechar={() => setCodigoTipo(null)} onConfirmar={criarCodigo} />
       <VersaoDialog

@@ -252,6 +252,8 @@ export const regrasApi = {
     chamar<{ data: LinhaRegra[]; total: number }>('GET', `/regras${qs({ ...filtros, pageSize: 20 })}`),
   contagens: (filtros: FiltrosLista) =>
     chamar<ContagensRegra>('GET', `/regras/contagens${qs({ search: filtros.search, cfopId: filtros.cfopId })}`),
+  urlExportacao: (filtros: FiltrosLista) =>
+    `/api/erp/fiscal/regras/exportacao${qs({ search: filtros.search, cfopId: filtros.cfopId, sort: filtros.sort, dir: filtros.dir })}`,
   obter: (id: string) => chamar<DetalheRegra>('GET', item(id)),
   historico: (id: string) => chamar<EventoHistorico[]>('GET', `${item(id)}/historico`),
   preCondicoes: (id: string) => chamar<PreCondicao[]>('GET', `${item(id)}/pre-condicoes`),

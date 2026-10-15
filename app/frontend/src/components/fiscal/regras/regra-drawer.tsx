@@ -30,7 +30,6 @@ interface Props {
   onFechar?: () => void;
   onSalvar?: (corpo: CorpoRegra) => Promise<string | null>;
   onNovoCodigo?: (tipo: 'beneficio' | 'classificacao') => void;
-  onEnquadramento?: (id: string) => void;
 }
 
 const VAZIO: CorpoRegra = {
@@ -72,7 +71,7 @@ function deDetalhe(detalhe: DetalheRegra): CorpoRegra {
 
 export function RegraDrawer({
   aberto, enquadramentos, beneficios, classificacoes, operacoes = [], cfops = [],
-  detalhe, erro, errosCampo = {}, onFechar = () => undefined, onSalvar, onNovoCodigo, onEnquadramento,
+  detalhe, erro, errosCampo = {}, onFechar = () => undefined, onSalvar, onNovoCodigo,
 }: Props) {
   const retornoFoco = useRetornoFoco(aberto);
   const manterDialogoAninhado = (event: { target: EventTarget | null; preventDefault: () => void }) => {
@@ -99,7 +98,6 @@ export function RegraDrawer({
   async function escolherEnquadramento(id: string) {
     setSujo(true);
     setForm((atual) => ({ ...atual, enquadramentoId: id }));
-    onEnquadramento?.(id);
     if (!id) return;
     try {
       const res = await fetch(`/api/erp/fiscal/enquadramentos/${id}`);

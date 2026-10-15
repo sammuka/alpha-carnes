@@ -362,6 +362,7 @@ test.describe('E01-T03 evidências app × protótipo', () => {
     await selecionarTexto(page, segregada.rotuloOperacao, 'Situação Submetida');
     await abrirAcoes(page);
     await expect(page.getByRole('button', { name: 'Aprovar', exact: true })).toBeEnabled();
+    await page.getByLabel('Motivo da ação').fill('Ação conferida no teste E2E.');
     await page.getByRole('button', { name: 'Aprovar', exact: true }).click();
     await capturar(page, 'app-segregacao.png', page.getByText(SEGREGACAO));
 
@@ -377,6 +378,7 @@ test.describe('E01-T03 evidências app × protótipo', () => {
     await selecionarTexto(pageB, principal.rotuloOperacao, 'Início de vigência 2026-06-01');
     await abrirAcoes(pageB);
     await expect(pageB.getByRole('button', { name: 'Aprovar', exact: true })).toBeEnabled();
+    await pageB.getByLabel('Motivo da ação').fill('Ação conferida no teste E2E.');
     await pageB.getByRole('button', { name: 'Aprovar', exact: true }).click();
     await capturar(pageB, 'app-vigencia-ambigua.png', pageB.getByText(VIGENCIA));
 

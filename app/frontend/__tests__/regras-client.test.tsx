@@ -68,6 +68,7 @@ function envelope(status: number, corpo: Record<string, unknown>): Response {
 let lista = [LINHA];
 let detalhe = DETALHE;
 let proximaAcao: Response | null = null;
+let falhaCfops = false;
 
 function padrao(metodo: string, caminho: string): Response {
   if (caminho.startsWith('/api/admin/parametros')) {
@@ -90,6 +91,7 @@ function padrao(metodo: string, caminho: string): Response {
     return json(200, { data: [{ id: ENQ, codigo: '12' }] });
   }
   if (caminho.startsWith('/api/erp/fiscal/cfops')) {
+    if (falhaCfops) return json(500, { message: 'Serviço indisponível.' });
     return json(200, { data: [{ id: CFOP, codigo: '5102', descricao: 'Venda' }] });
   }
   if (caminho.startsWith('/api/operacoes')) {
@@ -111,6 +113,7 @@ beforeEach(() => {
   lista = [LINHA];
   detalhe = { ...DETALHE };
   proximaAcao = null;
+  falhaCfops = false;
   window.sessionStorage.clear();
   global.fetch = jest.fn(async (entrada: string, init?: RequestInit) => {
     const url = new URL(String(entrada), 'http://localhost');
@@ -179,6 +182,7 @@ describe('regras-client', () => {
     celula.closest('tr')!.focus();
     await user.keyboard('{Enter}');
     await screen.findByRole('button', { name: 'Aprovar' });
+    await user.type(screen.getByLabelText('Motivo da ação'), 'Aprovação conferida.');
     proximaAcao = envelope(422, {
       message: 'A aprovação deve ser feita por usuário diferente de quem submeteu.',
       codigo: 'SEGREGACAO_FUNCAO',
@@ -194,6 +198,7 @@ describe('regras-client', () => {
     celula.closest('tr')!.focus();
     await user.keyboard('{Enter}');
     await screen.findByRole('button', { name: 'Aprovar' });
+    await user.type(screen.getByLabelText('Motivo da ação'), 'Aprovação conferida.');
     proximaAcao = envelope(422, {
       message: 'Já existe versão aprovada deste enquadramento com vigência sobreposta. Nenhuma foi escolhida.',
       codigo: 'VIGENCIA_AMBIGUA',
@@ -217,5 +222,30 @@ describe('regras-client', () => {
     });
     await user.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Versão aprovada ou aposentada não pode ser alterada. Inclua uma versão nova.');
+  });
+
+  it('M10: motivo da ação vem vazio e é obrigatório', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<RegrasClient podeGerenciar podeAprovar />);
+    const celula = await screen.findByText('Compra outubro', { selector: 'td' });
+    celula.closest('tr')!.focus();
+    await user.keyboard('{Enter}');
+    await screen.findByRole('button', { name: 'Aprovar' });
+    expect(screen.getByLabelText('Motivo da ação')).toHaveValue('');
+    (global.fetch as jest.Mock).mockClear();
+    await user.click(screen.getByRole('button', { name: 'Aprovar' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Informe o motivo da ação (3 a 500 caracteres).');
+    expect((global.fetch as jest.Mock).mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toBe(false);
+  });
+
+  it('M5: falha ao carregar os catálogos do formulário aparece e permite tentar de novo', async () => {
+    falhaCfops = true;
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<RegrasClient podeGerenciar podeAprovar />);
+    expect(await screen.findByText(/Não foi possível carregar os catálogos/)).toBeInTheDocument();
+    falhaCfops = false;
+    await user.click(screen.getByRole('button', { name: 'Tentar carregar catálogos novamente' }));
+    expect(await screen.findByRole('option', { name: '5102' })).toBeInTheDocument();
+    expect(screen.queryByText(/Não foi possível carregar os catálogos/)).not.toBeInTheDocument();
   });
 });

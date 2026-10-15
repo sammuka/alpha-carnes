@@ -216,9 +216,11 @@ test.describe('E01-T03 Editor de regras tributárias', () => {
 
     await abrirAcoes(page);
     await expect(page.getByRole('button', { name: 'Submeter', exact: true })).toBeEnabled();
+    await page.getByLabel('Motivo da ação').fill('Ação conferida no teste E2E.');
     await page.getByRole('button', { name: 'Submeter', exact: true }).click();
     await expect(page.getByText('Situação Submetida').first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Aprovar', exact: true })).toBeEnabled();
+    await page.getByLabel('Motivo da ação').fill('Ação conferida no teste E2E.');
     await page.getByRole('button', { name: 'Aprovar', exact: true }).click();
     await expect(page.getByText(SEGREGACAO)).toBeVisible();
     await expect(page.getByText('Situação Submetida').first()).toBeVisible();
@@ -229,6 +231,7 @@ test.describe('E01-T03 Editor de regras tributárias', () => {
     await expect(pageB.getByText('Situação Submetida').first()).toBeVisible();
     await abrirAcoes(pageB);
     await expect(pageB.getByRole('button', { name: 'Aprovar', exact: true })).toBeEnabled();
+    await pageB.getByLabel('Motivo da ação').fill('Ação conferida no teste E2E.');
     await pageB.getByRole('button', { name: 'Aprovar', exact: true }).click();
     await expect(pageB.getByText('Situação Aprovada').first()).toBeVisible();
     await expect(pageB.getByRole('button', { name: 'Editar versão' })).toHaveCount(0);
