@@ -7,7 +7,9 @@ import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { centrosCusto, contasContabeis, contaVersoes } from '../../src/database/schema/contabilidade-plano.schema';
 import { PlanoContasService } from '../../src/modules/contabilidade/plano/plano.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuditoriaService } from '../../src/common/auditoria/auditoria.service';
+import { EVENTOS } from '../../src/realtime/events/eventos';
 import { ultimaVersaoDecidida } from '../../src/modules/contabilidade/plano/vigencia';
 import type { CriarContaDto, EditarContaDto } from '../../src/modules/contabilidade/plano/dto/plano.dto';
 import type { ContaApresentada } from '../../src/modules/contabilidade/plano/plano.service';
@@ -805,5 +807,41 @@ describe('Plano de contas', () => {
       'Conta criada', 'Enviada para revisão', 'Aprovada', 'Nova versão criada',
       'Rascunho editado', 'Rascunho descartado', 'Bloqueada',
     ]);
+  });
+
+  it('lote emite o evento de cada conta só depois do commit', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    for (const codigo of ['A', 'B']) {
+      await service.criar(dtoBase({ codigo, classificacao: 'sintetica' }), userId);
+      await service.revisarCompetencia(codigo, { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    }
+    const emitir = jest.spyOn(app.get(EventEmitter2), 'emit');
+    await service.lote({ acao: 'aprovar', codigos: ['A', 'B'], justificativa: 'aprova em lote', numeroPorCodigo: { A: 1, B: 1 } }, userId);
+    const aprovadas = emitir.mock.calls.filter(([evento]) => evento === EVENTOS.PLANO_CONTA_APROVADA);
+    expect(aprovadas.map(([, payload]) => payload)).toEqual([
+      { codigo: 'A', acao: 'aprovar', situacao: 'APPROVED' },
+      { codigo: 'B', acao: 'aprovar', situacao: 'APPROVED' },
+    ]);
+    emitir.mockClear();
+    await service.criar(dtoBase({ codigo: 'C', classificacao: 'sintetica' }), userId);
+    await service.revisarCompetencia('C', { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    await expect(service.lote({
+      acao: 'bloquear', codigos: ['A', 'C'], justificativa: 'falha no segundo', numeroPorCodigo: { A: 1, C: 1 },
+    }, userId)).rejects.toMatchObject({ status: 422 });
+    expect(emitir.mock.calls.filter(([evento]) => evento === EVENTOS.PLANO_CONTA_BLOQUEADA)).toHaveLength(0);
+    expect((await service.obter('A')).situacao).toBe('APPROVED');
+    emitir.mockRestore();
+  });
+
+  it('lote não devolve uuid', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: 'A', classificacao: 'sintetica' }), userId);
+    await service.revisarCompetencia('A', { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    const res = await request(srv()).post('/contabilidade/plano/lote').set('Cookie', adminCookies)
+      .send({ acao: 'aprovar', codigos: ['A'], justificativa: 'aprova', numeroPorCodigo: { A: 1 } });
+    expect(res.status).toBe(201);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toMatchObject({ codigo: 'A', situacao: 'APPROVED' });
+    expect(JSON.stringify(res.body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
   });
 });

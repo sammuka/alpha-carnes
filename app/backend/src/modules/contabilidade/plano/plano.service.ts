@@ -56,6 +56,12 @@ const CLASSIFICACAO_ROTULO: Record<string, string> = {
 
 const PAGINA = 20;
 
+const EVENTO_DA_ACAO = {
+  'revisar-competencia': { evento: EVENTOS.PLANO_CONTA_REVISADA, acao: 'revisar', situacao: 'REVIEW' },
+  aprovar: { evento: EVENTOS.PLANO_CONTA_APROVADA, acao: 'aprovar', situacao: 'APPROVED' },
+  bloquear: { evento: EVENTOS.PLANO_CONTA_BLOQUEADA, acao: 'bloquear', situacao: 'SUSPENDED' },
+} as const;
+
 export interface ContaApresentada {
   codigo: string;
   nome: string;
@@ -311,7 +317,7 @@ export class PlanoContasService {
     await this.db.transaction(async (tx) => {
       await this.revisarNaTx(tx, codigo, dto.numero, dto.justificativa, usuarioId, dto.vigenciaInicio, dto.vigenciaFim);
     });
-    this.eventEmitter.emit(EVENTOS.PLANO_CONTA_REVISADA, { codigo, acao: 'revisar', situacao: 'REVIEW' });
+    this.emitirAcao('revisar-competencia', codigo);
     return this.obter(codigo);
   }
 
@@ -319,7 +325,7 @@ export class PlanoContasService {
     await this.db.transaction(async (tx) => {
       await this.aprovarNaTx(tx, codigo, dto.numero, dto.justificativa, usuarioId);
     });
-    this.eventEmitter.emit(EVENTOS.PLANO_CONTA_APROVADA, { codigo, acao: 'aprovar', situacao: 'APPROVED' });
+    this.emitirAcao('aprovar', codigo);
     return this.obter(codigo);
   }
 
@@ -327,7 +333,7 @@ export class PlanoContasService {
     await this.db.transaction(async (tx) => {
       await this.bloquearNaTx(tx, codigo, dto.numero, dto.justificativa, usuarioId);
     });
-    this.eventEmitter.emit(EVENTOS.PLANO_CONTA_BLOQUEADA, { codigo, acao: 'bloquear', situacao: 'SUSPENDED' });
+    this.emitirAcao('bloquear', codigo);
     return this.obter(codigo);
   }
 
@@ -388,18 +394,20 @@ export class PlanoContasService {
     return this.obter(codigo);
   }
 
+  private emitirAcao(chave: keyof typeof EVENTO_DA_ACAO, codigo: string) {
+    const { evento, acao, situacao } = EVENTO_DA_ACAO[chave];
+    this.eventEmitter.emit(evento, { codigo, acao, situacao });
+  }
+
   async lote(dto: LoteDto, usuarioId: string) {
-    return this.db.transaction(async (tx) => {
-      const saida = [];
+    await this.db.transaction(async (tx) => {
       for (const codigo of dto.codigos) {
         try {
           const numero = Object.hasOwn(dto.numeroPorCodigo, codigo) ? dto.numeroPorCodigo[codigo] : undefined;
           if (numero === undefined) throw new RegraContabilException('conflito concorrente');
-          if (dto.acao === 'bloquear') saida.push(await this.bloquearNaTx(tx, codigo, numero, dto.justificativa, usuarioId));
-          if (dto.acao === 'aprovar') saida.push(await this.aprovarNaTx(tx, codigo, numero, dto.justificativa, usuarioId));
-          if (dto.acao === 'revisar-competencia') {
-            saida.push(await this.revisarNaTx(tx, codigo, numero, dto.justificativa, usuarioId));
-          }
+          if (dto.acao === 'bloquear') await this.bloquearNaTx(tx, codigo, numero, dto.justificativa, usuarioId);
+          if (dto.acao === 'aprovar') await this.aprovarNaTx(tx, codigo, numero, dto.justificativa, usuarioId);
+          if (dto.acao === 'revisar-competencia') await this.revisarNaTx(tx, codigo, numero, dto.justificativa, usuarioId);
         } catch (erro) {
           if (erro instanceof HttpException) {
             throw new HttpException({ message: textoDe(erro), codigo }, erro.getStatus());
@@ -407,8 +415,9 @@ export class PlanoContasService {
           throw erro;
         }
       }
-      return saida;
     });
+    for (const codigo of dto.codigos) this.emitirAcao(dto.acao, codigo);
+    return Promise.all(dto.codigos.map((codigo) => this.obter(codigo)));
   }
 
   async validar(dto: CriarContaDto, _usuarioId: string) {
