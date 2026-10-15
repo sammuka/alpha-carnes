@@ -320,6 +320,19 @@ const PARAMETROS_SEED = [
       pendencia: 'H-E01-12',
     },
   },
+  {
+    chave: 'fiscal.regras_perfis_autorizados',
+    descricao: 'Perfis com acesso ao editor de regras tributárias',
+    valorJson: {
+      grupo: 'Fiscal',
+      tipo: 'info',
+      titulo: 'Perfis do editor de regras tributárias',
+      texto: 'Somente administrador até decisão sobre os demais perfis.',
+      valor: ['administrador'],
+      provisorio: true,
+      pendencia: 'H-E01-12',
+    },
+  },
 ] as const;
 
 export async function seedParametros(db: Db): Promise<void> {

@@ -63,6 +63,7 @@ const ITENS_PROTOTIPO: [string, string, string][] = [
 const ITENS_ERP: [string, string, string][] = [
   ['FISCAL', 'Empresas, estabelecimentos e regime', '/fiscal/empresas'],
   ['FISCAL', 'Operações fiscais e enquadramentos', '/fiscal/enquadramentos'],
+  ['FISCAL', 'Editor de regras tributárias', '/fiscal/regras'],
 ];
 
 describe('menu canônico v2', () => {
@@ -78,7 +79,7 @@ describe('menu canônico v2', () => {
     expect(semFiscal).toEqual(ITENS_PROTOTIPO);
     expect(semFiscal).toHaveLength(39);
     expect(atual.filter(([grupo]) => grupo === 'FISCAL')).toEqual(ITENS_ERP);
-    expect(atual).toHaveLength(41);
+    expect(atual).toHaveLength(42);
   });
 
   it('o item FISCAL declara a permissão FISCAL_EMPRESAS_LER e o ícone Landmark', () => {
@@ -103,6 +104,15 @@ describe('menu canônico v2', () => {
     const grupos = filtrarMenuPorMenusVisiveis(visiveis, ['FISCAL_EMPRESAS_LER']);
     const hrefs = grupos.flatMap((g) => g.items.map((i) => i.href));
     expect(hrefs).toContain('/fiscal/empresas');
+    expect(hrefs).not.toContain('/fiscal/enquadramentos');
+  });
+
+  it('permissão só FISCAL_EMPRESAS_LER mostra empresas e esconde regras e enquadramentos', () => {
+    const visiveis = ['/fiscal/empresas', '/fiscal/enquadramentos', '/fiscal/regras'];
+    const grupos = filtrarMenuPorMenusVisiveis(visiveis, ['FISCAL_EMPRESAS_LER']);
+    const hrefs = grupos.flatMap((g) => g.items.map((i) => i.href));
+    expect(hrefs).toContain('/fiscal/empresas');
+    expect(hrefs).not.toContain('/fiscal/regras');
     expect(hrefs).not.toContain('/fiscal/enquadramentos');
   });
 

@@ -97,6 +97,12 @@ export const MENU_V2: MenuGroupDef[] = [
         iconKey: 'Scale',
         permissao: 'FISCAL_ENQUADRAMENTOS_LER',
       },
+      {
+        href: '/fiscal/regras',
+        label: 'Editor de regras tributárias',
+        iconKey: 'FileSpreadsheet',
+        permissao: 'FISCAL_REGRAS_LER',
+      },
     ],
   },
   {
