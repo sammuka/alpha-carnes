@@ -78,6 +78,8 @@ const ABAS_APP: Array<{ aba: string; arquivo: string; chave: string }> = [
 async function capturar(page: Page, arquivo: string, chave: Locator): Promise<void> {
   await expect(chave, `elemento-chave ausente antes de ${arquivo}`).toBeVisible({ timeout: 30_000 });
   await chave.scrollIntoViewIfNeeded();
+  // Oculta o indicador do `next dev` (portal "N") sem alterar o produto.
+  await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
   await page.screenshot({ path: path.join(OUT_DIR, arquivo), fullPage: true });
 }
 
