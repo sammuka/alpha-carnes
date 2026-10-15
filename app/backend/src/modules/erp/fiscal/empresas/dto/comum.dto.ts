@@ -15,9 +15,11 @@ export const justificativaSchema = z.string().trim().min(3).max(500).refine(semN
 /** Concorrência otimista (D14). */
 export const versaoSchema = z.number().int().min(1);
 
-/** Inscrição estadual/municipal: remove `.`, `/`, `-` e espaços, maiúsculas, `^[0-9A-Z]{1,20}$`. */
+/** Inscrição estadual/municipal (somente ASCII): remove `.`, `/`, `-` e espaços, maiúsculas, `^[0-9A-Z]{1,20}$`. */
 export const inscricaoSchema = z
   .string()
+  // Recusa não-ASCII antes de normalizar: toUpperCase() converteria ı→I, ß→SS, ſ→S.
+  .refine((v) => /^[\u0000-\u007F]*$/.test(v), 'Inscrição deve ter de 1 a 20 letras ou dígitos.')
   .transform((v) => v.replace(/[./\-\s]/g, '').toUpperCase())
   .pipe(z.string().regex(/^[0-9A-Z]{1,20}$/, 'Inscrição deve ter de 1 a 20 letras ou dígitos.'));
 
