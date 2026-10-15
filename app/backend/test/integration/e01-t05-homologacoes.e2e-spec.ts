@@ -626,6 +626,72 @@ describe('E01-T05 homologações de regras', () => {
     expect(cenario?.atendida).toBe(true);
   });
 
+  it('lista, contagens e exportação respeitam filtros, ordem e escape do CSV', async () => {
+    const { regraId } = await regraAprovada();
+    const aberta = await request(app.getHttpServer())
+      .post('/fiscal/homologacoes')
+      .set('Cookie', admin)
+      .send({ regraId, descricao: 'Revisão; com "aspas" para exportar', justificativa: JUSTIFICATIVA });
+    expect(aberta.status).toBe(201);
+    const busca = { search: 'com "aspas" para exportar', situacao: 'EM_REVISAO' };
+    const contagens = await request(app.getHttpServer()).get('/fiscal/homologacoes/contagens').query(busca).set('Cookie', admin);
+    expect(contagens.status).toBe(200);
+    expect(contagens.body).toMatchObject({ total: 1, emRevisao: 1, aprovadas: 0, rejeitadas: 0, publicadas: 0 });
+    for (const sort of ['enquadramento', 'vigenciaInicio', 'usuario', 'aprovador', 'descricao']) {
+      const lista = await request(app.getHttpServer())
+        .get('/fiscal/homologacoes')
+        .query({ ...busca, sort, dir: 'desc' })
+        .set('Cookie', admin);
+      expect(lista.status).toBe(200);
+      expect(lista.body.data[0]).toMatchObject({ situacao: 'Em revisão', aprovador: '' });
+    }
+    const csv = await request(app.getHttpServer()).get('/fiscal/homologacoes/exportacao').query(busca).set('Cookie', admin);
+    expect(csv.status).toBe(200);
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.text).toContain('Enquadramento fiscal;Início de vigência;');
+    expect(csv.text).toContain('"Revisão; com ""aspas"" para exportar"');
+  });
+
+  it('id inexistente devolve 404 em todas as rotas por id e a regra sem fim de vigência abre', async () => {
+    const inexistente = '01a14089-0000-7000-8000-000000000000';
+    const corpo = { versao: 1, justificativa: 'Decisão de usuário diferente de quem submeteu.' };
+    for (const rota of ['', '/historico', '/diff', '/pre-condicoes']) {
+      const res = await request(app.getHttpServer()).get(`/fiscal/homologacoes/${inexistente}${rota}`).set('Cookie', admin);
+      expect(res.status).toBe(404);
+    }
+    for (const rota of ['aprovar', 'rejeitar', 'publicar']) {
+      const res = await request(app.getHttpServer()).post(`/fiscal/homologacoes/${inexistente}/${rota}`).set('Cookie', adminB).send(corpo);
+      expect(res.status).toBe(404);
+    }
+    const cenario = await request(app.getHttpServer())
+      .post(`/fiscal/homologacoes/${inexistente}/cenarios`)
+      .set('Cookie', adminB)
+      .send({ ...corpo, simulacaoId: inexistente });
+    expect(cenario.status).toBe(404);
+    const aberta404 = await request(app.getHttpServer())
+      .post('/fiscal/homologacoes')
+      .set('Cookie', admin)
+      .send({ regraId: inexistente, descricao: DESCRICAO, justificativa: JUSTIFICATIVA });
+    expect(aberta404.status).toBe(404);
+
+    const { regraId } = await regraAprovada({ vigenciaFim: null });
+    const aberta = await abrir(admin, regraId);
+    expect(aberta.status).toBe(201);
+    const diff = await request(app.getHttpServer()).get(`/fiscal/homologacoes/${aberta.body.id}/diff`).set('Cookie', admin);
+    expect(diff.status).toBe(200);
+    expect(JSON.stringify(diff.body)).toContain('Sem fim de vigência');
+    const aprovada = await decidir('aprovar', adminB, aberta.body.id as string, 1, 'Homologação conferida por outro usuário.');
+    expect(aprovada.status).toBe(200);
+    const lista = await request(app.getHttpServer())
+      .get('/fiscal/homologacoes')
+      .query({ search: DESCRICAO, situacao: 'APROVADA' })
+      .set('Cookie', admin);
+    expect(lista.status).toBe(200);
+    expect(lista.body.data.some((linha: { aprovador: string }) => linha.aprovador !== '')).toBe(true);
+    const csv = await request(app.getHttpServer()).get('/fiscal/homologacoes/exportacao').query({ situacao: 'APROVADA' }).set('Cookie', admin);
+    expect(csv.text).toContain('Aprovada;');
+  });
+
   it('quem só tem leitura não abre revisão', async () => {
     const { regraId } = await regraAprovada();
     const res = await abrir(leitor, regraId);
