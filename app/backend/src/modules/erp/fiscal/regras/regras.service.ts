@@ -13,7 +13,10 @@ import {
   enquadramentosFiscais,
   operacoes,
   regrasTributarias,
+  ROTULOS_IBS_CST,
   ROTULOS_ICMS_CST,
+  ROTULOS_IPI_CST,
+  ROTULOS_PIS_CST,
   ROTULOS_SITUACAO_REGRA,
   usuarios,
 } from '../../../../database/schema';
@@ -29,6 +32,7 @@ import {
   type Tx,
 } from '../empresas/fiscal-comum';
 import type { AcaoRegraDto, AtualizarRegraDto, CriarRegraDto, ListarRegrasQuery, NovaVersaoDto } from './dto/regra.dto';
+import { formatarPercentualPtBr } from './percentual';
 import { recusarAcao, recusarEdicao, type SituacaoRegra } from './regra-transicao';
 
 type Db = NodePgDatabase<typeof schema>;
@@ -154,6 +158,34 @@ export class RegrasTributariasService {
       tratamentoIcms: ROTULOS_ICMS_CST[linha.icmsCst as keyof typeof ROTULOS_ICMS_CST],
       autor: linha.autor ?? null,
       aprovador: linha.aprovador ?? null,
+    };
+  }
+
+  async comparar(id: string, com: string) {
+    const antes = await this.carregarComparavel(id);
+    const depois = await this.carregarComparavel(com);
+    if (antes.codigo !== depois.codigo) {
+      regraViolada('REGRAS_DISTINTAS', 'A comparação exige duas versões do mesmo código.');
+    }
+    const campos = [
+      ['Tratamento ICMS', antes.tratamentoIcms, depois.tratamentoIcms],
+      ['Redução de base do ICMS (%)', formatarPercentualPtBr(razao(antes.pRedBc)), formatarPercentualPtBr(razao(depois.pRedBc))],
+      ['Alíquota (%)', formatarPercentualPtBr(razao(antes.pIcms)), formatarPercentualPtBr(razao(depois.pIcms))],
+      ['Benefício fiscal', antes.beneficio, depois.beneficio],
+      ['Tratamento IPI', antes.tratamentoIpi, depois.tratamentoIpi],
+      ['Tratamento PIS/COFINS', antes.tratamentoPis, depois.tratamentoPis],
+      ['Tratamento IBS/CBS', antes.tratamentoIbs, depois.tratamentoIbs],
+      ['Classificação IBS/CBS', antes.classificacao, depois.classificacao],
+      ['Início de vigência', antes.vigenciaInicio, depois.vigenciaInicio],
+      ['Fim de vigência', antes.vigenciaFim ?? 'Sem fim de vigência', depois.vigenciaFim ?? 'Sem fim de vigência'],
+    ] as const;
+    return {
+      codigo: antes.codigo,
+      numeroVersaoAntes: antes.numeroVersao,
+      numeroVersaoDepois: depois.numeroVersao,
+      diferencas: campos
+        .filter(([, valorAntes, valorDepois]) => valorAntes !== valorDepois)
+        .map(([campo, valorAntes, valorDepois]) => ({ campo, antes: valorAntes, depois: valorDepois })),
     };
   }
 
@@ -440,6 +472,36 @@ export class RegrasTributariasService {
       }
     }
     conflito('VERSAO_ABERTA', 'Já existe versão em rascunho ou submetida para este código.');
+  }
+
+  private async carregarComparavel(id: string) {
+    const [linha] = await this.db
+      .select({
+        codigo: regrasTributarias.codigo,
+        numeroVersao: regrasTributarias.numeroVersao,
+        icmsCst: regrasTributarias.icmsCst,
+        pRedBc: regrasTributarias.pRedBc,
+        pIcms: regrasTributarias.pIcms,
+        ipiCst: regrasTributarias.ipiCst,
+        pisCst: regrasTributarias.pisCst,
+        ibsCst: regrasTributarias.ibsCst,
+        vigenciaInicio: regrasTributarias.vigenciaInicio,
+        vigenciaFim: regrasTributarias.vigenciaFim,
+        beneficio: beneficiosFiscais.descricao,
+        classificacao: classificacoesIbsCbs.descricao,
+      })
+      .from(regrasTributarias)
+      .innerJoin(beneficiosFiscais, eq(beneficiosFiscais.id, regrasTributarias.beneficioFiscalId))
+      .innerJoin(classificacoesIbsCbs, eq(classificacoesIbsCbs.id, regrasTributarias.classificacaoIbsCbsId))
+      .where(and(eq(regrasTributarias.id, id), isNull(regrasTributarias.deletedAt)));
+    if (!linha) throw new NotFoundException('Regra tributária não encontrada');
+    return {
+      ...linha,
+      tratamentoIcms: ROTULOS_ICMS_CST[linha.icmsCst as keyof typeof ROTULOS_ICMS_CST],
+      tratamentoIpi: ROTULOS_IPI_CST[linha.ipiCst as keyof typeof ROTULOS_IPI_CST],
+      tratamentoPis: ROTULOS_PIS_CST[linha.pisCst as keyof typeof ROTULOS_PIS_CST],
+      tratamentoIbs: ROTULOS_IBS_CST[linha.ibsCst as keyof typeof ROTULOS_IBS_CST],
+    };
   }
 
   private async obter(tx: Tx, id: string): Promise<Linha> {

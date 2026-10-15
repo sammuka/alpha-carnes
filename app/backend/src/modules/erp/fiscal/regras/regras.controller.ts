@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { z } from 'zod';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser, type CurrentUserPayload } from '../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
@@ -20,6 +21,8 @@ import {
 } from './dto/regra.dto';
 import { RegrasTributariasService } from './regras.service';
 
+const compararQuerySchema = z.object({ com: uuidSchema });
+
 @SkipThrottle()
 @Controller('fiscal')
 @UseGuards(JwtAuthGuard, RbacGuard)
@@ -30,6 +33,15 @@ export class RegrasController {
   @RequirePermissoes('FISCAL_REGRAS_LER')
   listar(@Query(new ZodValidationPipe(listarRegrasSchema)) query: ListarRegrasQuery) {
     return this.regras.listar(query);
+  }
+
+  @Get('regras/:id/comparar')
+  @RequirePermissoes('FISCAL_REGRAS_LER')
+  comparar(
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Query(new ZodValidationPipe(compararQuerySchema)) query: { com: string },
+  ) {
+    return this.regras.comparar(id, query.com);
   }
 
   @Get('regras/:id/historico')
