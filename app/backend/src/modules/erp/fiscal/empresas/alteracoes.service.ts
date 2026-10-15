@@ -145,7 +145,7 @@ export class AlteracoesService {
       if (estab.situacao !== 'APPROVED' || estab.versao !== atual.versaoBase) {
         conflito(
           'ALTERACAO_DESATUALIZADA',
-          'O cadastro mudou depois desta proposta. Descarte e crie uma nova.',
+          'O cadastro mudou depois desta proposta. Descarte o rascunho ou rejeite a revisão e crie uma nova.',
         );
       }
       const [aplicado] = await tx

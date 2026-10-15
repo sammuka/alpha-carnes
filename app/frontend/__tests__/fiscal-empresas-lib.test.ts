@@ -102,7 +102,7 @@ describe('cliente HTTP do BFF', () => {
   it('mapeia os códigos de erro para as mensagens fixas do contrato', async () => {
     const casos: Array<[string, string]> = [
       ['SEGREGACAO_FUNCAO', 'A aprovação deve ser feita por usuário diferente de quem submeteu.'],
-      ['ALTERACAO_DESATUALIZADA', 'O cadastro mudou depois desta proposta. Descarte e crie uma nova.'],
+      ['ALTERACAO_DESATUALIZADA', 'O cadastro mudou depois desta proposta. Descarte o rascunho ou rejeite a revisão e crie uma nova.'],
       ['CONFLITO_CONCORRENTE', 'O registro foi alterado por outro usuário. Recarregue para continuar.'],
     ];
     for (const [codigo, mensagem] of casos) {

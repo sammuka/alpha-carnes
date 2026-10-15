@@ -243,7 +243,7 @@ export function rotuloRegime(regime: RegimeVigente | null | undefined): string {
 /** Mensagens fixas do contrato visível, independentes do texto devolvido pelo backend. */
 const MENSAGENS_POR_CODIGO: Record<string, string> = {
   SEGREGACAO_FUNCAO: 'A aprovação deve ser feita por usuário diferente de quem submeteu.',
-  ALTERACAO_DESATUALIZADA: 'O cadastro mudou depois desta proposta. Descarte e crie uma nova.',
+  ALTERACAO_DESATUALIZADA: 'O cadastro mudou depois desta proposta. Descarte o rascunho ou rejeite a revisão e crie uma nova.',
   CONFLITO_CONCORRENTE: 'O registro foi alterado por outro usuário. Recarregue para continuar.',
 };
 
