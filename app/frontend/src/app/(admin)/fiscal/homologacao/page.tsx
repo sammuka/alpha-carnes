@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { HomologacoesClient } from '@/components/fiscal/homologacoes/homologacoes-client';
 import { getMe } from '@/lib/auth';
 
 export default async function HomologacaoPage() {
@@ -11,5 +12,10 @@ export default async function HomologacaoPage() {
       </p>
     );
   }
-  return <h1>Painel de alterações e homologação de regras</h1>;
+  return (
+    <HomologacoesClient
+      podeGerenciar={user.permissoes.includes('FISCAL_HOMOLOGACOES_GERENCIAR')}
+      podeAprovar={user.permissoes.includes('FISCAL_HOMOLOGACOES_APROVAR')}
+    />
+  );
 }
