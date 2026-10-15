@@ -2,7 +2,23 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Entregar a tela Plano de contas e centros de custo (`/erp/contabilidade/e09-t01`) com cadastro hierárquico de contas, centros de custo, vigência, situação, versionamento, revisão de competência, aprovação, bloqueio e mapeamento de lançamentos, sem diário, razão, SPED, apuração ou tela fiscal.
+## Histórico de revisões
+
+| Rev. | Data | Autor | Motivo |
+|---|---|---|---|
+| r1 | 2026-10-15 | planner | versão inicial da fatia E09-T01 |
+| r2 | 2026-10-15 | planner (nova instância) | Portão 1 r1 `ajustar` (6 achados; veredito `aa2b94b`, plano r1 `f0043b6`); ajuste cirúrgico: nenhum outro ponto do plano muda |
+
+| Achado r1 | Correção r2 |
+|---|---|
+| Rota visível `/erp/contabilidade/e09-t01` (Goal, D7, Task 1, páginas, Playwright). Caderno B L601 proíbe nomenclatura de épico na UI. O teste da Task 6 só lia `document.body` | Segmento da App Router e href: `/erp/contabilidade/plano-de-contas`. Slug de `slug()` (aplicacao.js L13) sobre "Plano de contas" (catalogo.js L721; Caderno B L436), sem `E##-T##`. O prefixo `/erp/contabilidade/` de catalogo.js L726 permanece. A chave `e09-t01-plano` (D6) continua interna e não é renderizada. O `it` da Task 6 recusa `e09-t01` no texto |
+| Rótulo abreviado em dois botões. catalogo.js L729 e aplicacao.js L40–L43 e L369 produzem um só: `Bloquear conta e mapear lançamentos` | D4 e a Task 6 usam esse texto integral na faixa (L369) e no drawer (L403–L405). `bloquear` e `mapear` continuam verbos distintos no service. Modal: `Justificativa / observação` (aplicacao.js L496). O drawer permanece `Motivo da alteração` (aplicacao.js L436). Aba Exceções em title case (aplicacao.js L14 e L203): `Conta desativada`, `Mudança de classificação após fechamento`. HTTP 422 segue o Caderno B L440, em minúsculas |
+| Versionar `SUSPENDED` nascia `DRAFT` (D4) contra o Review Focus 1 | Conta suspensa não versiona: HTTP 422 `conta desativada` e nenhuma linha nova. D4 alinhado. O `it` que falha primeiro está na Task 4 |
+| Task 1 não atualizava o que o RBAC já trava | Entram `perfil-permissoes.snapshot.json` (`perfil-permissoes-snapshot.spec.ts` L15–L18) e `perfil-menus.snapshot.json` (`menu-rbac.test.ts` L12–L17). Totais lidos nos testes: 40 rotas e 127 pares (126 + 1 só do administrador; L167–L169, L176–L180, L279–L280). O `it` de `menu-v2.test.ts` L66–L69 é substituído, e o `GRUPOS` de L6–L16 / o `it` de L62 passam a 10 grupos. `shell-ds.spec.ts` L29 e L86 travam os mesmos 9 grupos. `catalogo()` (`perfis.service.ts` L81–L84) ganha o prefixo `CONTABILIDADE_`. O array do gestor não recebe a rota: administrador espalha `MENUS_CANONICOS` (`menus-canonicos.ts` L61); o gestor é lista própria (L89–L90) e D7 não concede a rota a outro perfil. `GRUPOS_ESPERADOS.gestor` fica sem `CONTABILIDADE` |
+| Tasks 3, 4, 5 e 6 descreviam em prosa `loteSchema`, `acaoSchema`, criar/editar/versionar/mapear/lote, o broadcast e o client depois do `h1`. O Step 2 da Task 4 apontava o spec unitário para um corpo que usa `db.execute` do harness e2e | Corpo literal nesses pontos. `broadcast(room, type, payload)` como `realtime.hub.ts` L37. O comando da Task 4 roda `plano-contas.e2e-spec.ts` |
+| O `it` da Task 2 anunciava vigência invertida e o insert só enviava natureza `OUTRA` | O mesmo `it` faz o segundo insert com `vigenciaFim` anterior a `vigenciaInicio` e `rejects` |
+
+**Goal:** Entregar a tela Plano de contas e centros de custo (`/erp/contabilidade/plano-de-contas`) com cadastro hierárquico de contas, centros de custo, vigência, situação, versionamento, revisão de competência, aprovação, bloqueio e mapeamento de lançamentos, sem diário, razão, SPED, apuração ou tela fiscal.
 
 **Architecture:** Módulo NestJS `contabilidade/plano` é a autoridade das contas e dos centros de custo (Princípio III). A conta guarda o código imutável; cada versão guarda nome, classificação sintética/analítica, natureza, grupo, conta pai, centro de custo, vigência e situação. Mutações rodam em uma transação com `AuditoriaService.registrar` e só então emitem evento de domínio. O BFF remove identificadores internos antes do browser. A UI copia os rótulos do protótipo `docs/prototipos/erp-integrado-v1/` e o selo Provisório da persona que não é perfil canônico.
 
@@ -64,7 +80,7 @@ O formulário Dados principais (`componentes.js` L5839–L5848) mostra os widget
 | `vigenciaInicio` | `Início de vigência` | `input type="date"`, obrigatório | `componentes.js` L154–L164 |
 | `vigenciaFim` | `Fim de vigência` | `input type="date"`, opcional | `componentes.js` L166–L176 |
 | `situacao` | `Situação` | combo fechado | `componentes.js` L178–L188 e enum L1688–L1708 |
-| `justificativa` | `Motivo da alteração` | textarea obrigatória | `aplicacao.js` L436 |
+| `justificativa` | `Motivo da alteração` no drawer; `Justificativa / observação` no modal de ação | textarea obrigatória | drawer: `aplicacao.js` L436. Modal: `aplicacao.js` L496. Não trocar um pelo outro |
 
 Natureza, valor interno e rótulo: `ATIVO`/`Ativo`, `PASSIVO`/`Passivo`, `RECEITA`/`Receita`, `DESPESA`/`Despesa`, `CUSTO`/`Custos`.
 
@@ -95,16 +111,16 @@ Justificativa obrigatória em toda mutação (`componentes.js` L5892–L5895; `a
 | editar | `Editar versão` | `DRAFT` | `DRAFT` | altera a versão rascunho |
 | revisar | `Revisar competência` | `DRAFT` ou `REJECTED` | `REVIEW` | exige `vigenciaInicio` e motivo |
 | aprovar | `Aprovar` | `REVIEW` | `APPROVED` | uma aprovação; não há segundo perfil (D7) |
-| bloquear | `Bloquear conta` | `APPROVED` | `SUSPENDED` | conta deixa o combo |
-| versionar | `Versionar` | `APPROVED` ou `SUSPENDED` | nova linha `DRAFT` | a versão anterior permanece |
-| mapear | `Mapear lançamentos` | `APPROVED` e `analitica` | mesma situação | só auditoria se o centro enviado é o já gravado |
+| bloquear | verbo de backend; o controle visível é o integral abaixo | `APPROVED` | `SUSPENDED` | conta deixa o combo |
+| versionar | `Versionar` | `APPROVED` | nova linha `DRAFT` | a versão anterior permanece. Origem `SUSPENDED`: HTTP 422 `conta desativada` e nenhuma linha nova (Review Focus 1) |
+| mapear | verbo de backend; o controle visível é o integral abaixo | `APPROVED` e `analitica` | mesma situação | só auditoria se o centro enviado é o já gravado |
 | validar | `Validar pré-condições` | qualquer | sem escrita | devolve mensagens |
 | histórico | `Consultar histórico` | — | — | abre a aba Histórico |
 | exportar | `Exportar` e `Exportar visão` | — | — | CSV das colunas da grade |
 
-`actionNames` (`aplicacao.js` L40–L43) junta `bloquear conta e mapear lançamentos` num botão só porque o Caderno B L438 não põe vírgula antes do `e`. A lista funcional tem os dois verbos. A UI mostra os dois botões `Bloquear conta` e `Mapear lançamentos` dentro de `Ações do processo`, mais os botões soltos na faixa `Ações do domínio — previstas no contrato completo` (`aplicacao.js` L369). O quarto item não executa bloqueio e mapeamento no mesmo clique.
+`actionNames` (`aplicacao.js` L40–L43) não parte `bloquear conta e mapear lançamentos`: o split é na vírgula, e o Caderno B L438 não põe vírgula antes do `e`. `titleCase` (`aplicacao.js` L14) aplicado na faixa (`aplicacao.js` L369) e no drawer (`aplicacao.js` L403–L405) produz um controle com o texto integral `Bloquear conta e mapear lançamentos`. Não existem os botões `Bloquear conta` e `Mapear lançamentos`. A separação dos verbos fica no backend (linhas `bloquear` e `mapear` desta tabela). O clique da faixa abre o modal e o `Confirmar` faz `POST .../bloquear`. O `Abrir decisão →` do mesmo texto, dentro de `Ações do processo`, faz `POST .../mapear`. Os dois posts não saem do mesmo clique.
 
-Editar, revisar ou aprovar versão `SUSPENDED` responde 422 `conta desativada`. Versionar a partir de `SUSPENDED` é permitido e nasce `DRAFT`. Mapear versão suspensa, sintética ou não aprovada responde 422. Se o centro enviado no mapear difere do centro da versão aprovada, responde 422 `mudança de classificação após fechamento` e não grava; o caminho é `Versionar`.
+Editar, revisar, aprovar ou versionar versão `SUSPENDED` responde 422 `conta desativada` e não grava. Versionar suspensa não nasce `DRAFT`. Mapear versão suspensa, sintética ou não aprovada responde 422. Se o centro enviado no mapear difere do centro da versão aprovada, responde 422 `mudança de classificação após fechamento` e não grava; o caminho é `Versionar`. A mensagem HTTP 422 permanece a do Caderno B L440 (`conta desativada`, `mudança de classificação após fechamento`), em minúsculas. O title case vale só para a aba Exceções (D6).
 
 Não existe ação `Rejeitar` no Caderno B L438. `REJECTED` só é alcançado por `POST .../rejeitar` inexistente: o worker não cria essa rota. O rótulo `Rejeitado` permanece no combo porque está no enum. Nenhuma transição desta fatia grava `REJECTED`. Uma versão que já esteja `REJECTED` (não há como nascer assim) pode ir a `REVIEW` pela tabela acima; o teste não fabrica `REJECTED` por SQL de produto, só por inserção direta no teste de banco para travar a transição.
 
@@ -125,7 +141,7 @@ Abas, nesta ordem (`aplicacao.js` L7): `Ficha e campos`, `Movimentações`, `Reg
 - Ficha e campos: campos D2 da versão mais recente e a trilha `Responsável` com o nome do usuário (`aplicacao.js` L190). Sem UUID.
 - Movimentações: cabeçalhos `Acontecimento`, `Origem`, `Efeito`, `Situação` (`aplicacao.js` L195). Linhas reais da auditoria da conta. Sem as três linhas fictícias de SEFAZ/banco.
 - Regras e validações: o texto literal `partida dobrada, níveis hierárquicos válidos, competência obrigatória` (`catalogo.js` L730).
-- Exceções: `conta desativada` e `mudança de classificação após fechamento` (`catalogo.js` L731), cada uma no bloco `Bloqueio / exceção:` de `aplicacao.js` L203.
+- Exceções: dois blocos `Bloqueio / exceção:` (`aplicacao.js` L203) com o `titleCase` de `aplicacao.js` L14 sobre cada item de `catalogo.js` L731: `Conta desativada` e `Mudança de classificação após fechamento`. A mensagem HTTP 422 não usa esse title case; continua a do Caderno B L440.
 - Histórico: acontecimento, data `pt-BR` e nome do responsável. Sem GUID (`aplicacao.js` L210).
 - Integrações: a aba existe. Não renderizar os botões `Central de Integrações`, `Conciliação API × arquivos` e `Agendamentos` (`aplicacao.js` L218): as rotas não existem nesta ponta. Texto da aba: `Esta tela não chama serviço externo.`
 - Aceite e testes: os oito itens de `aplicacao.js` L223–L232, como lista somente leitura, sem gravar aceite.
@@ -138,7 +154,7 @@ Placeholder da busca (`aplicacao.js` L170): `Pesquisar descrição ou referênci
 
 Sai da UI, por Princípio I.2(a): `DADOS FICTÍCIOS`, `PROTÓTIPO`, `SIMULAR PERFIL`, KPIs `Itens no cenário` / `Ambiente em tela`, painel com `R$ 5.000,00` (`aplicacao.js` L350) e qualquer valor inventado.
 
-Voltar restaura filtro, ordenação, página e rascunho do formulário a partir de `sessionStorage` chave `e09-t01-plano`. Se o rascunho difere do último salvo, `window.confirm` com o texto `Há alterações não salvas. Deseja sair?`. Cancelar permanece na ficha.
+Voltar restaura filtro, ordenação, página e rascunho do formulário a partir de `sessionStorage` chave `e09-t01-plano`. A chave é interna: nenhum JSX, grade, toast, aba ou atributo visível a imprime (Caderno B L601). Se o rascunho difere do último salvo, `window.confirm` com o texto `Há alterações não salvas. Deseja sair?`. Cancelar permanece na ficha.
 
 Seleção múltipla (`componentes.js` L5869). Ação em lote envia a lista de códigos numa transação só. A primeira falha desfaz o lote inteiro e devolve 422 ou 409 da primeira conta, com o código de negócio no campo `codigo`.
 
@@ -146,7 +162,7 @@ Seleção múltipla (`componentes.js` L5869). Ação em lote envia a lista de c�
 
 Fonte: AD-04 L11; AD-18 L25 item 5; constituição L93–L94; `catalogo.js` L16 e L720–L727; ADR-ERP-024 L61.
 
-- Rota nova: `/erp/contabilidade/e09-t01`. Rótulo do item: `Plano de contas e centros de custo`. Grupo: `CONTABILIDADE`. `iconKey`: `FileText` (já presente em `ICON_MAP`; o protótipo usa bullet, não nomeia ícone lucide).
+- Rota nova: `/erp/contabilidade/plano-de-contas`. O segmento `e09-t01` de catalogo.js L726 não entra no href nem na barra de endereço (Caderno B L601). O slug `plano-de-contas` é o nome de negócio do título (catalogo.js L721; Caderno B L436), sem `E##-T##`. Rótulo do item: `Plano de contas e centros de custo`. Grupo: `CONTABILIDADE`. `iconKey`: `FileText` (já presente em `ICON_MAP`; o protótipo usa bullet, não nomeia ícone lucide).
 - `administrador` recebe a rota porque `MENUS_VISIVEIS_POR_PERFIL.administrador` é `[...MENUS_CANONICOS]`. Nenhum outro perfil ganha a rota no mapa.
 - `definirMenusSchema` passa de `.max(39)` para `.max(40)` (`perfil.dto.ts` L10), senão o administrador não consegue persistir a lista com a rota nova.
 - Os testes que exigem comprimento 39 passam a exigir: as 39 rotas antigas iguais e na mesma ordem; o total 40; a rota nova é a primeira de `CONTABILIDADE`.
@@ -210,8 +226,8 @@ O controller HTTP e o CSV devolvem `apresentar()`, que omite `id`, `contaId`, `c
 - Modify: `app/frontend/__tests__/menu-v2.test.ts`
 - Modify: `app/frontend/__tests__/menu-rbac.test.ts`
 - Modify: `app/backend/test/integration/perfis-menus.e2e-spec.ts`
-- Create: `app/frontend/src/app/(admin)/erp/contabilidade/e09-t01/page.tsx`
-- Create: `app/frontend/src/app/(admin)/erp/contabilidade/e09-t01/plano-contas-client.tsx`
+- Create: `app/frontend/src/app/(admin)/erp/contabilidade/plano-de-contas/page.tsx`
+- Create: `app/frontend/src/app/(admin)/erp/contabilidade/plano-de-contas/plano-contas-client.tsx`
 - Create: `app/frontend/src/app/api/contabilidade/plano/route.ts`
 - Create: `app/frontend/src/app/api/contabilidade/plano/exportar/route.ts`
 - Create: `app/frontend/src/app/api/contabilidade/plano/lote/route.ts`
@@ -226,15 +242,20 @@ O controller HTTP e o CSV devolvem `apresentar()`, que omite `id`, `contaId`, `c
 **Files:**
 - Modify: `app/backend/src/common/rbac/permissoes.ts`
 - Modify: `app/backend/src/common/rbac/menus-canonicos.ts`
+- Modify: `app/backend/src/common/rbac/perfil-permissoes.snapshot.json`
+- Modify: `app/backend/src/common/rbac/perfil-menus.snapshot.json`
 - Modify: `app/backend/src/modules/perfis/dto/perfil.dto.ts`
+- Modify: `app/backend/src/modules/perfis/perfis.service.ts` — `catalogo()` (`perfis.service.ts` L81–L84) lança se o prefixo não tem módulo
 - Modify: `app/frontend/src/lib/menu-v2.ts`
 - Modify: `app/frontend/__tests__/menu-v2.test.ts`
 - Modify: `app/frontend/__tests__/menu-rbac.test.ts`
+- Modify: `app/frontend/e2e/shell-ds.spec.ts` — `GRUPOS` L29–L39 e o teste L86 travam 9 grupos
+- Modify: `app/backend/test/integration/perfis-menus.e2e-spec.ts`
 - Create: `app/backend/test/unit/permissoes-e09-t01.spec.ts`
 
 **Interfaces:**
 - Consumes: `PERMISSOES`, `MAPA_PERFIL_PERMISSOES`, `MENUS_CANONICOS`, `MENU_V2`.
-- Produces: `PERMISSOES.CONTABILIDADE_PLANO_LER`, `PERMISSOES.CONTABILIDADE_PLANO_GERENCIAR`, rota `/erp/contabilidade/e09-t01`.
+- Produces: `PERMISSOES.CONTABILIDADE_PLANO_LER`, `PERMISSOES.CONTABILIDADE_PLANO_GERENCIAR`, rota `/erp/contabilidade/plano-de-contas`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -242,7 +263,7 @@ O controller HTTP e o CSV devolvem `apresentar()`, que omite `id`, `contaId`, `c
 import { MAPA_PERFIL_PERMISSOES, PERMISSOES } from '../../src/common/rbac/permissoes';
 import { MENUS_VISIVEIS_POR_PERFIL } from '../../src/common/rbac/menus-canonicos';
 
-const ROTA = '/erp/contabilidade/e09-t01';
+const ROTA = '/erp/contabilidade/plano-de-contas';
 const CHAVES = [PERMISSOES.CONTABILIDADE_PLANO_LER, PERMISSOES.CONTABILIDADE_PLANO_GERENCIAR];
 
 describe('E09-T01 RBAC', () => {
@@ -264,7 +285,7 @@ describe('E09-T01 RBAC', () => {
 });
 ```
 
-O teste de menu no frontend acrescenta o grupo e troca o comprimento fixo:
+Em `menu-v2.test.ts`, substituir o `const GRUPOS` de L6–L16 e o `it` de L62–L64 (hoje 9 grupos) e o `it` de L66–L69 (hoje `toEqual(ITENS_PROTOTIPO)` e `toHaveLength(39)`). Não deixar o `it` antigo ao lado do novo.
 
 ```ts
 const GRUPOS = [
@@ -272,26 +293,79 @@ const GRUPOS = [
   'FATURAMENTO', 'CONTABILIDADE', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
 ];
 
+it('MENU_V2 tem os 10 grupos na ordem do prototipo', () => {
+  expect(MENU_V2.map((g) => g.title)).toEqual(GRUPOS);
+});
+
 it('preserva as 39 rotas e acrescenta só o plano de contas', () => {
   const atual = MENU_V2.flatMap((g) => g.items.map((i) => [g.title, i.label, i.href]));
-  const operacionais = atual.filter(([, , href]) => href !== '/erp/contabilidade/e09-t01');
+  const operacionais = atual.filter(([, , href]) => href !== '/erp/contabilidade/plano-de-contas');
   expect(operacionais).toEqual(ITENS_PROTOTIPO);
+  expect(operacionais).toHaveLength(39);
   expect(atual).toHaveLength(40);
   expect(atual).toContainEqual([
     'CONTABILIDADE',
     'Plano de contas e centros de custo',
-    '/erp/contabilidade/e09-t01',
+    '/erp/contabilidade/plano-de-contas',
   ]);
+  expect(atual.some(([, , href]) => /e\d{2}-t\d{2}/i.test(String(href)))).toBe(false);
 });
 ```
 
-Repetir a asserção de comprimento 40 em `menu-rbac.test.ts` (L169 e L279) e em `perfis-menus.e2e-spec.ts` (L78–L79), mantendo a igualdade das 39 rotas antigas.
+O `it` de L82–L93 (`page.tsx`) continua. A página nasce na Task 6; o Step 4 desta task não o executa.
+
+Em `menu-rbac.test.ts`, os números lidos no arquivo hoje são 39 rotas (L167–L169 e L279) e 126 pares (L176–L180 e L280). A rota nova entra só no administrador, então os totais reais passam a 40 e 127. Não basta trocar 39 por 40.
+
+```ts
+const ROTA_PLANO = '/erp/contabilidade/plano-de-contas';
+
+const MATRIZ_RASTREABILIDADE: Record<string, string[]> = {
+  // as 39 chaves atuais, intactas, mais:
+  [ROTA_PLANO]: ['administrador'],
+};
+
+const TODOS = [
+  'COMERCIAL', 'GESTÃO', 'RECEBIMENTO & BALANÇA', 'DESOSSA', 'ESTOQUE',
+  'CARGA', 'FATURAMENTO', 'CONTABILIDADE', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
+];
+
+const GRUPOS_ESPERADOS: Record<string, string[]> = {
+  administrador: TODOS,
+  gestor: [
+    'COMERCIAL', 'GESTÃO', 'RECEBIMENTO & BALANÇA', 'DESOSSA', 'ESTOQUE',
+    'CARGA', 'FATURAMENTO', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
+  ],
+  // os outros nove perfis permanecem como estão em L102–L110
+};
+
+it('a matriz transcrita cobre as 39 rotas operacionais e a rota nova', () => {
+  const chaves = Object.keys(MATRIZ_RASTREABILIDADE);
+  expect(chaves.filter((href) => href !== ROTA_PLANO).sort()).toEqual(
+    [...ROTAS_CANONICAS].filter((href) => href !== ROTA_PLANO).sort(),
+  );
+  expect(chaves.filter((href) => href !== ROTA_PLANO)).toHaveLength(39);
+  expect([...ROTAS_CANONICAS].sort()).toEqual(chaves.sort());
+  expect(ROTAS_CANONICAS).toHaveLength(40);
+});
+
+it('a matriz soma 127 atribuicoes perfil x rota', () => {
+  const total = PERFIS.reduce((soma, perfil) => soma + menusDe(perfil).length, 0);
+  expect(total).toBe(127);
+  expect(Object.values(MATRIZ_RASTREABILIDADE).reduce((s, p) => s + p.length, 0)).toBe(127);
+});
+```
+
+O `it` de L274–L293 troca `toHaveLength(39)` por `toHaveLength(40)` e `toBe(126)` por `toBe(127)`, e afirma que `PERMISSOES_POR_PERFIL.administrador` contém as duas chaves novas e que nenhum outro perfil as contém. `filtrarMenuPorMenusVisiveis` (`menu-v2.ts` L119–L124) omite grupo sem item: o gestor não vê `CONTABILIDADE`.
+
+Em `shell-ds.spec.ts`, o `GRUPOS` de L29–L39 ganha `'CONTABILIDADE'` entre `'FATURAMENTO'` e `'CADASTROS & REGRAS'`. O título do teste de L86 passa de "9 grupos" para "10 grupos". A asserção `toEqual(GRUPOS)` não é afrouxada.
+
+Em `perfis-menus.e2e-spec.ts` L78–L79, `MENUS_CANONICOS` e `res.body.menus` passam a `toHaveLength(40)`.
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest test/unit/permissoes-e09-t01.spec.ts --runInBand` em `app/backend` e `npx jest __tests__/menu-v2.test.ts --runInBand` em `app/frontend`.
+Run: `npx jest test/unit/permissoes-e09-t01.spec.ts test/unit/perfil-permissoes-snapshot.spec.ts --runInBand` em `app/backend` e `npx jest __tests__/menu-v2.test.ts __tests__/menu-rbac.test.ts -t "10 grupos|preserva as 39|39 rotas operacionais|127 atribuicoes|onda 4" --runInBand` em `app/frontend`.
 
-Expected: FAIL porque as chaves e a rota não existem.
+Expected: FAIL porque as chaves, a rota e os snapshots não existem.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -302,7 +376,7 @@ CONTABILIDADE_PLANO_LER: 'CONTABILIDADE_PLANO_LER',
 CONTABILIDADE_PLANO_GERENCIAR: 'CONTABILIDADE_PLANO_GERENCIAR',
 ```
 
-Depois de `pushPermissoes('diretoria', 'FATURAMENTO_LER');`:
+Depois de `pushPermissoes('diretoria', 'FATURAMENTO_LER');` (`permissoes.ts` L405):
 
 ```ts
 pushPermissoes('administrador', 'CONTABILIDADE_PLANO_LER', 'CONTABILIDADE_PLANO_GERENCIAR');
@@ -315,9 +389,17 @@ CONTABILIDADE_PLANO_LER: 'Consultar plano de contas e centros de custo',
 CONTABILIDADE_PLANO_GERENCIAR: 'Criar, versionar, revisar, aprovar, bloquear e mapear o plano de contas',
 ```
 
-Em `menus-canonicos.ts`, inserir `'/erp/contabilidade/e09-t01'` depois de `'/faturamento/liberacao'` e antes de `'/cadastros/representantes'`.
+Em `menus-canonicos.ts`, inserir `'/erp/contabilidade/plano-de-contas'` em `MENUS_CANONICOS`, depois de `'/faturamento/liberacao'` (L32) e antes de `'/cadastros/representantes'` (L33). O array `gestor` (L89–L90) tem o mesmo par e não recebe a rota: `administrador` é `[...MENUS_CANONICOS]` (L61); `gestor` é lista própria; D7 não concede a rota a outro perfil. Inserir no gestor criaria o 128º par e o grupo `CONTABILIDADE` para o gestor (`filtrarMenuPorMenusVisiveis`, `menu-v2.ts` L124). O comentário "Total: 126 pares" (L58) passa a "126 pares da matriz v1.1 + 1".
 
 Em `perfil.dto.ts` L10, `.max(39)` vira `.max(40)`.
+
+Em `perfis.service.ts`, `MODULOS` (L59–L67) ganha, depois de `Expedição e Faturamento`:
+
+```ts
+{ modulo: 'Contabilidade', prefixos: ['CONTABILIDADE_'] },
+```
+
+Sem esse prefixo, `catalogo()` lança `Permissões sem módulo no catálogo` (L81–L84) e o `it` de `perfis-menus.e2e-spec.ts` L71 quebra antes de L78.
 
 Em `menu-v2.ts`, inserir o grupo depois de `FATURAMENTO`:
 
@@ -326,7 +408,7 @@ Em `menu-v2.ts`, inserir o grupo depois de `FATURAMENTO`:
   title: 'CONTABILIDADE',
   items: [
     {
-      href: '/erp/contabilidade/e09-t01',
+      href: '/erp/contabilidade/plano-de-contas',
       label: 'Plano de contas e centros de custo',
       iconKey: 'FileText',
     },
@@ -336,16 +418,24 @@ Em `menu-v2.ts`, inserir o grupo depois de `FATURAMENTO`:
 
 Não alterar `ROTA_ENTRADA_POR_PERFIL`.
 
+Regenerar os dois snapshots a partir dos mapas, em `app/backend`:
+
+```powershell
+npx tsx scripts/gerar-snapshot-perfis.ts
+```
+
+`perfil-permissoes-snapshot.spec.ts` L15–L18 exige `perfil-permissoes.snapshot.json` igual a `MAPA_PERFIL_PERMISSOES` ordenado. `menu-rbac.test.ts` L12–L17 lê também `perfil-menus.snapshot.json`. Só a chave `administrador` muda em cada arquivo: as duas permissões novas, em ordem alfabética, e a rota nova. Nenhum outro slug ganha permissão nem rota.
+
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: os mesmos comandos do Step 2.
+Run: os mesmos comandos do Step 2, mais `npx jest test/integration/perfis-menus.e2e-spec.ts -t "catalogo de permissoes" --runInBand` em `app/backend`.
 
-Expected: PASS.
+Expected: PASS. O `it` de `page.tsx` em `menu-v2.test.ts` L82 fica para a Task 6.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add app/backend/src/common/rbac/permissoes.ts app/backend/src/common/rbac/menus-canonicos.ts app/backend/src/modules/perfis/dto/perfil.dto.ts app/frontend/src/lib/menu-v2.ts app/frontend/__tests__/menu-v2.test.ts app/frontend/__tests__/menu-rbac.test.ts app/backend/test/integration/perfis-menus.e2e-spec.ts app/backend/test/unit/permissoes-e09-t01.spec.ts
+git add app/backend/src/common/rbac/permissoes.ts app/backend/src/common/rbac/menus-canonicos.ts app/backend/src/common/rbac/perfil-permissoes.snapshot.json app/backend/src/common/rbac/perfil-menus.snapshot.json app/backend/src/modules/perfis/dto/perfil.dto.ts app/backend/src/modules/perfis/perfis.service.ts app/frontend/src/lib/menu-v2.ts app/frontend/__tests__/menu-v2.test.ts app/frontend/__tests__/menu-rbac.test.ts app/frontend/e2e/shell-ds.spec.ts app/backend/test/integration/perfis-menus.e2e-spec.ts app/backend/test/unit/permissoes-e09-t01.spec.ts
 git commit -m @"
 feat(contabilidade): abre o menu do plano de contas só ao administrador
 
@@ -356,7 +446,7 @@ Inclui as permissões de leitura e gestão do plano de contas no perfil administ
 A persona contador/controladoria não é um dos 11 perfis. A permissão nova não pode vazar para os outros slugs.
 
 ### Impacto:
-O catálogo de menus do administrador passa de 39 para 40 rotas. Os outros perfis permanecem iguais.
+O catálogo de menus do administrador passa de 39 para 40 rotas e de 126 para 127 pares. Os outros perfis permanecem iguais.
 "@
 ```
 
@@ -378,18 +468,27 @@ O catálogo de menus do administrador passa de 39 para 40 rotas. Os outros perfi
 it('recusa natureza fora do enum e vigência invertida', async () => {
   const centro = await db.insert(centrosCusto).values({ codigo: 'CT1', nome: 'Operação industrial' }).returning();
   const conta = await db.insert(contasContabeis).values({ codigo: '1' }).returning();
-  await expect(db.insert(contaVersoes).values({
+  const base = {
     contaId: conta[0].id,
     numero: 1,
     nome: 'Caixa',
-    classificacao: 'analitica',
-    natureza: 'OUTRA',
+    classificacao: 'analitica' as const,
     grupo: 'Circulante',
     centroCustoId: centro[0].id,
-    vigenciaInicio: '2026-10-01',
-    situacao: 'DRAFT',
+    situacao: 'DRAFT' as const,
     justificativa: 'teste',
     responsavelId: adminId,
+  };
+  await expect(db.insert(contaVersoes).values({
+    ...base,
+    natureza: 'OUTRA',
+    vigenciaInicio: '2026-10-01',
+  })).rejects.toThrow();
+  await expect(db.insert(contaVersoes).values({
+    ...base,
+    natureza: 'ATIVO',
+    vigenciaInicio: '2026-10-01',
+    vigenciaFim: '2026-09-01',
   })).rejects.toThrow();
 });
 ```
@@ -478,7 +577,7 @@ Exportar em `schema/index.ts`. Gerar a migration pelo algoritmo D8 (`npm run db:
 
 Run: `npm run db:migrate` e o Jest do Step 2, em `app/backend`.
 
-Expected: PASS. O CHECK de natureza recusa `OUTRA`.
+Expected: PASS. O CHECK de natureza recusa `OUTRA`. O CHECK `chk_conta_versoes_vigencia` recusa fim `2026-09-01` com início `2026-10-01`.
 
 - [ ] **Step 5: Commit**
 
@@ -637,7 +736,93 @@ export const listarPlanoSchema = z.object({
 });
 ```
 
-`criar` abre transação, trava por `pg_advisory_xact_lock(hashtext('contabilidade:conta:' || codigo))`, recusa código duplicado com `ConflictException('Já existe conta com este código')`, resolve o centro ativo por código ou 422 `Centro de custo não encontrado`, resolve o pai por D3. Pai ausente: 422 `Conta pai não encontrada`. Pai sem versão `APPROVED` vigente: 422 `Conta pai não está ativa`. Pai cuja versão aprovada vigente é `analitica`: 422 `Conta pai analítica não é nível hierárquico válido`. Insere conta e versão `numero: 1`, `situacao: 'DRAFT'`, audita `modulo: 'contabilidade.plano'`, `operacao: 'INSERT'`, `tabela: 'conta_versoes'`. `criarCentro` faz o mesmo para `centros_custo` e 409 `Já existe centro de custo com este código`.
+```ts
+async criar(dto: CriarContaDto, usuarioId: string) {
+  await this.db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:conta:' + dto.codigo}))`);
+    const duplicada = await tx.select({ id: contasContabeis.id }).from(contasContabeis)
+      .where(and(eq(contasContabeis.codigo, dto.codigo), isNull(contasContabeis.deletedAt))).limit(1);
+    if (duplicada.length > 0) throw new ConflictException('Já existe conta com este código');
+    const centro = await this.centroAtivo(tx, dto.centroCodigo);
+    const paiId = await this.paiValido(tx, dto.classificacao, dto.contaPaiCodigo);
+    const [conta] = await tx.insert(contasContabeis).values({ codigo: dto.codigo }).returning();
+    const [versao] = await tx.insert(contaVersoes).values({
+      contaId: conta.id,
+      numero: 1,
+      nome: dto.nome,
+      classificacao: dto.classificacao,
+      natureza: dto.natureza,
+      grupo: dto.grupo,
+      contaPaiId: paiId,
+      centroCustoId: centro.id,
+      vigenciaInicio: dto.vigenciaInicio,
+      vigenciaFim: dto.vigenciaFim,
+      situacao: 'DRAFT',
+      justificativa: dto.justificativa,
+      responsavelId: usuarioId,
+    }).returning();
+    await this.auditoria.registrar(tx, {
+      tabela: 'conta_versoes',
+      registroId: versao.id,
+      operacao: 'INSERT',
+      modulo: 'contabilidade.plano',
+      usuarioId,
+      dadosAnteriores: {},
+      dadosNovos: versao,
+      justificativa: dto.justificativa,
+    });
+  });
+  this.eventEmitter.emit(EVENTOS.PLANO_CONTA_CRIADA, { codigo: dto.codigo, acao: 'criar', situacao: 'DRAFT' });
+  return this.obter(dto.codigo);
+}
+
+private async centroAtivo(tx: Tx, codigo: string) {
+  const [centro] = await tx.select().from(centrosCusto)
+    .where(and(eq(centrosCusto.codigo, codigo), isNull(centrosCusto.deletedAt))).limit(1);
+  if (!centro) throw new RegraContabilException('Centro de custo não encontrado');
+  return centro;
+}
+
+private async paiValido(tx: Tx, classificacao: 'sintetica' | 'analitica', contaPaiCodigo: string | null) {
+  if (!contaPaiCodigo) {
+    if (classificacao === 'analitica') throw new RegraContabilException('Conta pai não encontrada');
+    return null;
+  }
+  const [pai] = await tx.select().from(contasContabeis)
+    .where(and(eq(contasContabeis.codigo, contaPaiCodigo), isNull(contasContabeis.deletedAt))).limit(1);
+  if (!pai) throw new RegraContabilException('Conta pai não encontrada');
+  const [vigente] = await tx.select().from(contaVersoes).where(and(
+    eq(contaVersoes.contaId, pai.id),
+    eq(contaVersoes.situacao, 'APPROVED'),
+    isNull(contaVersoes.deletedAt),
+  )).orderBy(desc(contaVersoes.numero)).limit(1);
+  if (!vigente) throw new RegraContabilException('Conta pai não está ativa');
+  if (vigente.classificacao === 'analitica') {
+    throw new RegraContabilException('Conta pai analítica não é nível hierárquico válido');
+  }
+  return pai.id;
+}
+
+async criarCentro(dto: CriarCentroDto, usuarioId: string) {
+  await this.db.transaction(async (tx) => {
+    const duplicado = await tx.select({ id: centrosCusto.id }).from(centrosCusto)
+      .where(and(eq(centrosCusto.codigo, dto.codigo), isNull(centrosCusto.deletedAt))).limit(1);
+    if (duplicado.length > 0) throw new ConflictException('Já existe centro de custo com este código');
+    const [centro] = await tx.insert(centrosCusto).values({ codigo: dto.codigo, nome: dto.nome }).returning();
+    await this.auditoria.registrar(tx, {
+      tabela: 'centros_custo',
+      registroId: centro.id,
+      operacao: 'INSERT',
+      modulo: 'contabilidade.plano',
+      usuarioId,
+      dadosAnteriores: {},
+      dadosNovos: centro,
+      justificativa: dto.justificativa,
+    });
+  });
+  this.eventEmitter.emit(EVENTOS.CENTRO_CUSTO_CRIADO, { codigo: dto.codigo, acao: 'criar', situacao: 'APPROVED' });
+}
+```
 
 `beforeEach` do spec apaga `conta_versoes`, `contas_contabeis` e `centros_custo`, nessa ordem.
 
@@ -680,7 +865,7 @@ Ainda não há aprovação nem bloqueio. Nenhuma partida contábil é gravada.
 - Modify: `app/backend/src/modules/contabilidade/plano/dto/plano.dto.ts`
 - Modify: `app/backend/src/realtime/events/eventos.ts`
 - Modify: `app/backend/src/realtime/realtime.gateway.ts`
-- Test: `plano.service.spec.ts` e `plano-contas.e2e-spec.ts`
+- Test: `app/backend/test/integration/plano-contas.e2e-spec.ts` — os `it` abaixo usam `db.execute` do harness desta spec (Task 2). Não vão para `plano.service.spec.ts`.
 
 **Interfaces:**
 - Consumes: `criar` e `apresentar` da Task 3.
@@ -688,7 +873,7 @@ Ainda não há aprovação nem bloqueio. Nenhuma partida contábil é gravada.
 
 - [ ] **Step 1: Write the failing test**
 
-Review Focus 1, 2, 4 e 5. Helpers no mesmo spec:
+Review Focus 1, 2, 4 e 5, no harness de `plano-contas.e2e-spec.ts`. Helpers:
 
 ```ts
 async function promover(codigo: string) {
@@ -729,6 +914,17 @@ async function contarVersoes(codigo: string) {
   `);
   return res.rows[0].total as number;
 }
+
+it('não versiona conta suspensa e não nasce rascunho', async () => {
+  const conta = await contaAprovadaAnalitica();
+  await service.bloquear(conta.codigo, { numero: conta.numero, justificativa: 'bloqueio' }, userId);
+  await expect(service.versionar(conta.codigo, {
+    ...dtoBase({ codigo: conta.codigo, contaPaiCodigo: conta.contaPaiCodigo, centroCodigo: conta.centroCodigo }),
+    numero: conta.numero,
+    justificativa: 'tenta versionar',
+  }, userId)).rejects.toMatchObject({ response: { message: 'conta desativada' }, status: 422 });
+  expect(await contarVersoes(conta.codigo)).toBe(1);
+});
 
 it('não mapeia conta suspensa e não grava outra versão', async () => {
   const conta = await contaAprovadaAnalitica();
@@ -771,31 +967,160 @@ it('mapear conta sintética não cria tabela de lançamento', async () => {
 });
 ```
 
-O DTO de revisar recusa `vigenciaInicio` vazio no Zod (400). O teste de Review Focus 4 chama o service com a string vazia depois de um refine interno: se `vigenciaInicio` não casa `/^\d{4}-\d{2}-\d{2}$/`, o service lança `RegraContabilException` 422 `Início de vigência é obrigatório` antes de mudar a situação. Motivo em branco no service lança 422 `Motivo da alteração é obrigatório` e também deixa `DRAFT`.
+O DTO de revisar recusa `vigenciaInicio` vazio no Zod (400). O teste de Review Focus 4 chama o service com a string vazia depois de um refine interno: se `vigenciaInicio` não casa `/^\d{4}-\d{2}-\d{2}$/`, o service lança `RegraContabilException` 422 `Início de vigência é obrigatório` antes de mudar a situação. Motivo em branco no service lança 422 `Informe justificativa para auditoria.` (`aplicacao.js` L451) e também deixa `DRAFT`.
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx jest src/modules/contabilidade/plano/plano.service.spec.ts -t "suspensa|natureza da versão|competência|sintética" --runInBand` em `app/backend`.
+Run: `npx jest test/integration/plano-contas.e2e-spec.ts -t "suspensa|não versiona|natureza da versão|competência|sintética" --runInBand` em `app/backend`.
 
 Expected: FAIL com método ausente.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Transições exatamente como D4. Toda mutação: `FOR UPDATE` da conta, confere `numero`, escreve, audita, commit, então `eventEmitter.emit`. Payload do evento: `{ codigo, acao, situacao }` sem id.
+```ts
+private async travar(tx: Tx, codigo: string, numero: number) {
+  const [conta] = await tx.select().from(contasContabeis)
+    .where(and(eq(contasContabeis.codigo, codigo), isNull(contasContabeis.deletedAt)))
+    .for('update').limit(1);
+  if (!conta) throw new NotFoundException('Conta não encontrada');
+  const versoes = await tx.select().from(contaVersoes)
+    .where(and(eq(contaVersoes.contaId, conta.id), isNull(contaVersoes.deletedAt)));
+  const maior = versoes.reduce((m, v) => Math.max(m, v.numero), 0);
+  if (maior !== numero) throw new ConflictException('conflito concorrente');
+  const atual = versoes.find((v) => v.numero === numero);
+  if (!atual) throw new NotFoundException('Conta não encontrada');
+  return { conta, atual };
+}
 
-`editar` só em `DRAFT`. Se a situação atual for `APPROVED` ou `SUSPENDED` e o corpo mudar `natureza`, `grupo`, `classificacao` ou `centroCodigo`, lançar `RegraContabilException('mudança de classificação após fechamento')`.
+private mudouClassificacao(atual: ContaVersao, dto: { natureza: string; grupo: string; classificacao: string; centroCodigo: string }, centroId: string) {
+  return atual.natureza !== dto.natureza || atual.grupo !== dto.grupo
+    || atual.classificacao !== dto.classificacao || atual.centroCustoId !== centroId;
+}
 
-`bloquear` grava `SUSPENDED`. Segunda chamada: `ConflictException` 409 com mensagem `conta desativada`.
+async editar(codigo: string, dto: EditarContaDto, usuarioId: string) {
+  const salva = await this.db.transaction(async (tx) => {
+    const { atual } = await this.travar(tx, codigo, dto.numero);
+    if (atual.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
+    const centro = await this.centroAtivo(tx, dto.centroCodigo);
+    if (atual.situacao === 'APPROVED' && this.mudouClassificacao(atual, dto, centro.id)) {
+      throw new RegraContabilException('mudança de classificação após fechamento');
+    }
+    if (atual.situacao !== 'DRAFT') throw new RegraContabilException('mudança de classificação após fechamento');
+    if (!dto.justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
+    const [nova] = await tx.update(contaVersoes).set({
+      nome: dto.nome,
+      classificacao: dto.classificacao,
+      natureza: dto.natureza,
+      grupo: dto.grupo,
+      contaPaiId: await this.paiValido(tx, dto.classificacao, dto.contaPaiCodigo),
+      centroCustoId: centro.id,
+      vigenciaInicio: dto.vigenciaInicio,
+      vigenciaFim: dto.vigenciaFim,
+      justificativa: dto.justificativa,
+      responsavelId: usuarioId,
+    }).where(eq(contaVersoes.id, atual.id)).returning();
+    await this.auditoria.registrar(tx, {
+      tabela: 'conta_versoes', registroId: nova.id, operacao: 'UPDATE',
+      modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: atual, dadosNovos: nova,
+      justificativa: dto.justificativa,
+    });
+    return nova;
+  });
+  this.eventEmitter.emit(EVENTOS.PLANO_CONTA_CRIADA, { codigo, acao: 'editar', situacao: salva.situacao });
+  return this.obter(codigo);
+}
 
-`mapear`: se `classificacao !== 'analitica'`, 422 `Conta sintética não recebe mapeamento de lançamentos`. Se `situacao === 'SUSPENDED'`, 422 `conta desativada`. Se `situacao !== 'APPROVED'`, 422 `Conta ainda não aprovada`. Se `centroCodigo` difere, 422 `mudança de classificação após fechamento`. Se confere, só auditoria `ACAO_MANUAL` e evento `plano_conta_mapeada`.
+async versionar(codigo: string, dto: EditarContaDto, usuarioId: string) {
+  const salva = await this.db.transaction(async (tx) => {
+    const { conta, atual } = await this.travar(tx, codigo, dto.numero);
+    if (atual.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
+    if (atual.situacao === 'DRAFT' || atual.situacao === 'REVIEW') {
+      throw new ConflictException('Versão em aberto já existe');
+    }
+    if (atual.situacao !== 'APPROVED') throw new RegraContabilException('conta desativada');
+    const paiId = await this.paiValido(tx, dto.classificacao, dto.contaPaiCodigo);
+    if (paiId && await this.ciclo(tx, conta.id, paiId)) {
+      const [paiVersao] = await tx.select().from(contaVersoes)
+        .where(and(eq(contaVersoes.contaId, paiId), eq(contaVersoes.situacao, 'APPROVED'), isNull(contaVersoes.deletedAt)))
+        .limit(1);
+      throw new RegraContabilException(
+        paiVersao?.classificacao === 'analitica'
+          ? 'Conta pai analítica não é nível hierárquico válido'
+          : 'Ciclo na hierarquia da conta',
+      );
+    }
+    const centro = await this.centroAtivo(tx, dto.centroCodigo);
+    const [nova] = await tx.insert(contaVersoes).values({
+      contaId: conta.id,
+      numero: atual.numero + 1,
+      nome: dto.nome,
+      classificacao: dto.classificacao,
+      natureza: dto.natureza,
+      grupo: dto.grupo,
+      contaPaiId: paiId,
+      centroCustoId: centro.id,
+      vigenciaInicio: dto.vigenciaInicio,
+      vigenciaFim: dto.vigenciaFim,
+      situacao: 'DRAFT',
+      justificativa: dto.justificativa,
+      responsavelId: usuarioId,
+    }).returning();
+    await this.auditoria.registrar(tx, {
+      tabela: 'conta_versoes', registroId: nova.id, operacao: 'INSERT',
+      modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: atual, dadosNovos: nova,
+      justificativa: dto.justificativa,
+    });
+    return nova;
+  });
+  this.eventEmitter.emit(EVENTOS.PLANO_CONTA_VERSIONADA, { codigo, acao: 'versionar', situacao: 'DRAFT' });
+  return this.obter(codigo);
+}
 
-`versionar` copia a versão de origem para `numero + 1` em `DRAFT`, aplica o corpo (nova classificação permitida no rascunho) e revalida D3. Origem `DRAFT` ou `REVIEW`: 409 `Versão em aberto já existe`. Se o pai informado está na descendência da conta, 422 `Conta pai analítica não é nível hierárquico válido` quando o pai é analítico, ou 422 `Ciclo na hierarquia da conta` quando o caminhamento volta na própria conta. O teste desse ciclo: criar `1` sintética aprovada, `1.1` analítica aprovada filha de `1`, `versionar` a conta `1` com `contaPaiCodigo: '1.1'` e esperar 422 `Ciclo na hierarquia da conta` com a versão `1` ainda em `numero` 1.
+async mapear(codigo: string, dto: { numero: number; centroCodigo: string; justificativa: string }, usuarioId: string) {
+  await this.db.transaction(async (tx) => {
+    const { atual } = await this.travar(tx, codigo, dto.numero);
+    if (atual.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
+    if (atual.classificacao !== 'analitica') {
+      throw new RegraContabilException('Conta sintética não recebe mapeamento de lançamentos');
+    }
+    if (atual.situacao !== 'APPROVED') throw new RegraContabilException('Conta ainda não aprovada');
+    const centro = await this.centroAtivo(tx, dto.centroCodigo);
+    if (centro.id !== atual.centroCustoId) {
+      throw new RegraContabilException('mudança de classificação após fechamento');
+    }
+    await this.auditoria.registrar(tx, {
+      tabela: 'conta_versoes', registroId: atual.id, operacao: 'ACAO_MANUAL',
+      modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: atual, dadosNovos: atual,
+      justificativa: dto.justificativa,
+    });
+  });
+  this.eventEmitter.emit(EVENTOS.PLANO_CONTA_MAPEADA, { codigo, acao: 'mapear', situacao: 'APPROVED' });
+  return this.obter(codigo);
+}
+
+async lote(dto: { acao: 'revisar-competencia' | 'aprovar' | 'bloquear'; codigos: string[]; justificativa: string; numeroPorCodigo: Record<string, number> }, usuarioId: string) {
+  return this.db.transaction(async (tx) => {
+    const saida = [];
+    for (const codigo of dto.codigos) {
+      const numero = dto.numeroPorCodigo[codigo];
+      if (dto.acao === 'bloquear') saida.push(await this.bloquearNaTx(tx, codigo, numero, dto.justificativa, usuarioId));
+      if (dto.acao === 'aprovar') saida.push(await this.aprovarNaTx(tx, codigo, numero, dto.justificativa, usuarioId));
+      if (dto.acao === 'revisar-competencia') {
+        saida.push(await this.revisarNaTx(tx, codigo, numero, dto.justificativa, usuarioId));
+      }
+    }
+    return saida;
+  });
+}
+```
+
+`bloquear` grava `SUSPENDED` dentro da transação (`bloquearNaTx`). Segunda chamada: `ConflictException` 409 com mensagem `conta desativada`. `revisarNaTx` e `aprovarNaTx` seguem a tabela D4. `lote` usa a mesma `tx`: a primeira falha desfaz o lote e devolve 422 ou 409 da primeira conta, com o código de negócio no campo `codigo` (D6).
+
+O teste do ciclo: criar `1` sintética aprovada, `1.1` analítica aprovada filha de `1`, `versionar` a conta `1` com `contaPaiCodigo: '1.1'` e esperar 422 `Ciclo na hierarquia da conta` com a versão `1` ainda em `numero` 1. `ciclo` sobe `conta_pai_id` e devolve verdadeiro se alcançar a própria conta.
 
 `validar` executa as mesmas checagens e devolve `{ valido, mensagens }` sem `insert` nem `update`.
 
 `historico` lê `auditoria` do `registro_id` das versões da conta e devolve apenas `quando`, `quem`, `acontecimento`, `justificativa`.
-
-`lote` recebe `{ acao, codigos, justificativa, numeroPorCodigo }` e chama a ação de cada código na mesma transação. Falha dispara rollback.
 
 Em `eventos.ts`:
 
@@ -820,11 +1145,52 @@ private podeAssinar(ws: AuthSocket, room: string): boolean {
 }
 ```
 
-O `subscribe` chama `podeAssinar(ws, msg.room)`. Handlers `@OnEvent` desses sete eventos fazem `this.hub.broadcast('contabilidade-plano', ...)`. Não usar `broadcast` por `dataOperacao`. Quem tem só `CONTABILIDADE_PLANO_LER` não entra em room de operação.
+O `subscribe` (`realtime.gateway.ts` L141) chama `podeAssinar(ws, msg.room)`. Cada handler `@OnEvent` usa a assinatura real de `realtime.hub.ts` L37, `broadcast(room, type, payload)`, e não o `broadcast` privado que exige `dataOperacao` (L426–L429):
+
+```ts
+type PlanoContaPayload = { codigo: string; acao: string; situacao: string };
+
+@OnEvent(EVENTOS.PLANO_CONTA_CRIADA)
+handlePlanoContaCriada(payload: PlanoContaPayload): void {
+  this.hub.broadcast('contabilidade-plano', EVENTOS.PLANO_CONTA_CRIADA, payload);
+}
+
+@OnEvent(EVENTOS.PLANO_CONTA_VERSIONADA)
+handlePlanoContaVersionada(payload: PlanoContaPayload): void {
+  this.hub.broadcast('contabilidade-plano', EVENTOS.PLANO_CONTA_VERSIONADA, payload);
+}
+
+@OnEvent(EVENTOS.PLANO_CONTA_REVISADA)
+handlePlanoContaRevisada(payload: PlanoContaPayload): void {
+  this.hub.broadcast('contabilidade-plano', EVENTOS.PLANO_CONTA_REVISADA, payload);
+}
+
+@OnEvent(EVENTOS.PLANO_CONTA_APROVADA)
+handlePlanoContaAprovada(payload: PlanoContaPayload): void {
+  this.hub.broadcast('contabilidade-plano', EVENTOS.PLANO_CONTA_APROVADA, payload);
+}
+
+@OnEvent(EVENTOS.PLANO_CONTA_BLOQUEADA)
+handlePlanoContaBloqueada(payload: PlanoContaPayload): void {
+  this.hub.broadcast('contabilidade-plano', EVENTOS.PLANO_CONTA_BLOQUEADA, payload);
+}
+
+@OnEvent(EVENTOS.PLANO_CONTA_MAPEADA)
+handlePlanoContaMapeada(payload: PlanoContaPayload): void {
+  this.hub.broadcast('contabilidade-plano', EVENTOS.PLANO_CONTA_MAPEADA, payload);
+}
+
+@OnEvent(EVENTOS.CENTRO_CUSTO_CRIADO)
+handleCentroCustoCriado(payload: PlanoContaPayload): void {
+  this.hub.broadcast('contabilidade-plano', EVENTOS.CENTRO_CUSTO_CRIADO, payload);
+}
+```
+
+Quem tem só `CONTABILIDADE_PLANO_LER` não entra em room de operação.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx jest src/modules/contabilidade/plano/plano.service.spec.ts test/integration/plano-contas.e2e-spec.ts --runInBand` em `app/backend`.
+Run: `npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` em `app/backend`.
 
 Expected: PASS. O teste de sintética continua sem a relação `lancamentos_contabeis`.
 
@@ -885,6 +1251,48 @@ Expected: FAIL 404.
 
 - [ ] **Step 3: Write minimal implementation**
 
+Em `plano.dto.ts`:
+
+```ts
+export const editarSchema = criarContaSchema.omit({ codigo: true }).extend({
+  numero: z.number().int().positive(),
+});
+
+export const revisarSchema = z.object({
+  numero: z.number().int().positive(),
+  vigenciaInicio: dataIso,
+  vigenciaFim: dataIso.nullable(),
+  justificativa: motivo,
+});
+
+export const decidirSchema = z.object({
+  numero: z.number().int().positive(),
+  justificativa: motivo,
+});
+
+export const mapearSchema = z.object({
+  numero: z.number().int().positive(),
+  centroCodigo: codigo,
+  justificativa: motivo,
+});
+
+export const acaoSchema = {
+  editar: editarSchema,
+  versionar: editarSchema,
+  'revisar-competencia': revisarSchema,
+  aprovar: decidirSchema,
+  bloquear: decidirSchema,
+  mapear: mapearSchema,
+} as const;
+
+export const loteSchema = z.object({
+  acao: z.enum(['revisar-competencia', 'aprovar', 'bloquear']),
+  codigos: z.array(codigo).min(1).max(20),
+  justificativa: motivo,
+  numeroPorCodigo: z.record(z.string(), z.number().int().positive()),
+});
+```
+
 ```ts
 @SkipThrottle()
 @Controller('contabilidade')
@@ -944,11 +1352,13 @@ export class PlanoContasController {
   @RequirePermissoes('CONTABILIDADE_PLANO_GERENCIAR')
   acao(
     @Param('codigo') codigo: string,
-    @Param('acao') acao: 'editar' | 'versionar' | 'revisar-competencia' | 'aprovar' | 'bloquear' | 'mapear',
-    @Body(new ZodValidationPipe(acaoSchema)) dto: AcaoDto,
+    @Param('acao') acao: keyof typeof acaoSchema,
+    @Body() corpo: unknown,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    return this.plano.executar(acao, codigo, dto, user.sub);
+    const schema = acaoSchema[acao];
+    if (!schema) throw new NotFoundException();
+    return this.plano.executar(acao, codigo, schema.parse(corpo), user.sub);
   }
 }
 ```
@@ -999,19 +1409,19 @@ Perfil comercial recebe 403. O administrador recebe códigos de negócio e rótu
 ## Task 6: Tela
 
 **Files:**
-- Create: `app/frontend/src/app/(admin)/erp/contabilidade/e09-t01/page.tsx`
-- Create: `app/frontend/src/app/(admin)/erp/contabilidade/e09-t01/plano-contas-client.tsx`
+- Create: `app/frontend/src/app/(admin)/erp/contabilidade/plano-de-contas/page.tsx`
+- Create: `app/frontend/src/app/(admin)/erp/contabilidade/plano-de-contas/plano-contas-client.tsx`
 - Create: `app/frontend/__tests__/plano-contas-apresentacao.test.ts`
 
 **Interfaces:**
 - Consumes: BFF da Task 5, `BadgeProvisorio`, tokens DS v3 já usados nas telas `(admin)`.
-- Produces: a página `/erp/contabilidade/e09-t01`.
+- Produces: a página `/erp/contabilidade/plano-de-contas`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
 import { render, screen } from '@testing-library/react';
-import { PlanoContasClient } from '../src/app/(admin)/erp/contabilidade/e09-t01/plano-contas-client';
+import { PlanoContasClient } from '../src/app/(admin)/erp/contabilidade/plano-de-contas/plano-contas-client';
 
 it('mostra os rótulos da grade e esconde uuid e a palavra Marca', () => {
   render(<PlanoContasClient inicial={[{
@@ -1042,6 +1452,7 @@ it('mostra os rótulos da grade e esconde uuid e a palavra Marca', () => {
   expect(texto).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
   expect(texto).not.toMatch(/Marca/);
   expect(texto).not.toMatch(/E09/);
+  expect(texto).not.toMatch(/e09-t01/i);
 });
 ```
 
@@ -1055,33 +1466,116 @@ Expected: FAIL com módulo ausente.
 
 `page.tsx` é server component que lê a primeira página em `/api/contabilidade/plano` e renderiza `PlanoContasClient`. Sem cookie de sessão, o BFF já redireciona pelo fluxo `(admin)` existente.
 
-O client implementa D2, D4 e D6. Cabeçalho:
+O client implementa D2, D4 e D6. A chave `e09-t01-plano` só entra em `sessionStorage.getItem` / `setItem`; nenhum texto do JSX a contém.
 
 ```tsx
-<h1>Plano de contas e centros de custo</h1>
-<p>
-  Acesso típico: contador/controladoria
-  <BadgeProvisorio texto="Provisório" />
-</p>
+const CHAVE_RASCUNHO = 'e09-t01-plano';
+const ABAS = ['Ficha e campos', 'Movimentações', 'Regras e validações', 'Exceções', 'Histórico', 'Integrações', 'Aceite e testes'] as const;
+const EXCECOES = ['Conta desativada', 'Mudança de classificação após fechamento'];
+
+export function PlanoContasClient({ inicial }: { inicial: ContaApresentada[] }) {
+  const selecionada = inicial[0];
+  const [aba, setAba] = useState<(typeof ABAS)[number]>('Ficha e campos');
+  const [processo, setProcesso] = useState(false);
+  const [drawer, setDrawer] = useState(false);
+  const [modal, setModal] = useState<null | 'bloquear' | 'mapear' | 'versionar' | 'aprovar' | 'revisar-competencia'>(null);
+  const [motivo, setMotivo] = useState('');
+  const [aviso, setAviso] = useState('');
+  const colunas = ['Conta contábil', 'Situação', 'Natureza da conta', 'Centro de custo', 'Início de vigência', 'Fim de vigência'];
+
+  useEffect(() => {
+    const gravado = sessionStorage.getItem(CHAVE_RASCUNHO);
+    if (gravado === null) sessionStorage.setItem(CHAVE_RASCUNHO, '{}');
+  }, []);
+
+  async function confirmar() {
+    if (!selecionada) return;
+    if (!motivo.trim()) {
+      setAviso('Informe justificativa para demonstrar a decisão auditável.');
+      return;
+    }
+    if (!modal) return;
+    const resposta = await fetch(`/api/contabilidade/plano/${selecionada.codigo}/${modal}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ numero: selecionada.numero, justificativa: motivo, centroCodigo: selecionada.centroCodigo }),
+    });
+    if (resposta.status === 403) return setAviso('Acesso não permitido');
+    if (resposta.status === 409) return setAviso('conflito concorrente');
+    if (!resposta.ok) {
+      const corpo = await resposta.json() as { message?: string };
+      return setAviso(corpo.message ?? '');
+    }
+    if (modal === 'aprovar') setAviso('concluído com evidência');
+    setModal(null);
+  }
+
+  return (
+    <>
+      <h1>Plano de contas e centros de custo</h1>
+      <p>Acesso típico: contador/controladoria <BadgeProvisorio texto="Provisório" /></p>
+      <button type="button">Exportar</button>
+      <button type="button">+ Novo registro</button>
+      <button type="button" onClick={() => setProcesso(true)}>Ações do processo</button>
+      <div>
+        <button type="button" onClick={() => setDrawer(true)}>Criar</button>
+        <button type="button" onClick={() => setModal('versionar')}>Versionar</button>
+        <button type="button" onClick={() => setModal('aprovar')}>Aprovar</button>
+        <button type="button" onClick={() => setModal('bloquear')}>Bloquear conta e mapear lançamentos</button>
+        <button type="button" onClick={() => setModal('revisar-competencia')}>Revisar competência</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            {colunas.map((rotulo) => (
+              <th key={rotulo}><button type="button" aria-label={`Ordenar por ${rotulo}`}>{rotulo}</button></th>
+            ))}
+          </tr>
+        </thead>
+      </table>
+      <div role="tablist">
+        {ABAS.map((nome) => (
+          <button key={nome} type="button" role="tab" onClick={() => setAba(nome)}>{nome}</button>
+        ))}
+      </div>
+      {aba === 'Exceções' && EXCECOES.map((texto) => (
+        <p key={texto}><b>Bloqueio / exceção:</b> {texto}.</p>
+      ))}
+      {processo && (
+        <button type="button" onClick={() => { setProcesso(false); setModal('mapear'); }}>Abrir decisão →</button>
+      )}
+      {drawer ? <p><label htmlFor="review-justification">Motivo da alteração</label></p> : null}
+      {modal && (
+        <dialog open aria-modal="true">
+          <label htmlFor="action-reason">Justificativa / observação</label>
+          <textarea id="action-reason" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+          <button type="button" onClick={() => setModal(null)}>Cancelar</button>
+          <button type="button" onClick={confirmar}>Confirmar</button>
+          {aviso ? <p>{aviso}</p> : null}
+        </dialog>
+      )}
+    </>
+  );
+}
 ```
 
-Botões com estes textos, nesta faixa: `Exportar`, `+ Novo registro`, `Ações do processo`. Faixa de domínio: `Criar`, `Versionar`, `Aprovar`, `Bloquear conta`, `Mapear lançamentos`, `Revisar competência`. Ficha: `Editar versão`, `Validar pré-condições`, `Consultar histórico`.
+O botão da faixa `Bloquear conta e mapear lançamentos` abre o modal e o `Confirmar` faz `POST .../bloquear` (D4). O `Abrir decisão →` do drawer `Ações do processo` abre o mesmo modal e o `Confirmar` faz `POST .../mapear`. Não há botão `Bloquear conta` nem `Mapear lançamentos`.
 
 Abas com `role="tablist"` e `role="tab"`. Grade com `aria-label="Ordenar por {rótulo}"` no botão de cada coluna ordenável. Busca com `aria-label="Buscar registros da lista"`. Filtro com `aria-label="Filtrar situação"` e opções `Todos`, `Rascunho`, `Aguardando revisão`, `Aprovado`, `Rejeitado`, `Suspenso`.
 
 Datas na grade em `dd/MM/yyyy` (`pt-BR`). Fim nulo mostra `—`.
 
-Drawer `Dados principais` com os controles de D2. Lookup de centro: botão `Pesquisar`. Se a lista vier vazia, toast `Nenhum cadastro disponível para seleção. Consulte a área responsável.` (`aplicacao.js` L487) e o mesmo drawer oferece `Código` + `Centro de custo` + `Motivo da alteração` e o botão `+ Novo registro` que chama `POST /api/contabilidade/centros-custo`.
+Drawer `Dados principais` com os controles de D2. O rótulo do textarea do drawer é `Motivo da alteração` (`aplicacao.js` L436), não o do modal. Lookup de centro: botão `Pesquisar`. Se a lista vier vazia, toast `Nenhum cadastro disponível para seleção. Consulte a área responsável.` (`aplicacao.js` L487) e o mesmo drawer oferece `Código` + `Centro de custo` + `Motivo da alteração` e o botão `+ Novo registro` que chama `POST /api/contabilidade/centros-custo`.
 
 `Criar` no drawer chama `POST /api/contabilidade/plano`. `Editar versão` chama `POST /api/contabilidade/plano/{codigo}/editar`. O botão do protótipo `Salvar rascunho ilustrativo` não é copiado. `Verificar dados` chama `POST /api/contabilidade/plano/validar`.
 
-Cada ação de domínio abre um diálogo com `label` `Motivo da alteração`, botão `Cancelar` e botão `Confirmar`. `Confirmar` envia o POST da ação. Motivo vazio não chama a API e mostra `Motivo da alteração é obrigatório`.
+Ficha: `Editar versão`, `Validar pré-condições`, `Consultar histórico`.
 
-403 renderiza o estado `sem acesso` com o texto `Acesso não permitido`. 409 mostra `conflito concorrente`. 422 mostra `message` do backend. Depois de aprovar, toast `concluído com evidência`.
+403 renderiza o estado `sem acesso` com o texto `Acesso não permitido`. 409 mostra `conflito concorrente`. 422 mostra `message` do backend, inclusive `conta desativada` e `mudança de classificação após fechamento` em minúsculas (Caderno B L440). Depois de aprovar, toast `concluído com evidência`.
 
 Mobile (`max-width: 800px`): cada linha da grade vira um cartão com os seis rótulos e os valores. Os botões de ação permanecem visíveis. Nenhum cartão mostra UUID (`componentes.js` L5908).
 
-Não usar a palavra `Marca`. Não renderizar `E09` nem `E09-T01`.
+Não usar a palavra `Marca`. Não renderizar `E09`, `E09-T01` nem a chave `e09-t01-plano`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1103,7 +1597,7 @@ Reproduz grade, abas, ações e formulário com os rótulos do protótipo e o se
 A persona contador/controladoria não é perfil canônico, e a tela não pode exibir UUID.
 
 ### Impacto:
-O administrador passa a abrir /erp/contabilidade/e09-t01. Nenhuma outra rota operacional muda de rótulo.
+O administrador passa a abrir /erp/contabilidade/plano-de-contas. Nenhuma outra rota operacional muda de rótulo.
 "@
 ```
 
@@ -1121,7 +1615,9 @@ O administrador passa a abrir /erp/contabilidade/e09-t01. Nenhuma outra rota ope
 ```ts
 test('administrador cria conta analítica, bloqueia e vê a conta desativada', async () => {
   const page = await adminContext.newPage();
-  await page.goto('/erp/contabilidade/e09-t01');
+  await page.goto('/erp/contabilidade/plano-de-contas');
+  await expect(page).toHaveURL(/\/erp\/contabilidade\/plano-de-contas$/);
+  await expect(page).not.toHaveURL(/e\d{2}-t\d{2}/i);
   await expect(page.getByRole('heading', { name: 'Plano de contas e centros de custo' })).toBeVisible();
   await expect(page.getByText('Provisório')).toBeVisible();
   await page.getByRole('button', { name: '+ Novo registro' }).click();
@@ -1136,15 +1632,19 @@ test('administrador cria conta analítica, bloqueia e vê a conta desativada', a
   await revisarEAprovar(page);
   await expect(page.getByRole('cell', { name: 'Caixa e bancos' })).toBeVisible();
   await expect(page.getByText(/[0-9a-f]{8}-[0-9a-f]{4}-7/i)).toHaveCount(0);
-  await page.getByRole('button', { name: 'Bloquear conta' }).click();
-  await page.getByLabel('Motivo da alteração').fill('bloqueia a conta');
+  await page.getByRole('button', { name: 'Bloquear conta e mapear lançamentos' }).click();
+  await page.getByLabel('Justificativa / observação').fill('bloqueia a conta');
   await page.getByRole('button', { name: 'Confirmar' }).click();
-  await page.getByRole('button', { name: 'Mapear lançamentos' }).click();
-  await page.getByLabel('Motivo da alteração').fill('tenta mapear');
+  await page.getByRole('button', { name: /Ações do processo/ }).click();
+  await page.getByRole('button', { name: 'Abrir decisão →' }).click();
+  await page.getByLabel('Justificativa / observação').fill('tenta mapear');
   await page.getByRole('button', { name: 'Confirmar' }).click();
   await expect(page.getByText('conta desativada')).toBeVisible();
   await page.getByRole('tab', { name: 'Regras e validações' }).click();
   await expect(page.getByText('partida dobrada, níveis hierárquicos válidos, competência obrigatória')).toBeVisible();
+  await page.getByRole('tab', { name: 'Exceções' }).click();
+  await expect(page.getByText('Conta desativada')).toBeVisible();
+  await expect(page.getByText('Mudança de classificação após fechamento')).toBeVisible();
   await page.close();
 });
 ```
@@ -1171,16 +1671,16 @@ async function criarConta(
 
 async function revisarEAprovar(page: Page) {
   await page.getByRole('button', { name: 'Revisar competência' }).click();
-  await page.getByLabel('Motivo da alteração').last().fill('revisa a competência');
+  await page.getByLabel('Justificativa / observação').last().fill('revisa a competência');
   await page.getByRole('button', { name: 'Confirmar' }).click();
   await page.getByRole('button', { name: 'Aprovar' }).click();
-  await page.getByLabel('Motivo da alteração').last().fill('aprova a conta');
+  await page.getByLabel('Justificativa / observação').last().fill('aprova a conta');
   await page.getByRole('button', { name: 'Confirmar' }).click();
   await expect(page.getByText('Aprovado')).toBeVisible();
 }
 ```
 
-O combo de pai mostra o nome `Grupo do ativo` e guarda o código `1` no value. Depois de `Criar`, a linha nova fica selecionada. Um segundo teste cria só a sintética `1`, aprova e chama `Mapear lançamentos`. A mensagem visível é `Conta sintética não recebe mapeamento de lançamentos`.
+O combo de pai mostra o nome `Grupo do ativo` e guarda o código `1` no value. Depois de `Criar`, a linha nova fica selecionada. Um segundo teste cria só a sintética `1`, aprova, abre `Ações do processo` e clica `Abrir decisão →` (o verbo `mapear`, D4). A mensagem visível é `Conta sintética não recebe mapeamento de lançamentos`. A aba `Exceções` mostra `Conta desativada` e `Mudança de classificação após fechamento`.
 
 - [ ] **Step 2: Run test to verify it fails**
 
