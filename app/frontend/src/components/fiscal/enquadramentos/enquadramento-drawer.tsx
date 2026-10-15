@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ComboboxField } from '@/components/ui/combobox-field';
 import { DatePickerField } from '@/components/ui/date-picker-field';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { useRetornoFoco } from '../empresas/use-retorno-foco';
 import {
   ROTULOS_ABRANGENCIA,
   ROTULOS_FIN_NFE,
@@ -17,6 +18,11 @@ import {
   type DetalheEnquadramento,
   type OpcaoCombo,
 } from '@/lib/fiscal-enquadramentos';
+
+export interface SelecaoCodigo {
+  tipo: 'cfops' | 'ncms';
+  id: string;
+}
 
 export interface Catalogos {
   estabelecimentos: OpcaoCombo[];
@@ -32,6 +38,7 @@ interface Props {
   detalhe: DetalheEnquadramento | null;
   catalogos: Catalogos;
   erro: string | null;
+  selecaoCodigo?: SelecaoCodigo | null;
   onFechar: () => void;
   onSalvar: (corpo: CorpoEnquadramento) => Promise<string | null>;
   onErro: (mensagem: string | null) => void;
@@ -81,8 +88,14 @@ function itens(opcoes: OpcaoCombo[]) {
 }
 
 export function EnquadramentoDrawer({
-  aberto, detalhe, catalogos, erro, onFechar, onSalvar, onErro, onNovoCodigo,
+  aberto, detalhe, catalogos, erro, selecaoCodigo, onFechar, onSalvar, onErro, onNovoCodigo,
 }: Props) {
+  const retornoFoco = useRetornoFoco(aberto);
+  const manterDialogoAninhado = (event: { target: EventTarget | null; preventDefault: () => void }) => {
+    const alvo = event.target;
+    if (!(alvo instanceof Element)) return;
+    if (alvo.closest('[data-slot="dialog-content"], [data-slot="dialog-overlay"]')) event.preventDefault();
+  };
   const [form, setForm] = useState<CorpoEnquadramento>(VAZIO);
   const [avisos, setAvisos] = useState<string | null>(null);
 
@@ -91,6 +104,14 @@ export function EnquadramentoDrawer({
     setForm(detalhe ? deDetalhe(detalhe) : VAZIO);
     setAvisos(null);
   }, [aberto, detalhe]);
+
+  useEffect(() => {
+    if (!aberto || !selecaoCodigo) return;
+    setForm((atual) => ({
+      ...atual,
+      ...(selecaoCodigo.tipo === 'cfops' ? { cfopId: selecaoCodigo.id } : { ncmId: selecaoCodigo.id }),
+    }));
+  }, [aberto, selecaoCodigo]);
 
   function set<K extends keyof CorpoEnquadramento>(chave: K, valor: CorpoEnquadramento[K]) {
     setForm((atual) => ({ ...atual, [chave]: valor }));
@@ -122,7 +143,13 @@ export function EnquadramentoDrawer({
 
   return (
     <Sheet open={aberto} onOpenChange={(open) => { if (!open) onFechar(); }}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+      <SheetContent
+        onCloseAutoFocus={retornoFoco}
+        onPointerDownOutside={manterDialogoAninhado}
+        onFocusOutside={manterDialogoAninhado}
+        onInteractOutside={manterDialogoAninhado}
+        className="w-full overflow-y-auto sm:max-w-xl"
+      >
         <SheetHeader>
           <SheetTitle>{detalhe ? 'Editar versão' : 'Novo registro'}</SheetTitle>
         </SheetHeader>
