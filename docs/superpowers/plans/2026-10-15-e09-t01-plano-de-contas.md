@@ -10,6 +10,7 @@
 | r2 | 2026-10-15 | planner (nova instância) | Portão 1 r1 `ajustar` (6 achados; veredito `aa2b94b`, plano r1 `f0043b6`); ajuste cirúrgico: nenhum outro ponto do plano muda |
 | r3 | 2026-10-15 | planner (nova instância) | revisão crítica independente sobre o código implementado até `93599bb` (B1 a B4, M1 a M3, M5, M6) e AD-25 item 3; só acrescenta a seção "Correções da revisão crítica (r3)" (Tasks 8 a 17, classe de risco alto); as Tasks 1 a 7 já implementadas não mudam |
 | r4 | 2026-10-15 | planner (nova instância) | Portão 1 r3 `ajustar` (1 bloqueante, 8 menores; plano r3 `143aec2`, blob `d851f10…`); delta AD-22 cirúrgico: acrescenta a Task 17 (opções de conta pai, P-r3-2), corrige as Tasks 8 e 14 e passa a renumeração condicional para a Task 18, sempre a última, com os conflitos do merge com a E01 nomeados; as demais Tasks não mudam |
+| r5 | 2026-10-15 | planner (nova instância) | Portão 1 r4 `ajustar` (1 bloqueante, 4 menores; plano r4 `589ae72`, blob `887ebc1…`); delta cirúrgico na Task 17: o campo permanente `Buscar conta contábil` sai e a busca passa para o padrão do protótipo (select + botão `Pesquisar` que abre o popup `lookup-card`, `aplicacao.js` L412 e L490); `carregarPais` com try/catch e contador de pedido também no erro; a Task 18 passa a recontar os números de menu nos arquivos. Backend, teto de 50 e BFF não mudam |
 
 | Achado r1 | Correção r2 |
 |---|---|
@@ -1760,12 +1761,24 @@ Veredito: `ajustar`, 1 bloqueante e 8 menores, sobre o plano r3 (`143aec2`, blob
 | 8 P-r3-1 | Pendência não bloqueante mantida, com a nota do Linear; nenhuma task afirma tempo real na tela |
 | 9 Task 14 Step 2 | Expected corrigido: 10 linhas, não 21 |
 
+### Portão 1 r4 e correção (r5)
+
+Veredito: `ajustar`, 1 bloqueante e 4 menores, sobre o plano r4 (`589ae72`, blob `887ebc1…`). Delta restrito à Task 17 (client, testes Jest e Playwright) e à Task 18 (recontagem). Backend, teto de 50, BFF, DTO e a regra das opções não mudam.
+
+| Item do veredito | Correção r5 | Task e teste |
+|---|---|---|
+| BLOQUEANTE: o input permanente `Buscar conta contábil` não existe no protótipo (Princípio I) | Input e rótulo removidos. O campo `Conta contábil` é o `select` com o botão `Pesquisar` (`aplicacao.js` L412), que abre o popup `lookup-card` com o input `Pesquisar cadastro` (L490), alimentado por `GET opcoes-pai?q=`. Nenhum componente do frontend implementa esse padrão (o `ComboboxField` é outro padrão e foi descartado); o popup é escrito no próprio client | Task 17, itens 2 a 6 do client; Jest `plano-contas-opcoes-pai.test.tsx` (`abrir o drawer não consulta...`, `a busca dentro do popup...`, `escolher uma opção...`, `Fechar descarta...`); Playwright `criarConta` (item 8) |
+| (a) `carregarPais` sem try/catch | Corpo todo em `try/catch`; erro mostrado no popup (`erroPais`) | Jest `rede caída é capturada...` (sem `unhandledRejection`) |
+| (b) falha de pedido obsoleto chamava `setAviso` | Contador conferido em todos os ramos (`atual()`), inclusive resposta não ok e exceção; o erro vai para o popup, não para `setAviso` | Jest `falha de pedido obsoleto...` e `rede caída de pedido obsoleto...` |
+| (c) `getByLabel('Conta contábil')` não exato nos e2e | Rótulos novos: só `Selecionar Conta contábil` (popup) e `Pesquisar cadastro`. Conferência explícita por `Select-String`; leitura atual: nenhum seletor não exato | Task 17 item 7 (Expected: nenhuma linha) |
+| (d) Task 18 copiava números de menu | Os números do plano viram valores esperados a conferir contra contagem feita nos arquivos resolvidos (bloco "Recontagem" no Step 3) | Task 18, regra de recomputo e Step 3 |
+
 ### Decisões do delta
 
 - **Vigência (B2).** O plano já fixa o pai como "uma versão `APPROVED`, não suspensa" (D3) e a Task 4 recusa pai suspenso. Regra aplicada: a versão vigente é a de maior `numero` entre as `APPROVED` e `SUSPENDED` não excluídas, e a conta só é vigente se ela for `APPROVED`. Aprovar versão nova supera a anterior (maior número decidido). `DRAFT`, `REVIEW` e `REJECTED` não decidem nada: revisão em aberto não derruba a versão aprovada. Difere da leitura literal "a versão mais recente da conta precisa ser `APPROVED`" só quando há rascunho aberto sobre uma aprovada; a leitura literal impediria criar filhas durante qualquer revisão, o que D3 não pede.
 - **Mensagem do pai suspenso.** Review Focus 1 pede `conta desativada`. Pai sem nenhuma versão decidida mantém `Conta pai não está ativa` (teste existente L134 a L145).
 - **Consulta compartilhável e coerência com a E09-T02.** `ultimaVersaoDecidida(executor: Pick<NodePgDatabase<typeof schema>, 'select'>, contaId: string)` devolve a linha de `conta_versoes` ou `null` e fica em `plano/vigencia.ts`, sem dependência de Nest. A assinatura é estável: nome, caminho, parâmetros e retorno não mudam sem novo Portão 1. Na branch da E09-T02 (`feature/erp-e09-t02-politicas-contabilizacao`, commit `24d30b7`, `plano.service.ts` L173 a L198) o método `listarContasAnaliticasVigentes` mora no arquivo da T01 e ainda não existe nesta branch. Ele escolhe, por conta, a versão `APPROVED` analítica mais recente e por isso mantém vigente uma conta com v1 aprovada e v2 `SUSPENDED`. A correção desse método é do plano da T02 r4, que passa a decidir a vigência com `ultimaVersaoDecidida` desta fatia (a conta só é vigente se a última decidida for `APPROVED`; o filtro de analítica e a janela de data continuam da T02). Esta fatia não toca arquivo da T02 (critério de parada 4). O merge T01 para T02 é do coordenador: `plano.service.ts` conflitará em `exportarCsv` (Task 14) e ao lado de `listarCentrosAtivos` (`listarOpcoesPai`, Task 17), e `vigencia.ts` entra inteiro pela T01.
-- **Opções de conta pai (Task 17).** Lista própria, lida do backend ao abrir o drawer e ao buscar, sem relação com a página nem com o filtro da grade. Regra: conta não excluída, última versão decidida `APPROVED` e `sintetica` (D3), a mesma que `exigirPaiVigente` aplica. A janela de data não entra porque o backend também não a aplica. Teto de 50 com `truncado` e busca `q` por código ou nome.
+- **Opções de conta pai (Task 17).** Lista própria, lida do backend quando o usuário abre o popup `Pesquisar` (padrão do protótipo, sem campo de busca permanente) e ao buscar nele, sem relação com a página nem com o filtro da grade. Regra: conta não excluída, última versão decidida `APPROVED` e `sintetica` (D3), a mesma que `exigirPaiVigente` aplica. A janela de data não entra porque o backend também não a aplica. Teto de 50 com `truncado` e busca `q` por código ou nome.
 - **Bloqueio com rascunho (AD-25 item 3).** O token de concorrência continua sendo o maior `numero` não excluído (D4), que é o número que a grade mostra. Logo `bloquear` com o número da versão aberta é aceito e número desatualizado segue 409. "Rascunho aberto" cobre `DRAFT` e `REVIEW`, as duas situações que `versionar` chama de "Versão em aberto" (`plano.service.ts` L319 a L321): deixar `REVIEW` viva permitiria aprová-la depois do bloqueio e reativar a conta. Sem versão `APPROVED` imediatamente anterior à aberta, responde 422 `Situação não permite esta transição` e nada é descartado.
 - **Estado do descarte.** O `chk_conta_versoes_situacao` (`contabilidade-plano.schema.ts` L63) não tem estado de descarte. Usa-se soft delete (`deleted_at`) na versão aberta, conforme `docs/data/convencoes-schema.md`, e auditoria `operacao = 'DELETE'` (permitida por `chk_auditoria_operacao`, `auditoria.schema.ts` L21) na mesma transação do bloqueio. Sem status novo e sem migration.
 - **CSV.** A visão exportada é o filtro inteiro, sem paginação. Célula que começa por `=`, `+`, `-`, `@`, tab ou CR recebe o prefixo `'` (CSV injection).
@@ -1793,7 +1806,7 @@ Parar e devolver ao coordenador, sem commitar, se:
 ### Rollback do delta
 
 - Cada task é um commit: `git revert <sha-da-task>` (nunca `reset`, `reset --hard` nem force push). A Task 18 tem o rollback dela ao final: `git merge --abort` antes do commit do merge e `git revert -m 1 <sha-do-merge>` depois.
-- As Tasks 8 a 17 não mudam esquema: reverter o código restaura o comportamento anterior sem passo de banco. Reverter a Task 17 remove o endpoint, a rota BFF e o campo de busca, e o combo volta a ser montado da grade (com o defeito P-r3-2).
+- As Tasks 8 a 17 não mudam esquema: reverter o código restaura o comportamento anterior sem passo de banco. Reverter a Task 17 remove o endpoint, a rota BFF e o popup `Pesquisar` da conta pai, e o combo volta a ser montado da grade (com o defeito P-r3-2).
 - Task 11: versões descartadas permanecem com `deleted_at` preenchido depois do revert. Compensação manual, só com autorização do coordenador e conta a conta: `update conta_versoes set deleted_at = null where id = '<registro_id da auditoria DELETE>'`, depois de conferir que a conta segue `SUSPENDED` na versão anterior.
 - Task 16: o `TRUNCATE ... CASCADE` roda só em banco de teste; reverter restaura a limpeza antiga.
 
@@ -2912,12 +2925,17 @@ O e2e falha cedo se apontar para banco que não é de teste. Não quebra quando 
 - Modify: `app/backend/test/integration/plano-contas.e2e-spec.ts`
 - Create: `app/frontend/src/app/api/contabilidade/plano/opcoes-pai/route.ts`
 - Modify: `app/frontend/src/app/(admin)/erp/contabilidade/plano-de-contas/plano-contas-client.tsx`
+- Modify: `app/frontend/e2e/e09-t01-plano-contas.spec.ts`
 - Create: `app/frontend/__tests__/plano-contas-opcoes-pai.test.tsx`
 - Create: `app/frontend/__tests__/bff-plano-opcoes-pai.test.ts`
 
 Causa lida: `plano-contas-client.tsx` L632 monta o combo de conta pai com `contas`, o estado preenchido por `carregar` (L225 a L249) com a página corrente de 20 linhas já filtrada por busca e situação da grade, e só aceita a linha cuja situação exibida é `APPROVED`. Com mais de 20 contas, na página 2, com o filtro Rascunho ou com a conta aprovada que tem a v2 em rascunho (a linha da grade mostra a v2), um pai que o backend aceitaria não pode ser escolhido. O backend (`paiValido` L234, Tasks 9 e 10) é a autoridade; a tela precisa de uma lista própria, vinda do mesmo critério.
 
-Regra das opções (D3 e Task 9): conta com `deleted_at` nulo cuja `ultimaVersaoDecidida` é `APPROVED` e `sintetica`. D3 exige pai sintético (`paiValido`, L248 a L250, recusa pai analítico), então só sintéticas entram, e a classificação lida é a da versão decidida, a mesma que `exigirPaiVigente` confere. Janela de data (`vigencia_inicio` e `vigencia_fim`) não entra: nem `exigirPaiVigente` nem o `ciclo` a aplicam, e a opção existe exatamente quando o backend aceitaria. Ordem por `codigo`. A resposta tem só `codigo` e `nome` (D9, sem UUID). Há busca (`q`, por código ou nome) e teto de 50 itens (`LIMITE_OPCOES_PAI`), porque o plano de contas não tem tamanho máximo; passando do teto a resposta traz `truncado: true` e o combo mostra a orientação de refinar a busca. O padrão é o do combo de centros (`pesquisarCentros`, L339 a L351: carga por demanda, aviso em falha), com busca por texto como em `clientes.service.ts`.
+Regra das opções (D3 e Task 9): conta com `deleted_at` nulo cuja `ultimaVersaoDecidida` é `APPROVED` e `sintetica`. D3 exige pai sintético (`paiValido`, L248 a L250, recusa pai analítico), então só sintéticas entram, e a classificação lida é a da versão decidida, a mesma que `exigirPaiVigente` confere. Janela de data (`vigencia_inicio` e `vigencia_fim`) não entra: nem `exigirPaiVigente` nem o `ciclo` a aplicam, e a opção existe exatamente quando o backend aceitaria. Ordem por `codigo`. A resposta tem só `codigo` e `nome` (D9, sem UUID). Há busca (`q`, por código ou nome) e teto de 50 itens (`LIMITE_OPCOES_PAI`), porque o plano de contas não tem tamanho máximo; passando do teto a resposta traz `truncado: true` e o combo mostra a orientação de refinar a busca. A carga é por demanda, como em `pesquisarCentros` (L339 a L351), com erro tratado, e a busca por texto segue `clientes.service.ts`.
+
+**Padrão de UI (Portão 1 r4, Princípio I).** O protótipo não tem campo de busca permanente no formulário. O campo `relation` é um `select` com o botão `Pesquisar` ao lado (`aplicacao.js` L412, `title` "Pesquisar cadastro pelo nome"); o botão abre `openLookup` (L486 a L494): popup `lookup-popup` com o `lookup-card` (título `Selecionar <rótulo>`, botão `Fechar`, `input` `type="search"` com `aria-label="Pesquisar cadastro"` e placeholder "Pesquisar pelo nome ou descrição", lista de botões `lookup-option` com `<b>` nome e `<small>` detalhe, e a dica "A seleção utiliza uma referência interna invisível, nunca digitação de GUID."). Escolher uma opção grava o valor no `select` e fecha o popup (L507). A matriz UX L940 manda "Combo de cadastro com busca". Aqui o popup é alimentado por `GET /contabilidade/plano/opcoes-pai?q=` em vez do catálogo local.
+
+Reuso lido no frontend: nenhum componente implementa esse `lookup-card`/`Pesquisar` (busca de `lookup-card`, `lookup-popup` e `Pesquisar cadastro` em `app/frontend/src` e `e2e`: 0 ocorrências; as regras CSS `.lookup-popup` e `.lookup-card` só existem no protótipo, `docs/prototipos/erp-integrado-v1`, L71 e L72 do CSS). O `ComboboxField` (`app/frontend/src/components/ui/combobox-field.tsx`, usado em clientes, pedidos, rotas e outras telas) é um popover `Command` sem botão `Pesquisar` nem cartão; adotá-lo trocaria o padrão do protótipo por outro e por isso foi descartado. O popup é escrito no próprio `plano-contas-client.tsx`, com as classes Tailwind equivalentes às duas regras CSS (`fixed inset-0 z-[120] grid place-items-center bg-[rgba(17,32,50,.4)] p-3.5` e `w-[min(490px,95vw)] overflow-hidden rounded-[9px] bg-white shadow-lg`). Não se cria componente compartilhado nem se altera outro cliente.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3031,7 +3049,7 @@ Regra das opções (D3 e Task 9): conta com `deleted_at` nulo cuja `ultimaVersao
 `app/frontend/__tests__/plano-contas-opcoes-pai.test.tsx`:
 
 ```tsx
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PlanoContasClient, type ContaGrade } from '../src/app/(admin)/erp/contabilidade/plano-de-contas/plano-contas-client';
 
@@ -3043,51 +3061,143 @@ const linha = (codigo: string, nome: string): ContaGrade => ({
 });
 
 type Opcoes = { itens: { codigo: string; nome: string }[]; truncado?: boolean };
+type Resposta = Opcoes | { falha: Response } | { rede: true };
 
-function mockFetch(opcoes: Opcoes | { falha: Response }) {
+function resposta(r: Resposta): Response {
+  if ('falha' in r) return r.falha;
+  return { ok: true, status: 200, json: async () => ({ truncado: false, ...(r as Opcoes) }) } as Response;
+}
+
+function mockFetch(opcoes: Resposta | ((q: string) => Promise<Response>)) {
   const chamadas: string[] = [];
-  global.fetch = jest.fn(async (url: string) => {
+  const posts: { url: string; corpo: string }[] = [];
+  global.fetch = jest.fn(async (url: string, init?: RequestInit) => {
     chamadas.push(String(url));
+    if (init?.method === 'POST') posts.push({ url: String(url), corpo: String(init.body) });
     if (!String(url).startsWith('/api/contabilidade/plano/opcoes-pai')) {
       return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' } as Response;
     }
-    if ('falha' in opcoes) return opcoes.falha;
-    return { ok: true, status: 200, json: async () => ({ truncado: false, ...opcoes }) } as Response;
+    if (typeof opcoes === 'function') return opcoes(new URL(String(url), 'http://x').searchParams.get('q') ?? '');
+    if ('rede' in opcoes) throw new TypeError('Failed to fetch');
+    return resposta(opcoes);
   }) as unknown as typeof fetch;
-  return chamadas;
+  return { chamadas, posts };
 }
 
-describe('combo de conta pai', () => {
-  it('vem de opcoes-pai ao abrir o drawer e não das linhas da grade', async () => {
-    const chamadas = mockFetch({ itens: [{ codigo: 'P99', nome: 'Pai de outra página' }] });
+const campoPai = () => screen.getByPlaceholderText('Selecione conta contábil');
+
+async function abrirDrawer() {
+  await userEvent.click(screen.getByRole('button', { name: '+ Novo registro' }));
+}
+
+async function abrirPesquisaPai(drawerAberto = false) {
+  if (!drawerAberto) await abrirDrawer();
+  const botoes = screen.getAllByRole('button', { name: 'Pesquisar' });
+  await userEvent.click(botoes[botoes.length - 1]!);
+  return screen.findByRole('dialog', { name: 'Selecionar Conta contábil' });
+}
+
+describe('lookup de conta pai (padrão Pesquisar do protótipo)', () => {
+  it('abrir o drawer não consulta; o botão Pesquisar abre o popup com as opções do backend e não as da grade', async () => {
+    const { chamadas } = mockFetch({ itens: [{ codigo: 'P99', nome: 'Pai de outra página' }] });
     render(<PlanoContasClient inicial={[linha('G1', 'Só na grade')]} />);
+    await abrirDrawer();
     expect(chamadas).toEqual([]);
-    await userEvent.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    expect(screen.queryByLabelText('Buscar conta contábil')).not.toBeInTheDocument();
+    const popup = await abrirPesquisaPai(true);
     await waitFor(() => expect(chamadas).toContain('/api/contabilidade/plano/opcoes-pai?q='));
-    expect(await screen.findByRole('option', { name: 'Pai de outra página' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Só na grade' })).not.toBeInTheDocument();
+    expect(await within(popup).findByRole('button', { name: /Pai de outra página/ })).toBeInTheDocument();
+    expect(within(popup).queryByRole('button', { name: /Só na grade/ })).not.toBeInTheDocument();
+    expect(within(popup).getByLabelText('Pesquisar cadastro')).toHaveAttribute('type', 'search');
+    expect(within(popup).getByText('A seleção utiliza uma referência interna invisível, nunca digitação de GUID.')).toBeInTheDocument();
   });
 
-  it('a busca consulta o backend com o texto digitado', async () => {
-    const chamadas = mockFetch({ itens: [] });
-    render(<PlanoContasClient inicial={[linha('G1', 'Só na grade')]} />);
-    await userEvent.click(screen.getByRole('button', { name: '+ Novo registro' }));
-    await userEvent.type(await screen.findByLabelText('Buscar conta contábil'), 'cx');
+  it('a busca dentro do popup consulta o backend com o texto digitado', async () => {
+    const { chamadas } = mockFetch({ itens: [] });
+    render(<PlanoContasClient inicial={[]} />);
+    const popup = await abrirPesquisaPai();
+    await userEvent.type(within(popup).getByLabelText('Pesquisar cadastro'), 'cx');
     await waitFor(() => expect(chamadas).toContain('/api/contabilidade/plano/opcoes-pai?q=cx'));
+  });
+
+  it('escolher uma opção grava o pai no select, fecha o popup e o Criar envia o código', async () => {
+    const { posts } = mockFetch({ itens: [{ codigo: 'P99', nome: 'Pai de outra página' }] });
+    render(<PlanoContasClient inicial={[]} />);
+    const popup = await abrirPesquisaPai();
+    await userEvent.click(await within(popup).findByRole('button', { name: /Pai de outra página/ }));
+    expect(screen.queryByRole('dialog', { name: 'Selecionar Conta contábil' })).not.toBeInTheDocument();
+    expect(campoPai()).toHaveValue('P99');
+    expect(campoPai()).toHaveDisplayValue('Pai de outra página');
+    await userEvent.click(screen.getByRole('button', { name: 'Criar' }));
+    await waitFor(() => expect(posts.find((post) => post.url === '/api/contabilidade/plano')?.corpo).toContain('"contaPaiCodigo":"P99"'));
+  });
+
+  it('Fechar descarta o popup sem alterar o pai', async () => {
+    mockFetch({ itens: [{ codigo: 'P99', nome: 'Pai de outra página' }] });
+    render(<PlanoContasClient inicial={[]} />);
+    const popup = await abrirPesquisaPai();
+    await userEvent.click(within(popup).getByRole('button', { name: 'Fechar' }));
+    expect(screen.queryByRole('dialog', { name: 'Selecionar Conta contábil' })).not.toBeInTheDocument();
+    expect(campoPai()).toHaveValue('');
   });
 
   it('avisa quando a lista foi cortada no teto', async () => {
     mockFetch({ itens: [{ codigo: 'P1', nome: 'Primeira' }], truncado: true });
     render(<PlanoContasClient inicial={[]} />);
-    await userEvent.click(screen.getByRole('button', { name: '+ Novo registro' }));
-    expect(await screen.findByText('Refine a busca para ver mais contas.')).toBeInTheDocument();
+    const popup = await abrirPesquisaPai();
+    expect(await within(popup).findByText('Refine a busca para ver mais contas.')).toBeInTheDocument();
   });
 
-  it('mostra a falha do backend em vez de combo vazio silencioso', async () => {
+  it('mostra a falha do backend no popup em vez de lista vazia silenciosa', async () => {
     mockFetch({ falha: { ok: false, status: 500, text: async () => JSON.stringify({ message: 'Falha ao carregar as contas' }) } as Response });
     render(<PlanoContasClient inicial={[]} />);
-    await userEvent.click(screen.getByRole('button', { name: '+ Novo registro' }));
-    expect(await screen.findByText('Falha ao carregar as contas')).toBeInTheDocument();
+    const popup = await abrirPesquisaPai();
+    expect(await within(popup).findByText('Falha ao carregar as contas')).toBeInTheDocument();
+  });
+
+  it('rede caída é capturada: mostra o erro no popup e não gera rejeição não tratada', async () => {
+    const rejeicoes: unknown[] = [];
+    const aoRejeitar = (motivo: unknown) => rejeicoes.push(motivo);
+    process.on('unhandledRejection', aoRejeitar);
+    try {
+      mockFetch({ rede: true });
+      render(<PlanoContasClient inicial={[]} />);
+      const popup = await abrirPesquisaPai();
+      expect(await within(popup).findByText('Não foi possível carregar as contas. Tente novamente.')).toBeInTheDocument();
+      await new Promise((resolver) => setTimeout(resolver, 0));
+      expect(rejeicoes).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', aoRejeitar);
+    }
+  });
+
+  it('falha de pedido obsoleto não mostra erro nem apaga a lista do pedido mais novo', async () => {
+    let falharPrimeiro: (r: Response) => void = () => undefined;
+    const primeiro = new Promise<Response>((resolver) => { falharPrimeiro = resolver; });
+    mockFetch((q) => (q === ''
+      ? primeiro
+      : Promise.resolve(resposta({ itens: [{ codigo: 'P7', nome: 'Pai recente' }] }))));
+    render(<PlanoContasClient inicial={[]} />);
+    const popup = await abrirPesquisaPai();
+    await userEvent.type(within(popup).getByLabelText('Pesquisar cadastro'), 'a');
+    expect(await within(popup).findByRole('button', { name: /Pai recente/ })).toBeInTheDocument();
+    falharPrimeiro({ ok: false, status: 500, text: async () => JSON.stringify({ message: 'Falha antiga' }) } as Response);
+    await new Promise((resolver) => setTimeout(resolver, 0));
+    expect(screen.queryByText('Falha antiga')).not.toBeInTheDocument();
+    expect(within(popup).getByRole('button', { name: /Pai recente/ })).toBeInTheDocument();
+  });
+
+  it('rede caída de pedido obsoleto também não mostra erro', async () => {
+    let rejeitarPrimeiro: (e: unknown) => void = () => undefined;
+    const primeiro = new Promise<Response>((_ok, rejeitar) => { rejeitarPrimeiro = rejeitar; });
+    mockFetch((q) => (q === '' ? primeiro : Promise.resolve(resposta({ itens: [{ codigo: 'P7', nome: 'Pai recente' }] }))));
+    render(<PlanoContasClient inicial={[]} />);
+    const popup = await abrirPesquisaPai();
+    await userEvent.type(within(popup).getByLabelText('Pesquisar cadastro'), 'a');
+    expect(await within(popup).findByRole('button', { name: /Pai recente/ })).toBeInTheDocument();
+    rejeitarPrimeiro(new TypeError('Failed to fetch'));
+    await new Promise((resolver) => setTimeout(resolver, 0));
+    expect(screen.queryByText('Não foi possível carregar as contas. Tente novamente.')).not.toBeInTheDocument();
   });
 });
 ```
@@ -3209,63 +3319,135 @@ export async function GET(req: NextRequest) {
 2. Estados, ao lado de `centros` (L206):
 
 ```tsx
+  const [lookupPai, setLookupPai] = useState(false);
   const [paisOpcoes, setPaisOpcoes] = useState<OpcaoPai[]>([]);
   const [paisTruncado, setPaisTruncado] = useState(false);
   const [paiBusca, setPaiBusca] = useState('');
+  const [paiRotulo, setPaiRotulo] = useState('');
+  const [erroPais, setErroPais] = useState('');
   const pedidoPais = useRef(0);
 ```
 
-3. Função ao lado de `pesquisarCentros`:
+3. Funções ao lado de `pesquisarCentros`. Todo o corpo de `carregarPais` está em `try/catch` (nenhuma rejeição escapa do `void`) e o contador de pedido é conferido em todos os ramos, inclusive nos de erro:
 
 ```tsx
   async function carregarPais(q: string) {
     const pedido = (pedidoPais.current += 1);
-    const resposta = await fetch(`/api/contabilidade/plano/opcoes-pai?q=${encodeURIComponent(q)}`);
-    if (pedido !== pedidoPais.current) return;
-    if (!resposta.ok) {
-      setAviso(await lerMensagem(resposta));
-      return;
+    const atual = () => pedido === pedidoPais.current;
+    try {
+      const resposta = await fetch(`/api/contabilidade/plano/opcoes-pai?q=${encodeURIComponent(q)}`);
+      if (!resposta.ok) {
+        const mensagem = await lerMensagem(resposta);
+        if (atual()) setErroPais(mensagem || 'Não foi possível carregar as contas. Tente novamente.');
+        return;
+      }
+      const corpo = await resposta.json() as { itens?: OpcaoPai[]; truncado?: boolean };
+      if (!atual()) return;
+      setErroPais('');
+      setPaisOpcoes(corpo.itens ?? []);
+      setPaisTruncado(corpo.truncado === true);
+    } catch {
+      if (atual()) setErroPais('Não foi possível carregar as contas. Tente novamente.');
     }
-    const corpo = await resposta.json() as { itens?: OpcaoPai[]; truncado?: boolean };
-    setPaisOpcoes(corpo.itens ?? []);
-    setPaisTruncado(corpo.truncado === true);
+  }
+
+  function abrirPesquisaPai() {
+    setPaiBusca('');
+    setErroPais('');
+    setLookupPai(true);
+    void carregarPais('');
+  }
+
+  function escolherPai(opcao: OpcaoPai) {
+    setForm({ ...form, contaPaiCodigo: opcao.codigo });
+    setPaiRotulo(opcao.nome);
+    setLookupPai(false);
   }
 ```
 
-4. Em `abrirCriar` e `abrirEditar`, depois do `setDrawer(...)`: `setPaiBusca(''); void carregarPais('');`.
-5. Substituir o `<label htmlFor="conta-pai">` e o `<select id="conta-pai">` (L629 a L635) por:
+4. Em `abrirCriar` e `abrirEditar`, depois do `setDrawer(...)`: `setPaiRotulo(''); setLookupPai(false);`. Nada é carregado ao abrir o drawer; a consulta só acontece quando o usuário clica em `Pesquisar`, como no protótipo.
+5. Substituir o `<label htmlFor="conta-pai">` e o `<select id="conta-pai">` (L629 a L635) pelo campo `relation` do protótipo: o `select` (rótulo `Conta contábil` e placeholder `Selecione conta contábil`, ambos já existentes) com o botão `Pesquisar` ao lado:
 
 ```tsx
-          <label htmlFor="conta-pai-busca">Buscar conta contábil</label>
-          <input id="conta-pai-busca" value={paiBusca} onChange={(evento) => { setPaiBusca(evento.target.value); void carregarPais(evento.target.value); }} />
           <label htmlFor="conta-pai">Conta contábil</label>
-          <select id="conta-pai" ref={(elemento) => { elemento?.setAttribute('placeholder', 'Selecione conta contábil'); }} value={form.contaPaiCodigo} onChange={(evento) => setForm({ ...form, contaPaiCodigo: evento.target.value })}>
-            <option value="">Selecione conta contábil</option>
-            {form.contaPaiCodigo && !paisOpcoes.some((opcao) => opcao.codigo === form.contaPaiCodigo) && (
-              <option value={form.contaPaiCodigo}>{form.contaPaiCodigo}</option>
-            )}
-            {paisOpcoes.filter((opcao) => !(drawer === 'editar' && opcao.codigo === selecionada?.codigo)).map((opcao) => (
-              <option key={opcao.codigo} value={opcao.codigo}>{opcao.nome}</option>
-            ))}
-          </select>
-          {paisTruncado && <p>Refine a busca para ver mais contas.</p>}
+          <div className="flex items-center gap-2">
+            <select id="conta-pai" ref={(elemento) => { elemento?.setAttribute('placeholder', 'Selecione conta contábil'); }} value={form.contaPaiCodigo} onChange={(evento) => setForm({ ...form, contaPaiCodigo: evento.target.value })}>
+              <option value="">Selecione conta contábil</option>
+              {form.contaPaiCodigo && <option value={form.contaPaiCodigo}>{paiRotulo || form.contaPaiCodigo}</option>}
+            </select>
+            <button type="button" title="Pesquisar cadastro pelo nome" onClick={abrirPesquisaPai}>Pesquisar</button>
+          </div>
 ```
 
-O `<option>` extra mantém o pai já gravado quando a edição abre e ele não está entre as 50 primeiras; a própria conta não é oferecida como pai dela (o backend também recusa, Task 10). O campo de busca é o único acréscimo de UI e existe porque a lista é limitada; o `Pesquisar` do drawer continua só para o centro de custo.
+   O `select` só tem o placeholder e o pai já escolhido (na edição, o código gravado até o usuário pesquisar de novo); a lista de candidatos vive no popup. Não há `<label>` nem `<input>` novo de busca no formulário. Os dois botões `Pesquisar` do drawer (centro de custo, primeiro no DOM, e conta pai, último) se distinguem pela ordem: os testes Jest usam `getAllByRole` e o último, e o Playwright `.first()` e `.last()`.
+6. O popup, junto do `{drawer && (...)}` (fora da `<section>`, para cobrir a tela como o `lookup-popup`). A própria conta não é oferecida como pai dela na edição (o backend também recusa, Task 10):
+
+```tsx
+      {lookupPai && (
+        <div role="dialog" aria-label="Selecionar Conta contábil" className="fixed inset-0 z-[120] grid place-items-center bg-[rgba(17,32,50,.4)] p-3.5">
+          <div className="w-[min(490px,95vw)] overflow-hidden rounded-[9px] bg-white shadow-lg">
+            <div>
+              <h2>Selecionar Conta contábil</h2>
+              <button type="button" onClick={() => setLookupPai(false)}>Fechar</button>
+            </div>
+            <input
+              type="search"
+              autoFocus
+              placeholder="Pesquisar pelo nome ou descrição"
+              aria-label="Pesquisar cadastro"
+              value={paiBusca}
+              onChange={(evento) => { setPaiBusca(evento.target.value); void carregarPais(evento.target.value); }}
+            />
+            <div>
+              {paisOpcoes.filter((opcao) => !(drawer === 'editar' && opcao.codigo === selecionada?.codigo)).map((opcao) => (
+                <button type="button" key={opcao.codigo} onClick={() => escolherPai(opcao)}>
+                  <b>{opcao.nome}</b>
+                  <small>{opcao.codigo}</small>
+                </button>
+              ))}
+            </div>
+            {erroPais && <p role="alert">{erroPais}</p>}
+            {paisTruncado && <p>Refine a busca para ver mais contas.</p>}
+            <p>A seleção utiliza uma referência interna invisível, nunca digitação de GUID.</p>
+          </div>
+        </div>
+      )}
+```
+
+   O `<small>` mostra o código da conta (referência de negócio), nunca UUID. O botão `Pesquisar` deixa de ser só do centro de custo: serve também à conta pai, como em todo campo `relation` do protótipo.
+7. Conferência dos rótulos (menor c). Os únicos rótulos novos são o `aria-label` `Selecionar Conta contábil` (popup) e `Pesquisar cadastro` (busca). Em `app/frontend`, confirmar que nenhum seletor não exato fora de `plano-contas-opcoes-pai.test.tsx` casa com eles:
+
+```powershell
+Select-String -Path e2e/*.ts, __tests__/*.ts, __tests__/*.tsx -Pattern "getByLabel(Text)?\('[^']*(Conta contábil|Pesquisar)[^']*'\)"
+```
+
+   Expected: nenhuma linha. Os usos atuais de `Conta contábil` e `Pesquisar` em `e2e/e09-t01-plano-contas.spec.ts` (L93, L113 e L182) são `getByRole` com `name` e `exact: true` ou `getByPlaceholder`, e não casam. Linha encontrada: torná-la exata antes de seguir.
+8. `app/frontend/e2e/e09-t01-plano-contas.spec.ts`: em `criarCentro`, o clique no `Pesquisar` passa a `.first()` (L93: `page.getByRole('button', { name: 'Pesquisar', exact: true }).first().click()`); em `criarConta`, o bloco `if (dados.pai)` (L112 a L114) vira o fluxo do popup:
+
+```ts
+  if (dados.pai) {
+    await page.getByRole('button', { name: 'Pesquisar', exact: true }).last().click();
+    const lookup = page.getByRole('dialog', { name: 'Selecionar Conta contábil', exact: true });
+    await lookup.getByLabel('Pesquisar cadastro', { exact: true }).fill('Grupo do ativo');
+    await lookup.getByRole('button', { name: /Grupo do ativo/ }).click();
+    await expect(lookup).toBeHidden();
+    await expect(page.getByPlaceholder('Selecione conta contábil').locator('option:checked')).toHaveText('Grupo do ativo');
+  }
+```
 
 - [ ] **Step 4: Run to verify it passes**
 
-Em `app/backend`: `npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` e `npx tsc --noEmit`. Em `app/frontend`: `npx jest __tests__/plano-contas-opcoes-pai.test.tsx __tests__/bff-plano-opcoes-pai.test.ts __tests__/plano-contas-apresentacao.test.tsx` e `npx tsc --noEmit`. Expected: PASS e sem erro de tipo. Depois, com a pilha local no ar como na Task 7: `npx playwright test e2e/e09-t01-plano-contas.spec.ts`. Expected: PASS; a seleção do pai (`getByPlaceholder('Selecione conta contábil').selectOption`, spec L113) agora lê as opções do endpoint, e a conta pai aprovada antes aparece sem recarregar a grade.
+Em `app/backend`: `npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` e `npx tsc --noEmit`. Em `app/frontend`: `npx jest __tests__/plano-contas-opcoes-pai.test.tsx __tests__/bff-plano-opcoes-pai.test.ts __tests__/plano-contas-apresentacao.test.tsx` e `npx tsc --noEmit`. Expected: PASS e sem erro de tipo. Depois, com a pilha local no ar como na Task 7: `npx playwright test e2e/e09-t01-plano-contas.spec.ts`. Expected: PASS; a seleção do pai (spec L112 a L114) passa a ser: clicar em `Pesquisar`, buscar no popup, escolher e criar; as opções vêm do endpoint e a conta pai aprovada antes aparece sem recarregar a grade.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add app/backend/src/modules/contabilidade/plano app/backend/test/integration/plano-contas.e2e-spec.ts app/frontend/src/app/api/contabilidade/plano/opcoes-pai "app/frontend/src/app/(admin)/erp/contabilidade/plano-de-contas/plano-contas-client.tsx" app/frontend/__tests__/plano-contas-opcoes-pai.test.tsx app/frontend/__tests__/bff-plano-opcoes-pai.test.ts
+git add app/backend/src/modules/contabilidade/plano app/backend/test/integration/plano-contas.e2e-spec.ts app/frontend/src/app/api/contabilidade/plano/opcoes-pai "app/frontend/src/app/(admin)/erp/contabilidade/plano-de-contas/plano-contas-client.tsx" app/frontend/e2e/e09-t01-plano-contas.spec.ts app/frontend/__tests__/plano-contas-opcoes-pai.test.tsx app/frontend/__tests__/bff-plano-opcoes-pai.test.ts
 git commit -m @"
 fix(e09-t01): combo de conta pai vem de endpoint próprio, não da grade
 
 ### Descrição Detalhada:
-Cria GET /contabilidade/plano/opcoes-pai (CONTABILIDADE_PLANO_LER) com as contas sintéticas cuja última versão decidida é APPROVED, busca por código ou nome, teto de 50 e sem identificador. O client carrega as opções ao abrir o drawer e ao buscar.
+Cria GET /contabilidade/plano/opcoes-pai (CONTABILIDADE_PLANO_LER) com as contas sintéticas cuja última versão decidida é APPROVED, busca por código ou nome, teto de 50 e sem identificador. O client usa o padrão do protótipo: select de conta pai com botão Pesquisar que abre o popup de busca alimentado pelo endpoint.
 
 ### Motivo da Mudança:
 O combo usava a página corrente da grade, já filtrada. Pai válido em outra página, sob filtro ou com a v2 em rascunho não podia ser escolhido, contra a regra de vigência da Task 9.
@@ -3312,7 +3494,7 @@ Lidos em `F:/Projetos/AlphaCarnes/.worktrees/e01-t05` (HEAD `35848f3`, trilha E0
 | `permissoes.ts`, `perfis.service.ts` (`modulo: 'Fiscal'` e prefixo `CONTABILIDADE_`), `schema/index.ts`, `app.module.ts`, `realtime/events/eventos.ts` | acréscimos | acréscimos | Aditivos: manter os dois lados |
 | `realtime.gateway.ts` | `podeAssinar(ws, room)` com rooms fiscais (+99 linhas) e `test/unit/realtime-gateway-rooms.spec.ts` | `podeAssinar(ws, room)` com a room `contabilidade-plano` | Os dois mudam a mesma assinatura. Manter as regras das duas rooms e rodar `realtime-gateway-rooms.spec.ts` e o `it` da room `contabilidade-plano` de `plano-contas.e2e-spec.ts` |
 
-**Regra de recomputo.** Depois de resolver, os números não são copiados do plano: são recontados nos arquivos. `ROTAS_CANONICAS.length`, a soma de `menusDe(perfil)` nos 11 perfis e `MENU_V2.length` têm de dar 45, 132 e 11. Cada teste de menu que citava 39, 40, 44, 126, 127 ou 131 passa a usar o valor recontado, nunca um valor ajustado até passar.
+**Regra de recomputo.** Os números da tabela e deste parágrafo (11 grupos, 45 rotas, 132 pares, 39, 40, 44, 126, 127, 131 e os 10 grupos) foram lidos em `e01-t05` na data do plano e são **valores esperados a conferir, não valores a copiar**. Depois de resolver, os números não são copiados do plano: são recontados nos arquivos. `ROTAS_CANONICAS.length`, a soma de `menusDe(perfil)` nos 11 perfis e `MENU_V2.length` têm de dar 45, 132 e 11. Cada teste de menu que citava 39, 40, 44, 126, 127 ou 131 passa a usar o valor recontado, nunca um valor ajustado até passar.
 
 **Critério de parada (devolver ao coordenador, sem commitar o merge).** (a) Os totais recontados forem diferentes de 11 grupos, 45 rotas e 132 pares. (b) `FISCAL` não ficar antes de `CONTABILIDADE`, ou outro grupo mudar de posição. (c) Qualquer perfil, além do administrador, ganhar a rota do plano de contas ou uma permissão `CONTABILIDADE_PLANO_*`, ou algum perfil perder uma permissão `FISCAL_*` que a E01 deu. (d) `MENUS_OPERACIONAIS` deixar de ter 39 itens. (e) Conflito em arquivo fora da tabela, ou conflito que exija escolher entre duas regras (e não somar as duas). (f) `perfil-permissoes-snapshot.spec.ts`, `menu-rbac.test.ts`, `menu-v2.test.ts` ou `realtime-gateway-rooms.spec.ts` falharem depois do recomputo.
 
@@ -3385,7 +3567,18 @@ git rm -f app/backend/src/database/migrations/0048_e09_t01_plano_contas.sql
 if (Select-String -Path app/backend/src/database/migrations/meta/_journal.json -Pattern 'e09' -Quiet) { throw 'journal ainda cita e09' }
 ```
 
-Depois de resolver os demais arquivos pela tabela e recontar os totais (regra de recomputo), rodar `npx jest __tests__/menu-rbac.test.ts __tests__/menu-v2.test.ts` em `app/frontend` e `npx jest src/common/rbac test/unit/realtime-gateway-rooms.spec.ts` em `app/backend`. Só então `git commit --no-edit`. Qualquer item do critério de parada acima: `git merge --abort` e devolver ao coordenador.
+Depois de resolver os demais arquivos pela tabela, **recontar nos arquivos resolvidos** antes de editar qualquer número de teste:
+
+```powershell
+# Recontagem, em F:/Projetos/AlphaCarnes/.worktrees/e09-t01 com o merge ainda não commitado
+Set-Location app/backend
+node -e "const j=require('./src/common/rbac/perfil-menus.snapshot.json');const v=Object.values(j);console.log('perfis',Object.keys(j).length,'pares',v.reduce((a,l)=>a+l.length,0),'rotas do administrador',j.administrador.length)"
+Set-Location ../frontend
+(Select-String -Path src/lib/menu-v2.ts -Pattern "^    title:").Count
+(Select-String -Path src/lib/menu-v2.ts -Pattern "href: '/").Count
+```
+
+Contar também os itens de `MENUS_OPERACIONAIS` e de `MENUS_ERP` direto dos arrays em `menus-canonicos.ts` (linhas de rota entre `export const MENUS_OPERACIONAIS = [` e o `] as const` seguinte, e idem `MENUS_ERP`). Comparar com o esperado: 11 perfis, 132 pares, 45 rotas do administrador, 11 grupos, 45 `href` em `menu-v2.ts` e 39 operacionais. Número diferente é o critério de parada (a) ou (d), não motivo para ajustar o teste. Só com os números batendo, trocar nos testes de menu cada valor antigo (39, 40, 44, 126, 127, 131) pelo valor **recontado**, e então rodar a suíte. Depois, recontar de novo com a regra de recomputo, rodar `npx jest __tests__/menu-rbac.test.ts __tests__/menu-v2.test.ts` em `app/frontend` e `npx jest src/common/rbac test/unit/realtime-gateway-rooms.spec.ts` em `app/backend`. Só então `git commit --no-edit`. Qualquer item do critério de parada acima: `git merge --abort` e devolver ao coordenador.
 
 Gerar com o drizzle-kit (o diff é entre o último snapshot do develop e `contabilidade-plano.schema.ts`):
 
@@ -3494,3 +3687,4 @@ Os arquivos de menu e de RBAC resolvidos no merge entram no commit do próprio m
 - r3: cada achado B1 a B4, cada menor M1 a M3, M5, M6 e AD-25 item 3 tem task e teste no mapa da seção "Correções da revisão crítica (r3)". Não há migration nas Tasks 8 a 17. A Task 18 é condicional, é sempre a última e só roda por indicação do coordenador.
 - r3: nenhuma task toca `docs/execucao/` nem arquivo da E09-T02. A pendência P-r3-1 não tem task e está registrada na seção; a P-r3-2 virou a Task 17.
 - r4: cada item do veredito do Portão 1 r3 (1 bloqueante e 8 menores) tem correção na subseção "Portão 1 r3 e correção (r4)". A Task 17 não cria permissão, perfil nem menu, e a Task 18 continua a última. Nenhuma task afirma tempo real na tela.
+- r5: o bloqueante (campo fora do protótipo) e os menores (a) a (d) do Portão 1 r4 têm correção na subseção "Portão 1 r4 e correção (r5)", com o mapa achado, task e teste. O formulário volta a ter só os campos do protótipo; o `Pesquisar` da conta pai segue o `openLookup` (L486 a L494).
