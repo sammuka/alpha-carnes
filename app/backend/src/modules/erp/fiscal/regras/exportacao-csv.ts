@@ -9,7 +9,9 @@ export interface LinhaExportacaoRegra {
   icmsCst: string;
 }
 
-function celula(valor: string): string {
+function celula(original: string): string {
+  // Injeção de fórmula (OWASP): texto iniciado por = + - @ tab ou CR vira literal no Excel.
+  const valor = /^[=+\-@\t\r]/.test(original) ? `'${original}` : original;
   if (/[;"\r\n]/.test(valor)) return `"${valor.replace(/"/g, '""')}"`;
   return valor;
 }
