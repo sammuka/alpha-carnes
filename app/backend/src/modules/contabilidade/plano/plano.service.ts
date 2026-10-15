@@ -137,6 +137,7 @@ export class PlanoContasService {
 
   async criarCentro(dto: CriarCentroDto, usuarioId: string) {
     await this.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:centro:' + dto.codigo}))`);
       const duplicado = await tx.select({ id: centrosCusto.id }).from(centrosCusto)
         .where(and(eq(centrosCusto.codigo, dto.codigo), isNull(centrosCusto.deletedAt))).limit(1);
       if (duplicado.length > 0) throw new ConflictException('Já existe centro de custo com este código');

@@ -870,4 +870,15 @@ describe('Plano de contas', () => {
     expect(csv).toContain(`"'\t=tab"`);
     expect(csv).toContain(`"'=HYPERLINK(""http://x"")"`);
   });
+
+  it('dez criações simultâneas do mesmo centro: uma grava, nove respondem 409', async () => {
+    const resultados = await Promise.allSettled(
+      Array.from({ length: 10 }, () => service.criarCentro({ codigo: 'CTX', nome: 'Concorrente', justificativa: 'corrida' }, userId)),
+    );
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    for (const r of resultados.filter((x): x is PromiseRejectedResult => x.status === 'rejected')) {
+      expect(r.reason).toMatchObject({ status: 409, response: { message: 'Já existe centro de custo com este código' } });
+    }
+    expect((await service.listarCentrosAtivos()).filter((c) => c.codigo === 'CTX')).toHaveLength(1);
+  });
 });
