@@ -1,7 +1,8 @@
 import { INestApplication } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { createTestApp, cleanupDb, createTestUser } from '../helpers/test-app';
+import request from 'supertest';
+import { createTestApp, cleanupDb, createTestUser, loginCookies } from '../helpers/test-app';
 import { DRIZZLE } from '../../src/database/database.module';
 import * as schema from '../../src/database/schema';
 import { centrosCusto, contasContabeis } from '../../src/database/schema/contabilidade-plano.schema';
@@ -52,6 +53,8 @@ describe('Políticas de contabilização', () => {
   let outraPessoaId: string;
   let plano: PlanoContasService;
   let service: PoliticasContabilizacaoService;
+  let adminCookies: string;
+  let comercialCookies: string;
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -67,7 +70,12 @@ describe('Políticas de contabilização', () => {
     outraPessoaId = pessoa.id;
     plano = app.get(PlanoContasService);
     service = app.get(PoliticasContabilizacaoService);
+    const comercial = await createTestUser(app, { perfil: 'comercial' });
+    adminCookies = await loginCookies(app, admin.adminEmail, admin.adminPassword);
+    comercialCookies = await loginCookies(app, comercial.adminEmail, comercial.adminPassword);
   });
+
+  const srv = () => app.getHttpServer();
 
   beforeEach(async () => {
     await db.execute(sql`delete from politica_simulacoes`);
@@ -231,5 +239,38 @@ describe('Políticas de contabilização', () => {
         response: { message: 'aprovador diferente do autor', codigo: politica.codigo },
       });
     expect((await service.obter(politica.codigo)).situacao).toBe('DRAFT');
+  });
+
+  it('nega a política a um perfil que não é administrador', async () => {
+    const res = await request(srv()).get('/contabilidade/politicas').set('Cookie', comercialCookies);
+    expect(res.status).toBe(403);
+  });
+
+  it('não devolve uuid na listagem', async () => {
+    const res = await request(srv()).get('/contabilidade/politicas').set('Cookie', adminCookies);
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toMatch(
+      /[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i,
+    );
+  });
+
+  it('devolve 422 com message e codigo quando o mapeamento não existe', async () => {
+    const res = await request(srv()).post('/contabilidade/politicas').set('Cookie', adminCookies).send({
+      tipoEvento: 'LIQUIDACAO',
+      competencia: '2026-10',
+      contaDebitoCodigo: 'nao-existe',
+      contaCreditoCodigo: 'tambem-nao',
+      centroCodigo: 'CT1',
+      vigenciaInicio: '2026-10-01',
+      justificativa: 'tenta',
+    });
+    expect(res.status).toBe(422);
+    expect(res.body).toEqual({
+      statusCode: 422,
+      message: { message: 'mapeamento ausente', codigo: 'LIQUIDACAO-2026-10' },
+      timestamp: expect.any(String),
+      path: '/contabilidade/politicas',
+      requestId: 'unknown',
+    });
   });
 });
