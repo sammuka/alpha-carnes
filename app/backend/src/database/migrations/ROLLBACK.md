@@ -188,3 +188,28 @@ Rollback:
   Com linhas: não remover; as tabelas ficam inertes e abre-se decisão do Quality Owner.
 - Seed: a chave `fiscal.enquadramentos_perfis_autorizados` e as permissões `FISCAL_ENQUADRAMENTOS_*`
   saem só junto do revert.
+
+## E01-T03 — regras tributárias e catálogos manuais de benefício e classificação
+
+Migration gerada por `drizzle-kit generate --name e01_t03_regras_tributarias`, sem SQL manual.
+Somente `CREATE TABLE`, `CREATE [UNIQUE] INDEX` e `ALTER TABLE <tabela nova> ADD CONSTRAINT` sobre as
+três tabelas novas, nesta ordem de remoção:
+
+```sql
+DROP TABLE IF EXISTS regras_tributarias;
+DROP TABLE IF EXISTS classificacoes_ibs_cbs;
+DROP TABLE IF EXISTS beneficios_fiscais;
+```
+
+Não há `INSERT` de semente de benefício ou classificação. Não há coluna CSOSN, IS, versão de NT,
+data comercial, fiscal ou efetiva, nem FK para `notas_fiscais`. Não derrubar `enquadramentos_fiscais`,
+`cfops`, `ncms`, `estabelecimentos` nem `empresas`.
+
+Rollback:
+
+- Código: revert dos commits da fatia por PR (sem force-push).
+- Banco: só tabelas folha. Dev/CI sem dados: remover o schema e gerar a migration de remoção com
+  `drizzle-kit generate` (nunca SQL manual), na ordem `regras_tributarias`, `classificacoes_ibs_cbs`,
+  `beneficios_fiscais`. Com linhas: não remover; as tabelas ficam inertes e abre-se decisão do Quality Owner.
+- Seed: a chave `fiscal.regras_perfis_autorizados`, as permissões `FISCAL_REGRAS_*` e o item de menu
+  saem só junto do revert. A chave `fiscal.enquadramentos_perfis_autorizados` fica.
