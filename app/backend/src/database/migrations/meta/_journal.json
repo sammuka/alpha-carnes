@@ -330,6 +330,13 @@
       "when": 1792041111837,
       "tag": "0046_e01_t03_regras_tributarias",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1792054042058,
+      "tag": "0047_e01_t04_simulacoes_fiscais",
+      "breakpoints": true
     }
   ]
 }

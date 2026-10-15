@@ -34,3 +34,4 @@ export * from './estoque.schema';
 export * from './fiscal-empresas.schema';
 export * from './fiscal-enquadramentos.schema';
 export * from './fiscal-regras.schema';
+export * from './fiscal-simulacoes.schema';
