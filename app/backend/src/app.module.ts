@@ -33,6 +33,7 @@ import { SifModule } from './modules/gestao/sif/sif.module';
 import { AuditoriaConsultaModule } from './modules/auditoria/auditoria.module';
 import { EmpresasFiscaisModule } from './modules/erp/fiscal/empresas/empresas-fiscais.module';
 import { EnquadramentosFiscaisModule } from './modules/erp/fiscal/enquadramentos/enquadramentos-fiscais.module';
+import { RegrasTributariasModule } from './modules/erp/fiscal/regras/regras-tributarias.module';
 import { AuditoriaModule } from './common/auditoria/auditoria.module';
 import { AuditoriaInterceptor } from './common/interceptors/auditoria.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -89,6 +90,7 @@ import type { IncomingMessage } from 'http';
     AuditoriaConsultaModule,
     EmpresasFiscaisModule,
     EnquadramentosFiscaisModule,
+    RegrasTributariasModule,
   ],
   controllers: [HealthController],
   providers: [
