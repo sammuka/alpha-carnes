@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import request from 'supertest';
 import { sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -52,13 +53,17 @@ describe('E01-T05 homologações de regras', () => {
   let adminB = '';
   let gestor = '';
   let leitor = '';
+  let gerenciar = '';
   let seq = 110;
+  let eventos: jest.SpiedFunction<EventEmitter2['emit']>;
 
   beforeAll(async () => {
     app = await createTestApp();
     const a = await createTestUser(app, { perfil: 'administrador' });
     const g = await createTestUser(app, { perfil: 'gestor' });
     const l = await createTestUser(app, { perfil: 'diretoria' });
+    const soGerenciar = await createTestUser(app, { perfil: 'comercial' });
+    eventos = jest.spyOn(app.get(EventEmitter2), 'emit');
     await app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE).db.execute(sql`
       INSERT INTO perfis_permissoes (perfil_id, permissao_id)
       SELECT p.id, perm.id
@@ -67,9 +72,18 @@ describe('E01-T05 homologações de regras', () => {
       WHERE p.slug = 'diretoria'
       ON CONFLICT ON CONSTRAINT uq_perfil_permissao DO NOTHING
     `);
+    await app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE).db.execute(sql`
+      INSERT INTO perfis_permissoes (perfil_id, permissao_id)
+      SELECT p.id, perm.id
+      FROM perfis p
+      JOIN permissoes perm ON perm.codigo = 'FISCAL_HOMOLOGACOES_GERENCIAR'
+      WHERE p.slug = 'comercial'
+      ON CONFLICT ON CONSTRAINT uq_perfil_permissao DO NOTHING
+    `);
     admin = joinSetCookie(await request(app.getHttpServer()).post('/auth/login').send({ email: a.adminEmail, password: a.adminPassword }));
     gestor = joinSetCookie(await request(app.getHttpServer()).post('/auth/login').send({ email: g.adminEmail, password: g.adminPassword }));
     leitor = joinSetCookie(await request(app.getHttpServer()).post('/auth/login').send({ email: l.adminEmail, password: l.adminPassword }));
+    gerenciar = joinSetCookie(await request(app.getHttpServer()).post('/auth/login').send({ email: soGerenciar.adminEmail, password: soGerenciar.adminPassword }));
     const emailB = `admin-b-hom-${Date.now()}@test.local`;
     const senhaB = 'TestPass@123456';
     const criado = await request(app.getHttpServer())
@@ -81,6 +95,7 @@ describe('E01-T05 homologações de regras', () => {
   });
 
   afterAll(async () => {
+    eventos.mockRestore();
     await cleanupDb(app);
     await app.close();
   });
@@ -354,6 +369,93 @@ describe('E01-T05 homologações de regras', () => {
   it('gestor não abre revisão', async () => {
     const { regraId } = await regraAprovada();
     const res = await abrir(gestor, regraId);
+    expect(res.status).toBe(403);
+  });
+
+  function decidir(acao: 'aprovar' | 'rejeitar', cookies: string, id: string, versao: number, justificativa: string) {
+    return request(app.getHttpServer())
+      .post(`/fiscal/homologacoes/${id}/${acao}`)
+      .set('Cookie', cookies)
+      .send({ versao, justificativa });
+  }
+
+  async function lerRegra(id: string): Promise<{ situacao: string; updatedAt: string }> {
+    const n = await db().execute(sql`
+      SELECT situacao, updated_at AS "updatedAt" FROM regras_tributarias WHERE id = ${id}::uuid
+    `);
+    const linha = n.rows[0] as { situacao: string; updatedAt: Date | string };
+    return { situacao: linha.situacao, updatedAt: new Date(linha.updatedAt).toISOString() };
+  }
+
+  function contarEventos(): number {
+    return eventos.mock.calls.filter((chamada) => chamada[0] === 'homologacao_regra_alterada').length;
+  }
+
+  it('autor da regra não homologa', async () => {
+    const { regraId } = await regraAprovada();
+    const aberta = await abrir(admin, regraId);
+    expect(aberta.status).toBe(201);
+    const antes = await lerRegra(regraId);
+    eventos.mockClear();
+    const res = await decidir('aprovar', admin, aberta.body.id as string, 1, 'Decisão do autor da submissão.');
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('SEGREGACAO_FUNCAO');
+    expect(mensagemDe(res.body)).toBe('A aprovação deve ser feita por usuário diferente de quem submeteu.');
+    expect(await lerRegra(regraId)).toEqual(antes);
+    expect(contarEventos()).toBe(0);
+  });
+
+  it('segundo administrador aprova sem terceira pessoa', async () => {
+    const { regraId } = await regraAprovada();
+    const aberta = await abrir(admin, regraId);
+    expect(aberta.status).toBe(201);
+    const antes = await lerRegra(regraId);
+    const res = await decidir('aprovar', adminB, aberta.body.id as string, 1, 'Homologação conferida por outro usuário.');
+    expect(res.status).toBe(200);
+    expect(res.body.situacao).toBe('Aprovada');
+    const regra = await lerRegra(regraId);
+    expect(regra.situacao).toBe('APROVADA');
+    expect(regra.updatedAt).toBe(antes.updatedAt);
+  });
+
+  it('rejeitar grava Rejeitada e deixa o aprovador vazio', async () => {
+    const { regraId } = await regraAprovada();
+    const aberta = await abrir(admin, regraId);
+    expect(aberta.status).toBe(201);
+    const res = await decidir('rejeitar', adminB, aberta.body.id as string, 1, 'Rejeição da revisão desta versão.');
+    expect(res.status).toBe(200);
+    expect(res.body.situacao).toBe('Rejeitada');
+    expect(res.body.aprovador).toBe('');
+    const coluna = await db().execute(sql`
+      SELECT aprovado_por_id FROM homologacoes_regras WHERE id = ${aberta.body.id}::uuid
+    `);
+    expect((coluna.rows[0] as { aprovado_por_id: string | null }).aprovado_por_id).toBeNull();
+  });
+
+  it('aprovar de novo é transição inválida', async () => {
+    const { regraId } = await regraAprovada();
+    const aberta = await abrir(admin, regraId);
+    const aprovada = await decidir('aprovar', adminB, aberta.body.id as string, 1, 'Homologação conferida por outro usuário.');
+    expect(aprovada.status).toBe(200);
+    const res = await decidir('aprovar', adminB, aberta.body.id as string, aprovada.body.versao as number, 'Segunda decisão da mesma revisão.');
+    expect(res.status).toBe(409);
+    expect(codigoDe(res.body)).toBe('TRANSICAO_INVALIDA');
+    expect(mensagemDe(res.body)).toBe('Ação não permitida na situação atual.');
+  });
+
+  it('versão divergente é conflito concorrente', async () => {
+    const { regraId } = await regraAprovada();
+    const aberta = await abrir(admin, regraId);
+    const res = await decidir('aprovar', adminB, aberta.body.id as string, 9, 'Decisão com versão desatualizada.');
+    expect(res.status).toBe(409);
+    expect(codigoDe(res.body)).toBe('CONFLITO_CONCORRENTE');
+    expect(mensagemDe(res.body)).toBe('O registro foi alterado por outro usuário. Recarregue para continuar.');
+  });
+
+  it('quem só tem gestão não aprova', async () => {
+    const { regraId } = await regraAprovada();
+    const aberta = await abrir(admin, regraId);
+    const res = await decidir('aprovar', gerenciar, aberta.body.id as string, 1, 'Tentativa sem a permissão de aprovar.');
     expect(res.status).toBe(403);
   });
 

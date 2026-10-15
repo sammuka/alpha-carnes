@@ -27,9 +27,13 @@ import {
   conflito,
   conflitoConcorrente,
   ehViolacaoUnica,
+  exigirSegregacao,
+  exigirVersao,
   regraViolada,
   type Tx,
 } from '../empresas/fiscal-comum';
+import type { CorpoDecisaoDto } from './dto/homologacao.dto';
+import { recusarDecisao, type SituacaoHomologacao } from './homologacao-transicao';
 import { formatarPercentualPtBr } from '../regras/percentual';
 import { RegrasTributariasService } from '../regras/regras.service';
 import { rotuloCompetencia } from '../simulacoes/decimal-memoria';
@@ -240,6 +244,24 @@ export class HomologacoesService {
     return resultado.corpo;
   }
 
+  async aprovar(id: string, dto: CorpoDecisaoDto, usuarioId: string) {
+    return this.decidir(id, dto, usuarioId, 'aprovar');
+  }
+
+  async rejeitar(id: string, dto: CorpoDecisaoDto, usuarioId: string) {
+    return this.decidir(id, dto, usuarioId, 'rejeitar');
+  }
+
+  private async decidir(id: string, dto: CorpoDecisaoDto, usuarioId: string, acao: 'aprovar' | 'rejeitar') {
+    const resultado = await this.db.transaction(async (tx) => {
+      const gravado = await this.aplicarDecisao(tx, id, dto, usuarioId, acao);
+      await this.auditoria.registrar(tx, gravado.auditoria);
+      return gravado;
+    });
+    this.eventos.emit(EVENTO, resultado.payload);
+    return this.detalhar(id);
+  }
+
   private async aplicarAbrir(tx: Tx, dto: CriarHomologacaoDto, usuarioId: string) {
     const [regra] = await tx
       .select()
@@ -295,6 +317,56 @@ export class HomologacoesService {
     };
   }
 
+  private async aplicarDecisao(
+    tx: Tx,
+    id: string,
+    dto: CorpoDecisaoDto,
+    usuarioId: string,
+    acao: 'aprovar' | 'rejeitar',
+  ) {
+    const atual = await this.obterBloqueado(tx, id);
+    recusarDecisao(atual.situacao as SituacaoHomologacao, acao);
+    exigirVersao(atual.versao, dto.versao);
+    const [regra] = await tx
+      .select({ submetidoPorId: regrasTributarias.submetidoPorId })
+      .from(regrasTributarias)
+      .where(eq(regrasTributarias.id, atual.regraId));
+    if (!regra) throw new NotFoundException('Regra tributária não encontrada');
+    exigirSegregacao(regra.submetidoPorId, usuarioId);
+    const agora = new Date();
+    const resumo = acao === 'aprovar' ? 'Alteração aprovada' : 'Alteração rejeitada';
+    const patch = acao === 'aprovar'
+      ? { situacao: 'APROVADA' as const, aprovadoPorId: usuarioId, aprovadoEm: agora }
+      : { situacao: 'REJEITADA' as const, rejeitadoPorId: usuarioId, rejeitadoEm: agora };
+    const [linha] = await tx.update(homologacoesRegras).set({
+      ...patch,
+      justificativa: dto.justificativa,
+      versao: atual.versao + 1,
+      atualizadoPorId: usuarioId,
+      updatedAt: agora,
+    }).where(eq(homologacoesRegras.id, id)).returning();
+    if (!linha) throw new NotFoundException('Homologação não encontrada');
+    return {
+      payload: {
+        homologacaoId: linha.id,
+        regraId: linha.regraId,
+        codigo: linha.codigo,
+        acao: acao === 'aprovar' ? 'aprovada' as const : 'rejeitada' as const,
+        situacao: linha.situacao,
+      },
+      auditoria: {
+        tabela: 'homologacoes_regras',
+        registroId: linha.id,
+        operacao: 'UPDATE' as const,
+        modulo: MODULO,
+        usuarioId,
+        dadosAnteriores: { situacao: atual.situacao, versao: atual.versao },
+        dadosNovos: { situacao: linha.situacao, versao: linha.versao, resumo },
+        justificativa: dto.justificativa,
+      },
+    };
+  }
+
   private async inserirComCodigo(
     tx: Tx,
     valores: Omit<typeof homologacoesRegras.$inferInsert, 'codigo'>,
@@ -320,6 +392,15 @@ export class HomologacoesService {
       }
     }
     conflitoConcorrente();
+  }
+
+  private async obterBloqueado(tx: Tx, id: string): Promise<Linha> {
+    const [linha] = await tx.select().from(homologacoesRegras).where(and(
+      eq(homologacoesRegras.id, id),
+      isNull(homologacoesRegras.deletedAt),
+    )).for('no key update');
+    if (!linha) throw new NotFoundException('Homologação não encontrada');
+    return linha;
   }
 
   private async obter(tx: Tx, id: string): Promise<Linha> {

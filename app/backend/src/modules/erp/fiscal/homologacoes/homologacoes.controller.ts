@@ -8,8 +8,10 @@ import { ZodValidationPipe } from '../../../../common/pipes/zod-validation.pipe'
 import { RequirePermissoes } from '../../../../common/rbac/require-permissoes.decorator';
 import { uuidSchema } from '../enquadramentos/dto/comum.dto';
 import {
+  corpoDecisaoSchema,
   criarHomologacaoSchema,
   listarHomologacoesSchema,
+  type CorpoDecisaoDto,
   type CriarHomologacaoDto,
   type ListarHomologacoesQuery,
 } from './dto/homologacao.dto';
@@ -57,6 +59,28 @@ export class HomologacoesController {
   @RequirePermissoes('FISCAL_HOMOLOGACOES_LER')
   detalhar(@Param('id', new ZodValidationPipe(uuidSchema)) id: string) {
     return this.homologacoes.detalhar(id);
+  }
+
+  @Post(':id/aprovar')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_HOMOLOGACOES_APROVAR')
+  aprovar(
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Body(new ZodValidationPipe(corpoDecisaoSchema)) dto: CorpoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.homologacoes.aprovar(id, dto, user.sub);
+  }
+
+  @Post(':id/rejeitar')
+  @HttpCode(200)
+  @RequirePermissoes('FISCAL_HOMOLOGACOES_APROVAR')
+  rejeitar(
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Body(new ZodValidationPipe(corpoDecisaoSchema)) dto: CorpoDecisaoDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    return this.homologacoes.rejeitar(id, dto, user.sub);
   }
 
   @Post()
