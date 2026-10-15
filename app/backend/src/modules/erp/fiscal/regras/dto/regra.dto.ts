@@ -5,7 +5,7 @@ import {
   IPI_CST,
   PIS_CST,
 } from '../../../../../database/schema/fiscal-regras.schema';
-import { justificativaSchema, percentualSchema, uuidSchema, versaoSchema } from './comum.dto';
+import { dataVigenciaSchema, justificativaSchema, MSG_NUL, percentualSchema, semNul, uuidSchema, versaoSchema } from './comum.dto';
 
 const MENSAGEM_VIGENCIA = 'Fim de vigência deve ser igual ou posterior ao início.';
 
@@ -30,8 +30,8 @@ const camposRegra = {
   pisCst: z.enum(PIS_CST),
   ibsCst: z.enum(IBS_CST),
   classificacaoIbsCbsId: uuidSchema,
-  vigenciaInicio: z.iso.date(),
-  vigenciaFim: z.iso.date().nullish(),
+  vigenciaInicio: dataVigenciaSchema,
+  vigenciaFim: dataVigenciaSchema.nullish(),
   justificativa: justificativaSchema,
 };
 
@@ -60,7 +60,7 @@ export const SORT_REGRAS = ['enquadramento', 'cfop', 'cBenef', 'cClassTrib', 'op
 
 export const listarRegrasSchema = z.object({
   cfopId: uuidSchema.optional(),
-  search: z.string().trim().optional(),
+  search: z.string().trim().refine(semNul, MSG_NUL).optional(),
   sort: z.enum(SORT_REGRAS).default('enquadramento'),
   dir: z.enum(['asc', 'desc']).default('asc'),
   page: z.coerce.number().int().min(1).default(1),
