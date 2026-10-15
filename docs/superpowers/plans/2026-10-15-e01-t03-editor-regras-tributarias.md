@@ -12,6 +12,11 @@
 | Rev. | Data | Autor | Motivo |
 |---|---|---|---|
 | r1 | 2026-10-15 | planner | versão inicial da fatia E01-T03 |
+| r2 | 2026-10-15 | planner (nova instância) | Portão 1 r1 `ajustar` (1 achado); ajuste cirúrgico: nenhum outro ponto do plano muda |
+
+| Achado r1 | Correção r2 |
+|---|---|
+| D7, o schema do §5, `normalizarPercentual` / `formatarPercentualPtBr`, o GET, a comparação e os testes das Tasks 1, 2, 4, 6, 7, 12 e 13 gravam pontos percentuais em `NUMERIC(6,3)` com CHECK até 100 (`41,67` → `41.670`; `100` → `100.000`; `pIcms` `12.000`; comparação `12,000` / `7,000`). A L60 citada não autoriza essa precisão | C13 e D7. Razão `NUMERIC(5,4)` de 0 a 1 inclusive (`41,67` → `0.4167`; `12,00` → `0.1200`; `7,00` → `0.0700`; `100` → `1.0000`). Terceira casa decimal recusada. Tela com prefixo `%` e comparação exibida `12,00` / `7,00`. Sem AD |
 
 **Goal:** persistir a regra tributária versionada ligada ao enquadramento já gravado na T02 — Tratamento ICMS,
 redução de base, alíquota, benefício fiscal, Tratamento IPI, Tratamento PIS/COFINS, Tratamento IBS/CBS,
@@ -76,8 +81,9 @@ Sai, com dono:
   integral e (5) personas não viram perfis); AD-22 (L29); AD-24 (L31, grupo Fiscal e estabelecimento já
   entregues — não recriar).
 - `docs/data/convencoes-schema.md`: uuidv7, TIMESTAMPTZ, status TEXT+CHECK, soft delete, índice em toda FK.
-  Dinheiro e peso não entram. Percentual é `NUMERIC(6,3)`, nunca `double precision` e nunca `float` no
-  TypeScript (convencoes-schema.md L60). `updated_at` pelo serviço, sem trigger e sem SQL manual (padrão
+  Dinheiro e peso não entram. Alíquota e percentual são `NUMERIC(5,4)` em razão (0.0500 = 5%), nunca
+  `double precision` e nunca `float` no TypeScript (convencoes-schema.md L16; mesmo formato de `aliquota`
+  em `faturamento.schema.ts`). A L60 só proíbe JSONB para dinheiro e peso. `updated_at` pelo serviço, sem trigger e sem SQL manual (padrão
   das migrations 0044 e 0045).
 - UI nunca exibe UUID, PK, código E##/ALP nem nome de tabela (MATRIZ-UX L101). A palavra "Marca" não
   aparece como rótulo, entidade ou texto de busca (Princípio IX). Não há campo de cliente nesta tela.
@@ -123,7 +129,7 @@ Cinco entradas que a spec deixa fáceis de errar, e o teste que as prende:
 | D4 | Tratamento ICMS, e somente estes pares: `00` Tributação integral; `20` Redução de base; `40` Isenção; `41` Não tributada; `51` Diferimento. Não há par CSOSN no enum. Não há coluna `csosn` | componentes.js L322–L332 (rótulo "Tratamento ICMS") e L1802–L1822. O resumo "CST/CSOSN ICMS" do Caderno B L73 não acrescenta código |
 | D5 | Tratamento IPI: `51` Saída tributada à alíquota zero; `53` Saída não tributada; `99` Outras saídas. Tratamento PIS/COFINS: `01` Tributação normal; `06` Alíquota zero; `08` Sem incidência; `99` Outras operações. Tratamento IBS/CBS: `000` Tributação integral; `200` Alíquota reduzida. Um único enum. Não há coluna de IS, nem alíquota separada de IBS, CBS ou IS | componentes.js L370–L404 e L1824–L1864; MATRIZ-UX L93–L95. Caderno B L73 cita "IBS/CBS/IS" no resumo e o contrato de tela não tem o campo |
 | D6 | Benefício fiscal e Classificação IBS/CBS são catálogos manuais vazios, no espírito de `cfops`/`ncms` da T02. Formato do benefício: `^[A-Z]{2}[0-9]{6}$` (os exemplos SP020450, SP020740 e SP020100 medem isso). Formato da classificação: `^[0-9]{6}$` (000001, 200003, 200036). A migration não insere essas linhas. Não se cunha id de hipótese: a fonte não tem id para a tabela nacional de CST, cBenef ou cClassTrib | componentes.js L358–L368, L406–L416, L2700–L2732; pedido da fatia; T02 D7 como analogia de formato, não como id novo |
-| D7 | `p_red_bc` e `p_icms` são `NUMERIC(6,3)`, obrigatórios, de `0.000` a `100.000`. O JSON aceita string com vírgula ou ponto e no máximo 3 casas; o serviço grava a forma canônica com ponto e 3 casas (`41,67` → `41.670`). `z.number()` e `parseFloat` não entram. Fora da faixa ou com 4 casas → 400 | componentes.js L334–L356 (`inputMask` `0,00%`, tipo `percent`); aplicacao.js L420 e L449; convencoes-schema.md L60; pedido da fatia |
+| D7 | `p_red_bc` e `p_icms` são `NUMERIC(5,4)`, obrigatórios, razão de `0.0000` a `1.0000` inclusive. A entrada é string com vírgula ou ponto e no máximo duas casas; o serviço grava a razão canônica (`41,67` → `0.4167`; `12,00` → `0.1200`; `7,00` → `0.0700`; `100` → `1.0000`). Terceira casa decimal → 400, porque a máscara tem duas e a escala 4 não preserva a terceira sem arredondar. A regex de aplicacao.js L449 cede a esta convenção. `z.number()` e `parseFloat` não entram. Fora da faixa → 400. A tela mostra o ponto percentual com duas casas e o prefixo `%` no campo (`41,67`); o banco e o JSON canônico guardam a razão. A comparação devolve `12,00` e `7,00`, sem o prefixo dentro do valor | componentes.js L343 e L355 (`inputMask` `0,00%`); aplicacao.js L245–L249, L420 e L449; convencoes-schema.md L16; `faturamento.schema.ts` (`aliquota`); C13 |
 | D8 | `vigencia_inicio` obrigatória, `vigencia_fim` opcional e `>= inicio`. Não existem colunas comercial, fiscal ou efetiva. Selo `H-E01-10` | Caderno B L75 contra MATRIZ-UX L97–L98 e componentes.js L154–L176 (`vigenciaFim.required: false`); H-E01-10 já aberto na T02 |
 | D9 | Situação da versão: `RASCUNHO`, `SUBMETIDA`, `APROVADA`, `APOSENTADA`. Rótulos na tela: Rascunho, Submetida, Aprovada, Aposentada. Editar só `RASCUNHO`. `SUBMETIDA` não edita campos (409 `TRANSICAO_INVALIDA`). `APROVADA` e `APOSENTADA` não editam campos (409 `VERSAO_IMUTAVEL`) | Caderno B L74; pedido da fatia ("versão aprovada ou aposentada é imutável") |
 | D10 | Aprovar e aposentar exigem `FISCAL_REGRAS_APROVAR` e usuário diferente de `submetido_por_id`. Reusar `exigirSegregacao` (`fiscal-comum.ts` L77–L84), código `SEGREGACAO_FUNCAO`, 422. Um aprovador basta para ir a `APROVADA`. Não há coluna de quórum nem segunda aprovação. A pré-condição `DUPLA_APROVACAO` continua `atendida: false`, `provisoria: true`, selo `H-E01-11` | Caderno B L75 "aprovação segregada"; Caderno B L95 "aprovador diferente do autor"; H-E01-11; pedido da fatia. O protótipo não diz quantos aprovadores formam quórum |
@@ -160,6 +166,7 @@ Cinco entradas que a spec deixa fáceis de errar, e o teste que as prende:
 | C10 | Persona "fiscal/contador" (catalogo.js L217) × 11 perfis | D11 e H-E01-12. O subtítulo não imprime a persona como perfil |
 | C11 | componentes.js L3139 `requiresReason: false` × aplicacao.js L451, que recusa justificativa vazia, e MATRIZ-UX L76, que pede justificativa em operação crítica | D18. Toda mutação exige justificativa 3–500 |
 | C12 | Painel "Matriz de enquadramentos" com botões "Simular cálculo fiscal" e "Exportar memória de cálculo" (aplicacao.js L243–L254) × T04 | Remoção autorizada, igual à T02 §4. O painel é do épico E01, não da ficha desta tela |
+| C13 | convencoes-schema.md L16 e `faturamento.schema.ts` (`aliquota` `NUMERIC(5,4)`, 0.0500 = 5%) × pontos percentuais e a regex de aplicacao.js L449, que aceita até três casas. A máscara e o placeholder são `0,00%` e `0,00` (componentes.js L343 e L355; aplicacao.js L420). A matriz do épico mostra `41,67%` e `12,00%` (aplicacao.js L245–L249). A L60 só proíbe JSONB para dinheiro e peso | D7. Gravar a razão de 0 a 1 inclusive (`41,67` → `0.4167`; `12,00` → `0.1200`; `100` → `1.0000`). Recusar a terceira casa na entrada. Exibir `41,67` com prefixo `%`. Sem AD |
 
 ## 4. Referência do protótipo e fidelidade
 
@@ -302,8 +309,8 @@ export const regrasTributarias = pgTable('regras_tributarias', {
   numeroVersao: integer('numero_versao').notNull(),
   enquadramentoId: uuid('enquadramento_id').notNull().references(() => enquadramentosFiscais.id),
   icmsCst: varchar('icms_cst', { length: 2 }).notNull(),
-  pRedBc: numeric('p_red_bc', { precision: 6, scale: 3 }).notNull(),
-  pIcms: numeric('p_icms', { precision: 6, scale: 3 }).notNull(),
+  pRedBc: numeric('p_red_bc', { precision: 5, scale: 4 }).notNull(),
+  pIcms: numeric('p_icms', { precision: 5, scale: 4 }).notNull(),
   beneficioFiscalId: uuid('beneficio_fiscal_id').notNull().references(() => beneficiosFiscais.id),
   ipiCst: varchar('ipi_cst', { length: 2 }).notNull(),
   pisCst: varchar('pis_cst', { length: 2 }).notNull(),
@@ -333,8 +340,8 @@ export const regrasTributarias = pgTable('regras_tributarias', {
   check('regras_ipi_cst_check', sql`${t.ipiCst} IN ('51','53','99')`),
   check('regras_pis_cst_check', sql`${t.pisCst} IN ('01','06','08','99')`),
   check('regras_ibs_cst_check', sql`${t.ibsCst} IN ('000','200')`),
-  check('regras_p_red_bc_faixa_check', sql`${t.pRedBc} >= 0 AND ${t.pRedBc} <= 100`),
-  check('regras_p_icms_faixa_check', sql`${t.pIcms} >= 0 AND ${t.pIcms} <= 100`),
+  check('regras_p_red_bc_faixa_check', sql`${t.pRedBc} >= 0 AND ${t.pRedBc} <= 1`),
+  check('regras_p_icms_faixa_check', sql`${t.pIcms} >= 0 AND ${t.pIcms} <= 1`),
   check('regras_vigencia_ordem_check', sql`${t.vigenciaFim} IS NULL OR ${t.vigenciaFim} >= ${t.vigenciaInicio}`),
   check('regras_situacao_check', sql`${t.situacao} IN ('RASCUNHO','SUBMETIDA','APROVADA','APOSENTADA')`),
   check('regras_versao_positiva_check', sql`${t.versao} >= 1`),
@@ -366,26 +373,36 @@ desta tabela: vêm do enquadramento na leitura (D2).
 Arquivo puro `app/backend/src/modules/erp/fiscal/regras/percentual.ts`:
 
 ```ts
-const FAIXA = /^\d{1,3}(\.\d{1,3})?$/;
+const ENTRADA = /^\d{1,3}(\.\d{1,2})?$/;
 
-/** Aceita "41,67", "41.670" ou "100". Devolve "41.670" ou null. Sem parseFloat. */
+/** Aceita "41,67", "12.00" ou "100". Devolve a razão "0.4167", "0.1200" ou "1.0000", ou null. Sem parseFloat. */
 export function normalizarPercentual(entrada: string): string | null {
   const limpo = entrada.trim().replace('%', '').replace(/\s/g, '').replace(',', '.');
-  if (!FAIXA.test(limpo)) return null;
+  if (!ENTRADA.test(limpo)) return null;
   const [inteiroBruto, frac = ''] = limpo.split('.');
   if (inteiroBruto.length > 1 && inteiroBruto.startsWith('0')) return null;
-  const frac3 = (frac + '000').slice(0, 3);
-  const canon = `${inteiroBruto}.${frac3}`;
-  if (canon.split('.')[0].length === 3 && canon > '100.000') return null;
+  if (frac.length > 2) return null;
+  const frac2 = (frac + '00').slice(0, 2);
   if (inteiroBruto.length === 3 && inteiroBruto !== '100') return null;
-  if (inteiroBruto === '100' && frac3 !== '000') return null;
-  return canon;
+  if (inteiroBruto === '100' && frac2 !== '00') return null;
+  const digitos = `${inteiroBruto}${frac2}`.replace(/^0+/, '') || '0';
+  const quatro = digitos.padStart(4, '0');
+  if (quatro.length > 5) return null;
+  const inteiroRazao = quatro.length === 5 ? quatro[0] : '0';
+  const fracRazao = quatro.slice(-4);
+  if (inteiroRazao !== '0' && inteiroRazao !== '1') return null;
+  if (inteiroRazao === '1' && fracRazao !== '0000') return null;
+  return `${inteiroRazao}.${fracRazao}`;
 }
 
-/** "41.670" → "41,670". Não usa Number. */
+/** "0.4167" → "41,67". Não usa Number. O prefixo % fica no campo, não nesta string. */
 export function formatarPercentualPtBr(canon: string): string {
-  const [inteiro, frac] = canon.split('.');
-  return `${inteiro},${frac}`;
+  const [inteiro, frac = ''] = canon.split('.');
+  const frac4 = (frac + '0000').slice(0, 4);
+  const junto = `${inteiro}${frac4}`;
+  const inteiroPct = junto.slice(0, junto.length - 2).replace(/^0+(?=\d)/, '') || '0';
+  const fracPct = junto.slice(-2);
+  return `${inteiroPct},${fracPct}`;
 }
 ```
 
@@ -445,10 +462,10 @@ Rotas estáticas `contagens` e `exportacao` declaradas antes de `:id`.
 | GET `/fiscal/regras` | LER | {cfopId?, search?, sort ∈ enquadramento·cfop·cBenef·cClassTrib·operacao·icmsCst, dir ∈ asc·desc, page, pageSize=20} | página com as seis células da seção 4. Sem UUID no objeto de célula |
 | GET `/fiscal/regras/contagens` | LER | mesmo filtro | {total, rascunhos, submetidas, aprovadas, aposentadas} |
 | GET `/fiscal/regras/exportacao` | LER | mesmo filtro | `text/csv; charset=utf-8`, separador `;`, BOM, cabeçalho "Enquadramento fiscal;Operação fiscal (CFOP);Benefício fiscal;Classificação IBS/CBS;Operação;Tratamento ICMS" |
-| GET `/fiscal/regras/:id` | LER | uuid | detalhe com rótulos de D3–D6, `codigo`, `numeroVersao`, `empresaNome` (`empresas.razao_social`), situação no rótulo de D9, responsável (nome), `criadoEm`, `atualizadoEm`, autor (nome de quem submeteu, ou null), aprovador (nome, ou null). Ambiente não entra |
+| GET `/fiscal/regras/:id` | LER | uuid | detalhe com rótulos de D3–D6, `codigo`, `numeroVersao`, `empresaNome` (`empresas.razao_social`), situação no rótulo de D9, responsável (nome), `criadoEm`, `atualizadoEm`, autor (nome de quem submeteu, ou null), aprovador (nome, ou null). `pRedBc` e `pIcms` voltam na razão canônica (`"0.1200"`), não no ponto percentual. Ambiente não entra |
 | GET `/fiscal/regras/:id/historico` | LER | uuid | {operacao, situacaoAnterior, situacaoNova, usuarioNome, criadoEm, justificativa, resumo, versao, numeroVersao}. Sem nome de tabela e sem uuid |
 | GET `/fiscal/regras/:id/pre-condicoes` | LER | uuid | itens abaixo |
-| GET `/fiscal/regras/:id/comparar?com=` | LER | dois uuid | `{ codigo, numeroVersaoAntes, numeroVersaoDepois, diferencas: [{ campo, antes, depois }] }`. `campo` é o rótulo. Percentual com `formatarPercentualPtBr`. Enum com o rótulo de D4/D5 |
+| GET `/fiscal/regras/:id/comparar?com=` | LER | dois uuid | `{ codigo, numeroVersaoAntes, numeroVersaoDepois, diferencas: [{ campo, antes, depois }] }`. `campo` é o rótulo. Percentual com `formatarPercentualPtBr` (ex.: antes `"12,00"`, depois `"7,00"`). Enum com o rótulo de D4/D5 |
 | POST `/fiscal/regras` | GERENCIAR | corpo da seção 6 | 201 |
 | PATCH `/fiscal/regras/:id` | GERENCIAR | campos editáveis + versao + justificativa, sem codigo e sem numeroVersao | 200, ou 409 |
 | POST `/fiscal/regras/:id/versoes` | GERENCIAR | campos da versão nova + versao da origem + justificativa | 201 |
@@ -586,7 +603,7 @@ DS existente: `PageHeader`, `KpiStrip`/`Kpi`, `Table`, `Tabs`, `ComboboxField`, 
 - Histórico, Integrações e Aceite: o mesmo recorte da T02 §10, com os oito critérios de aplicacao.js L223–L231
   em leitura e a frase de L236 de que checkbox não é aceite.
 - Drawer: combos e enums com os rótulos literais. Percentual com prefixo `%` (aplicacao.js L420), `inputMode="decimal"`,
-  valor digitado em pt-BR. "Novo código" no benefício e na classificação abre `codigo-tributario-dialog`.
+  valor digitado e exibido em ponto percentual com duas casas (`41,67`); a gravação segue D7. "Novo código" no benefício e na classificação abre `codigo-tributario-dialog`.
   O diálogo avisa "Cadastro manual. A tabela oficial completa não está carregada; confira o código na documentação fiscal."
   Sem lista pronta e sem selo de id novo (D6). Erros por campo via `useErrosCampo` / `extrairErrosPorCampo` (AD-12).
   Sair com pendência pede confirmação.
@@ -667,8 +684,8 @@ coluna CSOSN, coluna IS, coluna de NT, colunas de data comercial/fiscal/efetiva,
 | Critério (fonte) | Teste (arquivo · nome) |
 |---|---|
 | DoD (1) ações do Caderno B L77 | e01-t03-regras · "criar rascunho, editar, submeter, aprovar e aposentar"; "adicionar versão grava o mesmo código e numero_versao 2" |
-| DoD (2) campos | fiscal-regras-dto · "icmsCst 101", "ipiCst 00", "pisCst 07", "ibsCst 100", "fim < início", "strict rejeita csosn, is, versaoNt e notaId"; percentual · "41,67 → 41.670", "100,001 é null", "41,6789 é null" |
-| DoD (3) recarregar | e01-t03-regras · "GET detalhe após aprovar devolve código, versão, rótulo Redução de base e pIcms 12.000" |
+| DoD (2) campos | fiscal-regras-dto · "icmsCst 101", "ipiCst 00", "pisCst 07", "ibsCst 100", "fim < início", "strict rejeita csosn, is, versaoNt e notaId"; percentual · "41,67 → 0.4167", "12,00 → 0.1200", "100 → 1.0000", "100,001 é null", "41,6789 é null" |
+| DoD (3) recarregar | e01-t03-regras · "GET detalhe após aprovar devolve código, versão, rótulo Redução de base e pIcms 0.1200" |
 | DoD (4) autorização | e01-t03-regras · "gestor sem FISCAL_REGRAS_* → 403 em toda rota"; "GERENCIAR sem APROVAR → 403 em aprovar" |
 | DoD (4) aprovação segregada | e01-t03-regras · "autor com APROVAR não aprova a si mesmo"; pre-condicoes · "DUPLA_APROVACAO provisoria=true e atendida=false" |
 | DoD (5) falha externa | não se aplica: sem SEFAZ. e01-t03-regras · "aprovar não abre socket HTTP" (fetch do serviço espionado com 0 chamadas) |
@@ -681,7 +698,7 @@ coluna CSOSN, coluna IS, coluna de NT, colunas de data comercial/fiscal/efetiva,
 | Imutabilidade (L75) | e01-t03-regras · "versão aprovada e aposentada recusam PATCH" |
 | Catálogo manual (D6) | e01-t03-migrations · "COUNT(*) = 0"; e01-t03-catalogos · "benefício duplicado → 409"; "não há chamada HTTP externa" |
 | Três datas (H-E01-10) | e01-t03-migrations · "information_schema.columns de regras_tributarias não contém data_comercial, data_fiscal nem data_efetiva" |
-| Percentual sem float | fiscal-regras-dto · "pIcms numérico é 400"; e01-t03-regras · "p_icms gravado é string 12.000" |
+| Percentual sem float | fiscal-regras-dto · "pIcms numérico é 400"; e01-t03-regras · "p_icms gravado é string 0.1200" |
 | Rótulos literais | regras-client · "rótulos literais do protótipo" |
 | Menu | menu-v2 · "42 itens"; perfis-menus.e2e · "42" e "oito permissões no módulo Fiscal" |
 | Concorrência | e01-t03-concorrencia · "2 PATCH do mesmo rascunho → [200,409]"; "2 aprovações sobrepostas → [200,422]" |
@@ -722,16 +739,23 @@ Teste que falha antes da implementação:
 import { formatarPercentualPtBr, normalizarPercentual } from '../../src/modules/erp/fiscal/regras/percentual';
 
 describe('percentual', () => {
-  it('normaliza vírgula para três casas e recusa faixa e float disfarçado', () => {
-    expect(normalizarPercentual('41,67')).toBe('41.670');
-    expect(normalizarPercentual('0')).toBe('0.000');
-    expect(normalizarPercentual('100')).toBe('100.000');
-    expect(normalizarPercentual('100,000')).toBe('100.000');
+  it('normaliza ponto percentual para razão e recusa terceira casa e float disfarçado', () => {
+    expect(normalizarPercentual('41,67')).toBe('0.4167');
+    expect(normalizarPercentual('12,00')).toBe('0.1200');
+    expect(normalizarPercentual('7,00')).toBe('0.0700');
+    expect(normalizarPercentual('0')).toBe('0.0000');
+    expect(normalizarPercentual('100')).toBe('1.0000');
+    expect(normalizarPercentual('100,00')).toBe('1.0000');
+    expect(normalizarPercentual('100,000')).toBeNull();
     expect(normalizarPercentual('100,001')).toBeNull();
+    expect(normalizarPercentual('41,678')).toBeNull();
     expect(normalizarPercentual('41,6789')).toBeNull();
     expect(normalizarPercentual('-1')).toBeNull();
     expect(normalizarPercentual('1e2')).toBeNull();
-    expect(formatarPercentualPtBr('12.000')).toBe('12,000');
+    expect(formatarPercentualPtBr('0.4167')).toBe('41,67');
+    expect(formatarPercentualPtBr('0.1200')).toBe('12,00');
+    expect(formatarPercentualPtBr('0.0700')).toBe('7,00');
+    expect(formatarPercentualPtBr('1.0000')).toBe('100,00');
   });
 });
 ```
@@ -746,13 +770,13 @@ Esperado antes do código: FAIL "Cannot find module". Depois: PASS. Implementar 
 ```powershell
 git add app/backend/src/modules/erp/fiscal/regras/percentual.ts app/backend/test/unit/percentual.spec.ts
 git commit -m @"
-feat(e01-t03): validar percentual com três casas decimais
+feat(e01-t03): validar percentual como razão de quatro casas
 
 ### Descrição Detalhada:
-Inclui normalização de percentual em string, de 0,000 a 100,000, com vírgula ou ponto na entrada e três casas na forma canônica.
+Inclui normalização de percentual em string: a entrada pt-BR tem no máximo duas casas e a forma canônica é a razão de 0.0000 a 1.0000.
 
 ### Motivo da Mudança:
-A tela usa máscara pt-BR e o servidor precisa gravar NUMERIC sem converter para float.
+A convenção de schema grava alíquota como razão, e a máscara da tela tem duas casas; a terceira seria arredondada na escala 4.
 
 ### Impacto:
 O DTO e a tela passam a importar estas duas funções. Nenhuma rota existe ainda.
@@ -788,10 +812,19 @@ it('catálogos nascem vazios e a regra não ganha coluna fora do contrato', asyn
     expect(nomes).not.toContain(proibida);
   }
   expect(nomes).toEqual(expect.arrayContaining(['vigencia_inicio', 'vigencia_fim', 'p_red_bc', 'p_icms', 'icms_cst', 'ibs_cst']));
+  const percentuais = await db.execute(sql`
+    SELECT column_name, numeric_precision::int AS numeric_precision, numeric_scale::int AS numeric_scale
+    FROM information_schema.columns
+    WHERE table_name = 'regras_tributarias' AND column_name IN ('p_red_bc', 'p_icms')
+  `);
+  expect(percentuais.rows).toEqual(expect.arrayContaining([
+    expect.objectContaining({ column_name: 'p_red_bc', numeric_precision: 5, numeric_scale: 4 }),
+    expect.objectContaining({ column_name: 'p_icms', numeric_precision: 5, numeric_scale: 4 }),
+  ]));
 });
 ```
 
-Acrescentar no mesmo arquivo: insert de `icms_cst = '101'` viola `regras_icms_cst_check`; insert de benefício `SP1` viola o formato; `uq_beneficios_codigo` e `uq_regras_abertas_codigo` são parciais (`WHERE deleted_at IS NULL`); não há FK de `regras_tributarias` para `notas_fiscais` em `information_schema.referential_constraints` / `key_column_usage`.
+Acrescentar no mesmo arquivo: insert de `icms_cst = '101'` viola `regras_icms_cst_check`; insert de benefício `SP1` viola o formato; `uq_beneficios_codigo` e `uq_regras_abertas_codigo` são parciais (`WHERE deleted_at IS NULL`); não há FK de `regras_tributarias` para `notas_fiscais` em `information_schema.referential_constraints` / `key_column_usage`; insert de `p_icms = '1.0001'` viola `regras_p_icms_faixa_check`; `'0.0000'` e `'1.0000'` passam.
 
 ```powershell
 Set-Location app/backend
@@ -818,7 +851,7 @@ feat(e01-t03): schema das regras tributárias e catálogos manuais
 Cria a migration 0046 com a regra versionada, o benefício fiscal e a classificação IBS/CBS, sem semente e sem colunas de nota, CSOSN, IS ou NT.
 
 ### Motivo da Mudança:
-O editor precisa persistir a versão tributária ligada ao enquadramento, com percentual NUMERIC e vigência só de início e fim.
+O editor precisa persistir a versão tributária ligada ao enquadramento, com percentual em razão NUMERIC(5,4) e vigência só de início e fim.
 
 ### Impacto:
 O truncate dos testes passa a limpar as três tabelas antes dos enquadramentos. Nenhuma rota HTTP nova.
@@ -868,7 +901,7 @@ O catálogo Fiscal passa de cinco para oito permissões. As 39 rotas operacionai
 export const percentualSchema = z.string().trim().transform((valor, ctx) => {
   const canon = normalizarPercentual(valor);
   if (!canon) {
-    ctx.addIssue({ code: 'custom', message: 'Informe um percentual de 0,000 a 100,000.' });
+    ctx.addIssue({ code: 'custom', message: 'Informe um percentual de 0,00 a 100,00.' });
     return z.NEVER;
   }
   return canon;
@@ -891,7 +924,7 @@ it('strict rejeita csosn, is, versaoNt e notaId', () => {
 });
 ```
 
-`corpoValido` usa `pRedBc: '41,67'`, `pIcms: '12,00'`, `icmsCst: '20'`, `ipiCst: '53'`, `pisCst: '06'`, `ibsCst: '000'`. Sucesso devolve `pRedBc === '41.670'` e `pIcms === '12.000'`.
+`corpoValido` usa `pRedBc: '41,67'`, `pIcms: '12,00'`, `icmsCst: '20'`, `ipiCst: '53'`, `pisCst: '06'`, `ibsCst: '000'`. Sucesso devolve `pRedBc === '0.4167'` e `pIcms === '0.1200'`.
 
 ```powershell
 Set-Location app/backend
@@ -1026,12 +1059,12 @@ it('autor com APROVAR não aprova a si mesmo', async () => {
 
 it('versão aprovada e aposentada recusam PATCH', async () => {
   const aprovada = await aprovarFluxo(adminA, adminB);
-  const patch = await patchComo(adminB, aprovada.id, { pIcms: '8,000', versao: aprovada.versao });
+  const patch = await patchComo(adminB, aprovada.id, { pIcms: '8,00', versao: aprovada.versao });
   expect(patch.status).toBe(409);
   expect(patch.body.codigo).toBe('VERSAO_IMUTAVEL');
   expect(patch.body.codigo).not.toMatch(/NOTA/);
   const lida = await detalharComo(adminA, aprovada.id);
-  expect(lida.body.pIcms).toBe('12.000');
+  expect(lida.body.pIcms).toBe('0.1200');
 });
 
 it('vigências aprovadas sobrepostas no mesmo enquadramento', async () => {
@@ -1045,7 +1078,7 @@ it('vigências aprovadas sobrepostas no mesmo enquadramento', async () => {
 });
 ```
 
-Também no mesmo arquivo: benefício com `deleted_at` → 422 `BENEFICIO_NAO_ELEGIVEL` e `COUNT(*)` de regras permanece 0; gestor → 403; quem só tem GERENCIAR → 403 no aprovar; POST não muda `enquadramentos_fiscais`, `cfops`, `ncms` nem `notas_fiscais` (comparar `updated_at` e `COUNT(*)`); GET depois de aprovar traz situação "Aprovada", Tratamento ICMS "Redução de base" quando o valor é `20`, e `pIcms` `"12.000"`; adicionar versão na aprovada cria `numeroVersao` 2 em Rascunho com o mesmo `codigo`; POST válido não devolve código que contenha `NT`; cada mutação grava uma auditoria; aposentar conserva a linha; histórico sem o texto `regras_tributarias` e sem uuid; aprovar não chama `global.fetch`.
+Também no mesmo arquivo: benefício com `deleted_at` → 422 `BENEFICIO_NAO_ELEGIVEL` e `COUNT(*)` de regras permanece 0; gestor → 403; quem só tem GERENCIAR → 403 no aprovar; POST não muda `enquadramentos_fiscais`, `cfops`, `ncms` nem `notas_fiscais` (comparar `updated_at` e `COUNT(*)`); GET depois de aprovar traz situação "Aprovada", Tratamento ICMS "Redução de base" quando o valor é `20`, e `pIcms` `"0.1200"`; o `p_icms` gravado é a string `"0.1200"`; adicionar versão na aprovada cria `numeroVersao` 2 em Rascunho com o mesmo `codigo`; POST válido não devolve código que contenha `NT`; cada mutação grava uma auditoria; aposentar conserva a linha; histórico sem o texto `regras_tributarias` e sem uuid; aprovar não chama `global.fetch`.
 
 `regra-transicao.spec.ts` cobre a tabela da seção 6 sem banco: de `APROVADA` o nome do erro de edição é `VERSAO_IMUTAVEL`; de `SUBMETIDA` é `TRANSICAO_INVALIDA`; de `RASCUNHO` a ação `aprovar` é `TRANSICAO_INVALIDA`.
 
@@ -1085,7 +1118,7 @@ it('mesmo código lista Alíquota (%)', async () => {
   const res = await comparar(versao1.id, versao2.id);
   expect(res.status).toBe(200);
   const aliquota = res.body.diferencas.find((d: { campo: string }) => d.campo === 'Alíquota (%)');
-  expect(aliquota).toMatchObject({ antes: '12,000', depois: '7,000' });
+  expect(aliquota).toMatchObject({ antes: '12,00', depois: '7,00' });
   expect(JSON.stringify(res.body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
 });
 
@@ -1279,7 +1312,7 @@ it('rótulos literais do protótipo', () => {
 
 O combo Tratamento IBS/CBS tem duas opções com o nome "Tributação integral" (ICMS `00` e IBS `000`). O teste acima encontra a de ICMS no primeiro combo; no de IBS, buscar também "Alíquota reduzida", que é exclusiva. Não fundir os dois combos.
 
-O teste da lib repete `normalizarPercentual('41,67') === '41.670'` no frontend (a função é duplicada em `lib/fiscal-regras.ts` com o mesmo corpo da Task 1, para o cliente não importar código do Nest).
+O teste da lib repete `normalizarPercentual('41,67') === '0.4167'` e `formatarPercentualPtBr('0.1200') === '12,00'` no frontend (a função é duplicada em `lib/fiscal-regras.ts` com o mesmo corpo da Task 1, para o cliente não importar código do Nest).
 
 Também cobrir: lista vazia com a frase da seção 10; alerta do 409 `VERSAO_IMUTAVEL`; alerta do 422 `VIGENCIA_AMBIGUA`; alerta do 422 `SEGREGACAO_FUNCAO`; grade sem uuid; selos `H-E01-10`, `H-E01-11` e `H-E01-12`.
 
@@ -1329,7 +1362,7 @@ Jornada (admin A e admin B):
 4. A ficha mostra o código numérico, situação Rascunho e os selos H-E01-10, H-E01-11 e H-E01-12.
 5. Admin A submete. Admin A aprova e vê "A aprovação deve ser feita por usuário diferente de quem submeteu." A situação permanece Submetida.
 6. Admin B aprova. Situação Aprovada. PATCH visual não existe: "Editar versão" não está na ficha aprovada.
-7. Adicionar versão com Alíquota (%) `7,00` e início `2027-01-01`. Comparar mostra "Alíquota (%)" com antes `12,000` e depois `7,000`.
+7. Adicionar versão com Alíquota (%) `7,00` e início `2027-01-01`. Comparar mostra "Alíquota (%)" com antes `12,00` e depois `7,00`.
 8. Trocar o CFOP do drawer para outro código e salvar → alerta `ENQUADRAMENTO_DIVERGENTE` e a grade não ganha linha.
 9. Gestor: o item não aparece; `goto('/fiscal/regras')` mostra "Você não tem permissão para visualizar o editor de regras tributárias."
 
