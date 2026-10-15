@@ -724,6 +724,41 @@ describe('Plano de contas', () => {
     expect(recusada.reason).toMatchObject({ status: 422, response: { message: 'Ciclo na hierarquia da conta' } });
   });
 
+  it('bloquear e aprovar compartilham o lock da hierarquia e nunca deixam filho aprovado sob pai suspenso', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: 'P', classificacao: 'sintetica' }), userId);
+    await promover('P');
+    await service.criar(dtoBase({ codigo: 'P.1', classificacao: 'sintetica', contaPaiCodigo: 'P' }), userId);
+    await service.revisarCompetencia('P.1', { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+
+    // 1) bloquear espera quem segura o lock da hierarquia.
+    let liberar!: () => void;
+    const segura = new Promise<void>((r) => { liberar = r; });
+    let preso!: () => void;
+    const lockPego = new Promise<void>((r) => { preso = r; });
+    const externa = db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:hierarquia'}))`);
+      preso();
+      await segura;
+    });
+    await lockPego;
+    let terminou = false;
+    const bloqueio = service.bloquear('P', { numero: 1, justificativa: 'bloqueia pai' }, userId).then(() => { terminou = true; });
+    try {
+      await new Promise((r) => setTimeout(r, 400));
+      expect(terminou).toBe(false);
+    } finally {
+      liberar();
+      await externa;
+    }
+    await bloqueio;
+
+    // 2) com o pai já suspenso, a aprovação do filho é recusada.
+    await expect(service.aprovar('P.1', { numero: 1, justificativa: 'aprova filho' }, userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'conta desativada' } });
+    expect((await service.obter('P.1')).situacao).toBe('REVIEW');
+  });
+
   async function contaComRascunhoAberto(emRevisao = false) {
     await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
     await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
