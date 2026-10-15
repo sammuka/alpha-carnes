@@ -83,6 +83,11 @@ export const EVENTOS = {
   CAMINHAO_LIBERADO: 'caminhao_liberado',
   // ── E09-T01 — Plano de contas ─────────────────────────────────────────────
   PLANO_CONTA_CRIADA: 'plano_conta_criada',
+  PLANO_CONTA_VERSIONADA: 'plano_conta_versionada',
+  PLANO_CONTA_REVISADA: 'plano_conta_revisada',
+  PLANO_CONTA_APROVADA: 'plano_conta_aprovada',
+  PLANO_CONTA_BLOQUEADA: 'plano_conta_bloqueada',
+  PLANO_CONTA_MAPEADA: 'plano_conta_mapeada',
   CENTRO_CUSTO_CRIADO: 'centro_custo_criado',
 } as const;
 

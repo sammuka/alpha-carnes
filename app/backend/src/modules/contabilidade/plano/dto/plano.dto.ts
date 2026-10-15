@@ -34,6 +34,49 @@ export const listarPlanoSchema = z.object({
   direcao: z.enum(['asc', 'desc']).default('asc'),
 });
 
+export const editarSchema = criarContaSchema.omit({ codigo: true }).extend({
+  numero: z.number().int().positive(),
+});
+
+export const revisarSchema = z.object({
+  numero: z.number().int().positive(),
+  vigenciaInicio: dataIso,
+  vigenciaFim: dataIso.nullable(),
+  justificativa: motivo,
+});
+
+export const decidirSchema = z.object({
+  numero: z.number().int().positive(),
+  justificativa: motivo,
+});
+
+export const mapearSchema = z.object({
+  numero: z.number().int().positive(),
+  centroCodigo: codigo,
+  justificativa: motivo,
+});
+
+export const acaoSchema = {
+  editar: editarSchema,
+  versionar: editarSchema,
+  'revisar-competencia': revisarSchema,
+  aprovar: decidirSchema,
+  bloquear: decidirSchema,
+  mapear: mapearSchema,
+} as const;
+
+export const loteSchema = z.object({
+  acao: z.enum(['revisar-competencia', 'aprovar', 'bloquear']),
+  codigos: z.array(codigo).min(1).max(20),
+  justificativa: motivo,
+  numeroPorCodigo: z.record(z.string(), z.number().int().positive()),
+});
+
 export type CriarCentroDto = z.infer<typeof criarCentroSchema>;
 export type CriarContaDto = z.infer<typeof criarContaSchema>;
 export type ListarPlanoQuery = z.infer<typeof listarPlanoSchema>;
+export type EditarContaDto = z.infer<typeof editarSchema>;
+export type RevisarCompetenciaDto = z.infer<typeof revisarSchema>;
+export type DecidirContaDto = z.infer<typeof decidirSchema>;
+export type MapearContaDto = z.infer<typeof mapearSchema>;
+export type LoteDto = z.infer<typeof loteSchema>;

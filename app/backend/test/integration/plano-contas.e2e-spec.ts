@@ -151,4 +151,113 @@ describe('Plano de contas', () => {
       response: { message: 'Já existe centro de custo com este código' },
     });
   });
+
+  async function promover(codigo: string) {
+    await service.revisarCompetencia(codigo, {
+      numero: 1,
+      vigenciaInicio: '2026-10-01',
+      vigenciaFim: null,
+      justificativa: 'revisa',
+    }, userId);
+    return service.aprovar(codigo, { numero: 1, justificativa: 'aprova' }, userId);
+  }
+
+  async function contaAprovadaSintetica() {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica', contaPaiCodigo: null, centroCodigo: 'CT1' }), userId);
+    return promover('1');
+  }
+
+  async function contaAprovadaAnalitica() {
+    const pai = await contaAprovadaSintetica();
+    await service.criar(dtoBase({
+      codigo: '1.1.01',
+      nome: 'Caixa e bancos',
+      classificacao: 'analitica',
+      contaPaiCodigo: pai.codigo,
+      centroCodigo: pai.centroCodigo,
+    }), userId);
+    return promover('1.1.01');
+  }
+
+  async function contarVersoes(codigo: string) {
+    const res = await db.execute(sql`
+      select count(*)::int as total
+        from conta_versoes v
+        join contas_contabeis c on c.id = v.conta_id
+       where c.codigo = ${codigo}
+         and v.deleted_at is null
+    `);
+    return res.rows[0].total as number;
+  }
+
+  it('não versiona conta suspensa e não nasce rascunho', async () => {
+    const conta = await contaAprovadaAnalitica();
+    await service.bloquear(conta.codigo, { numero: conta.numero, justificativa: 'bloqueio' }, userId);
+    await expect(service.versionar(conta.codigo, {
+      ...dtoBase({ codigo: conta.codigo, contaPaiCodigo: conta.contaPaiCodigo, centroCodigo: conta.centroCodigo }),
+      numero: conta.numero,
+      justificativa: 'tenta versionar',
+    }, userId)).rejects.toMatchObject({ response: { message: 'conta desativada' }, status: 422 });
+    expect(await contarVersoes(conta.codigo)).toBe(1);
+  });
+
+  it('não mapeia conta suspensa e não grava outra versão', async () => {
+    const conta = await contaAprovadaAnalitica();
+    await service.bloquear(conta.codigo, { numero: conta.numero, justificativa: 'bloqueio' }, userId);
+    await expect(service.mapear(conta.codigo, {
+      numero: conta.numero,
+      centroCodigo: conta.centroCodigo,
+      justificativa: 'tenta mapear',
+    }, userId)).rejects.toMatchObject({ response: { message: 'conta desativada' }, status: 422 });
+    expect(await contarVersoes(conta.codigo)).toBe(1);
+  });
+
+  it('não altera natureza da versão aprovada', async () => {
+    const conta = await contaAprovadaAnalitica();
+    await expect(service.editar(conta.codigo, { ...conta, natureza: 'PASSIVO', numero: conta.numero, justificativa: 'troca' }, userId))
+      .rejects.toMatchObject({ response: { message: 'mudança de classificação após fechamento' }, status: 422 });
+    expect((await service.obter(conta.codigo)).natureza).toBe('ATIVO');
+  });
+
+  it('não revisa competência sem início de vigência', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    const conta = await service.criar(dtoBase({ vigenciaInicio: '2026-10-01' }), userId);
+    await expect(service.revisarCompetencia(conta.codigo, {
+      numero: 1,
+      vigenciaInicio: '',
+      vigenciaFim: null,
+      justificativa: 'revisa',
+    }, userId)).rejects.toMatchObject({ status: 422 });
+    expect((await service.obter(conta.codigo)).situacao).toBe('DRAFT');
+  });
+
+  it('mapear conta sintética não cria tabela de lançamento', async () => {
+    const conta = await contaAprovadaSintetica();
+    await expect(service.mapear(conta.codigo, {
+      numero: conta.numero,
+      centroCodigo: conta.centroCodigo,
+      justificativa: 'mapear grupo',
+    }, userId)).rejects.toMatchObject({ status: 422 });
+    const tabelas = await db.execute(sql`select to_regclass('public.lancamentos_contabeis') as nome`);
+    expect(tabelas.rows[0].nome).toBeNull();
+  });
+
+  it('recusa ciclo na hierarquia ao versionar a conta pai', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica', contaPaiCodigo: null }), userId);
+    await promover('1');
+    await service.criar(dtoBase({ codigo: '1.1', classificacao: 'sintetica', contaPaiCodigo: '1' }), userId);
+    await promover('1.1');
+    const atual = await service.obter('1');
+    await expect(service.versionar('1', {
+      ...dtoBase({ codigo: '1', classificacao: 'sintetica', contaPaiCodigo: '1.1', centroCodigo: 'CT1' }),
+      numero: atual.numero,
+      justificativa: 'tenta ciclo',
+    }, userId)).rejects.toMatchObject({
+      status: 422,
+      response: { message: 'Ciclo na hierarquia da conta' },
+    });
+    expect((await service.obter('1')).numero).toBe(1);
+  });
 });
