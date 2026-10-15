@@ -30,6 +30,7 @@ export const MENUS_CANONICOS = [
   '/faturamento/notas-xml',
   '/faturamento/seguro-manual',
   '/faturamento/liberacao',
+  '/erp/contabilidade/plano-de-contas',
   '/cadastros/representantes',
   '/cadastros/produtos',
   '/cadastros/fornecedores',
@@ -55,7 +56,7 @@ export function menusDesconhecidos(hrefs: string[]): string[] {
 /**
  * Menus visíveis por perfil — transcrição da coluna "Perfis RBAC" da matriz de
  * rastreabilidade v1.1 (linhas 3–41), invertida de rota→perfis para perfil→rotas.
- * Total: 126 pares perfil×rota. Alterar aqui exige alterar a matriz (decisão 7).
+ * Total: 126 pares da matriz v1.1 + 1. Alterar aqui exige alterar a matriz (decisão 7).
  */
 export const MENUS_VISIVEIS_POR_PERFIL: Record<string, string[]> = {
   administrador: [...MENUS_CANONICOS],

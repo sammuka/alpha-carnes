@@ -64,6 +64,7 @@ export class PerfisService {
       { modulo: 'Recebimento', prefixos: ['RECEBIMENTO_', 'DIVERGENCIA_', 'OCORRENCIA_', 'CONFERENCIA_'] },
       { modulo: 'Pesagem e Desossa', prefixos: ['PESAGEM_', 'PESO_', 'ASSOCIACAO_', 'LEITURA_', 'ETIQUETA_', 'CORTE_', 'DESOSSA_', 'ESTOQUE_'] },
       { modulo: 'Expedição e Faturamento', prefixos: ['EXPEDICAO_', 'FATURAMENTO_', 'NFSE_', 'SEGURO_', 'LIBERACAO_'] },
+      { modulo: 'Contabilidade', prefixos: ['CONTABILIDADE_'] },
     ];
 
     const codigos = Object.keys(DESCRICOES_PERMISSOES).sort();

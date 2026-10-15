@@ -4,15 +4,8 @@ import { MENU_V2 } from '../src/lib/menu-v2';
 import { CADASTROS } from '../src/lib/cadastros-config';
 
 const GRUPOS = [
-  'COMERCIAL',
-  'GESTÃO',
-  'RECEBIMENTO & BALANÇA',
-  'DESOSSA',
-  'ESTOQUE',
-  'CARGA',
-  'FATURAMENTO',
-  'CADASTROS & REGRAS',
-  'ADMINISTRAÇÃO',
+  'COMERCIAL', 'GESTÃO', 'RECEBIMENTO & BALANÇA', 'DESOSSA', 'ESTOQUE', 'CARGA',
+  'FATURAMENTO', 'CONTABILIDADE', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
 ];
 
 /** ALL_NAV_GROUPS de src/app/components/Layout.tsx do protótipo (feature/completude-v1.1). */
@@ -59,14 +52,22 @@ const ITENS_PROTOTIPO: [string, string, string][] = [
 ];
 
 describe('menu canônico v2', () => {
-  it('MENU_V2 tem os 9 grupos na ordem do prototipo', () => {
+  it('MENU_V2 tem os 10 grupos na ordem do prototipo', () => {
     expect(MENU_V2.map((g) => g.title)).toEqual(GRUPOS);
   });
 
-  it('MENU_V2 tem os 39 itens com rotulo e rota do prototipo (AD-15)', () => {
+  it('preserva as 39 rotas e acrescenta só o plano de contas', () => {
     const atual = MENU_V2.flatMap((g) => g.items.map((i) => [g.title, i.label, i.href]));
-    expect(atual).toEqual(ITENS_PROTOTIPO);
-    expect(atual).toHaveLength(39);
+    const operacionais = atual.filter(([, , href]) => href !== '/erp/contabilidade/plano-de-contas');
+    expect(operacionais).toEqual(ITENS_PROTOTIPO);
+    expect(operacionais).toHaveLength(39);
+    expect(atual).toHaveLength(40);
+    expect(atual).toContainEqual([
+      'CONTABILIDADE',
+      'Plano de contas e centros de custo',
+      '/erp/contabilidade/plano-de-contas',
+    ]);
+    expect(atual.some(([, , href]) => /e\d{2}-t\d{2}/i.test(String(href)))).toBe(false);
   });
 
   it('MENU_V2 nao tem rota duplicada e todo item declara icone', () => {

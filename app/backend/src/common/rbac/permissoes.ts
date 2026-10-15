@@ -98,6 +98,8 @@ export const PERMISSOES = {
   ESPELHO_COMERCIAL_LER: 'ESPELHO_COMERCIAL_LER',
   PEDIDO_RESERVA_LIBERAR: 'PEDIDO_RESERVA_LIBERAR',
   OCORRENCIA_PRECO_CIENTE: 'OCORRENCIA_PRECO_CIENTE',
+  CONTABILIDADE_PLANO_LER: 'CONTABILIDADE_PLANO_LER',
+  CONTABILIDADE_PLANO_GERENCIAR: 'CONTABILIDADE_PLANO_GERENCIAR',
 } as const;
 
 export type Permissao = (typeof PERMISSOES)[keyof typeof PERMISSOES];
@@ -403,6 +405,7 @@ pushPermissoes('gestor', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR');
 pushPermissoes('administrador', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR');
 pushPermissoes('logistica', 'SEGURO_GERENCIAR', 'LIBERACAO_GERENCIAR'); // D10.9 — doc 04 §7.3/§7.4
 pushPermissoes('diretoria', 'FATURAMENTO_LER');
+pushPermissoes('administrador', 'CONTABILIDADE_PLANO_LER', 'CONTABILIDADE_PLANO_GERENCIAR');
 
 /** Descrições das permissões — usadas no seed e na sincronização do catálogo. */
 export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
@@ -481,4 +484,6 @@ export const DESCRICOES_PERMISSOES: Record<Permissao, string> = {
   ESPELHO_COMERCIAL_LER: 'Consultar e exportar o espelho comercial',
   PEDIDO_RESERVA_LIBERAR: 'Liberar administrativamente a reserva de um rascunho (AD-06)',
   OCORRENCIA_PRECO_CIENTE: 'Marcar como ciente uma ocorrência informativa de ajuste de preço',
+  CONTABILIDADE_PLANO_LER: 'Consultar plano de contas e centros de custo',
+  CONTABILIDADE_PLANO_GERENCIAR: 'Criar, versionar, revisar, aprovar, bloquear e mapear o plano de contas',
 };

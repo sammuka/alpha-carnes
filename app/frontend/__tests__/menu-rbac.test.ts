@@ -16,6 +16,8 @@ const PERMISSOES_POR_PERFIL = JSON.parse(
   readFileSync(join(RBAC, 'perfil-permissoes.snapshot.json'), 'utf8'),
 ) as Record<string, string[]>;
 
+const ROTA_PLANO = '/erp/contabilidade/plano-de-contas';
+
 /**
  * Coluna "Perfis RBAC" da matriz de rastreabilidade v1.1 (linhas 3–41), transcrita rota a rota.
  * É a fonte contra a qual `menus_visiveis` é conferido: são as mesmas 126 atribuições.
@@ -60,6 +62,7 @@ const MATRIZ_RASTREABILIDADE: Record<string, string[]> = {
   '/admin/perfis': ['administrador'],
   '/admin/parametros': ['administrador'],
   '/admin/auditoria': ['administrador', 'diretoria', 'gestor'],
+  [ROTA_PLANO]: ['administrador'],
 };
 
 /** Decisão 25 da Onda 2 — as 26 rotas que o gate de grupo retirava do menu. Devem estar visíveis. */
@@ -94,11 +97,14 @@ const EXTRAS_HERDADOS: Record<string, string[]> = {
  */
 const TODOS = [
   'COMERCIAL', 'GESTÃO', 'RECEBIMENTO & BALANÇA', 'DESOSSA', 'ESTOQUE',
-  'CARGA', 'FATURAMENTO', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
+  'CARGA', 'FATURAMENTO', 'CONTABILIDADE', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
 ];
 const GRUPOS_ESPERADOS: Record<string, string[]> = {
   administrador: TODOS,
-  gestor: TODOS,
+  gestor: [
+    'COMERCIAL', 'GESTÃO', 'RECEBIMENTO & BALANÇA', 'DESOSSA', 'ESTOQUE',
+    'CARGA', 'FATURAMENTO', 'CADASTROS & REGRAS', 'ADMINISTRAÇÃO',
+  ],
   compras: ['GESTÃO', 'RECEBIMENTO & BALANÇA', 'CADASTROS & REGRAS'],
   comercial: ['COMERCIAL', 'GESTÃO', 'DESOSSA'],
   recebimento_pesagem: ['GESTÃO', 'RECEBIMENTO & BALANÇA', 'ESTOQUE'],
@@ -164,19 +170,24 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     expect(PERFIS).toHaveLength(11);
   });
 
-  it('a matriz transcrita cobre exatamente as 39 rotas do menu (AD-15)', () => {
-    expect(Object.keys(MATRIZ_RASTREABILIDADE).sort()).toEqual([...ROTAS_CANONICAS].sort());
-    expect(ROTAS_CANONICAS).toHaveLength(39);
+  it('a matriz transcrita cobre as 39 rotas operacionais e a rota nova', () => {
+    const chaves = Object.keys(MATRIZ_RASTREABILIDADE);
+    expect(chaves.filter((href) => href !== ROTA_PLANO).sort()).toEqual(
+      [...ROTAS_CANONICAS].filter((href) => href !== ROTA_PLANO).sort(),
+    );
+    expect(chaves.filter((href) => href !== ROTA_PLANO)).toHaveLength(39);
+    expect([...ROTAS_CANONICAS].sort()).toEqual(chaves.sort());
+    expect(ROTAS_CANONICAS).toHaveLength(40);
   });
 
   it.each(PERFIS)('menus_visiveis do perfil sao exatamente os da matriz: %s', (perfil) => {
     expect([...menusDe(perfil)].sort()).toEqual(menusDaMatriz(perfil));
   });
 
-  it('a matriz soma 126 atribuicoes perfil x rota (AD-15 revogou 2 rotas da AD-11)', () => {
+  it('a matriz soma 127 atribuicoes perfil x rota', () => {
     const total = PERFIS.reduce((soma, perfil) => soma + menusDe(perfil).length, 0);
-    expect(total).toBe(126);
-    expect(Object.values(MATRIZ_RASTREABILIDADE).reduce((s, p) => s + p.length, 0)).toBe(126);
+    expect(total).toBe(127);
+    expect(Object.values(MATRIZ_RASTREABILIDADE).reduce((s, p) => s + p.length, 0)).toBe(127);
   });
 
   it('zero perdas: nenhuma rota da matriz fica fora do menu do perfil', () => {
@@ -276,8 +287,17 @@ describe('menu por menus_visiveis — reconciliação com a matriz', () => {
     for (const perfil of PERFIS) {
       expect(rotasVisiveis(perfil).sort()).toEqual(menusDaMatriz(perfil));
     }
-    expect(ROTAS_CANONICAS).toHaveLength(39);
-    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(126);
+    expect(ROTAS_CANONICAS).toHaveLength(40);
+    expect(PERFIS.reduce((soma, p) => soma + menusDe(p).length, 0)).toBe(127);
+
+    const chavesPlano = ['CONTABILIDADE_PLANO_LER', 'CONTABILIDADE_PLANO_GERENCIAR'];
+    expect(PERMISSOES_POR_PERFIL.administrador).toEqual(expect.arrayContaining(chavesPlano));
+    for (const perfil of PERFIS) {
+      if (perfil === 'administrador') continue;
+      for (const chave of chavesPlano) {
+        expect(PERMISSOES_POR_PERFIL[perfil]).not.toContain(chave);
+      }
+    }
 
     // E as permissões novas chegaram ao snapshot, nos perfis de D21.
     const novas = [

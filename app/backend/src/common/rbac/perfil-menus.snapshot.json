@@ -23,6 +23,7 @@
     "/desossa/dashboard",
     "/desossa/etiquetas",
     "/desossa/pesagem-destinacao",
+    "/erp/contabilidade/plano-de-contas",
     "/estoque/ajustes",
     "/estoque/consulta",
     "/estoque/entrada-itens",
