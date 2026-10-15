@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, isNull, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../../common/auditoria/auditoria.service';
@@ -6,6 +7,7 @@ import { montarPaginado } from '../../../../common/crud/paginacao';
 import { DRIZZLE } from '../../../../database/database.module';
 import * as schema from '../../../../database/schema';
 import { classificacoesIbsCbs } from '../../../../database/schema';
+import { EVENTOS } from '../../../../realtime/events/eventos';
 import { conflito, ehViolacaoUnica } from '../empresas/fiscal-comum';
 import type { ClassificacaoIbsCbsDto } from './dto/classificacao-ibs-cbs.dto';
 import type { ListarCatalogoQuery } from './dto/comum.dto';
@@ -19,6 +21,7 @@ export class ClassificacoesIbsCbsService {
   constructor(
     @Inject(DRIZZLE) private readonly drizzle: { db: Db },
     private readonly auditoria: AuditoriaService,
+    private readonly eventos: EventEmitter2,
   ) {}
 
   private get db(): Db {
@@ -54,25 +57,34 @@ export class ClassificacoesIbsCbsService {
 
   async criar(dto: ClassificacaoIbsCbsDto, usuarioId: string) {
     try {
-      return await this.db.transaction(async (tx) => {
-        const [linha] = await tx.insert(classificacoesIbsCbs).values({
+      const linha = await this.db.transaction(async (tx) => {
+        const [gravada] = await tx.insert(classificacoesIbsCbs).values({
           codigo: dto.codigo,
           descricao: dto.descricao,
           criadoPorId: usuarioId,
           atualizadoPorId: usuarioId,
         }).returning();
-        if (!linha) throw new Error('Falha ao gravar classificação IBS/CBS');
+        if (!gravada) throw new Error('Falha ao gravar classificação IBS/CBS');
         await this.auditoria.registrar(tx, {
           tabela: 'classificacoes_ibs_cbs',
-          registroId: linha.id,
+          registroId: gravada.id,
           operacao: 'INSERT',
           modulo: MODULO,
           usuarioId,
-          dadosNovos: linha,
+          dadosNovos: gravada,
           justificativa: dto.justificativa,
         });
-        return { id: linha.id, codigo: linha.codigo, descricao: linha.descricao, versao: linha.versao };
+        return gravada;
       });
+      this.eventos.emit(EVENTOS.REGRA_TRIBUTARIA_ALTERADA, {
+        regraId: linha.id,
+        enquadramentoId: linha.id,
+        codigo: linha.codigo,
+        numeroVersao: linha.versao,
+        acao: 'classificacao_criada',
+        situacao: 'ATIVA',
+      });
+      return { id: linha.id, codigo: linha.codigo, descricao: linha.descricao, versao: linha.versao };
     } catch (err) {
       if (ehViolacaoUnica(err, 'uq_classificacoes_codigo')) {
         conflito('CODIGO_JA_CADASTRADO', 'Código já cadastrado.');

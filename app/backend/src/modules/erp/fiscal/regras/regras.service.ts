@@ -1,4 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
@@ -21,6 +22,7 @@ import {
   usuarios,
 } from '../../../../database/schema';
 import { cfops } from '../../../../database/schema/fiscal-enquadramentos.schema';
+import { EVENTOS, type AcaoRegraTributaria } from '../../../../realtime/events/eventos';
 import { intervalosSobrepoem } from '../enquadramentos/enquadramento-criterio';
 import {
   conflito,
@@ -63,6 +65,7 @@ export class RegrasTributariasService {
   constructor(
     @Inject(DRIZZLE) private readonly drizzle: { db: Db },
     private readonly auditoria: AuditoriaService,
+    private readonly eventos: EventEmitter2,
   ) {}
 
   private get db(): Db {
@@ -248,11 +251,12 @@ export class RegrasTributariasService {
       await this.auditar(tx, linha, null, usuarioId, dto.justificativa, 'Rascunho criado', 'INSERT');
       return linha;
     });
+    this.emitir('rascunho_criado', criada);
     return this.detalhar(criada.id);
   }
 
   async atualizarRascunho(id: string, dto: AtualizarRegraDto, usuarioId: string) {
-    await this.db.transaction(async (tx) => {
+    const linha = await this.db.transaction(async (tx) => {
       const atual = await this.obterBloqueado(tx, id);
       recusarEdicao(atual.situacao as SituacaoRegra);
       exigirVersao(atual.versao, dto.versao);
@@ -278,7 +282,9 @@ export class RegrasTributariasService {
       }).where(eq(regrasTributarias.id, id)).returning();
       if (!linha) throw new NotFoundException('Regra tributária não encontrada');
       await this.auditar(tx, linha, atual, usuarioId, dto.justificativa, 'Rascunho atualizado', 'UPDATE');
+      return linha;
     });
+    this.emitir('rascunho_atualizado', linha);
     return this.detalhar(id);
   }
 
@@ -335,11 +341,12 @@ export class RegrasTributariasService {
         throw err;
       }
     });
+    this.emitir('versao_adicionada', criada);
     return this.detalhar(criada.id);
   }
 
   async submeter(id: string, dto: AcaoRegraDto, usuarioId: string) {
-    await this.db.transaction(async (tx) => {
+    const linha = await this.db.transaction(async (tx) => {
       const atual = await this.obterBloqueado(tx, id);
       recusarAcao(atual.situacao as SituacaoRegra, 'submeter');
       exigirVersao(atual.versao, dto.versao);
@@ -354,12 +361,14 @@ export class RegrasTributariasService {
       }).where(eq(regrasTributarias.id, id)).returning();
       if (!linha) throw new NotFoundException('Regra tributária não encontrada');
       await this.auditar(tx, linha, atual, usuarioId, dto.justificativa, 'Versão submetida', 'UPDATE');
+      return linha;
     });
+    this.emitir('submetida', linha);
     return this.detalhar(id);
   }
 
   async aprovar(id: string, dto: AcaoRegraDto, usuarioId: string) {
-    await this.db.transaction(async (tx) => {
+    const gravada = await this.db.transaction(async (tx) => {
       const linha = await this.obterBloqueado(tx, id);
       await travarEnquadramento(tx, linha.enquadramentoId);
       if (linha.situacao !== 'SUBMETIDA') transicaoInvalida(linha.situacao);
@@ -399,12 +408,14 @@ export class RegrasTributariasService {
       }).where(eq(regrasTributarias.id, id)).returning();
       if (!gravada) throw new NotFoundException('Regra tributária não encontrada');
       await this.auditar(tx, gravada, linha, usuarioId, dto.justificativa, 'Versão aprovada', 'UPDATE');
+      return gravada;
     });
+    this.emitir('aprovada', gravada);
     return this.detalhar(id);
   }
 
   async aposentar(id: string, dto: AcaoRegraDto, usuarioId: string) {
-    await this.db.transaction(async (tx) => {
+    const gravada = await this.db.transaction(async (tx) => {
       const linha = await this.obterBloqueado(tx, id);
       recusarAcao(linha.situacao as SituacaoRegra, 'aposentar');
       exigirVersao(linha.versao, dto.versao);
@@ -420,7 +431,9 @@ export class RegrasTributariasService {
       }).where(eq(regrasTributarias.id, id)).returning();
       if (!gravada) throw new NotFoundException('Regra tributária não encontrada');
       await this.auditar(tx, gravada, linha, usuarioId, dto.justificativa, 'Versão aposentada', 'UPDATE');
+      return gravada;
     });
+    this.emitir('aposentada', gravada);
     return this.detalhar(id);
   }
 
@@ -520,6 +533,17 @@ export class RegrasTributariasService {
     )).for('no key update');
     if (!linha) throw new NotFoundException('Regra tributária não encontrada');
     return linha;
+  }
+
+  private emitir(acao: AcaoRegraTributaria, linha: Pick<Linha, 'id' | 'enquadramentoId' | 'codigo' | 'numeroVersao' | 'situacao'>) {
+    this.eventos.emit(EVENTOS.REGRA_TRIBUTARIA_ALTERADA, {
+      regraId: linha.id,
+      enquadramentoId: linha.enquadramentoId,
+      codigo: linha.codigo,
+      numeroVersao: linha.numeroVersao,
+      acao,
+      situacao: linha.situacao,
+    });
   }
 
   private async auditar(

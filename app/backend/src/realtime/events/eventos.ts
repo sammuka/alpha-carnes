@@ -87,6 +87,8 @@ export const EVENTOS = {
   REGIME_TRIBUTARIO_ALTERADO: 'regime_tributario_alterado',
   // ── E01-T02 — Enquadramento fiscal (room `fiscal-enquadramentos`, Task 9) ──
   ENQUADRAMENTO_FISCAL_ALTERADO: 'enquadramento_fiscal_alterado',
+  // ── E01-T03 — Regras tributárias (room `fiscal-regras`) ──
+  REGRA_TRIBUTARIA_ALTERADA: 'regra_tributaria_alterada',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
@@ -503,6 +505,26 @@ export interface EnquadramentoFiscalAlteradoPayload {
   situacao?: string;
 }
 
+export type AcaoRegraTributaria =
+  | 'rascunho_criado'
+  | 'rascunho_atualizado'
+  | 'versao_adicionada'
+  | 'submetida'
+  | 'aprovada'
+  | 'aposentada'
+  | 'beneficio_criado'
+  | 'classificacao_criada';
+
+/** Sem percentual, CST ou id de nota. Catálogo manual reusa `regraId` como id da linha criada. */
+export interface RegraTributariaAlteradaPayload {
+  regraId: string;
+  enquadramentoId: string;
+  codigo: string;
+  numeroVersao: number;
+  acao: AcaoRegraTributaria;
+  situacao: string;
+}
+
 /** Contratos tipados dos eventos Onda 1 (PayloadPorEvento). */
 export interface PayloadPorEvento {
   reserva_disponibilidade_atualizada: ReservaAtualizadaPayload;
@@ -584,4 +606,5 @@ export interface PayloadPorEvento {
   estabelecimento_fiscal_alterado: CadastroFiscalAlteradoPayload;
   regime_tributario_alterado: CadastroFiscalAlteradoPayload;
   enquadramento_fiscal_alterado: EnquadramentoFiscalAlteradoPayload;
+  regra_tributaria_alterada: RegraTributariaAlteradaPayload;
 }
