@@ -722,4 +722,61 @@ describe('E01-T04 simulações fiscais', () => {
     expect(alteracao.status).toBe(404);
     expect(versao.status).toBe(404);
   });
+
+  it('CSV da memória e da grade neutralizam fórmula vinda do cadastro', async () => {
+    await limparSimulacoes();
+    const aprovada = await aprovarRegra(await cenario());
+    const perigoso = "=cmd|' /C calc'!A0";
+    await db().execute(sql`UPDATE produtos SET nome = ${perigoso} WHERE id = ${aprovada.base.produtoId}::uuid`);
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    const memoria = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${criada.body.id}/memoria`).set('Cookie', admin);
+    expect(memoria.text).toContain(`Produto;'${perigoso}`);
+    expect(memoria.text).not.toMatch(/(^|[\r\n;])=cmd/);
+    const grade = await request(app.getHttpServer()).get('/fiscal/simulacoes/exportacao').set('Cookie', admin);
+    expect(grade.text).toContain(`;'${perigoso};`);
+    expect(grade.text).not.toMatch(/(^|[\r\n;])=cmd/);
+  });
+
+  it('cadastro alterado em transação concorrente bloqueia a simulação até o commit', async () => {
+    const casos = [
+      { tabela: 'estabelecimentos', atribuicao: "situacao = 'SUSPENDED', justificativa_situacao = 'Suspenso para o teste.'", campo: 'estabelecimentoId', codigo: 'ESTABELECIMENTO_INDISPONIVEL' },
+      { tabela: 'clientes', atribuicao: "status = 'inativo'", campo: 'clienteId', codigo: 'CLIENTE_INDISPONIVEL' },
+      { tabela: 'produtos', atribuicao: "status = 'inativo'", campo: 'produtoId', codigo: 'PRODUTO_INDISPONIVEL' },
+      { tabela: 'ncms', atribuicao: 'deleted_at = now()', campo: 'ncmId', codigo: 'NCM_INDISPONIVEL' },
+      { tabela: 'operacoes', atribuicao: 'deleted_at = now()', campo: 'operacaoId', codigo: 'OPERACAO_INDISPONIVEL' },
+      { tabela: 'regras_tributarias', atribuicao: 'deleted_at = now()', campo: 'regraId', codigo: 'FALTA_REFERENCIA_LEGAL' },
+    ] as const;
+    for (const caso of casos) {
+      const aprovada = await aprovarRegra(await cenario());
+      const id = caso.campo === 'regraId' ? aprovada.regraId : aprovada.base[caso.campo];
+      let pendente: Promise<{ status: number; body: Parameters<typeof codigoDe>[0] }> | undefined;
+      let terminouAntes = false;
+      await db().transaction(async (tx) => {
+        await tx.execute(sql`UPDATE ${sql.raw(caso.tabela)} SET ${sql.raw(caso.atribuicao)} WHERE id = ${id}::uuid`);
+        pendente = simular(admin, corpoDe(aprovada.base)).then((r) => r);
+        pendente.then(() => { terminouAntes = true; }, () => { terminouAntes = true; });
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      });
+      expect({ tabela: caso.tabela, terminouAntes }).toEqual({ tabela: caso.tabela, terminouAntes: false });
+      const res = await pendente!;
+      expect(res.status).toBe(422);
+      expect(codigoDe(res.body)).toBe(caso.codigo);
+    }
+  });
+
+  it('listagem empata pelo identificador da simulação', async () => {
+    await limparSimulacoes();
+    const aprovada = await aprovarRegra(await cenario());
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const criada = await simular(admin, corpoDe(aprovada.base));
+      expect(criada.status).toBe(201);
+      ids.push(criada.body.id as string);
+    }
+    const lista = await request(app.getHttpServer()).get('/fiscal/simulacoes?sort=cliente&dir=asc&pageSize=10').set('Cookie', admin);
+    expect(lista.status).toBe(200);
+    const vistos = (lista.body.data as Array<{ id: string }>).map((i) => i.id);
+    expect(vistos).toEqual([...ids].sort());
+  });
 });
