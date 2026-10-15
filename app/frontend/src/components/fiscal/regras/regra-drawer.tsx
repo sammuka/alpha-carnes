@@ -96,6 +96,25 @@ export function RegraDrawer({
     setForm((atual) => ({ ...atual, [chave]: valor }));
   }
 
+  async function escolherEnquadramento(id: string) {
+    setSujo(true);
+    setForm((atual) => ({ ...atual, enquadramentoId: id }));
+    onEnquadramento?.(id);
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/erp/fiscal/enquadramentos/${id}`);
+      if (!res.ok) return;
+      const detalheEnq = await res.json() as { operacaoId?: string; cfopId?: string };
+      setForm((atual) => (
+        atual.enquadramentoId === id
+          ? { ...atual, operacaoId: detalheEnq.operacaoId ?? '', cfopId: detalheEnq.cfopId ?? '' }
+          : atual
+      ));
+    } catch {
+      // o servidor recusa a divergência no POST
+    }
+  }
+
   function verificar(): string | null {
     if (form.justificativa.trim().length < 3) return 'Informe a justificativa auditável (3 a 500 caracteres).';
     if (!form.vigenciaInicio) return 'Informe o início de vigência.';
@@ -138,7 +157,7 @@ export function RegraDrawer({
         </SheetHeader>
         <div className="grid gap-3 px-4">
           <Campo rotulo="Enquadramento fiscal">
-            <select aria-label="Enquadramento fiscal" className="h-8 w-full rounded-md border px-2" value={form.enquadramentoId} onChange={(e) => { set('enquadramentoId', e.target.value); onEnquadramento?.(e.target.value); }}>
+            <select aria-label="Enquadramento fiscal" className="h-8 w-full rounded-md border px-2" value={form.enquadramentoId} onChange={(e) => { void escolherEnquadramento(e.target.value); }}>
               <option value="">{enquadramentos.length === 0 ? TEXTO_VAZIO_COMBO : 'Selecione'}</option>
               {enquadramentos.map((opcao) => <option key={opcao.id} value={opcao.id}>{opcao.rotulo}</option>)}
             </select>

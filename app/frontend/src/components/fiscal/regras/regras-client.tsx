@@ -87,7 +87,7 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
   useEffect(() => {
     void Promise.all([
       opcoesDe('/enquadramentos?pageSize=100', (linha) => String(linha.codigo ?? '')),
-      opcoesDe('/api/operacoes?pageSize=100', (linha) => String(linha.rotulo ?? '')),
+      opcoesDe('/api/operacoes?limite=100', (linha) => String(linha.rotulo ?? '')),
       opcoesDe('/cfops?pageSize=100', (linha) => String(linha.codigo ?? '')),
       opcoesDe('/beneficios-fiscais?pageSize=100', (linha) => String(linha.descricao ?? '')),
       opcoesDe('/classificacoes-ibs-cbs?pageSize=100', (linha) => String(linha.descricao ?? '')),

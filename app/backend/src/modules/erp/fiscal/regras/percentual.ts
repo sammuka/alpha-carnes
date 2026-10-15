@@ -4,7 +4,7 @@ const ENTRADA = /^\d{1,3}(\.\d{1,2})?$/;
 export function normalizarPercentual(entrada: string): string | null {
   const limpo = entrada.trim().replace('%', '').replace(/\s/g, '').replace(',', '.');
   if (!ENTRADA.test(limpo)) return null;
-  const [inteiroBruto, frac = ''] = limpo.split('.');
+  const [inteiroBruto = '', frac = ''] = limpo.split('.');
   if (inteiroBruto.length > 1 && inteiroBruto.startsWith('0')) return null;
   if (frac.length > 2) return null;
   const frac2 = (frac + '00').slice(0, 2);
