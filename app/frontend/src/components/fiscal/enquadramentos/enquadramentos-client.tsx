@@ -132,7 +132,9 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   async function salvar(corpo: CorpoEnquadramento): Promise<string | null> {
     try {
       if (detalhe && drawer) {
-        const { estabelecimentoId: _id, ...resto } = corpo;
+        const resto = Object.fromEntries(
+          Object.entries(corpo).filter(([chave]) => chave !== 'estabelecimentoId'),
+        ) as Omit<CorpoEnquadramento, 'estabelecimentoId'>;
         await enquadramentosApi.atualizar(detalhe.id, { ...resto, versao: detalhe.versao });
       } else {
         await enquadramentosApi.criar(corpo);
