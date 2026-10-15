@@ -4,6 +4,7 @@ import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm
 import { alias } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
+import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { DRIZZLE } from '../../../database/database.module';
 import {
   auditoria,
@@ -95,8 +96,8 @@ export class PlanoContasService {
       if (duplicada.length > 0) throw new ConflictException('Já existe conta com este código');
       const centro = await this.centroAtivo(tx, dto.centroCodigo);
       const paiId = await this.paiValido(tx, dto.classificacao, dto.contaPaiCodigo);
-      const [conta] = await tx.insert(contasContabeis).values({ codigo: dto.codigo }).returning();
-      const [versao] = await tx.insert(contaVersoes).values({
+      const conta = primeiroOuFalha(await tx.insert(contasContabeis).values({ codigo: dto.codigo }).returning());
+      const versao = primeiroOuFalha(await tx.insert(contaVersoes).values({
         contaId: conta.id,
         numero: 1,
         nome: dto.nome,
@@ -110,7 +111,7 @@ export class PlanoContasService {
         situacao: 'DRAFT',
         justificativa: dto.justificativa,
         responsavelId: usuarioId,
-      }).returning();
+      }).returning());
       await this.auditoria.registrar(tx, {
         tabela: 'conta_versoes',
         registroId: versao.id,
@@ -131,7 +132,7 @@ export class PlanoContasService {
       const duplicado = await tx.select({ id: centrosCusto.id }).from(centrosCusto)
         .where(and(eq(centrosCusto.codigo, dto.codigo), isNull(centrosCusto.deletedAt))).limit(1);
       if (duplicado.length > 0) throw new ConflictException('Já existe centro de custo com este código');
-      const [centro] = await tx.insert(centrosCusto).values({ codigo: dto.codigo, nome: dto.nome }).returning();
+      const centro = primeiroOuFalha(await tx.insert(centrosCusto).values({ codigo: dto.codigo, nome: dto.nome }).returning());
       await this.auditoria.registrar(tx, {
         tabela: 'centros_custo',
         registroId: centro.id,
@@ -260,7 +261,7 @@ export class PlanoContasService {
       }
       if (atual.situacao !== 'DRAFT') throw new RegraContabilException('mudança de classificação após fechamento');
       if (!dto.justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
-      const [nova] = await tx.update(contaVersoes).set({
+      const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
         nome: dto.nome,
         classificacao: dto.classificacao,
         natureza: dto.natureza,
@@ -271,7 +272,7 @@ export class PlanoContasService {
         vigenciaFim: dto.vigenciaFim,
         justificativa: dto.justificativa,
         responsavelId: usuarioId,
-      }).where(eq(contaVersoes.id, atual.id)).returning();
+      }).where(eq(contaVersoes.id, atual.id)).returning());
       await this.auditoria.registrar(tx, {
         tabela: 'conta_versoes', registroId: nova.id, operacao: 'UPDATE',
         modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: atual, dadosNovos: nova,
@@ -331,7 +332,7 @@ export class PlanoContasService {
         );
       }
       const centro = await this.centroAtivo(tx, dto.centroCodigo);
-      const [nova] = await tx.insert(contaVersoes).values({
+      const nova = primeiroOuFalha(await tx.insert(contaVersoes).values({
         contaId: conta.id,
         numero: atual.numero + 1,
         nome: dto.nome,
@@ -345,7 +346,7 @@ export class PlanoContasService {
         situacao: 'DRAFT',
         justificativa: dto.justificativa,
         responsavelId: usuarioId,
-      }).returning();
+      }).returning());
       await this.auditoria.registrar(tx, {
         tabela: 'conta_versoes', registroId: nova.id, operacao: 'INSERT',
         modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: atual, dadosNovos: nova,
@@ -490,13 +491,13 @@ export class PlanoContasService {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio)) {
       throw new RegraContabilException('Início de vigência é obrigatório');
     }
-    const [nova] = await tx.update(contaVersoes).set({
+    const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
       situacao: 'REVIEW',
       vigenciaInicio: inicio,
       vigenciaFim: vigenciaFim === undefined ? atual.vigenciaFim : vigenciaFim,
       justificativa,
       responsavelId: usuarioId,
-    }).where(eq(contaVersoes.id, atual.id)).returning();
+    }).where(eq(contaVersoes.id, atual.id)).returning());
     await this.auditoria.registrar(tx, {
       tabela: 'conta_versoes', registroId: nova.id, operacao: 'UPDATE',
       modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: atual, dadosNovos: nova,
@@ -510,11 +511,11 @@ export class PlanoContasService {
     if (atual.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
     if (atual.situacao !== 'REVIEW') throw new RegraContabilException('Situação não permite esta transição');
     if (!justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
-    const [nova] = await tx.update(contaVersoes).set({
+    const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
       situacao: 'APPROVED',
       justificativa,
       responsavelId: usuarioId,
-    }).where(eq(contaVersoes.id, atual.id)).returning();
+    }).where(eq(contaVersoes.id, atual.id)).returning());
     await this.auditoria.registrar(tx, {
       tabela: 'conta_versoes', registroId: nova.id, operacao: 'UPDATE',
       modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: atual, dadosNovos: nova,
@@ -528,11 +529,11 @@ export class PlanoContasService {
     if (atual.situacao === 'SUSPENDED') throw new ConflictException('conta desativada');
     if (atual.situacao !== 'APPROVED') throw new RegraContabilException('Situação não permite esta transição');
     if (!justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
-    const [nova] = await tx.update(contaVersoes).set({
+    const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
       situacao: 'SUSPENDED',
       justificativa,
       responsavelId: usuarioId,
-    }).where(eq(contaVersoes.id, atual.id)).returning();
+    }).where(eq(contaVersoes.id, atual.id)).returning());
     await this.auditoria.registrar(tx, {
       tabela: 'conta_versoes', registroId: nova.id, operacao: 'UPDATE',
       modulo: 'contabilidade.plano', usuarioId, dadosAnteriores: atual, dadosNovos: nova,
