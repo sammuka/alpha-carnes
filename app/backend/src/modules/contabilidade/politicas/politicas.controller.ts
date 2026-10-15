@@ -35,6 +35,7 @@ export class PoliticasContabilizacaoController {
 
   @Get('exportar')
   @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="politicas-de-contabilizacao.csv"')
   @RequirePermissoes('CONTABILIDADE_POLITICA_LER')
   exportar(@Query(new ZodValidationPipe(listarPoliticasSchema)) query: ListarPoliticasQuery) {
     return this.politicas.exportarCsv(query);

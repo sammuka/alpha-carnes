@@ -21,6 +21,7 @@ import { EVENTOS } from '../../../realtime/events/eventos';
 import { PlanoContasService } from '../plano/plano.service';
 import { ultimaVersaoDecidida } from '../plano/vigencia';
 import { balancear, centavos } from './centavos';
+import { celulaCsv } from './csv';
 import type {
   AprovarPoliticaDto,
   ConfigurarPoliticaDto,
@@ -375,7 +376,8 @@ export class PoliticasContabilizacaoService {
   }
 
   async exportarCsv(query: ListarPoliticasQuery): Promise<string> {
-    const { itens } = await this.listar(query);
+    const bruto = await this.consulta(this.filtro(query)).orderBy(this.ordemDe(query));
+    const itens = bruto.map((linha) => this.apresentar(linha));
     const cabecalho = ['Competência', 'Situação', 'Conta de débito', 'Conta de crédito', 'Centro de custo', 'Tipo de ocorrência'];
     const linhas = itens.map((item) => [
       item.competenciaRotulo,
@@ -385,15 +387,13 @@ export class PoliticasContabilizacaoService {
       item.centroNome,
       item.tipoEventoRotulo,
     ]);
-    const escapar = (valor: string) => (/[",;\n]/.test(valor) ? `"${valor.replace(/"/g, '""')}"` : valor);
-    const corpo = [cabecalho, ...linhas].map((linha) => linha.map(escapar).join(';')).join('\n');
+    const corpo = [cabecalho, ...linhas].map((linha) => linha.map(celulaCsv).join(';')).join('\n');
     return `\uFEFF${corpo}`;
   }
 
   async listar(query: ListarPoliticasQuery): Promise<{ itens: PoliticaApresentada[]; total: number }> {
     const filtro = this.filtro(query);
-    const coluna = this.colunaOrdem(query.ordenar);
-    const ordem = query.direcao === 'desc' ? desc(coluna) : asc(coluna);
+    const ordem = this.ordemDe(query);
     const linhas = await this.consulta(filtro).orderBy(ordem).limit(PAGINA).offset((query.pagina - 1) * PAGINA);
     const [contagem] = await this.db.select({ total: sql<number>`count(*)::int` })
       .from(politicasContabilizacao)
@@ -502,6 +502,11 @@ export class PoliticasContabilizacaoService {
       )`);
     }
     return and(...termos);
+  }
+
+  private ordemDe(query: ListarPoliticasQuery) {
+    const coluna = this.colunaOrdem(query.ordenar);
+    return query.direcao === 'desc' ? desc(coluna) : asc(coluna);
   }
 
   private colunaOrdem(ordenar: ListarPoliticasQuery['ordenar']) {

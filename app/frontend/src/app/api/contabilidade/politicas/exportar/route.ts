@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
-import { repassar } from '@/lib/bff';
+import { repassarArquivo } from '@/lib/bff';
 
 export async function GET(req: NextRequest) {
-  return repassar(`/contabilidade/politicas/exportar${req.nextUrl.search}`);
+  return repassarArquivo(`/contabilidade/politicas/exportar${req.nextUrl.search}`);
 }

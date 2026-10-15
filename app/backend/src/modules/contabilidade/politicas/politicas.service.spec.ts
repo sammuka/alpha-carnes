@@ -1,4 +1,5 @@
 import { balancear, centavos } from './centavos';
+import { celulaCsv } from './csv';
 
 describe('centavos da política', () => {
   it('soma 0.10 e 0.20 em centavos, sem float', () => {
@@ -34,5 +35,23 @@ describe('centavos da política', () => {
         response: { message: 'balanceamento exato', codigo: 'LIQUIDACAO-2026-10' },
       });
     }
+  });
+});
+
+describe('celulaCsv', () => {
+  it.each([
+    ['=1+1', "'=1+1"],
+    ['+SUM(A1)', "'+SUM(A1)"],
+    // Comportamento aceito: número negativo legítimo também recebe o apóstrofo; a célula do CSV é texto e nenhuma coluna é numérica.
+    ['-2', "'-2"],
+    ['@cmd', "'@cmd"],
+    ['\t=tab', `"'\t=tab"`],
+    ['\r=cr', `"'\r=cr"`],
+    ['Caixa', 'Caixa'],
+    ['a;b', '"a;b"'],
+    ['diz "oi"', '"diz ""oi"""'],
+    ['linha\nnova', '"linha\nnova"'],
+  ])('%j vira %j', (entrada, esperado) => {
+    expect(celulaCsv(entrada)).toBe(esperado);
   });
 });

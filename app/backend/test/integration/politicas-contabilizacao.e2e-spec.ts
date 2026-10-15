@@ -562,4 +562,47 @@ describe('entrada inválida responde 400 e não grava', () => {
     expect(lista.itens).toHaveLength(0);
     expect(await service.exportarCsv(consulta)).not.toContain('Liquidação');
   });
+
+  describe('exportação da visão', () => {
+    const visao = { pagina: 1, q: '', situacao: '', competencia: '', ordenar: 'competencia', direcao: 'asc' } as const;
+
+    async function criarVinteEUma() {
+      for (let i = 0; i < 21; i += 1) {
+        const mes = String((i % 12) + 1).padStart(2, '0');
+        await service.configurar(dtoConfigurar({ competencia: `${2026 + Math.floor(i / 12)}-${mes}` }), autorId);
+      }
+    }
+
+    it('exporta a visão inteira e não só a página, e respeita o filtro', async () => {
+      await prepararContasAnaliticas();
+      await criarVinteEUma();
+      expect((await service.listar(visao)).itens).toHaveLength(20);
+      const csv = await service.exportarCsv({ ...visao, pagina: 2 });
+      expect(csv.replace('\uFEFF', '').split('\n')).toHaveLength(22);
+      const uma = await service.exportarCsv({ ...visao, competencia: '2026-03' });
+      expect(uma.replace('\uFEFF', '').split('\n')).toHaveLength(2);
+    });
+
+    it('neutraliza célula que começa como fórmula', async () => {
+      await prepararContasAnaliticas();
+      await plano.criar(dtoConta({ codigo: '1.1.02', classificacao: 'analitica', contaPaiCodigo: '1', nome: '=1+1' }), autorId);
+      await aprovarDireto('1.1.02');
+      await service.configurar(dtoConfigurar({ contaDebitoCodigo: '1.1.02' }), autorId);
+      const csv = await service.exportarCsv(visao);
+      expect(csv).toContain(";'=1+1;");
+      expect(csv).not.toContain(';=1+1;');
+    });
+
+    it('o endpoint devolve text/csv com o nome do arquivo e as 21 linhas, sem pagina', async () => {
+      await prepararContasAnaliticas();
+      await criarVinteEUma();
+      const res = await request(srv()).get('/contabilidade/politicas/exportar?pagina=2&ordenar=competencia&direcao=desc')
+        .set('Cookie', adminCookies);
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toContain('text/csv');
+      expect(res.headers['content-disposition']).toBe('attachment; filename="politicas-de-contabilizacao.csv"');
+      expect(res.text.replace('\uFEFF', '').split('\n')).toHaveLength(22);
+      expect(res.text).not.toMatch(/LIQUIDACAO-|[0-9a-f]{8}-[0-9a-f]{4}-/);
+    });
+  });
 });

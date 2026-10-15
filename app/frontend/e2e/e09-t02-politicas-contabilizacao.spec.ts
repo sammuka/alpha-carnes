@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { competenciaUnica, criarPlanoDaJornada, criarPoliticas, type PlanoDaJornada } from './helpers/e09-t02-seed';
 import { ADMIN_EMAIL, loginBackend } from './helpers/onda6-seed';
@@ -192,5 +193,45 @@ test('com mais de 20 políticas a página 2 é alcançada pela tela e a posiçã
   await page.reload();
   await expect(page.getByText('Página 2 de 2', { exact: true })).toBeVisible();
   await expect(linhas).toHaveCount(1);
+  await admin.close();
+});
+
+test('Exportar visão baixa o CSV com todas as linhas da visão, sem id e sem fórmula', async ({ browser, baseURL, playwright }) => {
+  const api = await playwright.request.newContext();
+  let propria: PlanoDaJornada;
+  try {
+    propria = await criarPlanoDaJornada(api);
+    await criarPoliticas(api, propria, 21);
+  } finally {
+    await api.dispose();
+  }
+  const admin = await browser.newContext({ baseURL });
+  const page = await admin.newPage();
+  await login(page, ADMIN_EMAIL, senhaAdmin, baseURL!);
+  await page.goto('/erp/contabilidade/politicas-de-contabilizacao');
+  const lista = page.waitForResponse((resposta) => {
+    const url = new URL(resposta.url());
+    return url.pathname === '/api/contabilidade/politicas' && url.searchParams.get('q') === propria.debitoNome;
+  });
+  await page.getByLabel('Buscar registros da lista').fill(propria.debitoNome);
+  expect((await lista).ok()).toBeTruthy();
+  await expect(page.locator('.politicas-grade tbody tr')).toHaveCount(20);
+
+  const baixando = page.waitForEvent('download');
+  const exportacao = page.waitForResponse((resposta) => {
+    const url = new URL(resposta.url());
+    return url.pathname === '/api/contabilidade/politicas/exportar' && url.searchParams.get('q') === propria.debitoNome
+      && !url.searchParams.has('pagina');
+  });
+  await page.getByRole('button', { name: 'Exportar visão' }).click();
+  expect((await exportacao).headers()['content-type']).toContain('text/csv');
+  const download = await baixando;
+  expect(download.suggestedFilename()).toBe('politicas-de-contabilizacao.csv');
+  const bytes = await readFile(await download.path());
+  expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  const linhas = bytes.toString('utf8').replace('\uFEFF', '').split('\n');
+  expect(linhas).toHaveLength(22);
+  expect(linhas[0]).toBe('Competência;Situação;Conta de débito;Conta de crédito;Centro de custo;Tipo de ocorrência');
+  expect(bytes.toString('utf8')).not.toMatch(/LIQUIDACAO-|[0-9a-f]{8}-[0-9a-f]{4}-/);
   await admin.close();
 });

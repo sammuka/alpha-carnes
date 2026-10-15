@@ -439,6 +439,29 @@ export function PoliticasContabilizacaoClient({
     setAviso('');
   }
 
+  async function exportar() {
+    const consulta = new URLSearchParams({ q: busca, competencia: filtroCompetencia, situacao: filtroSituacao, ordenar, direcao });
+    try {
+      const resposta = await fetch(`/api/contabilidade/politicas/exportar?${consulta.toString()}`);
+      if (!resposta.ok) {
+        setAviso((await lerMensagem(resposta)) || 'Não foi possível exportar. Tente novamente.');
+        return;
+      }
+      // blob, não text(): text() descarta o BOM e o Excel perde os acentos.
+      const url = URL.createObjectURL(await resposta.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'politicas-de-contabilizacao.csv';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setAviso('');
+    } catch {
+      setAviso('Não foi possível exportar. Tente novamente.');
+    }
+  }
+
   async function validar() {
     const resposta = await fetch('/api/contabilidade/politicas/validar', {
       method: 'POST',
@@ -490,7 +513,7 @@ export function PoliticasContabilizacaoClient({
       `}</style>
       <h1>Políticas de contabilização</h1>
       <p>Acesso típico: contador <BadgeProvisorio texto="Provisório" /></p>
-      <Button type="button" variant="secondary" onClick={() => void fetch(`/api/contabilidade/politicas/exportar?pagina=1&q=${encodeURIComponent(busca)}`)}>Exportar</Button>
+      <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar</Button>
       <Button type="button" variant="secondary" onClick={abrirCriar}>+ Novo registro</Button>
       <Button type="button" onClick={abrirCriar}>Configurar mappings</Button>
       <Button type="button" variant="secondary" onClick={() => abrirModal('simular')}>Simular evento</Button>
@@ -503,7 +526,7 @@ export function PoliticasContabilizacaoClient({
         <select aria-label="Filtrar situação" value={filtroSituacao} onChange={(evento) => { setFiltroSituacao(evento.target.value); setPagina(1); }}>
           {SITUACOES.map(([valor, rotulo]) => <option key={rotulo} value={valor}>{rotulo}</option>)}
         </select>
-        <Button type="button" variant="secondary" onClick={() => void fetch(`/api/contabilidade/politicas/exportar?pagina=1&q=${encodeURIComponent(busca)}&competencia=${filtroCompetencia}&situacao=${filtroSituacao}`)}>Exportar visão</Button>
+        <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar visão</Button>
       </div>
       {aviso ? <p role="status">{aviso}</p> : null}
       <div className="politicas-grade">

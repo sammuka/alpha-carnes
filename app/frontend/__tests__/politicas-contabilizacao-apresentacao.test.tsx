@@ -491,3 +491,66 @@ it('sob StrictMode a página 2 restaurada do sessionStorage não volta para a 1'
   render(<StrictMode><PoliticasContabilizacaoClient inicial={muitas(20)} totalInicial={45} /></StrictMode>);
   expect(await screen.findByText('Página 2 de 3')).toBeInTheDocument();
 });
+
+function respostaCsv(conteudo: string) {
+  return { ok: true, status: 200, blob: async () => new Blob([conteudo], { type: 'text/csv' }), text: async () => conteudo };
+}
+
+describe('exportação', () => {
+  let cliques: HTMLAnchorElement[];
+
+  beforeEach(() => {
+    cliques = [];
+    URL.createObjectURL = jest.fn(() => 'blob:politicas');
+    URL.revokeObjectURL = jest.fn();
+    jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function click(this: HTMLAnchorElement) {
+      cliques.push(this);
+    });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('Exportar visão baixa o arquivo com os mesmos parâmetros da lista e sem pagina', async () => {
+    const user = userEvent.setup();
+    const fetchMock = jest.fn((url: string) => Promise.resolve(
+      url.includes('/exportar') ? respostaCsv('\uFEFFCompetência') : corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 1 }),
+    ));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+    await user.type(screen.getByLabelText('Buscar registros da lista'), 'x');
+    await user.selectOptions(screen.getByLabelText('Filtrar situação'), 'DRAFT');
+    await user.click(screen.getByRole('button', { name: 'Ordenar por Conta de débito' }));
+    await user.click(screen.getByRole('button', { name: 'Exportar visão' }));
+    await waitFor(() => expect(cliques).toHaveLength(1));
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      '/api/contabilidade/politicas/exportar?q=x&competencia=&situacao=DRAFT&ordenar=contaDebito&direcao=asc',
+    );
+    expect(cliques[0]?.download).toBe('politicas-de-contabilizacao.csv');
+    expect(cliques[0]?.href).toBe('blob:politicas');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:politicas');
+  });
+
+  it('Exportar usa a mesma visão que Exportar visão', async () => {
+    const user = userEvent.setup();
+    const fetchMock = jest.fn().mockResolvedValue(respostaCsv('\uFEFFCompetência'));
+    global.fetch = fetchMock as unknown as typeof fetch;
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+    await user.click(screen.getByRole('button', { name: 'Exportar' }));
+    await waitFor(() => expect(cliques).toHaveLength(1));
+    expect(fetchMock).toHaveBeenCalledWith('/api/contabilidade/politicas/exportar?q=&competencia=&situacao=&ordenar=competencia&direcao=asc');
+  });
+
+  it('falha na exportação mostra a mensagem, não baixa nada e não afirma sucesso', async () => {
+    const user = userEvent.setup();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({ message: 'Validação falhou' }),
+    }) as unknown as typeof fetch;
+    render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+    await user.click(screen.getByRole('button', { name: 'Exportar visão' }));
+    expect(await screen.findByText('Validação falhou')).toBeInTheDocument();
+    expect(cliques).toHaveLength(0);
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(screen.queryByText(/exportad/i)).not.toBeInTheDocument();
+  });
+});

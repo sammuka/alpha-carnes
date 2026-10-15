@@ -20,3 +20,16 @@ export async function repassar(
     headers: { 'Content-Type': 'application/json' },
   });
 }
+
+/** Como `repassar`, mas para arquivo: no sucesso repassa os bytes (arrayBuffer, nunca text(), que descarta o BOM UTF-8) com Content-Type e Content-Disposition do backend; no erro segue como JSON. */
+export async function repassarArquivo(caminho: string): Promise<NextResponse> {
+  const resposta = await apiFetch(caminho, { method: 'GET' });
+  if (!resposta.ok) {
+    const texto = await resposta.text();
+    return new NextResponse(texto === '' ? null : texto, { status: resposta.status, headers: { 'Content-Type': 'application/json' } });
+  }
+  const headers: Record<string, string> = { 'Content-Type': resposta.headers.get('content-type') ?? 'text/csv; charset=utf-8' };
+  const disposicao = resposta.headers.get('content-disposition');
+  if (disposicao) headers['Content-Disposition'] = disposicao;
+  return new NextResponse(await resposta.arrayBuffer(), { status: resposta.status, headers });
+}
