@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../../common/auditoria/auditoria.service';
@@ -34,6 +34,7 @@ import {
   type Tx,
 } from '../empresas/fiscal-comum';
 import type { AcaoRegraDto, AtualizarRegraDto, CriarRegraDto, ListarRegrasQuery, NovaVersaoDto } from './dto/regra.dto';
+import { montarCsvRegras } from './exportacao-csv';
 import { formatarPercentualPtBr } from './percentual';
 import { recusarAcao, recusarEdicao, type SituacaoRegra } from './regra-transicao';
 
@@ -72,11 +73,15 @@ export class RegrasTributariasService {
     return this.drizzle.db;
   }
 
-  async listar(query: ListarRegrasQuery) {
-    const where = and(
+  private whereLista(query: ListarRegrasQuery) {
+    return and(
       isNull(regrasTributarias.deletedAt),
       query.cfopId ? eq(enquadramentosFiscais.cfopId, query.cfopId) : undefined,
     );
+  }
+
+  async listar(query: ListarRegrasQuery) {
+    const where = this.whereLista(query);
     const totalLinha = await this.db
       .select({ total: sql<number>`count(*)::int` })
       .from(regrasTributarias)
@@ -192,8 +197,86 @@ export class RegrasTributariasService {
     };
   }
 
+  async contagens(query: ListarRegrasQuery) {
+    const [linha] = await this.db
+      .select({
+        total: sql<number>`count(*)::int`,
+        rascunhos: sql<number>`count(*) filter (where ${regrasTributarias.situacao} = 'RASCUNHO')::int`,
+        submetidas: sql<number>`count(*) filter (where ${regrasTributarias.situacao} = 'SUBMETIDA')::int`,
+        aprovadas: sql<number>`count(*) filter (where ${regrasTributarias.situacao} = 'APROVADA')::int`,
+        aposentadas: sql<number>`count(*) filter (where ${regrasTributarias.situacao} = 'APOSENTADA')::int`,
+      })
+      .from(regrasTributarias)
+      .innerJoin(enquadramentosFiscais, eq(enquadramentosFiscais.id, regrasTributarias.enquadramentoId))
+      .where(this.whereLista(query));
+    return {
+      total: linha?.total ?? 0,
+      rascunhos: linha?.rascunhos ?? 0,
+      submetidas: linha?.submetidas ?? 0,
+      aprovadas: linha?.aprovadas ?? 0,
+      aposentadas: linha?.aposentadas ?? 0,
+    };
+  }
+
+  async exportar(query: ListarRegrasQuery): Promise<string> {
+    const linhas = await this.db
+      .select({
+        enquadramentoFiscal: enquadramentosFiscais.codigo,
+        operacaoFiscal: cfops.codigo,
+        beneficioFiscal: beneficiosFiscais.descricao,
+        classificacaoIbsCbs: classificacoesIbsCbs.descricao,
+        operacao: operacoes.rotulo,
+        icmsCst: regrasTributarias.icmsCst,
+      })
+      .from(regrasTributarias)
+      .innerJoin(enquadramentosFiscais, eq(enquadramentosFiscais.id, regrasTributarias.enquadramentoId))
+      .innerJoin(cfops, eq(cfops.id, enquadramentosFiscais.cfopId))
+      .innerJoin(operacoes, eq(operacoes.id, enquadramentosFiscais.operacaoId))
+      .innerJoin(beneficiosFiscais, eq(beneficiosFiscais.id, regrasTributarias.beneficioFiscalId))
+      .innerJoin(classificacoesIbsCbs, eq(classificacoesIbsCbs.id, regrasTributarias.classificacaoIbsCbsId))
+      .where(this.whereLista(query))
+      .orderBy(enquadramentosFiscais.codigo);
+    return montarCsvRegras(linhas);
+  }
+
+  async preCondicoes(id: string) {
+    const linha = await this.obter(this.db, id);
+    const [enquadramento] = await this.db
+      .select({ situacao: enquadramentosFiscais.situacao, deletedAt: enquadramentosFiscais.deletedAt })
+      .from(enquadramentosFiscais)
+      .where(eq(enquadramentosFiscais.id, linha.enquadramentoId));
+    const campos = [
+      linha.icmsCst,
+      linha.pRedBc,
+      linha.pIcms,
+      linha.beneficioFiscalId,
+      linha.ipiCst,
+      linha.pisCst,
+      linha.ibsCst,
+      linha.classificacaoIbsCbsId,
+    ].every((valor) => String(valor).trim() !== '');
+    return [
+      {
+        codigo: 'ENQUADRAMENTO_ATIVO',
+        atendida: enquadramento?.situacao === 'ATIVA' && enquadramento.deletedAt == null,
+        provisoria: false,
+      },
+      { codigo: 'VIGENCIA_INFORMADA', atendida: linha.vigenciaInicio.trim() !== '', provisoria: false },
+      { codigo: 'CAMPOS_TRIBUTARIOS', atendida: campos, provisoria: false },
+      { codigo: 'DATAS_COMERCIAL_FISCAL_EFETIVA', atendida: false, provisoria: true },
+      {
+        codigo: 'DUPLA_APROVACAO',
+        atendida: false,
+        provisoria: true,
+        texto: 'Um aprovador diferente de quem submeteu registra a aprovação. Quantos aprovadores formam quórum ainda não foi decidido.',
+      },
+      { codigo: 'PERFIS_ALEM_ADMINISTRADOR', atendida: false, provisoria: true },
+    ];
+  }
+
   async historico(id: string) {
-    await this.obter(this.db, id);
+    const atual = await this.obter(this.db, id);
+    const ids = atual.origemVersaoId ? [atual.origemVersaoId, id] : [id];
     const autor = alias(usuarios, 'historico_regra_autor');
     const linhas = await this.db
       .select({
@@ -206,7 +289,7 @@ export class RegrasTributariasService {
       })
       .from(schema.auditoria)
       .leftJoin(autor, eq(autor.id, schema.auditoria.usuarioId))
-      .where(and(eq(schema.auditoria.tabela, 'regras_tributarias'), eq(schema.auditoria.registroId, id)))
+      .where(and(eq(schema.auditoria.tabela, 'regras_tributarias'), inArray(schema.auditoria.registroId, ids)))
       .orderBy(schema.auditoria.createdAt);
     return linhas.map((linha) => {
       const novos = (linha.dadosNovos ?? {}) as Record<string, unknown>;

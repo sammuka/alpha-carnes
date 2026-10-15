@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { z } from 'zod';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser, type CurrentUserPayload } from '../../../../common/decorators/current-user.decorator';
@@ -29,6 +30,26 @@ const compararQuerySchema = z.object({ com: uuidSchema });
 export class RegrasController {
   constructor(private readonly regras: RegrasTributariasService) {}
 
+  @Get('regras/contagens')
+  @RequirePermissoes('FISCAL_REGRAS_LER')
+  contagens(@Query(new ZodValidationPipe(listarRegrasSchema)) query: ListarRegrasQuery) {
+    return this.regras.contagens(query);
+  }
+
+  @Get('regras/exportacao')
+  @RequirePermissoes('FISCAL_REGRAS_LER')
+  async exportacao(
+    @Query(new ZodValidationPipe(listarRegrasSchema)) query: ListarRegrasQuery,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.regras.exportar(query);
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="regras.csv"',
+    });
+    return csv;
+  }
+
   @Get('regras')
   @RequirePermissoes('FISCAL_REGRAS_LER')
   listar(@Query(new ZodValidationPipe(listarRegrasSchema)) query: ListarRegrasQuery) {
@@ -48,6 +69,12 @@ export class RegrasController {
   @RequirePermissoes('FISCAL_REGRAS_LER')
   historico(@Param('id', new ZodValidationPipe(uuidSchema)) id: string) {
     return this.regras.historico(id);
+  }
+
+  @Get('regras/:id/pre-condicoes')
+  @RequirePermissoes('FISCAL_REGRAS_LER')
+  preCondicoes(@Param('id', new ZodValidationPipe(uuidSchema)) id: string) {
+    return this.regras.preCondicoes(id);
   }
 
   @Get('regras/:id')

@@ -432,4 +432,63 @@ describe('E01-T03 regras tributárias', () => {
     `);
     expect(depois.rows[0]).toEqual(antes.rows[0]);
   });
+
+  it('CSV leva o rótulo Redução de base e as pré-condições provisórias', async () => {
+    const criada = await criarComo(adminA);
+    expect(criada.res.status).toBe(201);
+    const csv = await request(app.getHttpServer()).get('/fiscal/regras/exportacao').set('Cookie', adminA);
+    expect(csv.status).toBe(200);
+    expect(csv.headers['content-type']).toBe('text/csv; charset=utf-8');
+    const texto = csv.text;
+    expect(texto.startsWith('\uFEFF')).toBe(true);
+    const linhas = texto.replace(/^\uFEFF/, '').split('\r\n').filter((linha) => linha.length > 0);
+    expect(linhas[0]).toBe('Enquadramento fiscal;Operação fiscal (CFOP);Benefício fiscal;Classificação IBS/CBS;Operação;Tratamento ICMS');
+    const tratamentos = linhas.slice(1).map((linha) => linha.split(';')[5]);
+    expect(tratamentos).toContain('Redução de base');
+    expect(tratamentos).not.toContain('20');
+    expect(texto).not.toMatch(/CST/);
+    expect(texto).not.toMatch(UUID);
+
+    const pre = await request(app.getHttpServer()).get(`/fiscal/regras/${criada.res.body.id}/pre-condicoes`).set('Cookie', adminA);
+    expect(pre.status).toBe(200);
+    expect(pre.body).toEqual([
+      expect.objectContaining({ codigo: 'ENQUADRAMENTO_ATIVO', atendida: true, provisoria: false }),
+      expect.objectContaining({ codigo: 'VIGENCIA_INFORMADA', atendida: true, provisoria: false }),
+      expect.objectContaining({ codigo: 'CAMPOS_TRIBUTARIOS', atendida: true, provisoria: false }),
+      expect.objectContaining({ codigo: 'DATAS_COMERCIAL_FISCAL_EFETIVA', atendida: false, provisoria: true }),
+      expect.objectContaining({ codigo: 'DUPLA_APROVACAO', atendida: false, provisoria: true }),
+      expect.objectContaining({ codigo: 'PERFIS_ALEM_ADMINISTRADOR', atendida: false, provisoria: true }),
+    ]);
+    const dupla = (pre.body as { codigo: string; texto?: string }[]).find((item) => item.codigo === 'DUPLA_APROVACAO');
+    expect(dupla?.texto).toBe('Um aprovador diferente de quem submeteu registra a aprovação. Quantos aprovadores formam quórum ainda não foi decidido.');
+
+    const antes = await request(app.getHttpServer()).get('/fiscal/regras/contagens').set('Cookie', adminA);
+    expect(antes.status).toBe(200);
+    const outra = await criarComo(adminA);
+    expect(outra.res.status).toBe(201);
+    const depoisContagem = await request(app.getHttpServer()).get('/fiscal/regras/contagens').set('Cookie', adminA);
+    expect(depoisContagem.body.total).toBe(antes.body.total + 1);
+    expect(depoisContagem.body.rascunhos).toBe(antes.body.rascunhos + 1);
+  });
+
+  it('histórico usa os resumos fechados e a versão nova inclui a origem', async () => {
+    const fluxo = await aprovarFluxo();
+    const nova = await request(app.getHttpServer())
+      .post(`/fiscal/regras/${fluxo.id}/versoes`)
+      .set('Cookie', adminA)
+      .send({ ...fluxo.corpo, pIcms: '7,00', vigenciaInicio: '2027-01-01', vigenciaFim: null, versao: fluxo.aprovada.versao });
+    expect(nova.status).toBe(201);
+    const historico = await request(app.getHttpServer()).get(`/fiscal/regras/${nova.body.id}/historico`).set('Cookie', adminA);
+    expect(historico.status).toBe(200);
+    const resumos = (historico.body as { resumo: string }[]).map((item) => item.resumo);
+    expect(resumos).toEqual(expect.arrayContaining([
+      'Rascunho criado',
+      'Versão submetida',
+      'Versão aprovada',
+      `Versão nova do código ${fluxo.aprovada.codigo}`,
+    ]));
+    const texto = JSON.stringify(historico.body);
+    expect(texto).not.toMatch(/regras_tributarias/);
+    expect(texto).not.toMatch(UUID);
+  });
 });
