@@ -77,12 +77,14 @@ export class PlanoContasController {
   @RequirePermissoes('CONTABILIDADE_PLANO_GERENCIAR')
   acao(
     @Param('codigo') codigo: string,
-    @Param('acao') acao: keyof typeof acaoSchema,
+    @Param('acao') acao: string,
     @Body() corpo: unknown,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    const schema = acaoSchema[acao];
-    if (!schema) throw new NotFoundException();
-    return this.plano.executar(acao, codigo, schema.parse(corpo), user.sub);
+    if (!Object.hasOwn(acaoSchema, acao)) throw new NotFoundException();
+    const nome = acao as keyof typeof acaoSchema;
+    // transform devolve unknown; o schema da ação já garantiu a forma, então o cast é para o tipo que executar espera.
+    const dto = new ZodValidationPipe(acaoSchema[nome]).transform(corpo) as Parameters<PlanoContasService['executar']>[2];
+    return this.plano.executar(nome, codigo, dto, user.sub);
   }
 }

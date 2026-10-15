@@ -25,6 +25,7 @@ import {
   type LoteDto,
   type MapearContaDto,
   type RevisarCompetenciaDto,
+  dataCalendarioValida,
 } from './dto/plano.dto';
 import { RegraContabilException } from './regra-contabil.exception';
 
@@ -285,7 +286,7 @@ export class PlanoContasService {
   }
 
   async revisarCompetencia(codigo: string, dto: RevisarCompetenciaDto | { numero: number; vigenciaInicio: string; vigenciaFim: string | null; justificativa: string }, usuarioId: string) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dto.vigenciaInicio)) {
+    if (!dataCalendarioValida(dto.vigenciaInicio)) {
       throw new RegraContabilException('Início de vigência é obrigatório');
     }
     if (!dto.justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
@@ -384,7 +385,7 @@ export class PlanoContasService {
       const saida = [];
       for (const codigo of dto.codigos) {
         try {
-          const numero = dto.numeroPorCodigo[codigo];
+          const numero = Object.hasOwn(dto.numeroPorCodigo, codigo) ? dto.numeroPorCodigo[codigo] : undefined;
           if (numero === undefined) throw new RegraContabilException('conflito concorrente');
           if (dto.acao === 'bloquear') saida.push(await this.bloquearNaTx(tx, codigo, numero, dto.justificativa, usuarioId));
           if (dto.acao === 'aprovar') saida.push(await this.aprovarNaTx(tx, codigo, numero, dto.justificativa, usuarioId));
@@ -488,7 +489,7 @@ export class PlanoContasService {
     }
     if (!justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
     const inicio = vigenciaInicio ?? atual.vigenciaInicio;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio)) {
+    if (!dataCalendarioValida(inicio)) {
       throw new RegraContabilException('Início de vigência é obrigatório');
     }
     const nova = primeiroOuFalha(await tx.update(contaVersoes).set({

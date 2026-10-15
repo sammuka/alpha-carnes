@@ -566,4 +566,46 @@ describe('Plano de contas', () => {
     expect(res.status).toBe(200);
     expect(JSON.stringify(res.body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
   });
+
+  describe('entrada HTTP inválida', () => {
+    const post = (url: string, corpo: unknown) =>
+      request(srv()).post(url).set('Cookie', adminCookies).send(corpo as object);
+    const contasGravadas = async () =>
+      Number((await db.execute(sql`select count(*)::int as total from contas_contabeis`)).rows[0].total);
+    const valida = {
+      codigo: '1', nome: 'Caixa', classificacao: 'sintetica', natureza: 'ATIVO', grupo: 'Circulante',
+      contaPaiCodigo: null, centroCodigo: 'CT1', vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'abertura',
+    };
+
+    it.each([
+      ['numero não numérico', '/contabilidade/plano/1/aprovar', { numero: 'x', justificativa: 'ok' }],
+      ['justificativa só de espaços', '/contabilidade/plano/1/aprovar', { numero: 1, justificativa: '   ' }],
+      ['corpo vazio', '/contabilidade/plano/1/bloquear', {}],
+      ['início inexistente', '/contabilidade/plano/1/revisar-competencia',
+        { numero: 1, vigenciaInicio: '2026-02-31', vigenciaFim: null, justificativa: 'ok' }],
+      ['mês 13', '/contabilidade/plano/1/revisar-competencia',
+        { numero: 1, vigenciaInicio: '2026-13-01', vigenciaFim: null, justificativa: 'ok' }],
+      ['fim inexistente', '/contabilidade/plano/1/revisar-competencia',
+        { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: '2026-04-31', justificativa: 'ok' }],
+      ['criar com início inexistente', '/contabilidade/plano', { ...valida, vigenciaInicio: '2026-02-31' }],
+      ['criar com mês 13', '/contabilidade/plano', { ...valida, vigenciaInicio: '2026-13-01' }],
+      ['validar com fim inexistente', '/contabilidade/plano/validar', { ...valida, vigenciaFim: '2026-02-30' }],
+    ])('%s responde 400 e não grava', async (_nome, url, corpo) => {
+      const res = await post(url, corpo);
+      expect(res.status).toBe(400);
+      expect(await contasGravadas()).toBe(0);
+    });
+
+    it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])('ação herdada %s responde 404', async (acao) => {
+      expect((await post(`/contabilidade/plano/1/${acao}`, {})).status).toBe(404);
+    });
+
+    it('lote com código herdado do protótipo responde 422 conflito', async () => {
+      const res = await post('/contabilidade/plano/lote', {
+        acao: 'bloquear', codigos: ['constructor'], justificativa: 'ok', numeroPorCodigo: {},
+      });
+      expect(res.status).toBe(422);
+      expect(res.body.message.message).toBe('conflito concorrente');
+    });
+  });
 });
