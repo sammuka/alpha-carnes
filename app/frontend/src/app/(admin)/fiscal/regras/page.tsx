@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { RegrasClient } from '@/components/fiscal/regras/regras-client';
 import { getMe } from '@/lib/auth';
 
 export default async function RegrasPage() {
@@ -11,5 +12,10 @@ export default async function RegrasPage() {
       </p>
     );
   }
-  return <h1>Editor de regras tributárias</h1>;
+  return (
+    <RegrasClient
+      podeGerenciar={user.permissoes.includes('FISCAL_REGRAS_GERENCIAR')}
+      podeAprovar={user.permissoes.includes('FISCAL_REGRAS_APROVAR')}
+    />
+  );
 }
