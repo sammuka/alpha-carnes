@@ -27,6 +27,33 @@ export const editarSchema = z.object({
   justificativa: motivo,
 });
 
+export const dinheiro = z.string().regex(/^\d{1,13}\.\d{2}$/);
+
+export const simularSchema = z.object({
+  numero: z.number().int().positive(),
+  valor: dinheiro,
+  justificativa: motivo,
+});
+
+export const aprovarSchema = z.object({
+  numero: z.number().int().positive(),
+  justificativa: motivo,
+});
+
+const loteBase = z.object({
+  acao: z.enum(['simular', 'aprovar']),
+  codigos: z.array(codigo).min(1).max(20),
+  justificativa: motivo,
+  numeroPorCodigo: z.record(z.string(), z.number().int().positive()),
+  valor: dinheiro.optional(),
+});
+
+export const loteSchema = loteBase.superRefine((dto, ctx) => {
+  if (dto.acao === 'simular' && !dto.valor) {
+    ctx.addIssue({ code: 'custom', path: ['valor'], message: 'Valor é obrigatório.' });
+  }
+});
+
 export const listarPoliticasSchema = z.object({
   pagina: z.coerce.number().int().min(1).default(1),
   q: z.string().trim().max(180).default(''),
@@ -38,4 +65,7 @@ export const listarPoliticasSchema = z.object({
 
 export type ConfigurarPoliticaDto = z.infer<typeof configurarSchema>;
 export type EditarPoliticaDto = z.infer<typeof editarSchema>;
+export type SimularPoliticaDto = z.infer<typeof simularSchema>;
+export type AprovarPoliticaDto = z.infer<typeof aprovarSchema>;
+export type LotePoliticaDto = z.infer<typeof loteSchema>;
 export type ListarPoliticasQuery = z.infer<typeof listarPoliticasSchema>;

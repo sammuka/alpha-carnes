@@ -1,26 +1,32 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../common/auditoria/auditoria.service';
 import { primeiroOuFalha } from '../../../common/crud/paginacao';
 import { DRIZZLE } from '../../../database/database.module';
 import {
+  auditoria,
   centrosCusto,
   contasContabeis,
   contaVersoes,
   politicasContabilizacao,
+  politicaSimulacoes,
   politicaVersoes,
   usuarios,
 } from '../../../database/schema';
 import * as schema from '../../../database/schema';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { PlanoContasService } from '../plano/plano.service';
+import { balancear } from './centavos';
 import type {
+  AprovarPoliticaDto,
   ConfigurarPoliticaDto,
   EditarPoliticaDto,
   ListarPoliticasQuery,
+  LotePoliticaDto,
+  SimularPoliticaDto,
 } from './dto/politicas.dto';
 import { ConflitoPoliticaException, RegraPoliticaException } from './regra-politica.exception';
 
@@ -159,6 +165,21 @@ function instante(valor: Date | string): string {
   return valor instanceof Date ? valor.toISOString() : valor;
 }
 
+const ROTULO_ACAO: Record<string, string> = {
+  configurar: 'Configurar mappings',
+  editar: 'Editar versão',
+  simular: 'Simular evento',
+  aprovar: 'Aprovar regra',
+};
+
+function acontecimentoDe(dados: unknown, operacao: string) {
+  if (dados && typeof dados === 'object' && 'acao' in dados) {
+    const acao = String((dados as { acao: unknown }).acao);
+    if (ROTULO_ACAO[acao]) return ROTULO_ACAO[acao];
+  }
+  return operacao;
+}
+
 @Injectable()
 export class PoliticasContabilizacaoService {
   constructor(
@@ -209,7 +230,7 @@ export class PoliticasContabilizacaoService {
         modulo: 'contabilidade.politicas',
         usuarioId,
         dadosAnteriores: {},
-        dadosNovos: { codigo, tipoEvento: dto.tipoEvento, competencia: dto.competencia, numero: 1 },
+        dadosNovos: { codigo, tipoEvento: dto.tipoEvento, competencia: dto.competencia, numero: 1, acao: 'configurar' },
         justificativa: dto.justificativa,
       });
     });
@@ -249,11 +270,132 @@ export class PoliticasContabilizacaoService {
         modulo: 'contabilidade.politicas',
         usuarioId,
         dadosAnteriores: { numero: versao.numero, situacao: versao.situacao },
-        dadosNovos: { codigo, numero: nova.numero, situacao: nova.situacao },
+        dadosNovos: { codigo, numero: nova.numero, situacao: nova.situacao, acao: 'editar' },
         justificativa: dto.justificativa,
       });
     });
+    this.eventEmitter.emit(EVENTOS.POLITICA_EDITADA, { codigo, acao: 'editar', situacao: 'DRAFT' });
     return this.obter(codigo);
+  }
+
+  async simular(codigo: string, dto: SimularPoliticaDto, usuarioId: string) {
+    const situacao = await this.db.transaction(async (tx) => this.simularNaTx(tx, codigo, dto, usuarioId));
+    this.eventEmitter.emit(EVENTOS.POLITICA_SIMULADA, { codigo, acao: 'simular', situacao });
+    return this.obter(codigo);
+  }
+
+  async aprovar(codigo: string, dto: AprovarPoliticaDto, usuarioId: string) {
+    await this.db.transaction(async (tx) => this.aprovarNaTx(tx, codigo, dto, usuarioId));
+    this.eventEmitter.emit(EVENTOS.POLITICA_APROVADA, { codigo, acao: 'aprovar', situacao: 'APPROVED' });
+    return this.obter(codigo);
+  }
+
+  async validar(dto: ConfigurarPoliticaDto) {
+    const codigo = codigoDe(dto.tipoEvento, dto.competencia);
+    const mensagens: string[] = [];
+    await this.db.transaction(async (tx) => {
+      const duplicada = await tx.select({ codigo: politicasContabilizacao.codigo }).from(politicasContabilizacao)
+        .where(and(eq(politicasContabilizacao.codigo, codigo), isNull(politicasContabilizacao.deletedAt))).limit(1);
+      if (duplicada.length > 0) mensagens.push('evento duplicado');
+      for (const conta of [dto.contaDebitoCodigo, dto.contaCreditoCodigo]) {
+        try {
+          await this.contaAnaliticaVigente(tx, conta, codigo);
+        } catch (erro) {
+          if (!(erro instanceof RegraPoliticaException)) throw erro;
+          mensagens.push('mapeamento ausente');
+        }
+      }
+      try {
+        await this.centroExistente(tx, dto.centroCodigo, codigo);
+      } catch (erro) {
+        if (!(erro instanceof RegraPoliticaException)) throw erro;
+        mensagens.push('mapeamento ausente');
+      }
+    });
+    return { valido: mensagens.length === 0, mensagens };
+  }
+
+  async historico(codigo: string) {
+    const [politica] = await this.db.select({ id: politicasContabilizacao.id }).from(politicasContabilizacao)
+      .where(and(eq(politicasContabilizacao.codigo, codigo), isNull(politicasContabilizacao.deletedAt))).limit(1);
+    if (!politica) throw new NotFoundException('Política não encontrada');
+    const versoes = await this.db.select({ id: politicaVersoes.id }).from(politicaVersoes)
+      .where(eq(politicaVersoes.politicaId, politica.id));
+    const simulacoes = await this.db.select({ id: politicaSimulacoes.id }).from(politicaSimulacoes)
+      .where(eq(politicaSimulacoes.politicaId, politica.id));
+    const ids = [...versoes.map((v) => v.id), ...simulacoes.map((s) => s.id)];
+    if (ids.length === 0) return [];
+    const linhas = await this.db.select({
+      quando: auditoria.createdAt,
+      quem: usuarios.nome,
+      dadosNovos: auditoria.dadosNovos,
+      operacao: auditoria.operacao,
+      justificativa: auditoria.justificativa,
+    }).from(auditoria)
+      .leftJoin(usuarios, eq(usuarios.id, auditoria.usuarioId))
+      .where(and(inArray(auditoria.registroId, ids), eq(auditoria.modulo, 'contabilidade.politicas')))
+      .orderBy(desc(auditoria.createdAt));
+    return linhas.map((linha) => ({
+      quando: instante(linha.quando),
+      quem: linha.quem ?? '',
+      acontecimento: acontecimentoDe(linha.dadosNovos, linha.operacao),
+      justificativa: linha.justificativa ?? '',
+    }));
+  }
+
+  async lote(dto: LotePoliticaDto, usuarioId: string) {
+    const efeitos = await this.db.transaction(async (tx) => {
+      const saida: { codigo: string; acao: string; situacao: string }[] = [];
+      for (const codigo of dto.codigos) {
+        const numero = dto.numeroPorCodigo[codigo];
+        if (!numero) throw new ConflitoPoliticaException('conflito concorrente', codigo);
+        if (dto.acao === 'simular') {
+          if (!dto.valor) throw new RegraPoliticaException('Valor é obrigatório.', codigo);
+          const situacao = await this.simularNaTx(tx, codigo, {
+            numero,
+            valor: dto.valor,
+            justificativa: dto.justificativa,
+          }, usuarioId);
+          saida.push({ codigo, acao: 'simular', situacao });
+        } else {
+          await this.aprovarNaTx(tx, codigo, { numero, justificativa: dto.justificativa }, usuarioId);
+          saida.push({ codigo, acao: 'aprovar', situacao: 'APPROVED' });
+        }
+      }
+      return saida;
+    });
+    for (const efeito of efeitos) {
+      const evento = efeito.acao === 'simular' ? EVENTOS.POLITICA_SIMULADA : EVENTOS.POLITICA_APROVADA;
+      this.eventEmitter.emit(evento, efeito);
+    }
+    return efeitos;
+  }
+
+  async exportarCsv(query: ListarPoliticasQuery): Promise<string> {
+    const { itens } = await this.listar(query);
+    const cabecalho = ['Competência', 'Situação', 'Conta de débito', 'Conta de crédito', 'Centro de custo', 'Tipo de ocorrência'];
+    const linhas = itens.map((item) => [
+      item.competenciaRotulo,
+      item.situacaoRotulo,
+      item.contaDebitoNome,
+      item.contaCreditoNome,
+      item.centroNome,
+      item.tipoEventoRotulo,
+    ]);
+    const escapar = (valor: string) => (/[",;\n]/.test(valor) ? `"${valor.replace(/"/g, '""')}"` : valor);
+    const corpo = [cabecalho, ...linhas].map((linha) => linha.map(escapar).join(';')).join('\n');
+    return `\uFEFF${corpo}`;
+  }
+
+  async executar(
+    acao: 'editar' | 'simular' | 'aprovar',
+    codigo: string,
+    dto: EditarPoliticaDto | SimularPoliticaDto | AprovarPoliticaDto,
+    usuarioId: string,
+  ) {
+    if (acao === 'editar') return this.editar(codigo, dto as EditarPoliticaDto, usuarioId);
+    if (acao === 'simular') return this.simular(codigo, dto as SimularPoliticaDto, usuarioId);
+    return this.aprovar(codigo, dto as AprovarPoliticaDto, usuarioId);
   }
 
   async listar(query: ListarPoliticasQuery): Promise<{ itens: PoliticaApresentada[]; total: number }> {
@@ -379,6 +521,81 @@ export class PoliticasContabilizacaoService {
     if (ordenar === 'centroCusto') return centrosCusto.nome;
     if (ordenar === 'tipoEvento') return politicasContabilizacao.tipoEvento;
     return politicasContabilizacao.competencia;
+  }
+
+  private async simularNaTx(tx: Tx, codigo: string, dto: SimularPoliticaDto, usuarioId: string) {
+    if (!dto.justificativa.trim()) throw new RegraPoliticaException('Informe justificativa para auditoria.', codigo);
+    const { versao } = await this.travar(tx, codigo, dto.numero);
+    if (versao.situacao !== 'DRAFT' && versao.situacao !== 'APPROVED') {
+      throw new ConflitoPoliticaException('conflito concorrente', codigo);
+    }
+    const debitoConta = await tx.select({ id: contasContabeis.id }).from(contasContabeis)
+      .where(eq(contasContabeis.id, versao.contaDebitoId)).limit(1);
+    const creditoConta = await tx.select({ id: contasContabeis.id }).from(contasContabeis)
+      .where(eq(contasContabeis.id, versao.contaCreditoId)).limit(1);
+    const centroLinha = await tx.select({ codigo: centrosCusto.codigo }).from(centrosCusto)
+      .where(eq(centrosCusto.id, versao.centroCustoId)).limit(1);
+    const codigoDebito = debitoConta[0] ? (await tx.select({ codigo: contasContabeis.codigo }).from(contasContabeis).where(eq(contasContabeis.id, versao.contaDebitoId)).limit(1))[0]?.codigo : undefined;
+    const codigoCredito = creditoConta[0] ? (await tx.select({ codigo: contasContabeis.codigo }).from(contasContabeis).where(eq(contasContabeis.id, versao.contaCreditoId)).limit(1))[0]?.codigo : undefined;
+    if (!codigoDebito || !codigoCredito || !centroLinha[0]) {
+      throw new RegraPoliticaException('mapeamento ausente', codigo);
+    }
+    await this.contaAnaliticaVigente(tx, codigoDebito, codigo);
+    await this.contaAnaliticaVigente(tx, codigoCredito, codigo);
+    await this.centroExistente(tx, centroLinha[0].codigo, codigo);
+    const balanceado = balancear([
+      { lado: 'D', valor: dto.valor },
+      { lado: 'C', valor: dto.valor },
+    ], codigo);
+    const simulacao = primeiroOuFalha(await tx.insert(politicaSimulacoes).values({
+      politicaId: versao.politicaId,
+      versaoNumero: versao.numero,
+      valor: dto.valor,
+      debito: balanceado.debito,
+      credito: balanceado.credito,
+    }).returning());
+    await this.auditoria.registrar(tx, {
+      tabela: 'politica_simulacoes',
+      registroId: simulacao.id,
+      operacao: 'INSERT',
+      modulo: 'contabilidade.politicas',
+      usuarioId,
+      dadosAnteriores: {},
+      dadosNovos: { codigo, numero: versao.numero, acao: 'simular', valor: dto.valor },
+      justificativa: dto.justificativa,
+    });
+    return versao.situacao;
+  }
+
+  private async aprovarNaTx(tx: Tx, codigo: string, dto: AprovarPoliticaDto, usuarioId: string) {
+    if (!dto.justificativa.trim()) throw new RegraPoliticaException('Informe justificativa para auditoria.', codigo);
+    const { versao } = await this.travar(tx, codigo, dto.numero);
+    if (versao.situacao !== 'DRAFT') throw new ConflitoPoliticaException('conflito concorrente', codigo);
+    if (usuarioId === versao.responsavelId) {
+      throw new RegraPoliticaException('aprovador diferente do autor', codigo);
+    }
+    const [simulacao] = await tx.select({ id: politicaSimulacoes.id }).from(politicaSimulacoes)
+      .where(and(
+        eq(politicaSimulacoes.politicaId, versao.politicaId),
+        eq(politicaSimulacoes.versaoNumero, versao.numero),
+        isNull(politicaSimulacoes.deletedAt),
+      )).limit(1);
+    if (!simulacao) throw new RegraPoliticaException('mapeamento ausente', codigo);
+    const nova = primeiroOuFalha(await tx.update(politicaVersoes).set({
+      situacao: 'APPROVED',
+      aprovadorId: usuarioId,
+      justificativa: dto.justificativa,
+    }).where(eq(politicaVersoes.id, versao.id)).returning());
+    await this.auditoria.registrar(tx, {
+      tabela: 'politica_versoes',
+      registroId: nova.id,
+      operacao: 'UPDATE',
+      modulo: 'contabilidade.politicas',
+      usuarioId,
+      dadosAnteriores: { situacao: versao.situacao, numero: versao.numero },
+      dadosNovos: { codigo, numero: nova.numero, situacao: 'APPROVED', acao: 'aprovar' },
+      justificativa: dto.justificativa,
+    });
   }
 
   private async travar(tx: Tx, codigo: string, numero: number) {

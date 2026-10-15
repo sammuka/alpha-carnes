@@ -49,6 +49,7 @@ describe('Políticas de contabilização', () => {
   let db: NodePgDatabase<typeof schema>;
   let adminId: string;
   let autorId: string;
+  let outraPessoaId: string;
   let plano: PlanoContasService;
   let service: PoliticasContabilizacaoService;
 
@@ -60,6 +61,10 @@ describe('Políticas de contabilização', () => {
     if (!usuario) throw new Error('admin ausente');
     adminId = usuario.id;
     autorId = usuario.id;
+    const outra = await createTestUser(app, { perfil: 'administrador' });
+    const [pessoa] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.email, outra.adminEmail));
+    if (!pessoa) throw new Error('segunda pessoa ausente');
+    outraPessoaId = pessoa.id;
     plano = app.get(PlanoContasService);
     service = app.get(PoliticasContabilizacaoService);
   });
@@ -113,6 +118,7 @@ describe('Políticas de contabilização', () => {
   }
 
   it('recusa tipo fora do enum, competência fora do dia 01 e simulação desbalanceada', async () => {
+    await limparPlano();
     const centro = await db.insert(centrosCusto).values({ codigo: 'CT1', nome: 'Operação industrial' }).returning();
     const debito = await db.insert(contasContabeis).values({ codigo: '1.1.01' }).returning();
     const credito = await db.insert(contasContabeis).values({ codigo: '2.1.01' }).returning();
@@ -188,5 +194,42 @@ describe('Políticas de contabilização', () => {
       response: { message: 'mapeamento ausente', codigo: 'LIQUIDACAO-2026-10' },
     });
     expect((await service.listar({ pagina: 1, q: '', situacao: '', competencia: '', ordenar: 'competencia', direcao: 'asc' })).total).toBe(0);
+  });
+
+  it('simular não grava diário, razão nem partida', async () => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    const saida = await service.simular(politica.codigo, {
+      numero: 1,
+      valor: '10.10',
+      justificativa: 'simula',
+    }, autorId);
+    expect(saida.simulacaoDebito).toBe('10.10');
+    expect(saida.simulacaoCredito).toBe('10.10');
+    expect(saida.situacao).toBe('DRAFT');
+    for (const nome of ['lancamentos_contabeis', 'diario_contabil', 'razao_contabil', 'partidas_contabeis']) {
+      const tabelas = await db.execute(sql`select to_regclass(${'public.' + nome}) as nome`);
+      expect(tabelas.rows[0].nome).toBeNull();
+    }
+  });
+
+  it('não aprova sem mapeamento simulado', async () => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'mapeamento ausente', codigo: politica.codigo } });
+    expect((await service.obter(politica.codigo)).situacao).toBe('DRAFT');
+  });
+
+  it('o autor não aprova a própria regra', async () => {
+    await prepararContasAnaliticas();
+    const politica = await service.configurar(dtoConfigurar(), autorId);
+    await service.simular(politica.codigo, { numero: 1, valor: '10.00', justificativa: 'simula' }, autorId);
+    await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: 'eu mesmo' }, autorId))
+      .rejects.toMatchObject({
+        status: 422,
+        response: { message: 'aprovador diferente do autor', codigo: politica.codigo },
+      });
+    expect((await service.obter(politica.codigo)).situacao).toBe('DRAFT');
   });
 });

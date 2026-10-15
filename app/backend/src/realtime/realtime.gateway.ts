@@ -75,6 +75,7 @@ interface MensagemCliente {
  * Sem polling. Todo handler é defensivo — broadcast nunca derruba o request HTTP.
  */
 type PlanoContaPayload = { codigo: string; acao: string; situacao: string };
+type PoliticaPayload = { codigo: string; acao: string; situacao: string };
 
 @Injectable()
 export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
@@ -153,6 +154,9 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   private podeAssinar(ws: AuthSocket, room: string): boolean {
     if (room === 'contabilidade-plano') {
       return ws.user?.permissoes?.includes(PERMISSOES.CONTABILIDADE_PLANO_LER) ?? false;
+    }
+    if (room === 'contabilidade-politicas') {
+      return ws.user?.permissoes?.includes(PERMISSOES.CONTABILIDADE_POLITICA_LER) ?? false;
     }
     return ws.user?.permissoes?.includes(PERMISSOES.DISPONIBILIDADE_LER) ?? false;
   }
@@ -460,6 +464,26 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
   @OnEvent(EVENTOS.CENTRO_CUSTO_CRIADO)
   handleCentroCustoCriado(payload: PlanoContaPayload): void {
     this.hub.broadcast('contabilidade-plano', EVENTOS.CENTRO_CUSTO_CRIADO, payload);
+  }
+
+  @OnEvent(EVENTOS.POLITICA_CONFIGURADA)
+  handlePoliticaConfigurada(payload: PoliticaPayload): void {
+    this.hub.broadcast('contabilidade-politicas', EVENTOS.POLITICA_CONFIGURADA, payload);
+  }
+
+  @OnEvent(EVENTOS.POLITICA_EDITADA)
+  handlePoliticaEditada(payload: PoliticaPayload): void {
+    this.hub.broadcast('contabilidade-politicas', EVENTOS.POLITICA_EDITADA, payload);
+  }
+
+  @OnEvent(EVENTOS.POLITICA_SIMULADA)
+  handlePoliticaSimulada(payload: PoliticaPayload): void {
+    this.hub.broadcast('contabilidade-politicas', EVENTOS.POLITICA_SIMULADA, payload);
+  }
+
+  @OnEvent(EVENTOS.POLITICA_APROVADA)
+  handlePoliticaAprovada(payload: PoliticaPayload): void {
+    this.hub.broadcast('contabilidade-politicas', EVENTOS.POLITICA_APROVADA, payload);
   }
 
   private broadcast(evento: string, payload: unknown, dataOperacao: string): void {
