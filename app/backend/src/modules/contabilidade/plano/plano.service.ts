@@ -277,7 +277,7 @@ export class PlanoContasService {
       if (atual.situacao === 'APPROVED' && this.mudouClassificacao(atual, dto, centro.id)) {
         throw new RegraContabilException('mudança de classificação após fechamento');
       }
-      if (atual.situacao !== 'DRAFT') throw new RegraContabilException('mudança de classificação após fechamento');
+      if (atual.situacao !== 'DRAFT') throw new RegraContabilException('Situação não permite esta transição');
       if (!dto.justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
       const paiId = await this.paiDaVersao(tx, atual.contaId, dto.classificacao, dto.contaPaiCodigo);
       const nova = primeiroOuFalha(await tx.update(contaVersoes).set({
@@ -442,6 +442,7 @@ export class PlanoContasService {
       quando: auditoria.createdAt,
       quem: usuarios.nome,
       acontecimento: auditoria.operacao,
+      novos: auditoria.dadosNovos,
       justificativa: auditoria.justificativa,
     }).from(auditoria)
       .leftJoin(usuarios, eq(usuarios.id, auditoria.usuarioId))
@@ -449,11 +450,11 @@ export class PlanoContasService {
         eq(auditoria.tabela, 'conta_versoes'),
         inArray(auditoria.registroId, versoes.map((versao) => versao.id)),
       ))
-      .orderBy(asc(auditoria.createdAt));
+      .orderBy(asc(auditoria.createdAt), asc(auditoria.id));
     return linhas.map((linha) => ({
       quando: instante(linha.quando),
       quem: linha.quem ?? '',
-      acontecimento: linha.acontecimento,
+      acontecimento: rotularAcontecimento(linha.acontecimento, linha.novos),
       justificativa: linha.justificativa ?? '',
     }));
   }
@@ -685,6 +686,17 @@ function colunaOrdem(ordenar: ListarPlanoQuery['ordenar']) {
 
 function instante(valor: Date | string): string {
   return valor instanceof Date ? valor.toISOString() : valor;
+}
+
+function rotularAcontecimento(operacao: string, novos: unknown): string {
+  const dados = (novos ?? {}) as { situacao?: string; numero?: number };
+  if (operacao === 'INSERT') return (dados.numero ?? 1) > 1 ? 'Nova versão criada' : 'Conta criada';
+  if (operacao === 'DELETE') return 'Rascunho descartado';
+  if (operacao === 'ACAO_MANUAL') return 'Lançamentos mapeados';
+  if (dados.situacao === 'REVIEW') return 'Enviada para revisão';
+  if (dados.situacao === 'APPROVED') return 'Aprovada';
+  if (dados.situacao === 'SUSPENDED') return 'Bloqueada';
+  return 'Rascunho editado';
 }
 
 function textoDe(erro: unknown): string {

@@ -364,7 +364,7 @@ describe('Plano de contas', () => {
     await expect(service.editar(conta.codigo, comoEdicao(conta, { centroCodigo: 'CT2' }), userId))
       .rejects.toMatchObject({ status: 422 });
     await expect(service.editar(conta.codigo, comoEdicao(conta), userId))
-      .rejects.toMatchObject({ response: { message: 'mudança de classificação após fechamento' }, status: 422 });
+      .rejects.toMatchObject({ response: { message: 'Situação não permite esta transição' }, status: 422 });
     await service.bloquear(conta.codigo, { numero: conta.numero, justificativa: 'bloqueia' }, userId);
     const suspensa = await service.obter(conta.codigo);
     await expect(service.editar(suspensa.codigo, comoEdicao(suspensa), userId))
@@ -779,5 +779,31 @@ describe('Plano de contas', () => {
     espiao.mockRestore();
     expect((await versaoBruta(2)).deleted_at).toBeNull();
     expect((await versaoBruta(1)).situacao).toBe('APPROVED');
+  });
+
+  it('editar fora do rascunho recusa com transição inválida', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    await service.revisarCompetencia('1', { numero: 1, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa' }, userId);
+    const emRevisao = await service.obter('1');
+    await expect(service.editar('1', comoEdicao(emRevisao), userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'Situação não permite esta transição' } });
+    await db.execute(sql`update conta_versoes set situacao = 'REJECTED' where deleted_at is null`);
+    await expect(service.editar('1', comoEdicao(emRevisao), userId))
+      .rejects.toMatchObject({ status: 422, response: { message: 'Situação não permite esta transição' } });
+  });
+
+  it('histórico rotula e ordena os acontecimentos', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    await service.criar(dtoBase({ codigo: '1', classificacao: 'sintetica' }), userId);
+    const v1 = await promover('1');
+    const v2 = await service.versionar('1', comoEdicao(v1, { justificativa: 'abre v2' }), userId);
+    await service.editar('1', comoEdicao(v2, { nome: 'Caixa v2 ajustada' }), userId);
+    await service.bloquear('1', { numero: 2, justificativa: 'encerra' }, userId);
+    const linhas = await service.historico('1');
+    expect(linhas.map((linha) => linha.acontecimento)).toEqual([
+      'Conta criada', 'Enviada para revisão', 'Aprovada', 'Nova versão criada',
+      'Rascunho editado', 'Rascunho descartado', 'Bloqueada',
+    ]);
   });
 });
