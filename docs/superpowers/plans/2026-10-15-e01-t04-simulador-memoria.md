@@ -12,6 +12,14 @@
 | Rev. | Data | Autor | Motivo |
 |---|---|---|---|
 | r1 | 2026-10-15 | planner | versão inicial da fatia E01-T04 |
+| r2 | 2026-10-15 | planner (nova instância) | Portão 1 r1 `ajustar` (4 achados); ajuste cirúrgico: nenhum outro ponto do plano muda |
+
+| Achado r1 | Correção r2 |
+|---|---|
+| A Task 11 manda o painel afirmar o rótulo "Redução de base" | A asserção usa "Redução de base do ICMS (%)" (componentes.js). "Redução de base" continua só o valor do Tratamento ICMS 20 |
+| §10 (KPI "Base diferente") e a Task 12 ("banner da base diferente") abreviam a exceção | KPI e banner dizem "Base tributável difere de valor bruto" (catalogo.js). A aba Exceções não muda |
+| §4 troca o rodapé do drawer por "Simular" e retira "Salvar rascunho" | O rodapé é "Salvar rascunho" (aplicacao.js; sai só a palavra ilustrativo). "Simular" continua ação de processo. O clique grava CALCULADA, sem situação rascunho. A Task 12 clica nesse botão |
+| §4 e o getByLabelText da Task 11 usam "Justificativa auditável" | O rótulo visível é "Motivo da alteração" (aplicacao.js). A ficha E01-T04 não inclui a chave justificativa. A exigência de 3 a 500 caracteres permanece |
 
 **Goal:** persistir a simulação fiscal de um item e a memória de cálculo que a explica — simular, explicar
 tributos, exportar memória e comparar versões de cálculo — usando a regra tributária `APROVADA` já gravada
@@ -182,7 +190,7 @@ Cinco entradas que a spec deixa fáceis de errar, e o teste que as prende:
 | Ações | catalogo.js L234; aplicacao.js L14 | botões "Simular", "Explicar tributos", "Exportar memória", "Comparar versões" (`titleCase` só na primeira letra) |
 | Sete abas | aplicacao.js L7 | Ficha e campos, Movimentações, Regras e validações, Exceções, Histórico, Integrações, Aceite e testes |
 | Ficha | aplicacao.js L179–L192 | seção "Dados principais". Trilha: Empresa (`empresas.razao_social` via enquadramento), Situação, Responsável. Ambiente fica de fora |
-| Drawer | aplicacao.js L427–L438 e L451 | "Cancelar", "Verificar dados", "Simular". O genérico "Salvar rascunho" não entra (D12). Justificativa obrigatória |
+| Drawer | aplicacao.js L427–L438 e L451 | "Cancelar", "Verificar dados", "Salvar rascunho" (sai só a palavra ilustrativo). O clique grava CALCULADA; não há situação rascunho (D12). "Simular" continua ação de processo. Texto obrigatório, 3–500 |
 | Exceções | catalogo.js L236 | dois blocos, porque o `split(';')` produz duas partes e o `if (arr.length < 2)` de aplicacao.js L201 não dispara: "Base tributável difere de valor bruto" e "Falta referência legal" |
 | Competência exibida | aplicacao.js L147 | "Outubro de 2026" para `2026-10`. Mapa da seção 6 |
 
@@ -203,7 +211,7 @@ Rótulos literais, copiados do dicionário:
 | regraFiscal | Enquadramento fiscal | L310–L312 |
 | baseCalculo | Base tributável (calculada) | L490–L492 |
 | valorLiquido | Valor líquido (calculado) | L502–L504 |
-| justificativa | Justificativa auditável | L418–L420 |
+| — | Motivo da alteração | aplicacao.js L436. A ficha E01-T04 (componentes.js L3160–L3174) não inclui a chave justificativa. O texto continua obrigatório, de 3 a 500 caracteres (D18) |
 
 Pares já gravados na regra, só leitura na explicação. Importar `ROTULOS_ICMS_CST`, `ROTULOS_IPI_CST`,
 `ROTULOS_PIS_CST` e `ROTULOS_IBS_CST` de `fiscal-regras.schema.ts`. Não editar esses mapas.
@@ -228,7 +236,7 @@ não nas seis colunas.
 Remoções autorizadas (Princípio I.2(a)/(b)), conferidas no Portão 2: selo "DADOS FICTÍCIOS"; pill "Fixture de
 teste"; rodapé "registros fictícios"; eyebrow com código de épico e "Caderno B §E01-T04"; KPI "Ambiente em
 tela"; botões "Abrir ocorrência" e "Simular erro de validação"; o painel do épico e os quatro botões de
-aplicacao.js L254 (C11); "Cadastro demonstrativo em memória"; o `<select>` de situação com os seis
+aplicacao.js L254 (C11); a palavra "ilustrativo" do botão, que permanece "Salvar rascunho"; "Cadastro demonstrativo em memória"; o `<select>` de situação com os seis
 `stateTypes` de aplicacao.js L8; checkboxes da aba Aceite (viram leitura). Botões de Integrações para telas
 inexistentes (aplicacao.js L218) desabilitados com `title="Destino ainda não disponível"`.
 
@@ -710,7 +718,7 @@ Competência é `<input type="month">`. Não criar componente novo de calendári
 - Hero: título "Simulador fiscal e memória de cálculo"; subtítulo com as quatro ações e o selo H-E01-12;
   "Exportar" (a visão da grade); "+ Novo registro" (só `podeGerenciar`) abre o drawer; "Ações do processo ▾"
   com os quatro comandos.
-- KPIs: "Simulações" (códigos distintos), "Versões" (linhas), "Base diferente".
+- KPIs: "Simulações" (códigos distintos), "Versões" (linhas), "Base tributável difere de valor bruto".
 - Lista: busca; filtros da seção 4; "Exportar visão"; grid da seção 4; clique ou Enter seleciona;
   paginação server-side; filtros e ordenação em `sessionStorage` na chave `fiscal.simulador.lista`; vazio com
   o texto de aplicacao.js L172 ("Nenhum resultado para o período, filtro ou situação escolhidos. Limpe os filtros ou cadastre um novo registro.").
@@ -743,8 +751,7 @@ Competência é `<input type="month">`. Não criar componente novo de calendári
   negócio, competência editável, motivo. 422 não fecha como sucesso.
 - Diálogo comparar: escolhe a outra versão do mesmo código e lista `campo`, `antes`, `depois`. Não mostra UUID.
 - Estados: inicial, carregando (skeleton), sem registros, validação inválida, sem acesso (página), conflito
-  (409 `VERSAO_IMUTAVEL`), serviço indisponível ("Tentar novamente"), revisão pendente (banner do flag
-  `baseDifereBruto`, situação continua Calculada), concluído (toast "Simulação calculada.").
+  (409 `VERSAO_IMUTAVEL`), serviço indisponível ("Tentar novamente"), revisão pendente (banner "Base tributável difere de valor bruto" quando `baseDifereBruto`, situação continua Calculada), concluído (toast "Simulação calculada.").
 - Tempo real: `conectarRealtime({ rooms: ['fiscal-simulacoes'], onMessage, onReconnect })` refaz lista e
   detalhe. Sem polling.
 - `lib/fiscal-simulacoes.ts`: `formatarDinheiroPtBr`, `formatarEscalaPtBr`, `rotuloCompetencia` e
@@ -1364,7 +1371,7 @@ it('rótulos literais do protótipo', () => {
   expect(screen.getByLabelText('Desconto')).toBeInTheDocument();
   expect(screen.getByLabelText('Competência')).toBeInTheDocument();
   expect(screen.getByLabelText('Enquadramento fiscal')).toBeInTheDocument();
-  expect(screen.getByLabelText('Justificativa auditável')).toBeInTheDocument();
+  expect(screen.getByLabelText('Motivo da alteração')).toBeInTheDocument();
   expect(screen.getByLabelText('Base tributável (calculada)')).toBeDisabled();
   expect(screen.getByLabelText('Valor líquido (calculado)')).toBeDisabled();
   const texto = document.body.textContent ?? '';
@@ -1376,7 +1383,7 @@ it('rótulos literais do protótipo', () => {
 });
 ```
 
-O teste do painel, com uma explicação fixture, afirma o rótulo "Tratamento IPI", a frase de D7, a ausência de `0,00` nesse item, e os rótulos "Redução de base" e "Alíquota (%)". Também cobre: lista vazia com a frase da seção 10; alerta do 422 `FALTA_REFERENCIA_LEGAL`; alerta do 422 `DESCONTO_MAIOR_QUE_VALOR`; alerta do 409 `VERSAO_IMUTAVEL`; grade sem uuid; selos `H-E01-10`, `H-E01-11` e `H-E01-12`; ausência dos botões "Aprovar" e "Publicar".
+O teste do painel, com uma explicação fixture, afirma o rótulo "Tratamento IPI", a frase de D7, a ausência de `0,00` nesse item, e os rótulos "Redução de base do ICMS (%)" e "Alíquota (%)". Também cobre: lista vazia com a frase da seção 10; alerta do 422 `FALTA_REFERENCIA_LEGAL`; alerta do 422 `DESCONTO_MAIOR_QUE_VALOR`; alerta do 409 `VERSAO_IMUTAVEL`; grade sem uuid; selos `H-E01-10`, `H-E01-11` e `H-E01-12`; ausência dos botões "Aprovar" e "Publicar".
 
 O teste da lib repete `formatarDinheiroPtBr('583.30') === '583,30'`, `rotuloCompetencia('2026-10') === 'Outubro de 2026'` e `expect(lib).not.toHaveProperty('calcularMemoria')`. O fonte de `fiscal-simulacoes.ts` não contém `parseFloat` nem `Number(`.
 
@@ -1421,8 +1428,8 @@ Frontend: o `webServer` de `playwright.config.ts` (`npx next dev --webpack --por
 Jornada:
 
 1. Menu FISCAL → "Simulador fiscal e memória de cálculo". Os itens "Empresas, estabelecimentos e regime", "Operações fiscais e enquadramentos" e "Editor de regras tributárias" continuam visíveis.
-2. Simular: Enquadramento fiscal do seed, os cinco combos preenchidos por ele, Quantidade `10,000`, Peso informado na nota (kg) `982,000`, Valor `1.000,00`, Desconto `0,00`, Competência `2026-10`, justificativa "Simulação da competência de outubro de 2026."
-3. A ficha mostra situação Calculada, Valor líquido (calculado) `1.000,00`, Base tributável (calculada) `583,30`, o banner da base diferente e os selos H-E01-10, H-E01-11 e H-E01-12.
+2. Simular: Enquadramento fiscal do seed, os cinco combos preenchidos por ele, Quantidade `10,000`, Peso informado na nota (kg) `982,000`, Valor `1.000,00`, Desconto `0,00`, Competência `2026-10`, justificativa "Simulação da competência de outubro de 2026." O clique é no botão "Salvar rascunho" e grava CALCULADA, sem situação rascunho.
+3. A ficha mostra situação Calculada, Valor líquido (calculado) `1.000,00`, Base tributável (calculada) `583,30`, o banner "Base tributável difere de valor bruto" e os selos H-E01-10, H-E01-11 e H-E01-12.
 4. Explicar tributos mostra "ICMS" `70,00` e "Tratamento IPI" com a frase de D7, sem `0,00` nessa linha.
 5. Exportar memória baixa CSV com cabeçalho "Campo;Valor".
 6. Nova versão com Desconto `100,00`. Comparar versões mostra "ICMS" com antes `70,00` e depois `63,00`.
