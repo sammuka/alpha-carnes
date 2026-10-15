@@ -214,6 +214,7 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
   const [erroPais, setErroPais] = useState('');
   const pedidoPais = useRef(0);
   const botaoPesquisaPai = useRef<HTMLButtonElement>(null);
+  const popupPai = useRef<HTMLDivElement>(null);
   const [centroNovo, setCentroNovo] = useState({ codigo: '', nome: '', justificativa: '' });
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [acessoNegado, setAcessoNegado] = useState(semAcesso);
@@ -319,6 +320,19 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
     setCentrosVazios(false);
   }
 
+  async function rotuloDoPai(codigo: string) {
+    const naGrade = contas.find((conta) => conta.codigo === codigo);
+    if (naGrade) return naGrade.nome;
+    try {
+      const resposta = await fetch(`/api/contabilidade/plano/opcoes-pai?q=${encodeURIComponent(codigo)}`);
+      if (!resposta.ok) return '';
+      const corpo = await resposta.json() as { itens?: OpcaoPai[] };
+      return corpo.itens?.find((item) => item.codigo === codigo)?.nome ?? '';
+    } catch {
+      return '';
+    }
+  }
+
   function abrirEditar() {
     if (!selecionada) return;
     const preenchido = formularioDe(selecionada);
@@ -327,6 +341,8 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
     setDrawer('editar');
     setPaiRotulo('');
     setLookupPai(false);
+    const pai = preenchido.contaPaiCodigo;
+    if (pai) void rotuloDoPai(pai).then((nome) => setPaiRotulo((atual) => (nome && !atual ? nome : atual)));
   }
 
   function voltar() {
@@ -384,6 +400,8 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
   }
 
   function abrirPesquisaPai() {
+    setPaisOpcoes([]);
+    setPaisTruncado(false);
     setPaiBusca('');
     setErroPais('');
     setLookupPai(true);
@@ -395,6 +413,31 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
     setLookupPai(false);
     botaoPesquisaPai.current?.focus();
   }
+
+  // Enquanto o popup está aberto: Escape fecha de qualquer foco; Tab/Shift+Tab ciclam dentro dele.
+  useEffect(() => {
+    if (!lookupPai) return undefined;
+    function aoTeclar(evento: KeyboardEvent) {
+      if (evento.key === 'Escape') {
+        setLookupPai(false);
+        botaoPesquisaPai.current?.focus();
+        return;
+      }
+      if (evento.key !== 'Tab' || !popupPai.current) return;
+      const focaveis = Array.from(popupPai.current.querySelectorAll<HTMLElement>('button, input, [href], select, textarea, [tabindex]:not([tabindex="-1"])'))
+        .filter((el) => !el.hasAttribute('disabled'));
+      const primeiro = focaveis[0];
+      const ultimo = focaveis[focaveis.length - 1];
+      if (!primeiro || !ultimo) return;
+      const dentro = popupPai.current.contains(document.activeElement);
+      if (!dentro || (evento.shiftKey && document.activeElement === primeiro) || (!evento.shiftKey && document.activeElement === ultimo)) {
+        evento.preventDefault();
+        (evento.shiftKey && dentro ? ultimo : primeiro).focus();
+      }
+    }
+    document.addEventListener('keydown', aoTeclar);
+    return () => document.removeEventListener('keydown', aoTeclar);
+  }, [lookupPai]);
 
   function escolherPai(opcao: OpcaoPai) {
     setForm({ ...form, contaPaiCodigo: opcao.codigo });
@@ -708,11 +751,11 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
       )}
       {lookupPai && (
         <div
+          ref={popupPai}
           role="dialog"
           aria-modal="true"
           aria-label="Selecionar Conta contábil"
           className="fixed inset-0 z-[120] grid place-items-center bg-lookup-scrim p-3.5"
-          onKeyDown={(evento) => { if (evento.key === 'Escape') fecharPesquisaPai(); }}
         >
           <div className="w-[min(490px,95vw)] overflow-hidden rounded-[9px] bg-white shadow-lg">
             <div>

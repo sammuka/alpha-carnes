@@ -564,11 +564,12 @@ export class PlanoContasService {
   }
 
   private async aprovarNaTx(tx: Tx, codigo: string, numero: number, justificativa: string, usuarioId: string) {
+    // Mesmo lock em aprovar e bloquear, antes do FOR UPDATE da conta (mesma ordem: sem deadlock).
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:hierarquia'}))`);
     const { atual } = await this.travar(tx, codigo, numero);
     if (atual.situacao === 'SUSPENDED') throw new RegraContabilException('conta desativada');
     if (atual.situacao !== 'REVIEW') throw new RegraContabilException('Situação não permite esta transição');
     if (!justificativa.trim()) throw new RegraContabilException('Informe justificativa para auditoria.');
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:hierarquia'}))`);
     if (atual.contaPaiId) {
       await this.exigirPaiVigente(tx, atual.contaPaiId);
       await this.recusarCiclo(tx, atual.contaId, atual.contaPaiId);
@@ -589,6 +590,8 @@ export class PlanoContasService {
   }
 
   private async bloquearNaTx(tx: Tx, codigo: string, numero: number, justificativa: string, usuarioId: string) {
+    // Mesmo lock em aprovar e bloquear, antes do FOR UPDATE da conta (mesma ordem: sem deadlock).
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'contabilidade:hierarquia'}))`);
     const { atual, versoes } = await this.travar(tx, codigo, numero);
     if (atual.situacao === 'SUSPENDED') throw new ConflictException('conta desativada');
     const aberta = atual.situacao === 'DRAFT' || atual.situacao === 'REVIEW' ? atual : null;
