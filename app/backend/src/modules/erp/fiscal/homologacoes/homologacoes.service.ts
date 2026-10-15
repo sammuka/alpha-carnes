@@ -52,7 +52,9 @@ function razao(valor: string): string {
   return `${inteiro}.${(frac + '0000').slice(0, 4)}`;
 }
 
-function celula(valor: string): string {
+function celula(original: string): string {
+  // Injeção de fórmula (OWASP): texto iniciado por = + - @ tab ou CR vira literal no Excel.
+  const valor = /^[=+\-@\t\r]/.test(original) ? `'${original}` : original;
   if (/[;"\r\n]/.test(valor)) return `"${valor.replace(/"/g, '""')}"`;
   return valor;
 }
@@ -96,7 +98,7 @@ export class HomologacoesService {
       .leftJoin(autor, eq(autor.id, regrasTributarias.submetidoPorId))
       .leftJoin(aprovador, eq(aprovador.id, homologacoesRegras.aprovadoPorId))
       .where(where)
-      .orderBy(this.ordem(query, autor, aprovador))
+      .orderBy(...this.ordem(query, autor, aprovador))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
     const data = linhas.map((linha) => ({
@@ -151,7 +153,7 @@ export class HomologacoesService {
       .leftJoin(autor, eq(autor.id, regrasTributarias.submetidoPorId))
       .leftJoin(aprovador, eq(aprovador.id, homologacoesRegras.aprovadoPorId))
       .where(this.whereLista(query))
-      .orderBy(this.ordem(query, autor, aprovador));
+      .orderBy(...this.ordem(query, autor, aprovador));
     const cabecalho = 'Enquadramento fiscal;Início de vigência;Situação;Usuário;Responsável pela aprovação;Descrição';
     const corpo = linhas.map((linha) => [
       linha.enquadramento,
@@ -205,7 +207,8 @@ export class HomologacoesService {
       })
       .from(cenariosRegressao)
       .innerJoin(simulacoesFiscais, eq(simulacoesFiscais.id, cenariosRegressao.simulacaoId))
-      .where(and(eq(cenariosRegressao.homologacaoId, id), isNull(cenariosRegressao.deletedAt)));
+      .where(and(eq(cenariosRegressao.homologacaoId, id), isNull(cenariosRegressao.deletedAt)))
+      .orderBy(asc(simulacoesFiscais.codigo), asc(simulacoesFiscais.numeroVersao), asc(cenariosRegressao.id));
     return {
       ...linha,
       situacao: ROTULOS_SITUACAO_HOMOLOGACAO[linha.situacao as Situacao],
@@ -292,7 +295,7 @@ export class HomologacoesService {
           ? and(eq(schema.auditoria.tabela, 'cenarios_regressao'), inArray(schema.auditoria.registroId, idsCenario))
           : undefined,
       ))
-      .orderBy(schema.auditoria.createdAt);
+      .orderBy(schema.auditoria.createdAt, schema.auditoria.id);
     return linhas.map((linha) => {
       const novos = (linha.dadosNovos ?? {}) as Record<string, unknown>;
       const anteriores = (linha.dadosAnteriores ?? {}) as Record<string, unknown>;
@@ -358,14 +361,7 @@ export class HomologacoesService {
   }
 
   private async aplicarAbrir(tx: Tx, dto: CriarHomologacaoDto, usuarioId: string) {
-    const [regra] = await tx
-      .select()
-      .from(regrasTributarias)
-      .where(and(eq(regrasTributarias.id, dto.regraId), isNull(regrasTributarias.deletedAt)));
-    if (!regra) throw new NotFoundException('Regra tributária não encontrada');
-    if (regra.situacao !== 'APROVADA') {
-      regraViolada('REGRA_NAO_APROVADA', 'A homologação exige uma versão de regra já aprovada.');
-    }
+    const regra = await this.travarRegraAprovada(tx, dto.regraId);
     const aberta = await tx
       .select({ id: homologacoesRegras.id })
       .from(homologacoesRegras)
@@ -422,11 +418,7 @@ export class HomologacoesService {
     const atual = await this.obterBloqueado(tx, id);
     exigirVersao(atual.versao, dto.versao);
     recusarDecisao(atual.situacao as SituacaoHomologacao, acao);
-    const [regra] = await tx
-      .select({ submetidoPorId: regrasTributarias.submetidoPorId })
-      .from(regrasTributarias)
-      .where(eq(regrasTributarias.id, atual.regraId));
-    if (!regra) throw new NotFoundException('Regra tributária não encontrada');
+    const regra = await this.travarRegraAprovada(tx, atual.regraId);
     exigirSegregacao(regra.submetidoPorId, usuarioId);
     const agora = new Date();
     const resumo = acao === 'aprovar' ? 'Alteração aprovada' : 'Alteração rejeitada';
@@ -466,6 +458,7 @@ export class HomologacoesService {
     const atual = await this.obterBloqueado(tx, id);
     exigirVersao(atual.versao, dto.versao);
     recusarDecisao(atual.situacao as SituacaoHomologacao, 'vincular');
+    await this.travarRegraAprovada(tx, atual.regraId);
     const [simulacao] = await tx
       .select()
       .from(simulacoesFiscais)
@@ -482,7 +475,12 @@ export class HomologacoesService {
       simulacaoId: simulacao.id,
       criadoPorId: usuarioId,
       atualizadoPorId: usuarioId,
-    }).returning();
+    }).returning().catch((err: unknown) => {
+      if (ehViolacaoUnica(err, 'uq_cenarios_homologacao_simulacao')) {
+        conflito('CENARIO_JA_VINCULADO', 'Este cenário já está vinculado a esta homologação.');
+      }
+      throw err;
+    });
     if (!cenario) throw new Error('Falha ao gravar cenário de regressão');
     const [linha] = await tx.update(homologacoesRegras).set({
       justificativa: dto.justificativa,
@@ -516,11 +514,7 @@ export class HomologacoesService {
     const atual = await this.obterBloqueado(tx, id);
     exigirVersao(atual.versao, dto.versao);
     recusarDecisao(atual.situacao as SituacaoHomologacao, 'publicar');
-    const [regra] = await tx
-      .select({ submetidoPorId: regrasTributarias.submetidoPorId })
-      .from(regrasTributarias)
-      .where(eq(regrasTributarias.id, atual.regraId));
-    if (!regra) throw new NotFoundException('Regra tributária não encontrada');
+    const regra = await this.travarRegraAprovada(tx, atual.regraId);
     exigirSegregacao(regra.submetidoPorId, usuarioId);
     const vinculos = await tx
       .select({ id: cenariosRegressao.id })
@@ -588,6 +582,17 @@ export class HomologacoesService {
     conflitoConcorrente();
   }
 
+  /** Lê a regra com FOR SHARE: aposentar (FOR UPDATE) espera esta transação e vice-versa. */
+  private async travarRegraAprovada(tx: Tx, regraId: string) {
+    const [regra] = await tx.select().from(regrasTributarias)
+      .where(eq(regrasTributarias.id, regraId)).for('share');
+    if (!regra) throw new NotFoundException('Regra tributária não encontrada');
+    if (regra.situacao !== 'APROVADA' || regra.deletedAt) {
+      regraViolada('REGRA_NAO_APROVADA', 'A homologação exige uma versão de regra já aprovada.');
+    }
+    return regra;
+  }
+
   private async obterBloqueado(tx: Tx, id: string): Promise<Linha> {
     const [linha] = await tx.select().from(homologacoesRegras).where(and(
       eq(homologacoesRegras.id, id),
@@ -634,7 +639,7 @@ export class HomologacoesService {
       aprovador: aprovador.nome,
       descricao: homologacoesRegras.descricao,
     }[query.sort];
-    return direcao(coluna);
+    return [direcao(coluna), direcao(homologacoesRegras.id)];
   }
 
   private async diffSemOrigem(regraId: string) {

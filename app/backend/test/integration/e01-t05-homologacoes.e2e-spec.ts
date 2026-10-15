@@ -697,4 +697,77 @@ describe('E01-T05 homologações de regras', () => {
     const res = await abrir(leitor, regraId);
     expect(res.status).toBe(403);
   });
+
+  async function aposentarRegra(regraId: string, versao: number) {
+    const res = await request(app.getHttpServer())
+      .post(`/fiscal/regras/${regraId}/aposentar`)
+      .set('Cookie', adminB)
+      .send({ versao, justificativa: 'Versão aposentada depois da abertura.' });
+    expect(res.status).toBe(200);
+  }
+
+  it('regra aposentada depois da abertura não aprova, não rejeita, não vincula e não publica', async () => {
+    const aprovada = await regraAprovada();
+    const aberta = await abrir(admin, aprovada.regraId);
+    expect(aberta.status).toBe(201);
+    await aposentarRegra(aprovada.regraId, aprovada.versao);
+    for (const acao of ['aprovar', 'rejeitar'] as const) {
+      const res = await decidir(acao, adminB, aberta.body.id as string, 1, 'Decisão sobre regra aposentada.');
+      expect(res.status).toBe(422);
+      expect(codigoDe(res.body)).toBe('REGRA_NAO_APROVADA');
+    }
+    const outra = await homologacaoAprovada();
+    const simulacaoId = await simular(outra.base);
+    const vinculado = await vincular(adminB, outra.id, simulacaoId, outra.versao, 'Vínculo antes de aposentar.');
+    expect(vinculado.status).toBe(201);
+    const regra = await db().execute(sql`SELECT versao FROM regras_tributarias WHERE id = ${outra.regraId}::uuid`);
+    await aposentarRegra(outra.regraId, Number((regra.rows[0] as { versao: number }).versao));
+    const publicada = await publicar(adminB, outra.id, vinculado.body.versao as number, 'Publicação de regra aposentada.');
+    expect(publicada.status).toBe(422);
+    expect(codigoDe(publicada.body)).toBe('REGRA_NAO_APROVADA');
+    const outraSim = await vincular(adminB, outra.id, simulacaoId, vinculado.body.versao as number, 'Novo vínculo em regra aposentada.');
+    expect(outraSim.status).toBe(422);
+    expect(codigoDe(outraSim.body)).toBe('REGRA_NAO_APROVADA');
+  });
+
+  it('vincular o mesmo cenário duas vezes devolve 409', async () => {
+    const { id, base, versao } = await homologacaoAprovada();
+    const simulacaoId = await simular(base);
+    const primeira = await vincular(adminB, id, simulacaoId, versao, 'Primeiro vínculo da memória.');
+    expect(primeira.status).toBe(201);
+    const segunda = await vincular(adminB, id, simulacaoId, primeira.body.versao as number, 'Segundo vínculo da mesma memória.');
+    expect(segunda.status).toBe(409);
+    expect(codigoDe(segunda.body)).toBe('CENARIO_JA_VINCULADO');
+    expect(mensagemDe(segunda.body)).toBe('Este cenário já está vinculado a esta homologação.');
+  });
+
+  it('exportação neutraliza fórmula na descrição', async () => {
+    const { regraId } = await regraAprovada();
+    const perigosa = "=cmd|' /C calc'!A0";
+    const aberta = await request(app.getHttpServer())
+      .post('/fiscal/homologacoes')
+      .set('Cookie', admin)
+      .send({ regraId, descricao: perigosa, justificativa: JUSTIFICATIVA });
+    expect(aberta.status).toBe(201);
+    const csv = await request(app.getHttpServer()).get('/fiscal/homologacoes/exportacao').query({ search: 'calc' }).set('Cookie', admin);
+    expect(csv.status).toBe(200);
+    expect(csv.text).toContain(`;'${perigosa}`);
+    expect(csv.text).not.toMatch(/(^|[\r\n;])=cmd/);
+  });
+
+  it('abertura espera a baixa concorrente da regra e então recusa', async () => {
+    const { regraId } = await regraAprovada();
+    let terminouAntes = false;
+    let pendente: Promise<{ status: number; body: Parameters<typeof codigoDe>[0] }> | undefined;
+    await db().transaction(async (tx) => {
+      await tx.execute(sql`UPDATE regras_tributarias SET deleted_at = now() WHERE id = ${regraId}::uuid`);
+      pendente = abrir(admin, regraId).then((r) => r);
+      pendente.then(() => { terminouAntes = true; }, () => { terminouAntes = true; });
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(terminouAntes).toBe(false);
+    const res = await pendente!;
+    expect(res.status).toBe(422);
+    expect(codigoDe(res.body)).toBe('REGRA_NAO_APROVADA');
+  });
 });
