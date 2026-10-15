@@ -20,7 +20,7 @@ import * as schema from '../../../database/schema';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { PlanoContasService } from '../plano/plano.service';
 import { ultimaVersaoDecidida } from '../plano/vigencia';
-import { balancear } from './centavos';
+import { balancear, centavos } from './centavos';
 import type {
   AprovarPoliticaDto,
   ConfigurarPoliticaDto,
@@ -516,6 +516,7 @@ export class PoliticasContabilizacaoService {
 
   private async simularNaTx(tx: Tx, codigo: string, dto: SimularPoliticaDto, usuarioId: string) {
     if (!dto.justificativa.trim()) throw new RegraPoliticaException('Informe justificativa para auditoria.', codigo);
+    if (centavos(dto.valor, codigo) <= 0n) throw new RegraPoliticaException('valor deve ser maior que zero', codigo);
     const { versao } = await this.travar(tx, codigo, dto.numero);
     if (versao.situacao !== 'DRAFT' && versao.situacao !== 'APPROVED') {
       throw new ConflitoPoliticaException('conflito concorrente', codigo);
@@ -569,6 +570,7 @@ export class PoliticasContabilizacaoService {
       .where(and(
         eq(politicaSimulacoes.politicaId, versao.politicaId),
         eq(politicaSimulacoes.versaoNumero, versao.numero),
+        sql`${politicaSimulacoes.valor} > 0`,
         isNull(politicaSimulacoes.deletedAt),
       )).limit(1);
     if (!simulacao) throw new RegraPoliticaException('mapeamento ausente', codigo);

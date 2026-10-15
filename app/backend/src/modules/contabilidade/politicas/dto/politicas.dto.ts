@@ -36,10 +36,11 @@ export const editarSchema = z.object({
 });
 
 export const dinheiro = z.string().regex(/^\d{1,13}\.\d{2}$/);
+export const dinheiroPositivo = dinheiro.refine((valor) => /[1-9]/.test(valor), 'Valor deve ser maior que zero.');
 
 export const simularSchema = z.object({
   numero: z.number().int().positive(),
-  valor: dinheiro,
+  valor: dinheiroPositivo,
   justificativa: motivo,
 });
 
@@ -53,7 +54,7 @@ const loteBase = z.object({
   codigos: z.array(codigo).min(1).max(20),
   justificativa: motivo,
   numeroPorCodigo: z.record(z.string(), z.number().int().positive()),
-  valor: dinheiro.optional(),
+  valor: dinheiroPositivo.optional(),
 });
 
 export const loteSchema = loteBase.superRefine((dto, ctx) => {

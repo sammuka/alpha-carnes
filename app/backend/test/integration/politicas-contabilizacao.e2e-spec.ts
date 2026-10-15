@@ -484,4 +484,60 @@ describe('entrada inválida responde 400 e não grava', () => {
       },
     );
   });
+
+  describe('valor simulado maior que zero', () => {
+    async function politicaPronta() {
+      await prepararContasAnaliticas();
+      return service.configurar(dtoConfigurar(), autorId);
+    }
+
+    it.each(['0.00', '0000000000000.00'])('HTTP recusa %s com 400 e não grava', async (valor) => {
+      const politica = await politicaPronta();
+      const res = await request(srv()).post(`/contabilidade/politicas/${politica.codigo}/simular`)
+        .set('Cookie', adminCookies).send({ numero: 1, valor, justificativa: 'simula' });
+      expect(res.status).toBe(400);
+      expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+    });
+
+    it('o serviço recusa 0.00 com 422, para quem chama sem passar pelo DTO', async () => {
+      const politica = await politicaPronta();
+      await expect(service.simular(politica.codigo, { numero: 1, valor: '0.00', justificativa: 'simula' }, autorId))
+        .rejects.toMatchObject({
+          status: 422,
+          response: { message: 'valor deve ser maior que zero', codigo: politica.codigo },
+        });
+      expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+    });
+
+    it('o lote recusa 0.00 e desfaz tudo', async () => {
+      const politica = await politicaPronta();
+      const res = await request(srv()).post('/contabilidade/politicas/lote').set('Cookie', adminCookies).send({
+        acao: 'simular',
+        codigos: [politica.codigo],
+        justificativa: 'simula',
+        numeroPorCodigo: { [politica.codigo]: 1 },
+        valor: '0.00',
+      });
+      expect(res.status).toBe(400);
+      expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+    });
+
+    it('uma simulação 0.00 já gravada não destrava a aprovação', async () => {
+      const politica = await politicaPronta();
+      await db.execute(sql`
+        insert into politica_simulacoes (politica_id, versao_numero, valor, debito, credito)
+        select p.id, 1, 0, 0, 0 from politicas_contabilizacao p where p.codigo = ${politica.codigo}
+      `);
+      await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId))
+        .rejects.toMatchObject({ status: 422, response: { message: 'mapeamento ausente', codigo: politica.codigo } });
+      expect((await service.obter(politica.codigo)).situacao).toBe('DRAFT');
+    });
+
+    it('0.01 é o menor valor aceito e permite a aprovação por outra pessoa', async () => {
+      const politica = await politicaPronta();
+      await service.simular(politica.codigo, { numero: 1, valor: '0.01', justificativa: 'simula' }, autorId);
+      const aprovada = await service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId);
+      expect(aprovada.situacao).toBe('APPROVED');
+    });
+  });
 });
