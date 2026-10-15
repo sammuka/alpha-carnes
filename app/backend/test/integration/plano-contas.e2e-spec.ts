@@ -844,4 +844,30 @@ describe('Plano de contas', () => {
     expect(res.body[0]).toMatchObject({ codigo: 'A', situacao: 'APPROVED' });
     expect(JSON.stringify(res.body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
   });
+
+  it('csv exporta a visão inteira, não a página', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    for (let i = 1; i <= 29; i += 1) {
+      await service.criar(dtoBase({ codigo: String(i).padStart(2, '0'), nome: `Conta ${i}` }), userId);
+    }
+    const csv = await service.exportarCsv({ pagina: 2, q: '', situacao: '', ordenar: 'contaContabil', direcao: 'asc' });
+    expect(csv.replace('\uFEFF', '').split('\n')).toHaveLength(30);
+    const filtrado = await service.exportarCsv({ pagina: 1, q: 'Conta 2', situacao: 'DRAFT', ordenar: 'contaContabil', direcao: 'asc' });
+    expect(filtrado.replace('\uFEFF', '').split('\n')).toHaveLength(12);
+  });
+
+  it('csv neutraliza célula que começa como fórmula', async () => {
+    await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+    const nomes = ['=1+1', '+SUM(A1)', '-2', '@cmd', '\t=tab', '=HYPERLINK("http://x")'];
+    for (const [i, nome] of nomes.entries()) {
+      await service.criar(dtoBase({ codigo: `F${i}`, nome }), userId);
+    }
+    const csv = await service.exportarCsv({ pagina: 1, q: '', situacao: '', ordenar: 'contaContabil', direcao: 'asc' });
+    const linhas = csv.replace('\uFEFF', '').split('\n');
+    for (const inicio of ["'=1+1;", "'+SUM(A1);", "'-2;", "'@cmd;"]) {
+      expect(linhas.some((linha) => linha.startsWith(inicio))).toBe(true);
+    }
+    expect(csv).toContain(`"'\t=tab"`);
+    expect(csv).toContain(`"'=HYPERLINK(""http://x"")"`);
+  });
 });

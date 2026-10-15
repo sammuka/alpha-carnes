@@ -179,7 +179,8 @@ export class PlanoContasService {
   }
 
   async exportarCsv(query: ListarPlanoQuery): Promise<string> {
-    const { itens } = await this.listar(query);
+    const { linhas: bruto } = await this.consultar(query, false);
+    const itens = bruto.map((linha) => this.apresentar(linha));
     const cabecalho = ['Conta contábil', 'Situação', 'Natureza da conta', 'Centro de custo', 'Início de vigência', 'Fim de vigência'];
     const linhas = itens.map((item) => [
       item.nome,
@@ -189,7 +190,12 @@ export class PlanoContasService {
       item.vigenciaInicio,
       item.vigenciaFim ?? '—',
     ]);
-    const escapar = (valor: string) => (/[",;\n]/.test(valor) ? `"${valor.replace(/"/g, '""')}"` : valor);
+    // Célula que o Excel ou o Calc leria como fórmula ganha o prefixo ' (CSV injection).
+    const neutralizar = (valor: string) => (/^[=+\-@\t\r]/.test(valor) ? `'${valor}` : valor);
+    const escapar = (valor: string) => {
+      const seguro = neutralizar(valor);
+      return /[",;\r\n\t]/.test(seguro) ? `"${seguro.replace(/"/g, '""')}"` : seguro;
+    };
     const corpo = [cabecalho, ...linhas].map((linha) => linha.map(escapar).join(';')).join('\n');
     return `\uFEFF${corpo}`;
   }
