@@ -711,7 +711,7 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
           role="dialog"
           aria-modal="true"
           aria-label="Selecionar Conta contábil"
-          className="fixed inset-0 z-[120] grid place-items-center bg-[rgba(17,32,50,.4)] p-3.5"
+          className="fixed inset-0 z-[120] grid place-items-center bg-lookup-scrim p-3.5"
           onKeyDown={(evento) => { if (evento.key === 'Escape') fecharPesquisaPai(); }}
         >
           <div className="w-[min(490px,95vw)] overflow-hidden rounded-[9px] bg-white shadow-lg">
