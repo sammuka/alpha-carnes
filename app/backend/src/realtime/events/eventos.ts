@@ -81,6 +81,9 @@ export const EVENTOS = {
   // ── Onda 10 — Faturamento / Seguro / Liberação ─────────────────────────────
   SEGURO_ATUALIZADO: 'seguro_atualizado',
   CAMINHAO_LIBERADO: 'caminhao_liberado',
+  // ── E09-T01 — Plano de contas ─────────────────────────────────────────────
+  PLANO_CONTA_CRIADA: 'plano_conta_criada',
+  CENTRO_CUSTO_CRIADO: 'centro_custo_criado',
 } as const;
 
 export type NomeEvento = (typeof EVENTOS)[keyof typeof EVENTOS];
