@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 
 const CHAVE_RASCUNHO = 'e09-t01-plano';
@@ -66,6 +66,7 @@ type Aba = (typeof ABAS)[number];
 type Modal = 'bloquear' | 'mapear' | 'versionar' | 'aprovar' | 'revisar-competencia';
 type Ordenar = NonNullable<(typeof COLUNAS)[number]['ordenar']>;
 type Centro = { codigo: string; nome: string };
+type OpcaoPai = { codigo: string; nome: string };
 type Evento = { quando: string; quem: string; acontecimento: string; justificativa: string };
 type Formulario = {
   codigo: string;
@@ -205,6 +206,14 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
   const [formBase, setFormBase] = useState(JSON.stringify(FORM_VAZIO));
   const [centros, setCentros] = useState<Centro[]>([]);
   const [centrosVazios, setCentrosVazios] = useState(false);
+  const [lookupPai, setLookupPai] = useState(false);
+  const [paisOpcoes, setPaisOpcoes] = useState<OpcaoPai[]>([]);
+  const [paisTruncado, setPaisTruncado] = useState(false);
+  const [paiBusca, setPaiBusca] = useState('');
+  const [paiRotulo, setPaiRotulo] = useState('');
+  const [erroPais, setErroPais] = useState('');
+  const pedidoPais = useRef(0);
+  const botaoPesquisaPai = useRef<HTMLButtonElement>(null);
   const [centroNovo, setCentroNovo] = useState({ codigo: '', nome: '', justificativa: '' });
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [acessoNegado, setAcessoNegado] = useState(semAcesso);
@@ -305,6 +314,8 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
     setForm(FORM_VAZIO);
     setFormBase(JSON.stringify(FORM_VAZIO));
     setDrawer('criar');
+    setPaiRotulo('');
+    setLookupPai(false);
     setCentrosVazios(false);
   }
 
@@ -314,6 +325,8 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
     setForm(preenchido);
     setFormBase(JSON.stringify(preenchido));
     setDrawer('editar');
+    setPaiRotulo('');
+    setLookupPai(false);
   }
 
   function voltar() {
@@ -348,6 +361,45 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
     if (!Array.isArray(lista) || lista.length === 0) {
       setAviso('Nenhum cadastro disponível para seleção. Consulte a área responsável.');
     }
+  }
+
+  async function carregarPais(q: string) {
+    const pedido = (pedidoPais.current += 1);
+    const atual = () => pedido === pedidoPais.current;
+    try {
+      const resposta = await fetch(`/api/contabilidade/plano/opcoes-pai?q=${encodeURIComponent(q)}`);
+      if (!resposta.ok) {
+        const mensagem = await lerMensagem(resposta);
+        if (atual()) setErroPais(mensagem || 'Não foi possível carregar as contas. Tente novamente.');
+        return;
+      }
+      const corpo = await resposta.json() as { itens?: OpcaoPai[]; truncado?: boolean };
+      if (!atual()) return;
+      setErroPais('');
+      setPaisOpcoes(corpo.itens ?? []);
+      setPaisTruncado(corpo.truncado === true);
+    } catch {
+      if (atual()) setErroPais('Não foi possível carregar as contas. Tente novamente.');
+    }
+  }
+
+  function abrirPesquisaPai() {
+    setPaiBusca('');
+    setErroPais('');
+    setLookupPai(true);
+    void carregarPais('');
+  }
+
+  // Fecha o popup e devolve o foco ao botão Pesquisar que o abriu.
+  function fecharPesquisaPai() {
+    setLookupPai(false);
+    botaoPesquisaPai.current?.focus();
+  }
+
+  function escolherPai(opcao: OpcaoPai) {
+    setForm({ ...form, contaPaiCodigo: opcao.codigo });
+    setPaiRotulo(opcao.nome);
+    fecharPesquisaPai();
   }
 
   async function criarCentro() {
@@ -598,7 +650,7 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
       {drawer && (
         <section>
           <h2>Dados principais</h2>
-          <button type="button" onClick={() => void pesquisarCentros()}>Pesquisar</button>
+          <button type="button" aria-label="Pesquisar centro de custo" onClick={() => void pesquisarCentros()}>Pesquisar</button>
           {centrosVazios && (
             <>
               <p>Nenhum cadastro disponível para seleção. Consulte a área responsável.</p>
@@ -627,12 +679,13 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
           <label htmlFor="conta-grupo">Grupo</label>
           <input id="conta-grupo" value={form.grupo} onChange={(evento) => setForm({ ...form, grupo: evento.target.value })} />
           <label htmlFor="conta-pai">Conta contábil</label>
-          <select id="conta-pai" ref={(elemento) => { elemento?.setAttribute('placeholder', 'Selecione conta contábil'); }} value={form.contaPaiCodigo} onChange={(evento) => setForm({ ...form, contaPaiCodigo: evento.target.value })}>
-            <option value="">Selecione conta contábil</option>
-            {contas.filter((conta) => conta.classificacao === 'sintetica' && conta.situacao === 'APPROVED').map((conta) => (
-              <option key={conta.codigo} value={conta.codigo}>{conta.nome}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <select id="conta-pai" ref={(elemento) => { elemento?.setAttribute('placeholder', 'Selecione conta contábil'); }} value={form.contaPaiCodigo} onChange={(evento) => setForm({ ...form, contaPaiCodigo: evento.target.value })}>
+              <option value="">Selecione conta contábil</option>
+              {form.contaPaiCodigo && <option value={form.contaPaiCodigo}>{paiRotulo || form.contaPaiCodigo}</option>}
+            </select>
+            <button type="button" ref={botaoPesquisaPai} aria-label="Pesquisar conta contábil" title="Pesquisar cadastro pelo nome" onClick={abrirPesquisaPai}>Pesquisar</button>
+          </div>
           <p>Vinculado a cadastro existente; seleção obrigatória no formulário.</p>
           <label htmlFor="conta-centro">Centro de custo</label>
           <select id="conta-centro" value={form.centroCodigo} onChange={(evento) => setForm({ ...form, centroCodigo: evento.target.value })}>
@@ -652,6 +705,41 @@ export function PlanoContasClient({ inicial, semAcesso = false }: { inicial: Con
           <button type="button" onClick={() => void salvarConta()}>{drawer === 'editar' ? 'Editar versão' : 'Criar'}</button>
           <button type="button" onClick={() => void validar()}>Verificar dados</button>
         </section>
+      )}
+      {lookupPai && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Selecionar Conta contábil"
+          className="fixed inset-0 z-[120] grid place-items-center bg-lookup-scrim p-3.5"
+          onKeyDown={(evento) => { if (evento.key === 'Escape') fecharPesquisaPai(); }}
+        >
+          <div className="w-[min(490px,95vw)] overflow-hidden rounded-[9px] bg-white shadow-lg">
+            <div>
+              <h2>Selecionar Conta contábil</h2>
+              <button type="button" onClick={fecharPesquisaPai}>Fechar</button>
+            </div>
+            <input
+              type="search"
+              autoFocus
+              placeholder="Pesquisar pelo nome ou descrição"
+              aria-label="Pesquisar cadastro"
+              value={paiBusca}
+              onChange={(evento) => { setPaiBusca(evento.target.value); void carregarPais(evento.target.value); }}
+            />
+            <div>
+              {paisOpcoes.filter((opcao) => !(drawer === 'editar' && opcao.codigo === selecionada?.codigo)).map((opcao) => (
+                <button type="button" key={opcao.codigo} onClick={() => escolherPai(opcao)}>
+                  <b>{opcao.nome}</b>
+                  <small>{opcao.codigo}</small>
+                </button>
+              ))}
+            </div>
+            {erroPais && <p role="alert">{erroPais}</p>}
+            {paisTruncado && <p>Refine a busca para ver mais contas.</p>}
+            <p>A seleção utiliza uma referência interna invisível, nunca digitação de GUID.</p>
+          </div>
+        </div>
       )}
       {modal && (
         <dialog open aria-modal="true">

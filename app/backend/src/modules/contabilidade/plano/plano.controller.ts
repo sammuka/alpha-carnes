@@ -10,10 +10,12 @@ import {
   criarCentroSchema,
   criarContaSchema,
   listarPlanoSchema,
+  opcoesPaiSchema,
   loteSchema,
   type CriarCentroDto,
   type CriarContaDto,
   type ListarPlanoQuery,
+  type OpcoesPaiQuery,
   type LoteDto,
 } from './dto/plano.dto';
 import { PlanoContasService } from './plano.service';
@@ -67,6 +69,12 @@ export class PlanoContasController {
     return this.plano.lote(dto, user.sub);
   }
 
+  @Get('plano/opcoes-pai')
+  @RequirePermissoes('CONTABILIDADE_PLANO_LER')
+  opcoesPai(@Query(new ZodValidationPipe(opcoesPaiSchema)) query: OpcoesPaiQuery) {
+    return this.plano.listarOpcoesPai(query);
+  }
+
   @Get('plano/:codigo/historico')
   @RequirePermissoes('CONTABILIDADE_PLANO_LER')
   historico(@Param('codigo') codigo: string) {
@@ -77,12 +85,14 @@ export class PlanoContasController {
   @RequirePermissoes('CONTABILIDADE_PLANO_GERENCIAR')
   acao(
     @Param('codigo') codigo: string,
-    @Param('acao') acao: keyof typeof acaoSchema,
+    @Param('acao') acao: string,
     @Body() corpo: unknown,
     @CurrentUser() user: CurrentUserPayload,
   ) {
-    const schema = acaoSchema[acao];
-    if (!schema) throw new NotFoundException();
-    return this.plano.executar(acao, codigo, schema.parse(corpo), user.sub);
+    if (!Object.hasOwn(acaoSchema, acao)) throw new NotFoundException();
+    const nome = acao as keyof typeof acaoSchema;
+    // transform devolve unknown; o schema da ação já garantiu a forma, então o cast é para o tipo que executar espera.
+    const dto = new ZodValidationPipe(acaoSchema[nome]).transform(corpo) as Parameters<PlanoContasService['executar']>[2];
+    return this.plano.executar(nome, codigo, dto, user.sub);
   }
 }

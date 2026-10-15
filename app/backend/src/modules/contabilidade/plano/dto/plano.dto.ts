@@ -3,7 +3,14 @@ import { z } from 'zod';
 const codigo = z.string().trim().min(1).max(32);
 const texto180 = z.string().trim().min(1).max(180);
 const motivo = z.string().trim().min(1).max(2000);
-const dataIso = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export function dataCalendarioValida(valor: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const [ano, mes, dia] = valor.split('-').map(Number) as [number, number, number];
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  return data.getUTCFullYear() === ano && data.getUTCMonth() === mes - 1 && data.getUTCDate() === dia;
+}
+
+const dataIso = z.string().refine(dataCalendarioValida, { message: 'Data inexistente no calendário' });
 
 export const criarCentroSchema = z.object({
   codigo,
@@ -38,6 +45,9 @@ export const listarPlanoSchema = z.object({
   ordenar: z.enum(['contaContabil', 'naturezaConta', 'centroCusto', 'vigenciaInicio', 'vigenciaFim']).default('contaContabil'),
   direcao: z.enum(['asc', 'desc']).default('asc'),
 });
+
+export const opcoesPaiSchema = z.object({ q: z.string().trim().max(180).default('') });
+export type OpcoesPaiQuery = z.infer<typeof opcoesPaiSchema>;
 
 export const editarSchema = criarContaCampos.omit({ codigo: true }).extend({
   numero: z.number().int().positive(),
