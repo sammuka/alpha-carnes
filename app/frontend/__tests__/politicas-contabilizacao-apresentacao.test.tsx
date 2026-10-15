@@ -1,9 +1,12 @@
-import { act, render, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   PoliticasContabilizacaoClient,
   type PoliticaApresentada,
 } from '../src/app/(admin)/erp/contabilidade/politicas-de-contabilizacao/politicas-contabilizacao-client';
+
+beforeEach(() => sessionStorage.clear());
 
 function linha(codigo: string, tipoEventoRotulo: string): PoliticaApresentada {
   return {
@@ -270,4 +273,100 @@ it('o bloco Bloqueio / exceção existe só na aba Exceções', async () => {
   expect(screen.getAllByText(/Bloqueio \/ exceção/)).toHaveLength(2);
   expect(screen.getByText(/Mapeamento ausente/)).toBeInTheDocument();
   expect(screen.getByText(/Evento duplicado/)).toBeInTheDocument();
+});
+
+it('digitar na busca recarrega a lista pelo servidor com os filtros atuais', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn().mockResolvedValue(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 1 }));
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  expect(fetchMock).not.toHaveBeenCalled();
+  await user.type(screen.getByLabelText('Buscar registros da lista'), 'x');
+  expect(await screen.findByRole('cell', { name: 'Tarifa' })).toBeInTheDocument();
+  expect(screen.queryByRole('cell', { name: 'Liquidação' })).not.toBeInTheDocument();
+  expect(fetchMock).toHaveBeenLastCalledWith(
+    '/api/contabilidade/politicas?pagina=1&q=x&competencia=&situacao=&ordenar=competencia&direcao=asc',
+  );
+});
+
+it('ordenar por uma coluna recarrega a lista', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn().mockResolvedValue(corpoOk({ itens: [], total: 0 }));
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await user.click(screen.getByRole('button', { name: 'Ordenar por Conta de débito' }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('ordenar=contaDebito&direcao=asc')));
+});
+
+it('uma resposta antiga não sobrescreve a consulta mais nova', async () => {
+  const user = userEvent.setup();
+  const lenta = adiavel();
+  global.fetch = jest.fn()
+    .mockReturnValueOnce(lenta.promessa)
+    .mockResolvedValueOnce(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 1 })) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[]} />);
+  await user.type(screen.getByLabelText('Buscar registros da lista'), 'ab');
+  expect(await screen.findByRole('cell', { name: 'Tarifa' })).toBeInTheDocument();
+  await act(async () => { lenta.resolver(corpoOk({ itens: [linha('LIQUIDACAO-2026-10', 'Liquidação')], total: 1 })); });
+  expect(screen.queryByRole('cell', { name: 'Liquidação' })).not.toBeInTheDocument();
+});
+
+it('falha ao recarregar mostra a mensagem e não apaga a lista', async () => {
+  const user = userEvent.setup();
+  global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 400, text: async () => JSON.stringify({ message: 'Validação falhou' }) }) as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  await user.type(screen.getByLabelText('Buscar registros da lista'), 'x');
+  expect(await screen.findByText('Validação falhou')).toBeInTheDocument();
+  expect(screen.getByRole('cell', { name: 'Liquidação' })).toBeInTheDocument();
+});
+
+it('restaura busca, ordenação e direção do sessionStorage e consulta uma única vez', async () => {
+  sessionStorage.setItem('politicas-de-contabilizacao', JSON.stringify({ busca: 'x', ordenar: 'contaDebito', direcao: 'desc' }));
+  const fetchMock = jest.fn().mockResolvedValue(corpoOk({ itens: [linha('TARIFA-2026-10', 'Tarifa')], total: 1 }));
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} />);
+  expect(await screen.findByRole('cell', { name: 'Tarifa' })).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock).toHaveBeenCalledWith('/api/contabilidade/politicas?pagina=1&q=x&competencia=&situacao=&ordenar=contaDebito&direcao=desc');
+});
+
+// Guarda: hoje a tela não consulta ao montar; o teste trava a consulta extra que uma guarda de "primeira renderização" causaria.
+it('guarda: ordenação inválida no sessionStorage é ignorada e sob StrictMode não há consulta extra ao montar', async () => {
+  sessionStorage.setItem('politicas-de-contabilizacao', JSON.stringify({ ordenar: 'senha', direcao: 'x' }));
+  const fetchMock = jest.fn();
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<StrictMode><PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação')]} /></StrictMode>);
+  await act(async () => {});
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it('confirma na política exibida na ficha quando a selecionada saiu da lista recarregada', async () => {
+  const user = userEvent.setup();
+  const aprovada = { ...linha('LIQUIDACAO-2026-10', 'Liquidação'), situacao: 'APPROVED', situacaoRotulo: 'Aprovado' };
+  const fetchMock = jest.fn()
+    .mockResolvedValueOnce(corpoOk({ itens: [linha('LIQUIDACAO-2026-10', 'Liquidação')], total: 1 }))
+    .mockResolvedValueOnce(corpoOk(aprovada));
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[linha('LIQUIDACAO-2026-10', 'Liquidação'), linha('TARIFA-2026-10', 'Tarifa')]} />);
+  await user.click(screen.getByRole('cell', { name: 'Tarifa' }));
+  await user.type(screen.getByLabelText('Buscar registros da lista'), 'x');
+  await waitFor(() => expect(screen.queryByRole('cell', { name: 'Tarifa' })).not.toBeInTheDocument());
+  await user.click(screen.getByRole('button', { name: 'Aprovar regra' }));
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'outra pessoa aprova');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/contabilidade/politicas/LIQUIDACAO-2026-10/aprovar');
+});
+
+it('sem política na lista, Confirmar mostra aviso e não chama o servidor', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn();
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={[]} />);
+  await user.click(screen.getByRole('button', { name: 'Simular evento' }));
+  await user.type(screen.getByLabelText('Valor'), '10,10');
+  await user.type(screen.getByLabelText('Justificativa / observação'), 'simula');
+  await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+  expect(await screen.findByText('Selecione uma política na lista.')).toBeInTheDocument();
+  expect(fetchMock).not.toHaveBeenCalled();
 });

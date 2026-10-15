@@ -185,11 +185,13 @@ export function PoliticasContabilizacaoClient({
     const cru = sessionStorage.getItem(CHAVE_RASCUNHO);
     if (!cru) return;
     try {
-      const rascunho = JSON.parse(cru) as { form?: Formulario; busca?: string; filtroCompetencia?: string; filtroSituacao?: string };
+      const rascunho = JSON.parse(cru) as { form?: Formulario; busca?: string; filtroCompetencia?: string; filtroSituacao?: string; ordenar?: string; direcao?: string };
       if (rascunho.form) setForm(rascunho.form);
       if (rascunho.busca) setBusca(rascunho.busca);
       if (rascunho.filtroCompetencia) setFiltroCompetencia(rascunho.filtroCompetencia);
       if (rascunho.filtroSituacao) setFiltroSituacao(rascunho.filtroSituacao);
+      if (COLUNAS.some((coluna) => coluna.ordenar === rascunho.ordenar)) setOrdenar(rascunho.ordenar!);
+      if (rascunho.direcao === 'asc' || rascunho.direcao === 'desc') setDirecao(rascunho.direcao);
     } catch {
       sessionStorage.setItem(CHAVE_RASCUNHO, '');
     }
@@ -198,6 +200,45 @@ export function PoliticasContabilizacaoClient({
   useEffect(() => {
     sessionStorage.setItem(CHAVE_RASCUNHO, JSON.stringify({ form, busca, filtroCompetencia, filtroSituacao, ordenar, direcao }));
   }, [form, busca, filtroCompetencia, filtroSituacao, ordenar, direcao]);
+
+  const ultimaConsulta = useRef(new URLSearchParams({
+    pagina: '1', q: '', competencia: '', situacao: '', ordenar: 'competencia', direcao: 'asc',
+  }).toString());
+  const sequenciaLista = useRef(0);
+
+  useEffect(() => {
+    const consulta = new URLSearchParams({
+      pagina: '1', q: busca, competencia: filtroCompetencia, situacao: filtroSituacao, ordenar, direcao,
+    }).toString();
+    // Compara com a última consulta feita (inicialmente, a da lista que o servidor entregou): não consulta ao montar
+    // nem na segunda montagem simulada do StrictMode, e consulta uma vez só depois da restauração do sessionStorage.
+    if (consulta === ultimaConsulta.current) return;
+    ultimaConsulta.current = consulta;
+    sequenciaLista.current += 1;
+    const minha = sequenciaLista.current;
+    void (async () => {
+      try {
+        const resposta = await fetch(`/api/contabilidade/politicas?${consulta}`);
+        if (minha !== sequenciaLista.current) return;
+        if (!resposta.ok) {
+          setAviso(await lerMensagem(resposta));
+          return;
+        }
+        const corpo = await lerCorpo(resposta) as { itens?: PoliticaApresentada[] } | null;
+        if (minha !== sequenciaLista.current) return;
+        if (!corpo || !Array.isArray(corpo.itens)) {
+          setAviso(NAO_CONFIRMADO);
+          return;
+        }
+        setLinhas(corpo.itens);
+        setMarcadas([]);
+        setAviso('');
+      } catch {
+        if (minha === sequenciaLista.current) setAviso('Não foi possível atualizar a lista. Tente novamente.');
+      }
+    })();
+  }, [busca, filtroCompetencia, filtroSituacao, ordenar, direcao]);
+  // ponytail: uma requisição por tecla, sem debounce; a guarda de sequência descarta resposta antiga. Adicionar debounce de 250 ms se o servidor sentir.
 
   if (semAcesso) {
     return (
@@ -220,8 +261,7 @@ export function PoliticasContabilizacaoClient({
 
   function alvo(): PoliticaApresentada | undefined {
     if (marcadas.length === 1) return linhas.find((linha) => linha.codigo === marcadas[0]);
-    if (codigoSelecionado) return linhas.find((linha) => linha.codigo === codigoSelecionado);
-    return linhas[0];
+    return selecionada;
   }
 
   async function carregarOpcoes() {
@@ -272,7 +312,10 @@ export function PoliticasContabilizacaoClient({
 
   async function confirmarLoteOuAcao(acao: 'simular' | 'aprovar') {
     const atual = alvo();
-    if (!atual && marcadas.length <= 1) return;
+    if (!atual && marcadas.length <= 1) {
+      setAviso('Selecione uma política na lista.');
+      return;
+    }
     const valor = valorApi(valorTexto);
     if (!justificativaModal.trim()) {
       setAviso('Informe justificativa para demonstrar a decisão auditável.');
