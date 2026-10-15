@@ -9,6 +9,7 @@
 | r1 | 2026-10-15 | planner | versão inicial da fatia E09-T01 |
 | r2 | 2026-10-15 | planner (nova instância) | Portão 1 r1 `ajustar` (6 achados; veredito `aa2b94b`, plano r1 `f0043b6`); ajuste cirúrgico: nenhum outro ponto do plano muda |
 | r3 | 2026-10-15 | planner (nova instância) | revisão crítica independente sobre o código implementado até `93599bb` (B1 a B4, M1 a M3, M5, M6) e AD-25 item 3; só acrescenta a seção "Correções da revisão crítica (r3)" (Tasks 8 a 17, classe de risco alto); as Tasks 1 a 7 já implementadas não mudam |
+| r4 | 2026-10-15 | planner (nova instância) | Portão 1 r3 `ajustar` (1 bloqueante, 8 menores; plano r3 `143aec2`, blob `d851f10…`); delta AD-22 cirúrgico: acrescenta a Task 17 (opções de conta pai, P-r3-2), corrige as Tasks 8 e 14 e passa a renumeração condicional para a Task 18, sempre a última, com os conflitos do merge com a E01 nomeados; as demais Tasks não mudam |
 
 | Achado r1 | Correção r2 |
 |---|---|
@@ -1719,11 +1720,11 @@ O spec usa o administrador semeado. Não chama SEFAZ, banco nem EISS.
 
 ## Correções da revisão crítica (r3)
 
-**Classe de risco desta seção: ALTO** (AD-22 item 6). O delta altera regra de transição de conta contábil, descarte auditado de versão, validação de entrada HTTP, exportação CSV e (condicionalmente) migration. Rito: revisão crítica por commit, Portão 2 e Portão A. A seção não cria permissão, perfil, menu nem tabela; a única migration é a renumeração condicional da Task 17.
+**Classe de risco desta seção: ALTO** (AD-22 item 6). O delta altera regra de transição de conta contábil, descarte auditado de versão, validação de entrada HTTP, exportação CSV, uma leitura nova de opções de conta pai e (condicionalmente) migration. Rito: revisão crítica por commit, Portão 2 e Portão A. A seção não cria permissão, perfil, menu nem tabela; a única migration é a renumeração condicional da Task 18. A Task 17 lê com a permissão `CONTABILIDADE_PLANO_LER`, que já existe.
 
 **Origem.** Revisão crítica preliminar independente de 2026-10-15 sobre o código implementado até `93599bb` (achados B1 a B4; menores M1, M2, M3, M5, M6) e AD-25 item 3 (`docs/execucao/DECISOES.md`). A Task 13 cobre também um achado do planner (A1: `lote` devolve linhas cruas com UUID). As linhas citadas são as do código lido na revisão e deslocam a cada task.
 
-**Ordem.** As Tasks 8 a 16 são independentes, com duas exceções: a Task 10 usa `ultimaVersaoDecidida` criada na Task 9, e o `it` de rótulos da Task 12 exige o descarte da Task 11. A Task 17 só roda quando o coordenador indicar. Um commit por task; cada teste novo falha antes e passa depois, salvo os `it` marcados "guarda", que passam antes e depois e travam a regra contra correção excessiva.
+**Ordem.** As Tasks 8 a 17 são independentes, com três exceções: a Task 10 usa `ultimaVersaoDecidida` criada na Task 9, o `it` de rótulos da Task 12 exige o descarte da Task 11, e a Task 17 usa `vigencia.ts` e o helper `contaComV2Suspensa` da Task 9. A Task 18 é sempre a última e só roda quando o coordenador indicar. Um commit por task; cada teste novo falha antes e passa depois, salvo os `it` marcados "guarda", que passam antes e depois e travam a regra contra correção excessiva.
 
 **Convenções dos testes.** Todos entram em `app/backend/test/integration/plano-contas.e2e-spec.ts`, dentro do `describe` existente (que limpa as três tabelas no `beforeEach`, L54 a L58), salvo onde a task disser outro arquivo. Reutilizar `dtoBase`, `promover`, `comoEdicao`, `contaAprovadaSintetica`, `contaAprovadaAnalitica` e `contarVersoes` do arquivo. Chamada HTTP: `request(srv()).post(url).set('Cookie', adminCookies).send(corpo)`. O `AllExceptionsFilter` responde `{ statusCode, message: <corpo da exceção>, ... }`, então a mensagem de regra está em `res.body.message.message`. Comando de teste do backend, sempre em `app/backend`: `npx jest test/integration/plano-contas.e2e-spec.ts --runInBand`.
 
@@ -1731,7 +1732,7 @@ O spec usa o administrador semeado. Não chama SEFAZ, banco nem EISS.
 
 | Achado | Task | `it` que falha antes e passa depois |
 |---|---|---|
-| B3 `ZodError` vira 500, data inexistente, `constructor`/`toString` | 8 | `entrada HTTP inválida` (it.each de 9 entradas, 400), `ação herdada %s responde 404`, `lote com código herdado do protótipo responde 422 conflito`; unit `dataCalendarioValida` |
+| B3 `ZodError` vira 500, data inexistente, `constructor`/`toString` | 8 | `entrada HTTP inválida` (it.each de 9 entradas, 400), `ação herdada %s responde 404`, `lote com código herdado do protótipo responde 422 conflito`; unit `dataCalendarioValida`; `npx tsc --noEmit` sem TS2345 no controller |
 | B2 conta suspensa segue vigente | 9 | `conta com v1 aprovada e v2 suspensa não é pai válido` |
 | B1 ciclo pelo `editar` e na aprovação | 10 | `editar recusa ciclo e pai próprio sem gravar`, `aprovar revalida o ciclo...`, `duas aprovações cruzadas não fecham ciclo` |
 | AD-25 item 3 bloquear encerra o rascunho | 11 | `bloquear com rascunho aberto descarta...`, `revisão aberta também é descartada...`, `falha da auditoria desfaz o descarte` |
@@ -1740,13 +1741,31 @@ O spec usa o administrador semeado. Não chama SEFAZ, banco nem EISS.
 | M1 CSV paginado, M2 fórmula | 14 | `csv exporta a visão inteira...`, `csv neutraliza célula que começa como fórmula` |
 | M6 centro sem lock | 15 | `dez criações simultâneas do mesmo centro...` |
 | B4 `limparPlano` fixo e destrutivo | 16 | jest `e09-t01-limpar-plano.test.ts` |
-| Renumeração 0048 para 0049 | 17 | jest `e09-t01-migration-meta.spec.ts` |
+| P-r3-2 (Portão 1 r3, bloqueante) combo de conta pai limitado à página e ao filtro da grade | 17 | no e2e do backend, `describe` `opções de conta pai`: `pai fora da página 1 da grade aparece e a criação com ele funciona`, `o filtro e a busca da grade não reduzem as opções`, `pai aprovado com v2 em rascunho aparece...`, `pai com v1 aprovada e v2 suspensa não aparece`, `só entram sintéticas... igual a ultimaVersaoDecidida`, `busca por código ou nome...`, `passando do teto responde truncado...`, `exige a permissão de leitura e não devolve identificador` (403, 401); jest `plano-contas-opcoes-pai.test.tsx` (4 `it`) e `bff-plano-opcoes-pai.test.ts` |
+| Renumeração 0048 para 0049 e conflitos do merge com a E01 | 18 | jest `e09-t01-migration-meta.spec.ts` (4 `it`, incluindo o `--> statement-breakpoint` antes de cada trigger) e os testes de menu e RBAC recontados (11 grupos, 45 rotas, 132 pares) |
+
+### Portão 1 r3 e correção (r4)
+
+Veredito: `ajustar`, 1 bloqueante e 8 menores, sobre o plano r3 (`143aec2`, blob `d851f10…`). Cada item abaixo tem a correção e o ponto do plano onde ela está.
+
+| Item do veredito | Correção r4 |
+|---|---|
+| 1 (bloqueante) P-r3-2, combo de conta pai montado de `contas` (`plano-contas-client.tsx` L632) | Task 17: `GET /contabilidade/plano/opcoes-pai` (`CONTABILIDADE_PLANO_LER`), rota BFF e carga ao abrir o drawer e ao buscar. P-r3-2 sai das pendências |
+| 2 Task 8, `ZodValidationPipe.transform` devolve `unknown` (`zod-validation.pipe.ts` L9) e `executar` não compila (TS2345) | Task 8: o `dto` recebe cast para `Parameters<PlanoContasService['executar']>[2]`, sem `any`; o Step 4 roda `npx tsc --noEmit` |
+| 3 Task 17 (agora 18), `DATABASE_URL` apontava para o banco descartado | Task 18 Steps 3 e 4: `try/finally` repõe a variável; o banco da fatia é recriado e migrado só se o nome casar com `_(e2e\|test\|eNN_tNN)` (sufixo da Task 16), senão para |
+| 4 `Substring` descartava o `--> statement-breakpoint` antes do primeiro trigger | Task 18 Step 3: o bloco começa na linha `--> statement-breakpoint` (original L54) e um `it` conta 3 triggers precedidos por ela |
+| 5 conflitos semânticos do merge com a E01 | Task 18, tabela "Conflitos previstos no merge com a trilha E01": arquivos nomeados, números lidos em `e01-t05` e nesta branch (11 grupos, 45 rotas, 132 pares), regra de recomputo e critério de parada (a) a (f) |
+| 6 rollback com `reset --hard` | Rollback do delta e Task 18 unificados: `git merge --abort` antes do commit do merge, `git revert -m 1` depois; sem `reset --hard` em lugar nenhum |
+| 7 coerência com a E09-T02 | Decisões do delta, "Consulta compartilhável e coerência com a E09-T02" |
+| 8 P-r3-1 | Pendência não bloqueante mantida, com a nota do Linear; nenhuma task afirma tempo real na tela |
+| 9 Task 14 Step 2 | Expected corrigido: 10 linhas, não 21 |
 
 ### Decisões do delta
 
 - **Vigência (B2).** O plano já fixa o pai como "uma versão `APPROVED`, não suspensa" (D3) e a Task 4 recusa pai suspenso. Regra aplicada: a versão vigente é a de maior `numero` entre as `APPROVED` e `SUSPENDED` não excluídas, e a conta só é vigente se ela for `APPROVED`. Aprovar versão nova supera a anterior (maior número decidido). `DRAFT`, `REVIEW` e `REJECTED` não decidem nada: revisão em aberto não derruba a versão aprovada. Difere da leitura literal "a versão mais recente da conta precisa ser `APPROVED`" só quando há rascunho aberto sobre uma aprovada; a leitura literal impediria criar filhas durante qualquer revisão, o que D3 não pede.
 - **Mensagem do pai suspenso.** Review Focus 1 pede `conta desativada`. Pai sem nenhuma versão decidida mantém `Conta pai não está ativa` (teste existente L134 a L145).
-- **Consulta compartilhável.** `ultimaVersaoDecidida(executor, contaId)` fica em `plano/vigencia.ts`, sem dependência de Nest. A E09-T02 pode importá-la se decidir em plano próprio; esta seção não toca arquivo da T02.
+- **Consulta compartilhável e coerência com a E09-T02.** `ultimaVersaoDecidida(executor: Pick<NodePgDatabase<typeof schema>, 'select'>, contaId: string)` devolve a linha de `conta_versoes` ou `null` e fica em `plano/vigencia.ts`, sem dependência de Nest. A assinatura é estável: nome, caminho, parâmetros e retorno não mudam sem novo Portão 1. Na branch da E09-T02 (`feature/erp-e09-t02-politicas-contabilizacao`, commit `24d30b7`, `plano.service.ts` L173 a L198) o método `listarContasAnaliticasVigentes` mora no arquivo da T01 e ainda não existe nesta branch. Ele escolhe, por conta, a versão `APPROVED` analítica mais recente e por isso mantém vigente uma conta com v1 aprovada e v2 `SUSPENDED`. A correção desse método é do plano da T02 r4, que passa a decidir a vigência com `ultimaVersaoDecidida` desta fatia (a conta só é vigente se a última decidida for `APPROVED`; o filtro de analítica e a janela de data continuam da T02). Esta fatia não toca arquivo da T02 (critério de parada 4). O merge T01 para T02 é do coordenador: `plano.service.ts` conflitará em `exportarCsv` (Task 14) e ao lado de `listarCentrosAtivos` (`listarOpcoesPai`, Task 17), e `vigencia.ts` entra inteiro pela T01.
+- **Opções de conta pai (Task 17).** Lista própria, lida do backend ao abrir o drawer e ao buscar, sem relação com a página nem com o filtro da grade. Regra: conta não excluída, última versão decidida `APPROVED` e `sintetica` (D3), a mesma que `exigirPaiVigente` aplica. A janela de data não entra porque o backend também não a aplica. Teto de 50 com `truncado` e busca `q` por código ou nome.
 - **Bloqueio com rascunho (AD-25 item 3).** O token de concorrência continua sendo o maior `numero` não excluído (D4), que é o número que a grade mostra. Logo `bloquear` com o número da versão aberta é aceito e número desatualizado segue 409. "Rascunho aberto" cobre `DRAFT` e `REVIEW`, as duas situações que `versionar` chama de "Versão em aberto" (`plano.service.ts` L319 a L321): deixar `REVIEW` viva permitiria aprová-la depois do bloqueio e reativar a conta. Sem versão `APPROVED` imediatamente anterior à aberta, responde 422 `Situação não permite esta transição` e nada é descartado.
 - **Estado do descarte.** O `chk_conta_versoes_situacao` (`contabilidade-plano.schema.ts` L63) não tem estado de descarte. Usa-se soft delete (`deleted_at`) na versão aberta, conforme `docs/data/convencoes-schema.md`, e auditoria `operacao = 'DELETE'` (permitida por `chk_auditoria_operacao`, `auditoria.schema.ts` L21) na mesma transação do bloqueio. Sem status novo e sem migration.
 - **CSV.** A visão exportada é o filtro inteiro, sem paginação. Célula que começa por `=`, `+`, `-`, `@`, tab ou CR recebe o prefixo `'` (CSV injection).
@@ -1754,8 +1773,9 @@ O spec usa o administrador semeado. Não chama SEFAZ, banco nem EISS.
 
 ### Pendências registradas (sem task nesta seção)
 
-- **P-r3-1, tempo real na tela.** A room `contabilidade-plano` tem emissores no backend (`realtime.gateway.ts` L430 a L463) e nenhum consumidor no frontend. As Tasks 5 e 6 deste plano não exigem atualização em tempo real da tela; `plano-contas-client.tsx` só recarrega após a própria ação. Fica como pendência para o coordenador abrir issue. A Task 13 garante apenas que o evento sai no lote.
-- **P-r3-2, combo de conta pai.** `plano-contas-client.tsx` L632 monta o combo com `contas` (a página corrente de 20 linhas) filtrando `sintetica` e `APPROVED` da versão mais recente. Pai em outra página, ou com revisão aberta, não aparece. A autoridade é o backend (Tasks 9 e 10 recusam com 422). Corrigir exige endpoint novo de opções; fica como pendência.
+- **P-r3-1, tempo real na tela (não bloqueante, aceita no Portão 1 r3 item 8).** A room `contabilidade-plano` tem emissores no backend (`realtime.gateway.ts` L430 a L463) e nenhum consumidor no frontend; os eventos pós-commit cumprem o Princípio VI e nenhuma tela ERP consome room hoje. As Tasks 5, 6, 7 e 17 não exigem nem afirmam atualização em tempo real da tela: `plano-contas-client.tsx` só recarrega após a própria ação e o Playwright não testa segunda sessão. A Task 13 garante apenas que o evento sai no lote. O coordenador abre a issue no Linear antes do Portão 2; o worker não a abre e não escreve texto de tela sobre tempo real.
+
+A P-r3-2 (combo de conta pai) saiu desta lista: virou a Task 17.
 
 ### Critérios de parada do delta
 
@@ -1763,15 +1783,17 @@ Parar e devolver ao coordenador, sem commitar, se:
 
 1. Um teste novo (não marcado "guarda") passar antes da correção: o teste não prova nada, reescrever.
 2. Qualquer teste existente quebrar fora das asserções que este delta altera de propósito: `plano-contas.e2e-spec.ts` L364 a L365 (Task 12) e a forma do retorno de `lote` (Task 13).
-3. A correção exigir migration (só a Task 17 tem) ou alterar `CHECK`.
+3. A correção exigir migration (só a Task 18 tem) ou alterar `CHECK`.
 4. O diff tocar arquivo fora da lista da task, `docs/execucao/` ou arquivo da E09-T02.
 5. `npm run test:cov` em `app/backend` ficar abaixo de 80% em linhas ou ramos.
-6. Na Task 17: o `drizzle-kit generate` emitir prefixo diferente de `0049`, ou o SQL gerado diferir do original além dos três `CREATE TRIGGER`.
+6. Na Task 18: o `drizzle-kit generate` emitir prefixo diferente de `0049`, ou o SQL gerado diferir do original além dos três `CREATE TRIGGER`.
+7. Na Task 18: qualquer item (a) a (f) do critério de parada dos conflitos do merge (totais diferentes de 11 grupos, 45 rotas e 132 pares; `FISCAL` fora de ordem; outro perfil com a rota; `MENUS_OPERACIONAIS` diferente de 39; conflito fora da tabela ou que escolha entre duas regras; teste de RBAC, menu ou room falhando depois do recomputo).
+8. Na Task 17: o `it` `pai fora da página 1 da grade aparece e a criação com ele funciona` passar antes da implementação, ou a resposta de `opcoes-pai` trazer campo além de `codigo` e `nome`.
 
 ### Rollback do delta
 
-- Cada task é um commit: `git revert <sha-da-task>` (nunca `reset` nem force push). A Task 17 reverte conforme o próprio rollback, ao final dela.
-- As Tasks 8 a 16 não mudam esquema: reverter o código restaura o comportamento anterior sem passo de banco.
+- Cada task é um commit: `git revert <sha-da-task>` (nunca `reset`, `reset --hard` nem force push). A Task 18 tem o rollback dela ao final: `git merge --abort` antes do commit do merge e `git revert -m 1 <sha-do-merge>` depois.
+- As Tasks 8 a 17 não mudam esquema: reverter o código restaura o comportamento anterior sem passo de banco. Reverter a Task 17 remove o endpoint, a rota BFF e o campo de busca, e o combo volta a ser montado da grade (com o defeito P-r3-2).
 - Task 11: versões descartadas permanecem com `deleted_at` preenchido depois do revert. Compensação manual, só com autorização do coordenador e conta a conta: `update conta_versoes set deleted_at = null where id = '<registro_id da auditoria DELETE>'`, depois de conferir que a conta segue `SUSPENDED` na versão anterior.
 - Task 16: o `TRUNCATE ... CASCADE` roda só em banco de teste; reverter restaura a limpeza antiga.
 
@@ -1892,7 +1914,8 @@ const dataIso = z.string().refine(dataCalendarioValida, { message: 'Data inexist
   ) {
     if (!Object.hasOwn(acaoSchema, acao)) throw new NotFoundException();
     const nome = acao as keyof typeof acaoSchema;
-    const dto = new ZodValidationPipe(acaoSchema[nome]).transform(corpo);
+    // transform devolve unknown; o schema da ação já garantiu a forma, então o cast é para o tipo que executar espera.
+    const dto = new ZodValidationPipe(acaoSchema[nome]).transform(corpo) as Parameters<PlanoContasService['executar']>[2];
     return this.plano.executar(nome, codigo, dto, user.sub);
   }
 ```
@@ -1905,7 +1928,7 @@ const dataIso = z.string().refine(dataCalendarioValida, { message: 'Data inexist
 
 - [ ] **Step 4: Run to verify it passes**
 
-Mesmo comando do Step 2. Expected: PASS, incluindo o `it` existente L232 a L242 (`vigenciaInicio: ''` segue 422 pelo service).
+Mesmo comando do Step 2, e depois `npx tsc --noEmit` em `app/backend`. Expected: PASS, sem erro de tipo (sem o cast, o `tsc` acusa TS2345 em `this.plano.executar(nome, codigo, dto, user.sub)`, porque `ZodValidationPipe.transform` devolve `unknown`, `zod-validation.pipe.ts` L9), incluindo o `it` existente L232 a L242 (`vigenciaInicio: ''` segue 422 pelo service).
 
 - [ ] **Step 5: Commit**
 
@@ -2650,7 +2673,7 @@ Contagem do filtro: `Conta 2` e `Conta 20` a `Conta 29` são 11 contas, mais o c
 
 `npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` em `app/backend`.
 
-Expected: FAIL: 21 linhas (cabeçalho e 20) em vez de 30; fórmulas sem prefixo.
+Expected: FAIL: com `pagina: 2` o CSV antigo tem 10 linhas (cabeçalho e as 9 contas da segunda página, porque 29 contas dão 20 na primeira e 9 na segunda) em vez de 30; a segunda asserção (filtro `Conta 2` com `DRAFT`, 12 linhas) cabe numa página e só seria alcançada depois da primeira; as fórmulas saem sem prefixo.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -2877,7 +2900,382 @@ O e2e falha cedo se apontar para banco que não é de teste. Não quebra quando 
 
 ---
 
-## Task 17: Renumeração da migration para 0049 (condicional)
+## Task 17: Opções de conta pai independentes da grade (P-r3-2, bloqueante do Portão 1 r3)
+
+**Depende da Task 9** (`ultimaVersaoDecidida`, `vigencia.ts` e o helper `contaComV2Suspensa` do mesmo `describe`). Não cria permissão, menu, perfil, tabela nem migration: usa `CONTABILIDADE_PLANO_LER`, já existente.
+
+**Files:**
+- Modify: `app/backend/src/modules/contabilidade/plano/vigencia.ts`
+- Modify: `app/backend/src/modules/contabilidade/plano/dto/plano.dto.ts`
+- Modify: `app/backend/src/modules/contabilidade/plano/plano.service.ts`
+- Modify: `app/backend/src/modules/contabilidade/plano/plano.controller.ts`
+- Modify: `app/backend/test/integration/plano-contas.e2e-spec.ts`
+- Create: `app/frontend/src/app/api/contabilidade/plano/opcoes-pai/route.ts`
+- Modify: `app/frontend/src/app/(admin)/erp/contabilidade/plano-de-contas/plano-contas-client.tsx`
+- Create: `app/frontend/__tests__/plano-contas-opcoes-pai.test.tsx`
+- Create: `app/frontend/__tests__/bff-plano-opcoes-pai.test.ts`
+
+Causa lida: `plano-contas-client.tsx` L632 monta o combo de conta pai com `contas`, o estado preenchido por `carregar` (L225 a L249) com a página corrente de 20 linhas já filtrada por busca e situação da grade, e só aceita a linha cuja situação exibida é `APPROVED`. Com mais de 20 contas, na página 2, com o filtro Rascunho ou com a conta aprovada que tem a v2 em rascunho (a linha da grade mostra a v2), um pai que o backend aceitaria não pode ser escolhido. O backend (`paiValido` L234, Tasks 9 e 10) é a autoridade; a tela precisa de uma lista própria, vinda do mesmo critério.
+
+Regra das opções (D3 e Task 9): conta com `deleted_at` nulo cuja `ultimaVersaoDecidida` é `APPROVED` e `sintetica`. D3 exige pai sintético (`paiValido`, L248 a L250, recusa pai analítico), então só sintéticas entram, e a classificação lida é a da versão decidida, a mesma que `exigirPaiVigente` confere. Janela de data (`vigencia_inicio` e `vigencia_fim`) não entra: nem `exigirPaiVigente` nem o `ciclo` a aplicam, e a opção existe exatamente quando o backend aceitaria. Ordem por `codigo`. A resposta tem só `codigo` e `nome` (D9, sem UUID). Há busca (`q`, por código ou nome) e teto de 50 itens (`LIMITE_OPCOES_PAI`), porque o plano de contas não tem tamanho máximo; passando do teto a resposta traz `truncado: true` e o combo mostra a orientação de refinar a busca. O padrão é o do combo de centros (`pesquisarCentros`, L339 a L351: carga por demanda, aviso em falha), com busca por texto como em `clientes.service.ts`.
+
+- [ ] **Step 1: Write the failing tests**
+
+`plano-contas.e2e-spec.ts`: acrescentar `LIMITE_OPCOES_PAI` ao import de `'../../src/modules/contabilidade/plano/vigencia'` (feito na Task 9 só para `ultimaVersaoDecidida`). Antes do `});` final do `describe` principal:
+
+```ts
+  describe('opções de conta pai', () => {
+    const opcoes = (qs = '', cookies = adminCookies) =>
+      request(srv()).get(`/contabilidade/plano/opcoes-pai${qs}`).set('Cookie', cookies);
+    const codigosDe = (res: request.Response) => (res.body.itens as { codigo: string }[]).map((i) => i.codigo);
+    const grade = (pagina: number, extra: { q?: string; situacao?: '' | 'DRAFT' } = {}) =>
+      service.listar({ pagina, q: extra.q ?? '', situacao: extra.situacao ?? '', ordenar: 'contaContabil', direcao: 'asc' });
+
+    async function sinteticasAprovadas(quantidade: number) {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      for (let i = 1; i <= quantidade; i += 1) {
+        const n = String(i).padStart(2, '0');
+        await service.criar(dtoBase({ codigo: `C${n}`, nome: `Conta ${n}`, classificacao: 'sintetica' }), userId);
+        await aprovarDireto(`C${n}`);
+      }
+    }
+
+    it('pai fora da página 1 da grade aparece e a criação com ele funciona', async () => {
+      await sinteticasAprovadas(25);
+      const primeira = await grade(1);
+      const segunda = await grade(2);
+      expect(primeira.total).toBe(25);
+      expect(primeira.itens).toHaveLength(20);
+      const foraDaPagina = segunda.itens[0]!.codigo;
+      expect(primeira.itens.map((i) => i.codigo)).not.toContain(foraDaPagina);
+
+      const res = await opcoes();
+      expect(res.status).toBe(200);
+      expect(res.body.truncado).toBe(false);
+      expect(codigosDe(res)).toHaveLength(25);
+      expect(codigosDe(res)).toContain(foraDaPagina);
+
+      const criada = await request(srv()).post('/contabilidade/plano').set('Cookie', adminCookies)
+        .send(dtoBase({ codigo: 'FILHA', nome: 'Filha', classificacao: 'analitica', contaPaiCodigo: foraDaPagina }));
+      expect(criada.status).toBe(201);
+      expect(criada.body.contaPaiCodigo).toBe(foraDaPagina);
+    });
+
+    it('o filtro e a busca da grade não reduzem as opções', async () => {
+      await sinteticasAprovadas(3);
+      const filtrada = await grade(1, { q: 'zzz', situacao: 'DRAFT' });
+      expect(filtrada.total).toBe(0);
+      expect(codigosDe(await opcoes())).toEqual(['C01', 'C02', 'C03']);
+    });
+
+    it('pai aprovado com v2 em rascunho aparece, com o nome da versão vigente', async () => {
+      await service.criarCentro({ codigo: 'CT1', nome: 'Operação industrial', justificativa: 'abre centro' }, userId);
+      await service.criar(dtoBase({ codigo: '1', nome: 'Caixa e bancos', classificacao: 'sintetica' }), userId);
+      const v1 = await promover('1');
+      await service.versionar('1', comoEdicao(v1, { nome: 'Caixa novo', justificativa: 'abre v2' }), userId);
+      expect((await opcoes()).body.itens).toEqual([{ codigo: '1', nome: 'Caixa e bancos' }]);
+    });
+
+    it('pai com v1 aprovada e v2 suspensa não aparece', async () => {
+      await contaComV2Suspensa();
+      const res = await opcoes();
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ itens: [], truncado: false });
+    });
+
+    it('só entram sintéticas cuja última versão decidida é aprovada, igual a ultimaVersaoDecidida', async () => {
+      await contaAprovadaAnalitica();
+      await service.criar(dtoBase({ codigo: '2', nome: 'Só rascunho', classificacao: 'sintetica' }), userId);
+      await service.criar(dtoBase({ codigo: '3', nome: 'Com revisão aberta', classificacao: 'sintetica' }), userId);
+      const v1 = await promover('3');
+      await service.versionar('3', comoEdicao(v1, { justificativa: 'abre v2' }), userId);
+      await service.revisarCompetencia('3', { numero: 2, vigenciaInicio: '2026-10-01', vigenciaFim: null, justificativa: 'revisa v2' }, userId);
+
+      const esperados: string[] = [];
+      for (const conta of await db.select().from(contasContabeis)) {
+        const decidida = await ultimaVersaoDecidida(db, conta.id);
+        if (decidida?.situacao === 'APPROVED' && decidida.classificacao === 'sintetica') esperados.push(conta.codigo);
+      }
+      expect(esperados.sort()).toEqual(['1', '3']);
+      expect(codigosDe(await opcoes())).toEqual(esperados.sort());
+    });
+
+    it('busca por código ou nome sem caixa, e % é literal', async () => {
+      await sinteticasAprovadas(3);
+      expect(codigosDe(await opcoes('?q=conta%2002'))).toEqual(['C02']);
+      expect(codigosDe(await opcoes('?q=c03'))).toEqual(['C03']);
+      expect((await opcoes('?q=%25')).body.itens).toEqual([]);
+    });
+
+    it('passando do teto responde truncado e a busca devolve a conta fora dele', async () => {
+      await sinteticasAprovadas(LIMITE_OPCOES_PAI + 1);
+      const res = await opcoes();
+      expect(res.body.itens).toHaveLength(LIMITE_OPCOES_PAI);
+      expect(res.body.truncado).toBe(true);
+      const ultima = `C${LIMITE_OPCOES_PAI + 1}`;
+      expect(codigosDe(await opcoes(`?q=${ultima}`))).toEqual([ultima]);
+      expect((await opcoes(`?q=${ultima}`)).body.truncado).toBe(false);
+    });
+
+    it('exige a permissão de leitura e não devolve identificador', async () => {
+      await sinteticasAprovadas(2);
+      expect((await opcoes('', comercialCookies)).status).toBe(403);
+      expect((await request(srv()).get('/contabilidade/plano/opcoes-pai')).status).toBe(401);
+      const res = await opcoes();
+      for (const item of res.body.itens as object[]) expect(Object.keys(item).sort()).toEqual(['codigo', 'nome']);
+      expect(JSON.stringify(res.body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    });
+  });
+```
+
+`app/frontend/__tests__/plano-contas-opcoes-pai.test.tsx`:
+
+```tsx
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { PlanoContasClient, type ContaGrade } from '../src/app/(admin)/erp/contabilidade/plano-de-contas/plano-contas-client';
+
+const linha = (codigo: string, nome: string): ContaGrade => ({
+  codigo, nome, situacaoRotulo: 'Aprovado', naturezaRotulo: 'Ativo', centroNome: 'Operação industrial',
+  vigenciaInicio: '2026-10-01', vigenciaFim: null, classificacaoRotulo: 'sintética', grupo: 'Circulante',
+  contaPaiCodigo: null, centroCodigo: 'CT1', situacao: 'APPROVED', natureza: 'ATIVO', classificacao: 'sintetica',
+  numero: 1, responsavelNome: 'Administrador', criadoEm: '2026-10-15T10:00:00.000Z', alteradoEm: '2026-10-15T10:00:00.000Z',
+});
+
+type Opcoes = { itens: { codigo: string; nome: string }[]; truncado?: boolean };
+
+function mockFetch(opcoes: Opcoes | { falha: Response }) {
+  const chamadas: string[] = [];
+  global.fetch = jest.fn(async (url: string) => {
+    chamadas.push(String(url));
+    if (!String(url).startsWith('/api/contabilidade/plano/opcoes-pai')) {
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' } as Response;
+    }
+    if ('falha' in opcoes) return opcoes.falha;
+    return { ok: true, status: 200, json: async () => ({ truncado: false, ...opcoes }) } as Response;
+  }) as unknown as typeof fetch;
+  return chamadas;
+}
+
+describe('combo de conta pai', () => {
+  it('vem de opcoes-pai ao abrir o drawer e não das linhas da grade', async () => {
+    const chamadas = mockFetch({ itens: [{ codigo: 'P99', nome: 'Pai de outra página' }] });
+    render(<PlanoContasClient inicial={[linha('G1', 'Só na grade')]} />);
+    expect(chamadas).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    await waitFor(() => expect(chamadas).toContain('/api/contabilidade/plano/opcoes-pai?q='));
+    expect(await screen.findByRole('option', { name: 'Pai de outra página' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Só na grade' })).not.toBeInTheDocument();
+  });
+
+  it('a busca consulta o backend com o texto digitado', async () => {
+    const chamadas = mockFetch({ itens: [] });
+    render(<PlanoContasClient inicial={[linha('G1', 'Só na grade')]} />);
+    await userEvent.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    await userEvent.type(await screen.findByLabelText('Buscar conta contábil'), 'cx');
+    await waitFor(() => expect(chamadas).toContain('/api/contabilidade/plano/opcoes-pai?q=cx'));
+  });
+
+  it('avisa quando a lista foi cortada no teto', async () => {
+    mockFetch({ itens: [{ codigo: 'P1', nome: 'Primeira' }], truncado: true });
+    render(<PlanoContasClient inicial={[]} />);
+    await userEvent.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    expect(await screen.findByText('Refine a busca para ver mais contas.')).toBeInTheDocument();
+  });
+
+  it('mostra a falha do backend em vez de combo vazio silencioso', async () => {
+    mockFetch({ falha: { ok: false, status: 500, text: async () => JSON.stringify({ message: 'Falha ao carregar as contas' }) } as Response });
+    render(<PlanoContasClient inicial={[]} />);
+    await userEvent.click(screen.getByRole('button', { name: '+ Novo registro' }));
+    expect(await screen.findByText('Falha ao carregar as contas')).toBeInTheDocument();
+  });
+});
+```
+
+`app/frontend/__tests__/bff-plano-opcoes-pai.test.ts`:
+
+```ts
+const mockApiFetch = jest.fn();
+
+jest.mock('next/server', () => ({
+  NextRequest: class {
+    nextUrl: URL;
+    constructor(url: string) { this.nextUrl = new URL(url); }
+  },
+  NextResponse: class {
+    status: number;
+    constructor(_corpo: unknown, init?: { status?: number }) { this.status = init?.status ?? 200; }
+  },
+}));
+jest.mock('@/lib/api', () => ({ apiFetch: (...args: unknown[]) => mockApiFetch(...args) }));
+
+import { NextRequest } from 'next/server';
+import { GET } from '@/app/api/contabilidade/plano/opcoes-pai/route';
+
+it('repassa a consulta ao backend e devolve o status dele', async () => {
+  mockApiFetch.mockResolvedValue({ status: 403, text: async () => '{"message":"Forbidden"}' });
+  const res = await GET(new NextRequest('http://interno/api/contabilidade/plano/opcoes-pai?q=cx') as never);
+  expect(mockApiFetch).toHaveBeenCalledWith('/contabilidade/plano/opcoes-pai?q=cx', { method: 'GET' });
+  expect(res.status).toBe(403);
+});
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Em `app/backend`: `npx jest test/integration/plano-contas.e2e-spec.ts --runInBand`. Em `app/frontend`: `npx jest __tests__/plano-contas-opcoes-pai.test.tsx __tests__/bff-plano-opcoes-pai.test.ts`.
+
+Expected: FAIL em todos. Backend: `LIMITE_OPCOES_PAI` não é exportado de `vigencia` (erro de tipo do ts-jest); sem o import, `GET /contabilidade/plano/opcoes-pai` responde 404 em vez de 200, 403 e 401. Frontend: a rota `opcoes-pai/route` não existe e o combo ainda é montado de `contas`.
+
+- [ ] **Step 3: Write minimal implementation**
+
+`vigencia.ts`: trocar a linha de import do `drizzle-orm` por `import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';` e acrescentar ao final do arquivo:
+
+```ts
+/** Teto da lista de opções de conta pai; acima dele a busca (`q`) reduz o resultado. */
+export const LIMITE_OPCOES_PAI = 50;
+
+/**
+ * Contas que o backend aceitaria como pai: a última versão decidida (a mesma de
+ * `ultimaVersaoDecidida`) é APPROVED e sintética. Não depende de página nem de filtro da grade.
+ * Uma consulta só (DISTINCT ON) em vez de uma por conta. `q` filtra por código ou nome, sem caixa;
+ * `%`, `_` e `\` do texto são literais.
+ */
+export async function opcoesPaiVigentes(
+  executor: Pick<NodePgDatabase<typeof schema>, 'execute'>,
+  q: string,
+  limite: number,
+) {
+  const padrao = `%${q.replace(/[\\%_]/g, '\\$&')}%`;
+  const resultado = await executor.execute(sql`
+    select d.codigo, d.nome
+      from (
+        select distinct on (c.id) c.codigo, v.nome, v.classificacao, v.situacao
+          from contas_contabeis c
+          join conta_versoes v on v.conta_id = c.id
+         where c.deleted_at is null
+           and v.deleted_at is null
+           and v.situacao in ('APPROVED', 'SUSPENDED')
+         order by c.id, v.numero desc
+      ) d
+     where d.situacao = 'APPROVED'
+       and d.classificacao = 'sintetica'
+       and (${q} = '' or d.codigo ilike ${padrao} escape '\\' or d.nome ilike ${padrao} escape '\\')
+     order by d.codigo
+     limit ${limite}`);
+  return resultado.rows as { codigo: string; nome: string }[];
+}
+```
+
+`plano.dto.ts`: acrescentar depois de `listarPlanoSchema` e junto aos tipos:
+
+```ts
+export const opcoesPaiSchema = z.object({ q: z.string().trim().max(180).default('') });
+export type OpcoesPaiQuery = z.infer<typeof opcoesPaiSchema>;
+```
+
+`plano.service.ts`: importar `LIMITE_OPCOES_PAI` e `opcoesPaiVigentes` de `./vigencia` (junto de `ultimaVersaoDecidida`), `type OpcoesPaiQuery` de `./dto/plano.dto`, e acrescentar ao lado de `listarCentrosAtivos`:
+
+```ts
+  async listarOpcoesPai(query: OpcoesPaiQuery) {
+    const linhas = await opcoesPaiVigentes(this.db, query.q, LIMITE_OPCOES_PAI + 1);
+    return { itens: linhas.slice(0, LIMITE_OPCOES_PAI), truncado: linhas.length > LIMITE_OPCOES_PAI };
+  }
+```
+
+`plano.controller.ts`: importar `opcoesPaiSchema` e `type OpcoesPaiQuery` e acrescentar antes de `@Get('plano/:codigo/historico')`:
+
+```ts
+  @Get('plano/opcoes-pai')
+  @RequirePermissoes('CONTABILIDADE_PLANO_LER')
+  opcoesPai(@Query(new ZodValidationPipe(opcoesPaiSchema)) query: OpcoesPaiQuery) {
+    return this.plano.listarOpcoesPai(query);
+  }
+```
+
+`app/frontend/src/app/api/contabilidade/plano/opcoes-pai/route.ts`:
+
+```ts
+import { NextRequest } from 'next/server';
+import { repassar } from '@/lib/bff';
+
+export async function GET(req: NextRequest) {
+  return repassar(`/contabilidade/plano/opcoes-pai${req.nextUrl.search}`);
+}
+```
+
+`plano-contas-client.tsx`:
+
+1. `import { useEffect, useRef, useState } from 'react';` (L3) e, junto aos tipos (L64): `type OpcaoPai = { codigo: string; nome: string };`.
+2. Estados, ao lado de `centros` (L206):
+
+```tsx
+  const [paisOpcoes, setPaisOpcoes] = useState<OpcaoPai[]>([]);
+  const [paisTruncado, setPaisTruncado] = useState(false);
+  const [paiBusca, setPaiBusca] = useState('');
+  const pedidoPais = useRef(0);
+```
+
+3. Função ao lado de `pesquisarCentros`:
+
+```tsx
+  async function carregarPais(q: string) {
+    const pedido = (pedidoPais.current += 1);
+    const resposta = await fetch(`/api/contabilidade/plano/opcoes-pai?q=${encodeURIComponent(q)}`);
+    if (pedido !== pedidoPais.current) return;
+    if (!resposta.ok) {
+      setAviso(await lerMensagem(resposta));
+      return;
+    }
+    const corpo = await resposta.json() as { itens?: OpcaoPai[]; truncado?: boolean };
+    setPaisOpcoes(corpo.itens ?? []);
+    setPaisTruncado(corpo.truncado === true);
+  }
+```
+
+4. Em `abrirCriar` e `abrirEditar`, depois do `setDrawer(...)`: `setPaiBusca(''); void carregarPais('');`.
+5. Substituir o `<label htmlFor="conta-pai">` e o `<select id="conta-pai">` (L629 a L635) por:
+
+```tsx
+          <label htmlFor="conta-pai-busca">Buscar conta contábil</label>
+          <input id="conta-pai-busca" value={paiBusca} onChange={(evento) => { setPaiBusca(evento.target.value); void carregarPais(evento.target.value); }} />
+          <label htmlFor="conta-pai">Conta contábil</label>
+          <select id="conta-pai" ref={(elemento) => { elemento?.setAttribute('placeholder', 'Selecione conta contábil'); }} value={form.contaPaiCodigo} onChange={(evento) => setForm({ ...form, contaPaiCodigo: evento.target.value })}>
+            <option value="">Selecione conta contábil</option>
+            {form.contaPaiCodigo && !paisOpcoes.some((opcao) => opcao.codigo === form.contaPaiCodigo) && (
+              <option value={form.contaPaiCodigo}>{form.contaPaiCodigo}</option>
+            )}
+            {paisOpcoes.filter((opcao) => !(drawer === 'editar' && opcao.codigo === selecionada?.codigo)).map((opcao) => (
+              <option key={opcao.codigo} value={opcao.codigo}>{opcao.nome}</option>
+            ))}
+          </select>
+          {paisTruncado && <p>Refine a busca para ver mais contas.</p>}
+```
+
+O `<option>` extra mantém o pai já gravado quando a edição abre e ele não está entre as 50 primeiras; a própria conta não é oferecida como pai dela (o backend também recusa, Task 10). O campo de busca é o único acréscimo de UI e existe porque a lista é limitada; o `Pesquisar` do drawer continua só para o centro de custo.
+
+- [ ] **Step 4: Run to verify it passes**
+
+Em `app/backend`: `npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` e `npx tsc --noEmit`. Em `app/frontend`: `npx jest __tests__/plano-contas-opcoes-pai.test.tsx __tests__/bff-plano-opcoes-pai.test.ts __tests__/plano-contas-apresentacao.test.tsx` e `npx tsc --noEmit`. Expected: PASS e sem erro de tipo. Depois, com a pilha local no ar como na Task 7: `npx playwright test e2e/e09-t01-plano-contas.spec.ts`. Expected: PASS; a seleção do pai (`getByPlaceholder('Selecione conta contábil').selectOption`, spec L113) agora lê as opções do endpoint, e a conta pai aprovada antes aparece sem recarregar a grade.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add app/backend/src/modules/contabilidade/plano app/backend/test/integration/plano-contas.e2e-spec.ts app/frontend/src/app/api/contabilidade/plano/opcoes-pai "app/frontend/src/app/(admin)/erp/contabilidade/plano-de-contas/plano-contas-client.tsx" app/frontend/__tests__/plano-contas-opcoes-pai.test.tsx app/frontend/__tests__/bff-plano-opcoes-pai.test.ts
+git commit -m @"
+fix(e09-t01): combo de conta pai vem de endpoint próprio, não da grade
+
+### Descrição Detalhada:
+Cria GET /contabilidade/plano/opcoes-pai (CONTABILIDADE_PLANO_LER) com as contas sintéticas cuja última versão decidida é APPROVED, busca por código ou nome, teto de 50 e sem identificador. O client carrega as opções ao abrir o drawer e ao buscar.
+
+### Motivo da Mudança:
+O combo usava a página corrente da grade, já filtrada. Pai válido em outra página, sob filtro ou com a v2 em rascunho não podia ser escolhido, contra a regra de vigência da Task 9.
+
+### Impacto:
+Sem permissão, perfil, menu nem migration. A tela passa a depender do novo endpoint para escolher o pai; o backend segue como autoridade da hierarquia.
+"@
+```
+
+## Task 18: Renumeração da migration para 0049 (condicional, sempre a última)
 
 **Pré-condição explícita.** Executar somente quando o coordenador indicar. A condição é `origin/develop` conter as migrations `0044` a `0048` da trilha E01, a última sendo `0048_e01_t05_homologacoes_regras`. Verificação, em `F:/Projetos/AlphaCarnes/.worktrees/e09-t01`:
 
@@ -2893,9 +3291,30 @@ Saída esperada: cinco linhas, de `0044_...sql` a `0048_e01_t05_homologacoes_reg
 - Delete: `app/backend/src/database/migrations/0048_e09_t01_plano_contas.sql`
 - Create (gerado): `app/backend/src/database/migrations/0049_e09_t01_plano_contas.sql` e `meta/0049_snapshot.json`
 - Modify (gerado): `app/backend/src/database/migrations/meta/_journal.json`
+- Modify (conflitos semânticos do merge, tabela abaixo): `app/backend/src/common/rbac/menus-canonicos.ts`, `perfil-permissoes.snapshot.json`, `perfil-menus.snapshot.json`, `app/frontend/src/lib/menu-v2.ts`, `app/frontend/__tests__/menu-rbac.test.ts`, `app/frontend/__tests__/menu-v2.test.ts`, `app/frontend/e2e/shell-ds.spec.ts`
 - Create: `app/backend/test/unit/e09-t01-migration-meta.spec.ts`
 
 Estado lido: o ramo tem `0048_e09_t01_plano_contas.sql` (65 linhas: três `CREATE TABLE`, sete índices, três `CREATE TRIGGER`), `meta/0048_snapshot.json` e a entrada `idx 44` com a tag `0048_e09_t01_plano_contas` no journal. No `origin/develop` o prefixo `0048` e o `idx` seguem a E01; o merge conflita em `meta/_journal.json` e `meta/0048_snapshot.json`. O teste segue o precedente `test/unit/onda11-migrations-meta.spec.ts`.
+
+### Conflitos previstos no merge com a trilha E01
+
+Lidos em `F:/Projetos/AlphaCarnes/.worktrees/e01-t05` (HEAD `35848f3`, trilha E01 completa, base `a698824`) e nesta branch (`143aec2`). A E01 deixa 44 rotas (39 operacionais e 5 em `/fiscal/`), 131 pares perfil x rota e 10 grupos com `FISCAL` em 8º. Esta fatia acrescenta 1 rota só do administrador. O resultado do merge tem de ser **11 grupos, 45 rotas e 132 pares** (126 da matriz v1.1, 5 fiscais e 1 do plano de contas), com `FISCAL` antes de `CONTABILIDADE` (ADR-ERP-024 L49 a L64: Fiscal 8º, Contabilidade 11º dos 13 grupos possíveis).
+
+| Arquivo | E01 | Esta fatia | Resolução |
+|---|---|---|---|
+| `menus-canonicos.ts` | divide em `MENUS_OPERACIONAIS` (39), `MENUS_ERP` (5 `/fiscal/`) e `MENUS_CANONICOS = [...MENUS_OPERACIONAIS, ...MENUS_ERP]` | insere `/erp/contabilidade/plano-de-contas` dentro do array de 39 (L33) | Pode mesclar sem marcador de conflito e ainda assim errar, porque a rota cairia em `MENUS_OPERACIONAIS` (40). Mover a rota para o fim de `MENUS_ERP`; `MENUS_OPERACIONAIS` volta a 39. O array do gestor segue sem a rota |
+| `perfil-permissoes.snapshot.json` | `FISCAL_*` nos perfis que a E01 definiu (219 linhas alteradas) | `CONTABILIDADE_PLANO_GERENCIAR` e `CONTABILIDADE_PLANO_LER` só no administrador | Lista ordenada: manter as duas contribuições na posição alfabética. Conferir com `perfil-permissoes-snapshot.spec.ts` |
+| `perfil-menus.snapshot.json` | 5 rotas `/fiscal/` no administrador | `/erp/contabilidade/plano-de-contas` no administrador | Lista ordenada: administrador com 45 rotas; nenhum outro perfil muda. Conferir com `menu-rbac.test.ts` |
+| `menu-v2.ts` | grupo `FISCAL` com 5 itens depois de `FATURAMENTO` | grupo `CONTABILIDADE` depois de `FATURAMENTO` | Ordem `FATURAMENTO`, `FISCAL`, `CONTABILIDADE`, `CADASTROS & REGRAS`, `ADMINISTRAÇÃO` |
+| `menu-v2.test.ts` | `GRUPOS` com `FISCAL` (10), `ITENS_ERP` com 5, total 44, `FISCAL` na 8ª posição | `GRUPOS` com `CONTABILIDADE` (10), `operacionais` filtrado pelo href do plano, total 40 | `GRUPOS` com 11, `FISCAL` em `MENU_V2[7]` e `CONTABILIDADE` em `MENU_V2[8]`; `semFiscal` passa a excluir também o grupo `CONTABILIDADE`; `ITENS_ERP` ganha o 6º item `['CONTABILIDADE', 'Plano de contas e centros de custo', '/erp/contabilidade/plano-de-contas']` e o `it` que compara só o grupo `FISCAL` compara os 5 primeiros; totais 39 e 45 |
+| `menu-rbac.test.ts` | `MATRIZ_RASTREABILIDADE` 39 rotas e 126 pares; `MATRIZ_ERP` 5; `MATRIZ_COMPLETA` 44 e 131; filtro `semFiscal` por `/fiscal/` | rota do plano dentro de `MATRIZ_RASTREABILIDADE` (40 e 127) | A rota sai de `MATRIZ_RASTREABILIDADE` e entra em `MATRIZ_ERP` (6 e 6); `MATRIZ_RASTREABILIDADE` volta a 39 e 126; `MATRIZ_COMPLETA` 45 e 132; o filtro `semFiscal` exclui `/fiscal/` e `/erp/`; as somas `130 + 1` das duas asserções viram 132 |
+| `shell-ds.spec.ts` | `GRUPOS` com `FISCAL` (10) | `GRUPOS` com `CONTABILIDADE` (10) e título do teste | `GRUPOS` com 11 na ordem acima; título do `test` com 11 grupos |
+| `permissoes.ts`, `perfis.service.ts` (`modulo: 'Fiscal'` e prefixo `CONTABILIDADE_`), `schema/index.ts`, `app.module.ts`, `realtime/events/eventos.ts` | acréscimos | acréscimos | Aditivos: manter os dois lados |
+| `realtime.gateway.ts` | `podeAssinar(ws, room)` com rooms fiscais (+99 linhas) e `test/unit/realtime-gateway-rooms.spec.ts` | `podeAssinar(ws, room)` com a room `contabilidade-plano` | Os dois mudam a mesma assinatura. Manter as regras das duas rooms e rodar `realtime-gateway-rooms.spec.ts` e o `it` da room `contabilidade-plano` de `plano-contas.e2e-spec.ts` |
+
+**Regra de recomputo.** Depois de resolver, os números não são copiados do plano: são recontados nos arquivos. `ROTAS_CANONICAS.length`, a soma de `menusDe(perfil)` nos 11 perfis e `MENU_V2.length` têm de dar 45, 132 e 11. Cada teste de menu que citava 39, 40, 44, 126, 127 ou 131 passa a usar o valor recontado, nunca um valor ajustado até passar.
+
+**Critério de parada (devolver ao coordenador, sem commitar o merge).** (a) Os totais recontados forem diferentes de 11 grupos, 45 rotas e 132 pares. (b) `FISCAL` não ficar antes de `CONTABILIDADE`, ou outro grupo mudar de posição. (c) Qualquer perfil, além do administrador, ganhar a rota do plano de contas ou uma permissão `CONTABILIDADE_PLANO_*`, ou algum perfil perder uma permissão `FISCAL_*` que a E01 deu. (d) `MENUS_OPERACIONAIS` deixar de ter 39 itens. (e) Conflito em arquivo fora da tabela, ou conflito que exija escolher entre duas regras (e não somar as duas). (f) `perfil-permissoes-snapshot.spec.ts`, `menu-rbac.test.ts`, `menu-v2.test.ts` ou `realtime-gateway-rooms.spec.ts` falharem depois do recomputo.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2935,6 +3354,12 @@ describe('migration do plano de contas (E09-T01)', () => {
       expect(sql).toContain(`CREATE TRIGGER trg_${tabela}_updated_at`);
     }
   });
+
+  it('cada CREATE TRIGGER é precedido pela linha --> statement-breakpoint', () => {
+    const sql = readFileSync(path.join(MIGRATIONS, '0049_e09_t01_plano_contas.sql'), 'utf8');
+    expect(sql.match(/CREATE TRIGGER/g)).toHaveLength(3);
+    expect(sql.match(/-->\s*statement-breakpoint\r?\nCREATE TRIGGER/g)).toHaveLength(3);
+  });
 });
 ```
 
@@ -2951,7 +3376,7 @@ git show "${antes}:app/backend/src/database/migrations/0048_e09_t01_plano_contas
 git merge origin/develop
 ```
 
-Conflitos esperados e resolução (`--theirs` é o `origin/develop` durante o merge):
+Conflitos esperados e resolução conforme a tabela acima. Para os dois arquivos de migration (`--theirs` é o `origin/develop` durante o merge):
 
 ```powershell
 git checkout --theirs app/backend/src/database/migrations/meta/_journal.json app/backend/src/database/migrations/meta/0048_snapshot.json
@@ -2960,7 +3385,7 @@ git rm -f app/backend/src/database/migrations/0048_e09_t01_plano_contas.sql
 if (Select-String -Path app/backend/src/database/migrations/meta/_journal.json -Pattern 'e09' -Quiet) { throw 'journal ainda cita e09' }
 ```
 
-Conflito em outro arquivo: resolver apenas mantendo as duas versões quando o arquivo for lista aditiva (`schema/index.ts`, `app.module.ts`, `permissoes.ts`, `menus-canonicos.ts`, `eventos.ts`); parar se o conflito exigir escolher entre duas regras. Depois: `git commit --no-edit`.
+Depois de resolver os demais arquivos pela tabela e recontar os totais (regra de recomputo), rodar `npx jest __tests__/menu-rbac.test.ts __tests__/menu-v2.test.ts` em `app/frontend` e `npx jest src/common/rbac test/unit/realtime-gateway-rooms.spec.ts` em `app/backend`. Só então `git commit --no-edit`. Qualquer item do critério de parada acima: `git merge --abort` e devolver ao coordenador.
 
 Gerar com o drizzle-kit (o diff é entre o último snapshot do develop e `contabilidade-plano.schema.ts`):
 
@@ -2978,30 +3403,54 @@ Comparar o SQL e repor os triggers (o drizzle-kit não os emite):
 git diff --no-index --ignore-all-space "$env:TEMP/e09-0048-original.sql" src/database/migrations/0049_e09_t01_plano_contas.sql
 ```
 
-A única diferença aceitável são os três `CREATE TRIGGER` ausentes no arquivo novo; qualquer diferença em tabela, coluna, índice ou `CHECK` é parada. Se faltarem só os triggers, acrescentar ao final de `0049_e09_t01_plano_contas.sql` o bloco idêntico ao final do original:
+A única diferença aceitável são os três `CREATE TRIGGER` ausentes no arquivo novo; qualquer diferença em tabela, coluna, índice ou `CHECK` é parada. Se faltarem só os triggers, acrescentar ao final de `0049_e09_t01_plano_contas.sql` o bloco idêntico ao final do original, **incluindo a linha `--> statement-breakpoint` que precede o primeiro `CREATE TRIGGER`** (no original é a linha 54, sozinha, depois do último índice):
 
 ```powershell
 $original = Get-Content "$env:TEMP/e09-0048-original.sql" -Raw
-$bloco = $original.Substring($original.IndexOf('CREATE TRIGGER trg_centros_custo_updated_at'))
+$posTrigger = $original.IndexOf('CREATE TRIGGER trg_centros_custo_updated_at')
+$posQuebra = $original.LastIndexOf('--> statement-breakpoint', $posTrigger)
+if ($posTrigger -lt 0 -or $posQuebra -lt 0) { throw 'bloco de triggers não encontrado no original' }
+$bloco = $original.Substring($posQuebra)
 Add-Content src/database/migrations/0049_e09_t01_plano_contas.sql ("`n" + $bloco)
 ```
 
-Conferir a cadeia do snapshot e aplicar em banco vazio e descartável (distinto do banco da fatia):
+O `it` "cada CREATE TRIGGER é precedido pela linha --> statement-breakpoint" do Step 1 trava o resultado: sem a linha, o drizzle-orm executaria o último `CREATE UNIQUE INDEX` e o primeiro `CREATE TRIGGER` na mesma instrução.
+
+Conferir a cadeia do snapshot e aplicar em banco vazio e descartável (distinto do banco da fatia). O `DATABASE_URL` da fatia é guardado antes e reposto no fim, mesmo com erro:
 
 ```powershell
+$urlFatia = $env:DATABASE_URL
 node -e "const m='./src/database/migrations/meta/';const a=require(m+'0048_snapshot.json'),b=require(m+'0049_snapshot.json');if(b.prevId!==a.id)process.exit(1)"
 docker exec alphacarnes-postgres-1 psql -U alphacarnes -d postgres -c "CREATE DATABASE alphacarnes_e09_t01_mig"
-$env:DATABASE_URL = 'postgres://alphacarnes:alphacarnes@localhost:15433/alphacarnes_e09_t01_mig'
-npm run db:migrate
-docker exec alphacarnes-postgres-1 psql -U alphacarnes -d alphacarnes_e09_t01_mig -c "select to_regclass('public.conta_versoes'), to_regclass('public.centros_custo'), to_regclass('public.contas_contabeis')"
-docker exec alphacarnes-postgres-1 psql -U alphacarnes -d postgres -c "DROP DATABASE alphacarnes_e09_t01_mig"
+try {
+  $env:DATABASE_URL = 'postgres://alphacarnes:alphacarnes@localhost:15433/alphacarnes_e09_t01_mig'
+  npm run db:migrate
+  docker exec alphacarnes-postgres-1 psql -U alphacarnes -d alphacarnes_e09_t01_mig -c "select to_regclass('public.conta_versoes'), to_regclass('public.centros_custo'), to_regclass('public.contas_contabeis')"
+} finally {
+  $env:DATABASE_URL = $urlFatia
+  docker exec alphacarnes-postgres-1 psql -U alphacarnes -d postgres -c "DROP DATABASE IF EXISTS alphacarnes_e09_t01_mig"
+}
 ```
 
-Expected: `db:migrate` com código 0 e as três tabelas existentes.
+Expected: `db:migrate` com código 0 e as três tabelas existentes. Se `$urlFatia` estiver vazio aqui, a variável vem do `.env` da raiz: ler de lá em vez de seguir sem ela.
 
 - [ ] **Step 4: Run to verify it passes**
 
-Em `app/backend`: `npx jest test/unit/e09-t01-migration-meta.spec.ts`, `npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` e `npm run test:cov` (gate de 80%). Expected: PASS nos três.
+O banco da fatia já tem a `0048_e09_t01_plano_contas` registrada no controle do drizzle e não tem as tabelas da E01; migrar por cima colidiria. Recriar e migrar, **só se o nome casar com o sufixo de teste da Task 16**, e só então rodar os testes:
+
+```powershell
+Set-Location F:/Projetos/AlphaCarnes/.worktrees/e09-t01/app/backend
+if (-not $urlFatia) { throw 'DATABASE_URL da fatia ausente: definir antes de continuar' }
+$banco = ([Uri]$urlFatia).AbsolutePath.TrimStart('/')
+if ($banco -notmatch '_(e2e|test|e\d{2}_t\d{2})$') { throw "banco $banco não é de teste: recriação recusada" }
+docker exec alphacarnes-postgres-1 psql -U alphacarnes -d postgres -c "DROP DATABASE IF EXISTS $banco WITH (FORCE)"
+docker exec alphacarnes-postgres-1 psql -U alphacarnes -d postgres -c "CREATE DATABASE $banco"
+$env:DATABASE_URL = $urlFatia
+npm run db:migrate
+npm run db:seed
+```
+
+Em `app/backend`: `npx jest test/unit/e09-t01-migration-meta.spec.ts`, `npx jest test/integration/plano-contas.e2e-spec.ts --runInBand` e `npm run test:cov` (gate de 80%). Em `app/frontend`: `npx jest`. Expected: PASS nos quatro. Sem a recriação, `test:cov` falha por tabelas da E01 ausentes e a `0049` colide com a `0048` já aplicada.
 
 - [ ] **Step 5: Commit**
 
@@ -3014,14 +3463,16 @@ chore(e09-t01): renumera a migration do plano de contas para 0049
 Após o merge de origin/develop (migrations 0044 a 0048 da E01), remove a 0048_e09_t01 e seu snapshot e regenera como 0049_e09_t01_plano_contas com o drizzle-kit, mantendo o SQL equivalente e os três triggers set_updated_at.
 
 ### Motivo da Mudança:
-O ordinal 0048 passou a pertencer à E01 (0048_e01_t05_homologacoes_regras). O teste de meta confere a tag, o idx e os arquivos.
+O ordinal 0048 passou a pertencer à E01 (0048_e01_t05_homologacoes_regras). O teste de meta confere a tag, o idx, os arquivos e a linha statement-breakpoint antes de cada trigger.
 
 ### Impacto:
 Banco novo aplica a 0049 sem diferença de esquema. Quem já aplicou a 0048 da E09 em banco local recria o banco de teste da fatia.
 "@
 ```
 
-**Rollback da Task 17.** Antes do `git commit --no-edit` do merge: `git merge --abort`. Depois do commit e sem push, com autorização do coordenador: `git reset --hard $antes`. Com push feito: `git revert -m 1 <sha-do-merge>` e commit corretivo, nunca force push.
+Os arquivos de menu e de RBAC resolvidos no merge entram no commit do próprio merge (`git commit --no-edit`, Step 3), não neste.
+
+**Rollback da Task 18** (o mesmo critério do rollback do delta). Antes do `git commit --no-edit` do merge: `git merge --abort`. Depois do commit do merge, com ou sem push: `git revert -m 1 <sha-do-merge>` e commit corretivo, com autorização do coordenador; nunca `reset --hard` nem force push. Se só o commit de renumeração (Step 5) estiver errado: `git revert <sha-do-commit>`.
 
 ---
 
@@ -3040,5 +3491,6 @@ Banco novo aplica a 0049 sem diferença de esquema. Quem já aplicou a 0048 da E
 - Enums de `componentes.js` L1688–L1708 e L1866–L1886 estão no CHECK da Task 2 e nos rótulos da Task 6.
 - Review Focus 1–5 têm teste na Task 4, e o foco 3 tem teste na Task 3.
 - `apresentar` da Task 3 é o contrato que a Task 5 e a Task 6 consomem, com os mesmos nomes de campo.
-- r3: cada achado B1 a B4, cada menor M1 a M3, M5, M6 e AD-25 item 3 tem task e teste no mapa da seção "Correções da revisão crítica (r3)". Não há migration nas Tasks 8 a 16. A Task 17 é condicional e só roda por indicação do coordenador.
-- r3: nenhuma task toca `docs/execucao/` nem arquivo da E09-T02. As pendências P-r3-1 e P-r3-2 não têm task e estão registradas na seção.
+- r3: cada achado B1 a B4, cada menor M1 a M3, M5, M6 e AD-25 item 3 tem task e teste no mapa da seção "Correções da revisão crítica (r3)". Não há migration nas Tasks 8 a 17. A Task 18 é condicional, é sempre a última e só roda por indicação do coordenador.
+- r3: nenhuma task toca `docs/execucao/` nem arquivo da E09-T02. A pendência P-r3-1 não tem task e está registrada na seção; a P-r3-2 virou a Task 17.
+- r4: cada item do veredito do Portão 1 r3 (1 bloqueante e 8 menores) tem correção na subseção "Portão 1 r3 e correção (r4)". A Task 17 não cria permissão, perfil nem menu, e a Task 18 continua a última. Nenhuma task afirma tempo real na tela.
