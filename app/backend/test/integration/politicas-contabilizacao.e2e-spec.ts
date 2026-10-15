@@ -125,6 +125,18 @@ describe('Políticas de contabilização', () => {
     await aprovarDireto(codigo);
   }
 
+  async function novaVersaoDaConta(codigo: string, numero: number, situacao: 'SUSPENDED' | 'DRAFT' | 'REVIEW' | 'REJECTED') {
+    await db.execute(sql`
+      insert into conta_versoes (conta_id, numero, nome, classificacao, natureza, grupo, conta_pai_id,
+                                 centro_custo_id, vigencia_inicio, vigencia_fim, situacao, justificativa, responsavel_id)
+      select v.conta_id, ${numero}, v.nome, v.classificacao, v.natureza, v.grupo, v.conta_pai_id,
+             v.centro_custo_id, v.vigencia_inicio, v.vigencia_fim, ${situacao}, 'caso de teste', v.responsavel_id
+        from conta_versoes v
+        join contas_contabeis c on c.id = v.conta_id
+       where c.codigo = ${codigo} and v.numero = 1
+    `);
+  }
+
   it('recusa tipo fora do enum, competência fora do dia 01 e simulação desbalanceada', async () => {
     await limparPlano();
     const centro = await db.insert(centrosCusto).values({ codigo: 'CT1', nome: 'Operação industrial' }).returning();
@@ -417,4 +429,59 @@ describe('entrada inválida responde 400 e não grava', () => {
     expect(res.status).toBe(404);
   });
 });
+
+  describe('conta cuja versão em vigor está suspensa', () => {
+    it('configurar recusa a conta com 422 e não grava a política', async () => {
+      await prepararContasAnaliticas();
+      await novaVersaoDaConta('1.1.01', 2, 'SUSPENDED');
+      const res = await request(srv()).post('/contabilidade/politicas').set('Cookie', adminCookies).send(dtoConfigurar());
+      expect(res.status).toBe(422);
+      expect(res.body.message).toEqual({ message: 'mapeamento ausente', codigo: 'LIQUIDACAO-2026-10' });
+      expect(await db.select().from(politicasContabilizacao)).toHaveLength(0);
+    });
+
+    it('a conta suspensa não aparece nas opções do combo', async () => {
+      await prepararContasAnaliticas();
+      await novaVersaoDaConta('1.1.01', 2, 'SUSPENDED');
+      const res = await request(srv()).get('/contabilidade/politicas/opcoes').set('Cookie', adminCookies);
+      expect(res.status).toBe(200);
+      const codigos = (res.body.contas as { codigo: string }[]).map((conta) => conta.codigo);
+      expect(codigos).not.toContain('1.1.01');
+      expect(codigos).toContain('2.1.01');
+    });
+
+    it('simular recusa quando a conta foi suspensa depois da configuração', async () => {
+      await prepararContasAnaliticas();
+      const politica = await service.configurar(dtoConfigurar(), autorId);
+      await novaVersaoDaConta('1.1.01', 2, 'SUSPENDED');
+      await expect(service.simular(politica.codigo, { numero: 1, valor: '10.00', justificativa: 'simula' }, autorId))
+        .rejects.toMatchObject({ status: 422, response: { message: 'mapeamento ausente', codigo: politica.codigo } });
+      expect(await db.select().from(politicaSimulacoes)).toHaveLength(0);
+    });
+
+    it.each(['1.1.01', '2.1.01'])(
+      'aprovar recusa quando a conta %s foi suspensa depois da simulação e a regra continua em rascunho',
+      async (codigoConta) => {
+        await prepararContasAnaliticas();
+        const politica = await service.configurar(dtoConfigurar(), autorId);
+        await service.simular(politica.codigo, { numero: 1, valor: '10.00', justificativa: 'simula' }, autorId);
+        await novaVersaoDaConta(codigoConta, 2, 'SUSPENDED');
+        await expect(service.aprovar(politica.codigo, { numero: 1, justificativa: 'aprova' }, outraPessoaId))
+          .rejects.toMatchObject({ status: 422, response: { message: 'mapeamento ausente', codigo: politica.codigo } });
+        expect((await service.obter(politica.codigo)).situacao).toBe('DRAFT');
+      },
+    );
+
+    it.each(['DRAFT', 'REVIEW', 'REJECTED'] as const)(
+      'guarda: uma versão %s mais nova não derruba a conta em vigor nem tira a conta das opções',
+      async (situacao) => {
+        await prepararContasAnaliticas();
+        await novaVersaoDaConta('1.1.01', 2, situacao);
+        const politica = await service.configurar(dtoConfigurar(), autorId);
+        expect(politica.situacao).toBe('DRAFT');
+        const opcoes = await service.listarOpcoes();
+        expect(opcoes.contas.map((conta) => conta.codigo)).toContain('1.1.01');
+      },
+    );
+  });
 });

@@ -182,29 +182,27 @@ export class PlanoContasService {
 
   async listarContasAnaliticasVigentes(): Promise<{ codigo: string; nome: string }[]> {
     const hoje = sql`(now() at time zone 'America/Sao_Paulo')::date`;
-    const linhas = await this.db.select({
+    // Mesma regra de plano/vigencia.ts (ultimaVersaoDecidida): vale a versão de maior numero entre APPROVED e SUSPENDED.
+    return this.db.select({
       codigo: contasContabeis.codigo,
       nome: contaVersoes.nome,
-      numero: contaVersoes.numero,
     }).from(contasContabeis)
       .innerJoin(contaVersoes, and(
         eq(contaVersoes.contaId, contasContabeis.id),
+        isNull(contaVersoes.deletedAt),
+        sql`${contaVersoes.numero} = (
+          select max(v2.numero) from conta_versoes v2
+          where v2.conta_id = ${contasContabeis.id}
+            and v2.deleted_at is null
+            and v2.situacao in ('APPROVED', 'SUSPENDED')
+        )`,
         eq(contaVersoes.situacao, 'APPROVED'),
         eq(contaVersoes.classificacao, 'analitica'),
-        isNull(contaVersoes.deletedAt),
         sql`${contaVersoes.vigenciaInicio} <= ${hoje}`,
         sql`(${contaVersoes.vigenciaFim} is null or ${contaVersoes.vigenciaFim} >= ${hoje})`,
       ))
       .where(isNull(contasContabeis.deletedAt))
-      .orderBy(asc(contasContabeis.codigo), desc(contaVersoes.numero));
-    const vistas = new Set<string>();
-    const saida: { codigo: string; nome: string }[] = [];
-    for (const linha of linhas) {
-      if (vistas.has(linha.codigo)) continue;
-      vistas.add(linha.codigo);
-      saida.push({ codigo: linha.codigo, nome: linha.nome });
-    }
-    return saida;
+      .orderBy(asc(contasContabeis.codigo));
   }
 
   async listarOpcoesPai(query: OpcoesPaiQuery) {

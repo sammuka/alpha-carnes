@@ -19,6 +19,7 @@ import {
 import * as schema from '../../../database/schema';
 import { EVENTOS } from '../../../realtime/events/eventos';
 import { PlanoContasService } from '../plano/plano.service';
+import { ultimaVersaoDecidida } from '../plano/vigencia';
 import { balancear } from './centavos';
 import type {
   AprovarPoliticaDto,
@@ -571,6 +572,14 @@ export class PoliticasContabilizacaoService {
         isNull(politicaSimulacoes.deletedAt),
       )).limit(1);
     if (!simulacao) throw new RegraPoliticaException('mapeamento ausente', codigo);
+    const idsDasContas = [versao.contaDebitoId, versao.contaCreditoId];
+    const codigosDasContas = new Map((await tx.select({ id: contasContabeis.id, codigo: contasContabeis.codigo })
+      .from(contasContabeis).where(inArray(contasContabeis.id, idsDasContas))).map((c) => [c.id, c.codigo]));
+    for (const idConta of idsDasContas) {
+      const codigoConta = codigosDasContas.get(idConta);
+      if (!codigoConta) throw new RegraPoliticaException('mapeamento ausente', codigo);
+      await this.contaAnaliticaVigente(tx, codigoConta, codigo);
+    }
     const nova = primeiroOuFalha(await tx.update(politicaVersoes).set({
       situacao: 'APPROVED',
       aprovadorId: usuarioId,
@@ -604,18 +613,17 @@ export class PoliticasContabilizacaoService {
 
   private async contaAnaliticaVigente(tx: Tx, codigoConta: string, codigoPolitica: string) {
     const [conta] = await tx.select({ id: contasContabeis.id }).from(contasContabeis)
-      .innerJoin(contaVersoes, and(
-        eq(contaVersoes.contaId, contasContabeis.id),
-        eq(contaVersoes.situacao, 'APPROVED'),
-        eq(contaVersoes.classificacao, 'analitica'),
-        isNull(contaVersoes.deletedAt),
-        sql`${contaVersoes.vigenciaInicio} <= ${HOJE}`,
-        sql`(${contaVersoes.vigenciaFim} is null or ${contaVersoes.vigenciaFim} >= ${HOJE})`,
-      ))
-      .where(and(eq(contasContabeis.codigo, codigoConta), isNull(contasContabeis.deletedAt)))
-      .orderBy(desc(contaVersoes.numero))
-      .limit(1);
-    if (!conta) throw new RegraPoliticaException('mapeamento ausente', codigoPolitica);
+      .where(and(eq(contasContabeis.codigo, codigoConta), isNull(contasContabeis.deletedAt))).limit(1);
+    const emVigor = conta ? await ultimaVersaoDecidida(tx, conta.id) : null;
+    if (!conta || !emVigor || emVigor.situacao !== 'APPROVED' || emVigor.classificacao !== 'analitica') {
+      throw new RegraPoliticaException('mapeamento ausente', codigoPolitica);
+    }
+    const [vigente] = await tx.select({ id: contaVersoes.id }).from(contaVersoes).where(and(
+      eq(contaVersoes.id, emVigor.id),
+      sql`${contaVersoes.vigenciaInicio} <= ${HOJE}`,
+      sql`(${contaVersoes.vigenciaFim} is null or ${contaVersoes.vigenciaFim} >= ${HOJE})`,
+    )).limit(1);
+    if (!vigente) throw new RegraPoliticaException('mapeamento ausente', codigoPolitica);
     return conta;
   }
 
