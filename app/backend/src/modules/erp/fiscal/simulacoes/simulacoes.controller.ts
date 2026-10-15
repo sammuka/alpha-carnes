@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { z } from 'zod';
 import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser, type CurrentUserPayload } from '../../../../common/decorators/current-user.decorator';
@@ -24,6 +25,26 @@ const compararQuerySchema = z.object({ com: uuidSchema });
 @UseGuards(JwtAuthGuard, RbacGuard)
 export class SimulacoesController {
   constructor(private readonly simulacoes: SimulacoesFiscaisService) {}
+
+  @Get('simulacoes/contagens')
+  @RequirePermissoes('FISCAL_SIMULACOES_LER')
+  contagens(@Query(new ZodValidationPipe(listarSimulacoesSchema)) query: ListarSimulacoesQuery) {
+    return this.simulacoes.contagens(query);
+  }
+
+  @Get('simulacoes/exportacao')
+  @RequirePermissoes('FISCAL_SIMULACOES_LER')
+  async exportacao(
+    @Query(new ZodValidationPipe(listarSimulacoesSchema)) query: ListarSimulacoesQuery,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.simulacoes.exportar(query);
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="simulacoes.csv"',
+    });
+    return csv;
+  }
 
   @Get('simulacoes')
   @RequirePermissoes('FISCAL_SIMULACOES_LER')
@@ -52,6 +73,26 @@ export class SimulacoesController {
     return this.simulacoes.historico(id);
   }
 
+  @Get('simulacoes/:id/pre-condicoes')
+  @RequirePermissoes('FISCAL_SIMULACOES_LER')
+  preCondicoes(@Param('id', new ZodValidationPipe(uuidSchema)) id: string) {
+    return this.simulacoes.preCondicoes(id);
+  }
+
+  @Get('simulacoes/:id/memoria')
+  @RequirePermissoes('FISCAL_SIMULACOES_LER')
+  async memoria(
+    @Param('id', new ZodValidationPipe(uuidSchema)) id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.simulacoes.memoria(id);
+    res.set({
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="memoria.csv"',
+    });
+    return csv;
+  }
+
   @Get('simulacoes/:id')
   @RequirePermissoes('FISCAL_SIMULACOES_LER')
   detalhar(@Param('id', new ZodValidationPipe(uuidSchema)) id: string) {
@@ -77,5 +118,11 @@ export class SimulacoesController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     return this.simulacoes.novaVersao(id, dto, user.sub);
+  }
+
+  @Patch('simulacoes/:id')
+  @RequirePermissoes('FISCAL_SIMULACOES_GERENCIAR')
+  alterar(@Param('id', new ZodValidationPipe(uuidSchema)) id: string) {
+    return this.simulacoes.recusarAlteracao(id);
   }
 }

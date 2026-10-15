@@ -33,6 +33,7 @@ import { formatarPercentualPtBr } from '../regras/percentual';
 import { travarEnquadramento } from '../regras/regras.service';
 import { calcularMemoria, formatarDinheiroPtBr, formatarEscalaPtBr, rotuloCompetencia } from './decimal-memoria';
 import type { CriarSimulacaoDto, ListarSimulacoesQuery, NovaVersaoDto } from './dto/simulacao.dto';
+import { montarCsvGrade, montarCsvMemoria } from './exportacao-csv';
 import { montarExplicacao } from './explicacao';
 
 type Db = NodePgDatabase<typeof schema>;
@@ -81,6 +82,58 @@ export class SimulacoesFiscaisService {
 
   private get db(): Db {
     return this.drizzle.db;
+  }
+
+  async contagens(query: ListarSimulacoesQuery) {
+    const [linha] = await this.db
+      .select({
+        simulacoes: sql<number>`count(distinct ${simulacoesFiscais.codigo})::int`,
+        versoes: sql<number>`count(*)::int`,
+        baseDiferente: sql<number>`count(*) filter (where ${simulacoesFiscais.baseDifereBruto})::int`,
+      })
+      .from(simulacoesFiscais)
+      .innerJoin(clientes, eq(clientes.id, simulacoesFiscais.clienteId))
+      .innerJoin(produtos, eq(produtos.id, simulacoesFiscais.produtoId))
+      .innerJoin(estabelecimentos, eq(estabelecimentos.id, simulacoesFiscais.estabelecimentoId))
+      .innerJoin(operacoes, eq(operacoes.id, simulacoesFiscais.operacaoId))
+      .innerJoin(enquadramentosFiscais, eq(enquadramentosFiscais.id, simulacoesFiscais.enquadramentoId))
+      .innerJoin(regrasTributarias, eq(regrasTributarias.id, simulacoesFiscais.regraId))
+      .where(this.whereLista(query));
+    return {
+      simulacoes: linha?.simulacoes ?? 0,
+      versoes: linha?.versoes ?? 0,
+      baseDiferente: linha?.baseDiferente ?? 0,
+    };
+  }
+
+  async exportar(query: ListarSimulacoesQuery) {
+    const nomeCliente = nomeClienteSql();
+    const linhas = await this.db
+      .select({
+        cliente: nomeCliente,
+        produto: produtos.nome,
+        valor: simulacoesFiscais.valor,
+        valorLiquido: simulacoesFiscais.valorLiquido,
+        estabelecimento: estabelecimentos.nome,
+        operacao: operacoes.rotulo,
+      })
+      .from(simulacoesFiscais)
+      .innerJoin(clientes, eq(clientes.id, simulacoesFiscais.clienteId))
+      .innerJoin(produtos, eq(produtos.id, simulacoesFiscais.produtoId))
+      .innerJoin(estabelecimentos, eq(estabelecimentos.id, simulacoesFiscais.estabelecimentoId))
+      .innerJoin(operacoes, eq(operacoes.id, simulacoesFiscais.operacaoId))
+      .innerJoin(enquadramentosFiscais, eq(enquadramentosFiscais.id, simulacoesFiscais.enquadramentoId))
+      .innerJoin(regrasTributarias, eq(regrasTributarias.id, simulacoesFiscais.regraId))
+      .where(this.whereLista(query))
+      .orderBy(asc(nomeCliente));
+    return montarCsvGrade(linhas.map((linha) => ({
+      cliente: linha.cliente,
+      produto: linha.produto,
+      valor: formatarLista(linha.valor),
+      valorLiquido: formatarLista(linha.valorLiquido),
+      estabelecimento: linha.estabelecimento,
+      operacao: linha.operacao,
+    })));
   }
 
   async listar(query: ListarSimulacoesQuery) {
@@ -175,6 +228,52 @@ export class SimulacoesFiscaisService {
       classificacao: linha.classificacao,
       baseDifereBruto: linha.baseDifereBruto,
     });
+  }
+
+  async memoria(id: string) {
+    return montarCsvMemoria(await this.explicar(id));
+  }
+
+  async preCondicoes(id: string) {
+    const linha = await this.obter(this.db, id);
+    const dia = diaCompetencia(linha.competencia);
+    const [enquadramento] = await this.db.select({
+      situacao: enquadramentosFiscais.situacao,
+      deletedAt: enquadramentosFiscais.deletedAt,
+      vigenciaInicio: enquadramentosFiscais.vigenciaInicio,
+      vigenciaFim: enquadramentosFiscais.vigenciaFim,
+    }).from(enquadramentosFiscais).where(eq(enquadramentosFiscais.id, linha.enquadramentoId));
+    const [regra] = await this.db.select({
+      situacao: regrasTributarias.situacao,
+      deletedAt: regrasTributarias.deletedAt,
+      vigenciaInicio: regrasTributarias.vigenciaInicio,
+      vigenciaFim: regrasTributarias.vigenciaFim,
+    }).from(regrasTributarias).where(eq(regrasTributarias.id, linha.regraId));
+    const enquadramentoAtivo = Boolean(
+      enquadramento
+      && enquadramento.situacao === 'ATIVA'
+      && enquadramento.deletedAt == null
+      && cobre(enquadramento.vigenciaInicio, enquadramento.vigenciaFim, dia),
+    );
+    const regraVigente = Boolean(
+      regra
+      && regra.situacao === 'APROVADA'
+      && regra.deletedAt == null
+      && cobre(regra.vigenciaInicio, regra.vigenciaFim, dia),
+    );
+    return [
+      { codigo: 'ENQUADRAMENTO_ATIVO', atendida: enquadramentoAtivo, provisoria: false },
+      { codigo: 'REGRA_APROVADA_VIGENTE', atendida: regraVigente, provisoria: false },
+      { codigo: 'MEMORIA_SEM_DOCUMENTO', atendida: true, provisoria: false },
+      { codigo: 'DATAS_COMERCIAL_FISCAL_EFETIVA', atendida: false, provisoria: true },
+      {
+        codigo: 'DUPLA_APROVACAO',
+        atendida: false,
+        provisoria: true,
+        texto: 'Esta tela não aprova nem publica regra. O quórum numérico permanece provisório.',
+      },
+      { codigo: 'PERFIS_ALEM_ADMINISTRADOR', atendida: false, provisoria: true },
+    ];
   }
 
   async historico(id: string) {
