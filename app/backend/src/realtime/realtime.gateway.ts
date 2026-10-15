@@ -59,6 +59,7 @@ import {
   type CargaItemDivergentePayload,
   type CadastroFiscalAlteradoPayload,
   type EnquadramentoFiscalAlteradoPayload,
+  type RegraTributariaAlteradaPayload,
 } from './events/eventos';
 
 /** Socket autenticado: carrega o access token validado no handshake, inclusive `exp`. */
@@ -199,6 +200,15 @@ export class RealtimeGateway implements OnModuleInit, OnApplicationShutdown {
       this.broadcastRoom('fiscal-enquadramentos', EVENTOS.ENQUADRAMENTO_FISCAL_ALTERADO, payload);
     } catch (err) {
       this.logger.error(`Falha ao fazer broadcast de ${EVENTOS.ENQUADRAMENTO_FISCAL_ALTERADO}`, err as Error);
+    }
+  }
+
+  @OnEvent(EVENTOS.REGRA_TRIBUTARIA_ALTERADA)
+  handleRegraTributariaAlterada(payload: RegraTributariaAlteradaPayload): void {
+    try {
+      this.broadcastRoom('fiscal-regras', EVENTOS.REGRA_TRIBUTARIA_ALTERADA, payload);
+    } catch (err) {
+      this.logger.error(`Falha ao fazer broadcast de ${EVENTOS.REGRA_TRIBUTARIA_ALTERADA}`, err as Error);
     }
   }
 
