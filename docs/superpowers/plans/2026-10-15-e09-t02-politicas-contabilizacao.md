@@ -10,6 +10,7 @@
 | r2 | 2026-10-15 | planner | Portão 1 r1 (`c52c27b`) pediu ajustar: envelope do `AllExceptionsFilter`, vigência só na ficha, Situação fora da ordenação, lote na seleção múltipla e o spec de serviço fora da Task 3 |
 | r3 | 2026-10-15 | planner | revisão crítica preliminar independente (head `c4f99ee`, ramo `ebb40ed`): B2 conta suspensa aceita, B3 `ZodError` virando 500 e competência/valor inválidos, B7/AD-25 simulação 0,00, B8 Playwright (corrida do modal, sucesso sem confirmação do backend, dados fixos), `deletedAt` removido de `consulta()` e bloco de exceção fora da aba. Tasks 8–15 e seção "Correções da revisão crítica (r3)"; AD-25 (1), o vínculo de (2) e M7 registrados sem mudança |
 | r4 | 2026-10-15 | planner | Portão 1 r3 (plano `a0b65cc`, blob `e6d072c6…`) deu ajustar: B1 o combo `listarContasAnaliticasVigentes` é da própria T02 e a T01 r3 não o corrige (Task 9 passa a corrigi-lo, exceção só dessa função ao critério de parada 2); B2 paginação sem controle na tela (nova Task 15); B3 `Exportar` e `Exportar visão` sem download, CSV de 20 linhas e injeção de fórmula (nova Task 16); menores 4 a 9 nas Tasks 8, 9, 11, 13 e 14. O veredito chama as novas de Tasks 16 e 17; aqui ficam 15 e 16 para a renumeração condicional continuar a última (agora Task 17). Delta puro sobre a r3: Tasks 1–7, 10 e 12 não mudam |
+| r5 | 2026-10-15 | planner | Portão 1 r4 (plano `f38c2be`, blob `18bcd48c…`) deu ajustar: BLOQUEANTE `repassarArquivo` lia `text()` e perdia o BOM (Task 16 passa a repassar `arrayBuffer()` e o teste do BFF afirma EF BB BF); menores: `-2` vira `'-2` registrado como aceito (Task 16) e clique no link desabilitado sem requisição (Task 15). Delta puro sobre a r4: só Tasks 15 e 16, mapa e este histórico |
 
 **Goal:** Entregar a tela Políticas de contabilização (`/erp/contabilidade/politicas-de-contabilizacao`) em que o administrador configura o mapeamento de débito e crédito de um evento fonte, simula o evento com balanceamento exato e aprova a regra com outra pessoa, sem gravar diário, razão ou partida.
 
@@ -1749,13 +1750,21 @@ O que a T02 usa da T01:
 |---|---|---|---|
 | B1 — combo ainda lista conta suspensa; critério (b) e critério 2 em impasse | `plano.service.ts` L173–L198 (método criado pela T02 em `24d30b7`; a T01 r3 `143aec2` só trata `paiValido` e ciclo) | 9 | `politicas-contabilizacao.e2e-spec.ts`: "a conta suspensa não aparece nas opções do combo" |
 | B2 — registro 21+ inalcançável | `page.tsx` L8–L12 descarta `total`; cliente da Task 13 fixa `pagina: '1'`; `PAGINA = 20` em `politicas.service.ts` L36 | 15 | Jest: "Próxima página consulta pagina=2 e Anterior volta para a 1", "mudar a busca/situação/ordenação volta à página 1", "descarta a resposta antiga da página 2", "restaura a página do sessionStorage"; Playwright: "com mais de 20 políticas a página 2 é alcançada pela tela" |
-| B3 — Exportar não baixa; CSV de 20 linhas; fórmula não neutralizada; BFF força JSON | cliente L380 e L393 (`void fetch`); `politicas.service.ts` L376–L390 e `escapar` L387; `bff.ts` L11–L22 | 16 | Jest backend `celulaCsv` e "exporta a visão inteira"; integração "o endpoint devolve text/csv..."; Jest BFF `bff-politicas-exportar.test.ts`; Jest cliente "Exportar visão baixa o arquivo..."; Playwright com `waitForEvent('download')` |
+| B3 — Exportar não baixa; CSV de 20 linhas; fórmula não neutralizada; BFF força JSON | cliente L380 e L393 (`void fetch`); `politicas.service.ts` L376–L390 e `escapar` L387; `bff.ts` L11–L22 | 16 | Jest backend `celulaCsv` e "exporta a visão inteira"; integração "o endpoint devolve text/csv..."; Jest BFF `bff-politicas-exportar.test.ts` (inclui "repassa ... os bytes do backend, inclusive o BOM"); Jest cliente "Exportar visão baixa o arquivo..."; Playwright com `waitForEvent('download')` |
 | 4 — Task 8 mandava parar se um caso de 400 passasse antes, mas vários já passam | `configurarSchema` enum, `listarPoliticasSchema` `min(1)` e enums, `lote` pelo `ZodValidationPipe` (`politicas.controller.ts` L61–L65) | 8 | casos marcados `guarda:`; critério 1 só para os que hoje dão 500 |
 | 5 — Confirmar vira no-op silencioso quando a selecionada saiu da lista | `alvo()` L197–L201 contra `selecionada` L187 e o `return` L250 | 13 | "confirma na política exibida na ficha..." e "sem política na lista, Confirmar mostra aviso" |
 | 6 — restauração não repõe `ordenar`/`direcao`; GET extra sob StrictMode | efeito L160–L172 contra o save L175; guarda `primeiraRenderizacao` | 13 (e 15 para a página) | "restaura busca, ordenação e direção..." e "sob StrictMode não faz consulta extra ao montar" |
 | 7 — mutação que remove os dois `isNull` juntos | `consulta()` L467–L501 e `filtro()` L504 | 11 | dois testes, uma mutação para cada: "obter e histórico ignoram..." (mutação em `consulta`) e "listar, total e exportar ignoram..." (mutação em `filtro`) |
 | 8 — credenciais do Playwright divergem do seed; mensagem de commit com três frases | spec L28–L31 (`SEED_ADMIN_*` e senha fixa) contra `loginBackend` de `onda6-seed.ts` | 14 | o spec usa `ADMIN_EMAIL` e a senha devolvida por `loginBackend`; o commit leva uma só frase de causa |
 | 9 — `aprovarNaTx` não revalida contas | `politicas.service.ts` L571–L600 | 9 | "aprovar recusa quando a conta 1.1.01/2.1.01 foi suspensa depois da simulação" |
+
+### Achados do Portão 1 r4 (r5): achado, Task e teste
+
+| Item | Evidência | Task | Teste que falha antes e passa depois |
+|---|---|---|---|
+| BLOQUEANTE — `repassarArquivo` lia `text()`, que descarta o BOM; o Playwright (EF BB BF) falharia por construção | `Response('\uFEFFabc').text()` tem 3 caracteres, `arrayBuffer()` mantém os 3 bytes | 16 | Jest `bff-politicas-exportar.test.ts` "repassa ... os bytes do backend, inclusive o BOM" (mock com `text()` sem BOM e `arrayBuffer()` com EF BB BF; falha com a leitura via `text()`); Playwright da Task 16 (primeiros bytes EF BB BF) |
+| Menor (a) — `celulaCsv` prefixa também número negativo legítimo (`-2` vira `'-2`) | regex `^[=+\-@\t\r]` | 16 | caso `['-2', "'-2"]` do `it.each` de `celulaCsv`, com comentário de comportamento aceito |
+| Menor (b) — links `href="#"` com `preventDefault` e `aria-disabled` | Task 15, `PaginationLink` | 15 | "clique no link desabilitado não dispara requisição" (Anterior na página 1 sem `fetch`) e "não passa da última página" (Próxima na última) |
 
 Fora da r4 por decisão: nenhuma Task implementa `PaginationPrevious`/`PaginationNext` do DS (o texto fixo em inglês não serve) e a Task 15 usa `PaginationLink`; `plano-contas-client.tsx` (L531–L533) continua com botões simples, é arquivo da T01.
 
@@ -3397,6 +3406,16 @@ it('não passa da última página', async () => {
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
+it('clique no link desabilitado não dispara requisição', async () => {
+  const user = userEvent.setup();
+  const fetchMock = jest.fn();
+  global.fetch = fetchMock as unknown as typeof fetch;
+  render(<PoliticasContabilizacaoClient inicial={muitas(20)} totalInicial={45} />);
+  await user.click(screen.getByRole('link', { name: 'Página anterior' }));
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(screen.getByText('Página 1 de 3')).toBeInTheDocument();
+});
+
 it.each([
   ['a busca', async (user: ReturnType<typeof userEvent.setup>) => { await user.type(screen.getByLabelText('Buscar registros da lista'), 'x'); }, 'q=x'],
   ['a situação', async (user: ReturnType<typeof userEvent.setup>) => { await user.selectOptions(screen.getByLabelText('Filtrar situação'), 'DRAFT'); }, 'situacao=DRAFT'],
@@ -3642,6 +3661,7 @@ describe('celulaCsv', () => {
   it.each([
     ['=1+1', "'=1+1"],
     ['+SUM(A1)', "'+SUM(A1)"],
+    // Comportamento aceito: número negativo legítimo também recebe o apóstrofo; a célula do CSV é texto e nenhuma coluna é numérica.
     ['-2', "'-2"],
     ['@cmd', "'@cmd"],
     ['\t=tab', `"'\t=tab"`],
@@ -3718,8 +3738,8 @@ jest.mock('next/server', () => ({
   NextResponse: class {
     status: number;
     headers: Headers;
-    body: string | null;
-    constructor(body: string | null, init?: { status?: number; headers?: HeadersInit }) {
+    body: string | ArrayBuffer | null;
+    constructor(body: string | ArrayBuffer | null, init?: { status?: number; headers?: HeadersInit }) {
       this.body = body;
       this.status = init?.status ?? 200;
       this.headers = new Headers(init?.headers);
@@ -3732,14 +3752,18 @@ import { NextRequest } from 'next/server';
 import { GET } from '@/app/api/contabilidade/politicas/exportar/route';
 
 const csv = '\uFEFFCompetência;Situação\nOutubro de 2026;Rascunho';
+const bytesCsv = new TextEncoder().encode(csv);
+const buffer = bytesCsv.buffer.slice(bytesCsv.byteOffset, bytesCsv.byteOffset + bytesCsv.byteLength);
 
 beforeEach(() => mockApiFetch.mockReset());
 
-it('repassa o filtro, o text/csv e o Content-Disposition do backend', async () => {
+it('repassa o filtro, o text/csv, o Content-Disposition e os bytes do backend, inclusive o BOM', async () => {
   mockApiFetch.mockResolvedValue({
     ok: true,
     status: 200,
-    text: async () => csv,
+    // Como a Response real: text() decodifica e descarta o BOM; só arrayBuffer() mantém EF BB BF.
+    text: async () => csv.replace('\uFEFF', ''),
+    arrayBuffer: async () => buffer,
     headers: new Headers({
       'content-type': 'text/csv; charset=utf-8',
       'content-disposition': 'attachment; filename="politicas-de-contabilizacao.csv"',
@@ -3750,7 +3774,11 @@ it('repassa o filtro, o text/csv e o Content-Disposition do backend', async () =
   expect(resposta.status).toBe(200);
   expect(resposta.headers.get('content-type')).toBe('text/csv; charset=utf-8');
   expect(resposta.headers.get('content-disposition')).toBe('attachment; filename="politicas-de-contabilizacao.csv"');
-  expect((resposta as unknown as { body: string }).body).toBe(csv);
+  const corpo = (resposta as unknown as { body: ArrayBuffer }).body;
+  expect(corpo).toBeInstanceOf(ArrayBuffer);
+  expect(Array.from(new Uint8Array(corpo).slice(0, 3))).toEqual([0xef, 0xbb, 0xbf]);
+  expect(new Uint8Array(corpo)).toEqual(bytesCsv);
+  // Este teste falha se repassarArquivo voltar a ler text(): o corpo seria string sem o BOM.
 });
 
 it('erro do backend segue como JSON com o status original', async () => {
@@ -3887,7 +3915,7 @@ Set-Location ../frontend
 npx jest __tests__/politicas-contabilizacao-apresentacao.test.tsx __tests__/bff-politicas-exportar.test.ts --runInBand
 ```
 
-Expected: FAIL. Backend: `csv.ts` não existe (o spec de serviço não compila); `exportarCsv` devolve 21 linhas em vez de 22; sem prefixo de fórmula; sem `Content-Disposition`. Frontend: `repassarArquivo` não existe e a rota ainda força JSON; os botões não chamam `createObjectURL` nem clicam em `a[download]`. Se algum teste que não é guarda passar antes, parar (critério 1).
+Expected: FAIL. Backend: `csv.ts` não existe (o spec de serviço não compila); `exportarCsv` devolve 21 linhas em vez de 22; sem prefixo de fórmula; sem `Content-Disposition`. Frontend: `repassarArquivo` não existe e a rota ainda força JSON (com `repassarArquivo` lendo `text()` o teste do BFF também falharia: o corpo seria string sem o BOM); os botões não chamam `createObjectURL` nem clicam em `a[download]`. Se algum teste que não é guarda passar antes, parar (critério 1).
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -3926,17 +3954,17 @@ export function celulaCsv(valor: string): string {
 `app/frontend/src/lib/bff.ts`, nova função ao lado de `repassar` (que não muda):
 
 ```ts
-/** Como `repassar`, mas para arquivo: no sucesso preserva Content-Type e Content-Disposition do backend; no erro segue como JSON. */
+/** Como `repassar`, mas para arquivo: no sucesso repassa os bytes (arrayBuffer, nunca text(), que descarta o BOM UTF-8) com Content-Type e Content-Disposition do backend; no erro segue como JSON. */
 export async function repassarArquivo(caminho: string): Promise<NextResponse> {
   const resposta = await apiFetch(caminho, { method: 'GET' });
-  const texto = await resposta.text();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (resposta.ok) {
-    headers['Content-Type'] = resposta.headers.get('content-type') ?? 'text/csv; charset=utf-8';
-    const disposicao = resposta.headers.get('content-disposition');
-    if (disposicao) headers['Content-Disposition'] = disposicao;
+  if (!resposta.ok) {
+    const texto = await resposta.text();
+    return new NextResponse(texto === '' ? null : texto, { status: resposta.status, headers: { 'Content-Type': 'application/json' } });
   }
-  return new NextResponse(texto === '' ? null : texto, { status: resposta.status, headers });
+  const headers: Record<string, string> = { 'Content-Type': resposta.headers.get('content-type') ?? 'text/csv; charset=utf-8' };
+  const disposicao = resposta.headers.get('content-disposition');
+  if (disposicao) headers['Content-Disposition'] = disposicao;
+  return new NextResponse(await resposta.arrayBuffer(), { status: resposta.status, headers });
 }
 ```
 
