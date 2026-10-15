@@ -18,6 +18,13 @@ describe('room-permissoes', () => {
     expect(ROOMS_PROTEGIDAS['fiscal-enquadramentos']).toBe(PERMISSOES.FISCAL_ENQUADRAMENTOS_LER);
   });
 
+  it('fiscal-simulacoes exige FISCAL_SIMULACOES_LER e não altera as rooms anteriores', () => {
+    expect(ROOMS_PROTEGIDAS['fiscal-simulacoes']).toBe(PERMISSOES.FISCAL_SIMULACOES_LER);
+    expect(ROOMS_PROTEGIDAS['fiscal-regras']).toBe(PERMISSOES.FISCAL_REGRAS_LER);
+    expect(ROOMS_PROTEGIDAS['fiscal-empresas']).toBe(PERMISSOES.FISCAL_EMPRESAS_LER);
+    expect(ROOMS_PROTEGIDAS['fiscal-enquadramentos']).toBe(PERMISSOES.FISCAL_ENQUADRAMENTOS_LER);
+  });
+
   it('room legada continua exigindo DISPONIBILIDADE_LER', () => {
     expect(permissaoParaRoom('dashboard')).toBe(PERMISSOES.DISPONIBILIDADE_LER);
     expect(permissaoParaRoom('operacao:2026-10-13')).toBe('DISPONIBILIDADE_LER');
