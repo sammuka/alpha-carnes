@@ -2,6 +2,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { act } from 'react';
+import { conectarRealtime } from '@/lib/realtime';
 import { HomologacoesClient } from '../src/components/fiscal/homologacoes/homologacoes-client';
 
 jest.mock('@/lib/realtime', () => ({
@@ -180,5 +182,27 @@ describe('painel de homologação', () => {
     await user.click(screen.getByRole('button', { name: 'Publicar e auditar' }));
     await user.click(screen.getByRole('button', { name: 'Publicar' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('A publicação exige ao menos um cenário de regressão.');
+  });
+
+  it('evento em tempo real recarrega a lista e também a ficha aberta', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    let situacaoAtual = 'Em revisão';
+    global.fetch = jest.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
+      const caminho = new URL(String(entrada), 'http://localhost').pathname;
+      if ((init?.method ?? 'GET') === 'GET' && caminho === `/api/erp/fiscal/homologacoes/${ID}`) {
+        return responder(200, { ...DETALHE, situacao: situacaoAtual });
+      }
+      return fetchPadrao(entrada, init);
+    }) as unknown as typeof fetch;
+    render(<HomologacoesClient podeGerenciar podeAprovar />);
+    const celula = await screen.findByText('Revisão da versão aprovada para publicação.');
+    celula.closest('tr')!.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByText('Situação Em revisão')).toBeInTheDocument();
+
+    situacaoAtual = 'Aprovada';
+    const opcoes = (conectarRealtime as jest.Mock).mock.calls.at(-1)![0] as { onMessage: () => void };
+    await act(async () => { opcoes.onMessage(); });
+    expect(await screen.findByText('Situação Aprovada')).toBeInTheDocument();
   });
 });

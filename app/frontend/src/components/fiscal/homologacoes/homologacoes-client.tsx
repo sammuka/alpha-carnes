@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
@@ -83,11 +83,29 @@ export function HomologacoesClient({ podeGerenciar, podeAprovar }: { podeGerenci
 
   useEffect(() => { void carregar(); }, [carregar, recarga]);
   useEffect(() => { window.sessionStorage.setItem(CHAVE_LISTA, JSON.stringify(filtros)); }, [filtros]);
+  // O evento recarrega a lista e a ficha aberta (o handler lê a versão mais recente pela ref).
+  const aoEvento = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    aoEvento.current = () => {
+      setRecarga((n) => n + 1);
+      if (detalhe) void recarregarFicha(detalhe.id);
+    };
+  });
   useEffect(() => conectarRealtime({
     rooms: ['fiscal-homologacoes'],
-    onMessage: () => setRecarga((n) => n + 1),
-    onReconnect: () => setRecarga((n) => n + 1),
+    onMessage: () => aoEvento.current(),
+    onReconnect: () => aoEvento.current(),
   }), []);
+
+  async function recarregarFicha(id: string) {
+    try {
+      const [ficha, eventos] = await Promise.all([homologacoesApi.obter(id), homologacoesApi.historico(id)]);
+      setDetalhe((atual) => (atual?.id === id ? ficha : atual));
+      setHistorico(eventos);
+    } catch (erro) {
+      registrar(erro);
+    }
+  }
 
   function registrar(erro: unknown): string {
     if (!(erro instanceof ErroHomologacao)) return 'Falha na operação.';
