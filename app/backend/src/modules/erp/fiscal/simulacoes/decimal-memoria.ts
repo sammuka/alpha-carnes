@@ -3,6 +3,7 @@ export function normalizarDinheiro(entrada: string): string | null {
   if (limpo.includes(',')) {
     if (limpo.split(',').length !== 2) return null;
     const [esq, dir] = limpo.split(',');
+    if (esq === undefined || dir === undefined) return null;
     if (!/^(\d{1,3}(\.\d{3})*|\d+)$/.test(esq)) return null;
     if (!/^\d{1,2}$/.test(dir)) return null;
     const inteiro = esq.replaceAll('.', '');
@@ -13,6 +14,7 @@ export function normalizarDinheiro(entrada: string): string | null {
   if ((limpo.match(/\./g) ?? []).length > 1) return null;
   if (!/^\d{1,13}(\.\d{1,2})?$/.test(limpo)) return null;
   const [inteiro, frac = ''] = limpo.split('.');
+  if (inteiro === undefined) return null;
   if (inteiro.length > 1 && inteiro.startsWith('0')) return null;
   return `${inteiro}.${frac.padEnd(2, '0')}`;
 }
@@ -24,6 +26,7 @@ export function normalizarEscala(entrada: string, inteirosMax: number): string |
   if (limpo.includes(',')) {
     if (limpo.split(',').length !== 2) return null;
     const [esq, dir] = limpo.split(',');
+    if (esq === undefined || dir === undefined) return null;
     if (!/^(\d{1,3}(\.\d{3})*|\d+)$/.test(esq)) return null;
     if (!/^\d{1,3}$/.test(dir)) return null;
     inteiro = esq.replaceAll('.', '');
@@ -32,7 +35,7 @@ export function normalizarEscala(entrada: string, inteirosMax: number): string |
     if ((limpo.match(/\./g) ?? []).length > 1) return null;
     if (!/^\d+(\.\d{1,3})?$/.test(limpo)) return null;
     const partes = limpo.split('.');
-    inteiro = partes[0];
+    inteiro = partes[0] ?? '';
     frac = partes[1] ?? '';
   }
   if (inteiro.length > inteirosMax) return null;
@@ -43,7 +46,10 @@ export function normalizarEscala(entrada: string, inteirosMax: number): string |
 export function centavosDe(canon: string): bigint {
   const encontrado = /^(\d+)\.(\d{2})$/.exec(canon);
   if (!encontrado) throw new Error('dinheiro fora da forma canônica');
-  return BigInt(encontrado[1] + encontrado[2]);
+  const inteiro = encontrado[1];
+  const frac = encontrado[2];
+  if (inteiro === undefined || frac === undefined) throw new Error('dinheiro fora da forma canônica');
+  return BigInt(inteiro + frac);
 }
 
 export function dinheiroDeCentavos(centavos: bigint): string {
@@ -56,17 +62,25 @@ export function dinheiroDeCentavos(centavos: bigint): string {
 export function complementoRazao(razao: string): string | null {
   const encontrado = /^(\d)\.(\d{4})$/.exec(razao);
   if (!encontrado) return null;
-  const unidades = BigInt(encontrado[1] + encontrado[2]);
+  const inteiro = encontrado[1];
+  const frac = encontrado[2];
+  if (inteiro === undefined || frac === undefined) return null;
+  const unidades = BigInt(inteiro + frac);
   if (unidades > 10000n) return null;
   const complemento = (10000n - unidades).toString().padStart(5, '0');
-  return `${complemento[0]}.${complemento.slice(1)}`;
+  const cabeca = complemento[0];
+  if (cabeca === undefined) return null;
+  return `${cabeca}.${complemento.slice(1)}`;
 }
 
 /** Meio para cima quando o resto da divisão por 10000 é >= 5000. razao é "0.1200". */
 export function aplicarRazao(centavos: bigint, razao: string): bigint | null {
   const encontrado = /^(\d)\.(\d{4})$/.exec(razao);
   if (!encontrado) return null;
-  const unidades = BigInt(encontrado[1] + encontrado[2]);
+  const inteiro = encontrado[1];
+  const frac = encontrado[2];
+  if (inteiro === undefined || frac === undefined) return null;
+  const unidades = BigInt(inteiro + frac);
   if (unidades > 10000n) return null;
   const produto = centavos * unidades;
   const negativo = produto < 0n;
@@ -101,13 +115,17 @@ export function calcularMemoria(entrada: {
 }
 
 export function formatarDinheiroPtBr(canon: string): string {
-  const [inteiro, frac] = canon.split('.');
+  const partes = canon.split('.');
+  const inteiro = partes[0] ?? '';
+  const frac = partes[1] ?? '';
   const comMilhar = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return `${comMilhar},${frac}`;
 }
 
 export function formatarEscalaPtBr(canon: string): string {
-  const [inteiro, frac] = canon.split('.');
+  const partes = canon.split('.');
+  const inteiro = partes[0] ?? '';
+  const frac = partes[1] ?? '';
   const comMilhar = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   return `${comMilhar},${frac}`;
 }
@@ -119,6 +137,8 @@ const MESES: Record<string, string> = {
 };
 
 export function rotuloCompetencia(competencia: string): string {
-  const [ano, mes] = competencia.split('-');
-  return `${MESES[mes]} de ${ano}`;
+  const partes = competencia.split('-');
+  const ano = partes[0] ?? '';
+  const mes = partes[1] ?? '';
+  return `${MESES[mes] ?? ''} de ${ano}`;
 }

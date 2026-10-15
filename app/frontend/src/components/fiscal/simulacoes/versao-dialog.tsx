@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { CorpoSimulacao, DetalheSimulacao } from '@/lib/fiscal-simulacoes';
+import { useRetornoFoco } from '../empresas/use-retorno-foco';
 
 interface Props {
   aberto: boolean;
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export function VersaoDialog({ aberto, origem, erro, onFechar, onSalvar }: Props) {
+  const retornoFoco = useRetornoFoco(aberto);
   const [desconto, setDesconto] = useState('');
   const [competencia, setCompetencia] = useState('');
   const [motivo, setMotivo] = useState('');
@@ -45,7 +47,7 @@ export function VersaoDialog({ aberto, origem, erro, onFechar, onSalvar }: Props
 
   return (
     <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent aria-describedby={undefined} onCloseAutoFocus={retornoFoco}>
         <DialogHeader>
           <DialogTitle>Nova versão</DialogTitle>
         </DialogHeader>

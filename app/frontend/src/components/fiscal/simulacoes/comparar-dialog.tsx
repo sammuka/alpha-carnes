@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Diferenca, LinhaSimulacao } from '@/lib/fiscal-simulacoes';
+import { useRetornoFoco } from '../empresas/use-retorno-foco';
 
 interface Props {
   aberto: boolean;
@@ -14,10 +15,11 @@ interface Props {
 }
 
 export function CompararDialog({ aberto, versoes, diferencas, onFechar, onComparar }: Props) {
+  const retornoFoco = useRetornoFoco(aberto);
   const [com, setCom] = useState('');
   return (
     <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
-      <DialogContent aria-describedby={undefined}>
+      <DialogContent aria-describedby={undefined} onCloseAutoFocus={retornoFoco}>
         <DialogHeader>
           <DialogTitle>Comparar versões</DialogTitle>
         </DialogHeader>
