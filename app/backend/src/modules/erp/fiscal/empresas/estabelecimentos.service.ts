@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../../common/auditoria/auditoria.service';
 import { montarPaginado } from '../../../../common/crud/paginacao';
@@ -331,7 +331,8 @@ export class EstabelecimentosService {
       })
       .from(auditoria)
       .leftJoin(usuarios, eq(usuarios.id, auditoria.usuarioId))
-      .where(or(...condicoes));
+      .where(or(...condicoes))
+      .orderBy(desc(auditoria.createdAt), desc(auditoria.id));
     return linhas.map((linha) => {
       const antes = linha.dadosAnteriores as { situacao?: string };
       const depois = linha.dadosNovos as { situacao?: string };

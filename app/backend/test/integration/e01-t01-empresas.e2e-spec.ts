@@ -309,6 +309,23 @@ describe('E01-T01 empresas e estabelecimentos', () => {
     ]));
   });
 
+  it('histórico em ordem determinística: mais recente primeiro', async () => {
+    const empresa = await criarEmpresa(adminA, '12ABC398', 'Zeta Histórico LTDA');
+    const estab = await criarEstab(adminA, empresa.body.id, cnpjDe('12ABC3980001'), [
+      { codigo: '6201501', descricao: 'Desenvolvimento', tipo: 'PRINCIPAL' },
+    ]);
+    await request(app.getHttpServer())
+      .post(`/fiscal/estabelecimentos/${estab.body.id}/submeter`)
+      .set('Cookie', adminA)
+      .send({ versao: estab.body.versao, justificativa: MOTIVO });
+    const res = await request(app.getHttpServer())
+      .get(`/fiscal/estabelecimentos/${estab.body.id}/historico`)
+      .set('Cookie', adminA);
+    const instantes = res.body.map((linha: { criadoEm: string }) => linha.criadoEm);
+    expect(instantes.length).toBeGreaterThan(2);
+    expect(instantes).toEqual([...instantes].sort().reverse());
+  });
+
   it('aprovado não removível → 409; suspender é a reversão', async () => {
     const cnpj = cnpjDe('12ABC3560001');
     const empresa = await criarEmpresa(adminA, '12ABC356');
