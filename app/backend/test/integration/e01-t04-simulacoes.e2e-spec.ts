@@ -404,6 +404,17 @@ describe('E01-T04 simulações fiscais', () => {
     expect(detalhe.body.icms).toBe('70.00');
   });
 
+  it('a NCM aparece com máscara no detalhe e na explicação', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    const detalhe = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${criada.body.id}`).set('Cookie', admin);
+    expect(detalhe.body.ncm).toMatch(/^\d{4}\.\d{2}\.\d{2} — /);
+    const explicacao = await explicar(admin, criada.body.id);
+    const linha = (explicacao.body.linhas as { rotulo: string; valor: string }[]).find((l) => l.rotulo === 'Classificação fiscal (NCM)');
+    expect(linha?.valor).toMatch(/^\d{4}\.\d{2}\.\d{2} — /);
+  });
+
   it('quantidade não muda a base', async () => {
     const aprovada = await aprovarRegra(await cenario());
     const pouca = await simular(admin, corpoDe(aprovada.base, { quantidade: '1,000' }));

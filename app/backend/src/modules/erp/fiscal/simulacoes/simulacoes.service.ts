@@ -29,6 +29,7 @@ import {
   regraViolada,
   type Tx,
 } from '../empresas/fiscal-comum';
+import { mascararNcm } from '../enquadramentos/exportacao-csv';
 import { formatarPercentualPtBr } from '../regras/percentual';
 import { travarEnquadramento } from '../regras/regras.service';
 import { calcularMemoria, formatarDinheiroPtBr, formatarEscalaPtBr, rotuloCompetencia } from './decimal-memoria';
@@ -650,7 +651,7 @@ export class SimulacoesFiscaisService {
       .innerJoin(classificacoesIbsCbs, eq(classificacoesIbsCbs.id, regrasTributarias.classificacaoIbsCbsId))
       .where(and(eq(simulacoesFiscais.id, id), isNull(simulacoesFiscais.deletedAt)));
     if (!linha) throw new NotFoundException('Simulação fiscal não encontrada');
-    return { ...linha, ncm: `${linha.ncmCodigo} — ${linha.ncmDescricao}` };
+    return { ...linha, ncm: `${mascararNcm(linha.ncmCodigo)} — ${linha.ncmDescricao}` };
   }
 
   private apresentar(linha: Awaited<ReturnType<SimulacoesFiscaisService['carregar']>>) {
