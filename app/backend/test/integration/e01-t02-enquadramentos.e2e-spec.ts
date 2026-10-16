@@ -558,7 +558,7 @@ describe('E01-T02 enquadramentos fiscais', () => {
     expect(res.text).toContain(cabecalho);
     expect(res.text).toContain(criado.body.codigo);
     expect(res.text).toContain(base.rotulo);
-    expect(res.text).toContain(base.cfopCodigo);
+    expect(res.text).toContain(`${base.cfopCodigo[0]}.${base.cfopCodigo.slice(1)}`);
     expect(res.text).toContain('2026-01-01');
     expect(res.text).toContain('2026-12-31');
     expect(res.text).toContain('Filial Osasco');
@@ -568,7 +568,7 @@ describe('E01-T02 enquadramentos fiscais', () => {
     expect(res.text).toContain('Test administrador');
     expect(res.text).toContain('Acém');
     expect(res.text).toContain('Açougue Central');
-    expect(res.text).toContain('1708700');
+    expect(res.text).toContain('17.087.00');
     expect(res.text).toContain('Dentro do estado');
     expect(res.text).toContain('Revenda');
     expect(res.text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
@@ -671,5 +671,28 @@ describe('E01-T02 enquadramentos fiscais', () => {
       .set('Cookie', adminA);
     expect(csv.text.indexOf('700000000001')).toBeGreaterThan(0);
     expect(csv.text.indexOf('700000000001')).toBeLessThan(csv.text.indexOf('1000000000001'));
+  });
+
+  it('busca de NCM e CFOP aceita o código com máscara', async () => {
+    const base = await baseAprovada();
+    seq += 1;
+    const sufixo = String(seq).padStart(4, '0');
+    const ncm = await request(app.getHttpServer())
+      .post('/fiscal/ncms')
+      .set('Cookie', adminA)
+      .send({ codigo: `0401${sufixo}`, descricao: 'Leite e creme', justificativa: MOTIVO });
+    expect(ncm.status).toBe(201);
+    const porNcm = await request(app.getHttpServer())
+      .get('/fiscal/ncms')
+      .query({ search: `0401.${sufixo.slice(0, 2)}`, pageSize: 100 })
+      .set('Cookie', adminA);
+    expect(porNcm.status).toBe(200);
+    expect((porNcm.body.data as { id: string }[]).map((n) => n.id)).toContain(ncm.body.id);
+    const porCfop = await request(app.getHttpServer())
+      .get('/fiscal/cfops')
+      .query({ search: `${base.cfopCodigo[0]}.${base.cfopCodigo.slice(1, 3)}`, pageSize: 100 })
+      .set('Cookie', adminA);
+    expect(porCfop.status).toBe(200);
+    expect((porCfop.body.data as { id: string }[]).map((c) => c.id)).toContain(base.cfopId);
   });
 });

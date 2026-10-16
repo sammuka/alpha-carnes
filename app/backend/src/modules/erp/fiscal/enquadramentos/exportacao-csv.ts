@@ -40,6 +40,17 @@ export interface LinhaExportacaoEnquadramento {
   tipoProduto: string;
 }
 
+/** CFOP 9.999, NCM 9999.99.99 e CEST 99.999.99: texto mascarado, o Excel não descarta zeros à esquerda. */
+export function mascararCfop(codigo: string): string {
+  return /^[0-9]{4}$/.test(codigo) ? `${codigo[0]}.${codigo.slice(1)}` : codigo;
+}
+export function mascararNcm(codigo: string): string {
+  return /^[0-9]{8}$/.test(codigo) ? `${codigo.slice(0, 4)}.${codigo.slice(4, 6)}.${codigo.slice(6)}` : codigo;
+}
+export function mascararCest(codigo: string): string {
+  return /^[0-9]{7}$/.test(codigo) ? `${codigo.slice(0, 2)}.${codigo.slice(2, 5)}.${codigo.slice(5)}` : codigo;
+}
+
 function celula(original: string): string {
   // Injeção de fórmula (OWASP): texto iniciado por = + - @ tab ou CR vira literal no Excel.
   const valor = /^[=+\-@\t\r]/.test(original) ? `'${original}` : original;
@@ -71,7 +82,7 @@ export function montarCsvEnquadramentos(linhas: LinhaExportacaoEnquadramento[]):
   const corpo = linhas.map((linha) => [
     linha.codigo,
     linha.operacao,
-    linha.cfop,
+    mascararCfop(linha.cfop),
     linha.vigenciaInicio,
     linha.vigenciaFim ?? '',
     linha.estabelecimento,
@@ -81,8 +92,8 @@ export function montarCsvEnquadramentos(linhas: LinhaExportacaoEnquadramento[]):
     linha.responsavel,
     linha.produto,
     linha.cliente,
-    linha.ncm,
-    linha.cest,
+    mascararNcm(linha.ncm),
+    mascararCest(linha.cest),
     String(linha.prioridade),
     ROTULOS_ABRANGENCIA[linha.abrangencia] ?? linha.abrangencia,
     ROTULOS_TIPO_PRODUTO[linha.tipoProduto] ?? linha.tipoProduto,
