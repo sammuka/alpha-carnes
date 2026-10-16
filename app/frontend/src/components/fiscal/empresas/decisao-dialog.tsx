@@ -157,7 +157,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
       </Dialog>
 
       {/* Challenge 409: a troca de regime só segue com confirmação explícita. */}
-      <AlertDialog open={desafio !== null} onOpenChange={(aberto) => { if (!aberto) setDesafio(null); }}>
+      <AlertDialog open={desafio !== null} onOpenChange={(aberto) => { if (!aberto && !processando) setDesafio(null); }}>
         <AlertDialogContent onCloseAutoFocus={retornoFocoTroca}>
           <AlertDialogHeader>
             <AlertDialogTitle>Troca de regime tributário</AlertDialogTitle>
@@ -172,7 +172,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={processando}>Cancelar</AlertDialogCancel>
             <Button type="button" loading={processando} onClick={() => void executar(true)}>
               Encerrar e submeter
             </Button>

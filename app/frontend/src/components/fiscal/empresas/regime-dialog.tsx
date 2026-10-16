@@ -150,7 +150,7 @@ export function RegimeDialog({
             </p>
           )}
           <DialogFooter className="px-0">
-            <Button type="button" variant="ghost" onClick={onFechar}>
+            <Button type="button" variant="ghost" onClick={onFechar} disabled={salvando}>
               Cancelar
             </Button>
             <Button type="submit" loading={salvando}>
