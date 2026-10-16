@@ -344,6 +344,13 @@
       "when": 1792071879097,
       "tag": "0048_e01_t05_homologacoes_regras",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1792182223048,
+      "tag": "0049_e09_t01_plano_contas",
+      "breakpoints": true
     }
   ]
 }
