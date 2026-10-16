@@ -8,6 +8,8 @@ export const listarOperacoesSchema = z.object({
   status: statusOperacaoSchema.optional(),
   extraordinaria: z.union([z.boolean(), z.string()]).optional()
     .transform((v) => (v === undefined ? undefined : v === true || v === 'true')),
+  /** Busca opcional por rótulo ou data (dd/MM/aaaa ou aaaa-MM-dd). */
+  search: z.string().trim().max(100).refine((v) => !v.includes('\u0000'), { message: 'Texto contém caractere inválido.' }).optional(),
   pagina: z.coerce.number().int().positive().default(1),
   limite: z.coerce.number().int().min(1).max(100).default(20),
 }).refine(({ de, ate }) => !de || !ate || de <= ate, {
