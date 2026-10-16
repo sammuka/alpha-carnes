@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
 import { ComboboxField } from '@/components/ui/combobox-field';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
 import { PageHeader } from '@/components/ui/page-header';
@@ -19,6 +21,7 @@ import {
   ErroEnquadramento,
   enquadramentosApi,
   mensagemSobreposicao,
+  rotuloData,
   textoConsulta,
   type ContagensEnquadramento,
   type CorpoEnquadramento,
@@ -30,13 +33,23 @@ import {
   type PreCondicao,
 } from '@/lib/fiscal-enquadramentos';
 import { AbasDetalhe } from './abas-detalhe';
+import { ComboboxBusca } from './combobox-busca';
 import { CodigoFiscalDialog } from './codigo-fiscal-dialog';
 import { DuplicarDialog } from './duplicar-dialog';
 import { EnquadramentoDrawer, type Catalogos, type SelecaoCodigo } from './enquadramento-drawer';
 
-const CATALOGOS_VAZIOS: Catalogos = {
-  estabelecimentos: [], operacoes: [], produtos: [], clientes: [], cfops: [], ncms: [],
-};
+const CATALOGOS_VAZIOS: Catalogos = { estabelecimentos: [], operacoes: [] };
+const CHAVE_ROTULOS = 'fiscal.enquadramentos.rotulos';
+type ChaveBuscaFiltro = 'cfopId' | 'produtoId' | 'clienteId';
+
+function lerRotulos(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    return JSON.parse(window.sessionStorage.getItem(CHAVE_ROTULOS) ?? '{}') as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
 
 function lerFiltros(): FiltrosLista {
   if (typeof window === 'undefined') return FILTROS_LISTA;
@@ -68,6 +81,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   const [selecaoCodigo, setSelecaoCodigo] = useState<SelecaoCodigo | null>(null);
   const [recarga, setRecarga] = useState(0);
   const [erroCatalogos, setErroCatalogos] = useState(false);
+  const [rotulosFiltro, setRotulosFiltro] = useState<Record<string, string>>(lerRotulos);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -93,15 +107,15 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   }, [filtros]);
 
   useEffect(() => {
+    window.sessionStorage.setItem(CHAVE_ROTULOS, JSON.stringify(rotulosFiltro));
+  }, [rotulosFiltro]);
+
+  useEffect(() => {
     void Promise.all([
       enquadramentosApi.opcoesEstabelecimento(),
       enquadramentosApi.opcoesOperacao(),
-      enquadramentosApi.opcoesProduto(),
-      enquadramentosApi.opcoesCliente(),
-      enquadramentosApi.opcoesCodigo('cfops'),
-      enquadramentosApi.opcoesCodigo('ncms'),
-    ]).then(([estabelecimentos, operacoes, produtos, clientes, cfops, ncms]) => {
-      setCatalogos({ estabelecimentos, operacoes, produtos, clientes, cfops, ncms });
+    ]).then(([estabelecimentos, operacoes]) => {
+      setCatalogos({ estabelecimentos, operacoes });
       setErroCatalogos(false);
     }).catch(() => setErroCatalogos(true));
   }, [recarga]);
@@ -203,6 +217,12 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
     setPreCondicoes(await enquadramentosApi.preCondicoes(detalhe.id));
   }
 
+  function abrirNovoRegistro() {
+    setErroDrawer(null);
+    setSelecaoCodigo(null);
+    setDrawer(true);
+  }
+
   function combo(rotulo: string, id: string, opcoes: OpcaoCombo[], valor: string, chave: keyof FiltrosLista) {
     return (
       <label className="grid gap-1 text-xs" htmlFor={id}>
@@ -220,6 +240,27 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
     );
   }
 
+  function comboBusca(rotulo: string, id: string, tipo: 'cfops' | 'produtos' | 'clientes', chave: ChaveBuscaFiltro) {
+    return (
+      <label className="grid gap-1 text-xs" htmlFor={id}>
+        {rotulo}
+        <ComboboxBusca
+          id={id}
+          tipo={tipo}
+          value={filtros[chave]}
+          rotulo={rotulosFiltro[chave] ?? ''}
+          clearable
+          onChange={(opcao) => {
+            setRotulosFiltro((atual) => ({ ...atual, [chave]: opcao?.rotulo ?? '' }));
+            setFiltros((atual) => ({ ...atual, [chave]: opcao?.id ?? '', page: 1 }));
+          }}
+          placeholder={rotulo}
+          searchPlaceholder={`Buscar ${rotulo.toLowerCase()}`}
+        />
+      </label>
+    );
+  }
+
   return (
     <div className="grid gap-4">
       <PageHeader
@@ -230,17 +271,19 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
       >
         <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar</Button>
         {podeGerenciar && (
-          <Button type="button" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>+ Novo registro</Button>
+          <Button type="button" variant="secondary" onClick={abrirNovoRegistro}>+ Novo registro</Button>
         )}
-        <details>
-          <summary className="cursor-pointer text-sm">Ações do processo</summary>
-          <div className="mt-2 grid gap-1">
-            <Button type="button" variant="secondary" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>Cadastrar operação</Button>
-            <Button type="button" variant="secondary" onClick={() => detalhe && setDuplicar(true)}>Duplicar perfil</Button>
-            <Button type="button" variant="secondary" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>Relacionar produto e cliente</Button>
-            <Button type="button" variant="secondary" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>Controlar prioridade</Button>
-          </div>
-        </details>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" aria-haspopup="menu">Ações do processo <ChevronDown aria-hidden="true" /></Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={abrirNovoRegistro}>Cadastrar operação</DropdownMenuItem>
+            <DropdownMenuItem disabled={!detalhe} onSelect={() => detalhe && setDuplicar(true)}>Duplicar perfil</DropdownMenuItem>
+            <DropdownMenuItem onSelect={abrirNovoRegistro}>Relacionar produto e cliente</DropdownMenuItem>
+            <DropdownMenuItem onSelect={abrirNovoRegistro}>Controlar prioridade</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </PageHeader>
       <KpiStrip>
         <Kpi label="Enquadramentos" value={contagens?.total ?? '—'} />
@@ -263,9 +306,9 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         )}
         <div className="grid gap-2 md:grid-cols-4">
           {combo('Estabelecimento', 'filtro-estab', catalogos.estabelecimentos, filtros.estabelecimentoId, 'estabelecimentoId')}
-          {combo('Operação fiscal (CFOP)', 'filtro-cfop', catalogos.cfops, filtros.cfopId, 'cfopId')}
-          {combo('Produto', 'filtro-prod', catalogos.produtos, filtros.produtoId, 'produtoId')}
-          {combo('Cliente', 'filtro-cli', catalogos.clientes, filtros.clienteId, 'clienteId')}
+          {comboBusca('Operação fiscal (CFOP)', 'filtro-cfop', 'cfops', 'cfopId')}
+          {comboBusca('Produto', 'filtro-prod', 'produtos', 'produtoId')}
+          {comboBusca('Cliente', 'filtro-cli', 'clientes', 'clienteId')}
         </div>
         <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar visão</Button>
         {carregando && <Skeleton className="h-24" />}
@@ -299,7 +342,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
                 >
                   <TableCell>{linha.operacao}</TableCell>
                   <TableCell>{linha.cfop}</TableCell>
-                  <TableCell>{linha.vigenciaInicio}</TableCell>
+                  <TableCell>{rotuloData(linha.vigenciaInicio)}</TableCell>
                   <TableCell>{linha.estabelecimento}</TableCell>
                   <TableCell>{linha.tpNf}</TableCell>
                   <TableCell>{linha.finNfe}</TableCell>
@@ -359,9 +402,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
           if (!codigoTipo) return;
           const tipo = codigoTipo;
           const criado = await enquadramentosApi.criarCodigo(tipo, corpo);
-          const opcoes = await enquadramentosApi.opcoesCodigo(tipo);
-          setCatalogos((atual) => ({ ...atual, [tipo]: opcoes }));
-          setSelecaoCodigo({ tipo, id: criado.id });
+          setSelecaoCodigo({ tipo, id: criado.id, rotulo: `${criado.codigo} ${criado.descricao}`.trim() });
           setCodigoTipo(null);
         }}
       />

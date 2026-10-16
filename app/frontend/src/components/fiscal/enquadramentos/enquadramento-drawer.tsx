@@ -7,6 +7,7 @@ import { ComboboxField } from '@/components/ui/combobox-field';
 import { DatePickerField } from '@/components/ui/date-picker-field';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useRetornoFoco } from '../empresas/use-retorno-foco';
+import { ComboboxBusca } from './combobox-busca';
 import {
   ROTULOS_ABRANGENCIA,
   ROTULOS_FIN_NFE,
@@ -22,15 +23,25 @@ import {
 export interface SelecaoCodigo {
   tipo: 'cfops' | 'ncms';
   id: string;
+  rotulo: string;
+}
+
+type ChaveBusca = 'cfopId' | 'ncmId' | 'produtoId' | 'clienteId';
+type Rotulos = Record<ChaveBusca, string>;
+const ROTULOS_VAZIOS: Rotulos = { cfopId: '', ncmId: '', produtoId: '', clienteId: '' };
+
+function rotulosDe(detalhe: DetalheEnquadramento): Rotulos {
+  return {
+    cfopId: `${detalhe.cfopCodigo} ${detalhe.cfopDescricao}`.trim(),
+    ncmId: `${detalhe.ncmCodigo} ${detalhe.ncmDescricao}`.trim(),
+    produtoId: detalhe.produtoNome,
+    clienteId: detalhe.clienteNome,
+  };
 }
 
 export interface Catalogos {
   estabelecimentos: OpcaoCombo[];
   operacoes: OpcaoCombo[];
-  produtos: OpcaoCombo[];
-  clientes: OpcaoCombo[];
-  cfops: OpcaoCombo[];
-  ncms: OpcaoCombo[];
 }
 
 interface Props {
@@ -98,23 +109,29 @@ export function EnquadramentoDrawer({
   };
   const [form, setForm] = useState<CorpoEnquadramento>(VAZIO);
   const [avisos, setAvisos] = useState<string | null>(null);
+  const [rotulos, setRotulos] = useState<Rotulos>(ROTULOS_VAZIOS);
 
   useEffect(() => {
     if (!aberto) return;
     setForm(detalhe ? deDetalhe(detalhe) : VAZIO);
+    setRotulos(detalhe ? rotulosDe(detalhe) : ROTULOS_VAZIOS);
     setAvisos(null);
   }, [aberto, detalhe]);
 
   useEffect(() => {
     if (!aberto || !selecaoCodigo) return;
-    setForm((atual) => ({
-      ...atual,
-      ...(selecaoCodigo.tipo === 'cfops' ? { cfopId: selecaoCodigo.id } : { ncmId: selecaoCodigo.id }),
-    }));
+    const chave: ChaveBusca = selecaoCodigo.tipo === 'cfops' ? 'cfopId' : 'ncmId';
+    setForm((atual) => ({ ...atual, [chave]: selecaoCodigo.id }));
+    setRotulos((atual) => ({ ...atual, [chave]: selecaoCodigo.rotulo }));
   }, [aberto, selecaoCodigo]);
 
   function set<K extends keyof CorpoEnquadramento>(chave: K, valor: CorpoEnquadramento[K]) {
     setForm((atual) => ({ ...atual, [chave]: valor }));
+  }
+
+  function escolher(chave: ChaveBusca, opcao: OpcaoCombo | null) {
+    set(chave, opcao?.id ?? '');
+    setRotulos((atual) => ({ ...atual, [chave]: opcao?.rotulo ?? '' }));
   }
 
   function verificar(): string | null {
@@ -171,7 +188,7 @@ export function EnquadramentoDrawer({
             </select>
           </Campo>
           <Campo rotulo="Operação fiscal (CFOP)" selo="H-E01-08">
-            <ComboboxField id="enq-cfop" items={itens(catalogos.cfops)} value={form.cfopId} onChange={(id) => set('cfopId', id)} placeholder="Operação fiscal (CFOP)" searchPlaceholder="Buscar CFOP" emptyText={TEXTO_VAZIO_COMBO} />
+            <ComboboxBusca id="enq-cfop" tipo="cfops" value={form.cfopId} rotulo={rotulos.cfopId} onChange={(o) => escolher('cfopId', o)} placeholder="Operação fiscal (CFOP)" searchPlaceholder="Buscar CFOP" />
             <Button type="button" variant="secondary" onClick={() => onNovoCodigo('cfops')}>Novo código</Button>
           </Campo>
           <Campo rotulo="Abrangência da operação">
@@ -185,17 +202,17 @@ export function EnquadramentoDrawer({
             </select>
           </Campo>
           <Campo rotulo="Produto">
-            <ComboboxField id="enq-prod" items={itens(catalogos.produtos)} value={form.produtoId} onChange={(id) => set('produtoId', id)} placeholder="Produto" searchPlaceholder="Buscar produto" emptyText={TEXTO_VAZIO_COMBO} />
+            <ComboboxBusca id="enq-prod" tipo="produtos" value={form.produtoId} rotulo={rotulos.produtoId} onChange={(o) => escolher('produtoId', o)} placeholder="Produto" searchPlaceholder="Buscar produto" />
           </Campo>
           <Campo rotulo="Classificação fiscal (NCM)" selo="H-E01-08">
-            <ComboboxField id="enq-ncm" items={itens(catalogos.ncms)} value={form.ncmId} onChange={(id) => set('ncmId', id)} placeholder="Classificação fiscal (NCM)" searchPlaceholder="Buscar NCM" emptyText={TEXTO_VAZIO_COMBO} />
+            <ComboboxBusca id="enq-ncm" tipo="ncms" value={form.ncmId} rotulo={rotulos.ncmId} onChange={(o) => escolher('ncmId', o)} placeholder="Classificação fiscal (NCM)" searchPlaceholder="Buscar NCM" />
             <Button type="button" variant="secondary" onClick={() => onNovoCodigo('ncms')}>Novo código</Button>
           </Campo>
           <Campo rotulo="Substituição tributária (CEST)" selo="H-E01-09">
             <input aria-label="Substituição tributária (CEST)" className="h-8 w-full rounded-md border px-2 text-[13px]" inputMode="numeric" value={form.cest} onChange={(e) => set('cest', normalizarCest(e.target.value))} />
           </Campo>
           <Campo rotulo="Cliente">
-            <ComboboxField id="enq-cli" items={itens(catalogos.clientes)} value={form.clienteId} onChange={(id) => set('clienteId', id)} placeholder="Cliente" searchPlaceholder="Buscar cliente" emptyText={TEXTO_VAZIO_COMBO} />
+            <ComboboxBusca id="enq-cli" tipo="clientes" value={form.clienteId} rotulo={rotulos.clienteId} onChange={(o) => escolher('clienteId', o)} placeholder="Cliente" searchPlaceholder="Buscar cliente" />
           </Campo>
           <Campo rotulo="Início de vigência" selo="H-E01-10">
             <DatePickerField aria-label="Início de vigência" value={form.vigenciaInicio} onChange={(iso) => set('vigenciaInicio', iso)} />

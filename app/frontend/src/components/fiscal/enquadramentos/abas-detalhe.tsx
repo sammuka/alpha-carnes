@@ -3,13 +3,19 @@
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Campo, SecaoRotulo } from '../empresas/aba-ficha';
 import {
   ROTULOS_SITUACAO_ENQUADRAMENTO,
   rotuloData,
+  rotuloDataHora,
   type DetalheEnquadramento,
   type EventoHistoricoEnquadramento,
   type PreCondicao,
 } from '@/lib/fiscal-enquadramentos';
+
+function Provisorio({ codigo, children }: { codigo: string; children: React.ReactNode }) {
+  return <span className="flex flex-wrap items-center gap-2">{children} <BadgeProvisorio codigo={codigo} /></span>;
+}
 
 interface Props {
   detalhe: DetalheEnquadramento;
@@ -42,35 +48,38 @@ export function AbasDetalhe({
         <TabsTrigger value="integracoes">Integrações</TabsTrigger>
         <TabsTrigger value="aceite">Aceite e testes</TabsTrigger>
       </TabsList>
-      <TabsContent value="ficha" className="grid gap-3 text-sm">
-        <p>Código {detalhe.codigo}</p>
-        <p>Situação {situacao}</p>
-        <p>Responsável {detalhe.responsavel}</p>
-        <p>Criado em {detalhe.criadoEm}</p>
-        <p>Alterado em {detalhe.atualizadoEm}</p>
-        {detalhe.origemCodigo && <p>Duplicado do código {detalhe.origemCodigo}</p>}
-        <p>Estabelecimento {detalhe.estabelecimentoNome}</p>
-        <p>Operação {detalhe.operacaoRotulo}</p>
-        <p>Tipo da nota {detalhe.tipoNota}</p>
-        <p>Finalidade {detalhe.finalidade}</p>
-        <p className="inline-flex items-center gap-2">Operação fiscal (CFOP) {detalhe.cfopCodigo} <BadgeProvisorio codigo="H-E01-08" /></p>
-        <p>Abrangência da operação {detalhe.abrangenciaRotulo}</p>
-        <p>Origem do produto {detalhe.tipoProdutoRotulo}</p>
-        <p>Produto {detalhe.produtoNome}</p>
-        <p className="inline-flex items-center gap-2">Classificação fiscal (NCM) {detalhe.ncmCodigo} <BadgeProvisorio codigo="H-E01-08" /></p>
-        <p className="inline-flex items-center gap-2">Substituição tributária (CEST) {detalhe.cest} <BadgeProvisorio codigo="H-E01-09" /></p>
-        <p>Cliente {detalhe.clienteNome}</p>
-        <p className="inline-flex items-center gap-2">
-          Início de vigência {rotuloData(detalhe.vigenciaInicio)}
-          {detalhe.vigenciaFim ? ` · Fim de vigência ${rotuloData(detalhe.vigenciaFim)}` : ''}
-          <BadgeProvisorio codigo="H-E01-10" />
-        </p>
-        <p className="inline-flex items-center gap-2">Prioridade {detalhe.prioridade} <BadgeProvisorio codigo="H-E01-06" /></p>
+      <TabsContent value="ficha" className="grid gap-4 text-sm">
         <div>
-          <p className="font-semibold">Trilha e responsabilização</p>
-          <p>Empresa <span>{detalhe.empresaNome}</span></p>
-          <p>Situação {situacao}</p>
-          <p className="inline-flex items-center gap-2">Responsável {detalhe.responsavel} <BadgeProvisorio codigo="H-E01-11" /></p>
+          <SecaoRotulo>Informações do registro selecionado</SecaoRotulo>
+          <p className="mb-2 text-[11px] font-semibold text-muted-foreground">Dados principais</p>
+          <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-2">
+            <Campo label="Código"><span className="font-data">{detalhe.codigo}</span></Campo>
+            <Campo label="Estabelecimento">{detalhe.estabelecimentoNome}</Campo>
+            <Campo label="Operação">{detalhe.operacaoRotulo}</Campo>
+            <Campo label="Tipo da nota">{detalhe.tipoNota}</Campo>
+            <Campo label="Finalidade">{detalhe.finalidade}</Campo>
+            <Campo label="Operação fiscal (CFOP)"><Provisorio codigo="H-E01-08">{detalhe.cfopCodigo}</Provisorio></Campo>
+            <Campo label="Abrangência da operação">{detalhe.abrangenciaRotulo}</Campo>
+            <Campo label="Origem do produto">{detalhe.tipoProdutoRotulo}</Campo>
+            <Campo label="Produto">{detalhe.produtoNome}</Campo>
+            <Campo label="Classificação fiscal (NCM)"><Provisorio codigo="H-E01-08">{detalhe.ncmCodigo}</Provisorio></Campo>
+            <Campo label="Substituição tributária (CEST)"><Provisorio codigo="H-E01-09">{detalhe.cest}</Provisorio></Campo>
+            <Campo label="Cliente">{detalhe.clienteNome}</Campo>
+            <Campo label="Início de vigência"><Provisorio codigo="H-E01-10">{rotuloData(detalhe.vigenciaInicio)}</Provisorio></Campo>
+            <Campo label="Fim de vigência"><Provisorio codigo="H-E01-10">{detalhe.vigenciaFim ? rotuloData(detalhe.vigenciaFim) : 'Sem fim'}</Provisorio></Campo>
+            <Campo label="Prioridade"><Provisorio codigo="H-E01-06">{detalhe.prioridade}</Provisorio></Campo>
+          </div>
+        </div>
+        <div>
+          <SecaoRotulo>Trilha e responsabilização</SecaoRotulo>
+          <div className="grid grid-cols-1 gap-x-3.5 gap-y-2.5 sm:grid-cols-3">
+            <Campo label="Empresa">{detalhe.empresaNome}</Campo>
+            <Campo label="Situação">{situacao}</Campo>
+            <Campo label="Responsável"><Provisorio codigo="H-E01-11">{detalhe.responsavel}</Provisorio></Campo>
+            <Campo label="Criado em">{rotuloDataHora(detalhe.criadoEm)}</Campo>
+            <Campo label="Alterado em">{rotuloDataHora(detalhe.atualizadoEm)}</Campo>
+            {detalhe.origemCodigo && <Campo label="Duplicado do código">{detalhe.origemCodigo}</Campo>}
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           {podeGerenciar && <Button type="button" onClick={onEditar}>Editar versão</Button>}

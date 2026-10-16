@@ -29,6 +29,19 @@ describe('fiscal-enquadramentos', () => {
     expect(lib.normalizarCest('17.087.00')).toBe('1708700');
   });
 
+  it('máscara remove só ponto, hífen e espaço comum', () => {
+    expect(lib.normalizarNcm('0201\n3000')).toBe('0201\n3000');
+    expect(lib.codigoFiscalValido('ncms', lib.normalizarNcm('0201\n3000'))).toBe(false);
+    expect(lib.codigoFiscalValido('cfops', lib.normalizarCfop('5.102'))).toBe(true);
+    expect(lib.codigoFiscalValido('cfops', lib.normalizarCfop('51\t02'))).toBe(false);
+  });
+
+  it('formata data e data/hora no fuso de São Paulo', () => {
+    expect(lib.rotuloDataHora('2026-10-15T21:02:08.105Z')).toBe('15/10/2026 18:02');
+    expect(lib.rotuloDataHora('2026-10-15T02:30:00.000Z')).toBe('14/10/2026 23:30');
+    expect(lib.rotuloData('2026-10-15')).toBe('15/10/2026');
+  });
+
   it('não exporta função que calcule tributo', () => {
     expect(Object.keys(lib).join(' ')).not.toMatch(/tributo|aliquota|cst|ibs|cbs/i);
   });

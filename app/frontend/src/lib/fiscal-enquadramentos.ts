@@ -35,8 +35,17 @@ const MENSAGENS_POR_CODIGO: Record<string, string> = {
   CONFLITO_CONCORRENTE: 'O registro foi alterado por outro usuário. Recarregue para continuar.',
 };
 
+/** Remove só a máscara (ponto, hífen e espaço comum); o resto permanece e reprova em `codigoFiscalValido`. */
 export function normalizarNcm(valor: string): string {
-  return valor.replace(/[.\s-]/g, '');
+  return valor.replace(/[. -]/g, '');
+}
+
+export function normalizarCfop(valor: string): string {
+  return valor.replace(/[. -]/g, '');
+}
+
+export function codigoFiscalValido(tipo: 'cfops' | 'ncms', normalizado: string): boolean {
+  return (tipo === 'ncms' ? /^[0-9]{8}$/ : /^[0-9]{4}$/).test(normalizado);
 }
 
 export function normalizarCest(valor: string): string {
@@ -47,6 +56,24 @@ export function rotuloData(iso: string): string {
   const [ano, mes, dia] = iso.split('-');
   if (!ano || !mes || !dia) return iso;
   return `${dia}/${mes}/${ano}`;
+}
+
+const FORMATO_DATA_HORA = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** Instante ISO → `dd/MM/aaaa HH:mm` no fuso America/Sao_Paulo. */
+export function rotuloDataHora(iso: string): string {
+  const instante = new Date(iso);
+  if (Number.isNaN(instante.getTime())) return iso;
+  const p = Object.fromEntries(FORMATO_DATA_HORA.formatToParts(instante).map((parte) => [parte.type, parte.value]));
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
 }
 
 export function rotuloOperacao(rotulo: string, data: string): string {
@@ -188,8 +215,8 @@ export function mensagemSobreposicao(erro: ErroEnquadramento): string | null {
   if (erro.codigo !== 'ENQUADRAMENTO_SOBREPOSTO') return null;
   const conflito = erro.dados.conflito as ConflitoVigencia | undefined;
   if (!conflito?.codigo) return erro.message;
-  const fim = conflito.vigenciaFim ?? 'em aberto';
-  return `Há vigência sobreposta com o código ${conflito.codigo}. Vigência ${conflito.vigenciaInicio} a ${fim}.`;
+  const fim = conflito.vigenciaFim ? rotuloData(conflito.vigenciaFim) : 'em aberto';
+  return `Há vigência sobreposta com o código ${conflito.codigo}. Vigência ${rotuloData(conflito.vigenciaInicio)} a ${fim}.`;
 }
 
 export function textoConsulta(erro: ErroEnquadramento): string {
@@ -344,22 +371,45 @@ export const enquadramentosApi = {
       rotulo: rotuloOperacao(String(l.rotulo ?? ''), String(l.data ?? '')),
     }));
   },
-  opcoesProduto: async (): Promise<OpcaoCombo[]> => {
-    const body = await chamar<unknown>('GET', '/api/cadastros/produtos?page=1&pageSize=100&status=ativo');
-    return linhas(body).filter(ativo).map((l) => ({ id: String(l.id), rotulo: String(l.nome ?? '') }));
-  },
-  opcoesCliente: async (): Promise<OpcaoCombo[]> => {
-    const body = await chamar<unknown>('GET', '/api/cadastros/clientes?pageSize=100&status=ativo');
-    return linhas(body).filter(ativo).map((l) => ({
-      id: String(l.id),
-      rotulo: String((typeof l.nomeFantasia === 'string' && l.nomeFantasia.trim()) || l.razaoSocial || ''),
-    }));
-  },
-  opcoesCodigo: async (tipo: 'cfops' | 'ncms'): Promise<OpcaoCombo[]> => {
-    const body = await chamar<unknown>('GET', `/${tipo}?pageSize=100`);
-    return linhas(body).map((l) => ({
-      id: String(l.id),
-      rotulo: `${String(l.codigo ?? '')} ${String(l.descricao ?? '')}`.trim(),
-    }));
-  },
 };
+
+export type TipoBusca = 'produtos' | 'clientes' | 'cfops' | 'ncms';
+
+export interface ResultadoBusca {
+  opcoes: OpcaoCombo[];
+  /** Total de cadastros que casam com a busca no servidor. */
+  total: number;
+  /** `true` quando há mais resultados do que os exibidos. */
+  truncado: boolean;
+}
+
+export const TAMANHO_BUSCA = 50;
+export const AVISO_REFINAR = 'Há mais resultados do que os exibidos. Refine a busca.';
+
+const ROTA_BUSCA: Record<TipoBusca, string> = {
+  produtos: '/api/cadastros/produtos',
+  clientes: '/api/cadastros/clientes',
+  cfops: '/cfops',
+  ncms: '/ncms',
+};
+
+/** Busca no servidor (parâmetro `search` dos cadastros) para os combos de produto, cliente, CFOP e NCM. */
+export async function buscarOpcoes(tipo: TipoBusca, termo: string): Promise<ResultadoBusca> {
+  const comStatus = tipo === 'produtos' || tipo === 'clientes';
+  const body = await chamar<unknown>('GET', `${ROTA_BUSCA[tipo]}${qs({
+    page: 1,
+    pageSize: TAMANHO_BUSCA,
+    status: comStatus ? 'ativo' : undefined,
+    search: termo.trim(),
+  })}`);
+  const bruto = linhas(body);
+  const opcoes = bruto.filter(ativo).map((l): OpcaoCombo => {
+    if (tipo === 'produtos') return { id: String(l.id), rotulo: String(l.nome ?? '') };
+    if (tipo === 'clientes') {
+      return { id: String(l.id), rotulo: String((typeof l.nomeFantasia === 'string' && l.nomeFantasia.trim()) || l.razaoSocial || '') };
+    }
+    return { id: String(l.id), rotulo: `${String(l.codigo ?? '')} ${String(l.descricao ?? '')}`.trim() };
+  });
+  const total = typeof (body as { total?: unknown } | null)?.total === 'number' ? (body as { total: number }).total : bruto.length;
+  return { opcoes, total, truncado: total > bruto.length };
+}

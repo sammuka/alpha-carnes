@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EnquadramentosClient } from '../src/components/fiscal/enquadramentos/enquadramentos-client';
 import { conectarRealtime } from '../src/lib/realtime';
@@ -83,7 +83,7 @@ function envelope(status: number, corpo: Record<string, unknown>): Response {
 let lista = [LINHA];
 let proximoSalvar: Response | null = null;
 let proximaConsulta: Response | null = null;
-let falharProdutos = false;
+let falharEstabelecimentos = false;
 
 function padrao(metodo: string, caminho: string): Response {
   if (caminho.startsWith('/api/admin/parametros')) {
@@ -108,13 +108,13 @@ function padrao(metodo: string, caminho: string): Response {
     return proximoSalvar;
   }
   if (caminho.startsWith('/api/erp/fiscal/estabelecimentos')) {
+    if (falharEstabelecimentos) return json(500, { message: 'Falha.' });
     return json(200, { data: [{ id: ESTAB, nome: 'Filial Osasco', situacao: 'APPROVED' }], total: 1 });
   }
   if (caminho.startsWith('/api/operacoes')) {
     return json(200, { data: [{ id: OP, rotulo: 'Compra e venda outubro', data: '2026-10-01', status: 'aberta' }] });
   }
   if (caminho.startsWith('/api/cadastros/produtos')) {
-    if (falharProdutos) return json(500, { message: 'Falha.' });
     return json(200, { data: [{ id: PROD, nome: 'Acém', status: 'ativo', deletedAt: null }] });
   }
   if (caminho.startsWith('/api/cadastros/clientes')) {
@@ -133,7 +133,7 @@ beforeEach(() => {
   lista = [LINHA];
   proximoSalvar = null;
   proximaConsulta = null;
-  falharProdutos = false;
+  falharEstabelecimentos = false;
   window.sessionStorage.clear();
   (conectarRealtime as jest.Mock).mockClear();
   global.fetch = jest.fn(async (entrada: string, init?: RequestInit) => {
@@ -228,11 +228,11 @@ describe('EnquadramentosClient', () => {
   });
 
   it('falha ao carregar as opções dos filtros mostra erro e permite tentar de novo', async () => {
-    falharProdutos = true;
+    falharEstabelecimentos = true;
     const { user } = renderizar();
     const aviso = await screen.findByText(/Não foi possível carregar as opções dos filtros/);
     expect(aviso).toBeInTheDocument();
-    falharProdutos = false;
+    falharEstabelecimentos = false;
     await user.click(screen.getByRole('button', { name: 'Recarregar opções' }));
     await waitFor(() => expect(screen.queryByText(/Não foi possível carregar as opções dos filtros/)).not.toBeInTheDocument());
   });
@@ -251,5 +251,148 @@ describe('EnquadramentosClient', () => {
     expect(urls.some((url) => url.startsWith('/api/erp/fiscal/enquadramentos/exportacao') && url.includes('search=acem'))).toBe(true);
     expect(criar).toHaveBeenCalled();
     cliques.mockRestore();
+  });
+
+  it('ficha mostra grade de campos rotulados com datas dd/MM/aaaa HH:mm em São Paulo', async () => {
+    const { user } = renderizar();
+    const celula = await screen.findByText('Compra e venda outubro', { selector: 'td' });
+    celula.closest('tr')!.focus();
+    await user.keyboard('{Enter}');
+    await screen.findByText('Alpha Carnes Ltda');
+    expect(screen.getByText('Criado em').nextElementSibling).toHaveTextContent('14/10/2026 09:00');
+    expect(screen.getByText('Alterado em').nextElementSibling).toHaveTextContent('14/10/2026 09:00');
+    expect(screen.getByText('Início de vigência', { selector: 'p' }).nextElementSibling).toHaveTextContent('01/01/2026');
+    expect(screen.getByText('Fim de vigência', { selector: 'p' }).nextElementSibling).toHaveTextContent('31/12/2026');
+    expect(document.body.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('coluna Início de vigência e mensagem de sobreposição usam dd/MM/aaaa', async () => {
+    const { user } = renderizar();
+    const celula = await screen.findByText('Compra e venda outubro', { selector: 'td' });
+    expect(within(celula.closest('tr')!).getByText('01/01/2026')).toBeInTheDocument();
+    celula.closest('tr')!.focus();
+    await user.keyboard('{Enter}');
+    await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+    proximoSalvar = envelope(409, {
+      message: 'Há vigência sobreposta.',
+      codigo: 'ENQUADRAMENTO_SOBREPOSTO',
+      conflito: { codigo: '44', vigenciaInicio: '2026-01-01', vigenciaFim: '2026-06-30', prioridade: 1 },
+    });
+    await user.type(screen.getByLabelText(/Motivo da alteração/), 'Ajuste de vigência');
+    await user.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await screen.findByText(/Vigência 01\/01\/2026 a 30\/06\/2026/)).toBeInTheDocument();
+  });
+
+  it('Ações do processo é botão de menu acessível por teclado', async () => {
+    const { user } = renderizar();
+    const botao = await screen.findByRole('button', { name: /Ações do processo/ });
+    expect(botao).toHaveAttribute('aria-haspopup', 'menu');
+    botao.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(await screen.findByText('Novo registro')).toBeInTheDocument();
+  });
+
+  describe('combos com busca no servidor', () => {
+    const TODOS = Array.from({ length: 101 }, (_, i) => ({
+      id: `0190a1b2-c3d4-7e5f-8a9b-${String(i).padStart(12, '0')}`,
+      nome: i === 100 ? 'Peça Rara 101' : `Produto ${String(i + 1).padStart(3, '0')}`,
+      status: 'ativo',
+      deletedAt: null,
+    }));
+    let pendentes: Array<() => void>;
+
+    function responderProdutos(url: URL): Response {
+      const termo = (url.searchParams.get('search') ?? '').toLowerCase();
+      const achados = TODOS.filter((p) => p.nome.toLowerCase().includes(termo));
+      const pagina = achados.slice(0, Number(url.searchParams.get('pageSize') ?? 20));
+      return json(200, { data: pagina, total: achados.length, page: 1, pageSize: pagina.length });
+    }
+
+    function simular(produtos: (url: URL) => Response | Promise<Response>) {
+      (global.fetch as jest.Mock).mockImplementation(async (entrada: string, init?: RequestInit) => {
+        const url = new URL(String(entrada), 'http://localhost');
+        if (url.pathname === '/api/cadastros/produtos') return produtos(url);
+        return padrao(init?.method ?? 'GET', url.pathname);
+      });
+    }
+
+    async function abrirGaveta(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+      await screen.findByRole('dialog');
+      await user.click(document.getElementById('enq-prod')!);
+    }
+
+    beforeEach(() => { pendentes = []; });
+
+    it('o 101º item é encontrado pela busca e a lista inicial avisa para refinar', async () => {
+      simular(responderProdutos);
+      const { user } = renderizar();
+      await abrirGaveta(user);
+      expect(await screen.findByText(/Refine a busca/)).toBeInTheDocument();
+      expect(screen.queryByText('Peça Rara 101')).not.toBeInTheDocument();
+      await user.type(screen.getByPlaceholderText('Buscar produto'), 'rara');
+      expect(await screen.findByText('Peça Rara 101')).toBeInTheDocument();
+      expect(screen.queryByText(/Refine a busca/)).not.toBeInTheDocument();
+      const chamadas = (global.fetch as jest.Mock).mock.calls.map(([u]) => String(u));
+      expect(chamadas.some((u) => u.includes('/api/cadastros/produtos') && u.includes('search=rara'))).toBe(true);
+      await user.click(screen.getByText('Peça Rara 101'));
+      expect(document.getElementById('enq-prod')).toHaveTextContent('Peça Rara 101');
+    });
+
+    it('descarta a resposta obsoleta quando a digitação já mudou', async () => {
+      simular((url) => new Promise<Response>((resolver) => {
+        const termo = url.searchParams.get('search');
+        pendentes.push(() => resolver(json(200, { data: [{ id: `id-${termo}`, nome: `Resposta ${termo || 'inicial'}`, status: 'ativo' }], total: 1 })));
+      }));
+      const { user } = renderizar();
+      await abrirGaveta(user);
+      await waitFor(() => expect(pendentes).toHaveLength(1));
+      const entrada = screen.getByPlaceholderText('Buscar produto');
+      fireEvent.change(entrada, { target: { value: 'ab' } });
+      await waitFor(() => expect(pendentes).toHaveLength(2), { timeout: 2000 });
+      fireEvent.change(entrada, { target: { value: 'abc' } });
+      await waitFor(() => expect(pendentes).toHaveLength(3), { timeout: 2000 });
+      await act(async () => { pendentes[2]!(); });
+      expect(await screen.findByText('Resposta abc')).toBeInTheDocument();
+      await act(async () => { pendentes[1]!(); pendentes[0]!(); });
+      expect(screen.getByText('Resposta abc')).toBeInTheDocument();
+      expect(screen.queryByText('Resposta ab')).not.toBeInTheDocument();
+      expect(screen.queryByText('Resposta inicial')).not.toBeInTheDocument();
+    });
+
+    it('mostra o erro da busca', async () => {
+      simular(() => json(500, { message: 'x' }));
+      const { user } = renderizar();
+      await abrirGaveta(user);
+      expect(await screen.findByText('Serviço indisponível no momento. Tente novamente.')).toBeInTheDocument();
+    });
+
+    it('na edição o rótulo do item selecionado aparece mesmo fora da página de resultados', async () => {
+      simular(responderProdutos);
+      const { user } = renderizar();
+      const celula = await screen.findByText('Compra e venda outubro', { selector: 'td' });
+      celula.closest('tr')!.focus();
+      await user.keyboard('{Enter}');
+      await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+      expect(document.getElementById('enq-prod')).toHaveTextContent('Acém');
+      expect(document.getElementById('enq-cli')).toHaveTextContent('Açougue Central');
+      expect(document.getElementById('enq-cfop')).toHaveTextContent('5102 Venda de mercadoria');
+      expect(document.getElementById('enq-ncm')).toHaveTextContent('02013000 Carnes bovinas');
+    });
+  });
+
+  it('código fiscal com quebra de linha é recusado no frontend', async () => {
+    const { user } = renderizar();
+    await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+    await user.click((await screen.findAllByRole("button", { name: "Novo código" }))[0]!);
+    const codigo = await screen.findByLabelText('Código');
+    fireEvent.change(codigo, { target: { value: '51	02' } });
+    await user.type(screen.getByLabelText('Descrição'), 'Venda');
+    await user.type(screen.getByLabelText('Motivo do código'), 'Cadastro manual');
+    const dialogo = screen.getByRole('dialog', { name: 'Operação fiscal (CFOP)' });
+    await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await within(dialogo).findByText('CFOP deve ter 4 dígitos.')).toBeInTheDocument();
   });
 });
