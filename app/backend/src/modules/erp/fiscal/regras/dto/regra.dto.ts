@@ -6,7 +6,7 @@ import {
   PIS_CST,
   SITUACOES_REGRA,
 } from '../../../../../database/schema/fiscal-regras.schema';
-import { buscaSchema, justificativaSchema, percentualSchema, uuidSchema, versaoSchema } from './comum.dto';
+import { buscaSchema, dataVigenciaSchema, justificativaSchema, percentualSchema, uuidSchema, versaoSchema } from './comum.dto';
 
 const MENSAGEM_VIGENCIA = 'Fim de vigência deve ser igual ou posterior ao início.';
 
@@ -31,8 +31,8 @@ const camposRegra = {
   pisCst: z.enum(PIS_CST),
   ibsCst: z.enum(IBS_CST),
   classificacaoIbsCbsId: uuidSchema,
-  vigenciaInicio: z.iso.date(),
-  vigenciaFim: z.iso.date().nullish(),
+  vigenciaInicio: dataVigenciaSchema,
+  vigenciaFim: dataVigenciaSchema.nullish(),
   justificativa: justificativaSchema,
 };
 

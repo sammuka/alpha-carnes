@@ -352,7 +352,7 @@ export class RegrasTributariasService {
       .from(schema.auditoria)
       .leftJoin(autor, eq(autor.id, schema.auditoria.usuarioId))
       .where(and(eq(schema.auditoria.tabela, 'regras_tributarias'), inArray(schema.auditoria.registroId, ids)))
-      .orderBy(schema.auditoria.createdAt);
+      .orderBy(asc(schema.auditoria.createdAt), asc(schema.auditoria.id));
     return linhas.map((linha) => {
       const novos = (linha.dadosNovos ?? {}) as Record<string, unknown>;
       const anteriores = (linha.dadosAnteriores ?? {}) as Record<string, unknown>;
@@ -405,6 +405,9 @@ export class RegrasTributariasService {
       const atual = await this.obterBloqueado(tx, id);
       recusarEdicao(atual.situacao as SituacaoRegra);
       exigirVersao(atual.versao, dto.versao);
+      if ((atual.origemVersaoId || atual.numeroVersao > 1) && dto.enquadramentoId !== atual.enquadramentoId) {
+        regraViolada('LINHAGEM_ENQUADRAMENTO_FIXO', 'A versão nova permanece no mesmo enquadramento fiscal.');
+      }
       const enquadramento = await travarEnquadramento(tx, dto.enquadramentoId);
       this.exigirOperacaoDoEnquadramento(enquadramento, dto);
       await this.exigirCatalogos(tx, dto.beneficioFiscalId, dto.classificacaoIbsCbsId);
@@ -438,15 +441,7 @@ export class RegrasTributariasService {
       const origem = await this.obterBloqueado(tx, id);
       recusarAcao(origem.situacao as SituacaoRegra, 'adicionarVersao');
       exigirVersao(origem.versao, dto.versao);
-      if (dto.enquadramentoId !== origem.enquadramentoId) {
-        regraViolada('LINHAGEM_ENQUADRAMENTO_FIXO', 'A versão nova permanece no mesmo enquadramento fiscal.');
-      }
-      await travarEnquadramento(tx, origem.enquadramentoId);
-      this.exigirOperacaoDoEnquadramento(
-        await travarEnquadramento(tx, origem.enquadramentoId),
-        dto,
-      );
-      await this.exigirCatalogos(tx, dto.beneficioFiscalId, dto.classificacaoIbsCbsId);
+      // 409 de versão aberta antes de qualquer 422: a linhagem decide primeiro (M9).
       const aberta = await tx.select({ id: regrasTributarias.id }).from(regrasTributarias).where(and(
         eq(regrasTributarias.codigo, origem.codigo),
         isNull(regrasTributarias.deletedAt),
@@ -455,6 +450,11 @@ export class RegrasTributariasService {
       if (aberta.length > 0) {
         conflito('VERSAO_ABERTA', 'Já existe versão em rascunho ou submetida para este código.');
       }
+      if (dto.enquadramentoId !== origem.enquadramentoId) {
+        regraViolada('LINHAGEM_ENQUADRAMENTO_FIXO', 'A versão nova permanece no mesmo enquadramento fiscal.');
+      }
+      this.exigirOperacaoDoEnquadramento(await travarEnquadramento(tx, origem.enquadramentoId), dto);
+      await this.exigirCatalogos(tx, dto.beneficioFiscalId, dto.classificacaoIbsCbsId);
       try {
         const [linha] = await tx.insert(regrasTributarias).values({
           codigo: origem.codigo,
@@ -495,6 +495,8 @@ export class RegrasTributariasService {
       const atual = await this.obterBloqueado(tx, id);
       recusarAcao(atual.situacao as SituacaoRegra, 'submeter');
       exigirVersao(atual.versao, dto.versao);
+      // Mesma trava do aprovar: serializa com inativar, remover e mudança de chave do enquadramento (B6).
+      await travarEnquadramento(tx, atual.enquadramentoId);
       const [linha] = await tx.update(regrasTributarias).set({
         situacao: 'SUBMETIDA',
         submetidoPorId: usuarioId,

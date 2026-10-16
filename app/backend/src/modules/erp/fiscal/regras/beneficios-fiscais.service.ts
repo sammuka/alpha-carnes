@@ -77,10 +77,7 @@ export class BeneficiosFiscaisService {
         return gravada;
       });
       this.eventos.emit(EVENTOS.REGRA_TRIBUTARIA_ALTERADA, {
-        regraId: linha.id,
-        enquadramentoId: linha.id,
         codigo: linha.codigo,
-        numeroVersao: linha.versao,
         acao: 'beneficio_criado',
         situacao: 'ATIVA',
       });

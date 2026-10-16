@@ -515,11 +515,9 @@ export type AcaoRegraTributaria =
   | 'versao_adicionada'
   | 'submetida'
   | 'aprovada'
-  | 'aposentada'
-  | 'beneficio_criado'
-  | 'classificacao_criada';
+  | 'aposentada';
 
-/** Sem percentual, CST ou id de nota. Catálogo manual reusa `regraId` como id da linha criada. */
+/** Sem percentual, CST ou id de nota. */
 export interface SimulacaoFiscalAlteradaPayload {
   simulacaoId: string;
   codigo: string;
@@ -535,7 +533,10 @@ export interface HomologacaoRegraAlteradaPayload {
   situacao: string;
 }
 
-export interface RegraTributariaAlteradaPayload {
+export type AcaoCatalogoTributario = 'beneficio_criado' | 'classificacao_criada';
+
+/** Sem percentual, CST ou id de nota. */
+export interface RegraTributariaVersaoPayload {
   regraId: string;
   enquadramentoId: string;
   codigo: string;
@@ -543,6 +544,15 @@ export interface RegraTributariaAlteradaPayload {
   acao: AcaoRegraTributaria;
   situacao: string;
 }
+
+/** Catálogo manual (benefício, classificação) não tem regra nem enquadramento: só o código criado. */
+export interface RegraTributariaCatalogoPayload {
+  codigo: string;
+  acao: AcaoCatalogoTributario;
+  situacao: string;
+}
+
+export type RegraTributariaAlteradaPayload = RegraTributariaVersaoPayload | RegraTributariaCatalogoPayload;
 
 /** Contratos tipados dos eventos Onda 1 (PayloadPorEvento). */
 export interface PayloadPorEvento {

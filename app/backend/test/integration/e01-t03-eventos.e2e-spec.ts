@@ -268,4 +268,19 @@ describe('E01-T03 eventos pós-commit', () => {
     expect(codigoDe(res.body)).toBe('SEGREGACAO_FUNCAO');
     expect(chamadasRegra()).toHaveLength(0);
   });
+
+  it('M7: catálogo criado emite só código, ação e situação, sem regraId nem enquadramentoId', async () => {
+    spy.mockClear();
+    const beneficio = await request(app.getHttpServer()).post('/fiscal/beneficios-fiscais').set('Cookie', adminA)
+      .send({ codigo: 'SP777001', descricao: 'Benefício evento', justificativa: MOTIVO });
+    expect(beneficio.status).toBe(201);
+    const classificacao = await request(app.getHttpServer()).post('/fiscal/classificacoes-ibs-cbs').set('Cookie', adminA)
+      .send({ codigo: '777001', descricao: 'Classificação evento', justificativa: MOTIVO });
+    expect(classificacao.status).toBe(201);
+    const payloads = chamadasRegra().map((chamada) => chamada[1]);
+    expect(payloads).toEqual([
+      { codigo: 'SP777001', acao: 'beneficio_criado', situacao: 'ATIVA' },
+      { codigo: '777001', acao: 'classificacao_criada', situacao: 'ATIVA' },
+    ]);
+  });
 });

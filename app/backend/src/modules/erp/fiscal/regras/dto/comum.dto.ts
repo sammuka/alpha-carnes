@@ -1,9 +1,17 @@
 import { z } from 'zod';
 import { normalizarPercentual } from '../percentual';
 
-import { buscaSchema } from '../../enquadramentos/dto/comum.dto';
+import { buscaSchema, semNul } from '../../enquadramentos/dto/comum.dto';
 
 export { buscaSchema, justificativaSchema, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
+
+/** PostgreSQL recusa NUL em text (500 sem tratamento). */
+export const MSG_NUL = 'Texto com caractere inválido.';
+
+export const textoCurtoSchema = (max: number) => z.string().trim().min(1).max(max).refine(semNul, MSG_NUL);
+
+/** Data ISO com ano >= 1900: 0000-01-01 passa no z.iso.date mas derruba a leitura (500). */
+export const dataVigenciaSchema = z.iso.date().refine((d) => Number(d.slice(0, 4)) >= 1900, 'Informe uma data a partir de 1900.');
 
 export const percentualSchema = z.string().trim().transform((valor, ctx) => {
   const canon = normalizarPercentual(valor);

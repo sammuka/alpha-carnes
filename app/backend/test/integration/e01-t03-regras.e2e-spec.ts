@@ -148,26 +148,26 @@ describe('E01-T03 regras tributárias', () => {
       .set('Cookie', adminA)
       .send({ codigo: String(3000000 + seq).padStart(8, '0'), descricao: `NCM ${cnpjRaiz}`, justificativa: MOTIVO });
     expect(ncm.status).toBe(201);
+    const corpoEnquadramento = {
+      operacaoId: operacao.body.id as string,
+      tpNf: '1',
+      finNfe: '1',
+      cfopId: cfop.body.id as string,
+      abrangencia: 'INTERNA',
+      tipoProduto: 'REVENDA',
+      produtoId: produto.body.id as string,
+      ncmId: ncm.body.id as string,
+      cest: '1708700',
+      clienteId: cliente.body.id as string,
+      vigenciaInicio: '2026-01-01',
+      vigenciaFim: '2026-12-31',
+      prioridade: 1,
+      justificativa: MOTIVO,
+    };
     const enquadramento = await request(app.getHttpServer())
       .post('/fiscal/enquadramentos')
       .set('Cookie', adminA)
-      .send({
-        estabelecimentoId: aprovado.body.id,
-        operacaoId: operacao.body.id,
-        tpNf: '1',
-        finNfe: '1',
-        cfopId: cfop.body.id,
-        abrangencia: 'INTERNA',
-        tipoProduto: 'REVENDA',
-        produtoId: produto.body.id,
-        ncmId: ncm.body.id,
-        cest: '1708700',
-        clienteId: cliente.body.id,
-        vigenciaInicio: '2026-01-01',
-        vigenciaFim: '2026-12-31',
-        prioridade: 1,
-        justificativa: MOTIVO,
-      });
+      .send({ estabelecimentoId: aprovado.body.id, ...corpoEnquadramento });
     expect(enquadramento.status).toBe(201);
     const beneficio = await request(app.getHttpServer())
       .post('/fiscal/beneficios-fiscais')
@@ -185,6 +185,8 @@ describe('E01-T03 regras tributárias', () => {
       cfopId: cfop.body.id as string,
       beneficioFiscalId: beneficio.body.id as string,
       classificacaoIbsCbsId: classificacao.body.id as string,
+      corpoEnquadramento,
+      versaoEnquadramento: enquadramento.body.versao as number,
     };
   }
 
@@ -535,7 +537,7 @@ describe('E01-T03 regras tributárias', () => {
       .get('/fiscal/regras').query({ search: 'zzz-inexistente-zzz' }).set('Cookie', adminA);
     expect(semResultado.body.total).toBe(0);
     const comNulo = await request(app.getHttpServer())
-      .get('/fiscal/regras').query({ search: 'a b' }).set('Cookie', adminA);
+      .get('/fiscal/regras').query({ search: 'a0000b' }).set('Cookie', adminA);
     expect(comNulo.status).toBe(400);
 
     const asc = await request(app.getHttpServer())
@@ -550,5 +552,155 @@ describe('E01-T03 regras tributárias', () => {
     const contagem = await request(app.getHttpServer())
       .get('/fiscal/regras/contagens').query({ search: 'zzz-inexistente-zzz' }).set('Cookie', adminA);
     expect(contagem.body.total).toBe(0);
+  });
+
+  describe('correções da revisão crítica', () => {
+    type Base = Awaited<ReturnType<typeof cenario>>;
+
+    function ids(base: Base) {
+      return {
+        enquadramentoId: base.enquadramentoId,
+        operacaoId: base.operacaoId,
+        cfopId: base.cfopId,
+        beneficioFiscalId: base.beneficioFiscalId,
+        classificacaoIbsCbsId: base.classificacaoIbsCbsId,
+      };
+    }
+
+    it('B4: data 0000-01-01 e NUL viram 400, nunca 500', async () => {
+      const base = await cenario();
+      const inicio = await request(app.getHttpServer()).post('/fiscal/regras').set('Cookie', adminA)
+        .send(corpoRegra(base, { vigenciaInicio: '0000-01-01', vigenciaFim: null }));
+      expect(inicio.status).toBe(400);
+      const fim = await request(app.getHttpServer()).post('/fiscal/regras').set('Cookie', adminA)
+        .send(corpoRegra(base, { vigenciaFim: '0000-01-01' }));
+      expect(fim.status).toBe(400);
+      const nul = await request(app.getHttpServer()).post('/fiscal/regras').set('Cookie', adminA)
+        .send(corpoRegra(base, { justificativa: 'abc\u0000def' }));
+      expect(nul.status).toBe(400);
+      const beneficio = await request(app.getHttpServer()).post('/fiscal/beneficios-fiscais').set('Cookie', adminA)
+        .send({ codigo: 'SP999999', descricao: 'a\u0000b', justificativa: MOTIVO });
+      expect(beneficio.status).toBe(400);
+      const busca = await request(app.getHttpServer()).get('/fiscal/regras').query({ search: 'a\u0000b' }).set('Cookie', adminA);
+      expect(busca.status).toBe(400);
+    });
+
+    it('B6: enquadramento com regra aprovada não muda, não inativa e não é removido', async () => {
+      const base = await cenario();
+      const fluxo = await aprovarFluxo(ids(base));
+      const outroCfop = await request(app.getHttpServer()).post('/fiscal/cfops').set('Cookie', adminA)
+        .send({ codigo: String(6100 + (seq % 80)).padStart(4, '0'), descricao: `CFOP alt ${seq}`, justificativa: MOTIVO });
+      expect(outroCfop.status).toBe(201);
+      const url = `/fiscal/enquadramentos/${base.enquadramentoId}`;
+      const patch = await request(app.getHttpServer()).patch(url).set('Cookie', adminA)
+        .send({ ...base.corpoEnquadramento, cfopId: outroCfop.body.id, versao: base.versaoEnquadramento });
+      expect(patch.status).toBe(409);
+      expect(codigoDe(patch.body)).toBe('ENQUADRAMENTO_COM_REGRA_ATIVA');
+      expect((await detalharComo(adminA, fluxo.id)).body.cfopId).toBe(base.cfopId);
+      const inativar = await request(app.getHttpServer()).post(`${url}/inativar`).set('Cookie', adminA)
+        .send({ versao: base.versaoEnquadramento, justificativa: MOTIVO });
+      expect(inativar.status).toBe(409);
+      expect(codigoDe(inativar.body)).toBe('ENQUADRAMENTO_COM_REGRA_ATIVA');
+      const remover = await request(app.getHttpServer()).delete(url).set('Cookie', adminA).send({ justificativa: MOTIVO });
+      expect(remover.status).toBe(409);
+      expect(codigoDe(remover.body)).toBe('ENQUADRAMENTO_COM_REGRA_ATIVA');
+      const situacao = await db().execute(sql`SELECT situacao, deleted_at FROM enquadramentos_fiscais WHERE id = ${base.enquadramentoId}`);
+      expect(situacao.rows[0]).toMatchObject({ situacao: 'ATIVA', deleted_at: null });
+      // campo fora da chave continua editável
+      const prioridade = await request(app.getHttpServer()).patch(url).set('Cookie', adminA)
+        .send({ ...base.corpoEnquadramento, prioridade: 2, versao: base.versaoEnquadramento });
+      expect(prioridade.status).toBe(200);
+      // aposentada a regra, o enquadramento volta a poder inativar
+      const aposentada = await request(app.getHttpServer()).post(`/fiscal/regras/${fluxo.id}/aposentar`).set('Cookie', adminB)
+        .send({ versao: fluxo.aprovada.versao, justificativa: MOTIVO });
+      expect(aposentada.status).toBe(200);
+      const liberado = await request(app.getHttpServer()).post(`${url}/inativar`).set('Cookie', adminA)
+        .send({ versao: prioridade.body.versao, justificativa: MOTIVO });
+      expect(liberado.status).toBe(200);
+    });
+
+    it('B6: regra submetida também protege o enquadramento', async () => {
+      const base = await cenario();
+      const criada = await criarComo(adminA, ids(base));
+      expect(criada.res.status).toBe(201);
+      expect((await submeterComo(adminA, criada.res.body.id, criada.res.body.versao)).status).toBe(200);
+      const remover = await request(app.getHttpServer()).delete(`/fiscal/enquadramentos/${base.enquadramentoId}`)
+        .set('Cookie', adminA).send({ justificativa: MOTIVO });
+      expect(remover.status).toBe(409);
+      expect(codigoDe(remover.body)).toBe('ENQUADRAMENTO_COM_REGRA_ATIVA');
+    });
+
+    it('B7: rascunho de versão 2 não troca de enquadramento; rascunho da v1 troca', async () => {
+      const a = await cenario();
+      const b = await cenario();
+      const fluxo = await aprovarFluxo(ids(a));
+      const v2 = await request(app.getHttpServer()).post(`/fiscal/regras/${fluxo.id}/versoes`).set('Cookie', adminA)
+        .send({ ...fluxo.corpo, vigenciaInicio: '2027-01-01', vigenciaFim: null, versao: fluxo.aprovada.versao });
+      expect(v2.status).toBe(201);
+      const corpoB = corpoRegra(ids(b));
+      const mover = await request(app.getHttpServer()).patch(`/fiscal/regras/${v2.body.id}`).set('Cookie', adminA)
+        .send({ ...corpoB, versao: v2.body.versao });
+      expect(mover.status).toBe(422);
+      expect(codigoDe(mover.body)).toBe('LINHAGEM_ENQUADRAMENTO_FIXO');
+      expect((await detalharComo(adminA, v2.body.id)).body.enquadramentoId).toBe(a.enquadramentoId);
+      const v1 = await criarComo(adminA, ids(a));
+      expect(v1.res.status).toBe(201);
+      const livre = await request(app.getHttpServer()).patch(`/fiscal/regras/${v1.res.body.id}`).set('Cookie', adminA)
+        .send({ ...corpoB, versao: v1.res.body.versao });
+      expect(livre.status).toBe(200);
+    });
+
+    it('B8/M1: busca e ordenação da listagem', async () => {
+      const base = await cenario();
+      const fluxo = await aprovarFluxo(ids(base));
+      const segunda = await criarComo(adminA, { ...ids(base), icmsCst: '00', pRedBc: '0,00' });
+      expect(segunda.res.status).toBe(201);
+      const listar = (query: Record<string, string>) =>
+        request(app.getHttpServer()).get('/fiscal/regras').query({ cfopId: base.cfopId, ...query }).set('Cookie', adminA);
+      const vazio = await request(app.getHttpServer()).get('/fiscal/regras').query({ search: 'zzzzznaoexiste' }).set('Cookie', adminA);
+      expect(vazio.status).toBe(200);
+      expect(vazio.body.total).toBe(0);
+      const [beneficio] = await db().select().from(schema.beneficiosFiscais).where(eq(schema.beneficiosFiscais.id, base.beneficioFiscalId));
+      expect((await listar({ search: beneficio!.descricao })).body.total).toBe(2);
+      expect((await listar({ search: beneficio!.codigo.toLowerCase() })).body.total).toBe(2);
+      expect((await listar({ search: 'zzzzznaoexiste' })).body.total).toBe(0);
+      const contagem = await request(app.getHttpServer()).get('/fiscal/regras/contagens')
+        .query({ cfopId: base.cfopId, search: 'zzzzznaoexiste' }).set('Cookie', adminA);
+      expect(contagem.body.total).toBe(0);
+      const csv = await request(app.getHttpServer()).get('/fiscal/regras/exportacao')
+        .query({ cfopId: base.cfopId, search: 'zzzzznaoexiste' }).set('Cookie', adminA);
+      expect(csv.text.split('\r\n')).toHaveLength(1);
+      const asc = await listar({ sort: 'icmsCst', dir: 'asc' });
+      const desc = await listar({ sort: 'icmsCst', dir: 'desc' });
+      const trat = (r: { body: { data: Array<{ tratamentoIcms: string }> } }) => r.body.data.map((l) => l.tratamentoIcms);
+      expect(trat(asc)).toEqual([schema.ROTULOS_ICMS_CST['00'], schema.ROTULOS_ICMS_CST['20']]);
+      expect(trat(desc)).toEqual([schema.ROTULOS_ICMS_CST['20'], schema.ROTULOS_ICMS_CST['00']]);
+      expect((await listar({ sort: 'inexistente' })).status).toBe(400);
+      for (const sort of ['enquadramento', 'cfop', 'cBenef', 'cClassTrib', 'operacao']) {
+        expect((await listar({ sort, dir: 'desc' })).status).toBe(200);
+      }
+      // empate na chave de ordenação: código da regra e id desempatam
+      const empate = await listar({ sort: 'enquadramento' });
+      expect(empate.body.data.map((l: { id: string }) => l.id)).toEqual([fluxo.id, segunda.res.body.id]);
+    });
+
+    it('M2: ordem natural por código do enquadramento', async () => {
+      const lista = await request(app.getHttpServer()).get('/fiscal/regras').query({ pageSize: 100 }).set('Cookie', adminA);
+      const codigos = (lista.body.data as Array<{ enquadramentoFiscal: string }>).map((l) => Number(l.enquadramentoFiscal));
+      expect(codigos).toEqual([...codigos].sort((x, y) => x - y));
+    });
+
+    it('M9: versão nova da v1 com v2 aberta → 409 VERSAO_ABERTA antes de qualquer 422', async () => {
+      const base = await cenario();
+      const fluxo = await aprovarFluxo(ids(base));
+      const v2 = await request(app.getHttpServer()).post(`/fiscal/regras/${fluxo.id}/versoes`).set('Cookie', adminA)
+        .send({ ...fluxo.corpo, vigenciaInicio: '2027-01-01', vigenciaFim: null, versao: fluxo.aprovada.versao });
+      expect(v2.status).toBe(201);
+      await db().update(schema.beneficiosFiscais).set({ deletedAt: new Date() }).where(eq(schema.beneficiosFiscais.id, base.beneficioFiscalId));
+      const v3 = await request(app.getHttpServer()).post(`/fiscal/regras/${fluxo.id}/versoes`).set('Cookie', adminA)
+        .send({ ...fluxo.corpo, versao: fluxo.aprovada.versao });
+      expect(v3.status).toBe(409);
+      expect(codigoDe(v3.body)).toBe('VERSAO_ABERTA');
+    });
   });
 });
