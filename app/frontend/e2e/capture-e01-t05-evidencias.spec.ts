@@ -81,8 +81,10 @@ const painel = (page: Page): Locator => page.getByRole('tabpanel');
 async function capturar(page: Page, arquivo: string, chave: Locator): Promise<void> {
   await expect(chave, `elemento-chave ausente antes de ${arquivo}`).toBeVisible({ timeout: 30_000 });
   await chave.scrollIntoViewIfNeeded();
-  // Oculta o indicador do `next dev` (portal "N") sem alterar o produto.
-  await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
+  // A captura da página inteira parte do topo: cabeçalho e menu fixos não aparecem no meio da imagem.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  // Oculta o indicador do `next dev` (portal "N") e os avisos temporários, sem alterar o produto.
+  await page.addStyleTag({ content: 'nextjs-portal, [data-sonner-toaster] { display: none !important; }' });
   await page.screenshot({ path: path.join(OUT_DIR, arquivo), fullPage: true });
 }
 
@@ -112,8 +114,6 @@ async function preencherESalvar(page: Page, drawer: Locator, cenario: CenarioE01
   await drawer.getByLabel('Justificativa auditável').fill(JUSTIFICATIVA);
   await drawer.getByRole('button', { name: 'Salvar rascunho' }).click();
   await expect(drawer).toBeHidden({ timeout: 30_000 });
-  // O aviso de sucesso não deve aparecer por cima da tela capturada.
-  await expect(page.getByText('Revisão aberta.')).toBeHidden({ timeout: 15_000 });
 }
 
 /** Abre o diálogo de uma ação da aba Movimentações; `justificativa` preenche o campo quando há. */

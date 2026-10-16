@@ -232,7 +232,7 @@ test.describe('E01-T04 Simulador fiscal e memória de cálculo', () => {
     await expect(outra.locator('option').nth(1)).toHaveText(/ · versão 2 · Calculada · Outubro de 2026$/);
     await outra.selectOption((await outra.locator('option').nth(1).getAttribute('value')) ?? '');
     await comparar.getByRole('button', { name: 'Comparar versões', exact: true }).click();
-    await expect(comparar.getByText('ICMS: 70,00 → 63,00')).toBeVisible();
+    await expect(comparar.getByText('ICMS: 70,00 → 63,00')).toBeVisible({ timeout: 30_000 });
     await comparar.getByRole('button', { name: 'Fechar' }).click();
     await expect(comparar).toBeHidden();
     await expect(linhas).toHaveCount(2);

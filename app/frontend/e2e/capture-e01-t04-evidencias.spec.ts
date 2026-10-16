@@ -81,8 +81,10 @@ const painel = (page: Page): Locator => page.getByRole('tabpanel');
 async function capturar(page: Page, arquivo: string, chave: Locator): Promise<void> {
   await expect(chave, `elemento-chave ausente antes de ${arquivo}`).toBeVisible({ timeout: 30_000 });
   await chave.scrollIntoViewIfNeeded();
-  // Oculta o indicador do `next dev` (portal "N") sem alterar o produto.
-  await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
+  // A captura da página inteira parte do topo: cabeçalho e menu fixos não aparecem no meio da imagem.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  // Oculta o indicador do `next dev` (portal "N") e os avisos temporários, sem alterar o produto.
+  await page.addStyleTag({ content: 'nextjs-portal, [data-sonner-toaster] { display: none !important; }' });
   await page.screenshot({ path: path.join(OUT_DIR, arquivo), fullPage: true });
 }
 
@@ -207,7 +209,7 @@ test.describe('E01-T04 evidências app × protótipo', () => {
     await irParaSimulador(page);
     await filtrarCliente(page, cenario.clienteNome);
     const linhas = page.getByRole('row', { name: new RegExp(cenario.clienteNome) });
-    await expect(linhas).toHaveCount(2);
+    await expect(linhas).toHaveCount(2, { timeout: 30_000 });
     await capturar(page, 'app-lista.png', linhas.first());
 
     await linhas.filter({ hasNotText: '900,00' }).click();

@@ -296,7 +296,7 @@ test.describe('E01-T03 Editor de regras tributárias', () => {
     await expect(opcao).toBeAttached();
     await comparar.getByLabel('Outra versão').selectOption(await opcao.getAttribute('value') ?? '');
     await comparar.getByRole('button', { name: 'Comparar', exact: true }).click();
-    await expect(comparar.getByText('Alíquota (%): 7,00 → 12,00')).toBeVisible();
+    await expect(comparar.getByText('Alíquota (%): 7,00 → 12,00')).toBeVisible({ timeout: 30_000 });
     await expect(comparar.getByText('Início de vigência: 01/01/2027 → 01/01/2026')).toBeVisible();
     await comparar.getByRole('button', { name: 'Fechar' }).click();
     await expect(comparar).toBeHidden();

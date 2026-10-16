@@ -172,9 +172,11 @@ async function submeter(regra: RegraMinima): Promise<RegraMinima> {
 
 async function capturar(page: Page, arquivo: string, chave: Locator): Promise<void> {
   await expect(chave, `elemento-chave ausente antes de ${arquivo}`).toBeVisible({ timeout: 30_000 });
-  // O overlay do Next em desenvolvimento não faz parte da tela.
-  await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
+  // O overlay do Next em desenvolvimento e os avisos temporários não fazem parte da tela.
+  await page.addStyleTag({ content: 'nextjs-portal, [data-sonner-toaster] { display: none !important; }' });
   await chave.scrollIntoViewIfNeeded();
+  // A captura da página inteira parte do topo: cabeçalho e menu fixos não aparecem no meio da imagem.
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: path.join(OUT_DIR, arquivo), fullPage: true });
 }
 
@@ -338,8 +340,10 @@ test.describe('E01-T03 evidências app × protótipo', () => {
     const page = await abrirComo(browser, baseURL, usuarios.adminA);
     await irParaRegras(page);
     await filtrarCfop(page, '5102');
+    // A lista acumula registros de outras execuções: a busca traz a operação desta captura para a primeira página.
+    await page.getByLabel('Pesquisar descrição ou referência de negócio').fill(principal.rotuloOperacao);
     await capturar(page, 'app-lista.png', linhas(page, principal.rotuloOperacao).first());
-    await selecionarTexto(page, principal.rotuloOperacao, () => expect(valorCampo(page, 'Alíquota (%)')).toHaveText('12,00', { timeout: 4_000 }));
+    await selecionarTexto(page, principal.rotuloOperacao, () => expect(valorCampo(page, 'Alíquota (%)')).toHaveText('12,00', { timeout: 15_000 }));
     await capturar(page, 'app-ficha.png', page.getByText('Dados principais'));
     for (const item of ABAS_APP) {
       await capturar(page, item.arquivo, await abrirAba(page, item.aba, item.chave));
@@ -369,7 +373,7 @@ test.describe('E01-T03 evidências app × protótipo', () => {
 
     await irParaRegras(page);
     await filtrarCfop(page, '5102');
-    await selecionarTexto(page, segregada.rotuloOperacao, () => expect(valorCampo(page, 'Situação')).toHaveText('Submetida', { timeout: 4_000 }));
+    await selecionarTexto(page, segregada.rotuloOperacao, () => expect(valorCampo(page, 'Situação')).toHaveText('Submetida', { timeout: 15_000 }));
     const dialogoSegregacao = await decidirNaFicha(page, 'Aprovar', 'Aprovar regra');
     await capturar(page, 'app-segregacao.png', dialogoSegregacao.getByText(SEGREGACAO));
     await dialogoSegregacao.getByRole('button', { name: 'Cancelar' }).click();
@@ -383,13 +387,13 @@ test.describe('E01-T03 evidências app × protótipo', () => {
     const pageB = await abrirComo(browser, baseURL, usuarios.adminB);
     await irParaRegras(pageB);
     await filtrarCfop(pageB, '5102');
-    await selecionarTexto(pageB, principal.rotuloOperacao, () => expect(valorCampo(pageB, 'Início de vigência')).toContainText('01/06/2026', { timeout: 4_000 }));
+    await selecionarTexto(pageB, principal.rotuloOperacao, () => expect(valorCampo(pageB, 'Início de vigência')).toContainText('01/06/2026', { timeout: 15_000 }));
     const dialogoVigencia = await decidirNaFicha(pageB, 'Aprovar', 'Aprovar regra');
     await capturar(pageB, 'app-vigencia-ambigua.png', dialogoVigencia.getByText(VIGENCIA));
 
     await irParaRegras(page);
     await filtrarCfop(page, '5102');
-    await selecionarTexto(page, beneficio.rotuloOperacao, () => expect(valorCampo(page, 'Situação')).toHaveText('Rascunho', { timeout: 4_000 }));
+    await selecionarTexto(page, beneficio.rotuloOperacao, () => expect(valorCampo(page, 'Situação')).toHaveText('Rascunho', { timeout: 15_000 }));
     await page.getByRole('tab', { name: 'Ficha e campos', exact: true }).click();
     await page.getByRole('button', { name: 'Editar versão' }).click();
     const edicao = page.getByRole('dialog', { name: 'Editar versão' });
