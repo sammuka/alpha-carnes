@@ -37,7 +37,8 @@ async function postar(request: APIRequestContext, cookie: string, rota: string, 
   if (!resposta.ok()) throw new Error(`POST ${rota} -> ${resposta.status()}: ${await resposta.text()}`);
 }
 
-export async function criarPlanoDaJornada(request: APIRequestContext): Promise<PlanoDaJornada> {
+/** `debitoComoFormula` dá à conta de débito um nome que começa em "=", para provar a neutralização no CSV. */
+export async function criarPlanoDaJornada(request: APIRequestContext, debitoComoFormula = false): Promise<PlanoDaJornada> {
   const { cookieHeader } = await loginBackend(request);
   const sufixo = `${Date.now().toString(36)}${randomInt(46656).toString(36)}`;
   const vigenciaInicio = ontemIso();
@@ -46,7 +47,7 @@ export async function criarPlanoDaJornada(request: APIRequestContext): Promise<P
     sufixo,
     centroCodigo,
     centroNome: `Operação industrial ${sufixo}`,
-    debitoNome: `Caixa e bancos ${sufixo}`,
+    debitoNome: `${debitoComoFormula ? '=' : ''}Caixa e bancos ${sufixo}`,
     creditoNome: `Fornecedores ${sufixo}`,
   };
   await postar(request, cookieHeader, '/contabilidade/centros-custo', {

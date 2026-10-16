@@ -55,6 +55,8 @@ function postDaAcao(page: Page, acao: 'simular' | 'aprovar') {
 }
 
 async function configurarPolitica(page: Page, competencia: string) {
+  const gravada = page.waitForResponse((resposta) => resposta.request().method() === 'POST'
+    && new URL(resposta.url()).pathname === '/api/contabilidade/politicas');
   await page.getByRole('button', { name: 'Configurar mappings' }).first().click();
   const debito = page.getByLabel('Conta de débito', { exact: true });
   await expect(debito.locator('option', { hasText: plano.debitoNome })).toHaveCount(1);
@@ -66,6 +68,8 @@ async function configurarPolitica(page: Page, competencia: string) {
   await page.getByLabel('Início de vigência', { exact: true }).fill(ONTEM);
   await page.getByLabel('Justificativa auditável', { exact: true }).fill('abre a regra');
   await page.getByRole('button', { name: 'Configurar mappings' }).last().click();
+  // Só depois da resposta a tela recarrega a lista; digitar na busca antes disso corre contra a gravação.
+  await gravada;
 }
 
 test('administrador configura, simula e outra pessoa aprova', async ({ browser, baseURL }) => {
@@ -196,11 +200,11 @@ test('com mais de 20 políticas a página 2 é alcançada pela tela e a posiçã
   await admin.close();
 });
 
-test('Exportar visão baixa o CSV com todas as linhas da visão, sem id e sem fórmula', async ({ browser, baseURL, playwright }) => {
+test('Exportar visão baixa o CSV com todas as linhas da visão, sem id e com a fórmula neutralizada', async ({ browser, baseURL, playwright }) => {
   const api = await playwright.request.newContext();
   let propria: PlanoDaJornada;
   try {
-    propria = await criarPlanoDaJornada(api);
+    propria = await criarPlanoDaJornada(api, true);
     await criarPoliticas(api, propria, 21);
   } finally {
     await api.dispose();
@@ -232,6 +236,9 @@ test('Exportar visão baixa o CSV com todas as linhas da visão, sem id e sem f�
   const linhas = bytes.toString('utf8').replace('\uFEFF', '').split('\n');
   expect(linhas).toHaveLength(22);
   expect(linhas[0]).toBe('Competência;Situação;Conta de débito;Conta de crédito;Centro de custo;Tipo de ocorrência');
-  expect(bytes.toString('utf8')).not.toMatch(/LIQUIDACAO-|[0-9a-f]{8}-[0-9a-f]{4}-/);
+  const texto = bytes.toString('utf8');
+  expect(texto).not.toMatch(/LIQUIDACAO-|[0-9a-f]{8}-[0-9a-f]{4}-/);
+  expect(texto).toContain(`;'${propria.debitoNome};`);
+  expect(texto).not.toContain(`;${propria.debitoNome};`);
   await admin.close();
 });
