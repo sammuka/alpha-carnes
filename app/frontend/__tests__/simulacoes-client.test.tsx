@@ -821,3 +821,58 @@ describe('padrões do Portão A r3', () => {
     expect(chamadas.filter((c) => c.metodo === 'POST' && c.url.pathname === '/api/erp/fiscal/simulacoes')).toHaveLength(1);
   });
 });
+
+describe('padrões do Portão A r4', () => {
+  const MENSAGEM_REMOVIDA = 'Esta simulação não está mais disponível. O que foi digitado continua aqui, mas não pode ser salvo.';
+
+  it('triplo clique na versão nova envia uma só requisição e Escape não fecha durante o envio', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('button', { name: 'Nova versão' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.type(within(dialogo).getByLabelText('Motivo da alteração'), 'Novo desconto');
+    let liberar!: () => void;
+    portaoMutacao = new Promise<void>((resolve) => { liberar = resolve; });
+    await user.tripleClick(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await act(async () => { liberar(); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/versoes'))).toHaveLength(1);
+  });
+
+  it('triplo clique no Salvar da simulação nova envia uma só requisição e Escape não fecha o drawer durante o envio', async () => {
+    const { user } = renderizar();
+    await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+    const drawer = await screen.findByRole('dialog');
+    await escolherCombo(user, drawer, 'sim-enq', 'Buscar enquadramento', '12', '12 · Compra outubro');
+    await waitFor(() => expect(document.getElementById('sim-estab')).toHaveTextContent('Osasco'));
+    await user.type(within(drawer).getByLabelText('Quantidade'), '10,000');
+    await user.type(within(drawer).getByLabelText('Peso informado na nota (kg)'), '982,000');
+    await user.type(within(drawer).getByLabelText('Valor'), '1.000,00');
+    await user.type(within(drawer).getByLabelText('Desconto'), '0,00');
+    fireEvent.change(within(drawer).getByLabelText('Competência'), { target: { value: '2026-10' } });
+    await user.type(within(drawer).getByLabelText('Motivo da alteração'), 'Simulação de outubro');
+    let liberar!: () => void;
+    portaoMutacao = new Promise<void>((resolve) => { liberar = resolve; });
+    await user.tripleClick(within(drawer).getByRole('button', { name: 'Salvar rascunho' }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await act(async () => { liberar(); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.metodo === 'POST' && c.url.pathname === '/api/erp/fiscal/simulacoes')).toHaveLength(1);
+  });
+
+  it('404 ao salvar a versão nova mostra o aviso de removido e bloqueia o reenvio', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('button', { name: 'Nova versão' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.type(within(dialogo).getByLabelText('Motivo da alteração'), 'Novo desconto');
+    proximaMutacao = envelope(404, { message: 'Simulação fiscal não encontrada' });
+    await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await within(dialogo).findByText(MENSAGEM_REMOVIDA)).toBeInTheDocument();
+    expect(within(dialogo).getByRole('button', { name: 'Salvar rascunho' })).toBeDisabled();
+    expect(within(dialogo).getByLabelText('Motivo da alteração')).toHaveValue('Novo desconto');
+  });
+});

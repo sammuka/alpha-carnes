@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { errosPorCampo, textoUtil } from '@/lib/fiscal-comum-ui';
+import { errosPorCampo, justificativaValida, textoUtil } from '@/lib/fiscal-comum-ui';
 import { ErroRegra } from '@/lib/fiscal-regras';
 import { CampoForm } from '../comum/campo-form';
 import { useRetornoFoco } from '../empresas/use-retorno-foco';
@@ -46,7 +46,7 @@ export function CodigoTributarioDialog({ aberto, tipo, onFechar, onConfirmar }: 
     const locais: Record<string, string> = {};
     if (!codigo.trim()) locais.codigo = 'Informe o código.';
     if (!descricao.trim()) locais.descricao = 'Informe a descrição.';
-    if (textoUtil(motivo).length < 3) locais.justificativa = 'Informe o motivo (3 a 500 caracteres).';
+    if (!justificativaValida(motivo)) locais.justificativa = 'Informe o motivo (3 a 500 caracteres).';
     setErros(locais);
     if (Object.keys(locais).length > 0) return;
     emVoo.current = true;
@@ -64,7 +64,7 @@ export function CodigoTributarioDialog({ aberto, tipo, onFechar, onConfirmar }: 
   }
 
   return (
-    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
+    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta && !salvando) onFechar(); }}>
       <DialogContent onCloseAutoFocus={retornoFoco} aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{tipo === 'classificacao' ? 'Classificação IBS/CBS' : 'Benefício fiscal'}</DialogTitle>

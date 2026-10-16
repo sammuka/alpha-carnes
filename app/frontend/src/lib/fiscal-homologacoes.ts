@@ -51,9 +51,9 @@ export class ErroHomologacao extends Error {
   }
 }
 
-/** Falha de uma ação do processo, já com o texto da tela; `conflito` indica 409 (o diálogo oferece recarregar). */
+/** Falha de uma ação do processo, já com o texto da tela; `conflito` é 409 (o diálogo oferece recarregar) e `removido` é 404. */
 export class ErroAcaoHomologacao extends Error {
-  constructor(mensagem: string, readonly conflito: boolean) {
+  constructor(mensagem: string, readonly conflito: boolean, readonly removido = false) {
     super(mensagem);
     this.name = 'ErroAcaoHomologacao';
   }

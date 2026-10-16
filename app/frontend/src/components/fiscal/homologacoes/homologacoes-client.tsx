@@ -97,6 +97,7 @@ export function HomologacoesClient({ podeGerenciar, podeAprovar }: { podeGerenci
       await chamada();
     } catch (erro) {
       if (erro instanceof ErroHomologacao) {
+        if (erro.status === 404) throw new ErroAcaoHomologacao(MENSAGEM_REMOVIDA, false, true);
         throw new ErroAcaoHomologacao(mensagemDeHomologacao(erro), erro.codigo === 'CONFLITO_CONCORRENTE');
       }
       throw erro;

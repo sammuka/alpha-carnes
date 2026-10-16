@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { textoUtil } from '@/lib/fiscal-comum-ui';
+import { justificativaValida, textoUtil } from '@/lib/fiscal-comum-ui';
 import type { OpcaoCombo } from '@/lib/fiscal-enquadramentos';
 import { ErroAcaoHomologacao, buscarMemoriasDaRegra } from '@/lib/fiscal-homologacoes';
 import { CampoForm } from '../comum/campo-form';
@@ -38,6 +38,7 @@ export function CenarioDialog({ aberto, alvo, bloqueado = null, onFechar, onReca
   const [salvando, setSalvando] = useState(false);
   const [versao, setVersao] = useState(0);
   const [conflito, setConflito] = useState(false);
+  const [removido, setRemovido] = useState(false);
   const [recarregando, setRecarregando] = useState(false);
   /** Pedido em voo: o segundo clique não envia de novo. */
   const emVoo = useRef(false);
@@ -53,6 +54,7 @@ export function CenarioDialog({ aberto, alvo, bloqueado = null, onFechar, onReca
     setAviso(null);
     setSalvando(false);
     setConflito(false);
+    setRemovido(false);
     setVersao(alvo?.versao ?? 0);
     // Só a abertura inicializa: recarga da ficha por evento de outro usuário não apaga o que foi digitado.
   }, [aberto]);
@@ -61,7 +63,7 @@ export function CenarioDialog({ aberto, alvo, bloqueado = null, onFechar, onReca
     if (emVoo.current) return;
     const locais: Record<string, string> = {};
     if (!memoria) locais.memoria = 'Escolha a memória calculada.';
-    if (textoUtil(justificativa).length < 3) locais.justificativa = 'Informe a justificativa (mínimo de 3 caracteres).';
+    if (!justificativaValida(justificativa)) locais.justificativa = 'Informe a justificativa (mínimo de 3 caracteres).';
     setErros(locais);
     setErro(null);
     setAviso(null);
@@ -74,6 +76,7 @@ export function CenarioDialog({ aberto, alvo, bloqueado = null, onFechar, onReca
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : 'Falha na operação.');
       setConflito(falha instanceof ErroAcaoHomologacao && falha.conflito);
+      setRemovido(falha instanceof ErroAcaoHomologacao && falha.removido);
     } finally {
       emVoo.current = false;
       setSalvando(false);
@@ -124,7 +127,7 @@ export function CenarioDialog({ aberto, alvo, bloqueado = null, onFechar, onReca
               onChange={(e) => { setJustificativa(e.target.value); setErros(({ justificativa: _j, ...resto }) => resto); }}
             />
           </CampoForm>
-          {erro && <p role="alert" className="text-xs text-destructive">{erro}</p>}
+          {erro && !bloqueado && <p role="alert" className="text-xs text-destructive">{erro}</p>}
           {bloqueado && <p role="alert" className="text-xs text-destructive">{bloqueado}</p>}
           {aviso && <p role="status" className="text-xs text-muted-foreground">{aviso}</p>}
           {conflito && !bloqueado && (
@@ -135,7 +138,7 @@ export function CenarioDialog({ aberto, alvo, bloqueado = null, onFechar, onReca
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" disabled={salvando} onClick={onFechar}>Cancelar</Button>
-          <Button type="button" loading={salvando} disabled={salvando || Boolean(bloqueado)} onClick={() => void vincular()}>Vincular</Button>
+          <Button type="button" loading={salvando} disabled={salvando || removido || Boolean(bloqueado)} onClick={() => void vincular()}>Vincular</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -106,6 +106,9 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
   const [codigoTipo, setCodigoTipo] = useState<'beneficio' | 'classificacao' | null>(null);
   /** Versão de origem da versão nova: cópia e versão enviada, tiradas ao abrir. */
   const [alvoVersao, setAlvoVersao] = useState<DetalheRegra | null>(null);
+  /** O servidor respondeu 404 ao enviar: outro usuário removeu o registro; o reenvio fica bloqueado. */
+  const [edicaoRemovidaNoServidor, setEdicaoRemovidaNoServidor] = useState(false);
+  const [versaoRemovidaNoServidor, setVersaoRemovidaNoServidor] = useState(false);
   const [compararAberto, setCompararAberto] = useState(false);
   const [decisao, setDecisao] = useState<DecisaoPendente | null>(null);
   const [rotuloCfop, setRotuloCfop] = useState(lerRotuloCfop);
@@ -156,7 +159,7 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
 
   async function salvar(corpo: CorpoRegra): Promise<FalhaSalvar | null> {
     // Edição nunca cai em "criar": se o registro sumiu, o formulário fica bloqueado.
-    if (edicao && removidoNaEdicao) return { mensagem: MENSAGEM_REMOVIDA, porCampo: {} };
+    if (edicao && (removidoNaEdicao || edicaoRemovidaNoServidor)) return { mensagem: MENSAGEM_REMOVIDA, porCampo: {} };
     try {
       if (edicao) {
         await regrasApi.atualizar(edicao.detalhe.id, { ...corpo, versao: edicao.versao });
@@ -169,6 +172,7 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
       setDrawer(false);
       return null;
     } catch (erro) {
+      if (edicao && erro instanceof ErroRegra && erro.status === 404) setEdicaoRemovidaNoServidor(true);
       return falhaDe(erro);
     }
   }
@@ -194,6 +198,7 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
       rotuloConfirmar: textos.rotulo,
       perigosa: acao === 'aposentar',
       mensagemSucesso: 'Regra tributária salva.',
+      mensagemRemovido: MENSAGEM_REMOVIDA,
       executar: async (justificativa) => {
         try {
           await regrasApi[acao](id, { versao: alvo.versao, justificativa });
@@ -213,7 +218,7 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
   }
 
   async function salvarVersao(corpo: CorpoRegra & { versao: number }): Promise<FalhaSalvar | null> {
-    if (!alvoVersao || versaoRemovida) return { mensagem: MENSAGEM_REMOVIDA, porCampo: {} };
+    if (!alvoVersao || versaoRemovida || versaoRemovidaNoServidor) return { mensagem: MENSAGEM_REMOVIDA, porCampo: {} };
     try {
       const nova = await regrasApi.versao(alvoVersao.id, corpo);
       toast.success('Regra tributária salva.');
@@ -223,6 +228,7 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
       selecionar(nova.id);
       return null;
     } catch (erro) {
+      if (erro instanceof ErroRegra && erro.status === 404) setVersaoRemovidaNoServidor(true);
       return falhaDe(erro);
     }
   }
@@ -274,17 +280,21 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
   function abrirNovoRegistro() {
     setSelecaoCodigo(null);
     setEdicao(null);
+    setEdicaoRemovidaNoServidor(false);
     setDrawer(true);
   }
 
   function abrirVersao() {
-    if (detalhe) setAlvoVersao(detalhe);
+    if (!detalhe) return;
+    setVersaoRemovidaNoServidor(false);
+    setAlvoVersao(detalhe);
   }
 
   function abrirEdicao() {
     if (!detalhe) return;
     setSelecaoCodigo(null);
     setEdicao({ detalhe, versao: detalhe.versao });
+    setEdicaoRemovidaNoServidor(false);
     setDrawer(true);
   }
 
@@ -403,7 +413,7 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
       <RegraDrawer
         aberto={drawer}
         detalhe={edicao?.detalhe ?? null}
-        bloqueado={removidoNaEdicao ? MENSAGEM_REMOVIDA : null}
+        bloqueado={removidoNaEdicao || edicaoRemovidaNoServidor ? MENSAGEM_REMOVIDA : null}
         onRecarregar={recarregarEdicao}
         selecaoCodigo={selecaoCodigo}
         onFechar={() => setDrawer(false)}
@@ -414,7 +424,7 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
       <VersaoDialog
         aberto={alvoVersao !== null}
         origem={alvoVersao}
-        bloqueado={versaoRemovida ? MENSAGEM_REMOVIDA : null}
+        bloqueado={versaoRemovida || versaoRemovidaNoServidor ? MENSAGEM_REMOVIDA : null}
         onRecarregar={recarregarVersao}
         onFechar={() => setAlvoVersao(null)}
         onSalvar={salvarVersao}

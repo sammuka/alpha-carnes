@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { errosPorCampo, textoUtil, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
+import { errosPorCampo, justificativaValida, textoUtil, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
 import { rotuloData, type OpcaoCombo } from '@/lib/fiscal-enquadramentos';
 import {
   TEXTO_PENDENTE,
@@ -33,8 +33,8 @@ const VAZIO: CorpoAbertura = { regraId: '', descricao: '', justificativa: '' };
 function validar(form: CorpoAbertura): Record<string, string> {
   const erros: Record<string, string> = {};
   if (!form.regraId) erros.regraId = 'Selecione a versão aprovada da regra.';
-  if (textoUtil(form.descricao).length < 3) erros.descricao = 'Informe a descrição (3 a 500 caracteres).';
-  if (textoUtil(form.justificativa).length < 3) erros.justificativa = 'Informe a justificativa auditável (3 a 500 caracteres).';
+  if (!justificativaValida(form.descricao)) erros.descricao = 'Informe a descrição (3 a 500 caracteres).';
+  if (!justificativaValida(form.justificativa)) erros.justificativa = 'Informe a justificativa auditável (3 a 500 caracteres).';
   return erros;
 }
 
@@ -140,7 +140,8 @@ export function HomologacaoDrawer({ aberto, onFechar, onSalvar }: Props) {
   }
 
   function tentarFechar() {
-    if (sujo && !salvando) setConfirmarSaida(true);
+    if (salvando) return;
+    if (sujo) setConfirmarSaida(true);
     else onFechar();
   }
 

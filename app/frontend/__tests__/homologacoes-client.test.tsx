@@ -884,3 +884,87 @@ describe('padrões do Portão A r3', () => {
     expect(chamadas.filter((c) => c.metodo === 'POST' && c.url.pathname === '/api/erp/fiscal/homologacoes')).toHaveLength(1);
   });
 });
+
+describe('padrões do Portão A r4', () => {
+  const MENSAGEM_REMOVIDA = 'Esta homologação não está mais disponível. O que foi digitado continua aqui, mas não pode ser enviado.';
+
+  function segurar() {
+    let liberar!: () => void;
+    portaoMutacao = new Promise<void>((resolve) => { liberar = resolve; });
+    return () => liberar();
+  }
+
+  it('triplo clique em Aprovar envia uma só requisição e Escape não fecha o diálogo durante o envio', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    const dialogo = await abrirAcao(user, 'Aprovar/rejeitar');
+    await user.type(within(dialogo).getByLabelText('Justificativa auditável'), 'Decisão do segundo usuário');
+    const liberar = segurar();
+    await user.tripleClick(within(dialogo).getByRole('button', { name: 'Aprovar' }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await act(async () => { liberar(); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/aprovar'))).toHaveLength(1);
+  });
+
+  it('triplo clique em Vincular envia uma só requisição e Escape não fecha o diálogo durante o envio', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('button', { name: 'cenários aprovados' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.click(within(dialogo).getByRole('combobox', { name: /Memória calculada/ }));
+    await user.click(await screen.findByRole('option', { name: '72 · versão 1 · Novembro de 2026' }));
+    await user.type(within(dialogo).getByLabelText('Justificativa auditável'), 'Vínculo da memória');
+    const liberar = segurar();
+    await user.tripleClick(within(dialogo).getByRole('button', { name: 'Vincular' }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await act(async () => { liberar(); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/cenarios'))).toHaveLength(1);
+  });
+
+  it('triplo clique em Salvar a revisão nova envia uma só requisição e Escape não fecha o drawer durante o envio', async () => {
+    const { user } = renderizar();
+    await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+    const drawer = await screen.findByRole('dialog');
+    await user.click(drawer.querySelector('#hom-regra')!);
+    await user.type(await screen.findByPlaceholderText('Buscar enquadramento'), '12');
+    await user.click(await screen.findByRole('option', { name: '12 · versão 2' }));
+    await user.type(within(drawer).getByLabelText('Descrição'), 'Revisão da alíquota');
+    await user.type(within(drawer).getByLabelText('Justificativa auditável'), 'Publicar nova alíquota');
+    const liberar = segurar();
+    await user.tripleClick(within(drawer).getByRole('button', { name: 'Salvar rascunho' }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await act(async () => { liberar(); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.metodo === 'POST' && c.url.pathname === '/api/erp/fiscal/homologacoes')).toHaveLength(1);
+  });
+
+  it('404 ao decidir e ao vincular mostra o aviso de removido e bloqueia o reenvio', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    const decisao = await abrirAcao(user, 'Aprovar/rejeitar');
+    await user.type(within(decisao).getByLabelText('Justificativa auditável'), 'Decisão do segundo usuário');
+    proximaMutacao = envelope(404, { message: 'Homologação não encontrada' });
+    await user.click(within(decisao).getByRole('button', { name: 'Aprovar' }));
+    expect(await within(decisao).findByText(MENSAGEM_REMOVIDA)).toBeInTheDocument();
+    expect(within(decisao).getByRole('button', { name: 'Aprovar' })).toBeDisabled();
+    expect(within(decisao).getByRole('button', { name: 'Rejeitar' })).toBeDisabled();
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/aprovar'))).toHaveLength(1);
+    await user.click(within(decisao).getByRole('button', { name: 'Cancelar' }));
+
+    await user.click(screen.getByRole('tab', { name: 'Ficha e campos' }));
+    await user.click(screen.getByRole('button', { name: 'cenários aprovados' }));
+    const cenario = await screen.findByRole('dialog');
+    await user.click(within(cenario).getByRole('combobox', { name: /Memória calculada/ }));
+    await user.click(await screen.findByRole('option', { name: '72 · versão 1 · Novembro de 2026' }));
+    await user.type(within(cenario).getByLabelText('Justificativa auditável'), 'Vínculo da memória');
+    await user.click(within(cenario).getByRole('button', { name: 'Vincular' }));
+    expect(await within(cenario).findByText(MENSAGEM_REMOVIDA)).toBeInTheDocument();
+    expect(within(cenario).getByRole('button', { name: 'Vincular' })).toBeDisabled();
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/cenarios'))).toHaveLength(1);
+  });
+});

@@ -148,6 +148,10 @@ async function responder(metodo: string, url: URL, _corpo: Record<string, unknow
     }
     return json(200, detalhe);
   }
+  if (metodo === 'POST' && caminho === '/api/erp/fiscal/beneficios-fiscais') {
+    if (portaoMutacao) await portaoMutacao;
+    return proximaMutacao ?? json(201, { id: BEN, descricao: 'Novo benefício' });
+  }
   if (metodo === 'GET' && caminho === `/api/erp/fiscal/enquadramentos/${ENQ_NOVO}`) {
     return json(200, { operacaoId: OP, operacaoRotulo: 'Compra outubro', cfopId: CFOP, cfopCodigo: '5102', cfopDescricao: 'Venda' });
   }
@@ -908,5 +912,91 @@ describe('padrões do Portão A r3', () => {
     await act(async () => { liberar(); });
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(chamadas.filter((c) => c.url.pathname.endsWith('/versoes'))).toHaveLength(1);
+  });
+});
+
+describe('padrões do Portão A r4', () => {
+  const MENSAGEM_REMOVIDA = 'Esta regra não está mais disponível. O que foi digitado continua aqui, mas não pode ser salvo.';
+
+  function segurar() {
+    let liberar!: () => void;
+    portaoMutacao = new Promise<void>((resolve) => { liberar = resolve; });
+    return () => liberar();
+  }
+
+  async function abrirEdicao(user: ReturnType<typeof userEvent.setup>) {
+    detalhe = { ...detalhe, situacao: 'Rascunho' };
+    await abrirFicha(user);
+    await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+    return screen.findByRole('dialog');
+  }
+
+  it('triplo clique no Salvar do cadastro de benefício envia uma só requisição e Escape não fecha durante o envio', async () => {
+    const { user } = renderizar();
+    await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+    const drawer = await screen.findByRole('dialog');
+    await user.click(within(drawer).getAllByRole('button', { name: 'Novo código' })[0]!);
+    const dialogo = await screen.findByRole('dialog', { name: 'Benefício fiscal' });
+    await user.type(within(dialogo).getByLabelText('Código do cadastro manual'), 'SP020450');
+    await user.type(within(dialogo).getByLabelText('Descrição do cadastro manual'), 'Redução de base');
+    await user.type(within(dialogo).getByLabelText('Motivo do cadastro manual'), 'Cadastro manual');
+    const liberar = segurar();
+    await user.tripleClick(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Benefício fiscal' })).toBeInTheDocument();
+    await act(async () => { liberar(); });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Benefício fiscal' })).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.metodo === 'POST' && c.url.pathname === '/api/erp/fiscal/beneficios-fiscais')).toHaveLength(1);
+  });
+
+  it('triplo clique no Salvar da edição envia uma só requisição e Escape não fecha o drawer durante o envio', async () => {
+    const { user } = renderizar();
+    const drawer = await abrirEdicao(user);
+    await user.type(within(drawer).getByLabelText('Justificativa auditável'), 'Ajuste da alíquota');
+    const liberar = segurar();
+    await user.tripleClick(within(drawer).getByRole('button', { name: 'Salvar rascunho' }));
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await act(async () => { liberar(); });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.metodo === 'PATCH')).toHaveLength(1);
+  });
+
+  it('404 ao salvar a edição mostra o aviso de removido e bloqueia o reenvio', async () => {
+    const { user } = renderizar();
+    const drawer = await abrirEdicao(user);
+    await user.type(within(drawer).getByLabelText('Justificativa auditável'), 'Ajuste da alíquota');
+    proximaMutacao = envelope(404, { message: 'Regra tributária não encontrada' });
+    await user.click(within(drawer).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await within(drawer).findByText(MENSAGEM_REMOVIDA)).toBeInTheDocument();
+    expect(within(drawer).getByRole('button', { name: 'Salvar rascunho' })).toBeDisabled();
+    expect(within(drawer).getByLabelText('Justificativa auditável')).toHaveValue('Ajuste da alíquota');
+    expect(chamadas.filter((c) => c.metodo === 'PATCH')).toHaveLength(1);
+  });
+
+  it('404 ao salvar a versão nova e ao decidir também mostram o aviso e bloqueiam o reenvio', async () => {
+    detalhe = { ...detalhe, situacao: 'Aprovada' };
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('tab', { name: 'Movimentações' }));
+    await user.click(await screen.findByRole('button', { name: 'Adicionar versão' }));
+    const versao = await screen.findByRole('dialog');
+    await user.type(within(versao).getByLabelText('Motivo da versão'), 'Nova alíquota');
+    proximaMutacao = envelope(404, { message: 'Regra tributária não encontrada' });
+    await user.tripleClick(within(versao).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await within(versao).findByText(MENSAGEM_REMOVIDA)).toBeInTheDocument();
+    expect(within(versao).getByRole('button', { name: 'Salvar rascunho' })).toBeDisabled();
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/versoes'))).toHaveLength(1);
+    await user.click(within(versao).getByRole('button', { name: 'Cancelar' }));
+    detalhe = { ...detalhe, situacao: 'Submetida' };
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Aprovar' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Aprovar' }));
+    const decisao = await screen.findByRole('dialog');
+    await user.type(within(decisao).getByLabelText(/Justificativa/), 'Aprovando agora');
+    await user.click(within(decisao).getByRole('button', { name: 'Aprovar' }));
+    expect(await within(decisao).findByText(MENSAGEM_REMOVIDA)).toBeInTheDocument();
+    expect(within(decisao).getByRole('button', { name: 'Aprovar' })).toBeDisabled();
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/aprovar'))).toHaveLength(1);
   });
 });

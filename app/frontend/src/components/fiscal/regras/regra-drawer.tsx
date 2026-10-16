@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { buscarEnquadramentos, errosPorCampo, textoUtil, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
+import { buscarEnquadramentos, errosPorCampo, justificativaValida, textoUtil, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
 import { mascararCfop, type OpcaoCombo } from '@/lib/fiscal-enquadramentos';
 import {
   ROTULOS_IBS,
@@ -112,7 +112,7 @@ function validar(form: CorpoRegra): Record<string, string> {
   if (form.vigenciaFim && form.vigenciaInicio && form.vigenciaFim < form.vigenciaInicio) {
     erros.vigenciaFim = 'Fim de vigência deve ser igual ou posterior ao início.';
   }
-  if (textoUtil(form.justificativa).length < 3) erros.justificativa = 'Informe a justificativa (3 a 500 caracteres).';
+  if (!justificativaValida(form.justificativa)) erros.justificativa = 'Informe a justificativa (3 a 500 caracteres).';
   return erros;
 }
 
@@ -254,7 +254,8 @@ export function RegraDrawer({ aberto, detalhe, bloqueado = null, onRecarregar, s
   }
 
   function tentarFechar() {
-    if (sujo && !salvando) setConfirmarSaida(true);
+    if (salvando) return;
+    if (sujo) setConfirmarSaida(true);
     else onFechar();
   }
 
@@ -325,7 +326,7 @@ export function RegraDrawer({ aberto, detalhe, bloqueado = null, onRecarregar, s
             </CampoForm>
             {aviso && <p role="alert" className="text-sm text-destructive">{aviso}</p>}
             {verificado && <p role="status" className="text-sm text-muted-foreground">Dados verificados.</p>}
-            {erroSalvar && <p role="alert" className="text-sm text-destructive">{erroSalvar}</p>}
+            {erroSalvar && !bloqueado && <p role="alert" className="text-sm text-destructive">{erroSalvar}</p>}
             {bloqueado && <p role="alert" className="text-sm text-destructive">{bloqueado}</p>}
             {recarregado && <p role="status" className="text-sm text-muted-foreground">Dados recarregados. Revise o que digitou e salve de novo.</p>}
             {conflito && onRecarregar && !bloqueado && (

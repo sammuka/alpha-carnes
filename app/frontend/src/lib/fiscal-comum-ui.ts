@@ -18,10 +18,17 @@ export interface FalhaSalvar {
   porCampo: Record<string, string>;
   /** 409: o registro mudou desde que o formulário abriu; o formulário oferece "Recarregar dados". */
   conflito?: boolean;
+  /** 404: o registro foi removido por outro usuário; o formulário mostra o aviso e bloqueia o reenvio. */
+  removido?: boolean;
 }
 
 /** Texto que vale para o mínimo de caracteres e que se envia: o normalizador único de `./justificativa`. */
 export const textoUtil = normalizarJustificativa;
+
+/** A justificativa (ou o motivo) tem texto suficiente depois de normalizada: mínimo de 3 caracteres. */
+export function justificativaValida(texto: string): boolean {
+  return textoUtil(texto).length >= 3;
+}
 
 /** Rodapé do protótipo (aplicacao.js L176) sem a palavra "fictícios": `Exibindo N de M registros`. */
 export function textoExibindo(exibidos: number, total: number): string {

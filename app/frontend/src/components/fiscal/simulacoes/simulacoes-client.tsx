@@ -89,6 +89,8 @@ export function SimulacoesClient({ podeGerenciar }: { podeGerenciar: boolean }) 
   const [drawer, setDrawer] = useState(false);
   /** Simulação de origem da versão nova: cópia e versão enviada, tiradas ao abrir. */
   const [alvoVersao, setAlvoVersao] = useState<DetalheSimulacao | null>(null);
+  /** O servidor respondeu 404 ao enviar: outro usuário removeu a simulação; o reenvio fica bloqueado. */
+  const [versaoRemovidaNoServidor, setVersaoRemovidaNoServidor] = useState(false);
   const [compararAberto, setCompararAberto] = useState(false);
   const [rotulosFiltro, setRotulosFiltro] = useState<Record<string, string>>(lerRotulos);
 
@@ -177,7 +179,7 @@ export function SimulacoesClient({ podeGerenciar }: { podeGerenciar: boolean }) 
   }
 
   async function salvarVersao(corpo: CorpoSimulacao & { versao: number }): Promise<FalhaSalvar | null> {
-    if (!alvoVersao || versaoRemovida) return { mensagem: MENSAGEM_REMOVIDA, porCampo: {} };
+    if (!alvoVersao || versaoRemovida || versaoRemovidaNoServidor) return { mensagem: MENSAGEM_REMOVIDA, porCampo: {} };
     try {
       const nova = await simulacoesApi.versao(alvoVersao.id, corpo);
       toast.success('Simulação calculada.');
@@ -185,6 +187,7 @@ export function SimulacoesClient({ podeGerenciar }: { podeGerenciar: boolean }) 
       await abrirCriada(nova);
       return null;
     } catch (erro) {
+      if (erro instanceof ErroSimulacao && erro.status === 404) setVersaoRemovidaNoServidor(true);
       return falhaDe(erro);
     }
   }
@@ -199,7 +202,9 @@ export function SimulacoesClient({ podeGerenciar }: { podeGerenciar: boolean }) 
   }
 
   function abrirVersao() {
-    if (detalhe) setAlvoVersao(detalhe);
+    if (!detalhe) return;
+    setVersaoRemovidaNoServidor(false);
+    setAlvoVersao(detalhe);
   }
 
   /** O resultado da explicação aparece na aba Ficha; a tela vai para lá antes de carregar. */
@@ -364,7 +369,7 @@ export function SimulacoesClient({ podeGerenciar }: { podeGerenciar: boolean }) 
       <VersaoDialog
         aberto={alvoVersao !== null}
         origem={alvoVersao}
-        bloqueado={versaoRemovida ? MENSAGEM_REMOVIDA : null}
+        bloqueado={versaoRemovida || versaoRemovidaNoServidor ? MENSAGEM_REMOVIDA : null}
         onRecarregar={recarregarVersao}
         onFechar={() => setAlvoVersao(null)}
         onSalvar={salvarVersao}

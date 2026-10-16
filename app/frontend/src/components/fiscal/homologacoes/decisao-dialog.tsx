@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { textoUtil } from '@/lib/fiscal-comum-ui';
+import { justificativaValida, textoUtil } from '@/lib/fiscal-comum-ui';
 import { ErroAcaoHomologacao } from '@/lib/fiscal-homologacoes';
 import { CampoForm } from '../comum/campo-form';
 import { useRetornoFoco } from '../empresas/use-retorno-foco';
@@ -41,6 +41,7 @@ export function DecisaoDialog({ decisao, bloqueado = null, onFechar }: Props) {
   const [processando, setProcessando] = useState<string | null>(null);
   const [versao, setVersao] = useState(0);
   const [conflito, setConflito] = useState(false);
+  const [removido, setRemovido] = useState(false);
   const [recarregando, setRecarregando] = useState(false);
   /** Pedido em voo: o segundo clique não envia de novo. */
   const emVoo = useRef(false);
@@ -52,13 +53,14 @@ export function DecisaoDialog({ decisao, bloqueado = null, onFechar }: Props) {
     setAviso(null);
     setProcessando(null);
     setConflito(false);
+    setRemovido(false);
     setVersao(decisao?.versao ?? 0);
     emVoo.current = false;
   }, [decisao]);
 
   async function executar(acao: AcaoDecisao) {
     if (emVoo.current) return;
-    if (textoUtil(justificativa).length < 3) {
+    if (!justificativaValida(justificativa)) {
       setErroCampo('Informe a justificativa (mínimo de 3 caracteres).');
       return;
     }
@@ -74,6 +76,7 @@ export function DecisaoDialog({ decisao, bloqueado = null, onFechar }: Props) {
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : 'Falha na operação.');
       setConflito(falha instanceof ErroAcaoHomologacao && falha.conflito);
+      setRemovido(falha instanceof ErroAcaoHomologacao && falha.removido);
     } finally {
       emVoo.current = false;
       setProcessando(null);
@@ -114,7 +117,7 @@ export function DecisaoDialog({ decisao, bloqueado = null, onFechar }: Props) {
               onChange={(e) => { setJustificativa(e.target.value); setErroCampo(null); }}
             />
           </CampoForm>
-          {erro && <p role="alert" className="text-xs text-destructive">{erro}</p>}
+          {erro && !bloqueado && <p role="alert" className="text-xs text-destructive">{erro}</p>}
           {bloqueado && <p role="alert" className="text-xs text-destructive">{bloqueado}</p>}
           {aviso && <p role="status" className="text-xs text-muted-foreground">{aviso}</p>}
           {conflito && !bloqueado && (
@@ -131,7 +134,7 @@ export function DecisaoDialog({ decisao, bloqueado = null, onFechar }: Props) {
               type="button"
               variant={acao.perigosa ? 'destructive' : 'default'}
               loading={processando === acao.rotulo}
-              disabled={Boolean(bloqueado) || (processando !== null && processando !== acao.rotulo)}
+              disabled={Boolean(bloqueado) || removido || (processando !== null && processando !== acao.rotulo)}
               onClick={() => void executar(acao)}
             >
               {acao.rotulo}

@@ -40,6 +40,8 @@ export interface DecisaoPendente {
    * nova na próxima confirmação; o texto digitado fica no diálogo.
    */
   recarregar?: () => Promise<boolean>;
+  /** Texto do aviso quando o servidor responde 404 (registro removido por outro usuário); o reenvio fica bloqueado. */
+  mensagemRemovido?: string;
 }
 
 interface DecisaoDialogProps {
@@ -74,6 +76,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
   /** Pedido em voo: o segundo clique não envia de novo. */
   const emVoo = useRef(false);
   const [conflito, setConflito] = useState(false);
+  const [removido, setRemovido] = useState(false);
   const [recarregando, setRecarregando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [desafio, setDesafio] = useState<DesafioTroca | null>(null);
@@ -85,6 +88,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
     setErroCampo(null);
     setDesafio(null);
     setConflito(false);
+    setRemovido(false);
     setAviso(null);
   }, [decisao]);
 
@@ -108,6 +112,12 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
       onConcluido();
       onFechar();
     } catch (falha) {
+      if ((falha as { status?: number }).status === 404 && decisao.mensagemRemovido) {
+        setDesafio(null);
+        setRemovido(true);
+        setErro(decisao.mensagemRemovido);
+        return;
+      }
       if (falha instanceof ErroFiscal && falha.codigo === 'TROCA_REGIME_CONFIRMACAO_NECESSARIA') {
         setDesafio({
           fimProposto: String(falha.dados.fimProposto ?? ''),
@@ -188,6 +198,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
               type="button"
               variant={decisao?.perigosa ? 'destructive' : 'default'}
               loading={processando}
+              disabled={processando || removido}
               onClick={() => void executar(false)}
             >
               {decisao?.rotuloConfirmar}

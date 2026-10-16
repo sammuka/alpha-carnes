@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { errosPorCampo, textoUtil, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
+import { errosPorCampo, justificativaValida, textoUtil, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
 import { descontoMaiorQueValor, formatarDinheiroPtBr, validarDinheiro, type CorpoSimulacao, type DetalheSimulacao } from '@/lib/fiscal-simulacoes';
 import { CampoForm } from '../comum/campo-form';
 import { useRetornoFoco } from '../empresas/use-retorno-foco';
@@ -60,7 +60,7 @@ export function VersaoDialog({ aberto, origem, bloqueado = null, onRecarregar, o
     if (invalido) locais.desconto = invalido;
     else if (descontoMaiorQueValor(desconto, origem.valor)) locais.desconto = 'O desconto não pode ser maior que o valor.';
     if (!competencia) locais.competencia = 'Informe a competência.';
-    if (textoUtil(motivo).length < 3) locais.justificativa = 'Informe o motivo da alteração (3 a 500 caracteres).';
+    if (!justificativaValida(motivo)) locais.justificativa = 'Informe o motivo da alteração (3 a 500 caracteres).';
     setErros(locais);
     setErro(null);
     if (Object.keys(locais).length > 0) return;
@@ -108,7 +108,7 @@ export function VersaoDialog({ aberto, origem, bloqueado = null, onRecarregar, o
   }
 
   return (
-    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
+    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta && !salvando) onFechar(); }}>
       <DialogContent aria-describedby={undefined} onCloseAutoFocus={retornoFoco}>
         <DialogHeader>
           <DialogTitle>Nova versão</DialogTitle>
@@ -131,7 +131,7 @@ export function VersaoDialog({ aberto, origem, bloqueado = null, onRecarregar, o
           <CampoForm rotulo="Motivo da alteração" htmlFor="versao-motivo" erro={erros.justificativa}>
             <textarea id="versao-motivo" maxLength={500} className="min-h-16 rounded-md border px-2" value={motivo} onChange={(e) => { setMotivo(e.target.value); limpar('justificativa'); }} />
           </CampoForm>
-          {erro && <p role="alert" className="text-sm text-destructive">{erro}</p>}
+          {erro && !bloqueado && <p role="alert" className="text-sm text-destructive">{erro}</p>}
           {bloqueado && <p role="alert" className="text-sm text-destructive">{bloqueado}</p>}
           {recarregado && <p role="status" className="text-sm text-muted-foreground">Dados recarregados. Revise o que digitou e salve de novo.</p>}
           {conflito && onRecarregar && !bloqueado && (
