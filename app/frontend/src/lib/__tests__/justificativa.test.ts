@@ -1,4 +1,4 @@
-import { justificativaValida, normalizarJustificativa } from '../justificativa';
+import { contarVisiveis, justificativaValida, normalizarJustificativa } from '../justificativa';
 
 const c = (...pontos: number[]) => String.fromCodePoint(...pontos);
 const rep = (pontos: number[], n = 3) => c(...pontos).repeat(n);
@@ -39,5 +39,27 @@ describe('normalizarJustificativa e justificativaValida', () => {
   ])('%s é aceita e gravada intacta', (_n, texto) => {
     expect(justificativaValida(texto)).toBe(true);
     expect(normalizarJustificativa(` ${texto}${c(0x200b)}`)).toBe(texto);
+  });
+});
+
+describe('emoji com tags e contagem por grafema', () => {
+  const flag = c(0x1f3f4, 0xe0067, 0xe0062, 0xe0065, 0xe006e, 0xe0067, 0xe007f);
+  const familia = c(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467);
+
+  it('preserva as tags que seguem emoji no fim, mas apara tags soltas', () => {
+    expect(normalizarJustificativa(`abc ${flag} ${c(0x200b)}`)).toBe(`abc ${flag}`);
+    expect(normalizarJustificativa(`abc${c(0x1f3f4, 0xfe0f, 0xe0067, 0xe007f)}`)).toBe(`abc${c(0x1f3f4, 0xfe0f, 0xe0067, 0xe007f)}`);
+    expect(normalizarJustificativa(`abc${c(0xe0067, 0xe007f)}`)).toBe('abc');
+    expect(normalizarJustificativa(`ab${c(0xe0067)}`)).toBe('ab');
+  });
+
+  it('conta por grafema e ignora brancos visuais', () => {
+    expect(contarVisiveis(c(0x3164, 0x3164, 0x3164))).toBe(0);
+    expect(contarVisiveis(c(0x2800, 0x115f, 0x1160, 0xffa0, 0x34f))).toBe(0);
+    expect(contarVisiveis(familia)).toBe(1);
+    expect(contarVisiveis(flag)).toBe(1);
+    expect(contarVisiveis(c(0x65, 0x301))).toBe(1);
+    expect(justificativaValida(`a${familia}b`)).toBe(true);
+    expect(justificativaValida(`${familia}${familia}`)).toBe(false);
   });
 });

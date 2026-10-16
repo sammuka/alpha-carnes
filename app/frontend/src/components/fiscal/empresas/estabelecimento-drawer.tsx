@@ -312,7 +312,7 @@ export function EstabelecimentoDrawer({
             </div>
 
             <SheetFooter className="flex-row justify-end gap-2 border-t border-border p-4">
-              <Button type="button" variant="ghost" onClick={tentarFechar}>
+              <Button type="button" variant="ghost" disabled={salvando} onClick={tentarFechar}>
                 Cancelar
               </Button>
               <Button type="button" variant="secondary" onClick={verificar}>
