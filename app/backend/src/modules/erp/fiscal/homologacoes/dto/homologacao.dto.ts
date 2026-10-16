@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import { SITUACOES_HOMOLOGACAO } from '../../../../../database/schema/fiscal-homologacoes.schema';
+import { normalizarJustificativa } from '../../../../../common/validators/justificativa';
 import { buscaSchema, justificativaSchema, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
 
-/** Largura zero (U+200B a U+200D) e BOM (U+FEFF) não contam para o mínimo, como na justificativa. */
+/** Descrição da revisão: normalizada como a justificativa (invisíveis removidos, trim) e então 3–500. */
 export const descricaoSchema = z
   .string()
-  .transform((valor) => valor.replace(/[\u200B-\u200D\uFEFF]/g, ''))
-  .pipe(z.string().trim().min(3).max(500));
+  .transform(normalizarJustificativa)
+  .pipe(z.string().min(3).max(500));
 
 const camposDecisao = {
   versao: versaoSchema,

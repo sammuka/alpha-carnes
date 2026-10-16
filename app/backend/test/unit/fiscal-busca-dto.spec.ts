@@ -47,3 +47,22 @@ describe('justificativa e descrição medidas sem caracteres invisíveis', () =>
     expect(criarHomologacaoSchema.safeParse({ ...base, descricao: 'abc', justificativa: '\u200B\u200B\u200B' }).success).toBe(false);
   });
 });
+
+describe('normalizador único das justificativas e da descrição', () => {
+  const INVISIVEIS = ['\u2060', '\u00AD', '\u200E', '\u180E', '\u2800', '\u034F', '\u3164', '\uFFA0'];
+
+  it.each(INVISIVEIS)('três %s não formam uma justificativa nem uma descrição', (caractere) => {
+    const tres = caractere.repeat(3);
+    expect(justificativaSchema.safeParse(tres).success).toBe(false);
+    expect(criarHomologacaoSchema.safeParse({ regraId: UUID, justificativa: 'Motivo da revisão', descricao: tres }).success).toBe(false);
+  });
+
+  it('acentos e emoji seguem aceitos e o valor gravado sai normalizado', () => {
+    const ok = criarHomologacaoSchema.safeParse({ regraId: UUID, justificativa: ' Revisão \u2060concluída ', descricao: 'Ação \u200Bde teste' });
+    expect(ok.success).toBe(true);
+    if (ok.success) {
+      expect(ok.data.justificativa).toBe('Revisão concluída');
+      expect(ok.data.descricao).toBe('Ação de teste');
+    }
+  });
+});
