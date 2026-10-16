@@ -79,7 +79,7 @@ export class RegrasTributariasService {
 
   private whereLista(query: ListarRegrasQuery) {
     const filtro = query.search?.trim();
-    const termo = filtro ? `%${filtro.replace(/[%_]/g, '')}%` : undefined;
+    const termo = filtro ? `%${filtro.replace(/[%_\\]/g, '')}%` : undefined;
     return and(
       isNull(regrasTributarias.deletedAt),
       query.cfopId ? eq(enquadramentosFiscais.cfopId, query.cfopId) : undefined,
@@ -90,7 +90,9 @@ export class RegrasTributariasService {
             ${enquadramentosFiscais.codigo} ILIKE ${termo}
             OR ${cfops.codigo} ILIKE ${termo}
             OR ${operacoes.rotulo} ILIKE ${termo}
+            OR ${beneficiosFiscais.codigo} ILIKE ${termo}
             OR ${beneficiosFiscais.descricao} ILIKE ${termo}
+            OR ${classificacoesIbsCbs.codigo} ILIKE ${termo}
             OR ${classificacoesIbsCbs.descricao} ILIKE ${termo}
             OR ${regrasTributarias.codigo} ILIKE ${termo}
           )`

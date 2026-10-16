@@ -637,7 +637,7 @@ export class EnquadramentosService {
   }
 
   /**
-   * D9 (T03): regra SUBMETIDA ou APROVADA lê CFOP e operação por este enquadramento. Mudar a chave,
+   * D9 (T03): regra em RASCUNHO, SUBMETIDA ou APROVADA lê CFOP e operação por este enquadramento. Mudar a chave,
    * inativar ou remover deixaria a regra imutável alterada ou órfã. O enquadramento já está travado
    * (FOR NO KEY UPDATE); as regras, em FOR SHARE, serializam com submeter/aprovar concorrentes.
    */
@@ -645,12 +645,12 @@ export class EnquadramentosService {
     const [regra] = await tx.select({ codigo: regrasTributarias.codigo }).from(regrasTributarias).where(and(
       eq(regrasTributarias.enquadramentoId, enquadramentoId),
       isNull(regrasTributarias.deletedAt),
-      inArray(regrasTributarias.situacao, ['SUBMETIDA', 'APROVADA']),
+      inArray(regrasTributarias.situacao, ['RASCUNHO', 'SUBMETIDA', 'APROVADA']),
     )).limit(1).for('share');
     if (regra) {
       conflito(
         'ENQUADRAMENTO_COM_REGRA_ATIVA',
-        'Há regra tributária submetida ou aprovada neste enquadramento. Aposente a regra antes de alterá-lo, inativá-lo ou removê-lo.',
+        'Há regra tributária em rascunho, submetida ou aprovada neste enquadramento. Aposente ou remova a regra antes de alterar a chave, inativar ou remover o enquadramento.',
         { regraCodigo: regra.codigo },
       );
     }
