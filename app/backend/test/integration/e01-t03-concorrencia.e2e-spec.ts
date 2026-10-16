@@ -1,6 +1,10 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { sql } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { validarCnpjAlfanumerico } from '../../src/common/validators/cnpj-alfanumerico';
+import { DRIZZLE } from '../../src/database/database.module';
+import * as schema from '../../src/database/schema';
 import { cleanupDb, createTestApp, createTestUser, joinSetCookie } from '../helpers/test-app';
 
 const MOTIVO = 'Regra inicial da vigência de 2026.';
@@ -170,6 +174,7 @@ describe('E01-T03 concorrência', () => {
     expect(classificacao.status).toBe(201);
     return {
       enquadramentoId: enquadramento.body.id as string,
+      versaoEnquadramento: enquadramento.body.versao as number,
       operacaoId: operacao.body.id as string,
       cfopId: cfop.body.id as string,
       beneficioFiscalId: beneficio.body.id as string,
@@ -243,5 +248,78 @@ describe('E01-T03 concorrência', () => {
     expect(statusDe(respostas)).toEqual([200, 422]);
     const ambigua = respostas.find((resposta) => resposta.status === 422);
     expect(codigoDe(ambigua?.body ?? {})).toBe('VIGENCIA_AMBIGUA');
+  });
+  describe('ordem única de locks: enquadramento antes da regra (sem 40P01)', () => {
+    const RODADAS = 20;
+    const ACEITOS = [200, 201, 409, 422];
+
+    async function rascunho(base: Awaited<ReturnType<typeof cenario>>) {
+      const criado = await request(app.getHttpServer()).post('/fiscal/regras').set('Cookie', adminA).send(corpoRegra(base));
+      expect(criado.status).toBe(201);
+      return { id: criado.body.id as string, versao: criado.body.versao as number };
+    }
+
+    async function submetida(base: Awaited<ReturnType<typeof cenario>>) {
+      const regra = await rascunho(base);
+      const sub = await request(app.getHttpServer()).post(`/fiscal/regras/${regra.id}/submeter`).set('Cookie', adminA)
+        .send({ versao: regra.versao, justificativa: MOTIVO });
+      expect(sub.status).toBe(200);
+      return { id: regra.id, versao: sub.body.versao as number };
+    }
+
+    async function exigirEstadoIntegro(enquadramentoId: string) {
+      const orfas = await app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE).db.execute(sql`
+        SELECT r.id FROM regras_tributarias r
+        JOIN enquadramentos_fiscais e ON e.id = r.enquadramento_id
+        WHERE e.id = ${enquadramentoId} AND r.deleted_at IS NULL
+          AND r.situacao IN ('SUBMETIDA','APROVADA')
+          AND (e.situacao <> 'ATIVA' OR e.deleted_at IS NOT NULL)`);
+      expect(orfas.rows).toEqual([]);
+    }
+
+    function inativar(base: Awaited<ReturnType<typeof cenario>>) {
+      return request(app.getHttpServer()).post(`/fiscal/enquadramentos/${base.enquadramentoId}/inativar`).set('Cookie', adminA)
+        .send({ versao: base.versaoEnquadramento, justificativa: MOTIVO });
+    }
+
+    function remover(base: Awaited<ReturnType<typeof cenario>>) {
+      return request(app.getHttpServer()).delete(`/fiscal/enquadramentos/${base.enquadramentoId}`).set('Cookie', adminA)
+        .send({ justificativa: MOTIVO });
+    }
+
+    function acao(regra: { id: string; versao: number }, nome: 'submeter' | 'aprovar', cookie: string) {
+      return request(app.getHttpServer()).post(`/fiscal/regras/${regra.id}/${nome}`).set('Cookie', cookie)
+        .send({ versao: regra.versao, justificativa: MOTIVO });
+    }
+
+    it(`inativar × submeter, ${RODADAS} rodadas: nunca 500 e nenhuma regra submetida sob enquadramento inativo`, async () => {
+      for (let i = 0; i < RODADAS; i += 1) {
+        const base = await cenario();
+        const regra = await rascunho(base);
+        const respostas = await Promise.all([inativar(base), acao(regra, 'submeter', adminA)]);
+        for (const r of respostas) expect(ACEITOS).toContain(r.status);
+        await exigirEstadoIntegro(base.enquadramentoId);
+      }
+    }, 300_000);
+
+    it(`inativar × aprovar, ${RODADAS} rodadas: nunca 500 e nenhuma regra aprovada sob enquadramento inativo`, async () => {
+      for (let i = 0; i < RODADAS; i += 1) {
+        const base = await cenario();
+        const regra = await submetida(base);
+        const respostas = await Promise.all([inativar(base), acao(regra, 'aprovar', adminB)]);
+        for (const r of respostas) expect(ACEITOS).toContain(r.status);
+        await exigirEstadoIntegro(base.enquadramentoId);
+      }
+    }, 300_000);
+
+    it(`remover × submeter, ${RODADAS} rodadas: nunca 500 e nenhuma regra submetida sob enquadramento removido`, async () => {
+      for (let i = 0; i < RODADAS; i += 1) {
+        const base = await cenario();
+        const regra = await rascunho(base);
+        const respostas = await Promise.all([remover(base), acao(regra, 'submeter', adminA)]);
+        for (const r of respostas) expect(ACEITOS).toContain(r.status);
+        await exigirEstadoIntegro(base.enquadramentoId);
+      }
+    }, 300_000);
   });
 });

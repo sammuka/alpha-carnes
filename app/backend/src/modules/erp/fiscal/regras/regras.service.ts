@@ -26,6 +26,7 @@ import { EVENTOS, type AcaoRegraTributaria } from '../../../../realtime/events/e
 import { intervalosSobrepoem } from '../enquadramentos/enquadramento-criterio';
 import {
   conflito,
+  conflitoConcorrente,
   ehViolacaoUnica,
   exigirSegregacao,
   exigirVersao,
@@ -43,17 +44,29 @@ type Linha = typeof regrasTributarias.$inferSelect;
 
 const MODULO = 'fiscal.regras';
 
-export async function travarEnquadramento(tx: Tx, id: string) {
-  const [linha] = await tx
-    .select()
-    .from(enquadramentosFiscais)
-    .where(and(eq(enquadramentosFiscais.id, id), isNull(enquadramentosFiscais.deletedAt)))
-    .for('no key update');
+type LinhaEnquadramento = typeof enquadramentosFiscais.$inferSelect;
+
+/**
+ * Ordem única de locks (AD-33): enquadramento antes de regra, em todo o código. Inativar, remover e trocar
+ * a chave do enquadramento travam o enquadramento e depois as regras; as ações de regra fazem o mesmo.
+ * Só trava: a validação fica em `exigirEnquadramentoAtivo`, para preservar a precedência dos erros.
+ */
+async function bloquearEnquadramento(tx: Tx, id: string): Promise<LinhaEnquadramento | undefined> {
+  const [linha] = await tx.select().from(enquadramentosFiscais).where(eq(enquadramentosFiscais.id, id)).for('no key update');
+  return linha;
+}
+
+/** Removido ou inativo é indisponível (422): o enquadramento existiu e a regra o referencia. */
+function exigirEnquadramentoAtivo(linha: LinhaEnquadramento | undefined): LinhaEnquadramento {
   if (!linha) throw new NotFoundException('Enquadramento fiscal não encontrado');
-  if (linha.situacao !== 'ATIVA') {
+  if (linha.deletedAt || linha.situacao !== 'ATIVA') {
     regraViolada('ENQUADRAMENTO_INDISPONIVEL', 'O enquadramento fiscal não está ativo.');
   }
   return linha;
+}
+
+export async function travarEnquadramento(tx: Tx, id: string) {
+  return exigirEnquadramentoAtivo(await bloquearEnquadramento(tx, id));
 }
 
 /** Códigos numéricos guardados como texto: a ordenação põe 2 antes de 10. */
@@ -404,13 +417,14 @@ export class RegrasTributariasService {
 
   async atualizarRascunho(id: string, dto: AtualizarRegraDto, usuarioId: string) {
     const linha = await this.db.transaction(async (tx) => {
+      const destino = await bloquearEnquadramento(tx, dto.enquadramentoId);
       const atual = await this.obterBloqueado(tx, id);
       recusarEdicao(atual.situacao as SituacaoRegra);
       exigirVersao(atual.versao, dto.versao);
       if ((atual.origemVersaoId || atual.numeroVersao > 1) && dto.enquadramentoId !== atual.enquadramentoId) {
         regraViolada('LINHAGEM_ENQUADRAMENTO_FIXO', 'A versão nova permanece no mesmo enquadramento fiscal.');
       }
-      const enquadramento = await travarEnquadramento(tx, dto.enquadramentoId);
+      const enquadramento = exigirEnquadramentoAtivo(destino);
       this.exigirOperacaoDoEnquadramento(enquadramento, dto);
       await this.exigirCatalogos(tx, dto.beneficioFiscalId, dto.classificacaoIbsCbsId);
       const [linha] = await tx.update(regrasTributarias).set({
@@ -440,7 +454,7 @@ export class RegrasTributariasService {
 
   async adicionarVersao(id: string, dto: NovaVersaoDto, usuarioId: string) {
     const criada = await this.db.transaction(async (tx) => {
-      const origem = await this.obterBloqueado(tx, id);
+      const { linha: origem, enquadramento } = await this.travarComEnquadramento(tx, id);
       recusarAcao(origem.situacao as SituacaoRegra, 'adicionarVersao');
       exigirVersao(origem.versao, dto.versao);
       // 409 de versão aberta antes de qualquer 422: a linhagem decide primeiro (M9).
@@ -455,7 +469,7 @@ export class RegrasTributariasService {
       if (dto.enquadramentoId !== origem.enquadramentoId) {
         regraViolada('LINHAGEM_ENQUADRAMENTO_FIXO', 'A versão nova permanece no mesmo enquadramento fiscal.');
       }
-      this.exigirOperacaoDoEnquadramento(await travarEnquadramento(tx, origem.enquadramentoId), dto);
+      this.exigirOperacaoDoEnquadramento(exigirEnquadramentoAtivo(enquadramento), dto);
       await this.exigirCatalogos(tx, dto.beneficioFiscalId, dto.classificacaoIbsCbsId);
       try {
         const [linha] = await tx.insert(regrasTributarias).values({
@@ -494,11 +508,10 @@ export class RegrasTributariasService {
 
   async submeter(id: string, dto: AcaoRegraDto, usuarioId: string) {
     const linha = await this.db.transaction(async (tx) => {
-      const atual = await this.obterBloqueado(tx, id);
+      const { linha: atual, enquadramento } = await this.travarComEnquadramento(tx, id);
       recusarAcao(atual.situacao as SituacaoRegra, 'submeter');
       exigirVersao(atual.versao, dto.versao);
-      // Mesma trava do aprovar: serializa com inativar, remover e mudança de chave do enquadramento (B6).
-      await travarEnquadramento(tx, atual.enquadramentoId);
+      exigirEnquadramentoAtivo(enquadramento);
       const [linha] = await tx.update(regrasTributarias).set({
         situacao: 'SUBMETIDA',
         submetidoPorId: usuarioId,
@@ -518,8 +531,8 @@ export class RegrasTributariasService {
 
   async aprovar(id: string, dto: AcaoRegraDto, usuarioId: string) {
     const gravada = await this.db.transaction(async (tx) => {
-      const linha = await this.obterBloqueado(tx, id);
-      await travarEnquadramento(tx, linha.enquadramentoId);
+      const { linha, enquadramento } = await this.travarComEnquadramento(tx, id);
+      exigirEnquadramentoAtivo(enquadramento);
       if (linha.situacao !== 'SUBMETIDA') transicaoInvalida(linha.situacao);
       exigirVersao(linha.versao, dto.versao);
       exigirSegregacao(linha.submetidoPorId, usuarioId);
@@ -673,6 +686,18 @@ export class RegrasTributariasService {
     ));
     if (!linha) throw new NotFoundException('Regra tributária não encontrada');
     return linha;
+  }
+
+  /**
+   * Trava o enquadramento da regra e só então a regra (ordem única, AD-33). O enquadramento é lido sem
+   * trava primeiro; se um PATCH concorrente mudou o vínculo nesse meio-tempo, a disputa vira 409.
+   */
+  private async travarComEnquadramento(tx: Tx, id: string) {
+    const previa = await this.obter(tx, id);
+    const enquadramento = await bloquearEnquadramento(tx, previa.enquadramentoId);
+    const linha = await this.obterBloqueado(tx, id);
+    if (linha.enquadramentoId !== previa.enquadramentoId) conflitoConcorrente();
+    return { linha, enquadramento };
   }
 
   private async obterBloqueado(tx: Tx, id: string): Promise<Linha> {

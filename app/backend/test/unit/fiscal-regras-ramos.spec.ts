@@ -286,8 +286,8 @@ describe('ramos dos services de regras tributárias', () => {
 
   it('atualização sem fim de vigência e sem linha gravada responde 404', async () => {
     const service = regras([
-      { valor: [linha()] },
       { valor: [enquadramentoAtivo] },
+      { valor: [linha()] },
       { valor: [{ id: BEN }] },
       { valor: [{ id: CLS }] },
       { valor: [] },
@@ -302,10 +302,13 @@ describe('ramos dos services de regras tributárias', () => {
   it('versão nova recusa outro enquadramento e versão já aberta', async () => {
     const origem = linha({ situacao: 'APROVADA' });
     const pedido = { ...dto, versao: 3, enquadramentoId: OUTRO } as NovaVersaoDto;
-    await expect(regras([{ valor: [origem] }, { valor: [] }]).adicionarVersao(REGRA, pedido, USUARIO))
+    await expect(regras([{ valor: [origem] }, { valor: [enquadramentoAtivo] }, { valor: [origem] }, { valor: [] }])
+      .adicionarVersao(REGRA, pedido, USUARIO))
       .rejects.toMatchObject({ response: { codigo: 'LINHAGEM_ENQUADRAMENTO_FIXO' } });
 
     const aberta = regras([
+      { valor: [origem] },
+      { valor: [enquadramentoAtivo] },
       { valor: [origem] },
       { valor: [{ id: OUTRO }] },
     ]);
@@ -318,8 +321,9 @@ describe('ramos dos services de regras tributárias', () => {
     const pedido = { ...dto, versao: 3 } as NovaVersaoDto;
     const ateCatalogo = (): Passo[] => [
       { valor: [origem] },
-      { valor: [] },
       { valor: [enquadramentoAtivo] },
+      { valor: [origem] },
+      { valor: [] },
       { valor: [{ id: BEN }] },
       { valor: [{ id: CLS }] },
     ];
@@ -353,17 +357,34 @@ describe('ramos dos services de regras tributárias', () => {
     const acao = { versao: 3, justificativa: dto.justificativa };
     await expect(regras([
       { valor: [linha()] },
+      { valor: [enquadramentoAtivo] },
+      { valor: [linha()] },
       { valor: [] },
     ]).submeter(REGRA, acao, USUARIO)).rejects.toBeInstanceOf(NotFoundException);
+
+    // Ordem única (AD-33): enquadramento travado antes da regra; vínculo trocado no meio-tempo vira 409.
+    await expect(regras([
+      { valor: [linha()] },
+      { valor: [enquadramentoAtivo] },
+      { valor: [linha({ enquadramentoId: OUTRO })] },
+    ]).submeter(REGRA, acao, USUARIO)).rejects.toMatchObject({ response: { codigo: 'CONFLITO_CONCORRENTE' } });
+
+    await expect(regras([
+      { valor: [linha()] },
+      { valor: [{ ...enquadramentoAtivo, deletedAt: new Date() }] },
+      { valor: [linha()] },
+    ]).submeter(REGRA, acao, USUARIO)).rejects.toMatchObject({ response: { codigo: 'ENQUADRAMENTO_INDISPONIVEL' } });
 
     await expect(regras([
       { valor: [linha({ situacao: 'RASCUNHO' })] },
       { valor: [enquadramentoAtivo] },
+      { valor: [linha({ situacao: 'RASCUNHO' })] },
     ]).aprovar(REGRA, acao, USUARIO)).rejects.toMatchObject({ response: { codigo: 'TRANSICAO_INVALIDA' } });
 
     await expect(regras([
       { valor: [linha({ situacao: 'SUBMETIDA' })] },
       { valor: [enquadramentoAtivo] },
+      { valor: [linha({ situacao: 'SUBMETIDA' })] },
       { valor: [] },
       { valor: [] },
     ]).aprovar(REGRA, acao, USUARIO)).rejects.toBeInstanceOf(NotFoundException);
@@ -411,7 +432,7 @@ describe('ramos dos services de regras tributárias', () => {
 
   it('leitura e bloqueio ausentes respondem 404', async () => {
     await expect(regras([{ valor: [] }]).historico(REGRA)).rejects.toBeInstanceOf(NotFoundException);
-    await expect(regras([{ valor: [] }]).atualizarRascunho(REGRA, { ...dto, versao: 3 }, USUARIO))
+    await expect(regras([{ valor: [enquadramentoAtivo] }, { valor: [] }]).atualizarRascunho(REGRA, { ...dto, versao: 3 }, USUARIO))
       .rejects.toBeInstanceOf(NotFoundException);
   });
 });
