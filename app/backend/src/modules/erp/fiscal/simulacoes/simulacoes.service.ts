@@ -32,6 +32,7 @@ import {
 import { mascararNcm } from '../enquadramentos/exportacao-csv';
 import { formatarPercentualPtBr } from '../regras/percentual';
 import { travarEnquadramento } from '../regras/regras.service';
+import { exigirTratamentoIcmsCoerente } from '../regras/tratamento-icms';
 import { calcularMemoria, formatarDinheiroPtBr, formatarEscalaPtBr, rotuloCompetencia } from './decimal-memoria';
 import type { CriarSimulacaoDto, ListarSimulacoesQuery, NovaVersaoDto } from './dto/simulacao.dto';
 import { montarCsvGrade, montarCsvMemoria } from './exportacao-csv';
@@ -444,6 +445,8 @@ export class SimulacoesFiscaisService {
       regraViolada('ENQUADRAMENTO_INDISPONIVEL', 'O enquadramento fiscal não cobre esta competência.');
     }
     const regra = await this.resolverRegra(tx, dto.enquadramentoId, dia);
+    // Defesa em profundidade (AD-34): regra incoerente gravada antes da guarda nunca vira valor fiscal.
+    exigirTratamentoIcmsCoerente(regra, 'aprovacao');
     const memoria = calcularMemoria({
       valor: dto.valor,
       desconto: dto.desconto,
@@ -719,17 +722,35 @@ export class SimulacoesFiscaisService {
       modulo: MODULO,
       usuarioId,
       dadosAnteriores: anterior
-        ? { situacao: anterior.situacao, versao: anterior.versao, numeroVersao: anterior.numeroVersao }
+        ? { situacao: anterior.situacao, versao: anterior.versao, numeroVersao: anterior.numeroVersao, ...camposAuditados(anterior) }
         : {},
       dadosNovos: {
         situacao: 'Calculada',
         versao: linha.versao,
         numeroVersao: linha.numeroVersao,
+        ...camposAuditados(linha),
         resumo,
       },
       justificativa,
     });
   }
+}
+
+/** Insumos, regra aplicada e resultado da memória, auditados antes e depois. */
+function camposAuditados(linha: Linha) {
+  return {
+    regraId: linha.regraId,
+    enquadramentoId: linha.enquadramentoId,
+    quantidade: linha.quantidade,
+    pesoNf: linha.pesoNf,
+    valor: linha.valor,
+    desconto: linha.desconto,
+    competencia: linha.competencia,
+    valorLiquido: linha.valorLiquido,
+    baseTributavel: linha.baseTributavel,
+    icms: linha.icms,
+    baseDifereBruto: linha.baseDifereBruto,
+  };
 }
 
 function formatarLista(valor: string): string {

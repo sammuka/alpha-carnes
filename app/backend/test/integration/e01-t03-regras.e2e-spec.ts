@@ -759,4 +759,111 @@ describe('E01-T03 regras tributárias', () => {
       expect(codigoDe(v3.body)).toBe('VERSAO_ABERTA');
     });
   });
+
+  describe('Portão A r1 do PR #166 — tratamento ICMS (AD-34), versão nova e auditoria', () => {
+    it.each([
+      ['00', '41,67', '12,00'],
+      ['20', '0,00', '12,00'],
+      ['40', '0,00', '12,00'],
+      ['40', '41,67', '0,00'],
+      ['41', '0,00', '12,00'],
+      ['41', '10,00', '0,00'],
+    ])('tratamento ICMS incoerente não grava: CST %s, redução %s, alíquota %s', async (icmsCst, pRedBc, pIcms) => {
+      const base = await cenario();
+      const { res } = await criarComo(adminA, {
+        enquadramentoId: base.enquadramentoId,
+        operacaoId: base.operacaoId,
+        cfopId: base.cfopId,
+        beneficioFiscalId: base.beneficioFiscalId,
+        classificacaoIbsCbsId: base.classificacaoIbsCbsId,
+        icmsCst,
+        pRedBc,
+        pIcms,
+      });
+      expect(res.status).toBe(422);
+      expect(codigoDe(res.body)).toBe('TRATAMENTO_ICMS_INCOERENTE');
+      expect(JSON.stringify(res.body)).not.toMatch(/\bCST\b/);
+      const n = await db().execute(sql`SELECT COUNT(*)::int AS n FROM regras_tributarias WHERE enquadramento_id = ${base.enquadramentoId}::uuid`);
+      expect(n.rows[0]).toMatchObject({ n: 0 });
+    });
+
+    it('tratamento ICMS incoerente não grava no PATCH, na versão nova nem na aprovação', async () => {
+      const fluxo = await aprovarFluxo();
+      const nova = await request(app.getHttpServer()).post(`/fiscal/regras/${fluxo.id}/versoes`).set('Cookie', adminA)
+        .send({ ...fluxo.corpo, icmsCst: '40', vigenciaInicio: '2027-01-01', vigenciaFim: null, versao: fluxo.aprovada.versao });
+      expect(nova.status).toBe(422);
+      expect(codigoDe(nova.body)).toBe('TRATAMENTO_ICMS_INCOERENTE');
+
+      const criada = await criarComo(adminA);
+      expect(criada.res.status).toBe(201);
+      const patch = await request(app.getHttpServer()).patch(`/fiscal/regras/${criada.res.body.id}`).set('Cookie', adminA)
+        .send({ ...criada.corpo, icmsCst: '41', versao: criada.res.body.versao });
+      expect(patch.status).toBe(422);
+      expect(codigoDe(patch.body)).toBe('TRATAMENTO_ICMS_INCOERENTE');
+
+      const submetida = await submeterComo(adminA, criada.res.body.id, criada.res.body.versao);
+      expect(submetida.status).toBe(200);
+      // Linha incoerente gravada antes da guarda: a aprovação também recusa.
+      await db().execute(sql`UPDATE regras_tributarias SET icms_cst = '40' WHERE id = ${criada.res.body.id}::uuid`);
+      const aprovada = await aprovarComo(adminB, criada.res.body.id, submetida.body.versao);
+      expect(aprovada.status).toBe(422);
+      expect(codigoDe(aprovada.body)).toBe('TRATAMENTO_ICMS_INCOERENTE');
+    });
+
+    it('isenção e não tributada com redução e alíquota 0 gravam e aprovam', async () => {
+      const isenta = await aprovarFluxo({ icmsCst: '40', pRedBc: '0,00', pIcms: '0,00' });
+      expect(isenta.aprovada.situacao).toBe('Aprovada');
+      const naoTributada = await criarComo(adminA, { icmsCst: '41', pRedBc: '0,00', pIcms: '0,00' });
+      expect(naoTributada.res.status).toBe(201);
+    });
+
+    it('diferimento grava rascunho e não aprova enquanto o tratamento está pendente', async () => {
+      const criada = await criarComo(adminA, { icmsCst: '51' });
+      expect(criada.res.status).toBe(201);
+      const submetida = await submeterComo(adminA, criada.res.body.id, criada.res.body.versao);
+      expect(submetida.status).toBe(200);
+      const aprovada = await aprovarComo(adminB, criada.res.body.id, submetida.body.versao);
+      expect(aprovada.status).toBe(422);
+      expect(codigoDe(aprovada.body)).toBe('TRATAMENTO_ICMS_PENDENTE');
+      const detalhe = await detalharComo(adminA, criada.res.body.id);
+      expect(detalhe.body.situacao).toBe('Submetida');
+    });
+
+    it('versão nova a partir de versão antiga usa o maior número do código + 1', async () => {
+      const fluxo = await aprovarFluxo();
+      const v2 = await request(app.getHttpServer()).post(`/fiscal/regras/${fluxo.id}/versoes`).set('Cookie', adminA)
+        .send({ ...fluxo.corpo, pIcms: '7,00', vigenciaInicio: '2027-01-01', vigenciaFim: null, versao: fluxo.aprovada.versao });
+      expect(v2.status).toBe(201);
+      const v2Sub = await submeterComo(adminA, v2.body.id, v2.body.versao);
+      expect(v2Sub.status).toBe(200);
+      const v2Apr = await aprovarComo(adminB, v2.body.id, v2Sub.body.versao);
+      expect(v2Apr.status).toBe(200);
+      const v3 = await request(app.getHttpServer()).post(`/fiscal/regras/${fluxo.id}/versoes`).set('Cookie', adminA)
+        .send({ ...fluxo.corpo, pIcms: '8,00', vigenciaInicio: '2028-01-01', vigenciaFim: null, versao: fluxo.aprovada.versao });
+      expect(v3.status).toBe(201);
+      expect(v3.body.numeroVersao).toBe(3);
+      expect(v3.body.codigo).toBe(fluxo.aprovada.codigo);
+    });
+
+    it('auditoria do PATCH de rascunho registra a alíquota antes e depois', async () => {
+      const criada = await criarComo(adminA);
+      expect(criada.res.status).toBe(201);
+      const patch = await request(app.getHttpServer()).patch(`/fiscal/regras/${criada.res.body.id}`).set('Cookie', adminA)
+        .send({ ...criada.corpo, pIcms: '7,00', versao: criada.res.body.versao });
+      expect(patch.status).toBe(200);
+      const linhas = await db().execute(sql`
+        SELECT dados_anteriores, dados_novos FROM auditoria
+        WHERE registro_id = ${criada.res.body.id}::uuid AND operacao = 'UPDATE'
+      `);
+      expect(linhas.rows).toHaveLength(1);
+      const { dados_anteriores: antes, dados_novos: depois } = linhas.rows[0] as {
+        dados_anteriores: Record<string, unknown>;
+        dados_novos: Record<string, unknown>;
+      };
+      expect(antes).toMatchObject({ pIcms: '0.1200', icmsCst: '20', pRedBc: '0.4167', vigenciaInicio: '2026-01-01' });
+      expect(depois).toMatchObject({ pIcms: '0.0700', icmsCst: '20', pRedBc: '0.4167', vigenciaFim: '2026-12-31' });
+      expect(depois).toHaveProperty('beneficioFiscalId');
+      expect(depois).toHaveProperty('classificacaoIbsCbsId');
+    });
+  });
 });

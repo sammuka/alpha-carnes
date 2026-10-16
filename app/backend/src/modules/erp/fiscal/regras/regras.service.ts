@@ -38,6 +38,7 @@ import type { AcaoRegraDto, AtualizarRegraDto, CriarRegraDto, ListarRegrasQuery,
 import { montarCsvRegras } from './exportacao-csv';
 import { formatarPercentualPtBr } from './percentual';
 import { recusarAcao, recusarEdicao, type SituacaoRegra } from './regra-transicao';
+import { exigirTratamentoIcmsCoerente } from './tratamento-icms';
 
 type Db = NodePgDatabase<typeof schema>;
 type Linha = typeof regrasTributarias.$inferSelect;
@@ -390,6 +391,7 @@ export class RegrasTributariasService {
       const enquadramento = await travarEnquadramento(tx, dto.enquadramentoId);
       this.exigirOperacaoDoEnquadramento(enquadramento, dto);
       await this.exigirCatalogos(tx, dto.beneficioFiscalId, dto.classificacaoIbsCbsId);
+      exigirTratamentoIcmsCoerente(dto);
       const linha = await this.inserirComCodigo(tx, {
         numeroVersao: 1,
         enquadramentoId: dto.enquadramentoId,
@@ -427,6 +429,7 @@ export class RegrasTributariasService {
       const enquadramento = exigirEnquadramentoAtivo(destino);
       this.exigirOperacaoDoEnquadramento(enquadramento, dto);
       await this.exigirCatalogos(tx, dto.beneficioFiscalId, dto.classificacaoIbsCbsId);
+      exigirTratamentoIcmsCoerente(dto);
       const [linha] = await tx.update(regrasTributarias).set({
         enquadramentoId: dto.enquadramentoId,
         icmsCst: dto.icmsCst,
@@ -471,10 +474,14 @@ export class RegrasTributariasService {
       }
       this.exigirOperacaoDoEnquadramento(exigirEnquadramentoAtivo(enquadramento), dto);
       await this.exigirCatalogos(tx, dto.beneficioFiscalId, dto.classificacaoIbsCbsId);
+      exigirTratamentoIcmsCoerente(dto);
+      // Sob a trava do enquadramento (a linhagem não troca de enquadramento): MAX + 1, como na T04 (D24).
+      const [ultima] = await tx.select({ maior: sql<number>`MAX(${regrasTributarias.numeroVersao})::int` })
+        .from(regrasTributarias).where(eq(regrasTributarias.codigo, origem.codigo));
       try {
         const [linha] = await tx.insert(regrasTributarias).values({
           codigo: origem.codigo,
-          numeroVersao: origem.numeroVersao + 1,
+          numeroVersao: (ultima?.maior ?? origem.numeroVersao) + 1,
           enquadramentoId: origem.enquadramentoId,
           icmsCst: dto.icmsCst,
           pRedBc: dto.pRedBc,
@@ -536,6 +543,7 @@ export class RegrasTributariasService {
       if (linha.situacao !== 'SUBMETIDA') transicaoInvalida(linha.situacao);
       exigirVersao(linha.versao, dto.versao);
       exigirSegregacao(linha.submetidoPorId, usuarioId);
+      exigirTratamentoIcmsCoerente(linha, 'aprovacao');
       const outras = await tx.select({
         codigo: regrasTributarias.codigo,
         numeroVersao: regrasTributarias.numeroVersao,
@@ -736,15 +744,32 @@ export class RegrasTributariasService {
       modulo: MODULO,
       usuarioId,
       dadosAnteriores: anterior
-        ? { situacao: anterior.situacao, versao: anterior.versao, numeroVersao: anterior.numeroVersao }
+        ? { situacao: anterior.situacao, versao: anterior.versao, numeroVersao: anterior.numeroVersao, ...camposFiscais(anterior) }
         : {},
       dadosNovos: {
         situacao: linha.situacao,
         versao: linha.versao,
         numeroVersao: linha.numeroVersao,
+        ...camposFiscais(linha),
         resumo,
       },
       justificativa,
     });
   }
+}
+
+/** Campos tributários auditados antes e depois (CST, redução, alíquota, benefício, classificação, vigência). */
+function camposFiscais(linha: Linha) {
+  return {
+    icmsCst: linha.icmsCst,
+    pRedBc: linha.pRedBc,
+    pIcms: linha.pIcms,
+    beneficioFiscalId: linha.beneficioFiscalId,
+    ipiCst: linha.ipiCst,
+    pisCst: linha.pisCst,
+    ibsCst: linha.ibsCst,
+    classificacaoIbsCbsId: linha.classificacaoIbsCbsId,
+    vigenciaInicio: linha.vigenciaInicio,
+    vigenciaFim: linha.vigenciaFim,
+  };
 }

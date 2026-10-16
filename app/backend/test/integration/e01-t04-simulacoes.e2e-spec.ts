@@ -828,4 +828,65 @@ describe('E01-T04 simulações fiscais', () => {
     const vistos = (lista.body.data as Array<{ id: string }>).map((i) => i.id);
     expect(vistos).toEqual([...ids].sort());
   });
+
+  describe('Portão A r1 do PR #166 — tratamento ICMS (AD-34), CSV da memória e auditoria', () => {
+    it.each(['40', '41'])('isenção não calcula ICMS: tratamento %s grava ICMS 0,00 e base igual ao líquido', async (icmsCst) => {
+      const aprovada = await aprovarRegra(await cenario(), { icmsCst, pRedBc: '0,00', pIcms: '0,00' });
+      const criada = await simular(admin, corpoDe(aprovada.base));
+      expect(criada.status).toBe(201);
+      expect(criada.body.icms).toBe('0.00');
+      expect(criada.body.baseTributavel).toBe('1000.00');
+      expect(criada.body.baseDifereBruto).toBe(false);
+    });
+
+    it.each([
+      ['40', 'TRATAMENTO_ICMS_INCOERENTE'],
+      ['41', 'TRATAMENTO_ICMS_INCOERENTE'],
+      ['51', 'TRATAMENTO_ICMS_PENDENTE'],
+    ])('isenção não calcula ICMS: regra %s incoerente no banco responde 422 e não grava', async (icmsCst, codigo) => {
+      const aprovada = await aprovarRegra(await cenario());
+      // Linha anterior à guarda do AD-34: tratamento trocado sem zerar redução e alíquota.
+      await db().execute(sql`UPDATE regras_tributarias SET icms_cst = ${icmsCst} WHERE id = ${aprovada.regraId}::uuid`);
+      const res = await simular(admin, corpoDe(aprovada.base));
+      expect(res.status).toBe(422);
+      expect(codigoDe(res.body)).toBe(codigo);
+      const n = await db().execute(sql`SELECT COUNT(*)::int AS n FROM simulacoes_fiscais WHERE regra_id = ${aprovada.regraId}::uuid`);
+      expect(n.rows[0]).toMatchObject({ n: 0 });
+    });
+
+    it('CSV da memória traz o tratamento com a frase, a base diferente e a referência legal da explicação', async () => {
+      const aprovada = await aprovarRegra(await cenario());
+      const criada = await simular(admin, corpoDe(aprovada.base));
+      expect(criada.status).toBe(201);
+      const explicacao = await explicar(admin, criada.body.id);
+      const memoria = await request(app.getHttpServer()).get(`/fiscal/simulacoes/${criada.body.id}/memoria`).set('Cookie', admin);
+      expect(memoria.status).toBe(200);
+      const linhas = memoria.text.split('\r\n');
+      expect(linhas[0]).toBe('\uFEFFCampo;Valor');
+      expect(linhas).toContain('Tratamento IPI;"Saída não tributada. Esta regra não guarda alíquota deste tributo; nenhum valor é calculado."');
+      expect(linhas).toContain(`Base tributável difere de valor bruto;${explicacao.body.textoBase}`);
+      expect(linhas[linhas.length - 1]).toBe(`Referência legal;${explicacao.body.referenciaLegal}`);
+      expect(memoria.text).toContain('Benefício fiscal: Benefício');
+      expect(memoria.text).toContain('Classificação IBS/CBS: Classificação');
+      expect(memoria.text).not.toMatch(/\n$/);
+    });
+
+    it('auditoria da simulação registra valores, regra e resultado', async () => {
+      const aprovada = await aprovarRegra(await cenario());
+      const criada = await simular(admin, corpoDe(aprovada.base));
+      expect(criada.status).toBe(201);
+      const linhas = await db().execute(sql`SELECT dados_novos FROM auditoria WHERE registro_id = ${criada.body.id}::uuid`);
+      expect(linhas.rows).toHaveLength(1);
+      expect((linhas.rows[0] as { dados_novos: unknown }).dados_novos).toMatchObject({
+        valor: '1000.00',
+        desconto: '0.00',
+        valorLiquido: '1000.00',
+        baseTributavel: '583.30',
+        icms: '70.00',
+        baseDifereBruto: true,
+        competencia: '2026-10',
+        regraId: aprovada.regraId,
+      });
+    });
+  });
 });
