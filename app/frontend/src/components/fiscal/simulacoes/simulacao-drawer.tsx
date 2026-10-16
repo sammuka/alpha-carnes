@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { buscarEnquadramentos, errosPorCampo, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
+import { buscarEnquadramentos, errosPorCampo, textoUtil, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
 import { mascararNcm, type OpcaoCombo } from '@/lib/fiscal-enquadramentos';
 import {
   ErroSimulacao,
@@ -84,7 +84,7 @@ function validar(form: CorpoSimulacao): Record<string, string> {
     erros.desconto = 'O desconto não pode ser maior que o valor.';
   }
   if (!form.competencia) erros.competencia = 'Informe a competência.';
-  if (form.justificativa.trim().length < 3) erros.justificativa = 'Informe o motivo da alteração (3 a 500 caracteres).';
+  if (textoUtil(form.justificativa).length < 3) erros.justificativa = 'Informe o motivo da alteração (3 a 500 caracteres).';
   return erros;
 }
 
@@ -183,7 +183,7 @@ export function SimulacaoDrawer({ aberto, onFechar, onSalvar }: Props) {
     setVerificado(false);
     setSalvando(true);
     try {
-      const falha = await onSalvar({ ...form, justificativa: form.justificativa.trim() });
+      const falha = await onSalvar({ ...form, justificativa: textoUtil(form.justificativa) });
       if (falha) {
         setErroSalvar(falha.mensagem);
         setErrosServidor(errosPorCampo(falha.porCampo));

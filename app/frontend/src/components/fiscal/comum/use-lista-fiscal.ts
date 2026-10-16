@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TEXTO_SERVICO_INDISPONIVEL } from '@/lib/fiscal-comum-ui';
 
+/** Atraso da busca por texto: a lista só pergunta ao servidor quando a digitação para. */
+export const ATRASO_BUSCA_MS = 250;
+
 export interface FiltrosBase {
+  search: string;
   sort: string;
   dir: 'asc' | 'desc';
   page: number;
@@ -39,6 +43,13 @@ export function useListaFiscal<F extends FiltrosBase, L, C>({ chave, padrao, lis
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const pedido = useRef(0);
+  const [busca, setBusca] = useState(filtros.search);
+
+  useEffect(() => {
+    if (busca === filtros.search) return undefined;
+    const espera = setTimeout(() => setFiltros((atual) => ({ ...atual, search: busca, page: 1 })), ATRASO_BUSCA_MS);
+    return () => clearTimeout(espera);
+  }, [busca, filtros.search]);
 
   const carregar = useCallback(async () => {
     const numero = ++pedido.current;
@@ -76,5 +87,5 @@ export function useListaFiscal<F extends FiltrosBase, L, C>({ chave, padrao, lis
     }));
   }
 
-  return { filtros, setFiltros, linhas, total: paginacao.total, pageSize: paginacao.pageSize, contagens: totais, carregando, erro, ordenar, carregar };
+  return { filtros, setFiltros, busca, setBusca, linhas, total: paginacao.total, pageSize: paginacao.pageSize, contagens: totais, carregando, erro, ordenar, carregar };
 }

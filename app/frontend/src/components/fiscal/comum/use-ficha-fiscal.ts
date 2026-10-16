@@ -22,24 +22,27 @@ export function useFichaFiscal<D, H>({ buscar, recarga, mensagemNaoEncontrada }:
   const [erro, setErro] = useState<string | null>(null);
   const pedido = useRef(0);
 
-  const carregar = useCallback(async (id: string) => {
+  /** Devolve a ficha lida, ou `null` quando a leitura falhou, ficou obsoleta ou o registro não existe mais. */
+  const carregar = useCallback(async (id: string): Promise<D | null> => {
     const numero = ++pedido.current;
     setCarregando(true);
     try {
       const [ficha, eventos] = await buscar(id);
-      if (numero !== pedido.current) return;
+      if (numero !== pedido.current) return null;
       setDetalhe(ficha);
       setHistorico(eventos);
       setErro(null);
+      return ficha;
     } catch (falha) {
-      if (numero !== pedido.current) return;
+      if (numero !== pedido.current) return null;
       if ((falha as { status?: number }).status === 404) {
         setDetalhe(null);
         setSelecionadoId(null);
         setErro(mensagemNaoEncontrada);
-        return;
+        return null;
       }
       setErro(falha instanceof Error ? falha.message : 'Falha na operação.');
+      return null;
     } finally {
       if (numero === pedido.current) setCarregando(false);
     }

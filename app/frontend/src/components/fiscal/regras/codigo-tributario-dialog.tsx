@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { errosPorCampo } from '@/lib/fiscal-comum-ui';
+import { errosPorCampo, textoUtil } from '@/lib/fiscal-comum-ui';
 import { ErroRegra } from '@/lib/fiscal-regras';
 import { CampoForm } from '../comum/campo-form';
 import { useRetornoFoco } from '../empresas/use-retorno-foco';
@@ -43,13 +43,13 @@ export function CodigoTributarioDialog({ aberto, tipo, onFechar, onConfirmar }: 
     const locais: Record<string, string> = {};
     if (!codigo.trim()) locais.codigo = 'Informe o código.';
     if (!descricao.trim()) locais.descricao = 'Informe a descrição.';
-    if (motivo.trim().length < 3) locais.justificativa = 'Informe o motivo (3 a 500 caracteres).';
+    if (textoUtil(motivo).length < 3) locais.justificativa = 'Informe o motivo (3 a 500 caracteres).';
     setErros(locais);
     if (Object.keys(locais).length > 0) return;
     setSalvando(true);
     setErro(null);
     try {
-      await onConfirmar({ codigo: codigo.trim(), descricao: descricao.trim(), justificativa: motivo.trim() });
+      await onConfirmar({ codigo: codigo.trim(), descricao: descricao.trim(), justificativa: textoUtil(motivo) });
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : 'Falha na operação.');
       if (falha instanceof ErroRegra) setErros(errosPorCampo(falha.porCampo));

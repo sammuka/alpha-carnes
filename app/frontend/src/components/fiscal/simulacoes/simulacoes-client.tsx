@@ -45,6 +45,7 @@ const COLUNAS: ColunaGrade<LinhaSimulacao>[] = [
 
 const CHAVE_ROTULOS = 'fiscal.simulador.rotulos';
 const MENSAGEM_NAO_ENCONTRADA = 'A simulação selecionada não está mais disponível.';
+const MENSAGEM_REMOVIDA = 'Esta simulação não está mais disponível. O que foi digitado continua aqui, mas não pode ser salvo.';
 type ChaveFiltro = 'estabelecimentoId' | 'clienteId' | 'produtoId';
 
 /** Lê ficha e histórico juntos; função de módulo para manter a identidade estável. */
@@ -86,7 +87,8 @@ export function SimulacoesClient({ podeGerenciar }: { podeGerenciar: boolean }) 
   const [erroExplicacao, setErroExplicacao] = useState<string | null>(null);
   const [falta, setFalta] = useState<string | null>(null);
   const [drawer, setDrawer] = useState(false);
-  const [versaoAberta, setVersaoAberta] = useState(false);
+  /** Simulação de origem da versão nova: cópia e versão enviada, tiradas ao abrir. */
+  const [alvoVersao, setAlvoVersao] = useState<DetalheSimulacao | null>(null);
   const [compararAberto, setCompararAberto] = useState(false);
   const [rotulosFiltro, setRotulosFiltro] = useState<Record<string, string>>(lerRotulos);
 
@@ -124,17 +126,16 @@ export function SimulacoesClient({ podeGerenciar }: { podeGerenciar: boolean }) 
     }
   }, [aba, detalhe?.id, detalhe?.baseDifereBruto, explicacao, carregandoExplicacao, erroExplicacao]);
 
-  function falhaDe(erro: unknown, id?: string): FalhaSalvar {
+  function falhaDe(erro: unknown): FalhaSalvar {
     if (!(erro instanceof ErroSimulacao)) return { mensagem: 'Falha na operação.', porCampo: {} };
     const mensagem = mensagemDeSimulacao(erro);
     if (erro.codigo === 'FALTA_REFERENCIA_LEGAL') setFalta(mensagem);
-    if (erro.codigo === 'CONFLITO_CONCORRENTE' && id) void ficha.carregar(id);
-    return { mensagem, porCampo: erro.porCampo };
+    return { mensagem, porCampo: erro.porCampo, conflito: erro.codigo === 'CONFLITO_CONCORRENTE' };
   }
 
   async function exportar() {
     try {
-      baixarArquivo(await simulacoesApi.exportar(filtros), 'simulacoes-fiscais.csv');
+      baixarArquivo(await simulacoesApi.exportar({ ...filtros, search: lista.busca }), 'simulacoes-fiscais.csv');
     } catch (erro) {
       toast.error(texto(erro));
     }
@@ -176,16 +177,29 @@ export function SimulacoesClient({ podeGerenciar }: { podeGerenciar: boolean }) 
   }
 
   async function salvarVersao(corpo: CorpoSimulacao & { versao: number }): Promise<FalhaSalvar | null> {
-    if (!detalhe) return null;
+    if (!alvoVersao || versaoRemovida) return { mensagem: MENSAGEM_REMOVIDA, porCampo: {} };
     try {
-      const nova = await simulacoesApi.versao(detalhe.id, corpo);
+      const nova = await simulacoesApi.versao(alvoVersao.id, corpo);
       toast.success('Simulação calculada.');
-      setVersaoAberta(false);
+      setAlvoVersao(null);
       await abrirCriada(nova);
       return null;
     } catch (erro) {
-      return falhaDe(erro, detalhe.id);
+      return falhaDe(erro);
     }
+  }
+
+  /** 409 no diálogo: relê a origem e passa a enviar a versão nova, sem tocar no que foi digitado. */
+  async function recarregarVersao(): Promise<boolean> {
+    if (!alvoVersao) return false;
+    const fresca = await ficha.carregar(alvoVersao.id);
+    if (!fresca) return false;
+    setAlvoVersao({ ...alvoVersao, versao: fresca.versao });
+    return true;
+  }
+
+  function abrirVersao() {
+    if (detalhe) setAlvoVersao(detalhe);
   }
 
   /** O resultado da explicação aparece na aba Ficha; a tela vai para lá antes de carregar. */
@@ -244,6 +258,9 @@ export function SimulacoesClient({ podeGerenciar }: { podeGerenciar: boolean }) 
     );
   }
 
+  /** Outro usuário removeu a simulação enquanto o diálogo estava aberto. */
+  const versaoRemovida = alvoVersao !== null && detalhe?.id !== alvoVersao.id;
+
   return (
     <div className="grid gap-4">
       <PageHeader
@@ -262,7 +279,7 @@ export function SimulacoesClient({ podeGerenciar }: { podeGerenciar: boolean }) 
             {podeGerenciar && <DropdownMenuItem onSelect={() => setDrawer(true)}>Simular</DropdownMenuItem>}
             <DropdownMenuItem disabled={!detalhe} onSelect={() => void explicar()}>Explicar tributos</DropdownMenuItem>
             <DropdownMenuItem disabled={!detalhe} onSelect={() => setCompararAberto(true)}>Comparar versões</DropdownMenuItem>
-            {podeGerenciar && <DropdownMenuItem disabled={!detalhe} onSelect={() => setVersaoAberta(true)}>Nova versão</DropdownMenuItem>}
+            {podeGerenciar && <DropdownMenuItem disabled={!detalhe} onSelect={abrirVersao}>Nova versão</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
       </PageHeader>
@@ -277,8 +294,8 @@ export function SimulacoesClient({ podeGerenciar }: { podeGerenciar: boolean }) 
           aria-label="Buscar cliente"
           placeholder="Pesquisar descrição ou referência de negócio"
           className="h-8 rounded-md border px-2 text-sm"
-          value={filtros.search}
-          onChange={(e) => setFiltros((atual) => ({ ...atual, search: e.target.value, page: 1 }))}
+          value={lista.busca}
+          onChange={(e) => lista.setBusca(e.target.value)}
         />
         <div className="grid gap-2 md:grid-cols-4">
           {comboFiltro('Estabelecimento', 'filtro-estab', 'estabelecimentos', 'estabelecimentoId')}
@@ -337,14 +354,21 @@ export function SimulacoesClient({ podeGerenciar }: { podeGerenciar: boolean }) 
             onExplicar={() => void explicar()}
             onExportarMemoria={() => void exportarMemoria()}
             onComparar={() => setCompararAberto(true)}
-            onNovaVersao={() => setVersaoAberta(true)}
+            onNovaVersao={abrirVersao}
             onValidarPreCondicoes={() => void validarPreCondicoes()}
             onConsultarHistorico={() => void consultarHistorico()}
           />
         )}
       </section>
       <SimulacaoDrawer aberto={drawer} onFechar={() => setDrawer(false)} onSalvar={salvar} />
-      <VersaoDialog aberto={versaoAberta} origem={detalhe} onFechar={() => setVersaoAberta(false)} onSalvar={salvarVersao} />
+      <VersaoDialog
+        aberto={alvoVersao !== null}
+        origem={alvoVersao}
+        bloqueado={versaoRemovida ? MENSAGEM_REMOVIDA : null}
+        onRecarregar={recarregarVersao}
+        onFechar={() => setAlvoVersao(null)}
+        onSalvar={salvarVersao}
+      />
       <CompararDialog aberto={compararAberto} detalhe={detalhe} onFechar={() => setCompararAberto(false)} />
     </div>
   );

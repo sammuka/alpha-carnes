@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { buscarEnquadramentos, errosPorCampo, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
+import { buscarEnquadramentos, errosPorCampo, textoUtil, type FalhaSalvar } from '@/lib/fiscal-comum-ui';
 import { mascararCfop, type OpcaoCombo } from '@/lib/fiscal-enquadramentos';
 import {
   ROTULOS_IBS,
@@ -33,8 +33,12 @@ export interface SelecaoCodigoTributario {
 
 interface Props {
   aberto: boolean;
-  /** Versão em edição; `null` abre o formulário de um registro novo. */
+  /** Cópia da versão em edição, tirada ao abrir; `null` abre o formulário de um registro novo. */
   detalhe: DetalheRegra | null;
+  /** Motivo pelo qual a edição não pode mais ser salva (registro removido por outro usuário). */
+  bloqueado?: string | null;
+  /** Relê o registro após um 409, troca a versão enviada e devolve `false` se ele não existe mais. */
+  onRecarregar?: () => Promise<boolean>;
   selecaoCodigo?: SelecaoCodigoTributario | null;
   onFechar: () => void;
   /** Devolve `null` quando gravou; senão a falha que o formulário exibe. */
@@ -108,11 +112,11 @@ function validar(form: CorpoRegra): Record<string, string> {
   if (form.vigenciaFim && form.vigenciaInicio && form.vigenciaFim < form.vigenciaInicio) {
     erros.vigenciaFim = 'Fim de vigência deve ser igual ou posterior ao início.';
   }
-  if (form.justificativa.trim().length < 3) erros.justificativa = 'Informe a justificativa (3 a 500 caracteres).';
+  if (textoUtil(form.justificativa).length < 3) erros.justificativa = 'Informe a justificativa (3 a 500 caracteres).';
   return erros;
 }
 
-export function RegraDrawer({ aberto, detalhe, selecaoCodigo, onFechar, onSalvar, onNovoCodigo }: Props) {
+export function RegraDrawer({ aberto, detalhe, bloqueado = null, onRecarregar, selecaoCodigo, onFechar, onSalvar, onNovoCodigo }: Props) {
   const retornoFoco = useRetornoFoco(aberto);
   const manterDialogoAninhado = (event: { target: EventTarget | null; preventDefault: () => void }) => {
     const alvo = event.target;
@@ -129,6 +133,9 @@ export function RegraDrawer({ aberto, detalhe, selecaoCodigo, onFechar, onSalvar
   const [verificado, setVerificado] = useState(false);
   const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [conflito, setConflito] = useState(false);
+  const [recarregando, setRecarregando] = useState(false);
+  const [recarregado, setRecarregado] = useState(false);
   const [preenchendo, setPreenchendo] = useState(false);
   const [sujo, setSujo] = useState(false);
   const [confirmarSaida, setConfirmarSaida] = useState(false);
@@ -142,10 +149,12 @@ export function RegraDrawer({ aberto, detalhe, selecaoCodigo, onFechar, onSalvar
     setAviso(null);
     setVerificado(false);
     setErroSalvar(null);
+    setConflito(false);
+    setRecarregado(false);
     setSujo(false);
     setConfirmarSaida(false);
-    // Recarga da ficha com o drawer aberto (evento em tempo real) não pode apagar o que o usuário digitou.
-  }, [aberto, detalhe?.id]);
+    // Só a abertura inicializa: recarga da ficha por evento de outro usuário não apaga o que foi digitado.
+  }, [aberto]);
 
   useEffect(() => {
     if (!aberto || !selecaoCodigo) return;
@@ -207,13 +216,15 @@ export function RegraDrawer({ aberto, detalhe, selecaoCodigo, onFechar, onSalvar
   async function salvar() {
     if (!verificar()) return;
     setVerificado(false);
+    setRecarregado(false);
     setSalvando(true);
     try {
       const falha = await onSalvar({
         ...form,
-        justificativa: form.justificativa.trim(),
+        justificativa: textoUtil(form.justificativa),
         vigenciaFim: form.vigenciaFim || null,
       });
+      setConflito(Boolean(falha?.conflito));
       if (falha) {
         setErroSalvar(falha.mensagem);
         setErrosServidor(errosPorCampo(falha.porCampo));
@@ -222,6 +233,19 @@ export function RegraDrawer({ aberto, detalhe, selecaoCodigo, onFechar, onSalvar
       setErroSalvar(erro instanceof ErroRegra ? mensagemDeRegra(erro) : 'Falha na operação.');
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function recarregar() {
+    if (!onRecarregar) return;
+    setRecarregando(true);
+    try {
+      const existe = await onRecarregar();
+      setConflito(false);
+      setErroSalvar(null);
+      setRecarregado(existe);
+    } finally {
+      setRecarregando(false);
     }
   }
 
@@ -298,11 +322,16 @@ export function RegraDrawer({ aberto, detalhe, selecaoCodigo, onFechar, onSalvar
             {aviso && <p role="alert" className="text-sm text-destructive">{aviso}</p>}
             {verificado && <p role="status" className="text-sm text-muted-foreground">Dados verificados.</p>}
             {erroSalvar && <p role="alert" className="text-sm text-destructive">{erroSalvar}</p>}
+            {bloqueado && <p role="alert" className="text-sm text-destructive">{bloqueado}</p>}
+            {recarregado && <p role="status" className="text-sm text-muted-foreground">Dados recarregados. Revise o que digitou e salve de novo.</p>}
+            {conflito && onRecarregar && !bloqueado && (
+              <Button type="button" variant="secondary" size="sm" className="justify-self-start" loading={recarregando} onClick={() => void recarregar()}>Recarregar dados</Button>
+            )}
           </form>
           <SheetFooter>
             <Button type="button" variant="secondary" onClick={tentarFechar}>Cancelar</Button>
             <Button type="button" variant="secondary" onClick={() => verificar()}>Verificar dados</Button>
-            <Button type="submit" form="regra-form" loading={salvando} disabled={preenchendo}>Salvar rascunho</Button>
+            <Button type="submit" form="regra-form" loading={salvando} disabled={preenchendo || Boolean(bloqueado)}>Salvar rascunho</Button>
           </SheetFooter>
         </SheetContent>
       </Sheet>

@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { FormField } from '@/components/ui/form-field';
 import { Textarea } from '@/components/ui/textarea';
+import { textoUtil } from '@/lib/fiscal-comum-ui';
 import {
   ehConflitoConcorrente,
   ErroFiscal,
@@ -34,6 +35,11 @@ export interface DecisaoPendente {
   perigosa?: boolean;
   mensagemSucesso: string;
   executar: (justificativa: string, confirmarTroca: boolean) => Promise<unknown>;
+  /**
+   * Relê o registro após um 409 e devolve `true` se ele ainda existe. A tela passa a usar a versão
+   * nova na próxima confirmação; o texto digitado fica no diálogo.
+   */
+  recarregar?: () => Promise<boolean>;
 }
 
 interface DecisaoDialogProps {
@@ -65,6 +71,9 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
   const [erro, setErro] = useState<string | null>(null);
   const [erroCampo, setErroCampo] = useState<string | null>(null);
   const [processando, setProcessando] = useState(false);
+  const [conflito, setConflito] = useState(false);
+  const [recarregando, setRecarregando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [desafio, setDesafio] = useState<DesafioTroca | null>(null);
   const retornoFocoTroca = useRetornoFoco(desafio !== null);
 
@@ -73,19 +82,23 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
     setErro(null);
     setErroCampo(null);
     setDesafio(null);
+    setConflito(false);
+    setAviso(null);
   }, [decisao]);
 
   const executar = async (confirmarTroca: boolean) => {
     if (!decisao) return;
-    if (justificativa.trim().length < 3) {
+    if (textoUtil(justificativa).length < 3) {
       setErroCampo('Informe a justificativa (mínimo de 3 caracteres).');
       return;
     }
     setErroCampo(null);
     setErro(null);
+    setAviso(null);
+    setConflito(false);
     setProcessando(true);
     try {
-      await decisao.executar(justificativa.trim(), confirmarTroca);
+      await decisao.executar(textoUtil(justificativa), confirmarTroca);
       setDesafio(null);
       toast.success(decisao.mensagemSucesso);
       onConcluido();
@@ -100,6 +113,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
       }
       setDesafio(null);
       if (ehConflitoConcorrente(falha)) onConflito();
+      if ((falha as { codigo?: string | null }).codigo === 'CONFLITO_CONCORRENTE') setConflito(true);
       const conflito = falha instanceof ErroFiscal && falha.codigo === 'REGIME_SOBREPOSTO'
         ? descreverConflito(falha.dados)
         : null;
@@ -108,6 +122,23 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
       setProcessando(false);
     }
   };
+
+  async function recarregar() {
+    if (!decisao?.recarregar) return;
+    setRecarregando(true);
+    try {
+      const existe = await decisao.recarregar();
+      setConflito(false);
+      if (existe) {
+        setErro(null);
+        setAviso('Dados recarregados. Revise o que digitou e confirme de novo.');
+      } else {
+        setErro('O registro não está mais disponível.');
+      }
+    } finally {
+      setRecarregando(false);
+    }
+  }
 
   return (
     <>
@@ -136,6 +167,12 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
               <p role="alert" className="text-xs text-destructive">
                 {erro}
               </p>
+            )}
+            {aviso && <p role="status" className="text-xs text-muted-foreground">{aviso}</p>}
+            {conflito && decisao?.recarregar && (
+              <Button type="button" variant="secondary" size="sm" className="justify-self-start" loading={recarregando} onClick={() => void recarregar()}>
+                Recarregar dados
+              </Button>
             )}
           </div>
           <DialogFooter>

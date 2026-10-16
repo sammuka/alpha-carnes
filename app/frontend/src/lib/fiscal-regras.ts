@@ -341,12 +341,6 @@ export function rotuloVersao(linha: Pick<LinhaRegra, 'codigo' | 'numeroVersao' |
 const texto = (valor: unknown) => String(valor ?? '');
 
 /** Combos de busca no servidor (identidade estável para o `ComboboxBusca`). */
-export const buscarEnquadramentos = (termo: string) =>
-  buscarCatalogo('/api/erp/fiscal/enquadramentos', termo, (l) => ({
-    id: l.situacao === 'INATIVA' ? '' : texto(l.id),
-    rotulo: `${texto(l.codigo)} · ${texto(l.operacao)}`,
-  }));
-
 export const buscarBeneficios = (termo: string) =>
   buscarCatalogo('/api/erp/fiscal/beneficios-fiscais', termo, (l) => ({ id: texto(l.id), rotulo: texto(l.descricao) }));
 

@@ -15,6 +15,16 @@ export const ROTULO_NOVO = 'novo';
 export interface FalhaSalvar {
   mensagem: string;
   porCampo: Record<string, string>;
+  /** 409: o registro mudou desde que o formulário abriu; o formulário oferece "Recarregar dados". */
+  conflito?: boolean;
+}
+
+/** Largura zero (U+200B a U+200D) e BOM (U+FEFF) não contam como texto digitado. */
+const INVISIVEIS = /[\u200B-\u200D\uFEFF]/g;
+
+/** Texto sem caracteres invisíveis e sem espaços nas pontas: o que vale para o mínimo de caracteres e o que se envia. */
+export function textoUtil(valor: string): string {
+  return valor.replace(INVISIVEIS, '').trim();
 }
 
 /** Rodapé do protótipo (aplicacao.js L176) sem a palavra "fictícios": `Exibindo N de M registros`. */

@@ -117,6 +117,8 @@ let respostaPre: Response | null = null;
 let respostaComparar: Response | null = null;
 let liberarFicha: Promise<void> | null = null;
 let chamadas: Chamada[] = [];
+/** Segura a resposta da listagem cuja busca é a chave, para simular resposta que chega fora de ordem. */
+let portoesLista: Record<string, Promise<void>> = {};
 
 const VERSOES = [
   { ...linha(1), id: ID_V1, numeroVersao: 1 },
@@ -130,6 +132,9 @@ async function responder(metodo: string, url: URL): Promise<Response> {
   if (metodo === 'GET' && caminho === `${base}/contagens`) return json(200, { simulacoes: total, versoes: total, baseDiferente: 1 });
   if (metodo === 'GET' && caminho === base) {
     if (url.searchParams.get('codigo')) return json(200, { data: VERSOES, total: VERSOES.length, page: 1, pageSize: 100 });
+    const busca = url.searchParams.get('search') ?? '';
+    if (portoesLista[busca]) await portoesLista[busca];
+    if (busca === 'lento') return json(200, { data: [linha(7)], total: 1, page: 1, pageSize: 20 });
     const pagina = Number(url.searchParams.get('page') ?? '1');
     const quantas = Math.max(0, Math.min(20, total - (pagina - 1) * 20));
     const dados = Array.from({ length: quantas }, (_, i) => linha((pagina - 1) * 20 + i + 1));
@@ -190,6 +195,7 @@ beforeEach(() => {
   respostaComparar = null;
   liberarFicha = null;
   chamadas = [];
+  portoesLista = {};
   window.sessionStorage.clear();
   mockRealtime.mockClear();
   global.fetch = jest.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
@@ -619,5 +625,114 @@ describe('drawer de simulação', () => {
     }) as unknown as typeof fetch;
     await escolherCombo(user, drawer, 'sim-enq', 'Buscar enquadramento', '12', '12 · Compra outubro');
     expect(await within(drawer).findByText(/Não foi possível carregar os dados do enquadramento/)).toBeInTheDocument();
+  });
+});
+
+describe('lista: resposta obsoleta e busca com atraso', () => {
+  it('a busca só chega ao servidor quando a digitação para, com uma única consulta', async () => {
+    const { user } = renderizar();
+    await screen.findByText('Cliente 01', { selector: 'td' });
+    const antes = listagens().length;
+    await user.type(screen.getByLabelText('Buscar cliente'), 'abc');
+    expect(listagens().length).toBe(antes);
+    await waitFor(() => expect(listagens().at(-1)?.url.searchParams.get('search')).toBe('abc'));
+    expect(listagens().slice(antes).map((c) => c.url.searchParams.get('search'))).toEqual(['abc']);
+  });
+
+  it('descarta a resposta antiga que chega depois da nova', async () => {
+    let liberar!: () => void;
+    portoesLista.lento = new Promise<void>((resolve) => { liberar = resolve; });
+    const { user } = renderizar();
+    await screen.findByText('Cliente 01', { selector: 'td' });
+    const campo = screen.getByLabelText('Buscar cliente');
+    await user.type(campo, 'lento');
+    await waitFor(() => expect(listagens().some((c) => c.url.searchParams.get('search') === 'lento')).toBe(true));
+    await user.clear(campo);
+    await waitFor(() => expect(listagens().at(-1)?.url.searchParams.get('search') ?? '').toBe(''));
+    await act(async () => { liberar(); });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText('Cliente 07', { selector: 'td' })).not.toBeInTheDocument();
+    expect(screen.getByText('Cliente 01', { selector: 'td' })).toBeInTheDocument();
+  });
+});
+
+describe('diálogo aberto e concorrência', () => {
+  async function abrirVersao(user: ReturnType<typeof userEvent.setup>) {
+    await abrirFicha(user);
+    await user.click(screen.getByRole('button', { name: 'Nova versão' }));
+    return screen.findByRole('dialog');
+  }
+
+  it('o evento de outro usuário não apaga o digitado, o envio leva a versão de quando abriu e o 409 oferece recarregar', async () => {
+    const { user } = renderizar();
+    const dialogo = await abrirVersao(user);
+    await user.type(within(dialogo).getByLabelText('Motivo da alteração'), 'Novo desconto');
+    detalhe = { ...detalhe, versao: 3 };
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(within(dialogo).getByLabelText('Motivo da alteração')).toHaveValue('Novo desconto');
+    proximaMutacao = envelope(409, { message: 'x', codigo: 'CONFLITO_CONCORRENTE' });
+    await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await within(dialogo).findByText('O registro foi alterado por outro usuário. Recarregue para continuar.')).toBeInTheDocument();
+    expect(chamadas.find((c) => c.url.pathname.endsWith('/versoes'))?.corpo?.versao).toBe(1);
+    await user.click(within(dialogo).getByRole('button', { name: 'Recarregar dados' }));
+    expect(await within(dialogo).findByText('Dados recarregados. Revise o que digitou e salve de novo.')).toBeInTheDocument();
+    expect(within(dialogo).getByLabelText('Motivo da alteração')).toHaveValue('Novo desconto');
+    proximaMutacao = null;
+    await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/versoes')).at(-1)?.corpo?.versao).toBe(3);
+  });
+
+  it('simulação removida por outro usuário bloqueia o envio e mantém o digitado', async () => {
+    const { user } = renderizar();
+    const dialogo = await abrirVersao(user);
+    await user.type(within(dialogo).getByLabelText('Motivo da alteração'), 'Novo desconto');
+    respostaFicha = json(404, { message: 'Simulação fiscal não encontrada' });
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    expect(await within(dialogo).findByText('Esta simulação não está mais disponível. O que foi digitado continua aqui, mas não pode ser salvo.')).toBeInTheDocument();
+    expect(within(dialogo).getByRole('button', { name: 'Salvar rascunho' })).toBeDisabled();
+    expect(within(dialogo).getByLabelText('Motivo da alteração')).toHaveValue('Novo desconto');
+    expect(chamadas.some((c) => c.metodo === 'POST')).toBe(false);
+  });
+
+  it('o drawer de nova simulação não perde o digitado com o evento de outro usuário', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+    const drawer = await screen.findByRole('dialog');
+    await user.type(within(drawer).getByLabelText('Motivo da alteração'), 'Motivo digitado');
+    detalhe = { ...detalhe, versao: 4 };
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(within(drawer).getByLabelText('Motivo da alteração')).toHaveValue('Motivo digitado');
+  });
+});
+
+describe('justificativa com caracteres invisíveis', () => {
+  const INVISIVEIS = '\u200B\u200C\uFEFF';
+
+  it('no drawer, só caracteres invisíveis equivalem a vazio', async () => {
+    const { user } = renderizar();
+    await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+    const drawer = await screen.findByRole('dialog');
+    fireEvent.change(within(drawer).getByLabelText('Motivo da alteração'), { target: { value: INVISIVEIS + INVISIVEIS } });
+    await user.click(within(drawer).getByRole('button', { name: 'Verificar dados' }));
+    expect(await within(drawer).findByText('Informe o motivo da alteração (3 a 500 caracteres).')).toBeInTheDocument();
+  });
+
+  it('na versão nova, o motivo só com invisíveis é recusado e o válido vai sem eles', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('button', { name: 'Nova versão' }));
+    const dialogo = await screen.findByRole('dialog');
+    const motivo = within(dialogo).getByLabelText('Motivo da alteração');
+    fireEvent.change(motivo, { target: { value: 'a' + INVISIVEIS + 'b' } });
+    await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await within(dialogo).findByText('Informe o motivo da alteração (3 a 500 caracteres).')).toBeInTheDocument();
+    fireEvent.change(motivo, { target: { value: ' a' + INVISIVEIS + 'bc ' } });
+    await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    await waitFor(() => expect(chamadas.some((c) => c.url.pathname.endsWith('/versoes'))).toBe(true));
+    expect(chamadas.find((c) => c.url.pathname.endsWith('/versoes'))?.corpo?.justificativa).toBe('abc');
   });
 });

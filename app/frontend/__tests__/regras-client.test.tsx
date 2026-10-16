@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RegrasClient } from '../src/components/fiscal/regras/regras-client';
 import { RegraDrawer } from '../src/components/fiscal/regras/regra-drawer';
@@ -92,6 +92,8 @@ let respostaPre: Response | null = null;
 let respostaComparar: Response | null = null;
 let liberarFicha: Promise<void> | null = null;
 let chamadas: Chamada[] = [];
+/** Segura a resposta da listagem cuja busca é a chave, para simular resposta que chega fora de ordem. */
+let portoesLista: Record<string, Promise<void>> = {};
 
 const VERSOES = [
   { ...linha(1), id: ID_V1, numeroVersao: 1, situacao: 'Aprovada' },
@@ -106,6 +108,9 @@ async function responder(metodo: string, url: URL, _corpo: Record<string, unknow
   }
   if (metodo === 'GET' && caminho === '/api/erp/fiscal/regras') {
     if (url.searchParams.get('codigo')) return json(200, { data: VERSOES, total: VERSOES.length, page: 1, pageSize: 100 });
+    const busca = url.searchParams.get('search') ?? '';
+    if (portoesLista[busca]) await portoesLista[busca];
+    if (busca === 'lento') return json(200, { data: [linha(7)], total: 1, page: 1, pageSize: 20 });
     const pagina = Number(url.searchParams.get('page') ?? '1');
     const quantas = Math.max(0, Math.min(20, total - (pagina - 1) * 20));
     const dados = Array.from({ length: quantas }, (_, i) => linha((pagina - 1) * 20 + i + 1));
@@ -167,6 +172,7 @@ beforeEach(() => {
   respostaComparar = null;
   liberarFicha = null;
   chamadas = [];
+  portoesLista = {};
   window.sessionStorage.clear();
   mockRealtime.mockClear();
   global.fetch = jest.fn(async (entrada: string, init?: RequestInit) => {
@@ -639,5 +645,167 @@ describe('adicionar versão', () => {
     await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
     expect(await within(dialogo).findByRole('alert')).toHaveTextContent('Já existe versão em rascunho ou submetida para este código.');
     expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+});
+
+describe('lista: resposta obsoleta e busca com atraso', () => {
+  it('a busca só chega ao servidor quando a digitação para, com uma única consulta', async () => {
+    const { user } = renderizar();
+    await screen.findByText('Compra 01', { selector: 'td' });
+    const antes = listagens().length;
+    await user.type(screen.getByLabelText('Pesquisar descrição ou referência de negócio'), 'abc');
+    expect(listagens().length).toBe(antes);
+    await waitFor(() => expect(listagens().at(-1)?.url.searchParams.get('search')).toBe('abc'));
+    const buscas = listagens().slice(antes).map((c) => c.url.searchParams.get('search'));
+    expect(buscas).toEqual(['abc']);
+  });
+
+  it('descarta a resposta antiga que chega depois da nova (linhas, contagens e KPIs)', async () => {
+    let liberar!: () => void;
+    portoesLista.lento = new Promise<void>((resolve) => { liberar = resolve; });
+    const { user } = renderizar();
+    await screen.findByText('Compra 01', { selector: 'td' });
+    const campo = screen.getByLabelText('Pesquisar descrição ou referência de negócio');
+    await user.type(campo, 'lento');
+    await waitFor(() => expect(listagens().some((c) => c.url.searchParams.get('search') === 'lento')).toBe(true));
+    await user.clear(campo);
+    await waitFor(() => expect(listagens().at(-1)?.url.searchParams.get('search') ?? '').toBe(''));
+    total = 5;
+    await act(async () => { liberar(); });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText('Compra 07', { selector: 'td' })).not.toBeInTheDocument();
+    expect(screen.getByText('Compra 01', { selector: 'td' })).toBeInTheDocument();
+  });
+});
+
+describe('formulário aberto e concorrência', () => {
+  async function abrirEdicao(user: ReturnType<typeof userEvent.setup>) {
+    detalhe = { ...detalhe, situacao: 'Rascunho' };
+    await abrirFicha(user);
+    await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+    return screen.findByRole('dialog');
+  }
+
+  const leituras = () => chamadas.filter((c) => c.metodo === 'GET' && c.url.pathname === '/api/erp/fiscal/regras/' + ID).length;
+
+  it('o evento de outro usuário não apaga o digitado e o envio leva a versão de quando abriu; 409 oferece recarregar', async () => {
+    const { user } = renderizar();
+    const drawer = await abrirEdicao(user);
+    await user.type(within(drawer).getByLabelText('Justificativa auditável'), 'Meu texto');
+    const antes = leituras();
+    detalhe = { ...detalhe, versao: 3, pIcms: '0.0900' };
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    await waitFor(() => expect(leituras()).toBeGreaterThan(antes));
+    expect(within(drawer).getByLabelText('Justificativa auditável')).toHaveValue('Meu texto');
+    expect(within(drawer).getByLabelText('Alíquota (%)')).toHaveValue('12,00');
+    proximaMutacao = envelope(409, { message: 'x', codigo: 'CONFLITO_CONCORRENTE' });
+    await user.click(within(drawer).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await within(drawer).findByText('O registro foi alterado por outro usuário. Recarregue para continuar.')).toBeInTheDocument();
+    expect(chamadas.filter((c) => c.metodo === 'PATCH').at(-1)?.corpo?.versao).toBe(2);
+    await user.click(within(drawer).getByRole('button', { name: 'Recarregar dados' }));
+    expect(await within(drawer).findByText('Dados recarregados. Revise o que digitou e salve de novo.')).toBeInTheDocument();
+    expect(within(drawer).getByLabelText('Justificativa auditável')).toHaveValue('Meu texto');
+    proximaMutacao = null;
+    await user.click(within(drawer).getByRole('button', { name: 'Salvar rascunho' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.metodo === 'PATCH').at(-1)?.corpo?.versao).toBe(3);
+  });
+
+  it('registro removido por outro usuário bloqueia a edição, mantém o digitado e nunca cria', async () => {
+    const { user } = renderizar();
+    const drawer = await abrirEdicao(user);
+    await user.type(within(drawer).getByLabelText('Justificativa auditável'), 'Meu texto');
+    respostaFicha = json(404, { message: 'Regra tributária não encontrada' });
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    expect(await within(drawer).findByText('Esta regra não está mais disponível. O que foi digitado continua aqui, mas não pode ser salvo.')).toBeInTheDocument();
+    expect(within(drawer).getByRole('button', { name: 'Salvar rascunho' })).toBeDisabled();
+    expect(within(drawer).getByLabelText('Justificativa auditável')).toHaveValue('Meu texto');
+    expect(chamadas.some((c) => c.metodo === 'POST' && c.url.pathname === '/api/erp/fiscal/regras')).toBe(false);
+  });
+
+  it('a decisão leva a versão de quando abriu e 409 oferece recarregar dados', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    const dialogo = await abrirAcao(user, 'Aprovar');
+    detalhe = { ...detalhe, versao: 3 };
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    proximaMutacao = envelope(409, { message: 'x', codigo: 'CONFLITO_CONCORRENTE' });
+    await user.type(within(dialogo).getByLabelText(/Justificativa/), 'Aprovando agora');
+    await user.click(within(dialogo).getByRole('button', { name: 'Aprovar' }));
+    expect(await within(dialogo).findByRole('alert')).toHaveTextContent('O registro foi alterado por outro usuário. Recarregue para continuar.');
+    expect(chamadas.find((c) => c.url.pathname.endsWith('/aprovar'))?.corpo?.versao).toBe(2);
+    await user.click(within(dialogo).getByRole('button', { name: 'Recarregar dados' }));
+    expect(await within(dialogo).findByText('Dados recarregados. Revise o que digitou e confirme de novo.')).toBeInTheDocument();
+    expect(within(dialogo).getByLabelText(/Justificativa/)).toHaveValue('Aprovando agora');
+    proximaMutacao = null;
+    await user.click(within(dialogo).getByRole('button', { name: 'Aprovar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/aprovar')).at(-1)?.corpo?.versao).toBe(3);
+  });
+
+  it('a versão nova leva a versão de quando abriu e não perde o digitado com o evento', async () => {
+    detalhe = { ...detalhe, situacao: 'Aprovada' };
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('tab', { name: 'Movimentações' }));
+    await user.click(await screen.findByRole('button', { name: 'Adicionar versão' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.type(within(dialogo).getByLabelText('Motivo da versão'), 'Nova alíquota');
+    detalhe = { ...detalhe, versao: 3 };
+    await act(async () => { mockRealtime.mock.calls.at(-1)![0].onMessage(); });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(within(dialogo).getByLabelText('Motivo da versão')).toHaveValue('Nova alíquota');
+    proximaMutacao = envelope(409, { message: 'x', codigo: 'CONFLITO_CONCORRENTE' });
+    await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    await within(dialogo).findByText('O registro foi alterado por outro usuário. Recarregue para continuar.');
+    expect(chamadas.find((c) => c.url.pathname.endsWith('/versoes'))?.corpo?.versao).toBe(2);
+    await user.click(within(dialogo).getByRole('button', { name: 'Recarregar dados' }));
+    await within(dialogo).findByText('Dados recarregados. Revise o que digitou e salve de novo.');
+    proximaMutacao = null;
+    await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(chamadas.filter((c) => c.url.pathname.endsWith('/versoes')).at(-1)?.corpo?.versao).toBe(3);
+  });
+});
+
+describe('justificativa com caracteres invisíveis', () => {
+  const INVISIVEIS = '\u200B\u200C\uFEFF';
+
+  it('no drawer, largura zero e BOM não contam para o mínimo e não vão ao servidor', async () => {
+    detalhe = { ...detalhe, situacao: 'Rascunho' };
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+    const drawer = await screen.findByRole('dialog');
+    const campo = within(drawer).getByLabelText('Justificativa auditável');
+    fireEvent.change(campo, { target: { value: 'a' + INVISIVEIS + 'b' } });
+    await user.click(within(drawer).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await within(drawer).findByText('Informe a justificativa (3 a 500 caracteres).')).toBeInTheDocument();
+    fireEvent.change(campo, { target: { value: ' a' + INVISIVEIS + 'bc ' } });
+    await user.click(within(drawer).getByRole('button', { name: 'Salvar rascunho' }));
+    await waitFor(() => expect(chamadas.some((c) => c.metodo === 'PATCH')).toBe(true));
+    expect(chamadas.find((c) => c.metodo === 'PATCH')?.corpo?.justificativa).toBe('abc');
+  });
+
+  it('no diálogo de decisão, só caracteres invisíveis equivalem a vazio', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    const dialogo = await abrirAcao(user, 'Aprovar');
+    fireEvent.change(within(dialogo).getByLabelText(/Justificativa/), { target: { value: INVISIVEIS + INVISIVEIS } });
+    await user.click(within(dialogo).getByRole('button', { name: 'Aprovar' }));
+    expect(await within(dialogo).findByText('Informe a justificativa (mínimo de 3 caracteres).')).toBeInTheDocument();
+    expect(chamadas.some((c) => c.url.pathname.endsWith('/aprovar'))).toBe(false);
+  });
+
+  it('na versão nova, o motivo só com invisíveis é recusado', async () => {
+    detalhe = { ...detalhe, situacao: 'Aprovada' };
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('tab', { name: 'Movimentações' }));
+    await user.click(await screen.findByRole('button', { name: 'Adicionar versão' }));
+    const dialogo = await screen.findByRole('dialog');
+    fireEvent.change(within(dialogo).getByLabelText('Motivo da versão'), { target: { value: INVISIVEIS + INVISIVEIS } });
+    await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await within(dialogo).findByText('Informe o motivo (3 a 500 caracteres).')).toBeInTheDocument();
   });
 });

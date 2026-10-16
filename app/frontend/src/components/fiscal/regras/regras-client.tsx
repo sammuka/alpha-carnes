@@ -66,6 +66,7 @@ const COLUNAS: ColunaGrade<LinhaRegra>[] = [
 
 const CHAVE_ROTULO_CFOP = 'fiscal.regras.rotulo-cfop';
 const MENSAGEM_NAO_ENCONTRADA = 'A regra tributária selecionada não está mais disponível.';
+const MENSAGEM_REMOVIDA = 'Esta regra não está mais disponível. O que foi digitado continua aqui, mas não pode ser salvo.';
 
 /** Lê ficha e histórico juntos; função de módulo para manter a identidade estável. */
 const buscarFicha = (id: string): Promise<[DetalheRegra, EventoHistorico[]]> =>
@@ -98,11 +99,12 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
   const [erroHistorico, setErroHistorico] = useState<string | null>(null);
   const [ocorrencias, setOcorrencias] = useState<OcorrenciasRegra>({});
   const [drawer, setDrawer] = useState(false);
-  const [editando, setEditando] = useState(false);
-  const [versaoEdicao, setVersaoEdicao] = useState(0);
+  /** Versão em edição: cópia e versão enviada, tiradas ao abrir (um 409 legítimo avisa se mudou). */
+  const [edicao, setEdicao] = useState<{ detalhe: DetalheRegra; versao: number } | null>(null);
   const [selecaoCodigo, setSelecaoCodigo] = useState<SelecaoCodigoTributario | null>(null);
   const [codigoTipo, setCodigoTipo] = useState<'beneficio' | 'classificacao' | null>(null);
-  const [versaoAberta, setVersaoAberta] = useState(false);
+  /** Versão de origem da versão nova: cópia e versão enviada, tiradas ao abrir. */
+  const [alvoVersao, setAlvoVersao] = useState<DetalheRegra | null>(null);
   const [compararAberto, setCompararAberto] = useState(false);
   const [decisao, setDecisao] = useState<DecisaoPendente | null>(null);
   const [rotuloCfop, setRotuloCfop] = useState(lerRotuloCfop);
@@ -119,26 +121,25 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
     await Promise.all([lista.carregar(), ficha.carregar(id)]);
   }
 
-  /** Guarda a última recusa das exceções documentadas e recarrega a ficha em conflito de versão. */
-  function registrar(erro: unknown, id?: string) {
+  /** Guarda a última recusa das exceções documentadas. */
+  function registrar(erro: unknown) {
     if (!(erro instanceof ErroRegra)) return;
     const mensagem = mensagemDeRegra(erro);
     if (erro.codigo === 'BENEFICIO_NAO_ELEGIVEL' || erro.codigo === 'CLASSIFICACAO_NAO_ATIVA') {
       setOcorrencias((atual) => ({ ...atual, beneficio: mensagem }));
     }
     if (erro.codigo === 'VIGENCIA_AMBIGUA') setOcorrencias((atual) => ({ ...atual, vigencia: mensagem }));
-    if (erro.codigo === 'CONFLITO_CONCORRENTE' && id) void ficha.carregar(id);
   }
 
-  function falhaDe(erro: unknown, id?: string): FalhaSalvar {
-    registrar(erro, id);
-    if (erro instanceof ErroRegra) return { mensagem: mensagemDeRegra(erro), porCampo: erro.porCampo };
+  function falhaDe(erro: unknown): FalhaSalvar {
+    registrar(erro);
+    if (erro instanceof ErroRegra) return { mensagem: mensagemDeRegra(erro), porCampo: erro.porCampo, conflito: erro.codigo === 'CONFLITO_CONCORRENTE' };
     return { mensagem: 'Falha na operação.', porCampo: {} };
   }
 
   async function exportar() {
     try {
-      baixarArquivo(await regrasApi.exportar(filtros), 'regras-tributarias.csv');
+      baixarArquivo(await regrasApi.exportar({ ...filtros, search: lista.busca }), 'regras-tributarias.csv');
     } catch (erro) {
       toast.error(texto(erro));
     }
@@ -153,10 +154,12 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
   }
 
   async function salvar(corpo: CorpoRegra): Promise<FalhaSalvar | null> {
+    // Edição nunca cai em "criar": se o registro sumiu, o formulário fica bloqueado.
+    if (edicao && removidoNaEdicao) return { mensagem: MENSAGEM_REMOVIDA, porCampo: {} };
     try {
-      if (editando && detalhe) {
-        await regrasApi.atualizar(detalhe.id, { ...corpo, versao: versaoEdicao });
-        await atualizarApos(detalhe.id);
+      if (edicao) {
+        await regrasApi.atualizar(edicao.detalhe.id, { ...corpo, versao: edicao.versao });
+        await atualizarApos(edicao.detalhe.id);
       } else {
         await regrasApi.criar(corpo);
         await lista.carregar();
@@ -165,13 +168,24 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
       setDrawer(false);
       return null;
     } catch (erro) {
-      return falhaDe(erro, detalhe?.id);
+      return falhaDe(erro);
     }
+  }
+
+  /** 409 no formulário: relê o registro e passa a enviar a versão nova, sem tocar no que foi digitado. */
+  async function recarregarEdicao(): Promise<boolean> {
+    if (!edicao) return false;
+    const fresca = await ficha.carregar(edicao.detalhe.id);
+    if (!fresca) return false;
+    setEdicao({ detalhe: edicao.detalhe, versao: fresca.versao });
+    void lista.carregar();
+    return true;
   }
 
   function decidir(acao: AcaoRegra) {
     if (!detalhe) return;
-    const { id, versao } = detalhe;
+    const { id } = detalhe;
+    const alvo = { versao: detalhe.versao };
     const textos = TEXTOS_ACAO[acao];
     setDecisao({
       titulo: textos.titulo,
@@ -181,29 +195,43 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
       mensagemSucesso: 'Regra tributária salva.',
       executar: async (justificativa) => {
         try {
-          await regrasApi[acao](id, { versao, justificativa });
+          await regrasApi[acao](id, { versao: alvo.versao, justificativa });
         } catch (erro) {
-          registrar(erro, id);
+          registrar(erro);
           throw erro;
         }
         await atualizarApos(id);
+      },
+      recarregar: async () => {
+        const fresca = await ficha.carregar(id);
+        if (!fresca) return false;
+        alvo.versao = fresca.versao;
+        return true;
       },
     });
   }
 
   async function salvarVersao(corpo: CorpoRegra & { versao: number }): Promise<FalhaSalvar | null> {
-    if (!detalhe) return null;
+    if (!alvoVersao || versaoRemovida) return { mensagem: MENSAGEM_REMOVIDA, porCampo: {} };
     try {
-      const nova = await regrasApi.versao(detalhe.id, corpo);
+      const nova = await regrasApi.versao(alvoVersao.id, corpo);
       toast.success('Regra tributária salva.');
-      setVersaoAberta(false);
+      setAlvoVersao(null);
       await lista.carregar();
       setAba('ficha');
       selecionar(nova.id);
       return null;
     } catch (erro) {
-      return falhaDe(erro, detalhe.id);
+      return falhaDe(erro);
     }
+  }
+
+  async function recarregarVersao(): Promise<boolean> {
+    if (!alvoVersao) return false;
+    const fresca = await ficha.carregar(alvoVersao.id);
+    if (!fresca) return false;
+    setAlvoVersao({ ...alvoVersao, versao: fresca.versao });
+    return true;
   }
 
   async function criarCodigo(corpo: { codigo: string; descricao: string; justificativa: string }) {
@@ -244,19 +272,25 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
 
   function abrirNovoRegistro() {
     setSelecaoCodigo(null);
-    setEditando(false);
+    setEdicao(null);
     setDrawer(true);
+  }
+
+  function abrirVersao() {
+    if (detalhe) setAlvoVersao(detalhe);
   }
 
   function abrirEdicao() {
     if (!detalhe) return;
     setSelecaoCodigo(null);
-    setVersaoEdicao(detalhe.versao);
-    setEditando(true);
+    setEdicao({ detalhe, versao: detalhe.versao });
     setDrawer(true);
   }
 
   const situacao = detalhe?.situacao;
+  /** Outro usuário removeu o registro enquanto o formulário estava aberto. */
+  const removidoNaEdicao = edicao !== null && detalhe?.id !== edicao.detalhe.id;
+  const versaoRemovida = alvoVersao !== null && detalhe?.id !== alvoVersao.id;
 
   return (
     <div className="grid gap-4">
@@ -275,7 +309,7 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
           <DropdownMenuContent align="end">
             {podeGerenciar && <DropdownMenuItem onSelect={abrirNovoRegistro}>Criar rascunho</DropdownMenuItem>}
             {podeGerenciar && (
-              <DropdownMenuItem disabled={situacao !== 'Aprovada' && situacao !== 'Aposentada'} onSelect={() => setVersaoAberta(true)}>
+              <DropdownMenuItem disabled={situacao !== 'Aprovada' && situacao !== 'Aposentada'} onSelect={abrirVersao}>
                 Adicionar versão
               </DropdownMenuItem>
             )}
@@ -298,8 +332,8 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
           aria-label="Pesquisar descrição ou referência de negócio"
           placeholder="Pesquisar descrição ou referência de negócio"
           className="h-8 rounded-md border px-2 text-sm"
-          value={filtros.search}
-          onChange={(e) => setFiltros((atual) => ({ ...atual, search: e.target.value, page: 1 }))}
+          value={lista.busca}
+          onChange={(e) => lista.setBusca(e.target.value)}
         />
         <label className="grid max-w-sm gap-1 text-xs" htmlFor="filtro-cfop">
           Operação fiscal (CFOP)
@@ -360,21 +394,30 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
             onSubmeter={() => decidir('submeter')}
             onAprovar={() => decidir('aprovar')}
             onAposentar={() => decidir('aposentar')}
-            onAdicionarVersao={() => setVersaoAberta(true)}
+            onAdicionarVersao={abrirVersao}
             onComparar={() => setCompararAberto(true)}
           />
         )}
       </section>
       <RegraDrawer
         aberto={drawer}
-        detalhe={editando ? detalhe : null}
+        detalhe={edicao?.detalhe ?? null}
+        bloqueado={removidoNaEdicao ? MENSAGEM_REMOVIDA : null}
+        onRecarregar={recarregarEdicao}
         selecaoCodigo={selecaoCodigo}
         onFechar={() => setDrawer(false)}
         onSalvar={salvar}
         onNovoCodigo={setCodigoTipo}
       />
       <CodigoTributarioDialog aberto={codigoTipo !== null} tipo={codigoTipo} onFechar={() => setCodigoTipo(null)} onConfirmar={criarCodigo} />
-      <VersaoDialog aberto={versaoAberta} origem={detalhe} onFechar={() => setVersaoAberta(false)} onSalvar={salvarVersao} />
+      <VersaoDialog
+        aberto={alvoVersao !== null}
+        origem={alvoVersao}
+        bloqueado={versaoRemovida ? MENSAGEM_REMOVIDA : null}
+        onRecarregar={recarregarVersao}
+        onFechar={() => setAlvoVersao(null)}
+        onSalvar={salvarVersao}
+      />
       <CompararDialog aberto={compararAberto} detalhe={detalhe} onFechar={() => setCompararAberto(false)} />
       <DecisaoDialog decisao={decisao} onFechar={() => setDecisao(null)} onConcluido={() => undefined} onConflito={() => undefined} />
     </div>
