@@ -22,6 +22,7 @@ export function CodigoFiscalDialog({ aberto, tipo, onFechar, onConfirmar }: Prop
   const [descricao, setDescricao] = useState('');
   const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
   const titulo = tipo === 'ncms' ? 'Classificação fiscal (NCM)' : 'Operação fiscal (CFOP)';
 
   useEffect(() => {
@@ -33,7 +34,7 @@ export function CodigoFiscalDialog({ aberto, tipo, onFechar, onConfirmar }: Prop
   }, [aberto, tipo]);
 
   return (
-    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
+    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta && !enviando) onFechar(); }}>
       <DialogContent onCloseAutoFocus={retornoFoco} aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>{titulo}</DialogTitle>
@@ -42,20 +43,21 @@ export function CodigoFiscalDialog({ aberto, tipo, onFechar, onConfirmar }: Prop
           className="grid gap-3 px-4 pb-4"
           onSubmit={(evento) => {
             evento.preventDefault();
-            if (!tipo) return;
+            if (!tipo || enviando) return;
             const normalizado = tipo === 'ncms' ? normalizarNcm(codigo) : normalizarCfop(codigo);
             if (!codigoFiscalValido(tipo, normalizado)) {
               setErro(tipo === 'ncms' ? 'NCM deve ter 8 dígitos.' : 'CFOP deve ter 4 dígitos.');
               return;
             }
             setErro(null);
+            setEnviando(true);
             void Promise.resolve(onConfirmar({
               codigo: normalizado,
               descricao: descricao.trim(),
               justificativa: normalizarJustificativa(motivo),
             })).catch((falha: unknown) => {
               setErro(falha instanceof Error ? falha.message : 'Falha na operação.');
-            });
+            }).finally(() => setEnviando(false));
           }}
         >
           <p className="text-xs text-muted-foreground">{AVISO}</p>
@@ -70,8 +72,8 @@ export function CodigoFiscalDialog({ aberto, tipo, onFechar, onConfirmar }: Prop
           </label>
           {erro && <p role="alert" className="text-sm text-destructive">{erro}</p>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={onFechar}>Cancelar</Button>
-            <Button type="submit">Salvar rascunho</Button>
+            <Button type="button" variant="secondary" disabled={enviando} onClick={onFechar}>Cancelar</Button>
+            <Button type="submit" disabled={enviando}>Salvar rascunho</Button>
           </div>
         </form>
       </DialogContent>

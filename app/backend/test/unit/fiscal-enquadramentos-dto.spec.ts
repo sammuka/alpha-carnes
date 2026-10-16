@@ -152,8 +152,8 @@ describe('B1 — datas e NUL', () => {
     expect(createEnquadramentoSchema.safeParse(base({ justificativa: 'a﻿b' })).success).toBe(false);
     expect(createCfopSchema.safeParse({ codigo: '5101', descricao: 'Venda', justificativa: '​​​' }).success).toBe(false);
     expect(createNcmSchema.safeParse({ codigo: '02013000', descricao: 'Carne', justificativa: ' ​﻿ ' }).success).toBe(false);
-    const ok = createEnquadramentoSchema.safeParse(base({ justificativa: 'ab​c' }));
-    // O miolo permanece intacto: só as pontas são aparadas (normalizador r4).
-    expect(ok.success && ok.data.justificativa).toBe('ab\u200Bc');
+    const meio = `ab${String.fromCodePoint(0x200b)}c`;
+    const ok = createEnquadramentoSchema.safeParse(base({ justificativa: ` ${meio}${String.fromCodePoint(0x2060)} ` }));
+    expect(ok.success && ok.data.justificativa).toBe(meio);
   });
 });

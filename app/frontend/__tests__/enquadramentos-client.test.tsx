@@ -470,4 +470,37 @@ describe('EnquadramentosClient', () => {
     await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
     expect(await within(dialogo).findByText('CFOP deve ter 4 dígitos.')).toBeInTheDocument();
   });
+  it.each([['cfops', 'Operação fiscal (CFOP)', '5102', 0], ['ncms', 'Classificação fiscal (NCM)', '02013000', 1]] as const)(
+    'novo código %s: triplo clique em Salvar gera um único POST e Escape não fecha em voo',
+    async (rota, titulo, codigo, indice) => {
+      const { user } = renderizar();
+      await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+      await user.click((await screen.findAllByRole('button', { name: 'Novo código' }))[indice]!);
+      await user.type(await screen.findByLabelText('Código'), codigo);
+      await user.type(screen.getByLabelText('Descrição'), 'Venda');
+      await user.type(screen.getByLabelText('Motivo do código'), 'Cadastro manual');
+      let liberar: (r: Response) => void = () => undefined;
+      const anterior = global.fetch as unknown as (entrada: string, init?: RequestInit) => Promise<Response>;
+      const posts = jest.fn();
+      global.fetch = jest.fn(async (entrada: string, init?: RequestInit) => {
+        if ((init?.method ?? 'GET') === 'POST' && String(entrada).endsWith(`/api/erp/fiscal/${rota}`)) {
+          posts();
+          return new Promise<Response>((resolve) => { liberar = resolve; });
+        }
+        return anterior(entrada, init);
+      }) as unknown as typeof fetch;
+      const dialogo = screen.getByRole('dialog', { name: titulo });
+      const salvar = within(dialogo).getByRole('button', { name: 'Salvar rascunho' });
+      await user.click(salvar);
+      await user.click(salvar);
+      await user.click(salvar);
+      expect(salvar).toBeDisabled();
+      await user.keyboard('{Escape}');
+      expect(screen.getByRole('dialog', { name: titulo })).toBeInTheDocument();
+      expect(posts).toHaveBeenCalledTimes(1);
+      await act(async () => { liberar(json(201, { id: CFOP, codigo, descricao: 'Venda' })); });
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: titulo })).not.toBeInTheDocument());
+      expect(posts).toHaveBeenCalledTimes(1);
+    },
+  );
 });

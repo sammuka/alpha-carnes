@@ -198,6 +198,7 @@ export function EnquadramentoDrawer({
   }
 
   async function salvar() {
+    if (enviando) return;
     const local = verificar();
     if (local) {
       setAvisos(local);
@@ -219,7 +220,7 @@ export function EnquadramentoDrawer({
   }
 
   return (
-    <Sheet open={aberto} onOpenChange={(open) => { if (!open) onFechar(); }}>
+    <Sheet open={aberto} onOpenChange={(open) => { if (!open && !enviando) onFechar(); }}>
       <SheetContent
         onCloseAutoFocus={retornoFoco}
         onOpenAutoFocus={(event) => {
@@ -304,7 +305,7 @@ export function EnquadramentoDrawer({
           )}
         </div>
         <SheetFooter>
-          <Button type="button" variant="secondary" onClick={onFechar}>Cancelar</Button>
+          <Button type="button" variant="secondary" disabled={enviando} onClick={onFechar}>Cancelar</Button>
           <Button type="button" variant="secondary" onClick={() => setAvisos(verificar())}>Verificar dados</Button>
           <Button type="button" disabled={removido || enviando} onClick={() => void salvar()}>Salvar rascunho</Button>
         </SheetFooter>

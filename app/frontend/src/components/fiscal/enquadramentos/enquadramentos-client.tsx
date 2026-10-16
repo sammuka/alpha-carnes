@@ -104,6 +104,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   const [alvoDuplicar, setAlvoDuplicar] = useState<{ id: string; versao: number; prioridade: number } | null>(null);
   const [erroDuplicar, setErroDuplicar] = useState<string | null>(null);
   const [conflitoDuplicar, setConflitoDuplicar] = useState(false);
+  const [removidoDuplicar, setRemovidoDuplicar] = useState(false);
   const [decisao, setDecisao] = useState<DecisaoPendente | null>(null);
   const [codigoTipo, setCodigoTipo] = useState<'cfops' | 'ncms' | null>(null);
   const [selecaoCodigo, setSelecaoCodigo] = useState<SelecaoCodigo | null>(null);
@@ -377,6 +378,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
     if (!detalhe) return;
     setErroDuplicar(null);
     setConflitoDuplicar(false);
+    setRemovidoDuplicar(false);
     setAlvoDuplicar({ id: detalhe.id, versao: detalhe.versao, prioridade: detalhe.prioridade });
   }
 
@@ -390,6 +392,12 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
       setErroDuplicar(null);
       setConflitoDuplicar(false);
     } catch (erro) {
+      if (erro instanceof ErroEnquadramento && erro.status === 404) {
+        setRemovidoDuplicar(true);
+        setConflitoDuplicar(false);
+        setErroDuplicar(null);
+        return;
+      }
       setErroDuplicar(erro instanceof Error ? erro.message : 'Falha na operação.');
     }
   }
@@ -517,8 +525,9 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         prioridadeOrigem={alvoDuplicar?.prioridade ?? 1}
         erro={erroDuplicar}
         conflito={conflitoDuplicar}
+        removido={removidoDuplicar}
         onRecarregar={recarregarDuplicar}
-        onFechar={() => { setAlvoDuplicar(null); setErroDuplicar(null); setConflitoDuplicar(false); }}
+        onFechar={() => { setAlvoDuplicar(null); setErroDuplicar(null); setConflitoDuplicar(false); setRemovidoDuplicar(false); }}
         onConfirmar={async (corpo) => {
           if (!alvoDuplicar) return;
           // Versão capturada ao abrir o diálogo: se a ficha mudou desde então, o servidor responde 409.
@@ -529,6 +538,12 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
             setAlvoDuplicar(null);
             toast.success('Enquadramento salvo.');
           } catch (erro) {
+            if (erro instanceof ErroEnquadramento && erro.status === 404) {
+              setRemovidoDuplicar(true);
+              setConflitoDuplicar(false);
+              setErroDuplicar(null);
+              return;
+            }
             const conflito = erro instanceof ErroEnquadramento && erro.codigo === 'CONFLITO_CONCORRENTE';
             if (conflito) void carregarFicha(id);
             setConflitoDuplicar(conflito);
