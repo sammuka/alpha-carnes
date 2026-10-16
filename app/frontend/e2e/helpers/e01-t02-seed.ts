@@ -182,6 +182,41 @@ export async function criarEnquadramento(
   };
 }
 
+/**
+ * Mais enquadramentos ativos da mesma chave do cenário, cada um com vigência própria (sem sobreposição).
+ * Devolve as datas de início (ISO), em ordem crescente.
+ */
+export async function criarEnquadramentosEmLote(
+  request: APIRequestContext,
+  cookie: string,
+  cenario: CenarioE01T02,
+  quantidade: number,
+): Promise<string[]> {
+  const inicios: string[] = [];
+  for (let i = 0; i < quantidade; i += 1) {
+    const vigenciaInicio = dataFutura(2000 + i * 2);
+    await api(request, cookie, 'POST', '/fiscal/enquadramentos', {
+      estabelecimentoId: cenario.estabelecimento.id,
+      operacaoId: cenario.operacaoId,
+      tpNf: '1',
+      finNfe: '1',
+      cfopId: cenario.cfopId,
+      abrangencia: 'INTERNA',
+      tipoProduto: 'REVENDA',
+      produtoId: cenario.produtoId,
+      ncmId: cenario.ncmId,
+      cest: '1708700',
+      clienteId: cenario.clienteId,
+      vigenciaInicio,
+      vigenciaFim: dataFutura(2000 + i * 2 + 1),
+      prioridade: 1,
+      justificativa: MOTIVO,
+    });
+    inicios.push(vigenciaInicio);
+  }
+  return inicios;
+}
+
 /** Nome do banco vindo de DATABASE_URL; recusa banco sem sufixo de teste. */
 export function bancoDeTeste(): string {
   const url = process.env.DATABASE_URL;

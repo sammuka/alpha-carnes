@@ -6,6 +6,7 @@ import { test, expect, type Browser, type Locator, type Page } from '@playwright
 import {
   criarBase,
   criarEnquadramento,
+  criarEnquadramentosEmLote,
   entrarNoFrontend,
   liberarCodigosDaJornada,
   loginApi,
@@ -159,6 +160,27 @@ test.describe('E01-T02 Operações fiscais e enquadramentos', () => {
   test.use({ actionTimeout: 15_000 });
   test.setTimeout(300_000);
 
+  // next dev frio compila cada rota na primeira visita (dezenas de segundos); aquece as rotas da
+  // jornada antes dos testes para que as asserções de tempo normal valham sem folga extra.
+  test.beforeAll(async ({ browser, playwright }, testInfo) => {
+    test.setTimeout(240_000);
+    const baseURL = String(testInfo.project.use.baseURL);
+    const request = await playwright.request.newContext();
+    const usuarios = await prepararUsuarios(request);
+    await request.dispose();
+    const context = await browser.newContext({ baseURL });
+    try {
+      await entrarNoFrontend(context, baseURL, usuarios.adminA);
+      const page = await context.newPage();
+      for (const rota of ['/gestao/dashboard', '/fiscal/enquadramentos']) {
+        await page.goto(rota, { timeout: 120_000 });
+        await page.waitForLoadState('networkidle', { timeout: 120_000 });
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
   test('jornada: cadastro, duplicação, sobreposição e consulta sem alíquota', async ({ browser, request, baseURL }) => {
     liberarCodigosDaJornada();
     const usuarios = await prepararUsuarios(request);
@@ -185,9 +207,9 @@ test.describe('E01-T02 Operações fiscais e enquadramentos', () => {
     const drawer = page.getByRole('dialog', { name: 'Novo registro' });
     await expect(drawer.getByRole('button', { name: 'Salvar rascunho' })).toBeVisible();
     await cadastrarCodigo(page, drawer, 0, '5102', 'Venda de mercadoria');
-    await expect(drawer.locator('#enq-cfop')).toContainText('5102');
+    await expect(drawer.locator('#enq-cfop')).toContainText('5.102');
     await cadastrarCodigo(page, drawer, 1, '02013000', 'Carnes bovinas');
-    await expect(drawer.locator('#enq-ncm')).toContainText('02013000');
+    await expect(drawer.locator('#enq-ncm')).toContainText('0201.30.00');
 
     await escolherCombo(page, drawer, '#enq-estab', 'Buscar estabelecimento', base.estabelecimento.nome, new RegExp(base.estabelecimento.nome));
     await escolherCombo(
@@ -256,8 +278,11 @@ test.describe('E01-T02 Operações fiscais e enquadramentos', () => {
     await expect(duplicar).toBeHidden();
     await expect(linhas).toHaveCount(2);
 
-    page.once('dialog', (dialog) => dialog.accept('Inativação da primeira vigência no teste E2E.'));
     await page.getByRole('button', { name: 'Inativar', exact: true }).click();
+    const decisao = page.getByRole('dialog', { name: 'Inativar enquadramento' });
+    await decisao.getByLabel(/Justificativa/).fill('Inativação da primeira vigência no teste E2E.');
+    await decisao.getByRole('button', { name: 'Inativar', exact: true }).click();
+    await expect(decisao).toBeHidden();
     await page.getByRole('row', { name: new RegExp(hoje.br) }).click();
     await page.getByRole('tab', { name: 'Ficha e campos' }).click();
     await expect(valorDoCampo(page, 'Situação').filter({ hasText: 'Inativa' }).first()).toBeVisible();
@@ -344,6 +369,82 @@ test.describe('E01-T02 Operações fiscais e enquadramentos', () => {
       page.getByRole('button', { name: 'Duplicar', exact: true }),
       page.getByRole('dialog', { name: 'Duplicar perfil' }),
     );
+    await expectSemIdentificadoresTecnicos(page);
+  });
+
+  test('lista com mais de 20 linhas: paginação e ordenação no servidor', async ({ browser, request, baseURL }) => {
+    const usuarios = await prepararUsuarios(request);
+    const cookieA = await loginApi(request, usuarios.adminA);
+    const cookieB = await loginApi(request, usuarios.adminB);
+    const cenario: CenarioE01T02 = await criarEnquadramento(request, cookieA, cookieB, 'Paginacao');
+    const inicios = await criarEnquadramentosEmLote(request, cookieA, cenario, 20);
+    const page = await abrirComo(browser, baseURL!, usuarios.adminA);
+
+    await irParaEnquadramentos(page);
+    await filtrarPor(page, cenario.rotuloOperacao);
+    const paginacao = page.getByRole('navigation', { name: 'Paginação' });
+    await expect(paginacao).toContainText('21 registros · Página 1 de 2');
+    await expect(page.getByRole('row', { name: new RegExp(cenario.rotuloOperacao) })).toHaveCount(20);
+    await expect(paginacao.getByRole('button', { name: 'Anterior' })).toBeDisabled();
+    await paginacao.getByRole('button', { name: 'Próxima' }).click();
+    await expect(paginacao).toContainText('Página 2 de 2');
+    await expect(page.getByRole('row', { name: new RegExp(cenario.rotuloOperacao) })).toHaveCount(1);
+    await expect(paginacao.getByRole('button', { name: 'Próxima' })).toBeDisabled();
+
+    await page.getByRole('button', { name: 'Início de vigência', exact: true }).click();
+    await expect(paginacao).toContainText('Página 1 de 2');
+    const cabecalho = page.getByRole('columnheader', { name: 'Início de vigência' });
+    await expect(cabecalho).toHaveAttribute('aria-sort', 'ascending');
+    const primeira = page.getByRole('row', { name: new RegExp(cenario.rotuloOperacao) }).first();
+    await expect(primeira).toContainText('14/10/2026');
+    await page.getByRole('button', { name: 'Início de vigência', exact: true }).click();
+    await expect(cabecalho).toHaveAttribute('aria-sort', 'descending');
+    await expect(primeira).toContainText(brDeIso(inicios[inicios.length - 1]!));
+  });
+
+  test('ficha: histórico, aceite, integrações e estabelecimento somente leitura na edição', async ({ browser, request, baseURL }) => {
+    const usuarios = await prepararUsuarios(request);
+    const cookieA = await loginApi(request, usuarios.adminA);
+    const cookieB = await loginApi(request, usuarios.adminB);
+    const cenario: CenarioE01T02 = await criarEnquadramento(request, cookieA, cookieB, 'Ficha');
+    const page = await abrirComo(browser, baseURL!, usuarios.adminA);
+
+    await irParaEnquadramentos(page);
+    await filtrarPor(page, cenario.rotuloOperacao);
+    await page.getByRole('row', { name: new RegExp(cenario.rotuloOperacao) }).click();
+    await expect(valorDoCampo(page, 'Código')).toHaveText(/^[1-9][0-9]*$/);
+    await expect(valorDoCampo(page, 'Operação fiscal (CFOP)')).toContainText(/^[0-9]\.[0-9]{3}/);
+    await expect(valorDoCampo(page, 'Classificação fiscal (NCM)')).toContainText(/^[0-9]{4}\.[0-9]{2}\.[0-9]{2}/);
+    await expect(valorDoCampo(page, 'Substituição tributária (CEST)')).toContainText('17.087.00');
+
+    await page.getByRole('button', { name: 'Consultar histórico' }).click();
+    const abaHistorico = page.getByRole('tab', { name: 'Histórico' });
+    await expect(abaHistorico).toHaveAttribute('aria-selected', 'true');
+    await expect(abaHistorico).toBeFocused();
+    await expect(page.getByRole('tabpanel')).toContainText(/[0-9]{2}\/[0-9]{2}\/[0-9]{4} [0-9]{2}:[0-9]{2}/);
+
+    await page.getByRole('tab', { name: 'Aceite e testes' }).click();
+    await expect(page.getByRole('list', { name: 'Critérios de aceite' }).getByRole('listitem')).toHaveCount(8);
+    await expect(page.getByRole('checkbox')).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Integrações' }).click();
+    await expect(page.getByRole('button', { name: 'Abrir simulador' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Central de Integrações' })).toBeDisabled();
+
+    await page.getByRole('tab', { name: 'Ficha e campos' }).click();
+    await page.getByRole('button', { name: 'Editar versão' }).click();
+    const drawer = page.getByRole('dialog', { name: 'Editar versão' });
+    await expect(drawer.locator('#enq-estab')).toBeDisabled();
+    await drawer.getByLabel('Prioridade').fill('7');
+    await drawer.locator('#enq-motivo').fill('Ajuste de prioridade no teste E2E.');
+    await drawer.getByRole('button', { name: 'Salvar rascunho' }).click();
+    await expect(drawer).toBeHidden();
+    await expect(valorDoCampo(page, 'Prioridade')).toContainText('7');
+    await page.getByRole('button', { name: 'Editar versão' }).click();
+    await drawer.getByLabel('Prioridade').fill('8');
+    await drawer.locator('#enq-motivo').fill('Segundo ajuste imediato no teste E2E.');
+    await drawer.getByRole('button', { name: 'Salvar rascunho' }).click();
+    await expect(drawer).toBeHidden();
+    await expect(valorDoCampo(page, 'Prioridade')).toContainText('8');
     await expectSemIdentificadoresTecnicos(page);
   });
 });
