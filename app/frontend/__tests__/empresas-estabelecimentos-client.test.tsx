@@ -289,7 +289,7 @@ describe('EmpresasEstabelecimentosClient', () => {
     let tentativas = 0;
     rotas[`POST /api/erp/fiscal/estabelecimentos/${S1}/regimes/${R1}/submeter`] = () =>
       ++tentativas === 1
-        ? json(409, { message: 'Confirme a troca.', codigo: 'TROCA_REGIME_CONFIRMACAO_NECESSARIA', fimProposto: '2026-12-31' })
+        ? json(409, { message: 'Confirme a troca.', codigo: 'TROCA_REGIME_CONFIRMACAO_NECESSARIA', fimProposto: '2026-12-31', semRegimeAPartirDe: '2027-03-01' })
         : json(200, { id: R1 });
 
     const user = renderizar();
@@ -300,7 +300,9 @@ describe('EmpresasEstabelecimentosClient', () => {
     await user.type(await screen.findByLabelText(/Justificativa/), 'Mudança de enquadramento');
     await user.click(screen.getByRole('button', { name: 'Enviar para revisão' }));
 
-    expect(await screen.findByText('Encerrar o regime atual em 2026-12-31 e submeter a troca?')).toBeInTheDocument();
+    const desafio = await screen.findByText(/Encerrar o regime atual em 31\/12\/2026 e submeter a troca\?/);
+    expect(desafio).toHaveTextContent('a partir de 01/03/2027 o estabelecimento ficará sem regime vigente');
+    expect(desafio).not.toHaveTextContent('2026-12-31');
     await user.click(screen.getByRole('button', { name: 'Encerrar e submeter' }));
 
     await waitFor(() => expect(tentativas).toBe(2));
@@ -311,7 +313,7 @@ describe('EmpresasEstabelecimentosClient', () => {
 
   it.each([
     ['SEGREGACAO_FUNCAO', 'A aprovação deve ser feita por usuário diferente de quem submeteu.'],
-    ['ALTERACAO_DESATUALIZADA', 'O cadastro mudou depois desta proposta. Descarte e crie uma nova.'],
+    ['ALTERACAO_DESATUALIZADA', 'O cadastro mudou depois desta proposta. Descarte o rascunho ou rejeite a revisão e crie uma nova.'],
     ['CONFLITO_CONCORRENTE', 'O registro foi alterado por outro usuário. Recarregue para continuar.'],
   ])('erro %s da decisão mostra a mensagem do contrato', async (codigo, mensagem) => {
     rotas[`POST /api/erp/fiscal/estabelecimentos/${S2}/aprovar`] = () => json(409, { message: 'texto técnico', codigo });

@@ -47,6 +47,8 @@ interface DecisaoDialogProps {
 
 interface DesafioTroca {
   fimProposto: string;
+  /** Primeiro dia sem regime quando a nova versão já tem fim; nulo se ela fica em aberto. */
+  semRegimeAPartirDe: string | null;
 }
 
 /** Texto do conflito de vigência devolvido em `REGIME_SOBREPOSTO`. */
@@ -90,7 +92,10 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
       onFechar();
     } catch (falha) {
       if (falha instanceof ErroFiscal && falha.codigo === 'TROCA_REGIME_CONFIRMACAO_NECESSARIA') {
-        setDesafio({ fimProposto: String(falha.dados.fimProposto ?? '') });
+        setDesafio({
+          fimProposto: String(falha.dados.fimProposto ?? ''),
+          semRegimeAPartirDe: typeof falha.dados.semRegimeAPartirDe === 'string' ? falha.dados.semRegimeAPartirDe : null,
+        });
         return;
       }
       setDesafio(null);
@@ -155,7 +160,13 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
           <AlertDialogHeader>
             <AlertDialogTitle>Troca de regime tributário</AlertDialogTitle>
             <AlertDialogDescription>
-              Encerrar o regime atual em {desafio?.fimProposto} e submeter a troca?
+              Encerrar o regime atual em {formatarDataIso(desafio?.fimProposto)} e submeter a troca?
+              {desafio?.semRegimeAPartirDe && (
+                <>
+                  {' '}
+                  Atenção: a partir de {formatarDataIso(desafio.semRegimeAPartirDe)} o estabelecimento ficará sem regime vigente.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

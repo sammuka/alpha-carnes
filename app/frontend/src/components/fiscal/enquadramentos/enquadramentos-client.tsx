@@ -1,23 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
-import { ComboboxField } from '@/components/ui/combobox-field';
-import { EmptyState } from '@/components/ui/empty-state';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
 import { PageHeader } from '@/components/ui/page-header';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { conectarRealtime } from '@/lib/realtime';
 import {
   CHAVE_LISTA,
   FILTROS_LISTA,
-  TEXTO_VAZIO,
-  TEXTO_VAZIO_COMBO,
   ErroEnquadramento,
   enquadramentosApi,
+  mascararCfop,
+  mascararNcm,
   mensagemSobreposicao,
   textoConsulta,
   type ContagensEnquadramento,
@@ -26,17 +24,50 @@ import {
   type EventoHistoricoEnquadramento,
   type FiltrosLista,
   type LinhaEnquadramento,
-  type OpcaoCombo,
   type PreCondicao,
 } from '@/lib/fiscal-enquadramentos';
-import { AbasDetalhe } from './abas-detalhe';
+import { DecisaoDialog, type DecisaoPendente } from '../empresas/decisao-dialog';
+import { AbasDetalhe, type IdAba } from './abas-detalhe';
+import { ComboboxBusca } from './combobox-busca';
 import { CodigoFiscalDialog } from './codigo-fiscal-dialog';
 import { DuplicarDialog } from './duplicar-dialog';
-import { EnquadramentoDrawer, type Catalogos, type SelecaoCodigo } from './enquadramento-drawer';
+import { EnquadramentoDrawer, type SelecaoCodigo } from './enquadramento-drawer';
+import { GradeEnquadramentos } from './grade-enquadramentos';
 
-const CATALOGOS_VAZIOS: Catalogos = {
-  estabelecimentos: [], operacoes: [], produtos: [], clientes: [], cfops: [], ncms: [],
+const CHAVE_ROTULOS = 'fiscal.enquadramentos.rotulos';
+type AcaoSituacao = 'inativar' | 'reativar' | 'remover';
+
+const TEXTOS_SITUACAO: Record<AcaoSituacao, { titulo: string; detalhe: string; rotulo: string; sucesso: string }> = {
+  inativar: {
+    titulo: 'Inativar enquadramento',
+    detalhe: 'O enquadramento deixa de entrar na consulta. Informe a justificativa.',
+    rotulo: 'Inativar',
+    sucesso: 'Enquadramento inativado.',
+  },
+  reativar: {
+    titulo: 'Reativar enquadramento',
+    detalhe: 'O enquadramento volta a entrar na consulta, se não houver vigência sobreposta. Informe a justificativa.',
+    rotulo: 'Reativar',
+    sucesso: 'Enquadramento reativado.',
+  },
+  remover: {
+    titulo: 'Remover enquadramento',
+    detalhe: 'O enquadramento sai da lista e da consulta. Informe a justificativa.',
+    rotulo: 'Remover',
+    sucesso: 'Enquadramento removido.',
+  },
 };
+
+type ChaveBuscaFiltro = 'estabelecimentoId' | 'cfopId' | 'produtoId' | 'clienteId';
+
+function lerRotulos(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    return JSON.parse(window.sessionStorage.getItem(CHAVE_ROTULOS) ?? '{}') as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
 
 function lerFiltros(): FiltrosLista {
   if (typeof window === 'undefined') return FILTROS_LISTA;
@@ -51,22 +82,29 @@ function lerFiltros(): FiltrosLista {
 export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean }) {
   const [filtros, setFiltros] = useState<FiltrosLista>(lerFiltros);
   const [linhas, setLinhas] = useState<LinhaEnquadramento[]>([]);
+  const [paginacao, setPaginacao] = useState({ total: 0, pageSize: 20 });
   const [contagens, setContagens] = useState<ContagensEnquadramento | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erroLista, setErroLista] = useState<string | null>(null);
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
   const [detalhe, setDetalhe] = useState<DetalheEnquadramento | null>(null);
+  const [erroFicha, setErroFicha] = useState<string | null>(null);
   const [historico, setHistorico] = useState<EventoHistoricoEnquadramento[]>([]);
   const [preCondicoes, setPreCondicoes] = useState<PreCondicao[]>([]);
+  const [aba, setAba] = useState<IdAba>('ficha');
   const [alerta, setAlerta] = useState<string | null>(null);
-  const [catalogos, setCatalogos] = useState<Catalogos>(CATALOGOS_VAZIOS);
   const [drawer, setDrawer] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [versaoEdicao, setVersaoEdicao] = useState(0);
   const [erroDrawer, setErroDrawer] = useState<string | null>(null);
   const [duplicar, setDuplicar] = useState(false);
   const [erroDuplicar, setErroDuplicar] = useState<string | null>(null);
+  const [decisao, setDecisao] = useState<DecisaoPendente | null>(null);
   const [codigoTipo, setCodigoTipo] = useState<'cfops' | 'ncms' | null>(null);
   const [selecaoCodigo, setSelecaoCodigo] = useState<SelecaoCodigo | null>(null);
   const [recarga, setRecarga] = useState(0);
+  const [rotulosFiltro, setRotulosFiltro] = useState<Record<string, string>>(lerRotulos);
+  const pedidoFicha = useRef(0);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -77,7 +115,11 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         enquadramentosApi.contagens(filtros),
       ]);
       setLinhas(lista.data);
+      setPaginacao({ total: lista.total, pageSize: lista.pageSize });
       setContagens(totais);
+      // Removeu ou filtrou a última linha da página atual: volta para a última página existente.
+      const ultima = Math.max(1, Math.ceil(lista.total / lista.pageSize));
+      if (filtros.page > ultima) setFiltros((atual) => ({ ...atual, page: ultima }));
     } catch (erro) {
       setErroLista(erro instanceof Error ? erro.message : 'Serviço indisponível no momento. Tente novamente.');
     } finally {
@@ -85,24 +127,40 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
     }
   }, [filtros]);
 
+  /** Refaz a ficha e o histórico; a resposta de um pedido antigo não sobrescreve a do mais novo. */
+  const carregarFicha = useCallback(async (id: string) => {
+    const pedido = ++pedidoFicha.current;
+    try {
+      const [ficha, eventos] = await Promise.all([enquadramentosApi.obter(id), enquadramentosApi.historico(id)]);
+      if (pedido !== pedidoFicha.current) return;
+      setDetalhe(ficha);
+      setHistorico(eventos);
+      setErroFicha(null);
+    } catch (erro) {
+      if (pedido !== pedidoFicha.current) return;
+      if (erro instanceof ErroEnquadramento && erro.status === 404) {
+        setDetalhe(null);
+        setSelecionadoId(null);
+        setErroFicha('O enquadramento selecionado não está mais disponível.');
+        return;
+      }
+      setErroFicha(erro instanceof Error ? erro.message : 'Falha na operação.');
+    }
+  }, []);
+
   useEffect(() => { void carregar(); }, [carregar, recarga]);
+
+  useEffect(() => {
+    if (selecionadoId) void carregarFicha(selecionadoId);
+  }, [selecionadoId, recarga, carregarFicha]);
 
   useEffect(() => {
     window.sessionStorage.setItem(CHAVE_LISTA, JSON.stringify(filtros));
   }, [filtros]);
 
   useEffect(() => {
-    void Promise.all([
-      enquadramentosApi.opcoesEstabelecimento(),
-      enquadramentosApi.opcoesOperacao(),
-      enquadramentosApi.opcoesProduto(),
-      enquadramentosApi.opcoesCliente(),
-      enquadramentosApi.opcoesCodigo('cfops'),
-      enquadramentosApi.opcoesCodigo('ncms'),
-    ]).then(([estabelecimentos, operacoes, produtos, clientes, cfops, ncms]) => {
-      setCatalogos({ estabelecimentos, operacoes, produtos, clientes, cfops, ncms });
-    }).catch(() => undefined);
-  }, [recarga]);
+    window.sessionStorage.setItem(CHAVE_ROTULOS, JSON.stringify(rotulosFiltro));
+  }, [rotulosFiltro]);
 
   useEffect(() => {
     return conectarRealtime({
@@ -112,51 +170,101 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
     });
   }, []);
 
-  async function selecionar(id: string) {
-    setSelecionadoId(id);
+  async function exportar() {
+    try {
+      const blob = await enquadramentosApi.exportar(filtros);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'enquadramentos-fiscais.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (erro) {
+      toast.error(erro instanceof Error ? erro.message : 'Falha ao exportar.');
+    }
+  }
+
+  function selecionar(id: string) {
     setAlerta(null);
     setPreCondicoes([]);
-    try {
-      const [ficha, eventos] = await Promise.all([
-        enquadramentosApi.obter(id),
-        enquadramentosApi.historico(id),
-      ]);
-      setDetalhe(ficha);
-      setHistorico(eventos);
-    } catch (erro) {
-      setDetalhe(null);
-      setErroLista(erro instanceof Error ? erro.message : 'Falha na operação.');
+    setAba('ficha');
+    if (id === selecionadoId) {
+      void carregarFicha(id);
+      return;
     }
+    setDetalhe(null);
+    setHistorico([]);
+    setErroFicha(null);
+    setSelecionadoId(id);
+  }
+
+  function ordenar(coluna: string) {
+    setFiltros((atual) => ({
+      ...atual,
+      sort: coluna,
+      dir: atual.sort === coluna && atual.dir === 'asc' ? 'desc' : 'asc',
+      page: 1,
+    }));
+  }
+
+  /** Lista e ficha abertas com o que está gravado; deve terminar antes de a tela aceitar a próxima edição. */
+  async function atualizarApos(id: string) {
+    await Promise.all([carregar(), carregarFicha(id)]);
   }
 
   async function salvar(corpo: CorpoEnquadramento): Promise<string | null> {
     try {
-      if (detalhe && drawer) {
+      if (editando && detalhe) {
         const resto = Object.fromEntries(
           Object.entries(corpo).filter(([chave]) => chave !== 'estabelecimentoId'),
         ) as Omit<CorpoEnquadramento, 'estabelecimentoId'>;
-        await enquadramentosApi.atualizar(detalhe.id, { ...resto, versao: detalhe.versao });
+        await enquadramentosApi.atualizar(detalhe.id, { ...resto, versao: versaoEdicao });
+        await atualizarApos(detalhe.id);
       } else {
         await enquadramentosApi.criar(corpo);
+        await carregar();
       }
       toast.success('Enquadramento salvo.');
       setDrawer(false);
       setErroDrawer(null);
-      setRecarga((n) => n + 1);
       return null;
     } catch (erro) {
-      if (erro instanceof ErroEnquadramento) return mensagemSobreposicao(erro) ?? erro.message;
+      if (erro instanceof ErroEnquadramento) {
+        if (erro.codigo === 'CONFLITO_CONCORRENTE' && detalhe) void carregarFicha(detalhe.id);
+        return mensagemSobreposicao(erro) ?? erro.message;
+      }
       return 'Falha na operação.';
     }
   }
 
-  async function situacao(acao: 'inativar' | 'reativar' | 'remover') {
+  function situacao(acao: AcaoSituacao) {
     if (!detalhe) return;
-    const justificativa = window.prompt('Motivo da alteração')?.trim() ?? '';
-    if (justificativa.length < 3) return;
-    if (acao === 'remover') await enquadramentosApi.remover(detalhe.id, justificativa);
-    else await enquadramentosApi[acao](detalhe.id, { versao: detalhe.versao, justificativa });
-    setRecarga((n) => n + 1);
+    const { id, versao } = detalhe;
+    const textos = TEXTOS_SITUACAO[acao];
+    setDecisao({
+      titulo: textos.titulo,
+      detalhe: textos.detalhe,
+      rotuloConfirmar: textos.rotulo,
+      perigosa: acao === 'remover',
+      mensagemSucesso: textos.sucesso,
+      executar: async (justificativa) => {
+        try {
+          if (acao === 'remover') await enquadramentosApi.remover(id, justificativa);
+          else await enquadramentosApi[acao](id, { versao, justificativa });
+        } catch (erro) {
+          if (erro instanceof ErroEnquadramento && erro.codigo === 'CONFLITO_CONCORRENTE') void carregarFicha(id);
+          throw erro;
+        }
+        if (acao === 'remover') {
+          pedidoFicha.current += 1;
+          setSelecionadoId(null);
+          setDetalhe(null);
+          await carregar();
+        } else {
+          await atualizarApos(id);
+        }
+      },
+    });
   }
 
   async function consultar() {
@@ -184,21 +292,45 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
 
   async function validarPreCondicoes() {
     if (!detalhe) return;
-    setPreCondicoes(await enquadramentosApi.preCondicoes(detalhe.id));
+    try {
+      setPreCondicoes(await enquadramentosApi.preCondicoes(detalhe.id));
+    } catch (erro) {
+      toast.error(erro instanceof Error ? erro.message : 'Falha na operação.');
+    }
   }
 
-  function combo(rotulo: string, id: string, opcoes: OpcaoCombo[], valor: string, chave: keyof FiltrosLista) {
+  function abrirNovoRegistro() {
+    setErroDrawer(null);
+    setSelecaoCodigo(null);
+    setEditando(false);
+    setDrawer(true);
+  }
+
+  function abrirEdicao() {
+    if (!detalhe) return;
+    setErroDrawer(null);
+    setSelecaoCodigo(null);
+    setVersaoEdicao(detalhe.versao);
+    setEditando(true);
+    setDrawer(true);
+  }
+
+  function comboBusca(rotulo: string, id: string, tipo: 'estabelecimentos' | 'cfops' | 'produtos' | 'clientes', chave: ChaveBuscaFiltro) {
     return (
       <label className="grid gap-1 text-xs" htmlFor={id}>
         {rotulo}
-        <ComboboxField
+        <ComboboxBusca
           id={id}
-          items={opcoes.map((opcao) => ({ id: opcao.id, label: opcao.rotulo }))}
-          value={valor}
-          onChange={(novo) => setFiltros((atual) => ({ ...atual, [chave]: novo, page: 1 }))}
+          tipo={tipo}
+          value={filtros[chave]}
+          rotulo={rotulosFiltro[chave] ?? ''}
+          clearable
+          onChange={(opcao) => {
+            setRotulosFiltro((atual) => ({ ...atual, [chave]: opcao?.rotulo ?? '' }));
+            setFiltros((atual) => ({ ...atual, [chave]: opcao?.id ?? '', page: 1 }));
+          }}
           placeholder={rotulo}
           searchPlaceholder={`Buscar ${rotulo.toLowerCase()}`}
-          emptyText={TEXTO_VAZIO_COMBO}
         />
       </label>
     );
@@ -212,19 +344,21 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         badge={<BadgeProvisorio codigo="H-E01-12" />}
         live
       >
-        <Button type="button" variant="secondary" onClick={() => void enquadramentosApi.exportar(filtros)}>Exportar</Button>
+        <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar</Button>
         {podeGerenciar && (
-          <Button type="button" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>+ Novo registro</Button>
+          <Button type="button" variant="secondary" onClick={abrirNovoRegistro}>+ Novo registro</Button>
         )}
-        <details>
-          <summary className="cursor-pointer text-sm">Ações do processo</summary>
-          <div className="mt-2 grid gap-1">
-            <Button type="button" variant="secondary" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>Cadastrar operação</Button>
-            <Button type="button" variant="secondary" onClick={() => detalhe && setDuplicar(true)}>Duplicar perfil</Button>
-            <Button type="button" variant="secondary" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>Relacionar produto e cliente</Button>
-            <Button type="button" variant="secondary" onClick={() => { setErroDrawer(null); setSelecaoCodigo(null); setDrawer(true); }}>Controlar prioridade</Button>
-          </div>
-        </details>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" aria-haspopup="menu">Ações do processo <ChevronDown aria-hidden="true" /></Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={abrirNovoRegistro}>Cadastrar operação</DropdownMenuItem>
+            <DropdownMenuItem disabled={!detalhe} onSelect={() => detalhe && setDuplicar(true)}>Duplicar perfil</DropdownMenuItem>
+            <DropdownMenuItem onSelect={abrirNovoRegistro}>Relacionar produto e cliente</DropdownMenuItem>
+            <DropdownMenuItem onSelect={abrirNovoRegistro}>Controlar prioridade</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </PageHeader>
       <KpiStrip>
         <Kpi label="Enquadramentos" value={contagens?.total ?? '—'} />
@@ -240,76 +374,51 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
           onChange={(e) => setFiltros((atual) => ({ ...atual, search: e.target.value, page: 1 }))}
         />
         <div className="grid gap-2 md:grid-cols-4">
-          {combo('Estabelecimento', 'filtro-estab', catalogos.estabelecimentos, filtros.estabelecimentoId, 'estabelecimentoId')}
-          {combo('Operação fiscal (CFOP)', 'filtro-cfop', catalogos.cfops, filtros.cfopId, 'cfopId')}
-          {combo('Produto', 'filtro-prod', catalogos.produtos, filtros.produtoId, 'produtoId')}
-          {combo('Cliente', 'filtro-cli', catalogos.clientes, filtros.clienteId, 'clienteId')}
+          {comboBusca('Estabelecimento', 'filtro-estab', 'estabelecimentos', 'estabelecimentoId')}
+          {comboBusca('Operação fiscal (CFOP)', 'filtro-cfop', 'cfops', 'cfopId')}
+          {comboBusca('Produto', 'filtro-prod', 'produtos', 'produtoId')}
+          {comboBusca('Cliente', 'filtro-cli', 'clientes', 'clienteId')}
         </div>
-        <Button type="button" variant="secondary" onClick={() => void enquadramentosApi.exportar(filtros)}>Exportar visão</Button>
-        {carregando && <Skeleton className="h-24" />}
-        {erroLista && (
-          <div role="alert" className="grid gap-2">
-            <p>{erroLista}</p>
-            <Button type="button" onClick={() => setRecarga((n) => n + 1)}>Tentar novamente</Button>
-          </div>
-        )}
-        {!carregando && !erroLista && linhas.length === 0 && <EmptyState title={TEXTO_VAZIO} />}
-        {!carregando && linhas.length > 0 && (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Operação</TableHead>
-                <TableHead>Operação fiscal (CFOP)</TableHead>
-                <TableHead>Início de vigência</TableHead>
-                <TableHead>Estabelecimento</TableHead>
-                <TableHead>Tipo da nota</TableHead>
-                <TableHead>Finalidade</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {linhas.map((linha) => (
-                <TableRow
-                  key={linha.codigo}
-                  tabIndex={0}
-                  data-state={selecionadoId === linha.id ? 'selected' : undefined}
-                  onClick={() => void selecionar(linha.id)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') void selecionar(linha.id); }}
-                >
-                  <TableCell>{linha.operacao}</TableCell>
-                  <TableCell>{linha.cfop}</TableCell>
-                  <TableCell>{linha.vigenciaInicio}</TableCell>
-                  <TableCell>{linha.estabelecimento}</TableCell>
-                  <TableCell>{linha.tpNf}</TableCell>
-                  <TableCell>{linha.finNfe}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+        <Button type="button" variant="secondary" onClick={() => void exportar()}>Exportar visão</Button>
+        <GradeEnquadramentos
+          linhas={linhas}
+          total={paginacao.total}
+          pageSize={paginacao.pageSize}
+          carregando={carregando}
+          erro={erroLista}
+          filtros={filtros}
+          selecionadoId={selecionadoId}
+          onSelecionar={selecionar}
+          onOrdenar={ordenar}
+          onPagina={(page) => setFiltros((atual) => ({ ...atual, page }))}
+          onTentarNovamente={() => setRecarga((n) => n + 1)}
+        />
       </section>
       <section className="grid gap-2">
         <h2 className="text-sm font-semibold">Detalhamento e execução</h2>
+        {erroFicha && <p role="alert" className="text-sm text-destructive">{erroFicha}</p>}
         {detalhe && (
           <AbasDetalhe
             detalhe={detalhe}
             podeGerenciar={podeGerenciar}
+            aba={aba}
+            onAba={setAba}
             alerta={alerta}
             historico={historico}
             preCondicoes={preCondicoes}
             onValidarPreCondicoes={() => void validarPreCondicoes()}
             onConsultar={() => void consultar()}
-            onEditar={() => { setErroDrawer(null); setDrawer(true); }}
+            onEditar={abrirEdicao}
             onDuplicar={() => setDuplicar(true)}
-            onInativar={() => void situacao('inativar')}
-            onReativar={() => void situacao('reativar')}
-            onRemover={() => void situacao('remover')}
+            onInativar={() => situacao('inativar')}
+            onReativar={() => situacao('reativar')}
+            onRemover={() => situacao('remover')}
           />
         )}
       </section>
       <EnquadramentoDrawer
         aberto={drawer}
-        detalhe={selecionadoId ? detalhe : null}
-        catalogos={catalogos}
+        detalhe={editando ? detalhe : null}
         erro={erroDrawer}
         selecaoCodigo={selecaoCodigo}
         onFechar={() => setDrawer(false)}
@@ -324,10 +433,21 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         onFechar={() => { setDuplicar(false); setErroDuplicar(null); }}
         onConfirmar={(corpo) => {
           if (!detalhe) return;
-          void enquadramentosApi.duplicar(detalhe.id, { ...corpo, vigenciaFim: corpo.vigenciaFim || undefined, versao: detalhe.versao })
-            .then(() => { setDuplicar(false); toast.success('Enquadramento salvo.'); setRecarga((n) => n + 1); })
-            .catch((erro: unknown) => setErroDuplicar(erro instanceof ErroEnquadramento ? (mensagemSobreposicao(erro) ?? erro.message) : 'Falha na operação.'));
+          const id = detalhe.id;
+          void enquadramentosApi.duplicar(id, { ...corpo, vigenciaFim: corpo.vigenciaFim || undefined, versao: detalhe.versao })
+            .then(() => atualizarApos(id))
+            .then(() => { setDuplicar(false); toast.success('Enquadramento salvo.'); })
+            .catch((erro: unknown) => {
+              if (erro instanceof ErroEnquadramento && erro.codigo === 'CONFLITO_CONCORRENTE') void carregarFicha(id);
+              setErroDuplicar(erro instanceof ErroEnquadramento ? (mensagemSobreposicao(erro) ?? erro.message) : 'Falha na operação.');
+            });
         }}
+      />
+      <DecisaoDialog
+        decisao={decisao}
+        onFechar={() => setDecisao(null)}
+        onConcluido={() => undefined}
+        onConflito={() => undefined}
       />
       <CodigoFiscalDialog
         aberto={codigoTipo !== null}
@@ -337,9 +457,8 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
           if (!codigoTipo) return;
           const tipo = codigoTipo;
           const criado = await enquadramentosApi.criarCodigo(tipo, corpo);
-          const opcoes = await enquadramentosApi.opcoesCodigo(tipo);
-          setCatalogos((atual) => ({ ...atual, [tipo]: opcoes }));
-          setSelecaoCodigo({ tipo, id: criado.id });
+          const codigo = tipo === 'cfops' ? mascararCfop(criado.codigo) : mascararNcm(criado.codigo);
+          setSelecaoCodigo({ tipo, id: criado.id, rotulo: `${codigo} ${criado.descricao}`.trim() });
           setCodigoTipo(null);
         }}
       />

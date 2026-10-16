@@ -106,6 +106,15 @@ describe('DTOs Zod do cadastro fiscal (E01-T01)', () => {
         .toBe('12ABC34501DE35');
     });
 
+    it('IE/IM recusam nao-ASCII antes de normalizar (i sem ponto, sharp s, s longo)', () => {
+      for (const campo of ['inscricaoEstadual', 'inscricaoMunicipal'] as const) {
+        for (const valor of ['ı', 'ß', 'ſ', 'ABıC']) {
+          expect(createEstabelecimentoSchema.safeParse({ ...estabelecimentoValido, [campo]: valor }).success)
+            .toBe(false);
+        }
+      }
+    });
+
     it('IE/IM normalizados', () => {
       const r = createEstabelecimentoSchema.parse({
         ...estabelecimentoValido, inscricaoEstadual: '123.456.789.110', inscricaoMunicipal: 'ab-12/3',
@@ -247,5 +256,32 @@ describe('DTOs Zod do cadastro fiscal (E01-T01)', () => {
       expect(submeterRegimeSchema.parse({ versao: 1, justificativa: JUST, confirmarTroca: true }))
         .toEqual({ versao: 1, justificativa: JUST, confirmarTroca: true });
     });
+  });
+});
+
+describe('Portão A r1: entradas que o PostgreSQL não aceita e CNPJ não ASCII', () => {
+  const nulo = String.fromCharCode(0);
+
+  it('recusa U+0000 em razão social, nome, justificativa, descrição de CNAE e busca', () => {
+    expect(createEmpresaSchema.safeParse({ razaoSocial: `A${nulo}`, cnpjRaiz: '12ABC345', justificativa: JUST }).success).toBe(false);
+    expect(createEstabelecimentoSchema.safeParse({ ...estabelecimentoValido, nome: `A${nulo}` }).success).toBe(false);
+    expect(createEstabelecimentoSchema.safeParse({ ...estabelecimentoValido, justificativa: `abc${nulo}` }).success).toBe(false);
+    expect(cnaeItemSchema.safeParse({ codigo: '6201501', descricao: `a${nulo}`, tipo: 'PRINCIPAL' }).success).toBe(false);
+    expect(listarEstabelecimentosQuerySchema.safeParse({ search: `a${nulo}` }).success).toBe(false);
+    expect(listarEmpresasQuerySchema.safeParse({ search: `a${nulo}` }).success).toBe(false);
+  });
+
+  it('recusa data com ano abaixo de 1900 e aceita 1900-01-01', () => {
+    const base = { crt: '3', justificativa: JUST };
+    expect(createRegimeSchema.safeParse({ ...base, vigenciaInicio: '0000-01-01' }).success).toBe(false);
+    expect(createRegimeSchema.safeParse({ ...base, vigenciaInicio: '1899-12-31' }).success).toBe(false);
+    expect(createRegimeSchema.safeParse({ ...base, vigenciaInicio: '1900-01-01' }).success).toBe(true);
+    expect(updateRegimeSchema.safeParse({ vigenciaFim: '0000-12-31', versao: 1, justificativa: JUST }).success).toBe(false);
+  });
+
+  it('recusa CNPJ e raiz com caracteres não ASCII que toUpperCase transformaria', () => {
+    expect(createEstabelecimentoSchema.safeParse({ ...estabelecimentoValido, cnpj: 'ı2.ABC.345/01DE-35' }).success).toBe(false);
+    expect(createEmpresaSchema.safeParse({ razaoSocial: 'A', cnpjRaiz: 'ßABC3450', justificativa: JUST }).success).toBe(false);
+    expect(createEstabelecimentoSchema.safeParse(estabelecimentoValido).success).toBe(true);
   });
 });

@@ -6,12 +6,15 @@ import {
   TIPOS_PRODUTO_FISCAL,
   TP_NF,
 } from '../../../../../database/schema/fiscal-enquadramentos.schema';
-import { justificativaSchema, uuidSchema, versaoSchema } from './comum.dto';
+import { buscaSchema, dataSchema, justificativaSchema, uuidSchema, versaoSchema } from './comum.dto';
 
 export const cestSchema = z
   .string()
   .transform(normalizarCest)
   .refine(validarCest, { message: 'CEST deve ter 7 dígitos.' });
+
+/** Limite do `integer` do Postgres: acima disso o insert falharia com 500. */
+const PRIORIDADE_MAXIMA = 2147483647;
 
 const MENSAGEM_VIGENCIA = 'Fim de vigência deve ser igual ou posterior ao início.';
 
@@ -40,9 +43,9 @@ const camposChave = {
 export const createEnquadramentoSchema = z.object({
   estabelecimentoId: uuidSchema,
   ...camposChave,
-  vigenciaInicio: z.iso.date(),
-  vigenciaFim: z.iso.date().optional(),
-  prioridade: z.number().int().min(1),
+  vigenciaInicio: dataSchema,
+  vigenciaFim: dataSchema.optional(),
+  prioridade: z.number().int().min(1).max(PRIORIDADE_MAXIMA),
   justificativa: justificativaSchema,
 }).strict().superRefine(vigenciaOrdenada);
 export type CreateEnquadramentoDto = z.infer<typeof createEnquadramentoSchema>;
@@ -50,18 +53,18 @@ export type CreateEnquadramentoDto = z.infer<typeof createEnquadramentoSchema>;
 /** Rejeita `codigo`, `empresaId` e `estabelecimentoId` (D15, D3). */
 export const updateEnquadramentoSchema = z.object({
   ...camposChave,
-  vigenciaInicio: z.iso.date(),
-  vigenciaFim: z.iso.date().optional(),
-  prioridade: z.number().int().min(1),
+  vigenciaInicio: dataSchema,
+  vigenciaFim: dataSchema.optional(),
+  prioridade: z.number().int().min(1).max(PRIORIDADE_MAXIMA),
   versao: versaoSchema,
   justificativa: justificativaSchema,
 }).strict().superRefine(vigenciaOrdenada);
 export type UpdateEnquadramentoDto = z.infer<typeof updateEnquadramentoSchema>;
 
 export const duplicarEnquadramentoSchema = z.object({
-  vigenciaInicio: z.iso.date(),
-  vigenciaFim: z.iso.date().optional(),
-  prioridade: z.number().int().min(1).optional(),
+  vigenciaInicio: dataSchema,
+  vigenciaFim: dataSchema.optional(),
+  prioridade: z.number().int().min(1).max(PRIORIDADE_MAXIMA).optional(),
   versao: versaoSchema,
   justificativa: justificativaSchema,
 }).strict().superRefine(vigenciaOrdenada);
@@ -87,7 +90,7 @@ export const listarEnquadramentosQuerySchema = z.object({
   cfopId: uuidSchema.optional(),
   produtoId: uuidSchema.optional(),
   clienteId: uuidSchema.optional(),
-  search: z.string().trim().optional(),
+  search: buscaSchema,
   sort: z.enum(SORT_ENQUADRAMENTO).default('operacao'),
   dir: z.enum(['asc', 'desc']).default('asc'),
   page: z.coerce.number().int().min(1).default(1),

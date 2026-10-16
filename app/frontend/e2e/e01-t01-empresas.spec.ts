@@ -107,7 +107,8 @@ async function proporAlteracao(page: Page, novoNome: string, codigoCnae: string)
   await preencherAtividade(drawer, 2, codigoCnae, DESC_NOVA);
   await drawer.locator('#alteracao-motivo').fill('Alteração de nome e atividade, E2E.');
   await drawer.getByRole('button', { name: 'Submeter para revisão' }).click();
-  await expect(drawer).toBeHidden();
+  // Com next dev frio, a primeira submissão compila rotas antes de fechar o drawer: só este passo ganha folga.
+  await expect(drawer).toBeHidden({ timeout: 30_000 });
 }
 
 async function expectSemIdentificadoresTecnicos(page: Page): Promise<void> {
@@ -130,6 +131,27 @@ test.describe('E01-T01 Empresas, estabelecimentos e regime', () => {
   test.use({ actionTimeout: 15_000 });
   test.setTimeout(180_000);
 
+  // next dev frio compila cada rota na primeira visita (dezenas de segundos); aquece as rotas da
+  // jornada antes dos testes para que as asserções de tempo normal valham sem folga extra.
+  test.beforeAll(async ({ browser, playwright }, testInfo) => {
+    test.setTimeout(240_000);
+    const baseURL = String(testInfo.project.use.baseURL);
+    const request = await playwright.request.newContext();
+    const usuarios = await prepararUsuarios(request);
+    await request.dispose();
+    const context = await browser.newContext({ baseURL });
+    try {
+      await entrarNoFrontend(context, baseURL, usuarios.adminA);
+      const page = await context.newPage();
+      for (const rota of ['/gestao/dashboard', '/fiscal/empresas']) {
+        await page.goto(rota, { timeout: 120_000 });
+        await page.waitForLoadState('networkidle', { timeout: 120_000 });
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
   test('jornada: cadastro, regimes por vigência, alteração aprovada e rejeitada', async ({ browser, request, baseURL }) => {
     const usuarios = await prepararUsuarios(request);
     const ident = gerarIdentificadores('Jornada');
@@ -146,8 +168,11 @@ test.describe('E01-T01 Empresas, estabelecimentos e regime', () => {
     const aside = a.getByRole('complementary', { name: 'Navegação principal' });
     const grupo = aside.getByRole('button', { name: /FISCAL/ });
     if ((await grupo.getAttribute('aria-expanded')) !== 'true') await grupo.click();
-    await aside.getByRole('link', { name: TITULO }).click();
-    await expect(a).toHaveURL(/\/fiscal\/empresas$/);
+    // O dashboard acrescenta ?operacaoId= após hidratar; um clique anterior a isso é descartado.
+    await expect(async () => {
+      await aside.getByRole('link', { name: TITULO }).click();
+      await expect(a).toHaveURL(/\/fiscal\/empresas$/, { timeout: 5_000 });
+    }).toPass({ timeout: 30_000 });
     await expect(a.getByRole('heading', { name: TITULO, level: 1 })).toBeVisible();
 
     // Nova empresa (diálogo aninhado no drawer) e estabelecimento com dois CNAEs.
@@ -232,7 +257,7 @@ test.describe('E01-T01 Empresas, estabelecimentos e regime', () => {
     await a.getByRole('button', { name: /^Submeter regime Simples Nacional/ }).click();
     await decidir(a, 'Enviar para revisão');
     const troca = a.getByRole('alertdialog', { name: 'Troca de regime tributário' });
-    await expect(troca).toContainText(`Encerrar o regime atual em ${ontem.iso}`);
+    await expect(troca).toContainText(`Encerrar o regime atual em ${ontem.br}`);
     await troca.getByRole('button', { name: 'Encerrar e submeter' }).click();
     await expect(a.getByRole('dialog')).toHaveCount(0);
 

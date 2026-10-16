@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { normalizarCest, normalizarNcm } from '@/lib/fiscal-enquadramentos';
+import { codigoFiscalValido, normalizarCest, normalizarCfop, normalizarNcm } from '@/lib/fiscal-enquadramentos';
 import { useRetornoFoco } from '../empresas/use-retorno-foco';
 
 interface Props {
@@ -42,8 +42,14 @@ export function CodigoFiscalDialog({ aberto, tipo, onFechar, onConfirmar }: Prop
           onSubmit={(evento) => {
             evento.preventDefault();
             if (!tipo) return;
+            const normalizado = tipo === 'ncms' ? normalizarNcm(codigo) : normalizarCfop(codigo);
+            if (!codigoFiscalValido(tipo, normalizado)) {
+              setErro(tipo === 'ncms' ? 'NCM deve ter 8 dígitos.' : 'CFOP deve ter 4 dígitos.');
+              return;
+            }
+            setErro(null);
             void Promise.resolve(onConfirmar({
-              codigo: tipo === 'ncms' ? normalizarNcm(codigo) : codigo.replace(/\D/g, ''),
+              codigo: normalizado,
               descricao: descricao.trim(),
               justificativa: motivo.trim(),
             })).catch((falha: unknown) => {

@@ -1,9 +1,11 @@
 import { consultaEnquadramentoSchema } from '../../src/modules/erp/fiscal/enquadramentos/dto/consulta.dto';
 import {
   createEnquadramentoSchema,
+  duplicarEnquadramentoSchema,
+  listarEnquadramentosQuerySchema,
   updateEnquadramentoSchema,
 } from '../../src/modules/erp/fiscal/enquadramentos/dto/enquadramento.dto';
-import { createCfopSchema } from '../../src/modules/erp/fiscal/enquadramentos/dto/cfop.dto';
+import { createCfopSchema, listarCodigoFiscalQuerySchema } from '../../src/modules/erp/fiscal/enquadramentos/dto/cfop.dto';
 import { createNcmSchema } from '../../src/modules/erp/fiscal/enquadramentos/dto/ncm.dto';
 
 const UUID = '0199a1b2-c3d4-7e5f-8a6b-7c8d9e0f1a2b';
@@ -58,6 +60,16 @@ describe('DTOs de enquadramento, CFOP e NCM', () => {
     })).success).toBe(false);
   });
 
+  it('prioridade acima de 2147483647 (limite do integer) → 400 em criar, atualizar e duplicar', () => {
+    expect(createEnquadramentoSchema.safeParse(base({ prioridade: 2147483647 })).success).toBe(true);
+    expect(createEnquadramentoSchema.safeParse(base({ prioridade: 2147483648 })).success).toBe(false);
+    const { estabelecimentoId: _e, ...semEstab } = base({ prioridade: 2147483648, versao: 1 });
+    expect(updateEnquadramentoSchema.safeParse(semEstab).success).toBe(false);
+    expect(duplicarEnquadramentoSchema.safeParse({
+      vigenciaInicio: '2026-01-01', prioridade: 2147483648, versao: 1, justificativa: 'Duplicação de perfil',
+    }).success).toBe(false);
+  });
+
   it('prioridade 0', () => {
     expect(createEnquadramentoSchema.safeParse(base({ prioridade: 0 })).success).toBe(false);
   });
@@ -105,5 +117,33 @@ describe('DTOs de enquadramento, CFOP e NCM', () => {
       descricao: 'Venda',
       justificativa: 'Cadastro manual',
     }).success).toBe(false);
+  });
+
+  it('CFOP, NCM e CEST com quebra de linha ou tabulação são recusados', () => {
+    expect(createCfopSchema.safeParse({ codigo: '51\n02', descricao: 'Venda', justificativa: 'Cadastro manual' }).success).toBe(false);
+    expect(createNcmSchema.safeParse({ codigo: '0201\t3000', descricao: 'Carne', justificativa: 'Cadastro manual' }).success).toBe(false);
+    expect(createEnquadramentoSchema.safeParse(base({ cest: '17087\n00' })).success).toBe(false);
+  });
+});
+
+describe('B1 — datas e NUL', () => {
+  it.each(['0000-01-01', '1899-12-31'])('vigenciaInicio %s é recusada', (data) => {
+    expect(createEnquadramentoSchema.safeParse(base({ vigenciaInicio: data })).success).toBe(false);
+    expect(createEnquadramentoSchema.safeParse(base({ vigenciaFim: data })).success).toBe(false);
+    const { vigenciaInicio: _i, prioridade: _p, justificativa: _j, ...chave } = base();
+    expect(consultaEnquadramentoSchema.safeParse({ ...chave, data: '2026-01-01' }).success).toBe(true);
+    expect(consultaEnquadramentoSchema.safeParse({ ...chave, data }).success).toBe(false);
+  });
+
+  it('1900-01-01 é aceita', () => {
+    expect(createEnquadramentoSchema.safeParse(base({ vigenciaInicio: '1900-01-01' })).success).toBe(true);
+  });
+
+  it('NUL na justificativa, descrição e busca é recusado', () => {
+    expect(createEnquadramentoSchema.safeParse(base({ justificativa: 'abc\u0000def' })).success).toBe(false);
+    expect(createCfopSchema.safeParse({ codigo: '5101', descricao: 'a\u0000b', justificativa: 'abcd' }).success).toBe(false);
+    expect(createNcmSchema.safeParse({ codigo: '02013000', descricao: 'ok', justificativa: 'a\u0000bcd' }).success).toBe(false);
+    expect(listarEnquadramentosQuerySchema.safeParse({ search: 'a\u0000b' }).success).toBe(false);
+    expect(listarCodigoFiscalQuerySchema.safeParse({ search: 'a\u0000b' }).success).toBe(false);
   });
 });

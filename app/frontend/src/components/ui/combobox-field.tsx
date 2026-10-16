@@ -32,6 +32,11 @@ interface ComboboxFieldProps {
   disabled?: boolean;
   className?: string;
   clearable?: boolean;
+  /** Busca no servidor: desliga o filtro local e avisa a cada digitação (sem debounce). */
+  onSearchChange?: (termo: string) => void;
+  onOpenChange?: (aberto: boolean) => void;
+  /** Rodapé da lista (carregando, erro, aviso de refinar a busca). */
+  footer?: React.ReactNode;
 }
 
 export function ComboboxField({
@@ -45,8 +50,16 @@ export function ComboboxField({
   disabled,
   className,
   clearable,
+  onSearchChange,
+  onOpenChange,
+  footer,
 }: ComboboxFieldProps) {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpenInterno] = React.useState(false);
+  const setOpen = (aberto: boolean) => {
+    setOpenInterno(aberto);
+    if (!aberto) onSearchChange?.('');
+    onOpenChange?.(aberto);
+  };
   const selected = items.find((i) => i.id === value);
 
   return (
@@ -74,8 +87,12 @@ export function ComboboxField({
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[--radix-popover-trigger-width] p-0">
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} className="h-8 text-[13px]" />
+        <Command shouldFilter={!onSearchChange}>
+          <CommandInput
+            placeholder={searchPlaceholder}
+            className="h-8 text-[13px]"
+            {...(onSearchChange ? { onValueChange: onSearchChange } : {})}
+          />
           <CommandList className="max-h-56">
             <CommandEmpty className="py-4 text-center text-xs text-muted-foreground">
               {emptyText}
@@ -108,6 +125,7 @@ export function ComboboxField({
               ))}
             </CommandGroup>
           </CommandList>
+          {footer}
         </Command>
       </PopoverContent>
     </Popover>

@@ -67,17 +67,19 @@ const ABAS_PROTOTIPO: Array<{ aba: string; arquivo: string; chave: string }> = [
 ];
 
 const ABAS_APP: Array<{ aba: string; arquivo: string; chave: string }> = [
-  { aba: 'Movimentações', arquivo: 'app-movimentacoes.png', chave: 'Preparação → Verificação → Autorização → Conclusão' },
+  { aba: 'Movimentações', arquivo: 'app-movimentacoes.png', chave: 'Etapas e evidências de negócio' },
   { aba: 'Regras e validações', arquivo: 'app-regras.png', chave: 'Esta tela não calcula tributo' },
   { aba: 'Exceções', arquivo: 'app-excecoes.png', chave: 'Empate de enquadramento' },
   { aba: 'Histórico', arquivo: 'app-historico.png', chave: 'Seed E2E E01-T02' },
-  { aba: 'Integrações', arquivo: 'app-integracoes.png', chave: 'E01 — regras e simulação ficam nas telas seguintes.' },
-  { aba: 'Aceite e testes', arquivo: 'app-aceite.png', chave: 'Checkbox não é aceite. Os critérios abaixo são somente leitura.' },
+  { aba: 'Integrações', arquivo: 'app-integracoes.png', chave: 'Integração fiscal' },
+  { aba: 'Aceite e testes', arquivo: 'app-aceite.png', chave: 'Matriz de homologação funcional e técnica' },
 ];
 
 async function capturar(page: Page, arquivo: string, chave: Locator): Promise<void> {
   await expect(chave, `elemento-chave ausente antes de ${arquivo}`).toBeVisible({ timeout: 30_000 });
   await chave.scrollIntoViewIfNeeded();
+  // Oculta o indicador do `next dev` (portal "N") sem alterar o produto.
+  await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
   await page.screenshot({ path: path.join(OUT_DIR, arquivo), fullPage: true });
 }
 
@@ -201,8 +203,11 @@ test.describe('E01-T02 evidências app × protótipo', () => {
     await filtrarPor(page, ausente.rotuloOperacao);
     await page.getByRole('row', { name: new RegExp(ausente.rotuloOperacao) }).click();
     await abrirAba(page, 'Movimentações', 'Inativar');
-    page.once('dialog', (dialog) => dialog.accept('Evidência visual da inativação.'));
     await page.getByRole('button', { name: 'Inativar', exact: true }).click();
+    const decisao = page.getByRole('dialog', { name: 'Inativar enquadramento' });
+    await decisao.getByLabel(/Justificativa/).fill('Evidência visual da inativação.');
+    await decisao.getByRole('button', { name: 'Inativar', exact: true }).click();
+    await expect(decisao).toBeHidden();
     await page.getByRole('row', { name: new RegExp(ausente.rotuloOperacao) }).click();
     await abrirAba(page, 'Exceções', 'Operação sem regra aprovada');
     await page.getByRole('button', { name: 'Validar', exact: true }).click();

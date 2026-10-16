@@ -22,7 +22,16 @@ export interface LinhaExportacaoFiscal {
   empresa: string;
 }
 
-function celula(valor: string): string {
+/** Máscara exibida na grade (12.ABC.345/0001-35): o Excel trata como texto, sem perder zeros nem virar notação científica. */
+export function mascararCnpj(cnpj: string): string {
+  return cnpj.length === 14
+    ? `${cnpj.slice(0, 2)}.${cnpj.slice(2, 5)}.${cnpj.slice(5, 8)}/${cnpj.slice(8, 12)}-${cnpj.slice(12)}`
+    : cnpj;
+}
+
+function celula(original: string): string {
+  // Injeção de fórmula (OWASP): texto iniciado por = + - @ tab ou CR vira literal no Excel.
+  const valor = /^[=+\-@\t\r]/.test(original) ? `'${original}` : original;
   if (/[;"\r\n]/.test(valor)) return `"${valor.replace(/"/g, '""')}"`;
   return valor;
 }
@@ -32,7 +41,7 @@ export function montarCsvEstabelecimentos(linhas: LinhaExportacaoFiscal[]): stri
   const cabecalho = ['Estabelecimento', 'CNPJ', 'Regime tributário', 'Estado', 'Situação', 'Empresa'];
   const corpo = linhas.map((linha) => [
     linha.nome,
-    linha.cnpj,
+    mascararCnpj(linha.cnpj),
     linha.crt ? (ROTULOS_CRT[linha.crt] ?? '') : '',
     linha.uf,
     ROTULOS_SITUACAO[linha.situacao] ?? linha.situacao,

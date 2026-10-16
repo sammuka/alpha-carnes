@@ -17,6 +17,7 @@ import {
   mascararCnpjAlfanumerico,
   mensagemDoErroFiscal,
   normalizarCnpj,
+  validarCnpjAlfanumerico,
   type CnaeItem,
   type DadosFiscais,
   type Empresa,
@@ -128,6 +129,8 @@ export function EstabelecimentoDrawer({
       if (normalizado.length !== 14) locais.cnpj = 'CNPJ deve ter 14 posições.';
       else if (empresaSelecionada && normalizado.slice(0, 8) !== empresaSelecionada.cnpjRaiz) {
         locais.cnpj = 'A raiz do CNPJ difere da empresa selecionada.';
+      } else if (!validarCnpjAlfanumerico(normalizado)) {
+        locais.cnpj = 'CNPJ inválido: confira os dígitos verificadores.';
       }
     }
     if (!dados.inscricaoEstadual.trim()) locais.inscricaoEstadual = 'Informe a inscrição estadual.';

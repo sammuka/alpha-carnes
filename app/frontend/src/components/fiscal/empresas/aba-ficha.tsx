@@ -24,7 +24,7 @@ export function SecaoRotulo({ children }: { children: React.ReactNode }) {
   return <h3 className="mb-2 mt-1 text-[10px] font-extrabold uppercase tracking-[0.1em] text-primary">{children}</h3>;
 }
 
-function Campo({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+export function Campo({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <div className={`min-w-0 space-y-1 ${className ?? ''}`}>
       <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-muted-foreground">{label}</p>

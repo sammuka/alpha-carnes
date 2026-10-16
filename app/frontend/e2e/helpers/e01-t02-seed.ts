@@ -93,7 +93,8 @@ async function criarOperacao(
 function codigoNumerico(digitos: number, reservados: string[]): string {
   for (let tentativa = 0; tentativa < 20; tentativa += 1) {
     const base = String(Date.now() + tentativa * 97).slice(-(digitos));
-    const codigo = base.padStart(digitos, '1').slice(0, digitos);
+    // O primeiro dígito do epoch em ms muda só a cada ~2,7 h: zero inicial vira 1 em vez de falhar a janela inteira.
+    const codigo = base.padStart(digitos, '1').slice(0, digitos).replace(/^0/, '1');
     if (!reservados.includes(codigo) && !codigo.startsWith('0')) return codigo;
   }
   throw new Error('Não foi possível gerar código fiscal de apoio');
@@ -181,12 +182,58 @@ export async function criarEnquadramento(
   };
 }
 
+/**
+ * Mais enquadramentos ativos da mesma chave do cenário, cada um com vigência própria (sem sobreposição).
+ * Devolve as datas de início (ISO), em ordem crescente.
+ */
+export async function criarEnquadramentosEmLote(
+  request: APIRequestContext,
+  cookie: string,
+  cenario: CenarioE01T02,
+  quantidade: number,
+): Promise<string[]> {
+  const inicios: string[] = [];
+  for (let i = 0; i < quantidade; i += 1) {
+    const vigenciaInicio = dataFutura(2000 + i * 2);
+    await api(request, cookie, 'POST', '/fiscal/enquadramentos', {
+      estabelecimentoId: cenario.estabelecimento.id,
+      operacaoId: cenario.operacaoId,
+      tpNf: '1',
+      finNfe: '1',
+      cfopId: cenario.cfopId,
+      abrangencia: 'INTERNA',
+      tipoProduto: 'REVENDA',
+      produtoId: cenario.produtoId,
+      ncmId: cenario.ncmId,
+      cest: '1708700',
+      clienteId: cenario.clienteId,
+      vigenciaInicio,
+      vigenciaFim: dataFutura(2000 + i * 2 + 1),
+      prioridade: 1,
+      justificativa: MOTIVO,
+    });
+    inicios.push(vigenciaInicio);
+  }
+  return inicios;
+}
+
+/** Nome do banco vindo de DATABASE_URL; recusa banco sem sufixo de teste. */
+export function bancoDeTeste(): string {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error('DATABASE_URL é obrigatório para o seed SQL do E2E');
+  const nome = decodeURIComponent(new URL(url).pathname.replace(/^\//, ''));
+  if (!/^[a-z0-9_]+$/.test(nome) || !/_(test|e2e|e01_t\d+)$/.test(nome)) {
+    throw new Error(`Banco "${nome}" sem sufixo de teste (_test, _e2e ou _e01_tNN): seed SQL recusado`);
+  }
+  return nome;
+}
+
 /** Libera 5102 e 02013000 para a jornada criar os códigos pelo diálogo. */
 export function liberarCodigosDaJornada(): void {
   const sql = `UPDATE cfops SET deleted_at = now() WHERE codigo = '5102' AND deleted_at IS NULL; UPDATE ncms SET deleted_at = now() WHERE codigo = '02013000' AND deleted_at IS NULL;`;
   execFileSync('docker', [
     'exec', 'alphacarnes-postgres-1',
-    'psql', '-U', 'alphacarnes', '-d', 'alphacarnes_e01_t02',
+    'psql', '-U', 'alphacarnes', '-d', bancoDeTeste(),
     '-v', 'ON_ERROR_STOP=1', '-c', sql,
   ], { stdio: 'pipe' });
 }
@@ -203,7 +250,7 @@ export function inserirEmpate(enquadramentoId: string): string {
   const sql = `INSERT INTO enquadramentos_fiscais (codigo, empresa_id, estabelecimento_id, operacao_id, tp_nf, fin_nfe, cfop_id, abrangencia, tipo_produto, produto_id, ncm_id, cest, cliente_id, vigencia_inicio, vigencia_fim, prioridade, situacao, criado_por_id, atualizado_por_id) SELECT '${codigo}', empresa_id, estabelecimento_id, operacao_id, tp_nf, fin_nfe, cfop_id, abrangencia, tipo_produto, produto_id, ncm_id, cest, cliente_id, vigencia_inicio, vigencia_fim, 99, situacao, criado_por_id, atualizado_por_id FROM enquadramentos_fiscais WHERE id = '${enquadramentoId}'`;
   execFileSync('docker', [
     'exec', 'alphacarnes-postgres-1',
-    'psql', '-U', 'alphacarnes', '-d', 'alphacarnes_e01_t02',
+    'psql', '-U', 'alphacarnes', '-d', bancoDeTeste(),
     '-v', 'ON_ERROR_STOP=1', '-c', sql,
   ], { stdio: 'pipe' });
   return codigo;

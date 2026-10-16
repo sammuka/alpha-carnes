@@ -30,9 +30,11 @@ export class CfopsService {
   async listar(query: ListarCodigoFiscalQuery) {
     const filtro = query.search?.trim();
     const termo = filtro ? `%${filtro.replace(/[%_]/g, '')}%` : undefined;
+    // O código é guardado sem máscara: "04.01" ou "5.102" busca por "0401" e "5102".
+    const termoCodigo = filtro ? `%${filtro.replace(/[%_. -]/g, '') || filtro.replace(/[%_]/g, '')}%` : undefined;
     const where = and(
       isNull(cfops.deletedAt),
-      termo ? sql`(${cfops.codigo} ILIKE ${termo} OR ${cfops.descricao} ILIKE ${termo})` : undefined,
+      termo ? sql`(${cfops.codigo} ILIKE ${termoCodigo} OR ${cfops.descricao} ILIKE ${termo})` : undefined,
     );
     const totalLinha = await this.db.select({ total: sql<number>`count(*)::int` }).from(cfops).where(where);
     const data = await this.db

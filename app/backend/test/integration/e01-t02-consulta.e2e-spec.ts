@@ -355,4 +355,10 @@ describe('E01-T02 consulta de enquadramento', () => {
     expect(codigoDe(res.body)).toBe('REGRA_APROVADA_AUSENTE');
     expect(res.body.message.enquadramentoLocalizado).toBeNull();
   });
+
+  it.each(['0000-01-01', '1899-12-31'])('data da consulta %s → 400', async (data) => {
+    const base = await baseAprovada();
+    const res = await consultar(adminA, criterio(base, { data }));
+    expect(res.status).toBe(400);
+  });
 });

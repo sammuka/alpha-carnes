@@ -117,7 +117,7 @@ describe('E01-T02 enquadramentos fiscais', () => {
     return aprovado.body as { id: string; versao: number; situacao: string };
   }
 
-  async function baseAprovada() {
+  async function baseAprovada(nomeProduto = 'Acém') {
     const cnpjRaiz = raiz();
     const empresa = await criarEmpresa(adminA, cnpjRaiz);
     const estab = await criarEstab(adminA, empresa.id, cnpjDe(`${cnpjRaiz}0001`));
@@ -133,7 +133,7 @@ describe('E01-T02 enquadramentos fiscais', () => {
       .set('Cookie', adminA)
       .send({
         codigo: `P-${cnpjRaiz}`,
-        nome: 'Acém',
+        nome: nomeProduto,
         unidadePedido: 'kg',
         atributosJson: { fiscal: { ncm: '99999999', cfop: '9999' } },
       });
@@ -558,7 +558,7 @@ describe('E01-T02 enquadramentos fiscais', () => {
     expect(res.text).toContain(cabecalho);
     expect(res.text).toContain(criado.body.codigo);
     expect(res.text).toContain(base.rotulo);
-    expect(res.text).toContain(base.cfopCodigo);
+    expect(res.text).toContain(`${base.cfopCodigo[0]}.${base.cfopCodigo.slice(1)}`);
     expect(res.text).toContain('2026-01-01');
     expect(res.text).toContain('2026-12-31');
     expect(res.text).toContain('Filial Osasco');
@@ -568,7 +568,7 @@ describe('E01-T02 enquadramentos fiscais', () => {
     expect(res.text).toContain('Test administrador');
     expect(res.text).toContain('Acém');
     expect(res.text).toContain('Açougue Central');
-    expect(res.text).toContain('1708700');
+    expect(res.text).toContain('17.087.00');
     expect(res.text).toContain('Dentro do estado');
     expect(res.text).toContain('Revenda');
     expect(res.text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
@@ -610,5 +610,89 @@ describe('E01-T02 enquadramentos fiscais', () => {
       .set('Cookie', adminA)
       .send(corpoSem);
     expect(res.status).toBe(400);
+  });
+
+  it.each(['0000-01-01', '1899-12-31'])('vigenciaInicio %s → 400 e nenhuma linha', async (data) => {
+    const base = await baseAprovada();
+    const res = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', adminA)
+      .send(corpo(base, { vigenciaInicio: data, vigenciaFim: undefined }));
+    expect(res.status).toBe(400);
+    const fim = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', adminA)
+      .send(corpo(base, { vigenciaFim: data }));
+    expect(fim.status).toBe(400);
+    expect(await linhasDo(base.estabelecimentoId)).toBe(0);
+  });
+
+  it('justificativa com NUL → 400', async () => {
+    const base = await baseAprovada();
+    const res = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', adminA)
+      .send(corpo(base, { justificativa: 'motivo\u0000x' }));
+    expect(res.status).toBe(400);
+  });
+
+  it.each(['=1+1', '+1', '-1', '@SOMA(A1)'])('exportação CSV neutraliza fórmula %s no nome do produto', async (nome) => {
+    const base = await baseAprovada(nome);
+    const criado = await request(app.getHttpServer())
+      .post('/fiscal/enquadramentos')
+      .set('Cookie', adminA)
+      .send(corpo(base));
+    expect(criado.status).toBe(201);
+    const res = await request(app.getHttpServer())
+      .get(`/fiscal/enquadramentos/exportacao?estabelecimentoId=${base.estabelecimentoId}`)
+      .set('Cookie', adminA);
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(`;'${nome};`);
+    expect(res.text).not.toContain(`;${nome};`);
+  });
+
+  it('listagem e exportação ordenam o código como número ("700000000001" antes de "1000000000001")', async () => {
+    const base = await baseAprovada();
+    const criado = await request(app.getHttpServer()).post('/fiscal/enquadramentos').set('Cookie', adminA).send(corpo(base));
+    expect(criado.status).toBe(201);
+    for (const codigo of ['1000000000001', '700000000001']) {
+      await db().execute(sql`INSERT INTO enquadramentos_fiscais (codigo, empresa_id, estabelecimento_id, operacao_id, tp_nf, fin_nfe, cfop_id, abrangencia, tipo_produto, produto_id, ncm_id, cest, cliente_id, vigencia_inicio, vigencia_fim, prioridade, situacao, criado_por_id, atualizado_por_id)
+        SELECT ${codigo}, empresa_id, estabelecimento_id, operacao_id, tp_nf, fin_nfe, cfop_id, abrangencia, tipo_produto, produto_id, ncm_id, cest, cliente_id, vigencia_inicio, vigencia_fim, 99, 'ATIVA', criado_por_id, atualizado_por_id
+        FROM enquadramentos_fiscais WHERE id = ${criado.body.id}`);
+    }
+    const lista = await request(app.getHttpServer())
+      .get(`/fiscal/enquadramentos?estabelecimentoId=${base.estabelecimentoId}`)
+      .set('Cookie', adminA);
+    expect(lista.status).toBe(200);
+    const ordem = (lista.body.data as { codigo: string }[]).map((linha) => linha.codigo).filter((c) => c.length > 6);
+    expect(ordem).toEqual(['700000000001', '1000000000001']);
+    const csv = await request(app.getHttpServer())
+      .get(`/fiscal/enquadramentos/exportacao?estabelecimentoId=${base.estabelecimentoId}`)
+      .set('Cookie', adminA);
+    expect(csv.text.indexOf('700000000001')).toBeGreaterThan(0);
+    expect(csv.text.indexOf('700000000001')).toBeLessThan(csv.text.indexOf('1000000000001'));
+  });
+
+  it('busca de NCM e CFOP aceita o código com máscara', async () => {
+    const base = await baseAprovada();
+    seq += 1;
+    const sufixo = String(seq).padStart(4, '0');
+    const ncm = await request(app.getHttpServer())
+      .post('/fiscal/ncms')
+      .set('Cookie', adminA)
+      .send({ codigo: `0401${sufixo}`, descricao: 'Leite e creme', justificativa: MOTIVO });
+    expect(ncm.status).toBe(201);
+    const porNcm = await request(app.getHttpServer())
+      .get('/fiscal/ncms')
+      .query({ search: `0401.${sufixo.slice(0, 2)}`, pageSize: 100 })
+      .set('Cookie', adminA);
+    expect(porNcm.status).toBe(200);
+    expect((porNcm.body.data as { id: string }[]).map((n) => n.id)).toContain(ncm.body.id);
+    const porCfop = await request(app.getHttpServer())
+      .get('/fiscal/cfops')
+      .query({ search: `${base.cfopCodigo[0]}.${base.cfopCodigo.slice(1, 3)}`, pageSize: 100 })
+      .set('Cookie', adminA);
+    expect(porCfop.status).toBe(200);
+    expect((porCfop.body.data as { id: string }[]).map((c) => c.id)).toContain(base.cfopId);
   });
 });

@@ -1,8 +1,13 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { and, eq, isNull, sql } from 'drizzle-orm';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { validarCnpjAlfanumerico } from '../../src/common/validators/cnpj-alfanumerico';
+import { DRIZZLE } from '../../src/database/database.module';
+import * as schema from '../../src/database/schema';
 import { cleanupDb, createTestApp, createTestUser, joinSetCookie } from '../helpers/test-app';
 
+const { estabelecimentos } = schema;
 const MOTIVO = 'Ajuste de cadastro fiscal';
 
 function cnpjDe(base12: string): string {
@@ -201,6 +206,38 @@ describe('E01-T01 concorrência', () => {
       expect(suspensao.status).toBe(200);
       expect(ficha.body.situacao).toBe('SUSPENDED');
       expect(ficha.body.nome).toBe('Filial Osasco');
+    }
+  });
+
+  it('remover empresa × criar estabelecimento → nunca 200 e 201 juntos nem estabelecimento ativo sob empresa removida', async () => {
+    for (let i = 0; i < 8; i += 1) {
+      const raiz = `52ABC${String(i).padStart(3, '0')}`;
+      const empresaId = await empresa(raiz);
+      const [remocao, criacao] = await Promise.all([
+        request(app.getHttpServer())
+          .delete(`/fiscal/empresas/${empresaId}`)
+          .set('Cookie', adminA)
+          .send({ justificativa: MOTIVO }),
+        request(app.getHttpServer())
+          .post('/fiscal/estabelecimentos')
+          .set('Cookie', adminA)
+          .send({
+            empresaId,
+            nome: 'Filial Osasco',
+            cnpj: cnpjDe(`${raiz}0001`),
+            inscricaoEstadual: '123456789',
+            inscricaoMunicipal: '98765',
+            uf: 'SP',
+            justificativa: MOTIVO,
+          }),
+      ]);
+      expect(remocao.status === 200 && criacao.status === 201).toBe(false);
+      const { db } = app.get<{ db: NodePgDatabase<typeof schema> }>(DRIZZLE);
+      const [{ total }] = await db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(estabelecimentos)
+        .where(and(eq(estabelecimentos.empresaId, empresaId), isNull(estabelecimentos.deletedAt)));
+      if (remocao.status === 200) expect(total).toBe(0);
     }
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EnquadramentosClient } from '../src/components/fiscal/enquadramentos/enquadramentos-client';
 import { conectarRealtime } from '../src/lib/realtime';
@@ -83,10 +83,14 @@ function envelope(status: number, corpo: Record<string, unknown>): Response {
 let lista = [LINHA];
 let proximoSalvar: Response | null = null;
 let proximaConsulta: Response | null = null;
+let falharOperacoes = false;
 
 function padrao(metodo: string, caminho: string): Response {
   if (caminho.startsWith('/api/admin/parametros')) {
     return json(200, { valorJson: { provisorio: true, pendencia: 'H-E01-12' } });
+  }
+  if (metodo === 'GET' && caminho.startsWith('/api/erp/fiscal/enquadramentos/exportacao')) {
+    return { ok: true, status: 200, blob: async () => new Blob(['csv']) } as unknown as Response;
   }
   if (metodo === 'GET' && caminho.startsWith('/api/erp/fiscal/enquadramentos/contagens')) {
     return json(200, { total: lista.length, ativas: lista.length, inativas: 0 });
@@ -107,6 +111,7 @@ function padrao(metodo: string, caminho: string): Response {
     return json(200, { data: [{ id: ESTAB, nome: 'Filial Osasco', situacao: 'APPROVED' }], total: 1 });
   }
   if (caminho.startsWith('/api/operacoes')) {
+    if (falharOperacoes) return json(500, { message: 'Falha.' });
     return json(200, { data: [{ id: OP, rotulo: 'Compra e venda outubro', data: '2026-10-01', status: 'aberta' }] });
   }
   if (caminho.startsWith('/api/cadastros/produtos')) {
@@ -128,6 +133,7 @@ beforeEach(() => {
   lista = [LINHA];
   proximoSalvar = null;
   proximaConsulta = null;
+  falharOperacoes = false;
   window.sessionStorage.clear();
   (conectarRealtime as jest.Mock).mockClear();
   global.fetch = jest.fn(async (entrada: string, init?: RequestInit) => {
@@ -219,5 +225,249 @@ describe('EnquadramentosClient', () => {
     expect(container.textContent).not.toMatch(/cst|aliquota|alíquota|icms|ipi|pis|cofins|ibs|cbs/i);
     expect(container.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
     expect(container.textContent).not.toMatch(/Marca/);
+  });
+
+  it.each(['Exportar', 'Exportar visão'])('%s repassa a busca da tela e baixa o arquivo', async (rotulo) => {
+    const criar = jest.fn(() => 'blob:csv');
+    const revogar = jest.fn();
+    Object.assign(URL, { createObjectURL: criar, revokeObjectURL: revogar });
+    const cliques = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const { user } = renderizar();
+    await screen.findByText('Compra e venda outubro', { selector: 'td' });
+    await user.type(screen.getByLabelText('Buscar'), 'acem');
+    await user.click(screen.getByRole('button', { name: rotulo }));
+    await waitFor(() => expect(cliques).toHaveBeenCalledTimes(1));
+    const urls = (global.fetch as jest.Mock).mock.calls.map(([url]) => String(url));
+    expect(urls.some((url) => url.startsWith('/api/erp/fiscal/enquadramentos/exportacao') && url.includes('search=acem'))).toBe(true);
+    expect(criar).toHaveBeenCalled();
+    cliques.mockRestore();
+  });
+
+  it('ficha mostra grade de campos rotulados com datas dd/MM/aaaa HH:mm em São Paulo', async () => {
+    const { user } = renderizar();
+    const celula = await screen.findByText('Compra e venda outubro', { selector: 'td' });
+    celula.closest('tr')!.focus();
+    await user.keyboard('{Enter}');
+    await screen.findByText('Alpha Carnes Ltda');
+    expect(screen.getByText('Criado em').nextElementSibling).toHaveTextContent('14/10/2026 09:00');
+    expect(screen.getByText('Alterado em').nextElementSibling).toHaveTextContent('14/10/2026 09:00');
+    expect(screen.getByText('Início de vigência', { selector: 'p' }).nextElementSibling).toHaveTextContent('01/01/2026');
+    expect(screen.getByText('Fim de vigência', { selector: 'p' }).nextElementSibling).toHaveTextContent('31/12/2026');
+    expect(document.body.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('coluna Início de vigência e mensagem de sobreposição usam dd/MM/aaaa', async () => {
+    const { user } = renderizar();
+    const celula = await screen.findByText('Compra e venda outubro', { selector: 'td' });
+    expect(within(celula.closest('tr')!).getByText('01/01/2026')).toBeInTheDocument();
+    celula.closest('tr')!.focus();
+    await user.keyboard('{Enter}');
+    await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+    proximoSalvar = envelope(409, {
+      message: 'Há vigência sobreposta.',
+      codigo: 'ENQUADRAMENTO_SOBREPOSTO',
+      conflito: { codigo: '44', vigenciaInicio: '2026-01-01', vigenciaFim: '2026-06-30', prioridade: 1 },
+    });
+    await user.type(screen.getByLabelText(/Motivo da alteração/), 'Ajuste de vigência');
+    await user.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await screen.findByText(/Vigência 01\/01\/2026 a 30\/06\/2026/)).toBeInTheDocument();
+  });
+
+  it('Ações do processo é botão de menu acessível por teclado', async () => {
+    const { user } = renderizar();
+    const botao = await screen.findByRole('button', { name: /Ações do processo/ });
+    expect(botao).toHaveAttribute('aria-haspopup', 'menu');
+    botao.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(await screen.findByText('Novo registro')).toBeInTheDocument();
+  });
+
+  describe('combos com busca no servidor', () => {
+    const TODOS = Array.from({ length: 101 }, (_, i) => ({
+      id: `0190a1b2-c3d4-7e5f-8a9b-${String(i).padStart(12, '0')}`,
+      nome: i === 100 ? 'Peça Rara 101' : `Produto ${String(i + 1).padStart(3, '0')}`,
+      status: 'ativo',
+      deletedAt: null,
+    }));
+    let pendentes: Array<() => void>;
+
+    function responderProdutos(url: URL): Response {
+      const termo = (url.searchParams.get('search') ?? '').toLowerCase();
+      const achados = TODOS.filter((p) => p.nome.toLowerCase().includes(termo));
+      const pagina = achados.slice(0, Number(url.searchParams.get('pageSize') ?? 20));
+      return json(200, { data: pagina, total: achados.length, page: 1, pageSize: pagina.length });
+    }
+
+    function simular(produtos: (url: URL) => Response | Promise<Response>) {
+      (global.fetch as jest.Mock).mockImplementation(async (entrada: string, init?: RequestInit) => {
+        const url = new URL(String(entrada), 'http://localhost');
+        if (url.pathname === '/api/cadastros/produtos') return produtos(url);
+        return padrao(init?.method ?? 'GET', url.pathname);
+      });
+    }
+
+    async function abrirGaveta(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+      await screen.findByRole('dialog');
+      await user.click(document.getElementById('enq-prod')!);
+    }
+
+    beforeEach(() => { pendentes = []; });
+
+    it('o 101º item é encontrado pela busca e a lista inicial avisa para refinar', async () => {
+      simular(responderProdutos);
+      const { user } = renderizar();
+      await abrirGaveta(user);
+      expect(await screen.findByText(/Refine a busca/)).toBeInTheDocument();
+      expect(screen.queryByText('Peça Rara 101')).not.toBeInTheDocument();
+      await user.type(screen.getByPlaceholderText('Buscar produto'), 'rara');
+      expect(await screen.findByText('Peça Rara 101')).toBeInTheDocument();
+      expect(screen.queryByText(/Refine a busca/)).not.toBeInTheDocument();
+      const chamadas = (global.fetch as jest.Mock).mock.calls.map(([u]) => String(u));
+      expect(chamadas.some((u) => u.includes('/api/cadastros/produtos') && u.includes('search=rara'))).toBe(true);
+      await user.click(screen.getByText('Peça Rara 101'));
+      expect(document.getElementById('enq-prod')).toHaveTextContent('Peça Rara 101');
+    });
+
+    it('descarta a resposta obsoleta quando a digitação já mudou', async () => {
+      simular((url) => new Promise<Response>((resolver) => {
+        const termo = url.searchParams.get('search');
+        pendentes.push(() => resolver(json(200, { data: [{ id: `id-${termo}`, nome: `Resposta ${termo || 'inicial'}`, status: 'ativo' }], total: 1 })));
+      }));
+      const { user } = renderizar();
+      await abrirGaveta(user);
+      await waitFor(() => expect(pendentes).toHaveLength(1));
+      const entrada = screen.getByPlaceholderText('Buscar produto');
+      fireEvent.change(entrada, { target: { value: 'ab' } });
+      await waitFor(() => expect(pendentes).toHaveLength(2), { timeout: 2000 });
+      fireEvent.change(entrada, { target: { value: 'abc' } });
+      await waitFor(() => expect(pendentes).toHaveLength(3), { timeout: 2000 });
+      await act(async () => { pendentes[2]!(); });
+      expect(await screen.findByText('Resposta abc')).toBeInTheDocument();
+      await act(async () => { pendentes[1]!(); pendentes[0]!(); });
+      expect(screen.getByText('Resposta abc')).toBeInTheDocument();
+      expect(screen.queryByText('Resposta ab')).not.toBeInTheDocument();
+      expect(screen.queryByText('Resposta inicial')).not.toBeInTheDocument();
+    });
+
+    it('estabelecimento: o 101º é encontrado pela busca no drawer e no filtro da lista', async () => {
+      const todos = Array.from({ length: 101 }, (_, i) => ({
+        id: `0190a1b2-c3d4-7e5f-8a9b-${String(i + 500).padStart(12, '0')}`,
+        nome: i === 100 ? 'Filial Rara 101' : `Filial ${String(i + 1).padStart(3, '0')}`,
+        situacao: 'APPROVED',
+      }));
+      (global.fetch as jest.Mock).mockImplementation(async (entrada: string, init?: RequestInit) => {
+        const url = new URL(String(entrada), 'http://localhost');
+        if (url.pathname === '/api/erp/fiscal/estabelecimentos') {
+          const termo = (url.searchParams.get('search') ?? '').toLowerCase();
+          const achados = todos.filter((e) => e.nome.toLowerCase().includes(termo));
+          const pagina = achados.slice(0, Number(url.searchParams.get('pageSize')));
+          return json(200, { data: pagina, total: achados.length });
+        }
+        return padrao(init?.method ?? 'GET', url.pathname);
+      });
+      const { user } = renderizar();
+      await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+      await screen.findByRole('dialog');
+      await user.click(document.getElementById('enq-estab')!);
+      expect(await screen.findByText(/Refine a busca/)).toBeInTheDocument();
+      await user.type(screen.getByPlaceholderText('Buscar estabelecimento'), 'rara');
+      await user.click(await screen.findByText('Filial Rara 101'));
+      expect(document.getElementById('enq-estab')).toHaveTextContent('Filial Rara 101');
+    });
+
+    it('estabelecimento no filtro da lista: o 101º é encontrado e filtra a grade', async () => {
+      const todos = Array.from({ length: 101 }, (_, i) => ({
+        id: `0190a1b2-c3d4-7e5f-8a9b-${String(i + 500).padStart(12, '0')}`,
+        nome: i === 100 ? 'Filial Rara 101' : `Filial ${String(i + 1).padStart(3, '0')}`,
+        situacao: 'APPROVED',
+      }));
+      (global.fetch as jest.Mock).mockImplementation(async (entrada: string, init?: RequestInit) => {
+        const url = new URL(String(entrada), 'http://localhost');
+        if (url.pathname === '/api/erp/fiscal/estabelecimentos') {
+          const termo = (url.searchParams.get('search') ?? '').toLowerCase();
+          const achados = todos.filter((e) => e.nome.toLowerCase().includes(termo));
+          return json(200, { data: achados.slice(0, 50), total: achados.length });
+        }
+        return padrao(init?.method ?? 'GET', url.pathname);
+      });
+      const { user } = renderizar();
+      await screen.findByText('Compra e venda outubro', { selector: 'td' });
+      await user.click(document.getElementById('filtro-estab')!);
+      await user.type(screen.getByPlaceholderText('Buscar estabelecimento'), 'rara');
+      await user.click(await screen.findByText('Filial Rara 101'));
+      await waitFor(() => {
+        const urls = (global.fetch as jest.Mock).mock.calls.map(([u]) => String(u));
+        expect(urls.some((u) => u.startsWith('/api/erp/fiscal/enquadramentos?') && u.includes('estabelecimentoId=0190a1b2-c3d4-7e5f-8a9b-000000000600'))).toBe(true);
+      });
+    });
+
+    it('operação: busca no servidor pelo termo digitado (data ou rótulo)', async () => {
+      (global.fetch as jest.Mock).mockImplementation(async (entrada: string, init?: RequestInit) => {
+        const url = new URL(String(entrada), 'http://localhost');
+        if (url.pathname === '/api/operacoes') {
+          const termo = url.searchParams.get('search') ?? '';
+          const todas = [
+            { id: OP, rotulo: 'Compra e venda outubro', data: '2026-10-01' },
+            { id: '0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a99', rotulo: 'Operação rara', data: '2025-03-04' },
+          ].filter((o) => !termo || o.rotulo.toLowerCase().includes(termo.toLowerCase()));
+          return json(200, { data: todas, total: todas.length, page: 1, pageSize: 50 });
+        }
+        return padrao(init?.method ?? 'GET', url.pathname);
+      });
+      const { user } = renderizar();
+      await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+      await screen.findByRole('dialog');
+      await user.click(document.getElementById('enq-op')!);
+      await user.type(screen.getByPlaceholderText('Buscar operação'), 'rara');
+      const buscou = () => (global.fetch as jest.Mock).mock.calls.some(([u]) => String(u).startsWith('/api/operacoes') && String(u).includes('search=rara'));
+      await waitFor(() => expect(buscou()).toBe(true));
+      await user.click(await screen.findByText('Operação rara · 04/03/2025'));
+      expect(document.getElementById('enq-op')).toHaveTextContent('Operação rara · 04/03/2025');
+    });
+
+    it('operação: lista as operações sem aviso de truncamento', async () => {
+      const { user } = renderizar();
+      await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+      await screen.findByRole('dialog');
+      await user.click(document.getElementById('enq-op')!);
+      await screen.findByText('Compra e venda outubro · 01/10/2026');
+      expect(screen.queryByText(/mais recentes/)).not.toBeInTheDocument();
+    });
+
+    it('mostra o erro da busca', async () => {
+      simular(() => json(500, { message: 'x' }));
+      const { user } = renderizar();
+      await abrirGaveta(user);
+      expect(await screen.findByText('Serviço indisponível no momento. Tente novamente.')).toBeInTheDocument();
+    });
+
+    it('na edição o rótulo do item selecionado aparece mesmo fora da página de resultados', async () => {
+      simular(responderProdutos);
+      const { user } = renderizar();
+      const celula = await screen.findByText('Compra e venda outubro', { selector: 'td' });
+      celula.closest('tr')!.focus();
+      await user.keyboard('{Enter}');
+      await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+      expect(document.getElementById('enq-prod')).toHaveTextContent('Acém');
+      expect(document.getElementById('enq-cli')).toHaveTextContent('Açougue Central');
+      expect(document.getElementById('enq-cfop')).toHaveTextContent('5.102 Venda de mercadoria');
+      expect(document.getElementById('enq-ncm')).toHaveTextContent('0201.30.00 Carnes bovinas');
+    });
+  });
+
+  it('código fiscal com quebra de linha é recusado no frontend', async () => {
+    const { user } = renderizar();
+    await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+    await user.click((await screen.findAllByRole("button", { name: "Novo código" }))[0]!);
+    const codigo = await screen.findByLabelText('Código');
+    fireEvent.change(codigo, { target: { value: '51	02' } });
+    await user.type(screen.getByLabelText('Descrição'), 'Venda');
+    await user.type(screen.getByLabelText('Motivo do código'), 'Cadastro manual');
+    const dialogo = screen.getByRole('dialog', { name: 'Operação fiscal (CFOP)' });
+    await user.click(within(dialogo).getByRole('button', { name: 'Salvar rascunho' }));
+    expect(await within(dialogo).findByText('CFOP deve ter 4 dígitos.')).toBeInTheDocument();
   });
 });
