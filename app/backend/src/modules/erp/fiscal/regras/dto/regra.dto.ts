@@ -4,8 +4,9 @@ import {
   ICMS_CST,
   IPI_CST,
   PIS_CST,
+  SITUACOES_REGRA,
 } from '../../../../../database/schema/fiscal-regras.schema';
-import { justificativaSchema, percentualSchema, uuidSchema, versaoSchema } from './comum.dto';
+import { buscaSchema, justificativaSchema, percentualSchema, uuidSchema, versaoSchema } from './comum.dto';
 
 const MENSAGEM_VIGENCIA = 'Fim de vigência deve ser igual ou posterior ao início.';
 
@@ -60,7 +61,10 @@ export const SORT_REGRAS = ['enquadramento', 'cfop', 'cBenef', 'cClassTrib', 'op
 
 export const listarRegrasSchema = z.object({
   cfopId: uuidSchema.optional(),
-  search: z.string().trim().optional(),
+  search: buscaSchema,
+  /** Código da linhagem: lista as versões de uma mesma regra. */
+  codigo: buscaSchema,
+  situacao: z.enum(SITUACOES_REGRA).optional(),
   sort: z.enum(SORT_REGRAS).default('enquadramento'),
   dir: z.enum(['asc', 'desc']).default('asc'),
   page: z.coerce.number().int().min(1).default(1),

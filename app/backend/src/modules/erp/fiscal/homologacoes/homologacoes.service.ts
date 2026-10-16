@@ -637,7 +637,7 @@ export class HomologacoesService {
   ) {
     const direcao = query.dir === 'desc' ? desc : asc;
     const coluna = {
-      enquadramento: enquadramentosFiscais.codigo,
+      enquadramento: sql`${enquadramentosFiscais.codigo}::bigint`,
       vigenciaInicio: regrasTributarias.vigenciaInicio,
       usuario: autor.nome,
       aprovador: aprovador.nome,

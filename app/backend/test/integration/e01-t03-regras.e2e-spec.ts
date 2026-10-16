@@ -491,4 +491,47 @@ describe('E01-T03 regras tributárias', () => {
     expect(texto).not.toMatch(/regras_tributarias/);
     expect(texto).not.toMatch(UUID);
   });
+
+  it('lista aplica busca, ordenação natural por código, filtro de linhagem e de situação', async () => {
+    const aprovada = await aprovarFluxo();
+    const rascunho = await criarComo(adminA);
+    expect(rascunho.res.status).toBe(201);
+    const ficha = await detalharComo(adminA, aprovada.id);
+
+    const linhagem = await request(app.getHttpServer())
+      .get('/fiscal/regras').query({ codigo: ficha.body.codigo, pageSize: 100 }).set('Cookie', adminA);
+    expect(linhagem.status).toBe(200);
+    expect(linhagem.body.data).toHaveLength(1);
+    const linha = linhagem.body.data[0];
+    expect(linha).toMatchObject({ id: aprovada.id, codigo: ficha.body.codigo, numeroVersao: 1, situacao: 'Aprovada' });
+
+    const soAprovadas = await request(app.getHttpServer())
+      .get('/fiscal/regras').query({ situacao: 'APROVADA', pageSize: 100 }).set('Cookie', adminA);
+    const ids = (soAprovadas.body.data as { id: string }[]).map((l) => l.id);
+    expect(ids).toContain(aprovada.id);
+    expect(ids).not.toContain(rascunho.res.body.id);
+
+    const buscada = await request(app.getHttpServer())
+      .get('/fiscal/regras').query({ search: linha.enquadramentoFiscal, pageSize: 100 }).set('Cookie', adminA);
+    expect((buscada.body.data as { id: string }[]).map((l) => l.id)).toContain(aprovada.id);
+    const semResultado = await request(app.getHttpServer())
+      .get('/fiscal/regras').query({ search: 'zzz-inexistente-zzz' }).set('Cookie', adminA);
+    expect(semResultado.body.total).toBe(0);
+    const comNulo = await request(app.getHttpServer())
+      .get('/fiscal/regras').query({ search: 'a b' }).set('Cookie', adminA);
+    expect(comNulo.status).toBe(400);
+
+    const asc = await request(app.getHttpServer())
+      .get('/fiscal/regras').query({ sort: 'enquadramento', dir: 'asc', pageSize: 100 }).set('Cookie', adminA);
+    const codigos = (asc.body.data as { enquadramentoFiscal: string }[]).map((l) => Number(l.enquadramentoFiscal));
+    expect(codigos).toEqual([...codigos].sort((x, y) => x - y));
+    const desc = await request(app.getHttpServer())
+      .get('/fiscal/regras').query({ sort: 'enquadramento', dir: 'desc', pageSize: 100 }).set('Cookie', adminA);
+    const decrescente = (desc.body.data as { enquadramentoFiscal: string }[]).map((l) => Number(l.enquadramentoFiscal));
+    expect(decrescente).toEqual([...decrescente].sort((x, y) => y - x));
+
+    const contagem = await request(app.getHttpServer())
+      .get('/fiscal/regras/contagens').query({ search: 'zzz-inexistente-zzz' }).set('Cookie', adminA);
+    expect(contagem.body.total).toBe(0);
+  });
 });

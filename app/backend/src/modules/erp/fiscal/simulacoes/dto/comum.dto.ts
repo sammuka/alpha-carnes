@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { centavosDe, normalizarDinheiro, normalizarEscala } from '../decimal-memoria';
 
-export { justificativaSchema, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
+export { buscaSchema, justificativaSchema, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
 
 export const dinheiroSchema = z.string().trim().transform((valor, ctx) => {
   const canon = normalizarDinheiro(valor);

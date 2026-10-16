@@ -611,6 +611,32 @@ describe('E01-T04 simulações fiscais', () => {
     expect(descendente.body.data).toEqual(expect.arrayContaining([expect.objectContaining({ id: criada.body.id })]));
   });
 
+
+  it('lista expõe código, versão e situação e filtra por linhagem e por versão da regra', async () => {
+    const aprovada = await aprovarRegra(await cenario());
+    const criada = await simular(admin, corpoDe(aprovada.base));
+    expect(criada.status).toBe(201);
+    const linhagem = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ codigo: criada.body.codigo, pageSize: 100 }).set('Cookie', admin);
+    expect(linhagem.status).toBe(200);
+    expect(linhagem.body.data).toHaveLength(1);
+    expect(linhagem.body.data[0]).toMatchObject({
+      id: criada.body.id,
+      codigo: criada.body.codigo,
+      numeroVersao: 1,
+      situacao: 'Calculada',
+      competenciaRotulo: 'Outubro de 2026',
+    });
+    const porRegra = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ regraId: aprovada.regraId, pageSize: 100 }).set('Cookie', admin);
+    expect((porRegra.body.data as { id: string }[]).map((l) => l.id)).toEqual([criada.body.id]);
+    const outraRegra = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ regraId: crypto.randomUUID() }).set('Cookie', admin);
+    expect(outraRegra.body.total).toBe(0);
+    const comNulo = await request(app.getHttpServer())
+      .get('/fiscal/simulacoes').query({ search: 'a\u0000b' }).set('Cookie', admin);
+    expect(comNulo.status).toBe(400);
+  });
   it('competência anterior ao enquadramento não grava', async () => {
     const aprovada = await aprovarRegra(await cenario({ inicio: '2026-06-01' }));
     const res = await simular(admin, corpoDe(aprovada.base, { competencia: '2026-01' }));

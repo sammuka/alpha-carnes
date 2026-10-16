@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  buscaSchema,
   competenciaSchema,
   justificativaSchema,
   pesoSchema,
@@ -41,7 +42,11 @@ export const listarSimulacoesSchema = z.object({
   clienteId: uuidSchema.optional(),
   produtoId: uuidSchema.optional(),
   competencia: competenciaSchema.optional(),
-  search: z.string().trim().optional(),
+  search: buscaSchema,
+  /** Código da linhagem: lista as versões de uma mesma simulação. */
+  codigo: buscaSchema,
+  /** Memórias calculadas com exatamente esta versão de regra. */
+  regraId: uuidSchema.optional(),
   sort: z.enum(SORT_SIMULACOES).default('cliente'),
   dir: z.enum(['asc', 'desc']).default('asc'),
   page: z.coerce.number().int().min(1).default(1),

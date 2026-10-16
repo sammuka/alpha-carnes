@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { SITUACOES_HOMOLOGACAO } from '../../../../../database/schema/fiscal-homologacoes.schema';
-import { justificativaSchema, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
+import { buscaSchema, justificativaSchema, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
 
 export const descricaoSchema = z.string().trim().min(3).max(500);
 
@@ -25,7 +25,7 @@ export const vincularCenarioSchema = z.object({
 const SORT_HOMOLOGACOES = ['enquadramento', 'vigenciaInicio', 'usuario', 'aprovador', 'descricao'] as const;
 
 export const listarHomologacoesSchema = z.object({
-  search: z.string().trim().optional(),
+  search: buscaSchema,
   situacao: z.enum(SITUACOES_HOMOLOGACAO).optional(),
   sort: z.enum(SORT_HOMOLOGACOES).default('enquadramento'),
   dir: z.enum(['asc', 'desc']).default('asc'),

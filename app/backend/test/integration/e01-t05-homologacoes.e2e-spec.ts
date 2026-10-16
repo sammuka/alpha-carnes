@@ -652,6 +652,26 @@ describe('E01-T05 homologações de regras', () => {
     expect(csv.text).toContain('"Revisão; com ""aspas"" para exportar"');
   });
 
+  it('lista ordena o enquadramento como número e recusa busca com caractere nulo', async () => {
+    for (let i = 0; i < 2; i += 1) {
+      const { regraId } = await regraAprovada();
+      expect((await abrir(admin, regraId)).status).toBe(201);
+    }
+    const ordenar = async (dir: 'asc' | 'desc') => {
+      const res = await request(app.getHttpServer())
+        .get('/fiscal/homologacoes').query({ sort: 'enquadramento', dir, pageSize: 100 }).set('Cookie', admin);
+      expect(res.status).toBe(200);
+      return (res.body.data as { enquadramento: string }[]).map((l) => Number(l.enquadramento));
+    };
+    const crescente = await ordenar('asc');
+    expect(crescente).toEqual([...crescente].sort((x, y) => x - y));
+    const decrescente = await ordenar('desc');
+    expect(decrescente).toEqual([...decrescente].sort((x, y) => y - x));
+    const comNulo = await request(app.getHttpServer())
+      .get('/fiscal/homologacoes').query({ search: 'a\u0000b' }).set('Cookie', admin);
+    expect(comNulo.status).toBe(400);
+  });
+
   it('id inexistente devolve 404 em todas as rotas por id e a regra sem fim de vigência abre', async () => {
     const inexistente = '01a14089-0000-7000-8000-000000000000';
     const corpo = { versao: 1, justificativa: 'Decisão de usuário diferente de quem submeteu.' };

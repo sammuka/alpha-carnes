@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { normalizarPercentual } from '../percentual';
 
-export { justificativaSchema, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
+import { buscaSchema } from '../../enquadramentos/dto/comum.dto';
+
+export { buscaSchema, justificativaSchema, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
 
 export const percentualSchema = z.string().trim().transform((valor, ctx) => {
   const canon = normalizarPercentual(valor);
@@ -13,7 +15,7 @@ export const percentualSchema = z.string().trim().transform((valor, ctx) => {
 });
 
 export const listarCatalogoQuerySchema = z.object({
-  search: z.string().trim().optional(),
+  search: buscaSchema,
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

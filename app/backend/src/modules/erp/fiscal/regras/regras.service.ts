@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { AuditoriaService } from '../../../../common/auditoria/auditoria.service';
@@ -56,6 +56,10 @@ export async function travarEnquadramento(tx: Tx, id: string) {
   return linha;
 }
 
+/** Códigos numéricos guardados como texto: a ordenação põe 2 antes de 10. */
+const enquadramentoNumerico = sql`${enquadramentosFiscais.codigo}::bigint`;
+const regraNumerica = sql`${regrasTributarias.codigo}::bigint`;
+
 function razao(valor: string): string {
   const [inteiro, frac = ''] = valor.split('.');
   return `${inteiro}.${(frac + '0000').slice(0, 4)}`;
@@ -74,10 +78,42 @@ export class RegrasTributariasService {
   }
 
   private whereLista(query: ListarRegrasQuery) {
+    const filtro = query.search?.trim();
+    const termo = filtro ? `%${filtro.replace(/[%_]/g, '')}%` : undefined;
     return and(
       isNull(regrasTributarias.deletedAt),
       query.cfopId ? eq(enquadramentosFiscais.cfopId, query.cfopId) : undefined,
+      query.codigo ? eq(regrasTributarias.codigo, query.codigo) : undefined,
+      query.situacao ? eq(regrasTributarias.situacao, query.situacao) : undefined,
+      termo
+        ? sql`(
+            ${enquadramentosFiscais.codigo} ILIKE ${termo}
+            OR ${cfops.codigo} ILIKE ${termo}
+            OR ${operacoes.rotulo} ILIKE ${termo}
+            OR ${beneficiosFiscais.descricao} ILIKE ${termo}
+            OR ${classificacoesIbsCbs.descricao} ILIKE ${termo}
+            OR ${regrasTributarias.codigo} ILIKE ${termo}
+          )`
+        : undefined,
     );
+  }
+
+  private ordem(query: ListarRegrasQuery) {
+    const coluna = {
+      enquadramento: enquadramentoNumerico,
+      cfop: cfops.codigo,
+      cBenef: beneficiosFiscais.descricao,
+      cClassTrib: classificacoesIbsCbs.descricao,
+      operacao: operacoes.rotulo,
+      icmsCst: regrasTributarias.icmsCst,
+    }[query.sort];
+    return [
+      query.dir === 'desc' ? desc(coluna) : asc(coluna),
+      asc(enquadramentoNumerico),
+      asc(regraNumerica),
+      asc(regrasTributarias.numeroVersao),
+      asc(regrasTributarias.id),
+    ];
   }
 
   async listar(query: ListarRegrasQuery) {
@@ -86,10 +122,17 @@ export class RegrasTributariasService {
       .select({ total: sql<number>`count(*)::int` })
       .from(regrasTributarias)
       .innerJoin(enquadramentosFiscais, eq(enquadramentosFiscais.id, regrasTributarias.enquadramentoId))
+      .innerJoin(cfops, eq(cfops.id, enquadramentosFiscais.cfopId))
+      .innerJoin(operacoes, eq(operacoes.id, enquadramentosFiscais.operacaoId))
+      .innerJoin(beneficiosFiscais, eq(beneficiosFiscais.id, regrasTributarias.beneficioFiscalId))
+      .innerJoin(classificacoesIbsCbs, eq(classificacoesIbsCbs.id, regrasTributarias.classificacaoIbsCbsId))
       .where(where);
     const linhas = await this.db
       .select({
         id: regrasTributarias.id,
+        codigo: regrasTributarias.codigo,
+        numeroVersao: regrasTributarias.numeroVersao,
+        situacao: regrasTributarias.situacao,
         enquadramentoFiscal: enquadramentosFiscais.codigo,
         operacaoFiscal: cfops.codigo,
         beneficioFiscal: beneficiosFiscais.descricao,
@@ -104,11 +147,14 @@ export class RegrasTributariasService {
       .innerJoin(beneficiosFiscais, eq(beneficiosFiscais.id, regrasTributarias.beneficioFiscalId))
       .innerJoin(classificacoesIbsCbs, eq(classificacoesIbsCbs.id, regrasTributarias.classificacaoIbsCbsId))
       .where(where)
-      .orderBy(enquadramentosFiscais.codigo)
+      .orderBy(...this.ordem(query))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
     const data = linhas.map((linha) => ({
       id: linha.id,
+      codigo: linha.codigo,
+      numeroVersao: linha.numeroVersao,
+      situacao: ROTULOS_SITUACAO_REGRA[linha.situacao as SituacaoRegra],
       enquadramentoFiscal: linha.enquadramentoFiscal,
       operacaoFiscal: linha.operacaoFiscal,
       beneficioFiscal: linha.beneficioFiscal,
@@ -208,6 +254,10 @@ export class RegrasTributariasService {
       })
       .from(regrasTributarias)
       .innerJoin(enquadramentosFiscais, eq(enquadramentosFiscais.id, regrasTributarias.enquadramentoId))
+      .innerJoin(cfops, eq(cfops.id, enquadramentosFiscais.cfopId))
+      .innerJoin(operacoes, eq(operacoes.id, enquadramentosFiscais.operacaoId))
+      .innerJoin(beneficiosFiscais, eq(beneficiosFiscais.id, regrasTributarias.beneficioFiscalId))
+      .innerJoin(classificacoesIbsCbs, eq(classificacoesIbsCbs.id, regrasTributarias.classificacaoIbsCbsId))
       .where(this.whereLista(query));
     return {
       total: linha?.total ?? 0,
@@ -235,7 +285,7 @@ export class RegrasTributariasService {
       .innerJoin(beneficiosFiscais, eq(beneficiosFiscais.id, regrasTributarias.beneficioFiscalId))
       .innerJoin(classificacoesIbsCbs, eq(classificacoesIbsCbs.id, regrasTributarias.classificacaoIbsCbsId))
       .where(this.whereLista(query))
-      .orderBy(enquadramentosFiscais.codigo);
+      .orderBy(...this.ordem(query));
     return montarCsvRegras(linhas);
   }
 

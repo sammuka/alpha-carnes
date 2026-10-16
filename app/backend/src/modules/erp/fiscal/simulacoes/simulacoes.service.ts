@@ -163,6 +163,9 @@ export class SimulacoesFiscaisService {
     const linhas = await this.db
       .select({
         id: simulacoesFiscais.id,
+        codigo: simulacoesFiscais.codigo,
+        numeroVersao: simulacoesFiscais.numeroVersao,
+        competencia: simulacoesFiscais.competencia,
         cliente: nomeCliente,
         produto: produtos.nome,
         valor: simulacoesFiscais.valor,
@@ -183,6 +186,10 @@ export class SimulacoesFiscaisService {
       .offset((query.page - 1) * query.pageSize);
     return montarPaginado(linhas.map((linha) => ({
       id: linha.id,
+      codigo: linha.codigo,
+      numeroVersao: linha.numeroVersao,
+      situacao: 'Calculada',
+      competenciaRotulo: rotuloCompetencia(linha.competencia),
       cliente: linha.cliente,
       produto: linha.produto,
       valor: formatarLista(linha.valor),
@@ -455,6 +462,8 @@ export class SimulacoesFiscaisService {
       query.clienteId ? eq(simulacoesFiscais.clienteId, query.clienteId) : undefined,
       query.produtoId ? eq(simulacoesFiscais.produtoId, query.produtoId) : undefined,
       query.competencia ? eq(simulacoesFiscais.competencia, query.competencia) : undefined,
+      query.codigo ? eq(simulacoesFiscais.codigo, query.codigo) : undefined,
+      query.regraId ? eq(simulacoesFiscais.regraId, query.regraId) : undefined,
     ];
     if (query.search?.trim()) {
       const termo = `%${query.search.trim()}%`;
