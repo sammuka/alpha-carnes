@@ -358,12 +358,18 @@ export const enquadramentosApi = {
     if (!res.ok) throw criarErro(res.status, await res.json().catch(() => null));
     return res.blob();
   },
-  opcoesOperacao: async (): Promise<OpcaoCombo[]> => {
-    const body = await chamar<unknown>('GET', '/api/operacoes?limite=100');
-    return linhas(body).map((l) => ({
-      id: String(l.id),
-      rotulo: rotuloOperacao(String(l.rotulo ?? ''), String(l.data ?? '')),
-    }));
+  /** O endpoint não aceita busca: traz as 100 mais recentes e sinaliza quando há mais. */
+  opcoesOperacao: async (): Promise<{ opcoes: OpcaoCombo[]; truncado: boolean }> => {
+    const body = await chamar<unknown>('GET', `/api/operacoes?limite=${LIMITE_OPERACOES}`);
+    const bruto = linhas(body);
+    const total = typeof (body as { total?: unknown } | null)?.total === 'number' ? (body as { total: number }).total : bruto.length;
+    return {
+      opcoes: bruto.map((l) => ({
+        id: String(l.id),
+        rotulo: rotuloOperacao(String(l.rotulo ?? ''), String(l.data ?? '')),
+      })),
+      truncado: total > bruto.length || bruto.length >= LIMITE_OPERACOES,
+    };
   },
 };
 
@@ -378,6 +384,8 @@ export interface ResultadoBusca {
 }
 
 export const TAMANHO_BUSCA = 50;
+export const LIMITE_OPERACOES = 100;
+export const AVISO_OPERACOES = 'Exibindo as 100 operações mais recentes';
 export const AVISO_REFINAR = 'Há mais resultados do que os exibidos. Refine a busca.';
 
 const ROTA_BUSCA: Record<TipoBusca, string> = {

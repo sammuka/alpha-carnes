@@ -13,6 +13,7 @@ import {
   ROTULOS_FIN_NFE,
   ROTULOS_TIPO_PRODUTO,
   ROTULOS_TP_NF,
+  AVISO_OPERACOES,
   TEXTO_VAZIO_COMBO,
   normalizarCest,
   type CorpoEnquadramento,
@@ -42,6 +43,8 @@ function rotulosDe(detalhe: DetalheEnquadramento): Rotulos {
 
 export interface Catalogos {
   operacoes: OpcaoCombo[];
+  /** Há mais operações no servidor do que as 100 carregadas. */
+  operacoesTruncadas: boolean;
 }
 
 interface Props {
@@ -125,6 +128,12 @@ export function EnquadramentoDrawer({
     setRotulos((atual) => ({ ...atual, [chave]: selecaoCodigo.rotulo }));
   }, [aberto, selecaoCodigo]);
 
+  // A operação selecionada continua exibida mesmo fora da janela das 100 mais recentes.
+  const itensOperacao = itens(catalogos.operacoes);
+  if (detalhe && form.operacaoId === detalhe.operacaoId && !itensOperacao.some((i) => i.id === form.operacaoId)) {
+    itensOperacao.unshift({ id: detalhe.operacaoId, label: detalhe.operacaoRotulo });
+  }
+
   function set<K extends keyof CorpoEnquadramento>(chave: K, valor: CorpoEnquadramento[K]) {
     setForm((atual) => ({ ...atual, [chave]: valor }));
   }
@@ -175,7 +184,16 @@ export function EnquadramentoDrawer({
             <ComboboxBusca id="enq-estab" tipo="estabelecimentos" value={form.estabelecimentoId} rotulo={rotulos.estabelecimentoId} onChange={(o) => escolher('estabelecimentoId', o)} placeholder="Estabelecimento" searchPlaceholder="Buscar estabelecimento" />
           </Campo>
           <Campo rotulo="Operação">
-            <ComboboxField id="enq-op" items={itens(catalogos.operacoes)} value={form.operacaoId} onChange={(id) => set('operacaoId', id)} placeholder="Operação" searchPlaceholder="Buscar operação" emptyText={TEXTO_VAZIO_COMBO} />
+            <ComboboxField
+              id="enq-op"
+              items={itensOperacao}
+              value={form.operacaoId}
+              onChange={(id) => set('operacaoId', id)}
+              placeholder="Operação"
+              searchPlaceholder="Buscar operação"
+              emptyText={TEXTO_VAZIO_COMBO}
+              footer={catalogos.operacoesTruncadas ? <p role="status" className="border-t px-3 py-2 text-xs text-muted-foreground">{AVISO_OPERACOES}</p> : undefined}
+            />
           </Campo>
           <Campo rotulo="Tipo da nota">
             <select aria-label="Tipo da nota" className="h-8 w-full rounded-md border px-2 text-[13px]" value={form.tpNf} onChange={(e) => set('tpNf', e.target.value)}>

@@ -35,7 +35,7 @@ import { CodigoFiscalDialog } from './codigo-fiscal-dialog';
 import { DuplicarDialog } from './duplicar-dialog';
 import { EnquadramentoDrawer, type Catalogos, type SelecaoCodigo } from './enquadramento-drawer';
 
-const CATALOGOS_VAZIOS: Catalogos = { operacoes: [] };
+const CATALOGOS_VAZIOS: Catalogos = { operacoes: [], operacoesTruncadas: false };
 const CHAVE_ROTULOS = 'fiscal.enquadramentos.rotulos';
 type ChaveBuscaFiltro = 'estabelecimentoId' | 'cfopId' | 'produtoId' | 'clienteId';
 
@@ -108,8 +108,8 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   }, [rotulosFiltro]);
 
   useEffect(() => {
-    void enquadramentosApi.opcoesOperacao().then((operacoes) => {
-      setCatalogos({ operacoes });
+    void enquadramentosApi.opcoesOperacao().then(({ opcoes, truncado }) => {
+      setCatalogos({ operacoes: opcoes, operacoesTruncadas: truncado });
       setErroCatalogos(false);
     }).catch(() => setErroCatalogos(true));
   }, [recarga]);

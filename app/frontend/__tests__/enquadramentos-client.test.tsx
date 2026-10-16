@@ -414,6 +414,37 @@ describe('EnquadramentosClient', () => {
       });
     });
 
+    it('operação: com 101 operações mostra o aviso e mantém a selecionada fora da janela', async () => {
+      const recentes = Array.from({ length: 100 }, (_, i) => ({
+        id: `0190a1b2-c3d4-7e5f-8a9b-${String(i + 900).padStart(12, '0')}`,
+        rotulo: `Operação ${i + 1}`,
+        data: '2026-10-01',
+      }));
+      (global.fetch as jest.Mock).mockImplementation(async (entrada: string, init?: RequestInit) => {
+        const url = new URL(String(entrada), 'http://localhost');
+        if (url.pathname === '/api/operacoes') return json(200, { data: recentes, total: 101, page: 1, pageSize: 100 });
+        return padrao(init?.method ?? 'GET', url.pathname);
+      });
+      const { user } = renderizar();
+      const celula = await screen.findByText('Compra e venda outubro', { selector: 'td' });
+      celula.closest('tr')!.focus();
+      await user.keyboard('{Enter}');
+      await user.click(await screen.findByRole('button', { name: 'Editar versão' }));
+      const gatilho = document.getElementById('enq-op')!;
+      expect(gatilho).toHaveTextContent('Compra e venda outubro');
+      await user.click(gatilho);
+      expect(await screen.findByText('Exibindo as 100 operações mais recentes')).toBeInTheDocument();
+    });
+
+    it('operação: sem excedente não mostra o aviso', async () => {
+      const { user } = renderizar();
+      await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+      await screen.findByRole('dialog');
+      await user.click(document.getElementById('enq-op')!);
+      await screen.findByText('Compra e venda outubro · 01/10/2026');
+      expect(screen.queryByText('Exibindo as 100 operações mais recentes')).not.toBeInTheDocument();
+    });
+
     it('mostra o erro da busca', async () => {
       simular(() => json(500, { message: 'x' }));
       const { user } = renderizar();
