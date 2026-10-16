@@ -37,20 +37,31 @@ import { AuditoriaModule } from './common/auditoria/auditoria.module';
 import { AuditoriaInterceptor } from './common/interceptors/auditoria.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import type { IncomingMessage } from 'http';
-import { logRedact } from './common/logging/redact';
+import type { Writable } from 'stream';
+import { logRedact, logTestSink } from './common/logging/redact';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ load: [appConfig], isGlobal: true }),
     EventEmitterModule.forRoot(),
-    LoggerModule.forRoot({
-      pinoHttp: {
-        level: process.env.LOG_LEVEL ?? 'info',
-        redact: logRedact,
-        transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
-        genReqId: (req: IncomingMessage) =>
-          (req.headers['x-request-id'] as string | undefined) ?? crypto.randomUUID(),
-        customProps: () => ({ context: 'HTTP' }),
+    LoggerModule.forRootAsync({
+      useFactory: () => {
+        const opts = {
+          level: process.env.LOG_LEVEL ?? 'info',
+          redact: logRedact,
+          genReqId: (req: IncomingMessage) =>
+            (req.headers['x-request-id'] as string | undefined) ?? crypto.randomUUID(),
+          customProps: () => ({ context: 'HTTP' }),
+        };
+        if (logTestSink.stream) {
+          return { pinoHttp: [opts, logTestSink.stream] as [typeof opts, Writable] };
+        }
+        return {
+          pinoHttp: {
+            ...opts,
+            transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
+          },
+        };
       },
     }),
     ThrottlerModule.forRootAsync({
