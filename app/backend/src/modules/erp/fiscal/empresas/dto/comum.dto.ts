@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { justificativaNormalizadaSchema } from '../../../../../common/validators/justificativa';
 import { ufBrasilSchema } from '../../../../../common/dto/dominios.dto';
 
 /** U+0000 não é aceito pelo PostgreSQL em texto (causaria 500): recusado como 400. */
@@ -9,8 +10,8 @@ export const MENSAGEM_NULO = 'Texto contém caractere inválido.';
 export const CNPJ_ENTRADA_ASCII = /^[0-9A-Za-z./\-\s]*$/;
 export const MENSAGEM_CNPJ_ASCII = 'CNPJ aceita apenas letras (A-Z) e dígitos.';
 
-/** Justificativa obrigatória em toda mutação (D7): trim 3–500. */
-export const justificativaSchema = z.string().trim().min(3).max(500).refine(semNulo, MENSAGEM_NULO);
+/** Justificativa obrigatória em toda mutação (D7): normalizada (invisíveis removidos, trim) e então 3–500. */
+export const justificativaSchema = justificativaNormalizadaSchema;
 
 /** Concorrência otimista (D14). */
 export const versaoSchema = z.number().int().min(1);

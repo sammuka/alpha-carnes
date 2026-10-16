@@ -1,16 +1,13 @@
 import { z } from 'zod';
+import { justificativaNormalizadaSchema } from '../../../../../common/validators/justificativa';
 
 const MENSAGEM_NUL = 'Texto contém caractere inválido.';
 
 /** `\u0000` não existe em `text` do Postgres e viraria 500. */
 export const semNul = (valor: string): boolean => !valor.includes('\u0000');
 
-/** Justificativa obrigatória em toda mutação (D24): trim 3–500. */
-/** Caracteres de largura zero não contam para o mínimo: são removidos antes de medir. */
-export const justificativaSchema = z
-  .string()
-  .transform((valor) => valor.replace(/[\u200B-\u200D\uFEFF]/g, ''))
-  .pipe(z.string().trim().min(3).max(500).refine(semNul, { message: MENSAGEM_NUL }));
+/** Justificativa obrigatória em toda mutação (D24): normalizada (invisíveis removidos, trim) e então 3–500. */
+export const justificativaSchema = justificativaNormalizadaSchema;
 
 /** Busca livre das listagens. */
 export const buscaSchema = z.string().trim().refine(semNul, { message: MENSAGEM_NUL }).optional();
