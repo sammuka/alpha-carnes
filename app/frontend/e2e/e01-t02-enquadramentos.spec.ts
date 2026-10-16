@@ -35,6 +35,11 @@ function brDeIso(iso: string): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+/** Valor do campo rotulado da ficha (grade de rótulo + valor). */
+function valorDoCampo(page: Page, rotulo: string): Locator {
+  return page.locator(`p:text-is("${rotulo}") + div`);
+}
+
 async function abrirComo(browser: Browser, baseURL: string, usuario: UsuarioE2e): Promise<Page> {
   const context = await browser.newContext({ baseURL });
   await context.addInitScript(() => sessionStorage.removeItem('fiscal.enquadramentos.lista'));
@@ -200,7 +205,10 @@ test.describe('E01-T02 Operações fiscais e enquadramentos', () => {
     await expect(drawer.getByLabel('Finalidade')).toHaveValue('1');
     await expect(drawer.getByLabel('Abrangência da operação')).toHaveValue('INTERNA');
     await expect(drawer.getByLabel('Origem do produto')).toHaveValue('REVENDA');
+    // A busca do combo consulta o servidor (parâmetro search), não uma página fixa de 100 itens.
+    const buscaNoServidor = page.waitForRequest((r) => r.url().includes('/api/cadastros/produtos') && new URL(r.url()).searchParams.get('search') === base.produtoNome);
     await escolherCombo(page, drawer, '#enq-prod', 'Buscar produto', base.produtoNome, new RegExp(base.produtoNome));
+    await buscaNoServidor;
     await escolherCombo(page, drawer, '#enq-cli', 'Buscar cliente', base.clienteNome, new RegExp(base.clienteNome));
     await drawer.getByLabel('Substituição tributária (CEST)').fill('1708700');
     await drawer.getByRole('button', { name: 'Início de vigência' }).click();
@@ -218,7 +226,7 @@ test.describe('E01-T02 Operações fiscais e enquadramentos', () => {
     const linhas = page.getByRole('row', { name: new RegExp(base.rotuloOperacao) });
     await expect(linhas).toHaveCount(1);
     await linhas.click();
-    await expect(page.getByText(/^Código [1-9]\d*$/)).toBeVisible();
+    await expect(valorDoCampo(page, 'Código')).toHaveText(/^[1-9]\d*$/);
     await expect(page.getByText('Operação normal').first()).toBeVisible();
     await expect(page.getByText('Dentro do estado').first()).toBeVisible();
     await expect(page.getByText('Revenda').first()).toBeVisible();
@@ -235,7 +243,7 @@ test.describe('E01-T02 Operações fiscais e enquadramentos', () => {
     await expect(duplicar).toBeHidden();
     await expect(linhas).toHaveCount(2);
 
-    await page.getByRole('row', { name: new RegExp(hoje.iso) }).click();
+    await page.getByRole('row', { name: new RegExp(hoje.br) }).click();
     await page.getByRole('tab', { name: 'Movimentações' }).click();
     await page.getByRole('button', { name: 'Duplicar', exact: true }).click();
     await expect(duplicar).toBeVisible();
@@ -250,9 +258,9 @@ test.describe('E01-T02 Operações fiscais e enquadramentos', () => {
 
     page.once('dialog', (dialog) => dialog.accept('Inativação da primeira vigência no teste E2E.'));
     await page.getByRole('button', { name: 'Inativar', exact: true }).click();
-    await page.getByRole('row', { name: new RegExp(hoje.iso) }).click();
+    await page.getByRole('row', { name: new RegExp(hoje.br) }).click();
     await page.getByRole('tab', { name: 'Ficha e campos' }).click();
-    await expect(page.getByText('Situação Inativa').first()).toBeVisible();
+    await expect(valorDoCampo(page, 'Situação').filter({ hasText: 'Inativa' }).first()).toBeVisible();
     await page.getByRole('button', { name: 'Validar pré-condições' }).click();
     await expect(page.getByText(/provisória/).first()).toBeVisible();
     await page.getByRole('tab', { name: 'Exceções' }).click();
@@ -326,7 +334,7 @@ test.describe('E01-T02 Operações fiscais e enquadramentos', () => {
     }
     expect(naLinha, 'o foco deve alcançar a linha da grade só com Tab').toBe(true);
     await page.keyboard.press('Enter');
-    await expect(page.getByText(/^Código [1-9]\d*$/)).toBeVisible();
+    await expect(valorDoCampo(page, 'Código')).toHaveText(/^[1-9]\d*$/);
     await expect(page.getByRole('row', { name: new RegExp(cenario.rotuloOperacao) })).toHaveAttribute('data-state', 'selected');
     await expectControlesComNome(principal);
     await expectSemIdentificadoresTecnicos(page);
