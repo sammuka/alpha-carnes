@@ -519,6 +519,7 @@ export class RegrasTributariasService {
       recusarAcao(atual.situacao as SituacaoRegra, 'submeter');
       exigirVersao(atual.versao, dto.versao);
       exigirEnquadramentoAtivo(enquadramento);
+      exigirTratamentoIcmsCoerente(atual, 'aprovacao');
       const [linha] = await tx.update(regrasTributarias).set({
         situacao: 'SUBMETIDA',
         submetidoPorId: usuarioId,

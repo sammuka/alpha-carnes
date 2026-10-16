@@ -325,7 +325,7 @@ export function RegrasClient({ podeGerenciar, podeAprovar }: { podeGerenciar: bo
               </DropdownMenuItem>
             )}
             <DropdownMenuItem disabled={!detalhe} onSelect={() => setCompararAberto(true)}>Comparar</DropdownMenuItem>
-            {podeGerenciar && <DropdownMenuItem disabled={situacao !== 'Rascunho'} onSelect={() => decidir('submeter')}>Submeter</DropdownMenuItem>}
+            {podeGerenciar && <DropdownMenuItem disabled={situacao !== 'Rascunho' || detalhe?.icmsCst === '51'} onSelect={() => decidir('submeter')}>Submeter</DropdownMenuItem>}
             {podeAprovar && <DropdownMenuItem disabled={situacao !== 'Submetida'} onSelect={() => decidir('aprovar')}>Aprovar</DropdownMenuItem>}
             {podeAprovar && <DropdownMenuItem disabled={situacao !== 'Aprovada'} onSelect={() => decidir('aposentar')}>Aposentar</DropdownMenuItem>}
           </DropdownMenuContent>

@@ -817,16 +817,32 @@ describe('E01-T03 regras tributárias', () => {
       expect(naoTributada.res.status).toBe(201);
     });
 
-    it('diferimento grava rascunho e não aprova enquanto o tratamento está pendente', async () => {
-      const criada = await criarComo(adminA, { icmsCst: '51' });
+    it('diferimento não submete: 422, regra continua rascunho e o enquadramento continua inativável', async () => {
+      const base = await cenario();
+      const criada = await criarComo(adminA, {
+        enquadramentoId: base.enquadramentoId,
+        operacaoId: base.operacaoId,
+        cfopId: base.cfopId,
+        beneficioFiscalId: base.beneficioFiscalId,
+        classificacaoIbsCbsId: base.classificacaoIbsCbsId,
+        icmsCst: '51',
+      });
       expect(criada.res.status).toBe(201);
       const submetida = await submeterComo(adminA, criada.res.body.id, criada.res.body.versao);
-      expect(submetida.status).toBe(200);
-      const aprovada = await aprovarComo(adminB, criada.res.body.id, submetida.body.versao);
-      expect(aprovada.status).toBe(422);
-      expect(codigoDe(aprovada.body)).toBe('TRATAMENTO_ICMS_PENDENTE');
+      expect(submetida.status).toBe(422);
+      expect(codigoDe(submetida.body)).toBe('TRATAMENTO_ICMS_PENDENTE');
+      expect(JSON.stringify(submetida.body)).toContain('A regra permanece em rascunho');
       const detalhe = await detalharComo(adminA, criada.res.body.id);
-      expect(detalhe.body.situacao).toBe('Submetida');
+      expect(detalhe.body.situacao).toBe('Rascunho');
+      const liberado = await request(app.getHttpServer()).post(`/fiscal/enquadramentos/${base.enquadramentoId}/inativar`)
+        .set('Cookie', adminA).send({ versao: base.versaoEnquadramento, justificativa: MOTIVO });
+      expect(liberado.status).toBe(200);
+    });
+
+    it('CST 20 sem redução: mensagem humana sem redundância', async () => {
+      const { res } = await criarComo(adminA, { icmsCst: '20', pRedBc: '0,00' });
+      expect(res.status).toBe(422);
+      expect(JSON.stringify(res.body)).toContain('A redução de base de cálculo do ICMS deve ser maior que 0,00 para este tratamento.');
     });
 
     it('versão nova a partir de versão antiga usa o maior número do código + 1', async () => {

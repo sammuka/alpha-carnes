@@ -8,18 +8,18 @@ function zero(razao: string): boolean {
 /**
  * AD-34 (fail-closed, semântica legal do tratamento ICMS): Tributação integral sem redução; Redução de base
  * com redução maior que zero; Isenção e Não tributada sem redução e sem alíquota. Diferimento não tem
- * tratamento definido nas fontes: o rascunho existe, a aprovação e o cálculo recusam.
+ * tratamento definido nas fontes: o rascunho existe; submissão, aprovação e cálculo recusam.
  */
 export function exigirTratamentoIcmsCoerente(
   regra: { icmsCst: string; pRedBc: string; pIcms: string },
-  etapa: 'rascunho' | 'aprovacao' = 'rascunho',
+  etapa: 'rascunho' | 'aprovacao' /* aprovacao = submissão, aprovação e cálculo */ = 'rascunho',
 ): void {
   const { icmsCst, pRedBc, pIcms } = regra;
   if (icmsCst === '00' && !zero(pRedBc)) {
     regraViolada('TRATAMENTO_ICMS_INCOERENTE', 'Tributação integral não admite redução de base do ICMS. Informe redução 0,00.');
   }
   if (icmsCst === '20' && zero(pRedBc)) {
-    regraViolada('TRATAMENTO_ICMS_INCOERENTE', 'Redução de base exige redução de base do ICMS maior que 0.');
+    regraViolada('TRATAMENTO_ICMS_INCOERENTE', 'A redução de base de cálculo do ICMS deve ser maior que 0,00 para este tratamento.');
   }
   if ((icmsCst === '40' || icmsCst === '41') && (!zero(pRedBc) || !zero(pIcms))) {
     const rotulo = icmsCst === '40' ? 'Isenção' : 'Não tributada';
@@ -28,7 +28,7 @@ export function exigirTratamentoIcmsCoerente(
   if (etapa === 'aprovacao' && icmsCst === '51') {
     regraViolada(
       'TRATAMENTO_ICMS_PENDENTE',
-      'O tratamento do diferimento do ICMS está pendente de decisão. A regra com Diferimento fica em rascunho ou submetida e não pode ser aprovada nem usada no cálculo.',
+      'O tratamento do diferimento do ICMS está pendente de decisão. A regra permanece em rascunho: não pode ser submetida, aprovada nem usada no cálculo.',
     );
   }
 }

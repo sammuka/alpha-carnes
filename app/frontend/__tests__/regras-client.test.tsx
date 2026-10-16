@@ -1009,6 +1009,34 @@ describe('Portão A r1 do PR #166 — tratamento ICMS (AD-34)', () => {
     await user.selectOptions(screen.getByLabelText('Tratamento ICMS'), '51');
     const aviso = screen.getByText(/diferimento do ICMS está pendente/);
     expect(aviso.closest('p')).toHaveTextContent('Provisório');
+    expect(aviso.closest('p')).toHaveTextContent('não pode ser submetida nem aprovada');
+  });
+
+  it('rascunho com diferimento: Submeter desabilitado na ficha e no menu, com o aviso Provisório', async () => {
+    detalhe = { ...detalhe, situacao: 'Rascunho', icmsCst: '51' };
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('tab', { name: 'Movimentações' }));
+    expect(await screen.findByRole('button', { name: 'Submeter' })).toBeDisabled();
+    const aviso = screen.getByText(/não pode ser submetida nem aprovada/);
+    expect(aviso.closest('p')).toHaveTextContent('Provisório');
+    await user.click(screen.getByRole('button', { name: /Ações do processo/ }));
+    expect(await screen.findByRole('menuitem', { name: 'Submeter' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('a API recusa a submissão com 422 pendente: alerta humano no diálogo e a regra segue em rascunho', async () => {
+    detalhe = { ...detalhe, situacao: 'Rascunho', icmsCst: '20' };
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('tab', { name: 'Movimentações' }));
+    await user.click(await screen.findByRole('button', { name: 'Submeter' }));
+    const decisao = await screen.findByRole('dialog');
+    await user.type(within(decisao).getByLabelText(/Justificativa/), 'Enviando para aprovação');
+    const texto = 'O tratamento do diferimento do ICMS está pendente de decisão. A regra permanece em rascunho: não pode ser submetida, aprovada nem usada no cálculo.';
+    proximaMutacao = envelope(422, { message: texto, codigo: 'TRATAMENTO_ICMS_PENDENTE' });
+    await user.click(within(decisao).getByRole('button', { name: 'Submeter' }));
+    expect(await within(decisao).findByText(texto)).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('tratamento ICMS incoerente: a mensagem do servidor aparece no drawer e na aprovação', async () => {

@@ -296,7 +296,7 @@ export function RegraDrawer({ aberto, detalhe, bloqueado = null, onRecarregar, s
             {form.icmsCst === '51' && (
               <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <BadgeProvisorio />
-                O tratamento do diferimento do ICMS está pendente de decisão. A regra pode ficar em rascunho, mas não pode ser aprovada.
+                O tratamento do diferimento do ICMS está pendente de decisão. A regra fica em rascunho e não pode ser submetida nem aprovada até a decisão.
               </p>
             )}
             <CampoForm rotulo="Redução de base do ICMS (%)" erro={erroDe('pRedBc')}>

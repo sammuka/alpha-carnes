@@ -67,6 +67,7 @@ export function AbasDetalhe({
     return carregandoFicha ? <Skeleton className="h-40" aria-label="Carregando a ficha" /> : null;
   }
   const situacao = detalhe.situacao;
+  const diferida = detalhe.icmsCst === '51';
   return (
     <Tabs value={aba} onValueChange={(valor) => onAba(valor as IdAba)}>
       <TabsList>
@@ -129,12 +130,18 @@ export function AbasDetalhe({
             <div>
               <SecaoRotulo>Ações da regra</SecaoRotulo>
               <div className="flex flex-wrap gap-2">
-                {podeGerenciar && <Button type="button" variant="secondary" disabled={situacao !== 'Rascunho'} onClick={onSubmeter}>Submeter</Button>}
+                {podeGerenciar && <Button type="button" variant="secondary" disabled={situacao !== 'Rascunho' || diferida} onClick={onSubmeter}>Submeter</Button>}
                 {podeAprovar && <Button type="button" disabled={situacao !== 'Submetida'} onClick={onAprovar}>Aprovar</Button>}
                 {podeAprovar && <Button type="button" variant="secondary" disabled={situacao !== 'Aprovada'} onClick={onAposentar}>Aposentar</Button>}
                 {podeGerenciar && <Button type="button" variant="secondary" disabled={situacao !== 'Aprovada' && situacao !== 'Aposentada'} onClick={onAdicionarVersao}>Adicionar versão</Button>}
                 <Button type="button" variant="secondary" onClick={onComparar}>Comparar</Button>
               </div>
+              {diferida && situacao === 'Rascunho' && (
+                <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <BadgeProvisorio />
+                  O tratamento do diferimento do ICMS está pendente de decisão. A regra não pode ser submetida nem aprovada até a decisão.
+                </p>
+              )}
             </div>
           )}
         </AbaMovimentacoes>
