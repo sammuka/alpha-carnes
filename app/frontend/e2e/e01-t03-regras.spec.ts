@@ -10,6 +10,7 @@ import {
   DESC_CLASSIFICACAO,
   criarCenario,
   criarRegraApoio,
+  criarRegrasEmLote,
   entrarNoFrontend,
   liberarCodigosDaJornada,
   loginApi,
@@ -17,6 +18,7 @@ import {
   type CenarioE01T03,
   type UsuarioE2e,
 } from './helpers/e01-t03-seed';
+import { escolherCombo, paginacao, valorCampo } from './helpers/fiscal-ui';
 
 const TITULO = 'Editor de regras tributárias';
 const EMPRESAS = 'Empresas, estabelecimentos e regime';
@@ -35,7 +37,10 @@ function escapar(texto: string): RegExp {
 
 async function abrirComo(browser: Browser, baseURL: string, usuario: UsuarioE2e): Promise<Page> {
   const context = await browser.newContext({ baseURL });
-  await context.addInitScript(() => sessionStorage.removeItem('fiscal.regras.lista'));
+  await context.addInitScript(() => {
+    sessionStorage.removeItem('fiscal.regras.lista');
+    sessionStorage.removeItem('fiscal.regras.rotulo-cfop');
+  });
   await entrarNoFrontend(context, baseURL, usuario);
   return context.newPage();
 }
@@ -98,30 +103,31 @@ async function cadastrarCodigo(page: Page, drawer: Locator, indice: number, codi
   await expect(dialogo).toBeHidden();
 }
 
-async function abrirAcoes(page: Page): Promise<void> {
-  const aprovar = page.getByRole('button', { name: 'Aprovar', exact: true });
-  if (!(await aprovar.isVisible())) await page.getByText('Ações do processo', { exact: true }).click();
-  await expect(aprovar).toBeVisible();
+/** Ações da Movimentações: abre o diálogo da decisão, informa a justificativa e confirma. */
+async function decidir(page: Page, botao: string, dialogo: string, confirmar: string): Promise<Locator> {
+  await page.getByRole('tab', { name: 'Movimentações' }).click();
+  await page.getByRole('button', { name: botao, exact: true }).click();
+  const caixa = page.getByRole('dialog', { name: dialogo });
+  await caixa.getByLabel(/Justificativa/).fill('Decisão registrada pela jornada E2E.');
+  await caixa.getByRole('button', { name: confirmar, exact: true }).click();
+  return caixa;
 }
 
-async function escolherEnquadramento(drawer: Locator, cenario: CenarioE01T03): Promise<void> {
-  await expect(drawer.getByLabel('Enquadramento fiscal').locator(`option[value="${cenario.enquadramentoId}"]`)).toBeAttached();
-  await drawer.getByLabel('Enquadramento fiscal', { exact: true }).selectOption(cenario.enquadramentoId);
-  await expect(drawer.getByLabel('Operação', { exact: true })).toHaveValue(cenario.operacaoId, { timeout: 15_000 });
-  await expect(drawer.getByLabel('Operação fiscal (CFOP)', { exact: true })).toHaveValue(cenario.cfopId);
+async function escolherEnquadramento(page: Page, drawer: Locator, cenario: CenarioE01T03): Promise<void> {
+  await escolherCombo(page, drawer, 'reg-enq', 'Buscar enquadramento', cenario.codigoEnquadramento, new RegExp(`^${cenario.codigoEnquadramento} · `));
+  await expect(drawer.locator('#reg-op')).toContainText(cenario.rotuloOperacao, { timeout: 15_000 });
+  await expect(drawer.locator('#reg-cfop')).toContainText('5.102');
 }
 
-async function preencherTributos(drawer: Locator): Promise<void> {
-  await expect(drawer.getByLabel('Benefício fiscal').locator('option', { hasText: DESC_BENEFICIO })).toBeAttached();
-  await expect(drawer.getByLabel('Classificação IBS/CBS').locator('option', { hasText: DESC_CLASSIFICACAO })).toBeAttached();
+async function preencherTributos(page: Page, drawer: Locator): Promise<void> {
   await drawer.getByLabel('Tratamento ICMS').selectOption({ label: 'Redução de base' });
   await drawer.getByLabel('Redução de base do ICMS (%)').fill('41,67');
   await drawer.getByLabel('Alíquota (%)').fill('12,00');
-  await drawer.getByLabel('Benefício fiscal').selectOption({ label: DESC_BENEFICIO });
+  await escolherCombo(page, drawer, 'reg-ben', 'Buscar benefício fiscal', CODIGO_BENEFICIO, escapar(DESC_BENEFICIO));
   await drawer.getByLabel('Tratamento IPI').selectOption({ label: 'Saída não tributada' });
   await drawer.getByLabel('Tratamento PIS/COFINS').selectOption({ label: 'Alíquota zero' });
   await drawer.getByLabel('Tratamento IBS/CBS').selectOption({ label: 'Tributação integral' });
-  await drawer.getByLabel('Classificação IBS/CBS').selectOption({ label: DESC_CLASSIFICACAO });
+  await escolherCombo(page, drawer, 'reg-cla', 'Buscar classificação IBS/CBS', CODIGO_CLASSIFICACAO, escapar(DESC_CLASSIFICACAO));
   await drawer.getByLabel('Início de vigência').fill('2026-01-01');
   await drawer.getByLabel('Justificativa auditável').fill(JUSTIFICATIVA);
 }
@@ -131,16 +137,19 @@ function linhasDo(page: Page, rotulo: string): Locator {
 }
 
 async function filtrarCfop(page: Page): Promise<void> {
-  const filtro = page.getByLabel('Operação fiscal (CFOP)');
-  await expect(filtro.locator('option', { hasText: '5102' })).toBeAttached();
-  await filtro.selectOption({ label: '5102' });
+  await escolherCombo(page, page, 'filtro-cfop', 'Buscar CFOP', '5102', /5\.102/);
+}
+
+async function buscarPor(page: Page, texto: string): Promise<void> {
+  await page.getByLabel('Pesquisar descrição ou referência de negócio').fill(texto);
 }
 
 async function selecionarLinha(page: Page, rotulo: string): Promise<void> {
-  await filtrarCfop(page);
+  await buscarPor(page, rotulo);
   const linha = linhasDo(page, rotulo).first();
   await expect(linha).toBeVisible({ timeout: 15_000 });
   await linha.click();
+  await expect(valorCampo(page, 'Código')).toBeVisible({ timeout: 15_000 });
 }
 
 async function expectSemIdentificadoresTecnicos(page: Page): Promise<void> {
@@ -195,8 +204,10 @@ test.describe('E01-T03 Editor de regras tributárias', () => {
     await expect(drawer.getByRole('button', { name: 'Salvar rascunho' })).toBeVisible();
     await cadastrarCodigo(page, drawer, 0, CODIGO_BENEFICIO, DESC_BENEFICIO);
     await cadastrarCodigo(page, drawer, 1, CODIGO_CLASSIFICACAO, DESC_CLASSIFICACAO);
-    await escolherEnquadramento(drawer, cenario);
-    await preencherTributos(drawer);
+    await escolherEnquadramento(page, drawer, cenario);
+    await preencherTributos(page, drawer);
+    await drawer.getByRole('button', { name: 'Verificar dados' }).click();
+    await expect(drawer.getByText('Dados verificados.')).toBeVisible();
     const [criada] = await Promise.all([
       page.waitForResponse(
         (item) => item.request().method() === 'POST' && new URL(item.url()).pathname === '/api/erp/fiscal/regras',
@@ -208,31 +219,55 @@ test.describe('E01-T03 Editor de regras tributárias', () => {
     await expect(drawer).toBeHidden();
 
     await selecionarLinha(page, cenario.rotuloOperacao);
-    await expect(page.getByText(/^Código [1-9]\d*$/)).toBeVisible();
-    await expect(page.getByText('Situação Rascunho').first()).toBeVisible();
+    await expect(valorCampo(page, 'Código')).toHaveText(/^[1-9]\d*$/);
+    await expect(valorCampo(page, 'Situação')).toHaveText('Rascunho');
+    await expect(valorCampo(page, 'Início de vigência')).toContainText('01/01/2026');
+    await expect(valorCampo(page, 'Criado em')).toHaveText(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
     for (const selo of ['H-E01-10', 'H-E01-11', 'H-E01-12']) {
       await expect(page.getByText(selo).first()).toBeVisible();
     }
 
-    await abrirAcoes(page);
-    await expect(page.getByRole('button', { name: 'Submeter', exact: true })).toBeEnabled();
-    await page.getByRole('button', { name: 'Submeter', exact: true }).click();
-    await expect(page.getByText('Situação Submetida').first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Aprovar', exact: true })).toBeEnabled();
-    await page.getByRole('button', { name: 'Aprovar', exact: true }).click();
-    await expect(page.getByText(SEGREGACAO)).toBeVisible();
-    await expect(page.getByText('Situação Submetida').first()).toBeVisible();
+    // A ficha é recarregada após salvar: duas edições seguidas sem 409 falso.
+    for (const aliquota of ['13,00', '12,00']) {
+      await page.getByRole('button', { name: 'Editar versão' }).click();
+      const edicao = page.getByRole('dialog', { name: 'Editar versão' });
+      await edicao.getByLabel('Alíquota (%)').fill(aliquota);
+      await edicao.getByLabel('Justificativa auditável').fill(`Ajuste da alíquota para ${aliquota}.`);
+      const [salva] = await Promise.all([
+        page.waitForResponse((item) => item.request().method() === 'PATCH', { timeout: 30_000 }),
+        edicao.getByRole('button', { name: 'Salvar rascunho' }).click(),
+      ]);
+      expect(salva.status(), await salva.text()).toBe(200);
+      await expect(edicao).toBeHidden();
+      await expect(valorCampo(page, 'Alíquota (%)')).toHaveText(aliquota);
+    }
+
+    // Consultar histórico ativa a aba e mostra quando • quem.
+    await page.getByRole('button', { name: 'Consultar histórico' }).click();
+    await expect(page.getByRole('tab', { name: 'Histórico' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByText(/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2} • /).first()).toBeVisible();
+    await page.getByRole('tab', { name: 'Ficha e campos' }).click();
+
+    await decidir(page, 'Submeter', 'Submeter regra', 'Submeter');
+    await page.getByRole('tab', { name: 'Ficha e campos' }).click();
+    await expect(valorCampo(page, 'Situação')).toHaveText('Submetida');
+    const dialogoSegregacao = await decidir(page, 'Aprovar', 'Aprovar regra', 'Aprovar');
+    await expect(dialogoSegregacao.getByText(SEGREGACAO)).toBeVisible();
+    await dialogoSegregacao.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(dialogoSegregacao).toBeHidden();
+    await page.getByRole('tab', { name: 'Ficha e campos' }).click();
+    await expect(valorCampo(page, 'Situação')).toHaveText('Submetida');
 
     const pageB = await abrirComo(browser, baseURL!, usuarios.adminB);
     await irParaRegras(pageB);
     await selecionarLinha(pageB, cenario.rotuloOperacao);
-    await expect(pageB.getByText('Situação Submetida').first()).toBeVisible();
-    await abrirAcoes(pageB);
-    await expect(pageB.getByRole('button', { name: 'Aprovar', exact: true })).toBeEnabled();
-    await pageB.getByRole('button', { name: 'Aprovar', exact: true }).click();
-    await expect(pageB.getByText('Situação Aprovada').first()).toBeVisible();
+    await expect(valorCampo(pageB, 'Situação')).toHaveText('Submetida');
+    await decidir(pageB, 'Aprovar', 'Aprovar regra', 'Aprovar');
+    await pageB.getByRole('tab', { name: 'Ficha e campos' }).click();
+    await expect(valorCampo(pageB, 'Situação')).toHaveText('Aprovada');
     await expect(pageB.getByRole('button', { name: 'Editar versão' })).toHaveCount(0);
 
+    await pageB.getByRole('tab', { name: 'Movimentações' }).click();
     await expect(pageB.getByRole('button', { name: 'Adicionar versão', exact: true })).toBeEnabled();
     await pageB.getByRole('button', { name: 'Adicionar versão', exact: true }).click();
     const versao = pageB.getByRole('dialog', { name: 'Adicionar versão' });
@@ -250,25 +285,29 @@ test.describe('E01-T03 Editor de regras tributárias', () => {
     await expect(versao).toBeHidden();
     await expect(linhasDo(pageB, cenario.rotuloOperacao)).toHaveCount(2);
 
-    await pageB.getByText('Alíquota (%) 12,00').first().waitFor();
-    await abrirAcoes(pageB);
+    // A ficha abre a versão criada.
+    await expect(valorCampo(pageB, 'Versão')).toHaveText('2');
+    await expect(valorCampo(pageB, 'Alíquota (%)')).toHaveText('7,00');
+
+    await pageB.getByRole('tab', { name: 'Movimentações' }).click();
     await pageB.getByRole('button', { name: 'Comparar', exact: true }).click();
     const comparar = pageB.getByRole('dialog', { name: 'Comparar' });
-    const opcao = comparar.locator('option', { hasText: new RegExp(`^${cenario.codigoEnquadramento} · Redução de base$`) });
+    const opcao = comparar.locator('option', { hasText: / · versão 1 · Aprovada$/ });
     await expect(opcao).toBeAttached();
     await comparar.getByLabel('Outra versão').selectOption(await opcao.getAttribute('value') ?? '');
     await comparar.getByRole('button', { name: 'Comparar', exact: true }).click();
-    await expect(comparar.getByText('Alíquota (%): 12,00 → 7,00')).toBeVisible();
-    await comparar.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(comparar.getByText('Alíquota (%): 7,00 → 12,00')).toBeVisible();
+    await expect(comparar.getByText('Início de vigência: 01/01/2027 → 01/01/2026')).toBeVisible();
+    await comparar.getByRole('button', { name: 'Fechar' }).click();
     await expect(comparar).toBeHidden();
 
     await expect(linhasDo(pageB, cenario.rotuloOperacao)).toHaveCount(2);
     await pageB.getByRole('button', { name: '+ Novo registro' }).click();
     const divergente = pageB.getByRole('dialog', { name: 'Novo registro' });
-    await escolherEnquadramento(divergente, cenario);
-    await divergente.getByLabel('Operação fiscal (CFOP)', { exact: true }).selectOption(cenario.cfopDivergenteId);
-    await expect(divergente.getByLabel('Operação fiscal (CFOP)', { exact: true })).toHaveValue(cenario.cfopDivergenteId);
-    await preencherTributos(divergente);
+    await escolherEnquadramento(pageB, divergente, cenario);
+    await escolherCombo(pageB, divergente, 'reg-cfop', 'Buscar CFOP', cenario.cfopDivergenteCodigo, escapar('6.102'));
+    await expect(divergente.locator('#reg-cfop')).toContainText('6.102');
+    await preencherTributos(pageB, divergente);
     const [recusa] = await Promise.all([
       pageB.waitForResponse(
         (item) => item.request().method() === 'POST' && new URL(item.url()).pathname === '/api/erp/fiscal/regras',
@@ -279,14 +318,54 @@ test.describe('E01-T03 Editor de regras tributárias', () => {
     const statusRecusa = recusa.status();
     const corpoRecusa = await recusa.text();
     await expect(
-      pageB.getByText(DIVERGENTE),
+      divergente.getByText(DIVERGENTE),
       `POST ${recusa.url()} ${statusRecusa} ${corpoRecusa}`,
     ).toBeVisible();
-    pageB.once('dialog', (dialog) => dialog.accept());
     await divergente.getByRole('button', { name: 'Cancelar' }).click();
+    await pageB.getByRole('button', { name: 'Descartar e sair' }).click();
     await expect(divergente).toBeHidden();
     await expect(linhasDo(pageB, cenario.rotuloOperacao)).toHaveCount(2);
     await expectSemIdentificadoresTecnicos(pageB);
+  });
+
+  test('lista com mais de 20 linhas: paginação, ordenação e exportação no servidor', async ({ browser, request, baseURL }) => {
+    const usuarios = await prepararUsuarios(request);
+    const cookieA = await loginApi(request, usuarios.adminA);
+    const cookieB = await loginApi(request, usuarios.adminB);
+    const cenario: CenarioE01T03 = await criarCenario(request, cookieA, cookieB, 'Paginacao');
+    await criarRegrasEmLote(request, cookieA, cenario, 21);
+    const page = await abrirComo(browser, baseURL!, usuarios.adminA);
+
+    await irParaRegras(page);
+    await buscarPor(page, cenario.rotuloOperacao);
+    const navegacao = paginacao(page);
+    await expect(navegacao).toContainText('Exibindo 20 de 21 registros');
+    await expect(navegacao).toContainText('Página 1 de 2');
+    await expect(linhasDo(page, cenario.rotuloOperacao)).toHaveCount(20);
+    await expect(navegacao.getByRole('button', { name: 'Anterior' })).toBeDisabled();
+    await navegacao.getByRole('button', { name: 'Próxima' }).click();
+    await expect(navegacao).toContainText('Exibindo 1 de 21 registros');
+    await expect(navegacao).toContainText('Página 2 de 2');
+    await expect(linhasDo(page, cenario.rotuloOperacao)).toHaveCount(1);
+    await expect(navegacao.getByRole('button', { name: 'Próxima' })).toBeDisabled();
+
+    await page.getByRole('button', { name: 'Benefício fiscal', exact: true }).click();
+    await expect(navegacao).toContainText('Página 1 de 2');
+    await expect(page.getByRole('columnheader', { name: 'Benefício fiscal' })).toHaveAttribute('aria-sort', 'ascending');
+    await page.getByRole('button', { name: 'Benefício fiscal', exact: true }).click();
+    await expect(page.getByRole('columnheader', { name: 'Benefício fiscal' })).toHaveAttribute('aria-sort', 'descending');
+
+    const exportacao = page.waitForResponse(
+      (item) => new URL(item.url()).pathname === '/api/erp/fiscal/regras/exportacao',
+      { timeout: 30_000 },
+    );
+    await page.getByRole('button', { name: 'Exportar visão' }).click();
+    const resposta = await exportacao;
+    expect(resposta.ok()).toBe(true);
+    const consulta = new URL(resposta.url()).searchParams;
+    expect(consulta.get('search')).toBe(cenario.rotuloOperacao);
+    expect(consulta.get('sort')).toBe('cBenef');
+    expect(consulta.get('dir')).toBe('desc');
   });
 
   test('autorização: gestor não vê o item e o administrador mantém o grupo Fiscal', async ({ browser, request, baseURL }) => {
@@ -320,6 +399,7 @@ test.describe('E01-T03 Editor de regras tributárias', () => {
 
     await irParaRegras(page);
     await filtrarCfop(page);
+    await buscarPor(page, cenario.rotuloOperacao);
     await expect(linhasDo(page, cenario.rotuloOperacao)).toBeVisible();
     await expectControlesComNome(principal);
 
@@ -356,7 +436,7 @@ test.describe('E01-T03 Editor de regras tributárias', () => {
     }
     expect(naLinha, 'o foco deve alcançar a linha da grade só com Tab').toBe(true);
     await page.keyboard.press('Enter');
-    await expect(page.getByText(/^Código [1-9]\d*$/)).toBeVisible();
+    await expect(valorCampo(page, 'Código')).toHaveText(/^[1-9]\d*$/);
     await expectControlesComNome(principal);
     await expectSemIdentificadoresTecnicos(page);
   });

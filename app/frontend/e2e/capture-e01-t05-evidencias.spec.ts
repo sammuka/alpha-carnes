@@ -15,6 +15,7 @@ import {
   type UsuarioE2e,
   type UsuariosE01,
 } from './helpers/e01-t05-seed';
+import { escolherCombo, valorCampo } from './helpers/fiscal-ui';
 
 const TITULO = 'Painel de alterações e homologação de regras';
 const SEM_PERMISSAO = 'Você não tem permissão para visualizar o painel de alterações e homologação de regras.';
@@ -67,12 +68,12 @@ const ABAS_PROTOTIPO: Array<{ aba: string; arquivo: string; chave: string }> = [
 ];
 
 const ABAS_APP: Array<{ aba: string; arquivo: string; chave: string }> = [
-  { aba: 'Movimentações', arquivo: 'app-movimentacoes.png', chave: 'Preparação → Verificação → Autorização → Conclusão' },
+  { aba: 'Movimentações', arquivo: 'app-movimentacoes.png', chave: 'Etapas e evidências de negócio' },
   { aba: 'Regras e validações', arquivo: 'app-regras.png', chave: 'aprovador diferente do autor; cenários de regressão obrigatórios' },
   { aba: 'Exceções', arquivo: 'app-excecoes.png', chave: 'Atualização normativa em meio à operação' },
-  { aba: 'Histórico', arquivo: 'app-historico.png', chave: 'payloads sigilosos' },
-  { aba: 'Integrações', arquivo: 'app-integracoes.png', chave: 'Integração fiscal' },
-  { aba: 'Aceite e testes', arquivo: 'app-aceite.png', chave: 'não registra aceite contratual' },
+  { aba: 'Histórico', arquivo: 'app-historico.png', chave: 'Histórico e justificativas' },
+  { aba: 'Integrações', arquivo: 'app-integracoes.png', chave: 'Dependências e conexões do domínio' },
+  { aba: 'Aceite e testes', arquivo: 'app-aceite.png', chave: 'Matriz de homologação funcional e técnica' },
 ];
 
 const painel = (page: Page): Locator => page.getByRole('tabpanel');
@@ -105,20 +106,21 @@ async function abrirDrawer(page: Page): Promise<Locator> {
 }
 
 async function preencherESalvar(page: Page, drawer: Locator, cenario: CenarioE01T05, descricao: string): Promise<void> {
-  await drawer.getByRole('combobox', { name: 'Enquadramento fiscal' }).click();
-  await page.getByPlaceholder('Pesquisar enquadramento').fill(cenario.codigoEnquadramento);
-  const opcao = page.getByRole('option', { name: new RegExp(cenario.codigoEnquadramento) });
-  await expect(opcao.first()).toBeVisible({ timeout: 90_000 });
-  await opcao.first().click();
+  await escolherCombo(page, drawer, 'hom-regra', 'Buscar enquadramento', cenario.codigoEnquadramento, new RegExp(`^${cenario.codigoEnquadramento} · versão \\d+$`));
+  await expect(valorCampo(drawer, 'Início de vigência')).toHaveText('01/01/2026', { timeout: 15_000 });
   await drawer.getByLabel('Descrição').fill(descricao);
   await drawer.getByLabel('Justificativa auditável').fill(JUSTIFICATIVA);
   await drawer.getByRole('button', { name: 'Salvar rascunho' }).click();
   await expect(drawer).toBeHidden({ timeout: 30_000 });
+  // O aviso de sucesso não deve aparecer por cima da tela capturada.
+  await expect(page.getByText('Revisão aberta.')).toBeHidden({ timeout: 15_000 });
 }
 
-async function abrirAcoes(page: Page): Promise<void> {
-  const menu = page.getByRole('button', { name: 'Ações do processo ▾' });
-  if ((await menu.getAttribute('aria-expanded')) !== 'true') await menu.click();
+/** Abre o diálogo de uma ação da aba Movimentações; `justificativa` preenche o campo quando há. */
+async function abrirAcaoDaFicha(page: Page, botao: string): Promise<Locator> {
+  await page.getByRole('tab', { name: 'Movimentações', exact: true }).click();
+  await page.getByRole('button', { name: botao, exact: true }).click();
+  return page.getByRole('dialog', { name: botao });
 }
 
 async function abrirPrototipo(page: Page): Promise<void> {
@@ -184,49 +186,48 @@ test.describe('E01-T05 evidências app × protótipo', () => {
     const drawer = await abrirDrawer(page);
     await capturar(page, 'app-drawer.png', drawer.getByRole('button', { name: 'Salvar rascunho' }));
     await preencherESalvar(page, drawer, principal, DESCRICAO);
+    await page.getByLabel('Pesquisar descrição ou referência de negócio').fill(DESCRICAO);
     await capturar(page, 'app-lista.png', page.getByRole('row', { name: new RegExp(DESCRICAO) }).first());
-    await capturar(page, 'app-ficha.png', painel(page).getByText('Situação Em revisão').first());
+    await capturar(page, 'app-ficha.png', valorCampo(painel(page), 'Situação'));
     for (const item of ABAS_APP) {
       await abrirAbaApp(page, item.aba, item.chave);
       await capturar(page, item.arquivo, painel(page).getByText(item.chave).first());
     }
     await page.getByRole('tab', { name: 'Ficha e campos', exact: true }).click();
 
-    await abrirAcoes(page);
-    await page.getByRole('button', { name: 'Revisar diff' }).click();
-    const diff = page.getByRole('dialog', { name: 'Revisar diff' });
+    const diff = await abrirAcaoDaFicha(page, 'Revisar diff');
     await capturar(page, 'app-diff.png', diff.getByText(/Alíquota \(%\)/).first());
     await page.keyboard.press('Escape');
     await expect(diff).toBeHidden();
 
-    await abrirAcoes(page);
-    await page.getByRole('button', { name: 'Aprovar/rejeitar' }).click();
-    const decisao = page.getByRole('dialog', { name: 'Aprovar/rejeitar' });
+    const decisao = await abrirAcaoDaFicha(page, 'Aprovar/rejeitar');
+    await decisao.getByLabel('Justificativa auditável').fill(JUSTIFICATIVA);
     await decisao.getByRole('button', { name: 'Aprovar' }).click();
     await expect(decisao).toBeHidden({ timeout: 30_000 });
-    await expect(painel(page).getByText('Situação Aprovada').first()).toBeVisible();
+    await page.getByRole('tab', { name: 'Ficha e campos', exact: true }).click();
+    await expect(valorCampo(painel(page), 'Situação')).toContainText('Aprovada');
 
-    await abrirAcoes(page);
-    await page.getByRole('button', { name: 'Publicar e auditar' }).click();
-    const publicar = page.getByRole('dialog', { name: 'Publicar e auditar' });
+    const publicar = await abrirAcaoDaFicha(page, 'Publicar e auditar');
+    await publicar.getByLabel('Justificativa auditável').fill(JUSTIFICATIVA);
     await publicar.getByRole('button', { name: 'Publicar' }).click();
-    await capturar(page, 'app-cenario-ausente.png', page.getByRole('alert').filter({ hasText: AUSENTE }).first());
+    await capturar(page, 'app-cenario-ausente.png', publicar.getByRole('alert').filter({ hasText: AUSENTE }).first());
     await page.keyboard.press('Escape');
     await expect(publicar).toBeHidden();
 
+    await page.getByRole('tab', { name: 'Ficha e campos', exact: true }).click();
     await painel(page).getByRole('button', { name: 'cenários aprovados' }).click();
     const cenario = page.getByRole('dialog', { name: 'cenários aprovados' });
-    const memoria = cenario.getByRole('combobox', { name: 'Memória calculada' });
-    const opcaoMemoria = memoria.locator('option', { hasText: principal.simulacaoCodigo });
-    await expect(opcaoMemoria.first()).toBeAttached({ timeout: 60_000 });
-    await memoria.selectOption((await opcaoMemoria.first().getAttribute('value')) ?? '');
+    await escolherCombo(page, cenario, 'hom-memoria', 'Buscar memória calculada', principal.simulacaoCodigo, new RegExp(principal.simulacaoCodigo));
+    await cenario.getByLabel('Justificativa auditável').fill(JUSTIFICATIVA);
     await cenario.getByRole('button', { name: 'Vincular' }).click();
     await expect(cenario).toBeHidden({ timeout: 30_000 });
 
-    await abrirAcoes(page);
-    await page.getByRole('button', { name: 'Publicar e auditar' }).click();
-    await page.getByRole('dialog', { name: 'Publicar e auditar' }).getByRole('button', { name: 'Publicar' }).click();
-    await capturar(page, 'app-publicada.png', painel(page).getByText('Situação Publicada').first());
+    const publicarDeNovo = await abrirAcaoDaFicha(page, 'Publicar e auditar');
+    await publicarDeNovo.getByLabel('Justificativa auditável').fill(JUSTIFICATIVA);
+    await publicarDeNovo.getByRole('button', { name: 'Publicar' }).click();
+    await expect(publicarDeNovo).toBeHidden({ timeout: 30_000 });
+    await page.getByRole('tab', { name: 'Ficha e campos', exact: true }).click();
+    await capturar(page, 'app-publicada.png', valorCampo(painel(page), 'Situação').filter({ hasText: 'Publicada' }));
 
     await page.getByLabel('Pesquisar descrição ou referência de negócio').fill('zzz-sem-cadastro-e01-t05');
     await capturar(page, 'app-vazio.png', page.getByText(TEXTO_VAZIO));
@@ -248,10 +249,10 @@ test.describe('E01-T05 evidências app × protótipo', () => {
     await irParaPainel(autor);
     const drawerAutor = await abrirDrawer(autor);
     await preencherESalvar(autor, drawerAutor, doAutor, DESCRICAO_AUTOR);
-    await abrirAcoes(autor);
-    await autor.getByRole('button', { name: 'Aprovar/rejeitar' }).click();
-    await autor.getByRole('dialog', { name: 'Aprovar/rejeitar' }).getByRole('button', { name: 'Aprovar' }).click();
-    await capturar(autor, 'app-segregacao.png', autor.getByRole('alert').filter({ hasText: SEGREGACAO }).first());
+    const decisaoAutor = await abrirAcaoDaFicha(autor, 'Aprovar/rejeitar');
+    await decisaoAutor.getByLabel('Justificativa auditável').fill(JUSTIFICATIVA);
+    await decisaoAutor.getByRole('button', { name: 'Aprovar' }).click();
+    await capturar(autor, 'app-segregacao.png', decisaoAutor.getByRole('alert').filter({ hasText: SEGREGACAO }).first());
     await autor.close();
 
     const gestor = await abrirComo(browser, baseURL, usuarios.gestor);

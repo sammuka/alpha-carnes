@@ -8,12 +8,15 @@ import { test, expect, type Browser, type Locator, type Page, type Response } fr
 import {
   criarCenario,
   criarSimulacaoApoio,
+  criarSimulacoesEmLote,
   entrarNoFrontend,
   loginApi,
   prepararUsuarios,
   type CenarioE01T04,
   type UsuarioE2e,
 } from './helpers/e01-t04-seed';
+
+import { acaoDoProcesso, escolherCombo, paginacao, valorCampo } from './helpers/fiscal-ui';
 
 const TITULO = 'Simulador fiscal e memória de cálculo';
 const EMPRESAS = 'Empresas, estabelecimentos e regime';
@@ -80,15 +83,10 @@ async function preencherCompetencia(page: Page, campo: Locator, anoMes: string):
 }
 
 async function escolherEnquadramento(page: Page, drawer: Locator, cenario: CenarioE01T04): Promise<void> {
-  const combo = drawer.getByLabel('Enquadramento fiscal', { exact: true });
-  await expect(combo.locator(`option[value="${cenario.enquadramentoId}"]`)).toBeAttached({ timeout: 30_000 });
-  const detalhe = page.waitForResponse(
-    (item) => item.request().method() === 'GET' && item.url().includes(`/fiscal/enquadramentos/${cenario.enquadramentoId}`),
-    { timeout: 30_000 },
-  );
-  await combo.selectOption(cenario.enquadramentoId);
-  expect((await detalhe).ok()).toBe(true);
-  await expect(drawer.getByLabel('Operação', { exact: true })).toHaveValue(cenario.operacaoId, { timeout: 15_000 });
+  await escolherCombo(page, drawer, 'sim-enq', 'Buscar enquadramento', cenario.codigoEnquadramento, new RegExp(`^${cenario.codigoEnquadramento} · `));
+  await expect(drawer.locator('#sim-op')).toContainText(cenario.rotuloOperacao, { timeout: 15_000 });
+  await expect(drawer.locator('#sim-cli')).toContainText(cenario.clienteNome);
+  await expect(drawer.locator('#sim-ncm')).toContainText('0201.30.00');
 }
 
 async function preencherSimulacao(page: Page, drawer: Locator, cenario: CenarioE01T04, competencia: string): Promise<void> {
@@ -180,11 +178,12 @@ test.describe('E01-T04 Simulador fiscal e memória de cálculo', () => {
 
     await linhas.click();
     const ficha = page.getByRole('tabpanel');
-    await expect(ficha.getByText('Situação Calculada').first()).toBeVisible();
-    await expect(ficha.getByText('Situação Rascunho')).toHaveCount(0);
-    await expect(ficha.getByText('Valor líquido (calculado) 1.000,00').first()).toBeVisible();
-    await expect(ficha.getByText('Base tributável (calculada) 583,30').first()).toBeVisible();
-    await expect(ficha.getByRole('status')).toHaveText('Base tributável difere de valor bruto');
+    await expect(valorCampo(ficha, 'Situação')).toHaveText('Calculada');
+    await expect(valorCampo(ficha, 'Valor líquido (calculado)')).toHaveText('R$ 1.000,00');
+    await expect(valorCampo(ficha, 'Base tributável (calculada)')).toHaveText('R$ 583,30');
+    await expect(valorCampo(ficha, 'Criado em')).toHaveText(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
+    await expect(valorCampo(ficha, 'Classificação fiscal (NCM)')).toContainText('0201.30.00');
+    await expect(ficha.getByRole('status').first()).toHaveText('Base tributável difere de valor bruto');
     for (const selo of ['H-E01-10', 'H-E01-11', 'H-E01-12']) {
       await expect(page.getByText(selo).first()).toBeVisible();
     }
@@ -202,8 +201,11 @@ test.describe('E01-T04 Simulador fiscal e memória de cálculo', () => {
     ]);
     expect(fs.readFileSync(await download.path(), 'utf8')).toContain('Campo;Valor');
 
-    await page.getByText('Ações do processo', { exact: true }).click();
-    await page.getByRole('button', { name: 'Nova versão', exact: true }).click();
+    await ficha.getByRole('button', { name: 'Consultar histórico' }).click();
+    await expect(page.getByRole('tab', { name: 'Histórico' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByText(/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2} • /).first()).toBeVisible();
+
+    await acaoDoProcesso(page, 'Nova versão');
     const versao = page.getByRole('dialog', { name: 'Nova versão' });
     await versao.getByLabel('Desconto da versão', { exact: true }).fill('100,00');
     await versao.getByLabel('Motivo da alteração', { exact: true }).fill('Versão com desconto de cem reais.');
@@ -217,16 +219,21 @@ test.describe('E01-T04 Simulador fiscal e memória de cálculo', () => {
     await exigirPost(nova, '/api/erp/fiscal/simulacoes/versoes', versao);
     await expect(versao).toBeHidden();
     await expect(linhas).toHaveCount(2);
+    // A ficha abre a versão criada.
+    await expect(valorCampo(page, 'Versão')).toHaveText('2');
+    await expect(valorCampo(page, 'Valor líquido (calculado)')).toHaveText('R$ 900,00');
 
     await linhas.filter({ hasNotText: '900,00' }).click();
+    await expect(valorCampo(page, 'Versão')).toHaveText('1');
     await page.getByRole('button', { name: 'Comparar versões', exact: true }).click();
     const comparar = page.getByRole('dialog', { name: 'Comparar versões' });
     const outra = comparar.getByLabel('Outra versão', { exact: true });
     await expect(outra.locator('option')).toHaveCount(2);
+    await expect(outra.locator('option').nth(1)).toHaveText(/ · versão 2 · Calculada · Outubro de 2026$/);
     await outra.selectOption((await outra.locator('option').nth(1).getAttribute('value')) ?? '');
     await comparar.getByRole('button', { name: 'Comparar versões', exact: true }).click();
     await expect(comparar.getByText('ICMS: 70,00 → 63,00')).toBeVisible();
-    await comparar.getByRole('button', { name: 'Cancelar' }).click();
+    await comparar.getByRole('button', { name: 'Fechar' }).click();
     await expect(comparar).toBeHidden();
     await expect(linhas).toHaveCount(2);
 
@@ -242,11 +249,48 @@ test.describe('E01-T04 Simulador fiscal e memória de cálculo', () => {
     ]);
     expect(recusa.status(), await recusa.text()).toBe(422);
     await expect(semRegra.locator('p[role=alert]')).toContainText(FALTA);
-    page.once('dialog', (dialog) => { void dialog.accept(); });
     await semRegra.getByRole('button', { name: 'Cancelar' }).click();
+    await page.getByRole('button', { name: 'Descartar e sair' }).click();
     await expect(semRegra).toBeHidden();
     await expect(linhas).toHaveCount(2);
     await expectSemIdentificadoresTecnicos(page);
+  });
+
+  test('lista com mais de 20 linhas: paginação, ordenação e exportação no servidor', async ({ browser, request, baseURL }) => {
+    const usuarios = await prepararUsuarios(request);
+    const cookieA = await loginApi(request, usuarios.adminA);
+    const cookieB = await loginApi(request, usuarios.adminB);
+    const cenario = await criarCenario(request, cookieA, cookieB, 'Paginacao');
+    await criarSimulacoesEmLote(request, cookieA, cenario, 21);
+    const page = await abrirComo(browser, baseURL!, usuarios.adminA);
+
+    await page.goto('/fiscal/simulador');
+    await expect(page.getByRole('heading', { name: TITULO, level: 1 })).toBeVisible({ timeout: 30_000 });
+    await filtrarCliente(page, cenario.clienteNome);
+    const navegacao = paginacao(page);
+    await expect(navegacao).toContainText('Exibindo 20 de 21 registros');
+    await expect(navegacao).toContainText('Página 1 de 2');
+    await expect(linhasDo(page, cenario.clienteNome)).toHaveCount(20);
+    await navegacao.getByRole('button', { name: 'Próxima' }).click();
+    await expect(navegacao).toContainText('Exibindo 1 de 21 registros');
+    await expect(navegacao).toContainText('Página 2 de 2');
+    await expect(linhasDo(page, cenario.clienteNome)).toHaveCount(1);
+    await expect(navegacao.getByRole('button', { name: 'Próxima' })).toBeDisabled();
+
+    await page.getByRole('button', { name: 'Valor', exact: true }).click();
+    await expect(navegacao).toContainText('Página 1 de 2');
+    await expect(page.getByRole('columnheader', { name: 'Valor', exact: true })).toHaveAttribute('aria-sort', 'ascending');
+
+    const exportacao = page.waitForResponse(
+      (item) => new URL(item.url()).pathname === '/api/erp/fiscal/simulacoes/exportacao',
+      { timeout: 30_000 },
+    );
+    await page.getByRole('button', { name: 'Exportar visão' }).click();
+    const resposta = await exportacao;
+    expect(resposta.ok()).toBe(true);
+    const consulta = new URL(resposta.url()).searchParams;
+    expect(consulta.get('search')).toBe(cenario.clienteNome);
+    expect(consulta.get('sort')).toBe('valor');
   });
 
   test('autorização: gestor não vê o item e o administrador mantém o grupo Fiscal', async ({ browser, request, baseURL }) => {
@@ -304,10 +348,9 @@ test.describe('E01-T04 Simulador fiscal e memória de cálculo', () => {
     }
     expect(naLinha, 'o foco deve alcançar a linha da grade só com Tab').toBe(true);
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('tabpanel').getByText('Situação Calculada').first()).toBeVisible();
+    await expect(valorCampo(page, 'Situação')).toHaveText('Calculada');
     await expectControlesComNome(principal);
 
-    await page.getByText('Ações do processo', { exact: true }).click();
     const novaVersao = page.getByRole('button', { name: 'Nova versão', exact: true });
     await novaVersao.click();
     const dialogo = page.getByRole('dialog', { name: 'Nova versão' });

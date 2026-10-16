@@ -16,6 +16,7 @@ import {
   type UsuarioE2e,
   type UsuariosE01,
 } from './helpers/e01-t04-seed';
+import { escolherCombo, valorCampo } from './helpers/fiscal-ui';
 import { BACKEND_URL } from './helpers/onda6-seed';
 
 const TITULO = 'Simulador fiscal e memória de cálculo';
@@ -70,9 +71,9 @@ const ABAS_APP: Array<{ aba: string; arquivo: string; chave: string }> = [
   { aba: 'Movimentações', arquivo: 'app-movimentacoes.png', chave: 'Nenhuma simulação gera lançamento fiscal nem documento.' },
   { aba: 'Regras e validações', arquivo: 'app-regras.png', chave: 'nenhum valor gerado vira lançamento fiscal sem documento; Decimal exato' },
   { aba: 'Exceções', arquivo: 'app-excecoes.png', chave: 'Falta referência legal' },
-  { aba: 'Histórico', arquivo: 'app-historico.png', chave: 'payloads sigilosos' },
+  { aba: 'Histórico', arquivo: 'app-historico.png', chave: 'Histórico e justificativas' },
   { aba: 'Integrações', arquivo: 'app-integracoes.png', chave: 'Integração fiscal' },
-  { aba: 'Aceite e testes', arquivo: 'app-aceite.png', chave: 'não registra aceite contratual' },
+  { aba: 'Aceite e testes', arquivo: 'app-aceite.png', chave: 'Matriz de homologação funcional e técnica' },
 ];
 
 const painel = (page: Page): Locator => page.getByRole('tabpanel');
@@ -210,8 +211,8 @@ test.describe('E01-T04 evidências app × protótipo', () => {
     await capturar(page, 'app-lista.png', linhas.first());
 
     await linhas.filter({ hasNotText: '900,00' }).click();
-    await capturar(page, 'app-ficha.png', painel(page).getByText('Situação Calculada').first());
-    await capturar(page, 'app-base-difere.png', painel(page).getByRole('status'));
+    await capturar(page, 'app-ficha.png', valorCampo(painel(page), 'Situação'));
+    await capturar(page, 'app-base-difere.png', painel(page).getByRole('status').first());
 
     await painel(page).getByRole('button', { name: 'Explicar tributos' }).click();
     await capturar(page, 'app-explicacao.png', painel(page).getByText(FRASE_IPI).first());
@@ -221,7 +222,7 @@ test.describe('E01-T04 evidências app × protótipo', () => {
       await capturar(page, item.arquivo, painel(page).getByText(item.chave).first());
     }
 
-    await page.getByText('Ações do processo', { exact: true }).click();
+    await page.getByRole('tab', { name: 'Ficha e campos', exact: true }).click();
     await page.getByRole('button', { name: 'Comparar versões', exact: true }).click();
     const comparar = page.getByRole('dialog', { name: 'Comparar versões' });
     const outra = comparar.getByLabel('Outra versão', { exact: true });
@@ -229,15 +230,14 @@ test.describe('E01-T04 evidências app × protótipo', () => {
     await outra.selectOption((await outra.locator('option').nth(1).getAttribute('value')) ?? '');
     await comparar.getByRole('button', { name: 'Comparar versões', exact: true }).click();
     await capturar(page, 'app-comparar.png', comparar.getByText('ICMS: 70,00 → 63,00'));
-    await comparar.getByRole('button', { name: 'Cancelar' }).click();
+    await comparar.getByRole('button', { name: 'Fechar' }).click();
     await expect(comparar).toBeHidden();
 
     await page.getByRole('button', { name: '+ Novo registro' }).click();
     const drawer = page.getByRole('dialog', { name: 'Novo registro' });
     await capturar(page, 'app-drawer.png', drawer.getByRole('button', { name: 'Salvar rascunho' }));
-    const combo = drawer.getByLabel('Enquadramento fiscal', { exact: true });
-    await expect(combo.locator(`option[value="${cenario.enquadramentoId}"]`)).toBeAttached();
-    await combo.selectOption(cenario.enquadramentoId);
+    await escolherCombo(page, drawer, 'sim-enq', 'Buscar enquadramento', cenario.codigoEnquadramento, new RegExp(`^${cenario.codigoEnquadramento} · `));
+    await expect(drawer.locator('#sim-op')).toContainText(cenario.rotuloOperacao, { timeout: 15_000 });
     await drawer.getByLabel('Quantidade', { exact: true }).fill('10,000');
     await drawer.getByLabel('Peso informado na nota (kg)', { exact: true }).fill('982,000');
     await drawer.getByLabel('Valor', { exact: true }).fill('1.000,00');
@@ -246,8 +246,8 @@ test.describe('E01-T04 evidências app × protótipo', () => {
     await drawer.getByLabel('Motivo da alteração', { exact: true }).fill(MOTIVO);
     await drawer.getByRole('button', { name: 'Salvar rascunho' }).click();
     await capturar(page, 'app-falta-referencia.png', drawer.locator('p[role=alert]').filter({ hasText: FALTA }));
-    page.once('dialog', (dialog) => { void dialog.accept(); });
     await drawer.getByRole('button', { name: 'Cancelar' }).click();
+    await page.getByRole('button', { name: 'Descartar e sair' }).click();
     await expect(drawer).toBeHidden();
 
     await filtrarCliente(page, 'zzz-sem-cadastro-e01-t04');

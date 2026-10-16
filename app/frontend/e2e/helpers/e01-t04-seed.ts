@@ -148,6 +148,16 @@ export async function criarCenario(
   };
 }
 
+/** Mais simulações do mesmo cenário, para passar de 20 linhas na lista. */
+export async function criarSimulacoesEmLote(
+  request: APIRequestContext,
+  cookie: string,
+  cenario: CenarioE01T04,
+  quantidade: number,
+): Promise<void> {
+  for (let i = 0; i < quantidade; i += 1) await criarSimulacaoApoio(request, cookie, cenario);
+}
+
 /** Linha calculada para o teclado, sem passar pelo drawer. */
 export async function criarSimulacaoApoio(
   request: APIRequestContext,

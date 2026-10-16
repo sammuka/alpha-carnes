@@ -17,6 +17,8 @@ import {
   type UsuarioE2e,
   type UsuariosE01,
 } from './helpers/e01-t03-seed';
+import { bancoDeTeste } from './helpers/e01-t02-seed';
+import { escolherCombo, valorCampo } from './helpers/fiscal-ui';
 import { BACKEND_URL } from './helpers/onda6-seed';
 
 const TITULO = 'Editor de regras tributárias';
@@ -72,12 +74,12 @@ const ABAS_PROTOTIPO: Array<{ aba: string; arquivo: string; chave: string }> = [
 ];
 
 const ABAS_APP: Array<{ aba: string; arquivo: string; chave: string }> = [
-  { aba: 'Movimentações', arquivo: 'app-movimentacoes.png', chave: 'Preparação → Verificação → Autorização → Conclusão' },
+  { aba: 'Movimentações', arquivo: 'app-movimentacoes.png', chave: 'Etapas e evidências de negócio' },
   { aba: 'Regras e validações', arquivo: 'app-regras.png', chave: 'motor de regras não permite edição retroativa em nota emitida; aprovação segregada' },
   { aba: 'Exceções', arquivo: 'app-excecoes.png', chave: 'Versão NT inválida' },
   { aba: 'Histórico', arquivo: 'app-historico.png', chave: 'Rascunho criado' },
-  { aba: 'Integrações', arquivo: 'app-integracoes.png', chave: 'Abrir simulador' },
-  { aba: 'Aceite e testes', arquivo: 'app-aceite.png', chave: 'Checkbox não é aceite. Os critérios abaixo são somente leitura.' },
+  { aba: 'Integrações', arquivo: 'app-integracoes.png', chave: 'Dependências e conexões do domínio' },
+  { aba: 'Aceite e testes', arquivo: 'app-aceite.png', chave: 'Matriz de homologação funcional e técnica' },
 ];
 
 interface RegraMinima {
@@ -170,13 +172,18 @@ async function submeter(regra: RegraMinima): Promise<RegraMinima> {
 
 async function capturar(page: Page, arquivo: string, chave: Locator): Promise<void> {
   await expect(chave, `elemento-chave ausente antes de ${arquivo}`).toBeVisible({ timeout: 30_000 });
+  // O overlay do Next em desenvolvimento não faz parte da tela.
+  await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
   await chave.scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(OUT_DIR, arquivo), fullPage: true });
 }
 
 async function abrirComo(browser: Browser, baseURL: string, usuario: UsuarioE2e): Promise<Page> {
   const context = await browser.newContext({ baseURL, viewport: { width: 1280, height: 800 } });
-  await context.addInitScript(() => sessionStorage.removeItem('fiscal.regras.lista'));
+  await context.addInitScript(() => {
+    sessionStorage.removeItem('fiscal.regras.lista');
+    sessionStorage.removeItem('fiscal.regras.rotulo-cfop');
+  });
   await entrarNoFrontend(context, baseURL, usuario);
   return context.newPage();
 }
@@ -187,9 +194,8 @@ async function irParaRegras(page: Page): Promise<void> {
 }
 
 async function filtrarCfop(page: Page, codigo: string): Promise<void> {
-  const filtro = page.getByLabel('Operação fiscal (CFOP)', { exact: true });
-  await expect(filtro.locator('option', { hasText: codigo })).toBeAttached();
-  await filtro.selectOption({ label: codigo });
+  const mascarado = `${codigo[0]}.${codigo.slice(1)}`;
+  await escolherCombo(page, page, 'filtro-cfop', 'Buscar CFOP', codigo, new RegExp(mascarado.replace('.', '\\.')));
 }
 
 function linhas(page: Page, rotulo: string): Locator {
@@ -218,26 +224,33 @@ async function abaPrototipo(page: Page, aba: string, chave: string): Promise<Loc
   return alvo;
 }
 
-async function abrirAcoes(page: Page): Promise<void> {
-  const aprovar = page.getByRole('button', { name: 'Aprovar', exact: true });
-  if (!(await aprovar.isVisible())) await page.getByText('Ações do processo', { exact: true }).click();
-  await expect(aprovar).toBeVisible();
+/** Abre a decisão na aba Movimentações e confirma com uma justificativa; devolve o diálogo. */
+async function decidirNaFicha(page: Page, botao: string, dialogo: string): Promise<Locator> {
+  await page.getByRole('tab', { name: 'Movimentações', exact: true }).click();
+  await expect(page.getByRole('button', { name: botao, exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: botao, exact: true }).click();
+  const caixa = page.getByRole('dialog', { name: dialogo });
+  await caixa.getByLabel(/Justificativa/).fill(MOTIVO);
+  await caixa.getByRole('button', { name: botao, exact: true }).click();
+  return caixa;
 }
 
-async function selecionarTexto(page: Page, rotulo: string, texto: string): Promise<void> {
+/** Seleciona a linha da operação cuja ficha atende a condição (a mesma operação pode ter várias versões). */
+async function selecionarTexto(page: Page, rotulo: string, confere: () => Promise<void>): Promise<void> {
+  await page.getByLabel('Pesquisar descrição ou referência de negócio').fill(rotulo);
   const grupo = linhas(page, rotulo);
   await expect(grupo.first()).toBeVisible({ timeout: 15_000 });
   const total = await grupo.count();
   for (let i = 0; i < total; i += 1) {
     await grupo.nth(i).click();
     try {
-      await expect(page.getByText(texto).first()).toBeVisible({ timeout: 4_000 });
+      await confere();
       return;
     } catch {
       // a ficha ainda é de outra versão da mesma operação
     }
   }
-  throw new Error(`não achei "${texto}" na operação ${rotulo}`);
+  throw new Error(`não achei a versão esperada na operação ${rotulo}`);
 }
 
 function removerBeneficio(id: string): void {
@@ -246,7 +259,7 @@ function removerBeneficio(id: string): void {
   }
   execFileSync('docker', [
     'exec', 'alphacarnes-postgres-1',
-    'psql', '-U', 'alphacarnes', '-d', 'alphacarnes_e01_t03',
+    'psql', '-U', 'alphacarnes', '-d', bancoDeTeste(),
     '-v', 'ON_ERROR_STOP=1', '-c',
     `UPDATE beneficios_fiscais SET deleted_at = now() WHERE id = '${id}' AND deleted_at IS NULL`,
   ], { stdio: 'pipe' });
@@ -326,24 +339,21 @@ test.describe('E01-T03 evidências app × protótipo', () => {
     await irParaRegras(page);
     await filtrarCfop(page, '5102');
     await capturar(page, 'app-lista.png', linhas(page, principal.rotuloOperacao).first());
-    await selecionarTexto(page, principal.rotuloOperacao, 'Alíquota (%) 12,00');
+    await selecionarTexto(page, principal.rotuloOperacao, () => expect(valorCampo(page, 'Alíquota (%)')).toHaveText('12,00', { timeout: 4_000 }));
     await capturar(page, 'app-ficha.png', page.getByText('Dados principais'));
     for (const item of ABAS_APP) {
       await capturar(page, item.arquivo, await abrirAba(page, item.aba, item.chave));
     }
 
-    await page.getByRole('tab', { name: 'Ficha e campos', exact: true }).click();
-    await abrirAcoes(page);
+    await page.getByRole('tab', { name: 'Movimentações', exact: true }).click();
     await page.getByRole('button', { name: 'Comparar', exact: true }).click();
     const comparar = page.getByRole('dialog', { name: 'Comparar' });
-    const opcao = comparar.locator('option', {
-      hasText: new RegExp(`^${principal.codigoEnquadramento} · Redução de base$`),
-    });
+    const opcao = comparar.locator('option', { hasText: / · versão 2 · Rascunho$/ });
     await expect(opcao).toBeAttached();
     await comparar.getByLabel('Outra versão').selectOption(await opcao.getAttribute('value') ?? '');
     await comparar.getByRole('button', { name: 'Comparar', exact: true }).click();
     await capturar(page, 'app-comparar.png', comparar.getByText(COMPARACAO));
-    await comparar.getByRole('button', { name: 'Cancelar' }).click();
+    await comparar.getByRole('button', { name: 'Fechar' }).click();
     await expect(comparar).toBeHidden();
 
     await page.getByRole('button', { name: '+ Novo registro' }).click();
@@ -359,11 +369,10 @@ test.describe('E01-T03 evidências app × protótipo', () => {
 
     await irParaRegras(page);
     await filtrarCfop(page, '5102');
-    await selecionarTexto(page, segregada.rotuloOperacao, 'Situação Submetida');
-    await abrirAcoes(page);
-    await expect(page.getByRole('button', { name: 'Aprovar', exact: true })).toBeEnabled();
-    await page.getByRole('button', { name: 'Aprovar', exact: true }).click();
-    await capturar(page, 'app-segregacao.png', page.getByText(SEGREGACAO));
+    await selecionarTexto(page, segregada.rotuloOperacao, () => expect(valorCampo(page, 'Situação')).toHaveText('Submetida', { timeout: 4_000 }));
+    const dialogoSegregacao = await decidirNaFicha(page, 'Aprovar', 'Aprovar regra');
+    await capturar(page, 'app-segregacao.png', dialogoSegregacao.getByText(SEGREGACAO));
+    await dialogoSegregacao.getByRole('button', { name: 'Cancelar' }).click();
 
     await submeter(await criarRascunho(
       principal,
@@ -374,23 +383,22 @@ test.describe('E01-T03 evidências app × protótipo', () => {
     const pageB = await abrirComo(browser, baseURL, usuarios.adminB);
     await irParaRegras(pageB);
     await filtrarCfop(pageB, '5102');
-    await selecionarTexto(pageB, principal.rotuloOperacao, 'Início de vigência 2026-06-01');
-    await abrirAcoes(pageB);
-    await expect(pageB.getByRole('button', { name: 'Aprovar', exact: true })).toBeEnabled();
-    await pageB.getByRole('button', { name: 'Aprovar', exact: true }).click();
-    await capturar(pageB, 'app-vigencia-ambigua.png', pageB.getByText(VIGENCIA));
+    await selecionarTexto(pageB, principal.rotuloOperacao, () => expect(valorCampo(pageB, 'Início de vigência')).toContainText('01/06/2026', { timeout: 4_000 }));
+    const dialogoVigencia = await decidirNaFicha(pageB, 'Aprovar', 'Aprovar regra');
+    await capturar(pageB, 'app-vigencia-ambigua.png', dialogoVigencia.getByText(VIGENCIA));
 
     await irParaRegras(page);
     await filtrarCfop(page, '5102');
-    await selecionarTexto(page, beneficio.rotuloOperacao, 'Situação Rascunho');
+    await selecionarTexto(page, beneficio.rotuloOperacao, () => expect(valorCampo(page, 'Situação')).toHaveText('Rascunho', { timeout: 4_000 }));
+    await page.getByRole('tab', { name: 'Ficha e campos', exact: true }).click();
     await page.getByRole('button', { name: 'Editar versão' }).click();
     const edicao = page.getByRole('dialog', { name: 'Editar versão' });
     await edicao.getByLabel('Justificativa auditável').fill('Evidência de benefício inativo.');
     removerBeneficio(beneficioId);
     await edicao.getByRole('button', { name: 'Salvar rascunho' }).click();
     await capturar(page, 'app-beneficio-nao-elegivel.png', edicao.getByText(BENEFICIO));
-    page.once('dialog', (dialog) => dialog.accept());
     await edicao.getByRole('button', { name: 'Cancelar' }).click();
+    await page.getByRole('button', { name: 'Descartar e sair' }).click();
     await expect(edicao).toBeHidden();
 
     await irParaRegras(page);

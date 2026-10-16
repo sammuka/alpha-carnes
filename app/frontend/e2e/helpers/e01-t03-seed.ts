@@ -7,6 +7,7 @@
 import { execFileSync } from 'node:child_process';
 import type { APIRequestContext } from '@playwright/test';
 import {
+  bancoDeTeste,
   criarBase,
   entrarNoFrontend,
   loginApi,
@@ -26,7 +27,6 @@ export {
 };
 
 const MOTIVO = 'Seed E2E E01-T03';
-const BANCO = 'alphacarnes_e01_t03';
 
 export const CODIGO_BENEFICIO = 'SP020450';
 export const DESC_BENEFICIO = 'Redução de base — São Paulo (SP020450)';
@@ -159,6 +159,16 @@ export async function criarRegraApoio(
   });
 }
 
+/** Mais rascunhos da mesma chave do cenário, para passar de 20 linhas na lista. */
+export async function criarRegrasEmLote(
+  request: APIRequestContext,
+  cookie: string,
+  cenario: CenarioE01T03,
+  quantidade: number,
+): Promise<void> {
+  for (let i = 0; i < quantidade; i += 1) await criarRegraApoio(request, cookie, cenario);
+}
+
 /** Libera os códigos da jornada para o diálogo criar de novo. Não insere linha. */
 export function liberarCodigosDaJornada(): void {
   const sql = [
@@ -167,7 +177,7 @@ export function liberarCodigosDaJornada(): void {
   ].join(' ');
   execFileSync('docker', [
     'exec', 'alphacarnes-postgres-1',
-    'psql', '-U', 'alphacarnes', '-d', BANCO,
+    'psql', '-U', 'alphacarnes', '-d', bancoDeTeste(),
     '-v', 'ON_ERROR_STOP=1', '-c', sql,
   ], { stdio: 'pipe' });
 }

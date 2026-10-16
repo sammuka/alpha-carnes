@@ -68,3 +68,27 @@ export async function criarCenarioHomologacao(
   });
   return { ...cenario, simulacaoId: simulacao.id, simulacaoCodigo: simulacao.codigo };
 }
+
+/**
+ * Várias homologações da mesma versão de regra: abre, rejeita e abre de novo (a rejeitada libera a regra),
+ * para passar de 20 linhas na lista. A última fica em revisão.
+ */
+export async function criarHomologacoesEmLote(
+  request: APIRequestContext,
+  cookieA: string,
+  cookieB: string,
+  cenario: CenarioE01T05,
+  quantidade: number,
+  descricao: string,
+): Promise<void> {
+  for (let i = 0; i < quantidade; i += 1) {
+    const aberta = await api<{ id: string; versao: number }>(request, cookieA, '/fiscal/homologacoes', {
+      regraId: cenario.regraId,
+      descricao,
+      justificativa: MOTIVO,
+    });
+    if (i < quantidade - 1) {
+      await api(request, cookieB, `/fiscal/homologacoes/${aberta.id}/rejeitar`, { versao: aberta.versao, justificativa: MOTIVO });
+    }
+  }
+}
