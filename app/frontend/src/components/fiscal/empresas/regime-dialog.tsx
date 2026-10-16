@@ -62,6 +62,7 @@ export function RegimeDialog({
 
   const salvar = async (evento: React.FormEvent) => {
     evento.preventDefault();
+    if (salvando) return;
     const locais: Record<string, string> = {};
     if (!crt) locais.crt = 'Selecione o regime tributário.';
     if (!inicio) locais.vigenciaInicio = 'Informe o início da vigência.';
@@ -102,7 +103,7 @@ export function RegimeDialog({
   };
 
   return (
-    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
+    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta && !salvando) onFechar(); }}>
       <DialogContent onCloseAutoFocus={retornoFoco}>
         <DialogHeader>
           <DialogTitle>{regime ? 'Editar versão de regime' : 'Nova versão de regime'}</DialogTitle>
@@ -149,7 +150,7 @@ export function RegimeDialog({
             </p>
           )}
           <DialogFooter className="px-0">
-            <Button type="button" variant="ghost" onClick={onFechar}>
+            <Button type="button" variant="ghost" onClick={onFechar} disabled={salvando}>
               Cancelar
             </Button>
             <Button type="submit" loading={salvando}>

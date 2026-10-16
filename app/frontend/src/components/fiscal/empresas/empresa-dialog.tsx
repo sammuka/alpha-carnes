@@ -59,6 +59,7 @@ export function EmpresaDialog({ aberto, onFechar, empresa, onSalvo, onConflito }
 
   const salvar = async (evento: React.FormEvent) => {
     evento.preventDefault();
+    if (salvando) return;
     const locais: Record<string, string> = {};
     if (!razaoSocial.trim()) locais.razaoSocial = 'Informe a razão social.';
     if (!editando && normalizarCnpj(cnpjRaiz).length !== 8) locais.cnpjRaiz = 'CNPJ raiz deve ter 8 letras ou dígitos.';
@@ -93,7 +94,7 @@ export function EmpresaDialog({ aberto, onFechar, empresa, onSalvo, onConflito }
   };
 
   return (
-    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
+    <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta && !salvando) onFechar(); }}>
       <DialogContent onCloseAutoFocus={retornoFoco}>
         <DialogHeader>
           <DialogTitle>{editando ? 'Editar empresa' : 'Nova empresa'}</DialogTitle>
@@ -141,7 +142,7 @@ export function EmpresaDialog({ aberto, onFechar, empresa, onSalvo, onConflito }
             </p>
           )}
           <DialogFooter className="px-0">
-            <Button type="button" variant="ghost" onClick={onFechar}>
+            <Button type="button" variant="ghost" onClick={onFechar} disabled={salvando}>
               Cancelar
             </Button>
             <Button type="submit" loading={salvando}>
