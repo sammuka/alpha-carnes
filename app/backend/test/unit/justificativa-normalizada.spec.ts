@@ -28,7 +28,7 @@ describe.each([
     expect(schema.safeParse('ab\u2060\u00AD ').success).toBe(false);
   });
 
-  it('aceita acentos e emoji, preservando marcas combinantes', () => {
+  it('aceita acentos e emoji, preservando acentos combinantes', () => {
     expect(schema.parse('  Correção ação \u{1F600}  ')).toBe('Correção ação \u{1F600}');
     expect(schema.parse('e\u0301e\u0301e\u0301')).toBe('e\u0301e\u0301e\u0301');
   });
