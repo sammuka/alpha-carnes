@@ -23,14 +23,21 @@ function documento(cabecalho: string, linhas: string[]): string {
   return `\uFEFF${[cabecalho, ...linhas].join('\r\n')}`;
 }
 
-/** CSV da explicação. A frase sem alíquota vai na coluna Valor, entre aspas por causa do `;`. */
+/**
+ * CSV da explicação (D11, §7), na ordem de /explicacao: linhas, tratamento sem alíquota com a frase,
+ * parágrafo da base diferente (quando há) e referência legal. A frase vai entre aspas por causa do `;`.
+ */
 export function montarCsvMemoria(entrada: {
   linhas: LinhaCsvMemoria[];
-  semAliquota: Array<{ rotulo: string; texto: string }>;
+  semAliquota: Array<{ rotulo: string; tratamento: string; texto: string }>;
+  textoBase: string | null;
+  referenciaLegal: string;
 }): string {
   const pares = [
     ...entrada.linhas.map((linha) => [linha.rotulo, linha.valor]),
-    ...entrada.semAliquota.map((linha) => [linha.rotulo, linha.texto]),
+    ...entrada.semAliquota.map((linha) => [linha.rotulo, `${linha.tratamento}. ${linha.texto}`]),
+    ...(entrada.textoBase ? [['Base tributável difere de valor bruto', entrada.textoBase]] : []),
+    ['Referência legal', entrada.referenciaLegal],
   ];
   return documento('Campo;Valor', pares.map((par) => par.map(celula).join(';')));
 }
