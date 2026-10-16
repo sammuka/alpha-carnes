@@ -35,7 +35,7 @@ import {
 } from './cnaes-editor';
 import { EmpresaDialog } from './empresa-dialog';
 import { useRetornoFoco } from './use-retorno-foco';
-import { normalizarJustificativa } from '@/lib/justificativa';
+import { justificativaValida, normalizarJustificativa } from '@/lib/justificativa';
 
 interface EstabelecimentoDrawerProps {
   aberto: boolean;
@@ -137,7 +137,7 @@ export function EstabelecimentoDrawer({
     if (!dados.inscricaoEstadual.trim()) locais.inscricaoEstadual = 'Informe a inscrição estadual.';
     if (!dados.inscricaoMunicipal.trim()) locais.inscricaoMunicipal = 'Informe a inscrição municipal.';
     if (!dados.uf) locais.uf = 'Selecione o estado.';
-    if (normalizarJustificativa(justificativa).length < 3) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
+    if (!justificativaValida(justificativa)) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
     const cnaesInvalidos = validarCnaes(cnaes);
     setErros(locais);
     setErrosCnaes(cnaesInvalidos);

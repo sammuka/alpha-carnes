@@ -16,7 +16,7 @@ import {
   type Empresa,
 } from '@/lib/fiscal-empresas';
 import { useRetornoFoco } from './use-retorno-foco';
-import { normalizarJustificativa } from '@/lib/justificativa';
+import { justificativaValida, normalizarJustificativa } from '@/lib/justificativa';
 
 interface EmpresaDialogProps {
   aberto: boolean;
@@ -62,7 +62,7 @@ export function EmpresaDialog({ aberto, onFechar, empresa, onSalvo, onConflito }
     const locais: Record<string, string> = {};
     if (!razaoSocial.trim()) locais.razaoSocial = 'Informe a razão social.';
     if (!editando && normalizarCnpj(cnpjRaiz).length !== 8) locais.cnpjRaiz = 'CNPJ raiz deve ter 8 letras ou dígitos.';
-    if (normalizarJustificativa(justificativa).length < 3) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
+    if (!justificativaValida(justificativa)) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
     setErros(locais);
     setErroGeral(null);
     if (Object.keys(locais).length > 0) return;

@@ -636,6 +636,48 @@ describe('E01-T02 enquadramentos fiscais', () => {
     expect(res.status).toBe(400);
   });
 
+  describe('justificativa: pontas aparadas, miolo intacto, mínimo de 3 visíveis', () => {
+    const c = (...pontos: number[]) => String.fromCodePoint(...pontos);
+    const recusadas: Array<[string, string]> = [
+      ['U+17B4 x3', c(0x17b4).repeat(3)],
+      ['U+FE0F x3', c(0xfe0f).repeat(3)],
+      ['U+180B-180D', c(0x180b, 0x180c, 0x180d)],
+      ['U+E0100-E0102', c(0xe0100, 0xe0101, 0xe0102)],
+      ['U+0301 x3', c(0x301).repeat(3)],
+      ['viramas e nuktas soltos', c(0x94d, 0x93c, 0x94d)],
+      ['só espaços e ZW', ` ${c(0x200b, 0x3000, 0xa0, 0x2060)} `],
+    ];
+    const aceitas: Array<[string, string]> = [
+      ['família com ZWJ', `${c(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467)} ok`],
+      ['persa com ZWNJ', `می${c(0x200c)}خواهم`],
+      ['bandeira com tags', `${c(0x1f3f4, 0xe0067, 0xe0062, 0xe0065, 0xe006e, 0xe0067, 0xe007f)} abc`],
+      ['São José', 'São José'],
+      ['ação', 'ação'],
+    ];
+
+    it.each(recusadas)('%s → 400', async (_nome, justificativa) => {
+      const res = await request(app.getHttpServer())
+        .post('/fiscal/ncms')
+        .set('Cookie', adminA)
+        .send({ codigo: '90000000', descricao: 'NCM recusada', justificativa });
+      expect(res.status).toBe(400);
+    });
+
+    it.each(aceitas)('%s → 201 e grava byte a byte (salvo pontas)', async (_nome, texto) => {
+      seq += 1;
+      const res = await request(app.getHttpServer())
+        .post('/fiscal/ncms')
+        .set('Cookie', adminA)
+        .send({ codigo: String(29100000 + seq), descricao: 'NCM justificativa', justificativa: ` ${c(0x200b)}${texto}${c(0x2060)} ` });
+      expect(res.status).toBe(201);
+      const [linha] = await db()
+        .select({ hex: sql<string>`encode(convert_to(${schema.auditoria.justificativa}, 'UTF8'), 'hex')` })
+        .from(schema.auditoria)
+        .where(eq(schema.auditoria.registroId, res.body.id));
+      expect(linha?.hex).toBe(Buffer.from(texto, 'utf8').toString('hex'));
+    });
+  });
+
   it.each(['=1+1', '+1', '-1', '@SOMA(A1)'])('exportação CSV neutraliza fórmula %s no nome do produto', async (nome) => {
     const base = await baseAprovada(nome);
     const criado = await request(app.getHttpServer())
