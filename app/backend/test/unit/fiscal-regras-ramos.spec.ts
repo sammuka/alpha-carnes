@@ -326,6 +326,7 @@ describe('ramos dos services de regras tributárias', () => {
       { valor: [] },
       { valor: [{ id: BEN }] },
       { valor: [{ id: CLS }] },
+      { valor: [{ maior: 1 }] },
     ];
 
     expect(await codigo(regras([
@@ -346,8 +347,10 @@ describe('ramos dos services de regras tributárias', () => {
       { valor: { rows: [] } },
     ]).adicionarVersao(REGRA, pedido, USUARIO)).rejects.toThrow('Falha ao gravar versão');
 
+    // MAX sem linha (código sem versões visíveis) cai no número da origem.
     await expect(regras([
-      ...ateCatalogo(),
+      ...ateCatalogo().slice(0, -1),
+      { valor: [] },
       { erro: new Error('falha de disco') },
       { valor: { rows: [] } },
     ]).adicionarVersao(REGRA, pedido, USUARIO)).rejects.toThrow('falha de disco');
