@@ -1,6 +1,7 @@
 import { consultaEnquadramentoSchema } from '../../src/modules/erp/fiscal/enquadramentos/dto/consulta.dto';
 import {
   createEnquadramentoSchema,
+  duplicarEnquadramentoSchema,
   listarEnquadramentosQuerySchema,
   updateEnquadramentoSchema,
 } from '../../src/modules/erp/fiscal/enquadramentos/dto/enquadramento.dto';
@@ -57,6 +58,16 @@ describe('DTOs de enquadramento, CFOP e NCM', () => {
       vigenciaInicio: '2026-06-01',
       vigenciaFim: '2026-01-01',
     })).success).toBe(false);
+  });
+
+  it('prioridade acima de 2147483647 (limite do integer) → 400 em criar, atualizar e duplicar', () => {
+    expect(createEnquadramentoSchema.safeParse(base({ prioridade: 2147483647 })).success).toBe(true);
+    expect(createEnquadramentoSchema.safeParse(base({ prioridade: 2147483648 })).success).toBe(false);
+    const { estabelecimentoId: _e, ...semEstab } = base({ prioridade: 2147483648, versao: 1 });
+    expect(updateEnquadramentoSchema.safeParse(semEstab).success).toBe(false);
+    expect(duplicarEnquadramentoSchema.safeParse({
+      vigenciaInicio: '2026-01-01', prioridade: 2147483648, versao: 1, justificativa: 'Duplicação de perfil',
+    }).success).toBe(false);
   });
 
   it('prioridade 0', () => {

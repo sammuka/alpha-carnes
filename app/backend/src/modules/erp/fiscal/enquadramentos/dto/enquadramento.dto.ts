@@ -13,6 +13,9 @@ export const cestSchema = z
   .transform(normalizarCest)
   .refine(validarCest, { message: 'CEST deve ter 7 dígitos.' });
 
+/** Limite do `integer` do Postgres: acima disso o insert falharia com 500. */
+const PRIORIDADE_MAXIMA = 2147483647;
+
 const MENSAGEM_VIGENCIA = 'Fim de vigência deve ser igual ou posterior ao início.';
 
 function vigenciaOrdenada(
@@ -42,7 +45,7 @@ export const createEnquadramentoSchema = z.object({
   ...camposChave,
   vigenciaInicio: dataSchema,
   vigenciaFim: dataSchema.optional(),
-  prioridade: z.number().int().min(1),
+  prioridade: z.number().int().min(1).max(PRIORIDADE_MAXIMA),
   justificativa: justificativaSchema,
 }).strict().superRefine(vigenciaOrdenada);
 export type CreateEnquadramentoDto = z.infer<typeof createEnquadramentoSchema>;
@@ -52,7 +55,7 @@ export const updateEnquadramentoSchema = z.object({
   ...camposChave,
   vigenciaInicio: dataSchema,
   vigenciaFim: dataSchema.optional(),
-  prioridade: z.number().int().min(1),
+  prioridade: z.number().int().min(1).max(PRIORIDADE_MAXIMA),
   versao: versaoSchema,
   justificativa: justificativaSchema,
 }).strict().superRefine(vigenciaOrdenada);
@@ -61,7 +64,7 @@ export type UpdateEnquadramentoDto = z.infer<typeof updateEnquadramentoSchema>;
 export const duplicarEnquadramentoSchema = z.object({
   vigenciaInicio: dataSchema,
   vigenciaFim: dataSchema.optional(),
-  prioridade: z.number().int().min(1).optional(),
+  prioridade: z.number().int().min(1).max(PRIORIDADE_MAXIMA).optional(),
   versao: versaoSchema,
   justificativa: justificativaSchema,
 }).strict().superRefine(vigenciaOrdenada);
