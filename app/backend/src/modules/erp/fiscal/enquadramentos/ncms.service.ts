@@ -30,9 +30,11 @@ export class NcmsService {
   async listar(query: ListarNcmQuery) {
     const filtro = query.search?.trim();
     const termo = filtro ? `%${filtro.replace(/[%_]/g, '')}%` : undefined;
+    // O código é guardado sem máscara: "04.01" ou "5.102" busca por "0401" e "5102".
+    const termoCodigo = filtro ? `%${filtro.replace(/[%_. -]/g, '') || filtro.replace(/[%_]/g, '')}%` : undefined;
     const where = and(
       isNull(ncms.deletedAt),
-      termo ? sql`(${ncms.codigo} ILIKE ${termo} OR ${ncms.descricao} ILIKE ${termo})` : undefined,
+      termo ? sql`(${ncms.codigo} ILIKE ${termoCodigo} OR ${ncms.descricao} ILIKE ${termo})` : undefined,
     );
     const totalLinha = await this.db.select({ total: sql<number>`count(*)::int` }).from(ncms).where(where);
     const data = await this.db
