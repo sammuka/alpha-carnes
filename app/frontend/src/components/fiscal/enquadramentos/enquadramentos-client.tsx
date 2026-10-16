@@ -103,6 +103,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   const [focoDrawer, setFocoDrawer] = useState<string | null>(null);
   const [alvoDuplicar, setAlvoDuplicar] = useState<{ id: string; versao: number; prioridade: number } | null>(null);
   const [erroDuplicar, setErroDuplicar] = useState<string | null>(null);
+  const [conflitoDuplicar, setConflitoDuplicar] = useState(false);
   const [decisao, setDecisao] = useState<DecisaoPendente | null>(null);
   const [codigoTipo, setCodigoTipo] = useState<'cfops' | 'ncms' | null>(null);
   const [selecaoCodigo, setSelecaoCodigo] = useState<SelecaoCodigo | null>(null);
@@ -110,6 +111,9 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   const [rotulosFiltro, setRotulosFiltro] = useState<Record<string, string>>(lerRotulos);
   const [busca, setBusca] = useState(() => lerFiltros().search);
   const pedidoFicha = useRef(0);
+  // Id da ficha em edição no drawer aberto (null no modo criação): só ela pode marcar o drawer como removido.
+  const edicaoAbertaId = useRef<string | null>(null);
+  edicaoAbertaId.current = drawer && editando ? (fichaEdicao?.id ?? null) : null;
   const pedidoLista = useRef(0);
   const filtrosAtuais = useRef(filtros);
   filtrosAtuais.current = filtros;
@@ -158,7 +162,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
     } catch (erro) {
       if (pedido !== pedidoFicha.current) return;
       if (erro instanceof ErroEnquadramento && erro.status === 404) {
-        setRemovidoEdicao(true);
+        if (edicaoAbertaId.current === id) setRemovidoEdicao(true);
         setDetalhe(null);
         setSelecionadoId(null);
         setErroFicha('O enquadramento selecionado não está mais disponível.');
@@ -370,7 +374,24 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   }
 
   function abrirDuplicar() {
-    if (detalhe) setAlvoDuplicar({ id: detalhe.id, versao: detalhe.versao, prioridade: detalhe.prioridade });
+    if (!detalhe) return;
+    setErroDuplicar(null);
+    setConflitoDuplicar(false);
+    setAlvoDuplicar({ id: detalhe.id, versao: detalhe.versao, prioridade: detalhe.prioridade });
+  }
+
+  /** Busca a versão atual da ficha a duplicar; o digitado fica no diálogo e o envio passa a usar a versão nova. */
+  async function recarregarDuplicar() {
+    if (!alvoDuplicar) return;
+    try {
+      const atual = await enquadramentosApi.obter(alvoDuplicar.id);
+      setAlvoDuplicar({ id: atual.id, versao: atual.versao, prioridade: alvoDuplicar.prioridade });
+      setDetalhe((anterior) => (anterior?.id === atual.id ? atual : anterior));
+      setErroDuplicar(null);
+      setConflitoDuplicar(false);
+    } catch (erro) {
+      setErroDuplicar(erro instanceof Error ? erro.message : 'Falha na operação.');
+    }
   }
 
   function comboBusca(rotulo: string, id: string, tipo: 'estabelecimentos' | 'cfops' | 'produtos' | 'clientes', chave: ChaveBuscaFiltro) {
@@ -483,7 +504,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         erro={erroDrawer}
         selecaoCodigo={selecaoCodigo}
         focoInicial={focoDrawer}
-        removido={removidoEdicao}
+        removido={editando && removidoEdicao}
         conflito={conflitoDrawer}
         onRecarregar={recarregarEdicao}
         onFechar={() => setDrawer(false)}
@@ -495,18 +516,24 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
         aberto={alvoDuplicar !== null}
         prioridadeOrigem={alvoDuplicar?.prioridade ?? 1}
         erro={erroDuplicar}
-        onFechar={() => { setAlvoDuplicar(null); setErroDuplicar(null); }}
-        onConfirmar={(corpo) => {
+        conflito={conflitoDuplicar}
+        onRecarregar={recarregarDuplicar}
+        onFechar={() => { setAlvoDuplicar(null); setErroDuplicar(null); setConflitoDuplicar(false); }}
+        onConfirmar={async (corpo) => {
           if (!alvoDuplicar) return;
           // Versão capturada ao abrir o diálogo: se a ficha mudou desde então, o servidor responde 409.
           const { id, versao } = alvoDuplicar;
-          void enquadramentosApi.duplicar(id, { ...corpo, vigenciaFim: corpo.vigenciaFim || undefined, versao })
-            .then(() => atualizarApos(id))
-            .then(() => { setAlvoDuplicar(null); toast.success('Enquadramento salvo.'); })
-            .catch((erro: unknown) => {
-              if (erro instanceof ErroEnquadramento && erro.codigo === 'CONFLITO_CONCORRENTE') void carregarFicha(id);
-              setErroDuplicar(erro instanceof ErroEnquadramento ? (mensagemSobreposicao(erro) ?? erro.message) : 'Falha na operação.');
-            });
+          try {
+            await enquadramentosApi.duplicar(id, { ...corpo, vigenciaFim: corpo.vigenciaFim || undefined, versao });
+            await atualizarApos(id);
+            setAlvoDuplicar(null);
+            toast.success('Enquadramento salvo.');
+          } catch (erro) {
+            const conflito = erro instanceof ErroEnquadramento && erro.codigo === 'CONFLITO_CONCORRENTE';
+            if (conflito) void carregarFicha(id);
+            setConflitoDuplicar(conflito);
+            setErroDuplicar(erro instanceof ErroEnquadramento ? (mensagemSobreposicao(erro) ?? erro.message) : 'Falha na operação.');
+          }
         }}
       />
       <DecisaoDialog

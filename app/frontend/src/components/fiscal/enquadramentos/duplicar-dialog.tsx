@@ -11,11 +11,14 @@ interface Props {
   aberto: boolean;
   prioridadeOrigem: number;
   erro: string | null;
+  /** Último envio recusado por alteração concorrente: mostra Recarregar dados. */
+  conflito?: boolean;
+  onRecarregar?: () => Promise<void>;
   onFechar: () => void;
-  onConfirmar: (corpo: { vigenciaInicio: string; vigenciaFim: string; prioridade: number; justificativa: string }) => void;
+  onConfirmar: (corpo: { vigenciaInicio: string; vigenciaFim: string; prioridade: number; justificativa: string }) => Promise<void>;
 }
 
-export function DuplicarDialog({ aberto, prioridadeOrigem, erro, onFechar, onConfirmar }: Props) {
+export function DuplicarDialog({ aberto, prioridadeOrigem, erro, conflito = false, onRecarregar, onFechar, onConfirmar }: Props) {
   const retornoFoco = useRetornoFoco(aberto);
   return (
     <Dialog open={aberto} onOpenChange={(aberta) => { if (!aberta) onFechar(); }}>
@@ -23,24 +26,35 @@ export function DuplicarDialog({ aberto, prioridadeOrigem, erro, onFechar, onCon
         <DialogHeader>
           <DialogTitle>Duplicar perfil</DialogTitle>
         </DialogHeader>
-        <FormularioDuplicar prioridadeOrigem={prioridadeOrigem} erro={erro} onFechar={onFechar} onConfirmar={onConfirmar} />
+        <FormularioDuplicar
+          prioridadeOrigem={prioridadeOrigem}
+          erro={erro}
+          conflito={conflito}
+          onRecarregar={onRecarregar}
+          onFechar={onFechar}
+          onConfirmar={onConfirmar}
+        />
       </DialogContent>
     </Dialog>
   );
 }
 
 /** Montado só enquanto o diálogo está aberto: os campos iniciam ao abrir e nenhuma atualização da ficha os apaga. */
-function FormularioDuplicar({ prioridadeOrigem, erro, onFechar, onConfirmar }: Omit<Props, 'aberto'>) {
+function FormularioDuplicar({ prioridadeOrigem, erro, conflito, onRecarregar, onFechar, onConfirmar }: Omit<Props, 'aberto'>) {
   const [inicio, setInicio] = useState('');
   const [fim, setFim] = useState('');
   const [prioridade, setPrioridade] = useState(prioridadeOrigem);
   const [motivo, setMotivo] = useState('');
+  const [enviando, setEnviando] = useState(false);
   return (
     <form
       className="grid gap-3 px-4 pb-4"
       onSubmit={(evento) => {
         evento.preventDefault();
-        onConfirmar({ vigenciaInicio: inicio, vigenciaFim: fim, prioridade, justificativa: limparJustificativa(motivo) });
+        if (enviando) return;
+        setEnviando(true);
+        void onConfirmar({ vigenciaInicio: inicio, vigenciaFim: fim, prioridade, justificativa: limparJustificativa(motivo) })
+          .finally(() => setEnviando(false));
       }}
     >
       <label className="grid gap-1 text-xs">Início de vigência<DatePickerField aria-label="Início de vigência da cópia" value={inicio} onChange={setInicio} /></label>
@@ -52,9 +66,14 @@ function FormularioDuplicar({ prioridadeOrigem, erro, onFechar, onConfirmar }: O
         <textarea aria-label="Motivo da duplicação" className="min-h-16 rounded-md border px-2" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
       </label>
       {erro && <p role="alert" className="text-sm text-destructive">{erro}</p>}
+      {conflito && onRecarregar && (
+        <div>
+          <Button type="button" variant="secondary" disabled={enviando} onClick={() => void onRecarregar()}>Recarregar dados</Button>
+        </div>
+      )}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onFechar}>Cancelar</Button>
-        <Button type="submit">Duplicar</Button>
+        <Button type="submit" disabled={enviando}>Duplicar</Button>
       </div>
     </form>
   );

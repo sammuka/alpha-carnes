@@ -10,15 +10,23 @@ import { useCallback, useLayoutEffect, useRef } from 'react';
  */
 export function useRetornoFoco(aberto: boolean): (evento: Event) => void {
   const origem = useRef<HTMLElement | null>(null);
+  // Item de menu (Radix) desmonta ao ser selecionado: guarda também o id do gatilho do menu.
+  const gatilhoId = useRef<string | null>(null);
 
   useLayoutEffect(() => {
-    if (aberto) origem.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!aberto) return;
+    const ativo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    origem.current = ativo;
+    gatilhoId.current = ativo?.closest('[role="menu"]')?.getAttribute('aria-labelledby') ?? null;
   }, [aberto]);
 
   return useCallback((evento: Event) => {
     evento.preventDefault();
     const alvo = origem.current;
+    const gatilho = gatilhoId.current ? document.getElementById(gatilhoId.current) : null;
     origem.current = null;
+    gatilhoId.current = null;
     if (alvo?.isConnected) alvo.focus();
+    else gatilho?.focus();
   }, []);
 }
