@@ -52,6 +52,12 @@ function razao(valor: string): string {
   return `${inteiro}.${(frac + '0000').slice(0, 4)}`;
 }
 
+/** `aaaa-MM-dd` → `dd/MM/aaaa`, o formato das telas. */
+function dataBr(iso: string): string {
+  const [ano, mes, dia] = iso.split('-');
+  return ano && mes && dia ? `${dia}/${mes}/${ano}` : iso;
+}
+
 function celula(original: string): string {
   // Injeção de fórmula (OWASP): texto iniciado por = + - @ tab ou CR vira literal no Excel.
   const valor = /^[=+\-@\t\r]/.test(original) ? `'${original}` : original;
@@ -157,7 +163,7 @@ export class HomologacoesService {
     const cabecalho = 'Enquadramento fiscal;Início de vigência;Situação;Usuário;Responsável pela aprovação;Descrição';
     const corpo = linhas.map((linha) => [
       linha.enquadramento,
-      linha.vigenciaInicio,
+      dataBr(linha.vigenciaInicio),
       ROTULOS_SITUACAO_HOMOLOGACAO[linha.situacao as Situacao],
       linha.usuario ?? '',
       linha.aprovador ?? '',

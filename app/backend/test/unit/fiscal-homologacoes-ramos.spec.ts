@@ -107,7 +107,7 @@ describe('fiscal-homologacoes ramos de apresentação sem autor e sem total', ()
 
   it('exportação sem autor deixa as colunas vazias', async () => {
     const csv: string = await servicoCom([[linha]]).exportar(consulta);
-    expect(csv).toContain('1;2026-01-01;Em revisão;;;d');
+    expect(csv).toContain('1;01/01/2026;Em revisão;;;d');
   });
 
   it('diff sem origem aceita percentual sem fração e vigência sem fim', async () => {

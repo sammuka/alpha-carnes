@@ -649,6 +649,7 @@ describe('E01-T05 homologações de regras', () => {
     expect(csv.status).toBe(200);
     expect(csv.headers['content-type']).toContain('text/csv');
     expect(csv.text).toContain('Enquadramento fiscal;Início de vigência;');
+    expect(csv.text).toMatch(/;\d{2}\/\d{2}\/\d{4};/);
     expect(csv.text).toContain('"Revisão; com ""aspas"" para exportar"');
   });
 
