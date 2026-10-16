@@ -358,12 +358,6 @@ export const enquadramentosApi = {
     if (!res.ok) throw criarErro(res.status, await res.json().catch(() => null));
     return res.blob();
   },
-  opcoesEstabelecimento: async (): Promise<OpcaoCombo[]> => {
-    const body = await chamar<unknown>('GET', '/estabelecimentos?situacao=APPROVED&pageSize=100');
-    return linhas(body)
-      .filter((l) => l.situacao === 'APPROVED' || l.situacao === undefined)
-      .map((l) => ({ id: String(l.id), rotulo: String(l.nome ?? '') }));
-  },
   opcoesOperacao: async (): Promise<OpcaoCombo[]> => {
     const body = await chamar<unknown>('GET', '/api/operacoes?limite=100');
     return linhas(body).map((l) => ({
@@ -373,7 +367,7 @@ export const enquadramentosApi = {
   },
 };
 
-export type TipoBusca = 'produtos' | 'clientes' | 'cfops' | 'ncms';
+export type TipoBusca = 'estabelecimentos' | 'produtos' | 'clientes' | 'cfops' | 'ncms';
 
 export interface ResultadoBusca {
   opcoes: OpcaoCombo[];
@@ -387,6 +381,7 @@ export const TAMANHO_BUSCA = 50;
 export const AVISO_REFINAR = 'Há mais resultados do que os exibidos. Refine a busca.';
 
 const ROTA_BUSCA: Record<TipoBusca, string> = {
+  estabelecimentos: '/estabelecimentos',
   produtos: '/api/cadastros/produtos',
   clientes: '/api/cadastros/clientes',
   cfops: '/cfops',
@@ -400,10 +395,12 @@ export async function buscarOpcoes(tipo: TipoBusca, termo: string): Promise<Resu
     page: 1,
     pageSize: TAMANHO_BUSCA,
     status: comStatus ? 'ativo' : undefined,
+    situacao: tipo === 'estabelecimentos' ? 'APPROVED' : undefined,
     search: termo.trim(),
   })}`);
-  const bruto = linhas(body);
+  const bruto = linhas(body).filter((l) => tipo !== 'estabelecimentos' || l.situacao === 'APPROVED' || l.situacao === undefined);
   const opcoes = bruto.filter(ativo).map((l): OpcaoCombo => {
+    if (tipo === 'estabelecimentos') return { id: String(l.id), rotulo: String(l.nome ?? '') };
     if (tipo === 'produtos') return { id: String(l.id), rotulo: String(l.nome ?? '') };
     if (tipo === 'clientes') {
       return { id: String(l.id), rotulo: String((typeof l.nomeFantasia === 'string' && l.nomeFantasia.trim()) || l.razaoSocial || '') };

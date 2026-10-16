@@ -83,7 +83,7 @@ function envelope(status: number, corpo: Record<string, unknown>): Response {
 let lista = [LINHA];
 let proximoSalvar: Response | null = null;
 let proximaConsulta: Response | null = null;
-let falharEstabelecimentos = false;
+let falharOperacoes = false;
 
 function padrao(metodo: string, caminho: string): Response {
   if (caminho.startsWith('/api/admin/parametros')) {
@@ -108,10 +108,10 @@ function padrao(metodo: string, caminho: string): Response {
     return proximoSalvar;
   }
   if (caminho.startsWith('/api/erp/fiscal/estabelecimentos')) {
-    if (falharEstabelecimentos) return json(500, { message: 'Falha.' });
     return json(200, { data: [{ id: ESTAB, nome: 'Filial Osasco', situacao: 'APPROVED' }], total: 1 });
   }
   if (caminho.startsWith('/api/operacoes')) {
+    if (falharOperacoes) return json(500, { message: 'Falha.' });
     return json(200, { data: [{ id: OP, rotulo: 'Compra e venda outubro', data: '2026-10-01', status: 'aberta' }] });
   }
   if (caminho.startsWith('/api/cadastros/produtos')) {
@@ -133,7 +133,7 @@ beforeEach(() => {
   lista = [LINHA];
   proximoSalvar = null;
   proximaConsulta = null;
-  falharEstabelecimentos = false;
+  falharOperacoes = false;
   window.sessionStorage.clear();
   (conectarRealtime as jest.Mock).mockClear();
   global.fetch = jest.fn(async (entrada: string, init?: RequestInit) => {
@@ -228,11 +228,11 @@ describe('EnquadramentosClient', () => {
   });
 
   it('falha ao carregar as opções dos filtros mostra erro e permite tentar de novo', async () => {
-    falharEstabelecimentos = true;
+    falharOperacoes = true;
     const { user } = renderizar();
     const aviso = await screen.findByText(/Não foi possível carregar as opções dos filtros/);
     expect(aviso).toBeInTheDocument();
-    falharEstabelecimentos = false;
+    falharOperacoes = false;
     await user.click(screen.getByRole('button', { name: 'Recarregar opções' }));
     await waitFor(() => expect(screen.queryByText(/Não foi possível carregar as opções dos filtros/)).not.toBeInTheDocument());
   });
@@ -360,6 +360,58 @@ describe('EnquadramentosClient', () => {
       expect(screen.getByText('Resposta abc')).toBeInTheDocument();
       expect(screen.queryByText('Resposta ab')).not.toBeInTheDocument();
       expect(screen.queryByText('Resposta inicial')).not.toBeInTheDocument();
+    });
+
+    it('estabelecimento: o 101º é encontrado pela busca no drawer e no filtro da lista', async () => {
+      const todos = Array.from({ length: 101 }, (_, i) => ({
+        id: `0190a1b2-c3d4-7e5f-8a9b-${String(i + 500).padStart(12, '0')}`,
+        nome: i === 100 ? 'Filial Rara 101' : `Filial ${String(i + 1).padStart(3, '0')}`,
+        situacao: 'APPROVED',
+      }));
+      (global.fetch as jest.Mock).mockImplementation(async (entrada: string, init?: RequestInit) => {
+        const url = new URL(String(entrada), 'http://localhost');
+        if (url.pathname === '/api/erp/fiscal/estabelecimentos') {
+          const termo = (url.searchParams.get('search') ?? '').toLowerCase();
+          const achados = todos.filter((e) => e.nome.toLowerCase().includes(termo));
+          const pagina = achados.slice(0, Number(url.searchParams.get('pageSize')));
+          return json(200, { data: pagina, total: achados.length });
+        }
+        return padrao(init?.method ?? 'GET', url.pathname);
+      });
+      const { user } = renderizar();
+      await user.click(await screen.findByRole('button', { name: '+ Novo registro' }));
+      await screen.findByRole('dialog');
+      await user.click(document.getElementById('enq-estab')!);
+      expect(await screen.findByText(/Refine a busca/)).toBeInTheDocument();
+      await user.type(screen.getByPlaceholderText('Buscar estabelecimento'), 'rara');
+      await user.click(await screen.findByText('Filial Rara 101'));
+      expect(document.getElementById('enq-estab')).toHaveTextContent('Filial Rara 101');
+    });
+
+    it('estabelecimento no filtro da lista: o 101º é encontrado e filtra a grade', async () => {
+      const todos = Array.from({ length: 101 }, (_, i) => ({
+        id: `0190a1b2-c3d4-7e5f-8a9b-${String(i + 500).padStart(12, '0')}`,
+        nome: i === 100 ? 'Filial Rara 101' : `Filial ${String(i + 1).padStart(3, '0')}`,
+        situacao: 'APPROVED',
+      }));
+      (global.fetch as jest.Mock).mockImplementation(async (entrada: string, init?: RequestInit) => {
+        const url = new URL(String(entrada), 'http://localhost');
+        if (url.pathname === '/api/erp/fiscal/estabelecimentos') {
+          const termo = (url.searchParams.get('search') ?? '').toLowerCase();
+          const achados = todos.filter((e) => e.nome.toLowerCase().includes(termo));
+          return json(200, { data: achados.slice(0, 50), total: achados.length });
+        }
+        return padrao(init?.method ?? 'GET', url.pathname);
+      });
+      const { user } = renderizar();
+      await screen.findByText('Compra e venda outubro', { selector: 'td' });
+      await user.click(document.getElementById('filtro-estab')!);
+      await user.type(screen.getByPlaceholderText('Buscar estabelecimento'), 'rara');
+      await user.click(await screen.findByText('Filial Rara 101'));
+      await waitFor(() => {
+        const urls = (global.fetch as jest.Mock).mock.calls.map(([u]) => String(u));
+        expect(urls.some((u) => u.startsWith('/api/erp/fiscal/enquadramentos?') && u.includes('estabelecimentoId=0190a1b2-c3d4-7e5f-8a9b-000000000600'))).toBe(true);
+      });
     });
 
     it('mostra o erro da busca', async () => {

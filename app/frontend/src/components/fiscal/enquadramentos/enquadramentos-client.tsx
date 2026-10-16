@@ -5,7 +5,6 @@ import { ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { BadgeProvisorio } from '@/components/ui/badge-provisorio';
 import { Button } from '@/components/ui/button';
-import { ComboboxField } from '@/components/ui/combobox-field';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Kpi, KpiStrip } from '@/components/ui/kpi-strip';
@@ -17,7 +16,6 @@ import {
   CHAVE_LISTA,
   FILTROS_LISTA,
   TEXTO_VAZIO,
-  TEXTO_VAZIO_COMBO,
   ErroEnquadramento,
   enquadramentosApi,
   mensagemSobreposicao,
@@ -29,7 +27,6 @@ import {
   type EventoHistoricoEnquadramento,
   type FiltrosLista,
   type LinhaEnquadramento,
-  type OpcaoCombo,
   type PreCondicao,
 } from '@/lib/fiscal-enquadramentos';
 import { AbasDetalhe } from './abas-detalhe';
@@ -38,9 +35,9 @@ import { CodigoFiscalDialog } from './codigo-fiscal-dialog';
 import { DuplicarDialog } from './duplicar-dialog';
 import { EnquadramentoDrawer, type Catalogos, type SelecaoCodigo } from './enquadramento-drawer';
 
-const CATALOGOS_VAZIOS: Catalogos = { estabelecimentos: [], operacoes: [] };
+const CATALOGOS_VAZIOS: Catalogos = { operacoes: [] };
 const CHAVE_ROTULOS = 'fiscal.enquadramentos.rotulos';
-type ChaveBuscaFiltro = 'cfopId' | 'produtoId' | 'clienteId';
+type ChaveBuscaFiltro = 'estabelecimentoId' | 'cfopId' | 'produtoId' | 'clienteId';
 
 function lerRotulos(): Record<string, string> {
   if (typeof window === 'undefined') return {};
@@ -111,11 +108,8 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
   }, [rotulosFiltro]);
 
   useEffect(() => {
-    void Promise.all([
-      enquadramentosApi.opcoesEstabelecimento(),
-      enquadramentosApi.opcoesOperacao(),
-    ]).then(([estabelecimentos, operacoes]) => {
-      setCatalogos({ estabelecimentos, operacoes });
+    void enquadramentosApi.opcoesOperacao().then((operacoes) => {
+      setCatalogos({ operacoes });
       setErroCatalogos(false);
     }).catch(() => setErroCatalogos(true));
   }, [recarga]);
@@ -223,24 +217,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
     setDrawer(true);
   }
 
-  function combo(rotulo: string, id: string, opcoes: OpcaoCombo[], valor: string, chave: keyof FiltrosLista) {
-    return (
-      <label className="grid gap-1 text-xs" htmlFor={id}>
-        {rotulo}
-        <ComboboxField
-          id={id}
-          items={opcoes.map((opcao) => ({ id: opcao.id, label: opcao.rotulo }))}
-          value={valor}
-          onChange={(novo) => setFiltros((atual) => ({ ...atual, [chave]: novo, page: 1 }))}
-          placeholder={rotulo}
-          searchPlaceholder={`Buscar ${rotulo.toLowerCase()}`}
-          emptyText={TEXTO_VAZIO_COMBO}
-        />
-      </label>
-    );
-  }
-
-  function comboBusca(rotulo: string, id: string, tipo: 'cfops' | 'produtos' | 'clientes', chave: ChaveBuscaFiltro) {
+  function comboBusca(rotulo: string, id: string, tipo: 'estabelecimentos' | 'cfops' | 'produtos' | 'clientes', chave: ChaveBuscaFiltro) {
     return (
       <label className="grid gap-1 text-xs" htmlFor={id}>
         {rotulo}
@@ -305,7 +282,7 @@ export function EnquadramentosClient({ podeGerenciar }: { podeGerenciar: boolean
           </div>
         )}
         <div className="grid gap-2 md:grid-cols-4">
-          {combo('Estabelecimento', 'filtro-estab', catalogos.estabelecimentos, filtros.estabelecimentoId, 'estabelecimentoId')}
+          {comboBusca('Estabelecimento', 'filtro-estab', 'estabelecimentos', 'estabelecimentoId')}
           {comboBusca('Operação fiscal (CFOP)', 'filtro-cfop', 'cfops', 'cfopId')}
           {comboBusca('Produto', 'filtro-prod', 'produtos', 'produtoId')}
           {comboBusca('Cliente', 'filtro-cli', 'clientes', 'clienteId')}

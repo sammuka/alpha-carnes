@@ -26,12 +26,13 @@ export interface SelecaoCodigo {
   rotulo: string;
 }
 
-type ChaveBusca = 'cfopId' | 'ncmId' | 'produtoId' | 'clienteId';
+type ChaveBusca = 'estabelecimentoId' | 'cfopId' | 'ncmId' | 'produtoId' | 'clienteId';
 type Rotulos = Record<ChaveBusca, string>;
-const ROTULOS_VAZIOS: Rotulos = { cfopId: '', ncmId: '', produtoId: '', clienteId: '' };
+const ROTULOS_VAZIOS: Rotulos = { estabelecimentoId: '', cfopId: '', ncmId: '', produtoId: '', clienteId: '' };
 
 function rotulosDe(detalhe: DetalheEnquadramento): Rotulos {
   return {
+    estabelecimentoId: detalhe.estabelecimentoNome,
     cfopId: `${detalhe.cfopCodigo} ${detalhe.cfopDescricao}`.trim(),
     ncmId: `${detalhe.ncmCodigo} ${detalhe.ncmDescricao}`.trim(),
     produtoId: detalhe.produtoNome,
@@ -40,7 +41,6 @@ function rotulosDe(detalhe: DetalheEnquadramento): Rotulos {
 }
 
 export interface Catalogos {
-  estabelecimentos: OpcaoCombo[];
   operacoes: OpcaoCombo[];
 }
 
@@ -172,7 +172,7 @@ export function EnquadramentoDrawer({
         </SheetHeader>
         <div className="grid gap-3 px-4">
           <Campo rotulo="Estabelecimento">
-            <ComboboxField id="enq-estab" items={itens(catalogos.estabelecimentos)} value={form.estabelecimentoId} onChange={(id) => set('estabelecimentoId', id)} placeholder="Estabelecimento" searchPlaceholder="Buscar estabelecimento" emptyText={TEXTO_VAZIO_COMBO} />
+            <ComboboxBusca id="enq-estab" tipo="estabelecimentos" value={form.estabelecimentoId} rotulo={rotulos.estabelecimentoId} onChange={(o) => escolher('estabelecimentoId', o)} placeholder="Estabelecimento" searchPlaceholder="Buscar estabelecimento" />
           </Campo>
           <Campo rotulo="Operação">
             <ComboboxField id="enq-op" items={itens(catalogos.operacoes)} value={form.operacaoId} onChange={(id) => set('operacaoId', id)} placeholder="Operação" searchPlaceholder="Buscar operação" emptyText={TEXTO_VAZIO_COMBO} />
