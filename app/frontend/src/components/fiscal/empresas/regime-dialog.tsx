@@ -18,7 +18,7 @@ import {
   type RegimeVersao,
 } from '@/lib/fiscal-empresas';
 import { useRetornoFoco } from './use-retorno-foco';
-import { normalizarJustificativa } from '@/lib/justificativa';
+import { justificativaValida, normalizarJustificativa } from '@/lib/justificativa';
 
 interface RegimeDialogProps {
   aberto: boolean;
@@ -66,7 +66,7 @@ export function RegimeDialog({
     if (!crt) locais.crt = 'Selecione o regime tributário.';
     if (!inicio) locais.vigenciaInicio = 'Informe o início da vigência.';
     if (inicio && fim && fim < inicio) locais.vigenciaFim = 'Fim de vigência deve ser igual ou posterior ao início.';
-    if (normalizarJustificativa(justificativa).length < 3) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
+    if (!justificativaValida(justificativa)) locais.justificativa = 'Informe o motivo (mínimo de 3 caracteres).';
     setErros(locais);
     setErroGeral(null);
     if (Object.keys(locais).length > 0 || !crt) return;

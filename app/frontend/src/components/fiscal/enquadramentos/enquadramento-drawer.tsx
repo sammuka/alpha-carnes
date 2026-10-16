@@ -21,6 +21,7 @@ import {
   type DetalheEnquadramento,
   type OpcaoCombo,
 } from '@/lib/fiscal-enquadramentos';
+import { justificativaValida } from '@/lib/justificativa';
 
 export interface SelecaoCodigo {
   tipo: 'cfops' | 'ncms';
@@ -185,7 +186,7 @@ export function EnquadramentoDrawer({
     if (!form.cest) faltando.push('Substituição tributária (CEST)');
     if (!form.clienteId) faltando.push('Cliente');
     if (!form.vigenciaInicio) faltando.push('Início de vigência');
-    if (limparJustificativa(form.justificativa).length < 3) faltando.push('Motivo da alteração (3 a 500 caracteres)');
+    if (!justificativaValida(form.justificativa)) faltando.push('Motivo da alteração (3 a 500 caracteres)');
     const problemas: string[] = [];
     if (faltando.length > 0) problemas.push('Preencha os campos obrigatórios: ' + faltando.join(', ') + '.');
     if (form.cest && form.cest.length !== 7) problemas.push('Substituição tributária (CEST) deve ter 7 dígitos.');

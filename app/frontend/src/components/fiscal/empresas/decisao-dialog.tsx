@@ -24,7 +24,7 @@ import {
   type RegimeVigente,
 } from '@/lib/fiscal-empresas';
 import { useRetornoFoco } from './use-retorno-foco';
-import { normalizarJustificativa } from '@/lib/justificativa';
+import { justificativaValida, normalizarJustificativa } from '@/lib/justificativa';
 
 /** Descreve uma decisão que exige justificativa: submeter, aprovar, rejeitar, suspender, remover… */
 export interface DecisaoPendente {
@@ -95,7 +95,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
   const executar = async (confirmarTroca: boolean) => {
     if (!decisao || emVoo.current) return;
     const texto = normalizarJustificativa(justificativa);
-    if (texto.length < 3) {
+    if (!justificativaValida(texto)) {
       setErroCampo('Informe a justificativa (mínimo de 3 caracteres).');
       return;
     }
