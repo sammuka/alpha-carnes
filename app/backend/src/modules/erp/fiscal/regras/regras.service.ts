@@ -176,8 +176,13 @@ export class RegrasTributariasService {
         numeroVersao: regrasTributarias.numeroVersao,
         versao: regrasTributarias.versao,
         enquadramentoId: regrasTributarias.enquadramentoId,
+        enquadramentoCodigo: enquadramentosFiscais.codigo,
         operacaoId: enquadramentosFiscais.operacaoId,
+        operacaoRotulo: operacoes.rotulo,
         cfopId: enquadramentosFiscais.cfopId,
+        cfopCodigo: cfops.codigo,
+        beneficioDescricao: beneficiosFiscais.descricao,
+        classificacaoDescricao: classificacoesIbsCbs.descricao,
         icmsCst: regrasTributarias.icmsCst,
         pRedBc: regrasTributarias.pRedBc,
         pIcms: regrasTributarias.pIcms,
@@ -199,6 +204,10 @@ export class RegrasTributariasService {
       .from(regrasTributarias)
       .innerJoin(enquadramentosFiscais, eq(enquadramentosFiscais.id, regrasTributarias.enquadramentoId))
       .innerJoin(empresas, eq(empresas.id, enquadramentosFiscais.empresaId))
+      .innerJoin(cfops, eq(cfops.id, enquadramentosFiscais.cfopId))
+      .innerJoin(operacoes, eq(operacoes.id, enquadramentosFiscais.operacaoId))
+      .innerJoin(beneficiosFiscais, eq(beneficiosFiscais.id, regrasTributarias.beneficioFiscalId))
+      .innerJoin(classificacoesIbsCbs, eq(classificacoesIbsCbs.id, regrasTributarias.classificacaoIbsCbsId))
       .innerJoin(responsavel, eq(responsavel.id, regrasTributarias.atualizadoPorId))
       .leftJoin(autor, eq(autor.id, regrasTributarias.submetidoPorId))
       .leftJoin(aprovador, eq(aprovador.id, regrasTributarias.aprovadoPorId))
@@ -210,6 +219,9 @@ export class RegrasTributariasService {
       pIcms: razao(linha.pIcms),
       situacao: ROTULOS_SITUACAO_REGRA[linha.situacao as SituacaoRegra],
       tratamentoIcms: ROTULOS_ICMS_CST[linha.icmsCst as keyof typeof ROTULOS_ICMS_CST],
+      tratamentoIpi: ROTULOS_IPI_CST[linha.ipiCst as keyof typeof ROTULOS_IPI_CST],
+      tratamentoPis: ROTULOS_PIS_CST[linha.pisCst as keyof typeof ROTULOS_PIS_CST],
+      tratamentoIbs: ROTULOS_IBS_CST[linha.ibsCst as keyof typeof ROTULOS_IBS_CST],
       autor: linha.autor ?? null,
       aprovador: linha.aprovador ?? null,
     };

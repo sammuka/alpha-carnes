@@ -343,6 +343,23 @@ describe('E01-T03 regras tributárias', () => {
     expect(aposCiclo).toHaveLength(5);
   });
 
+  it('detalhe devolve os rótulos de negócio dos combos e dos tratamentos', async () => {
+    const criada = await criarComo(adminA);
+    expect(criada.res.status).toBe(201);
+    const detalhe = await detalharComo(adminA, criada.res.body.id);
+    expect(detalhe.status).toBe(200);
+    expect(detalhe.body).toMatchObject({
+      tratamentoIpi: 'Saída não tributada',
+      tratamentoPis: 'Alíquota zero',
+      tratamentoIbs: 'Tributação integral',
+    });
+    expect(detalhe.body.enquadramentoCodigo).toMatch(/^\d+$/);
+    expect(detalhe.body.operacaoRotulo).toMatch(/^Compra /);
+    expect(detalhe.body.cfopCodigo).toMatch(/^\d{4}$/);
+    expect(detalhe.body.beneficioDescricao).toMatch(/^Benefício /);
+    expect(detalhe.body.classificacaoDescricao).toMatch(/^Classificação /);
+  });
+
   it('adicionar versão grava o mesmo código e numero_versao 2', async () => {
     const fluxo = await aprovarFluxo();
     const nova = await request(app.getHttpServer())
