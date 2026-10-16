@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { SITUACOES_HOMOLOGACAO } from '../../../../../database/schema/fiscal-homologacoes.schema';
-import { buscaSchema, justificativaSchema, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
+import { buscaSchema, justificativaSchema, semInvisiveis, uuidSchema, versaoSchema } from '../../enquadramentos/dto/comum.dto';
 
-export const descricaoSchema = z.string().trim().min(3).max(500);
+export const descricaoSchema = z.preprocess(semInvisiveis, z.string().trim().min(3).max(500));
 
 const camposDecisao = {
   versao: versaoSchema,
