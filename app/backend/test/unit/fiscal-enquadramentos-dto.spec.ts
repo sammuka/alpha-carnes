@@ -146,4 +146,13 @@ describe('B1 — datas e NUL', () => {
     expect(listarEnquadramentosQuerySchema.safeParse({ search: 'a\u0000b' }).success).toBe(false);
     expect(listarCodigoFiscalQuerySchema.safeParse({ search: 'a\u0000b' }).success).toBe(false);
   });
+
+  it('justificativa só com caracteres de largura zero não cumpre o mínimo', () => {
+    expect(createEnquadramentoSchema.safeParse(base({ justificativa: '​‌‍' })).success).toBe(false);
+    expect(createEnquadramentoSchema.safeParse(base({ justificativa: 'a﻿b' })).success).toBe(false);
+    expect(createCfopSchema.safeParse({ codigo: '5101', descricao: 'Venda', justificativa: '​​​' }).success).toBe(false);
+    expect(createNcmSchema.safeParse({ codigo: '02013000', descricao: 'Carne', justificativa: ' ​﻿ ' }).success).toBe(false);
+    const ok = createEnquadramentoSchema.safeParse(base({ justificativa: 'ab​c' }));
+    expect(ok.success && ok.data.justificativa).toBe('abc');
+  });
 });
