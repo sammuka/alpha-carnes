@@ -78,8 +78,7 @@ export function DecisaoDialog({ decisao, onFechar, onConcluido, onConflito }: De
 
   const executar = async (confirmarTroca: boolean) => {
     if (!decisao) return;
-    // Caracteres de largura zero não contam para o mínimo (o servidor os remove).
-    const texto = justificativa.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+    const texto = normalizarJustificativa(justificativa);
     if (texto.length < 3) {
       setErroCampo('Informe a justificativa (mínimo de 3 caracteres).');
       return;

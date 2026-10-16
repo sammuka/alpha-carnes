@@ -712,3 +712,18 @@ describe('envio em andamento', () => {
     expect(chamadas.filter((c) => c.url.pathname.endsWith('/inativar'))).toHaveLength(1);
   });
 });
+
+describe('justificativa com invisíveis fora do intervalo U+200B-200D', () => {
+  it('o diálogo de inativação recusa 3×U+2060 e U+00AD', async () => {
+    const { user } = renderizar();
+    await abrirFicha(user);
+    await user.click(screen.getByRole('tab', { name: 'Movimentações' }));
+    await user.click(await screen.findByRole('button', { name: 'Inativar' }));
+    const dialogo = await screen.findByRole('dialog');
+    await user.click(within(dialogo).getByLabelText(/Justificativa/));
+    await user.paste('⁠⁠⁠­');
+    await user.click(within(dialogo).getByRole('button', { name: 'Inativar' }));
+    expect(await within(dialogo).findByRole('alert')).toHaveTextContent(/Informe a justificativa/);
+    expect(chamadas.some((c) => c.url.pathname.endsWith('/inativar'))).toBe(false);
+  });
+});
