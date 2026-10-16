@@ -37,6 +37,7 @@ import { AuditoriaModule } from './common/auditoria/auditoria.module';
 import { AuditoriaInterceptor } from './common/interceptors/auditoria.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import type { IncomingMessage } from 'http';
+import { logRedact } from './common/logging/redact';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import type { IncomingMessage } from 'http';
     LoggerModule.forRoot({
       pinoHttp: {
         level: process.env.LOG_LEVEL ?? 'info',
+        redact: logRedact,
         transport: process.env.NODE_ENV !== 'production' ? { target: 'pino-pretty' } : undefined,
         genReqId: (req: IncomingMessage) =>
           (req.headers['x-request-id'] as string | undefined) ?? crypto.randomUUID(),
