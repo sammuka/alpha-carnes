@@ -153,6 +153,7 @@ describe('B1 — datas e NUL', () => {
     expect(createCfopSchema.safeParse({ codigo: '5101', descricao: 'Venda', justificativa: '​​​' }).success).toBe(false);
     expect(createNcmSchema.safeParse({ codigo: '02013000', descricao: 'Carne', justificativa: ' ​﻿ ' }).success).toBe(false);
     const ok = createEnquadramentoSchema.safeParse(base({ justificativa: 'ab​c' }));
-    expect(ok.success && ok.data.justificativa).toBe('abc');
+    // O miolo permanece intacto: só as pontas são aparadas (normalizador r4).
+    expect(ok.success && ok.data.justificativa).toBe('ab\u200Bc');
   });
 });
